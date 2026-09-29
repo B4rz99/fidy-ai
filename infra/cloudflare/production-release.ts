@@ -65,9 +65,11 @@ const ResourceLifecycle = Schema.Struct({
     "replaced",
   ]),
 });
+// Alchemy `replaced` carries the successfully created generation's attrs; only the old
+// generation is pending garbage collection. Capture still independently verifies live traffic.
 const StateEntry = Schema.Struct({
   logicalId: Schema.String,
-  status: Schema.Literals(["created", "updated"]),
+  status: Schema.Literals(["created", "updated", "replaced"]),
   attr: Schema.Struct({ workerName: WorkerName }),
 });
 const StateMap = Schema.Record(Schema.String, Schema.Unknown);
@@ -260,7 +262,8 @@ export const decodeWorkerReceipts = (output: string): WorkerReceipts => {
       if (
         Option.isSome(lifecycle) &&
         lifecycle.value.status !== "created" &&
-        lifecycle.value.status !== "updated"
+        lifecycle.value.status !== "updated" &&
+        lifecycle.value.status !== "replaced"
       ) {
         throw Error(workerReceiptMessages[logicalId].unstable);
       }

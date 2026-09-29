@@ -43,3 +43,11 @@ jobs:
       - name: Report public and Core Worker deployments without changing traffic
         working-directory: infra/cloudflare
         run: bun production-release.ts inspect
+      - name: Classify Production drift without printing provider attributes
+        working-directory: infra/cloudflare
+        run: |
+          if bash scripts/check-topology-drift.sh inspect; then
+            echo 'No Production topology drift.'
+          else
+            echo 'Drift remains blocked; see sanitized resource categories above.'
+          fi

@@ -172,7 +172,21 @@ private. No provider method is wrapped and no repair API is invoked. The SDK
 runner is an explicit platform entrypoint: its narrowly scoped compiler overrides
 accommodate Alchemy's `any`-typed failure channel and the entrypoint Layer, while
 all failures are contained and the returned plan crosses a closed Schema before
-reporting. No provider result, persisted state, or drift gate changes. The provider's omitted receipt
+reporting. No provider result, persisted state, or drift gate changes.
+
+Inspection [36640476836](https://github.com/B4rz99/fidy-ai/actions/runs/36640476836)
+identified exactly `versionId` drift on both Core and Ingress, while the promoted
+pair remained at 100%. A regression against the installed Alchemy Worker reader
+reproduced that same difference with otherwise matching Cloudflare responses.
+Alchemy defines this field as the latest gradual-rollout upload receipt, not the
+current traffic deployment. The pinned `alchemy@2.0.0-beta.79` Bun patch retains
+that receipt only after `GET` verifies the immutable version still exists. A
+missing version still produces drift; unrelated live configuration changes remain
+observable. Both source and distributed JavaScript are patched because Bun and
+Node/Vitest resolve different package conditions. No saved record or traffic is
+rewritten by this fix. The SDK adapter test has only a file-scoped upstream
+`any`-error-channel exception, guarded by the exact compiler-exception allowlist.
+Remove the patch only when a locked upstream release passes these regression tests. The provider's omitted receipt
 fields are a source-backed hypothesis until the protected report identifies the
 live differences; normal release proof and onboarding enablement remain pending.
 

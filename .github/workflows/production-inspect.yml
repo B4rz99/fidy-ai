@@ -23,9 +23,11 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       SMOKE_PROOF: ${{ secrets.SMOKE_PROOF }}
-      RELEASE_SNAPSHOT_FILE: ${{ runner.temp }}/fidy-release.json
-      SMOKE_ATTESTATION_FILE: ${{ runner.temp }}/fidy-smoke-passed.json
     steps:
+      - name: Configure release file paths
+        run: |
+          echo "RELEASE_SNAPSHOT_FILE=$RUNNER_TEMP/fidy-release.json" >> "$GITHUB_ENV"
+          echo "SMOKE_ATTESTATION_FILE=$RUNNER_TEMP/fidy-smoke-passed.json" >> "$GITHUB_ENV"
       - name: Check out protected trunk
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

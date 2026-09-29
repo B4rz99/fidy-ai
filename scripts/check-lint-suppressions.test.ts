@@ -115,6 +115,7 @@ it("keeps platform diagnostic opt-outs on their reviewed file boundaries", () =>
           // Alchemy exposes an any-typed failure channel; the isolated SDK entrypoint
           // contains all failures and Schema-decodes the read-only plan before reporting.
           "anyUnknownInErrorContext:./infra/cloudflare/inspect-worker-drift.ts",
+          "anyUnknownInErrorContext:./infra/cloudflare/worker-receipt.test.ts",
           "strictEffectProvide:./infra/cloudflare/inspect-worker-drift.ts",
         ].toSorted()
       );

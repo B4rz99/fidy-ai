@@ -46,6 +46,25 @@ fi
 
 if grep --fixed-strings --quiet 'Plan:' "$log_file"; then
   echo 'Production Cloudflare topology drift inspection failed: category=drift_detected' >&2
+  if [[ "${1:-}" == inspect ]]; then
+    # The raw plan may contain Secret-backed attributes. Emit only allowlisted resource
+    # categories and whether other resources are involved; never print the plan itself.
+    resources=$(grep --extended-regexp --only-matching \
+      '\[[[:alnum:]_-]+\] (create|update|replace|delete)' "$log_file" || true)
+    if [[ -z "$resources" ]]; then
+      echo 'Drift resource categories: unavailable' >&2
+    else
+      if grep --quiet --extended-regexp '^\[Core\] ' <<< "$resources"; then
+        echo 'Drift resource category: Core' >&2
+      fi
+      if grep --quiet --extended-regexp '^\[Ingress\] ' <<< "$resources"; then
+        echo 'Drift resource category: Ingress' >&2
+      fi
+      if grep --quiet --extended-regexp -v '^\[(Core|Ingress)\] ' <<< "$resources"; then
+        echo 'Drift resource category: other' >&2
+      fi
+    fi
+  fi
 else
   echo 'Production Cloudflare topology drift inspection failed: category=missing_plan' >&2
 fi

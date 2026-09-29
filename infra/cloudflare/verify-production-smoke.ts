@@ -20,8 +20,10 @@ import {
   type HttpClientResponse,
 } from "effect/unstable/http";
 import {
+  SmokeFailureStage,
   SmokeIdentity,
   SmokeResponse,
+  smokeFailureHeader,
   smokePath,
   verifySmokeIdentity,
 } from "../../apps/server/cloudflare/runtime/smoke";
@@ -87,7 +89,9 @@ const candidateResponseDiagnostic = (
   let versionState = "other";
   if (observedVersion === undefined) versionState = "missing";
   else if (observedVersion === expectedPublic.workerVersionId) versionState = "expected";
-  return `Candidate request did not reach the expected public Worker (status=${response.status}, version=${versionState}, noStore=${response.headers["cache-control"] === "no-store"})`;
+  const stage = Schema.decodeUnknownOption(SmokeFailureStage)(response.headers[smokeFailureHeader]);
+  const detail = Option.match(stage, { onNone: () => "", onSome: (value) => `, stage=${value}` });
+  return `Candidate smoke response rejected (status=${response.status}, version=${versionState}, noStore=${response.headers["cache-control"] === "no-store"}${detail})`;
 };
 
 const isRoutingFallback = (

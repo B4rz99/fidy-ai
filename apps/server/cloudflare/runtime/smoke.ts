@@ -4,6 +4,25 @@ import { contractDigestPattern, gitRevisionPattern } from "./release-identity";
 export const smokePath = "/internal/release-smoke";
 export const smokeVersionHeader = "cloudflare-workers-version-overrides";
 export const smokeProofHeader = "x-fidy-smoke-proof";
+export const smokeFailureHeader = "x-fidy-smoke-failure";
+/** Only closed stages cross the proof-admitted smoke boundary, never foreign error text. */
+export const SmokeFailureStage = Schema.Literals([
+  "identity",
+  "secrets",
+  "schema",
+  "storage",
+  "coordinator",
+  "admission",
+  "claim",
+  "publication",
+  "probe_read",
+  "probe_state",
+  "platform",
+  "configuration",
+  "public_forwarding",
+  "public_response",
+]);
+export type SmokeFailureStage = typeof SmokeFailureStage.Type;
 
 export const SmokeIdentity = Schema.Struct({
   gitRevision: Schema.String.check(Schema.isPattern(gitRevisionPattern)),

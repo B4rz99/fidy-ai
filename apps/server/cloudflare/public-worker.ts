@@ -16,7 +16,9 @@ import {
 } from "./runtime/telemetry";
 import { browserOrigins } from "./runtime/topology";
 import {
+  type SmokeFailureStage,
   SmokeResponse,
+  smokeFailureHeader,
   smokeManifest,
   smokePath,
   smokeProofAccepted,
@@ -106,6 +108,22 @@ const forbiddenOrigin = (): Response =>
   Response.json({ status: "forbidden_origin" }, { status: 403 });
 
 const unavailable = (): Response => Response.json({ status: "unavailable" }, { status: 503 });
+
+const smokeUnavailable = (
+  request: Request,
+  environment: PublicEnvironment,
+  stage: SmokeFailureStage
+): Response => {
+  const response = unavailable();
+  if (
+    new URL(request.url).pathname !== smokePath ||
+    !smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })
+  ) {
+    return response;
+  }
+  response.headers.set(smokeFailureHeader, stage);
+  return response;
+};
 
 const isAllowedPreflightHeaders = (value: Option.Option<string>): boolean =>
   Option.isNone(value) ||
@@ -378,14 +396,14 @@ const coreRequest = (
     if (path === "/pat-pairings") {
       headers.set("x-pat-source", yield* pairingSource(request, environment));
     }
+    // Clone the streamed request before replacing its URL and admitted headers.
+    // Rebuilding a Request from the raw body requires runtime-specific duplex options.
     return new Request(
-      `https://core.internal${path}${transactionPath(path) || canonicalRoute(path) || path === smokePath ? new URL(request.url).search : ""}`,
-      {
-        headers,
-        method: request.method,
-        body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
-        signal: request.signal,
-      }
+      new Request(
+        `https://core.internal${path}${transactionPath(path) || canonicalRoute(path) || path === smokePath ? new URL(request.url).search : ""}`,
+        request
+      ),
+      { headers }
     );
   });
 
@@ -497,14 +515,14 @@ const routeOwnedRequest = (
     if (new URL(request.url).pathname !== smokePath || !response.ok) return response;
     const version = environment.CF_VERSION_METADATA?.id;
     if (version === undefined || environment.CONTRACT_DIGEST === undefined) {
-      return unavailable();
+      return smokeUnavailable(request, environment, "configuration");
     }
     const decoded = yield* Effect.tryPromise({
       try: () => response.json().then(Schema.decodeUnknownOption(SmokeResponse)),
       catch: () => undefined,
     });
     if (Option.isNone(decoded)) {
-      return unavailable();
+      return smokeUnavailable(request, environment, "public_response");
     }
     return Response.json(
       {
@@ -519,7 +537,10 @@ const routeOwnedRequest = (
       { status: response.status }
     );
   }).pipe(
-    Effect.match({ onFailure: unavailable, onSuccess: (response) => response }),
+    Effect.match({
+      onFailure: () => smokeUnavailable(request, environment, "public_forwarding"),
+      onSuccess: (response) => response,
+    }),
     Effect.map((response) => applyApiPolicy(response, environment.BROWSER_ORIGIN, origin)),
     Effect.runPromise
   );
@@ -531,7 +552,11 @@ const fetchEffect = (request: Request, environment: PublicEnvironment): Effect.E
       const browserOrigin = resolveBrowserOrigin(environment.BROWSER_ORIGIN);
       if (Option.isNone(browserOrigin)) {
         return Promise.resolve(
-          applyApiPolicy(unavailable(), browserOrigins.production, Option.none())
+          applyApiPolicy(
+            smokeUnavailable(request, environment, "configuration"),
+            browserOrigins.production,
+            Option.none()
+          )
         );
       }
 
@@ -548,7 +573,12 @@ const fetchEffect = (request: Request, environment: PublicEnvironment): Effect.E
     catch: () => undefined,
   }).pipe(
     Effect.match({
-      onFailure: () => applyApiPolicy(unavailable(), browserOrigins.production, Option.none()),
+      onFailure: () =>
+        applyApiPolicy(
+          smokeUnavailable(request, environment, "public_forwarding"),
+          browserOrigins.production,
+          Option.none()
+        ),
       onSuccess: (response) => response,
     }),
     Effect.map((response) => {

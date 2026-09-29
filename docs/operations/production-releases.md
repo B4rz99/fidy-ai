@@ -127,10 +127,13 @@ unpromoted candidate versions while both stable Workers were restored. Normal pu
 this Worker-only drift before upload. After inspection proves **only** `Core` and `Ingress` have
 update drift, dispatch `Deploy Production` from `trunk` with `resume=true` and `bootstrap=false`.
 The first resume (`36602097827`) stopped at candidate smoke before promotion. Cleanup restored
-public stable traffic but could not confirm its write before removing the Core candidate. Cleanup in run `36618951807` committed despite the failed workflow result; inspection
-`36620852745` confirms public deployment `e6a6fcdc-a14e-4560-b360-3cdb6d3b6421` and Core
-deployment `86d18c08-2219-4321-ae98-76428713c188`, each with its sole original stable version
-at 100%. Resume now requires that exact sole-stable pair and original candidate receipts,
+public stable traffic but could not confirm its write before removing the Core candidate. Resume `36623274217` passed reconciliation, upload, and staging but stopped at HTTP 503
+from the expected public candidate. Cleanup succeeded; inspection `36623831453` confirms
+public deployment `144a4b86-a8a5-42e8-8be6-f9710066c063` and Core deployment
+`2f4cb41f-2fb0-4ee1-8b99-4150e085a587`, each with its sole original stable version at 100%.
+Resume now requires that exact sole-stable pair and receipts for public candidate
+`6e9271d7-b98f-4acb-9771-bee834ea0961` and Core candidate
+`8384e10e-2c6b-4063-9835-2ad461bed222`,
 proves stable smoke identities, accepts only the two inspected Worker updates, and rechecks
 trunk and both deployments. It performs no cleanup traffic write. It then follows ordinary
 zero-traffic candidate upload, pairing smoke, and guarded promotion. Any other drift, receipt,
@@ -138,6 +141,16 @@ or Worker identity fails closed. Reconciliation failures report a closed stage (
 `routing`, `identity`, `drift`, `trunk`, or `recapture`) without foreign errors or provider values.
 A deployment write is issued once; bounded reads may confirm its exact committed routing after
 a lost response, but never justify repeating the write.
+
+Proof-admitted smoke failures report only a closed `x-fidy-smoke-failure` stage, such as
+`identity`, `configuration`, `schema`, `storage`, `coordinator`, or `publication`.
+The runner validates this vocabulary before printing it and never retries a 503 or treats
+it as a passing gate. No provider error, secret, or User content enters diagnostics.
+Failure alerts use the GitHub run ID and attempt as their idempotency identity, rather
+than the revision: distinct runs of one revision can have different traffic reports.
+[Resend documents](https://resend.com/docs/dashboard/emails/idempotency-keys) that reusing
+a key with a different payload produces HTTP 409. This corrects the collision risk seen
+in the failed resume; actual inbox delivery still needs verification.
 
 Never deploy a mutable tag, a later checkout, or provider-controlled source. Production has no
 persistent staging sibling. The stack rejects missing, malformed, and all-zero Production release

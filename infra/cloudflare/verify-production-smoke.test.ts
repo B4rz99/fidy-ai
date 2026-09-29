@@ -1,4 +1,4 @@
-import { Context, Effect, Exit, Layer } from "effect";
+import { Cause, Context, Effect, Exit, Layer, Option } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { verifyProductionSmoke, verifyPromotedSmoke } from "./verify-production-smoke";
@@ -72,6 +72,54 @@ describe("intermediate production smoke", () => {
       })
     )
   );
+  it.each(["admission", "secret-provider-body"])(
+    "reports only an owned smoke failure stage (%s)",
+    (stage) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+            Promise.resolve(
+              new Response(null, {
+                status: 503,
+                headers: {
+                  ...securityHeaders,
+                  "x-fidy-smoke-worker-version": publicCandidate,
+                  "x-fidy-smoke-failure": stage,
+                },
+              })
+            )
+          );
+          const exit = yield* Effect.scoped(
+            Effect.gen(function* () {
+              const services = yield* Layer.build(FetchHttpClient.layer);
+              return yield* Effect.exit(
+                verifyProductionSmoke(config).pipe(
+                  Effect.provideService(
+                    HttpClient.HttpClient,
+                    Context.get(services, HttpClient.HttpClient)
+                  ),
+                  Effect.provideService(FetchHttpClient.Fetch, mockedFetch)
+                )
+              );
+            })
+          );
+          expect(Exit.isFailure(exit)).toBe(true);
+          if (Exit.isFailure(exit)) {
+            const error = Cause.findErrorOption(exit.cause);
+            expect(Option.isSome(error)).toBe(true);
+            if (Option.isSome(error)) {
+              const reason =
+                "reason" in error.value ? String(error.value.reason) : String(error.value);
+              if (stage === "admission") expect(reason).toContain("stage=admission");
+              expect(reason).not.toContain("secret-provider-body");
+            }
+          }
+          expect(mockedFetch).toHaveBeenCalledTimes(1);
+          mockedFetch.mockRestore();
+        })
+      )
+  );
+
   it("waits for candidate routing to converge without accepting fallback or changing the probe identity", () =>
     Effect.runPromise(
       Effect.gen(function* () {

@@ -1,10 +1,12 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { Clock, Data, Effect, Option, Schema } from "effect";
 import {
+  type SmokeFailureStage,
   SmokeIdentity,
   type SmokeIdentity as SmokeIdentityType,
   SmokeRequest,
   type SmokeRequest as SmokeRequestType,
+  smokeFailureHeader,
   smokeManifest,
   smokeProofAccepted,
 } from "./smoke";
@@ -38,7 +40,11 @@ export type SmokeEnvironment = Readonly<{
   WOMPI_EVENT_SECRET: string;
 }>;
 
-const fail = (): Response => Response.json({ status: "unavailable" }, { status: 503 });
+const fail = (stage: SmokeFailureStage = "platform"): Response =>
+  Response.json(
+    { status: "unavailable" },
+    { status: 503, headers: { [smokeFailureHeader]: stage } }
+  );
 const refused = (): Response => Response.json({}, { status: 404 });
 const markerKey = "_release-smoke/marker-v1";
 const maxBodyBytes = 512;
@@ -68,18 +74,25 @@ const responseFor = (environment: SmokeEnvironment, status: string, httpStatus: 
   );
 
 /** Convert only platform Promises; their causes never cross the public smoke response. */
-class SmokeBindingFailed extends Data.TaggedError("SmokeBindingFailed")<{}> {}
+class SmokeBindingFailed extends Data.TaggedError("SmokeBindingFailed")<{
+  stage: SmokeFailureStage;
+}> {}
 
-const platform = <A>(tryWork: () => Promise<A>): Effect.Effect<A, SmokeBindingFailed> =>
-  Effect.tryPromise({ try: tryWork, catch: () => new SmokeBindingFailed() });
+const platform = <A>(
+  tryWork: () => Promise<A>,
+  stage: SmokeFailureStage = "platform"
+): Effect.Effect<A, SmokeBindingFailed> =>
+  Effect.tryPromise({ try: tryWork, catch: () => new SmokeBindingFailed({ stage }) });
 
 const readProbe = Effect.fn(function* (environment: SmokeEnvironment, probeId: string) {
-  const row = yield* platform(() =>
-    environment.DB.prepare(
-      "SELECT git_revision, expires_at_ms, status FROM release_smoke_probes WHERE probe_id = ?"
-    )
-      .bind(probeId)
-      .first<SmokeRow>()
+  const row = yield* platform(
+    () =>
+      environment.DB.prepare(
+        "SELECT git_revision, expires_at_ms, status FROM release_smoke_probes WHERE probe_id = ?"
+      )
+        .bind(probeId)
+        .first<SmokeRow>(),
+    "probe_read"
   );
   return Option.fromNullishOr(row);
 });
@@ -106,19 +119,30 @@ const checkBindings = Effect.fn(function* (environment: SmokeEnvironment) {
     environment.WOMPI_INTEGRITY_SECRET,
     environment.WOMPI_EVENT_SECRET,
   ];
-  if (secrets.some((secret) => typeof secret !== "string" || secret.length === 0)) return false;
+  if (secrets.some((secret) => typeof secret !== "string" || secret.length === 0)) {
+    return yield* new SmokeBindingFailed({ stage: "secrets" });
+  }
   // Zero rows: verify the schema without loading any Category or User content.
-  yield* platform(() => environment.DB.prepare("SELECT id FROM categories LIMIT 0").all());
-  yield* platform(() =>
-    environment.DB.prepare("SELECT probe_id FROM release_smoke_probes LIMIT 0").all()
+  yield* platform(
+    () => environment.DB.prepare("SELECT id FROM categories LIMIT 0").all(),
+    "schema"
   );
-  yield* platform(() => environment.SMOKE_BUCKET.put(markerKey, "smoke-v1"));
-  if ((yield* platform(() => environment.SMOKE_BUCKET.get(markerKey))) === null) return false;
-  const coordinator = environment.USER_TRANSACTION_COORDINATOR.getByName("_release-smoke-v1");
-  const compatibility = yield* platform(() =>
-    coordinator.fetch("https://coordinator.internal/release-smoke")
+  yield* platform(
+    () => environment.DB.prepare("SELECT probe_id FROM release_smoke_probes LIMIT 0").all(),
+    "schema"
   );
-  return compatibility.ok;
+  yield* platform(() => environment.SMOKE_BUCKET.put(markerKey, "smoke-v1"), "storage");
+  if ((yield* platform(() => environment.SMOKE_BUCKET.get(markerKey), "storage")) === null) {
+    return yield* new SmokeBindingFailed({ stage: "storage" });
+  }
+  const compatibility = yield* platform(
+    () =>
+      environment.USER_TRANSACTION_COORDINATOR.getByName("_release-smoke-v1").fetch(
+        "https://coordinator.internal/release-smoke"
+      ),
+    "coordinator"
+  );
+  if (!compatibility.ok) return yield* new SmokeBindingFailed({ stage: "coordinator" });
 });
 
 const publishClaimedProbe = Effect.fn(function* (
@@ -126,17 +150,20 @@ const publishClaimedProbe = Effect.fn(function* (
   environment: SmokeEnvironment,
   now: number
 ) {
-  const claimed = yield* platform(() =>
-    environment.DB.prepare(smokeClaimSql).bind(probeId, now).run()
+  const claimed = yield* platform(
+    () => environment.DB.prepare(smokeClaimSql).bind(probeId, now).run(),
+    "claim"
   );
   if (claimed.meta.changes !== 1) return;
-  if (!(yield* checkBindings(environment))) return yield* new SmokeBindingFailed();
-  yield* platform(() =>
-    environment.SMOKE_QUEUE.send({
-      protocolVersion: 1,
-      probeId,
-      gitRevision: environment.RELEASE_GIT_SHA,
-    } satisfies SmokeWork)
+  yield* checkBindings(environment);
+  yield* platform(
+    () =>
+      environment.SMOKE_QUEUE.send({
+        protocolVersion: 1,
+        probeId,
+        gitRevision: environment.RELEASE_GIT_SHA,
+      } satisfies SmokeWork),
+    "publication"
   );
 });
 
@@ -152,16 +179,18 @@ const startProbe = Effect.fn(function* (request: Request, environment: SmokeEnvi
   );
   if (Option.isNone(decoded)) return refused();
   const probe = decoded.value;
-  if (!matchesCore(probe, environment)) return fail();
+  if (!matchesCore(probe, environment)) return fail("identity");
   const now = yield* Clock.currentTimeMillis;
   // One serialized statement caps concurrent distinct probes; replays are idempotent.
-  yield* platform(() =>
-    environment.DB.prepare(smokeAdmissionSql)
-      .bind(probe.probeId, environment.RELEASE_GIT_SHA, now + smokeWindowMs, now, maxActiveProbes)
-      .run()
+  yield* platform(
+    () =>
+      environment.DB.prepare(smokeAdmissionSql)
+        .bind(probe.probeId, environment.RELEASE_GIT_SHA, now + smokeWindowMs, now, maxActiveProbes)
+        .run(),
+    "admission"
   );
   const row = yield* readProbe(environment, probe.probeId);
-  if (!validRow(row, environment, now)) return fail();
+  if (!validRow(row, environment, now)) return fail("probe_state");
   // Atomic claim prevents replays from repeating binding checks or Queue publication.
   if (row.value.status === "pending") yield* publishClaimedProbe(probe.probeId, environment, now);
   return responseFor(
@@ -182,7 +211,7 @@ const getProbe = Effect.fn(function* (request: Request, environment: SmokeEnviro
         row.value.status === "passed" ? "passed" : "pending",
         completedStatus
       )
-    : fail();
+    : fail("probe_state");
 });
 
 /** Private, reserved-only protocol: it never receives a User identity or arbitrary resource key. */
@@ -196,7 +225,7 @@ export const handleSmoke = ({
       if (request.method === "POST") return yield* startProbe(request, environment);
       if (request.method === "GET") return yield* getProbe(request, environment);
       return refused();
-    }).pipe(Effect.orElseSucceed(fail))
+    }).pipe(Effect.catch((error) => Effect.succeed(fail(error.stage))))
   );
 
 const receiveMessage = Effect.fn(function* (
@@ -204,7 +233,7 @@ const receiveMessage = Effect.fn(function* (
   environment: SmokeEnvironment
 ) {
   const decoded = Schema.decodeUnknownOption(SmokeWork)(message.body);
-  if (Option.isNone(decoded)) return yield* new SmokeBindingFailed();
+  if (Option.isNone(decoded)) return yield* new SmokeBindingFailed({ stage: "platform" });
   const work = decoded.value;
   const row = yield* platform(() =>
     environment.DB.prepare(
@@ -232,7 +261,9 @@ export const receiveSmoke = ({
 }: Readonly<{ batch: MessageBatch<unknown>; environment: SmokeEnvironment }>): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      if (batch.queue !== environment.SMOKE_QUEUE_NAME) return yield* new SmokeBindingFailed();
+      if (batch.queue !== environment.SMOKE_QUEUE_NAME) {
+        return yield* new SmokeBindingFailed({ stage: "platform" });
+      }
       yield* Effect.forEach(batch.messages, (message) => receiveMessage(message, environment), {
         discard: true,
         concurrency: "unbounded",
@@ -261,7 +292,7 @@ export class ReleaseSmokeWorkflowV1 extends WorkflowEntrypoint<SmokeEnvironment,
     const db = this.env.DB;
     const work = Effect.gen(function* () {
       const decoded = Schema.decodeUnknownOption(SmokeWork)(event.payload);
-      if (Option.isNone(decoded)) return yield* new SmokeBindingFailed();
+      if (Option.isNone(decoded)) return yield* new SmokeBindingFailed({ stage: "platform" });
       yield* platform(() =>
         step.do("settle-synthetic-smoke-v1", () => settleSyntheticSmoke(db, decoded.value))
       );

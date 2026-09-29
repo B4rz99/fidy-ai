@@ -122,9 +122,14 @@ public/Core stable pair. Do not run it if inspection shows any different traffic
 unpromoted candidate versions while both stable Workers were restored. Normal pushes still refuse
 this Worker-only drift before upload. After inspection proves **only** `Core` and `Ingress` have
 update drift, dispatch `Deploy Production` from `trunk` with `resume=true` and `bootstrap=false`.
-This one-time path first captures and smoke-verifies the exact restored stable pair, requires both
-inspected deployment IDs and the original candidate receipts, and accepts only a plan with those two
-Worker updates. It then follows the ordinary zero-traffic candidate, pairing smoke, and guarded
+The first resume (`36602097827`) stopped at candidate smoke before promotion. Cleanup restored
+public stable traffic but could not confirm its write before removing the Core candidate. The next
+resume is limited to public deployment `e6a6fcdc-a14e-4560-b360-3cdb6d3b6421` at stable 100%, and Core
+deployment `17e36514-375e-4517-8c8e-beca709a863b` at stable 100% plus candidate 0%, with the exact
+persisted candidate receipts from that run. It proves the normal stable smoke identities, accepts
+only the two inspected Worker updates, rechecks trunk and both deployments, and removes only the
+known zero-traffic Core candidate. Cleanup polls stale reads without repeating a committed write;
+unknown deployments stop immediately. It then recaptures the sole stable pair before candidate upload. It then follows the ordinary zero-traffic candidate, pairing smoke, and guarded
 promotion steps. Any other drift, receipt, or Worker identity fails closed.
 
 Never deploy a mutable tag, a later checkout, or provider-controlled source. Production has no

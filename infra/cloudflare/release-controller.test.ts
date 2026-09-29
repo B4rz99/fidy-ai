@@ -136,6 +136,42 @@ describe("zero-traffic Worker release", () => {
       })
     ));
 
+  it("confirms cleanup through a stale read without repeating a committed traffic write", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = harness();
+        const release = yield* staged(fixture.port);
+        const oldPublic = yield* fixture.port.current(publicName);
+        let stale = false;
+        const port: ReleasePort = {
+          ...fixture.port,
+          deploy: (name, entries) =>
+            Effect.gen(function* () {
+              const result = yield* fixture.port.deploy(name, entries);
+              stale = name === publicName;
+              return result;
+            }),
+          current: (name) => {
+            if (name === publicName && stale) {
+              stale = false;
+              return Effect.succeed(oldPublic);
+            }
+            return fixture.port.current(name);
+          },
+        };
+        yield* releaseCleanup.cleanRelease(port, release.snapshot, candidates);
+        expect(fixture.changes).toEqual([
+          `${publicName}:100/0`,
+          `${coreName}:100/0`,
+          `${publicName}:100`,
+          `${coreName}:100`,
+        ]);
+        expect((yield* fixture.port.current(coreName)).versions).toEqual([
+          { id: versions.coreStable, percentage: 100 },
+        ]);
+      })
+    ));
+
   it("cleans only its own partially staged candidate after a Core staging failure", () =>
     Effect.runPromise(
       Effect.gen(function* () {

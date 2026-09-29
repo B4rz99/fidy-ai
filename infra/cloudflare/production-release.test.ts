@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   decodeCaptureWorkerReceipts,
   decodeWorkerReceipts,
+  isInspectedResumePair,
   isInterruptedAlchemyReceipt,
   isInterruptedStableSnapshot,
   isPreSmokeBaseline,
@@ -54,24 +55,24 @@ it("permits interrupted-upload reconciliation only for the inspected stable pair
     stableContractDigest: "f33c9633df9fdfe0dbb730156fe9083dc4d0f676648a27d102f73bc98262fd4f",
     public: {
       name: "fidy-ingress",
-      deploymentId: "e1f796e7-ccb4-41f0-96b2-8d0d3d74feb0",
+      deploymentId: "e6a6fcdc-a14e-4560-b360-3cdb6d3b6421",
       stableVersionId: "90b1cd6a-4796-41bf-ae33-fb3333a3fff0",
     },
     core: {
       name: "fidy-core",
-      deploymentId: "c69c2631-79ca-4db6-95ca-3d6e9464e02a",
+      deploymentId: "17e36514-375e-4517-8c8e-beca709a863b",
       stableVersionId: "28ffd738-508a-4d00-a3e1-31911f86ce01",
     },
   };
   const workers = {
     public: {
       workerName: snapshot.public.name,
-      versionId: Option.some("d56d5cab-bf3e-434b-84aa-a74b7c94f159"),
+      versionId: Option.some("18489858-358b-4986-9d60-98a686052c85"),
       hasRolloutBaseline: true,
     },
     core: {
       workerName: snapshot.core.name,
-      versionId: Option.some("deee8a6c-ace3-4f50-b589-7729605031df"),
+      versionId: Option.some("2216c932-4dc6-4195-baad-8944aa28bf07"),
       hasRolloutBaseline: true,
     },
   };
@@ -97,6 +98,47 @@ it("permits interrupted-upload reconciliation only for the inspected stable pair
     isInterruptedAlchemyReceipt({
       workers: { ...workers, public: { ...workers.public, hasRolloutBaseline: false } },
       snapshot,
+    })
+  ).toBe(false);
+});
+
+it("allows resume cleanup only for the inspected stable traffic and exact zero-traffic Core candidate", () => {
+  const pair = {
+    publicDeployment: {
+      id: "e6a6fcdc-a14e-4560-b360-3cdb6d3b6421",
+      versions: [{ id: "90b1cd6a-4796-41bf-ae33-fb3333a3fff0", percentage: 100 }],
+    },
+    coreDeployment: {
+      id: "17e36514-375e-4517-8c8e-beca709a863b",
+      versions: [
+        { id: "28ffd738-508a-4d00-a3e1-31911f86ce01", percentage: 100 },
+        { id: "2216c932-4dc6-4195-baad-8944aa28bf07", percentage: 0 },
+      ],
+    },
+  };
+  expect(isInspectedResumePair(pair)).toBe(true);
+  expect(
+    isInspectedResumePair({ ...pair, coreDeployment: { ...pair.coreDeployment, id: "changed" } })
+  ).toBe(false);
+  expect(
+    isInspectedResumePair({
+      ...pair,
+      coreDeployment: {
+        ...pair.coreDeployment,
+        versions: [
+          { id: "28ffd738-508a-4d00-a3e1-31911f86ce01", percentage: 99 },
+          { id: "2216c932-4dc6-4195-baad-8944aa28bf07", percentage: 1 },
+        ],
+      },
+    })
+  ).toBe(false);
+  expect(
+    isInspectedResumePair({
+      ...pair,
+      publicDeployment: {
+        ...pair.publicDeployment,
+        versions: [{ id: "18489858-358b-4986-9d60-98a686052c85", percentage: 100 }],
+      },
     })
   ).toBe(false);
 });

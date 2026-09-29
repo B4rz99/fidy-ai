@@ -125,8 +125,13 @@ const interruptedPromotion = {
   coreDeployment: "0d731332-605d-47bf-976d-69963275b40e",
   coreCandidate: "deee8a6c-ace3-4f50-b589-7729605031df",
   coreStable: "28ffd738-508a-4d00-a3e1-31911f86ce01",
-  coreRecoveredDeployment: "c69c2631-79ca-4db6-95ca-3d6e9464e02a",
-  publicCandidate: "d56d5cab-bf3e-434b-84aa-a74b7c94f159",
+} as const;
+const interruptedUpload = {
+  ...interruptedPromotion,
+  publicDeployment: "e6a6fcdc-a14e-4560-b360-3cdb6d3b6421",
+  coreRecoveredDeployment: "17e36514-375e-4517-8c8e-beca709a863b",
+  publicCandidate: "18489858-358b-4986-9d60-98a686052c85",
+  coreCandidate: "2216c932-4dc6-4195-baad-8944aa28bf07",
 } as const;
 
 /** The one-time direct bootstrap must never use a later, unverified Production baseline. */
@@ -704,7 +709,7 @@ const capture = Effect.fn(function* (
   yield* writeFile(env.file, encodeJson(snapshot));
 });
 export const isInterruptedStableSnapshot = (snapshot: ReleaseSnapshot): boolean => {
-  const expected = interruptedPromotion;
+  const expected = interruptedUpload;
   return (
     snapshot.stableRevision === expected.revision &&
     snapshot.stableContractDigest === preSmokeDigest &&
@@ -719,7 +724,7 @@ export const isInterruptedAlchemyReceipt = (input: {
   snapshot: ReleaseSnapshot;
 }): boolean => {
   const { workers, snapshot } = input;
-  const expected = interruptedPromotion;
+  const expected = interruptedUpload;
   return (
     workers.public.workerName === snapshot.public.name &&
     workers.core.workerName === snapshot.core.name &&
@@ -729,6 +734,41 @@ export const isInterruptedAlchemyReceipt = (input: {
     workers.core.hasRolloutBaseline
   );
 };
+export const isInspectedResumePair = (input: {
+  publicDeployment: Deployment;
+  coreDeployment: Deployment;
+}): boolean => {
+  const { publicDeployment, coreDeployment } = input;
+  return (
+    matchesRecoveryVersion({
+      deployment: publicDeployment,
+      id: interruptedUpload.publicDeployment,
+      version: interruptedUpload.publicVersion,
+    }) &&
+    coreDeployment.id === interruptedUpload.coreRecoveredDeployment &&
+    coreDeployment.versions.length === 2 &&
+    coreDeployment.versions.some(
+      (version) => version.id === interruptedUpload.coreStable && version.percentage === 100
+    ) &&
+    coreDeployment.versions.some(
+      (version) => version.id === interruptedUpload.coreCandidate && version.percentage === 0
+    )
+  );
+};
+
+const readResumePair = Effect.fn(function* (port: ReleasePort, workers: WorkerReceipts) {
+  const pair = {
+    publicDeployment: yield* port.current(workers.public.workerName),
+    coreDeployment: yield* port.current(workers.core.workerName),
+  };
+  if (!isInspectedResumePair(pair)) {
+    return yield* new ReleaseFailure({
+      message: "Interrupted-upload routing changed; no recovery write",
+    });
+  }
+  return pair;
+});
+
 const resumeCapture = Effect.fn(function* (
   port: ReleasePort,
   env: Config,
@@ -736,20 +776,48 @@ const resumeCapture = Effect.fn(function* (
 ) {
   if (!env.resumeRelease || env.bootstrapRelease) {
     return yield* new ReleaseFailure({
-      message: "Interrupted-upload reconciliation requires protected dispatch",
+      message: "Resume requires protected dispatch",
     });
   }
-  yield* capture(port, env, client);
-  const snapshot = yield* Schema.decodeUnknownEffect(releaseSchemas.snapshot)(
-    yield* readFile(env.file)
-  );
+  const workers = yield* workersFromState();
+  const { publicDeployment, coreDeployment } = yield* readResumePair(port, workers);
+  const identity = yield* stableIdentity({
+    publicVersionId: interruptedUpload.publicVersion,
+    coreVersionId: interruptedUpload.coreStable,
+    proof: env.smokeProof,
+  }).pipe(Effect.provideService(HttpClient.HttpClient, client));
+  const snapshot = yield* Schema.decodeEffect(releaseSchemas.snapshot)({
+    revision: env.revision,
+    ...identity,
+    public: {
+      name: workers.public.workerName,
+      deploymentId: publicDeployment.id,
+      stableVersionId: interruptedUpload.publicVersion,
+    },
+    core: {
+      name: workers.core.workerName,
+      deploymentId: coreDeployment.id,
+      stableVersionId: interruptedUpload.coreStable,
+    },
+  });
   if (!isInterruptedStableSnapshot(snapshot)) {
     return yield* new ReleaseFailure({ message: "Interrupted-upload stable Worker pair changed" });
   }
-  const workers = yield* workersFromState();
   if (!isInterruptedAlchemyReceipt({ workers, snapshot })) {
     return yield* new ReleaseFailure({ message: "Interrupted-upload Alchemy receipts changed" });
   }
+  yield* shell(["bash", "scripts/check-topology-drift.sh", "resume"]);
+  if ((yield* port.trunk()) !== env.revision) {
+    return yield* new ReleaseFailure({
+      message: "Interrupted-upload baseline changed; no recovery write",
+    });
+  }
+  yield* readResumePair(port, workers);
+  yield* releaseCleanup.cleanRelease(port, snapshot, {
+    publicVersionId: interruptedUpload.publicCandidate,
+    coreVersionId: interruptedUpload.coreCandidate,
+  });
+  yield* capture(port, env, client);
 });
 const stage = Effect.fn(function* (port: ReleasePort, env: Config) {
   const snapshot = yield* Schema.decodeUnknownEffect(releaseSchemas.snapshot)(

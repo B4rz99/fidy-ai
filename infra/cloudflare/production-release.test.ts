@@ -21,7 +21,7 @@ describe("Production release Worker receipts", () => {
 
     expect(
       decodeWorkerReceipts(
-        `[00:00:00.000] INFO: Refreshing Cloudflare State Store credentials\n${JSON.stringify(state, null, 2)}`
+        `[00:00:00.000] INFO: Cloudflare state read progress ${JSON.stringify(state, null, 2)}`
       )
     ).toEqual({
       public: {

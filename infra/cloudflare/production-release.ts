@@ -180,9 +180,9 @@ type WorkerReceipt = Readonly<{
 type WorkerReceipts = Readonly<{ public: WorkerReceipt; core: WorkerReceipt }>;
 
 const decodeStateMap = (output: string): typeof StateMap.Type => {
-  const objectStarts = [...output.matchAll(/^\{/gmu)].map((match) => match.index);
+  const objectStarts = [...output.matchAll(/\{/gu)].map((match) => match.index);
 
-  for (const index of objectStarts.reverse()) {
+  for (const index of objectStarts) {
     try {
       return Schema.decodeUnknownSync(StateMap)(JSON.parse(output.slice(index).trim()));
     } catch {
@@ -239,7 +239,9 @@ const workersFromState = Effect.fn(function* () {
     "--no-input",
     "--log-level",
     "error",
-  ]);
+  ]).pipe(
+    Effect.mapError(() => new ReleaseFailure({ message: "Alchemy Worker state command failed" }))
+  );
   return yield* Effect.try({
     try: () => decodeWorkerReceipts(rawState),
     catch: () => new ReleaseFailure({ message: "Alchemy Worker state output is invalid" }),
@@ -429,11 +431,7 @@ const capture = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient
 ) {
-  const workers = yield* workersFromState().pipe(
-    Effect.mapError(
-      () => new ReleaseFailure({ message: "Release capture could not read Alchemy Worker state" })
-    )
-  );
+  const workers = yield* workersFromState();
   // The pinned Alchemy provider falls back to a direct 100% PUT when its previous Worker
   // output has no hash. Never let that branch masquerade as a candidate upload.
   if (!workers.public.hasRolloutBaseline || !workers.core.hasRolloutBaseline) {

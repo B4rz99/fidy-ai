@@ -177,20 +177,25 @@ type WorkerReceipt = Readonly<{
   versionId: Option.Option<string>;
   hasRolloutBaseline: boolean;
 }>;
-const workersFromState = Effect.fn(function* () {
-  // Alchemy's persisted upload receipts, not a health response. Never print state: it also
-  // contains other resources' binding metadata.
-  const rawState = yield* shell([
-    "bun",
-    "../../node_modules/alchemy/bin/alchemy.ts",
-    "state",
-    "read",
-    "--backend",
-    "cloudflare",
-    "--recursive",
-    "FidyCloudflare/production",
-  ]);
-  const entries = yield* Schema.decodeUnknownEffect(StateMap)(yield* decodeJson(rawState));
+type WorkerReceipts = Readonly<{ public: WorkerReceipt; core: WorkerReceipt }>;
+
+const decodeStateMap = (output: string): typeof StateMap.Type => {
+  const objectStarts = [...output.matchAll(/^\{/gmu)].map((match) => match.index);
+
+  for (const index of objectStarts.reverse()) {
+    try {
+      return Schema.decodeUnknownSync(StateMap)(JSON.parse(output.slice(index).trim()));
+    } catch {
+      // Alchemy can write credential-refresh progress before its JSON state. Accept only a
+      // complete object matching the state-map schema; never include the output in an error.
+    }
+  }
+
+  throw Error("Alchemy Worker state output is invalid");
+};
+
+export const decodeWorkerReceipts = (output: string): WorkerReceipts => {
+  const entries = decodeStateMap(output);
   const select = (logicalId: string): WorkerReceipt => {
     const matches = Object.values(entries).flatMap((value) => {
       const decoded = Schema.decodeUnknownOption(StateEntry)(value);
@@ -216,9 +221,28 @@ const workersFromState = Effect.fn(function* () {
     }
     return matches[0] ?? { workerName: "", versionId: Option.none(), hasRolloutBaseline: false };
   };
+  return { public: select("Ingress"), core: select("Core") };
+};
+
+const workersFromState = Effect.fn(function* () {
+  // Alchemy's persisted upload receipts, not a health response. Never print state: it also
+  // contains other resources' binding metadata.
+  const rawState = yield* shell([
+    "bun",
+    "../../node_modules/alchemy/bin/alchemy.ts",
+    "state",
+    "read",
+    "--backend",
+    "cloudflare",
+    "--recursive",
+    "FidyCloudflare/production",
+    "--no-input",
+    "--log-level",
+    "error",
+  ]);
   return yield* Effect.try({
-    try: () => ({ public: select("Ingress"), core: select("Core") }),
-    catch: () => new ReleaseFailure({ message: "Missing or ambiguous Alchemy Worker receipt" }),
+    try: () => decodeWorkerReceipts(rawState),
+    catch: () => new ReleaseFailure({ message: "Alchemy Worker state output is invalid" }),
   });
 });
 
@@ -351,21 +375,33 @@ const soleStableVersion = (deployment: Deployment): string => {
   }
   return deployment.versions[0].id;
 };
-const capture = Effect.fn(function* (
-  port: ReleasePort,
-  env: Config,
-  client: HttpClient.HttpClient
-) {
-  const workers = yield* workersFromState();
-  // The pinned Alchemy provider falls back to a direct 100% PUT when its previous Worker
-  // output has no hash. Never let that branch masquerade as a candidate upload.
-  if (!workers.public.hasRolloutBaseline || !workers.core.hasRolloutBaseline) {
-    return yield* Effect.fail(
-      Error("Alchemy Worker rollout baseline missing; candidate upload is unsafe")
-    );
-  }
-  const publicDeployment = yield* port.current(workers.public.workerName);
-  const coreDeployment = yield* port.current(workers.core.workerName);
+const readStablePair = Effect.fn(function* ({
+  port,
+  workers,
+  proof,
+  client,
+}: {
+  port: ReleasePort;
+  workers: WorkerReceipts;
+  proof: string;
+  client: HttpClient.HttpClient;
+}) {
+  const publicDeployment = yield* port.current(workers.public.workerName).pipe(
+    Effect.mapError(
+      () =>
+        new ReleaseFailure({
+          message: "Release capture could not read stable Worker deployments",
+        })
+    )
+  );
+  const coreDeployment = yield* port.current(workers.core.workerName).pipe(
+    Effect.mapError(
+      () =>
+        new ReleaseFailure({
+          message: "Release capture could not read stable Worker deployments",
+        })
+    )
+  );
   const publicStable = yield* Effect.try({
     try: () => soleStableVersion(publicDeployment),
     catch: () => new ReleaseFailure({ message: "Unstable public Worker" }),
@@ -377,19 +413,59 @@ const capture = Effect.fn(function* (
   const identity = yield* stableIdentity({
     publicVersionId: publicStable,
     coreVersionId: coreStable,
+    proof,
+  }).pipe(
+    Effect.provideService(HttpClient.HttpClient, client),
+    Effect.mapError(
+      () =>
+        new ReleaseFailure({ message: "Release capture could not verify the stable Worker pair" })
+    )
+  );
+  return { publicStable, coreStable, identity };
+});
+
+const capture = Effect.fn(function* (
+  port: ReleasePort,
+  env: Config,
+  client: HttpClient.HttpClient
+) {
+  const workers = yield* workersFromState().pipe(
+    Effect.mapError(
+      () => new ReleaseFailure({ message: "Release capture could not read Alchemy Worker state" })
+    )
+  );
+  // The pinned Alchemy provider falls back to a direct 100% PUT when its previous Worker
+  // output has no hash. Never let that branch masquerade as a candidate upload.
+  if (!workers.public.hasRolloutBaseline || !workers.core.hasRolloutBaseline) {
+    return yield* new ReleaseFailure({
+      message: "Release capture blocked: Alchemy Worker rollout baseline is unavailable",
+    });
+  }
+  const stablePair = yield* readStablePair({
+    port,
+    workers,
     proof: env.smokeProof,
-  }).pipe(Effect.provideService(HttpClient.HttpClient, client));
-  const snapshot = yield* releaseController.captureRelease(port, {
-    revision: env.revision,
-    ...identity,
-    publicName: workers.public.workerName,
-    coreName: workers.core.workerName,
+    client,
   });
+  const snapshot = yield* releaseController
+    .captureRelease(port, {
+      revision: env.revision,
+      ...stablePair.identity,
+      publicName: workers.public.workerName,
+      coreName: workers.core.workerName,
+    })
+    .pipe(
+      Effect.mapError(
+        () => new ReleaseFailure({ message: "Release capture could not create a stable snapshot" })
+      )
+    );
   if (
-    snapshot.public.stableVersionId !== publicStable ||
-    snapshot.core.stableVersionId !== coreStable
+    snapshot.public.stableVersionId !== stablePair.publicStable ||
+    snapshot.core.stableVersionId !== stablePair.coreStable
   ) {
-    return yield* Effect.fail(Error("Stable deployments changed during capture"));
+    return yield* new ReleaseFailure({
+      message: "Stable Worker deployments changed during capture",
+    });
   }
   yield* writeFile(env.file, encodeJson(snapshot));
 });
@@ -514,10 +590,12 @@ if (import.meta.main) {
     }
     yield* writeFile(Bun.stdout, "Production release routing step passed.\n");
   }).pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }), Effect.scoped);
-  await Effect.runPromise(program).catch(() => {
-    process.stderr.write(
-      "Production release routing failed; inspect Worker deployment state before recovery.\n"
-    );
+  await Effect.runPromise(program).catch((cause: unknown) => {
+    const message =
+      cause instanceof ReleaseFailure
+        ? cause.message
+        : "Production release routing failed; inspect Worker deployment state before recovery.";
+    process.stderr.write(`${message}\n`);
     process.exitCode = 1;
   });
 }

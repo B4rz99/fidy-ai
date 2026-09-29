@@ -89,11 +89,19 @@ describe("intermediate production smoke", () => {
               })
             )
           );
-          const exit = yield* Effect.exit(
-            verifyProductionSmoke(config).pipe(
-              Effect.provide(FetchHttpClient.layer),
-              Effect.provideService(FetchHttpClient.Fetch, mockedFetch)
-            )
+          const exit = yield* Effect.scoped(
+            Effect.gen(function* () {
+              const services = yield* Layer.build(FetchHttpClient.layer);
+              return yield* Effect.exit(
+                verifyProductionSmoke(config).pipe(
+                  Effect.provideService(
+                    HttpClient.HttpClient,
+                    Context.get(services, HttpClient.HttpClient)
+                  ),
+                  Effect.provideService(FetchHttpClient.Fetch, mockedFetch)
+                )
+              );
+            })
           );
           expect(Exit.isFailure(exit)).toBe(true);
           if (Exit.isFailure(exit)) {

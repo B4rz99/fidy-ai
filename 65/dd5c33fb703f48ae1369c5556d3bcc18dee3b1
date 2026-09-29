@@ -1,0 +1,21 @@
+infra/cloudflare/production-release.ts
+  s_f8dbb486b6c236::t_1cd757496e39b6 181,220,246-252
+infra/cloudflare/production-release.test.ts
+  s_f8dbb486b6c236::t_4402088b5623d0 6-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "65dd5c33fb703f48ae1369c5556d3bcc18dee3b1",
+  "prompts": {},
+  "sessions": {
+    "s_f8dbb486b6c236": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e7d2-da0e-701d-8653-23d0f6150e67",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

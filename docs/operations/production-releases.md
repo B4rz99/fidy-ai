@@ -158,6 +158,15 @@ and deployment. The check runs synchronously once per workflow, performs reads o
 retries or background continuation, so workflow status, step timing, and logs are sufficient without
 separate metrics or tracing. Never include raw provider output or credentials in those logs.
 
+### Expand-and-contract changes
+
+Add schema and resource capacity before code depends on it; keep the stable and candidate Worker
+versions compatible during 0%-traffic smoke and any code-only rollback. Use a new migration for a
+changed applied schema. Do not drop old columns, remove bindings, rename Workflow definitions, or
+change Durable Object lifecycle in the same release that starts using their replacements. Those
+changes require a separately reviewed rollout and a fix-forward recovery plan. D1 read replication
+stays disabled for authorization and immediate post-mutation reads.
+
 ## Local parity and smoke checks
 
 Start the same topology locally:
@@ -298,6 +307,9 @@ operator action.
 Cloudflare documentation: [Worker version rollbacks](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/),
 [deployable versions](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/versions/methods/list/),
 and [deployment create API](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/deployments/methods/create/).
+
+For an incident, use the [Production recovery guide](production-recovery.md) to separate traffic,
+state, provider outcomes, and operational evidence before choosing a response.
 
 Never print, copy into metadata, or pass Cloudflare tokens as command arguments. Rotate a token in
 Cloudflare and GitHub if exposure is suspected.

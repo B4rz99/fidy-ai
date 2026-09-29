@@ -11,9 +11,13 @@ separate responsibilities:
 - [`@fidy/cloudflare-infra`](infra/cloudflare/) owns the Alchemy stack, resource wiring, and edge
   policy, but no domain model or Worker implementation.
 
-Cloudflare is the sole Production runtime authority. D1, Durable Objects, Queues, Workflows, R2,
-Workers AI, and Email Workers serve distinct adapter seams; an unimplemented seam returns a typed
-unavailable result rather than falling back to process-local state or a different provider. Railway,
+Cloudflare is the sole Production runtime authority. The public ingress Worker has no D1 binding;
+the private Core Worker owns the User-scoped data API and primary D1 authority. The unrouted Email
+Worker has a narrow D1 binding for forwarded-mail admission and retention. Durable Objects coordinate
+per-User work, Queues redeliver bounded identities, Workflows execute durable steps, R2 retains
+private bytes, Email Workers admit forwarded mail, and Workers AI handles Fidy-controlled inference.
+An unimplemented seam returns a typed unavailable result rather than falling back to process-local
+state or a different provider. Railway,
 PostgreSQL, and the Bun process runtime were superseded by
 [ADR 0026](docs/adr/0026-cloudflare-native-production-replatform.md).
 
@@ -48,7 +52,8 @@ bypasses canonical operation policy for tools.
 [`infra/cloudflare/alchemy.run.ts`](infra/cloudflare/alchemy.run.ts) is the sole Production topology
 authority. One stack deploys an assets-only web Worker at `app.fidyapp.com`, redirects `fidyapp.com`
 there, and exposes an ingress Worker at `api.fidyapp.com`. The Core Worker is private behind the
-ingress service binding and alone owns the D1 binding; the ingress has no direct database access.
+ingress service binding and owns the primary D1 binding; the unrouted Email Worker has a narrow
+D1 binding for forwarded-mail admission and retention. The ingress has no direct database access.
 The static artifact contains no server implementation or Secrets. Local development uses the same
 entrypoints, D1 migrations, and binding graph; other remote stages are rejected before resource
 creation.
@@ -62,9 +67,10 @@ signals expose delivery and execution failures; see the
 [background-work runbook](docs/operations/cloudflare-background-work.md). The server architecture
 records incomplete execution paths separately from their declared contracts.
 
-GitHub Actions rechecks trunk immediately before deploying an exact source revision, then verifies
-the redirect, static artifact, and bound health response. Workstation and provider-controlled source deployments
-are not release paths. See the [Production runbook](docs/operations/production-releases.md).
+GitHub Actions rechecks trunk immediately before deploying an exact source revision. It applies
+forward-only additive D1 migrations, smokes exact zero-traffic Worker versions, and promotes only
+the verified pair. Rollback can restore compatible Worker code traffic, never D1 or other state.
+Workstation and provider-controlled source deployments are not release paths. See the [Production runbook](docs/operations/production-releases.md).
 
 ## Identity and verification
 

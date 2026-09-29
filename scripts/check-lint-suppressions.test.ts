@@ -108,8 +108,6 @@ it("keeps platform diagnostic opt-outs on their reviewed file boundaries", () =>
           "nodeBuiltinImport:./apps/web/cloudflare/production-policy/artifact.ts",
           "nodeBuiltinImport:./apps/web/scripts/build-production.test.ts",
           "nodeBuiltinImport:./apps/web/scripts/check-browser-bundle.test.ts",
-          "nodeBuiltinImport:./scripts/check-legacy-authorities.test.ts",
-          "nodeBuiltinImport:./scripts/check-legacy-authorities.ts",
           "nodeBuiltinImport:./scripts/document-parsing/check.ts",
           "nodeBuiltinImport:./scripts/document-parsing/extraction-proof.ts",
           "nodeBuiltinImport:./scripts/document-parsing/protected-document-proof.ts",

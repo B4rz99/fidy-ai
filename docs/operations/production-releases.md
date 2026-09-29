@@ -4,6 +4,10 @@ GitHub Actions coordinates every Production release through
 [`.github/workflows/production.yml`](../../.github/workflows/production.yml). Do not deploy from a
 provider repository integration or from a workstation.
 
+Before enabling real onboarding, complete the [Production launch proof](production-launch.md).
+An ordinary passing release is not launch approval; that checklist records live evidence, synthetic
+cleanup, and the explicit operator decision without relaxing applied-migration guards.
+
 ## Authority and provider setup
 
 `infra/cloudflare/alchemy.run.ts` is the sole Production topology authority. It declares the static
@@ -123,14 +127,17 @@ unpromoted candidate versions while both stable Workers were restored. Normal pu
 this Worker-only drift before upload. After inspection proves **only** `Core` and `Ingress` have
 update drift, dispatch `Deploy Production` from `trunk` with `resume=true` and `bootstrap=false`.
 The first resume (`36602097827`) stopped at candidate smoke before promotion. Cleanup restored
-public stable traffic but could not confirm its write before removing the Core candidate. The next
-resume is limited to public deployment `e6a6fcdc-a14e-4560-b360-3cdb6d3b6421` at stable 100%, and Core
-deployment `17e36514-375e-4517-8c8e-beca709a863b` at stable 100% plus candidate 0%, with the exact
-persisted candidate receipts from that run. It proves the normal stable smoke identities, accepts
-only the two inspected Worker updates, rechecks trunk and both deployments, and removes only the
-known zero-traffic Core candidate. Cleanup polls stale reads without repeating a committed write;
-unknown deployments stop immediately. It then recaptures the sole stable pair before candidate upload. It then follows the ordinary zero-traffic candidate, pairing smoke, and guarded
-promotion steps. Any other drift, receipt, or Worker identity fails closed.
+public stable traffic but could not confirm its write before removing the Core candidate. Cleanup in run `36618951807` committed despite the failed workflow result; inspection
+`36620852745` confirms public deployment `e6a6fcdc-a14e-4560-b360-3cdb6d3b6421` and Core
+deployment `86d18c08-2219-4321-ae98-76428713c188`, each with its sole original stable version
+at 100%. Resume now requires that exact sole-stable pair and original candidate receipts,
+proves stable smoke identities, accepts only the two inspected Worker updates, and rechecks
+trunk and both deployments. It performs no cleanup traffic write. It then follows ordinary
+zero-traffic candidate upload, pairing smoke, and guarded promotion. Any other drift, receipt,
+or Worker identity fails closed. Reconciliation failures report a closed stage (`receipts`,
+`routing`, `identity`, `drift`, `trunk`, or `recapture`) without foreign errors or provider values.
+A deployment write is issued once; bounded reads may confirm its exact committed routing after
+a lost response, but never justify repeating the write.
 
 Never deploy a mutable tag, a later checkout, or provider-controlled source. Production has no
 persistent staging sibling. The stack rejects missing, malformed, and all-zero Production release

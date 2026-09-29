@@ -57,16 +57,7 @@ const requireDeployment = Effect.fn(function* (
   expected: Deployment
 ) {
   const observed = yield* port.current(name);
-  if (
-    observed.id !== expected.id ||
-    observed.versions.length !== expected.versions.length ||
-    expected.versions.some(
-      (version) =>
-        !observed.versions.some(
-          (actual) => actual.id === version.id && actual.percentage === version.percentage
-        )
-    )
-  ) {
+  if (observed.id !== expected.id || !matchesVersions(observed, expected.versions)) {
     return yield* Effect.fail(Error(`Worker deployment changed: ${name}`));
   }
 });
@@ -85,13 +76,46 @@ const staged = (
     { id: candidate, percentage: 0 },
   ],
 });
+const matchesVersions = (observed: Deployment, versions: Deployment["versions"]): boolean =>
+  observed.versions.length === versions.length &&
+  versions.every((expected) =>
+    observed.versions.some(
+      (actual) => actual.id === expected.id && actual.percentage === expected.percentage
+    )
+  );
+
+const observeCommitted = Effect.fn(function* (
+  port: ReleasePort,
+  name: string,
+  input: { versions: Deployment["versions"]; previousId: string }
+) {
+  return yield* Effect.gen(function* () {
+    const observed = yield* port.current(name);
+    if (observed.id === input.previousId || !matchesVersions(observed, input.versions)) {
+      return yield* Effect.fail(Error("Worker write not confirmed; inspect deployment state"));
+    }
+    return observed;
+  }).pipe(Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 6 }));
+});
+
+/** Write once and confirm exact routing, including when the accepted-write response was lost. */
 const deployExact = Effect.fn(function* (
   port: ReleasePort,
   name: string,
   versions: Deployment["versions"]
 ) {
-  const result = yield* port.deploy(name, versions);
-  // Cloudflare can expose the previous deployment briefly after accepting a write.
+  const previous = yield* port.current(name);
+  const reported = yield* port.deploy(name, versions).pipe(
+    Effect.catchCauseIf(
+      (cause) => !Cause.hasInterrupts(cause),
+      () => observeCommitted(port, name, { versions, previousId: previous.id })
+    )
+  );
+  // Wrangler's write adapter reads traffic after its command; that read can still be the old ID.
+  const result =
+    reported.id === previous.id
+      ? yield* observeCommitted(port, name, { versions, previousId: previous.id })
+      : reported;
   // Retry the read only; never repeat a traffic-changing request.
   yield* requireDeployment(port, name, { id: result.id, versions }).pipe(
     Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 6 })
@@ -267,4 +291,4 @@ const promoteRelease = Effect.fn(function* (
   return { publicDeploymentId: publicPromoted.id, coreDeploymentId: corePromoted.id };
 });
 
-export const releaseController = { captureRelease, stageRelease, promoteRelease };
+export const releaseController = { captureRelease, deployExact, stageRelease, promoteRelease };

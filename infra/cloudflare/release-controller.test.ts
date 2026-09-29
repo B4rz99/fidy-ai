@@ -172,6 +172,34 @@ describe("zero-traffic Worker release", () => {
       })
     ));
 
+  it("finishes both candidate cleanups when the first committed response is lost, without repeating a write", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = harness();
+        const release = yield* staged(fixture.port);
+        const ambiguous: ReleasePort = {
+          ...fixture.port,
+          deploy: (name, entries) =>
+            fixture.port.deploy(name, entries).pipe(
+              Effect.filterOrFail(
+                () => name !== publicName,
+                () => Error("response lost")
+              )
+            ),
+        };
+        yield* releaseCleanup.cleanRelease(ambiguous, release.snapshot, candidates);
+        expect(fixture.changes).toEqual([
+          `${publicName}:100/0`,
+          `${coreName}:100/0`,
+          `${publicName}:100`,
+          `${coreName}:100`,
+        ]);
+        expect((yield* fixture.port.current(coreName)).versions).toEqual([
+          { id: versions.coreStable, percentage: 100 },
+        ]);
+      })
+    ));
+
   it("cleans only its own partially staged candidate after a Core staging failure", () =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -180,7 +208,7 @@ describe("zero-traffic Worker release", () => {
         fixture.fail(`${coreName}:100/0`);
         yield* failure(
           releaseController.stageRelease(fixture.port, snapshot, candidates),
-          "provider refused"
+          "write not confirmed"
         );
         yield* releaseCleanup.cleanRelease(fixture.port, snapshot, candidates);
         expect((yield* fixture.port.current(publicName)).versions).toEqual([
@@ -301,7 +329,7 @@ describe("zero-traffic Worker release", () => {
       })
     ));
 
-  it("restores Core if its promotion committed but the response was lost", () =>
+  it("confirms a committed Core promotion without repeating the write when its response was lost", () =>
     Effect.runPromise(
       Effect.gen(function* () {
         const fixture = harness();
@@ -319,20 +347,65 @@ describe("zero-traffic Worker release", () => {
               )
             ),
         };
-        yield* failure(
-          releaseController.promoteRelease(ambiguous, release, {
-            exactPairPassed: true,
-            middlePairPassed: true,
-          }),
-          "restored"
-        );
+        yield* releaseController.promoteRelease(ambiguous, release, {
+          exactPairPassed: true,
+          middlePairPassed: true,
+        });
         expect((yield* fixture.port.current(coreName)).versions).toEqual([
-          { id: versions.coreStable, percentage: 100 },
+          { id: versions.coreCandidate, percentage: 100 },
         ]);
         expect((yield* fixture.port.current(publicName)).versions).toEqual([
+          { id: versions.publicCandidate, percentage: 100 },
+        ]);
+        expect(fixture.changes).toEqual([
+          `${publicName}:100/0`,
+          `${coreName}:100/0`,
+          `${coreName}:100`,
+          `${publicName}:100`,
+        ]);
+      })
+    ));
+
+  it("refuses an unknown deployment after an ambiguous write and never repeats that write", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = harness();
+        const unknown: ReleasePort = {
+          ...fixture.port,
+          deploy: (name) =>
+            fixture.port
+              .deploy(name, [{ id: versions.coreCandidate, percentage: 100 }])
+              .pipe(Effect.andThen(Effect.fail(Error("response lost")))),
+        };
+        yield* failure(
+          releaseController.deployExact(unknown, publicName, [
+            { id: versions.publicCandidate, percentage: 100 },
+          ]),
+          "write not confirmed"
+        );
+        expect(fixture.changes).toEqual([`${publicName}:100`]);
+      })
+    ));
+
+  it("confirms a committed staging write when the adapter returns the preceding deployment", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = harness();
+        const previous = yield* fixture.port.current(publicName);
+        const stale: ReleasePort = {
+          ...fixture.port,
+          deploy: (name, entries) => fixture.port.deploy(name, entries).pipe(Effect.as(previous)),
+        };
+        const result = yield* releaseController.deployExact(stale, publicName, [
           { id: versions.publicStable, percentage: 100 },
           { id: versions.publicCandidate, percentage: 0 },
         ]);
+        expect(result.id).not.toBe(previous.id);
+        expect(result.versions).toEqual([
+          { id: versions.publicStable, percentage: 100 },
+          { id: versions.publicCandidate, percentage: 0 },
+        ]);
+        expect(fixture.changes).toEqual([`${publicName}:100/0`]);
       })
     ));
 
@@ -389,7 +462,7 @@ describe("zero-traffic Worker release", () => {
       })
     ));
 
-  it("refuses to restore Core if public promotion committed but the response was lost", () =>
+  it("confirms a committed public promotion without retry or Core rollback when its response was lost", () =>
     Effect.runPromise(
       Effect.gen(function* () {
         const fixture = harness();
@@ -405,13 +478,19 @@ describe("zero-traffic Worker release", () => {
               )
             ),
         };
-        yield* failure(
-          releaseController.promoteRelease(ambiguous, release, {
-            exactPairPassed: true,
-            middlePairPassed: true,
-          }),
-          "restoration not confirmed"
-        );
+        yield* releaseController.promoteRelease(ambiguous, release, {
+          exactPairPassed: true,
+          middlePairPassed: true,
+        });
+        expect((yield* original.current(publicName)).versions).toEqual([
+          { id: versions.publicCandidate, percentage: 100 },
+        ]);
+        expect(fixture.changes).toEqual([
+          `${publicName}:100/0`,
+          `${coreName}:100/0`,
+          `${coreName}:100`,
+          `${publicName}:100`,
+        ]);
         expect((yield* original.current(coreName)).versions).toEqual([
           { id: versions.coreCandidate, percentage: 100 },
         ]);

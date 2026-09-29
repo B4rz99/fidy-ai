@@ -1,6 +1,6 @@
 /// <reference types="bun-types" />
 
-import { Context, Data, Effect, Encoding, Layer, Option, Schema, Stream } from "effect";
+import { Cause, Context, Data, Effect, Encoding, Layer, Option, Schema, Stream } from "effect";
 import {
   FetchHttpClient,
   HttpBody,
@@ -129,7 +129,7 @@ const interruptedPromotion = {
 const interruptedUpload = {
   ...interruptedPromotion,
   publicDeployment: "e6a6fcdc-a14e-4560-b360-3cdb6d3b6421",
-  coreRecoveredDeployment: "17e36514-375e-4517-8c8e-beca709a863b",
+  coreRecoveredDeployment: "86d18c08-2219-4321-ae98-76428713c188",
   publicCandidate: "18489858-358b-4986-9d60-98a686052c85",
   coreCandidate: "2216c932-4dc6-4195-baad-8944aa28bf07",
 } as const;
@@ -140,6 +140,25 @@ export const isPreSmokeBaseline = (health: {
   contractDigest: string;
 }): boolean => health.gitRevision === preSmokeRevision && health.contractDigest === preSmokeDigest;
 class ReleaseFailure extends Data.TaggedError("ReleaseFailure")<{ message: string }> {}
+
+/** CLI failures report only owned release messages, never foreign errors or provider values. */
+export const releaseFailureMessage = (cause: Cause.Cause<unknown>): string => {
+  const error = Cause.findErrorOption(cause);
+  return Option.isSome(error) && error.value instanceof ReleaseFailure
+    ? error.value.message
+    : "Production release routing failed; inspect Worker deployment state before recovery.";
+};
+
+type ResumeStage = "receipts" | "routing" | "identity" | "drift" | "trunk" | "recapture";
+const resumeStage = <A, E, R>(
+  stage: ResumeStage,
+  work: Effect.Effect<A, E, R>
+): Effect.Effect<A, ReleaseFailure, R> =>
+  work.pipe(
+    Effect.mapError(
+      () => new ReleaseFailure({ message: `Production reconciliation failed: stage=${stage}` })
+    )
+  );
 const Json = Schema.fromJsonString(Schema.Unknown);
 const decodeJson = Schema.decodeUnknownEffect(Json);
 const encodeJson = Schema.encodeSync(Json);
@@ -745,14 +764,11 @@ export const isInspectedResumePair = (input: {
       id: interruptedUpload.publicDeployment,
       version: interruptedUpload.publicVersion,
     }) &&
-    coreDeployment.id === interruptedUpload.coreRecoveredDeployment &&
-    coreDeployment.versions.length === 2 &&
-    coreDeployment.versions.some(
-      (version) => version.id === interruptedUpload.coreStable && version.percentage === 100
-    ) &&
-    coreDeployment.versions.some(
-      (version) => version.id === interruptedUpload.coreCandidate && version.percentage === 0
-    )
+    matchesRecoveryVersion({
+      deployment: coreDeployment,
+      id: interruptedUpload.coreRecoveredDeployment,
+      version: interruptedUpload.coreStable,
+    })
   );
 };
 
@@ -779,13 +795,19 @@ const resumeCapture = Effect.fn(function* (
       message: "Resume requires protected dispatch",
     });
   }
-  const workers = yield* workersFromState();
-  const { publicDeployment, coreDeployment } = yield* readResumePair(port, workers);
-  const identity = yield* stableIdentity({
-    publicVersionId: interruptedUpload.publicVersion,
-    coreVersionId: interruptedUpload.coreStable,
-    proof: env.smokeProof,
-  }).pipe(Effect.provideService(HttpClient.HttpClient, client));
+  const workers = yield* resumeStage("receipts", workersFromState());
+  const { publicDeployment, coreDeployment } = yield* resumeStage(
+    "routing",
+    readResumePair(port, workers)
+  );
+  const identity = yield* resumeStage(
+    "identity",
+    stableIdentity({
+      publicVersionId: interruptedUpload.publicVersion,
+      coreVersionId: interruptedUpload.coreStable,
+      proof: env.smokeProof,
+    }).pipe(Effect.provideService(HttpClient.HttpClient, client))
+  );
   const snapshot = yield* Schema.decodeEffect(releaseSchemas.snapshot)({
     revision: env.revision,
     ...identity,
@@ -806,18 +828,15 @@ const resumeCapture = Effect.fn(function* (
   if (!isInterruptedAlchemyReceipt({ workers, snapshot })) {
     return yield* new ReleaseFailure({ message: "Interrupted-upload Alchemy receipts changed" });
   }
-  yield* shell(["bash", "scripts/check-topology-drift.sh", "resume"]);
-  if ((yield* port.trunk()) !== env.revision) {
+  yield* resumeStage("drift", shell(["bash", "scripts/check-topology-drift.sh", "resume"]));
+  if ((yield* resumeStage("trunk", port.trunk())) !== env.revision) {
     return yield* new ReleaseFailure({
       message: "Interrupted-upload baseline changed; no recovery write",
     });
   }
-  yield* readResumePair(port, workers);
-  yield* releaseCleanup.cleanRelease(port, snapshot, {
-    publicVersionId: interruptedUpload.publicCandidate,
-    coreVersionId: interruptedUpload.coreCandidate,
-  });
-  yield* capture(port, env, client);
+  yield* resumeStage("routing", readResumePair(port, workers));
+  // Cleanup already committed in run 36618951807. Reconcile receipts without another traffic write.
+  yield* resumeStage("recapture", capture(port, env, client));
 });
 const stage = Effect.fn(function* (port: ReleasePort, env: Config) {
   const snapshot = yield* Schema.decodeUnknownEffect(releaseSchemas.snapshot)(
@@ -1263,12 +1282,14 @@ if (import.meta.main) {
     }
     yield* writeFile(Bun.stdout, "Production release routing step passed.\n");
   }).pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }), Effect.scoped);
-  await Effect.runPromise(program).catch((cause: unknown) => {
-    const message =
-      cause instanceof ReleaseFailure
-        ? cause.message
-        : "Production release routing failed; inspect Worker deployment state before recovery.";
-    process.stderr.write(`${message}\n`);
-    process.exitCode = 1;
-  });
+  await Effect.runPromise(
+    program.pipe(
+      Effect.catchCause((cause) =>
+        Effect.sync(() => {
+          process.stderr.write(`${releaseFailureMessage(cause)}\n`);
+          process.exitCode = 1;
+        })
+      )
+    )
+  );
 }

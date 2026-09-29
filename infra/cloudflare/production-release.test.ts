@@ -1,4 +1,4 @@
-import { Effect, Exit, Option } from "effect";
+import { Cause, Effect, Exit, Option } from "effect";
 import { describe, expect, it } from "vitest";
 import {
   decodeCaptureWorkerReceipts,
@@ -8,6 +8,7 @@ import {
   isInterruptedStableSnapshot,
   isPreSmokeBaseline,
   matchesRecoveryVersion,
+  releaseFailureMessage,
   verifyInspectedStaging,
 } from "./production-release";
 
@@ -44,9 +45,19 @@ it("refuses a removed public candidate before diagnostic smoke and never changes
         )
       );
       expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) expect(releaseFailureMessage(exit.cause)).toContain("staged");
       expect(writes).toBe(0);
     })
   ));
+
+it("keeps foreign failures and defects out of release CLI diagnostics", () => {
+  const foreign = Error("secret-provider-body-and-token");
+  for (const cause of [Cause.fail(foreign), Cause.die(foreign)]) {
+    expect(releaseFailureMessage(cause)).toBe(
+      "Production release routing failed; inspect Worker deployment state before recovery."
+    );
+  }
+});
 
 it("permits interrupted-upload reconciliation only for the inspected stable pair and Alchemy receipts", () => {
   const snapshot = {
@@ -60,7 +71,7 @@ it("permits interrupted-upload reconciliation only for the inspected stable pair
     },
     core: {
       name: "fidy-core",
-      deploymentId: "17e36514-375e-4517-8c8e-beca709a863b",
+      deploymentId: "86d18c08-2219-4321-ae98-76428713c188",
       stableVersionId: "28ffd738-508a-4d00-a3e1-31911f86ce01",
     },
   };
@@ -102,23 +113,32 @@ it("permits interrupted-upload reconciliation only for the inspected stable pair
   ).toBe(false);
 });
 
-it("allows resume cleanup only for the inspected stable traffic and exact zero-traffic Core candidate", () => {
+it("allows reconciliation only for the inspected sole-stable Worker pair after cleanup committed", () => {
   const pair = {
     publicDeployment: {
       id: "e6a6fcdc-a14e-4560-b360-3cdb6d3b6421",
       versions: [{ id: "90b1cd6a-4796-41bf-ae33-fb3333a3fff0", percentage: 100 }],
     },
     coreDeployment: {
-      id: "17e36514-375e-4517-8c8e-beca709a863b",
-      versions: [
-        { id: "28ffd738-508a-4d00-a3e1-31911f86ce01", percentage: 100 },
-        { id: "2216c932-4dc6-4195-baad-8944aa28bf07", percentage: 0 },
-      ],
+      id: "86d18c08-2219-4321-ae98-76428713c188",
+      versions: [{ id: "28ffd738-508a-4d00-a3e1-31911f86ce01", percentage: 100 }],
     },
   };
   expect(isInspectedResumePair(pair)).toBe(true);
   expect(
     isInspectedResumePair({ ...pair, coreDeployment: { ...pair.coreDeployment, id: "changed" } })
+  ).toBe(false);
+  expect(
+    isInspectedResumePair({
+      ...pair,
+      coreDeployment: {
+        ...pair.coreDeployment,
+        versions: [
+          ...pair.coreDeployment.versions,
+          { id: "2216c932-4dc6-4195-baad-8944aa28bf07", percentage: 0 },
+        ],
+      },
+    })
   ).toBe(false);
   expect(
     isInspectedResumePair({

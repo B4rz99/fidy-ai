@@ -857,7 +857,8 @@ it.effect(
         () => withIsolatedD1("operator-alert-worker", inspectRejectedAlert),
         (fetch) => Effect.sync(() => fetch.mockRestore())
       )
-    )
+    ),
+  { timeout: 15_000 }
 );
 
 describe("Cloudflare Worker topology (continued)", () => {

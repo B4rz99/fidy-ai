@@ -53,6 +53,7 @@ class CandidateRoutingPending extends Data.TaggedError("CandidateRoutingPending"
 const apiOrigin = "https://api.fidyapp.com";
 const maxAttempts = 20;
 const pollDelayMs = 1500;
+const authorityRefusedStatus = 403;
 const successStart = 200;
 const successEnd = 300;
 const probeEntropyBytes = 16;
@@ -230,6 +231,51 @@ const checkEdge = Effect.fn(function* (
 });
 
 /** Explicitly pinned HTTP invocations; a fallback to stable always fails identity comparison. */
+/** Poll only proof-admitted, identity-only GETs while global routing propagates. */
+export const verifyReadOnlySmokeRouting = Effect.fn(function* (
+  env: unknown,
+  mode: "candidate" | "promoted" = "candidate"
+) {
+  const decoded = Schema.decodeUnknownOption(RunnerConfig)(env);
+  if (Option.isNone(decoded)) {
+    return yield* new ReleaseSmokeFailed({ reason: "Incomplete routing readiness configuration" });
+  }
+  const config = decoded.value;
+  const headers =
+    mode === "candidate"
+      ? candidateHeaders(config, config.PUBLIC_VERSION_ID)
+      : { "x-fidy-smoke-proof": config.SMOKE_PROOF };
+  yield* Effect.gen(function* () {
+    const response = yield* call(`${smokePath}?readiness=1`, headers, Option.none());
+    if (response.status === authorityRefusedStatus) {
+      return yield* new ReleaseSmokeFailed({ reason: "Read-only routing authority refused" });
+    }
+    return yield* check(response, config, {
+      gitRevision: config.RELEASE_GIT_SHA,
+      contractDigest: config.CONTRACT_DIGEST,
+      workerVersionId: config.PUBLIC_VERSION_ID,
+    }).pipe(
+      Effect.catch(
+        () =>
+          new CandidateRoutingPending({ reason: "Read-only Worker identities have not converged" })
+      )
+    );
+  }).pipe(
+    Effect.retry({
+      times: maxAttempts - 1,
+      schedule: Schedule.spaced("1500 millis"),
+      while: (error) => error instanceof CandidateRoutingPending,
+    }),
+    Effect.timeout("45 seconds"),
+    Effect.catch(
+      () =>
+        new ReleaseSmokeFailed({
+          reason: "Read-only Worker routing did not converge; no synthetic work started",
+        })
+    )
+  );
+});
+
 export const verifyProductionSmoke = Effect.fn(function* (env: unknown) {
   const decoded = Schema.decodeUnknownOption(RunnerConfig)(env);
   if (Option.isNone(decoded)) {
@@ -279,8 +325,12 @@ if (import.meta.main) {
         const services = yield* Layer.build(FetchHttpClient.layer);
         return yield* (
           process.argv[2] === "promoted"
-            ? verifyPromotedSmoke(process.env)
-            : verifyProductionSmoke(process.env)
+            ? verifyReadOnlySmokeRouting(process.env, "promoted").pipe(
+                Effect.andThen(verifyPromotedSmoke(process.env))
+              )
+            : verifyReadOnlySmokeRouting(process.env).pipe(
+                Effect.andThen(verifyProductionSmoke(process.env))
+              )
         ).pipe(
           Effect.provideService(
             HttpClient.HttpClient,

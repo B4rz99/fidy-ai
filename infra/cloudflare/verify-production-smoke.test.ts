@@ -1,7 +1,11 @@
 import { Cause, Context, Effect, Exit, Layer, Option } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { verifyProductionSmoke, verifyPromotedSmoke } from "./verify-production-smoke";
+import {
+  verifyProductionSmoke,
+  verifyPromotedSmoke,
+  verifyReadOnlySmokeRouting,
+} from "./verify-production-smoke";
 
 const revision = "0123456789abcdef0123456789abcdef01234567";
 const previousRevision = "fedcba9876543210fedcba9876543210fedcba98";
@@ -38,6 +42,87 @@ const recordingResponse = (input: {
     input.bodies.push(body);
     return input.response;
   });
+
+const routingModes: ReadonlyArray<"candidate" | "promoted"> = ["candidate", "promoted"];
+describe("read-only routing readiness", () => {
+  it("refuses readiness authority without starting synthetic work", () =>
+    Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+            const request = new Request(input, init);
+            expect(request.method).toBe("GET");
+            expect(new URL(request.url).searchParams.get("readiness")).toBe("1");
+            return Promise.resolve(new Response(null, { status: 403, headers: securityHeaders }));
+          });
+          const services = yield* Layer.build(FetchHttpClient.layer);
+          const exit = yield* Effect.exit(
+            verifyReadOnlySmokeRouting(config).pipe(
+              Effect.andThen(verifyProductionSmoke(config)),
+              Effect.provideService(
+                HttpClient.HttpClient,
+                Context.get(services, HttpClient.HttpClient)
+              ),
+              Effect.provideService(FetchHttpClient.Fetch, mockedFetch)
+            )
+          );
+          expect(Exit.isFailure(exit)).toBe(true);
+          expect(mockedFetch).toHaveBeenCalledTimes(1);
+          mockedFetch.mockRestore();
+        })
+      )
+    ));
+  it.each(routingModes)("waits for both Worker identities without synthetic work (%s)", (mode) =>
+    Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          let attempts = 0;
+          const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+            const request = new Request(input, init);
+            expect(request.method).toBe("GET");
+            expect(new URL(request.url).searchParams.get("readiness")).toBe("1");
+            expect(request.headers.has("cloudflare-workers-version-overrides")).toBe(
+              mode === "candidate"
+            );
+            attempts++;
+            if (attempts === 1) {
+              return Promise.resolve(new Response(null, { status: 503, headers: securityHeaders }));
+            }
+            return Promise.resolve(
+              Response.json(
+                {
+                  status: "pending",
+                  public: {
+                    gitRevision: revision,
+                    contractDigest: digest,
+                    workerVersionId: publicCandidate,
+                  },
+                  core: {
+                    gitRevision: attempts === 2 ? previousRevision : revision,
+                    contractDigest: digest,
+                    workerVersionId: coreCandidate,
+                  },
+                  manifest: { protocolVersion: 1, asyncWorkVersion: 1 },
+                },
+                { headers: { ...securityHeaders, "x-fidy-smoke-worker-version": publicCandidate } }
+              )
+            );
+          });
+          const services = yield* Layer.build(FetchHttpClient.layer);
+          yield* verifyReadOnlySmokeRouting(config, mode).pipe(
+            Effect.provideService(
+              HttpClient.HttpClient,
+              Context.get(services, HttpClient.HttpClient)
+            ),
+            Effect.provideService(FetchHttpClient.Fetch, mockedFetch)
+          );
+          expect(attempts).toBe(3);
+          mockedFetch.mockRestore();
+        })
+      )
+    )
+  );
+});
 
 /** A wrong public version in the second smoke must never generate a passing release gate. */
 describe("intermediate production smoke", () => {

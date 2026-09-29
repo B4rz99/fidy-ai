@@ -72,6 +72,27 @@ describe("private release smoke", () => {
             handleSmoke({ request: request("a".repeat(513), true), environment })
           )).status
         ).toBe(404);
+        const refusedReadiness = yield* Effect.tryPromise(() =>
+          handleSmoke({
+            request: new Request("https://core.internal/internal/release-smoke?readiness=1"),
+            environment,
+          })
+        );
+        expect(refusedReadiness.status).toBe(404);
+        expect(refusedReadiness.headers.get("x-fidy-smoke-failure")).toBeNull();
+        const ready = yield* Effect.tryPromise(() =>
+          handleSmoke({
+            request: new Request("https://core.internal/internal/release-smoke?readiness=1", {
+              headers: { "x-fidy-smoke-proof": proof },
+            }),
+            environment,
+          })
+        );
+        expect(ready.status).toBe(200);
+        expect(yield* Effect.tryPromise(() => ready.json())).toMatchObject({
+          status: "pending",
+          core: { workerVersionId: environment.CF_VERSION_METADATA.id },
+        });
         const mismatch = yield* Effect.tryPromise(() =>
           handleSmoke({ request: request(body, true), environment })
         );

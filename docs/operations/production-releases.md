@@ -127,13 +127,14 @@ unpromoted candidate versions while both stable Workers were restored. Normal pu
 this Worker-only drift before upload. After inspection proves **only** `Core` and `Ingress` have
 update drift, dispatch `Deploy Production` from `trunk` with `resume=true` and `bootstrap=false`.
 The first resume (`36602097827`) stopped at candidate smoke before promotion. Cleanup restored
-public stable traffic but could not confirm its write before removing the Core candidate. Resume `36628978237` passed reconciliation, upload, and staging but stopped at HTTP 503
-from the expected public candidate without an owned Core failure stage. Cleanup succeeded;
-inspection `36629815315` confirms public deployment `480d7221-1fa7-4710-9be6-173ce4d7963b`
-and Core deployment `47c43874-be03-4919-8cd6-9a449291aafe`, each with its sole original
-stable version at 100%. Resume now requires that exact sole-stable pair and receipts for
-public candidate `094dc4f1-372f-4799-bc92-e0deccd35014` and Core candidate
-`5d76fb6d-cec5-4abd-a215-dbcd03b9ff31`,
+public stable traffic but could not confirm its write before removing the Core candidate. Resume `36631716949` passed reconciliation, upload, and staging but immediately received
+HTTP 503 from a different public Worker version: routing had not converged to the requested
+candidate. Cleanup succeeded; inspection `36632237904` confirms public deployment
+`4eae3224-b347-4ccc-8715-17389919e0f6` and Core deployment
+`8cd6309b-859a-424a-bc05-e206e5c24922`, each with its sole original stable version at 100%.
+Resume now requires that exact sole-stable pair and receipts for public candidate
+`7b83226f-3fbe-4d2f-99e8-72d7f818375f` and Core candidate
+`89a2da14-0f1b-4c8a-8eba-ed39b19d6b62`,
 proves stable smoke identities, accepts only the two inspected Worker updates, and rechecks
 trunk and both deployments. It performs no cleanup traffic write. It then follows ordinary
 zero-traffic candidate upload, pairing smoke, and guarded promotion. Any other drift, receipt,
@@ -144,8 +145,8 @@ a lost response, but never justify repeating the write.
 
 Proof-admitted smoke failures report only a closed `x-fidy-smoke-failure` stage, such as
 `identity`, `configuration`, `schema`, `storage`, `coordinator`, or `publication`.
-The runner validates this vocabulary before printing it and never retries a 503 or treats
-it as a passing gate. An unexpected private execution defect is classified as `platform`;
+The runner validates this vocabulary before printing it and never retries a synthetic
+smoke 503 or treats it as a passing gate. An unexpected private execution defect is classified as `platform`;
 a downstream 503 without a valid owned diagnostic is classified as `core_response` and its
 body is discarded. Neither classification establishes the root cause by itself. No provider error, secret, or User content enters diagnostics.
 Failure alerts use the GitHub run ID and attempt as their idempotency identity, rather
@@ -153,6 +154,18 @@ than the revision: distinct runs of one revision can have different traffic repo
 [Resend documents](https://resend.com/docs/dashboard/emails/idempotency-keys) that reusing
 a key with a different payload produces HTTP 409. This corrects the collision risk seen
 in the failed resume; actual inbox delivery still needs verification.
+
+Before either candidate smoke or the normal post-promotion smoke, the runner polls
+proof-admitted `GET /internal/release-smoke?readiness=1` for exact public/Core identities.
+This response is identity-only (`pending`), not a passing synthetic attestation. It performs
+no D1 read/admission, R2/DO check, Queue send, or Workflow creation. A bounded readiness
+failure blocks the release before any synthetic work. Candidate readiness uses both version
+overrides; post-promotion readiness uses normal traffic with no overrides. Only after this
+read-only convergence does the existing synthetic protocol run with its unchanged gates.
+[Cloudflare documents](https://developers.cloudflare.com/workers/configuration/versions-and-deployments/version-overrides/)
+that a recent deployment can briefly fall back to normal traffic even when an override is sent.
+This addresses the observed wrong-public-version attempt; it does not establish that every
+previous HTTP 503 had the same cause.
 
 Never deploy a mutable tag, a later checkout, or provider-controlled source. Production has no
 persistent staging sibling. The stack rejects missing, malformed, and all-zero Production release

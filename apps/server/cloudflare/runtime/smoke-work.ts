@@ -201,7 +201,12 @@ const startProbe = Effect.fn(function* (request: Request, environment: SmokeEnvi
 });
 
 const getProbe = Effect.fn(function* (request: Request, environment: SmokeEnvironment) {
-  const probeId = new URL(request.url).searchParams.get("probeId");
+  const parameters = new URL(request.url).searchParams;
+  // Identity-only readiness precedes synthetic work; no schema, admission, or binding effects.
+  if (parameters.get("readiness") === "1") {
+    return responseFor(environment, "pending", completedStatus);
+  }
+  const probeId = parameters.get("probeId");
   if (probeId === null || !Schema.is(SmokeWork.fields.probeId)(probeId)) return refused();
   const row = yield* readProbe(environment, probeId);
   const now = yield* Clock.currentTimeMillis;

@@ -1,0 +1,84 @@
+infra/cloudflare/rollback-compatibility.test.ts
+  s_d81eeca08a60b9::t_374a9e7ba26af6 4-13,15,18-20,23-28,32-45
+  s_d81eeca08a60b9::t_11b8aecd3db09e 1-3,16-17,21-22,30-31,46-47
+  s_d81eeca08a60b9::t_5a991537758235 14,29
+infra/cloudflare/release-rollback.test.ts
+  s_d81eeca08a60b9::t_12cfb324999629 1-2,5-16,27-36,46,55-57,102-104,183
+  s_d81eeca08a60b9::t_5dd707a5f07f59 42,58,86,95-97,117-123,127,131-140,148-149,163-170,174
+  s_d81eeca08a60b9::t_a2ef2a30de6efa 43,59,77-82,98-100,150-162
+  s_d81eeca08a60b9::t_b33aec0fa87a50 45,60-61,87
+  s_d81eeca08a60b9::t_74c34f53634f6a 124-126,128-130,141-147,171-173,175-180
+  s_d81eeca08a60b9::t_57574dc19d1811 3-4
+  s_d81eeca08a60b9::t_7a08e1009ebaa2 17-26,37-41,44,47-54,62-76,83-85,88-94,101,105-116,181-182
+infra/cloudflare/verify-production-smoke.ts
+  s_d81eeca08a60b9::t_b78f73ff637ea9 189-208
+  s_d81eeca08a60b9::t_0f4989d2b7c194 214-218,231,243
+infra/cloudflare/production-release.ts
+  s_d81eeca08a60b9::t_4f7aff2c372a63 563,565,576-580,605-607,609
+  s_d81eeca08a60b9::t_20ca887b1f74f0 657-659
+  s_d81eeca08a60b9::t_b079bfb6c6faa0 540,548
+  s_d81eeca08a60b9::t_32be566810db50 524-528
+  s_d81eeca08a60b9::t_58176e11c09417 541-547,550-562,566-575
+  s_d81eeca08a60b9::t_3789345c02c8b6 483-484
+  s_d81eeca08a60b9::t_32ae4c4c518723 18-19,39-52,59,510,514-517,519,522,539,549,589-592,594-597,599-602,610,622-626,628-631,633-637
+  s_d81eeca08a60b9::t_2e6023f8cae9b3 472-479,481-482
+  s_d81eeca08a60b9::t_6abdee6df73a43 518,520-521,523,529-537,603-604,611-621,627,632
+  s_d81eeca08a60b9::t_74357fc350c944 538,564,581-588,608
+  s_d81eeca08a60b9::t_554331e0253665 593,598
+infra/cloudflare/release-rollback.ts
+  s_d81eeca08a60b9::t_79022e086c0c9d 1-3,5-12,19
+  s_d81eeca08a60b9::t_4215143d80d98f 23,27,29,37
+  s_d81eeca08a60b9::t_645a4796679584 4,18,20-22,24-26,28,30-34,36,38-48,50-51,55-61,83-86
+  s_d81eeca08a60b9::t_7a08e1009ebaa2 13-17,35,52-54,62-82
+  s_d81eeca08a60b9::t_e2a04e122ce13c 49
+.github/workflows/production.yml
+  s_d81eeca08a60b9::t_c84c6c73ef8809 37,163,167-177,179-201,203
+  s_d81eeca08a60b9::t_81fb109e77aee4 178
+apps/web/scripts/production-workflow.test.ts
+  s_d81eeca08a60b9::t_a8c18449bf6a11 159-172
+  s_d81eeca08a60b9::t_a850293d7af7f7 5-7
+  s_d81eeca08a60b9::t_e6768b74bf27e7 173-174
+infra/cloudflare/rollback-compatibility.ts
+  s_d81eeca08a60b9::t_f642c3b8349d97 1-6,15-18,20-23
+  s_d81eeca08a60b9::t_374a9e7ba26af6 7-11,13-14
+  s_d81eeca08a60b9::t_8bf5987994fd12 12,19
+.github/workflows/production-rollback.yml
+  s_d81eeca08a60b9::t_0a734bf5d2dc6c 1-20,22-59,61-71
+  s_d81eeca08a60b9::t_83a4af19a65c30 21,60
+infra/cloudflare/release-controller.ts
+  s_d81eeca08a60b9::t_ed57a2fdb96004 223,227,236
+docs/operations/production-releases.md
+  s_d81eeca08a60b9::t_f082657afb3d09 79-84,203-262
+  s_f8dbb486b6c236::t_0dc144191995d1 263
+infra/cloudflare/verify-production-smoke.test.ts
+  s_d81eeca08a60b9::t_e5ccaa754e6917 4
+  s_d81eeca08a60b9::t_d8921fcca3f679 3,103,109-110,158
+  s_d81eeca08a60b9::t_d209a0e5703fc7 108,111-125,127-130,132-157
+  s_d81eeca08a60b9::t_7dc9e397239833 104-107
+  s_d81eeca08a60b9::t_96b9e5fa126da9 126
+  s_d81eeca08a60b9::t_700eab403e1c6c 131
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "50e783e1317ea2e529964cafd6f6e7228df09e2d",
+  "prompts": {},
+  "sessions": {
+    "s_d81eeca08a60b9": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0ea67-7ec2-73ea-8c2d-8947557052dd",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_f8dbb486b6c236": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e7d2-da0e-701d-8653-23d0f6150e67",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -53,6 +53,18 @@ const VersionResponse = Schema.Struct({
     }),
   }),
 });
+const ResourceIdentity = Schema.Struct({ logicalId: Schema.String });
+const ResourceLifecycle = Schema.Struct({
+  status: Schema.Literals([
+    "creating",
+    "created",
+    "updating",
+    "updated",
+    "deleting",
+    "replacing",
+    "replaced",
+  ]),
+});
 const StateEntry = Schema.Struct({
   logicalId: Schema.String,
   status: Schema.Literals(["created", "updated"]),
@@ -197,7 +209,18 @@ type WorkerReceipt = Readonly<{
   hasRolloutBaseline: boolean;
 }>;
 type WorkerReceipts = Readonly<{ public: WorkerReceipt; core: WorkerReceipt }>;
-const missingWorkerReceiptMessage = "Alchemy Worker state lacks a unique required Worker receipt";
+const missingWorkerResourceMessage = "Alchemy Worker state lacks the required Worker resource";
+const ambiguousWorkerReceiptMessage =
+  "Alchemy Worker state has an ambiguous required Worker receipt";
+const unstableWorkerReceiptMessage = "Alchemy Worker state has an unstable required Worker receipt";
+const incompleteWorkerReceiptMessage =
+  "Alchemy Worker state has an incomplete required Worker receipt";
+const workerReceiptMessages = new Set([
+  missingWorkerResourceMessage,
+  ambiguousWorkerReceiptMessage,
+  unstableWorkerReceiptMessage,
+  incompleteWorkerReceiptMessage,
+]);
 
 const decodeStateMap = (output: string): typeof StateMap.Type => {
   const objectStarts = [...output.matchAll(/\{/gu)].map((match) => match.index);
@@ -217,27 +240,40 @@ const decodeStateMap = (output: string): typeof StateMap.Type => {
 export const decodeWorkerReceipts = (output: string): WorkerReceipts => {
   const entries = decodeStateMap(output);
   const select = (logicalId: string): WorkerReceipt => {
-    const matches = Object.values(entries).flatMap((value) => {
-      const decoded = Schema.decodeUnknownOption(StateEntry)(value);
-      if (Option.isNone(decoded) || decoded.value.logicalId !== logicalId) return [];
-      const rawVersion = Schema.decodeUnknownOption(
-        Schema.Struct({ attr: Schema.Struct({ versionId: VersionId }) })
-      )(value);
-      const baseline = Schema.decodeUnknownOption(
-        Schema.Struct({
-          attr: Schema.Struct({ hash: Schema.Record(Schema.String, Schema.Unknown) }),
-        })
-      )(value);
-      return [
-        {
-          workerName: decoded.value.attr.workerName,
-          versionId: Option.map(rawVersion, (entry) => entry.attr.versionId),
-          hasRolloutBaseline: Option.isSome(baseline),
-        },
-      ];
+    const matchingEntries = Object.values(entries).filter((value) => {
+      const identity = Schema.decodeUnknownOption(ResourceIdentity)(value);
+      return Option.isSome(identity) && identity.value.logicalId === logicalId;
     });
-    if (matches.length !== 1) throw Error(missingWorkerReceiptMessage);
-    return matches[0] ?? { workerName: "", versionId: Option.none(), hasRolloutBaseline: false };
+    if (matchingEntries.length === 0) throw Error(missingWorkerResourceMessage);
+    if (matchingEntries.length !== 1) throw Error(ambiguousWorkerReceiptMessage);
+
+    const value = matchingEntries[0];
+    const decoded = Schema.decodeUnknownOption(StateEntry)(value);
+    if (Option.isNone(decoded)) {
+      const lifecycle = Schema.decodeUnknownOption(ResourceLifecycle)(value);
+      if (
+        Option.isSome(lifecycle) &&
+        lifecycle.value.status !== "created" &&
+        lifecycle.value.status !== "updated"
+      ) {
+        throw Error(unstableWorkerReceiptMessage);
+      }
+      throw Error(incompleteWorkerReceiptMessage);
+    }
+
+    const rawVersion = Schema.decodeUnknownOption(
+      Schema.Struct({ attr: Schema.Struct({ versionId: VersionId }) })
+    )(value);
+    const baseline = Schema.decodeUnknownOption(
+      Schema.Struct({
+        attr: Schema.Struct({ hash: Schema.Record(Schema.String, Schema.Unknown) }),
+      })
+    )(value);
+    return {
+      workerName: decoded.value.attr.workerName,
+      versionId: Option.map(rawVersion, (entry) => entry.attr.versionId),
+      hasRolloutBaseline: Option.isSome(baseline),
+    };
   };
   return { public: select("Ingress"), core: select("Core") };
 };
@@ -265,8 +301,8 @@ const workersFromState = Effect.fn(function* () {
     catch: (cause) =>
       new ReleaseFailure({
         message:
-          cause instanceof Error && cause.message === missingWorkerReceiptMessage
-            ? missingWorkerReceiptMessage
+          cause instanceof Error && workerReceiptMessages.has(cause.message)
+            ? cause.message
             : "Alchemy Worker state JSON could not be decoded",
       }),
   });

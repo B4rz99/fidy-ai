@@ -16,7 +16,7 @@ import {
 } from "./runtime/telemetry";
 import { browserOrigins } from "./runtime/topology";
 import {
-  type SmokeFailureStage,
+  SmokeFailureStage,
   SmokeResponse,
   smokeFailureHeader,
   smokeManifest,
@@ -107,7 +107,9 @@ const unauthenticated = (): Response =>
 const forbiddenOrigin = (): Response =>
   Response.json({ status: "forbidden_origin" }, { status: 403 });
 
-const unavailable = (): Response => Response.json({ status: "unavailable" }, { status: 503 });
+const serviceUnavailableStatus = 503;
+const unavailable = (): Response =>
+  Response.json({ status: "unavailable" }, { status: serviceUnavailableStatus });
 
 const smokeUnavailable = (
   request: Request,
@@ -512,7 +514,18 @@ const routeOwnedRequest = (
       try: (signal) => environment.CORE.fetch(forwarded, { signal }),
       catch: () => undefined,
     });
-    if (new URL(request.url).pathname !== smokePath || !response.ok) return response;
+    if (new URL(request.url).pathname !== smokePath) return response;
+    if (response.status === serviceUnavailableStatus) {
+      const stage = Schema.decodeUnknownOption(SmokeFailureStage)(
+        response.headers.get(smokeFailureHeader)
+      );
+      return smokeUnavailable(
+        request,
+        environment,
+        Option.getOrElse(stage, () => "core_response")
+      );
+    }
+    if (!response.ok) return response;
     const version = environment.CF_VERSION_METADATA?.id;
     if (version === undefined || environment.CONTRACT_DIGEST === undefined) {
       return smokeUnavailable(request, environment, "configuration");

@@ -127,13 +127,13 @@ unpromoted candidate versions while both stable Workers were restored. Normal pu
 this Worker-only drift before upload. After inspection proves **only** `Core` and `Ingress` have
 update drift, dispatch `Deploy Production` from `trunk` with `resume=true` and `bootstrap=false`.
 The first resume (`36602097827`) stopped at candidate smoke before promotion. Cleanup restored
-public stable traffic but could not confirm its write before removing the Core candidate. Resume `36623274217` passed reconciliation, upload, and staging but stopped at HTTP 503
-from the expected public candidate. Cleanup succeeded; inspection `36623831453` confirms
-public deployment `144a4b86-a8a5-42e8-8be6-f9710066c063` and Core deployment
-`2f4cb41f-2fb0-4ee1-8b99-4150e085a587`, each with its sole original stable version at 100%.
-Resume now requires that exact sole-stable pair and receipts for public candidate
-`6e9271d7-b98f-4acb-9771-bee834ea0961` and Core candidate
-`8384e10e-2c6b-4063-9835-2ad461bed222`,
+public stable traffic but could not confirm its write before removing the Core candidate. Resume `36628978237` passed reconciliation, upload, and staging but stopped at HTTP 503
+from the expected public candidate without an owned Core failure stage. Cleanup succeeded;
+inspection `36629815315` confirms public deployment `480d7221-1fa7-4710-9be6-173ce4d7963b`
+and Core deployment `47c43874-be03-4919-8cd6-9a449291aafe`, each with its sole original
+stable version at 100%. Resume now requires that exact sole-stable pair and receipts for
+public candidate `094dc4f1-372f-4799-bc92-e0deccd35014` and Core candidate
+`5d76fb6d-cec5-4abd-a215-dbcd03b9ff31`,
 proves stable smoke identities, accepts only the two inspected Worker updates, and rechecks
 trunk and both deployments. It performs no cleanup traffic write. It then follows ordinary
 zero-traffic candidate upload, pairing smoke, and guarded promotion. Any other drift, receipt,
@@ -145,7 +145,9 @@ a lost response, but never justify repeating the write.
 Proof-admitted smoke failures report only a closed `x-fidy-smoke-failure` stage, such as
 `identity`, `configuration`, `schema`, `storage`, `coordinator`, or `publication`.
 The runner validates this vocabulary before printing it and never retries a 503 or treats
-it as a passing gate. No provider error, secret, or User content enters diagnostics.
+it as a passing gate. An unexpected private execution defect is classified as `platform`;
+a downstream 503 without a valid owned diagnostic is classified as `core_response` and its
+body is discarded. Neither classification establishes the root cause by itself. No provider error, secret, or User content enters diagnostics.
 Failure alerts use the GitHub run ID and attempt as their idempotency identity, rather
 than the revision: distinct runs of one revision can have different traffic reports.
 [Resend documents](https://resend.com/docs/dashboard/emails/idempotency-keys) that reusing

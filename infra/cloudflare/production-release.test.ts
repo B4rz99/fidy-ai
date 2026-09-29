@@ -66,24 +66,24 @@ it("permits interrupted-upload reconciliation only for the inspected stable pair
     stableContractDigest: "f33c9633df9fdfe0dbb730156fe9083dc4d0f676648a27d102f73bc98262fd4f",
     public: {
       name: "fidy-ingress",
-      deploymentId: "144a4b86-a8a5-42e8-8be6-f9710066c063",
+      deploymentId: "480d7221-1fa7-4710-9be6-173ce4d7963b",
       stableVersionId: "90b1cd6a-4796-41bf-ae33-fb3333a3fff0",
     },
     core: {
       name: "fidy-core",
-      deploymentId: "2f4cb41f-2fb0-4ee1-8b99-4150e085a587",
+      deploymentId: "47c43874-be03-4919-8cd6-9a449291aafe",
       stableVersionId: "28ffd738-508a-4d00-a3e1-31911f86ce01",
     },
   };
   const workers = {
     public: {
       workerName: snapshot.public.name,
-      versionId: Option.some("6e9271d7-b98f-4acb-9771-bee834ea0961"),
+      versionId: Option.some("094dc4f1-372f-4799-bc92-e0deccd35014"),
       hasRolloutBaseline: true,
     },
     core: {
       workerName: snapshot.core.name,
-      versionId: Option.some("8384e10e-2c6b-4063-9835-2ad461bed222"),
+      versionId: Option.some("5d76fb6d-cec5-4abd-a215-dbcd03b9ff31"),
       hasRolloutBaseline: true,
     },
   };
@@ -116,11 +116,11 @@ it("permits interrupted-upload reconciliation only for the inspected stable pair
 it("allows reconciliation only for the inspected sole-stable Worker pair after cleanup committed", () => {
   const pair = {
     publicDeployment: {
-      id: "144a4b86-a8a5-42e8-8be6-f9710066c063",
+      id: "480d7221-1fa7-4710-9be6-173ce4d7963b",
       versions: [{ id: "90b1cd6a-4796-41bf-ae33-fb3333a3fff0", percentage: 100 }],
     },
     coreDeployment: {
-      id: "2f4cb41f-2fb0-4ee1-8b99-4150e085a587",
+      id: "47c43874-be03-4919-8cd6-9a449291aafe",
       versions: [{ id: "28ffd738-508a-4d00-a3e1-31911f86ce01", percentage: 100 }],
     },
   };

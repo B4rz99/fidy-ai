@@ -21,6 +21,7 @@ export const SmokeFailureStage = Schema.Literals([
   "configuration",
   "public_forwarding",
   "public_response",
+  "core_response",
 ]);
 export type SmokeFailureStage = typeof SmokeFailureStage.Type;
 

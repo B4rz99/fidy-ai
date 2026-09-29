@@ -1808,7 +1808,19 @@ const smokeResponse = (request: Request, environment: CoreEnvironment): Effect.E
               : unavailable()
           ),
     catch: () => undefined,
-  }).pipe(Effect.orElseSucceed(unavailable));
+  }).pipe(
+    Effect.orElseSucceed(() =>
+      Response.json(
+        { status: "unavailable" },
+        {
+          status: 503,
+          headers: smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })
+            ? { [smokeFailureHeader]: "platform" }
+            : {},
+        }
+      )
+    )
+  );
 
 const reservedCoreResponse = (
   request: Request,

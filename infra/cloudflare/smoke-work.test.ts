@@ -96,6 +96,24 @@ describe("private release smoke", () => {
         expect(yield* Effect.tryPromise(() => admissionFailure.text())).not.toContain(
           "secret-provider-body"
         );
+        const executionFailure = yield* Effect.tryPromise(() =>
+          handleSmoke({
+            request: request(body, true),
+            environment: {
+              ...environment,
+              CF_VERSION_METADATA: {
+                get id(): string {
+                  throw Error("secret-runtime-defect");
+                },
+              },
+            },
+          })
+        );
+        expect(executionFailure.status).toBe(503);
+        expect(executionFailure.headers.get("x-fidy-smoke-failure")).toBe("platform");
+        expect(yield* Effect.tryPromise(() => executionFailure.text())).not.toContain(
+          "secret-runtime-defect"
+        );
         expect(effects).toBe(0);
       })
   );

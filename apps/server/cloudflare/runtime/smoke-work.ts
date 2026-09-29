@@ -225,7 +225,10 @@ export const handleSmoke = ({
       if (request.method === "POST") return yield* startProbe(request, environment);
       if (request.method === "GET") return yield* getProbe(request, environment);
       return refused();
-    }).pipe(Effect.catch((error) => Effect.succeed(fail(error.stage))))
+    }).pipe(
+      Effect.catch((error) => Effect.succeed(fail(error.stage))),
+      Effect.catchCause(() => Effect.succeed(fail("platform")))
+    )
   );
 
 const receiveMessage = Effect.fn(function* (

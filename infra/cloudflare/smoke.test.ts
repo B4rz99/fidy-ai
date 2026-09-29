@@ -124,6 +124,35 @@ describe("production smoke ingress", () => {
         expect(failed.status).toBe(503);
         expect(failed.headers.get("x-fidy-smoke-failure")).toBe("public_forwarding");
         expect(yield* Effect.tryPromise(() => failed.text())).not.toContain("secret-provider-body");
+        for (const stage of ["schema", "secret-provider-body", ""]) {
+          const sanitized = yield* Effect.tryPromise(() =>
+            publicWorker.fetch(
+              new Request("https://api.fidyapp.com/internal/release-smoke", {
+                method: "POST",
+                headers: { "x-fidy-smoke-proof": "a".repeat(64) },
+              }),
+              {
+                ...environment,
+                CORE: {
+                  fetch: () =>
+                    Promise.resolve(
+                      new Response("secret-provider-body", {
+                        status: 503,
+                        headers: { "x-fidy-smoke-failure": stage },
+                      })
+                    ),
+                },
+              }
+            )
+          );
+          expect(sanitized.status).toBe(503);
+          expect(sanitized.headers.get("x-fidy-smoke-failure")).toBe(
+            stage === "schema" ? "schema" : "core_response"
+          );
+          expect(yield* Effect.tryPromise(() => sanitized.text())).not.toContain(
+            "secret-provider-body"
+          );
+        }
       })
   );
 

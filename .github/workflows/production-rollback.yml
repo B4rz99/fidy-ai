@@ -1,0 +1,71 @@
+name: Guarded Worker code rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_run_id:
+        description: Production release run containing the captured stable Worker versions
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    if: github.ref == 'refs/heads/trunk'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
+      RELEASE_GIT_SHA: ${{ github.sha }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      SMOKE_PROOF: ${{ secrets.SMOKE_PROOF }}
+    steps:
+      - name: Check out the protected trunk workflow
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.4.1"
+
+      - name: Install locked workspace
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Verify source release and retrieve its captured receipt
+        env:
+          SOURCE_RUN_ID: ${{ inputs.release_run_id }}
+        run: |
+          [[ "$SOURCE_RUN_ID" =~ ^[0-9]+$ ]] || exit 1
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID" \
+            --jq '{name,head_branch,head_sha}' > "$RUNNER_TEMP/source-run.json"
+          jq -e '.name == "Deploy Production" and .head_branch == "trunk" and (.head_sha | test("^[0-9a-f]{40}$"))' \
+            "$RUNNER_TEMP/source-run.json" >/dev/null
+          mkdir -p "$RUNNER_TEMP/recovery"
+          gh run download "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name fidy-rollback --dir "$RUNNER_TEMP/recovery"
+          echo "RELEASE_SNAPSHOT_FILE=$RUNNER_TEMP/recovery/fidy-release.json" >> "$GITHUB_ENV"
+          echo "SMOKE_ATTESTATION_FILE=$RUNNER_TEMP/fidy-manual-smoke.json" >> "$GITHUB_ENV"
+          jq -e --arg revision "$(jq -r .head_sha "$RUNNER_TEMP/source-run.json")" \
+            '.release.snapshot.revision == $revision' \
+            "$RUNNER_TEMP/recovery/fidy-release.json.promoted" >/dev/null
+
+      - name: Restore captured public and Core code only when safe
+        working-directory: infra/cloudflare
+        run: bun production-release.ts rollback
+
+      - name: Report observed Worker traffic after a failed manual attempt
+        if: ${{ failure() }}
+        run: bun infra/cloudflare/production-release.ts report || true

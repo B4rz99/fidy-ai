@@ -76,7 +76,12 @@ The [Kapso real-user launch check](kapso-launch-readiness.md) is separate from o
 12. Recheck trunk and current deployment IDs before each promotion. Route the tested Core candidate
     to 100%, then the tested public candidate to 100%. No mutable tag or latest-version selector
     participates. Verify the redirect, static metadata, and bound health response afterward.
-13. Record the Git revision, contract digest, and stack identity in the GitHub step summary.
+13. Retain the captured rollback receipt in a private, seven-day GitHub Actions artifact. Probe
+    **normal traffic without version overrides** using the same synthetic smoke protocol. Retry a
+    bounded three times for convergence; a confirmed failure attempts guarded code-only rollback,
+    public first and then Core. A failed post-promotion probe fails the release even if code traffic
+    was successfully restored. The failure email includes the observed traffic state.
+14. Record the Git revision, contract digest, and stack identity in the GitHub step summary.
 
 A superseded candidate reports:
 
@@ -194,6 +199,67 @@ there is no atomic two-Worker traffic transaction. A failed release must not be 
 rollback. In particular, D1 migrations, R2, Durable Object/Workflow state, Queue work, scripts other
 than public/Core, and the web artifact may already have changed under Alchemy. Keep these changes
 additive and compatible with stable Worker code, and fix forward through a reviewed trunk release.
+
+### Immediate post-promotion code failure (#720)
+
+The post-promotion probe exercises **unversioned normal traffic**, checking both independently
+reported Worker version IDs, release identities, the smoke manifest, and synthetic Queue/Workflow
+completion. Exact-version overrides are used only before promotion; they could conceal a routing
+failure afterward. The probe cannot detect code paths it does not exercise or claim real-traffic
+exception coverage. It is bounded by three attempts; a confirmed failure triggers the checked-in
+rollback command, not an unreviewed deploy. No Tail Worker or paid-plan Tail feature is required.
+
+Rollback accepts only the immutable public/Core stable IDs captured **before** candidate upload.
+Both must appear in Cloudflare's `deployable=true` Worker version history (at most the most recent
+100 versions are eligible). The version metadata must show unchanged bindings and Durable Object
+migration tags, and the Git diff from the captured stable revision must show no D1 migration,
+Alchemy topology, or named Queue/Workflow change. An absent Git revision, unknown version metadata,
+changed secret/binding, Durable Object lifecycle change, or changed deployment **refuses** automatic
+rollback. The Cloudflare deployment API is called without `force=true`; if Cloudflare rejects a
+secret change or deleted resource, stop rather than bypass its safety check. These checks are
+conservative eligibility evidence, not a general schema migration proof. Changes to a shared
+resource outside reviewed Git deployment authority are unsupported and require operator inspection.
+
+Before each traffic write, the controller checks the exact promoted deployment ID and its sole
+100% candidate version. It restores public first (the stable-public/candidate-Core intermediate
+pairing passed pre-promotion smoke), then Core, and confirms each resulting deployment. If any
+read or write is uncertain, it stops and emails the observed traffic state; **do not infer a full
+rollback from the attempt**. GitHub serializes release and manual fallback runs. Cloudflare's
+create-deployment API does not expose an atomic deployment `If-Match`/compare-and-swap precondition:
+an out-of-band deployment between the final read and write can still race. Restrict deployment
+credentials to this coordinator and stop for operator action if a different writer is suspected.
+
+The one-command manual fallback for an eligible recent release, using its Production workflow run ID:
+
+```sh
+gh workflow run production-rollback.yml --ref trunk -f release_run_id=<release-run-id>
+```
+
+The protected Production environment downloads that run's captured receipt, validates its trunk
+revision, and runs the **same guarded code-only** rollback. It cannot force an incompatible target
+or overwrite a later deployment. Watch its run and the Production alert; if it refuses, inspect
+both observed deployments, resource history, and D1 schema, then fix forward through reviewed trunk.
+The receipt artifact expires after seven days; an older release requires explicit operator planning,
+not a guessed version. No workstation or dashboard deployment is an ordinary fallback.
+
+**Prelaunch exercise — required before the first real User, not yet performed:** On the empty
+Production stack, deliberately promote a candidate whose normal-traffic smoke fails while the
+pre-promotion exact-version smoke passes. Record the candidate/stable deployment IDs, the failed
+probe and confirmed restoration. Repeat with a controlled rollback refusal (for example, a
+changed deployment ID) and verify the release-failure email contains the observed traffic state.
+In another synthetic run, invoke the manual fallback command above and verify it restores the
+captured pair. Record the workflow run IDs, Cloudflare response/version evidence, and operator
+receipt privately; reset to a clean compatible baseline before admitting Users. Local tests cover
+controller ordering/refusal and workflow wiring but **do not replace this remote exercise**.
+
+Worker traffic rollback **does not restore** D1/R2/DO state, Queue contents, Workflow definitions
+or instances, routes, configuration, secrets, web assets, or external effects. Keep schema and
+resource changes additive and compatible with stable code; otherwise fix forward with explicit
+operator action.
+
+Cloudflare documentation: [Worker version rollbacks](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/),
+[deployable versions](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/versions/methods/list/),
+and [deployment create API](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/deployments/methods/create/).
 
 Never print, copy into metadata, or pass Cloudflare tokens as command arguments. Rotate a token in
 Cloudflare and GitHub if exposure is suspected.

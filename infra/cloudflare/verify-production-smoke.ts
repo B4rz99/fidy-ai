@@ -186,12 +186,36 @@ export const verifyProductionSmoke = Effect.fn(function* (env: unknown) {
   });
 });
 
+/** Probe normal traffic after promotion; an exact-version override would hide a routing failure. */
+export const verifyPromotedSmoke = Effect.fn(function* (env: unknown) {
+  const decoded = Schema.decodeUnknownOption(RunnerConfig)(env);
+  if (Option.isNone(decoded)) {
+    return yield* new ReleaseSmokeFailed({
+      reason: "Incomplete post-promotion smoke configuration",
+    });
+  }
+  const config = decoded.value;
+  yield* awaitSyntheticWork(
+    config,
+    { "x-fidy-smoke-proof": config.SMOKE_PROOF },
+    {
+      gitRevision: config.RELEASE_GIT_SHA,
+      contractDigest: config.CONTRACT_DIGEST,
+      workerVersionId: config.PUBLIC_VERSION_ID,
+    }
+  );
+});
+
 if (import.meta.main) {
   const result = await Effect.runPromiseExit(
     Effect.scoped(
       Effect.gen(function* () {
         const services = yield* Layer.build(FetchHttpClient.layer);
-        return yield* verifyProductionSmoke(process.env).pipe(
+        return yield* (
+          process.argv[2] === "promoted"
+            ? verifyPromotedSmoke(process.env)
+            : verifyProductionSmoke(process.env)
+        ).pipe(
           Effect.provideService(
             HttpClient.HttpClient,
             Context.get(services, HttpClient.HttpClient)
@@ -204,7 +228,7 @@ if (import.meta.main) {
   const passed = Exit.isSuccess(result);
   const smokeEnvironment = process.env;
   const attestationFile = smokeEnvironment.SMOKE_ATTESTATION_FILE;
-  if (passed && attestationFile?.startsWith("/") === true) {
+  if (passed && process.argv[2] !== "promoted" && attestationFile?.startsWith("/") === true) {
     await Bun.write(
       attestationFile,
       JSON.stringify({
@@ -216,9 +240,7 @@ if (import.meta.main) {
   }
   await Bun.write(
     passed ? Bun.stdout : Bun.stderr,
-    passed
-      ? "Exact-version production smoke passed.\n"
-      : "Exact-version production smoke failed; do not promote.\n"
+    passed ? "Production smoke passed.\n" : "Production smoke failed; inspect Worker traffic.\n"
   );
   if (!passed) process.exitCode = 1;
 }

@@ -220,11 +220,11 @@ const promoteRelease = Effect.fn(function* (
   const corePromoted = yield* deployExact(port, snapshot.core.name, [
     { id: release.coreVersionId, percentage: 100 },
   ]);
-  yield* Effect.gen(function* () {
+  const publicPromoted = yield* Effect.gen(function* () {
     yield* requireTrunk(port, snapshot.revision);
     yield* requireDeployment(port, snapshot.public.name, publicStaged);
     yield* requireDeployment(port, snapshot.core.name, corePromoted);
-    yield* deployExact(port, snapshot.public.name, [
+    return yield* deployExact(port, snapshot.public.name, [
       { id: release.publicVersionId, percentage: 100 },
     ]);
   }).pipe(
@@ -233,6 +233,7 @@ const promoteRelease = Effect.fn(function* (
       () => restoreCore(port, { release, publicStaged, corePromoted })
     )
   );
+  return { publicDeploymentId: publicPromoted.id, coreDeploymentId: corePromoted.id };
 });
 
 export const releaseController = { captureRelease, stageRelease, promoteRelease };

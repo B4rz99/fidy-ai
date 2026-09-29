@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 const repositoryRoot = `${process.cwd()}/../..`;
 const workflow = await Bun.file(`${repositoryRoot}/.github/workflows/production.yml`).text();
+const manualRollback = await Bun.file(
+  `${repositoryRoot}/.github/workflows/production-rollback.yml`
+).text();
 const profileAction = await Bun.file(
   `${repositoryRoot}/.github/actions/configure-alchemy-cloudflare-profile/action.yml`
 ).text();
@@ -151,6 +154,22 @@ describe("Production release workflow policy", () => {
     expect(workflow).not.toContain("railway");
     expect(workflow).not.toContain("cloudflare/wrangler.json");
     expect(workflow).not.toContain("cloudflare/wrangler-action");
+  });
+
+  it("probes normal traffic before guarded rollback and alerts when release recovery fails", () => {
+    const promote = workflow.indexOf("bun production-release.ts promote");
+    const probe = workflow.indexOf("bun verify-production-smoke.ts promoted");
+    const rollback = workflow.indexOf("bun production-release.ts rollback");
+    const alert = workflow.indexOf("Email operator if deployment failed");
+    expect(promote).toBeGreaterThan(0);
+    expect(promote).toBeLessThan(probe);
+    expect(probe).toBeLessThan(rollback);
+    expect(rollback).toBeLessThan(alert);
+    expect(workflow).toContain("steps.post_smoke.outcome == 'failure'");
+    expect(workflow).toContain("steps.promote.outcome == 'success'");
+    expect(manualRollback).toContain("workflow_dispatch:");
+    expect(manualRollback).toContain("group: production-deployment");
+    expect(manualRollback).toContain("bun production-release.ts rollback");
   });
 
   it("verifies the public topology and provider state after deployment", () => {

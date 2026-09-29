@@ -34,6 +34,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Configure release file paths
         run: |
@@ -159,11 +160,47 @@ jobs:
           bun verify-production-smoke.ts
 
       - name: Promote the exact smoke-tested Workers
+        id: promote
         working-directory: infra/cloudflare
         run: bun production-release.ts promote
 
+      - name: Retain guarded recovery receipt for operator fallback
+        if: ${{ steps.promote.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: fidy-rollback
+          path: ${{ env.RELEASE_SNAPSHOT_FILE }}.promoted
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Probe normal Worker traffic after promotion
+        id: post_smoke
+        if: ${{ always() && steps.promote.outcome == 'success' }}
+        working-directory: infra/cloudflare
+        run: |
+          export PUBLIC_VERSION_ID CORE_VERSION_ID PUBLIC_WORKER_NAME CORE_WORKER_NAME
+          export STABLE_PUBLIC_VERSION_ID STABLE_RELEASE_GIT_SHA STABLE_CONTRACT_DIGEST
+          PUBLIC_VERSION_ID=$(jq -r .publicVersionId "$RELEASE_SNAPSHOT_FILE")
+          CORE_VERSION_ID=$(jq -r .coreVersionId "$RELEASE_SNAPSHOT_FILE")
+          PUBLIC_WORKER_NAME=$(jq -r .snapshot.public.name "$RELEASE_SNAPSHOT_FILE")
+          CORE_WORKER_NAME=$(jq -r .snapshot.core.name "$RELEASE_SNAPSHOT_FILE")
+          STABLE_PUBLIC_VERSION_ID=$(jq -r .snapshot.public.stableVersionId "$RELEASE_SNAPSHOT_FILE")
+          STABLE_RELEASE_GIT_SHA=$(jq -r .snapshot.stableRevision "$RELEASE_SNAPSHOT_FILE")
+          STABLE_CONTRACT_DIGEST=$(jq -r .snapshot.stableContractDigest "$RELEASE_SNAPSHOT_FILE")
+          for attempt in {1..3}; do
+            if bun verify-production-smoke.ts promoted; then exit 0; fi
+            echo "Normal-traffic smoke not confirmed ($attempt/3)."
+            sleep 3
+          done
+          exit 1
+
+      - name: Restore captured Worker code after failed post-promotion probe
+        if: ${{ failure() && steps.post_smoke.outcome == 'failure' && steps.promote.outcome == 'success' }}
+        working-directory: infra/cloudflare
+        run: bun production-release.ts rollback
+
       - name: Remove failed zero-traffic candidates when safe
-        if: ${{ failure() && steps.capture.outcome == 'success' }}
+        if: ${{ failure() && steps.capture.outcome == 'success' && steps.promote.outcome != 'success' }}
         working-directory: infra/cloudflare
         run: bun production-release.ts cleanup
 

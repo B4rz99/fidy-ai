@@ -1,7 +1,7 @@
 import { Context, Effect, Exit, Layer } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
-import { describe, expect, it, vi } from "vitest";
-import { verifyProductionSmoke } from "./verify-production-smoke";
+import { afterAll, describe, expect, it, vi } from "vitest";
+import { verifyProductionSmoke, verifyPromotedSmoke } from "./verify-production-smoke";
 
 const revision = "0123456789abcdef0123456789abcdef01234567";
 const previousRevision = "fedcba9876543210fedcba9876543210fedcba98";
@@ -100,7 +100,62 @@ describe("intermediate production smoke", () => {
           expect(calls).toEqual(["new-public/new-Core", "old-public/new-Core"]);
           expect(Exit.isFailure(exit)).toBe(true);
         } finally {
-          mockedFetch.mockRestore();
+          mockedFetch.mockClear();
+        }
+      })
+    ));
+});
+
+afterAll(() => vi.restoreAllMocks());
+
+describe("post-promotion production smoke", () => {
+  it("refuses a healthy version override when normal traffic still reaches stable code", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const requests: Request[] = [];
+        const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+          const request = new Request(input, init);
+          requests.push(request);
+          return Promise.resolve(
+            Response.json(
+              {
+                status: "passed",
+                public: {
+                  gitRevision: previousRevision,
+                  contractDigest: digest,
+                  workerVersionId: publicStable,
+                },
+                core: {
+                  gitRevision: revision,
+                  contractDigest: digest,
+                  workerVersionId: coreCandidate,
+                },
+                manifest: { protocolVersion: 1, asyncWorkVersion: 1 },
+              },
+              { headers: { ...securityHeaders, "x-fidy-smoke-worker-version": publicStable } }
+            )
+          );
+        });
+        try {
+          const exit = yield* Effect.scoped(
+            Effect.gen(function* () {
+              const services = yield* Layer.build(FetchHttpClient.layer);
+              return yield* Effect.exit(
+                verifyPromotedSmoke(config).pipe(
+                  Effect.provideService(
+                    HttpClient.HttpClient,
+                    Context.get(services, HttpClient.HttpClient)
+                  ),
+                  Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" })
+                )
+              );
+            })
+          );
+          expect(Exit.isFailure(exit)).toBe(true);
+          expect(requests).toHaveLength(1);
+          expect(requests[0]?.headers.has("cloudflare-workers-version-overrides")).toBe(false);
+        } finally {
+          mockedFetch.mockClear();
         }
       })
     ));

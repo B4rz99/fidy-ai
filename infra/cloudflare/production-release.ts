@@ -15,6 +15,8 @@ import {
   smokePath,
 } from "../../apps/server/cloudflare/runtime/smoke";
 import { releaseCleanup } from "./release-cleanup";
+import { type RollbackPort, RollbackReceipt, releaseRollback } from "./release-rollback";
+import { type WorkerResources, rollbackCompatible } from "./rollback-compatibility";
 import {
   type Deployment,
   type ReleasePort,
@@ -34,13 +36,30 @@ const ListResponse = Schema.Struct({
   result: Schema.Struct({ deployments: Schema.Array(ApiDeployment) }),
 });
 const CreateResponse = Schema.Struct({ success: Schema.Literal(true), result: ApiDeployment });
+const DeployableResponse = Schema.Struct({
+  success: Schema.Literal(true),
+  result: Schema.Struct({ items: Schema.Array(Schema.Struct({ id: VersionId })) }),
+});
+const VersionResponse = Schema.Struct({
+  success: Schema.Literal(true),
+  result: Schema.Struct({
+    id: VersionId,
+    resources: Schema.Struct({
+      bindings: Schema.Record(Schema.String, Schema.Unknown),
+      script_runtime: Schema.Struct({
+        migration_tag: Schema.optional(Schema.String),
+        exports: Schema.Record(Schema.String, Schema.Unknown),
+      }),
+    }),
+  }),
+});
 const StateEntry = Schema.Struct({
   logicalId: Schema.String,
   status: Schema.Literals(["created", "updated"]),
   attr: Schema.Struct({ workerName: WorkerName }),
 });
 const StateMap = Schema.Record(Schema.String, Schema.Unknown);
-const Commands = Schema.Literals(["capture", "stage", "promote", "cleanup", "report"]);
+const Commands = Schema.Literals(["capture", "stage", "promote", "rollback", "cleanup", "report"]);
 const SmokeAttestation = Schema.Struct({
   revision: SmokeIdentity.fields.gitRevision,
   publicVersionId: VersionId,
@@ -532,10 +551,19 @@ const reportTraffic = Effect.fn(function* (port: ReleasePort, env: Config) {
     catch: () => new ReleaseFailure({ message: "Release snapshot unavailable" }),
   });
   if (!exists) {
-    yield* writeFile(Bun.stdout, "Worker traffic unavailable: no release snapshot\n");
-    return;
+    const promotedExists = yield* Effect.tryPromise({
+      try: () => Bun.file(`${env.file}.promoted`).exists(),
+      catch: () => new ReleaseFailure({ message: "Release receipt unavailable" }),
+    });
+    if (!promotedExists) {
+      yield* writeFile(Bun.stdout, "Worker traffic unavailable: no release snapshot\n");
+      return;
+    }
   }
-  const raw = yield* readFile(env.file);
+  const raw = exists
+    ? yield* readFile(env.file)
+    : (yield* Schema.decodeUnknownEffect(RollbackReceipt)(yield* readFile(`${env.file}.promoted`)))
+        .release;
   const isStaged = Schema.decodeUnknownOption(Schema.Struct({ snapshot: Schema.Unknown }))(raw);
   const snapshot = Option.isSome(isStaged)
     ? (yield* Schema.decodeUnknownEffect(releaseSchemas.staged)(raw)).snapshot
@@ -561,10 +589,135 @@ const promote = Effect.fn(function* (port: ReleasePort, env: Config) {
   ) {
     return yield* Effect.fail(Error("Smoke attestation does not match candidate uploads"));
   }
-  yield* releaseController.promoteRelease(port, staged, {
+  const promoted = yield* releaseController.promoteRelease(port, staged, {
     exactPairPassed: true,
     middlePairPassed: true,
   });
+  // A successful promotion must retain the exact deployment IDs for guarded recovery.
+  yield* writeFile(`${env.file}.promoted`, encodeJson({ release: staged, promoted }));
+});
+
+const versionResources = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  worker: { name: string; id: string }
+) {
+  const url = `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(worker.name)}/versions/${worker.id}`;
+  const raw = yield* providerJson(
+    HttpClientRequest.get(url, {
+      headers: { authorization: `Bearer ${env.token}` },
+    })
+  ).pipe(Effect.provideService(HttpClient.HttpClient, client));
+  const version = yield* Schema.decodeUnknownEffect(VersionResponse)(raw);
+  if (version.result.id !== worker.id) {
+    return yield* Effect.fail(Error("Worker version identity changed"));
+  }
+  return {
+    bindings: version.result.resources.bindings,
+    migrationTag: version.result.resources.script_runtime.migration_tag ?? "",
+    exports: version.result.resources.script_runtime.exports,
+  } satisfies WorkerResources;
+});
+const rollbackSource = Effect.fn(function* (snapshot: typeof releaseSchemas.snapshot.Type) {
+  // A code-only release is the only automatic rollback case. A missing Git ancestor refuses.
+  yield* shell([
+    "git",
+    "-C",
+    "../..",
+    "merge-base",
+    "--is-ancestor",
+    snapshot.stableRevision,
+    snapshot.revision,
+  ]);
+  const changedPaths = (yield* shell([
+    "git",
+    "-C",
+    "../..",
+    "diff",
+    "--name-only",
+    snapshot.stableRevision,
+    snapshot.revision,
+    "--",
+    "infra/cloudflare/alchemy.run.ts",
+    "apps/server/cloudflare/",
+  ]))
+    .trim()
+    .split("\n");
+  const workflowPaths = new Set<string>();
+  for (const revision of [snapshot.stableRevision, snapshot.revision]) {
+    const found = yield* shell([
+      "git",
+      "-C",
+      "../..",
+      "grep",
+      "-l",
+      "-F",
+      "WorkflowEntrypoint",
+      revision,
+      "--",
+      "apps/server/cloudflare/",
+    ]);
+    for (const line of found.trim().split("\n")) {
+      workflowPaths.add(line.slice(line.indexOf(":") + 1));
+    }
+  }
+  return { changedPaths, workflowPaths: [...workflowPaths] };
+});
+const rollbackCompatibility = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  release: typeof RollbackReceipt.Type.release
+) {
+  const source = yield* rollbackSource(release.snapshot);
+  const pairs = [
+    {
+      name: release.snapshot.public.name,
+      stable: release.snapshot.public.stableVersionId,
+      candidate: release.publicVersionId,
+    },
+    {
+      name: release.snapshot.core.name,
+      stable: release.snapshot.core.stableVersionId,
+      candidate: release.coreVersionId,
+    },
+  ];
+  let compatible = true;
+  for (const pair of pairs) {
+    const stable = yield* versionResources(env, client, { name: pair.name, id: pair.stable });
+    const candidate = yield* versionResources(env, client, { name: pair.name, id: pair.candidate });
+    compatible &&= rollbackCompatible({
+      stable,
+      candidate,
+      ...source,
+    });
+  }
+  return compatible;
+});
+const rollback = Effect.fn(function* (
+  port: ReleasePort,
+  env: Config,
+  client: HttpClient.HttpClient
+) {
+  const { release, promoted } = yield* Schema.decodeUnknownEffect(RollbackReceipt)(
+    yield* readFile(`${env.file}.promoted`)
+  );
+  const compatible = yield* rollbackCompatibility(env, client, release);
+  const guarded: RollbackPort = {
+    ...port,
+    deployable: (name, id) =>
+      Effect.gen(function* () {
+        const versions = yield* Schema.decodeUnknownEffect(DeployableResponse)(
+          yield* providerJson(
+            HttpClientRequest.get(
+              `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(name)}/versions?deployable=true`,
+              { headers: { authorization: `Bearer ${env.token}` } }
+            )
+          ).pipe(Effect.provideService(HttpClient.HttpClient, client))
+        );
+        return versions.result.items.some((item) => item.id === id);
+      }),
+  };
+  yield* releaseRollback.restore(guarded, { release, promoted, compatible });
 });
 
 if (import.meta.main) {
@@ -583,6 +736,9 @@ if (import.meta.main) {
         break;
       case "promote":
         yield* promote(port, environment);
+        break;
+      case "rollback":
+        yield* rollback(port, environment, client);
         break;
       case "cleanup":
         yield* cleanup(port, environment);

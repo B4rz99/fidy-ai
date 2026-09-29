@@ -110,6 +110,7 @@ const responseLimit = 100_000;
 const successStatusStart = 200;
 const successStatusEnd = 300;
 const probeEntropyBytes = 16;
+const inspectionHistoryLimit = 5;
 const origin = "https://api.fidyapp.com";
 const preSmokeRevision = "b71c2248e4667ffa042fd00c286a2c2240436475";
 const preSmokeDigest = "f33c9633df9fdfe0dbb730156fe9083dc4d0f676648a27d102f73bc98262fd4f";
@@ -739,11 +740,21 @@ const cleanup = Effect.fn(function* (port: ReleasePort, env: Config) {
     coreVersionId: workers.core.versionId.value,
   });
 });
-const inspectTraffic = Effect.fn(function* (port: ReleasePort) {
+const inspectTraffic = Effect.fn(function* (env: Config, client: HttpClient.HttpClient) {
   const workers = yield* workersFromState("capture");
+  const deployments = Effect.fn(function* (name: string) {
+    const raw = yield* providerJson(
+      HttpClientRequest.get(
+        `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(name)}/deployments`,
+        { headers: { authorization: `Bearer ${env.token}` } }
+      )
+    ).pipe(Effect.provideService(HttpClient.HttpClient, client));
+    const response = yield* Schema.decodeUnknownEffect(ListResponse)(raw);
+    return response.result.deployments.slice(0, inspectionHistoryLimit).map(asDeployment);
+  });
   const observed = {
-    public: yield* port.current(workers.public.workerName),
-    core: yield* port.current(workers.core.workerName),
+    public: yield* deployments(workers.public.workerName),
+    core: yield* deployments(workers.core.workerName),
   };
   yield* writeFile(Bun.stdout, `${encodeJson(observed)}\n`);
 });
@@ -971,7 +982,7 @@ const runRouting = Effect.fn(function* ({
       yield* reportTraffic(port, env);
       break;
     case "inspect":
-      yield* inspectTraffic(port);
+      yield* inspectTraffic(env, client);
       break;
   }
 });

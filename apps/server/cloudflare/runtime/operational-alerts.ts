@@ -86,6 +86,7 @@ export const OperationalAlert = Schema.Union([
     owner: Schema.Literal("retention"),
     severity,
   }),
+  // Existing Tail-only alert rows remain decodable so their delivery state can be retired cleanly.
   Schema.Struct({
     kind: Schema.Literal("worker_exception"),
     owner: Schema.Literal("workerExceptions"),
@@ -115,10 +116,6 @@ const criticalAgeMs = 600_000;
 const rejectedEmailWarningCount = 5;
 const retentionWarningAgeMs = 3_600_000;
 const retentionCriticalAgeMs = 86_400_000;
-const workerWarningCount = 5;
-const workerCriticalCount = 10;
-const callbackWarningCount = 5;
-const callbackCriticalCount = 20;
 const queueWarningCount = 100;
 const queueCriticalCount = 1_000;
 
@@ -170,52 +167,6 @@ const whatsappAlerts = (
   return [];
 };
 
-const workerExceptionAlerts = (
-  signal: Extract<EventMetricSignal, { state: "healthy" | "attention" }>
-): ReadonlyArray<OperationalAlert> =>
-  signal.recentCount >= workerWarningCount
-    ? [
-        {
-          kind: "worker_exception",
-          owner: "workerExceptions",
-          severity: signal.fiveMinuteCount >= workerCriticalCount ? "critical" : "warning",
-        },
-      ]
-    : [];
-
-const callbackRejectionAlerts = (
-  signal: Extract<EventMetricSignal, { state: "healthy" | "attention" }>
-): ReadonlyArray<OperationalAlert> =>
-  signal.recentCount >= callbackWarningCount
-    ? [
-        {
-          kind: "callback_rejection",
-          owner: "callbackRejections",
-          severity: signal.recentCount >= callbackCriticalCount ? "critical" : "warning",
-        },
-      ]
-    : [];
-
-const platformAlerts = (
-  signal: Extract<EventMetricSignal, { state: "healthy" | "attention" }>
-): ReadonlyArray<OperationalAlert> => {
-  const owner = signal.operation;
-  switch (owner) {
-    case "workerExceptions":
-      return workerExceptionAlerts(signal);
-    case "resourceLimits":
-      return signal.recentCount > 0
-        ? [{ kind: "resource_limit", owner, severity: "critical" }]
-        : [];
-    case "callbackRejections":
-      return callbackRejectionAlerts(signal);
-    case "workflowFailures":
-      return signal.recentCount > 0
-        ? [{ kind: "workflow_failure", owner, severity: "critical" }]
-        : [];
-  }
-};
-
 const queueAlerts = (
   signal: Extract<OperationalSignal, { backlogCount: number }>
 ): ReadonlyArray<OperationalAlert> => {
@@ -261,7 +212,11 @@ const alertsForSignal = (signal: AlertSignal): ReadonlyArray<OperationalAlert> =
   if (signal.state === "unavailable") {
     return [{ kind: "inspection_unavailable", owner: signal.operation, severity: "warning" }];
   }
-  if (signal.component === "platform-events") return platformAlerts(signal);
+  if (signal.component === "workflow-execution") {
+    return signal.recentCount > 0
+      ? [{ kind: "workflow_failure", owner: signal.operation, severity: "critical" }]
+      : [];
+  }
   if (signal.component === "capability") {
     return signal.state === "attention"
       ? [{ kind: "capability_unusable", owner: signal.operation, severity: "critical" }]

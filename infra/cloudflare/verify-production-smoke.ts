@@ -1,6 +1,17 @@
 /// <reference types="bun-types" />
 
-import { Cause, Context, Data, Effect, Encoding, Exit, Layer, Option, Schema } from "effect";
+import {
+  Cause,
+  Context,
+  Data,
+  Effect,
+  Encoding,
+  Exit,
+  Layer,
+  Option,
+  Schedule,
+  Schema,
+} from "effect";
 import {
   FetchHttpClient,
   HttpBody,
@@ -30,6 +41,10 @@ const RunnerConfig = Schema.Struct({
 });
 type RunnerConfig = typeof RunnerConfig.Type;
 class ReleaseSmokeFailed extends Data.TaggedError("ReleaseSmokeFailed")<{
+  readonly reason: string;
+}> {}
+
+class CandidateRoutingPending extends Data.TaggedError("CandidateRoutingPending")<{
   readonly reason: string;
 }> {}
 
@@ -75,11 +90,27 @@ const candidateResponseDiagnostic = (
   return `Candidate request did not reach the expected public Worker (status=${response.status}, version=${versionState}, noStore=${response.headers["cache-control"] === "no-store"})`;
 };
 
-const check = Effect.fn(function* (
+const isRoutingFallback = (
   response: HttpClientResponse.HttpClientResponse,
-  config: RunnerConfig,
+  expectedPublic: SmokeIdentity
+): boolean =>
+  response.status >= successStart &&
+  response.status < successEnd &&
+  response.headers["cache-control"] === "no-store" &&
+  Schema.is(SmokeIdentity.fields.workerVersionId)(
+    response.headers["x-fidy-smoke-worker-version"]
+  ) &&
+  response.headers["x-fidy-smoke-worker-version"] !== expectedPublic.workerVersionId;
+
+const checkPublicResponse = Effect.fn(function* (
+  response: HttpClientResponse.HttpClientResponse,
   expectedPublic: SmokeIdentity
 ) {
+  if (isRoutingFallback(response, expectedPublic)) {
+    return yield* new CandidateRoutingPending({
+      reason: candidateResponseDiagnostic(response, expectedPublic),
+    });
+  }
   if (
     response.status < successStart ||
     response.status >= successEnd ||
@@ -90,6 +121,14 @@ const check = Effect.fn(function* (
       reason: candidateResponseDiagnostic(response, expectedPublic),
     });
   }
+});
+
+const check = Effect.fn(function* (
+  response: HttpClientResponse.HttpClientResponse,
+  config: RunnerConfig,
+  expectedPublic: SmokeIdentity
+) {
+  yield* checkPublicResponse(response, expectedPublic);
   const raw = yield* response.json;
   const result = Schema.decodeUnknownOption(
     Schema.Struct({ ...SmokeResponse.fields, public: SmokeIdentity })
@@ -127,10 +166,22 @@ const awaitSyntheticWork = Effect.fn(function* (
     expectedGitRevision: config.RELEASE_GIT_SHA,
     expectedContractDigest: config.CONTRACT_DIGEST,
   });
-  let status = yield* check(
-    yield* call(smokePath, headers, Option.some(request)),
-    config,
-    expectedPublic
+  // Cloudflare may briefly ignore an override after staging. Replay this single,
+  // idempotent probe only for a valid public-version fallback, never transport or authority errors.
+  let status = yield* Effect.gen(function* () {
+    return yield* check(
+      yield* call(smokePath, headers, Option.some(request)),
+      config,
+      expectedPublic
+    );
+  }).pipe(
+    Effect.retry({
+      times: 6,
+      schedule: Schedule.spaced("1500 millis"),
+      while: (error) =>
+        "cloudflare-workers-version-overrides" in headers &&
+        error instanceof CandidateRoutingPending,
+    })
   );
   for (let attempt = 0; attempt < maxAttempts && status !== "passed"; attempt++) {
     yield* Effect.sleep(`${pollDelayMs} millis`);
@@ -251,7 +302,8 @@ if (import.meta.main) {
   }
   const error = Exit.isFailure(result) ? Cause.findErrorOption(result.cause) : Option.none();
   const safeReason =
-    Option.isSome(error) && error.value instanceof ReleaseSmokeFailed
+    Option.isSome(error) &&
+    (error.value instanceof ReleaseSmokeFailed || error.value instanceof CandidateRoutingPending)
       ? error.value.reason
       : "unclassified smoke failure (no provider response logged)";
   await Bun.write(

@@ -71,4 +71,6 @@ jobs:
           STABLE_CONTRACT_DIGEST: f33c9633df9fdfe0dbb730156fe9083dc4d0f676648a27d102f73bc98262fd4f
           PUBLIC_WORKER_NAME: fidycloudflare-ingress-production-hf6ajjsszff23h5z
           CORE_WORKER_NAME: fidycloudflare-core-production-hdv5cspnk7fai6vg
-        run: bun verify-production-smoke.ts
+        run: |
+          bun production-release.ts verify-staged
+          bun verify-production-smoke.ts

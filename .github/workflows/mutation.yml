@@ -2,7 +2,7 @@ name: Mutation
 
 on:
   schedule:
-    - cron: "17 5 * * *"
+    - cron: "17 5 * * 0"
   workflow_dispatch:
 
 permissions:
@@ -13,8 +13,8 @@ jobs:
     name: Mutation
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    # Mutation testing is deliberately shifted right: it protects trunk nightly
-    # without extending or blocking pull-request feedback.
+    # Mutation testing protects trunk weekly on Sundays without extending or
+    # blocking pull-request feedback. GitHub schedules use UTC.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       # Stryker's Babel instrumenter needs Node. Bun still installs dependencies

@@ -91,7 +91,7 @@ const CreatedAt = UtcTimestamp.pipe(
 
 /**
  * One movement of money — how much, which way, who with, and when it happened
- * (CONTEXT.md). This is the canonical shape of the entity: the input schema,
+ * (GLOSSARY.md). This is the canonical shape of the entity: the input schema,
  * the row schema and the transport schemas are all derived from it, so a field added
  * here reaches every one of them and a field added anywhere else is a parallel
  * definition (ARCHITECTURE.md §4).

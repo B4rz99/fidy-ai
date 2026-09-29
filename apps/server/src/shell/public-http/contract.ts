@@ -135,7 +135,7 @@ export const CanonicalRetryAfterBody = Schema.Struct({
  * to agents as the space to cover: a code arriving later is a change to every
  * caller that had already covered it. The spec (GitHub issue #1) names all
  * four, and names them exactly this way — `paywall_required`, not
- * `payment_required`, because it is the Paywall the caller has met (CONTEXT.md)
+ * `payment_required`, because it is the Paywall the caller has met (GLOSSARY.md)
  * and the string is the contract.
  *
  * `unauthenticated`, `consent_required`, and `user_action_required` are repository additions to

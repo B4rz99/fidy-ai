@@ -7,7 +7,7 @@
 Bad names cause bugs. **A good name says what the entity is and what it is not.**
 
 - **Precise.** `spentSoFar` beats `total`; `alreadyFired` beats `flags`.
-- **Consistent.** One concept, one word, everywhere — the discipline `CONTEXT.md` applies to domain
+- **Consistent.** One concept, one word, everywhere — the discipline `GLOSSARY.md` applies to domain
   terms applies to code.
 - **Two or three words.** If a name needs more, it is usually carrying two ideas.
 - **If it is hard to name, the design is unclear.** Naming difficulty is a signal about the entity,

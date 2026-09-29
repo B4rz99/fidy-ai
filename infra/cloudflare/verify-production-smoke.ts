@@ -64,6 +64,17 @@ const call = Effect.fn(function* (
   return yield* client.execute(request).pipe(Effect.timeout("8 seconds"));
 });
 
+const candidateResponseDiagnostic = (
+  response: HttpClientResponse.HttpClientResponse,
+  expectedPublic: SmokeIdentity
+): string => {
+  const observedVersion = response.headers["x-fidy-smoke-worker-version"];
+  let versionState = "other";
+  if (observedVersion === undefined) versionState = "missing";
+  else if (observedVersion === expectedPublic.workerVersionId) versionState = "expected";
+  return `Candidate request did not reach the expected public Worker (status=${response.status}, version=${versionState}, noStore=${response.headers["cache-control"] === "no-store"})`;
+};
+
 const check = Effect.fn(function* (
   response: HttpClientResponse.HttpClientResponse,
   config: RunnerConfig,
@@ -76,7 +87,7 @@ const check = Effect.fn(function* (
     response.headers["x-fidy-smoke-worker-version"] !== expectedPublic.workerVersionId
   ) {
     return yield* new ReleaseSmokeFailed({
-      reason: "Candidate request did not reach the expected public Worker",
+      reason: candidateResponseDiagnostic(response, expectedPublic),
     });
   }
   const raw = yield* response.json;

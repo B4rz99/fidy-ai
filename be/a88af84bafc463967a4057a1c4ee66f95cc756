@@ -1,0 +1,23 @@
+bun.lock
+  s_f8dbb486b6c236::t_779f1c6dff3b62 38,103,265
+apps/server/package.json
+  s_f8dbb486b6c236::t_10503a2ebd3494 193
+infra/cloudflare/package.json
+  s_f8dbb486b6c236::t_3f1cf763a42d09 20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "bea88af84bafc463967a4057a1c4ee66f95cc756",
+  "prompts": {},
+  "sessions": {
+    "s_f8dbb486b6c236": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e7d2-da0e-701d-8653-23d0f6150e67",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

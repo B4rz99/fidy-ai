@@ -94,6 +94,7 @@ const Commands = Schema.Literals([
   "cleanup",
   "report",
   "inspect",
+  "recover-core",
 ]);
 const SmokeAttestation = Schema.Struct({
   revision: SmokeIdentity.fields.gitRevision,
@@ -114,6 +115,15 @@ const inspectionHistoryLimit = 5;
 const origin = "https://api.fidyapp.com";
 const preSmokeRevision = "b71c2248e4667ffa042fd00c286a2c2240436475";
 const preSmokeDigest = "f33c9633df9fdfe0dbb730156fe9083dc4d0f676648a27d102f73bc98262fd4f";
+// One-time recovery receipt from inspected Production runs 36588418380 and 36594005666.
+const interruptedPromotion = {
+  revision: "2d65bde42f81b5c4af377e433100a7500bec0a5b",
+  publicDeployment: "e1f796e7-ccb4-41f0-96b2-8d0d3d74feb0",
+  publicVersion: "90b1cd6a-4796-41bf-ae33-fb3333a3fff0",
+  coreDeployment: "0d731332-605d-47bf-976d-69963275b40e",
+  coreCandidate: "deee8a6c-ace3-4f50-b589-7729605031df",
+  coreStable: "28ffd738-508a-4d00-a3e1-31911f86ce01",
+} as const;
 
 /** The one-time direct bootstrap must never use a later, unverified Production baseline. */
 export const isPreSmokeBaseline = (health: {
@@ -740,6 +750,94 @@ const cleanup = Effect.fn(function* (port: ReleasePort, env: Config) {
     coreVersionId: workers.core.versionId.value,
   });
 });
+const isSoleRecoveryVersion = (deployment: Deployment, version: string): boolean =>
+  deployment.versions.length === 1 &&
+  deployment.versions[0]?.id === version &&
+  deployment.versions[0].percentage === 100;
+export const matchesRecoveryVersion = (input: {
+  deployment: Deployment;
+  id: string;
+  version: string;
+}): boolean =>
+  input.deployment.id === input.id && isSoleRecoveryVersion(input.deployment, input.version);
+const requireRecoveryPair = Effect.fn(function* (
+  port: ReleasePort,
+  workers: WorkerReceipts,
+  core: { id: string; version: string }
+) {
+  const currentPublic = yield* port.current(workers.public.workerName);
+  const currentCore = yield* port.current(workers.core.workerName);
+  if (
+    !matchesRecoveryVersion({
+      deployment: currentPublic,
+      id: interruptedPromotion.publicDeployment,
+      version: interruptedPromotion.publicVersion,
+    }) ||
+    !matchesRecoveryVersion({ deployment: currentCore, id: core.id, version: core.version })
+  ) {
+    return yield* new ReleaseFailure({
+      message: "Interrupted promotion identity changed; no recovery write",
+    });
+  }
+});
+const recoverInterruptedCore = Effect.fn(function* (
+  port: ReleasePort,
+  env: Config,
+  client: HttpClient.HttpClient
+) {
+  const workers = yield* workersFromState("capture");
+  const expected = interruptedPromotion;
+  yield* requireRecoveryPair(port, workers, {
+    id: expected.coreDeployment,
+    version: expected.coreCandidate,
+  });
+  const health = yield* Schema.decodeUnknownEffect(healthSchema)(
+    yield* providerJson(HttpClientRequest.get(`${origin}/health`)).pipe(
+      Effect.provideService(HttpClient.HttpClient, client)
+    )
+  );
+  if (health.gitRevision !== expected.revision || health.contractDigest !== preSmokeDigest) {
+    return yield* new ReleaseFailure({
+      message: "Interrupted promotion revision changed; no recovery write",
+    });
+  }
+  yield* stableIdentity({
+    publicVersionId: expected.publicVersion,
+    coreVersionId: expected.coreCandidate,
+    proof: env.smokeProof,
+  }).pipe(Effect.provideService(HttpClient.HttpClient, client));
+  if ((yield* port.trunk()) !== env.revision) {
+    return yield* new ReleaseFailure({
+      message: "Recovery superseded by trunk; no recovery write",
+    });
+  }
+  // A provider response may be lost after a committed write. Observe exact routing even if
+  // the response is rejected; do not issue a second, ambiguous traffic change.
+  yield* port
+    .deploy(workers.core.workerName, [{ id: expected.coreStable, percentage: 100 }])
+    .pipe(Effect.catch(() => Effect.void));
+  const core = yield* port.current(workers.core.workerName);
+  if (!isSoleRecoveryVersion(core, expected.coreStable)) {
+    return yield* new ReleaseFailure({
+      message: "Core recovery not confirmed; inspect both Workers",
+    });
+  }
+  const publicDeployment = yield* port.current(workers.public.workerName);
+  if (
+    !matchesRecoveryVersion({
+      deployment: publicDeployment,
+      id: expected.publicDeployment,
+      version: expected.publicVersion,
+    })
+  ) {
+    return yield* new ReleaseFailure({ message: "Public routing changed during Core recovery" });
+  }
+  yield* stableIdentity({
+    publicVersionId: expected.publicVersion,
+    coreVersionId: expected.coreStable,
+    proof: env.smokeProof,
+  }).pipe(Effect.provideService(HttpClient.HttpClient, client));
+});
 const inspectTraffic = Effect.fn(function* (env: Config, client: HttpClient.HttpClient) {
   const workers = yield* workersFromState("capture");
   const deployments = Effect.fn(function* (name: string) {
@@ -996,6 +1094,8 @@ if (import.meta.main) {
     const port = releasePort(environment, client);
     if (command === "bootstrap-capture" || command === "bootstrap-verify") {
       yield* runBootstrap({ command, port, env: environment, client });
+    } else if (command === "recover-core") {
+      yield* recoverInterruptedCore(port, environment, client);
     } else {
       yield* runRouting({ command, port, env: environment, client });
     }

@@ -225,6 +225,81 @@ describe("zero-traffic Worker release", () => {
       })
     ));
 
+  it("retries an eventually consistent deployment read without writing traffic twice", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = harness();
+        const release = yield* staged(fixture.port);
+        const priorCore = yield* fixture.port.current(coreName);
+        let staleRead = false;
+        const delayed: ReleasePort = {
+          ...fixture.port,
+          deploy: (name, entries) =>
+            Effect.gen(function* () {
+              const result = yield* fixture.port.deploy(name, entries);
+              staleRead =
+                name === coreName &&
+                entries[0]?.id === versions.coreCandidate &&
+                entries.length === 1;
+              return result;
+            }),
+          current: (name) =>
+            Effect.gen(function* () {
+              if (name === coreName && staleRead) {
+                staleRead = false;
+                return priorCore;
+              }
+              return yield* fixture.port.current(name);
+            }),
+        };
+        yield* releaseController.promoteRelease(delayed, release, {
+          exactPairPassed: true,
+          middlePairPassed: true,
+        });
+        expect(fixture.changes).toEqual([
+          `${publicName}:100/0`,
+          `${coreName}:100/0`,
+          `${coreName}:100`,
+          `${publicName}:100`,
+        ]);
+      })
+    ));
+
+  it("restores Core if its promotion committed but the response was lost", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = harness();
+        const release = yield* staged(fixture.port);
+        const ambiguous: ReleasePort = {
+          ...fixture.port,
+          deploy: (name, entries) =>
+            fixture.port.deploy(name, entries).pipe(
+              Effect.filterOrFail(
+                () =>
+                  name !== coreName ||
+                  entries[0]?.id !== versions.coreCandidate ||
+                  entries.length !== 1,
+                () => Error("response lost after Core commit")
+              )
+            ),
+        };
+        yield* failure(
+          releaseController.promoteRelease(ambiguous, release, {
+            exactPairPassed: true,
+            middlePairPassed: true,
+          }),
+          "restored"
+        );
+        expect((yield* fixture.port.current(coreName)).versions).toEqual([
+          { id: versions.coreStable, percentage: 100 },
+        ]);
+        expect((yield* fixture.port.current(publicName)).versions).toEqual([
+          { id: versions.publicStable, percentage: 100 },
+          { id: versions.publicCandidate, percentage: 0 },
+        ]);
+      })
+    ));
+
   it("does not promote if either pairing fails smoke", () =>
     Effect.runPromise(
       Effect.gen(function* () {

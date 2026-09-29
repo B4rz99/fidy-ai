@@ -112,6 +112,14 @@ A superseded candidate reports:
 Release $RELEASE_GIT_SHA was superseded by $CURRENT_TRUNK_SHA; leaving the prior topology active.
 ```
 
+After run `36588418380` failed at Core-first promotion, inspection `36594005666` confirmed
+public stable at 100% and Core candidate at 100% (the middle pair passed compatibility smoke).
+The one-time protected `Recover interrupted Production Core promotion` dispatch restores only the
+inspected prior Core version, after requiring the exact public/Core deployment IDs, live health and
+smoke identity, unchanged Worker source, and current trunk. Its final check proves the original
+public/Core stable pair. Do not run it if inspection shows any different traffic; use the read-only
+`Inspect Production Worker traffic` workflow first. Both workflows serialize with deployment.
+
 Never deploy a mutable tag, a later checkout, or provider-controlled source. Production has no
 persistent staging sibling. The stack rejects missing, malformed, and all-zero Production release
 metadata before creating resources.

@@ -1,4 +1,4 @@
-import { Cause, Effect, Schema } from "effect";
+import { Cause, Effect, Schedule, Schema } from "effect";
 import { gitRevisionPattern } from "../../apps/server/cloudflare/runtime/release-identity";
 import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/smoke";
 
@@ -91,7 +91,11 @@ const deployExact = Effect.fn(function* (
   versions: Deployment["versions"]
 ) {
   const result = yield* port.deploy(name, versions);
-  yield* requireDeployment(port, name, { id: result.id, versions });
+  // Cloudflare can expose the previous deployment briefly after accepting a write.
+  // Retry the read only; never repeat a traffic-changing request.
+  yield* requireDeployment(port, name, { id: result.id, versions }).pipe(
+    Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 6 })
+  );
   return result;
 });
 
@@ -203,6 +207,26 @@ const restoreCore = Effect.fn(function* (
   );
 });
 
+const restoreAmbiguousCore = Effect.fn(function* (
+  port: ReleasePort,
+  release: StagedRelease,
+  publicStaged: Deployment
+) {
+  const observedCore = yield* port
+    .current(release.snapshot.core.name)
+    .pipe(Effect.catch(() => Effect.void));
+  if (
+    observedCore?.versions.length !== 1 ||
+    observedCore.versions[0]?.id !== release.coreVersionId ||
+    observedCore.versions[0].percentage !== 100
+  ) {
+    return yield* Effect.fail(
+      Error("Core promotion not confirmed; inspect both Worker deployments")
+    );
+  }
+  return yield* restoreCore(port, { release, publicStaged, corePromoted: observedCore });
+});
+
 const promoteRelease = Effect.fn(function* (
   port: ReleasePort,
   release: StagedRelease,
@@ -219,7 +243,14 @@ const promoteRelease = Effect.fn(function* (
   yield* requireDeployment(port, snapshot.core.name, coreStaged);
   const corePromoted = yield* deployExact(port, snapshot.core.name, [
     { id: release.coreVersionId, percentage: 100 },
-  ]);
+  ]).pipe(
+    Effect.catchCauseIf(
+      (cause) => !Cause.hasInterrupts(cause),
+      // A lost response or stale read can hide a committed Core write. Only restore
+      // after observing exactly the tested middle pair; never overwrite an unknown pair.
+      () => restoreAmbiguousCore(port, release, publicStaged)
+    )
+  );
   const publicPromoted = yield* Effect.gen(function* () {
     yield* requireTrunk(port, snapshot.revision);
     yield* requireDeployment(port, snapshot.public.name, publicStaged);

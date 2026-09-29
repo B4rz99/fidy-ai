@@ -1,4 +1,4 @@
-import { Option } from "effect";
+import { Effect, Exit, Option } from "effect";
 import { describe, expect, it } from "vitest";
 import {
   decodeCaptureWorkerReceipts,
@@ -7,7 +7,45 @@ import {
   isInterruptedStableSnapshot,
   isPreSmokeBaseline,
   matchesRecoveryVersion,
+  verifyInspectedStaging,
 } from "./production-release";
+
+it("refuses a removed public candidate before diagnostic smoke and never changes traffic", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let writes = 0;
+      const exit = yield* Effect.exit(
+        verifyInspectedStaging(
+          {
+            trunk: () => Effect.succeed("a".repeat(40)),
+            current: () =>
+              Effect.succeed({
+                id: "e6a6fcdc-a14e-4560-b360-3cdb6d3b6421",
+                versions: [{ id: "90b1cd6a-4796-41bf-ae33-fb3333a3fff0", percentage: 100 }],
+              }),
+            deploy: () => {
+              writes++;
+              return Effect.fail(Error("unexpected traffic write"));
+            },
+          },
+          {
+            public: {
+              workerName: "fidy-ingress",
+              versionId: Option.some("18489858-358b-4986-9d60-98a686052c85"),
+              hasRolloutBaseline: true,
+            },
+            core: {
+              workerName: "fidy-core",
+              versionId: Option.some("2216c932-4dc6-4195-baad-8944aa28bf07"),
+              hasRolloutBaseline: true,
+            },
+          }
+        )
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      expect(writes).toBe(0);
+    })
+  ));
 
 it("permits interrupted-upload reconciliation only for the inspected stable pair and Alchemy receipts", () => {
   const snapshot = {

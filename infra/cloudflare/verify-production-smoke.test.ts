@@ -29,38 +29,84 @@ const securityHeaders = {
   "x-frame-options": "DENY",
 };
 
+const recordingResponse = (input: {
+  request: Request;
+  bodies: string[];
+  response: Response;
+}): Promise<Response> =>
+  input.request.text().then((body) => {
+    input.bodies.push(body);
+    return input.response;
+  });
+
 /** A wrong public version in the second smoke must never generate a passing release gate. */
 describe("intermediate production smoke", () => {
-  it("refuses a stable-public override that actually reaches another public Worker", () =>
+  it.each([403, 503])("refuses HTTP %i without retrying synthetic work", (status) =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const calls: string[] = [];
+        const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+          Promise.resolve(
+            new Response(null, {
+              status,
+              headers: { ...securityHeaders, "x-fidy-smoke-worker-version": publicStable },
+            })
+          )
+        );
+        const exit = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const services = yield* Layer.build(FetchHttpClient.layer);
+            return yield* Effect.exit(
+              verifyProductionSmoke(config).pipe(
+                Effect.provideService(
+                  HttpClient.HttpClient,
+                  Context.get(services, HttpClient.HttpClient)
+                ),
+                Effect.provideService(FetchHttpClient.Fetch, mockedFetch)
+              )
+            );
+          })
+        );
+        expect(Exit.isFailure(exit)).toBe(true);
+        expect(mockedFetch).toHaveBeenCalledTimes(1);
+        mockedFetch.mockRestore();
+      })
+    )
+  );
+  it("waits for candidate routing to converge without accepting fallback or changing the probe identity", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const bodies: string[] = [];
+        let firstCandidate = true;
         const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
           const request = new Request(input, init);
           const path = new URL(request.url).pathname;
           const override = request.headers.get("cloudflare-workers-version-overrides") ?? "";
           const oldPublic = override.includes(`fidy-public="${publicStable}"`);
           if (path === "/internal/release-smoke") {
-            calls.push(oldPublic ? "old-public/new-Core" : "new-public/new-Core");
-            return Promise.resolve(
-              Response.json(
-                {
-                  status: "passed",
-                  public: {
-                    gitRevision: oldPublic ? previousRevision : revision,
-                    contractDigest: digest,
-                    workerVersionId: publicCandidate, // The old public's override was ignored
-                  },
-                  core: {
-                    gitRevision: revision,
-                    contractDigest: digest,
-                    workerVersionId: coreCandidate,
-                  },
-                  manifest: { protocolVersion: 1, asyncWorkVersion: 1 },
+            const fallback = firstCandidate;
+            firstCandidate = false;
+            const observed = fallback || oldPublic ? publicStable : publicCandidate;
+            const response = Response.json(
+              {
+                status: "passed",
+                public: {
+                  gitRevision: fallback || oldPublic ? previousRevision : revision,
+                  contractDigest: digest,
+                  workerVersionId: observed,
                 },
-                { headers: { ...securityHeaders, "x-fidy-smoke-worker-version": publicCandidate } }
-              )
+                core: {
+                  gitRevision: revision,
+                  contractDigest: digest,
+                  workerVersionId: coreCandidate,
+                },
+                manifest: { protocolVersion: 1, asyncWorkVersion: 1 },
+              },
+              {
+                status: 202,
+                headers: { ...securityHeaders, "x-fidy-smoke-worker-version": observed },
+              }
             );
+            return recordingResponse({ request, bodies, response });
           }
           const status =
             new Map([
@@ -73,12 +119,7 @@ describe("intermediate production smoke", () => {
           return Promise.resolve(
             new Response(null, {
               status,
-              headers: {
-                ...securityHeaders,
-                "x-fidy-smoke-worker-version": request.headers.has("x-fidy-smoke-proof")
-                  ? publicCandidate
-                  : publicStable,
-              },
+              headers: { ...securityHeaders, "x-fidy-smoke-worker-version": publicCandidate },
             })
           );
         });
@@ -92,18 +133,102 @@ describe("intermediate production smoke", () => {
                     HttpClient.HttpClient,
                     Context.get(services, HttpClient.HttpClient)
                   ),
-                  Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" })
+                  Effect.provideService(FetchHttpClient.Fetch, mockedFetch)
                 )
               );
             })
           );
-          expect(calls).toEqual(["new-public/new-Core", "old-public/new-Core"]);
-          expect(Exit.isFailure(exit)).toBe(true);
+          expect(Exit.isSuccess(exit)).toBe(true);
+          expect(bodies).toHaveLength(3);
+          expect(bodies[1]).toBe(bodies[0]);
         } finally {
-          mockedFetch.mockClear();
+          mockedFetch.mockRestore();
         }
       })
     ));
+  it(
+    "refuses a stable-public override that actually reaches another public Worker",
+    () =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const calls: string[] = [];
+          const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+            const request = new Request(input, init);
+            const path = new URL(request.url).pathname;
+            const override = request.headers.get("cloudflare-workers-version-overrides") ?? "";
+            const oldPublic = override.includes(`fidy-public="${publicStable}"`);
+            if (path === "/internal/release-smoke") {
+              calls.push(oldPublic ? "old-public/new-Core" : "new-public/new-Core");
+              return Promise.resolve(
+                Response.json(
+                  {
+                    status: "passed",
+                    public: {
+                      gitRevision: oldPublic ? previousRevision : revision,
+                      contractDigest: digest,
+                      workerVersionId: publicCandidate, // The old public's override was ignored
+                    },
+                    core: {
+                      gitRevision: revision,
+                      contractDigest: digest,
+                      workerVersionId: coreCandidate,
+                    },
+                    manifest: { protocolVersion: 1, asyncWorkVersion: 1 },
+                  },
+                  {
+                    headers: { ...securityHeaders, "x-fidy-smoke-worker-version": publicCandidate },
+                  }
+                )
+              );
+            }
+            const status =
+              new Map([
+                ["/health", 200],
+                ["/categories", 401],
+                ["/providers/kapso/callback", 401],
+                ["/providers/wompi/billing-events", 400],
+                ["/web/hosted-turns", 403],
+              ]).get(path) ?? 404;
+            return Promise.resolve(
+              new Response(null, {
+                status,
+                headers: {
+                  ...securityHeaders,
+                  "x-fidy-smoke-worker-version": request.headers.has("x-fidy-smoke-proof")
+                    ? publicCandidate
+                    : publicStable,
+                },
+              })
+            );
+          });
+          try {
+            const exit = yield* Effect.scoped(
+              Effect.gen(function* () {
+                const services = yield* Layer.build(FetchHttpClient.layer);
+                return yield* Effect.exit(
+                  verifyProductionSmoke(config).pipe(
+                    Effect.provideService(FetchHttpClient.Fetch, mockedFetch),
+                    Effect.provideService(
+                      HttpClient.HttpClient,
+                      Context.get(services, HttpClient.HttpClient)
+                    ),
+                    Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" })
+                  )
+                );
+              })
+            );
+            expect(calls).toEqual([
+              "new-public/new-Core",
+              ...Array.from({ length: 7 }, () => "old-public/new-Core"),
+            ]);
+            expect(Exit.isFailure(exit)).toBe(true);
+          } finally {
+            mockedFetch.mockClear();
+          }
+        })
+      ),
+    15_000
+  );
 });
 
 afterAll(() => vi.restoreAllMocks());
@@ -142,6 +267,7 @@ describe("post-promotion production smoke", () => {
               const services = yield* Layer.build(FetchHttpClient.layer);
               return yield* Effect.exit(
                 verifyPromotedSmoke(config).pipe(
+                  Effect.provideService(FetchHttpClient.Fetch, mockedFetch),
                   Effect.provideService(
                     HttpClient.HttpClient,
                     Context.get(services, HttpClient.HttpClient)

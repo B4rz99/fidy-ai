@@ -96,6 +96,7 @@ const Commands = Schema.Literals([
   "inspect",
   "recover-core",
   "resume-capture",
+  "verify-staged",
 ]);
 const SmokeAttestation = Schema.Struct({
   revision: SmokeIdentity.fields.gitRevision,
@@ -892,6 +893,41 @@ const recoverInterruptedCore = Effect.fn(function* (
     proof: env.smokeProof,
   }).pipe(Effect.provideService(HttpClient.HttpClient, client));
 });
+export const verifyInspectedStaging = Effect.fn(function* (
+  port: ReleasePort,
+  workers: WorkerReceipts
+) {
+  const inspected = {
+    public: {
+      stable: interruptedPromotion.publicVersion,
+      candidate: "18489858-358b-4986-9d60-98a686052c85",
+    },
+    core: {
+      stable: interruptedPromotion.coreStable,
+      candidate: "2216c932-4dc6-4195-baad-8944aa28bf07",
+    },
+  };
+  for (const role of ["public", "core"] as const) {
+    const worker = workers[role];
+    const expected = inspected[role];
+    const deployment = yield* port.current(worker.workerName);
+    if (
+      !Option.contains(worker.versionId, expected.candidate) ||
+      deployment.versions.length !== 2 ||
+      !deployment.versions.some(
+        (version) => version.id === expected.stable && version.percentage === 100
+      ) ||
+      !deployment.versions.some(
+        (version) => version.id === expected.candidate && version.percentage === 0
+      )
+    ) {
+      return yield* new ReleaseFailure({
+        message: "Inspected candidate pair is no longer staged; no synthetic probe",
+      });
+    }
+  }
+});
+
 const inspectTraffic = Effect.fn(function* (env: Config, client: HttpClient.HttpClient) {
   const workers = yield* workersFromState("capture");
   const deployments = Effect.fn(function* (name: string) {
@@ -1152,6 +1188,8 @@ if (import.meta.main) {
       yield* recoverInterruptedCore(port, environment, client);
     } else if (command === "resume-capture") {
       yield* resumeCapture(port, environment, client);
+    } else if (command === "verify-staged") {
+      yield* verifyInspectedStaging(port, yield* workersFromState());
     } else {
       yield* runRouting({ command, port, env: environment, client });
     }

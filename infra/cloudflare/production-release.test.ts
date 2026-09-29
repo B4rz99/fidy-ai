@@ -4,8 +4,8 @@ import { decodeWorkerReceipts } from "./production-release";
 
 describe("Production release Worker receipts", () => {
   it("reports a missing Worker receipt without echoing state values", () => {
-    expect(() => decodeWorkerReceipts('{"secret":"not-for-logs"}')).toThrow(
-      "Alchemy Worker state lacks the required Worker resource"
+    expect(() => decodeWorkerReceipts('{"secret":"not-for-logs"}')).toThrowError(
+      new Error("Alchemy Ingress Worker resource is missing")
     );
   });
 
@@ -15,8 +15,19 @@ describe("Production release Worker receipts", () => {
       core: { logicalId: "Core", status: "updated", attr: { workerName: "prod-core" } },
     };
 
-    expect(() => decodeWorkerReceipts(JSON.stringify(state))).toThrow(
-      "Alchemy Worker state has an unstable required Worker receipt"
+    expect(() => decodeWorkerReceipts(JSON.stringify(state))).toThrowError(
+      new Error("Alchemy Ingress Worker lifecycle is unstable")
+    );
+  });
+
+  it("identifies the Core Worker when its lifecycle is unstable", () => {
+    const state = {
+      ingress: { logicalId: "Ingress", status: "updated", attr: { workerName: "prod-ingress" } },
+      core: { logicalId: "Core", status: "replaced", attr: { workerName: "prod-core" } },
+    };
+
+    expect(() => decodeWorkerReceipts(JSON.stringify(state))).toThrowError(
+      new Error("Alchemy Core Worker lifecycle is unstable")
     );
   });
 
@@ -34,8 +45,8 @@ describe("Production release Worker receipts", () => {
       },
     };
 
-    expect(() => decodeWorkerReceipts(JSON.stringify(state))).toThrow(
-      "Alchemy Worker state has an incomplete required Worker receipt"
+    expect(() => decodeWorkerReceipts(JSON.stringify(state))).toThrowError(
+      new Error("Alchemy Ingress Worker receipt is incomplete")
     );
   });
 
@@ -50,8 +61,8 @@ describe("Production release Worker receipts", () => {
       core: { logicalId: "Core", status: "updated", attr: { workerName: "prod-core" } },
     };
 
-    expect(() => decodeWorkerReceipts(JSON.stringify(state))).toThrow(
-      "Alchemy Worker state has an ambiguous required Worker receipt"
+    expect(() => decodeWorkerReceipts(JSON.stringify(state))).toThrowError(
+      new Error("Alchemy Ingress Worker receipt is ambiguous")
     );
   });
 

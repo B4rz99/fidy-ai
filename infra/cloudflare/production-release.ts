@@ -209,17 +209,23 @@ type WorkerReceipt = Readonly<{
   hasRolloutBaseline: boolean;
 }>;
 type WorkerReceipts = Readonly<{ public: WorkerReceipt; core: WorkerReceipt }>;
-const missingWorkerResourceMessage = "Alchemy Worker state lacks the required Worker resource";
-const ambiguousWorkerReceiptMessage =
-  "Alchemy Worker state has an ambiguous required Worker receipt";
-const unstableWorkerReceiptMessage = "Alchemy Worker state has an unstable required Worker receipt";
-const incompleteWorkerReceiptMessage =
-  "Alchemy Worker state has an incomplete required Worker receipt";
-const workerReceiptMessages = new Set([
-  missingWorkerResourceMessage,
-  ambiguousWorkerReceiptMessage,
-  unstableWorkerReceiptMessage,
-  incompleteWorkerReceiptMessage,
+const workerReceiptMessages = {
+  Ingress: {
+    missing: "Alchemy Ingress Worker resource is missing",
+    ambiguous: "Alchemy Ingress Worker receipt is ambiguous",
+    unstable: "Alchemy Ingress Worker lifecycle is unstable",
+    incomplete: "Alchemy Ingress Worker receipt is incomplete",
+  },
+  Core: {
+    missing: "Alchemy Core Worker resource is missing",
+    ambiguous: "Alchemy Core Worker receipt is ambiguous",
+    unstable: "Alchemy Core Worker lifecycle is unstable",
+    incomplete: "Alchemy Core Worker receipt is incomplete",
+  },
+} as const;
+const safeWorkerReceiptMessages = new Set<string>([
+  ...Object.values(workerReceiptMessages.Ingress),
+  ...Object.values(workerReceiptMessages.Core),
 ]);
 
 const decodeStateMap = (output: string): typeof StateMap.Type => {
@@ -239,13 +245,13 @@ const decodeStateMap = (output: string): typeof StateMap.Type => {
 
 export const decodeWorkerReceipts = (output: string): WorkerReceipts => {
   const entries = decodeStateMap(output);
-  const select = (logicalId: string): WorkerReceipt => {
+  const select = (logicalId: "Ingress" | "Core"): WorkerReceipt => {
     const matchingEntries = Object.values(entries).filter((value) => {
       const identity = Schema.decodeUnknownOption(ResourceIdentity)(value);
       return Option.isSome(identity) && identity.value.logicalId === logicalId;
     });
-    if (matchingEntries.length === 0) throw Error(missingWorkerResourceMessage);
-    if (matchingEntries.length !== 1) throw Error(ambiguousWorkerReceiptMessage);
+    if (matchingEntries.length === 0) throw Error(workerReceiptMessages[logicalId].missing);
+    if (matchingEntries.length !== 1) throw Error(workerReceiptMessages[logicalId].ambiguous);
 
     const value = matchingEntries[0];
     const decoded = Schema.decodeUnknownOption(StateEntry)(value);
@@ -256,9 +262,9 @@ export const decodeWorkerReceipts = (output: string): WorkerReceipts => {
         lifecycle.value.status !== "created" &&
         lifecycle.value.status !== "updated"
       ) {
-        throw Error(unstableWorkerReceiptMessage);
+        throw Error(workerReceiptMessages[logicalId].unstable);
       }
-      throw Error(incompleteWorkerReceiptMessage);
+      throw Error(workerReceiptMessages[logicalId].incomplete);
     }
 
     const rawVersion = Schema.decodeUnknownOption(
@@ -301,7 +307,7 @@ const workersFromState = Effect.fn(function* () {
     catch: (cause) =>
       new ReleaseFailure({
         message:
-          cause instanceof Error && workerReceiptMessages.has(cause.message)
+          cause instanceof Error && safeWorkerReceiptMessages.has(cause.message)
             ? cause.message
             : "Alchemy Worker state JSON could not be decoded",
       }),

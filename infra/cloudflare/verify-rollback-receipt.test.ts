@@ -1,4 +1,3 @@
-import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -27,10 +26,10 @@ const receipt = {
 
 describe("manual rollback receipt admission", () => {
   it("refuses an invalid manual source run before running any Cloudflare command", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "fidy-rollback-"));
+    const id = crypto.randomUUID();
+    const runFile = join(tmpdir(), `fidy-run-${id}.json`);
+    const receiptFile = join(tmpdir(), `fidy-receipt-${id}.json`);
     try {
-      const runFile = join(directory, "run.json");
-      const receiptFile = join(directory, "receipt.json");
       await Bun.write(runFile, JSON.stringify({ ...run, head_branch: "untrusted" }));
       await Bun.write(receiptFile, JSON.stringify(receipt));
       const child = Bun.spawn(["bun", "verify-rollback-receipt.ts", runFile, receiptFile], {
@@ -42,15 +41,21 @@ describe("manual rollback receipt admission", () => {
       expect(await new Response(child.stdout).text()).toBe("");
       expect(await new Response(child.stderr).text()).toContain("Worker traffic unchanged");
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      await Promise.allSettled([Bun.file(runFile).delete(), Bun.file(receiptFile).delete()]);
     }
   });
 
   it("admits only a trunk production push receipt matching its run revision", () => {
-    expect(verifyRollbackReceipt(run, receipt)).toBe(true);
-    expect(verifyRollbackReceipt({ ...run, head_branch: "feature" }, receipt)).toBe(false);
-    expect(verifyRollbackReceipt({ ...run, head_sha: "d".repeat(40) }, receipt)).toBe(false);
-    expect(verifyRollbackReceipt({ ...run, name: "Another workflow" }, receipt)).toBe(false);
-    expect(verifyRollbackReceipt({ ...run, event: "workflow_dispatch" }, receipt)).toBe(false);
+    expect(verifyRollbackReceipt({ run, receipt })).toBe(true);
+    expect(verifyRollbackReceipt({ run: { ...run, head_branch: "feature" }, receipt })).toBe(false);
+    expect(verifyRollbackReceipt({ run: { ...run, head_sha: "d".repeat(40) }, receipt })).toBe(
+      false
+    );
+    expect(verifyRollbackReceipt({ run: { ...run, name: "Another workflow" }, receipt })).toBe(
+      false
+    );
+    expect(verifyRollbackReceipt({ run: { ...run, event: "workflow_dispatch" }, receipt })).toBe(
+      false
+    );
   });
 });

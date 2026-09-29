@@ -1,6 +1,6 @@
 /// <reference types="bun-types" />
 
-import { Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/smoke";
 import { RollbackReceipt } from "./release-rollback";
 
@@ -12,9 +12,9 @@ const SourceRun = Schema.Struct({
 });
 
 /** Refuse a downloaded receipt that does not belong to an automatic trunk Production run. */
-export const verifyRollbackReceipt = (run: unknown, receipt: unknown): boolean => {
-  const source = Schema.decodeUnknownOption(SourceRun)(run);
-  const captured = Schema.decodeUnknownOption(RollbackReceipt)(receipt);
+export const verifyRollbackReceipt = (input: { run: unknown; receipt: unknown }): boolean => {
+  const source = Schema.decodeUnknownOption(SourceRun)(input.run);
+  const captured = Schema.decodeUnknownOption(RollbackReceipt)(input.receipt);
   return (
     Option.isSome(source) &&
     Option.isSome(captured) &&
@@ -24,27 +24,33 @@ export const verifyRollbackReceipt = (run: unknown, receipt: unknown): boolean =
 
 if (import.meta.main) {
   const maxBytes = 100_000;
-  const readJson = async (path: string): Promise<unknown> => {
-    const file = Bun.file(path);
-    if (file.size > maxBytes) throw Error("Receipt exceeds limit");
-    const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))(
-      await file.text()
-    );
-    if (Option.isNone(decoded)) throw Error("Invalid receipt JSON");
-    return decoded.value;
-  };
-  try {
+  const readJson = (path: string): Effect.Effect<unknown, string> =>
+    Effect.gen(function* () {
+      const file = Bun.file(path);
+      if (file.size > maxBytes) return yield* Effect.fail("Receipt exceeds limit");
+      const text = yield* Effect.tryPromise({
+        try: () => file.text(),
+        catch: () => "Unreadable receipt",
+      });
+      const decoded = Schema.decodeOption(Schema.fromJsonString(Schema.Unknown))(text);
+      if (Option.isNone(decoded)) return yield* Effect.fail("Invalid receipt JSON");
+      return decoded.value;
+    });
+  const program = Effect.gen(function* () {
     const sourcePath = Option.fromUndefinedOr(process.argv[2]);
     const receiptPath = Option.fromUndefinedOr(process.argv[3]);
     if (Option.isNone(sourcePath) || Option.isNone(receiptPath)) {
-      throw Error("Missing receipt path");
+      return yield* Effect.fail("Missing receipt path");
     }
-    const run = await readJson(sourcePath.value);
-    const receipt = await readJson(receiptPath.value);
-    if (!verifyRollbackReceipt(run, receipt)) throw Error("Untrusted rollback receipt");
-    process.stdout.write("Captured release receipt verified.\n");
-  } catch {
-    process.stderr.write("Manual rollback receipt rejected; Worker traffic unchanged.\n");
-    process.exitCode = 1;
-  }
+    const run = yield* readJson(sourcePath.value);
+    const receipt = yield* readJson(receiptPath.value);
+    if (!verifyRollbackReceipt({ run, receipt })) return yield* Effect.fail("Untrusted receipt");
+  });
+  Effect.runPromise(program).then(
+    () => process.stdout.write("Captured release receipt verified.\n"),
+    () => {
+      process.stderr.write("Manual rollback receipt rejected; Worker traffic unchanged.\n");
+      process.exitCode = 1;
+    }
+  );
 }

@@ -6,7 +6,7 @@
 
 ## Question and boundary
 
-Fidy will sell one Pro Subscription to Colombian consumers at gross COP prices of 9,900 weekly, 28,900 monthly, and 289,900 yearly. The merchant is presently intended to be the owner's Colombian natural-person business using Wompi. A `PriceRevision` must retain the exact price, billing period, ServiceMarket, and tax treatment, while each `BillingAttempt` retains the charge and provider history ([Fidy domain definitions](../../CONTEXT.md#L237-L252); [parent specification](https://github.com/B4rz99/fidy-ai/issues/1); [checkout ticket #36](https://github.com/B4rz99/fidy-ai/issues/36)).
+Fidy will sell one Pro Subscription to Colombian consumers at gross COP prices of 9,900 weekly, 28,900 monthly, and 289,900 yearly. The merchant is presently intended to be the owner's Colombian natural-person business using Wompi. A `PriceRevision` must retain the exact price, billing period, ServiceMarket, and tax treatment, while each `BillingAttempt` retains the charge and provider history ([Fidy domain definitions](../../GLOSSARY.md#L237-L252); [parent specification](https://github.com/B4rz99/fidy-ai/issues/1); [checkout ticket #36](https://github.com/B4rz99/fidy-ai/issues/36)).
 
 This report traces the governing primary sources and defines the decision and implementation artifacts. It **cannot complete the legal conclusion requested by #224** because the repository does not contain the owner's current RUT, complete person-wide tax facts, signed customer terms, actual Wompi merchant agreement, or a review by a Colombian accountant or tax adviser. Those are facts the law makes outcome-determinative, not details that can be inferred from the words “natural person,” “SaaS,” or from projected Fidy revenue.
 

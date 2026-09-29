@@ -37,7 +37,7 @@ bun run verify
 
 See [`.env.example`](./.env.example) for retained local configuration and the project documentation:
 
-- [Domain context](./CONTEXT.md)
+- [Domain glossary](./GLOSSARY.md)
 - [System architecture](./ARCHITECTURE.md)
 - [Server architecture](./apps/server/ARCHITECTURE.md)
 - [Web architecture](./apps/web/ARCHITECTURE.md)

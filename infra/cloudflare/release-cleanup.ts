@@ -1,6 +1,8 @@
-import { Effect, Schema } from "effect";
+import { Data, Effect, Schedule, Schema } from "effect";
 import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/smoke";
 import { type Deployment, type ReleasePort, type ReleaseSnapshot } from "./release-controller";
+
+class CleanupPending extends Data.TaggedError("CleanupPending") {}
 
 const isStable = (deployment: Deployment, stableId: string): boolean =>
   deployment.versions.length === 1 &&
@@ -42,11 +44,23 @@ const cleanRelease = Effect.fn(function* (
     if (confirmed.id !== observed.id) {
       return yield* Effect.fail(Error("Worker deployment changed during cleanup"));
     }
-    yield* port.deploy(name, [{ id: stableId, percentage: 100 }]);
-    const restored = yield* port.current(name);
-    if (!isStable(restored, stableId)) {
-      return yield* Effect.fail(Error("Stable Worker traffic restoration not confirmed"));
-    }
+    const written = yield* port.deploy(name, [{ id: stableId, percentage: 100 }]);
+    // Poll only the read. A stale response cannot justify repeating an accepted write.
+    yield* Effect.gen(function* () {
+      const restored = yield* port.current(name);
+      if (restored.id === observed.id && isStaged(restored, stableId, verified)) {
+        return yield* new CleanupPending();
+      }
+      if (restored.id !== written.id || !isStable(restored, stableId)) {
+        return yield* Effect.fail(Error("Stable Worker traffic restoration not confirmed"));
+      }
+    }).pipe(
+      Effect.retry({
+        times: 6,
+        schedule: Schedule.spaced("500 millis"),
+        while: (error) => error instanceof CleanupPending,
+      })
+    );
   });
   yield* clean(snapshot.public.name, snapshot.public.stableVersionId, candidate.publicVersionId);
   yield* clean(snapshot.core.name, snapshot.core.stableVersionId, candidate.coreVersionId);

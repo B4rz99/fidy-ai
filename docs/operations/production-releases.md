@@ -155,6 +155,27 @@ than the revision: distinct runs of one revision can have different traffic repo
 a key with a different payload produces HTTP 409. This corrects the collision risk seen
 in the failed resume; actual inbox delivery still needs verification.
 
+Protected resume `36633807905` passed the candidate and compatibility pairing smokes,
+promoted the tested Workers, and passed the normal-traffic post-promotion smoke plus
+public topology and unauthorized-edge checks. It failed only the final drift gate;
+this is not yet a fully successful deployment. Inspection `36634807654` confirms
+public version `163ee99f-f0aa-4101-910e-aae30b4c5aca` and Core version
+`08dff69e-c0db-47ce-ba97-fe5bffaa1a6b` each serve 100%, with drift limited to
+`Core` and `Ingress`. The earlier interrupted-upload resume constants describe the
+previous cleanup, not this promoted pair; do not reuse that recovery path now.
+
+After the original drift CLI rejects a plan, an additional dry-run inspection
+reports only closed changed attribute names for these two Workers, including
+upload-receipt fields. It is bounded to 45 seconds and cannot change the original
+verdict. Unknown keys become `other`; attribute values and provider text remain
+private. No provider method is wrapped and no repair API is invoked. The SDK
+runner is an explicit platform entrypoint: its narrowly scoped compiler overrides
+accommodate Alchemy's `any`-typed failure channel and the entrypoint Layer, while
+all failures are contained and the returned plan crosses a closed Schema before
+reporting. No provider result, persisted state, or drift gate changes. The provider's omitted receipt
+fields are a source-backed hypothesis until the protected report identifies the
+live differences; normal release proof and onboarding enablement remain pending.
+
 Before either candidate smoke or the normal post-promotion smoke, the runner polls
 proof-admitted `GET /internal/release-smoke?readiness=1` for exact public/Core identities.
 This response is identity-only (`pending`), not a passing synthetic attestation. It performs

@@ -72,11 +72,30 @@ describe("private release smoke", () => {
             handleSmoke({ request: request("a".repeat(513), true), environment })
           )).status
         ).toBe(404);
-        expect(
-          (yield* Effect.tryPromise(() =>
-            handleSmoke({ request: request(body, true), environment })
-          )).status
-        ).toBe(503);
+        const mismatch = yield* Effect.tryPromise(() =>
+          handleSmoke({ request: request(body, true), environment })
+        );
+        expect(mismatch.status).toBe(503);
+        expect(mismatch.headers.get("x-fidy-smoke-failure")).toBe("identity");
+        const admissionFailure = yield* Effect.tryPromise(() =>
+          handleSmoke({
+            request: request(body, true),
+            environment: {
+              ...environment,
+              CF_VERSION_METADATA: { id: version },
+              DB: withMethods(unavailableDatabase, {
+                prepare: () => {
+                  throw Error("secret-provider-body");
+                },
+              }),
+            },
+          })
+        );
+        expect(admissionFailure.status).toBe(503);
+        expect(admissionFailure.headers.get("x-fidy-smoke-failure")).toBe("admission");
+        expect(yield* Effect.tryPromise(() => admissionFailure.text())).not.toContain(
+          "secret-provider-body"
+        );
         expect(effects).toBe(0);
       })
   );

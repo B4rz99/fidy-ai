@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { readFileSync, readdirSync } from "node:fs";
-import { Schema } from "effect";
+import { Option, Schema } from "effect";
 
 const args = Bun.argv.slice(2);
 const rootIndex = args.indexOf("--root");
@@ -15,14 +15,17 @@ if (root === undefined) process.exit(2);
 const Manifest = Schema.Struct({
   dependencies: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
   peerDependencies: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+  devDependencies: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
   scripts: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
 });
 const findings: Array<string> = [];
 const sourceSuffix = /\.[cm]?[jt]sx?$/u;
+const inboundResend =
+  /(?:resend[-_](?:receiv(?:e|ing)|inbound|webhook)|(?:receiv(?:e|ing)|inbound)[-_]resend|webhooks?[/_-]resend)/iu;
 const legacyName =
-  /(?:^|[./-])(?:railway|postgres(?:ql)?|hyperdrive|dockerfile|pg-repos?|persisted-queue)(?:[./-]|$)/iu;
+  /(?:^|[./-])(?:railway|postgres(?:ql)?|hyperdrive|dockerfile|pg-repos?|persisted-queue|openai|svix|sentry|anthropic|cohere|mistral|deepseek|groq)(?:[./-]|$)/iu;
 const legacyAuthority =
-  /@effect\/(?:sql-pg|platform-bun|cluster)|effect\/unstable\/cluster|\b(?:postgres(?:ql)?|hyperdrive|railway|persisted[_-]?queue|sentry)\b/iu;
+  /@effect\/(?:sql-pg|platform-bun|cluster)|effect\/unstable\/cluster|\b(?:postgres(?:ql)?|hyperdrive|railway|persisted[_-]?queue|sentry|openai|svix|anthropic|cohere|mistral|deepseek|groq)\b/iu;
 const legacyTestImport =
   /(?:from\s*|import\s*\(|require\s*\()\s*["'](@effect\/(?:sql-pg|platform-bun|cluster)|effect\/unstable\/cluster|pg)(?:\/[^"']*)?["']/u;
 const postgresService = /\b(postgres)(?=:\d+\b)/iu;
@@ -103,16 +106,23 @@ const recordManifestScripts = (path: string, scripts: Record<string, string>): v
   }
 };
 
+const checkManifestDependencies = (path: string, names: ReadonlyArray<string>): void => {
+  for (const name of names) {
+    if (name === "pg" || legacyAuthority.test(name)) findings.push(`${path}: ${name}`);
+  }
+};
+
 const checkManifest = (path: string): void => {
   const manifest = Schema.decodeUnknownSync(Manifest)(
     JSON.parse(readFileSync(`${root}/${path}`, "utf8"))
   );
-  for (const name of [
+  checkManifestDependencies(path, [
     ...Object.keys(manifest.dependencies ?? {}),
     ...Object.keys(manifest.peerDependencies ?? {}),
-  ]) {
-    if (name === "pg" || legacyAuthority.test(name)) findings.push(`${path}: ${name}`);
-  }
+    ...Object.keys(manifest.devDependencies ?? {}).filter(
+      (name) => name !== "@effect/platform-bun"
+    ),
+  ]);
   recordManifestScripts(path, manifest.scripts ?? {});
 };
 
@@ -130,19 +140,74 @@ const isProductionSource = (path: string): boolean =>
 const isWorkflow = (path: string): boolean =>
   path.startsWith(".github/workflows/") && /\.ya?ml$/u.test(path);
 
+const legacyTestMatch = (line: string): Option.Option<RegExpExecArray> =>
+  Option.fromNullOr(
+    legacyTestImport.exec(line) ??
+      postgresService.exec(line) ??
+      /\b(postgres)(?:ql)?:\/\//iu.exec(line) ??
+      /\b(?:execFileSync|spawnSync|spawn|execFile)\s*\(\s*["'](psql)["']/u.exec(line) ??
+      /(?:from\s*|import\s*\(|require\s*\()\s*["']([^"']*(?:openai|svix|sentry|anthropic|cohere|mistral|deepseek|groq|resend[-_](?:receiving|inbound|webhook))[^"']*)["']/iu.exec(
+        line
+      ) ??
+      /\b((?:OPENAI|SVIX|SENTRY|ANTHROPIC|RESEND_(?:RECEIVING|INBOUND|WEBHOOK))_[A-Z_]+)\b/u.exec(
+        line
+      )
+  );
+
 const checkLegacyTest = (path: string): void => {
   const text = readFileSync(`${root}/${path}`, "utf8");
   for (const line of text.split("\n")) {
-    const match =
-      legacyTestImport.exec(line) ??
-      postgresService.exec(line) ??
-      /\b(postgres)(?:ql)?:\/\//iu.exec(line) ??
-      /\b(?:execFileSync|spawnSync|spawn|execFile)\s*\(\s*["'](psql)["']/u.exec(line);
-    if (match === null || (match[1] === "@effect/platform-bun" && developmentTooling.has(path))) {
+    const match = legacyTestMatch(line);
+    if (Option.isNone(match)) continue;
+    if (match.value[1] === "@effect/platform-bun" && developmentTooling.has(path)) {
       continue;
     }
-    findings.push(`${path}: ${match[1]}`);
+    findings.push(`${path}: ${match.value[1]}`);
   }
+};
+
+const outboundTransport = "apps/server/src/shell/outbound-http/internal/";
+const inboundEmail = "apps/server/cloudflare/ingestion/";
+const serverRoots = ["apps/server/src/", "apps/server/cloudflare/"];
+const approvedOutboundHosts = new Set([
+  "api.fidyapp.com",
+  "app.fidyapp.com",
+  "fidyapp.com",
+  "api.kapso.ai",
+  "api.resend.com",
+  "sandbox.wompi.co",
+  "production.wompi.co",
+]);
+
+const approvedDestination = (path: string, scheme: string, host: string): boolean => {
+  if (host.endsWith(".internal")) return true;
+  if (host === "127.0.0.1") return true;
+  if (scheme === "http") return host === "localhost";
+  if (scheme !== "https") return false;
+  if (host === "internal.invalid") return true;
+  if (host === "api.resend.com") return path.startsWith(outboundTransport);
+  return approvedOutboundHosts.has(host);
+};
+
+const checkDestination = (path: string, text: string): void => {
+  if (!serverRoots.some((prefix) => path.startsWith(prefix))) return;
+  if (path.startsWith("apps/server/cloudflare/browser-acceptance-")) return;
+  for (const match of text.matchAll(/(https?):\/\/([\w.-]+)/gu)) {
+    const scheme = match[1];
+    const host = match[2];
+    if (scheme !== undefined && host !== undefined && approvedDestination(path, scheme, host)) {
+      continue;
+    }
+    findings.push(`${path}: ${match[0]}`);
+  }
+};
+
+const checkInboundEmail = (path: string, text: string): void => {
+  if (!path.startsWith(inboundEmail)) return;
+  const match = /\bRESEND_API_KEY\b|\bResendEmailDelivery\b|https:\/\/api\.resend\.com/iu.exec(
+    text
+  );
+  if (match !== null) findings.push(`${path}: ${match[0]}`);
 };
 
 const isAllowedBunTool = (path: string, authority: string): boolean =>
@@ -150,19 +215,25 @@ const isAllowedBunTool = (path: string, authority: string): boolean =>
   scriptRoots.some((prefix) => path.startsWith(`${prefix}/`)) &&
   !runtimeScripts.has(path);
 
+const legacySourceMatch = (line: string): Option.Option<RegExpExecArray> =>
+  Option.fromNullOr(legacyAuthority.exec(line) ?? inboundResend.exec(line) ?? pgImport.exec(line));
+
 const checkSource = (path: string): void => {
   if (!isProductionSource(path) && !isWorkflow(path)) return;
   const text = readFileSync(`${root}/${path}`, "utf8");
+  checkDestination(path, text);
+  checkInboundEmail(path, text);
   for (const line of text.split("\n")) {
-    const match = legacyAuthority.exec(line) ?? pgImport.exec(line);
-    if (match === null) continue;
-    if (isAllowedBunTool(path, match[0])) continue;
-    findings.push(`${path}: ${match[1] ?? match[0]}`);
+    const match = legacySourceMatch(line);
+    if (Option.isNone(match)) continue;
+    if (isAllowedBunTool(path, match.value[0])) continue;
+    findings.push(`${path}: ${match.value[1] ?? match.value[0]}`);
   }
 };
 
 const checkConfig = (path: string): void => {
-  const match = legacyAuthority.exec(readFileSync(`${root}/${path}`, "utf8"));
+  const text = readFileSync(`${root}/${path}`, "utf8");
+  const match = legacyAuthority.exec(text) ?? inboundResend.exec(text);
   if (match !== null) findings.push(`${path}: ${match[0]}`);
 };
 
@@ -185,7 +256,7 @@ const checkContent = (path: string): void => {
 };
 
 const checkFile = (path: string): void => {
-  if (legacyName.test(path) || path === ".dockerignore") {
+  if (legacyName.test(path) || inboundResend.test(path) || path === ".dockerignore") {
     findings.push(`${path}: legacy production path`);
   }
   if (path.endsWith("/package.json") || path === "package.json") {

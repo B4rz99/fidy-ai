@@ -41,6 +41,143 @@ it("allows Cloudflare production code and Bun-only development tools", () => {
   expect(check(root).code).toBe(0);
 });
 
+it("rejects direct OpenAI inference dependencies and Worker calls", () => {
+  const root = fixture({
+    "apps/server/package.json": JSON.stringify({ dependencies: { "@ai-sdk/openai": "1.0.0" } }),
+    "apps/server/cloudflare/agent/model.ts": "fetch('https://api.openai.com/v1/responses');",
+  });
+  const result = check(root);
+  expect(result.code).toBe(1);
+  expect(result.stderr).toContain("apps/server/package.json: @ai-sdk/openai");
+  expect(result.stderr).toContain("apps/server/cloudflare/agent/model.ts: openai");
+});
+
+it("rejects obsolete inbound Resend and Svix without blocking outbound Resend", () => {
+  const allowed = fixture({
+    "apps/server/cloudflare/email.ts": "const delivery = 'ResendEmailDelivery';",
+    "infra/cloudflare/config.json": JSON.stringify({ RESEND_API_KEY: "outbound-only" }),
+  });
+  expect(check(allowed).code).toBe(0);
+
+  const root = fixture({
+    "apps/server/package.json": JSON.stringify({ devDependencies: { svix: "1.0.0" } }),
+    "apps/server/cloudflare/webhooks/resend.ts": "export const handler = () => {};",
+    "infra/cloudflare/config.json": JSON.stringify({ RESEND_RECEIVING_SECRET: "obsolete" }),
+    ".github/workflows/ci.yml": "env:\n  RESEND_WEBHOOK_SECRET: obsolete\n",
+  });
+  const result = check(root);
+  expect(result.code).toBe(1);
+  expect(result.stderr).toContain("apps/server/package.json: svix");
+  expect(result.stderr).toContain(
+    "apps/server/cloudflare/webhooks/resend.ts: legacy production path"
+  );
+  expect(result.stderr).toContain("infra/cloudflare/config.json: RESEND_RECEIVING");
+  expect(result.stderr).toContain(".github/workflows/ci.yml: RESEND_WEBHOOK");
+});
+
+it("rejects outbound Resend authority in Cloudflare inbound email handling", () => {
+  const root = fixture({
+    "apps/server/cloudflare/ingestion/email-worker.ts":
+      "const key = environment.RESEND_API_KEY; fetch('https://api.resend.com/emails/received');",
+  });
+  const result = check(root);
+  expect(result.code).toBe(1);
+  expect(result.stderr).toContain(
+    "apps/server/cloudflare/ingestion/email-worker.ts: RESEND_API_KEY"
+  );
+  const renamed = fixture({
+    "apps/server/cloudflare/ingestion/mail-handler.ts": "const key = environment.RESEND_API_KEY;",
+  });
+  expect(check(renamed).stderr).toContain(
+    "apps/server/cloudflare/ingestion/mail-handler.ts: RESEND_API_KEY"
+  );
+});
+
+it("rejects Sentry development and release machinery", () => {
+  const root = fixture({
+    "apps/web/package.json": JSON.stringify({ devDependencies: { "@sentry/cli": "2.0.0" } }),
+    ".github/workflows/production.yml": "- run: sentry-cli sourcemaps upload ./dist",
+    "apps/server/cloudflare/telemetry.test.ts": "import * as Sentry from '@sentry/node';",
+  });
+  const result = check(root);
+  expect(result.code).toBe(1);
+  expect(result.stderr).toContain("apps/web/package.json: @sentry/cli");
+  expect(result.stderr).toContain(".github/workflows/production.yml: sentry");
+  expect(result.stderr).toContain("apps/server/cloudflare/telemetry.test.ts: @sentry/node");
+});
+
+it("rejects an obsolete direct model credential in test fixtures", () => {
+  const root = fixture({
+    "apps/server/cloudflare/fixtures/inference.fixture.ts":
+      "export const env = { OPENAI_API_KEY: 'test' };",
+  });
+  const result = check(root);
+  expect(result.code).toBe(1);
+  expect(result.stderr).toContain(
+    "apps/server/cloudflare/fixtures/inference.fixture.ts: OPENAI_API_KEY"
+  );
+});
+
+it("rejects another external hosted-model SDK without blocking Workers AI", () => {
+  const allowed = fixture({
+    "apps/server/cloudflare/agent/model.ts": "return env.AI.run(model, input);",
+  });
+  expect(check(allowed).code).toBe(0);
+
+  const root = fixture({
+    "apps/server/package.json": JSON.stringify({ dependencies: { "@anthropic-ai/sdk": "1.0.0" } }),
+  });
+  const result = check(root);
+  expect(result.code).toBe(1);
+  expect(result.stderr).toContain("apps/server/package.json: @anthropic-ai/sdk");
+});
+
+it("rejects an unapproved external destination in the outbound provider transport", () => {
+  const root = fixture({
+    "apps/server/src/shell/outbound-http/internal/outbound-http.ts":
+      "const endpoint = 'https://models.example.org/v1/inference';",
+  });
+  const result = check(root);
+  expect(result.code).toBe(1);
+  expect(result.stderr).toContain(
+    "apps/server/src/shell/outbound-http/internal/outbound-http.ts: https://models.example.org"
+  );
+});
+
+it("rejects external inference URLs in the hosted-agent and interpretation adapters", () => {
+  const root = fixture({
+    "apps/server/src/shell/hosted-inference/provider.ts":
+      "const endpoint = 'https://models.example.org/v1/inference';",
+    "apps/server/cloudflare/ingestion/model.ts":
+      "const endpoint = 'https://models.example.org/v1/interpret';",
+  });
+  const result = check(root);
+  expect(result.code).toBe(1);
+  expect(result.stderr).toContain(
+    "apps/server/src/shell/hosted-inference/provider.ts: https://models.example.org"
+  );
+  expect(result.stderr).toContain(
+    "apps/server/cloudflare/ingestion/model.ts: https://models.example.org"
+  );
+});
+
+it("rejects insecure provider destinations and model URLs elsewhere in the Worker", () => {
+  const root = fixture({
+    "apps/server/src/shell/outbound-http/internal/outbound-http.ts":
+      "const endpoint = 'http://api.resend.com/emails';",
+    "apps/server/cloudflare/runtime/model.ts":
+      "const endpoint = 'https://model-provider.example/v1/inference';",
+  });
+  const result = check(root);
+  expect(result.code).toBe(1);
+  expect(result.stderr).toContain(
+    "apps/server/src/shell/outbound-http/internal/outbound-http.ts: http://api.resend.com"
+  );
+  expect(result.stderr).toContain(
+    "apps/server/cloudflare/runtime/model.ts: https://model-provider.example"
+  );
+});
+
 it("rejects a production PostgreSQL dependency without banning Bun development tools", () => {
   const root = fixture({
     "apps/server/package.json": JSON.stringify({ dependencies: { "@effect/sql-pg": "4.0.0" } }),

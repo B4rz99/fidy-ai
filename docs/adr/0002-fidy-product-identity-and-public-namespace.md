@@ -3,8 +3,10 @@
 - **Status:** Accepted
 - **Date:** 2026-07-28
 - **Active specification:** [Product name, domain & external endpoints](https://github.com/B4rz99/fidy-ai/issues/9)
-- **Superseded in part by:** [ADR 0015](0015-browser-paired-web-authentication.md) replaces only the
-  magic-link entry
+- **Superseded in part by:** [ADR 0015](0015-browser-paired-web-authentication.md) replaces the
+  magic-link entry; [ADR 0026](0026-cloudflare-native-production-replatform.md) replaces the web
+  origin and inbound email provider. See [external endpoints](../operations/external-endpoints.md)
+  for the current topology.
 
 ## Context
 

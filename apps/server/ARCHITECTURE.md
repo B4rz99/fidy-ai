@@ -69,6 +69,8 @@ the User coordinator Durable Object builds for Memory work and hosted Turns, whi
 only declares without building. A closed approved-model schema and live provider-conformance gate protect canonical tool,
 continuation, structured-output, and `es-CO` behavior. Unsupported or absent configuration fails
 with typed unavailability, and there is no gateway, direct OpenAI, or external-model fallback.
+Kapso-generated voice transcripts arrive as external channel material through the authenticated
+WhatsApp webhook; they are not a Fidy-controlled model invocation or hosted inference adapter.
 
 ## 5. Persistence and asynchronous execution
 

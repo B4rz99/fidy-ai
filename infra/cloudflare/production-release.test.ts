@@ -3,6 +3,12 @@ import { describe, expect, it } from "vitest";
 import { decodeWorkerReceipts } from "./production-release";
 
 describe("Production release Worker receipts", () => {
+  it("reports a missing Worker receipt without echoing state values", () => {
+    expect(() => decodeWorkerReceipts('{"secret":"not-for-logs"}')).toThrow(
+      "Alchemy Worker state lacks a unique required Worker receipt"
+    );
+  });
+
   it("decodes the Worker receipts when Alchemy progress precedes the state JSON", () => {
     const publicVersion = "11111111-1111-4111-8111-111111111111";
     const coreVersion = "22222222-2222-4222-8222-222222222222";

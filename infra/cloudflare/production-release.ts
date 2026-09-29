@@ -93,6 +93,7 @@ const Commands = Schema.Literals([
   "rollback",
   "cleanup",
   "report",
+  "inspect",
 ]);
 const SmokeAttestation = Schema.Struct({
   revision: SmokeIdentity.fields.gitRevision,
@@ -738,6 +739,14 @@ const cleanup = Effect.fn(function* (port: ReleasePort, env: Config) {
     coreVersionId: workers.core.versionId.value,
   });
 });
+const inspectTraffic = Effect.fn(function* (port: ReleasePort) {
+  const workers = yield* workersFromState("capture");
+  const observed = {
+    public: yield* port.current(workers.public.workerName),
+    core: yield* port.current(workers.core.workerName),
+  };
+  yield* writeFile(Bun.stdout, `${encodeJson(observed)}\n`);
+});
 const reportTraffic = Effect.fn(function* (port: ReleasePort, env: Config) {
   const exists = yield* Effect.tryPromise({
     try: () => Bun.file(env.file).exists(),
@@ -937,7 +946,7 @@ const runRouting = Effect.fn(function* ({
   env,
   client,
 }: {
-  command: "capture" | "stage" | "promote" | "rollback" | "cleanup" | "report";
+  command: "capture" | "stage" | "promote" | "rollback" | "cleanup" | "report" | "inspect";
   port: ReleasePort;
   env: Config;
   client: HttpClient.HttpClient;
@@ -960,6 +969,9 @@ const runRouting = Effect.fn(function* ({
       break;
     case "report":
       yield* reportTraffic(port, env);
+      break;
+    case "inspect":
+      yield* inspectTraffic(port);
       break;
   }
 });

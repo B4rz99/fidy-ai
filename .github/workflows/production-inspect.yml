@@ -1,0 +1,43 @@
+name: Inspect Production Worker traffic
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    if: github.ref == 'refs/heads/trunk'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    env:
+      RELEASE_GIT_SHA: ${{ github.sha }}
+      GITHUB_TOKEN: ${{ github.token }}
+      ALCHEMY_PROFILE: ci
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      SMOKE_PROOF: ${{ secrets.SMOKE_PROOF }}
+      RELEASE_SNAPSHOT_FILE: ${{ runner.temp }}/fidy-release.json
+      SMOKE_ATTESTATION_FILE: ${{ runner.temp }}/fidy-smoke-passed.json
+    steps:
+      - name: Check out protected trunk
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.4.1"
+      - name: Install locked workspace
+        run: bun install --frozen-lockfile --ignore-scripts
+      - name: Configure Alchemy's ephemeral Cloudflare profile
+        uses: ./.github/actions/configure-alchemy-cloudflare-profile
+      - name: Report public and Core Worker deployments without changing traffic
+        working-directory: infra/cloudflare
+        run: bun production-release.ts inspect

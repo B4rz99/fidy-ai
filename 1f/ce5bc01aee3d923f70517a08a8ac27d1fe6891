@@ -1,0 +1,22 @@
+package.json
+  s_f8dbb486b6c236::t_bf6e42399d1a14 74
+  s_f8dbb486b6c236::t_9c99797b37c068 67
+bun.lock
+  s_f8dbb486b6c236::t_2392855abf1303 2,116,123-125,1147,1241,1691
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "1fce5bc01aee3d923f70517a08a8ac27d1fe6891",
+  "prompts": {},
+  "sessions": {
+    "s_f8dbb486b6c236": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0e7d2-da0e-701d-8653-23d0f6150e67",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,96 +1,58 @@
-import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { type SpawnSyncReturns, spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const scriptPath = fileURLToPath(new URL("./check-topology-drift.sh", import.meta.url));
-const workingDirectory = fileURLToPath(new URL("../", import.meta.url));
-
-const runDriftGate = async (input: {
-  output: string;
-  exitCode: number;
-}): Promise<{
-  readonly args: string;
-  readonly exitCode: number;
-  readonly output: string;
-}> => {
-  const temporaryDirectory = await mkdtemp(join(tmpdir(), "fidy-topology-drift-"));
-  const fakeBin = join(temporaryDirectory, "bin");
-  const fakeBun = join(fakeBin, "bun");
-  const fixturePath = join(temporaryDirectory, "alchemy-output.txt");
-  const argsPath = join(temporaryDirectory, "alchemy-args.txt");
-
+const runDriftCheck = (plan: string, mode?: string): SpawnSyncReturns<string> => {
+  const directory = mkdtempSync(join(tmpdir(), "fidy-drift-gate-"));
   try {
-    await mkdir(fakeBin);
-    await writeFile(fixturePath, input.output);
-    await writeFile(
-      fakeBun,
-      '#!/usr/bin/env bash\nprintf "%s\\n" "$*" > "$DRIFT_ARGS"\ncat "$DRIFT_FIXTURE"\nexit "$DRIFT_EXIT_CODE"\n',
-      { mode: 0o755 }
+    writeFileSync(
+      join(directory, "bun"),
+      "#!/usr/bin/env bash\nprintf '%s\\n' \"$FAKE_DRIFT_PLAN\"\n",
+      {
+        mode: 0o700,
+      }
     );
-
-    const result = spawnSync("bash", [scriptPath], {
-      cwd: workingDirectory,
+    return spawnSync("bash", ["scripts/check-topology-drift.sh", ...(mode ? [mode] : [])], {
+      cwd: new URL("..", import.meta.url).pathname,
       encoding: "utf8",
       env: {
         ...process.env,
-        DRIFT_EXIT_CODE: String(input.exitCode),
-        DRIFT_ARGS: argsPath,
-        DRIFT_FIXTURE: fixturePath,
-        PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
+        PATH: `${directory}:${process.env.PATH ?? ""}`,
+        FAKE_DRIFT_PLAN: plan,
       },
     });
-
-    return {
-      args: await readFile(argsPath, "utf8"),
-      exitCode: result.status ?? 1,
-      output: `${result.stdout}${result.stderr}`,
-    };
   } finally {
-    await rm(temporaryDirectory, { force: true, recursive: true });
+    rmSync(directory, { recursive: true, force: true });
   }
 };
 
-describe("Production topology drift gate", () => {
-  it("accepts only a successful no-change plan", async () => {
-    const result = await runDriftGate({
-      exitCode: 0,
-      output: "[14:00:00] INFO: Plan: no changes\n",
-    });
+describe("interrupted-release drift gate", () => {
+  const expectedWorkerDrift =
+    "[0] INFO: Plan: 2 to update\n[0] INFO: [Core] update\n[0] INFO: [Ingress] update\nsecret-attribute-do-not-print";
 
-    expect(result.exitCode).toBe(0);
-    expect(result.args).toContain(
-      "drift --config alchemy-drift.run.ts --stage production --no-input"
+  it("refuses Worker drift on the normal release path", () => {
+    const result = runDriftCheck(expectedWorkerDrift);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("category=drift_detected");
+    expect(result.stderr).not.toContain("secret-attribute-do-not-print");
+  });
+
+  it("accepts only the two known Worker updates after guarded resume capture", () => {
+    const result = runDriftCheck(expectedWorkerDrift, "resume");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("verified interrupted Worker pair");
+    expect(result.stdout).not.toContain("secret-attribute-do-not-print");
+  });
+
+  it("refuses another drifted resource or unexpected plan shape", () => {
+    const other = runDriftCheck(`${expectedWorkerDrift}\n[0] INFO: [Assets] update`, "resume");
+    expect(other.status).toBe(1);
+    const changedPlan = runDriftCheck(
+      expectedWorkerDrift.replace("2 to update", "3 to update"),
+      "resume"
     );
-    expect(result.output).toContain("Production Cloudflare topology has no drift.");
-  });
-
-  it("rejects a drift plan without exposing its resource attributes", async () => {
-    const result = await runDriftGate({
-      exitCode: 0,
-      output:
-        "[14:00:00] INFO: Plan: 1 to update\n" +
-        "[14:00:00] INFO: [FidyCloudflare/production/Core] update\n" +
-        "  API_TOKEN: provider-private-payload\n",
-    });
-
-    expect(result.exitCode).toBe(1);
-    expect(result.output).toContain("category=drift_detected");
-    expect(result.output).not.toContain("FidyCloudflare/production/Core");
-    expect(result.output).not.toContain("provider-private-payload");
-  });
-
-  it("classifies a failed Alchemy command without echoing its captured error", async () => {
-    const result = await runDriftGate({
-      exitCode: 17,
-      output: "error: ConfigError: missing required configuration\n" + "provider-private-payload\n",
-    });
-
-    expect(result.exitCode).toBe(1);
-    expect(result.output).toContain("category=configuration");
-    expect(result.output).not.toContain("provider-private-payload");
-    expect(result.output).not.toContain("missing required configuration");
+    expect(changedPlan.status).toBe(1);
   });
 });

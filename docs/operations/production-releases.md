@@ -118,7 +118,14 @@ The one-time protected `Recover interrupted Production Core promotion` dispatch 
 inspected prior Core version, after requiring the exact public/Core deployment IDs, live health and
 smoke identity, unchanged Worker source, and current trunk. Its final check proves the original
 public/Core stable pair. Do not run it if inspection shows any different traffic; use the read-only
-`Inspect Production Worker traffic` workflow first. Both workflows serialize with deployment.
+`Inspect Production Worker traffic` workflow first. Both workflows serialize with deployment. The interrupted upload left Alchemy receipts for the
+unpromoted candidate versions while both stable Workers were restored. Normal pushes still refuse
+this Worker-only drift before upload. After inspection proves **only** `Core` and `Ingress` have
+update drift, dispatch `Deploy Production` from `trunk` with `resume=true` and `bootstrap=false`.
+This one-time path first captures and smoke-verifies the exact restored stable pair, requires both
+inspected deployment IDs and the original candidate receipts, and accepts only a plan with those two
+Worker updates. It then follows the ordinary zero-traffic candidate, pairing smoke, and guarded
+promotion steps. Any other drift, receipt, or Worker identity fails closed.
 
 Never deploy a mutable tag, a later checkout, or provider-controlled source. Production has no
 persistent staging sibling. The stack rejects missing, malformed, and all-zero Production release

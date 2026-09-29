@@ -19,6 +19,11 @@
   ],
   "deferredUpdates": [
     {
+      "name": "wrangler",
+      "reason": "During the guarded Production Worker release recovery, keep the exact Wrangler 4.136.2 rollout implementation that staged and smoke-tested the candidate pair. Changing the 0% deployment CLI before finishing this recovery would invalidate that evidence. Upgrade all three workspace pins together and rerun Worker release tests immediately after the incident.",
+      "until": "2026-10-02T00:00:00Z"
+    },
+    {
       "name": "@hugeicons/core-free-icons",
       "manifest": "apps/web/package.json",
       "reason": "4.3.4 publishes dist/esm/index.js exports for Grid2x2 and Grid3x2 icons with lowercase x, but its Linux tarball contains only uppercase X filenames. Vite production builds and browser acceptance fail on case-sensitive runners. Keep 4.3.3 until the publisher fixes the export paths; verify the package tarball and Linux build before updating.",

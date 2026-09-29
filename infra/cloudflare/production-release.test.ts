@@ -3,9 +3,65 @@ import { describe, expect, it } from "vitest";
 import {
   decodeCaptureWorkerReceipts,
   decodeWorkerReceipts,
+  isInterruptedAlchemyReceipt,
+  isInterruptedStableSnapshot,
   isPreSmokeBaseline,
   matchesRecoveryVersion,
 } from "./production-release";
+
+it("permits interrupted-upload reconciliation only for the inspected stable pair and Alchemy receipts", () => {
+  const snapshot = {
+    revision: "a".repeat(40),
+    stableRevision: "2d65bde42f81b5c4af377e433100a7500bec0a5b",
+    stableContractDigest: "f33c9633df9fdfe0dbb730156fe9083dc4d0f676648a27d102f73bc98262fd4f",
+    public: {
+      name: "fidy-ingress",
+      deploymentId: "e1f796e7-ccb4-41f0-96b2-8d0d3d74feb0",
+      stableVersionId: "90b1cd6a-4796-41bf-ae33-fb3333a3fff0",
+    },
+    core: {
+      name: "fidy-core",
+      deploymentId: "c69c2631-79ca-4db6-95ca-3d6e9464e02a",
+      stableVersionId: "28ffd738-508a-4d00-a3e1-31911f86ce01",
+    },
+  };
+  const workers = {
+    public: {
+      workerName: snapshot.public.name,
+      versionId: Option.some("d56d5cab-bf3e-434b-84aa-a74b7c94f159"),
+      hasRolloutBaseline: true,
+    },
+    core: {
+      workerName: snapshot.core.name,
+      versionId: Option.some("deee8a6c-ace3-4f50-b589-7729605031df"),
+      hasRolloutBaseline: true,
+    },
+  };
+  expect(isInterruptedStableSnapshot(snapshot)).toBe(true);
+  expect(isInterruptedAlchemyReceipt({ workers, snapshot })).toBe(true);
+  expect(
+    isInterruptedStableSnapshot({
+      ...snapshot,
+      core: { ...snapshot.core, deploymentId: "different" },
+    })
+  ).toBe(false);
+  expect(isInterruptedStableSnapshot({ ...snapshot, stableRevision: "b".repeat(40) })).toBe(false);
+  expect(
+    isInterruptedAlchemyReceipt({
+      workers: {
+        ...workers,
+        core: { ...workers.core, versionId: Option.some(snapshot.core.stableVersionId) },
+      },
+      snapshot,
+    })
+  ).toBe(false);
+  expect(
+    isInterruptedAlchemyReceipt({
+      workers: { ...workers, public: { ...workers.public, hasRolloutBaseline: false } },
+      snapshot,
+    })
+  ).toBe(false);
+});
 
 it("permits Core recovery only with an exact sole 100% deployment identity", () => {
   const version = "22222222-2222-4222-8222-222222222222";

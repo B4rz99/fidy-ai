@@ -28,6 +28,18 @@ describe("Production release workflow policy", () => {
     expect(workflow).toContain("if: ${{ env.BOOTSTRAP_RELEASE != 'true' }}");
     expect(workflow).toContain("if: ${{ env.BOOTSTRAP_RELEASE == 'true' }}");
   });
+  it("requires protected stable-pair capture before accepting only inspected Worker drift", () => {
+    expect(workflow).toContain(
+      "RESUME_RELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.resume && !inputs.bootstrap }}"
+    );
+    const resumeCapture = workflow.indexOf("bun production-release.ts resume-capture");
+    const driftGate = workflow.indexOf("bash scripts/check-topology-drift.sh resume");
+    const upload = workflow.indexOf("alchemy deploy --stage production --yes --no-input");
+    expect(resumeCapture).toBeGreaterThan(0);
+    expect(resumeCapture).toBeLessThan(driftGate);
+    expect(driftGate).toBeLessThan(upload);
+    expect(workflow).toContain("bash scripts/check-topology-drift.sh\n");
+  });
   it("serializes trunk releases without cancelling an active deployment", () => {
     expect(workflow).toContain("branches: [trunk]");
     expect(workflow).toContain("group: production-deployment");
@@ -204,7 +216,7 @@ describe("Production release workflow policy", () => {
     expect(verification).toBeLessThan(postDeploymentDrift);
     expect(postDeploymentDriftCommand).toBeGreaterThan(postDeploymentDrift);
     expect(postDeploymentDriftCommand).toBeLessThan(releaseRecord);
-    expect(workflow.match(/bash scripts\/check-topology-drift\.sh/gu)).toHaveLength(2);
+    expect(workflow.match(/bash scripts\/check-topology-drift\.sh/gu)).toHaveLength(3);
     expect(workflow).not.toContain("alchemy drift --stage production --no-input");
     expect(workflow).toContain("https://fidyapp.com/health-check");
     expect(workflow).toContain("https://app.fidyapp.com/deployment-metadata.json");

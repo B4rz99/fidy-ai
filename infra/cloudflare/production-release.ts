@@ -95,6 +95,7 @@ const Commands = Schema.Literals([
   "report",
   "inspect",
   "recover-core",
+  "resume-capture",
 ]);
 const SmokeAttestation = Schema.Struct({
   revision: SmokeIdentity.fields.gitRevision,
@@ -123,6 +124,8 @@ const interruptedPromotion = {
   coreDeployment: "0d731332-605d-47bf-976d-69963275b40e",
   coreCandidate: "deee8a6c-ace3-4f50-b589-7729605031df",
   coreStable: "28ffd738-508a-4d00-a3e1-31911f86ce01",
+  coreRecoveredDeployment: "c69c2631-79ca-4db6-95ca-3d6e9464e02a",
+  publicCandidate: "d56d5cab-bf3e-434b-84aa-a74b7c94f159",
 } as const;
 
 /** The one-time direct bootstrap must never use a later, unverified Production baseline. */
@@ -146,6 +149,7 @@ type Config = Readonly<{
   smokeAttestationFile: string;
   contractDigest: Option.Option<string>;
   bootstrapRelease: boolean;
+  resumeRelease: boolean;
 }>;
 const config = (): Config => {
   const environment = process.env;
@@ -163,6 +167,7 @@ const config = (): Config => {
       SMOKE_PROOF: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
       CONTRACT_DIGEST: Schema.optional(SmokeIdentity.fields.contractDigest),
       BOOTSTRAP_RELEASE: Schema.optional(Schema.Literals(["true", "false"])),
+      RESUME_RELEASE: Schema.optional(Schema.Literals(["true", "false"])),
     })
   )(environment);
   if (Option.isNone(decoded)) {
@@ -179,6 +184,7 @@ const config = (): Config => {
     smokeAttestationFile: decoded.value.SMOKE_ATTESTATION_FILE,
     contractDigest: Option.fromUndefinedOr(decoded.value.CONTRACT_DIGEST),
     bootstrapRelease: decoded.value.BOOTSTRAP_RELEASE === "true",
+    resumeRelease: decoded.value.RESUME_RELEASE === "true",
   };
 };
 
@@ -696,6 +702,54 @@ const capture = Effect.fn(function* (
   }
   yield* writeFile(env.file, encodeJson(snapshot));
 });
+export const isInterruptedStableSnapshot = (snapshot: ReleaseSnapshot): boolean => {
+  const expected = interruptedPromotion;
+  return (
+    snapshot.stableRevision === expected.revision &&
+    snapshot.stableContractDigest === preSmokeDigest &&
+    snapshot.public.deploymentId === expected.publicDeployment &&
+    snapshot.public.stableVersionId === expected.publicVersion &&
+    snapshot.core.deploymentId === expected.coreRecoveredDeployment &&
+    snapshot.core.stableVersionId === expected.coreStable
+  );
+};
+export const isInterruptedAlchemyReceipt = (input: {
+  workers: WorkerReceipts;
+  snapshot: ReleaseSnapshot;
+}): boolean => {
+  const { workers, snapshot } = input;
+  const expected = interruptedPromotion;
+  return (
+    workers.public.workerName === snapshot.public.name &&
+    workers.core.workerName === snapshot.core.name &&
+    Option.contains(workers.public.versionId, expected.publicCandidate) &&
+    Option.contains(workers.core.versionId, expected.coreCandidate) &&
+    workers.public.hasRolloutBaseline &&
+    workers.core.hasRolloutBaseline
+  );
+};
+const resumeCapture = Effect.fn(function* (
+  port: ReleasePort,
+  env: Config,
+  client: HttpClient.HttpClient
+) {
+  if (!env.resumeRelease || env.bootstrapRelease) {
+    return yield* new ReleaseFailure({
+      message: "Interrupted-upload reconciliation requires protected dispatch",
+    });
+  }
+  yield* capture(port, env, client);
+  const snapshot = yield* Schema.decodeUnknownEffect(releaseSchemas.snapshot)(
+    yield* readFile(env.file)
+  );
+  if (!isInterruptedStableSnapshot(snapshot)) {
+    return yield* new ReleaseFailure({ message: "Interrupted-upload stable Worker pair changed" });
+  }
+  const workers = yield* workersFromState();
+  if (!isInterruptedAlchemyReceipt({ workers, snapshot })) {
+    return yield* new ReleaseFailure({ message: "Interrupted-upload Alchemy receipts changed" });
+  }
+});
 const stage = Effect.fn(function* (port: ReleasePort, env: Config) {
   const snapshot = yield* Schema.decodeUnknownEffect(releaseSchemas.snapshot)(
     yield* readFile(env.file)
@@ -1096,6 +1150,8 @@ if (import.meta.main) {
       yield* runBootstrap({ command, port, env: environment, client });
     } else if (command === "recover-core") {
       yield* recoverInterruptedCore(port, environment, client);
+    } else if (command === "resume-capture") {
+      yield* resumeCapture(port, environment, client);
     } else {
       yield* runRouting({ command, port, env: environment, client });
     }

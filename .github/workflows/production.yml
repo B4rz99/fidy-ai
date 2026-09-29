@@ -10,6 +10,11 @@ on:
         required: true
         type: boolean
         default: false
+      resume:
+        description: "One-time smoke-gated reconciliation of the inspected interrupted Worker upload"
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -29,6 +34,7 @@ jobs:
     env:
       RELEASE_GIT_SHA: ${{ github.sha }}
       BOOTSTRAP_RELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.bootstrap }}
+      RESUME_RELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.resume && !inputs.bootstrap }}
       GITHUB_TOKEN: ${{ github.token }}
       ALCHEMY_PROFILE: ci
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
@@ -84,9 +90,21 @@ jobs:
       - name: Ensure Alchemy's Cloudflare state authority exists
         uses: ./.github/actions/bootstrap-alchemy-cloudflare-state
 
+      - name: Verify the inspected stable pair before interrupted-upload reconciliation
+        if: ${{ env.RESUME_RELEASE == 'true' }}
+        working-directory: infra/cloudflare
+        run: |
+          umask 077
+          bun production-release.ts resume-capture
+
       - name: Reject drift from the deployed Cloudflare topology
         working-directory: infra/cloudflare
-        run: bash scripts/check-topology-drift.sh
+        run: |
+          if [[ "$RESUME_RELEASE" == true ]]; then
+            bash scripts/check-topology-drift.sh resume
+          else
+            bash scripts/check-topology-drift.sh
+          fi
 
       - name: Require the reviewed Cloudflare security policy
         working-directory: infra/cloudflare

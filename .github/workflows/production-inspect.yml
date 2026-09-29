@@ -2,6 +2,12 @@ name: Inspect Production Worker traffic
 
 on:
   workflow_dispatch:
+    inputs:
+      probe_staged_pair:
+        description: "Probe only the inspected 0%-traffic candidates from the interrupted release"
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -51,3 +57,18 @@ jobs:
           else
             echo 'Drift remains blocked; see sanitized resource categories above.'
           fi
+      - name: Diagnose the inspected zero-traffic candidate pairing without promoting
+        if: ${{ inputs.probe_staged_pair }}
+        working-directory: infra/cloudflare
+        env:
+          # Only the versions uploaded in run 36602097827. No traffic-changing command runs here.
+          RELEASE_GIT_SHA: bb266058b40663208c2478ae48af4fe8bb5fa79d
+          CONTRACT_DIGEST: f33c9633df9fdfe0dbb730156fe9083dc4d0f676648a27d102f73bc98262fd4f
+          PUBLIC_VERSION_ID: 18489858-358b-4986-9d60-98a686052c85
+          CORE_VERSION_ID: 2216c932-4dc6-4195-baad-8944aa28bf07
+          STABLE_PUBLIC_VERSION_ID: 90b1cd6a-4796-41bf-ae33-fb3333a3fff0
+          STABLE_RELEASE_GIT_SHA: 2d65bde42f81b5c4af377e433100a7500bec0a5b
+          STABLE_CONTRACT_DIGEST: f33c9633df9fdfe0dbb730156fe9083dc4d0f676648a27d102f73bc98262fd4f
+          PUBLIC_WORKER_NAME: fidycloudflare-ingress-production-hf6ajjsszff23h5z
+          CORE_WORKER_NAME: fidycloudflare-core-production-hdv5cspnk7fai6vg
+        run: bun verify-production-smoke.ts

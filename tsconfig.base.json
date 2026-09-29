@@ -111,22 +111,6 @@
         },
         "overrides": [
           {
-            "include": ["./scripts/check-legacy-authorities.ts"],
-            "options": {
-              "diagnosticSeverity": {
-                "nodeBuiltinImport": "off"
-              }
-            }
-          },
-          {
-            "include": ["./scripts/check-legacy-authorities.test.ts"],
-            "options": {
-              "diagnosticSeverity": {
-                "nodeBuiltinImport": "off"
-              }
-            }
-          },
-          {
             "include": ["./apps/web/cloudflare/production-policy/artifact.ts"],
             "options": {
               "diagnosticSeverity": {

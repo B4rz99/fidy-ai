@@ -107,8 +107,10 @@ explicit stable `UserId` and an applicable access policy, except a deliberately 
 point that verifies its own proof. Phone numbers, provider ids, message ids, object ids, and model
 claims are evidence or input, never authority.
 
-Every access to User-owned data is constrained by that `UserId`; possession of an opaque UUID does
-not confer access. Each canonical operation declares one access requirement: a PAT scope for domain operations or an
+The private Core data API replaces PostgreSQL RLS for canonical User data: public ingress has no
+D1 binding, every User-owned read or mutation carries an explicit `UserId`, and pre-subject lookups
+are narrowly scoped. The private Email Worker has a separate, narrow D1 admission and retention
+boundary; it cannot treat a sender or receipt as User authority. Possession of an opaque UUID does not confer access. Each canonical operation declares one access requirement: a PAT scope for domain operations or an
 eligible caller class for account-security operations. It governs HTTP
 authorization, MCP/tool visibility, CLI availability, hosted-agent calls, and suggested operations.
 The hosted agent uses the same authorization path as the User's own agents.
@@ -117,9 +119,11 @@ A non-request path that reads User data crosses the private data boundary. Its d
 isolation beyond the request-derived API test. Queue work, caches, schedules, retries, and model
 context must not mix Users.
 
-**Evidence:** trace the subject and policy from entry point through handler and repository; inspect
+**Evidence:** trace the subject and policy from entry point through the private data API; inspect
 all object-id reads and writes; verify an under-scoped caller cannot invoke or discover the
-operation; verify User B cannot observe or alter User A.
+operation. At each applicable request, coordinator, Queue, Workflow, schedule, R2, and model-context
+seam, use two distinct Users to prove B cannot observe or alter A, including no partial effects on
+rejection.
 
 **Violation examples:** a repo accepts `TransactionId` without `UserId`; a worker loads every due
 InsightEvent and loses the subject before delivery; a tool is hidden from MCP but remains callable

@@ -615,7 +615,7 @@ it("bounds concurrent remember calls so one User's aggregate is never oversubscr
     })
   ));
 
-it("keeps one User's Memories invisible and unalterable to another User", () =>
+it("enforces the private data API's two-User Memory boundary without partial writes", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
@@ -641,6 +641,9 @@ it("keeps one User's Memories invisible and unalterable to another User", () =>
           send(db, { path: `/memories/${owned.data.id}`, method: "DELETE", session: cookie(1) })
         )).status
       ).toBe(404);
+      expect(
+        (yield* decode(Listed, yield* fromTestPromise(() => recalled(db, cookie(0))))).data
+      ).toEqual([expect.objectContaining({ text: "memoria privada" })]);
       expect(yield* fromTestPromise(() => memoryTextRows(db, users[0]))).toEqual([
         { text: "memoria privada" },
       ]);
@@ -652,6 +655,7 @@ it("keeps one User's Memories invisible and unalterable to another User", () =>
       ]);
       expect(yield* fromTestPromise(() => auditRows(db, users[0]))).toEqual([
         expect.objectContaining({ operation: "memory.remember", outcome: "success" }),
+        expect.objectContaining({ operation: "memory.recall", outcome: "success" }),
       ]);
     })
   ));

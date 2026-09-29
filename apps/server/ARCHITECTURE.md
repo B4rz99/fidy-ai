@@ -50,9 +50,10 @@ private verifier in the browser and treats the server/Worker as the proof-verifi
 
 Cloudflare storage adapters must preserve the same subject boundary: D1 queries receive an explicit
 subject, Durable Object keys are coordination identities rather than authorization, and Queue or
-Workflow payloads contain only bounded, secret-free projections. Email Worker admission and R2
-content retrieval are external to this package's inbound forwarding seam. The application accepts
-only the provider-neutral forwarded-email contract and remains fail closed without an adapter.
+Workflow payloads contain only bounded, secret-free projections. The private, unrouted Email Worker admits and retains forwarded mail with a narrow D1/R2/Queue
+binding; downstream processing uses the provider-neutral forwarding contract. Institution
+Connection-state admission and authenticated sender proof are not installed, so no production Email
+Routing rule enables inbound delivery.
 
 Telemetry is metadata-only and provider-neutral. Secrets, request bodies, model content, provider
 responses, and personal data do not cross the telemetry contract.

@@ -63,9 +63,11 @@ The [Kapso real-user launch check](kapso-launch-readiness.md) is separate from o
 8. Recheck trunk, then capture each active public/Core deployment and its sole stable 100% version;
    prove both stable identities through the reserved smoke path. Refuse an ambiguous deployment.
    Alchemy may retain a replacement receipt while old-generation cleanup is pending; use its current
-   generation only when the Worker identity and rollout hash are present. All other in-progress or
-   incomplete receipts, missing baselines, ambiguous deployments, and identity mismatches block
-   candidate upload.
+   generation only when the Worker identity and rollout hash are present. For an interrupted update,
+   capture may use its persisted output only when its Worker identity matches the last-applied output;
+   this exception applies to capture only. Candidate staging and cleanup still require completed
+   receipts. All other in-progress/incomplete receipts, missing baselines, ambiguous deployments, and
+   identity mismatches block candidate upload.
 9. Run `alchemy deploy --stage production --yes --no-input` with the same revision and digest.
    The capture step first requires existing Alchemy Worker hash state so the pinned provider cannot
    fall back to a direct 100% PUT. Alchemy owns the complete topology and uploads the public/Core

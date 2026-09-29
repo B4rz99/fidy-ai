@@ -65,12 +65,23 @@ const ResourceLifecycle = Schema.Struct({
     "replaced",
   ]),
 });
+const stableWorkerReceiptStatuses = new Set(["created", "updated", "replaced"]);
 // Alchemy `replaced` carries the successfully created generation's attrs; only the old
 // generation is pending garbage collection. Capture still independently verifies live traffic.
+const ResourceAttributes = Schema.Record(Schema.String, Schema.Unknown);
+const WorkerIdentity = Schema.Struct({ workerName: WorkerName });
 const StateEntry = Schema.Struct({
   logicalId: Schema.String,
   status: Schema.Literals(["created", "updated", "replaced"]),
-  attr: Schema.Struct({ workerName: WorkerName }),
+  attr: ResourceAttributes,
+});
+// Interrupted updates retain both the current output and the last-applied output. Capture may
+// use them only when their Worker identities agree; completed-receipt consumers reject updates.
+const UpdatingStateEntry = Schema.Struct({
+  logicalId: Schema.String,
+  status: Schema.Literal("updating"),
+  attr: ResourceAttributes,
+  old: Schema.Struct({ attr: ResourceAttributes }),
 });
 const StateMap = Schema.Record(Schema.String, Schema.Unknown);
 const Commands = Schema.Literals(["capture", "stage", "promote", "rollback", "cleanup", "report"]);
@@ -245,7 +256,45 @@ const decodeStateMap = (output: string): typeof StateMap.Type => {
   throw Error("Alchemy Worker state output is invalid");
 };
 
-export const decodeWorkerReceipts = (output: string): WorkerReceipts => {
+const interruptedUpdateAttributes = (
+  value: unknown,
+  logicalId: "Ingress" | "Core"
+): typeof ResourceAttributes.Type => {
+  const interrupted = Schema.decodeUnknownOption(UpdatingStateEntry)(value);
+  if (Option.isNone(interrupted)) throw Error(workerReceiptMessages[logicalId].incomplete);
+  const currentIdentity = Schema.decodeUnknownOption(WorkerIdentity)(interrupted.value.attr);
+  const previousIdentity = Schema.decodeUnknownOption(WorkerIdentity)(interrupted.value.old.attr);
+  if (
+    Option.isNone(currentIdentity) ||
+    Option.isNone(previousIdentity) ||
+    currentIdentity.value.workerName !== previousIdentity.value.workerName
+  ) {
+    throw Error(workerReceiptMessages[logicalId].incomplete);
+  }
+  return interrupted.value.attr;
+};
+
+const attributesForReceipt = (
+  value: unknown,
+  logicalId: "Ingress" | "Core",
+  mode: "capture" | "completed"
+): typeof ResourceAttributes.Type => {
+  const decoded = Schema.decodeUnknownOption(StateEntry)(value);
+  if (Option.isSome(decoded)) return decoded.value.attr;
+  const lifecycle = Schema.decodeUnknownOption(ResourceLifecycle)(value);
+  if (Option.isSome(lifecycle) && lifecycle.value.status === "updating" && mode === "capture") {
+    return interruptedUpdateAttributes(value, logicalId);
+  }
+  if (Option.isSome(lifecycle) && !stableWorkerReceiptStatuses.has(lifecycle.value.status)) {
+    throw Error(workerReceiptMessages[logicalId].unstable);
+  }
+  throw Error(workerReceiptMessages[logicalId].incomplete);
+};
+
+const decodeWorkerReceiptsWithMode = (
+  output: string,
+  mode: "capture" | "completed"
+): WorkerReceipts => {
   const entries = decodeStateMap(output);
   const select = (logicalId: "Ingress" | "Core"): WorkerReceipt => {
     const matchingEntries = Object.values(entries).filter((value) => {
@@ -255,39 +304,31 @@ export const decodeWorkerReceipts = (output: string): WorkerReceipts => {
     if (matchingEntries.length === 0) throw Error(workerReceiptMessages[logicalId].missing);
     if (matchingEntries.length !== 1) throw Error(workerReceiptMessages[logicalId].ambiguous);
 
-    const value = matchingEntries[0];
-    const decoded = Schema.decodeUnknownOption(StateEntry)(value);
-    if (Option.isNone(decoded)) {
-      const lifecycle = Schema.decodeUnknownOption(ResourceLifecycle)(value);
-      if (
-        Option.isSome(lifecycle) &&
-        lifecycle.value.status !== "created" &&
-        lifecycle.value.status !== "updated" &&
-        lifecycle.value.status !== "replaced"
-      ) {
-        throw Error(workerReceiptMessages[logicalId].unstable);
-      }
-      throw Error(workerReceiptMessages[logicalId].incomplete);
-    }
-
-    const rawVersion = Schema.decodeUnknownOption(
-      Schema.Struct({ attr: Schema.Struct({ versionId: VersionId }) })
-    )(value);
+    const attributes = attributesForReceipt(matchingEntries[0], logicalId, mode);
+    const identity = Schema.decodeUnknownOption(WorkerIdentity)(attributes);
+    if (Option.isNone(identity)) throw Error(workerReceiptMessages[logicalId].incomplete);
+    const rawVersion = Schema.decodeUnknownOption(Schema.Struct({ versionId: VersionId }))(
+      attributes
+    );
     const baseline = Schema.decodeUnknownOption(
-      Schema.Struct({
-        attr: Schema.Struct({ hash: Schema.Record(Schema.String, Schema.Unknown) }),
-      })
-    )(value);
+      Schema.Struct({ hash: Schema.Record(Schema.String, Schema.Unknown) })
+    )(attributes);
     return {
-      workerName: decoded.value.attr.workerName,
-      versionId: Option.map(rawVersion, (entry) => entry.attr.versionId),
+      workerName: identity.value.workerName,
+      versionId: Option.map(rawVersion, (entry) => entry.versionId),
       hasRolloutBaseline: Option.isSome(baseline),
     };
   };
   return { public: select("Ingress"), core: select("Core") };
 };
 
-const workersFromState = Effect.fn(function* () {
+export const decodeWorkerReceipts = (output: string): WorkerReceipts =>
+  decodeWorkerReceiptsWithMode(output, "completed");
+
+export const decodeCaptureWorkerReceipts = (output: string): WorkerReceipts =>
+  decodeWorkerReceiptsWithMode(output, "capture");
+
+const workersFromState = Effect.fn(function* (mode: "capture" | "completed" = "completed") {
   // Alchemy's persisted upload receipts, not a health response. Never print state: it also
   // contains other resources' binding metadata.
   const rawState = yield* shell([
@@ -306,7 +347,8 @@ const workersFromState = Effect.fn(function* () {
     Effect.mapError(() => new ReleaseFailure({ message: "Alchemy Worker state command failed" }))
   );
   return yield* Effect.try({
-    try: () => decodeWorkerReceipts(rawState),
+    try: () =>
+      mode === "capture" ? decodeCaptureWorkerReceipts(rawState) : decodeWorkerReceipts(rawState),
     catch: (cause) =>
       new ReleaseFailure({
         message:
@@ -500,7 +542,7 @@ const capture = Effect.fn(function* (
   env: Config,
   client: HttpClient.HttpClient
 ) {
-  const workers = yield* workersFromState();
+  const workers = yield* workersFromState("capture");
   // The pinned Alchemy provider falls back to a direct 100% PUT when its previous Worker
   // output has no hash. Never let that branch masquerade as a candidate upload.
   if (!workers.public.hasRolloutBaseline || !workers.core.hasRolloutBaseline) {

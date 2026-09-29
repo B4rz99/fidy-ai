@@ -1,6 +1,6 @@
 import { Option } from "effect";
 import { describe, expect, it } from "vitest";
-import { decodeWorkerReceipts } from "./production-release";
+import { decodeCaptureWorkerReceipts, decodeWorkerReceipts } from "./production-release";
 
 describe("Production release Worker receipts", () => {
   it("reports a missing Worker receipt without echoing state values", () => {
@@ -73,6 +73,93 @@ describe("Production release Worker receipts", () => {
     };
 
     expect(decodeWorkerReceipts(JSON.stringify(state)).public).toEqual({
+      workerName: "prod-ingress",
+      versionId: Option.some("11111111-1111-4111-8111-111111111111"),
+      hasRolloutBaseline: false,
+    });
+  });
+
+  it("uses an interrupted update receipt only for baseline capture", () => {
+    const ingressVersion = "11111111-1111-4111-8111-111111111111";
+    const coreVersion = "22222222-2222-4222-8222-222222222222";
+    const attributes = {
+      workerName: "prod-ingress",
+      versionId: ingressVersion,
+      hash: { main: "ingress-digest" },
+    };
+    const state = {
+      ingress: {
+        logicalId: "Ingress",
+        status: "updating",
+        attr: attributes,
+        old: { attr: attributes },
+      },
+      core: {
+        logicalId: "Core",
+        status: "updated",
+        attr: { workerName: "prod-core", versionId: coreVersion, hash: { main: "core-digest" } },
+      },
+    };
+
+    expect(() => decodeWorkerReceipts(JSON.stringify(state))).toThrowError(
+      new Error("Alchemy Ingress Worker lifecycle is unstable")
+    );
+    expect(decodeCaptureWorkerReceipts(JSON.stringify(state))).toEqual({
+      public: {
+        workerName: "prod-ingress",
+        versionId: Option.some(ingressVersion),
+        hasRolloutBaseline: true,
+      },
+      core: {
+        workerName: "prod-core",
+        versionId: Option.some(coreVersion),
+        hasRolloutBaseline: true,
+      },
+    });
+  });
+
+  it("rejects an interrupted update when the previous Worker identity disagrees", () => {
+    const state = {
+      ingress: {
+        logicalId: "Ingress",
+        status: "updating",
+        attr: { workerName: "prod-ingress", hash: { main: "digest" } },
+        old: { attr: { workerName: "different-ingress", hash: { main: "digest" } } },
+      },
+      core: { logicalId: "Core", status: "updated", attr: { workerName: "prod-core" } },
+    };
+
+    expect(() => decodeCaptureWorkerReceipts(JSON.stringify(state))).toThrowError(
+      new Error("Alchemy Ingress Worker receipt is incomplete")
+    );
+  });
+
+  it("does not infer an interrupted-update baseline without the current output hash", () => {
+    const state = {
+      ingress: {
+        logicalId: "Ingress",
+        status: "updating",
+        attr: { workerName: "prod-ingress", versionId: "11111111-1111-4111-8111-111111111111" },
+        old: {
+          attr: {
+            workerName: "prod-ingress",
+            versionId: "11111111-1111-4111-8111-111111111111",
+            hash: { main: "previous-digest" },
+          },
+        },
+      },
+      core: {
+        logicalId: "Core",
+        status: "updated",
+        attr: {
+          workerName: "prod-core",
+          versionId: "22222222-2222-4222-8222-222222222222",
+          hash: { main: "core-digest" },
+        },
+      },
+    };
+
+    expect(decodeCaptureWorkerReceipts(JSON.stringify(state)).public).toEqual({
       workerName: "prod-ingress",
       versionId: Option.some("11111111-1111-4111-8111-111111111111"),
       hasRolloutBaseline: false,

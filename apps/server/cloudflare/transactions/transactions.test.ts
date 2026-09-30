@@ -13,7 +13,7 @@ import { UserTransactionCoordinator } from "./transaction-coordinator";
 import { AtomicBatchCallId, AtomicBatchRejected, ErrorCode } from "@fidy/server/canonical-runtime";
 import type { AtomicBatchCall } from "@fidy/server/canonical-runtime";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
-import { DisclosureSnapshot } from "@fidy/server/agent-runtime";
+import { DisclosureSnapshot } from "@fidy/server/consent-contract";
 import { CategoryId, CategoryKeyword, KeywordRuleId } from "@fidy/server/categories";
 import { keywordRuleGuardFailure } from "../mutations/keyword-rule-outcome";
 import { currentDisclosureFor } from "@fidy/server/consent-ingress";

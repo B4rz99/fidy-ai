@@ -1,3 +1,4 @@
+import { consentGranted } from "@fidy/server/consent-runtime";
 import {
   BillingAttempt,
   BillingAttemptId,
@@ -205,8 +206,7 @@ const authority = (
       .prepare(`SELECT s.user_id, u.time_zone, v.email_address FROM web_sessions AS s
     JOIN users AS u ON u.id = s.user_id
     JOIN verified_email_credentials AS v ON v.user_id = s.user_id
-    JOIN onboarding_consent_records AS c ON c.user_id = s.user_id
-    WHERE s.token_digest = ? AND s.revoked_at_ms IS NULL AND s.fresh_until_ms > ?
+    WHERE ${consentGranted("s.user_id")} AND s.token_digest = ? AND s.revoked_at_ms IS NULL AND s.fresh_until_ms > ?
       AND s.idle_expires_at_ms > ? AND s.hard_expires_at_ms > ?`)
       .bind(tokenDigest, at, at, at)
       .first()

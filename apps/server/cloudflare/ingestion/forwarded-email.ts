@@ -1,4 +1,5 @@
 import { Clock, Crypto, Data, Effect, Option, PlatformError, Result, Schema, Stream } from "effect";
+import { consentGranted, consentNotRevoked, consentRevoked } from "@fidy/server/consent-runtime";
 import PostalMime from "postal-mime";
 import {
   maximumEmailAddressCharacters,
@@ -159,9 +160,7 @@ export const receiveForwardedEmail = Effect.fn(function* (
     environment.DB.prepare(
       `SELECT a.user_id, u.time_zone FROM email_forwarding_addresses a
      JOIN users u ON u.id = a.user_id
-     JOIN onboarding_consent_records c ON c.user_id = a.user_id
-     WHERE a.local_part = ? AND NOT EXISTS (
-       SELECT 1 FROM consent_user_revocations r WHERE r.user_id = a.user_id)`
+     WHERE a.local_part = ? AND ${consentGranted("a.user_id")} AND ${consentNotRevoked("a.user_id")}`
     )
       .bind(localPart)
       .first()
@@ -355,8 +354,8 @@ export const dispatchForwardedEmail = Effect.fn(function* (environment: Forwarde
      WHERE (o.sent_at_ms IS NULL OR o.sent_at_ms < ?)
        AND r.state = 'queued' AND r.expires_at_ms > ?
        AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes f WHERE f.receipt_id = r.id)
-       AND EXISTS (SELECT 1 FROM onboarding_consent_records c WHERE c.user_id = o.user_id)
-       AND NOT EXISTS (SELECT 1 FROM consent_user_revocations c WHERE c.user_id = o.user_id)
+       AND ${consentGranted("o.user_id")}
+       AND ${consentNotRevoked("o.user_id")}
      LIMIT 25`
     )
       .bind(now - dispatchCooldownMs, now)
@@ -388,8 +387,7 @@ export const sweepForwardedEmail = Effect.fn(function* (environment: ForwardedEm
       `SELECT id, user_id, object_key, state FROM forwarded_email_receipts
      WHERE state IN ('storing', 'queued') AND (expires_at_ms <= ?
        OR (state = 'storing' AND received_at_ms <= ?)
-       OR (state = 'queued' AND EXISTS
-         (SELECT 1 FROM consent_user_revocations c WHERE c.user_id = forwarded_email_receipts.user_id)))
+       OR (state = 'queued' AND ${consentRevoked("forwarded_email_receipts.user_id")}))
      ORDER BY expires_at_ms ASC, id ASC LIMIT ?`
     )
       .bind(now + sweepLookaheadMs, now - storingInterruptionMs, maximumSweep)
@@ -404,7 +402,7 @@ export const sweepForwardedEmail = Effect.fn(function* (environment: ForwardedEm
         environment.DB.prepare(`INSERT INTO forwarded_email_needs_review
           (id, receipt_id, user_id, reason, created_at_ms, evidence_expires_at_ms)
           SELECT ?, id, user_id,
-          CASE WHEN EXISTS (SELECT 1 FROM consent_user_revocations c WHERE c.user_id = r.user_id)
+          CASE WHEN ${consentRevoked("r.user_id")}
             THEN 'consent-revoked' ELSE 'processing-interrupted' END, ?, ?
           FROM forwarded_email_receipts r WHERE r.id = ? AND r.user_id = ?
           AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes o WHERE o.receipt_id = r.id)`).bind(

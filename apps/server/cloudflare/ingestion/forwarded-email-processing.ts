@@ -1,3 +1,4 @@
+import { consentGranted, consentNotRevoked } from "@fidy/server/consent-runtime";
 import { fallbackCaptureCategory } from "@fidy/server/categories";
 import { Clock, Data, DateTime, Effect, Option, type PlatformError, Schema } from "effect";
 import PostalMime from "postal-mime";
@@ -70,8 +71,8 @@ const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, EmailProcessingUnav
 const active = `EXISTS (SELECT 1 FROM forwarded_email_receipts r
   WHERE r.id = ? AND r.user_id = ? AND r.state = 'queued' AND r.expires_at_ms > ?
   AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes o WHERE o.receipt_id = r.id)
-  AND EXISTS (SELECT 1 FROM onboarding_consent_records c WHERE c.user_id = r.user_id)
-  AND NOT EXISTS (SELECT 1 FROM consent_user_revocations c WHERE c.user_id = r.user_id))`;
+  AND ${consentGranted("r.user_id")}
+  AND ${consentNotRevoked("r.user_id")})`;
 
 // Only these fixed HTML tags may leave the personal-evidence boundary; never store tag names
 // supplied by the email, attributes, text, URLs, dimensions, or content-dependent lengths.
@@ -103,8 +104,8 @@ const findOwnedReceipt = (
       input.DB.prepare(`SELECT r.id, r.object_key, r.delivery_digest, r.byte_length,
     r.received_at_ms, r.expires_at_ms, r.time_zone FROM forwarded_email_receipts r
     WHERE r.id = ? AND r.user_id = ? AND r.state = 'queued' AND r.expires_at_ms > ?
-      AND EXISTS (SELECT 1 FROM onboarding_consent_records c WHERE c.user_id = r.user_id)
-      AND NOT EXISTS (SELECT 1 FROM consent_user_revocations c WHERE c.user_id = r.user_id)
+      AND ${consentGranted("r.user_id")}
+      AND ${consentNotRevoked("r.user_id")}
       AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes o WHERE o.receipt_id = r.id)`)
         .bind(input.receiptId, input.userId, current)
         .first()

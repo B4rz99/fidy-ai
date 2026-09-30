@@ -5,7 +5,7 @@ import {
   DisclosureRevision,
   PolicyRevision,
   Sha256Digest,
-} from "~/core/consent/reference";
+} from "~/core/consent/contract";
 import { UserId } from "~/core/identity/reference";
 import { HostedAgentSessionId } from "./reference";
 

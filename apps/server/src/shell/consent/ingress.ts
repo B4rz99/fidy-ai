@@ -1,6 +1,6 @@
 import { Option, type Redacted, Schema } from "effect";
 import type { HttpClient } from "effect/unstable/http";
-import { DisclosureSnapshot } from "~/core/consent/model";
+import { DisclosureSnapshot } from "~/core/consent/contract";
 import { TranscriptText } from "~/core/transcript/model";
 import {
   type KapsoClientService,
@@ -20,14 +20,6 @@ import {
 import { makeKapsoOutboundHttp } from "~/shell/outbound-http/operations";
 import { currentDisclosureFor } from "./current-disclosure";
 
-export { decideConsentReply } from "~/core/consent/rules";
-export {
-  ConsentIngressExchange,
-  canRecordConsentIngressDecision,
-  classifyConsentIngressReplay,
-  isConsentIngressDecisionPhase,
-  type ConsentIngressMessage,
-} from "~/core/consent/ingress-lifecycle";
 export {
   decodeKapsoDisclosureLifecycleWebhook,
   decodeKapsoWebhook,
@@ -35,7 +27,6 @@ export {
   maxKapsoWebhookBytes,
 };
 export { currentDisclosureFor, DisclosureDeliveryCorrelationToken };
-export { PendingConsentExchangeId, Sha256Digest } from "~/core/consent/reference";
 export { WhatsAppProviderMessageId } from "~/core/provider-evidence/contract";
 export { WhatsAppDeliveryKey } from "~/shell/channels/whatsapp/model";
 export {

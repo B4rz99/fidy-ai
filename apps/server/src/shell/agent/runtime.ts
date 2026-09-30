@@ -33,7 +33,6 @@ export {
   TurnFailureReason,
   UserTranscriptEntry,
 } from "~/core/transcript/model";
-export { DisclosureSnapshot } from "~/core/consent/model";
 export { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
 export { UserId } from "~/core/identity/reference";
 export { memoriesFromRows, memoryRowsQuery } from "~/shell/memory/query";

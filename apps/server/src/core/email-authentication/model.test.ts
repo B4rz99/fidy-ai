@@ -8,7 +8,7 @@ import {
   VerifiedEmailCredentialLifecycleEvent,
   VerifiedEmailCredentialLifecycleEventId,
 } from "./model";
-import { PendingConsentExchangeId } from "~/core/consent/reference";
+import { PendingConsentExchangeId } from "~/core/consent/contract";
 import {
   UserId,
   WhatsAppBusinessPortfolioId,

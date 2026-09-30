@@ -1,18 +1,98 @@
 import { Schema } from "effect";
 import { Locale, ServiceMarket } from "~/core/_shared/context";
-import { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
-import { UserId, WhatsAppCallerReference } from "~/core/identity/reference";
+import {
+  ProviderMessageEvidence,
+  WhatsAppProviderMessageId,
+} from "~/core/provider-evidence/contract";
+import {
+  UserId,
+  WhatsAppBusinessPhoneNumberId,
+  WhatsAppCallerReference,
+} from "~/core/identity/reference";
 import { InsightKind } from "~/core/insights/reference";
 import { PATId } from "~/core/tokens/reference";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { WebSessionId } from "~/core/web-session/reference";
-import {
-  ConsentRecordId,
-  DisclosureRevision,
-  PendingConsentExchangeId,
-  PolicyRevision,
-  Sha256Digest,
-} from "./reference";
+/** Stable identity of one temporary pre-User disclosure exchange. */
+export const PendingConsentExchangeId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("PendingConsentExchangeId"))
+  .annotate({ identifier: "PendingConsentExchangeId" });
+export type PendingConsentExchangeId = typeof PendingConsentExchangeId.Type;
+
+/** Stable identity of one append-only ConsentRecord. */
+export const ConsentRecordId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("ConsentRecordId"))
+  .annotate({ identifier: "ConsentRecordId" });
+export type ConsentRecordId = typeof ConsentRecordId.Type;
+
+/** Immutable source-control identifier of one full policy version. */
+export const PolicyRevision = Schema.String.check(
+  Schema.isTrimmed(),
+  Schema.isPattern(/^[a-z0-9][a-z0-9._-]{0,63}$/u)
+)
+  .pipe(Schema.brand("PolicyRevision"))
+  .annotate({ identifier: "PolicyRevision" });
+export type PolicyRevision = typeof PolicyRevision.Type;
+
+/** Immutable identifier of the shorter disclosure presented in chat. */
+export const DisclosureRevision = Schema.String.check(
+  Schema.isTrimmed(),
+  Schema.isPattern(/^[a-z0-9][a-z0-9._-]{0,63}$/u)
+)
+  .pipe(Schema.brand("DisclosureRevision"))
+  .annotate({ identifier: "DisclosureRevision" });
+export type DisclosureRevision = typeof DisclosureRevision.Type;
+
+/** Lowercase SHA-256 digest that pins exact source-controlled content bytes. */
+export const Sha256Digest = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u))
+  .pipe(Schema.brand("Sha256Digest"))
+  .annotate({ identifier: "Sha256Digest" });
+export type Sha256Digest = typeof Sha256Digest.Type;
+
+/** Temporary Consent evidence; delivery and settlement phases carry the proof each decision requires. */
+export const ConsentIngressExchange = Schema.Struct({
+  initiatingMessageId: WhatsAppProviderMessageId,
+  initiatingBodySha256: Sha256Digest,
+  businessPhoneNumberId: WhatsAppBusinessPhoneNumberId,
+  expiresAtMs: Schema.Finite,
+  phase: Schema.Union([
+    Schema.TaggedStruct("BeforeDelivery", {
+      stage: Schema.Literals(["awaiting_delivery", "outbound_started"]),
+      disclosureMessageId: Schema.NullOr(WhatsAppProviderMessageId),
+    }),
+    Schema.TaggedStruct("AwaitingDecision", {
+      disclosureMessageId: WhatsAppProviderMessageId,
+      disclosedAtMs: Schema.Finite,
+      decisionNotBeforeMs: Schema.Finite,
+    }),
+    Schema.TaggedStruct("Settled", {
+      decision: Schema.Literals(["accepted", "declined"]),
+      disclosureMessageId: WhatsAppProviderMessageId,
+      disclosedAtMs: Schema.Finite,
+      decisionNotBeforeMs: Schema.Finite,
+    }),
+  ]),
+});
+export type ConsentIngressExchange = typeof ConsentIngressExchange.Type;
+
+/** Provider-qualified message facts supplied by ingress after authentication and bounded decoding. */
+export type ConsentIngressMessage = Readonly<{
+  providerMessageId: WhatsAppProviderMessageId;
+  bodySha256: Sha256Digest;
+  businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
+  occurredAtMs: number;
+  receivedAtMs: number;
+}>;
+
+/** Closed origins for symmetric PAT Consent revocations; only expiry is automatic. */
+export const PATRevocationOrigin = Schema.Literals([
+  "user-revoke-one",
+  "user-revoke-all",
+  "user-revoke-unclaimed",
+  "approved-unclaimed-expiry",
+  "fixed-lifetime-expiry",
+]);
+export type PATRevocationOrigin = typeof PATRevocationOrigin.Type;
 
 const maximumLegalFactLength = 1_000;
 const maximumPolicyUrlLength = 2_048;
@@ -22,14 +102,6 @@ const legalFact = Schema.NonEmptyString.check(
   Schema.isTrimmed(),
   Schema.isMaxLength(maximumLegalFactLength)
 );
-
-export {
-  ConsentRecordId,
-  DisclosureRevision,
-  PendingConsentExchangeId,
-  PolicyRevision,
-  Sha256Digest,
-};
 
 /** Stable HTTPS location of a source-controlled policy revision. */
 export const PolicyUrl = Schema.String.check(

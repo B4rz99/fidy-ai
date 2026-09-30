@@ -1,4 +1,4 @@
-import { decidePATRevocation } from "~/core/consent/pat-revocation";
+import { decidePATRevocation } from "~/core/consent/operations";
 import {
   type FreshSessionSubject,
   freshSessionExists,
@@ -6,10 +6,57 @@ import {
 } from "~/shell/identity/browser-runtime";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 
+/** Copy the accepted pre-User decision into stable-User evidence in the caller's onboarding unit.
+ * Returns no insert for an absent or declined exchange. The caller must commit this with User
+ * creation, credential proof consumption, and its existing completion assertion; never run alone.
+ */
+export const recordOnboardingConsent = ({
+  userId,
+  exchangeId,
+}: Readonly<{
+  userId: string;
+  exchangeId: string;
+}>): OwnedStatement => ({
+  sql: `INSERT INTO onboarding_consent_records
+    (id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms)
+    SELECT d.exchange_id, ?, d.disclosure_json, d.disclosure_message_id,
+      d.decision_message_id, d.received_at_ms, d.occurred_at_ms FROM pending_consent_decisions AS d
+    WHERE d.exchange_id = ? AND d.decision = 'accepted'`,
+  params: [userId, exchangeId],
+});
+
 // One fresh evidence id per row, including multi-grant revocation; no bearer enters a statement.
 const randomConsentId = `lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4'
   || substr(hex(randomblob(2)),2) || '-a' || substr(hex(randomblob(2)),2) || '-'
   || hex(randomblob(6)))`;
+
+/** Require the matching append-only evidence before its protected PAT or pairing transition.
+ * User decisions bind session id (and, for one PAT, decision time); expiry has a fixed policy origin.
+ * Keep these bindings and the evidence write in the caller's existing D1 unit.
+ */
+export const patRevocationRecorded = ({
+  kind,
+  decision,
+}: Readonly<{
+  kind: "pat" | "pairing";
+  decision: "user" | "current-user" | "expiry";
+}>): string => {
+  const subject = kind === "pat" ? "r.pat_id = pats.id" : "r.pairing_id = pat_pairings.id";
+  const origin =
+    decision === "expiry"
+      ? `r.policy_reason = '${kind === "pat" ? "pat-fixed-lifetime-expiry" : "pat-approved-unclaimed-expiry"}'`
+      : `r.session_id = ?${decision === "current-user" ? " AND r.occurred_at_ms = ?" : ""}`;
+  return `EXISTS (SELECT 1 FROM pat_revocation_consents r WHERE ${subject} AND ${origin})`;
+};
+
+/** A policy-expiry unit may not commit evidence while leaving its covered grant live. Bind the decision time. */
+export const unfinishedConsentExpiry = (kind: "pat" | "pairing"): string =>
+  kind === "pat"
+    ? `EXISTS (SELECT 1 FROM pat_revocation_consents r JOIN pats p ON p.id = r.pat_id
+        WHERE r.policy_reason = 'pat-fixed-lifetime-expiry' AND r.occurred_at_ms = ? AND p.revoked_at_ms IS NULL)`
+    : `EXISTS (SELECT 1 FROM pat_revocation_consents r JOIN pat_pairings p ON p.id = r.pairing_id
+        WHERE r.policy_reason = 'pat-approved-unclaimed-expiry' AND r.occurred_at_ms = ?
+        AND p.state = 'approved_awaiting_claim')`;
 
 type RevokeOneInput = Readonly<{ id: string; shortId: string; current: number }>;
 /** Append a User-origin revocation only for the live grant owned by this fresh WebSession. */

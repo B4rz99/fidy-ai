@@ -1,3 +1,4 @@
+import { handleWebAuthentication } from "../web-authentication/operations";
 import { observeOperationalHealth } from "../runtime/operational-health";
 import { Miniflare } from "miniflare";
 import { afterEach, expect, it, vi } from "vitest";
@@ -261,6 +262,21 @@ afterEach(() =>
     })
   )
 );
+
+it("refuses a wrong browser protocol method without admitting a pairing", async () => {
+  const { db } = await setup();
+  const response = await Effect.runPromise(
+    handleWebAuthentication({
+      request: new Request("https://api.fidyapp.com/web/pairings"),
+      db,
+      publish: () => undefined,
+    })
+  );
+  expect(response.status).toBe(405);
+  expect(await db.prepare("SELECT COUNT(*) AS count FROM browser_login_pairings").first()).toEqual({
+    count: 0,
+  });
+});
 
 it("creates one complete stable identity on first valid mailbox proof and refuses replay", () =>
   Effect.runPromise(

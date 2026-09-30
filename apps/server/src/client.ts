@@ -74,10 +74,10 @@ export {
   StartBrowserPairingEmailAuthenticationPayload,
   WebAuthApi,
   type WebAuthApiGroups,
-} from "./web-auth-api";
+} from "~/shell/web-authentication/contract";
 export { StartedBrowserLoginPairing } from "~/core/browser-login/model";
 export { EmailAddress, EmailVerificationCode } from "~/core/email-authentication/model";
-export { CompleteEmailReplacementPayload } from "./web-auth-api";
+export { CompleteEmailReplacementPayload } from "~/shell/web-authentication/contract";
 export { RequestEmailReplacementPayload } from "~/shell/email-authentication/contract";
 export {
   emailReplacementPath,
@@ -113,4 +113,4 @@ export {
   EmailReplacementInvalidApi,
   emailReplacementFreshBody,
   emailReplacementInvalidBody,
-} from "./web-auth-api";
+} from "~/shell/web-authentication/contract";

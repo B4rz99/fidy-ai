@@ -17,7 +17,8 @@ import {
   reviewExpiredMessage,
 } from "@fidy/server/tokens-runtime";
 import { type Cause, DateTime, Effect, Option, Redacted, Result, Schema } from "effect";
-import { grantManualPATConsent } from "@fidy/server/consent-pat";
+import { isConsentRevoked } from "../consent/operations";
+import { grantManualPATConsent } from "@fidy/server/consent-operations";
 import {
   canonical,
   currentMillis,
@@ -209,10 +210,8 @@ const failedIssuance = (
         .first()
     );
     if (prior !== null) return consumed();
-    const revokedConsent = yield* Effect.tryPromise(() =>
-      db.prepare("SELECT 1 FROM consent_user_revocations WHERE user_id = ?").bind(userId).first()
-    );
-    if (revokedConsent !== null) return consentActionRequired();
+    const revokedConsent = yield* isConsentRevoked({ db, userId });
+    if (revokedConsent) return consentActionRequired();
     const issued = yield* Effect.tryPromise(() =>
       db
         .prepare("SELECT count(*) AS total FROM pats WHERE user_id = ? AND issued_at_ms > ?")

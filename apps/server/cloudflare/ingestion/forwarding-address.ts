@@ -1,3 +1,4 @@
+import { consentGranted, consentNotRevoked } from "@fidy/server/consent-runtime";
 import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { activeProUserParams, activeProUserSql } from "../access-tier";
@@ -45,8 +46,8 @@ const rows = (db: D1Database, userId: string, current: number): D1PreparedStatem
        AND r.received_at_ms >= ? AND r.received_at_ms < ?) AS consumed,
       ${activeProUserSql} AS pro
      FROM email_forwarding_addresses a WHERE a.user_id = ?
-       AND EXISTS (SELECT 1 FROM onboarding_consent_records c WHERE c.user_id = a.user_id)
-       AND NOT EXISTS (SELECT 1 FROM consent_user_revocations c WHERE c.user_id = a.user_id)`
+       AND ${consentGranted("a.user_id")}
+       AND ${consentNotRevoked("a.user_id")}`
     )
     .bind(
       DateTime.toEpochMillis(period.from),

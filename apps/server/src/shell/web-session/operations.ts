@@ -1,3 +1,5 @@
+import { consentNotRevoked } from "~/shell/consent/runtime";
+
 /** A BrowserLoginPairing candidate named by `id` must remain while any WebSession references it,
  * including expired or revoked sessions. Negate this predicate inside the pairing owner's atomic
  * cleanup; it conveys retention only, never authentication or authority. */
@@ -35,7 +37,7 @@ export const liveWebSessionAuthority = (
   return {
     ...credential,
     predicate: `${credential.predicate}
-    AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = web_sessions.user_id)`,
+    AND ${consentNotRevoked("web_sessions.user_id")}`,
   };
 };
 

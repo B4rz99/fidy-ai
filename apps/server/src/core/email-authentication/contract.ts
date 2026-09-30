@@ -3,7 +3,7 @@ import { Schema, SchemaTransformation } from "effect";
 import { UtcTimestamp } from "~/core/_shared/time";
 
 import { BrowserLoginPairingId } from "~/core/browser-login/contract";
-import { PendingConsentExchangeId } from "~/core/consent/reference";
+import { PendingConsentExchangeId } from "~/core/consent/contract";
 
 import { UserId, WhatsAppCallerReference } from "~/core/identity/contract";
 

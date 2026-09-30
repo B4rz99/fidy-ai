@@ -1,4 +1,5 @@
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { consentNotRevoked } from "~/shell/consent/runtime";
 import { SqlClient } from "effect/unstable/sql";
 import { ActivePATMetadata, PATRecipientLabel, PATScopes, TokenShortId } from "~/core/tokens/model";
 import type { UserId } from "~/core/identity/contract";
@@ -36,7 +37,7 @@ export const patMetadataQuery = ({
 }>): OwnedStatement => ({
   sql: `SELECT short_id,recipient_label,scopes_json,created_at_ms,last_used_at_ms,expires_at_ms
     FROM pats WHERE user_id = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?
-    AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = pats.user_id)
+    AND ${consentNotRevoked("pats.user_id")}
     ${
       Option.isSome(session)
         ? `AND EXISTS (SELECT 1 FROM web_sessions WHERE id = ? AND user_id = ?

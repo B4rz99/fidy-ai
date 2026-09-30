@@ -25,7 +25,7 @@ import {
   expirePATConsents,
   expirePairingConsents,
   grantPairedPATConsent,
-} from "@fidy/server/consent-pat";
+} from "@fidy/server/consent-operations";
 import {
   canonical,
   currentMillis,

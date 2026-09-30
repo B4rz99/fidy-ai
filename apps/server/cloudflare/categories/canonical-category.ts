@@ -13,6 +13,7 @@ import {
 } from "@fidy/server/tokens-runtime";
 import { Effect, Option, Schema } from "effect";
 import { currentMillis, newId } from "../pats/pat-shared";
+import { isConsentRevoked } from "../consent/operations";
 import { commitPATUnit, prepareOwnedStatement } from "../pats/pat-unit";
 import { type TransactionCaller, isPATCaller } from "../transactions/transaction-boundary";
 
@@ -83,15 +84,10 @@ const refusedCategoryWork = (
 ): Effect.Effect<Response, void> =>
   Effect.gen(function* () {
     if (isPATCaller(subject)) {
-      const withdrawn = yield* Effect.tryPromise({
-        try: () =>
-          db
-            .prepare("SELECT 1 FROM consent_user_revocations WHERE user_id = ?")
-            .bind(subject.userId)
-            .first(),
-        catch: () => undefined,
-      });
-      if (withdrawn !== null) return userActionRequired();
+      const withdrawn = yield* isConsentRevoked({ db, userId: subject.userId }).pipe(
+        Effect.mapError(() => undefined)
+      );
+      if (withdrawn) return userActionRequired();
     }
     return unauthenticated();
   });

@@ -1,8 +1,4 @@
-import {
-  currentUser,
-  logoutBrowser,
-  canonicalBrowserSession as transactionSession,
-} from "./web-session/operations";
+import { canonicalBrowserSession as transactionSession } from "./web-session/operations";
 import {
   ScopeMissing,
   UserActionRequired,
@@ -49,12 +45,21 @@ import { pathId, rawPathId } from "./http/path";
 import { handleWebAuthentication } from "./web-authentication/operations";
 import {
   type BrowserPairingEmailEnvironment,
+  type EmailReplacementEnvironment,
+  type OnboardingEmailEnvironment,
   dispatchBrowserPairingEmail,
+  dispatchEmailReplacement,
+  dispatchOnboardingEmail,
   isBrowserPairingEmailWork,
+  isEmailReplacementWork,
   receiveBrowserPairingEmail,
+  receiveEmailReplacement,
+  receiveOnboardingEmail,
   reconcileBrowserPairingEmail,
+  reconcileEmailReplacement,
+  reconcileOnboardingEmail,
 } from "./email-authentication/runtime";
-import { handleSupportRecovery, rotateBackupRecoveryCode } from "./recovery/operations";
+import { handleSupportRecovery } from "./recovery/operations";
 import { handleCardEnrollment } from "./card-enrollment/card-enrollment";
 import {
   type BillingCollectionEnvironment,
@@ -64,13 +69,6 @@ import {
   receiveWompiBillingEvent,
   reconcileBillingCandidates,
 } from "./billing/billing-collection";
-import {
-  type EmailReplacementEnvironment,
-  dispatchEmailReplacement,
-  isEmailReplacementWork,
-  receiveEmailReplacement,
-  reconcileEmailReplacement,
-} from "./email-authentication/runtime";
 import { handlePATRequest, patRoute } from "./pats/pat-routes";
 import { listPATs } from "./pats/pat-management";
 import { recallMemories, rejectMemoryMutation } from "./memory/memory";
@@ -101,12 +99,6 @@ import {
   keywordRuleUnknownId,
   listOwnKeywordRules,
 } from "./categories/canonical-keyword-rules";
-import {
-  type OnboardingEmailEnvironment,
-  dispatchOnboardingEmail,
-  receiveOnboardingEmail,
-  reconcileOnboardingEmail,
-} from "./email-authentication/runtime";
 import { contractDigestPattern, gitRevisionPattern } from "./runtime/release-identity";
 import { smokeFailureHeader, smokePath, smokeProofAccepted } from "./runtime/smoke";
 import {
@@ -193,7 +185,8 @@ export {
   BillingCollectionWorkflowV1,
   runBillingCollectionWorkflow,
 } from "./billing/billing-collection";
-export { BrowserPairingEmailWorkflowV1, EmailReplacementWorkflowV1 } from "./email-authentication/runtime";
+export { BrowserPairingEmailWorkflowV1 } from "./email-authentication/runtime";
+export { EmailReplacementWorkflowV1 } from "./email-authentication/runtime";
 export { StatementExtractionWorkflowV1, ReleaseSmokeWorkflowV1 };
 export { OperationalCanaryWorkflowV1 } from "./operational-canary-workflow";
 

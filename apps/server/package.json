@@ -24,10 +24,10 @@
       "import": "./src/shell/web-session/operations.ts",
       "default": "./src/shell/web-session/operations.ts"
     },
-    "./identity-runtime": {
-      "types": "./src/shell/identity/browser-runtime.ts",
-      "import": "./src/shell/identity/browser-runtime.ts",
-      "default": "./src/shell/identity/browser-runtime.ts"
+    "./identity": {
+      "types": "./src/shell/identity/operations.ts",
+      "import": "./src/shell/identity/operations.ts",
+      "default": "./src/shell/identity/operations.ts"
     },
     "./subscription-runtime": {
       "types": "./src/shell/subscription/runtime.ts",

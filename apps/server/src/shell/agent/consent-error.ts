@@ -1,5 +1,5 @@
 import { Data } from "effect";
-import type { UserId } from "~/core/identity/reference";
+import type { UserId } from "~/core/identity/contract";
 
 /** Failure returned before any model or Transcript work when onboarding Consent is absent. */
 export class OnboardingConsentRequired extends Data.TaggedError("OnboardingConsentRequired")<{

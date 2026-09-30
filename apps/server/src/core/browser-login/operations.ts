@@ -1,8 +1,8 @@
 import { DateTime, Option } from "effect";
 import {
+  type BrowserLoginPairingLifecycle,
   BrowserLoginPublicCode,
   type BrowserLoginPublicCodeSymbols,
-  type BrowserLoginPairingLifecycle,
   browserLoginPublicCodeAlphabet,
 } from "./contract";
 

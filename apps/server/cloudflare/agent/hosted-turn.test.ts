@@ -29,7 +29,8 @@ import {
 import { sweepHostedTurns } from "./hosted-turn-sweep";
 import { hostedTurnTestMigrations } from "./hosted-turn-test-migrations";
 import { WhatsAppHostedSubject, WhatsAppInboundEvidence } from "./hosted-authority";
-import { findWhatsAppReplay, findWhatsAppUser, sweepExpiredWhatsAppWindows } from "./whatsapp-turn";
+import { findWhatsAppReplay, sweepExpiredWhatsAppWindows } from "./whatsapp-turn";
+import { findWhatsAppUser } from "../identity/operations";
 import { observeOperationalHealth } from "../runtime/operational-health";
 import {
   recordWhatsAppSend,
@@ -46,7 +47,7 @@ import type { KapsoHostedLifecycleEvidence } from "../../src/shell/channels/what
 import {
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
-} from "../../src/core/identity/reference";
+} from "../../src/core/identity/contract";
 import {
   acknowledgeBrowserTurn,
   browserHostedDelivery,

@@ -1,5 +1,6 @@
 import * as D1Client from "@effect/sql-d1/D1Client";
-import { User, UserId, getCurrentUser } from "@fidy/server/identity-runtime";
+import { User, UserId } from "../../src/core/identity/contract";
+import { getCurrentUser } from "@fidy/server/identity";
 import {
   calculateWebSessionDeadlines,
   webSessionIdleRenewalCandidate,

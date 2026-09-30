@@ -1,5 +1,5 @@
 import { BackupRecoveryCode } from "../../src/core/recovery/contract";
-import { UserId } from "../../src/core/identity/reference";
+import { UserId } from "../../src/core/identity/contract";
 import { findRecoveryPairing, prepareRecoveryPairingApproval } from "../browser-login/operations";
 import { freshBrowserSession } from "@fidy/server/web-session-runtime";
 import { freshSessionExists, freshSessionParams } from "@fidy/server/web-session";

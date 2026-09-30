@@ -6,7 +6,7 @@ import {
   maximumEmailSubjectCharacters,
   maximumEmailTextCharacters,
 } from "../../src/core/ingestion/email-policy";
-import { UserId } from "../../src/core/identity/reference";
+import { UserId } from "../../src/core/identity/contract";
 
 /** Only a Cloudflare Email Routing event may supply this envelope; no HTTP path accepts it. */
 export type ForwardedEmailMessage = Pick<

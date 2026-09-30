@@ -1,7 +1,7 @@
 import type { Miniflare } from "miniflare";
 import { afterEach, expect, it, vi } from "vitest";
 import { CardEnrollment, PaymentRequestId } from "@fidy/server/client";
-import { UserId } from "@fidy/server/identity-runtime";
+import { UserId } from "../../src/core/identity/contract";
 import { Clock, Data, Effect, Schema } from "effect";
 import { billingAttemptIdFor, handleCardEnrollment } from "./card-enrollment";
 import { sweepExpiredCardPreparationAdmission } from "./card-preparation-admission";

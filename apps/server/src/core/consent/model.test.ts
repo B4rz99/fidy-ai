@@ -4,7 +4,7 @@ import {
   E164PhoneNumber,
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
-} from "~/core/identity/reference";
+} from "~/core/identity/contract";
 import {
   ConsentDecisionEvidence,
   ConsentInboundContent,

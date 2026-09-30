@@ -4,7 +4,7 @@ import { afterEach, vi } from "vitest";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import { startBrowserPairing, redeemBrowserPairing } from "../browser-login/operations";
 import { expect, it } from "@effect/vitest";
-import { UserId } from "../../src/core/identity/reference";
+import { UserId } from "../../src/core/identity/contract";
 import { BackupRecoveryCode } from "../../src/core/recovery/contract";
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { handleSupportRecovery, prepareInitialBackupRecoveryCode } from "./operations";

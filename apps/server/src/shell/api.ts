@@ -18,7 +18,7 @@ import { DashboardGroup } from "~/shell/dashboard/operations";
 
 import { EmailAuthenticationGroup } from "~/shell/email-authentication/contract";
 
-import { IdentityGroup } from "~/shell/identity/operations";
+import { IdentityGroup } from "~/shell/identity/contract";
 
 import { InsightsGroup } from "~/shell/insights/operations";
 

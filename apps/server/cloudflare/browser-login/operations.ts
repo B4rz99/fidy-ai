@@ -11,7 +11,7 @@ import {
   selectPublicCodeSymbols,
 } from "../../src/core/browser-login/operations";
 import { prepareWebSessionIssuance } from "@fidy/server/web-session-runtime";
-import { UserId } from "../../src/core/identity/reference";
+import { UserId } from "../../src/core/identity/contract";
 import { Clock, DateTime, Effect, Encoding, Option, Schema } from "effect";
 import { pairingId as newPairingId } from "./internal/worker-crypto";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";

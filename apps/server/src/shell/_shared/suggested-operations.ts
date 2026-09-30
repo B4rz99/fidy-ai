@@ -3,7 +3,7 @@ import type { CanonicalCapability } from "~/core/canonical-operations/contract";
 import type { AccessTier } from "~/core/access-tier/contract";
 import { type OperationId, operationCatalog } from "~/shell/api";
 import { type CanonicalCaller, type ResolvedCaller, toAccessCaller } from "./authz";
-import type { UserId } from "~/core/identity/reference";
+import type { UserId } from "~/core/identity/contract";
 import type { CanonicalInput } from "./canonical-input";
 import {
   type OperationAccessCaller,

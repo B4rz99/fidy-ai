@@ -29,11 +29,6 @@
       "import": "./src/shell/identity/operations.ts",
       "default": "./src/shell/identity/operations.ts"
     },
-    "./identity-runtime": {
-      "types": "./src/shell/identity/browser-runtime.ts",
-      "import": "./src/shell/identity/browser-runtime.ts",
-      "default": "./src/shell/identity/browser-runtime.ts"
-    },
     "./subscription-runtime": {
       "types": "./src/shell/subscription/runtime.ts",
       "import": "./src/shell/subscription/runtime.ts",

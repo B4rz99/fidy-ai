@@ -1,8 +1,8 @@
-import { readFile } from "node:fs/promises";
+import { NodeFileSystem } from "@effect/platform-node";
 import { Miniflare } from "miniflare";
 import * as D1Client from "@effect/sql-d1/D1Client";
 import { listCategoriesResponse } from "../../src/shell/categories/operations";
-import { Clock, Context, Data, DateTime, Effect, Layer, Option, Schema } from "effect";
+import { Clock, Context, Data, DateTime, Effect, FileSystem, Layer, Option, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { afterEach, expect, it, vi } from "vitest";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
@@ -11,58 +11,59 @@ import publicWorker from "../public-worker";
 import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
 import { hostedTurnTestMigrations } from "../agent/hosted-turn-test-migrations";
 import { recordLivePATUse } from "../../src/shell/tokens/operations";
+import { newId } from "../platform/operations";
 
-it("rechecks the explicit User and fixed expiration in the published PAT use operation", async () => {
-  const { db, send, sessions } = await setup();
-  const issued = Schema.decodeUnknownSync(Schema.Struct({ data: Issued }))(
-    await (
-      await send({
-        path: "/pats",
-        method: "POST",
-        session: sessions[0],
-        payload: {
-          requestId: crypto.randomUUID(),
-          grant: manualGrant(),
-        },
-      })
-    ).json()
-  ).data;
-  const row = await db
-    .prepare("SELECT id FROM pats WHERE user_id = ? AND short_id = ?")
-    .bind(userA, issued.pat.shortId)
-    .first<{ id: string }>();
-  if (row === null) throw new Error("Expected issued PAT");
-  const digest = await dig(issued.bearer);
-  const current = clock();
-  const use = async (userId: string, time: number): Promise<number> => {
-    const statement = recordLivePATUse({
-      subject: {
-        patId: row.id,
-        userId,
-        digest,
-        requiredScope: Option.some("read"),
-      },
-      current: time,
-    });
-    return (
-      await db
-        .prepare(statement.sql)
-        .bind(...statement.params)
-        .run()
-    ).meta.changes;
-  };
-  expect(await use(userB, current)).toBe(0);
-  expect(await use(userA, Date.parse(issued.pat.expiresAt))).toBe(0);
-  expect(await use(userA, current)).toBe(1);
-  const persisted = await db
-    .prepare("SELECT last_used_at_ms, expires_at_ms FROM pats WHERE user_id = ? AND id = ?")
-    .bind(userA, row.id)
-    .first();
-  expect(persisted).toEqual({
-    last_used_at_ms: current,
-    expires_at_ms: Date.parse(issued.pat.expiresAt),
-  });
-});
+it("rechecks the explicit User and fixed expiration in the published PAT use operation", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { db, send, sessions } = yield* awaitPromise(setup());
+      const response = yield* awaitPromise(
+        send({
+          path: "/pats",
+          method: "POST",
+          session: sessions[0],
+          payload: { requestId: newId(), grant: manualGrant() },
+        })
+      );
+      const issued = (yield* Schema.decodeUnknownEffect(Schema.Struct({ data: Issued }))(
+        yield* awaitPromise(response.json())
+      )).data;
+      const row = yield* awaitPromise(
+        db
+          .prepare("SELECT id FROM pats WHERE user_id = ? AND short_id = ?")
+          .bind(userA, issued.pat.shortId)
+          .first<{ id: string }>()
+      );
+      if (row === null) return yield* Effect.die(new Error("Expected issued PAT"));
+      const digest = yield* awaitPromise(dig(issued.bearer));
+      const current = clock();
+      const use = (userId: string, time: number): Effect.Effect<number, TestPromiseFailure> => {
+        const statement = recordLivePATUse({
+          subject: { patId: row.id, userId, digest, requiredScope: Option.some("read") },
+          current: time,
+        });
+        return awaitPromise(
+          db
+            .prepare(statement.sql)
+            .bind(...statement.params)
+            .run()
+        ).pipe(Effect.map((result) => result.meta.changes));
+      };
+      expect(yield* use(userB, current)).toBe(0);
+      expect(yield* use(userA, Date.parse(issued.pat.expiresAt))).toBe(0);
+      expect(yield* use(userA, current)).toBe(1);
+      const persisted = yield* awaitPromise(
+        db
+          .prepare("SELECT last_used_at_ms, expires_at_ms FROM pats WHERE user_id = ? AND id = ?")
+          .bind(userA, row.id)
+          .first()
+      );
+      expect(persisted).toEqual({
+        last_used_at_ms: current,
+        expires_at_ms: Date.parse(issued.pat.expiresAt),
+      });
+    })
+  ));
 
 const instances: Array<Miniflare> = [];
 const userA = "10000000-0000-4000-8000-000000000001";
@@ -100,7 +101,8 @@ const awaitPromise = <A>(
     try: () => Promise.resolve(promise),
     catch: (cause) => new TestPromiseFailure({ cause }),
   });
-const runTest = <A, E>(work: Effect.Effect<A, E>): Promise<A> => Effect.runPromise(work);
+const runTest = <A, E>(work: Effect.Effect<A, E, FileSystem.FileSystem>): Promise<A> =>
+  Effect.runPromise(Effect.provide(work, NodeFileSystem.layer));
 const clock = (): number => Effect.runSync(Clock.currentTimeMillis);
 type ManualGrant = Readonly<{
   recipientLabel: string;
@@ -138,6 +140,7 @@ const setup = (
 }> =>
   runTest(
     Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
       const mf = new Miniflare({
         workers: [
           {
@@ -197,8 +200,8 @@ const setup = (
         ...hostedTurnTestMigrations,
       ];
       for (const name of migrationNames) {
-        const sql = yield* awaitPromise(
-          readFile(new URL(`../migrations/${name}.sql`, import.meta.url), "utf8")
+        const sql = yield* fs.readFileString(
+          decodeURIComponent(new URL(`../migrations/${name}.sql`, import.meta.url).pathname)
         );
         for (const statement of sql
           .replace(/^--.*$/gmu, "")

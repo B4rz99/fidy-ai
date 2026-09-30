@@ -1,17 +1,23 @@
 import { Effect } from "effect";
+
 import type { OperationId } from "~/shell/api";
+
 import {
   completeEmailReplacement,
   requestEmailReplacement,
-} from "~/shell/email-authentication/mutation";
+} from "~/shell/email-authentication/operations";
+
 import type { OperationCatalog } from "./operation-catalog";
+
 import type {
   CanonicalFailure,
   CanonicalImplementationCaller,
   CanonicalImplementationRequirements,
   CanonicalOperationImplementations,
 } from "./canonical-implementation";
+
 import type { CanonicalInput } from "./canonical-input";
+
 import type { CanonicalSuccess } from "./canonical-success";
 
 /** Caller facts supplied to every canonical mutation adapter. */

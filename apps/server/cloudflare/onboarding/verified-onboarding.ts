@@ -1,15 +1,20 @@
 import { EmailAddress, EmailVerificationCode } from "@fidy/server/client";
+
 import {
   canRedeemOnboardingProof,
   maximumOnboardingProofFailures,
   verifiedOnboardingContext,
-} from "@fidy/server/onboarding-verification";
+} from "@fidy/server/email-authentication-policy";
+
 import { Clock, Data, Effect, Option, Schema } from "effect";
+
 import { newId } from "../pats/pat-shared";
+
 import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
 import { prepareVerifiedUser } from "../identity/operations";
 
 const Payload = Schema.Struct({ combinedCode: EmailVerificationCode });
+
 const ProofRow = Schema.Struct({
   id: Schema.String.check(Schema.isUUID()),
   exchange_id: Schema.String.check(Schema.isUUID()),
@@ -25,16 +30,24 @@ const ProofRow = Schema.Struct({
     "ambiguous",
   ]),
 });
+
 type Enrollment = typeof ProofRow.Type;
+
 const maximumBodyBytes = 512;
+
 const requestBodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: maximumBodyBytes,
   deadlineMilliseconds: 2_000,
 });
+
 const digestLength = 32;
+
 const recoverySymbols = 25;
+
 const publicCodeLength = 9;
+
 const proofOffset = 10;
+
 const invalid = (): Response =>
   Response.json(
     {
@@ -45,21 +58,26 @@ const invalid = (): Response =>
     },
     { status: 400, headers: { "cache-control": "no-store" } }
   );
+
 const unavailable = (): Response =>
   Response.json(
     { status: "unavailable" },
     { status: 503, headers: { "cache-control": "no-store" } }
   );
+
 const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
 const randomCode = (): string => {
   const bytes = crypto.getRandomValues(new Uint8Array(recoverySymbols));
   const symbols = Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
   return symbols.match(/.{1,5}/gu)?.join("-") ?? "";
 };
+
 const digest = (text: string): Promise<Uint8Array> =>
   crypto.subtle
     .digest("SHA-256", new TextEncoder().encode(text))
     .then((bytes) => new Uint8Array(bytes));
+
 const equalDigest = (left: Uint8Array, right: Uint8Array): boolean => {
   if (left.length !== digestLength || right.length !== digestLength) return false;
   let difference = 0;
@@ -136,6 +154,7 @@ const createUser = (db: D1Database, row: Enrollment, now: number): Promise<Respo
 class OnboardingBoundaryFailure extends Data.TaggedError("OnboardingBoundaryFailure")<{
   readonly cause: unknown;
 }> {}
+
 const waitFor = <A>(run: () => Promise<A>): Effect.Effect<A, OnboardingBoundaryFailure> =>
   Effect.tryPromise({ try: run, catch: (cause) => new OnboardingBoundaryFailure({ cause }) });
 
@@ -198,4 +217,4 @@ export const verifyOnboarding = ({
       }
       return yield* waitFor(() => createUser(db, row.value, now));
     })
-  ).catch(() => invalid()); // D1 constraints and final proof trigger reject races and replay.
+  ).catch(() => invalid());

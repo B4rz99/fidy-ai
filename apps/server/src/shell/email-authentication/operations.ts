@@ -1,79 +1,54 @@
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
-import {
-  AtomicBatchEligible,
-  freshWebSessionOnly,
-  operationPolicy,
-} from "~/shell/_shared/operation-policy";
-import { OperationResponse } from "~/shell/public-http/contract";
-import {
-  CompleteEmailReplacementPayload,
-  CompletedEmailReplacement,
-  EmailReplacementFreshPairingRequiredApi,
+import { Context, Effect } from "effect";
+import type { EmailAddress } from "~/core/email-authentication/contract";
+import type { UserId } from "~/core/identity/contract";
+import type { CanonicalImplementationCaller } from "~/shell/_shared/canonical-implementation-caller";
+import type { CanonicalInput } from "~/shell/_shared/canonical-input";
+import type { CanonicalSuccess } from "~/shell/_shared/canonical-success";
+import { EmailReplacementInvalidApi, emailReplacementInvalidBody } from "./contract";
+
+/** Cloudflare's transaction adapter; the canonical implementation owns the operation result. */
+export type EmailReplacementMutationService = Readonly<{
+  request: (subject: UserId, candidate: EmailAddress) => Effect.Effect<void>;
+  complete: (subject: UserId, combinedCode: string) => Effect.Effect<boolean>;
+}>;
+export class EmailReplacementMutation extends Context.Service<
+  EmailReplacementMutation,
+  EmailReplacementMutationService
+>()("@fidy/server/shell/email-authentication/operations/EmailReplacementMutation") {}
+
+/** Both browser operations enter the same canonical mutation seam as other stable-User work. */
+export const requestEmailReplacement = ({
+  input,
+  caller,
+}: Readonly<{
+  input: CanonicalInput<"emailAuthentication.requestEmailReplacement">;
+  caller: CanonicalImplementationCaller;
+}>): Effect.Effect<
+  CanonicalSuccess<"emailAuthentication.requestEmailReplacement">,
+  never,
+  EmailReplacementMutation
+> =>
+  Effect.gen(function* () {
+    const mutation = yield* EmailReplacementMutation;
+    yield* mutation.request(caller.resolved.subjectUserId, input.payload.candidateEmail);
+    return { data: { status: "pending" }, next: [] } as const;
+  });
+
+export const completeEmailReplacement = ({
+  input,
+  caller,
+}: Readonly<{
+  input: CanonicalInput<"emailAuthentication.completeEmailReplacement">;
+  caller: CanonicalImplementationCaller;
+}>): Effect.Effect<
+  CanonicalSuccess<"emailAuthentication.completeEmailReplacement">,
   EmailReplacementInvalidApi,
-  EmailReplacementOriginRejectedApi,
-  EmailReplacementPayloadTooLargeApi,
-  EmailReplacementUnsupportedMediaTypeApi,
-} from "~/shell/web-authentication/contract";
-import { EmailReplacementPending, RequestEmailReplacementPayload } from "./contract";
-import { emailReplacementCompletionPath, emailReplacementPath } from "./path";
-
-export { EmailReplacementPending, RequestEmailReplacementPayload } from "./contract";
-export { emailReplacementCompletionPath, emailReplacementPath } from "./path";
-
-const requestEmailReplacement = HttpApiEndpoint.post(
-  "requestEmailReplacement",
-  emailReplacementPath,
-  {
-    payload: RequestEmailReplacementPayload,
-    success: OperationResponse(EmailReplacementPending),
-  }
-)
-  .annotate(
-    OpenApi.Description,
-    "Use after the User confirms replacing their verified email; sends a verification code to the candidate address."
-  )
-  // Standalone: the mailbox challenge and outbox share their own atomic unit (ADR 0027).
-  .annotate(AtomicBatchEligible, false)
-  .annotateMerge(
-    operationPolicy({
-      access: freshWebSessionOnly,
-      requiredTier: "free",
-      agentConfirmation: "not-required",
-      kind: "mutation",
-    })
-  );
-
-const completeEmailReplacement = HttpApiEndpoint.post(
-  "completeEmailReplacement",
-  emailReplacementCompletionPath,
-  {
-    payload: CompleteEmailReplacementPayload,
-    success: OperationResponse(CompletedEmailReplacement),
-    error: [
-      EmailReplacementInvalidApi,
-      EmailReplacementFreshPairingRequiredApi,
-      EmailReplacementOriginRejectedApi,
-      EmailReplacementPayloadTooLargeApi,
-      EmailReplacementUnsupportedMediaTypeApi,
-    ],
-  }
-)
-  .annotate(
-    OpenApi.Description,
-    "Verify the candidate mailbox and replace the one VerifiedEmailCredential under a fresh WebSession."
-  )
-  // Standalone: the single-use proof and credential swap share their own atomic unit (ADR 0027).
-  .annotate(AtomicBatchEligible, false)
-  .annotateMerge(
-    operationPolicy({
-      access: freshWebSessionOnly,
-      requiredTier: "free",
-      agentConfirmation: "not-required",
-      kind: "mutation",
-    })
-  );
-
-/** Bounded verified-email account-security operations and their access policies. */
-export const EmailAuthenticationGroup = HttpApiGroup.make("emailAuthentication")
-  .add(requestEmailReplacement)
-  .add(completeEmailReplacement);
+  EmailReplacementMutation
+> =>
+  Effect.gen(function* () {
+    const mutation = yield* EmailReplacementMutation;
+    if (!(yield* mutation.complete(caller.resolved.subjectUserId, input.payload.combinedCode))) {
+      return yield* EmailReplacementInvalidApi.make({ error: emailReplacementInvalidBody.error });
+    }
+    return { data: { status: "replaced" }, next: [] } as const;
+  });

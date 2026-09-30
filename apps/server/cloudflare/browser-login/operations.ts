@@ -1,49 +1,38 @@
-import { BrowserLoginPairingId } from "../../src/core/browser-login/contract";
 import {
-  BrowserLoginPrivateVerifier,
+  BrowserLoginPairingId,
   BrowserLoginPublicCodeSymbols,
+  browserLoginPollingIntervalSeconds,
 } from "../../src/core/browser-login/contract";
 import {
-  decideBrowserLoginRedemption,
   decidePendingBrowserLoginProof,
   formatPublicCode,
   maximumWrongVerifierAttempts,
   selectPublicCodeSymbols,
 } from "../../src/core/browser-login/operations";
-import { prepareWebSessionIssuance } from "@fidy/server/web-session-runtime";
 import { sessionPairingRetention } from "@fidy/server/web-session";
-import { UserId } from "../../src/core/identity/contract";
+import type { UserId } from "../../src/core/identity/contract";
 import { Clock, DateTime, Effect, Encoding, Option, Schema } from "effect";
 import { pairingId as newPairingId } from "./internal/worker-crypto";
+import {
+  Pairing,
+  Proof,
+  digest,
+  digestBytes,
+  recordWrongVerifier,
+  sameDigest,
+} from "./internal/pairing-proof";
+import { redeemKnownProof } from "./internal/redemption";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
 import type { PairingEmailOwnership } from "../email-authentication/contract";
 
-const Proof = Schema.Struct({
-  pairingId: BrowserLoginPairingId,
-  privateVerifier: BrowserLoginPrivateVerifier,
-});
-const Pairing = Schema.Struct({
-  user_id: Schema.NullOr(UserId),
-  verifier_digest: Schema.Array(
-    Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))
-  ).check(Schema.isLengthBetween(32, 32)),
-  expires_at_ms: Schema.Finite,
-  wrong_attempts: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 5 })),
-  last_poll_at_ms: Schema.NullOr(Schema.Finite),
-  minimum_poll_interval_seconds: Schema.Int.check(Schema.isBetween({ minimum: 5, maximum: 60 })),
-  state: Schema.Literals(["pending_approval", "ready", "consumed", "invalidated"]),
-});
 const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 512,
   deadlineMilliseconds: 2_000,
 });
-const digestBytes = 32;
 const pairingMs = 600_000;
-const maximumPollSeconds = 60;
 const publicSymbols = 8;
 const randomSampleBytes = 16;
-const httpPending = 202;
-const httpLimited = 429;
+const httpOk = 200;
 const invalid = (): Response =>
   Response.json(
     {
@@ -59,25 +48,11 @@ const unavailable = (): Response =>
     { status: "unavailable" },
     { status: 503, headers: { "cache-control": "no-store" } }
   );
-const json = (body: object, status = 200, headers?: HeadersInit): Response => {
-  const responseHeaders = new Headers(headers);
-  responseHeaders.set("cache-control", "no-store");
-  return Response.json(body, { status, headers: responseHeaders });
-};
+const json = (body: object): Response =>
+  Response.json(body, { headers: { "cache-control": "no-store" } });
 const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, void> =>
   Effect.tryPromise({ try: run, catch: () => undefined });
-const digest = (value: string): Promise<Uint8Array> =>
-  crypto.subtle
-    .digest("SHA-256", new TextEncoder().encode(value))
-    .then((bytes) => new Uint8Array(bytes));
 const instant = (epochMs: number): string => DateTime.formatIso(DateTime.makeUnsafe(epochMs));
-const sameDigest = (expected: ReadonlyArray<number>, received: Uint8Array): boolean => {
-  if (expected.length !== digestBytes || received.length !== digestBytes) return false;
-  let difference = 0;
-  for (let index = 0; index < digestBytes; index++)
-    difference |= (expected[index] ?? 0) ^ (received[index] ?? 0);
-  return difference === 0;
-};
 const samplePublicCode = (): string => {
   let symbols = "";
   while (symbols.length < publicSymbols) {
@@ -97,8 +72,7 @@ export const startBrowserPairing = (db: D1Database): Promise<Response> =>
       yield* attempt(() =>
         db
           .prepare(`DELETE FROM browser_login_pairings WHERE id IN (
-    SELECT id FROM browser_login_pairings WHERE expires_at_ms <= ? AND NOT (${sessionPairingRetention})
-    ORDER BY expires_at_ms LIMIT 32)`)
+    SELECT id FROM browser_login_pairings WHERE expires_at_ms <= ? AND NOT (${sessionPairingRetention}) ORDER BY expires_at_ms LIMIT 32)`)
           .bind(started)
           .run()
       );
@@ -121,7 +95,7 @@ export const startBrowserPairing = (db: D1Database): Promise<Response> =>
         privateVerifier,
         publicCode,
         expiresAt: instant(started + pairingMs),
-        pollingIntervalSeconds: 5,
+        pollingIntervalSeconds: browserLoginPollingIntervalSeconds,
       });
     })
   );
@@ -163,24 +137,9 @@ export const approveBrowserPairing = ({
           )
           .run()
       );
-      return result.meta.changes > 0 ? new Response(null, { status: 200 }) : invalid();
+      return result.meta.changes > 0 ? new Response(null, { status: httpOk }) : invalid();
     }).pipe(Effect.catchCause(() => Effect.succeed(invalid())))
   );
-
-const recordWrongVerifier = (db: D1Database, pairingId: string): Promise<D1Result> =>
-  db
-    .prepare(`UPDATE browser_login_pairings
-  SET wrong_attempts = wrong_attempts + 1,
-    state = CASE WHEN wrong_attempts + 1 >= ? THEN 'invalidated' ELSE state END,
-    user_id = CASE WHEN wrong_attempts + 1 >= ? THEN NULL ELSE user_id END
-  WHERE id = ? AND state IN ('pending_approval', 'ready') AND wrong_attempts < ?`)
-    .bind(
-      maximumWrongVerifierAttempts,
-      maximumWrongVerifierAttempts,
-      pairingId,
-      maximumWrongVerifierAttempts
-    )
-    .run();
 
 /** Validate an independent browser proof without polling or granting authority. Email may proceed only on Some(expiry). */
 export const verifyPendingBrowserPairing = ({
@@ -216,8 +175,9 @@ export const verifyPendingBrowserPairing = ({
         expiresAt: DateTime.makeUnsafe(pairing.value.expires_at_ms),
         attemptedAt: DateTime.makeUnsafe(current),
       });
-      if (decision._tag === "WrongVerifier")
+      if (decision._tag === "WrongVerifier") {
         yield* attempt(() => recordWrongVerifier(db, pairingId));
+      }
       return decision._tag === "Accept" ? Option.some(pairing.value.expires_at_ms) : Option.none();
     })
   );
@@ -232,8 +192,9 @@ export const redeemBrowserPairing = ({
 }): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      if (request.headers.get("content-type")?.split(";")[0] !== "application/json")
+      if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
         return invalid();
+      }
       const bytes = yield* readBoundedRequestBody(request, policy);
       const text = yield* Effect.try({
         try: () => new TextDecoder("utf-8", { fatal: true }).decode(bytes),
@@ -250,85 +211,9 @@ export const redeemBrowserPairing = ({
       );
       if (raw === null) return invalid();
       const pairing = Schema.decodeUnknownOption(Pairing)(raw);
-      if (Option.isNone(pairing)) return unavailable();
-      const current = yield* Clock.currentTimeMillis;
-      const decision = decideBrowserLoginRedemption({
-        lifecycle: pairing.value.state,
-        verifierMatches: sameDigest(
-          pairing.value.verifier_digest,
-          yield* attempt(() => digest(proof.value.privateVerifier))
-        ),
-        wrongVerifierAttempts: pairing.value.wrong_attempts,
-        minimumPollIntervalSeconds: pairing.value.minimum_poll_interval_seconds,
-        lastAcceptedPollAt: Option.map(
-          Option.fromNullishOr(pairing.value.last_poll_at_ms),
-          DateTime.makeUnsafe
-        ),
-        expiresAt: DateTime.makeUnsafe(pairing.value.expires_at_ms),
-        attemptedAt: DateTime.makeUnsafe(current),
-      });
-      if (decision._tag === "WrongVerifier") {
-        yield* attempt(() => recordWrongVerifier(db, proof.value.pairingId));
-        return invalid();
-      }
-      if (decision._tag === "SlowDown") {
-        yield* attempt(() =>
-          db
-            .prepare(
-              `UPDATE browser_login_pairings SET minimum_poll_interval_seconds = ? WHERE id = ? AND state = ?`
-            )
-            .bind(
-              Math.min(decision.minimumPollIntervalSeconds, maximumPollSeconds),
-              proof.value.pairingId,
-              pairing.value.state
-            )
-            .run()
-        );
-        return json(
-          { error: { code: "rate_limited", retryAfterSeconds: decision.retryAfterSeconds } },
-          httpLimited,
-          { "retry-after": String(decision.retryAfterSeconds) }
-        );
-      }
-      if (decision._tag === "Pending") {
-        const accepted = yield* attempt(() =>
-          db
-            .prepare(`UPDATE browser_login_pairings SET last_poll_at_ms = ?
-      WHERE id = ? AND state = 'pending_approval' AND last_poll_at_ms IS ? AND expires_at_ms > ?`)
-            .bind(current, proof.value.pairingId, pairing.value.last_poll_at_ms, current)
-            .run()
-        );
-        return accepted.meta.changes !== 1
-          ? invalid()
-          : json(
-              {
-                status: "pending_approval",
-                expiresAt: instant(pairing.value.expires_at_ms),
-                pollingIntervalSeconds: decision.minimumPollIntervalSeconds,
-              },
-              httpPending
-            );
-      }
-      if (decision._tag !== "Consume") return invalid();
-      if (pairing.value.user_id === null) return invalid();
-      const issuance = yield* prepareWebSessionIssuance({
-        db,
-        pairingId: proof.value.pairingId,
-        userId: pairing.value.user_id,
-        current,
-      });
-      const committed = yield* attempt(() =>
-        db.batch([
-          db
-            .prepare(
-              `UPDATE browser_login_pairings SET state = 'consumed' WHERE id = ? AND state = 'ready' AND expires_at_ms > ? AND wrong_attempts < ?`
-            )
-            .bind(proof.value.pairingId, current, maximumWrongVerifierAttempts),
-          issuance.statement,
-        ])
-      );
-      const issued = committed[1];
-      return issued === undefined ? invalid() : issuance.complete(issued);
+      return Option.isNone(pairing)
+        ? unavailable()
+        : yield* redeemKnownProof(db, proof.value, pairing.value);
     }).pipe(Effect.catchCause(() => Effect.succeed(invalid())))
   );
 
@@ -346,6 +231,20 @@ export const pendingPairingAuthority = ({
 }> => ({
   predicate: `EXISTS (SELECT 1 FROM browser_login_pairings WHERE id = ? AND state = 'pending_approval' AND expires_at_ms > ? AND wrong_attempts < ?)`,
   bindings: [pairingId, current, maximumWrongVerifierAttempts],
+});
+
+/** Filter Email Authentication's bounded due-work scan before its ORDER/LIMIT. The caller's owned
+ * proof relation must use alias e with pairing_id; no caller-selected SQL expression is accepted. */
+export const pendingEmailPairingAuthority = ({
+  current,
+}: {
+  current: number;
+}): Readonly<{
+  predicate: string;
+  bindings: readonly [number, number];
+}> => ({
+  predicate: `EXISTS (SELECT 1 FROM browser_login_pairings AS p WHERE p.id = e.pairing_id AND p.state = 'pending_approval' AND p.expires_at_ms > ? AND p.wrong_attempts < ?)`,
+  bindings: [current, maximumWrongVerifierAttempts],
 });
 
 /** Compose immediately after Email Authentication consumes the matching current User-owned proof.
@@ -368,7 +267,8 @@ export const prepareEmailPairingApproval = ({
     .bind(userId, pairingId, atMs, maximumWrongVerifierAttempts);
 
 const RecoveryPairing = Schema.Struct({ id: BrowserLoginPairingId, expiresAtMs: Schema.Finite });
-/** A Recovery-proven User may select only a pending, unexpired pairing without conflicting email ownership. */
+/** Resolve one unexpired pending locator for a Recovery-proven User. The caller must additionally
+ * reject conflicting Email Authentication ownership before consuming a recovery credential. */
 export const findRecoveryPairing = ({
   db,
   userId,
@@ -382,15 +282,14 @@ export const findRecoveryPairing = ({
 }): Promise<Option.Option<typeof RecoveryPairing.Type>> =>
   db
     .prepare(`SELECT p.id, p.expires_at_ms AS expiresAtMs FROM browser_login_pairings AS p
-  WHERE p.public_code = ? AND p.state = 'pending_approval' AND p.expires_at_ms > ?
-    AND (p.user_id IS NULL OR p.user_id = ?)`)
+  WHERE p.public_code = ? AND p.state = 'pending_approval' AND p.expires_at_ms > ? AND (p.user_id IS NULL OR p.user_id = ?)`)
     .bind(publicCode, atMs, userId)
     .first()
     .then(Schema.decodeUnknownOption(RecoveryPairing));
 
-/** Compose in Recovery's credential-consumption batch, immediately after its successful consumption statement.
- * The changes() guard prevents approval without consumption; recheck ownership/expiry at commit, and require a
- * subsequent case/evidence statement that aborts the batch if this transition changes no row. Never grants a session. */
+/** Compose in Recovery's consumption batch immediately after its successful credential statement.
+ * Recheck expiry and Email Authentication's ownership guard, then require subsequent case/evidence
+ * statements to abort the batch if this transition changes no row. Never grants a session. */
 export const prepareRecoveryPairingApproval = ({
   db,
   userId,
@@ -406,6 +305,5 @@ export const prepareRecoveryPairingApproval = ({
 }): D1PreparedStatement =>
   db
     .prepare(`UPDATE browser_login_pairings SET state = 'ready', user_id = ?
-  WHERE id = ? AND state = 'pending_approval' AND expires_at_ms > ? AND changes() = 1
-    AND (${emailOwnership.predicate})`)
+  WHERE id = ? AND state = 'pending_approval' AND expires_at_ms > ? AND changes() = 1 AND (${emailOwnership.predicate})`)
     .bind(userId, pairingId, atMs, ...emailOwnership.bindings);

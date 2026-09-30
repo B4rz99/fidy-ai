@@ -2,7 +2,7 @@ import { NodeFileSystem } from "@effect/platform-node";
 import { Miniflare } from "miniflare";
 import { afterEach, vi } from "vitest";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
-import { startBrowserPairing, redeemBrowserPairing } from "../browser-login/operations";
+import { redeemBrowserPairing, startBrowserPairing } from "../browser-login/operations";
 import { expect, it } from "@effect/vitest";
 import { UserId } from "../../src/core/identity/contract";
 import { BackupRecoveryCode } from "../../src/core/recovery/contract";
@@ -13,7 +13,7 @@ const instances: Array<Miniflare> = [];
 afterEach(() => vi.restoreAllMocks());
 afterEach(() =>
   Effect.runPromise(
-    Effect.all(instances.splice(0).map((instance) => Effect.promise(() => instance.dispose())))
+    Effect.forEach(instances.splice(0), (instance) => Effect.tryPromise(() => instance.dispose()))
   )
 );
 const setup = Effect.gen(function* () {
@@ -56,8 +56,9 @@ const setup = Effect.gen(function* () {
     for (const statement of sql
       .replace(/^--.*$/gmu, "")
       .trim()
-      .split(/;\s*\n(?=CREATE |ALTER |$)/u))
+      .split(/;\s*\n(?=CREATE |ALTER |$)/u)) {
       yield* Effect.tryPromise(() => db.prepare(statement).run());
+    }
   }
   return db;
 });
@@ -71,6 +72,8 @@ const insertUser = (db: D1Database, userId: UserId): D1PreparedStatement =>
     .bind(userId);
 
 const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
+const startPairing = (db: D1Database): Promise<unknown> =>
+  startBrowserPairing(db).then((response) => response.json());
 it.layer(NodeFileSystem.layer, { excludeTestServices: true })("Recovery D1", (it) => {
   it.effect(
     "prepares one-time recovery disclosure without persisting it before the stable-User batch commits",
@@ -130,14 +133,10 @@ it.layer(NodeFileSystem.layer, { excludeTestServices: true })("Recovery D1", (it
           privateVerifier: Schema.String,
         });
         const pairing = yield* Schema.decodeUnknownEffect(Pairing)(
-          yield* Effect.tryPromise(() =>
-            startBrowserPairing(db).then((response) => response.json())
-          )
+          yield* Effect.tryPromise(() => startPairing(db))
         );
         const other = yield* Schema.decodeUnknownEffect(Pairing)(
-          yield* Effect.tryPromise(() =>
-            startBrowserPairing(db).then((response) => response.json())
-          )
+          yield* Effect.tryPromise(() => startPairing(db))
         );
         const { privateKey, publicKey } = yield* Effect.tryPromise(() => generateKeyPair("RS256"));
         const jwk = {

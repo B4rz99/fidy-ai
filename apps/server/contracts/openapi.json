@@ -2260,6 +2260,7 @@
         "type": "object"
       },
       "EmailAddressEncoded": {
+        "maxLength": 512,
         "type": "string"
       },
       "EmailForwardingAddress": {

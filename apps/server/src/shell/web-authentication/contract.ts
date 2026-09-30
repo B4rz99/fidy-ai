@@ -14,7 +14,7 @@ import {
 } from "~/core/browser-login/contract";
 import { BrowserLoginPairingId } from "~/core/browser-login/reference";
 import { EmailAddress, EmailVerificationCode } from "~/core/email-authentication/contract";
-import { browserPairingEmailRetryAfterSeconds } from "~/core/email-authentication/rules";
+import { browserPairingEmailRetryAfterSeconds } from "~/core/email-authentication/operations";
 import { BackupRecoveryCode } from "~/core/recovery/contract";
 
 const browserLoginUnavailableError = {

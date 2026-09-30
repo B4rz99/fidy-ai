@@ -12,7 +12,7 @@ import {
   ReviseInput,
   memoryOperationIds,
 } from "@fidy/server/memory-runtime";
-import { emailReplacementOperations } from "@fidy/server/email-replacement";
+import { emailReplacementOperations } from "@fidy/server/email-authentication-runtime";
 import type { TelemetryService } from "@fidy/server/telemetry";
 import { Cause, Clock, Data, Effect, Exit, Option, Schema } from "effect";
 import { correctionInput } from "./transactions/transaction-corrections";
@@ -45,12 +45,21 @@ import { pathId, rawPathId } from "./http/path";
 import { handleWebAuthentication } from "./web-authentication/operations";
 import {
   type BrowserPairingEmailEnvironment,
+  type EmailReplacementEnvironment,
+  type OnboardingEmailEnvironment,
   dispatchBrowserPairingEmail,
+  dispatchEmailReplacement,
+  dispatchOnboardingEmail,
   isBrowserPairingEmailWork,
+  isEmailReplacementWork,
   receiveBrowserPairingEmail,
+  receiveEmailReplacement,
+  receiveOnboardingEmail,
   reconcileBrowserPairingEmail,
-} from "./identity/browser-pairing-email-delivery";
-import { handleSupportRecovery } from "./identity/support-recovery";
+  reconcileEmailReplacement,
+  reconcileOnboardingEmail,
+} from "./email-authentication/runtime";
+import { handleSupportRecovery } from "./recovery/operations";
 import { handleCardEnrollment } from "./card-enrollment/card-enrollment";
 import {
   type BillingCollectionEnvironment,
@@ -60,13 +69,6 @@ import {
   receiveWompiBillingEvent,
   reconcileBillingCandidates,
 } from "./billing/billing-collection";
-import {
-  type EmailReplacementEnvironment,
-  dispatchEmailReplacement,
-  isEmailReplacementWork,
-  receiveEmailReplacement,
-  reconcileEmailReplacement,
-} from "./identity/email-replacement-delivery";
 import { handlePATRequest, patRoute } from "./pats/pat-routes";
 import { listPATs } from "./pats/pat-management";
 import { recallMemories, rejectMemoryMutation } from "./memory/memory";
@@ -97,12 +99,6 @@ import {
   keywordRuleUnknownId,
   listOwnKeywordRules,
 } from "./categories/canonical-keyword-rules";
-import {
-  type OnboardingEmailEnvironment,
-  dispatchOnboardingEmail,
-  receiveOnboardingEmail,
-  reconcileOnboardingEmail,
-} from "./onboarding/onboarding-email";
 import { contractDigestPattern, gitRevisionPattern } from "./runtime/release-identity";
 import { smokeFailureHeader, smokePath, smokeProofAccepted } from "./runtime/smoke";
 import {
@@ -184,13 +180,13 @@ import {
 } from "./agent/whatsapp-turn";
 
 export { UserTransactionCoordinator } from "./transactions/transaction-coordinator";
-export { OnboardingEmailWorkflowV1 } from "./onboarding/onboarding-email";
+export { OnboardingEmailWorkflowV1 } from "./email-authentication/runtime";
 export {
   BillingCollectionWorkflowV1,
   runBillingCollectionWorkflow,
 } from "./billing/billing-collection";
-export { BrowserPairingEmailWorkflowV1 } from "./identity/browser-pairing-email-delivery";
-export { EmailReplacementWorkflowV1 } from "./identity/email-replacement-delivery";
+export { BrowserPairingEmailWorkflowV1 } from "./email-authentication/runtime";
+export { EmailReplacementWorkflowV1 } from "./email-authentication/runtime";
 export { StatementExtractionWorkflowV1, ReleaseSmokeWorkflowV1 };
 export { OperationalCanaryWorkflowV1 } from "./operational-canary-workflow";
 

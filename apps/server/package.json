@@ -84,26 +84,6 @@
       "import": "./src/shell/categories/runtime.ts",
       "default": "./src/shell/categories/runtime.ts"
     },
-    "./onboarding-verification": {
-      "types": "./src/shell/email-authentication/onboarding.ts",
-      "import": "./src/shell/email-authentication/onboarding.ts",
-      "default": "./src/shell/email-authentication/onboarding.ts"
-    },
-    "./email-replacement-path": {
-      "types": "./src/shell/email-authentication/path.ts",
-      "import": "./src/shell/email-authentication/path.ts",
-      "default": "./src/shell/email-authentication/path.ts"
-    },
-    "./email-replacement": {
-      "types": "./src/shell/email-authentication/runtime.ts",
-      "import": "./src/shell/email-authentication/runtime.ts",
-      "default": "./src/shell/email-authentication/runtime.ts"
-    },
-    "./onboarding-email-delivery": {
-      "types": "./src/shell/email-authentication/delivery.ts",
-      "import": "./src/shell/email-authentication/delivery.ts",
-      "default": "./src/shell/email-authentication/delivery.ts"
-    },
     "./consent-pat": {
       "types": "./src/shell/consent/pat-runtime.ts",
       "import": "./src/shell/consent/pat-runtime.ts",
@@ -168,6 +148,26 @@
       "types": "./src/shell/hosted-inference/model.ts",
       "import": "./src/shell/hosted-inference/model.ts",
       "default": "./src/shell/hosted-inference/model.ts"
+    },
+    "./email-authentication-policy": {
+      "types": "./src/core/email-authentication/operations.ts",
+      "import": "./src/core/email-authentication/operations.ts",
+      "default": "./src/core/email-authentication/operations.ts"
+    },
+    "./email-authentication-contract": {
+      "types": "./src/shell/email-authentication/contract.ts",
+      "import": "./src/shell/email-authentication/contract.ts",
+      "default": "./src/shell/email-authentication/contract.ts"
+    },
+    "./email-authentication-runtime": {
+      "types": "./src/shell/email-authentication/runtime.ts",
+      "import": "./src/shell/email-authentication/runtime.ts",
+      "default": "./src/shell/email-authentication/runtime.ts"
+    },
+    "./email-authentication-operations": {
+      "types": "./src/shell/email-authentication/operations.ts",
+      "import": "./src/shell/email-authentication/operations.ts",
+      "default": "./src/shell/email-authentication/operations.ts"
     }
   },
   "scripts": {

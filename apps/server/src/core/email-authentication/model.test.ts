@@ -13,8 +13,8 @@ import {
   UserId,
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
-} from "~/core/identity/reference";
-import { WebSessionId } from "~/core/web-session/reference";
+} from "~/core/identity/contract";
+import { WebSessionId } from "~/core/web-session/contract";
 import { EmailEnrollmentId } from "./reference";
 
 const decodeEmail = Schema.decodeUnknownResult(EmailAddress);

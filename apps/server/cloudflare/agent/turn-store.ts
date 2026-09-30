@@ -32,7 +32,7 @@ import { transactionNow } from "../transactions/transaction-boundary";
 import {
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
-} from "../../src/core/identity/reference";
+} from "../../src/core/identity/contract";
 import {
   type HostedSubject,
   type WhatsAppHostedSubject,

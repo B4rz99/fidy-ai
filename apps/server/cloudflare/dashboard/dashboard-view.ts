@@ -1,6 +1,6 @@
 import type { EffectiveTransactionAggregate } from "@fidy/server/transactions-runtime";
 import { type DateTime, Effect, Option, Schema } from "effect";
-import { IanaTimeZone, Locale, ServiceMarket } from "../../src/core/_shared/context";
+import { prepareUserContext } from "../identity/operations";
 import { Category } from "../../src/core/categories/contract";
 import { type DashboardDocument, collectLayoutWidgets } from "../../src/core/dashboard/model";
 import { dashboardProjectionRanges } from "../../src/core/dashboard/projection";
@@ -12,12 +12,7 @@ import {
 } from "../transactions/dashboard-query";
 import { findDashboardAggregate, projectionReady } from "../transactions/dashboard-projection";
 
-const UserContextRow = Schema.Struct({
-  service_market: ServiceMarket,
-  locale: Locale,
-  time_zone: IanaTimeZone,
-});
-type Context = typeof UserContextRow.Type;
+type Context = DashboardFacts["context"];
 type LayoutWidgets = ReturnType<typeof collectLayoutWidgets>;
 type Groups = DashboardFacts["groups"];
 
@@ -28,9 +23,10 @@ const loadBase = (
 ): Effect.Effect<Option.Option<Omit<DashboardFacts, "groups">>> =>
   Effect.gen(function* () {
     const lists = widgets.filter((widget) => widget.type === "transaction-list");
+    const userQuery = prepareUserContext({ db, userId });
     const [user, categoryRows, state, ...pages] = yield* Effect.tryPromise(() =>
       db.batch([
-        db.prepare("SELECT service_market, locale, time_zone FROM users WHERE id = ?").bind(userId),
+        userQuery.statement,
         db.prepare("SELECT id, label FROM categories ORDER BY display_order LIMIT 32"),
         db
           .prepare("SELECT version, readiness FROM dashboard_projection_state WHERE user_id = ?")
@@ -55,7 +51,7 @@ const loadBase = (
     if (Option.isNone(selected) || !projectionReady(selected.value.state.results[0])) {
       return Option.none();
     }
-    const context = Schema.decodeUnknownOption(UserContextRow)(selected.value.user.results[0]);
+    const context = userQuery.decode(selected.value.user.results[0]);
     const categories = Option.all(
       selected.value.categories.results.map((row) => Schema.decodeUnknownOption(Category)(row))
     );
@@ -70,12 +66,13 @@ const loadBase = (
     if (Option.isNone(context) || Option.isNone(categories) || Option.isNone(listFacts)) {
       return Option.none();
     }
+    const { serviceMarket: service_market, locale, timeZone: time_zone } = context.value;
     const budgets = yield* listOwnedBudgets({ db, userId });
     return Option.map(budgets, (owned) => ({
       lists: new Map(listFacts.value),
       budgets: owned,
       categories: new Map(categories.value.map((category) => [category.id, category])),
-      context: context.value,
+      context: { service_market, locale, time_zone },
     }));
   }).pipe(Effect.orElseSucceed(() => Option.none()));
 

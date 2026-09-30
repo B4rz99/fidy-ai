@@ -2,8 +2,8 @@ import { Schema, SchemaTransformation } from "effect";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { BrowserLoginPairingId } from "~/core/browser-login/reference";
 import { PendingConsentExchangeId } from "~/core/consent/reference";
-import { UserId, WhatsAppCallerReference } from "~/core/identity/reference";
-import { WebSessionId } from "~/core/web-session/reference";
+import { UserId, WhatsAppCallerReference } from "~/core/identity/contract";
+import { WebSessionId } from "~/core/web-session/contract";
 import { EmailEnrollmentId, canonicalEmailAddressChecks } from "./reference";
 
 const unambiguousGroup = "[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]";

@@ -83,7 +83,7 @@ import {
   categoryRowsQuery,
 } from "../../src/shell/categories/internal/query";
 import { recordBrowserCategoryWork } from "../../src/shell/categories/internal/canonical-work";
-import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
+import { liveWebSessionAuthority } from "@fidy/server/web-session";
 
 const HTTP_OK = 200;
 const maximumProjectionCategories = 32;

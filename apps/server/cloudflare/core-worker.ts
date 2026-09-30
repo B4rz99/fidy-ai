@@ -1,3 +1,8 @@
+import {
+  currentUser,
+  logoutBrowser,
+  canonicalBrowserSession as transactionSession,
+} from "./web-session/operations";
 import { ScopeMissing, UserActionRequired } from "../src/shell/public-http/contract";
 import { categoryUnavailable } from "../src/shell/categories/operations";
 import { listCategoriesPath } from "../src/shell/categories/contract";
@@ -27,11 +32,7 @@ import {
   recoverPendingDisclosures,
   sweepExpiredConsent,
 } from "./onboarding/consent-ingress";
-import {
-  transactionInput,
-  transactionSession,
-  unauthenticatedTransaction,
-} from "./transactions/transactions";
+import { transactionInput, unauthenticatedTransaction } from "./transactions/transactions";
 import {
   type TransactionCaller,
   isPATCaller,
@@ -102,8 +103,6 @@ import {
 } from "./categories/operations";
 import { executeProtectedSubscriptionQuery } from "./billing/subscription-queries";
 import {
-  currentUser,
-  logoutBrowser,
   redeemBrowserPairing,
   rotateBackupRecoveryCode,
   startBrowserPairing,

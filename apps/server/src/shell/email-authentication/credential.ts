@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { EmailAddress } from "~/core/email-authentication/model";
-import type { UserId } from "~/core/identity/reference";
+import type { UserId } from "~/core/identity/contract";
 
 const VerifiedEmailRow = Schema.Struct({ email: EmailAddress });
 

@@ -550,7 +550,7 @@ const PROBES: readonly Probe[] = [
       {
         path: `${SIBLING_REFERENCE}/probe.ts`,
         source:
-          'import { UserId } from "~/core/identity/reference";\n' +
+          'import { UserId } from "~/core/identity/contract";\n' +
           'import { TokenId } from "~/core/tokens/reference";\n\n' +
           "export const siblingReferenceProbe = [UserId, TokenId];\n",
       },
@@ -636,7 +636,7 @@ const PROBES: readonly Probe[] = [
       {
         path: `${CORE_TO_SHELL}/probe.ts`,
         source:
-          'import { UserId } from "~/core/identity/reference";\n' +
+          'import { UserId } from "~/core/identity/contract";\n' +
           'import "~/shell/public-http/contract";\n\n' +
           "export const coreImportsShellProbe = UserId;\n",
       },
@@ -740,7 +740,7 @@ const PROBES: readonly Probe[] = [
     expect: {
       kind: "rejected",
       mustContain: [
-        `error cross-directory-import-is-relative: ${RELATIVE_CROSS_DIRECTORY}/probe.ts → src/core/identity/reference.ts`,
+        `error cross-directory-import-is-relative: ${RELATIVE_CROSS_DIRECTORY}/probe.ts → src/core/identity/contract.ts`,
       ],
     },
     files: [

@@ -3,7 +3,7 @@ import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { expect, it } from "@effect/vitest";
 import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
-import { E164PhoneNumber, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
+import { E164PhoneNumber, WhatsAppBusinessScopedUserId } from "~/core/identity/contract";
 import { TranscriptText } from "~/core/transcript/model";
 import {
   OutboundHttpFailure,

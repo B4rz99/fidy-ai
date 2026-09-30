@@ -7,6 +7,7 @@ import {
 import { Clock, Data, Effect, Option, Schema } from "effect";
 import { newId } from "../pats/pat-shared";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
+import { prepareVerifiedUser } from "../identity/operations";
 
 const Payload = Schema.Struct({ combinedCode: EmailVerificationCode });
 const ProofRow = Schema.Struct({
@@ -93,17 +94,12 @@ const createUser = (db: D1Database, row: Enrollment, now: number): Promise<Respo
   const userId = newId();
   const recoveryCode = randomCode();
   return digest(recoveryCode).then((recoveryDigest) => {
+    const identity = prepareVerifiedUser({ db, userId, exchangeId: row.exchange_id, now });
     const context = verifiedOnboardingContext(now);
     return db
       .batch([
-        db
-          .prepare(`INSERT INTO users (id, service_market, locale, time_zone, created_at_ms)
-      VALUES (?, ?, ?, ?, ?)`)
-          .bind(userId, context.serviceMarket, context.locale, context.timeZone, now),
-        db
-          .prepare(`INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms)
-      SELECT ?, portfolio_id, bsuid, ? FROM pending_consent_exchanges WHERE id = ? AND state = 'accepted'`)
-          .bind(userId, now, row.exchange_id),
+        identity.user,
+        identity.association,
         db
           .prepare(`INSERT INTO verified_email_credentials (user_id, email_address, verified_at_ms)
       VALUES (?, ?, ?)`)

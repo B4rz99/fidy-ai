@@ -1,7 +1,6 @@
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { User } from "~/core/identity/model";
-import { UserId } from "~/core/identity/reference";
+import { User, UserId } from "~/core/identity/contract";
 import { Unavailable } from "~/shell/public-http/contract";
 
 const UserRow = Schema.Struct({

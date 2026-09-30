@@ -2,7 +2,8 @@ import { CreateTransactionInput, encodeMoneyAmount } from "@fidy/server/transact
 import { type CategoryId } from "../../src/core/categories/contract";
 import { categorizeCapture, categoryExists } from "../categories/operations";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { sessionCookie, sha256 } from "../identity/browser-login";
+import type { UserContext } from "../../src/core/identity/contract";
+import { findUserContext } from "../identity/operations";
 import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
 import {
   type TransactionBoundaryFailure,
@@ -15,7 +16,6 @@ import {
   callerScope,
   isPATCaller,
   maximumTransactionInputBytes,
-  transactionNow as now,
   transactionId,
   transactionUnavailable,
   unauthenticatedTransaction,
@@ -33,12 +33,6 @@ import {
 } from "../mutations/transaction-outcome";
 
 const Input = Schema.toCodecJson(CreateTransactionInput);
-const UserContext = Schema.Struct({
-  service_market: Schema.String,
-  locale: Schema.String,
-  time_zone: Schema.String,
-});
-const Session = Schema.Struct({ id: Schema.String, user_id: Schema.String });
 const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: maximumTransactionInputBytes,
   deadlineMilliseconds: 2000,
@@ -47,41 +41,11 @@ const policy = Schema.decodeSync(RequestBodyPolicy)({
 type Capture = Readonly<{
   input: typeof Input.Type;
   subject: TransactionCaller;
-  context: typeof UserContext.Type;
+  context: UserContext;
   categoryId: CategoryId;
   id: string;
   current: number;
 }>;
-
-const sessionSubject = (raw: unknown, digest: Uint8Array): Option.Option<TransactionSubject> =>
-  Option.map(Schema.decodeUnknownOption(Session)(raw), (value) => ({
-    id: value.id,
-    userId: value.user_id,
-    digest,
-  }));
-
-/** Resolve a live WebSession on every canonical call; neither an object id nor a User id is authority. */
-export const transactionSession = ({
-  request,
-  db,
-}: {
-  request: Request;
-  db: D1Database;
-}): Promise<Option.Option<TransactionSubject>> => {
-  const cookie = sessionCookie(request);
-  if (Option.isNone(cookie)) return Promise.resolve(Option.none());
-  return sha256(cookie.value).then((digest) => {
-    const current = now();
-    return db
-      .prepare(
-        `SELECT id, user_id FROM web_sessions WHERE token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
-      AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = web_sessions.user_id)`
-      )
-      .bind(digest, current, current)
-      .first()
-      .then((raw) => sessionSubject(raw, digest));
-  });
-};
 
 /** Decode bounded canonical input before dispatching a mutation to the User coordinator. */
 export const transactionInput = (request: Request): Promise<Option.Option<typeof Input.Type>> =>
@@ -139,9 +103,9 @@ const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedSt
       SELECT ?, user_id, id, 'manual', ?, ?, ?, 'manual-v1', ? FROM transactions WHERE user_id = ? AND id = ?`)
       .bind(
         transactionId(),
-        context.service_market,
+        context.serviceMarket,
         context.locale,
-        context.time_zone,
+        context.timeZone,
         createdAt,
         subject.userId,
         id
@@ -165,15 +129,8 @@ const hasUnknownCategory = (db: D1Database, categoryId: Option.Option<string>): 
 const captureUserContext = (
   db: D1Database,
   userId: string
-): Effect.Effect<Option.Option<typeof UserContext.Type>, TransactionBoundaryFailure> =>
-  Effect.tryPromise({
-    try: () =>
-      db
-        .prepare("SELECT service_market, locale, time_zone FROM users WHERE id = ?")
-        .bind(userId)
-        .first(),
-    catch: boundaryFailure,
-  }).pipe(Effect.map(Schema.decodeUnknownOption(UserContext)));
+): Effect.Effect<Option.Option<UserContext>, TransactionBoundaryFailure> =>
+  findUserContext({ db, userId }).pipe(Effect.mapError(boundaryFailure));
 
 /** Explicit Category, then the User's keyword policy, then the direction fallback. */
 const resolveCaptureCategory = ({
@@ -225,7 +182,7 @@ const captureMutation = ({
   db: D1Database;
   subject: TransactionCaller;
   input: typeof Input.Type;
-  context: typeof UserContext.Type;
+  context: UserContext;
   categoryId: CategoryId;
   current: number;
 }>): PreparedCanonicalMutation => {

@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import type { UserId } from "~/core/identity/reference";
+import type { UserId } from "~/core/identity/contract";
 import { ProviderQualifiedMessages } from "~/core/consent/model";
 import { TranscriptText } from "~/core/transcript/model";
 

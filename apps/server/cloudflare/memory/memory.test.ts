@@ -3,7 +3,9 @@ import { afterEach, expect, it, vi } from "vitest";
 import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
 import { ErrorCode } from "@fidy/server/canonical-runtime";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
-import { Memory, MemoryId, maximumAggregateMemoryTokens } from "@fidy/server/memory-runtime";
+import { Memory, MemoryId } from "@fidy/server/memory-contract";
+import { maximumAggregateMemoryTokens } from "@fidy/server/memory-operations";
+import { readCurrentMemories } from "./operations";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
@@ -612,6 +614,47 @@ it("bounds concurrent remember calls so one User's aggregate is never oversubscr
           (row) => row.operation === "memory.remember" && row.outcome === "resource_limit"
         )
       ).toHaveLength(1);
+    })
+  ));
+
+it("loads only the explicit User's current Memories for hosted model context", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const owned = yield* decode(
+        Single,
+        yield* fromTestPromise(() => remembered(db, "contexto anterior", cookie(0)))
+      );
+      yield* fromTestPromise(() =>
+        send(db, {
+          path: `/memories/${owned.data.id}`,
+          method: "PUT",
+          session: cookie(0),
+          payload: { text: "contexto vigente" },
+        })
+      );
+      yield* fromTestPromise(() => remembered(db, "contexto de otra persona", cookie(1)));
+      const authority = {
+        table: "web_sessions" as const,
+        predicate: "id = ? AND user_id = ?",
+        bindings: [sessions[0], users[0]],
+      };
+      const current = yield* readCurrentMemories({ db, userId: users[0], authority });
+      expect(Option.getOrThrow(current).map(({ text }) => text)).toEqual(["contexto vigente"]);
+      const foreign = yield* readCurrentMemories({
+        db,
+        userId: users[1],
+        authority: { ...authority, bindings: [sessions[1], users[1]] },
+      });
+      expect(Option.getOrThrow(foreign).map(({ text }) => text)).toEqual([
+        "contexto de otra persona",
+      ]);
+      yield* fromTestPromise(() =>
+        send(db, { path: `/memories/${owned.data.id}`, method: "DELETE", session: cookie(0) })
+      );
+      expect(
+        Option.getOrThrow(yield* readCurrentMemories({ db, userId: users[0], authority }))
+      ).toEqual([]);
     })
   ));
 

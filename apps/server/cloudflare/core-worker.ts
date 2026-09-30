@@ -11,7 +11,7 @@ import {
   RememberInput,
   ReviseInput,
   memoryOperationIds,
-} from "@fidy/server/memory-runtime";
+} from "@fidy/server/memory-contract";
 import { emailReplacementOperations } from "@fidy/server/email-authentication-runtime";
 import type { TelemetryService } from "@fidy/server/telemetry";
 import { Cause, Clock, Data, Effect, Exit, Option, Schema } from "effect";
@@ -76,7 +76,7 @@ import {
   patRoute,
   sweepExpiredPATPairings,
 } from "./pats/operations";
-import { recallMemories, rejectMemoryMutation } from "./memory/memory";
+import { recallMemories, rejectMemoryMutation } from "./memory/operations";
 import { canonicalOperation, canonicalRoute } from "./routing/canonical-routes";
 import {
   BatchInput,

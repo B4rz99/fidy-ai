@@ -8,7 +8,7 @@ import {
   getCanonicalOperationInput,
 } from "@fidy/server/canonical-runtime";
 import { TransactionId } from "@fidy/server/transactions-runtime";
-import { type MemoryOperationId } from "@fidy/server/memory-runtime";
+import { type MemoryOperationId } from "@fidy/server/memory-contract";
 import { type HostedInference } from "@fidy/server/hosted-inference";
 import { DeliveryEvidenceInput, InsightEventId } from "@fidy/server/insights-contract";
 import { insightRefusal, prepareInsightTransition } from "../insights/operations";
@@ -22,7 +22,7 @@ import { forwardingAddressMutationAdapter } from "./forwarding-address-mutation"
 import { prepareCreateBudget, prepareDeleteBudget, prepareUpdateBudget } from "../budgets/budgets";
 import { budgetRefusal } from "../budgets/budget-outcome";
 import { transactionRefusal } from "./transaction-outcome";
-import { memoryRefusal } from "./memory-outcome";
+import { memoryRefusal, prepareForget, prepareRemember, prepareRevise } from "../memory/operations";
 import {
   type TransactionCaller,
   type TransactionMutationOperation,
@@ -38,7 +38,6 @@ import {
   prepareDeleteKeywordRule,
   prepareUpdateKeywordRule,
 } from "../categories/canonical-keyword-rules";
-import { prepareForget, prepareRemember, prepareRevise } from "../memory/memory";
 import { committedJsonResponse } from "./canonical-mutation-unit";
 import {
   type CanonicalMutationPreparation,

@@ -74,10 +74,15 @@
       "import": "./src/core/transactions/model.ts",
       "default": "./src/core/transactions/model.ts"
     },
-    "./memory-runtime": {
-      "types": "./src/shell/memory/runtime.ts",
-      "import": "./src/shell/memory/runtime.ts",
-      "default": "./src/shell/memory/runtime.ts"
+    "./memory-contract": {
+      "types": "./src/shell/memory/contract.ts",
+      "import": "./src/shell/memory/contract.ts",
+      "default": "./src/shell/memory/contract.ts"
+    },
+    "./memory-operations": {
+      "types": "./src/shell/memory/operations.ts",
+      "import": "./src/shell/memory/operations.ts",
+      "default": "./src/shell/memory/operations.ts"
     },
     "./memory-routes": {
       "types": "./src/shell/memory/cloudflare-routes.ts",

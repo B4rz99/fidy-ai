@@ -39,7 +39,7 @@ import {
   maximumAtomicBatchCalls,
   operationCatalog,
 } from "@fidy/server/canonical-runtime";
-import { memoryOperationIds } from "@fidy/server/memory-runtime";
+import { memoryOperationIds } from "@fidy/server/memory-contract";
 import {
   Cause,
   Context,

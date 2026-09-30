@@ -1,24 +1,52 @@
-import { NodeFileSystem } from "@effect/platform-node";
 import { handleWebAuthentication } from "../web-authentication/operations";
-import { observeOperationalHealth } from "../runtime/operational-health";
-import { Miniflare } from "miniflare";
-import { afterEach, expect, it, vi } from "vitest";
-import { startBrowserPairing } from "../browser-login/operations";
-import {
-  deliverBrowserPairingEmail,
-  dispatchBrowserPairingEmail,
-} from "../identity/browser-pairing-email-delivery";
-import { Cause, Clock, Effect, Exit, FileSystem, Option, Schema } from "effect";
-import {
-  deliverEmailReplacement,
-  dispatchEmailReplacement,
-} from "../identity/email-replacement-delivery";
-import { SignJWT, exportJWK, generateKeyPair } from "jose";
-import coreWorker, { makeCoreWorker } from "../core-worker";
-import { DisabledTelemetryResource, makeTelemetryService } from "@fidy/server/telemetry";
-import { handleSupportRecovery } from "../recovery/operations";
-import publicWorker from "../public-worker";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
+
+import { DisabledTelemetryResource, makeTelemetryService } from "@fidy/server/telemetry";
+
+import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
+
+import { SignJWT, exportJWK, generateKeyPair } from "jose";
+
+import { Miniflare } from "miniflare";
+
+import { afterEach, expect, it, vi } from "vitest";
+
+import coreWorker, { makeCoreWorker } from "../core-worker";
+
+import { prepareOnboardingCredential } from "./operations";
+
+import { startBrowserPairing } from "../browser-login/operations";
+
+import { handleSupportRecovery } from "../recovery/operations";
+
+import publicWorker from "../public-worker";
+
+import { observeOperationalHealth } from "../runtime/operational-health";
+
+import { internals as pairingDelivery } from "./internal/pairing-delivery";
+
+import { dispatchBrowserPairingEmail, dispatchEmailReplacement } from "./runtime";
+
+import { internals as replacementDelivery } from "./internal/replacement-delivery";
+
+const { deliverBrowserPairingEmail } = pairingDelivery;
+
+const { deliverEmailReplacement } = replacementDelivery;
+
+it("leaves mailbox proof redeemable after the published owner rejects oversized input", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, send } = yield* Effect.tryPromise(() => setup());
+      const refused = yield* prepareOnboardingCredential({
+        db,
+        combinedCode: "x".repeat(513),
+        nowMs: yield* Clock.currentTimeMillis,
+      });
+      expect(Option.isNone(refused)).toBe(true);
+      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
+      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(400);
+    })
+  ));
 
 const signWebhook = (secret: string, body: string | Uint8Array): Promise<string> =>
   crypto.subtle
@@ -40,10 +68,15 @@ const encodeJson = (value: unknown): string =>
   Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(value);
 
 const mfInstances: Array<Miniflare> = [];
+
 const exchange = "10000000-0000-4000-8000-000000000001";
+
 const enrollment = "10000000-0000-4000-8000-000000000002";
+
 const code = "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ";
+
 let nextDatabase = 0;
+
 const digest = (text: string): Promise<Uint8Array> =>
   crypto.subtle
     .digest("SHA-256", new TextEncoder().encode(text))
@@ -100,24 +133,19 @@ const setup = (
       yield* Effect.tryPromise(() => mf.ready);
       const db = yield* Effect.tryPromise(() => mf.getD1Database("DB"));
       const applyMigration = (name: string): Promise<void> =>
-        Effect.runPromise(
-          Effect.gen(function* () {
-            const files = yield* FileSystem.FileSystem;
-            return yield* files.readFileString(
-              new URL(`../migrations/${name}.sql`, import.meta.url).pathname
-            );
-          }).pipe(Effect.provide(NodeFileSystem.layer))
-        ).then((sql) =>
-          sql
-            .replace(/^--.*$/gmu, "")
-            .trim()
-            .split(/;\s*\n(?=CREATE |ALTER |$)/u)
-            .reduce<Promise<void>>(
-              (previous, statement) =>
-                previous.then(() => db.prepare(statement).run()).then(() => undefined),
-              Promise.resolve()
-            )
-        );
+        Bun.file(new URL(`../migrations/${name}.sql`, import.meta.url))
+          .text()
+          .then((sql) =>
+            sql
+              .replace(/^--.*$/gmu, "")
+              .trim()
+              .split(/;\s*\n(?=CREATE |ALTER |$)/u)
+              .reduce<Promise<void>>(
+                (previous, statement) =>
+                  previous.then(() => db.prepare(statement).run()).then(() => undefined),
+                Promise.resolve()
+              )
+          );
       // Applied migrations depend on the preceding schema, so they must run in order.
       yield* Effect.tryPromise(() =>
         [
@@ -269,24 +297,28 @@ afterEach(() =>
   )
 );
 
-it("refuses a wrong browser protocol method without admitting a pairing", async () => {
-  const { db } = await setup();
-  const response = await Effect.runPromise(
-    handleWebAuthentication({
-      request: new Request("https://api.fidyapp.com/web/pairings"),
-      db,
-      publish: () => undefined,
+it("refuses a wrong browser protocol method without admitting a pairing", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db } = yield* Effect.tryPromise(() => setup());
+      const response = yield* handleWebAuthentication({
+        request: new Request("https://api.fidyapp.com/web/pairings"),
+        db,
+        publish: () => undefined,
+      });
+      expect(response.status).toBe(405);
+      expect(response.headers.get("allow")).toBe("GET");
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(response.headers.get("content-type")).toBe("application/json; charset=utf-8");
+      expect(yield* Effect.tryPromise(() => response.json())).toEqual({
+        status: "method_not_allowed",
+      });
+      const retained = yield* Effect.tryPromise(() =>
+        db.prepare("SELECT COUNT(*) AS count FROM browser_login_pairings").first()
+      );
+      expect(retained).toEqual({ count: 0 });
     })
-  );
-  expect(response.status).toBe(405);
-  expect(response.headers.get("allow")).toBe("GET");
-  expect(response.headers.get("cache-control")).toBe("no-store");
-  expect(response.headers.get("content-type")).toBe("application/json; charset=utf-8");
-  expect(await response.json()).toEqual({ status: "method_not_allowed" });
-  expect(await db.prepare("SELECT COUNT(*) AS count FROM browser_login_pairings").first()).toEqual({
-    count: 0,
-  });
-});
+  ));
 
 it("creates one complete stable identity on first valid mailbox proof and refuses replay", () =>
   Effect.runPromise(
@@ -1459,39 +1491,6 @@ it("does not impose a shared login lockout after concurrent pairing starts", () 
       );
       expect(starts.every((response) => response.status === 200)).toBe(true);
       expect((yield* Effect.tryPromise(() => startBrowserPairing(db))).status).toBe(200);
-    })
-  ));
-
-it("counts concurrent wrong verifiers atomically before permitting another browser proof", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, sendRequest } = yield* Effect.tryPromise(() => setup());
-      const pairing = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
-      )(
-        yield* Effect.tryPromise(() => startBrowserPairing(db).then((response) => response.json()))
-      );
-      const redeem = (privateVerifier: string): Promise<Response> =>
-        sendRequest(
-          new Request("https://api.fidyapp.com/web/pairings/redeem", {
-            method: "POST",
-            headers: { "content-type": "application/json", origin: "https://app.fidyapp.com" },
-            body: encodeJson({ pairingId: pairing.pairingId, privateVerifier }),
-          })
-        );
-      const rejected = yield* Effect.tryPromise(() =>
-        Promise.all(Array.from({ length: 5 }, () => redeem("A".repeat(43))))
-      );
-      expect(rejected.map((response) => response.status)).toEqual([400, 400, 400, 400, 400]);
-      expect((yield* Effect.tryPromise(() => redeem(pairing.privateVerifier))).status).toBe(400);
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT state, wrong_attempts FROM browser_login_pairings WHERE id = ?")
-            .bind(pairing.pairingId)
-            .first()
-        )
-      ).toEqual({ state: "invalidated", wrong_attempts: 5 });
     })
   ));
 

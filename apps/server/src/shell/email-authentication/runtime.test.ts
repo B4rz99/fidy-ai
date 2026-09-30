@@ -1,9 +1,16 @@
-import assert from "node:assert/strict";
 import { expect, it } from "@effect/vitest";
+
 import { Cause, ConfigProvider, Context, Effect, Exit, Layer, Option } from "effect";
-import { EmailAddress, EmailVerificationCode } from "~/core/email-authentication/model";
+
+import assert from "node:assert/strict";
+
+import { EmailAddress, EmailVerificationCode } from "~/core/email-authentication/contract";
+
 import { OutboundHttp } from "~/shell/outbound-http/operations";
-import { EmailDeliveryPort, EmailSendFailed } from "./delivery";
+
+import { EmailSendFailed } from "./internal/delivery";
+
+import { EmailDeliveryPort } from "./runtime";
 
 const deliveryConfig = ConfigProvider.layer(
   ConfigProvider.fromUnknown({

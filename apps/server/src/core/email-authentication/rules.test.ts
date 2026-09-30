@@ -1,5 +1,7 @@
 import { expect, it } from "@effect/vitest";
+
 import { DateTime, Effect, Option } from "effect";
+
 import {
   decideBrowserPairingEmailRequest,
   decideEmailReplacementRequest,
@@ -7,7 +9,7 @@ import {
   emailWorkflowExpiry,
   proofExpiry,
   selectEmailCodeSymbols,
-} from "./rules";
+} from "./operations";
 
 const acceptedAt = DateTime.makeUnsafe("2026-08-23T12:00:00Z");
 

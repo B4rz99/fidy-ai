@@ -1,20 +1,30 @@
 import { keywordRulePath, listCategoriesPath } from "@fidy/server/categories-path";
+
 import { atomicBatchOperation } from "@fidy/server/canonical-runtime";
-import { emailReplacementOperations } from "@fidy/server/email-replacement";
+
+import { emailReplacementOperations } from "@fidy/server/email-authentication-runtime";
+
 import { statementStagingPath } from "@fidy/server/statement-path";
+
 import {
   transactionMethods,
   ownsTransactionPath as transactionPath,
 } from "@fidy/server/transaction-routes";
+
 import { ownsMemoryPath as memoryPath } from "@fidy/server/memory-routes";
+
 import type { TelemetryService } from "@fidy/server/telemetry";
+
 import { Effect, Encoding, Option, Schema } from "effect";
+
 import {
   type WorkerTelemetryEnvironment,
   cloudflareWorkerTelemetry,
   observeWorkerRequest,
 } from "./runtime/telemetry";
+
 import { browserOrigins } from "./runtime/topology";
+
 import {
   SmokeFailureStage,
   SmokeResponse,
@@ -25,10 +35,13 @@ import {
   smokeProofHeader,
   smokeVersionHeader,
 } from "./runtime/smoke";
+
 import { patBrowserRoute, patDirectRoute, patMethods, patRoute } from "./pats/pat-routes";
+
 import { canonicalMethods, canonicalOperation, canonicalRoute } from "./routing/canonical-routes";
 
 const minimumAdmissionKeyLength = 32;
+
 type PublicEnvironment = WorkerTelemetryEnvironment & {
   readonly BROWSER_ORIGIN: string;
   readonly CORE: Pick<Fetcher, "fetch">;
@@ -108,6 +121,7 @@ const forbiddenOrigin = (): Response =>
   Response.json({ status: "forbidden_origin" }, { status: 403 });
 
 const serviceUnavailableStatus = 503;
+
 const unavailable = (): Response =>
   Response.json({ status: "unavailable" }, { status: serviceUnavailableStatus });
 
@@ -188,30 +202,45 @@ const categoryAuthorizationFailure = (
 };
 
 const callbackPath = "/providers/kapso/callback";
+
 const wompiBillingEventPath = "/providers/wompi/billing-events";
+
 const verificationPath = "/web/onboarding/email/verify";
+
 const pairingPaths = ["/web/pairings", "/web/pairings/redeem", "/web/session/logout"] as const;
+
 const userPath = "/user";
+
 const hostedTurnPath = "/web/hosted-turns";
+
 const hostedReceiptPath = "/web/hosted-turns/delivery";
+
 const enrollmentPreparePath = "/web/subscription/card-enrollments/prepare";
+
 const enrollmentSubmitPath = "/web/subscription/card-enrollments/submit";
+
 const enrollmentStatusPath =
   /^\/web\/subscription\/(?:card-enrollments|billing-attempts)\/[0-9a-f-]{36}$/u;
+
 const enrollmentPath = (path: string): boolean =>
   path === enrollmentPreparePath ||
   path === enrollmentSubmitPath ||
   enrollmentStatusPath.test(path);
+
 const rotateRecoveryPath = "/recovery/backup-code/rotate";
+
 const replacementPaths = [
   emailReplacementOperations.request.path,
   emailReplacementOperations.complete.path,
 ] as const;
+
 const supportRecoveryPath = "/internal/support-recovery";
+
 const emailAuthenticationPaths = [
   "/web/email/authentication/start",
   "/web/email/authentication/complete",
 ] as const;
+
 const postPaths = new Set<string>([
   callbackPath,
   wompiBillingEventPath,
@@ -228,6 +257,7 @@ const postPaths = new Set<string>([
   hostedTurnPath,
   hostedReceiptPath,
 ]);
+
 const browserMutationPaths = new Set<string>([
   rotateRecoveryPath,
   ...replacementPaths,
@@ -237,20 +267,25 @@ const browserMutationPaths = new Set<string>([
   hostedTurnPath,
   hostedReceiptPath,
 ]);
+
 const sessionPaths = new Set<string>([userPath, ...browserMutationPaths]);
+
 const preflightPaths = new Set<string>([
   listCategoriesPath,
   verificationPath,
   userPath,
   ...browserMutationPaths,
 ]);
+
 const ownedPaths = new Set<string>(["/health", listCategoriesPath, userPath, ...postPaths]);
+
 const ownedPath = (path: string): boolean =>
   ownedPaths.has(path) ||
   enrollmentPath(path) ||
   transactionPath(path) ||
   patRoute(path) ||
   canonicalRoute(path);
+
 const allowedMethods = (path: string): ReadonlyArray<string> => {
   if (transactionPath(path)) return transactionMethods(path);
   if (patRoute(path)) return patMethods(path);
@@ -259,19 +294,23 @@ const allowedMethods = (path: string): ReadonlyArray<string> => {
   if (ownedPaths.has(path)) return [postPaths.has(path) ? "POST" : "GET"];
   return canonicalMethods(path);
 };
+
 const callbackHeaders = (request: Request): Headers =>
   new Headers([
     ["x-webhook-signature", request.headers.get("x-webhook-signature") ?? ""],
     ["x-webhook-event", request.headers.get("x-webhook-event") ?? ""],
     ["x-idempotency-key", request.headers.get("x-idempotency-key") ?? ""],
   ]);
+
 const wompiEventHeaders = (request: Request): Headers =>
   new Headers({
     "content-type": request.headers.get("content-type") ?? "",
     "x-event-checksum": request.headers.get("x-event-checksum") ?? "",
   });
+
 const providerHeaders = (request: Request, path: string): Headers =>
   path === callbackPath ? callbackHeaders(request) : wompiEventHeaders(request);
+
 const cookieForwardPaths = new Set<string>([
   "/web/session/logout",
   rotateRecoveryPath,
@@ -292,11 +331,13 @@ const browserHeaders = (request: Request, path: string): Headers => {
   }
   return headers;
 };
+
 const supportHeaders = (request: Request): Headers =>
   new Headers({
     "content-type": request.headers.get("content-type") ?? "",
     "cf-access-jwt-assertion": request.headers.get("cf-access-jwt-assertion") ?? "",
   });
+
 const forwardsSession = (request: Request, path: string): boolean =>
   path === userPath ||
   path === hostedTurnPath ||
@@ -307,6 +348,7 @@ const forwardsSession = (request: Request, path: string): boolean =>
 
 /** Declared canonical paths that accept either the browser cookie or a PAT bearer. */
 const credentialPath = (path: string): boolean => transactionPath(path) || memoryPath(path);
+
 const credentialBearerHeaders = (request: Request, path: string): Option.Option<Headers> =>
   credentialPath(path) && !request.headers.has("cookie") && request.headers.has("authorization")
     ? Option.some(
@@ -316,8 +358,10 @@ const credentialBearerHeaders = (request: Request, path: string): Option.Option<
         })
       )
     : Option.none();
+
 const browserForwardPath = (path: string): boolean =>
   path === verificationPath || isBrowserMutation(path) || enrollmentPath(path);
+
 const directHeaders = (request: Request, path: string): Option.Option<Headers> => {
   if (patDirectRoute(path)) {
     return Option.some(new Headers({ "content-type": request.headers.get("content-type") ?? "" }));
@@ -329,11 +373,13 @@ const directHeaders = (request: Request, path: string): Option.Option<Headers> =
   if (path === supportRecoveryPath) return Option.some(supportHeaders(request));
   return Option.none();
 };
+
 const browserForwardHeaders = (request: Request, path: string): Headers => {
   const headers = browserHeaders(request, path);
   if (enrollmentPath(path)) headers.set("origin", request.headers.get("origin") ?? "");
   return headers;
 };
+
 const fallbackHeaders = (request: Request, path: string): Headers => {
   if (forwardsSession(request, path)) {
     return new Headers({
@@ -345,6 +391,7 @@ const fallbackHeaders = (request: Request, path: string): Headers => {
   headers.delete(smokeProofHeader);
   return headers;
 };
+
 const forwardedHeaders = (request: Request, path: string): Headers => {
   if (path === smokePath) {
     return new Headers({
@@ -360,6 +407,7 @@ const forwardedHeaders = (request: Request, path: string): Headers => {
   if (browserForwardPath(path)) return browserForwardHeaders(request, path);
   return fallbackHeaders(request, path);
 };
+
 const pairingSource = (
   request: Request,
   environment: PublicEnvironment
@@ -388,6 +436,7 @@ const pairingSource = (
     });
     return Encoding.encodeHex(new Uint8Array(signature));
   });
+
 const coreRequest = (
   request: Request,
   environment: PublicEnvironment
@@ -415,6 +464,7 @@ const hasPreflight = (path: string): boolean =>
   transactionPath(path) ||
   patRoute(path) ||
   canonicalRoute(path);
+
 const isBrowserMutation = (path: string): boolean => browserMutationPaths.has(path);
 
 const isPreflight = (request: Request, path: string, origin: Option.Option<string>): boolean =>
@@ -425,12 +475,14 @@ const disallowedSupportOrigin = (path: string, origin: Option.Option<string>): b
 
 const isAllowedMethod = (request: Request, path: string): boolean =>
   allowedMethods(path).includes(request.method);
+
 /** The cookie-admitted atomic-batch route, recognized through the canonical catalog. */
 const atomicBatchPath = (path: string): boolean =>
   Option.exists(
     canonicalOperation({ method: "POST", path }),
     (operation) => operation.id === atomicBatchOperation
   );
+
 /** Declared paths that may be admitted by the browser session cookie instead of a PAT. */
 const cookieAdmittedPath = (path: string): boolean =>
   transactionPath(path) ||
@@ -438,6 +490,7 @@ const cookieAdmittedPath = (path: string): boolean =>
   memoryPath(path) ||
   path === listCategoriesPath ||
   keywordRulePath(path);
+
 const requiresBrowserOrigin = (request: Request, path: string): boolean =>
   sessionPaths.has(path) ||
   enrollmentPath(path) ||

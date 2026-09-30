@@ -1,3 +1,5 @@
+import type { FreshSessionSubject } from "@fidy/server/web-session";
+import { browserSession } from "../web-session/operations";
 import {
   ApprovePATPairingPayload,
   PATPairingPublicCodeInput,
@@ -25,7 +27,6 @@ import {
   grantPairedPATConsent,
 } from "@fidy/server/consent-pat";
 import {
-  type SessionRow,
   canonical,
   currentMillis,
   dayMilliseconds,
@@ -42,7 +43,6 @@ import {
   scopesFrom,
   unauthorized,
   unavailable,
-  webSession,
 } from "./pat-shared";
 import { commitPATUnit, prepareOwnedStatement } from "./pat-unit";
 
@@ -250,7 +250,9 @@ export const inspectPATPairing = ({
 }: Readonly<{ request: Request; db: D1Database }>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const session = yield* Effect.tryPromise(() => webSession({ request, db, fresh: true }));
+      const session = yield* Effect.tryPromise(() =>
+        browserSession({ request, db, input: { current: currentMillis(), fresh: true } })
+      );
       if (Option.isNone(session)) return unauthorized();
       const current = currentMillis();
       if (!(yield* admitReview(db, session.value.id, current))) return rateLimited();
@@ -286,7 +288,7 @@ export const inspectPATPairing = ({
   );
 
 type Approval = Readonly<{
-  session: SessionRow;
+  session: FreshSessionSubject;
   pairing: PairingRow;
   current: number;
   expires: number;
@@ -349,7 +351,9 @@ export const approvePATPairing = ({
 }: Readonly<{ request: Request; db: D1Database }>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const session = yield* Effect.tryPromise(() => webSession({ request, db, fresh: true }));
+      const session = yield* Effect.tryPromise(() =>
+        browserSession({ request, db, input: { current: currentMillis(), fresh: true } })
+      );
       if (Option.isNone(session)) return unauthorized();
       const payload = yield* Effect.tryPromise(() =>
         decodeBody({ request, schema: Schema.toCodecJson(ApprovePATPairingPayload) })

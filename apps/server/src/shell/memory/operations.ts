@@ -8,7 +8,7 @@ import {
   MemoryCapacityExceededApi,
 } from "./contract";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
-import { liveWebSessionAuthority } from "~/shell/identity/browser-runtime";
+import { liveWebSessionAuthority } from "~/shell/web-session/operations";
 import { admitMemory } from "~/core/memory/operations";
 import { HostedInference } from "~/shell/hosted-inference/operations";
 

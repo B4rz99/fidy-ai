@@ -1,4 +1,4 @@
-import type { WebSessionAuthority } from "@fidy/server/identity-runtime";
+import type { WebSessionAuthority } from "@fidy/server/web-session";
 import type { PATAuthority } from "@fidy/server/tokens-runtime";
 
 /** Live caller authority re-evaluated beside a User-scoped Memory read. */

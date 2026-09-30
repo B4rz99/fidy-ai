@@ -2,7 +2,7 @@ import { Data, type DateTime, type Effect, type Option, Schema } from "effect";
 import type { Brand, Duration } from "effect";
 import type { Response } from "effect/unstable/ai";
 import type { CanonicalOperationId } from "~/core/canonical-operations/contract";
-import type { User } from "~/core/identity/model";
+import type { User } from "~/core/identity/contract";
 import type { TranscriptEntry } from "~/core/transcript/model";
 import { maximumToolCallsPerTurn } from "~/shell/_shared/hosted-turn-bounds";
 

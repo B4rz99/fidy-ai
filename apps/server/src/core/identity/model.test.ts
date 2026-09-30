@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime, Result, Schema } from "effect";
-import { TrialPeriod, UserPreferences } from "./model";
+import { TrialPeriod, UserPreferences } from "./contract";
 
 it("accepts only a TrialPeriod lasting exactly 168 hours", () => {
   const startedAt = "2026-08-01T12:00:00Z";

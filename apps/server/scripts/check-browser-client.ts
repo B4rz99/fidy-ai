@@ -18,7 +18,7 @@ const entrypoint = "src/client.ts";
  */
 const safeSource = [
   /^src\/client\.ts$/u,
-  /^src\/shell\/(?:public-http|schema-codecs)\/contract\.ts$/u,
+  /^src\/shell\/(?:public-http|schema-codecs|identity)\/contract\.ts$/u,
   /^src\/shell\/web-authentication\/contract\.ts$/u,
   /^src\/subscription-enrollment-api\.ts$/u,
   /^src\/shell\/agent\/hosted-turn-api\.ts$/u,

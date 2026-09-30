@@ -1,3 +1,4 @@
+import { consentNotRevoked } from "@fidy/server/consent-runtime";
 import * as D1Client from "@effect/sql-d1/D1Client";
 import { User, UserId } from "../../src/core/identity/contract";
 import { getCurrentUser } from "@fidy/server/identity";
@@ -37,7 +38,7 @@ export const canonicalBrowserSession = ({
         db
           .prepare(`SELECT id, user_id FROM web_sessions
       WHERE token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
-      AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = web_sessions.user_id)`)
+      AND ${consentNotRevoked("web_sessions.user_id")}`)
           .bind(digest, current, current)
           .first()
       );

@@ -1,9 +1,15 @@
 import { Context, Effect } from "effect";
+
 import type { EmailAddress } from "~/core/email-authentication/contract";
+
 import type { UserId } from "~/core/identity/contract";
+
 import type { CanonicalImplementationCaller } from "~/shell/_shared/canonical-implementation-caller";
+
 import type { CanonicalInput } from "~/shell/_shared/canonical-input";
+
 import type { CanonicalSuccess } from "~/shell/_shared/canonical-success";
+
 import { EmailReplacementInvalidApi, emailReplacementInvalidBody } from "./contract";
 
 /** Cloudflare's transaction adapter; the canonical implementation owns the operation result. */
@@ -11,6 +17,7 @@ export type EmailReplacementMutationService = Readonly<{
   request: (subject: UserId, candidate: EmailAddress) => Effect.Effect<void>;
   complete: (subject: UserId, combinedCode: string) => Effect.Effect<boolean>;
 }>;
+
 export class EmailReplacementMutation extends Context.Service<
   EmailReplacementMutation,
   EmailReplacementMutationService

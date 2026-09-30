@@ -4,11 +4,10 @@ import { AuthenticatedBrowserLoginPairing } from "./contract";
 
 it("publishes redemption success without bearer or User material", () => {
   const encode = Schema.encodeSync(Schema.toCodecJson(AuthenticatedBrowserLoginPairing));
-  expect(
-    encode({
-      status: "authenticated",
-      userId: "private-user",
-      bearer: "private-bearer",
-    })
-  ).toEqual({ status: "authenticated" });
+  const reply = {
+    status: "authenticated" as const,
+    userId: "private-user",
+    bearer: "private-bearer",
+  };
+  expect(encode(reply)).toEqual({ status: "authenticated" });
 });

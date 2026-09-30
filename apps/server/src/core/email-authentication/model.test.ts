@@ -11,12 +11,15 @@ import {
   VerifiedEmailCredentialLifecycleEvent,
   VerifiedEmailCredentialLifecycleEventId,
 } from "./contract";
+
 import { PendingConsentExchangeId } from "~/core/consent/contract";
+
 import {
   UserId,
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
 } from "~/core/identity/contract";
+
 import { WebSessionId } from "~/core/web-session/contract";
 
 const decodeEmail = Schema.decodeUnknownResult(EmailAddress);

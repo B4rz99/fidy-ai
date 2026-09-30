@@ -3,7 +3,7 @@ import { UserId } from "../../src/core/identity/contract";
 import { findRecoveryPairing, prepareRecoveryPairingApproval } from "../browser-login/operations";
 import { freshBrowserSession } from "@fidy/server/web-session-runtime";
 import { freshSessionExists, freshSessionParams } from "@fidy/server/web-session";
-import { digestBackupCode, sampleBackupCode } from "./internal/backup-proof";
+import { digestBackupCode, recoveryId, sampleBackupCode } from "./internal/backup-proof";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { JWTVerifyGetKey } from "jose";
 import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
@@ -12,7 +12,7 @@ import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body"
 /** Prepare one-time disclosure and its digest-only insert for the onboarding owner's atomic D1 batch.
  * No persistence occurs here. Disclose backupRecoveryCode only after the caller commits the statement
  * together with creation of this exact stable User. A failed batch grants no recovery authority. */
-export const prepareInitialBackupRecoveryCode = async ({
+export const prepareInitialBackupRecoveryCode = ({
   db,
   userId,
   createdAtMs,
@@ -23,16 +23,15 @@ export const prepareInitialBackupRecoveryCode = async ({
 }): Promise<
   Readonly<{ backupRecoveryCode: BackupRecoveryCode; statement: D1PreparedStatement }>
 > => {
-  const backupRecoveryCode = Schema.decodeUnknownSync(BackupRecoveryCode)(sampleBackupCode());
-  const codeDigest = await digestBackupCode(backupRecoveryCode);
-  return {
+  const backupRecoveryCode = Schema.decodeSync(BackupRecoveryCode)(sampleBackupCode());
+  return digestBackupCode(backupRecoveryCode).then((codeDigest) => ({
     backupRecoveryCode,
     statement: db
       .prepare(
         "INSERT INTO backup_recovery_credentials (user_id, code_digest, created_at_ms) VALUES (?, ?, ?)"
       )
       .bind(userId, codeDigest, createdAtMs),
-  };
+  }));
 };
 
 /** Rotate only the explicit fresh WebSession's User proof; recheck freshness in the same D1 unit
@@ -52,9 +51,9 @@ export const rotateBackupRecoveryCode = ({
         catch: () => undefined,
       });
       if (Option.isNone(session)) return noSession();
-      const subject = Schema.decodeUnknownOption(UserId)(session.value.userId);
+      const subject = Schema.decodeOption(UserId)(session.value.userId);
       if (Option.isNone(subject)) return unavailable();
-      const code = Schema.decodeUnknownSync(BackupRecoveryCode)(sampleBackupCode());
+      const code = yield* Schema.decodeEffect(BackupRecoveryCode)(sampleBackupCode());
       const codeDigest = yield* Effect.tryPromise({
         try: () => digestBackupCode(code),
         catch: () => undefined,
@@ -74,7 +73,7 @@ export const rotateBackupRecoveryCode = ({
             db
               .prepare(`INSERT INTO canonical_security_mutations (id, user_id, session_id, operation, occurred_at_ms)
         SELECT ?, ?, ?, 'recovery.rotateBackupRecoveryCode', ? WHERE changes() = 1`)
-              .bind(crypto.randomUUID(), subject.value, session.value.id, usedAt),
+              .bind(recoveryId(), subject.value, session.value.id, usedAt),
           ]),
         catch: () => undefined,
       });
@@ -232,23 +231,26 @@ const recoveryCandidate = (db: D1Database, input: CaseDecision) =>
     )
     .bind(input.codeDigest)
     .first()
-    .then(async (row) => {
+    .then((row) => {
       const credential = Schema.decodeUnknownOption(CredentialSubject)(row);
       if (Option.isNone(credential)) return Option.none();
-      const pairing = await findRecoveryPairing({
+      return findRecoveryPairing({
         db,
         userId: credential.value.user_id,
         publicCode: input.publicCode,
         atMs: input.now,
+      }).then((pairing) => {
+        if (Option.isNone(pairing)) return Option.none();
+        return db
+          .prepare("SELECT id FROM support_recovery_cases WHERE pairing_id = ?")
+          .bind(pairing.value.id)
+          .first()
+          .then((prior) =>
+            prior === null
+              ? Option.some({ credential: credential.value, pairing: pairing.value })
+              : Option.none()
+          );
       });
-      if (Option.isNone(pairing)) return Option.none();
-      const prior = await db
-        .prepare("SELECT id FROM support_recovery_cases WHERE pairing_id = ?")
-        .bind(pairing.value.id)
-        .first();
-      return prior === null
-        ? Option.some({ credential: credential.value, pairing: pairing.value })
-        : Option.none();
     });
 
 const matchingRecoveryCandidate = (db: D1Database, input: CaseDecision): Promise<boolean> =>
@@ -275,52 +277,52 @@ type CaseDecision = Readonly<{
   now: number;
 }>;
 
-const approveCase = async (db: D1Database, input: CaseDecision): Promise<boolean> => {
-  const candidate = await recoveryCandidate(db, input);
-  if (Option.isNone(candidate)) return false;
-  const { credential, pairing } = candidate.value;
-  const caseId = crypto.randomUUID();
-  const openedId = crypto.randomUUID();
-  const approvedId = crypto.randomUUID();
-  const { operator, codeDigest, now } = input;
-  return db
-    .batch([
-      db
-        .prepare(recoveryCredentialConsume)
-        .bind(
-          crypto.getRandomValues(new Uint8Array(digestBytes)),
-          now,
-          credential.user_id,
-          codeDigest,
-          credential.revision
-        ),
-      prepareRecoveryPairingApproval({
-        db,
-        userId: credential.user_id,
-        pairingId: pairing.id,
-        atMs: now,
-      }),
-      db
-        .prepare(supportCaseInsert)
-        .bind(
-          caseId,
-          credential.user_id,
-          pairing.id,
-          operator.issuer,
-          operator.subject,
-          credential.revision,
-          now,
-          pairing.expiresAtMs,
-          now
-        ),
-      db.prepare(supportCaseOpened).bind(openedId, now, caseId),
-      // If any conditional transition did not create its case, the final FK aborts the D1 batch.
-      db
-        .prepare(supportCaseApproved)
-        .bind(approvedId, caseId, caseId, operator.issuer, operator.subject, now),
-    ])
-    .then((pairing) => pairing.every((entry) => entry.meta.changes === 1));
-};
+const approveCase = (db: D1Database, input: CaseDecision): Promise<boolean> =>
+  recoveryCandidate(db, input).then((candidate) => {
+    if (Option.isNone(candidate)) return false;
+    const { credential, pairing } = candidate.value;
+    const caseId = recoveryId();
+    const openedId = recoveryId();
+    const approvedId = recoveryId();
+    const { operator, codeDigest, now } = input;
+    return db
+      .batch([
+        db
+          .prepare(recoveryCredentialConsume)
+          .bind(
+            crypto.getRandomValues(new Uint8Array(digestBytes)),
+            now,
+            credential.user_id,
+            codeDigest,
+            credential.revision
+          ),
+        prepareRecoveryPairingApproval({
+          db,
+          userId: credential.user_id,
+          pairingId: pairing.id,
+          atMs: now,
+        }),
+        db
+          .prepare(supportCaseInsert)
+          .bind(
+            caseId,
+            credential.user_id,
+            pairing.id,
+            operator.issuer,
+            operator.subject,
+            credential.revision,
+            now,
+            pairing.expiresAtMs,
+            now
+          ),
+        db.prepare(supportCaseOpened).bind(openedId, now, caseId),
+        // If any conditional transition did not create its case, the final FK aborts the D1 batch.
+        db
+          .prepare(supportCaseApproved)
+          .bind(approvedId, caseId, caseId, operator.issuer, operator.subject, now),
+      ])
+      .then((pairing) => pairing.every((entry) => entry.meta.changes === 1));
+  });
 
 const configuredAccess = (config: {
   CLOUDFLARE_ACCESS_ISSUER: string;

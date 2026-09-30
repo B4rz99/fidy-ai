@@ -1,3 +1,4 @@
+import { canonicalBrowserSession as transactionSession } from "./web-session/operations";
 import {
   ScopeMissing,
   UserActionRequired,
@@ -30,11 +31,7 @@ import {
   recoverPendingDisclosures,
   sweepExpiredConsent,
 } from "./onboarding/consent-ingress";
-import {
-  transactionInput,
-  transactionSession,
-  unauthenticatedTransaction,
-} from "./transactions/transactions";
+import { transactionInput, unauthenticatedTransaction } from "./transactions/transactions";
 import {
   type TransactionCaller,
   isPATCaller,

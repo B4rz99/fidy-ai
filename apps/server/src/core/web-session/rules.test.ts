@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime } from "effect";
-import { calculateWebSessionDeadlines, renewWebSessionIdleDeadline } from "./rules";
+import { calculateWebSessionDeadlines, renewWebSessionIdleDeadline } from "./operations";
 
 it("starts one WebSession with ten-minute freshness, thirty-day idle, and ninety-day hard deadlines", () => {
   const pairedAt = DateTime.makeUnsafe("2026-03-01T12:00:00.000Z");

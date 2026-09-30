@@ -220,7 +220,7 @@ export default {
       name: "api-assembly-imports-beyond-operations",
       severity: "error",
       comment:
-        "src/shell/api.ts imported something other than a slice's operations.ts, " +
+        "src/shell/api.ts imported something other than published operation declarations, " +
         "shell/_shared, or the Public HTTP contract. The assembly composes operation definitions " +
         "and their universal validation declaration and nothing else. A slice's " +
         "handlers.ts *must* import api.ts, because HttpApiBuilder.group takes the assembled " +
@@ -232,7 +232,7 @@ export default {
         path: "^src/",
         pathNot: [
           "^src/shell/_shared/",
-          "^src/shell/(public-http|tokens)/contract\\.ts$",
+          "^src/shell/(public-http|tokens|insights)/contract\\.ts$",
           "^src/shell/[^/]+/operations\\.ts$",
         ],
       },

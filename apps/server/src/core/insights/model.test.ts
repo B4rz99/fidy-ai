@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { BigDecimal, Equal, Result, Schema, SchemaIssue } from "effect";
-import { DeliveryEvidenceInput, InsightEvent, InsightGenerationInput } from "./model";
+import { DeliveryEvidenceInput, InsightEvent, InsightGenerationInput } from "./contract";
 
 type InsightOccurrenceInput = typeof InsightEvent.Encoded;
 type MoneyGroupInput = InsightOccurrenceInput["moneyGroups"][number];

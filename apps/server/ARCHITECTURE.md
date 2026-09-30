@@ -35,6 +35,16 @@ published interfaces; implementation files and `internal/` modules remain privat
 import shell or platform code. Shell adapters load external values, pass plain values to core, and
 map typed domain failures to the public contract.
 
+Insights publishes its occurrence, captured schedule context, delivery evidence, and failures from
+`core/insights/contract.ts`, with one lifecycle policy in `core/insights/operations.ts`. Its canonical
+HTTP declarations live in `shell/insights/contract.ts`; actionable failure and next-operation policy
+live in `shell/insights/operations.ts`. `cloudflare/insights/operations.ts` owns immutable occurrence
+generation, bounded due discovery and pending pages, and guarded lifecycle/evidence/Audit commits.
+Storage codecs remain in its `internal/` directory. Due identities carry their explicit User and
+must be re-read under that User before delivery; generation accepts captured Money groups, not
+Transaction repositories. No runtime factory, scheduled dispatcher, or outbound send is installed
+by this publication pass, and marking delivery records evidence rather than sending a message.
+
 The canonical operation definition is the source for reflected operation ids, access metadata,
 suggested operations, OpenAPI, MCP definitions, and hosted-agent tool descriptions. The reflected
 registries remain complete even when their execution implementation is unavailable; a registry entry

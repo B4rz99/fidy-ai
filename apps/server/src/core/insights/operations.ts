@@ -1,6 +1,5 @@
 import { Effect } from "effect";
-import { InvalidInsightTransition } from "./errors";
-import { type InsightLifecycleState } from "./model";
+import { InsightLifecycleState, InvalidInsightTransition } from "./contract";
 
 const allowedTargets: Readonly<
   Record<InsightLifecycleState, ReadonlyArray<InsightLifecycleState>>
@@ -15,6 +14,17 @@ const allowedTargets: Readonly<
 export const allowedInsightTransitions = (
   current: InsightLifecycleState
 ): ReadonlyArray<InsightLifecycleState> => allowedTargets[current];
+
+/**
+ * Complete source states that may advance to a target. Durable conditional writes
+ * must check these again at commit, not rely on an earlier lifecycle read.
+ */
+export const insightTransitionSources = (
+  target: InsightLifecycleState
+): ReadonlyArray<InsightLifecycleState> =>
+  InsightLifecycleState.literals.filter((current) =>
+    allowedInsightTransitions(current).includes(target)
+  );
 
 /** Validates one monotonic lifecycle movement, including direct forward skips. */
 export const transitionInsight = (

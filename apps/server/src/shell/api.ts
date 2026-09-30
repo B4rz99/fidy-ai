@@ -15,13 +15,9 @@ import { BudgetsGroup } from "~/shell/budgets/operations";
 import { CategoriesGroup } from "~/shell/categories/operations";
 
 import { DashboardGroup } from "~/shell/dashboard/operations";
-
 import { EmailAuthenticationGroup } from "~/shell/email-authentication/contract";
-
 import { IdentityGroup } from "~/shell/identity/contract";
-
-import { InsightsGroup } from "~/shell/insights/operations";
-
+import { InsightsGroup } from "~/shell/insights/contract";
 import { IngestionGroup } from "~/shell/ingestion/operations";
 
 import { MemoryGroup } from "~/shell/memory/operations";

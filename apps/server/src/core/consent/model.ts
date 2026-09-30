@@ -2,7 +2,7 @@ import { Schema } from "effect";
 import { Locale, ServiceMarket } from "~/core/_shared/context";
 import { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
 import { UserId, WhatsAppCallerReference } from "~/core/identity/contract";
-import { InsightKind } from "~/core/insights/reference";
+import { InsightKind } from "~/core/insights/contract";
 import { PATId } from "~/core/tokens/reference";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { WebSessionId } from "~/core/web-session/contract";

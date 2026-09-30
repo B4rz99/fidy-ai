@@ -1,14 +1,20 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Result } from "effect";
-import type { InvalidInsightTransition } from "./errors";
-import type { InsightLifecycleState } from "./model";
-import { transitionInsight } from "./rules";
+import type { InsightLifecycleState, InvalidInsightTransition } from "./contract";
+import { insightTransitionSources, transitionInsight } from "./operations";
 
 const decide = (
   current: "pending" | "delivered" | "read" | "dismissed",
   target: typeof current
 ): Result.Result<InsightLifecycleState, InvalidInsightTransition> =>
   Effect.runSync(Effect.result(transitionInsight({ current, target })));
+
+it("guards each target against exactly the states that may advance to it", () => {
+  expect(insightTransitionSources("pending")).toEqual([]);
+  expect(insightTransitionSources("delivered")).toEqual(["pending"]);
+  expect(insightTransitionSources("read")).toEqual(["pending", "delivered"]);
+  expect(insightTransitionSources("dismissed")).toEqual(["pending", "delivered", "read"]);
+});
 
 it("moves a pending InsightEvent to delivered", () => {
   const outcome = decide("pending", "delivered");

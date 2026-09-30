@@ -4,7 +4,12 @@ import {
   requestEmailReplacement as requestCanonicalReplacement,
 } from "@fidy/server/email-authentication-operations";
 
-import type { PreparedOnboardingCredential } from "./contract";
+import type {
+  PairingEmailOwnership,
+  PreparedOnboardingCredential,
+  VerifiedEmailRead,
+} from "./contract";
+import type { UserId } from "@fidy/server/identity-runtime";
 
 import {
   OnboardingProofRow,
@@ -16,11 +21,14 @@ import {
 
 import {
   CompleteEmailReplacementPayload,
+  EmailAddress,
   EmailVerificationCode,
   RequestEmailReplacementPayload,
 } from "@fidy/server/client";
 
 import { canRedeemOnboardingProof } from "@fidy/server/email-authentication-policy";
+import { Sha256Digest } from "@fidy/server/consent-ingress";
+import { WhatsAppProviderMessageId } from "../../src/core/provider-evidence/contract";
 
 import {
   browserReplacementCaller,
@@ -329,6 +337,124 @@ export const completeBrowserPairingEmail = (input: {
       }
     }).pipe(Effect.catchCause(() => Effect.succeed(pairingunavailable())))
   );
+
+/** Observe only the closed delivery state for an accepted pre-User Consent exchange. */
+export const readOnboardingEmailStatus = (
+  input: Readonly<{ db: D1Database; exchangeId: string }>
+): Effect.Effect<OnboardingEmailStatus, void> =>
+  Effect.gen(function* () {
+    const stored = yield* Effect.tryPromise({
+      try: () =>
+        input.db
+          .prepare("SELECT state FROM pending_email_enrollments WHERE exchange_id = ?")
+          .bind(input.exchangeId)
+          .first(),
+      catch: () => undefined,
+    });
+    if (stored === null) return "awaiting_email";
+    const decoded = yield* Schema.decodeUnknownEffect(OnboardingEmailState)(stored).pipe(
+      Effect.mapError(() => undefined)
+    );
+    return decoded.state;
+  });
+
+const OnboardingEmailState = Schema.Struct({
+  state: Schema.Literals([
+    "awaiting_delivery",
+    "sending",
+    "awaiting_proof",
+    "rejected",
+    "ambiguous",
+  ]),
+});
+export type OnboardingEmailStatus = (typeof OnboardingEmailState.Type)["state"] | "awaiting_email";
+
+/** Prepare one explicit User's current verified mailbox read for a shared D1 batch. */
+export const prepareVerifiedEmailRead = ({
+  db,
+  userId,
+}: Readonly<{ db: D1Database; userId: UserId }>): VerifiedEmailRead => ({
+  statement: db
+    .prepare("SELECT email_address FROM verified_email_credentials WHERE user_id = ? LIMIT 1")
+    .bind(userId),
+  decode: (result) =>
+    Schema.decodeUnknownEffect(VerifiedEmailRows)(result.results).pipe(
+      Effect.mapError(() => undefined),
+      Effect.map((rows) =>
+        rows[0] === undefined ? Option.none() : Option.some(rows[0].email_address)
+      )
+    ),
+});
+
+const VerifiedEmailRows = Schema.Array(Schema.Struct({ email_address: EmailAddress })).check(
+  Schema.isMaxLength(1)
+);
+
+/** Classify mailbox evidence without disclosing the retained submission or mailbox. */
+export const readOnboardingMailboxReplay = (
+  input: Readonly<{ db: D1Database; exchangeId: string; messageId: string; digest: string }>
+): Effect.Effect<"missing" | "replay" | "conflict", void> =>
+  Effect.gen(function* () {
+    const raw = yield* Effect.tryPromise({
+      try: () =>
+        input.db
+          .prepare(
+            "SELECT submission_message_id, submission_body_sha256 FROM pending_email_enrollments WHERE exchange_id = ?"
+          )
+          .bind(input.exchangeId)
+          .first(),
+      catch: () => undefined,
+    });
+    if (raw === null) return "missing";
+    const row = yield* Schema.decodeUnknownEffect(MailboxReplayRow)(raw).pipe(
+      Effect.mapError(() => undefined)
+    );
+    return row.submission_message_id === input.messageId &&
+      row.submission_body_sha256 === input.digest
+      ? "replay"
+      : "conflict";
+  });
+
+/** Record the first accepted-exchange mailbox; uniqueness and Consent guards remain authoritative at D1 commit. */
+export const prepareOnboardingMailbox = (
+  input: Readonly<{
+    db: D1Database;
+    id: string;
+    exchangeId: string;
+    email: EmailAddress;
+    messageId: string;
+    digest: string;
+    createdAtMs: number;
+    expiresAtMs: number;
+  }>
+): D1PreparedStatement =>
+  input.db
+    .prepare(`INSERT INTO pending_email_enrollments
+    (id, exchange_id, email_address, submission_message_id, submission_body_sha256, created_at_ms, expires_at_ms, state)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'awaiting_delivery')`)
+    .bind(
+      input.id,
+      input.exchangeId,
+      input.email,
+      input.messageId,
+      input.digest,
+      input.createdAtMs,
+      input.expiresAtMs
+    );
+
+const MailboxReplayRow = Schema.Struct({
+  submission_message_id: WhatsAppProviderMessageId,
+  submission_body_sha256: Sha256Digest,
+});
+
+/** Refuse a pairing pinned by email proof to a different User, both before and within an approval batch. */
+export const pairingEmailOwnership = (
+  input: Readonly<{ pairingId: string; userId: UserId }>
+): PairingEmailOwnership => ({
+  predicate:
+    "NOT EXISTS (SELECT 1 FROM browser_pairing_email_proofs AS e WHERE e.pairing_id = ? AND e.user_id <> ?)",
+  bindings: [input.pairingId, input.userId],
+});
 
 const onboardingPublicCodeLength = 9;
 

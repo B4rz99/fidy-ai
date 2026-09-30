@@ -1,9 +1,8 @@
+import { type CategoryId, type KeywordRule } from "../../../src/core/categories/contract";
 import {
-  type CategoryId,
-  type KeywordRule,
   keywordRulesFromRows,
   keywordRulesQuery,
-} from "@fidy/server/categories";
+} from "../../../src/shell/categories/internal/keyword-rules";
 import { Effect, Option } from "effect";
 
 /** The status a declared `ValidationFailed` keyword-rule refusal answers with. */

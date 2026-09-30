@@ -1,12 +1,6 @@
 import { CreateTransactionInput, encodeMoneyAmount } from "@fidy/server/transactions-runtime";
-import {
-  type CategoryId,
-  fallbackCaptureCategory,
-  findKeywordCategory,
-  findKnownCaptureCategory,
-  keywordRulesFromRows,
-  keywordRulesQuery,
-} from "@fidy/server/categories";
+import { type CategoryId } from "../../src/core/categories/contract";
+import { categorizeCapture, categoryExists } from "../categories/operations";
 import { DateTime, Effect, Option, Schema } from "effect";
 import type { UserContext } from "../../src/core/identity/contract";
 import { findUserContext } from "../identity/operations";
@@ -130,42 +124,13 @@ const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedSt
 const hasUnknownCategory = (db: D1Database, categoryId: Option.Option<string>): Promise<boolean> =>
   Option.isNone(categoryId)
     ? Promise.resolve(false)
-    : db
-        .prepare("SELECT id FROM categories WHERE id = ?")
-        .bind(categoryId.value)
-        .first()
-        .then((category) => category === null);
+    : categoryExists({ db, categoryId: categoryId.value }).then((exists) => !exists);
 
 const captureUserContext = (
   db: D1Database,
   userId: string
 ): Effect.Effect<Option.Option<UserContext>, TransactionBoundaryFailure> =>
   findUserContext({ db, userId }).pipe(Effect.mapError(boundaryFailure));
-
-const findRuleCategory = ({
-  db,
-  userId,
-  counterparty,
-}: Readonly<{ db: D1Database; userId: string; counterparty: string }>): Effect.Effect<
-  Option.Option<CategoryId>,
-  TransactionBoundaryFailure
-> =>
-  Effect.gen(function* () {
-    const query = keywordRulesQuery({ userId });
-    const stored = yield* Effect.tryPromise({
-      try: () =>
-        db
-          .prepare(query.sql)
-          .bind(...query.params)
-          .all(),
-      catch: boundaryFailure,
-    });
-    const rules = keywordRulesFromRows(stored.results);
-    if (Option.isNone(rules)) {
-      return yield* boundaryFailure("keyword_rules_unreadable");
-    }
-    return yield* findKeywordCategory({ counterparty, rules: rules.value });
-  });
 
 /** Explicit Category, then the User's keyword policy, then the direction fallback. */
 const resolveCaptureCategory = ({
@@ -177,20 +142,13 @@ const resolveCaptureCategory = ({
   subject: TransactionCaller;
   input: typeof Input.Type;
 }>): Effect.Effect<CategoryId, TransactionBoundaryFailure> =>
-  Effect.gen(function* () {
-    const keywordRule = Option.isNone(input.counterparty)
-      ? Option.none<CategoryId>()
-      : yield* findRuleCategory({
-          db,
-          userId: subject.userId,
-          counterparty: input.counterparty.value,
-        });
-    const known = yield* findKnownCaptureCategory({
-      caller: input.categoryId,
-      keywordRule,
-    });
-    return Option.getOrElse(known, () => fallbackCaptureCategory(input.direction));
-  });
+  categorizeCapture({
+    db,
+    userId: subject.userId,
+    caller: input.categoryId,
+    counterparty: input.counterparty,
+    direction: input.direction,
+  }).pipe(Effect.mapError(() => boundaryFailure("keyword_rules_unreadable")));
 
 /** One capture refusal built from the shared Transaction refusal vocabulary. */
 const refusedCapture = ({

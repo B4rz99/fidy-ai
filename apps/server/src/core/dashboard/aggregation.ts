@@ -1,6 +1,6 @@
 import { BigDecimal, Function, Option } from "effect";
 import type { Money, MoneyGroups, ReadonlyMoney } from "~/core/_shared/money";
-import type { CategoryId } from "~/core/categories/reference";
+import type { CategoryId } from "~/core/categories/contract";
 import type { EffectiveTransactionAggregate } from "~/core/transactions/contract";
 import {
   type DashboardMetricFact,

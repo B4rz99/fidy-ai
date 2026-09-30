@@ -132,7 +132,13 @@ hosted-Turn allowance is read before model preflight and guarded again at insert
 ordered query, decodes every row through the published Category schema, and is shared by the
 operation registry and the private Core Worker adapter. Keyword rules are scoped to one User and
 reference stable CategoryIds; capture reads them for future Transactions and no rule change
-rewrites retained history.
+rewrites retained history. Categories declares identities and schemas in `core/categories/contract.ts`
+and canonical HTTP declarations in `shell/categories/contract.ts`. Its substantive operations own
+required lookup, bounded metadata projections, User-scoped categorization snapshots, and keyword-rule
+mutation preparation/readback in `cloudflare/categories/operations.ts`; persistence and conflict
+implementation stay in visible internals. Other owners compose the Category-owned existence guard
+into their atomic writes rather than knowing Category storage, and never load keyword-rule rows.
+There is no catch-all Categories runtime re-export or repository publication.
 The infrastructure admission primitive atomically charges Stable-User, source, operation,
 outstanding-work, and spend policies with caller-owned proof, replay, or outbox statements. Its
 resource refusal and authority-unavailable failures are separate from commercial allowance results.

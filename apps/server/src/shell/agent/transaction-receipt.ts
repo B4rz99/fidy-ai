@@ -1,7 +1,7 @@
 import { DateTime, Option, Schema } from "effect";
 import type { IanaTimeZone, Locale } from "~/core/_shared/context";
 import { type ReadonlyMoney, currencyMetadata, encodeMoneyAmount } from "~/core/_shared/money";
-import { categoryRows } from "~/core/categories/taxonomy";
+import { listLaunchCategories } from "~/core/categories/operations";
 import { TranscriptText } from "~/core/transcript/model";
 import { CreateTransactionResponse } from "~/shell/transactions/operations";
 
@@ -70,7 +70,9 @@ export const renderTransactionReceipt = ({
 }>): Option.Option<TranscriptText> =>
   Schema.decodeUnknownOption(CreateTransactionResponse)(output).pipe(
     Option.flatMap(({ data: transaction }) =>
-      Option.fromUndefinedOr(categoryRows.find(({ id }) => id === transaction.categoryId)).pipe(
+      Option.fromUndefinedOr(
+        listLaunchCategories().find(({ id }) => id === transaction.categoryId)
+      ).pipe(
         Option.map(({ label }) => {
           const heading = transaction.direction === "outflow" ? "Gasto" : "Ingreso";
           const lines = [

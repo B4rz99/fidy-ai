@@ -1,6 +1,6 @@
 import { Data } from "effect";
 import { type Currency } from "~/core/_shared/money";
-import { type CategoryId } from "~/core/categories/reference";
+import { type CategoryId } from "~/core/categories/contract";
 import { type BudgetId } from "./reference";
 
 /** The requested Budget is absent or does not belong to the current User. */

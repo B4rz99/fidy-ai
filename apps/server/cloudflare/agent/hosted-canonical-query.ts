@@ -1,9 +1,8 @@
 import { Cause, Effect, Exit, Option, Schema } from "effect";
-import type { CatalogOperation } from "../../src/shell/_shared/operation-catalog";
-import type { TransactionSubject } from "../transactions/transaction-boundary";
-import { executeProtectedCategories } from "../categories/canonical-category";
+import { type CatalogOperation } from "../../src/shell/_shared/operation-catalog";
+import { type TransactionSubject } from "../transactions/transaction-boundary";
+import { executeProtectedCategories, listOwnKeywordRules } from "../categories/operations";
 import { executeProtectedSubscriptionQuery } from "../billing/subscription-queries";
-import { listOwnKeywordRules } from "../categories/canonical-keyword-rules";
 import { browseBudgets } from "../budgets/budget-queries";
 import { reconcileBudgetLatches } from "../budgets/budget-latches";
 import { browseTransactions } from "../transactions/transaction-history";

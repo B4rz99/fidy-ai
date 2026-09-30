@@ -1,7 +1,7 @@
 import { Effect, Option, Schema } from "effect";
 import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
 import { makeDashboardCatalog } from "../../src/core/dashboard/catalog";
-import { categoryIds } from "../../src/core/categories/taxonomy";
+import { categoryIds } from "../../src/core/categories/contract";
 import { DashboardCatalog, DashboardEdit } from "../../src/core/dashboard/model";
 import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-operations";
 import { prepareOwnedStatement } from "../atomic/operations";

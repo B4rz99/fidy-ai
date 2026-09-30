@@ -1,5 +1,5 @@
 import { Data, Option } from "effect";
-import { type CategoryId } from "~/core/categories/reference";
+import { type CategoryId } from "~/core/categories/contract";
 import { type DashboardFailure, type DashboardIssue } from "~/core/dashboard/errors";
 import { NotFound, type SuggestedOperation, ValidationFailed } from "~/shell/public-http/contract";
 import {

@@ -12,7 +12,7 @@ import { BrowserLoginGroup } from "~/shell/browser-login/operations";
 
 import { BudgetsGroup } from "~/shell/budgets/operations";
 
-import { CategoriesGroup } from "~/shell/categories/operations";
+import { CategoriesGroup } from "~/shell/categories/contract";
 
 import { DashboardGroup } from "~/shell/dashboard/operations";
 import { EmailAuthenticationGroup } from "~/shell/email-authentication/contract";

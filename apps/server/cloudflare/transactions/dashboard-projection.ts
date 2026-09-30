@@ -1,7 +1,7 @@
 import type { EffectiveTransactionAggregate } from "@fidy/server/transactions-runtime";
 import { BigDecimal, Effect, Option, Schema } from "effect";
 import { Currency, Money } from "../../src/core/_shared/money";
-import { CategoryId } from "../../src/core/categories/reference";
+import { CategoryId } from "../../src/core/categories/contract";
 
 const maximumPeriodDays = 32;
 const minutesPerDay = 1440;

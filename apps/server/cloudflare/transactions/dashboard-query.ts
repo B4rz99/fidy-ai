@@ -1,6 +1,6 @@
 import { Option, Schema } from "effect";
 import { Money } from "../../src/core/_shared/money";
-import { Category } from "../../src/core/categories/model";
+import { Category } from "../../src/core/categories/contract";
 import { Transaction } from "../../src/core/transactions/model";
 
 /** Transaction-owned, User-scoped storage interface for Dashboard fact queries. */

@@ -1,4 +1,4 @@
-import { fallbackCaptureCategory } from "@fidy/server/categories";
+import { fallbackCaptureCategory } from "../../src/core/categories/operations";
 import { Clock, Data, DateTime, Effect, Option, type PlatformError, Schema } from "effect";
 import PostalMime from "postal-mime";
 import { ReceivedEmailContent } from "../../src/core/ingestion/model";

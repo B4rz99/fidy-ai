@@ -1,4 +1,4 @@
-import { keywordRulePath, listCategoriesPath } from "@fidy/server/categories-path";
+import { keywordRulePath, listCategoriesPath } from "../src/shell/categories/contract";
 
 import { atomicBatchOperation } from "@fidy/server/canonical-runtime";
 

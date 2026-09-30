@@ -14,8 +14,8 @@ import { AtomicBatchCallId, AtomicBatchRejected, ErrorCode } from "@fidy/server/
 import type { AtomicBatchCall } from "@fidy/server/canonical-runtime";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { DisclosureSnapshot } from "@fidy/server/agent-runtime";
-import { CategoryId, CategoryKeyword, KeywordRuleId } from "@fidy/server/categories";
-import { keywordRuleGuardFailure } from "../mutations/keyword-rule-outcome";
+import { CategoryId, CategoryKeyword, KeywordRuleId } from "../../src/core/categories/contract";
+import { keywordRuleGuardFailure } from "../categories/operations";
 import { currentDisclosureFor } from "@fidy/server/consent-ingress";
 import { hostedDeliveryReceipt } from "../agent/hosted-turn";
 import { hostedTurnTestMigrations } from "../agent/hosted-turn-test-migrations";

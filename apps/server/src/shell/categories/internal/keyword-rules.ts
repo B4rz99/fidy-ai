@@ -1,6 +1,6 @@
 import { Option, Schema } from "effect";
-import { KeywordRule } from "~/core/categories/model";
-import { maximumKeywordRulesPerUser } from "~/core/categories/rules";
+import { KeywordRule } from "~/core/categories/contract";
+import { maximumKeywordRulesPerUser } from "~/core/categories/operations";
 import { liveWebSessionAuthority } from "~/shell/web-session/operations";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 

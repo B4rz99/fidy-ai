@@ -104,11 +104,6 @@
       "import": "./src/shell/budgets/runtime.ts",
       "default": "./src/shell/budgets/runtime.ts"
     },
-    "./categories": {
-      "types": "./src/shell/categories/runtime.ts",
-      "import": "./src/shell/categories/runtime.ts",
-      "default": "./src/shell/categories/runtime.ts"
-    },
     "./consent-pat": {
       "types": "./src/shell/consent/pat-runtime.ts",
       "import": "./src/shell/consent/pat-runtime.ts",
@@ -123,11 +118,6 @@
       "types": "./src/shell/channels/whatsapp/hosted-sender.ts",
       "import": "./src/shell/channels/whatsapp/hosted-sender.ts",
       "default": "./src/shell/channels/whatsapp/hosted-sender.ts"
-    },
-    "./categories-path": {
-      "types": "./src/shell/categories/path.ts",
-      "import": "./src/shell/categories/path.ts",
-      "default": "./src/shell/categories/path.ts"
     },
     "./client": {
       "types": "./src/client.ts",

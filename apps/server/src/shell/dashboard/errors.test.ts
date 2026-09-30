@@ -1,6 +1,6 @@
 import { Option, Schema } from "effect";
 import { expect, it } from "vitest";
-import { CategoryId } from "~/core/categories/reference";
+import { CategoryId } from "~/core/categories/contract";
 import {
   DuplicateWidgetId,
   InvalidDashboardResult,

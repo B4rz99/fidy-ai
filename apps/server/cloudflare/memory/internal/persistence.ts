@@ -1,7 +1,7 @@
 import { maximumAggregateMemoryTokens } from "@fidy/server/memory-operations";
 import { DateTime, Option, Schema } from "effect";
 import { Memory, MemoryId, MemoryText } from "@fidy/server/memory-contract";
-import type { OwnedStatement } from "@fidy/server/tokens-runtime";
+import type { OwnedStatement } from "../../../src/shell/_shared/owned-statement";
 import type { MemoryAuthority } from "../contract";
 
 /** The exact Memory row projection every owner query returns, kept in one place. */

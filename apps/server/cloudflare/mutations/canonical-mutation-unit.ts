@@ -6,7 +6,7 @@ import {
   auditDayCountExpression,
   dailyAuditBudget,
 } from "../atomic/daily-canonical-budget";
-import { KeywordRule, KeywordRuleId } from "@fidy/server/categories";
+import { KeywordRule, KeywordRuleId } from "../../src/core/categories/contract";
 import { Memory, MemoryId } from "@fidy/server/memory-contract";
 import { Budget, BudgetId } from "@fidy/server/budgets-runtime";
 import { StatementSubmission } from "@fidy/server/statement-staging";

@@ -1,19 +1,14 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Option, Result, Schema } from "effect";
-import { CategoryId } from "./reference";
-import {
-  CategoryKeyword,
-  CreateKeywordRuleInput,
-  KeywordRuleId,
-  normalizeCategoryKeyword,
-} from "./model";
+import { CategoryId, CategoryKeyword, CreateKeywordRuleInput, KeywordRuleId } from "./contract";
 import {
   canCreateKeywordRule,
   findKeywordCategory,
   findKnownCaptureCategory,
   hasKeywordRule,
   maximumKeywordRulesPerUser,
-} from "./rules";
+  normalizeCategoryKeyword,
+} from "./operations";
 
 const domicilios = CategoryId.make("11111111-1111-4111-8111-111111111111");
 const mercado = CategoryId.make("22222222-2222-4222-8222-222222222222");

@@ -8,7 +8,7 @@ import {
   UnderBudget,
   hasExactBudgetProgress,
 } from "~/core/budgets/model";
-import { Category } from "~/core/categories/model";
+import { Category } from "~/core/categories/contract";
 import {
   AppliedDashboardPeriod,
   BudgetBarWidget,

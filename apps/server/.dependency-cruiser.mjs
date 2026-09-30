@@ -26,6 +26,22 @@
 export default {
   forbidden: [
     {
+      name: "categories-private-persistence",
+      severity: "error",
+      comment:
+        "Category persistence and categorization internals are private. Call the Categories contract or substantive operations instead.",
+      from: { pathNot: ["^src/shell/categories/", "^cloudflare/categories/"] },
+      to: { path: "^(src/shell|cloudflare)/categories/internal/" },
+    },
+    {
+      name: "categories-no-private-reexports",
+      severity: "error",
+      comment:
+        "Categories publication declares substantive interfaces rather than laundering its private persistence exports.",
+      from: { path: "^(src/shell|cloudflare)/categories/(contract|operations|runtime)\\.ts$" },
+      to: { path: "^(src/shell|cloudflare)/categories/internal/", dependencyTypes: ["export"] },
+    },
+    {
       name: "core-imports-shell",
       severity: "error",
       comment:
@@ -234,6 +250,7 @@ export default {
           "^src/shell/_shared/",
           "^src/shell/(public-http|tokens|insights|memory)/contract\\.ts$",
           "^src/shell/[^/]+/operations\\.ts$",
+          "^src/shell/categories/contract\\.ts$",
         ],
       },
     },

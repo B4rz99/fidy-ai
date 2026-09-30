@@ -1,10 +1,7 @@
 import { canonicalBrowserSession as transactionSession } from "./web-session/operations";
-import {
-  ScopeMissing,
-  UserActionRequired,
-  categoryUnavailable,
-  listCategoriesPath,
-} from "@fidy/server/categories";
+import { ScopeMissing, UserActionRequired } from "../src/shell/public-http/contract";
+import { categoryUnavailable } from "../src/shell/categories/operations";
+import { listCategoriesPath } from "../src/shell/categories/contract";
 import {
   MemoryId,
   type MemoryOperationId,
@@ -13,7 +10,7 @@ import {
   memoryOperationIds,
 } from "@fidy/server/memory-contract";
 import { emailReplacementOperations } from "@fidy/server/email-authentication-runtime";
-import type { TelemetryService } from "@fidy/server/telemetry";
+import { type TelemetryService } from "@fidy/server/telemetry";
 import { Cause, Clock, Data, Effect, Exit, Option, Schema } from "effect";
 import { correctionInput } from "./transactions/transaction-corrections";
 import { BudgetId, CreateBudgetInput, UpdateBudgetInput } from "@fidy/server/budgets-runtime";
@@ -93,15 +90,16 @@ import {
   maximumAtomicBatchCalls,
   operationCatalog,
 } from "@fidy/server/canonical-runtime";
-import { executeProtectedCategories } from "./categories/canonical-category";
 import { executeProtectedSubscriptionQuery } from "./billing/subscription-queries";
 import {
+  executeProtectedCategories,
   keywordRuleIdFromPath,
   keywordRuleInput,
   keywordRuleInvalidInput,
   keywordRuleUnknownId,
   listOwnKeywordRules,
-} from "./categories/canonical-keyword-rules";
+} from "./categories/operations";
+import { executeProtectedSubscriptionQuery } from "./billing/subscription-queries";
 import { contractDigestPattern, gitRevisionPattern } from "./runtime/release-identity";
 import { smokeFailureHeader, smokePath, smokeProofAccepted } from "./runtime/smoke";
 import {

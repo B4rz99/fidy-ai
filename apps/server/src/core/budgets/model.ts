@@ -2,7 +2,7 @@ import { BigDecimal, DateTime, Schema, Struct } from "effect";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { Money, type ReadonlyMoney } from "~/core/_shared/money";
 import { UtcTimestamp } from "~/core/_shared/time";
-import { CategoryId } from "~/core/categories/reference";
+import { CategoryId } from "~/core/categories/contract";
 import { BudgetId } from "./reference";
 
 export { BudgetId } from "./reference";

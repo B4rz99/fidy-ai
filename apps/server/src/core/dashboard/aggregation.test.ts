@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { BigDecimal, Option, Schema } from "effect";
 import { Money } from "~/core/_shared/money";
-import { CategoryId } from "~/core/categories/reference";
+import { CategoryId } from "~/core/categories/contract";
 import { Widget } from "./model";
 import {
   type ProjectedRange,

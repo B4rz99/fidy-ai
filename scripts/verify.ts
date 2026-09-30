@@ -87,7 +87,7 @@ const checks: Array<Check> = [
     env: Bun.env,
   },
   rootCheck("static", "Lint suppressions", ["bun", "run", "lint:suppressions"]),
-  rootCheck("static", "oxlint", ["bun", "run", "lint"]),
+  // Type-aware Oxlint also runs the ordinary rules; do not lint the same workspace twice.
   rootCheck("static", "oxlint type-aware", ["bun", "run", "lint:type-aware"]),
   rootCheck("static", "Format", ["bun", "run", "format:check"]),
   rootCheck("static", "Project-reference build", ["bun", "run", "typecheck"]),
@@ -138,6 +138,13 @@ const checks: Array<Check> = [
     ...(Bun.env.CLOUDFLARE_TEST_SHARD !== undefined
       ? [`--shard=${Bun.env.CLOUDFLARE_TEST_SHARD}`]
       : []),
+    ...(Bun.env.CLOUDFLARE_TEST_REPORT === "true"
+      ? [
+          "--reporter=default",
+          "--reporter=json",
+          "--outputFile=test-results/cloudflare-adapters.json",
+        ]
+      : []),
   ]),
   rootCheck("cloudflare-infra", "Cloudflare infrastructure tests", [
     "bun",
@@ -153,9 +160,15 @@ const checks: Array<Check> = [
     "apps/server",
     "test:email-interpretation",
   ]),
-  rootCheck("unit", "Web tests", ["bun", "run", "--cwd", "apps/web", "test"]),
-  rootCheck("unit", "Web Istanbul coverage", ["bun", "run", "--cwd", "apps/web", "test:coverage"]),
-  rootCheck("unit", "Production deployment adapters", ["bun", "run", "test:production-adapters"]),
+  // Coverage executes the whole web suite, including scripts/production-workflow.test.ts and
+  // scripts/cloudflare-adapter.test.ts; separate uninstrumented runs duplicate that evidence.
+  rootCheck("unit", "Web tests and Istanbul coverage", [
+    "bun",
+    "run",
+    "--cwd",
+    "apps/web",
+    "test:coverage",
+  ]),
   rootCheck("unit", "CI tooling", ["bun", "run", "test:ci-tools"]),
   rootCheck("unit", "Contract checker tests", ["bun", "run", "test:contracts"]),
   rootCheck("browser", "Web static-shell browser checks", [

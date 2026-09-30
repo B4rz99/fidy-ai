@@ -9,7 +9,9 @@ export default defineConfig({
   forbidOnly: isCI,
   retries: isCI ? 2 : 0,
   workers: 2,
-  reporter: "line",
+  reporter: isCI
+    ? [["line"], ["json", { outputFile: "test-results/browser-timings.json" }]]
+    : "line",
   use: {
     baseURL: "https://127.0.0.1:4173",
     ignoreHTTPSErrors: true,

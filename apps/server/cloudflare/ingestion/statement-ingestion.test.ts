@@ -7,7 +7,8 @@ import {
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { Clock, Data, Effect, Option, Schema } from "effect";
 import { Miniflare } from "miniflare";
-import { afterEach, expect, it } from "vitest";
+import { afterAll, afterEach, expect, it } from "vitest";
+import { installTestSchema, isolatedTestStorage } from "../d1-test-fixture";
 import {
   BatchEnvelope,
   batchCallId,
@@ -21,7 +22,6 @@ import { oversizedChildMessage } from "../mutations/canonical-mutation-batch";
 import { hostedTurnTestMigrations } from "../agent/hosted-turn-test-migrations";
 import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
 import { statementConflictMessage } from "./statement-staging";
-import { applyStatementTestMigration as applyMigration } from "./statement-migrations.test-fixture";
 import {
   dispatchStatementExtraction,
   receiveStatementExtraction,
@@ -55,6 +55,8 @@ const statementBytes = (text = statementCsv): Uint8Array<ArrayBuffer> =>
 
 let sequence = 0;
 const instances: Array<Miniflare> = [];
+const storage = isolatedTestStorage();
+afterAll(() => storage.dispose());
 const migrationNames = [
   "0001_categories",
   "0002_resource_admission",
@@ -106,7 +108,14 @@ type Runtime = Readonly<{
 /** Native coordination proves the deployed binding shape; direct mode permits D1 fault injection. */
 type Coordination = "direct" | "bound" | "without-r2";
 
+let platformBundle = Option.none<Promise<string>>();
 const platformModule = (): Promise<string> =>
+  Option.getOrElse(platformBundle, () => {
+    const bundle = buildPlatformModule();
+    platformBundle = Option.some(bundle);
+    return bundle;
+  });
+const buildPlatformModule = (): Promise<string> =>
   Bun.build({
     entrypoints: [
       new URL("../transactions/transaction-platform-fixture.ts", import.meta.url).pathname,
@@ -158,99 +167,72 @@ const seedUser = (
 ): Promise<unknown> =>
   Promise.all([digest(`verifier${input.index}`), digest(bearer(input.index))]).then(
     ([verifierDigest, tokenDigest]) =>
-      db
-        .prepare(
-          "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)"
-        )
-        .bind(input.userId, input.current)
-        .run()
-        .then(() =>
-          db
-            .prepare(
-              "INSERT INTO browser_login_pairings (id, public_code, verifier_digest, user_id, state, created_at_ms, expires_at_ms) VALUES (?, ?, ?, ?, 'consumed', ?, ?)"
-            )
-            .bind(
-              input.pairingId,
-              `ABCD-123${input.index}`,
-              verifierDigest,
-              input.userId,
-              input.current,
-              input.current + 600_000
-            )
-            .run()
-        )
-        .then(() =>
-          db
-            .prepare(
-              "INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms, fresh_until_ms, idle_expires_at_ms, hard_expires_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-            )
-            .bind(
-              input.sessionId,
-              input.pairingId,
-              input.userId,
-              tokenDigest,
-              input.current,
-              input.current + 600_000,
-              input.current + 3_600_000,
-              input.current + 7_776_000_000
-            )
-            .run()
-        )
+      db.batch([
+        db
+          .prepare(
+            "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)"
+          )
+          .bind(input.userId, input.current),
+        db
+          .prepare(
+            "INSERT INTO browser_login_pairings (id, public_code, verifier_digest, user_id, state, created_at_ms, expires_at_ms) VALUES (?, ?, ?, ?, 'consumed', ?, ?)"
+          )
+          .bind(
+            input.pairingId,
+            `ABCD-123${input.index}`,
+            verifierDigest,
+            input.userId,
+            input.current,
+            input.current + 600_000
+          ),
+        db
+          .prepare(
+            "INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms, fresh_until_ms, idle_expires_at_ms, hard_expires_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+          )
+          .bind(
+            input.sessionId,
+            input.pairingId,
+            input.userId,
+            tokenDigest,
+            input.current,
+            input.current + 600_000,
+            input.current + 3_600_000,
+            input.current + 7_776_000_000
+          ),
+      ])
   );
 
-const setup = (coordination: Coordination = "direct"): Promise<Runtime> =>
+const boundStorage = (coordination: "bound" | "without-r2"): Promise<Runtime> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      sequence += 1;
-      const name = `statement-ingestion-${sequence}`;
-      const module =
-        coordination === "direct"
-          ? "export default { fetch() { return new Response('ok') } }"
-          : yield* fromTestPromise(platformModule);
+      const name = `statement-ingestion-${++sequence}`;
+      const module = yield* fromTestPromise(platformModule);
       const miniflare = new Miniflare({
         workers: [
           {
             config: {
+              name,
+              type: "worker",
               compatibilityDate: "2026-09-08",
               env: {
                 DB: { id: name, type: "d1" },
                 BUCKET: { name, type: "r2" },
-                ...(coordination === "direct"
-                  ? {}
-                  : {
-                      USER_TRANSACTION_COORDINATOR: {
-                        type: "durable-object" as const,
-                        worker: name,
-                        exportName: "UserTransactionCoordinator",
-                      },
-                    }),
+                USER_TRANSACTION_COORDINATOR: {
+                  type: "durable-object",
+                  worker: name,
+                  exportName: "UserTransactionCoordinator",
+                },
                 ...(coordination === "bound"
-                  ? {
-                      STATEMENT_STAGING_BUCKET: { name, type: "r2" as const },
-                    }
+                  ? { STATEMENT_STAGING_BUCKET: { name, type: "r2" as const } }
                   : {}),
               },
-              ...(coordination === "direct"
-                ? {}
-                : {
-                    exports: {
-                      UserTransactionCoordinator: {
-                        type: "durable-object" as const,
-                        storage: "sqlite" as const,
-                      },
-                    },
-                  }),
+              exports: {
+                UserTransactionCoordinator: { type: "durable-object", storage: "sqlite" },
+              },
               manifest: {
                 mainModule: "index.mjs",
-                modules: {
-                  "index.mjs": {
-                    contents: module,
-                    type: "esm",
-                  },
-                },
+                modules: { "index.mjs": { contents: module, type: "esm" } },
               },
-              name,
-              type: "worker",
             },
           },
         ],
@@ -260,22 +242,36 @@ const setup = (coordination: Coordination = "direct"): Promise<Runtime> =>
       const bindings = yield* fromTestPromise(() =>
         miniflare.getBindings<{ DB: D1Database; BUCKET: R2Bucket }>(name)
       );
+      const coordinator = Option.some(yield* fromTestPromise(() => platformCoordinator(miniflare)));
+      return { db: bindings.DB, bucket: bindings.BUCKET, coordinator };
+    })
+  );
+
+const setup = (coordination: Coordination = "direct"): Promise<Runtime> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime: Runtime =
+        coordination === "direct"
+          ? { ...(yield* fromTestPromise(() => storage.acquire())), coordinator: Option.none() }
+          : yield* fromTestPromise(() => boundStorage(coordination));
       yield* fromTestPromise(() =>
-        migrationNames.reduce(
-          (previous, migration) => previous.then(() => applyMigration(bindings.DB, migration)),
-          Promise.resolve()
-        )
+        installTestSchema({
+          db: runtime.db,
+          sources: migrationNames.map(
+            (name) => new URL(`../migrations/${name}.sql`, import.meta.url)
+          ),
+        })
       );
       const current = yield* Clock.currentTimeMillis;
       yield* fromTestPromise(() =>
-        seedUser(bindings.DB, {
+        seedUser(runtime.db, {
           current,
           index: 0,
           pairingId: "10000000-0000-4000-8000-000000000301",
           sessionId: sessionA,
           userId: userA,
         }).then(() =>
-          seedUser(bindings.DB, {
+          seedUser(runtime.db, {
             current,
             index: 1,
             pairingId: "10000000-0000-4000-8000-000000000302",
@@ -284,11 +280,7 @@ const setup = (coordination: Coordination = "direct"): Promise<Runtime> =>
           })
         )
       );
-      const coordinator =
-        coordination === "direct"
-          ? Option.none()
-          : Option.some(yield* fromTestPromise(() => platformCoordinator(miniflare)));
-      return { bucket: bindings.BUCKET, db: bindings.DB, coordinator };
+      return runtime;
     })
   );
 

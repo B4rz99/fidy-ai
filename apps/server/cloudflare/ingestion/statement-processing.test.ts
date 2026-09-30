@@ -1,13 +1,12 @@
 import { statementParserLimits } from "@fidy/server/statement-parser";
 import { Effect, Option } from "effect";
-import { Miniflare } from "miniflare";
-import { afterEach, expect } from "vitest";
+import { installTestSchema, isolatedTestStorage } from "../d1-test-fixture";
+import { afterAll, expect } from "vitest";
 import { it as effectIt } from "@effect/vitest";
 import { currentMillis } from "../pats/pat-shared";
 import { failStatementSubmission, processStatementSubmission } from "./statement-processing";
 import { expireStatementReviewEvidence } from "./statement-review-retention";
 import { StatementStaging, submissionProjection } from "./statement-staging";
-import { applyStatementTestMigration as applyMigration } from "./statement-migrations.test-fixture";
 
 const fromTestPromise = <A>(run: () => PromiseLike<A>): Effect.Effect<A> =>
   Effect.tryPromise(() => Promise.resolve(run())).pipe(Effect.orDie);
@@ -38,45 +37,17 @@ const migrations = [
   "0016_statement_processing",
   "0017_statement_dispatch",
 ];
-const instances: Array<Miniflare> = [];
+const storage = isolatedTestStorage();
 
 const setup = (csv: string): Promise<{ db: D1Database; bucket: R2Bucket }> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const instance = new Miniflare({
-        workers: [
-          {
-            config: {
-              name: "statement-processing-test",
-              type: "worker",
-              compatibilityDate: "2026-09-08",
-              env: { DB: { id: "statement-processing-test", type: "d1" }, BUCKET: { type: "r2" } },
-              manifest: {
-                mainModule: "index.mjs",
-                modules: {
-                  "index.mjs": {
-                    contents: "export default { fetch() { return new Response('ok') } }",
-                    type: "esm",
-                  },
-                },
-              },
-            },
-          },
-        ],
-      });
-      instances.push(instance);
-      yield* fromTestPromise(() => instance.ready);
-      const { DB: db, BUCKET: bucket } = yield* fromTestPromise(() =>
-        instance.getBindings<{
-          DB: D1Database;
-          BUCKET: R2Bucket;
-        }>("statement-processing-test")
-      );
+      const { db, bucket } = yield* fromTestPromise(() => storage.acquire());
       yield* fromTestPromise(() =>
-        migrations.reduce<Promise<void>>(
-          (previous, migration) => previous.then(() => applyMigration(db, migration)),
-          Promise.resolve()
-        )
+        installTestSchema({
+          db,
+          sources: migrations.map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
+        })
       );
       const current = currentMillis();
       yield* fromTestPromise(() =>
@@ -135,14 +106,7 @@ const setup = (csv: string): Promise<{ db: D1Database; bucket: R2Bucket }> =>
     })
   );
 
-afterEach(() =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* fromTestPromise(() => Promise.all(instances.map((instance) => instance.dispose())));
-      instances.length = 0;
-    })
-  )
-);
+afterAll(() => storage.dispose());
 
 effectIt.effect(
   "clears all expired raw review evidence even when more than a hundred rows expire together",

@@ -204,6 +204,16 @@ Use the smallest seam that proves the behavior:
   retention after dispatcher failure. Workflow activity tests do not by themselves prove live
   platform suspension or production alert delivery.
 
+Ordinary D1 and D1/R2 adapter fixtures amortize Miniflare startup through
+`cloudflare/d1-test-fixture.ts`. Each acquisition gets new database and bucket bindings; rows,
+schema, triggers, objects, and coordinator instances are never shared between cases. Checked-in
+migration SQL is cached as immutable text. Ordinary fixtures can install their entire ordered schema
+in one D1 batch before seeding; this is not evidence for production migration boundaries. Migration
+behavior tests and fixtures that seed between migrations retain file-by-file execution. Tests
+of real Durable Object bindings, runtime restart, and platform lifecycle keep fresh runtimes.
+Fixture isolation tests cover contaminated schemas, rows, R2 bytes, and allocation beyond one
+process's binding pool. Files remain serial within each runner.
+
 Tests whose only owner was a removed runtime or provider implementation are deleted. Portable
 domain, schema, security, contract, browser, provider-boundary, and isolation evidence remains
 authoritative.

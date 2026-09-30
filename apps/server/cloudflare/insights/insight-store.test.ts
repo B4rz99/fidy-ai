@@ -1,5 +1,5 @@
-import { Miniflare } from "miniflare";
-import { afterEach, expect } from "vitest";
+import { applyTestMigration, isolatedTestDatabases } from "../d1-test-fixture";
+import { afterAll, expect } from "vitest";
 import { it as effectIt } from "@effect/vitest";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { InsightEventId, InsightGenerationInput } from "@fidy/server/insights-runtime";
@@ -22,29 +22,17 @@ const fromTestPromise = <A>(run: () => PromiseLike<A>): Effect.Effect<A> =>
 
 const users = ["10000000-0000-4000-8000-000000000051", "10000000-0000-4000-8000-000000000052"];
 const sessions = ["10000000-0000-4000-8000-000000000061", "10000000-0000-4000-8000-000000000062"];
-const active: Array<Miniflare> = [];
-let sequence = 0;
+const databases = isolatedTestDatabases();
 /** Direct owner-statement tests keep their historical assertion; the unit uses indexed guards. */
 const insightCompletion = (db: D1Database): D1PreparedStatement =>
   db.prepare(`INSERT INTO insight_mutation_assertion (id, accepted)
     VALUES (1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END)
     ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`);
-afterEach(() => Promise.all(active.splice(0).map((mf) => mf.dispose())));
+afterAll(() => databases.dispose());
 const migrate = (db: D1Database, migration: string): Effect.Effect<void> =>
-  Effect.gen(function* () {
-    const sql = yield* fromTestPromise(() =>
-      Bun.file(new URL(`../migrations/${migration}.sql`, import.meta.url)).text()
-    );
-    const statements = sql
-      .replace(/^--.*$/gmu, "")
-      .trim()
-      .split(/;\s*\n(?=CREATE |ALTER |INSERT |DROP |$)/u);
-    yield* Effect.forEach(
-      statements,
-      (statement) => fromTestPromise(() => db.prepare(statement).run()),
-      { concurrency: 1, discard: true }
-    );
-  });
+  fromTestPromise(() =>
+    applyTestMigration({ db, source: new URL(`../migrations/${migration}.sql`, import.meta.url) })
+  );
 const seedUser = (db: D1Database, index: number, current: number): Effect.Effect<void> =>
   Effect.gen(function* () {
     const user = users[index] ?? "";
@@ -85,31 +73,7 @@ const seedUser = (db: D1Database, index: number, current: number): Effect.Effect
   });
 const setup = (): Effect.Effect<D1Database> =>
   Effect.gen(function* () {
-    const name = `insights-${++sequence}`;
-    const mf = new Miniflare({
-      workers: [
-        {
-          config: {
-            compatibilityDate: "2026-09-08",
-            env: { DB: { id: name, type: "d1" } },
-            manifest: {
-              mainModule: "index.mjs",
-              modules: {
-                "index.mjs": {
-                  contents: "export default {fetch() {return new Response('ok')}}",
-                  type: "esm",
-                },
-              },
-            },
-            name,
-            type: "worker",
-          },
-        },
-      ],
-    });
-    active.push(mf);
-    yield* fromTestPromise(() => mf.ready);
-    const db = yield* fromTestPromise(() => mf.getD1Database("DB"));
+    const db = yield* fromTestPromise(() => databases.acquire());
     const migrations = [
       "0001_categories",
       "0002_resource_admission",

@@ -82,3 +82,9 @@ backed by isolated Miniflare D1. Loopback operator and provider fixtures supply 
 proof delivery, and Wompi responses; focused `page.route` fixtures remain for browser presentation
 and failure states. The server contract gate owns generated OpenAPI freshness, while browser checks
 prove that neither host publishes that artifact.
+
+Browser journey sign-in fixtures advance only the browser's initial polling timer after operator
+approval; real Core proof verification, rate limits, and session creation are unchanged. Dedicated
+pairing journeys retain real-time cadence and real approval/redemption evidence. The mocked expiry
+case advances the browser clock through a pending request and its deadline rather than sleeping.
+CI preserves per-test JSON timings without capturing traces, screenshots, or video.

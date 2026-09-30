@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config";
+import { CloudflareTestSequencer } from "./test-sequencer";
 
 export default defineConfig({
   resolve: {
@@ -9,10 +10,11 @@ export default defineConfig({
   },
   test: {
     include: ["cloudflare/**/*.test.ts"],
+    sequence: { sequencer: CloudflareTestSequencer },
     // Miniflare instances answer their synchronous D1/R2 calls through a worker channel that
     // asserts each response id. Running several D1/R2-heavy files at once delivers a foreign id and
     // fails an unrelated file's test with `assert(message?.id === id)`. Files run one at a time so
-    // the suite is deterministic; the complete suite still finishes in about a minute.
+    // the suite is deterministic; CI distributes files by estimated duration across runners.
     fileParallelism: false,
     testTimeout: 15_000,
   },

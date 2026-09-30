@@ -114,7 +114,16 @@ jobs:
       - name: Cloudflare adapter validation
         env:
           CLOUDFLARE_TEST_SHARD: ${{ matrix.shard }}/4
+          CLOUDFLARE_TEST_REPORT: "true"
         run: bun run verify -- --group cloudflare-adapters
+      - name: Preserve adapter timing evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cloudflare-adapter-timings-${{ matrix.shard }}
+          path: apps/server/test-results/cloudflare-adapters.json
+          if-no-files-found: error
+          retention-days: 7
 
   cloudflare-infra:
     needs: changes
@@ -135,15 +144,27 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/bun-install
+      - name: Select installed Playwright version
+        id: playwright-version
+        working-directory: apps/web
+        run: bun -e 'console.log("version=" + require("@playwright/test/package.json").version)' >> "$GITHUB_OUTPUT"
       - name: Restore Playwright browser cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('bun.lock') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}
       - name: Install Chromium
         run: bunx --bun playwright install --with-deps chromium
       - name: Static-shell browser validation
         run: bun run verify -- --group browser
+      - name: Preserve browser timing evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: browser-timings
+          path: apps/web/test-results/browser-timings.json
+          if-no-files-found: error
+          retention-days: 7
 
   security-secrets:
     name: Secrets

@@ -1,5 +1,6 @@
 import { Miniflare } from "miniflare";
-import { afterEach, expect, it } from "vitest";
+import { afterAll, afterEach, expect, it } from "vitest";
+import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { it as effectIt } from "@effect/vitest";
 import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
 import {
@@ -40,6 +41,7 @@ const sessions = ["10000000-0000-4000-8000-000000000061", "10000000-0000-4000-80
 const category = "10000000-0000-4000-8000-000000000016";
 let sequence = 0;
 const instances: Array<Miniflare> = [];
+const databases = isolatedTestDatabases();
 const digest = (text: string): Promise<Uint8Array> =>
   crypto.subtle
     .digest("SHA-256", new TextEncoder().encode(text))
@@ -84,20 +86,6 @@ const input = (changes: Partial<TestTransactionPayload> = {}): TestTransactionPa
   occurredAt: "2025-01-10T12:00:00.000Z",
   ...changes,
 });
-const applyMigration = (db: D1Database, name: string): Promise<void> =>
-  Bun.file(new URL(`../migrations/${name}.sql`, import.meta.url))
-    .text()
-    .then((sql) =>
-      sql
-        .replace(/^--.*$/gmu, "")
-        .trim()
-        .split(/;\s*\n(?=CREATE |ALTER |INSERT |DROP |$)/u)
-        .reduce<Promise<void>>(
-          (last, statement) => last.then(() => db.prepare(statement).run()).then(() => undefined),
-          Promise.resolve()
-        )
-    );
-
 /** The coordination environment a test DO instance runs with: D1 plus the hosted-inference seam. */
 type CoordinatorTestEnvironment = ConstructorParameters<typeof UserTransactionCoordinator>[1];
 const coordinatorEnvironment = (db: D1Database): CoordinatorTestEnvironment => ({
@@ -106,105 +94,107 @@ const coordinatorEnvironment = (db: D1Database): CoordinatorTestEnvironment => (
   HOSTED_AI_MODEL: approvedWorkersAiModel,
 });
 
-const platformModule = (platform: boolean): Promise<string> =>
+let platformBundle = Option.none<Promise<string>>();
+const platformModule = (): Promise<string> =>
+  Option.getOrElse(platformBundle, () => {
+    const bundle = buildPlatformModule();
+    platformBundle = Option.some(bundle);
+    return bundle;
+  });
+const buildPlatformModule = (): Promise<string> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const built = platform
-        ? yield* fromTestPromise(() =>
-            Bun.build({
-              entrypoints: [new URL("./transaction-platform-fixture.ts", import.meta.url).pathname],
-              target: "browser",
-            })
-          )
-        : undefined;
-      if (built !== undefined && !built.success) throw new Error("Fixture bundle failed");
-      if (built === undefined) return "export default {fetch() {return new Response('ok')}}";
+      const built = yield* fromTestPromise(() =>
+        Bun.build({
+          entrypoints: [new URL("./transaction-platform-fixture.ts", import.meta.url).pathname],
+          target: "browser",
+        })
+      );
+      if (!built.success) throw new Error("Fixture bundle failed");
       const output = built.outputs[0];
       if (output === undefined) throw new Error("Fixture module missing");
       return yield* fromTestPromise(() => output.text());
     })
   );
 
-const setup = (platform = false): Promise<D1Database> =>
+const platformDatabase = (): Promise<D1Database> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      // Every test starts its own deterministic PAT sequence instead of inheriting module order.
-      seededPATSequence = 0;
-      const fixtureModule = yield* fromTestPromise(() => platformModule(platform));
+      const fixtureModule = yield* fromTestPromise(platformModule);
+      const name = `transactions-${++sequence}`;
       const mf = new Miniflare({
         workers: [
           {
             config: {
+              name,
+              type: "worker",
               compatibilityDate: "2026-09-08",
-              env: { DB: { id: `transactions-${++sequence}`, type: "d1" } },
-              ...(platform
-                ? {
-                    exports: {
-                      UserTransactionCoordinator: {
-                        type: "durable-object" as const,
-                        storage: "sqlite" as const,
-                      },
-                    },
-                    env: {
-                      DB: { id: `transactions-${sequence}`, type: "d1" as const },
-                      USER_TRANSACTION_COORDINATOR: {
-                        type: "durable-object" as const,
-                        worker: `transactions-${sequence}`,
-                        exportName: "UserTransactionCoordinator",
-                      },
-                      AI: { type: "json" as const, value: { run: null } },
-                      HOSTED_AI_MODEL: { type: "text" as const, value: approvedWorkersAiModel },
-                    },
-                  }
-                : {}),
+              exports: {
+                UserTransactionCoordinator: { type: "durable-object", storage: "sqlite" },
+              },
+              env: {
+                DB: { id: name, type: "d1" },
+                USER_TRANSACTION_COORDINATOR: {
+                  type: "durable-object",
+                  worker: name,
+                  exportName: "UserTransactionCoordinator",
+                },
+                AI: { type: "json", value: { run: null } },
+                HOSTED_AI_MODEL: { type: "text", value: approvedWorkersAiModel },
+              },
               manifest: {
                 mainModule: "index.mjs",
-                modules: {
-                  "index.mjs": {
-                    contents: fixtureModule,
-                    type: "esm",
-                  },
-                },
+                modules: { "index.mjs": { contents: fixtureModule, type: "esm" } },
               },
-              name: `transactions-${sequence}`,
-              type: "worker",
             },
           },
         ],
       });
       instances.push(mf);
       yield* fromTestPromise(() => mf.ready);
-      const db = yield* fromTestPromise(() => mf.getD1Database("DB"));
+      return yield* fromTestPromise(() => mf.getD1Database("DB"));
+    })
+  );
+afterAll(() => databases.dispose());
+
+const setup = (platform = false): Promise<D1Database> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      // Every test starts its own deterministic PAT sequence instead of inheriting module order.
+      seededPATSequence = 0;
+      const db = platform
+        ? yield* fromTestPromise(() => platformDatabase())
+        : yield* fromTestPromise(() => databases.acquire());
       yield* fromTestPromise(() =>
-        [
-          "0001_categories",
-          "0002_resource_admission",
-          "0003_pending_consent",
-          "0004_onboarding_email",
-          "0005_verified_onboarding",
-          "0006_browser_login",
-          "0009_transactions",
-          "0010_pat_lifecycle",
-          "0011_transaction_corrections",
-          "0012_statement_staging",
-          "0012_transaction_search",
-          "0013_category_keyword_rules",
-          "0013_transaction_reconciliation",
-          "0014_memory",
-          "0015_statement_submission",
-          "0016_budgets",
-          "0016_hosted_turn",
-          "0017_hosted_compaction",
-          "0017_forwarded_email",
-          "0017_statement_dispatch",
-          "0018_batch_envelope_audit",
-          "0019_canonical_child_guards",
-          "0020_dashboard_projection",
-          ...hostedTurnTestMigrations,
-        ].reduce<Promise<void>>(
-          (previous, name) => previous.then(() => applyMigration(db, name)),
-          Promise.resolve()
-        )
+        installTestSchema({
+          db,
+          sources: [
+            "0001_categories",
+            "0002_resource_admission",
+            "0003_pending_consent",
+            "0004_onboarding_email",
+            "0005_verified_onboarding",
+            "0006_browser_login",
+            "0009_transactions",
+            "0010_pat_lifecycle",
+            "0011_transaction_corrections",
+            "0012_statement_staging",
+            "0012_transaction_search",
+            "0013_category_keyword_rules",
+            "0013_transaction_reconciliation",
+            "0014_memory",
+            "0015_statement_submission",
+            "0016_budgets",
+            "0016_hosted_turn",
+            "0017_hosted_compaction",
+            "0017_forwarded_email",
+            "0017_statement_dispatch",
+            "0018_batch_envelope_audit",
+            "0019_canonical_child_guards",
+            "0020_dashboard_projection",
+            ...hostedTurnTestMigrations,
+          ].map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
+        })
       );
       const current = yield* Clock.currentTimeMillis;
       yield* Effect.forEach(
@@ -4020,34 +4010,6 @@ it("does not assign a child to a forged guard marker from an unrelated write", (
     })
   ));
 
-it("rejects a duplicate call identity before any child commits", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* fromTestPromise(() => setup());
-      const duplicate = transactionCall(1, input());
-      const response = yield* fromTestPromise(() =>
-        sendPublicRequest(
-          db,
-          batchRequest(0, [duplicate, transactionCall(1, input({ counterparty: "Dup" }))])
-        )
-      );
-      expect(response.status).toBe(400);
-      const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
-        yield* fromTestPromise(() => response.json())
-      ).pipe(Effect.orDie);
-      expect(rejection.error.code).toBe("validation_failed");
-      expect(rejection.error.failedCallIndex).toBe(1);
-      expect(
-        yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
-      ).toBe(0);
-      expect(
-        yield* fromTestPromise(() =>
-          countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
-        )
-      ).toBe(0);
-    })
-  ));
-
 it("fails closed on a canonical mutation without a batch adapter", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -4880,6 +4842,11 @@ it("rejects a duplicate call identity named across owners before any child commi
       expect(rejection.error.code).toBe("validation_failed");
       expect(rejection.error.failedCallIndex).toBe(1);
       expect(rejection.error.operation).toBe("memory.remember");
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(db, "SELECT COUNT(*) AS count FROM transaction_audit")
+        )
+      ).toBe(0);
       expect(
         yield* fromTestPromise(() =>
           countRows(

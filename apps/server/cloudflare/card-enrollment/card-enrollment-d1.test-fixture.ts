@@ -1,5 +1,6 @@
 import { Data, Effect } from "effect";
 import { Miniflare } from "miniflare";
+import { applyTestMigration } from "../d1-test-fixture";
 
 class FixtureFailure extends Data.TaggedError("FixtureFailure") {}
 const fromPromise = <A>(tryPromise: () => Promise<A>): Effect.Effect<A> =>
@@ -39,15 +40,9 @@ export const makeCardEnrollmentD1 = Effect.fnUntraced(function* (
     "0009_card_enrollment.sql",
     "0012_billing_collection.sql",
   ]) {
-    const migration = yield* fromPromise(() =>
-      Bun.file(new URL(`../migrations/${file}`, import.meta.url)).text()
+    yield* fromPromise(() =>
+      applyTestMigration({ db, source: new URL(`../migrations/${file}`, import.meta.url) })
     );
-    for (const statement of migration
-      .replace(/^--.*$/gmu, "")
-      .trim()
-      .split(/;\s*\n(?=CREATE |DROP |$)/u)) {
-      yield* fromPromise(() => db.prepare(statement).run());
-    }
   }
   return { db, instance };
 });

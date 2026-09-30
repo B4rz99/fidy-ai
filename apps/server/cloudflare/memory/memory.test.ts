@@ -1,5 +1,5 @@
-import { Miniflare } from "miniflare";
-import { afterEach, expect, it, vi } from "vitest";
+import { applyTestMigration, isolatedTestDatabases } from "../d1-test-fixture";
+import { afterAll, expect, it, vi } from "vitest";
 import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
 import { ErrorCode } from "@fidy/server/canonical-runtime";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
@@ -30,8 +30,7 @@ const pairings = [
 const dayMilliseconds = 86_400_000;
 const compareText = (left: string, right: string): number => left.localeCompare(right);
 const compareCount = (left: number, right: number): number => left - right;
-let sequence = 0;
-const instances: Array<Miniflare> = [];
+const databases = isolatedTestDatabases();
 const clock = (): number => Effect.runSync(Clock.currentTimeMillis);
 const iso = (milliseconds: number): string => DateTime.formatIso(DateTime.makeUnsafe(milliseconds));
 /** Advances wall-clock ordering so two retained Memories cannot share one created instant. */
@@ -47,18 +46,7 @@ const identifier = (): string =>
   `20000000-0000-4000-8000-${String((identifierSequence += 1)).padStart(12, "0")}`;
 const cookie = (index: number): string => `__Host-fidy_session=${bearer(index)}`;
 const applyMigration = (db: D1Database, name: string): Promise<void> =>
-  Bun.file(new URL(`../migrations/${name}.sql`, import.meta.url))
-    .text()
-    .then((sql) =>
-      sql
-        .replace(/^--.*$/gmu, "")
-        .trim()
-        .split(/;\s*\n(?=CREATE |ALTER |INSERT |DROP |$)/u)
-        .reduce<Promise<void>>(
-          (last, statement) => last.then(() => db.prepare(statement).run()).then(() => undefined),
-          Promise.resolve()
-        )
-    );
+  applyTestMigration({ db, source: new URL(`../migrations/${name}.sql`, import.meta.url) });
 
 type Send = Readonly<{ path: string; method: "GET" | "POST" | "PUT" | "DELETE" }> &
   Partial<
@@ -77,30 +65,7 @@ const setup = (): Promise<D1Database> =>
     Effect.gen(function* () {
       // Each test owns fresh coordinator instances so no request can reach a disposed database.
       coordinators.clear();
-      const mf = new Miniflare({
-        workers: [
-          {
-            config: {
-              compatibilityDate: "2026-09-08",
-              env: { DB: { id: `memory-${++sequence}`, type: "d1" } },
-              manifest: {
-                mainModule: "index.mjs",
-                modules: {
-                  "index.mjs": {
-                    contents: "export default {fetch(){return new Response('ok')}}",
-                    type: "esm",
-                  },
-                },
-              },
-              name: `memory-${sequence}`,
-              type: "worker",
-            },
-          },
-        ],
-      });
-      instances.push(mf);
-      yield* fromTestPromise(() => mf.ready);
-      const db = yield* fromTestPromise(() => mf.getD1Database("DB"));
+      const db = yield* fromTestPromise(() => databases.acquire());
       yield* fromTestPromise(() =>
         [
           "0001_categories",
@@ -353,11 +318,7 @@ const auditRows = (db: D1Database, user: string): Promise<ReadonlyArray<AuditRow
     Effect.runPromise
   );
 
-afterEach(() =>
-  Effect.runPromise(
-    fromTestPromise(() => Promise.all(instances.splice(0).map((mf) => mf.dispose())))
-  )
-);
+afterAll(() => databases.dispose());
 
 it("normalizes formatting, retains current prose, and recalls it in stable creation order", () =>
   Effect.runPromise(

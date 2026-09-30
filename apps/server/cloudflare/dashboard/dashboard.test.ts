@@ -1,5 +1,5 @@
-import { Miniflare } from "miniflare";
-import { afterEach, expect, it } from "vitest";
+import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { afterAll, expect, it } from "vitest";
 import { BigDecimal, type Cause, DateTime, Effect, Schema } from "effect";
 import { repairDashboardProjection } from "../transactions/dashboard-repair";
 import { DashboardDocument } from "../../src/core/dashboard/model";
@@ -14,29 +14,12 @@ import publicWorker from "../public-worker";
 
 const users = ["10000000-0000-4000-8000-000000000051", "10000000-0000-4000-8000-000000000052"];
 const sessions = ["10000000-0000-4000-8000-000000000061", "10000000-0000-4000-8000-000000000062"];
-const instances: Array<Miniflare> = [];
-let sequence = 0;
+const databases = isolatedTestDatabases();
 const bearer = (index: number): string => String(index + 1).repeat(43);
 const digest = (text: string): Promise<Uint8Array> =>
   crypto.subtle
     .digest("SHA-256", new TextEncoder().encode(text))
     .then((value) => new Uint8Array(value));
-
-const migrate = (db: D1Database, name: string): Effect.Effect<void, Cause.UnknownError> =>
-  Effect.gen(function* () {
-    const sql = yield* Effect.tryPromise(() =>
-      Bun.file(new URL(`../migrations/${name}.sql`, import.meta.url)).text()
-    );
-    const statements = sql
-      .replace(/^--.*$/gmu, "")
-      .trim()
-      .split(/;\s*\n(?=CREATE |ALTER |INSERT |DROP |$)/u);
-    yield* Effect.forEach(
-      statements,
-      (statement) => Effect.tryPromise(() => db.prepare(statement).run()),
-      { discard: true }
-    );
-  });
 
 const seedUser = ({
   db,
@@ -50,101 +33,73 @@ const seedUser = ({
   current: number;
 }>): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
+    const verifierDigest = yield* Effect.tryPromise(() => digest(`verifier${index}`));
+    const tokenDigest = yield* Effect.tryPromise(() => digest(bearer(index)));
     yield* Effect.tryPromise(() =>
-      db
-        .prepare(
-          "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)"
-        )
-        .bind(user, current)
-        .run()
-    );
-    const credentialDigest1 = yield* Effect.tryPromise(() => digest(`verifier${index}`));
-    yield* Effect.tryPromise(() =>
-      db
-        .prepare(
-          "INSERT INTO browser_login_pairings (id, public_code, verifier_digest, user_id, state, created_at_ms, expires_at_ms) VALUES (?, ?, ?, ?, 'consumed', ?, ?)"
-        )
-        .bind(
-          `10000000-0000-4000-8000-00000000007${index}`,
-          `ABCD-123${index}`,
-          credentialDigest1,
-          user,
-          current,
-          current + 600000
-        )
-        .run()
-    );
-    const credentialDigest2 = yield* Effect.tryPromise(() => digest(bearer(index)));
-    yield* Effect.tryPromise(() =>
-      db
-        .prepare(
-          "INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms, fresh_until_ms, idle_expires_at_ms, hard_expires_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-        )
-        .bind(
-          sessions[index],
-          `10000000-0000-4000-8000-00000000007${index}`,
-          user,
-          credentialDigest2,
-          current,
-          current + 600000,
-          current + 3600000,
-          current + 7776000000
-        )
-        .run()
+      db.batch([
+        db
+          .prepare(
+            "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)"
+          )
+          .bind(user, current),
+        db
+          .prepare(
+            "INSERT INTO browser_login_pairings (id, public_code, verifier_digest, user_id, state, created_at_ms, expires_at_ms) VALUES (?, ?, ?, ?, 'consumed', ?, ?)"
+          )
+          .bind(
+            `10000000-0000-4000-8000-00000000007${index}`,
+            `ABCD-123${index}`,
+            verifierDigest,
+            user,
+            current,
+            current + 600000
+          ),
+        db
+          .prepare(
+            "INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms, fresh_until_ms, idle_expires_at_ms, hard_expires_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+          )
+          .bind(
+            sessions[index],
+            `10000000-0000-4000-8000-00000000007${index}`,
+            user,
+            tokenDigest,
+            current,
+            current + 600000,
+            current + 3600000,
+            current + 7776000000
+          ),
+      ])
     );
   });
 
 const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
   Effect.gen(function* () {
-    const id = `dashboard-${++sequence}`;
-    const mf = new Miniflare({
-      workers: [
-        {
-          config: {
-            compatibilityDate: "2026-09-08",
-            env: { DB: { id, type: "d1" } },
-            manifest: {
-              mainModule: "index.mjs",
-              modules: {
-                "index.mjs": {
-                  contents: "export default {fetch() {return new Response('ok')}}",
-                  type: "esm",
-                },
-              },
-            },
-            name: id,
-            type: "worker",
-          },
-        },
-      ],
-    });
-    instances.push(mf);
-    yield* Effect.tryPromise(() => mf.ready);
-    const db = yield* Effect.tryPromise(() => mf.getD1Database("DB"));
-    yield* Effect.forEach(
-      [
-        "0001_categories",
-        "0003_pending_consent",
-        "0004_onboarding_email",
-        "0005_verified_onboarding",
-        "0006_browser_login",
-        "0009_transactions",
-        "0010_pat_lifecycle",
-        "0011_transaction_corrections",
-        "0012_statement_staging",
-        "0012_transaction_search",
-        "0013_category_keyword_rules",
-        "0013_transaction_reconciliation",
-        "0014_memory",
-        "0015_statement_submission",
-        "0016_budgets",
-        "0017_statement_dispatch",
-        "0018_dashboard",
-        "0019_canonical_child_guards",
-        "0020_dashboard_projection",
-      ],
-      (name) => migrate(db, name),
-      { discard: true }
+    const db = yield* Effect.tryPromise(() => databases.acquire());
+    yield* Effect.tryPromise(() =>
+      installTestSchema({
+        db,
+        sources: [
+          "0001_categories",
+          "0003_pending_consent",
+          "0004_onboarding_email",
+          "0005_verified_onboarding",
+          "0006_browser_login",
+          "0009_transactions",
+          "0010_pat_lifecycle",
+          "0011_transaction_corrections",
+          "0012_statement_staging",
+          "0012_transaction_search",
+          "0013_category_keyword_rules",
+          "0013_transaction_reconciliation",
+          "0014_memory",
+          "0015_statement_submission",
+          "0016_budgets",
+          "0017_statement_dispatch",
+          "0018_dashboard",
+          "0019_canonical_child_guards",
+          "0020_dashboard_projection",
+        ].map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
+      })
     );
     const current = DateTime.nowUnsafe().epochMilliseconds;
     yield* Effect.forEach(users, (user, index) => seedUser({ db, user, index, current }), {
@@ -152,7 +107,7 @@ const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
     });
     return db;
   });
-afterEach(() => Promise.all(instances.splice(0).map((mf) => mf.dispose())));
+afterAll(() => databases.dispose());
 
 const seedPAT = (
   db: D1Database,

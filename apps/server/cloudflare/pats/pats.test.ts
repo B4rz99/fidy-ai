@@ -1,16 +1,16 @@
-import { Miniflare } from "miniflare";
+import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import * as D1Client from "@effect/sql-d1/D1Client";
 import { listCategoriesResponse } from "@fidy/server/categories";
 import { Clock, Context, Data, DateTime, Effect, Layer, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
 import { hostedTurnTestMigrations } from "../agent/hosted-turn-test-migrations";
 
-const instances: Array<Miniflare> = [];
+const databases = isolatedTestDatabases();
 const userA = "10000000-0000-4000-8000-000000000001";
 const userB = "20000000-0000-4000-8000-000000000002";
 const Started = Schema.Struct({
@@ -84,35 +84,7 @@ const setup = (
 }> =>
   runTest(
     Effect.gen(function* () {
-      const mf = new Miniflare({
-        workers: [
-          {
-            config: {
-              compatibilityDate: "2026-09-08",
-              env: {
-                DB: {
-                  id: "pats",
-                  type: "d1",
-                },
-              },
-              manifest: {
-                mainModule: "index.mjs",
-                modules: {
-                  "index.mjs": {
-                    contents: "export default {fetch(){return new Response('ok')}}",
-                    type: "esm",
-                  },
-                },
-              },
-              name: "pats",
-              type: "worker",
-            },
-          },
-        ],
-      });
-      instances.push(mf);
-      yield* awaitPromise(mf.ready);
-      const db = yield* awaitPromise(mf.getD1Database("DB"));
+      const db = yield* awaitPromise(databases.acquire());
       const migrationNames = [
         "0001_categories",
         "0002_resource_admission",
@@ -142,17 +114,14 @@ const setup = (
         "0020_dashboard_projection",
         ...hostedTurnTestMigrations,
       ];
-      for (const name of migrationNames) {
-        const sql = yield* awaitPromise(
-          Bun.file(new URL(`../migrations/${name}.sql`, import.meta.url)).text()
-        );
-        for (const statement of sql
-          .replace(/^--.*$/gmu, "")
-          .trim()
-          .split(/;\s*\n(?=CREATE |ALTER |INSERT |DROP |$)/u)) {
-          yield* awaitPromise(db.prepare(statement).run());
-        }
-      }
+      yield* awaitPromise(
+        installTestSchema({
+          db,
+          sources: migrationNames.map(
+            (name) => new URL(`../migrations/${name}.sql`, import.meta.url)
+          ),
+        })
+      );
       const createSession = (user: string, index: number): Promise<string> =>
         runTest(
           Effect.gen(function* () {
@@ -323,14 +292,8 @@ const issueManualPAT = ({
       yield* awaitPromise(response.json())
     )).data;
   });
-afterEach(() =>
-  runTest(
-    Effect.gen(function* () {
-      vi.useRealTimers();
-      yield* awaitPromise(Promise.all(instances.splice(0).map((mf) => mf.dispose())));
-    })
-  )
-);
+afterEach(() => vi.useRealTimers());
+afterAll(() => databases.dispose());
 it("releases one scoped bearer to the private-code holder after web approval, never on replay", () =>
   runTest(
     Effect.gen(function* () {

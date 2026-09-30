@@ -1,5 +1,5 @@
-import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { handleWebAuthentication } from "../web-authentication/operations";
+import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 
 import { DisabledTelemetryResource, makeTelemetryService } from "@fidy/server/telemetry";
 
@@ -297,24 +297,28 @@ afterEach(() =>
   )
 );
 
-it("refuses a wrong browser protocol method without admitting a pairing", async () => {
-  const { db } = await setup();
-  const response = await Effect.runPromise(
-    handleWebAuthentication({
-      request: new Request("https://api.fidyapp.com/web/pairings"),
-      db,
-      publish: () => undefined,
+it("refuses a wrong browser protocol method without admitting a pairing", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db } = yield* Effect.tryPromise(() => setup());
+      const response = yield* handleWebAuthentication({
+        request: new Request("https://api.fidyapp.com/web/pairings"),
+        db,
+        publish: () => undefined,
+      });
+      expect(response.status).toBe(405);
+      expect(response.headers.get("allow")).toBe("GET");
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(response.headers.get("content-type")).toBe("application/json; charset=utf-8");
+      expect(yield* Effect.tryPromise(() => response.json())).toEqual({
+        status: "method_not_allowed",
+      });
+      const retained = yield* Effect.tryPromise(() =>
+        db.prepare("SELECT COUNT(*) AS count FROM browser_login_pairings").first()
+      );
+      expect(retained).toEqual({ count: 0 });
     })
-  );
-  expect(response.status).toBe(405);
-  expect(response.headers.get("allow")).toBe("GET");
-  expect(response.headers.get("cache-control")).toBe("no-store");
-  expect(response.headers.get("content-type")).toBe("application/json; charset=utf-8");
-  expect(await response.json()).toEqual({ status: "method_not_allowed" });
-  expect(await db.prepare("SELECT COUNT(*) AS count FROM browser_login_pairings").first()).toEqual({
-    count: 0,
-  });
-});
+  ));
 
 it("creates one complete stable identity on first valid mailbox proof and refuses replay", () =>
   Effect.runPromise(

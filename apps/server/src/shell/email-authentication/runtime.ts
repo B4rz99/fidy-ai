@@ -4,7 +4,7 @@ import type { HttpClient } from "effect/unstable/http";
 
 import { UserId } from "~/core/identity/reference";
 
-import { WebSessionId } from "~/core/web-session/reference";
+import { WebSessionId } from "~/core/web-session/contract";
 
 import type { CanonicalImplementationCaller } from "~/shell/_shared/canonical-implementation";
 
@@ -33,11 +33,11 @@ export const emailReplacementImplementations = {
 
 /** The browser WebSession is the sole authority for the canonical replacement invocation. */
 export const browserReplacementCaller = (session: {
-  readonly user_id: string;
+  readonly userId: string;
   readonly id: string;
 }): CanonicalImplementationCaller => ({
   resolved: {
-    subjectUserId: UserId.make(session.user_id),
+    subjectUserId: UserId.make(session.userId),
     capabilities: [],
     authorityRoot: "no-verified-whatsapp-authority",
     auditCaller: { _tag: "WebSession", webSessionId: WebSessionId.make(session.id) },

@@ -8,7 +8,7 @@ import { PendingConsentExchangeId } from "~/core/consent/reference";
 
 import { UserId, WhatsAppCallerReference } from "~/core/identity/reference";
 
-import { WebSessionId } from "~/core/web-session/reference";
+import { WebSessionId } from "~/core/web-session/contract";
 
 const maximumEmailAddressLength = 254;
 

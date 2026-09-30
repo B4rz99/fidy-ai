@@ -3,10 +3,8 @@ import { emailReplacementFreshBody, emailReplacementInvalidBody } from "@fidy/se
 import { type EmailReplacementMutationService } from "@fidy/server/email-authentication-operations";
 
 import { Clock, Crypto, Data, Effect, Exit, Option, PlatformError, Schema } from "effect";
-
+import { freshBrowserSession } from "../../web-session/operations";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../../http/request-body";
-
-import { freshBrowserSession } from "../../identity/browser-login";
 
 const Proof = Schema.Struct({
   user_id: Schema.String.check(Schema.isUUID()),
@@ -115,12 +113,12 @@ const startProof = (
   return Effect.runPromise(
     attempt(() =>
       db.batch([
-        admissionStatement(db, { userId: session.user_id, workId, current }),
+        admissionStatement(db, { userId: session.userId, workId, current }),
         db
           .prepare(`INSERT INTO email_replacement_audit
       (id, user_id, session_id, operation, outcome, occurred_at_ms)
       VALUES (?, ?, ?, 'requestEmailReplacement', 'accepted', ?)`)
-          .bind(newId(), session.user_id, session.id, current),
+          .bind(newId(), session.userId, session.id, current),
         db
           .prepare(`INSERT INTO email_replacements
       (user_id, work_id, session_id, candidate_email, prior_email, prior_verified_at_ms,
@@ -145,7 +143,7 @@ const startProof = (
             candidateEmail,
             current,
             current + proofLifetimeMilliseconds,
-            session.user_id,
+            session.userId,
             candidateEmail,
             workId,
             candidateEmail,
@@ -208,10 +206,7 @@ const replacementCommitted = (committed: Exit.Exit<ReadonlyArray<D1Result>, void
 const redeemProof = (
   db: D1Database,
   input: {
-    session: {
-      readonly id: string;
-      readonly user_id: string;
-    };
+    session: { readonly id: string; readonly userId: string };
     combinedCode: string;
     current: number;
   }
@@ -225,7 +220,7 @@ const redeemProof = (
           .prepare(`SELECT user_id, work_id, proof_digest FROM email_replacements
       WHERE user_id = ? AND session_id = ? AND state = 'awaiting_proof'
         AND public_code = ? AND proof_expires_at_ms > ? AND expires_at_ms > ?`)
-          .bind(session.user_id, session.id, publicCode, current, current)
+          .bind(session.userId, session.id, publicCode, current, current)
           .first()
       );
       const proof = Schema.decodeUnknownOption(Proof)(raw);
@@ -248,7 +243,7 @@ const redeemProof = (
         attempt(() =>
           commitReplacement(db, {
             workId: proof.value.work_id,
-            userId: session.user_id,
+            userId: session.userId,
             sessionId: session.id,
             publicCode,
             current,
@@ -263,10 +258,7 @@ const redeemProof = (
     })
   );
 
-export type SessionSubject = {
-  readonly id: string;
-  readonly user_id: string;
-};
+export type SessionSubject = { readonly id: string; readonly userId: string };
 
 class ReplacementDatabaseUnavailable extends Data.TaggedError("ReplacementDatabaseUnavailable")<{
   readonly operation: "request" | "complete";
@@ -284,7 +276,7 @@ const replacementAdapter = ({
   onAccepted: (id: string) => void;
 }): EmailReplacementMutationService => ({
   request: (subject, candidateEmail) => {
-    if (subject !== session.user_id) return Effect.die("Email replacement subject mismatch");
+    if (subject !== session.userId) return Effect.die("Email replacement subject mismatch");
     const workId = newId();
     return Effect.tryPromise({
       try: () => startProof(db, { session, candidateEmail, workId, current }),
@@ -295,7 +287,7 @@ const replacementAdapter = ({
     );
   },
   complete: (subject, combinedCode) =>
-    subject === session.user_id
+    subject === session.userId
       ? Effect.tryPromise({
           try: () => redeemProof(db, { session, combinedCode, current }),
           catch: () => new ReplacementDatabaseUnavailable({ operation: "complete" }),
@@ -315,7 +307,7 @@ const recordRejected = (
         .prepare(`INSERT INTO email_replacement_audit
     (id, user_id, session_id, operation, outcome, occurred_at_ms)
     VALUES (?, ?, ?, 'completeEmailReplacement', 'rejected', ?)`)
-        .bind(auditId, session.user_id, session.id, current)
+        .bind(auditId, session.userId, session.id, current)
         .run()
     ).pipe(Effect.asVoid)
   );
@@ -345,7 +337,7 @@ const rejectWrongProof = (
           .prepare(`INSERT INTO email_replacement_audit
       (id, user_id, session_id, operation, outcome, occurred_at_ms)
       VALUES (?, ?, ?, 'completeEmailReplacement', 'rejected', ?)`)
-          .bind(newId(), session.user_id, session.id, current),
+          .bind(newId(), session.userId, session.id, current),
       ])
     ).pipe(Effect.asVoid)
   );

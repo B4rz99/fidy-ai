@@ -20,7 +20,7 @@ import {
   WhatsAppBusinessScopedUserId,
 } from "~/core/identity/reference";
 
-import { WebSessionId } from "~/core/web-session/reference";
+import { WebSessionId } from "~/core/web-session/contract";
 
 const decodeEmail = Schema.decodeUnknownResult(EmailAddress);
 

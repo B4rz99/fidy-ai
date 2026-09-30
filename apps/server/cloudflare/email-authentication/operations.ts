@@ -26,7 +26,7 @@ import {
 
 import { Clock, Data, Effect, Option, Schema } from "effect";
 
-import { freshBrowserSession } from "../identity/browser-login";
+import { freshBrowserSession } from "../web-session/operations";
 
 import { internals as replacementInternals } from "./internal/replacement";
 

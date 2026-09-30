@@ -8,7 +8,7 @@ import {
 import {
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
-} from "../../src/core/identity/reference";
+} from "../../src/core/identity/contract";
 import { WhatsAppInboundEvidence } from "./hosted-authority";
 import {
   HostedDeliveryCorrelationToken,
@@ -201,24 +201,4 @@ export const readWhatsAppPendingWork = ({
         .first()
     );
     return Schema.decodeUnknownOption(PendingWork)(raw);
-  });
-
-/** Pre-coordination lookup, not authorization: the coordinator must recheck the association. */
-export const findWhatsAppUser = ({
-  db,
-  portfolioId,
-  bsuid,
-}: Readonly<{
-  db: D1Database;
-  portfolioId: WhatsAppBusinessPortfolioId;
-  bsuid: WhatsAppBusinessScopedUserId;
-}>): Effect.Effect<Option.Option<UserId>, Cause.UnknownError> =>
-  Effect.gen(function* () {
-    const row = yield* Effect.tryPromise(() =>
-      db
-        .prepare("SELECT user_id FROM whatsapp_identities WHERE portfolio_id = ? AND bsuid = ?")
-        .bind(portfolioId, bsuid)
-        .first()
-    );
-    return Option.map(Schema.decodeUnknownOption(UserRow)(row), ({ user_id }) => user_id);
   });

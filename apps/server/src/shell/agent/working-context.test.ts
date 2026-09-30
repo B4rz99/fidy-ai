@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime, Option, Schema } from "effect";
 import { IanaTimeZone } from "~/core/_shared/context";
-import { UserId } from "~/core/identity/reference";
+import { UserId } from "~/core/identity/contract";
 import { TranscriptEntry, TranscriptTurnId } from "~/core/transcript/model";
 import { HostedAgentSessionId } from "~/core/transcript/reference";
 import { type SessionTranscriptEntry, assembleWorkingContext } from "./working-context";

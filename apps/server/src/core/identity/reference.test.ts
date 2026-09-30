@@ -5,7 +5,7 @@ import {
   UserId,
   WhatsAppBusinessScopedUserId,
   WhatsAppParentBusinessScopedUserId,
-} from "./reference";
+} from "./contract";
 
 it("rejects an owner id that is not a UUID", () => {
   const decodeUserId = Schema.decodeUnknownResult(UserId);

@@ -185,7 +185,7 @@ const probes: readonly Probe[] = [
       {
         path: `${testingServerInternal}/probe.ts`,
         source:
-          'import type { Identity } from "../../../../server/src/core/identity/model";\n\n' +
+          'import type { Identity } from "../../../../server/src/core/identity/contract";\n\n' +
           "export type ServerInternalProbe = Identity;\n",
       },
     ],

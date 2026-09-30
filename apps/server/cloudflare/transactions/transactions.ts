@@ -8,6 +8,8 @@ import {
   keywordRulesQuery,
 } from "@fidy/server/categories";
 import { DateTime, Effect, Option, Schema } from "effect";
+import type { UserContext } from "../../src/core/identity/contract";
+import { findUserContext } from "../identity/operations";
 import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
 import {
   type TransactionBoundaryFailure,
@@ -37,11 +39,6 @@ import {
 } from "../mutations/transaction-outcome";
 
 const Input = Schema.toCodecJson(CreateTransactionInput);
-const UserContext = Schema.Struct({
-  service_market: Schema.String,
-  locale: Schema.String,
-  time_zone: Schema.String,
-});
 const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: maximumTransactionInputBytes,
   deadlineMilliseconds: 2000,
@@ -50,7 +47,7 @@ const policy = Schema.decodeSync(RequestBodyPolicy)({
 type Capture = Readonly<{
   input: typeof Input.Type;
   subject: TransactionCaller;
-  context: typeof UserContext.Type;
+  context: UserContext;
   categoryId: CategoryId;
   id: string;
   current: number;
@@ -112,9 +109,9 @@ const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedSt
       SELECT ?, user_id, id, 'manual', ?, ?, ?, 'manual-v1', ? FROM transactions WHERE user_id = ? AND id = ?`)
       .bind(
         transactionId(),
-        context.service_market,
+        context.serviceMarket,
         context.locale,
-        context.time_zone,
+        context.timeZone,
         createdAt,
         subject.userId,
         id
@@ -142,15 +139,8 @@ const hasUnknownCategory = (db: D1Database, categoryId: Option.Option<string>): 
 const captureUserContext = (
   db: D1Database,
   userId: string
-): Effect.Effect<Option.Option<typeof UserContext.Type>, TransactionBoundaryFailure> =>
-  Effect.tryPromise({
-    try: () =>
-      db
-        .prepare("SELECT service_market, locale, time_zone FROM users WHERE id = ?")
-        .bind(userId)
-        .first(),
-    catch: boundaryFailure,
-  }).pipe(Effect.map(Schema.decodeUnknownOption(UserContext)));
+): Effect.Effect<Option.Option<UserContext>, TransactionBoundaryFailure> =>
+  findUserContext({ db, userId }).pipe(Effect.mapError(boundaryFailure));
 
 const findRuleCategory = ({
   db,
@@ -234,7 +224,7 @@ const captureMutation = ({
   db: D1Database;
   subject: TransactionCaller;
   input: typeof Input.Type;
-  context: typeof UserContext.Type;
+  context: UserContext;
   categoryId: CategoryId;
   current: number;
 }>): PreparedCanonicalMutation => {

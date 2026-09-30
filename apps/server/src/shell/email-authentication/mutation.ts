@@ -1,10 +1,13 @@
 import { Context, Effect } from "effect";
 import type { EmailAddress } from "~/core/email-authentication/model";
-import type { UserId } from "~/core/identity/reference";
+import type { UserId } from "~/core/identity/contract";
 import type { CanonicalImplementationCaller } from "~/shell/_shared/canonical-implementation-caller";
 import type { CanonicalInput } from "~/shell/_shared/canonical-input";
 import type { CanonicalSuccess } from "~/shell/_shared/canonical-success";
-import { EmailReplacementInvalidApi, emailReplacementInvalidBody } from "~/web-auth-api";
+import {
+  EmailReplacementInvalidApi,
+  emailReplacementInvalidBody,
+} from "~/shell/web-authentication/contract";
 
 /** Cloudflare's transaction adapter; the canonical implementation owns the operation result. */
 export type EmailReplacementMutationService = Readonly<{

@@ -1,6 +1,6 @@
 import { Option } from "effect";
 import type { DateTime } from "effect";
-import type { User } from "~/core/identity/model";
+import type { User } from "~/core/identity/contract";
 import type { TranscriptEntry } from "~/core/transcript/model";
 import type { HostedContextSection } from "~/shell/hosted-inference/contract";
 

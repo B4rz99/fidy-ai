@@ -2,7 +2,7 @@ import { DateTime, Option, type Schema } from "effect";
 import type { Prompt } from "effect/unstable/ai";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { categoryRows } from "~/core/categories/taxonomy";
-import type { User } from "~/core/identity/model";
+import type { User } from "~/core/identity/contract";
 import {
   type TranscriptEntry,
   TranscriptEntryId,

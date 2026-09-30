@@ -6,7 +6,7 @@ import { BrowserLoginPairingId } from "~/core/browser-login/contract";
 
 import { PendingConsentExchangeId } from "~/core/consent/reference";
 
-import { UserId, WhatsAppCallerReference } from "~/core/identity/reference";
+import { UserId, WhatsAppCallerReference } from "~/core/identity/contract";
 
 import { WebSessionId } from "~/core/web-session/contract";
 

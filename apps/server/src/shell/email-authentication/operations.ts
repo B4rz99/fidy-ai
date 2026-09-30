@@ -2,7 +2,7 @@ import { Context, Effect } from "effect";
 
 import type { EmailAddress } from "~/core/email-authentication/contract";
 
-import type { UserId } from "~/core/identity/reference";
+import type { UserId } from "~/core/identity/contract";
 
 import type { CanonicalImplementationCaller } from "~/shell/_shared/canonical-implementation-caller";
 

@@ -2,7 +2,7 @@ import { Config, Context, Effect, Layer, Option, type Redacted, Schema } from "e
 
 import type { HttpClient } from "effect/unstable/http";
 
-import { UserId } from "~/core/identity/reference";
+import { UserId } from "~/core/identity/contract";
 
 import { WebSessionId } from "~/core/web-session/contract";
 

@@ -1,5 +1,5 @@
 import { Option } from "effect";
-import type { UserId } from "~/core/identity/reference";
+import type { UserId } from "~/core/identity/contract";
 import type { HostedAgentSessionConsentBasis } from "./hosted-agent-session";
 import type { HostedAgentSessionId } from "./reference";
 

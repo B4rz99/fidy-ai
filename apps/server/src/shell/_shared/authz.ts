@@ -7,7 +7,7 @@ import type {
   CanonicalCapabilities,
   CanonicalOperationId,
 } from "~/core/canonical-operations/contract";
-import type { UserId } from "~/core/identity/reference";
+import type { UserId } from "~/core/identity/contract";
 import { type TokenBearer, TokenBearerFormat } from "~/core/tokens/model";
 import {
   ConsentRequired,

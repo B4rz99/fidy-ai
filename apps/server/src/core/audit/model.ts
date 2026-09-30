@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
-import { UserId } from "~/core/identity/reference";
+import { UserId } from "~/core/identity/contract";
 import { PATId } from "~/core/tokens/reference";
 import { HostedAgentSessionId } from "~/core/transcript/reference";
 import { WebSessionId } from "~/core/web-session/contract";

@@ -11,7 +11,7 @@ import {
   selectPublicCodeSymbols,
 } from "../../src/core/browser-login/operations";
 import { calculateWebSessionDeadlines } from "../../src/core/web-session/operations";
-import type { UserId } from "../../src/core/identity/reference";
+import type { UserId } from "../../src/core/identity/contract";
 import { Clock, DateTime, Effect, Encoding, Option, Schema } from "effect";
 import { pairingId as newPairingId } from "./internal/worker-crypto";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";

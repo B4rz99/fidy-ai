@@ -1,6 +1,6 @@
 import { Function, Schema } from "effect";
 import { DisclosureDeliveryCorrelationToken } from "~/core/provider-evidence/contract";
-import { PendingConsentExchangeId } from "~/core/consent/model";
+import { PendingConsentExchangeId } from "~/core/consent/contract";
 
 export { DisclosureDeliveryCorrelationToken } from "~/core/provider-evidence/contract";
 

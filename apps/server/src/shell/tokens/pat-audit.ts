@@ -1,4 +1,5 @@
 import { Option } from "effect";
+import { consentNotRevoked } from "~/shell/consent/runtime";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 import {
   type FreshSessionSubject,
@@ -63,7 +64,7 @@ export const recordPATList = ({
   sql: `INSERT INTO pat_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
     SELECT ?,?,?,'pats.listPATs','accepted',? WHERE EXISTS (SELECT 1 FROM web_sessions
     WHERE id = ? AND user_id = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?)
-    AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = ?)`,
+    AND ${consentNotRevoked("?")}`,
   params: [
     input.id,
     session.userId,

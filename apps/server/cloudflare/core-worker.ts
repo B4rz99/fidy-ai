@@ -46,7 +46,7 @@ import {
   receiveConsentWebhook,
   recoverPendingDisclosures,
   sweepExpiredConsent,
-} from "./onboarding/consent-ingress";
+} from "./consent/runtime";
 import { transactionInput, unauthenticatedTransaction } from "./transactions/transactions";
 import {
   type TransactionCaller,

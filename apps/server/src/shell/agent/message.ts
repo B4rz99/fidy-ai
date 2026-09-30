@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import type { UserId } from "~/core/identity/contract";
-import { ProviderQualifiedMessages } from "~/core/consent/model";
+import { ProviderQualifiedMessages } from "~/core/consent/contract";
 import { TranscriptText } from "~/core/transcript/model";
 
 /** Channel-neutral text and optional provider evidence accepted by the hosted agent. */

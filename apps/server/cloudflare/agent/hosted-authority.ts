@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { consentGranted, consentNotRevoked } from "@fidy/server/consent-runtime";
 import { UserId } from "@fidy/server/agent-runtime";
 import {
   WhatsAppBusinessPortfolioId,

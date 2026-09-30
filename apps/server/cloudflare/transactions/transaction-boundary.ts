@@ -1,4 +1,5 @@
 import { Clock, Data, Effect, Option, Schema } from "effect";
+import { isConsentRevoked } from "../consent/operations";
 import {
   type CanonicalCapability,
   type ErrorCode,
@@ -420,13 +421,10 @@ export const refusedPATWork = ({
   db,
   userId,
 }: Readonly<{ db: D1Database; userId: string }>): Promise<Response> =>
-  Effect.tryPromise({
-    try: () =>
-      db.prepare("SELECT 1 FROM consent_user_revocations WHERE user_id = ?").bind(userId).first(),
-    catch: () => undefined,
-  }).pipe(
+  isConsentRevoked({ db, userId }).pipe(
+    Effect.mapError(() => undefined),
     Effect.map((withdrawn) =>
-      withdrawn === null
+      !withdrawn
         ? transactionFailure({
             code: "unauthenticated",
             status: HTTP_UNAUTHENTICATED,

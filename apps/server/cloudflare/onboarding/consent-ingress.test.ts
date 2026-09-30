@@ -1,9 +1,7 @@
 import { Miniflare } from "miniflare";
 
 import { type Cause, Clock, DateTime, Effect, Equal, Exit, Option, Schema } from "effect";
-
-import { recoverPendingDisclosures, sweepExpiredConsent } from "./consent-ingress";
-
+import { recoverPendingDisclosures, sweepExpiredConsent } from "../consent/runtime";
 import { WhatsAppStatusAdmission, WhatsAppTurnAdmission } from "../agent/whatsapp-turn";
 
 import {

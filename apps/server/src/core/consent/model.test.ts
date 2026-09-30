@@ -15,7 +15,7 @@ import {
   PolicyRevision,
   PolicyUrl,
   Sha256Digest,
-} from "./model";
+} from "./contract";
 
 type DisclosureInput = typeof DisclosureSnapshot.Encoded;
 

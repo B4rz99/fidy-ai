@@ -1,4 +1,4 @@
-import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
+import { liveWebSessionAuthority } from "@fidy/server/identity";
 import {
   livePATAuthority,
   recordCanonicalPATWork,

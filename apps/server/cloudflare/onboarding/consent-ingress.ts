@@ -28,13 +28,13 @@ import {
   maxKapsoWebhookBytes,
 } from "@fidy/server/consent-ingress";
 import { EmailAddress } from "@fidy/server/client";
-import type { UserId } from "../../src/core/identity/reference";
+import type { UserId } from "../../src/core/identity/contract";
 import { approveBrowserPairing } from "../identity/browser-login";
+import { findWhatsAppUser } from "../identity/operations";
 import {
   type WhatsAppStatusAdmission,
   type WhatsAppTurnAdmission,
   findWhatsAppDeliveryUser,
-  findWhatsAppUser,
 } from "../agent/whatsapp-turn";
 import { decodeKapsoHostedLifecycleWebhook } from "@fidy/server/whatsapp-hosted";
 import {

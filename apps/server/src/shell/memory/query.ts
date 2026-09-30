@@ -1,7 +1,7 @@
 import { Option, Schema } from "effect";
 import { Memory, MemoryId, MemoryText } from "~/core/memory/model";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
-import type { WebSessionAuthority } from "~/shell/identity/session-guard";
+import type { WebSessionAuthority } from "~/shell/identity/contract";
 import type { PATAuthority } from "~/shell/tokens/pat-write";
 
 /** Live credential re-evaluated by D1 beside this owner-published Memory projection. */

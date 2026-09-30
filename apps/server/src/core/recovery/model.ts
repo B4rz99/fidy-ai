@@ -1,7 +1,7 @@
 import { DateTime, Schema } from "effect";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { BrowserLoginPairingId } from "~/core/browser-login/reference";
-import { UserId } from "~/core/identity/reference";
+import { UserId } from "~/core/identity/contract";
 
 /**
  * Raw emergency proof disclosed once after onboarding. Its 25 unambiguous base32 symbols provide

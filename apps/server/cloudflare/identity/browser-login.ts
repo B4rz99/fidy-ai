@@ -1,16 +1,17 @@
+import { getCurrentUser } from "@fidy/server/identity";
+import { User, UserId } from "../../src/core/identity/contract";
+import { BrowserLoginPairingId } from "../../src/core/browser-login/reference";
 import {
-  BrowserLoginPairingId,
   BrowserLoginPublicCodeSymbols,
-  User,
-  UserId,
-  calculateWebSessionDeadlines,
   decideBrowserLoginRedemption,
   formatPublicCode,
-  getCurrentUser,
   maximumWrongVerifierAttempts,
   selectPublicCodeSymbols,
+} from "../../src/core/browser-login/rules";
+import {
+  calculateWebSessionDeadlines,
   webSessionIdleRenewalCandidate,
-} from "@fidy/server/identity-runtime";
+} from "../../src/core/web-session/rules";
 import * as D1Client from "@effect/sql-d1/D1Client";
 import { BackupRecoveryCode } from "@fidy/server/client";
 import {

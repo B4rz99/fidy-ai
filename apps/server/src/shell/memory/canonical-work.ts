@@ -1,5 +1,5 @@
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
-import { liveWebSessionAuthority } from "~/shell/identity/browser-runtime";
+import { liveWebSessionAuthority } from "~/shell/identity/operations";
 import type { MemoryOperationId } from "./operations";
 
 type BrowserMemorySubject = Readonly<{ id: string; userId: string; digest: Uint8Array }>;

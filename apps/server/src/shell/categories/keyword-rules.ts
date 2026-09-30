@@ -1,7 +1,7 @@
 import { Option, Schema } from "effect";
 import { KeywordRule } from "~/core/categories/model";
 import { maximumKeywordRulesPerUser } from "~/core/categories/rules";
-import { liveWebSessionAuthority } from "~/shell/identity/browser-runtime";
+import { liveWebSessionAuthority } from "~/shell/identity/operations";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 
 /** Every Category operation an accepted browser call may be attributable to. */

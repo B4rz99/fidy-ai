@@ -1,10 +1,7 @@
+import type { FreshSessionSubject } from "~/shell/identity/contract";
 import { Option } from "effect";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
-import {
-  type FreshSessionSubject,
-  freshSessionExists,
-  freshSessionParams,
-} from "~/shell/identity/browser-runtime";
+import { freshSessionExists, freshSessionParams } from "~/shell/identity/operations";
 import { type CreateManualPATPayload } from "~/core/tokens/model";
 import type { CanonicalCapability } from "~/core/canonical-operations/contract";
 import type { AuditedPATOperation } from "./pat-audited-operations";

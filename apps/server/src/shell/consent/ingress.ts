@@ -42,7 +42,7 @@ export {
   WhatsAppBusinessPhoneNumberId,
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
-} from "~/core/identity/reference";
+} from "~/core/identity/contract";
 export type { KapsoSendFailed, KapsoSentMessage } from "~/shell/channels/whatsapp/kapso-client";
 export type { WhatsAppInboundEvent, WhatsAppWebhookReceipt } from "~/shell/channels/whatsapp/model";
 

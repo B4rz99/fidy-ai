@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime, Effect } from "effect";
-import { UserId } from "./reference";
-import { isTrialPeriodActive, makeColombianUser } from "./rules";
+import { UserId } from "./contract";
+import { isTrialPeriodActive, makeColombianUser } from "./operations";
 
 const userId = UserId.make("f1d1a000-0000-4000-8000-000000000001");
 const createdAt = DateTime.makeUnsafe("2026-07-28T00:00:00Z");

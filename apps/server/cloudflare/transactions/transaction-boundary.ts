@@ -1,10 +1,11 @@
+import type { WebSessionAuthority } from "../../src/shell/identity/contract";
 import { Clock, Data, Effect, Option, Schema } from "effect";
 import {
   type CanonicalCapability,
   type ErrorCode,
   atomicBatchOperation,
 } from "@fidy/server/canonical-runtime";
-import { type WebSessionAuthority, liveWebSessionAuthority } from "@fidy/server/identity-runtime";
+import { liveWebSessionAuthority } from "@fidy/server/identity";
 import {
   type AuditedPATMutation,
   type PATAuthority,

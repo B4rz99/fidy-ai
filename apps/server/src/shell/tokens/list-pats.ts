@@ -1,10 +1,10 @@
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { ActivePATMetadata, PATRecipientLabel, PATScopes, TokenShortId } from "~/core/tokens/model";
-import type { UserId } from "~/core/identity/reference";
+import type { UserId } from "~/core/identity/contract";
 import { Unavailable } from "~/shell/public-http/contract";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
-import type { FreshSessionSubject } from "~/shell/identity/browser-runtime";
+import type { FreshSessionSubject } from "~/shell/identity/contract";
 
 const activeLimit = 100;
 const PATMetadataRow = Schema.Struct({

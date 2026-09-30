@@ -3,7 +3,7 @@ import { UserId } from "@fidy/server/agent-runtime";
 import {
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
-} from "../../src/core/identity/reference";
+} from "../../src/core/identity/contract";
 import {
   WhatsAppBusinessPhoneNumberId,
   WhatsAppProviderMessageId,
@@ -11,8 +11,10 @@ import {
 import type { TransactionSubject } from "../transactions/transaction-boundary";
 import {
   liveWebSessionAuthority,
+  liveWhatsAppAuthority,
   webSessionCredentialAuthority,
-} from "@fidy/server/identity-runtime";
+  whatsAppCredentialAuthority,
+} from "@fidy/server/identity";
 
 /** A claimed channel subject, not authority until D1 rechecks the stable User association. */
 export const WhatsAppHostedSubject = Schema.TaggedStruct("WhatsAppHosted", {
@@ -47,11 +49,7 @@ export const hostedIdentity = ({
   current,
 }: Readonly<{ subject: HostedSubject; current: number }>): HostedSqlAuthority =>
   isWhatsAppHosted(subject)
-    ? {
-        table: "whatsapp_identities" as const,
-        predicate: "user_id = ? AND portfolio_id = ? AND bsuid = ?",
-        bindings: [subject.userId, subject.portfolioId, subject.bsuid] as const,
-      }
+    ? whatsAppCredentialAuthority(subject)
     : webSessionCredentialAuthority({ subject, current });
 
 /** Trusted SQL authority selection. Provider ids are evidence; the matching D1 association is authority. */
@@ -60,11 +58,5 @@ export const hostedAuthority = ({
   current,
 }: Readonly<{ subject: HostedSubject; current: number }>): HostedSqlAuthority =>
   isWhatsAppHosted(subject)
-    ? {
-        table: "whatsapp_identities" as const,
-        predicate: `user_id = ? AND portfolio_id = ? AND bsuid = ?
-          AND EXISTS (SELECT 1 FROM onboarding_consent_records WHERE user_id = whatsapp_identities.user_id)
-          AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = whatsapp_identities.user_id)`,
-        bindings: [subject.userId, subject.portfolioId, subject.bsuid] as const,
-      }
+    ? liveWhatsAppAuthority(subject)
     : liveWebSessionAuthority({ subject, current });

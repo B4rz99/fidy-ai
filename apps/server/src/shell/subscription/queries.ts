@@ -1,7 +1,7 @@
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { deriveAccessTier } from "~/core/access-tier/operations";
-import type { UserId } from "~/core/identity/reference";
+import type { UserId } from "~/core/identity/contract";
 import { Price, SubscriptionOffers, SubscriptionStatus } from "~/core/subscription/model";
 import { Unavailable } from "~/shell/public-http/contract";
 import {

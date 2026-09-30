@@ -10,7 +10,7 @@ import {
   WhatsAppCallerReference,
   WhatsAppParentBusinessScopedUserId,
   WhatsAppUsername,
-} from "~/core/identity/reference";
+} from "~/core/identity/contract";
 import type { TranscriptText } from "~/core/transcript/model";
 
 const maximumProviderIdentifierLength = 256;

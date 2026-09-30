@@ -1,6 +1,6 @@
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { Config, Context, Data, DateTime, Effect, Layer, Option, Schema } from "effect";
-import type { E164PhoneNumber, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
+import type { E164PhoneNumber, WhatsAppBusinessScopedUserId } from "~/core/identity/contract";
 import type { TranscriptText } from "~/core/transcript/model";
 import type {
   DisclosureDeliveryCorrelationToken,

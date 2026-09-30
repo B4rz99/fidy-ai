@@ -2,7 +2,10 @@ import { Miniflare } from "miniflare";
 import { afterEach, expect, it } from "vitest";
 import { type Cause, Effect, Option } from "effect";
 import { findUserContext, findWhatsAppUser, prepareVerifiedUser } from "./operations";
-import { whatsAppCredentialAuthority } from "../../src/shell/identity/operations";
+import {
+  establishedWhatsAppAuthority,
+  whatsAppCredentialAuthority,
+} from "../../src/shell/identity/operations";
 import {
   UserId,
   WhatsAppBusinessPortfolioId,
@@ -87,6 +90,60 @@ it("resolves only a Portfolio-scoped BSUID and refuses cross-User association su
       };
       expect(yield* check(firstUser)).toEqual({ user_id: firstUser });
       expect(yield* check(secondUser)).toBeNull();
+    })
+  ));
+
+it("keeps established WhatsApp browser approval available after revocation and rechecks its exact User basis at commit", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* database("identity-established-approval");
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db.prepare(
+            "CREATE TABLE whatsapp_identities (user_id TEXT, portfolio_id TEXT, bsuid TEXT)"
+          ),
+          db.prepare("CREATE TABLE onboarding_consent_records (user_id TEXT)"),
+          db.prepare("CREATE TABLE consent_user_revocations (user_id TEXT)"),
+          db.prepare("CREATE TABLE approval_evidence (user_id TEXT)"),
+          db
+            .prepare("INSERT INTO whatsapp_identities VALUES (?, 'portfolio', 'CO.Person1')")
+            .bind(firstUser),
+          db
+            .prepare("INSERT INTO whatsapp_identities VALUES (?, 'portfolio', 'CO.Person2')")
+            .bind(secondUser),
+          db.prepare("INSERT INTO onboarding_consent_records VALUES (?)").bind(firstUser),
+          db.prepare("INSERT INTO consent_user_revocations VALUES (?)").bind(firstUser),
+        ])
+      );
+      const approval = (userId: string, bsuid: string): D1PreparedStatement => {
+        const gate = establishedWhatsAppAuthority({
+          userId: UserId.make(userId),
+          portfolioId: WhatsAppBusinessPortfolioId.make("portfolio"),
+          bsuid: WhatsAppBusinessScopedUserId.make(bsuid),
+        });
+        return db
+          .prepare(`INSERT INTO approval_evidence (user_id)
+          SELECT user_id FROM ${gate.table} WHERE ${gate.predicate}`)
+          .bind(...gate.bindings);
+      };
+      const pending = approval(firstUser, "CO.Person1");
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          approval(firstUser, "CO.Person1"),
+          approval(secondUser, "CO.Person1"),
+          approval(secondUser, "CO.Person2"),
+        ])
+      );
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db.prepare("DELETE FROM onboarding_consent_records WHERE user_id = ?").bind(firstUser),
+          pending,
+        ])
+      );
+      expect(
+        (yield* Effect.tryPromise(() => db.prepare("SELECT user_id FROM approval_evidence").all()))
+          .results
+      ).toEqual([{ user_id: firstUser }]);
     })
   ));
 

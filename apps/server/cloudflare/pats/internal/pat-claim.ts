@@ -3,14 +3,16 @@ import {
   PAT,
   PATPairingDeviceCode,
   PATPairingId,
+} from "@fidy/server/tokens-contract";
+import {
   claimPairingGrant,
-  decidePATPairingClaim,
   insertClaimedPAT,
   recordClaimedPAT,
   recordPendingPoll,
   recordWrongPairingProof,
   slowPairingPoll,
-} from "@fidy/server/tokens-runtime";
+} from "@fidy/server/tokens-operations";
+import { decidePATPairingClaim } from "@fidy/server/tokens-policy";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { PairingRow } from "./pat-pairing";
 import {
@@ -28,7 +30,8 @@ import {
   scopesFrom,
   unavailable,
 } from "./pat-shared";
-import { commitPATUnit, prepareOwnedStatement } from "./pat-unit";
+import { commitPATUnit } from "./pat-unit";
+import { prepareOwnedStatement } from "../../atomic/operations";
 
 const maximumPollSeconds = 60;
 const pendingStatus = 202;

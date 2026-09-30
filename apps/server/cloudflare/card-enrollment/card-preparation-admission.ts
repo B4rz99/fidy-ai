@@ -11,7 +11,7 @@ import {
   ResourceAdmissionScopeKey,
   ResourceAdmissionUnits,
 } from "../resource-admission/authority";
-import { newId } from "../pats/pat-shared";
+import { newId } from "../platform/operations";
 
 const windowMilliseconds = 3_600_000;
 const userAttemptLimit = 24;

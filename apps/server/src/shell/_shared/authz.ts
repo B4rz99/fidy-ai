@@ -8,7 +8,7 @@ import type {
   CanonicalOperationId,
 } from "~/core/canonical-operations/contract";
 import type { UserId } from "~/core/identity/contract";
-import { type TokenBearer, TokenBearerFormat } from "~/core/tokens/model";
+import { type TokenBearer, TokenBearerFormat } from "~/core/tokens/contract";
 import {
   ConsentRequired,
   ScopeMissing,

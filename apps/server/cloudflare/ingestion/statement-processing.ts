@@ -29,7 +29,7 @@ import {
   unmappedStatementRow,
 } from "../../src/core/ingestion/rules";
 import { TransactionExtraction, encodeMoneyAmount } from "../../src/core/transactions/model";
-import { currentMillis } from "../pats/pat-shared";
+import { currentMillis } from "../platform/operations";
 import { StatementStaging, newIngestionId } from "./statement-staging";
 import { maximumRetainedReviewEvidence } from "./statement-review-retention";
 import { statementChunkSize } from "./statement-processing-limits";

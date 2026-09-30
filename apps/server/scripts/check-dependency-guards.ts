@@ -61,7 +61,7 @@ type Probe = {
 const decode = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
 
 const runGraph = (
-  sourceRoots: readonly string[] = ["src", "scripts", "tools"]
+  sourceRoots: readonly string[] = ["src", "cloudflare", "scripts", "tools"]
 ): { readonly exitCode: Option.Option<number>; readonly report: string } => {
   const spawned = Bun.spawnSync(["bun", "../../tools/depcruise/run.mjs", ".", ...sourceRoots], {
     cwd: serverRoot,
@@ -128,6 +128,22 @@ const landmarkInternalTarget = `src/shell/${PROBE_PREFIX}landmark-internal-targe
 const emptyGraph = `tools/${PROBE_PREFIX}empty-graph`;
 
 const PROBES: readonly Probe[] = [
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-tokens-adapter-imports-internal: cloudflare/${PROBE_PREFIX}tokens-private/probe.test.ts → cloudflare/pats/internal/pat-shared.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}tokens-private/probe.test.ts`,
+        source:
+          'import type { PATRow } from "../pats/internal/pat-shared";\nexport type ForeignPAT = PATRow;\n',
+      },
+    ],
+    name: "a foreign Cloudflare test cannot reach Tokens storage rows",
+  },
   {
     expect: { kind: "allowed" },
     files: [
@@ -809,7 +825,7 @@ const remove = (path: string): void => {
   }
 };
 
-const stale = ["src", "scripts", "tools"].flatMap((root) =>
+const stale = ["src", "cloudflare", "scripts", "tools"].flatMap((root) =>
   Array.from(
     new Bun.Glob("**/__probe-*").scanSync({ cwd: `${serverRoot}/${root}`, onlyFiles: false })
   ).map((entry) => `${root}/${entry}`)

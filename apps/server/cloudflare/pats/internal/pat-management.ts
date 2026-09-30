@@ -1,18 +1,14 @@
 import { freshSessionExists } from "@fidy/server/web-session";
 import type { FreshSessionSubject } from "@fidy/server/web-session";
-import { browserSession } from "../web-session/operations";
+import { browserSession } from "@fidy/server/web-session-runtime";
 import {
-  ActivePATList,
-  patMetadataQuery,
-  patMetadataResponseFromRows,
   patRevokeAllCompletion,
   recordAllPATRevocations,
   recordOnePATRevocation,
-  recordPATList,
   revokeEveryPAT,
   revokeEveryPairing,
   revokeOnePAT,
-} from "@fidy/server/tokens-runtime";
+} from "@fidy/server/tokens-operations";
 import { type Cause, Effect, Option, Schema } from "effect";
 import { freshSessionParams } from "@fidy/server/web-session";
 import {
@@ -23,75 +19,16 @@ import {
 import {
   canonical,
   currentMillis,
-  httpRateLimited,
   newId,
   notFound,
-  response,
   shortIdIsValid,
   unauthorized,
   serviceUnavailable as unavailable,
 } from "./pat-shared";
-import { commitPATUnit, prepareOwnedStatement } from "./pat-unit";
-import { refusedByAuditBudget } from "../audit/audit-triggers";
+import { commitPATUnit } from "./pat-unit";
+import { prepareOwnedStatement } from "../../atomic/operations";
 
 export { createManualPAT } from "./pat-manual";
-
-/** List only currently active, subject-owned, safe PAT metadata. */
-export const listPATs = ({
-  request,
-  db,
-}: Readonly<{ request: Request; db: D1Database }>): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const session = yield* Effect.tryPromise(() =>
-        browserSession({ request, db, input: { current: currentMillis(), fresh: false } })
-      );
-      if (Option.isNone(session)) return unauthorized();
-      const current = currentMillis();
-      return yield* Effect.gen(function* () {
-        const [rows, recorded] = yield* Effect.tryPromise({
-          try: () =>
-            db.batch([
-              prepareOwnedStatement({
-                db,
-                statement: patMetadataQuery({ userId: session.value.userId, current, session }),
-              }),
-              prepareOwnedStatement({
-                db,
-                statement: recordPATList({
-                  session: session.value,
-                  input: { id: newId(), current },
-                }),
-              }),
-            ]),
-          catch: (error) =>
-            refusedByAuditBudget(error) ? ("rate_limited" as const) : ("unavailable" as const),
-        });
-        if (recorded?.meta.changes !== 1) return unauthorized();
-        if (rows === undefined) return unavailable();
-        const listed = yield* patMetadataResponseFromRows(rows.results).pipe(Effect.option);
-        return Option.isSome(listed)
-          ? canonical(
-              yield* Schema.encodeEffect(Schema.toCodecJson(ActivePATList))(listed.value.data)
-            )
-          : unavailable();
-      }).pipe(
-        Effect.catch((error) =>
-          Effect.succeed(
-            error === "rate_limited"
-              ? response({
-                  body: {
-                    error: { code: "rate_limited", message: "PAT metadata budget exhausted." },
-                    next: [],
-                  },
-                  status: httpRateLimited,
-                })
-              : unavailable()
-          )
-        )
-      );
-    })
-  );
 
 const revokedPATResponse = (
   db: D1Database,

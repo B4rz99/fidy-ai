@@ -3,7 +3,7 @@ import { Effect, Option } from "effect";
 import { Miniflare } from "miniflare";
 import { afterEach, expect } from "vitest";
 import { it as effectIt } from "@effect/vitest";
-import { currentMillis } from "../pats/pat-shared";
+import { currentMillis } from "../platform/operations";
 import { failStatementSubmission, processStatementSubmission } from "./statement-processing";
 import { expireStatementReviewEvidence } from "./statement-review-retention";
 import { StatementStaging, submissionProjection } from "./statement-staging";

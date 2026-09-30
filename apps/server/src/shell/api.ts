@@ -29,9 +29,7 @@ import { MemoryGroup } from "~/shell/memory/operations";
 import { makeOperationsGroup } from "~/shell/operations/operations";
 
 import { SubscriptionGroup } from "~/shell/subscription/operations";
-
-import { PATsGroup } from "~/shell/tokens/operations";
-
+import { PATsGroup } from "~/shell/tokens/contract";
 import { RecoveryGroup } from "~/shell/recovery/operations";
 
 import { TransactionsGroup } from "~/shell/transactions/operations";

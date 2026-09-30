@@ -1,14 +1,12 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime, Effect, Option, Schema } from "effect";
+import { PATPairingLifecycle, PATPairingPublicCode, PATPairingPublicCodeInput } from "./contract";
 import {
   type PATPairingClaimDecision,
-  PATPairingLifecycle,
-  PATPairingPublicCode,
-  PATPairingPublicCodeInput,
   decidePATPairingClaim,
   patPairingExpiry,
   selectPATPairingPublicCodeSymbols,
-} from "./pairing";
+} from "./operations";
 
 const expiry = DateTime.makeUnsafe("2026-09-01T12:10:00.000Z");
 const attemptedAt = DateTime.makeUnsafe("2026-09-01T12:00:05.000Z");

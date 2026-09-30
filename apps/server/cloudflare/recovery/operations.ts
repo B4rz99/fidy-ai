@@ -7,6 +7,7 @@ import { digestBackupCode, sampleBackupCode } from "./internal/backup-proof";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { JWTVerifyGetKey } from "jose";
 import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
+import { newId } from "../platform/operations";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
 
 /** Prepare one-time disclosure and its digest-only insert for the onboarding owner's atomic D1 batch.

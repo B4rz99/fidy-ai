@@ -1,7 +1,7 @@
 import { Effect, Option, Schema } from "effect";
-import { recordCanonicalPATWork } from "@fidy/server/tokens-runtime";
-import { newId } from "../pats/pat-shared";
-import { prepareOwnedStatement } from "../pats/pat-unit";
+import { recordCanonicalPATWork } from "@fidy/server/tokens-operations";
+import { newId } from "../platform/operations";
+import { prepareOwnedStatement } from "../atomic/operations";
 import { refusedByAuditBudget } from "../audit/audit-triggers";
 import {
   type CategoryFailure,

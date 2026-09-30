@@ -3,7 +3,7 @@ import {
   livePATAuthority,
   recordCanonicalPATWork,
   recordLivePATUse,
-} from "@fidy/server/tokens-runtime";
+} from "@fidy/server/tokens-operations";
 import {
   SubscriptionOffers,
   SubscriptionStatus,
@@ -14,8 +14,8 @@ import {
   subscriptionStandingQuery,
 } from "@fidy/server/subscription-runtime";
 import { Effect, Option, Schema } from "effect";
-import { prepareOwnedStatement } from "../pats/pat-unit";
-import { currentMillis, newId } from "../pats/pat-shared";
+import { prepareOwnedStatement } from "../atomic/operations";
+import { currentMillis, newId } from "../platform/operations";
 import { type TransactionCaller, isPATCaller } from "../transactions/transaction-boundary";
 
 const headers = { "cache-control": "no-store", "content-type": "application/json; charset=utf-8" };

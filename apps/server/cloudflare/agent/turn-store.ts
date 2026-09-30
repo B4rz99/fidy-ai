@@ -41,7 +41,7 @@ import {
   hostedIdentity,
   isWhatsAppHosted,
 } from "./hosted-authority";
-import { newId } from "../pats/pat-shared";
+import { newId } from "../platform/operations";
 
 const maximumRetainedEntries = 200;
 const maximumCurrentMemories = 100;

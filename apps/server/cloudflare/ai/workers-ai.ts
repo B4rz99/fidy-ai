@@ -7,7 +7,7 @@ import {
 } from "@fidy/server/hosted-inference";
 import { type Cause, Effect, type Layer, Option } from "effect";
 import { cloudflareWorkerTelemetry, observeModelRun } from "../runtime/telemetry";
-import { newId } from "../pats/pat-shared";
+import { newId } from "../platform/operations";
 import {
   type ResourceAdmissionAttempt,
   ResourceAdmissionAuthority,

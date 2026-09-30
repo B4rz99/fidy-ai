@@ -7,9 +7,7 @@ import {
 } from "@fidy/server/email-authentication-policy";
 
 import { Clock, Data, Effect, Option, Schema } from "effect";
-
-import { newId } from "../pats/pat-shared";
-
+import { newId } from "../platform/operations";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
 import { prepareVerifiedUser } from "../identity/operations";
 

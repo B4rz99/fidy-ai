@@ -13,7 +13,7 @@ import {
 } from "~/shell/subscription/queries";
 import { listCategoriesResponse } from "~/shell/categories/list-categories";
 import { getCurrentUser } from "~/shell/identity/operations";
-import { listPATsResponse } from "~/shell/tokens/list-pats";
+import { listPATsResponse } from "~/shell/tokens/operations";
 import { canonicalMutationImplementations } from "./canonical-mutation-registry";
 
 /**

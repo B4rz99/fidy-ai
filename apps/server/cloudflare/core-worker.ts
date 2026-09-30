@@ -50,7 +50,7 @@ import {
   receiveBrowserPairingEmail,
   reconcileBrowserPairingEmail,
 } from "./identity/browser-pairing-email-delivery";
-import { handleSupportRecovery } from "./identity/support-recovery";
+import { handleSupportRecovery, rotateBackupRecoveryCode } from "./recovery/operations";
 import { handleCardEnrollment } from "./card-enrollment/card-enrollment";
 import {
   type BillingCollectionEnvironment,

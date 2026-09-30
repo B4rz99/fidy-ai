@@ -1,9 +1,8 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime, Option, Redacted, Schema } from "effect";
-import { BrowserLoginPairingId } from "~/core/browser-login/reference";
+import { BrowserLoginPairingId } from "~/core/browser-login/contract";
 import { UserId } from "~/core/identity/reference";
 import {
-  BackupRecoveryCode,
   BackupRecoveryCredential,
   BackupRecoveryDigest,
   SupportOperatorId,
@@ -12,6 +11,7 @@ import {
   SupportRecoveryCaseEventId,
   SupportRecoveryCaseId,
 } from "./model";
+import { BackupRecoveryCode } from "../contract";
 
 const userId = UserId.make("f1d1a000-0000-4000-8000-000000000902");
 const caseId = SupportRecoveryCaseId.make("f1d1a000-0000-4000-8000-000000000903");

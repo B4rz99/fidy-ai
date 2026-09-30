@@ -1,18 +1,20 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime, Option, Schema } from "effect";
 import {
-  BrowserLoginPairingLifecycle,
-  BrowserLoginPublicCode,
-  BrowserLoginPublicCodeInput,
-  BrowserLoginPublicCodeSymbols,
   browserLoginPairingExpiry,
-  browserLoginPublicCodeAlphabet,
   decideApprovalTransition,
   decideBrowserLoginRedemption,
   decidePendingBrowserLoginProof,
   formatPublicCode,
   selectPublicCodeSymbols,
-} from "./rules";
+} from "./operations";
+import {
+  BrowserLoginPairingLifecycle,
+  BrowserLoginPublicCode,
+  BrowserLoginPublicCodeInput,
+  BrowserLoginPublicCodeSymbols,
+  browserLoginPublicCodeAlphabet,
+} from "./contract";
 
 const decode = Schema.decodeUnknownOption(BrowserLoginPublicCodeInput);
 const decodeCode = Schema.decodeUnknownOption(BrowserLoginPublicCode);

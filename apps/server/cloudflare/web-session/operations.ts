@@ -17,7 +17,7 @@ import {
   PlatformError,
   Schema,
 } from "effect";
-import { maximumWrongVerifierAttempts } from "../../src/core/browser-login/rules";
+import { maximumWrongVerifierAttempts } from "../../src/core/browser-login/operations";
 import { SqlClient } from "effect/unstable/sql";
 
 /** Resolve canonical browser authority without extending idle life or bypassing Consent. */

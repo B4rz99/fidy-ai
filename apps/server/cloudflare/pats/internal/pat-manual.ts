@@ -15,7 +15,7 @@ import { UserActionRequired, ValidationFailed } from "@fidy/server/public-http-c
 import { buildPATDisclosure } from "@fidy/server/tokens-policy";
 import { issueManualPAT, recordSessionPATTransition } from "@fidy/server/tokens-operations";
 import { type Cause, DateTime, Effect, Option, Redacted, Result, Schema } from "effect";
-import { isConsentRevoked } from "../consent/operations";
+import { isConsentRevoked } from "../../consent/operations";
 import { grantManualPATConsent } from "@fidy/server/consent-operations";
 import {
   canonical,

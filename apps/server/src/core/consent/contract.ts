@@ -12,7 +12,7 @@ import {
 import { InsightKind } from "~/core/insights/reference";
 import { PATId } from "~/core/tokens/reference";
 import { UtcTimestamp } from "~/core/_shared/time";
-import { WebSessionId } from "~/core/web-session/reference";
+import { WebSessionId } from "~/core/web-session/contract";
 /** Stable identity of one temporary pre-User disclosure exchange. */
 export const PendingConsentExchangeId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("PendingConsentExchangeId"))

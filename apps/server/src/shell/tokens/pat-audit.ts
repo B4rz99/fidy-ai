@@ -5,7 +5,7 @@ import {
   type FreshSessionSubject,
   freshSessionExists,
   freshSessionParams,
-} from "~/shell/identity/browser-runtime";
+} from "~/shell/web-session/operations";
 import { type PATAuthority, livePATAuthority } from "./pat-write";
 import type { AuditedPATOperation } from "./pat-audited-operations";
 import type { CanonicalCapability } from "~/core/canonical-operations/contract";
@@ -32,14 +32,14 @@ export const recordSessionPATTransition = ({
     ? {
         sql: `INSERT INTO pat_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
         SELECT ?,?,?,?,'accepted',? WHERE changes() = 1`,
-        params: [input.id, session.user_id, session.id, input.operation, input.current],
+        params: [input.id, session.userId, session.id, input.operation, input.current],
       }
     : {
         sql: `INSERT INTO pat_audit (id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms)
         SELECT ?,?,?,?,?,'accepted',? WHERE changes() = 1`,
         params: [
           input.id,
-          session.user_id,
+          session.userId,
           session.id,
           input.patId.value,
           input.operation,
@@ -67,14 +67,14 @@ export const recordPATList = ({
     AND ${consentNotRevoked("?")}`,
   params: [
     input.id,
-    session.user_id,
+    session.userId,
     session.id,
     input.current,
     session.id,
-    session.user_id,
+    session.userId,
     input.current,
     input.current,
-    session.user_id,
+    session.userId,
   ],
 });
 
@@ -87,7 +87,7 @@ export const recordOnePATRevocation = ({
   sql: `INSERT INTO pat_audit (id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms)
     SELECT ?,?,?,id,'pats.revokePAT','accepted',? FROM pats
     WHERE user_id = ? AND short_id = ? AND changes() = 1`,
-  params: [input.id, session.user_id, session.id, input.current, session.user_id, input.shortId],
+  params: [input.id, session.userId, session.id, input.current, session.userId, input.shortId],
 });
 
 /** The revoke-all audit is guarded by the same fresh User decision as its PAT transition. */
@@ -99,7 +99,7 @@ export const recordAllPATRevocations = ({
     SELECT ?,?,?,'pats.revokeAllPATs','accepted',? WHERE ${freshSessionExists}`,
   params: [
     input.id,
-    session.user_id,
+    session.userId,
     session.id,
     input.current,
     ...freshSessionParams({ session, time: input.current }),

@@ -10,10 +10,7 @@ import {
   WhatsAppProviderMessageId,
 } from "../../src/shell/channels/whatsapp/model";
 import type { TransactionSubject } from "../transactions/transaction-boundary";
-import {
-  liveWebSessionAuthority,
-  webSessionCredentialAuthority,
-} from "@fidy/server/identity-runtime";
+import { liveWebSessionAuthority, webSessionCredentialAuthority } from "@fidy/server/web-session";
 
 /** A claimed channel subject, not authority until D1 rechecks the stable User association. */
 export const WhatsAppHostedSubject = Schema.TaggedStruct("WhatsAppHosted", {

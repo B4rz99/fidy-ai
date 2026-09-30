@@ -1,33 +1,14 @@
 import { consentGranted } from "@fidy/server/consent-runtime";
+import { browserSession, createWebSession } from "../web-session/operations";
 import {
   BrowserLoginPairingId,
   BrowserLoginPublicCodeSymbols,
-  User,
-  UserId,
-  calculateWebSessionDeadlines,
   decideBrowserLoginRedemption,
   formatPublicCode,
-  getCurrentUser,
-  maximumWrongVerifierAttempts,
   selectPublicCodeSymbols,
-  webSessionIdleRenewalCandidate,
 } from "@fidy/server/identity-runtime";
-import * as D1Client from "@effect/sql-d1/D1Client";
 import { BackupRecoveryCode } from "@fidy/server/client";
-import {
-  Clock,
-  Context,
-  Crypto,
-  DateTime,
-  Effect,
-  Encoding,
-  Exit,
-  Layer,
-  Option,
-  PlatformError,
-  Schema,
-} from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import { Clock, Crypto, DateTime, Effect, Encoding, Option, PlatformError, Schema } from "effect";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
 
 const PairingProof = Schema.Struct({
@@ -42,15 +23,10 @@ const Pairing = Schema.Struct({
   minimum_poll_interval_seconds: Schema.Int,
   state: Schema.Literals(["pending_approval", "ready", "consumed", "invalidated"]),
 });
-const Session = Schema.Struct({
-  id: Schema.String.check(Schema.isUUID()),
-  user_id: Schema.String.check(Schema.isUUID()),
-});
 const digestBytes = 32;
 const codeSymbols = 8;
 const sampleBytes = 16;
 const pairingMs = 600_000;
-const HTTP_OK = 200;
 const HTTP_PENDING = 202;
 const HTTP_RATE_LIMITED = 429;
 const maximumPollSeconds = 60;
@@ -317,7 +293,7 @@ const redeemValidProof = (
       });
     }
     if (decision._tag !== "Consume") return invalid();
-    return yield* createWebSession(db, proof.pairingId, current);
+    return yield* createWebSession({ db, pairingId: proof.pairingId, current });
   });
 
 const recordWrongVerifier = ({
@@ -418,185 +394,6 @@ const recordPoll = ({
     );
   });
 
-const createWebSession = (
-  db: D1Database,
-  pairingId: string,
-  current: number
-): Effect.Effect<Response, void> =>
-  Effect.gen(function* () {
-    const token = Encoding.encodeBase64Url(crypto.getRandomValues(new Uint8Array(digestBytes)));
-    const deadlines = calculateWebSessionDeadlines(DateTime.makeUnsafe(current));
-    const tokenDigest = yield* attempt(() => sha256(token));
-    const committed = yield* attempt(() =>
-      db.batch([
-        db
-          .prepare(
-            `UPDATE browser_login_pairings SET state = 'consumed' WHERE id = ? AND state = 'ready' AND expires_at_ms > ? AND wrong_attempts < ?`
-          )
-          .bind(pairingId, current, maximumWrongVerifierAttempts),
-        db
-          .prepare(
-            `INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms,
-        fresh_until_ms, idle_expires_at_ms, hard_expires_at_ms)
-      SELECT ?, p.id, p.user_id, ?, ?, ?, ?, ? FROM browser_login_pairings AS p
-      WHERE p.id = ? AND p.state = 'consumed' AND p.user_id IS NOT NULL`
-          )
-          .bind(
-            uuid(),
-            tokenDigest,
-            current,
-            DateTime.toEpochMillis(deadlines.freshUntil),
-            DateTime.toEpochMillis(deadlines.idleExpiresAt),
-            DateTime.toEpochMillis(deadlines.hardExpiresAt),
-            pairingId
-          ),
-      ])
-    );
-    if (committed[1]?.meta.changes !== 1) return invalid();
-    return json({ status: "authenticated" }, HTTP_OK, {
-      "set-cookie": sessionSetCookie(token),
-    });
-  });
-
-const sessionSetCookie = (token: string): string =>
-  `__Host-fidy_session=${token}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=2592000`;
-
-export const sessionCookie = (request: Request): Option.Option<string> => {
-  const cookies =
-    request.headers
-      .get("cookie")
-      ?.split(";")
-      .map((value) => value.trim()) ?? [];
-  const selected = cookies.filter((cookie) => cookie.startsWith("__Host-fidy_session="));
-  if (selected.length !== 1) return Option.none();
-  const value = selected[0]?.slice("__Host-fidy_session=".length) ?? "";
-  return /^[A-Za-z0-9_-]{43}$/u.test(value) ? Option.some(value) : Option.none();
-};
-
-/** Resolve a live WebSession; account-security actions additionally require a fresh decision. */
-type SessionInput = Readonly<{ current: number; fresh: boolean }>;
-export const browserSession = ({
-  request,
-  db,
-  input,
-}: {
-  request: Request;
-  db: D1Database;
-  input: SessionInput;
-}): Promise<Option.Option<typeof Session.Type>> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const token = sessionCookie(request);
-      if (Option.isNone(token)) return Option.none();
-      const tokenDigest = yield* attempt(() => sha256(token.value));
-      const row = yield* attempt(() =>
-        db
-          .prepare(
-            `SELECT id, user_id FROM web_sessions
-    WHERE token_digest = ? AND revoked_at_ms IS NULL AND (? = 0 OR fresh_until_ms > ?)
-      AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?`
-          )
-          .bind(tokenDigest, input.fresh ? 1 : 0, input.current, input.current, input.current)
-          .first()
-      );
-      return Schema.decodeUnknownOption(Session)(row);
-    })
-  );
-
-/** Resolve the exact still-fresh browser session for an account-security action. */
-export const freshBrowserSession = ({
-  request,
-  db,
-  current,
-}: {
-  request: Request;
-  db: D1Database;
-  current: number;
-}): Promise<Option.Option<typeof Session.Type>> =>
-  browserSession({ request, db, input: { current, fresh: true } });
-
-/** Return the canonical User projection only for a live, unrevoked WebSession. */
-export const currentUser = ({
-  request,
-  db,
-}: {
-  request: Request;
-  db: D1Database;
-}): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const token = sessionCookie(request);
-      if (Option.isNone(token)) return noSession();
-      {
-        const digest = yield* attempt(() => sha256(token.value));
-        const usedAt = yield* Clock.currentTimeMillis;
-        const candidate = webSessionIdleRenewalCandidate(DateTime.makeUnsafe(usedAt));
-        const rawSession = yield* attempt(() =>
-          db
-            .prepare(
-              `UPDATE web_sessions SET idle_expires_at_ms = min(hard_expires_at_ms,
-        max(idle_expires_at_ms, ?)) WHERE token_digest = ? AND revoked_at_ms IS NULL
-        AND idle_expires_at_ms > ? AND hard_expires_at_ms > ? RETURNING id, user_id`
-            )
-            .bind(DateTime.toEpochMillis(candidate), digest, usedAt, usedAt)
-            .first()
-        );
-        if (rawSession === null) return noSession();
-        const session = Schema.decodeUnknownOption(Session)(rawSession);
-        if (Option.isNone(session)) return unavailable();
-        const subject = Schema.decodeOption(UserId)(session.value.user_id);
-        if (Option.isNone(subject)) return unavailable();
-        return yield* projectCurrentUser({
-          db,
-          subject: subject.value,
-          session: session.value,
-          token: token.value,
-        });
-      }
-    }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
-  );
-
-const projectCurrentUser = ({
-  db,
-  subject,
-  session,
-  token,
-}: {
-  db: D1Database;
-  subject: UserId;
-  session: typeof Session.Type;
-  token: string;
-}): Effect.Effect<Response, void> =>
-  Effect.gen(function* () {
-    const loaded = yield* Effect.exit(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const clients = yield* Layer.build(D1Client.layer({ db }));
-          return yield* getCurrentUser(subject).pipe(
-            Effect.withTracerEnabled(false),
-            Effect.provideService(SqlClient.SqlClient, Context.get(clients, SqlClient.SqlClient))
-          );
-        })
-      )
-    );
-    if (Exit.isFailure(loaded)) return unavailable();
-    const observedAt = yield* Clock.currentTimeMillis;
-    yield* attempt(() =>
-      db
-        .prepare(
-          `INSERT INTO canonical_user_reads (id, user_id, session_id, occurred_at_ms) VALUES (?, ?, ?, ?)`
-        )
-        .bind(uuid(), session.user_id, session.id, observedAt)
-        .run()
-    );
-    const data = yield* Schema.encodeEffect(Schema.toCodecJson(User))(loaded.value.data).pipe(
-      Effect.orDie
-    );
-    return json({ data, next: loaded.value.next }, HTTP_OK, {
-      "set-cookie": sessionSetCookie(token),
-    });
-  });
-
 /** Require a still-fresh browser session before rotating its User's emergency proof. */
 export const rotateBackupRecoveryCode = ({
   request,
@@ -607,32 +404,18 @@ export const rotateBackupRecoveryCode = ({
 }): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const token = sessionCookie(request);
-      if (Option.isNone(token)) return noSession();
-      {
-        const usedAt = yield* Clock.currentTimeMillis;
-        const tokenDigest = yield* attempt(() => sha256(token.value));
-        const session = yield* attempt(() =>
-          db
-            .prepare(
-              `SELECT id, user_id FROM web_sessions
-      WHERE token_digest = ? AND revoked_at_ms IS NULL AND fresh_until_ms > ?
-        AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?`
-            )
-            .bind(tokenDigest, usedAt, usedAt, usedAt)
-            .first()
-        );
-        if (session === null) return noSession();
-        const decoded = Schema.decodeUnknownOption(Session)(session);
-        if (Option.isNone(decoded)) return unavailable();
-        return yield* rotateFreshSessionProof(db, decoded.value, usedAt);
-      }
+      const usedAt = yield* Clock.currentTimeMillis;
+      const session = yield* attempt(() =>
+        browserSession({ request, db, input: { current: usedAt, fresh: true } })
+      );
+      if (Option.isNone(session)) return noSession();
+      return yield* rotateFreshSessionProof(db, session.value, usedAt);
     }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
   );
 
 const rotateFreshSessionProof = (
   db: D1Database,
-  session: typeof Session.Type,
+  session: Readonly<{ id: string; userId: string }>,
   usedAt: number
 ): Effect.Effect<Response, void> =>
   Effect.gen(function* () {
@@ -652,9 +435,9 @@ const rotateFreshSessionProof = (
           .bind(
             codeDigest,
             usedAt,
-            session.user_id,
+            session.userId,
             session.id,
-            session.user_id,
+            session.userId,
             usedAt,
             usedAt,
             usedAt
@@ -664,7 +447,7 @@ const rotateFreshSessionProof = (
             `INSERT INTO canonical_security_mutations (id, user_id, session_id, operation, occurred_at_ms)
         SELECT ?, ?, ?, 'recovery.rotateBackupRecoveryCode', ? WHERE changes() = 1`
           )
-          .bind(uuid(), session.user_id, session.id, usedAt),
+          .bind(uuid(), session.userId, session.id, usedAt),
       ])
     );
     if (rotated[0]?.meta.changes !== 1 || rotated[1]?.meta.changes !== 1) {
@@ -679,36 +462,3 @@ const rotateFreshSessionProof = (
       next: [],
     });
   });
-
-/** Revoke the exact cookie's session without disclosing whether it existed. */
-export const logoutBrowser = ({
-  request,
-  db,
-}: {
-  request: Request;
-  db: D1Database;
-}): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const token = sessionCookie(request);
-      if (Option.isSome(token)) {
-        const current = yield* Clock.currentTimeMillis;
-        const tokenDigest = yield* attempt(() => sha256(token.value));
-        yield* attempt(() =>
-          db
-            .prepare(
-              `UPDATE web_sessions SET revoked_at_ms = ? WHERE token_digest = ? AND revoked_at_ms IS NULL`
-            )
-            .bind(current, tokenDigest)
-            .run()
-        );
-      }
-      return new Response(null, {
-        status: 204,
-        headers: {
-          "set-cookie": "__Host-fidy_session=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0",
-          "cache-control": "no-store",
-        },
-      });
-    })
-  );

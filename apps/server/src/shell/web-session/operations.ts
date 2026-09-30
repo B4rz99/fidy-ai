@@ -4,7 +4,7 @@ import { consentNotRevoked } from "~/shell/consent/runtime";
 export const freshSessionExists = `EXISTS (SELECT 1 FROM web_sessions WHERE id = ? AND user_id = ? AND revoked_at_ms IS NULL
   AND fresh_until_ms > ? AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?)`;
 
-export type FreshSessionSubject = Readonly<{ id: string; user_id: string }>;
+export type FreshSessionSubject = Readonly<{ id: string; userId: string }>;
 type WebSessionSubject = Readonly<{ id: string; userId: string; digest: Uint8Array }>;
 /** One live-authority gate over the `web_sessions` table. */
 export type WebSessionAuthority = Readonly<{
@@ -42,7 +42,7 @@ export const freshSessionParams = ({
   time,
 }: Readonly<{ session: FreshSessionSubject; time: number }>): SessionParams => [
   session.id,
-  session.user_id,
+  session.userId,
   time,
   time,
   time,

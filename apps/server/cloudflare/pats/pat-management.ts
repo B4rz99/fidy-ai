@@ -1,3 +1,6 @@
+import { freshSessionExists } from "@fidy/server/web-session";
+import type { FreshSessionSubject } from "@fidy/server/web-session";
+import { browserSession } from "../web-session/operations";
 import {
   ActivePATList,
   patMetadataQuery,
@@ -11,25 +14,22 @@ import {
   revokeOnePAT,
 } from "@fidy/server/tokens-runtime";
 import { type Cause, Effect, Option, Schema } from "effect";
-import { freshSessionParams } from "@fidy/server/identity-runtime";
+import { freshSessionParams } from "@fidy/server/web-session";
 import {
   revokeAllPATConsents,
   revokeAllPairingConsents,
   revokeOnePATConsent,
 } from "@fidy/server/consent-operations";
 import {
-  type SessionRow,
   canonical,
   currentMillis,
   httpRateLimited,
   newId,
   notFound,
   response,
-  sessionExists,
   shortIdIsValid,
   unauthorized,
   serviceUnavailable as unavailable,
-  webSession,
 } from "./pat-shared";
 import { commitPATUnit, prepareOwnedStatement } from "./pat-unit";
 import { refusedByAuditBudget } from "../audit/audit-triggers";
@@ -43,7 +43,9 @@ export const listPATs = ({
 }: Readonly<{ request: Request; db: D1Database }>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const session = yield* Effect.tryPromise(() => webSession({ request, db, fresh: false }));
+      const session = yield* Effect.tryPromise(() =>
+        browserSession({ request, db, input: { current: currentMillis(), fresh: false } })
+      );
       if (Option.isNone(session)) return unauthorized();
       const current = currentMillis();
       return yield* Effect.gen(function* () {
@@ -52,7 +54,7 @@ export const listPATs = ({
             db.batch([
               prepareOwnedStatement({
                 db,
-                statement: patMetadataQuery({ userId: session.value.user_id, current, session }),
+                statement: patMetadataQuery({ userId: session.value.userId, current, session }),
               }),
               prepareOwnedStatement({
                 db,
@@ -93,7 +95,7 @@ export const listPATs = ({
 
 const revokedPATResponse = (
   db: D1Database,
-  session: SessionRow,
+  session: FreshSessionSubject,
   input: Readonly<{ shortId: string; current: number }>
 ): Effect.Effect<Response, Cause.UnknownError> =>
   Effect.gen(function* () {
@@ -101,9 +103,9 @@ const revokedPATResponse = (
     const owned = yield* Effect.tryPromise(() =>
       db
         .prepare(
-          `SELECT revoked_at_ms FROM pats WHERE user_id = ? AND short_id = ? AND ${sessionExists}`
+          `SELECT revoked_at_ms FROM pats WHERE user_id = ? AND short_id = ? AND ${freshSessionExists}`
         )
-        .bind(session.user_id, shortId, ...freshSessionParams({ session, time: current }))
+        .bind(session.userId, shortId, ...freshSessionParams({ session, time: current }))
         .first()
     );
     const record = Schema.decodeUnknownOption(
@@ -121,7 +123,9 @@ export const revokePAT = ({
 }: Readonly<{ request: Request; db: D1Database; shortId: string }>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const session = yield* Effect.tryPromise(() => webSession({ request, db, fresh: true }));
+      const session = yield* Effect.tryPromise(() =>
+        browserSession({ request, db, input: { current: currentMillis(), fresh: true } })
+      );
       if (Option.isNone(session)) return unauthorized();
       if (!shortIdIsValid(shortId)) return notFound();
       const current = currentMillis();
@@ -163,7 +167,9 @@ export const revokeAllPATs = ({
 }: Readonly<{ request: Request; db: D1Database }>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const session = yield* Effect.tryPromise(() => webSession({ request, db, fresh: true }));
+      const session = yield* Effect.tryPromise(() =>
+        browserSession({ request, db, input: { current: currentMillis(), fresh: true } })
+      );
       if (Option.isNone(session)) return unauthorized();
       const current = currentMillis();
       const committed = yield* Effect.tryPromise(() =>
@@ -188,7 +194,7 @@ export const revokeAllPATs = ({
             }),
             db
               .prepare(patRevokeAllCompletion)
-              .bind(session.value.user_id, current, session.value.user_id),
+              .bind(session.value.userId, current, session.value.userId),
             prepareOwnedStatement({
               db,
               statement: recordAllPATRevocations({

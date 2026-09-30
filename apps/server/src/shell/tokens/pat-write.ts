@@ -6,7 +6,7 @@ import {
   type FreshSessionSubject,
   freshSessionExists,
   freshSessionParams,
-} from "~/shell/identity/browser-runtime";
+} from "~/shell/web-session/operations";
 import { type CreateManualPATPayload } from "~/core/tokens/model";
 import type { CanonicalCapability } from "~/core/canonical-operations/contract";
 import type { AuditedPATOperation } from "./pat-audited-operations";
@@ -41,7 +41,7 @@ export const issueManualPAT = ({
     AND (SELECT count(*) FROM pats WHERE user_id = ? AND issued_at_ms > ?) < ?`,
   params: [
     input.patId,
-    session.user_id,
+    session.userId,
     input.shortId,
     input.bearerDigest,
     input.grant.recipientLabel,
@@ -52,11 +52,11 @@ export const issueManualPAT = ({
     input.expires,
     input.requestId,
     ...freshSessionParams({ session, time: input.current }),
-    session.user_id,
-    session.user_id,
+    session.userId,
+    session.userId,
     input.current,
     maxActivePATs,
-    session.user_id,
+    session.userId,
     input.current - issuanceWindowMilliseconds,
     maxIssuancesPerUserWindow,
   ],
@@ -72,13 +72,13 @@ export const approvePairingGrant = ({
     WHERE id = ? AND state = 'pending_approval' AND expires_at_ms > ? AND ${freshSessionExists}
     AND ${consentNotRevoked("?")}`,
   params: [
-    session.user_id,
+    session.userId,
     input.current,
     input.expires,
     input.pairingId,
     input.current,
     ...freshSessionParams({ session, time: input.current }),
-    session.user_id,
+    session.userId,
   ],
 });
 
@@ -213,7 +213,7 @@ export const revokeOnePAT = ({
     AND expires_at_ms > ? AND ${freshSessionExists} AND ${patRevocationRecorded({ kind: "pat", decision: "current-user" })}`,
   params: [
     input.current,
-    session.user_id,
+    session.userId,
     input.shortId,
     input.current,
     ...freshSessionParams({ session, time: input.current }),
@@ -232,7 +232,7 @@ export const revokeEveryPAT = ({
     AND ${patRevocationRecorded({ kind: "pat", decision: "user" })}`,
   params: [
     current,
-    session.user_id,
+    session.userId,
     current,
     ...freshSessionParams({ session, time: current }),
     session.id,
@@ -247,7 +247,7 @@ export const revokeEveryPairing = ({
   sql: `UPDATE pat_pairings SET state = 'revoked_unclaimed' WHERE user_id = ?
     AND state = 'approved_awaiting_claim' AND ${freshSessionExists}
     AND ${patRevocationRecorded({ kind: "pairing", decision: "user" })}`,
-  params: [session.user_id, ...freshSessionParams({ session, time: current }), session.id],
+  params: [session.userId, ...freshSessionParams({ session, time: current }), session.id],
 });
 
 /** Apply scheduled policy expiry only to approvals backed by their append-only Consent evidence. */

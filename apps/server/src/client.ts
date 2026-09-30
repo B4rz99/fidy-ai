@@ -76,13 +76,13 @@ export {
   type WebAuthApiGroups,
 } from "~/shell/web-authentication/contract";
 export { StartedBrowserLoginPairing } from "~/core/browser-login/contract";
-export { EmailAddress, EmailVerificationCode } from "~/core/email-authentication/model";
-export { CompleteEmailReplacementPayload } from "~/shell/web-authentication/contract";
+export { EmailAddress, EmailVerificationCode } from "~/core/email-authentication/contract";
+export { CompleteEmailReplacementPayload } from "~/shell/email-authentication/contract";
 export { RequestEmailReplacementPayload } from "~/shell/email-authentication/contract";
 export {
   emailReplacementPath,
   emailReplacementCompletionPath,
-} from "~/shell/email-authentication/path";
+} from "~/shell/email-authentication/contract";
 export { BillingAttemptId, PaymentRequestId } from "~/core/subscription/model";
 export type { SubscriptionStatus } from "~/core/subscription/model";
 export { PriceId } from "~/core/subscription/reference";
@@ -113,4 +113,4 @@ export {
   EmailReplacementInvalidApi,
   emailReplacementFreshBody,
   emailReplacementInvalidBody,
-} from "~/shell/web-authentication/contract";
+} from "~/shell/email-authentication/contract";

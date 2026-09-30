@@ -1,21 +1,26 @@
 import { expect, it } from "@effect/vitest";
+
 import { DateTime, Redacted, Result, Schema } from "effect";
+
 import {
   EmailAddress,
+  EmailEnrollmentId,
   EmailVerificationPublicCode,
   PendingEmailEnrollment,
   VerifiedEmailCredential,
   VerifiedEmailCredentialLifecycleEvent,
   VerifiedEmailCredentialLifecycleEventId,
-} from "./model";
+} from "./contract";
+
 import { PendingConsentExchangeId } from "~/core/consent/reference";
+
 import {
   UserId,
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
 } from "~/core/identity/reference";
+
 import { WebSessionId } from "~/core/web-session/contract";
-import { EmailEnrollmentId } from "./reference";
 
 const decodeEmail = Schema.decodeUnknownResult(EmailAddress);
 

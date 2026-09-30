@@ -53,7 +53,7 @@ import {
   isBrowserPairingEmailWork,
   receiveBrowserPairingEmail,
   reconcileBrowserPairingEmail,
-} from "./identity/browser-pairing-email-delivery";
+} from "./email-authentication/runtime";
 import { handleSupportRecovery, rotateBackupRecoveryCode } from "./recovery/operations";
 import { handleCardEnrollment } from "./card-enrollment/card-enrollment";
 import {
@@ -70,7 +70,7 @@ import {
   isEmailReplacementWork,
   receiveEmailReplacement,
   reconcileEmailReplacement,
-} from "./identity/email-replacement-delivery";
+} from "./email-authentication/runtime";
 import { handlePATRequest, patRoute } from "./pats/pat-routes";
 import { listPATs } from "./pats/pat-management";
 import { recallMemories, rejectMemoryMutation } from "./memory/memory";
@@ -106,7 +106,7 @@ import {
   dispatchOnboardingEmail,
   receiveOnboardingEmail,
   reconcileOnboardingEmail,
-} from "./onboarding/onboarding-email";
+} from "./email-authentication/runtime";
 import { contractDigestPattern, gitRevisionPattern } from "./runtime/release-identity";
 import { smokeFailureHeader, smokePath, smokeProofAccepted } from "./runtime/smoke";
 import {
@@ -188,13 +188,12 @@ import {
 } from "./agent/whatsapp-turn";
 
 export { UserTransactionCoordinator } from "./transactions/transaction-coordinator";
-export { OnboardingEmailWorkflowV1 } from "./onboarding/onboarding-email";
+export { OnboardingEmailWorkflowV1 } from "./email-authentication/runtime";
 export {
   BillingCollectionWorkflowV1,
   runBillingCollectionWorkflow,
 } from "./billing/billing-collection";
-export { BrowserPairingEmailWorkflowV1 } from "./identity/browser-pairing-email-delivery";
-export { EmailReplacementWorkflowV1 } from "./identity/email-replacement-delivery";
+export { BrowserPairingEmailWorkflowV1, EmailReplacementWorkflowV1 } from "./email-authentication/runtime";
 export { StatementExtractionWorkflowV1, ReleaseSmokeWorkflowV1 };
 export { OperationalCanaryWorkflowV1 } from "./operational-canary-workflow";
 

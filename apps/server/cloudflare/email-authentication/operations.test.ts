@@ -4,21 +4,28 @@ import { observeOperationalHealth } from "../runtime/operational-health";
 import { Miniflare } from "miniflare";
 import { afterEach, expect, it, vi } from "vitest";
 import { startBrowserPairing } from "../browser-login/operations";
-import {
-  deliverBrowserPairingEmail,
-  dispatchBrowserPairingEmail,
-} from "../identity/browser-pairing-email-delivery";
+import { prepareOnboardingCredential } from "./operations";
+import { internals as pairingDelivery } from "./internal/pairing-delivery";
+import { dispatchBrowserPairingEmail, dispatchEmailReplacement } from "./runtime";
+const { deliverBrowserPairingEmail } = pairingDelivery;
 import { Cause, Clock, Effect, Exit, FileSystem, Option, Schema } from "effect";
-import {
-  deliverEmailReplacement,
-  dispatchEmailReplacement,
-} from "../identity/email-replacement-delivery";
+import { internals as replacementDelivery } from "./internal/replacement-delivery";
+const { deliverEmailReplacement } = replacementDelivery;
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import coreWorker, { makeCoreWorker } from "../core-worker";
 import { DisabledTelemetryResource, makeTelemetryService } from "@fidy/server/telemetry";
 import { handleSupportRecovery } from "../recovery/operations";
 import publicWorker from "../public-worker";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
+
+it("leaves mailbox proof redeemable after the published owner rejects oversized input", () =>
+  Effect.runPromise(Effect.gen(function* () {
+    const { db, send } = yield* Effect.tryPromise(() => setup());
+    const refused = yield* prepareOnboardingCredential({ db, combinedCode: "x".repeat(513), nowMs: yield* Clock.currentTimeMillis });
+    expect(Option.isNone(refused)).toBe(true);
+    expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
+    expect((yield* Effect.tryPromise(() => send(code))).status).toBe(400);
+  })));
 
 const signWebhook = (secret: string, body: string | Uint8Array): Promise<string> =>
   crypto.subtle

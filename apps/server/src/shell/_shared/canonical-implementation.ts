@@ -1,13 +1,23 @@
 import type { Crypto, Effect } from "effect";
+
 import type { HttpApiEndpoint } from "effect/unstable/httpapi";
+
 import type { SqlClient } from "effect/unstable/sql";
+
 import type { HostedInference } from "~/shell/hosted-inference/operations";
-import type { EmailReplacementMutation } from "~/shell/email-authentication/mutation";
+
+import type { EmailReplacementMutation } from "~/shell/email-authentication/operations";
+
 import type { OperationId } from "~/shell/api";
+
 import type { Telemetry } from "~/shell/observability/operations";
+
 import type { ChildOperationAudit } from "./authz";
+
 import type { CanonicalImplementationCaller } from "./canonical-implementation-caller";
+
 import type { CanonicalEndpoint, CanonicalInput } from "./canonical-input";
+
 import type { CanonicalSuccess } from "./canonical-success";
 
 export type { CanonicalImplementationCaller } from "./canonical-implementation-caller";

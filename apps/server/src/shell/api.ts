@@ -1,21 +1,39 @@
 import { HttpApi, type HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
+
 import { TokenAuthorization } from "~/shell/_shared/authz";
+
 import { CanonicalTelemetry } from "~/shell/_shared/canonical-telemetry";
+
 import { ValidationGate } from "~/shell/public-http/contract";
+
 import { bindOperationCatalog, makeOperationCatalog } from "~/shell/_shared/operation-catalog";
+
 import { BrowserLoginGroup } from "~/shell/browser-login/operations";
+
 import { BudgetsGroup } from "~/shell/budgets/operations";
+
 import { CategoriesGroup } from "~/shell/categories/operations";
+
 import { DashboardGroup } from "~/shell/dashboard/operations";
-import { EmailAuthenticationGroup } from "~/shell/email-authentication/operations";
+
+import { EmailAuthenticationGroup } from "~/shell/email-authentication/contract";
+
 import { IdentityGroup } from "~/shell/identity/operations";
+
 import { InsightsGroup } from "~/shell/insights/operations";
+
 import { IngestionGroup } from "~/shell/ingestion/operations";
+
 import { MemoryGroup } from "~/shell/memory/operations";
+
 import { makeOperationsGroup } from "~/shell/operations/operations";
+
 import { SubscriptionGroup } from "~/shell/subscription/operations";
+
 import { PATsGroup } from "~/shell/tokens/operations";
+
 import { RecoveryGroup } from "~/shell/recovery/operations";
+
 import { TransactionsGroup } from "~/shell/transactions/operations";
 
 const OrdinaryFidyApi = HttpApi.make("fidy")
@@ -36,6 +54,7 @@ const OrdinaryFidyApi = HttpApi.make("fidy")
 // The child union is reflected before the batch group exists, so queries and recursive batches are
 // absent by construction. The live dispatch layer checks registry completeness at startup.
 const ordinaryOperationCatalog = makeOperationCatalog(OrdinaryFidyApi);
+
 const OperationsGroup = makeOperationsGroup(ordinaryOperationCatalog);
 
 /**

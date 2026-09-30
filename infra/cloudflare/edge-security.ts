@@ -1,24 +1,36 @@
 import { operationCatalog } from "@fidy/server/canonical-runtime";
+
 import {
   emailReplacementCompletionPath,
   emailReplacementPath,
-} from "@fidy/server/email-replacement-path";
+} from "@fidy/server/email-authentication-contract";
+
 import { statementStagingPath } from "@fidy/server/statement-path";
+
 import type * as Cloudflare from "alchemy/Cloudflare";
+
 import { browserOrigins, productionTopology } from "../../apps/server/cloudflare/runtime/topology";
 
 const kapsoCallbackPath = "/providers/kapso/callback";
+
 const wompiCallbackPath = "/providers/wompi/billing-events";
+
 const cloudflareFreeManagedRulesetId = "77454fe2d30c4220b5701f6fdfb893ba";
+
 const cloudflareHttpDdosRulesetId = "4d21379b4f9f4bb088e0729962c8b3cf";
+
 const freePlanRateLimitPeriod = 10;
+
 const freePlanRequestsPerPeriod = 60;
+
 const apiHostname = productionTopology.ingress.hostname;
+
 const ownedHostnames = [
   ...productionTopology.web.redirects,
   productionTopology.web.hostname,
   apiHostname,
 ];
+
 const ownedHostExpression = ownedHostnames.map((hostname) => `"${hostname}"`).join(" ");
 
 const reservedIngress = {
@@ -118,10 +130,13 @@ const reservedRateLimitPaths = [
   "/pat-pairings/claim",
   statementStagingPath,
 ] as const;
+
 const declaredRoutes = operationCatalog.operations.map((operation) => operation.route);
+
 const exactPaths = Array.from(
   new Set([...reservedRateLimitPaths, ...declaredRoutes.filter((route) => !route.includes(":"))])
 ).sort();
+
 const paramPrefixes = Array.from(
   new Set([
     ...declaredRoutes
@@ -131,6 +146,7 @@ const paramPrefixes = Array.from(
     "/web/subscription/billing-attempts/",
   ])
 ).sort();
+
 const rateLimitExpression = `http.request.uri.path in {${exactPaths.map((path) => `"${path}"`).join(" ")}}${paramPrefixes
   .map((prefix) => ` or starts_with(http.request.uri.path, "${prefix}")`)
   .join("")}`;

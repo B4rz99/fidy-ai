@@ -1,33 +1,30 @@
-import {
-  CompleteEmailReplacementPayload,
-  RequestEmailReplacementPayload,
-  emailReplacementFreshBody,
-  emailReplacementInvalidBody,
-} from "@fidy/server/client";
-import {
-  EmailReplacementMutation,
-  type EmailReplacementMutationService,
-  browserReplacementCaller,
-  emailReplacementImplementations,
-  permitsFreshBrowserReplacement,
-} from "@fidy/server/email-replacement";
+import { emailReplacementFreshBody, emailReplacementInvalidBody } from "@fidy/server/client";
+
+import { type EmailReplacementMutationService } from "@fidy/server/email-authentication-operations";
+
 import { Clock, Crypto, Data, Effect, Exit, Option, PlatformError, Schema } from "effect";
-import { freshBrowserSession } from "../web-session/operations";
-import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
+import { freshBrowserSession } from "../../web-session/operations";
+import { RequestBodyPolicy, readBoundedRequestBody } from "../../http/request-body";
 
 const Proof = Schema.Struct({
   user_id: Schema.String.check(Schema.isUUID()),
   work_id: Schema.String.check(Schema.isUUID()),
   proof_digest: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))),
 });
+
 const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 512,
-  deadlineMilliseconds: 2_000,
+  deadlineMilliseconds: 2000,
 });
+
 const HTTP_OK = 200;
+
 const HTTP_INVALID = 400;
+
 const HTTP_UNAUTHORIZED = 401;
+
 const HTTP_UNAVAILABLE = 503;
+
 const workerCrypto = Crypto.make({
   randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),
   digest: (algorithm, data) =>
@@ -45,21 +42,33 @@ const workerCrypto = Crypto.make({
         }),
     }),
 });
+
 const newId = (): string => Effect.runSync(workerCrypto.randomUUIDv4.pipe(Effect.orDie));
+
 const digestLength = 32;
+
 const proofPublicLength = 9;
+
 const proofSecretOffset = 10;
-const proofLifetimeMilliseconds = 600_000;
-const admissionWindowMilliseconds = 86_400_000;
+
+const proofLifetimeMilliseconds = 600000;
+
+const admissionWindowMilliseconds = 86400000;
+
 const json = (body: object, status: number): Response =>
   Response.json(body, { status, headers: { "cache-control": "no-store" } });
+
 const invalid = (): Response => json(emailReplacementInvalidBody, HTTP_INVALID);
+
 const unavailable = (): Response => json({ status: "unavailable" }, HTTP_UNAVAILABLE);
+
 const fresh = (): Response => json(emailReplacementFreshBody, HTTP_UNAUTHORIZED);
+
 const digest = (value: string): Promise<Uint8Array> =>
   crypto.subtle
     .digest("SHA-256", new TextEncoder().encode(value))
     .then((bytes) => new Uint8Array(bytes));
+
 const equalDigest = (left: ReadonlyArray<number>, right: Uint8Array): boolean => {
   if (left.length !== digestLength || right.length !== digestLength) return false;
   let difference = 0;
@@ -71,6 +80,7 @@ const equalDigest = (left: ReadonlyArray<number>, right: Uint8Array): boolean =>
 
 const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, void> =>
   Effect.tryPromise({ try: run, catch: () => undefined });
+
 const readProof = <A, Encoded>(
   request: globalThis.Request,
   schema: Schema.Codec<A, Encoded>
@@ -89,38 +99,6 @@ const readProof = <A, Encoded>(
     }).pipe(Effect.orElseSucceed(() => Option.none<A>()))
   );
 };
-
-/** Start a candidate-mailbox proof for a fresh WebSession, without disclosing collisions. */
-export const requestEmailReplacement = ({
-  request,
-  db,
-  onAccepted,
-}: {
-  request: globalThis.Request;
-  db: D1Database;
-  onAccepted: (id: string) => void;
-}): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const input = yield* attempt(() => readProof(request, RequestEmailReplacementPayload));
-      if (Option.isNone(input)) return invalid();
-      {
-        const current = yield* Clock.currentTimeMillis;
-        const session = yield* attempt(() => freshBrowserSession({ request, db, current }));
-        if (Option.isNone(session)) return fresh();
-        if (!permitsFreshBrowserReplacement("request")) return unavailable();
-        const result = yield* emailReplacementImplementations
-          .request({ payload: input.value }, browserReplacementCaller(session.value))
-          .pipe(
-            Effect.provideService(
-              EmailReplacementMutation,
-              replacementAdapter({ db, session: session.value, current, onAccepted })
-            )
-          );
-        return json(result, HTTP_OK);
-      }
-    }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
-  );
 
 const startProof = (
   db: D1Database,
@@ -183,7 +161,11 @@ const startProof = (
 
 const admissionStatement = (
   db: D1Database,
-  input: { userId: string; workId: string; current: number }
+  input: {
+    userId: string;
+    workId: string;
+    current: number;
+  }
 ): D1PreparedStatement => {
   const { userId, workId, current } = input;
   return db
@@ -216,44 +198,10 @@ const recordMalformedInput = (
     }
   });
 
-/** Consume a candidate-mailbox proof only while the initiating User still has fresh browser authority. */
-export const completeEmailReplacement = ({
-  request,
-  db,
-}: {
-  request: globalThis.Request;
-  db: D1Database;
-}): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const input = yield* attempt(() => readProof(request, CompleteEmailReplacementPayload));
-      if (Option.isNone(input)) {
-        // No successful credential transition can follow malformed input, even if audit fails.
-        yield* Effect.exit(recordMalformedInput(request, db));
-        return invalid();
-      }
-      {
-        const current = yield* Clock.currentTimeMillis;
-        const session = yield* attempt(() => freshBrowserSession({ request, db, current }));
-        if (Option.isNone(session)) return fresh();
-        if (!permitsFreshBrowserReplacement("complete")) return unavailable();
-        return yield* emailReplacementImplementations
-          .complete({ payload: input.value }, browserReplacementCaller(session.value))
-          .pipe(
-            Effect.provideService(
-              EmailReplacementMutation,
-              replacementAdapter({
-                db,
-                session: session.value,
-                current,
-                onAccepted: () => undefined,
-              })
-            ),
-            Effect.match({ onSuccess: (result) => json(result, HTTP_OK), onFailure: invalid })
-          );
-      }
-    }).pipe(Effect.catchCause(() => Effect.succeed(invalid())))
-  );
+const replacementCommitted = (committed: Exit.Exit<ReadonlyArray<D1Result>, void>): boolean =>
+  Exit.isSuccess(committed) &&
+  committed.value.length === 3 &&
+  committed.value.every((result) => result.meta.changes === 1);
 
 const redeemProof = (
   db: D1Database,
@@ -291,8 +239,6 @@ const redeemProof = (
         );
         return false;
       }
-      // Both writes are in one D1 transaction. An expired session, superseded credential or
-      // competing candidate UNIQUE claim leaves the existing mailbox authoritative.
       const committed = yield* Effect.exit(
         attempt(() =>
           commitReplacement(db, {
@@ -304,11 +250,7 @@ const redeemProof = (
           })
         )
       );
-      if (
-        Exit.isSuccess(committed) &&
-        committed.value.length === 3 &&
-        committed.value.every((result) => result.meta.changes === 1)
-      ) {
+      if (replacementCommitted(committed)) {
         return true;
       }
       yield* attempt(() => recordRejected(db, session, current));
@@ -316,7 +258,7 @@ const redeemProof = (
     })
   );
 
-type SessionSubject = { readonly id: string; readonly userId: string };
+export type SessionSubject = { readonly id: string; readonly userId: string };
 
 class ReplacementDatabaseUnavailable extends Data.TaggedError("ReplacementDatabaseUnavailable")<{
   readonly operation: "request" | "complete";
@@ -373,7 +315,11 @@ const recordRejected = (
 
 const rejectWrongProof = (
   db: D1Database,
-  input: { workId: string; session: SessionSubject; current: number }
+  input: {
+    workId: string;
+    session: SessionSubject;
+    current: number;
+  }
 ): Promise<void> => {
   const { workId, session, current } = input;
   return Effect.runPromise(
@@ -448,4 +394,37 @@ const commitReplacement = (
       ])
     )
   );
+};
+
+export const internals = {
+  Proof,
+  policy,
+  HTTP_OK,
+  HTTP_INVALID,
+  HTTP_UNAUTHORIZED,
+  HTTP_UNAVAILABLE,
+  workerCrypto,
+  newId,
+  digestLength,
+  proofPublicLength,
+  proofSecretOffset,
+  proofLifetimeMilliseconds,
+  admissionWindowMilliseconds,
+  json,
+  invalid,
+  unavailable,
+  fresh,
+  digest,
+  equalDigest,
+  attempt,
+  readProof,
+  startProof,
+  admissionStatement,
+  recordMalformedInput,
+  redeemProof,
+  ReplacementDatabaseUnavailable,
+  replacementAdapter,
+  recordRejected,
+  rejectWrongProof,
+  commitReplacement,
 };

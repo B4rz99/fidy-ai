@@ -5,6 +5,7 @@ import {
 } from "@fidy/server/statement-staging";
 import { Data, Effect, Encoding, Fiber, Option, Result } from "effect";
 import { Miniflare } from "miniflare";
+import { applyTestMigration } from "../d1-test-fixture";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   StatementStaging,
@@ -90,18 +91,7 @@ const makeMiniflare = (): Promise<Miniflare> =>
   );
 
 const applyMigration = (database: D1Database, name: string): Promise<void> =>
-  Bun.file(new URL(`${name}.sql`, migrationsDirectoryUrl))
-    .text()
-    .then((sql) => sql.replace(/^--.*$/gmu, "").trim())
-    .then((sql) =>
-      sql
-        .split(/;\s*\n(?=CREATE |ALTER |INSERT |DROP |$)/u)
-        .reduce<Promise<unknown>>(
-          (previous, statement) => previous.then(() => database.prepare(statement).run()),
-          Promise.resolve()
-        )
-    )
-    .then(() => undefined);
+  applyTestMigration({ db: database, source: new URL(`${name}.sql`, migrationsDirectoryUrl) });
 
 const migrateDatabase = (database: D1Database): Promise<void> =>
   migrationNames.reduce(

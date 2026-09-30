@@ -10,6 +10,7 @@ const json = (value: object): string => JSON.stringify(value);
 const runFixture = <A, E>(effect: Effect.Effect<A, E>): Promise<A> => Effect.runPromise(effect);
 const opaqueProofEncodedLength = 43;
 const minimumPollIntervalMilliseconds = 5000;
+const advancePastExpiryMilliseconds = 2_000;
 const successStatus = 200;
 const pendingStatus = 202;
 const noContentStatus = 204;
@@ -598,10 +599,16 @@ test("stops at pairing expiry after a timed-out poll without creating a replacem
   Effect.runPromise(
     Effect.gen(function* () {
       const counts = { start: 0, redeem: 0 };
+      yield* wait(page.clock.install());
       yield* wait(installExpiringPairingRoutes(page, counts));
       yield* wait(page.goto("/auth/pair"));
       yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());
-      yield* wait(expect(page.getByText(invalidPairingMessage)).toBeVisible({ timeout: 10000 }));
+      yield* wait(expect(page.getByText(publicCode, { exact: true })).toBeVisible());
+      yield* wait(page.clock.fastForward(minimumPollIntervalMilliseconds));
+      yield* wait(expect.poll(() => counts.redeem).toBe(1));
+      yield* wait(expect(page.getByText(invalidPairingMessage)).not.toBeVisible());
+      yield* wait(page.clock.fastForward(advancePastExpiryMilliseconds));
+      yield* wait(expect(page.getByText(invalidPairingMessage)).toBeVisible());
       expect(counts.start).toBe(1);
       expect(counts.redeem).toBe(1);
     })

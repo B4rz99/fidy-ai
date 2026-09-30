@@ -1,5 +1,6 @@
 import { Clock, Data, Effect, Option, Schema } from "effect";
 import { Miniflare } from "miniflare";
+import { applyTestMigration } from "../d1-test-fixture";
 import { afterEach, expect, it } from "vitest";
 import { forwardingAddressResponse } from "./forwarding-address";
 import {
@@ -73,23 +74,10 @@ const setup = Effect.fn(function* () {
       db.prepare(`CREATE TRIGGER ${name} BEFORE ${event} ON ${table} BEGIN SELECT 1; END`).run()
     );
   }
-  const migration = yield* wait(() =>
-    Bun.file(new URL("../migrations/0017_forwarded_email.sql", import.meta.url)).text()
-  );
-  for (const statement of migration
-    .replace(/^--.*$/gmu, "")
-    .trim()
-    .split(/;\s*\n(?=(?:CREATE|ALTER|INSERT|DROP) |$)/u)) {
-    if (statement.trim().length > 0) yield* wait(() => db.prepare(statement.trim()).run());
-  }
-  const childGuards = yield* wait(() =>
-    Bun.file(new URL("../migrations/0019_canonical_child_guards.sql", import.meta.url)).text()
-  );
-  for (const statement of childGuards
-    .replace(/^--.*$/gmu, "")
-    .trim()
-    .split(/;\s*\n(?=(?:CREATE|ALTER|INSERT|DROP) |$)/u)) {
-    if (statement.trim().length > 0) yield* wait(() => db.prepare(statement.trim()).run());
+  for (const name of ["0017_forwarded_email", "0019_canonical_child_guards"]) {
+    yield* wait(() =>
+      applyTestMigration({ db, source: new URL(`../migrations/${name}.sql`, import.meta.url) })
+    );
   }
   for (const user of [userA, userB]) {
     yield* wait(() => db.prepare("INSERT INTO users VALUES (?)").bind(user).run());

@@ -1,5 +1,6 @@
 import { observeOperationalHealth } from "../runtime/operational-health";
 import { Miniflare } from "miniflare";
+import { applyTestMigration } from "../d1-test-fixture";
 import { afterEach, expect, it, vi } from "vitest";
 import { startBrowserPairing } from "../identity/browser-login";
 import {
@@ -98,19 +99,7 @@ const setup = (
       yield* Effect.tryPromise(() => mf.ready);
       const db = yield* Effect.tryPromise(() => mf.getD1Database("DB"));
       const applyMigration = (name: string): Promise<void> =>
-        Bun.file(new URL(`../migrations/${name}.sql`, import.meta.url))
-          .text()
-          .then((sql) =>
-            sql
-              .replace(/^--.*$/gmu, "")
-              .trim()
-              .split(/;\s*\n(?=CREATE |ALTER |$)/u)
-              .reduce<Promise<void>>(
-                (previous, statement) =>
-                  previous.then(() => db.prepare(statement).run()).then(() => undefined),
-                Promise.resolve()
-              )
-          );
+        applyTestMigration({ db, source: new URL(`../migrations/${name}.sql`, import.meta.url) });
       // Applied migrations depend on the preceding schema, so they must run in order.
       yield* Effect.tryPromise(() =>
         [

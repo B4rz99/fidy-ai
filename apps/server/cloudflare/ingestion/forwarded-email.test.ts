@@ -4,6 +4,7 @@ import type { TelemetryWorkRecord } from "@fidy/server/telemetry";
 import { makeWorkerTelemetry } from "../runtime/telemetry";
 import { Clock, Data, Effect, Option } from "effect";
 import { Miniflare } from "miniflare";
+import { applyTestMigration } from "../d1-test-fixture";
 import { afterEach, expect } from "vitest";
 import emailWorker, { makeEmailWorker } from "./email-worker";
 import { processForwardedEmail } from "./forwarded-email-processing";
@@ -165,23 +166,10 @@ const setup = Effect.fn(function* () {
       .bind(userA)
       .run()
   );
-  const migration = yield* wait(() =>
-    Bun.file(new URL("../migrations/0017_forwarded_email.sql", import.meta.url)).text()
-  );
-  for (const statement of migration
-    .replace(/^--.*$/gmu, "")
-    .trim()
-    .split(/;\s*\n(?=(?:CREATE|ALTER|INSERT|DROP) |$)/u)) {
-    if (statement.trim().length > 0) yield* wait(() => db.prepare(statement.trim()).run());
-  }
-  const processing = yield* wait(() =>
-    Bun.file(new URL("../migrations/0018_forwarded_email_processing.sql", import.meta.url)).text()
-  );
-  for (const statement of processing
-    .replace(/^--.*$/gmu, "")
-    .trim()
-    .split(/;\s*\n(?=(?:CREATE|ALTER|INSERT|DROP) |$)/u)) {
-    if (statement.trim().length > 0) yield* wait(() => db.prepare(statement.trim()).run());
+  for (const name of ["0017_forwarded_email", "0018_forwarded_email_processing"]) {
+    yield* wait(() =>
+      applyTestMigration({ db, source: new URL(`../migrations/${name}.sql`, import.meta.url) })
+    );
   }
   yield* wait(() => db.prepare("INSERT INTO users (id) VALUES (?)").bind(userB).run());
   yield* wait(() =>

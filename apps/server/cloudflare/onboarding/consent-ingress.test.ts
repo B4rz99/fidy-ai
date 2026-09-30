@@ -1,4 +1,5 @@
 import { Miniflare } from "miniflare";
+import { applyTestMigration } from "../d1-test-fixture";
 import { type Cause, Clock, DateTime, Effect, Equal, Exit, Option, Schema } from "effect";
 import { recoverPendingDisclosures, sweepExpiredConsent } from "./consent-ingress";
 import { WhatsAppStatusAdmission, WhatsAppTurnAdmission } from "../agent/whatsapp-turn";
@@ -149,19 +150,7 @@ const setup = (
       yield* Effect.tryPromise(() => mf.ready);
       const db = yield* Effect.tryPromise(() => mf.getD1Database("DB"));
       // Apply migrations and their statements in order; triggers must not be split at BEGIN/END.
-      const applyMigration = (source: URL): Promise<unknown> =>
-        Bun.file(source)
-          .text()
-          .then((sql) =>
-            sql
-              .replace(/^--.*$/gmu, "")
-              .trim()
-              .split(/;\s*\n(?=CREATE |ALTER |UPDATE |DROP |$)/u)
-              .reduce<Promise<unknown>>(
-                (previous, statement) => previous.then(() => db.prepare(statement).run()),
-                Promise.resolve()
-              )
-          );
+      const applyMigration = (source: URL): Promise<void> => applyTestMigration({ db, source });
       yield* Effect.tryPromise(() =>
         applyMigration(new URL("../migrations/0002_resource_admission.sql", import.meta.url))
       );

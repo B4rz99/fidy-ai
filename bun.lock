@@ -35,7 +35,7 @@
         "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
       },
       "devDependencies": {
-        "@cloudflare/workers-types": "5.20260922.1",
+        "@cloudflare/workers-types": "5.20260923.1",
         "@effect/platform-bun": "4.0.0-rc.115",
         "@effect/platform-node": "4.0.0-rc.115",
         "@effect/vitest": "4.0.0-rc.115",
@@ -100,7 +100,7 @@
         "effect": "4.0.0-rc.115",
       },
       "devDependencies": {
-        "@cloudflare/workers-types": "5.20260922.1",
+        "@cloudflare/workers-types": "5.20260923.1",
         "@effect/platform-bun": "4.0.0-rc.115",
         "@effect/vitest": "4.0.0-rc.115",
         "alchemy": "2.0.0-beta.79",
@@ -265,7 +265,7 @@
 
     "@cloudflare/workerd-windows-64": ["@cloudflare/workerd-windows-64@1.20260921.1", "", { "os": "win32", "cpu": "x64" }, "sha512-VgNcRPstoZMb1G94JTrx+jU24GtkkazNfox0gnF/2fkuXpcfW/M0e0xvdMovYfwt8ZxG5AB2ZNvanD6ufBwiuQ=="],
 
-    "@cloudflare/workers-types": ["@cloudflare/workers-types@5.20260922.1", "", {}, "sha512-zZVBBFJan5Kw+flEgSHqqCZ0LvHPv5LvfP2igmQiLvZ4fFQYsI4epN9cGiCQqaCyhCzQuqWEyK1Lamzm3QJAmw=="],
+    "@cloudflare/workers-types": ["@cloudflare/workers-types@5.20260923.1", "", {}, "sha512-zuOqyxfhzhN2LlxxcpnAS79aGVm9ku3ZcWKyvVLHyjPV6oHsuHSFidzSHhHE9ho9UTcUxU1IdtpdVuFXluKB+g=="],
 
     "@cspotcode/source-map-support": ["@cspotcode/source-map-support@0.8.1", "", { "dependencies": { "@jridgewell/trace-mapping": "0.3.9" } }, "sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw=="],
 
@@ -1866,8 +1866,6 @@
     "@effect/platform-node/undici": ["undici@8.10.2", "", {}, "sha512-/y4/bH9YNU5hi9NIrpOuvGXFcxrj3CMrV+/AYpowAYTpHn8gX/XPFjNy766FPoYY0miQhdW977JFWKGNhBdwyQ=="],
 
     "@effect/platform-node-shared/ws": ["ws@8.21.3", "", { "peerDependencies": { "bufferutil": "^4.0.1", "utf-8-validate": ">=5.0.2" }, "optionalPeers": ["bufferutil", "utf-8-validate"] }, "sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw=="],
-
-    "@effect/sql-d1/@cloudflare/workers-types": ["@cloudflare/workers-types@5.20260923.1", "", {}, "sha512-zuOqyxfhzhN2LlxxcpnAS79aGVm9ku3ZcWKyvVLHyjPV6oHsuHSFidzSHhHE9ho9UTcUxU1IdtpdVuFXluKB+g=="],
 
     "@jridgewell/gen-mapping/@jridgewell/sourcemap-codec": ["@jridgewell/sourcemap-codec@1.5.5", "", {}, "sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og=="],
 

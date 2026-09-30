@@ -1,0 +1,145 @@
+import { Miniflare } from "miniflare";
+import { Option } from "effect";
+
+const migrationStatements = new Map<string, Promise<ReadonlyArray<string>>>();
+
+const loadMigrationStatements = (source: URL): Promise<ReadonlyArray<string>> =>
+  Option.getOrElse(Option.fromUndefinedOr(migrationStatements.get(source.href)), () => {
+    const loaded = Bun.file(source)
+      .text()
+      .then((sql) =>
+        sql
+          .replace(/^--.*$/gmu, "")
+          .trim()
+          .split(/;\s*\n(?=PRAGMA |CREATE |ALTER |UPDATE |INSERT |DROP |$)/u)
+          .filter((statement) => statement.trim().length > 0)
+      );
+    migrationStatements.set(source.href, loaded);
+    return loaded;
+  });
+
+/** Applies checked-in migration statements in order in one D1 transaction per file.
+ * Only immutable SQL text is cached; every database still executes every migration.
+ */
+export const applyTestMigration = ({
+  db,
+  source,
+}: Readonly<{ db: D1Database; source: URL }>): Promise<void> =>
+  loadMigrationStatements(source)
+    .then((sql) => db.batch(sql.map((statement) => db.prepare(statement))))
+    .then(() => undefined);
+
+/** Installs an ordered baseline in one transaction before seeding a fresh test database.
+ * Failure rolls back the whole schema. This does not model production migration boundaries;
+ * tests of file-by-file migration behavior must use applyTestMigration instead.
+ */
+export const installTestSchema = ({
+  db,
+  sources,
+}: Readonly<{ db: D1Database; sources: ReadonlyArray<URL> }>): Promise<void> =>
+  sources
+    .reduce<Promise<ReadonlyArray<string>>>(
+      (previous, source) =>
+        previous.then((sql) => loadMigrationStatements(source).then((next) => [...sql, ...next])),
+      Promise.resolve([])
+    )
+    .then((sql) =>
+      sql.length === 0 ? undefined : db.batch(sql.map((statement) => db.prepare(statement)))
+    )
+    .then(() => undefined);
+
+type BindingSlot = Readonly<{ runtime: Miniflare; index: number }>;
+const bindingPool = (
+  withBuckets: boolean
+): Readonly<{
+  acquire: () => BindingSlot;
+  dispose: () => Promise<void>;
+}> => {
+  const runtimes: Miniflare[] = [];
+  const poolSize = 16;
+  let nextBinding = poolSize;
+  let poolSequence = 0;
+  let runtime = Option.none<Miniflare>();
+  const acquire = (): BindingSlot => {
+    if (nextBinding === poolSize) {
+      poolSequence += 1;
+      const env: Record<string, { type: "d1"; id: string } | { type: "r2"; name: string }> = {};
+      for (let index = 0; index < poolSize; index += 1) {
+        const name = `isolated-${poolSequence}-${index}`;
+        env[`DB_${index}`] = { type: "d1", id: name };
+        if (withBuckets) env[`BUCKET_${index}`] = { type: "r2", name };
+      }
+      const created = new Miniflare({
+        workers: [
+          {
+            config: {
+              name: `isolated-${poolSequence}`,
+              type: "worker",
+              compatibilityDate: "2026-09-08",
+              env,
+              manifest: {
+                mainModule: "index.mjs",
+                modules: {
+                  "index.mjs": {
+                    contents: "export default {fetch(){return new Response('ok')}}",
+                    type: "esm",
+                  },
+                },
+              },
+            },
+          },
+        ],
+      });
+      runtimes.push(created);
+      runtime = Option.some(created);
+      nextBinding = 0;
+    }
+    return { runtime: Option.getOrThrow(runtime), index: nextBinding++ };
+  };
+  const dispose = (): Promise<void> =>
+    Promise.all(runtimes.splice(0).map((instance) => instance.dispose())).then(() => undefined);
+  return { acquire, dispose };
+};
+
+/** Reuses a D1-only Worker process, never a database. Each acquisition returns a new binding
+ * with independent rows, schema, triggers, and sessions. Call dispose at suite teardown.
+ * Tests of Worker/DO lifecycle or runtime restart must keep their own fresh runtime.
+ */
+export const isolatedTestDatabases = (): Readonly<{
+  acquire: () => Promise<D1Database>;
+  dispose: () => Promise<void>;
+}> => {
+  const pool = bindingPool(false);
+  return {
+    acquire: () => {
+      const slot = pool.acquire();
+      return slot.runtime.getD1Database(`DB_${slot.index}`);
+    },
+    dispose: pool.dispose,
+  };
+};
+
+/** Gives each test an independent D1 database and R2 bucket while amortizing Worker startup.
+ * Neither binding is reset or reused. Dispose at suite teardown; tests of runtime restarts
+ * and real coordinator bindings must own a fresh Miniflare instance instead.
+ */
+export const isolatedTestStorage = (): Readonly<{
+  acquire: () => Promise<Readonly<{ db: D1Database; bucket: R2Bucket }>>;
+  dispose: () => Promise<void>;
+}> => {
+  const pool = bindingPool(true);
+  return {
+    acquire: () => {
+      const slot = pool.acquire();
+      return Promise.all([
+        slot.runtime.getD1Database(`DB_${slot.index}`),
+        slot.runtime
+          .getBindings<{ [key: `BUCKET_${number}`]: R2Bucket }>()
+          .then((bindings) =>
+            Option.getOrThrow(Option.fromUndefinedOr(bindings[`BUCKET_${slot.index}`]))
+          ),
+      ]).then(([db, bucket]) => ({ db, bucket }));
+    },
+    dispose: pool.dispose,
+  };
+};

@@ -1,5 +1,5 @@
-import { Miniflare } from "miniflare";
-import { afterEach, expect, it, vi } from "vitest";
+import { applyTestMigration, installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { type Cause, Clock, DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { currentDisclosureFor, decodeKapsoWebhook } from "@fidy/server/consent-ingress";
 import {
@@ -85,8 +85,7 @@ const grants = [
   "10000000-0000-4000-8000-000000000101",
   "10000000-0000-4000-8000-000000000102",
 ] as const;
-const models: Array<Miniflare> = [];
-let sequence = 0;
+const databases = isolatedTestDatabases();
 const now = (): number => Effect.runSync(Clock.currentTimeMillis);
 const digest = (value: string): Promise<Uint8Array> =>
   Effect.runPromise(
@@ -150,24 +149,9 @@ const promiseGate = (): { readonly promise: Promise<void>; readonly release: () 
   return { promise, release: (): void => release() };
 };
 const applyMigration = (db: D1Database, name: string): Effect.Effect<void, Cause.UnknownError> =>
-  Effect.gen(function* () {
-    const sql = yield* Effect.tryPromise(() =>
-      Bun.file(new URL(`../migrations/${name}.sql`, import.meta.url)).text()
-    );
-    const statements = sql
-      .replace(/^--.*$/gmu, "")
-      .trim()
-      .split(/;\s*\n(?=PRAGMA |CREATE |ALTER |UPDATE |INSERT |DROP |$)/u);
-    if (name === "0024_hosted_whatsapp") {
-      yield* Effect.tryPromise(() =>
-        db.batch(statements.map((statement) => db.prepare(statement)))
-      );
-      return;
-    }
-    for (const statement of statements) {
-      yield* Effect.tryPromise(() => db.prepare(statement).run());
-    }
-  });
+  Effect.tryPromise(() =>
+    applyTestMigration({ db, source: new URL(`../migrations/${name}.sql`, import.meta.url) })
+  );
 const migrationNames = [
   "0001_categories",
   "0002_resource_admission",
@@ -258,33 +242,20 @@ const applySeededMigration = ({
 const setup = (seedLegacyTurn = false): Promise<D1Database> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const name = `hosted-turn-${++sequence}`;
-      const mf = new Miniflare({
-        workers: [
-          {
-            config: {
-              compatibilityDate: "2026-09-08",
-              env: { DB: { id: name, type: "d1" } },
-              manifest: {
-                mainModule: "index.mjs",
-                modules: {
-                  "index.mjs": {
-                    contents: "export default {fetch(){return new Response('ok')}}",
-                    type: "esm",
-                  },
-                },
-              },
-              name,
-              type: "worker",
-            },
-          },
-        ],
-      });
-      models.push(mf);
-      yield* Effect.tryPromise(() => mf.ready);
-      const db = yield* Effect.tryPromise(() => mf.getD1Database("DB"));
-      for (const migration of migrationNames) {
-        yield* applySeededMigration({ db, migration, seedLegacyTurn });
+      const db = yield* Effect.tryPromise(() => databases.acquire());
+      if (seedLegacyTurn) {
+        for (const migration of migrationNames) {
+          yield* applySeededMigration({ db, migration, seedLegacyTurn });
+        }
+      } else {
+        yield* Effect.tryPromise(() =>
+          installTestSchema({
+            db,
+            sources: migrationNames.map(
+              (name) => new URL(`../migrations/${name}.sql`, import.meta.url)
+            ),
+          })
+        );
       }
       // The stored disclosure is generated from the same canonical snapshot onboarding retains.
       const snapshot = yield* Schema.encodeEffect(
@@ -785,13 +756,8 @@ const acknowledgeVisibleReply = (
     })
   );
 
-afterEach(() =>
-  Effect.runPromise(
-    Effect.tryPromise(() => Promise.all(models.splice(0).map((model) => model.dispose()))).pipe(
-      Effect.tap(() => Effect.sync(() => vi.unstubAllGlobals()))
-    )
-  )
-);
+afterEach(() => vi.unstubAllGlobals());
+afterAll(() => databases.dispose());
 
 it("refuses an exhausted User spend budget before purchasing a hosted model round", () =>
   Effect.runPromise(

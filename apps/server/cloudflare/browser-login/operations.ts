@@ -1,5 +1,5 @@
-import { BrowserLoginPairingId } from "../../src/core/browser-login/reference";
 import {
+  BrowserLoginPairingId,
   BrowserLoginPrivateVerifier,
   BrowserLoginPublicCodeSymbols,
 } from "../../src/core/browser-login/contract";
@@ -10,9 +10,10 @@ import {
   maximumWrongVerifierAttempts,
   selectPublicCodeSymbols,
 } from "../../src/core/browser-login/operations";
-import { calculateWebSessionDeadlines } from "../../src/core/web-session/operations";
-import type { UserId } from "../../src/core/identity/contract";
+import { prepareWebSessionIssuance } from "@fidy/server/web-session-runtime";
+import { UserId } from "../../src/core/identity/contract";
 import { Clock, DateTime, Effect, Encoding, Option, Schema } from "effect";
+import { pairingId as newPairingId } from "./internal/worker-crypto";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
 
 const Proof = Schema.Struct({
@@ -20,6 +21,7 @@ const Proof = Schema.Struct({
   privateVerifier: BrowserLoginPrivateVerifier,
 });
 const Pairing = Schema.Struct({
+  user_id: Schema.NullOr(UserId),
   verifier_digest: Schema.Array(
     Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))
   ).check(Schema.isLengthBetween(32, 32)),
@@ -103,7 +105,7 @@ export const startBrowserPairing = (db: D1Database): Promise<Response> =>
       const privateVerifier = Encoding.encodeBase64Url(
         crypto.getRandomValues(new Uint8Array(digestBytes))
       );
-      const pairingId = crypto.randomUUID();
+      const pairingId = newPairingId();
       const proofDigest = yield* attempt(() => digest(privateVerifier));
       const result = yield* attempt(() =>
         db
@@ -191,11 +193,11 @@ export const verifyPendingBrowserPairing = ({
 }): Promise<Option.Option<number>> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const proof = Schema.decodeUnknownOption(Proof)({ pairingId, privateVerifier });
+      const proof = Schema.decodeOption(Proof)({ pairingId, privateVerifier });
       if (Option.isNone(proof)) return Option.none();
       const raw = yield* attempt(() =>
         db
-          .prepare(`SELECT verifier_digest, expires_at_ms, wrong_attempts,
+          .prepare(`SELECT user_id, verifier_digest, expires_at_ms, wrong_attempts,
     last_poll_at_ms, minimum_poll_interval_seconds, state FROM browser_login_pairings WHERE id = ?`)
           .bind(pairingId)
           .first()
@@ -242,7 +244,7 @@ export const redeemBrowserPairing = ({
       if (Option.isNone(proof)) return invalid();
       const raw = yield* attempt(() =>
         db
-          .prepare(`SELECT verifier_digest, expires_at_ms, wrong_attempts, state,
+          .prepare(`SELECT user_id, verifier_digest, expires_at_ms, wrong_attempts, state,
     last_poll_at_ms, minimum_poll_interval_seconds FROM browser_login_pairings WHERE id = ?`)
           .bind(proof.value.pairingId)
           .first()
@@ -309,9 +311,13 @@ export const redeemBrowserPairing = ({
             );
       }
       if (decision._tag !== "Consume") return invalid();
-      const token = Encoding.encodeBase64Url(crypto.getRandomValues(new Uint8Array(digestBytes)));
-      const deadlines = calculateWebSessionDeadlines(DateTime.makeUnsafe(current));
-      const tokenDigest = yield* attempt(() => digest(token));
+      if (pairing.value.user_id === null) return invalid();
+      const issuance = yield* prepareWebSessionIssuance({
+        db,
+        pairingId: proof.value.pairingId,
+        userId: pairing.value.user_id,
+        current,
+      });
       const committed = yield* attempt(() =>
         db.batch([
           db
@@ -319,25 +325,11 @@ export const redeemBrowserPairing = ({
               `UPDATE browser_login_pairings SET state = 'consumed' WHERE id = ? AND state = 'ready' AND expires_at_ms > ? AND wrong_attempts < ?`
             )
             .bind(proof.value.pairingId, current, maximumWrongVerifierAttempts),
-          db
-            .prepare(`INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms, fresh_until_ms, idle_expires_at_ms, hard_expires_at_ms)
-      SELECT ?, p.id, p.user_id, ?, ?, ?, ?, ? FROM browser_login_pairings AS p
-      WHERE p.id = ? AND p.state = 'consumed' AND p.user_id IS NOT NULL`)
-            .bind(
-              crypto.randomUUID(),
-              tokenDigest,
-              current,
-              DateTime.toEpochMillis(deadlines.freshUntil),
-              DateTime.toEpochMillis(deadlines.idleExpiresAt),
-              DateTime.toEpochMillis(deadlines.hardExpiresAt),
-              proof.value.pairingId
-            ),
+          issuance.statement,
         ])
       );
-      if (committed[1]?.meta.changes !== 1) return invalid();
-      return json({ status: "authenticated" }, 200, {
-        "set-cookie": `__Host-fidy_session=${token}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=2592000`,
-      });
+      const issued = committed[1];
+      return issued === undefined ? invalid() : issuance.complete(issued);
     }).pipe(Effect.catchCause(() => Effect.succeed(invalid())))
   );
 

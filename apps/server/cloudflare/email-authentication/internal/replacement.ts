@@ -4,9 +4,8 @@ import { type EmailReplacementMutationService } from "@fidy/server/email-authent
 
 import { Clock, Crypto, Data, Effect, Exit, Option, PlatformError, Schema } from "effect";
 
-import { RequestBodyPolicy, readBoundedRequestBody } from "../../http/request-body";
-
 import { freshBrowserSession } from "../../web-session/operations";
+import { RequestBodyPolicy, readBoundedRequestBody } from "../../http/request-body";
 
 const Proof = Schema.Struct({
   user_id: Schema.String.check(Schema.isUUID()),
@@ -208,10 +207,7 @@ const replacementCommitted = (committed: Exit.Exit<ReadonlyArray<D1Result>, void
 const redeemProof = (
   db: D1Database,
   input: {
-    session: {
-      readonly id: string;
-      readonly userId: string;
-    };
+    session: { readonly id: string; readonly userId: string };
     combinedCode: string;
     current: number;
   }
@@ -263,10 +259,7 @@ const redeemProof = (
     })
   );
 
-export type SessionSubject = {
-  readonly id: string;
-  readonly userId: string;
-};
+export type SessionSubject = { readonly id: string; readonly userId: string };
 
 class ReplacementDatabaseUnavailable extends Data.TaggedError("ReplacementDatabaseUnavailable")<{
   readonly operation: "request" | "complete";

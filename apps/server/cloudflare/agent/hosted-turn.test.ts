@@ -1,10 +1,10 @@
 import { Miniflare } from "miniflare";
 import { afterEach, expect, it, vi } from "vitest";
 import { type Cause, Clock, DateTime, Effect, Option, Redacted, Schema } from "effect";
+import { DisclosureSnapshot } from "@fidy/server/consent-contract";
 import { currentDisclosureFor, decodeKapsoWebhook } from "@fidy/server/consent-ingress";
 import {
   CanonicalToolOutcome,
-  DisclosureSnapshot,
   HostedAgentSessionId,
   TranscriptText,
   TranscriptTurnId,

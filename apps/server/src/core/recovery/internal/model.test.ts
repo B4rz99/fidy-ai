@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime, Option, Redacted, Schema } from "effect";
-import { BrowserLoginPairingId } from "~/core/browser-login/reference";
+import { BrowserLoginPairingId } from "~/core/browser-login/contract";
 import { UserId } from "~/core/identity/contract";
 import {
   BackupRecoveryCredential,

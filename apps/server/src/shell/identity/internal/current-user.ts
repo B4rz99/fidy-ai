@@ -1,4 +1,5 @@
 import { DateTime, Effect, Option, Schema } from "effect";
+import { consentGranted } from "~/shell/consent/runtime";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { User, UserId } from "~/core/identity/contract";
 import { Unavailable } from "~/shell/public-http/contract";
@@ -35,7 +36,7 @@ export const getCurrentUser = (
         subject
       ) => sql`SELECT u.id, u.service_market, u.locale, u.time_zone, u.created_at_ms,
         t.started_at_ms, t.ends_at_ms FROM users AS u JOIN trial_periods AS t ON t.user_id = u.id
-        WHERE u.id = ${subject} AND EXISTS (SELECT 1 FROM onboarding_consent_records AS c WHERE c.user_id = u.id)`,
+        WHERE u.id = ${subject} AND ${sql.literal(consentGranted("u.id"))}`,
     })(userId)
   ).pipe(
     Effect.flatMap((row) =>

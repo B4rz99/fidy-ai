@@ -17,7 +17,8 @@ import {
   sweepPairingReviews,
   sweepUnapprovedPairings,
 } from "@fidy/server/tokens-operations";
-import { expirePATConsents, expirePairingConsents } from "@fidy/server/consent-pat";
+import { expirePATConsents, expirePairingConsents } from "@fidy/server/consent-operations";
+import { isConsentRevoked } from "../consent/operations";
 import { prepareOwnedStatement } from "../atomic/operations";
 import { currentMillis, newId } from "../platform/operations";
 import { refusedByAuditBudget } from "../audit/audit-triggers";
@@ -73,13 +74,6 @@ type CategoryAuthorization =
   | "unauthenticated"
   | "scope_missing"
   | "user_action_required";
-const consentRevoked = (
-  db: D1Database,
-  userId: string
-): Effect.Effect<boolean, Cause.UnknownError> =>
-  Effect.tryPromise(() =>
-    db.prepare("SELECT 1 FROM consent_user_revocations WHERE user_id = ?").bind(userId).first()
-  ).pipe(Effect.map((row) => row !== null));
 export type AuthorizedPAT = Readonly<{
   patId: string;
   userId: string;
@@ -110,7 +104,7 @@ export const authorizeCanonicalPAT = ({
     Effect.gen(function* () {
       const pat = yield* authenticate(request, db);
       if (Option.isNone(pat)) return "unauthenticated";
-      if (yield* consentRevoked(db, pat.value.user_id)) return "user_action_required";
+      if (yield* isConsentRevoked({ db, userId: pat.value.user_id })) return "user_action_required";
       const decision = scopeDecision(scopesFrom(pat.value.scopes_json), operation);
       return decision === "accepted"
         ? {

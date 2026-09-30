@@ -19,7 +19,7 @@ import {
   selectPATPairingPublicCodeSymbols,
 } from "@fidy/server/tokens-policy";
 import { type Cause, DateTime, Effect, Encoding, Option, Result, Schema } from "effect";
-import { grantPairedPATConsent } from "@fidy/server/consent-pat";
+import { grantPairedPATConsent } from "@fidy/server/consent-operations";
 import {
   canonical,
   currentMillis,

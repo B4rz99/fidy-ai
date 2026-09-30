@@ -6,14 +6,10 @@ import {
   CanonicalToolOutcome,
   CanonicalToolResultEntry,
   type CompactedConversationOutput,
-  DisclosureSnapshot,
   FailedTurnTranscriptEntry,
   type HostedAdmissionState,
   HostedAgentSessionConsentBasis,
   HostedAgentSessionId,
-  IanaTimeZone,
-  Locale,
-  ServiceMarket,
   type SessionTranscriptEntry,
   TranscriptEntry,
   TranscriptEntryId,
@@ -40,6 +36,7 @@ import {
   hostedIdentity,
   isWhatsAppHosted,
 } from "./hosted-authority";
+import { type HostedConsentStanding, readHostedConsent } from "../consent/operations";
 import { newId } from "../platform/operations";
 
 const maximumRetainedEntries = 200;
@@ -63,14 +60,6 @@ const TurnRow = Schema.Struct({
   started_at_ms: Schema.Int,
   proposed_at_ms: Schema.NullOr(Schema.Int),
 });
-const ConsentUserRow = Schema.Struct({
-  service_market: ServiceMarket,
-  locale: Locale,
-  time_zone: IanaTimeZone,
-  id: Schema.String,
-  disclosure_json: Schema.String,
-  revoked: Schema.Int,
-});
 const CompactRow = Schema.Struct({
   text: Schema.String.check(Schema.isMinLength(1)),
   through_sequence: Schema.Int,
@@ -92,37 +81,19 @@ const EntryRow = Schema.Struct({
   outcome_json: Schema.NullOr(Schema.String),
 });
 
-type ConsentUserRow = typeof ConsentUserRow.Type;
 type SessionRow = typeof SessionRow.Type;
 type TurnRow = typeof TurnRow.Type;
 type EntryRow = typeof EntryRow.Type;
 
 /** No decoded private data is returned when the current credential or Consent is not live. */
 export type HostedTurnSnapshot = Readonly<{
-  user: Readonly<{
-    serviceMarket: ConsentUserRow["service_market"];
-    locale: ConsentUserRow["locale"];
-    timeZone: ConsentUserRow["time_zone"];
-  }>;
-  consentBasis: HostedAgentSessionConsentBasis;
-  revoked: boolean;
+  user: HostedConsentStanding["user"];
+  consentBasis: HostedConsentStanding["consentBasis"];
+  revoked: HostedConsentStanding["revoked"];
   capacityAvailable: boolean;
   session: Option.Option<SessionRow>;
   pending: Option.Option<TurnRow>;
 }>;
-
-const decodeConsent = (row: ConsentUserRow): HostedAgentSessionConsentBasis => {
-  const disclosure = Schema.decodeSync(Schema.fromJsonString(DisclosureSnapshot))(
-    row.disclosure_json
-  );
-  return Schema.decodeSync(HostedAgentSessionConsentBasis)({
-    grantId: row.id,
-    disclosureRevision: disclosure.revision,
-    disclosureSha256: disclosure.contentSha256,
-    policyRevision: disclosure.policy.revision,
-    policySha256: disclosure.policy.contentSha256,
-  });
-};
 
 /** Recheck the supplied WebSession or verified WhatsApp association and read the User's hosted lifecycle; revoked Consent remains visible for refusal. */
 export const readHostedSnapshot = ({
@@ -136,17 +107,8 @@ export const readHostedSnapshot = ({
 }>): Effect.Effect<Option.Option<HostedTurnSnapshot>, Cause.UnknownError | Schema.SchemaError> =>
   Effect.gen(function* () {
     const authority = hostedIdentity({ subject, current: now });
-    const raw = yield* Effect.tryPromise(() =>
-      db
-        .prepare(`SELECT u.service_market, u.locale, u.time_zone, c.id, c.disclosure_json,
-      EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = u.id) AS revoked
-      FROM users AS u JOIN onboarding_consent_records AS c ON c.user_id = u.id
-      WHERE u.id = ? AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
-        .bind(subject.userId, ...authority.bindings)
-        .first()
-    );
-    if (raw === null) return Option.none();
-    const user = yield* Schema.decodeUnknownEffect(ConsentUserRow)(raw);
+    const standing = yield* readHostedConsent({ db, userId: subject.userId, authority });
+    if (Option.isNone(standing)) return Option.none();
     const sessionRaw = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT id, user_id, consent_basis_json, started_at_ms, last_activity_at_ms, status
@@ -179,9 +141,7 @@ export const readHostedSnapshot = ({
       Schema.decodeUnknownOption(Schema.Struct({ used: Schema.Int }))
     );
     return Option.some({
-      user: { serviceMarket: user.service_market, locale: user.locale, timeZone: user.time_zone },
-      consentBasis: decodeConsent(user),
-      revoked: user.revoked === 1,
+      ...standing.value,
       capacityAvailable: Option.exists(budgetRow, (row) => row.used < maximumDailyTurns),
       session:
         sessionRaw === null

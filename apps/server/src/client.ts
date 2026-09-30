@@ -77,7 +77,7 @@ export {
 } from "~/shell/web-authentication/contract";
 export { StartedBrowserLoginPairing } from "~/core/browser-login/contract";
 export { EmailAddress, EmailVerificationCode } from "~/core/email-authentication/contract";
-export { CompleteEmailReplacementPayload } from "~/shell/web-authentication/contract";
+export { CompleteEmailReplacementPayload } from "~/shell/email-authentication/contract";
 export { RequestEmailReplacementPayload } from "~/shell/email-authentication/contract";
 export {
   emailReplacementPath,
@@ -109,8 +109,11 @@ export {
   BrowserLoginPairingInvalidApi,
   BrowserLoginPollingRateLimitedApi,
   BrowserPairingEmailAuthenticationInvalidApi,
+} from "~/shell/web-authentication/contract";
+
+export {
   EmailReplacementFreshPairingRequiredApi,
   EmailReplacementInvalidApi,
   emailReplacementFreshBody,
   emailReplacementInvalidBody,
-} from "~/shell/web-authentication/contract";
+} from "~/shell/email-authentication/contract";

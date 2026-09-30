@@ -1,32 +1,37 @@
 import {
-  ConsentIngressExchange,
-  type ConsentIngressMessage,
   DisclosureDeliveryCorrelationToken,
   type EmailStatus,
   type KapsoSendFailed,
   type KapsoSentMessage,
-  PendingConsentExchangeId,
   PendingDisclosureJson,
-  Sha256Digest,
   WhatsAppBusinessPhoneNumberId,
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
   type WhatsAppDeliveryKey,
   type WhatsAppInboundEvent,
   WhatsAppProviderMessageId,
-  canRecordConsentIngressDecision,
-  classifyConsentIngressReplay,
   currentDisclosureFor,
-  decideConsentReply,
   decodeKapsoDisclosureLifecycleWebhook,
   decodeKapsoWebhook,
-  isConsentIngressDecisionPhase,
   makeDisclosureSender,
   makeEmailStatusSender,
   makeVoiceUnavailableSender,
   maxKapsoFutureTimestampMinutes,
   maxKapsoWebhookBytes,
 } from "@fidy/server/consent-ingress";
+import {
+  ConsentIngressExchange,
+  type ConsentIngressMessage,
+  PendingConsentExchangeId,
+  Sha256Digest,
+} from "@fidy/server/consent-contract";
+import {
+  canRecordConsentIngressDecision,
+  classifyConsentIngressReplay,
+  decideConsentReply,
+  isConsentIngressDecisionPhase,
+} from "../../src/core/consent/operations";
+import { consentGranted, consentNotRevoked } from "@fidy/server/consent-runtime";
 import { EmailAddress } from "@fidy/server/client";
 import type { UserId } from "../../src/core/identity/contract";
 import { approveBrowserPairing } from "../browser-login/operations";
@@ -186,6 +191,12 @@ const DeliveryRow = Schema.Struct({
   occurred_at_ms: Schema.Finite,
 });
 
+export type PendingConsentEnvironment = Readonly<{
+  DB: D1Database;
+  KAPSO_API_KEY: string;
+  onAccepted: (id: string) => void;
+}>;
+
 type Environment = Readonly<{
   readonly DB: D1Database;
   readonly KAPSO_API_KEY: string;
@@ -201,12 +212,13 @@ type WebhookInbound = Readonly<{
   readonly digest: Sha256Digest;
   readonly receivedAtMs: number;
 }>;
-type Inbound = WebhookInbound &
+export type PendingConsentInbound = WebhookInbound &
   Readonly<{
     event: WhatsAppInboundEvent & {
       content: Exclude<WhatsAppInboundEvent["content"], { _tag: "UnusableVoiceTranscript" }>;
     };
   }>;
+type Inbound = PendingConsentInbound;
 type TextInbound = Inbound &
   Readonly<{
     event: WhatsAppInboundEvent & {
@@ -458,7 +470,7 @@ const findMailboxReplay = (
   });
 
 const insertMailbox = (
-  environment: Environment,
+  environment: PendingConsentEnvironment,
   {
     input,
     pending,
@@ -497,7 +509,7 @@ const insertMailbox = (
   });
 
 const recordMailbox = (
-  environment: Environment,
+  environment: PendingConsentEnvironment,
   input: Inbound,
   pending: StoredExchange
 ): Effect.Effect<Response, void, Crypto.Crypto> =>
@@ -541,7 +553,7 @@ const EmailState = Schema.Struct({
 });
 
 const reportEmailStatus = (
-  environment: Environment,
+  environment: PendingConsentEnvironment,
   input: Inbound,
   pending: StoredExchange
 ): Effect.Effect<Response, void, HttpClient.HttpClient> =>
@@ -653,7 +665,7 @@ const sameDelivery = (
   row.phone_number_id === input.phoneNumberId &&
   row.occurred_at_ms === input.occurredAtMs;
 
-type DeliveryInput = Readonly<{
+export type PendingDisclosureDelivery = Readonly<{
   correlationToken: DisclosureDeliveryCorrelationToken;
   phoneNumberId: WhatsAppBusinessPhoneNumberId;
   messageId: WhatsAppProviderMessageId;
@@ -683,7 +695,14 @@ const findDelivery = (
     )
   );
 
-const recordDelivery = (db: D1Database, input: DeliveryInput): Effect.Effect<Response, void> =>
+/** Record authenticated, correlated provider delivery once; conflicts never open a Consent decision. */
+export const recordPendingDisclosureDelivery = ({
+  db,
+  input,
+}: Readonly<{
+  db: D1Database;
+  input: PendingDisclosureDelivery;
+}>): Effect.Effect<Response, void> =>
   Effect.gen(function* () {
     const existing = yield* findDelivery(db, input.correlationToken);
     if (Option.isSome(existing)) {
@@ -714,7 +733,7 @@ const recordDelivery = (db: D1Database, input: DeliveryInput): Effect.Effect<Res
   });
 
 const deliveryEffect = (
-  environment: Environment,
+  environment: PendingConsentEnvironment,
   input: Readonly<{
     readonly event: WhatsAppInboundEvent;
     readonly correlationToken: DisclosureDeliveryCorrelationToken;
@@ -733,6 +752,8 @@ const deliveryEffect = (
       correlationToken: input.correlationToken,
     });
   });
+
+type DeliveryInput = PendingDisclosureDelivery;
 
 type NewExchange = Readonly<{
   input: Inbound;
@@ -919,7 +940,7 @@ export const recoverPendingDisclosures = ({
   ).pipe(Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch));
 
 const sendExchange = (
-  environment: Environment,
+  environment: PendingConsentEnvironment,
   { input, id, correlationToken, disclosure }: NewExchange
 ): Effect.Effect<Response, never, HttpClient.HttpClient> =>
   Effect.gen(function* () {
@@ -969,7 +990,7 @@ const recordUndeliveredMailbox = (
   });
 
 const startExchange = (
-  environment: Environment,
+  environment: PendingConsentEnvironment,
   input: Inbound
 ): Effect.Effect<Response, void, Crypto.Crypto | HttpClient.HttpClient> =>
   Effect.gen(function* () {
@@ -1007,12 +1028,15 @@ const handleDelivery = (base: WebhookBase, db: D1Database): Effect.Effect<Respon
       decodeKapsoDisclosureLifecycleWebhook({ ...base, eventName: "whatsapp.message.delivered" })
     );
     if (Exit.isFailure(result)) return answer(HTTP_UNAUTHORIZED);
-    return yield* recordDelivery(db, {
-      correlationToken: result.value.correlationToken,
-      phoneNumberId: result.value.businessPhoneNumberId,
-      messageId: result.value.messageEvidence.providerMessageId,
-      occurredAtMs: DateTime.toEpochMillis(result.value.occurredAt),
-      receivedAtMs: DateTime.toEpochMillis(base.receivedAt),
+    return yield* recordPendingDisclosureDelivery({
+      db,
+      input: {
+        correlationToken: result.value.correlationToken,
+        phoneNumberId: result.value.businessPhoneNumberId,
+        messageId: result.value.messageEvidence.providerMessageId,
+        occurredAtMs: DateTime.toEpochMillis(result.value.occurredAt),
+        receivedAtMs: DateTime.toEpochMillis(base.receivedAt),
+      },
     });
   });
 
@@ -1020,7 +1044,7 @@ const requestsEmailStatus = (input: Inbound): boolean =>
   input.event.content.text.trim().toLocaleLowerCase("es-CO") === "estado";
 
 const routeAcceptedInbound = (
-  environment: Environment,
+  environment: PendingConsentEnvironment,
   input: Inbound,
   pending: StoredExchange
 ): Effect.Effect<Response, void, Crypto.Crypto | HttpClient.HttpClient> =>
@@ -1077,8 +1101,8 @@ const refuseVoice = (
         (portfolio_id, message_id, user_id, claimed_at_ms)
         SELECT ?, ?, w.user_id, ? FROM whatsapp_identities AS w
         WHERE w.user_id = ? AND w.portfolio_id = ? AND w.bsuid = ?
-          AND EXISTS (SELECT 1 FROM onboarding_consent_records AS c WHERE c.user_id = w.user_id)
-          AND NOT EXISTS (SELECT 1 FROM consent_user_revocations AS r WHERE r.user_id = w.user_id)
+          AND ${consentGranted("w.user_id")}
+          AND ${consentNotRevoked("w.user_id")}
           AND (SELECT count(*) FROM hosted_voice_refusals
             WHERE user_id = w.user_id AND claimed_at_ms > ?) < 5
         ON CONFLICT (portfolio_id, message_id) DO NOTHING`)
@@ -1143,13 +1167,15 @@ const routeHostedInbound = (
     return Option.some(response);
   });
 
-const routeConsentInbound = (
-  environment: Environment,
-  input: Inbound
-): Effect.Effect<Response, void, Crypto.Crypto | HttpClient.HttpClient> =>
+/** Handle one decoded pre-User Consent message after the ingress has excluded established hosted Users. */
+export const receivePendingConsent = ({
+  environment,
+  input,
+}: Readonly<{
+  environment: PendingConsentEnvironment;
+  input: PendingConsentInbound;
+}>): Effect.Effect<Response, void, Crypto.Crypto | HttpClient.HttpClient> =>
   Effect.gen(function* () {
-    const hosted = yield* routeHostedInbound(environment, input);
-    if (Option.isSome(hosted)) return hosted.value;
     const pending = yield* findExchange(environment.DB, input.event);
     if (Option.isSome(pending) && pending.value.state === "accepted") {
       return yield* routeAcceptedInbound(environment, input, pending.value);
@@ -1191,7 +1217,9 @@ const routeTextInbound = (
         })
       );
     }
-    return yield* routeConsentInbound(environment, input);
+    const hosted = yield* routeHostedInbound(environment, input);
+    if (Option.isSome(hosted)) return hosted.value;
+    return yield* receivePendingConsent({ environment, input });
   });
 
 const handleInbound = (

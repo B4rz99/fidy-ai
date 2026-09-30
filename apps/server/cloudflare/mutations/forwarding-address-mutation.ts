@@ -1,3 +1,4 @@
+import { consentGranted, consentNotRevoked } from "@fidy/server/consent-runtime";
 import { EmailForwardingAddress } from "../../src/core/ingestion/model";
 import { Effect, Option, Schema } from "effect";
 import { dailyAuditExhausted } from "../atomic/daily-canonical-budget";
@@ -73,8 +74,8 @@ export const prepareForwardingAddress = Effect.fn(function* (
     work.db
       .prepare(
         `SELECT id FROM email_forwarding_addresses WHERE user_id = ? AND
-       EXISTS (SELECT 1 FROM onboarding_consent_records WHERE user_id = ?) AND
-       NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = ?)`
+       ${consentGranted("?")} AND
+       ${consentNotRevoked("?")}`
       )
       .bind(work.subject.userId, work.subject.userId, work.subject.userId)
       .first()

@@ -1,7 +1,11 @@
 import { describe, expect, it } from "@effect/vitest";
 import { DateTime, Effect, Schema } from "effect";
-import { DisclosureSnapshot, PendingConsentExchangeId } from "./model";
-import { decideConsentReply, hasPendingConsentExpired, makePendingConsentDraft } from "./rules";
+import { DisclosureSnapshot, PendingConsentExchangeId } from "./contract";
+import {
+  decideConsentReply,
+  hasPendingConsentExpired,
+  makePendingConsentDraft,
+} from "./operations";
 
 const makeDisclosure = (): DisclosureSnapshot =>
   Schema.decodeSync(DisclosureSnapshot)({

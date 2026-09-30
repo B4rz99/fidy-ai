@@ -1,35 +1,21 @@
 import { Miniflare } from "miniflare";
-
 import { type Cause, Clock, DateTime, Effect, Equal, Exit, Option, Schema } from "effect";
-
-import { recoverPendingDisclosures, sweepExpiredConsent } from "./consent-ingress";
-
+import { recoverPendingDisclosures, sweepExpiredConsent } from "../consent/runtime";
 import { WhatsAppStatusAdmission, WhatsAppTurnAdmission } from "../agent/whatsapp-turn";
-
 import {
   dispatchOnboardingEmail,
   receiveOnboardingEmail,
   runOnboardingEmailWorkflow,
 } from "../email-authentication/runtime";
+import { internals as onboardingDelivery } from "../email-authentication/internal/onboarding-delivery";
 
 import { afterEach, expect, it, vi } from "vitest";
-
 import coreWorker from "../core-worker";
-
 import publicWorker from "../public-worker";
-
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
-
 import { maxKapsoWebhookBytes } from "@fidy/server/consent-ingress";
 
-const deliverOnboardingEmail =
-  (environment: { DB: D1Database; RESEND_API_KEY: string }) =>
-  (id: string): Promise<void> =>
-    runOnboardingEmailWorkflow({
-      environment,
-      payload: { kind: "onboarding-verification", version: 1, id },
-      activity: (_name, _options, run) => run(),
-    });
+const { deliverOnboardingEmail } = onboardingDelivery;
 
 const signWebhook = (secret: string, body: string | Uint8Array): Promise<string> =>
   crypto.subtle
@@ -49,26 +35,18 @@ const signWebhook = (secret: string, body: string | Uint8Array): Promise<string>
 
 const encodeJson = (value: unknown): string =>
   Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(value);
-
 const decodeJson = (value: string): unknown =>
   Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(value);
 
 const secret = "kapso-webhook-secret-for-consent-tests";
-
 const portfolio = "portfolio-1";
-
 const dayMs = 86_400_000;
-
 const statusCooldownElapsedMs = 61_000;
-
 const bsuid = "CO.13491208655302741918";
 
 const nowSeconds = Math.floor(Effect.runSync(Clock.currentTimeMillis) / 1000);
-
 const migration = new URL("../migrations/0003_pending_consent.sql", import.meta.url);
-
 const active = new Set<Miniflare>();
-
 let databaseNumber = 0;
 
 const seedSyntheticEnrollment = (

@@ -1,3 +1,4 @@
+import { sessionPairingRetention } from "@fidy/server/web-session";
 import { Miniflare } from "miniflare";
 import { afterEach, expect, it } from "vitest";
 import { Effect, Option } from "effect";
@@ -45,6 +46,38 @@ it("prepares session issuance for an explicit User and releases its cookie only 
         })
       );
       expect(Option.map(resolved, (session) => session.userId)).toEqual(Option.some(userA));
+    })
+  ));
+
+it("retains pairing references even after session revocation while allowing unrelated pairing cleanup", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const unusedPairing = "20000000-0000-4000-8000-000000000003";
+      yield* fromTestPromise(() =>
+        db.prepare("CREATE TABLE browser_login_pairings (id TEXT PRIMARY KEY)").run()
+      );
+      yield* fromTestPromise(() =>
+        db.prepare("ALTER TABLE web_sessions ADD COLUMN pairing_id TEXT").run()
+      );
+      yield* fromTestPromise(() =>
+        db
+          .prepare("INSERT INTO browser_login_pairings VALUES (?), (?), (?)")
+          .bind(sessionA, sessionB, unusedPairing)
+          .run()
+      );
+      yield* fromTestPromise(() => db.prepare("UPDATE web_sessions SET pairing_id = id").run());
+      yield* fromTestPromise(() => logoutBrowser({ request: request(tokenA), db }));
+      const removed = yield* fromTestPromise(() =>
+        db
+          .prepare(`DELETE FROM browser_login_pairings WHERE NOT (${sessionPairingRetention})`)
+          .run()
+      );
+      expect(removed.meta.changes).toBe(1);
+      const retained = yield* fromTestPromise(() =>
+        db.prepare("SELECT id FROM browser_login_pairings ORDER BY id").all()
+      );
+      expect(retained.results).toEqual([{ id: sessionA }, { id: sessionB }]);
     })
   ));
 

@@ -1,4 +1,8 @@
-import { EmailReplacementMutation } from "@fidy/server/email-authentication-operations";
+import {
+  EmailReplacementMutation,
+  completeEmailReplacement as completeCanonicalReplacement,
+  requestEmailReplacement as requestCanonicalReplacement,
+} from "@fidy/server/email-authentication-operations";
 
 import type { PreparedOnboardingCredential } from "./contract";
 
@@ -20,7 +24,6 @@ import { canRedeemOnboardingProof } from "@fidy/server/email-authentication-poli
 
 import {
   browserReplacementCaller,
-  emailReplacementImplementations,
   permitsFreshBrowserReplacement,
 } from "@fidy/server/email-authentication-runtime";
 
@@ -126,14 +129,15 @@ export const requestEmailReplacement = ({
         );
         if (Option.isNone(session)) return replacementfresh();
         if (!permitsFreshBrowserReplacement("request")) return replacementunavailable();
-        const result = yield* emailReplacementImplementations
-          .request({ payload: input.value }, browserReplacementCaller(session.value))
-          .pipe(
-            Effect.provideService(
-              EmailReplacementMutation,
-              replacementreplacementAdapter({ db, session: session.value, current, onAccepted })
-            )
-          );
+        const result = yield* requestCanonicalReplacement({
+          input: { payload: input.value },
+          caller: browserReplacementCaller(session.value),
+        }).pipe(
+          Effect.provideService(
+            EmailReplacementMutation,
+            replacementreplacementAdapter({ db, session: session.value, current, onAccepted })
+          )
+        );
         return replacementjson(result, replacementHTTP_OK);
       }
     }).pipe(Effect.catchCause(() => Effect.succeed(replacementunavailable())))
@@ -164,23 +168,24 @@ export const completeEmailReplacement = ({
         );
         if (Option.isNone(session)) return replacementfresh();
         if (!permitsFreshBrowserReplacement("complete")) return replacementunavailable();
-        return yield* emailReplacementImplementations
-          .complete({ payload: input.value }, browserReplacementCaller(session.value))
-          .pipe(
-            Effect.provideService(
-              EmailReplacementMutation,
-              replacementreplacementAdapter({
-                db,
-                session: session.value,
-                current,
-                onAccepted: () => undefined,
-              })
-            ),
-            Effect.match({
-              onSuccess: (result) => replacementjson(result, replacementHTTP_OK),
-              onFailure: replacementinvalid,
+        return yield* completeCanonicalReplacement({
+          input: { payload: input.value },
+          caller: browserReplacementCaller(session.value),
+        }).pipe(
+          Effect.provideService(
+            EmailReplacementMutation,
+            replacementreplacementAdapter({
+              db,
+              session: session.value,
+              current,
+              onAccepted: () => undefined,
             })
-          );
+          ),
+          Effect.match({
+            onSuccess: (result) => replacementjson(result, replacementHTTP_OK),
+            onFailure: replacementinvalid,
+          })
+        );
       }
     }).pipe(Effect.catchCause(() => Effect.succeed(replacementinvalid())))
   );

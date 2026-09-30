@@ -104,10 +104,20 @@
       "import": "./src/shell/budgets/runtime.ts",
       "default": "./src/shell/budgets/runtime.ts"
     },
-    "./consent-pat": {
-      "types": "./src/shell/consent/pat-runtime.ts",
-      "import": "./src/shell/consent/pat-runtime.ts",
-      "default": "./src/shell/consent/pat-runtime.ts"
+    "./consent-runtime": {
+      "types": "./src/shell/consent/runtime.ts",
+      "import": "./src/shell/consent/runtime.ts",
+      "default": "./src/shell/consent/runtime.ts"
+    },
+    "./consent-operations": {
+      "types": "./src/shell/consent/operations.ts",
+      "import": "./src/shell/consent/operations.ts",
+      "default": "./src/shell/consent/operations.ts"
+    },
+    "./consent-contract": {
+      "types": "./src/core/consent/contract.ts",
+      "import": "./src/core/consent/contract.ts",
+      "default": "./src/core/consent/contract.ts"
     },
     "./consent-ingress": {
       "types": "./src/shell/consent/ingress.ts",

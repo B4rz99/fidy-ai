@@ -1,3 +1,4 @@
+import { consentNotRevoked } from "@fidy/server/consent-runtime";
 import { CreateTransactionInput, encodeMoneyAmount } from "@fidy/server/transactions-runtime";
 import { type CategoryId } from "../../src/core/categories/contract";
 import { categorizeCapture, categoryExists } from "../categories/operations";
@@ -59,7 +60,7 @@ const captureAudit = (
   return db
     .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
       SELECT ?, user_id, ?, 'transactions.createTransaction', 'success', ? FROM transactions WHERE user_id = ? AND id = ?
-      AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = transactions.user_id)
+      AND ${consentNotRevoked("transactions.user_id")}
       AND changes() = 1`)
     .bind(transactionId(), subject.id, current, subject.userId, id);
 };

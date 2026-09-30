@@ -1,4 +1,4 @@
-import { emailReplacementOperations } from "@fidy/server/email-authentication-runtime";
+import { EmailAuthenticationGroup } from "../../src/shell/email-authentication/contract";
 import { currentUser, logoutBrowser } from "@fidy/server/web-session-runtime";
 import { Effect } from "effect";
 import { redeemBrowserPairing, startBrowserPairing } from "../browser-login/operations";
@@ -14,6 +14,11 @@ const jsonHeaders = {
   "content-type": "application/json; charset=utf-8",
   "cache-control": "no-store",
 } as const;
+
+const emailReplacementOperations = {
+  request: EmailAuthenticationGroup.endpoints.requestEmailReplacement,
+  complete: EmailAuthenticationGroup.endpoints.completeEmailReplacement,
+};
 
 type BrowserExecution = Readonly<{
   request: Request;

@@ -76,6 +76,7 @@ import {
 } from "../mutations/mutation-types";
 import { newId } from "../platform/operations";
 import { refusedByAuditBudget } from "../audit/audit-triggers";
+import { isConsentRevoked } from "../consent/operations";
 import { type SuggestedOperationCaller } from "../../src/shell/_shared/suggested-operations";
 import { categoryUnavailable, toApiFailure } from "../../src/shell/categories/operations";
 import { dailyAuditMessage } from "../mutations/transaction-outcome";
@@ -1060,15 +1061,10 @@ const refusedCategoryWork = (
 ): Effect.Effect<Response, void> =>
   Effect.gen(function* () {
     if (isPATCaller(subject)) {
-      const withdrawn = yield* Effect.tryPromise({
-        try: () =>
-          db
-            .prepare("SELECT 1 FROM consent_user_revocations WHERE user_id = ?")
-            .bind(subject.userId)
-            .first(),
-        catch: () => undefined,
-      });
-      if (withdrawn !== null) return userActionRequired();
+      const withdrawn = yield* isConsentRevoked({ db, userId: subject.userId }).pipe(
+        Effect.mapError(() => undefined)
+      );
+      if (withdrawn) return userActionRequired();
     }
     return unauthenticated();
   });

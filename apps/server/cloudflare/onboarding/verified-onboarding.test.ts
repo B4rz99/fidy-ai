@@ -273,6 +273,10 @@ it("refuses a wrong browser protocol method without admitting a pairing", async 
     })
   );
   expect(response.status).toBe(405);
+  expect(response.headers.get("allow")).toBe("GET");
+  expect(response.headers.get("cache-control")).toBe("no-store");
+  expect(response.headers.get("content-type")).toBe("application/json; charset=utf-8");
+  expect(await response.json()).toEqual({ status: "method_not_allowed" });
   expect(await db.prepare("SELECT COUNT(*) AS count FROM browser_login_pairings").first()).toEqual({
     count: 0,
   });

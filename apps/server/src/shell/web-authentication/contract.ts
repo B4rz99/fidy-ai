@@ -8,11 +8,11 @@ import {
 } from "effect/unstable/httpapi";
 import { UtcTimestamp } from "~/core/_shared/time";
 import {
+  BrowserLoginPairingId,
   BrowserLoginPrivateVerifier,
   StartedBrowserLoginPairing,
   browserLoginPollingIntervalSeconds,
 } from "~/core/browser-login/contract";
-import { BrowserLoginPairingId } from "~/core/browser-login/reference";
 import { EmailAddress, EmailVerificationCode } from "~/core/email-authentication/contract";
 import { browserPairingEmailRetryAfterSeconds } from "~/core/email-authentication/rules";
 import { BackupRecoveryCode } from "~/core/recovery/contract";

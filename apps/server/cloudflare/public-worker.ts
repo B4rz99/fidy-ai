@@ -25,7 +25,7 @@ import {
   smokeProofHeader,
   smokeVersionHeader,
 } from "./runtime/smoke";
-import { patBrowserRoute, patDirectRoute, patMethods, patRoute } from "./pats/pat-routes";
+import { patBrowserRoute, patDirectRoute, patMethods, patRoute } from "./pats/operations";
 import { canonicalMethods, canonicalOperation, canonicalRoute } from "./routing/canonical-routes";
 
 const minimumAdmissionKeyLength = 32;

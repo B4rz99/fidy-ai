@@ -1,6 +1,6 @@
 import { Data, DateTime, Effect, Option, Result, Schema } from "effect";
-import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
-import { prepareOwnedStatement } from "../pats/pat-unit";
+import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-operations";
+import { prepareOwnedStatement } from "../atomic/operations";
 import { makeDefaultDashboard } from "../../src/core/dashboard/catalog";
 import { categoryIds } from "../../src/core/categories/taxonomy";
 import {

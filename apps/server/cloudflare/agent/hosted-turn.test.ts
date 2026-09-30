@@ -14,7 +14,7 @@ import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import type { HostedInferenceService } from "@fidy/server/hosted-inference";
 import { makeCloudflareHostedInference } from "../ai/workers-ai";
 import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
-import { newId } from "../pats/pat-shared";
+import { newId } from "../platform/operations";
 import {
   admitHostedTurn,
   commitHostedCompaction,

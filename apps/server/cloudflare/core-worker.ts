@@ -74,8 +74,13 @@ import {
   receiveEmailReplacement,
   reconcileEmailReplacement,
 } from "./identity/email-replacement-delivery";
-import { handlePATRequest, patRoute } from "./pats/pat-routes";
-import { listPATs } from "./pats/pat-management";
+import {
+  authorizeCanonicalPAT,
+  handlePATRequest,
+  listPATs,
+  patRoute,
+  sweepExpiredPATPairings,
+} from "./pats/operations";
 import { recallMemories, rejectMemoryMutation } from "./memory/memory";
 import { canonicalOperation, canonicalRoute } from "./routing/canonical-routes";
 import {
@@ -93,8 +98,6 @@ import {
   maximumAtomicBatchCalls,
   operationCatalog,
 } from "@fidy/server/canonical-runtime";
-import { sweepExpiredPATPairings } from "./pats/pat-pairing";
-import { authorizeCanonicalPAT } from "./pats/pat-authorization";
 import { executeProtectedCategories } from "./categories/canonical-category";
 import { executeProtectedSubscriptionQuery } from "./billing/subscription-queries";
 import {

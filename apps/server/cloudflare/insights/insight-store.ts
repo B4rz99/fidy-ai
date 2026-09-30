@@ -17,8 +17,8 @@ import {
   transactionNow,
   transactionUnavailable,
 } from "../transactions/transaction-boundary";
-import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
-import { prepareOwnedStatement } from "../pats/pat-unit";
+import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-operations";
+import { prepareOwnedStatement } from "../atomic/operations";
 import { dailyAuditBudget, utcDayMilliseconds } from "../atomic/daily-canonical-budget";
 import { budgetAuditLimitRefusal } from "../budgets/budget-outcome";
 import {

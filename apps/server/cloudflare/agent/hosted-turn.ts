@@ -63,7 +63,7 @@ import type {
   WhatsAppProviderMessageId,
 } from "../../src/shell/channels/whatsapp/model";
 import { transactionNow } from "../transactions/transaction-boundary";
-import { newId } from "../pats/pat-shared";
+import { newId } from "../platform/operations";
 import {
   type HostedAdmissionChannel,
   type HostedTurnOutcome,

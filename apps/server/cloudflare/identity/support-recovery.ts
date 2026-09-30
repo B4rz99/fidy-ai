@@ -2,7 +2,7 @@ import { BackupRecoveryCode } from "@fidy/server/client";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { JWTVerifyGetKey } from "jose";
 import { Clock, Data, Effect, Option, Schema } from "effect";
-import { newId } from "../pats/pat-shared";
+import { newId } from "../platform/operations";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
 
 const Payload = Schema.Struct({

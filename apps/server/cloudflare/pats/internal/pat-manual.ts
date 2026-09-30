@@ -5,15 +5,13 @@ import {
   ManualPATIssuanceRateLimited,
   ManualPATReviewExpired,
   TokenBearer,
-  UserActionRequired,
-  ValidationFailed,
-  buildPATDisclosure,
   issuanceConsumedMessage,
   issuanceLimitedMessage,
-  issueManualPAT,
-  recordSessionPATTransition,
   reviewExpiredMessage,
-} from "@fidy/server/tokens-runtime";
+} from "@fidy/server/tokens-contract";
+import { UserActionRequired, ValidationFailed } from "@fidy/server/public-http-contract";
+import { buildPATDisclosure } from "@fidy/server/tokens-policy";
+import { issueManualPAT, recordSessionPATTransition } from "@fidy/server/tokens-operations";
 import { type Cause, DateTime, Effect, Option, Redacted, Result, Schema } from "effect";
 import { grantManualPATConsent } from "@fidy/server/consent-pat";
 import {
@@ -39,7 +37,8 @@ import {
   serviceUnavailable as unavailable,
   webSession,
 } from "./pat-shared";
-import { commitPATUnit, prepareOwnedStatement } from "./pat-unit";
+import { commitPATUnit } from "./pat-unit";
+import { prepareOwnedStatement } from "../../atomic/operations";
 
 const httpForbidden = 403;
 const consentActionRequired = (): Response =>

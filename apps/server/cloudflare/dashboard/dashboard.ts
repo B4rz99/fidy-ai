@@ -3,8 +3,8 @@ import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
 import { makeDashboardCatalog } from "../../src/core/dashboard/catalog";
 import { categoryIds } from "../../src/core/categories/taxonomy";
 import { DashboardCatalog, DashboardEdit } from "../../src/core/dashboard/model";
-import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
-import { prepareOwnedStatement } from "../pats/pat-unit";
+import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-operations";
+import { prepareOwnedStatement } from "../atomic/operations";
 import {
   type TransactionCaller,
   callerAuthority,

@@ -8,12 +8,13 @@ import {
 import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
 import {
   livePATAuthority,
+  patAtomicAssertion,
   recordCanonicalPATWork,
   recordLivePATUse,
-} from "@fidy/server/tokens-runtime";
+} from "@fidy/server/tokens-operations";
 import { Effect, Option, Schema } from "effect";
-import { currentMillis, newId } from "../pats/pat-shared";
-import { commitPATUnit, prepareOwnedStatement } from "../pats/pat-unit";
+import { currentMillis, newId } from "../platform/operations";
+import { prepareOwnedStatement } from "../atomic/operations";
 import { type TransactionCaller, isPATCaller } from "../transactions/transaction-boundary";
 
 const headers = { "cache-control": "no-store", "content-type": "application/json; charset=utf-8" };
@@ -127,7 +128,10 @@ export const executeProtectedCategories = ({
   Effect.gen(function* () {
     const results = yield* Effect.tryPromise({
       try: () =>
-        commitPATUnit({ db, statements: categoryStatements(db, subject, currentMillis()) }),
+        db.batch([
+          ...categoryStatements(db, subject, currentMillis()),
+          db.prepare(patAtomicAssertion),
+        ]),
       catch: () => undefined,
     });
     return yield* presentCategoryWork(db, subject, results);

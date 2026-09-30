@@ -9,10 +9,25 @@
       "import": "./src/shell/canonical-runtime.ts",
       "default": "./src/shell/canonical-runtime.ts"
     },
-    "./tokens-runtime": {
-      "types": "./src/shell/tokens/runtime.ts",
-      "import": "./src/shell/tokens/runtime.ts",
-      "default": "./src/shell/tokens/runtime.ts"
+    "./tokens-contract": {
+      "types": "./src/shell/tokens/contract.ts",
+      "import": "./src/shell/tokens/contract.ts",
+      "default": "./src/shell/tokens/contract.ts"
+    },
+    "./tokens-operations": {
+      "types": "./src/shell/tokens/operations.ts",
+      "import": "./src/shell/tokens/operations.ts",
+      "default": "./src/shell/tokens/operations.ts"
+    },
+    "./tokens-policy": {
+      "types": "./src/core/tokens/operations.ts",
+      "import": "./src/core/tokens/operations.ts",
+      "default": "./src/core/tokens/operations.ts"
+    },
+    "./public-http-contract": {
+      "types": "./src/shell/public-http/contract.ts",
+      "import": "./src/shell/public-http/contract.ts",
+      "default": "./src/shell/public-http/contract.ts"
     },
     "./identity-runtime": {
       "types": "./src/shell/identity/browser-runtime.ts",
@@ -174,7 +189,7 @@
     "test:email-interpretation": "bun --bun vitest run --config vitest.email-interpretation.config.ts",
     "test:mutation": "node ../../tools/mutation/run.mjs",
     "check:browser-client": "bun scripts/check-browser-client.ts",
-    "lint:deps": "bun ../../tools/depcruise/run.mjs . src scripts tools",
+    "lint:deps": "bun ../../tools/depcruise/run.mjs . src cloudflare scripts tools",
     "lint:deps:probes": "bun scripts/check-dependency-guards.ts",
     "check:lint-guards": "bun scripts/check-lint-guards.ts"
   },

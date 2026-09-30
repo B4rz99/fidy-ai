@@ -20,7 +20,7 @@ import {
   statementSourceFormat,
 } from "@fidy/server/statement-format";
 import { CanonicalOperationId, type ErrorCode } from "@fidy/server/canonical-runtime";
-import { recordRejectedPATWork } from "@fidy/server/tokens-runtime";
+import { recordRejectedPATWork } from "@fidy/server/tokens-operations";
 import {
   Context,
   Crypto,
@@ -40,7 +40,7 @@ import {
   type BoundedBodyReadFailed,
   collectBoundedRequestBody,
 } from "../http/bounded-request-body";
-import { prepareOwnedStatement } from "../pats/pat-unit";
+import { prepareOwnedStatement } from "../atomic/operations";
 import {
   type TransactionAuthority,
   acceptedPATAccountability,

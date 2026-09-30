@@ -3,27 +3,21 @@ import {
   PATPairingPublicCodeInput,
   PATPairingReview,
   StartPATPairingPayload,
+} from "@fidy/server/tokens-contract";
+import {
   admitPairingReview,
   admitPairingSource,
   approvePairingGrant,
-  buildPairedPATDisclosure,
-  expireApprovedPairings,
-  expireFixedPATs,
-  pairingExpiryCompletion,
-  patExpiryCompletion,
   recordSessionPATTransition,
-  selectPATPairingPublicCodeSymbols,
   startPairingGrant,
   sweepPairingAdmission,
-  sweepPairingReviews,
-  sweepUnapprovedPairings,
-} from "@fidy/server/tokens-runtime";
-import { type Cause, DateTime, Effect, Encoding, Option, Result, Schema } from "effect";
+} from "@fidy/server/tokens-operations";
 import {
-  expirePATConsents,
-  expirePairingConsents,
-  grantPairedPATConsent,
-} from "@fidy/server/consent-pat";
+  buildPairedPATDisclosure,
+  selectPATPairingPublicCodeSymbols,
+} from "@fidy/server/tokens-policy";
+import { type Cause, DateTime, Effect, Encoding, Option, Result, Schema } from "effect";
+import { grantPairedPATConsent } from "@fidy/server/consent-pat";
 import {
   type SessionRow,
   canonical,
@@ -44,7 +38,8 @@ import {
   unavailable,
   webSession,
 } from "./pat-shared";
-import { commitPATUnit, prepareOwnedStatement } from "./pat-unit";
+import { commitPATUnit } from "./pat-unit";
+import { prepareOwnedStatement } from "../../atomic/operations";
 
 const symbolCount = 8;
 const sampleBytes = 16;
@@ -99,41 +94,6 @@ export const PairingRow = Schema.Struct({
 });
 export type PairingRow = typeof PairingRow.Type;
 
-/** Reclaim unapproved anonymous metadata; never remove approved User-bound grant evidence. */
-export const sweepExpiredPATPairings = (db: D1Database): Promise<void> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const current = currentMillis();
-      yield* Effect.tryPromise(() =>
-        db.batch([
-          prepareOwnedStatement({
-            db,
-            statement: expirePairingConsents({ current, limit: scheduledSweepLimit }),
-          }),
-          prepareOwnedStatement({ db, statement: expireApprovedPairings(current) }),
-          db.prepare(pairingExpiryCompletion).bind(current),
-          prepareOwnedStatement({
-            db,
-            statement: expirePATConsents({ current, limit: scheduledSweepLimit }),
-          }),
-          prepareOwnedStatement({ db, statement: expireFixedPATs(current) }),
-          db.prepare(patExpiryCompletion).bind(current),
-          prepareOwnedStatement({
-            db,
-            statement: sweepUnapprovedPairings({ current, limit: scheduledSweepLimit }),
-          }),
-          prepareOwnedStatement({
-            db,
-            statement: sweepPairingAdmission({ current, limit: scheduledSweepLimit }),
-          }),
-          prepareOwnedStatement({
-            db,
-            statement: sweepPairingReviews({ current, limit: scheduledSweepLimit }),
-          }),
-        ])
-      );
-    })
-  );
 type StartedPairing = Readonly<{
   source: Uint8Array;
   payload: StartPATPairingPayload;

@@ -10,16 +10,16 @@ import {
   memoryRowQuery,
   recordBrowserMemoryWork,
 } from "@fidy/server/memory-runtime";
-import { recordCanonicalPATWork } from "@fidy/server/tokens-runtime";
+import { recordCanonicalPATWork } from "@fidy/server/tokens-operations";
 import type {
   CanonicalMutationRefusal,
   CommittedMutationValue,
   GuardRefusalWork,
   MemoryOutcome,
 } from "./mutation-types";
-import { newId } from "../pats/pat-shared";
+import { newId } from "../platform/operations";
 import { refusedByAuditBudget } from "../audit/audit-triggers";
-import { prepareOwnedStatement } from "../pats/pat-unit";
+import { prepareOwnedStatement } from "../atomic/operations";
 import {
   type TransactionCaller,
   isPATCaller,

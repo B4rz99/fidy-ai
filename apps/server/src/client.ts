@@ -36,7 +36,7 @@ export {
   TokenBearerFormat,
   TokenShortId,
   recipientLabelLimit,
-} from "~/core/tokens/model";
+} from "~/core/tokens/contract";
 export { PATId } from "~/core/tokens/reference";
 export {
   ApprovedPATPairing,
@@ -50,8 +50,8 @@ export {
   PendingPATPairingClaim,
   StartedPATPairing,
   StartPATPairingPayload,
-} from "~/core/tokens/pairing";
-export { buildPATDisclosure, patScopeCopy } from "~/core/tokens/rules";
+} from "~/core/tokens/contract";
+export { buildPATDisclosure, patScopeCopy } from "~/core/tokens/operations";
 export { StagedStatementReference, SubmitForExtractionInput } from "~/core/ingestion/model";
 export type { CanonicalInput } from "~/shell/_shared/canonical-input";
 export type { CanonicalSuccess } from "~/shell/_shared/canonical-success";

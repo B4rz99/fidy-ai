@@ -40,7 +40,16 @@ suggested operations, OpenAPI, MCP definitions, and hosted-agent tool descriptio
 registries remain complete even when their execution implementation is unavailable; a registry entry
 must never silently fall back to local state. The direct proof-bearing PATPairing API has no stable
 User or canonical operation policy; its generated OpenAPI is checked for freshness independently of
-the stable-User contract pair. No prelaunch compatibility gate compares either API with older revisions.
+the stable-User contract pair. Tokens publishes browser-safe PAT and PATPairing declarations from
+`core/tokens/contract.ts` and `shell/tokens/contract.ts`, pure decisions from
+`core/tokens/operations.ts`, and transaction-composable lifecycle, authority, safe metadata, and
+accountability operations from `shell/tokens/operations.ts`. It has no separate runtime authority.
+`cloudflare/pats/operations.ts` owns declared-route dispatch, bearer authorization, and bounded
+expiry composition; its D1 rows, proof mechanics, and individual HTTP adapters remain in
+`cloudflare/pats/internal/`. Generic D1 statement binding and server time/identity generation belong
+to `cloudflare/atomic/operations.ts` and `cloudflare/platform/operations.ts`, not Tokens. Raw bearers
+remain one-time responses, and every protected use rechecks the explicit User, scope, Consent,
+revocation, and fixed expiration in its D1 unit. No prelaunch compatibility gate compares either API with older revisions.
 
 ## 3. Security and subject boundaries
 

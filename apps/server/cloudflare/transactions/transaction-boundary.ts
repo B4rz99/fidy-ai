@@ -13,10 +13,10 @@ import {
   recordAuditedPATUseFromAuthority,
   recordCanonicalPATWork,
   recordCanonicalPATWorkFromAuthority,
-} from "@fidy/server/tokens-runtime";
-import type { AuthorizedPAT } from "../pats/pat-authorization";
-import { prepareOwnedStatement } from "../pats/pat-unit";
-import { newId } from "../pats/pat-shared";
+} from "@fidy/server/tokens-operations";
+import type { AuthorizedPAT } from "../pats/operations";
+import { prepareOwnedStatement } from "../atomic/operations";
+import { newId } from "../platform/operations";
 import { refusedByAuditBudget } from "../audit/audit-triggers";
 
 /**

@@ -88,6 +88,23 @@ export default {
       },
     },
     {
+      name: "foreign-tokens-adapter-imports-internal",
+      severity: "error",
+      comment:
+        "Tokens storage rows, proofs, and HTTP adapters are private. Foreign Cloudflare " +
+        "callers, tests, scripts, and tools use cloudflare/pats/operations.ts.",
+      from: { pathNot: "^cloudflare/pats/" },
+      to: { path: "^cloudflare/pats/internal/" },
+    },
+    {
+      name: "tokens-adapter-interface-reexports-internal",
+      severity: "error",
+      comment:
+        "Tokens publishes substantive adapter operations, never re-exported private rows or proof mechanics.",
+      from: { path: "^cloudflare/pats/(contract|operations|runtime)\\.ts$" },
+      to: { path: "^cloudflare/pats/internal/", dependencyTypes: ["export"] },
+    },
+    {
       name: "provider-callers-import-raw-http",
       severity: "error",
       comment:
@@ -215,7 +232,7 @@ export default {
         path: "^src/",
         pathNot: [
           "^src/shell/_shared/",
-          "^src/shell/public-http/contract\\.ts$",
+          "^src/shell/(public-http|tokens)/contract\\.ts$",
           "^src/shell/[^/]+/operations\\.ts$",
         ],
       },

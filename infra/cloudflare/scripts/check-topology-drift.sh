@@ -48,15 +48,6 @@ if grep --fixed-strings --quiet 'Plan:' "$log_file"; then
   # Never print a raw drift plan: attributes can contain Secret-backed values.
   resources=$(grep --extended-regexp --only-matching \
     '\[[[:alnum:]_-]+\] (create|update|replace|delete)' "$log_file" | sort -u || true)
-  if [[ "${1:-}" == resume ]]; then
-    # Only the previously inspected Worker-only drift is allowed past this gate, and
-    # only after the exact stable pair and Alchemy receipts passed resume-capture.
-    if [[ "$resources" == $'[Core] update\n[Ingress] update' ]] &&
-      grep --extended-regexp --quiet 'Plan: 2 to update(, [0-9]+ binding changes)?$' "$log_file"; then
-      echo 'Production drift is limited to the verified interrupted Worker pair.'
-      exit 0
-    fi
-  fi
   echo 'Production Cloudflare topology drift inspection failed: category=drift_detected' >&2
   # Take an additional dry-run snapshot for diagnostics only; never repair or change this verdict.
   bun inspect-worker-drift.ts >>"$log_file" 2>&1 || true

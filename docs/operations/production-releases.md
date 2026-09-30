@@ -72,28 +72,10 @@ The [Kapso real-user launch check](kapso-launch-readiness.md) is separate from o
    this exception applies to capture only. Candidate staging and cleanup still require completed
    receipts. All other in-progress/incomplete receipts, missing baselines, ambiguous deployments, and
    identity mismatches block candidate upload.
-   **One-time smoke bootstrap:** Production still has the pre-smoke `b71c2248` Worker pair.
-   The normal capture cannot call a smoke path that this pair does not implement. Once the
-   reviewed bootstrap change is on `trunk`, dispatch `Deploy Production` with `bootstrap=true`
-   from `trunk`. This protected run first requires that exact pre-smoke revision and contract
-   digest on `/health`, captures both sole 100% Cloudflare deployments, and rechecks trunk.
-   Only this dispatch omits `version.traffic: 0`: Alchemy deploys the new Core and public
-   Workers directly. It then verifies the exact new stable identities using the protected
-   smoke endpoint, waits for synthetic Queue/Workflow completion, and runs the normal public
-   topology and edge probes. This first cutover cannot prove the old-public/new-Core smoke
-   pairing or guarantee automatic rollback; on partial failure, inspect both deployments and
-   fix forward through reviewed Production authority. Do not rerun the bootstrap after the
-   stable revision changes; subsequent trunk pushes use the normal candidate path. The
-   dispatch command is:
-
-   ```sh
-   gh workflow run production.yml --ref trunk -f bootstrap=true
-   ```
-
 9. Run `alchemy deploy --stage production --yes --no-input` with the same revision and digest.
    The capture step first requires existing Alchemy Worker hash state so the pinned provider cannot
    fall back to a direct 100% PUT. Alchemy owns the complete topology and uploads the public/Core
-   immutable candidates with `version.traffic: 0`. This is **upload only**, not an active 0% deployment. The protected one-time bootstrap above establishes the first smoke-capable stable pair through a direct Alchemy deployment.
+   immutable candidates with `version.traffic: 0`. This is **upload only**, not an active 0% deployment.
 10. Read the exact candidate IDs from Alchemy's persisted Worker upload receipts. The checked-in
     routing controller uses Wrangler's 0% deployment primitive to install each candidate alongside
     its captured stable version (100%). It re-reads Cloudflare after each write. Never replace 0%
@@ -116,32 +98,18 @@ A superseded candidate reports:
 Release $RELEASE_GIT_SHA was superseded by $CURRENT_TRUNK_SHA; leaving the prior topology active.
 ```
 
-After run `36588418380` failed at Core-first promotion, inspection `36594005666` confirmed
-public stable at 100% and Core candidate at 100% (the middle pair passed compatibility smoke).
-The one-time protected `Recover interrupted Production Core promotion` dispatch restores only the
-inspected prior Core version, after requiring the exact public/Core deployment IDs, live health and
-smoke identity, unchanged Worker source, and current trunk. Its final check proves the original
-public/Core stable pair. Do not run it if inspection shows any different traffic; use the read-only
-`Inspect Production Worker traffic` workflow first. Both workflows serialize with deployment. The interrupted upload left Alchemy receipts for the
-unpromoted candidate versions while both stable Workers were restored. Normal pushes still refuse
-this Worker-only drift before upload. After inspection proves **only** `Core` and `Ingress` have
-update drift, dispatch `Deploy Production` from `trunk` with `resume=true` and `bootstrap=false`.
-The first resume (`36602097827`) stopped at candidate smoke before promotion. Cleanup restored
-public stable traffic but could not confirm its write before removing the Core candidate. Resume `36631716949` passed reconciliation, upload, and staging but immediately received
-HTTP 503 from a different public Worker version: routing had not converged to the requested
-candidate. Cleanup succeeded; inspection `36632237904` confirms public deployment
-`4eae3224-b347-4ccc-8715-17389919e0f6` and Core deployment
-`8cd6309b-859a-424a-bc05-e206e5c24922`, each with its sole original stable version at 100%.
-Resume now requires that exact sole-stable pair and receipts for public candidate
-`7b83226f-3fbe-4d2f-99e8-72d7f818375f` and Core candidate
-`89a2da14-0f1b-4c8a-8eba-ed39b19d6b62`,
-proves stable smoke identities, accepts only the two inspected Worker updates, and rechecks
-trunk and both deployments. It performs no cleanup traffic write. It then follows ordinary
-zero-traffic candidate upload, pairing smoke, and guarded promotion. Any other drift, receipt,
-or Worker identity fails closed. Reconciliation failures report a closed stage (`receipts`,
-`routing`, `identity`, `drift`, `trunk`, or `recapture`) without foreign errors or provider values.
-A deployment write is issued once; bounded reads may confirm its exact committed routing after
-a lost response, but never justify repeating the write.
+Normal release [36645519165](https://github.com/B4rz99/fidy-ai/actions/runs/36645519165)
+passed candidate and compatibility smoke, exact-pair promotion, normal-traffic probes,
+public topology/unauthorized-edge checks, and both drift gates. Infrastructure state
+was preserved. The obsolete direct smoke bootstrap, incident-specific Core recovery,
+interrupted-upload resume, and fixed historical candidate probe have been retired.
+Their incident evidence remains in [issue #725](https://github.com/B4rz99/fidy-ai/issues/725)
+and the historical workflow runs, not executable recovery constants.
+
+Use `Inspect Production Worker traffic` for read-only routing and drift evidence.
+Unexpected drift blocks every release; there is no Worker-only exemption. A deployment
+write is issued once; bounded reads may confirm its exact committed routing after a
+lost response, but never justify repeating the write.
 
 Proof-admitted smoke failures report only a closed `x-fidy-smoke-failure` stage, such as
 `identity`, `configuration`, `schema`, `storage`, `coordinator`, or `publication`.
@@ -154,15 +122,6 @@ than the revision: distinct runs of one revision can have different traffic repo
 [Resend documents](https://resend.com/docs/dashboard/emails/idempotency-keys) that reusing
 a key with a different payload produces HTTP 409. This corrects the collision risk seen
 in the failed resume; actual inbox delivery still needs verification.
-
-Protected resume `36633807905` passed the candidate and compatibility pairing smokes,
-promoted the tested Workers, and passed the normal-traffic post-promotion smoke plus
-public topology and unauthorized-edge checks. It failed only the final drift gate;
-this is not yet a fully successful deployment. Inspection `36634807654` confirms
-public version `163ee99f-f0aa-4101-910e-aae30b4c5aca` and Core version
-`08dff69e-c0db-47ce-ba97-fe5bffaa1a6b` each serve 100%, with drift limited to
-`Core` and `Ingress`. The earlier interrupted-upload resume constants describe the
-previous cleanup, not this promoted pair; do not reuse that recovery path now.
 
 After the original drift CLI rejects a plan, an additional dry-run inspection
 reports only closed changed attribute names for these two Workers, including
@@ -186,9 +145,11 @@ observable. Both source and distributed JavaScript are patched because Bun and
 Node/Vitest resolve different package conditions. No saved record or traffic is
 rewritten by this fix. The SDK adapter test has only a file-scoped upstream
 `any`-error-channel exception, guarded by the exact compiler-exception allowlist.
-Remove the patch only when a locked upstream release passes these regression tests. The provider's omitted receipt
-fields are a source-backed hypothesis until the protected report identifies the
-live differences; normal release proof and onboarding enablement remain pending.
+The patch resolved both drift gates in the green normal release above. The upstream
+fix is tracked by [Alchemy #1900](https://github.com/alchemy-run/alchemy/issues/1900)
+and [PR #1901](https://github.com/alchemy-run/alchemy/pull/1901). Remove the patch only
+when a locked upstream release passes these regression tests. Onboarding enablement
+remains paused and requires the separate launch proof.
 
 Before either candidate smoke or the normal post-promotion smoke, the runner polls
 proof-admitted `GET /internal/release-smoke?readiness=1` for exact public/Core identities.
@@ -292,8 +253,7 @@ probes to expire before retrying a saturated gate. Failed work for a claimed pro
 fresh probe ID. The reserved Durable Object check establishes compatibility with whichever
 version Cloudflare assigned the object; Queue/Workflow completion establishes deployed wiring,
 **not that the candidate's async code ran**. The synthetic D1 row expires after five minutes and
-Core cron removes expired rows. The reserved R2 marker carries no User material. The one-time smoke bootstrap uses the direct deployment path before a stable version can answer
-the reserved Durable Object probe; later releases use #719.
+Core cron removes expired rows. The reserved R2 marker carries no User material.
 
 ## Failure and recovery
 

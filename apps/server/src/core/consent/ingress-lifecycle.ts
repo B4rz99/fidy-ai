@@ -1,5 +1,5 @@
 import { Option, Schema } from "effect";
-import { WhatsAppBusinessPhoneNumberId } from "~/core/identity/reference";
+import { WhatsAppBusinessPhoneNumberId } from "~/core/identity/contract";
 import { WhatsAppProviderMessageId } from "~/core/provider-evidence/contract";
 import { Sha256Digest } from "./reference";
 

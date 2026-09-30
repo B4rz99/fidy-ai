@@ -1,6 +1,6 @@
-export { User } from "~/core/identity/model";
-export { UserId } from "~/core/identity/reference";
-export { getCurrentUser } from "./current-user";
+export { User } from "~/core/identity/contract";
+export { UserId } from "~/core/identity/contract";
+export { getCurrentUser } from "./operations";
 export { BrowserLoginPairingId } from "~/core/browser-login/reference";
 export {
   BrowserLoginPublicCodeSymbols,

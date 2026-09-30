@@ -13,7 +13,7 @@ import {
   UserId,
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
-} from "~/core/identity/reference";
+} from "~/core/identity/contract";
 import { WebSessionId } from "~/core/web-session/contract";
 import { EmailEnrollmentId } from "./reference";
 

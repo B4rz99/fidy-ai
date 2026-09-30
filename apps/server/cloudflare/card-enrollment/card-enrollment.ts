@@ -20,7 +20,7 @@ import {
   makeWompiEnrollmentClient,
 } from "@fidy/server/subscription-runtime";
 import { Cause, Clock, Data, DateTime, Effect, Exit, Option, Schema } from "effect";
-import { UserId } from "@fidy/server/identity-runtime";
+import { UserId } from "../../src/core/identity/contract";
 import { claimPreparedCardEnrollment } from "./card-enrollment-claim";
 import { admitCardPreparationAttempt } from "./card-preparation-admission";
 import { ResourceAdmissionRefused } from "../resource-admission/authority";

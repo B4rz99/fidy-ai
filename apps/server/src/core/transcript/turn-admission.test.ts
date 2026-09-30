@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Option, Schema } from "effect";
-import { UserId } from "~/core/identity/reference";
+import { UserId } from "~/core/identity/contract";
 import { HostedAgentSessionId } from "./reference";
 import { HostedAgentSessionConsentBasis } from "./hosted-agent-session";
 import { type HostedAdmissionRequest, decideHostedAdmission } from "./turn-admission";

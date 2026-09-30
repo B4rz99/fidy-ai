@@ -1,6 +1,6 @@
 import { Duration, Effect, Schema, SchemaTransformation } from "effect";
 import { PATId } from "./reference";
-import { UserId } from "~/core/identity/reference";
+import { UserId } from "~/core/identity/contract";
 import { CanonicalCapability } from "~/core/canonical-operations/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
 

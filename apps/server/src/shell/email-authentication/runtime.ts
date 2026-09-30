@@ -1,5 +1,5 @@
 import { Option } from "effect";
-import { UserId } from "~/core/identity/reference";
+import { UserId } from "~/core/identity/contract";
 import { WebSessionId } from "~/core/web-session/contract";
 import type { CanonicalImplementationCaller } from "~/shell/_shared/canonical-implementation";
 import { canonicalMutationImplementations } from "~/shell/_shared/canonical-mutation-registry";

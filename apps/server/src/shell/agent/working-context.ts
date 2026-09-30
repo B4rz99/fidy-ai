@@ -1,7 +1,6 @@
 import { Brand, Option } from "effect";
 import type { DateTime } from "effect";
-import type { User } from "~/core/identity/model";
-import type { UserId } from "~/core/identity/reference";
+import type { User, UserId } from "~/core/identity/contract";
 import type { TranscriptEntry, TranscriptTurnId } from "~/core/transcript/model";
 import type { HostedAgentSessionId } from "~/core/transcript/reference";
 import type { HostedInitialTextContext } from "~/shell/hosted-inference/contract";

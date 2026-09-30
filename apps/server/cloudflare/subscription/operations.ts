@@ -1,4 +1,4 @@
-import type { UserId } from "../../src/core/identity/reference";
+import type { UserId } from "../../src/core/identity/contract";
 
 const trialDurationMs = 604_800_000;
 

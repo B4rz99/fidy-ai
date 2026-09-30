@@ -1,5 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { handleWebAuthentication } from "../web-authentication/operations";
+import { verifyOnboarding } from "../onboarding/runtime";
+import { prepareInitialTrialPeriod } from "../subscription/operations";
+import { UserId } from "../../src/core/identity/contract";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 
 import { DisabledTelemetryResource, makeTelemetryService } from "@fidy/server/telemetry";
@@ -378,6 +381,88 @@ it("creates one complete stable identity on first valid mailbox proof and refuse
             .first<{ count: number }>()
         ))?.count
       ).toBe(1);
+    })
+  ));
+
+it("never replaces or extends an existing User's TrialPeriod during initialization", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, send } = yield* Effect.tryPromise(() => setup());
+      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
+      const original = yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT user_id, started_at_ms, ends_at_ms FROM trial_periods")
+          .first<{ user_id: string; started_at_ms: number; ends_at_ms: number }>()
+      );
+      expect(original).not.toBeNull();
+      if (original === null) return;
+      const result = yield* Effect.exit(
+        Effect.tryPromise(() =>
+          db.batch([
+            prepareInitialTrialPeriod({
+              db,
+              userId: UserId.make(original.user_id),
+              verifiedAtMs: original.started_at_ms + 86_400_000,
+            }),
+          ])
+        )
+      );
+      expect(Exit.isFailure(result)).toBe(true);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT user_id, started_at_ms, ends_at_ms FROM trial_periods").first()
+        )
+      ).toEqual(original);
+    })
+  ));
+
+it("rolls back every owner and preserves the proof when recovery setup fails before retry", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db } = yield* Effect.tryPromise(() => setup());
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(`CREATE TRIGGER refuse_initial_recovery BEFORE INSERT ON backup_recovery_credentials
+          BEGIN SELECT RAISE(ABORT, 'recovery_unavailable'); END`)
+          .run()
+      );
+      const verify = (): Promise<Response> =>
+        verifyOnboarding({
+          db,
+          request: new Request("https://api.fidyapp.com/web/onboarding/email/verify", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: encodeJson({ combinedCode: code }),
+          }),
+        });
+      const rejected = yield* Effect.tryPromise(verify);
+      expect(rejected.status).toBe(400);
+      expect(yield* Effect.tryPromise(() => rejected.text())).not.toContain("recovery_unavailable");
+      for (const table of [
+        "users",
+        "whatsapp_identities",
+        "verified_email_credentials",
+        "onboarding_consent_records",
+        "trial_periods",
+        "backup_recovery_credentials",
+        "completed_email_enrollments",
+      ]) {
+        expect(
+          (yield* Effect.tryPromise(() =>
+            db.prepare(`SELECT count(*) AS count FROM ${table}`).first<{ count: number }>()
+          ))?.count
+        ).toBe(0);
+      }
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT state, public_code FROM pending_email_enrollments").first()
+        )
+      ).toEqual({ state: "awaiting_proof", public_code: "ABCD-EFGH" });
+      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER refuse_initial_recovery").run());
+      const retried = yield* Effect.tryPromise(verify);
+      expect(retried.status).toBe(200);
+      expect(yield* Effect.tryPromise(() => retried.json())).toMatchObject({ status: "created" });
+      expect((yield* Effect.tryPromise(verify)).status).toBe(400);
     })
   ));
 

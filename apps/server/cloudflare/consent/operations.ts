@@ -8,7 +8,7 @@ import {
 } from "@fidy/server/agent-runtime";
 import { consentRevocationQuery } from "@fidy/server/consent-runtime";
 import { recordOnboardingConsent } from "@fidy/server/consent-operations";
-import type { UserId } from "@fidy/server/identity-runtime";
+import type { UserId } from "../../src/core/identity/contract";
 
 /** Prepare exact accepted pending evidence for the caller's atomic stable-User onboarding unit. */
 export const prepareOnboardingConsent = ({

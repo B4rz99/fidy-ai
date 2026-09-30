@@ -1,4 +1,4 @@
-import type { UserId } from "@fidy/server/identity-runtime";
+import type { UserId } from "../../src/core/identity/contract";
 
 /** A verified, current mailbox proof. It carries no mailbox or digest; D1 consumes it at commit. */
 export type PreparedOnboardingCredential = Readonly<{

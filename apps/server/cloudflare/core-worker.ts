@@ -143,9 +143,7 @@ import {
   handleSmoke,
   receiveSmoke,
 } from "./runtime/smoke-work";
-
-import { verifyOnboarding } from "./onboarding/verified-onboarding";
-
+import { verifyOnboarding } from "./onboarding/runtime";
 import {
   type WorkerTelemetryEnvironment,
   cloudflareWorkerTelemetry,

@@ -70,8 +70,8 @@ export const insertMemory = ({
   db: D1Database;
   authority: MemoryAuthority;
   candidate: Memory;
-}>): D1PreparedStatement => {
-  return db
+}>): D1PreparedStatement =>
+  db
     .prepare(`INSERT INTO memories (id, user_id, text, created_at, updated_at)
       SELECT ?, user_id, ?, ?, ? FROM ${authority.table} WHERE ${authority.predicate}`)
     .bind(
@@ -81,7 +81,6 @@ export const insertMemory = ({
       DateTime.formatIso(candidate.updatedAt),
       ...authority.bindings
     );
-};
 
 export const replaceMemory = ({
   db,
@@ -93,8 +92,8 @@ export const replaceMemory = ({
   userId: string;
   authority: MemoryAuthority;
   candidate: Memory;
-}>): D1PreparedStatement => {
-  return db
+}>): D1PreparedStatement =>
+  db
     .prepare(`UPDATE memories SET text = ?, updated_at = ? WHERE user_id = ? AND id = ?
       AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
     .bind(
@@ -104,7 +103,6 @@ export const replaceMemory = ({
       candidate.id,
       ...authority.bindings
     );
-};
 
 export const deleteMemory = ({
   db,
@@ -116,12 +114,11 @@ export const deleteMemory = ({
   userId: string;
   authority: MemoryAuthority;
   id: string;
-}>): D1PreparedStatement => {
-  return db
+}>): D1PreparedStatement =>
+  db
     .prepare(`DELETE FROM memories WHERE user_id = ? AND id = ?
       AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
     .bind(userId, id, ...authority.bindings);
-};
 
 /** The Memory owner's exact trigger metric, asserted for a named child before its write. */
 export const memoryCapacityGuards =

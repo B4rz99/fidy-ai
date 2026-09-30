@@ -11,6 +11,7 @@ import {
   selectPublicCodeSymbols,
 } from "../../src/core/browser-login/operations";
 import { prepareWebSessionIssuance } from "@fidy/server/web-session-runtime";
+import { sessionPairingRetention } from "@fidy/server/web-session";
 import { UserId } from "../../src/core/identity/contract";
 import { Clock, DateTime, Effect, Encoding, Option, Schema } from "effect";
 import { pairingId as newPairingId } from "./internal/worker-crypto";
@@ -95,8 +96,8 @@ export const startBrowserPairing = (db: D1Database): Promise<Response> =>
       yield* attempt(() =>
         db
           .prepare(`DELETE FROM browser_login_pairings WHERE id IN (
-    SELECT id FROM browser_login_pairings WHERE expires_at_ms <= ? AND id NOT IN
-    (SELECT pairing_id FROM web_sessions) ORDER BY expires_at_ms LIMIT 32)`)
+    SELECT id FROM browser_login_pairings WHERE expires_at_ms <= ? AND NOT (${sessionPairingRetention})
+    ORDER BY expires_at_ms LIMIT 32)`)
           .bind(started)
           .run()
       );

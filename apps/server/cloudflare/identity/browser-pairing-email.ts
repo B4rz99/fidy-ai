@@ -1,8 +1,6 @@
 import { EmailAddress, EmailVerificationCode } from "@fidy/server/client";
-import {
-  BrowserLoginPairingId,
-  decidePendingBrowserLoginProof,
-} from "@fidy/server/identity-runtime";
+import { BrowserLoginPairingId } from "../../src/core/browser-login/reference";
+import { decidePendingBrowserLoginProof } from "../../src/core/browser-login/operations";
 import { Clock, Crypto, DateTime, Effect, Option, PlatformError, Schema } from "effect";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
 

@@ -10,7 +10,7 @@ import {
   maximumWrongVerifierAttempts,
   selectPublicCodeSymbols,
 } from "../../src/core/browser-login/operations";
-import { calculateWebSessionDeadlines } from "@fidy/server/identity-runtime";
+import { calculateWebSessionDeadlines } from "../../src/core/web-session/operations";
 import type { UserId } from "../../src/core/identity/reference";
 import { Clock, DateTime, Effect, Encoding, Option, Schema } from "effect";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";

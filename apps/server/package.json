@@ -4,6 +4,11 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./access-tier": {
+      "types": "./src/shell/access-tier/operations.ts",
+      "import": "./src/shell/access-tier/operations.ts",
+      "default": "./src/shell/access-tier/operations.ts"
+    },
     "./canonical-runtime": {
       "types": "./src/shell/canonical-runtime.ts",
       "import": "./src/shell/canonical-runtime.ts",

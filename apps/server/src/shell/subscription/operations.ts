@@ -6,6 +6,23 @@ import {
 } from "~/core/subscription/model";
 import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
 import { OperationResponse, Unavailable } from "~/shell/public-http/contract";
+import type { OwnedStatement } from "~/shell/_shared/owned-statement";
+
+/**
+ * Embed one resolved User's settled paid-period activity at a UTC instant in the caller's D1
+ * unit. A future period grants nothing and the end is exclusive. This performs no write and
+ * grants no caller authority; the caller must retain its own authorization and atomic commit.
+ */
+export const activePaidSubscriptionPredicate = ({
+  userId,
+  nowEpochMs,
+}: Readonly<{ userId: string; nowEpochMs: number }>): OwnedStatement => ({
+  sql: `EXISTS (SELECT 1 FROM subscriptions AS subscription
+    WHERE subscription.user_id = ? AND subscription.paid_period_ends_at_ms > ?
+    AND EXISTS (SELECT 1 FROM billing_paid_periods AS period
+      WHERE period.attempt_id = subscription.attempt_id AND period.starts_at_ms <= ?))`,
+  params: [userId, nowEpochMs, nowEpochMs],
+});
 
 const getUpgradeUrl = HttpApiEndpoint.get("getUpgradeUrl", "/subscription/upgrade-url", {
   success: OperationResponse(UpgradeDestination),

@@ -130,6 +130,35 @@ const emptyGraph = `tools/${PROBE_PREFIX}empty-graph`;
 
 const PROBES: readonly Probe[] = [
   {
+    name: "AccessTier composes published owner operations",
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `src/shell/access-tier/${PROBE_PREFIX}published/probe.ts`,
+        source: `import { activeTrialPredicate } from "~/shell/identity/operations";\nimport { activePaidSubscriptionPredicate } from "~/shell/subscription/operations";\nexport const predicates = [activeTrialPredicate, activePaidSubscriptionPredicate];\n`,
+      },
+    ],
+  },
+  {
+    name: "AccessTier cannot reach an owner's row projection",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error access-tier-imports-owner-implementation: src/shell/access-tier/${PROBE_PREFIX}private/probe.ts → src/shell/subscription/${PROBE_PREFIX}row-projection/probe.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `src/shell/subscription/${PROBE_PREFIX}row-projection/probe.ts`,
+        source: "export const projection = true;\n",
+      },
+      {
+        path: `src/shell/access-tier/${PROBE_PREFIX}private/probe.ts`,
+        source: `import { projection } from "~/shell/subscription/${PROBE_PREFIX}row-projection/probe";\nexport const value = projection;\n`,
+      },
+    ],
+  },
+  {
     expect: {
       kind: "rejected",
       mustContain: [

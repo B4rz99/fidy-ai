@@ -1,3 +1,4 @@
+import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 import type { Effect } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { User, UserId } from "~/core/identity/contract";
@@ -31,3 +32,17 @@ export const getCurrentUser = (
   Unavailable,
   SqlClient.SqlClient
 > => readCurrentUser(userId);
+
+/**
+ * Embed one resolved User's original TrialPeriod activity in the caller's D1 unit. The UTC
+ * decision instant is inclusive at the start and exclusive at the end. This grants no caller
+ * authority, performs no write, and must be composed with the caller's own authorization guard.
+ */
+export const activeTrialPredicate = ({
+  userId,
+  nowEpochMs,
+}: Readonly<{ userId: string; nowEpochMs: number }>): OwnedStatement => ({
+  sql: `EXISTS (SELECT 1 FROM trial_periods AS trial
+    WHERE trial.user_id = ? AND trial.started_at_ms <= ? AND trial.ends_at_ms > ?)`,
+  params: [userId, nowEpochMs, nowEpochMs],
+});

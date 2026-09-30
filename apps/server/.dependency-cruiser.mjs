@@ -89,6 +89,18 @@ export default {
       },
     },
     {
+      name: "access-tier-imports-owner-implementation",
+      severity: "error",
+      comment:
+        "AccessTier derives capability through published Identity and Subscription behavior, " +
+        "never their repositories, rows, runtime authority, or private implementation.",
+      from: { path: "^src/(core|shell)/access-tier/" },
+      to: {
+        path: "^src/(core|shell)/(identity|subscription)/",
+        pathNot: "^src/(core|shell)/(identity|subscription)/(contract|operations)\\.ts$",
+      },
+    },
+    {
       name: "foreign-module-imports-internal",
       severity: "error",
       comment:

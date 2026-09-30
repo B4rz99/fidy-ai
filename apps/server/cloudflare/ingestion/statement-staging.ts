@@ -34,7 +34,7 @@ import {
   PlatformError,
   Schema,
 } from "effect";
-import { activeProUserParams, activeProUserSql } from "../access-tier";
+import { activeProUserPredicate } from "@fidy/server/access-tier";
 import { refusedByAuditBudget } from "../audit/audit-triggers";
 import {
   type BoundedBodyReadFailed,
@@ -570,8 +570,9 @@ const readOwnedStagedBytes = (
 const readAdmissionState = (
   config: StatementStagingConfig,
   input: Readonly<{ userId: string; nowEpochMs: number }>
-): Effect.Effect<Option.Option<AdmissionStateRow>, StatementStagingUnavailable> =>
-  platformUnavailable(() =>
+): Effect.Effect<Option.Option<AdmissionStateRow>, StatementStagingUnavailable> => {
+  const pro = activeProUserPredicate(input);
+  return platformUnavailable(() =>
     config.database
       .prepare(
         `SELECT
@@ -582,17 +583,18 @@ const readAdmissionState = (
            EXISTS (SELECT 1 FROM statement_backfill_entitlements AS e
              WHERE e.user_id = ? AND (e.consumed_at_ms IS NOT NULL OR e.submission_id IS NOT NULL))
              AS backfill_reserved,
-           ${activeProUserSql} AS pro`
+           ${pro.sql} AS pro`
       )
       .bind(
         input.userId,
         input.userId,
         input.nowEpochMs - millisecondsPerHour,
         input.userId,
-        ...activeProUserParams({ nowEpochMs: input.nowEpochMs, userId: input.userId })
+        ...pro.params
       )
       .first()
   ).pipe(Effect.map((value) => Schema.decodeUnknownOption(AdmissionStateRow)(value)));
+};
 
 /** The closed refusal for exhausted submission pressure or a spent Free backfill, or `None`. */
 const admissionRefusal = (
@@ -634,6 +636,7 @@ const submissionInsertStatement = (
 ): D1PreparedStatement => {
   const { userId, idempotencyKey, stagingId, submissionId, nowEpochMs } = input;
   const hourStartEpochMs = nowEpochMs - millisecondsPerHour;
+  const pro = activeProUserPredicate({ userId, nowEpochMs });
   return config.database
     .prepare(
       `INSERT INTO statement_submissions (
@@ -655,7 +658,7 @@ const submissionInsertStatement = (
          AND (SELECT count(*) FROM statement_submissions AS hourly
                WHERE hourly.user_id = staging.user_id AND hourly.submitted_at_ms > ?)
              < ?
-         AND (${activeProUserSql} OR NOT EXISTS (
+         AND (${pro.sql} OR NOT EXISTS (
                SELECT 1 FROM statement_backfill_entitlements AS entitlement
                WHERE entitlement.user_id = staging.user_id
                  AND (entitlement.consumed_at_ms IS NOT NULL
@@ -676,7 +679,7 @@ const submissionInsertStatement = (
       maximumOutstandingStatementSubmissions,
       hourStartEpochMs,
       maximumStatementSubmissionsPerHour,
-      ...activeProUserParams({ nowEpochMs, userId }),
+      ...pro.params,
       ...input.authority.bindings
     );
 };
@@ -779,7 +782,7 @@ const publicationAccountabilityStatements = (
 ): ReadonlyArray<D1PreparedStatement> => {
   const { database } = config;
   const { userId, stagingId, submissionId, auditId, nowEpochMs } = input;
-  const proParams = activeProUserParams({ nowEpochMs, userId });
+  const pro = activeProUserPredicate({ nowEpochMs, userId });
   return [
     database
       .prepare(
@@ -792,12 +795,12 @@ const publicationAccountabilityStatements = (
     database
       .prepare(
         `INSERT INTO statement_backfill_entitlements (user_id, submission_id)
-         SELECT ?, CASE WHEN ${activeProUserSql} THEN NULL ELSE ? END WHERE changes() = 1
+         SELECT ?, CASE WHEN ${pro.sql} THEN NULL ELSE ? END WHERE changes() = 1
          ON CONFLICT(user_id) DO UPDATE SET submission_id =
-           CASE WHEN ${activeProUserSql} THEN statement_backfill_entitlements.submission_id
+           CASE WHEN ${pro.sql} THEN statement_backfill_entitlements.submission_id
                 ELSE excluded.submission_id END`
       )
-      .bind(userId, ...proParams, submissionId, ...proParams),
+      .bind(userId, ...pro.params, submissionId, ...pro.params),
     database
       .prepare(
         `INSERT INTO statement_submission_audit (id, user_id, operation, outcome, occurred_at_ms)

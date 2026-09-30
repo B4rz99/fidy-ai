@@ -1,7 +1,7 @@
 import { Miniflare } from "miniflare";
 import { expect, it } from "vitest";
 import { Effect } from "effect";
-import { activeProUserParams, activeProUserSql } from "./access-tier";
+import { activeProUserPredicate } from "@fidy/server/access-tier";
 
 const userId = "10000000-0000-4000-8000-000000000001";
 
@@ -45,17 +45,24 @@ it("does not grant Pro before either the original TrialPeriod or the paid period
           db.prepare("INSERT INTO billing_paid_periods VALUES ('attempt', 400)"),
         ])
       );
-      const tier = (at: number): Promise<number> =>
-        db
-          .prepare(`SELECT ${activeProUserSql} AS active`)
-          .bind(...activeProUserParams({ userId, nowEpochMs: at }))
+      const tier = (at: number, subject = userId): Promise<number> => {
+        const predicate = activeProUserPredicate({ userId: subject, nowEpochMs: at });
+        return db
+          .prepare(`SELECT ${predicate.sql} AS active`)
+          .bind(...predicate.params)
           .first<{ active: number }>()
           .then((row) => row?.active ?? -1);
+      };
       expect(yield* Effect.tryPromise(() => tier(199))).toBe(0);
       expect(yield* Effect.tryPromise(() => tier(200))).toBe(1);
       expect(yield* Effect.tryPromise(() => tier(300))).toBe(0);
       expect(yield* Effect.tryPromise(() => tier(400))).toBe(1);
       expect(yield* Effect.tryPromise(() => tier(500))).toBe(0);
+
+      const otherUserId = "10000000-0000-4000-8000-000000000002";
+      // A's active trial and settled Subscription cannot grant either capability to B.
+      expect(yield* Effect.tryPromise(() => tier(200, otherUserId))).toBe(0);
+      expect(yield* Effect.tryPromise(() => tier(400, otherUserId))).toBe(0);
     } finally {
       yield* Effect.tryPromise(() => mf.dispose());
     }

@@ -147,6 +147,18 @@ admits at most one statement child; its refusal follows the same canonical contr
 submission. See [ADR 0029](../../docs/adr/0029-atomic-batch-accountability-boundaries.md) for
 accountability and abort attribution.
 
+### Verified onboarding coordination
+
+`cloudflare/onboarding/operations.ts` owns the data-less completion coordinator; its `runtime.ts`
+admits bounded proof-bearing HTTP input without establishing a browser session. It composes
+Identity, Consent, Email Authentication, Recovery, and Subscription published preparation operations
+in one D1 batch. Stable User creation, the WhatsApp association, VerifiedEmailCredential, accepted
+Consent evidence, original TrialPeriod, digest-only recovery authority, and proof consumption commit
+together or not at all. Only successful completion discloses the one-time BackupRecoveryCode.
+Pending evidence, delivery, credentials, and aggregate tables remain with their respective owners.
+The existing Core route observation continues to bound and observe verification; coordination adds
+no provider call, durable continuation, financial processing, or separate runtime authority.
+
 ### Current background execution
 
 Onboarding email, browser-pairing email, email replacement, and billing collection each have a D1

@@ -8,8 +8,6 @@ import { WebSessionId } from "~/core/web-session/contract";
 
 import type { CanonicalImplementationCaller } from "~/shell/_shared/canonical-implementation";
 
-import { canonicalMutationImplementations } from "~/shell/_shared/canonical-mutation-registry";
-
 import { decideOperationAccess, getOperationPolicy } from "~/shell/_shared/operation-policy";
 
 import { FidyApi } from "~/shell/api";
@@ -24,11 +22,6 @@ import { EmailSendFailed, deliverySender } from "./internal/delivery";
 export const emailReplacementOperations = {
   request: FidyApi.groups.emailAuthentication.endpoints.requestEmailReplacement,
   complete: FidyApi.groups.emailAuthentication.endpoints.completeEmailReplacement,
-} as const;
-
-export const emailReplacementImplementations = {
-  request: canonicalMutationImplementations["emailAuthentication.requestEmailReplacement"],
-  complete: canonicalMutationImplementations["emailAuthentication.completeEmailReplacement"],
 } as const;
 
 /** The browser WebSession is the sole authority for the canonical replacement invocation. */

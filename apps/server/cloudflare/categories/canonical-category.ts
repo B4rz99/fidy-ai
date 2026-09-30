@@ -5,7 +5,7 @@ import {
   categoryUnavailable,
   recordBrowserCategoryWork,
 } from "@fidy/server/categories";
-import { liveWebSessionAuthority } from "@fidy/server/identity";
+import { liveWebSessionAuthority } from "@fidy/server/web-session";
 import {
   livePATAuthority,
   recordCanonicalPATWork,

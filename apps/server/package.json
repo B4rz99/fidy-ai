@@ -14,6 +14,16 @@
       "import": "./src/shell/tokens/runtime.ts",
       "default": "./src/shell/tokens/runtime.ts"
     },
+    "./web-session-runtime": {
+      "types": "./cloudflare/web-session/operations.ts",
+      "import": "./cloudflare/web-session/operations.ts",
+      "default": "./cloudflare/web-session/operations.ts"
+    },
+    "./web-session": {
+      "types": "./src/shell/web-session/operations.ts",
+      "import": "./src/shell/web-session/operations.ts",
+      "default": "./src/shell/web-session/operations.ts"
+    },
     "./identity": {
       "types": "./src/shell/identity/operations.ts",
       "import": "./src/shell/identity/operations.ts",

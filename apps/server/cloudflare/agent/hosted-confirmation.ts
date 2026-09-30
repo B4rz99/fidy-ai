@@ -4,7 +4,7 @@ import {
   type TranscriptTurnId,
   type UserId,
 } from "@fidy/server/agent-runtime";
-import { liveWebSessionAuthority } from "@fidy/server/identity";
+import { liveWebSessionAuthority } from "@fidy/server/web-session";
 import { type Cause, Effect, Option, Schema } from "effect";
 import type { CatalogOperation } from "../../src/shell/_shared/operation-catalog";
 import type { TransactionSubject } from "../transactions/transaction-boundary";

@@ -62,12 +62,3 @@ export type WhatsAppAuthority = Readonly<{
   predicate: string;
   bindings: ReadonlyArray<string>;
 }>;
-
-export type FreshSessionSubject = Readonly<{ id: string; user_id: string }>;
-export type WebSessionSubject = Readonly<{ id: string; userId: string; digest: Uint8Array }>;
-/** One live-authority gate over the User's browser credential. */
-export type WebSessionAuthority = Readonly<{
-  table: "web_sessions";
-  predicate: string;
-  bindings: ReadonlyArray<string | number | Uint8Array>;
-}>;

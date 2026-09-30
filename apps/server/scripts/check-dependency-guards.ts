@@ -719,7 +719,7 @@ const PROBES: readonly Probe[] = [
       {
         path: `${RELATIVE_CROSS_DIRECTORY}/probe.ts`,
         source:
-          'import { UserId } from "../../identity/reference";\n\n' +
+          'import { UserId } from "../../identity/contract";\n\n' +
           "export const relativeCrossDirectoryProbe = UserId;\n",
       },
     ],

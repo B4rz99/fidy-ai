@@ -1,5 +1,5 @@
 import { nextTransactionPage } from "@fidy/server/transaction-continuation";
-import { liveWebSessionAuthority } from "@fidy/server/identity";
+import { liveWebSessionAuthority } from "@fidy/server/web-session";
 import {
   Counterparty,
   Currency,

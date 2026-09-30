@@ -10,7 +10,6 @@ import {
 import { DateTime, Effect, Option, Schema } from "effect";
 import type { UserContext } from "../../src/core/identity/contract";
 import { findUserContext } from "../identity/operations";
-import { sessionCookie, sha256 } from "../identity/browser-login";
 import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
 import {
   type TransactionBoundaryFailure,
@@ -23,7 +22,6 @@ import {
   callerScope,
   isPATCaller,
   maximumTransactionInputBytes,
-  transactionNow as now,
   transactionId,
   transactionUnavailable,
   unauthenticatedTransaction,
@@ -41,7 +39,6 @@ import {
 } from "../mutations/transaction-outcome";
 
 const Input = Schema.toCodecJson(CreateTransactionInput);
-const Session = Schema.Struct({ id: Schema.String, user_id: Schema.String });
 const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: maximumTransactionInputBytes,
   deadlineMilliseconds: 2000,
@@ -55,36 +52,6 @@ type Capture = Readonly<{
   id: string;
   current: number;
 }>;
-
-const sessionSubject = (raw: unknown, digest: Uint8Array): Option.Option<TransactionSubject> =>
-  Option.map(Schema.decodeUnknownOption(Session)(raw), (value) => ({
-    id: value.id,
-    userId: value.user_id,
-    digest,
-  }));
-
-/** Resolve a live WebSession on every canonical call; neither an object id nor a User id is authority. */
-export const transactionSession = ({
-  request,
-  db,
-}: {
-  request: Request;
-  db: D1Database;
-}): Promise<Option.Option<TransactionSubject>> => {
-  const cookie = sessionCookie(request);
-  if (Option.isNone(cookie)) return Promise.resolve(Option.none());
-  return sha256(cookie.value).then((digest) => {
-    const current = now();
-    return db
-      .prepare(
-        `SELECT id, user_id FROM web_sessions WHERE token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
-      AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = web_sessions.user_id)`
-      )
-      .bind(digest, current, current)
-      .first()
-      .then((raw) => sessionSubject(raw, digest));
-  });
-};
 
 /** Decode bounded canonical input before dispatching a mutation to the User coordinator. */
 export const transactionInput = (request: Request): Promise<Option.Option<typeof Input.Type>> =>

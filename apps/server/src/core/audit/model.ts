@@ -4,7 +4,7 @@ import { UtcTimestamp } from "~/core/_shared/time";
 import { UserId } from "~/core/identity/contract";
 import { PATId } from "~/core/tokens/reference";
 import { HostedAgentSessionId } from "~/core/transcript/reference";
-import { WebSessionId } from "~/core/web-session/reference";
+import { WebSessionId } from "~/core/web-session/contract";
 
 /** A stable UUID naming one append-only AuditLogEntry. */
 export const AuditLogEntryId = Schema.String.check(Schema.isUUID())

@@ -11,9 +11,7 @@ import {
   patShortIdLength,
 } from "@fidy/server/tokens-runtime";
 import { Clock, Crypto, DateTime, Effect, Encoding, Option, PlatformError, Schema } from "effect";
-import { freshSessionExists } from "@fidy/server/identity";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
-import { browserSession } from "../identity/browser-login";
 
 const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 1024,
@@ -37,12 +35,6 @@ export const httpRateLimited = 429;
 const unbiasedBase36Limit = 252;
 const shortAlphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
 
-/** Bounded proof-free projection of an authenticated WebSession. */
-export const SessionRow = Schema.Struct({
-  id: Schema.String.check(Schema.isUUID()),
-  user_id: Schema.String.check(Schema.isUUID()),
-});
-export type SessionRow = typeof SessionRow.Type;
 /** One decoded grant row; caller supplies its explicit subject when reading owned data. */
 export const PATRow = Schema.Struct({
   id: Schema.String,
@@ -158,16 +150,6 @@ export const patFrom = (row: PATRow): Option.Option<PAT> => {
     revokedAt: Option.map(Option.fromNullishOr(row.revoked_at_ms), DateTime.makeUnsafe),
   });
 };
-/** Browser freshness is required for authority changes, but not safe listing. */
-export const webSession = ({
-  request,
-  db,
-  fresh,
-}: Readonly<{ request: Request; db: D1Database; fresh: boolean }>): Promise<
-  Option.Option<SessionRow>
-> => browserSession({ request, db, input: { current: currentMillis(), fresh } });
-/** Recheck the exact WebSession inside a D1 atomic transition, not only on a prior read. */
-export const sessionExists = freshSessionExists;
 export const response = ({ body, status }: Readonly<{ body: unknown; status: number }>): Response =>
   Response.json(body, { status, headers: { "cache-control": "no-store" } });
 export const canonical = (data: unknown): Response =>

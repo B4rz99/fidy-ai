@@ -14,7 +14,7 @@ import {
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
 } from "~/core/identity/contract";
-import { WebSessionId } from "~/core/web-session/reference";
+import { WebSessionId } from "~/core/web-session/contract";
 import { EmailEnrollmentId } from "./reference";
 
 const decodeEmail = Schema.decodeUnknownResult(EmailAddress);

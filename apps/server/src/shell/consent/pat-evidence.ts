@@ -1,6 +1,9 @@
-import type { FreshSessionSubject } from "~/shell/identity/contract";
 import { decidePATRevocation } from "~/core/consent/pat-revocation";
-import { freshSessionExists, freshSessionParams } from "~/shell/identity/operations";
+import {
+  type FreshSessionSubject,
+  freshSessionExists,
+  freshSessionParams,
+} from "~/shell/web-session/operations";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 
 // One fresh evidence id per row, including multi-grant revocation; no bearer enters a statement.
@@ -30,7 +33,7 @@ export const revokeOnePATConsent = ({
       disclosure.revision,
       disclosure.text,
       input.current,
-      session.user_id,
+      session.userId,
       input.shortId,
       input.current,
       ...freshSessionParams({ session, time: input.current }),
@@ -58,7 +61,7 @@ export const revokeAllPATConsents = ({
       disclosure.revision,
       disclosure.text,
       current,
-      session.user_id,
+      session.userId,
       current,
       ...freshSessionParams({ session, time: current }),
     ],
@@ -84,7 +87,7 @@ export const revokeAllPairingConsents = ({
       disclosure.revision,
       disclosure.text,
       current,
-      session.user_id,
+      session.userId,
       ...freshSessionParams({ session, time: current }),
     ],
   };
@@ -154,7 +157,7 @@ export const grantManualPATConsent = ({
 }: Readonly<{ session: FreshSessionSubject; input: ManualGrantInput }>): OwnedStatement => ({
   sql: `INSERT INTO pat_grant_consents (id,user_id,session_id,request_id,disclosure_revision,disclosure_text,accepted_at_ms)
     SELECT ?,?,?,?,'pat-grant-2026-09',?,? WHERE changes() = 1`,
-  params: [input.id, session.user_id, session.id, input.requestId, input.disclosure, input.current],
+  params: [input.id, session.userId, session.id, input.requestId, input.disclosure, input.current],
 });
 
 type PairedGrantInput = Readonly<{
@@ -170,5 +173,5 @@ export const grantPairedPATConsent = ({
 }: Readonly<{ session: FreshSessionSubject; input: PairedGrantInput }>): OwnedStatement => ({
   sql: `INSERT INTO pat_grant_consents (id,user_id,session_id,pairing_id,disclosure_revision,disclosure_text,accepted_at_ms)
     SELECT ?,?,?,?,'pat-pairing-grant-2026-09',?,? WHERE changes() = 1`,
-  params: [input.id, session.user_id, session.id, input.pairingId, input.disclosure, input.current],
+  params: [input.id, session.userId, session.id, input.pairingId, input.disclosure, input.current],
 });

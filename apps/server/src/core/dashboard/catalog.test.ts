@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Schema } from "effect";
-import { CategoryId } from "~/core/categories/reference";
+import { CategoryId } from "~/core/categories/contract";
 import { makeCatalogWidget, makeDashboardCatalog, makeDefaultDashboard } from "./catalog";
 import { DashboardDocument, Widget, WidgetId } from "./model";
 

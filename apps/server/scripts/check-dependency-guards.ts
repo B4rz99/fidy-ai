@@ -90,6 +90,7 @@ const ALIAS_SAME_DIRECTORY = dir("alias-same-directory");
 const RELATIVE_CROSS_DIRECTORY = dir("relative-cross-directory");
 const HOSTED_MODEL = `src/shell/agent/${PROBE_PREFIX}hosted-model`;
 const HOSTED_TOKENIZER = `src/shell/agent/${PROBE_PREFIX}hosted-tokenizer`;
+const CATEGORY_PRIVATE = `src/shell/agent/${PROBE_PREFIX}category-private`;
 
 const ownInternal = `src/core/${PROBE_PREFIX}own-internal`;
 const foreignInternalSource = `src/core/${PROBE_PREFIX}foreign-internal-source`;
@@ -557,25 +558,52 @@ const PROBES: readonly Probe[] = [
     name: "a core slice may import a sibling's published reference.ts",
   },
   {
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `${SIBLING_REFERENCE}/categories.ts`,
+        source:
+          'import { CategoryId } from "~/core/categories/contract";\nimport { listLaunchCategories } from "~/core/categories/operations";\nexport const choices = { CategoryId, listLaunchCategories };\n',
+      },
+    ],
+    name: "Category identity and launch choices are published without the old model facade",
+  },
+  {
     expect: {
       kind: "rejected",
       mustContain: [
-        `error core-slice-reaches-sibling-slice: ${SIBLING_IMPLEMENTATION}/probe.ts → src/core/categories/model.ts`,
-        `error core-slice-reaches-sibling-slice: ${SIBLING_IMPLEMENTATION}/probe.ts → src/core/categories/rules.ts`,
-        `error core-slice-reaches-sibling-slice: ${SIBLING_IMPLEMENTATION}/probe.ts → src/core/categories/errors.ts`,
-        `error core-slice-reaches-sibling-slice: ${SIBLING_IMPLEMENTATION}/probe.ts → src/core/categories/taxonomy.ts`,
+        `error categories-private-persistence: ${CATEGORY_PRIVATE}/probe.ts → src/shell/categories/internal/keyword-rules.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${CATEGORY_PRIVATE}/probe.ts`,
+        source:
+          'import { keywordRulesQuery } from "~/shell/categories/internal/keyword-rules";\nexport const forbidden = keywordRulesQuery;\n',
+      },
+    ],
+    name: "Category callers cannot acquire private rule persistence",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error core-slice-reaches-sibling-slice: ${SIBLING_IMPLEMENTATION}/probe.ts → src/core/budgets/model.ts`,
+        `error core-slice-reaches-sibling-slice: ${SIBLING_IMPLEMENTATION}/probe.ts → src/core/budgets/rules.ts`,
+        `error core-slice-reaches-sibling-slice: ${SIBLING_IMPLEMENTATION}/probe.ts → src/core/budgets/errors.ts`,
+        `error core-slice-reaches-sibling-slice: ${SIBLING_IMPLEMENTATION}/probe.ts → src/core/dashboard/catalog.ts`,
       ],
     },
     files: [
       {
         path: `${SIBLING_IMPLEMENTATION}/probe.ts`,
         source:
-          'import { Category } from "~/core/categories/model";\n' +
-          'import { CategoryNotFound } from "~/core/categories/errors";\n' +
-          'import { findKnownCaptureCategory } from "~/core/categories/rules";\n' +
-          'import { categoryIds } from "~/core/categories/taxonomy";\n\n' +
+          'import { Budget } from "~/core/budgets/model";\n' +
+          'import { BudgetNotFound } from "~/core/budgets/errors";\n' +
+          'import { calculateBudgetStatus } from "~/core/budgets/rules";\n' +
+          'import { makeDefaultDashboard } from "~/core/dashboard/catalog";\n\n' +
           "export const siblingImplementationProbe = [\n" +
-          "  Category,\n  CategoryNotFound,\n  findKnownCaptureCategory,\n  categoryIds,\n];\n",
+          "  Budget,\n  BudgetNotFound,\n  calculateBudgetStatus,\n  makeDefaultDashboard,\n];\n",
       },
     ],
     name: "core-slice-reaches-sibling-slice rejects a sibling's implementation",
@@ -584,15 +612,15 @@ const PROBES: readonly Probe[] = [
     expect: {
       kind: "rejected",
       mustContain: [
-        `error core-slice-reaches-sibling-slice: ${TYPE_ONLY}/probe.ts → src/core/categories/model.ts`,
+        `error core-slice-reaches-sibling-slice: ${TYPE_ONLY}/probe.ts → src/core/budgets/model.ts`,
       ],
     },
     files: [
       {
         path: `${TYPE_ONLY}/probe.ts`,
         source:
-          'import type { Category } from "~/core/categories/model";\n\n' +
-          "export type TypeOnlyProbe = Category;\n",
+          'import type { Budget } from "~/core/budgets/model";\n\n' +
+          "export type TypeOnlyProbe = Budget;\n",
       },
     ],
     name: "an `import type` is an edge the graph can see (tsPreCompilationDeps)",

@@ -1,5 +1,5 @@
 import { BigDecimal, Function, Schema, Struct } from "effect";
-import { CategoryId } from "~/core/categories/reference";
+import { CategoryId } from "~/core/categories/contract";
 import {
   CapturedInterpretationContext,
   InterpretationRevision,

@@ -5,11 +5,13 @@ import {
   KeywordRuleAlreadyExists,
   KeywordRuleLimitReached,
   KeywordRuleNotFound,
+} from "../../../src/core/categories/contract";
+import {
   canCreateKeywordRule,
   hasKeywordRule,
   maximumKeywordRulesPerUser,
-} from "@fidy/server/categories";
-import type { KeywordRuleOutcome } from "../mutations/mutation-types";
+} from "../../../src/core/categories/operations";
+import type { KeywordRuleOutcome } from "../../mutations/mutation-types";
 
 /**
  * Decide a rule change against one User's already-decoded retained rules. Preparation and

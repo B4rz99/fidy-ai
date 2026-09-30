@@ -1,6 +1,6 @@
 import { DateTime, Function } from "effect";
 import type { IanaTimeZone } from "~/core/_shared/context";
-import type { CategoryId } from "~/core/categories/reference";
+import type { CategoryId } from "~/core/categories/contract";
 import { resolveDashboardPeriod } from "./calculation";
 import type { Widget } from "./model";
 

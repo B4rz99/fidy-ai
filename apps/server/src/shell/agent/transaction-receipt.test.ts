@@ -2,7 +2,7 @@ import { BigDecimal, DateTime, Option } from "effect";
 import { describe, expect, it } from "vitest";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { Money } from "~/core/_shared/money";
-import { categoryIds } from "~/core/categories/taxonomy";
+import { categoryIds } from "~/core/categories/contract";
 import { formatMoneyEsCo, renderTransactionReceipt } from "./transaction-receipt";
 
 describe("transaction receipt", () => {

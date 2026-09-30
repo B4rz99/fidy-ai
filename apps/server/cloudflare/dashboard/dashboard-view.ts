@@ -1,7 +1,7 @@
 import type { EffectiveTransactionAggregate } from "@fidy/server/transactions-runtime";
 import { type DateTime, Effect, Option, Schema } from "effect";
 import { IanaTimeZone, Locale, ServiceMarket } from "../../src/core/_shared/context";
-import { Category } from "../../src/core/categories/model";
+import { Category } from "../../src/core/categories/contract";
 import { type DashboardDocument, collectLayoutWidgets } from "../../src/core/dashboard/model";
 import { dashboardProjectionRanges } from "../../src/core/dashboard/projection";
 import type { DashboardFacts } from "../../src/shell/dashboard/presentation";

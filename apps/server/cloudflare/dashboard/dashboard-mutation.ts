@@ -2,7 +2,7 @@ import { Data, DateTime, Effect, Option, Result, Schema } from "effect";
 import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import { makeDefaultDashboard } from "../../src/core/dashboard/catalog";
-import { categoryIds } from "../../src/core/categories/taxonomy";
+import { categoryIds } from "../../src/core/categories/contract";
 import {
   DashboardDocument,
   type DashboardEdit,

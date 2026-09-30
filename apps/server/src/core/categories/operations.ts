@@ -1,9 +1,13 @@
+import { normalizeSearchText } from "~/core/search/operations";
 import { Effect, Option } from "effect";
-import { type CategoryKeyword, type KeywordRuleId, normalizeCategoryKeyword } from "./model";
-import type { CategoryId } from "./reference";
-import { categoryIds } from "./taxonomy";
-
-export { normalizeCategoryKeyword } from "./model";
+import {
+  type Category,
+  type CategoryId,
+  type CategoryKeyword,
+  CategoryLabel,
+  type KeywordRuleId,
+  categoryIds,
+} from "./contract";
 
 /** Bounds the rules scanned during each Transaction capture for one User. */
 export const maximumKeywordRulesPerUser = 100;
@@ -76,3 +80,46 @@ export const findKnownCaptureCategory = <Category extends string>(
   choices: KnownCategories<Category>
 ): Effect.Effect<Option.Option<Category>> =>
   Effect.succeed(Option.orElse(choices.caller, () => choices.keywordRule));
+
+/** Seed-ready Colombian Categories in presentation order. */
+const categoryRows = [
+  {
+    id: categoryIds.restaurantes,
+    label: CategoryLabel.make("Restaurantes"),
+    displayOrder: 0,
+  },
+  { id: categoryIds.domicilios, label: CategoryLabel.make("Domicilios"), displayOrder: 1 },
+  { id: categoryIds.mercado, label: CategoryLabel.make("Mercado"), displayOrder: 2 },
+  { id: categoryIds.transporte, label: CategoryLabel.make("Transporte"), displayOrder: 3 },
+  { id: categoryIds.vivienda, label: CategoryLabel.make("Vivienda"), displayOrder: 4 },
+  { id: categoryIds.servicios, label: CategoryLabel.make("Servicios"), displayOrder: 5 },
+  { id: categoryIds.salud, label: CategoryLabel.make("Salud"), displayOrder: 6 },
+  { id: categoryIds.educacion, label: CategoryLabel.make("Educación"), displayOrder: 7 },
+  { id: categoryIds.compras, label: CategoryLabel.make("Compras"), displayOrder: 8 },
+  {
+    id: categoryIds.entretenimiento,
+    label: CategoryLabel.make("Entretenimiento"),
+    displayOrder: 9,
+  },
+  { id: categoryIds.viajes, label: CategoryLabel.make("Viajes"), displayOrder: 10 },
+  { id: categoryIds.impuestos, label: CategoryLabel.make("Impuestos"), displayOrder: 11 },
+  {
+    id: categoryIds.transferencias,
+    label: CategoryLabel.make("Transferencias"),
+    displayOrder: 12,
+  },
+  {
+    id: categoryIds.retirosDeEfectivo,
+    label: CategoryLabel.make("Retiros de efectivo"),
+    displayOrder: 13,
+  },
+  { id: categoryIds.ingresos, label: CategoryLabel.make("Ingresos"), displayOrder: 14 },
+  { id: categoryIds.otros, label: CategoryLabel.make("Otros"), displayOrder: 15 },
+] as const;
+
+/** Launch Category choices in presentation order, without persistence attributes. */
+export const listLaunchCategories = (): ReadonlyArray<Category> =>
+  categoryRows.map(({ id, label }) => ({ id, label }));
+
+/** Normalize counterparty fragments without altering their retained spelling. */
+export const normalizeCategoryKeyword = normalizeSearchText;

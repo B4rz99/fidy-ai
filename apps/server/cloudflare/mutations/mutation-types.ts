@@ -4,7 +4,7 @@ import type {
   CategoryKeyword,
   KeywordRule,
   KeywordRuleId,
-} from "@fidy/server/categories";
+} from "../../src/core/categories/contract";
 import type { Memory, MemoryId } from "@fidy/server/memory-runtime";
 import type { Budget, BudgetId } from "@fidy/server/budgets-runtime";
 import type { StatementSubmission } from "@fidy/server/statement-staging";

@@ -1,6 +1,6 @@
 import { Miniflare } from "miniflare";
 import * as D1Client from "@effect/sql-d1/D1Client";
-import { listCategoriesResponse } from "@fidy/server/categories";
+import { listCategoriesResponse } from "../../src/shell/categories/operations";
 import { Clock, Context, Data, DateTime, Effect, Layer, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { afterEach, expect, it, vi } from "vitest";

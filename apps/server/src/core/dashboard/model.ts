@@ -1,5 +1,5 @@
 import { DateTime, Option, Schema, Struct } from "effect";
-import { CategoryId } from "~/core/categories/reference";
+import { CategoryId } from "~/core/categories/contract";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
 import { Currency } from "~/core/_shared/money";
 import { UtcTimestamp } from "~/core/_shared/time";

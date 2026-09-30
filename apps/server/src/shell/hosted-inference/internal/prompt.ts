@@ -1,7 +1,7 @@
 import { DateTime, Option, type Schema } from "effect";
 import type { Prompt } from "effect/unstable/ai";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
-import { categoryRows } from "~/core/categories/taxonomy";
+import { listLaunchCategories } from "~/core/categories/operations";
 import type { User } from "~/core/identity/model";
 import {
   type TranscriptEntry,
@@ -30,7 +30,7 @@ export const systemPromptInternal = ({
   `Convierte las horas locales que indique el Usuario usando esta zona IANA; envía los instantes ` +
   `de las operaciones canónicas en UTC con su offset explícito, nunca como hora local sin zona. ` +
   `No infieras ese contexto de teléfonos, monedas ni proveedores. ` +
-  `Las categorías canónicas disponibles son ${categoryRows
+  `Las categorías canónicas disponibles son ${listLaunchCategories()
     .map(({ id, label }) => `${label}: ${id}`)
     .join(", ")}. ` +
   `Usa operaciones canónicas para consultar hechos financieros del Usuario; no los inventes. ` +

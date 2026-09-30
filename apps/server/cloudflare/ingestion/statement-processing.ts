@@ -1,3 +1,4 @@
+import { fallbackCaptureCategory } from "../../src/core/categories/operations";
 import {
   type ParsedStatement,
   StatementParseFailed,
@@ -9,14 +10,8 @@ import {
   StatementStagingId,
   maximumStatementBytes,
 } from "@fidy/server/statement-staging";
-import {
-  type CategoryId,
-  type KeywordRule,
-  fallbackCaptureCategory,
-  findKeywordCategory,
-  keywordRulesFromRows,
-  keywordRulesQuery,
-} from "@fidy/server/categories";
+import { type CategoryId } from "../../src/core/categories/contract";
+import { prepareCategorization } from "../categories/operations";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import {
   type InterpretedStatementRow,
@@ -179,7 +174,9 @@ type RowWork = Readonly<{
   row: ParsedStatementRow;
   result: InterpretedStatementRow<TransactionExtraction>;
   context: SubmissionRow;
-  rules: ReadonlyArray<KeywordRule>;
+  categorize: ReturnType<typeof prepareCategorization> extends Effect.Effect<infer A, infer _E>
+    ? A
+    : never;
 }>;
 const active = `EXISTS (SELECT 1 FROM statement_submissions WHERE id = ? AND user_id = ?
     AND status = 'processing' AND retention_expires_at_ms > ?)`;
@@ -352,15 +349,11 @@ const rowOutcome = (work: RowWork): Effect.Effect<void, StatementProcessingUnava
             {
               ...work,
               result,
-              categoryId: Option.isSome(result.extraction.counterparty)
-                ? Option.getOrElse(
-                    yield* findKeywordCategory({
-                      counterparty: result.extraction.counterparty.value,
-                      rules: work.rules,
-                    }),
-                    () => fallbackCaptureCategory(result.extraction.direction)
-                  )
-                : fallbackCaptureCategory(result.extraction.direction),
+              categoryId: yield* work.categorize({
+                caller: Option.none(),
+                counterparty: result.extraction.counterparty,
+                direction: result.extraction.direction,
+              }),
             },
             id,
             activeArgs
@@ -489,27 +482,6 @@ const readProgress = (
     return yield* Schema.decodeUnknownEffect(countRow)(raw);
   });
 
-const ownedStatementRules = (
-  db: D1Database,
-  userId: string
-): Effect.Effect<ReadonlyArray<KeywordRule>, StatementProcessingUnavailable> =>
-  Effect.gen(function* () {
-    const query = keywordRulesQuery({ userId });
-    const rows = yield* attempt(() =>
-      db
-        .prepare(query.sql)
-        .bind(...query.params)
-        .all()
-    );
-    const decoded = keywordRulesFromRows(rows.results);
-    if (Option.isNone(decoded)) {
-      return yield* new StatementProcessingUnavailable({
-        cause: new Error("Statement keyword rules unavailable"),
-      });
-    }
-    return decoded.value;
-  });
-
 const finalizeChunk = ({
   input,
   context,
@@ -526,7 +498,17 @@ const finalizeChunk = ({
   Effect.gen(function* () {
     const chunk = rows.slice(progress.total, progress.total + statementChunkSize);
     const mapping = mechanicalMappingFor(parsed.headers);
-    const rules = Option.isSome(mapping) ? yield* ownedStatementRules(input.DB, input.userId) : [];
+    const categorize = Option.isSome(mapping)
+      ? yield* prepareCategorization({ db: input.DB, userId: input.userId }).pipe(
+          Effect.mapError(
+            () =>
+              new StatementProcessingUnavailable({
+                cause: new Error("Statement keyword rules unavailable"),
+              })
+          )
+        )
+      : (input: { direction: "inflow" | "outflow" }): Effect.Effect<CategoryId> =>
+          Effect.succeed(fallbackCaptureCategory(input.direction));
     const interpreted = Option.isSome(mapping)
       ? yield* interpretStatementRows(
           { rows: chunk, mapping: mapping.value, timeZone: context.time_zone },
@@ -541,7 +523,7 @@ const finalizeChunk = ({
         submissionId: input.submissionId,
         row,
         context,
-        rules,
+        categorize,
         result: interpreted?.outcomes[index] ?? unmappedStatementRow(row),
       });
     }

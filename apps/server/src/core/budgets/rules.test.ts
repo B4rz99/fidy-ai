@@ -10,7 +10,7 @@ import {
   deriveCurrentBudgetMonth,
   sumBudgetContributions,
 } from "./rules";
-import { CategoryId } from "~/core/categories/reference";
+import { CategoryId } from "~/core/categories/contract";
 
 const money = (amount: string, currency: Currency = Currency.make("COP")): Money =>
   Money.make({ amount: BigDecimal.fromStringUnsafe(amount), currency });

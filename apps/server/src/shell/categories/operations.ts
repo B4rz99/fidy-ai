@@ -1,115 +1,143 @@
-import { Schema } from "effect";
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
-import {
-  Category,
-  CreateKeywordRuleInput,
-  KeywordRule,
-  KeywordRuleId,
-  UpdateKeywordRuleInput,
-} from "~/core/categories/model";
+import { Data, Effect } from "effect";
+import { SqlClient } from "effect/unstable/sql";
 import {
   NotFound,
-  OperationResponse,
+  type SuggestedOperation,
   Unavailable,
   ValidationFailed,
-  createdStatus,
 } from "~/shell/public-http/contract";
-import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
-import { keywordRulesPath, listCategoriesPath, retainedKeywordRulePath } from "./path";
+import { type ListCategoriesResponse } from "./contract";
+import { categoryResponseFromRows, categoryRowsQuery } from "./internal/query";
+import {
+  type CategoryFailure,
+  type CategoryNotFound,
+  type KeywordRuleAlreadyExists,
+  type KeywordRuleLimitReached,
+  type KeywordRuleNotFound,
+} from "~/core/categories/contract";
+import {
+  type SuggestedOperationCaller,
+  checkpointSuggestedOperations,
+  suggestOperation,
+} from "~/shell/_shared/suggested-operations";
 
-export const ListCategoriesResponse = OperationResponse(Schema.Array(Category));
+/** Safe reason returned when authoritative Category data cannot be loaded. */
+export class CategoryQueryFailure extends Data.TaggedError("CategoryQueryFailure")<{
+  readonly reason: "unavailable";
+}> {}
 
-/** The caller's own rules, in stable creation order. */
-export const ListKeywordRulesResponse = OperationResponse(Schema.Array(KeywordRule));
+const queryFailure = (): CategoryQueryFailure =>
+  new CategoryQueryFailure({ reason: "unavailable" });
 
-/** One created or replaced rule, or the id of a removed one. */
-export const KeywordRuleResponse = OperationResponse(KeywordRule);
-export const RemovedKeywordRuleResponse = OperationResponse(KeywordRuleId);
+const loadCategories: Effect.Effect<
+  typeof ListCategoriesResponse.Type,
+  CategoryQueryFailure,
+  SqlClient.SqlClient
+> = Effect.flatMap(SqlClient.SqlClient, (sql) => {
+  const query = categoryRowsQuery();
+  return sql.unsafe<Record<string, unknown>>(query.sql, query.params);
+}).pipe(
+  Effect.mapError(queryFailure),
+  Effect.flatMap((rows) => Effect.fromOption(categoryResponseFromRows(rows), queryFailure))
+);
 
-/**
- * The retained keyword-rule path parameter, rebuilt at each declaration. The published document
- * componentizes one schema instance reached from several declarations, so sharing the instance
- * would renumber the OpenAPI components; sharing the shape is what keeps them in step.
- */
-const retainedKeywordRuleParams = (): Schema.Struct<{ readonly id: typeof KeywordRuleId }> =>
-  Schema.Struct({ id: KeywordRuleId });
+export const categoryUnavailable = (): Unavailable =>
+  Unavailable.make({
+    error: {
+      code: "unavailable",
+      message: "Categories are temporarily unavailable. Retry later.",
+    },
+    next: [],
+  });
 
-const read = operationPolicy({
-  access: patScoped("read"),
-  requiredTier: "free",
-  agentConfirmation: "not-required",
-  kind: "query",
-});
-const additiveWrite = operationPolicy({
-  access: patScoped("write"),
-  requiredTier: "free",
-  agentConfirmation: "not-required",
-  kind: "mutation",
-});
-const destructiveWrite = operationPolicy({
-  access: patScoped("write"),
-  requiredTier: "free",
-  agentConfirmation: "required",
-  kind: "mutation",
-});
+/** Canonical Categories query shared by HTTP and hosted-agent execution. */
+export const listCategoriesResponse: Effect.Effect<
+  typeof ListCategoriesResponse.Type,
+  Unavailable,
+  SqlClient.SqlClient
+> = loadCategories.pipe(Effect.mapError(categoryUnavailable));
 
-/** Public Category discovery and caller-owned keyword-rule management. */
-export const CategoriesGroup = HttpApiGroup.make("categories")
-  .add(
-    HttpApiEndpoint.get("listCategories", listCategoriesPath, {
-      success: ListCategoriesResponse,
-      error: Unavailable,
-    })
-      .annotate(
-        OpenApi.Description,
-        "List the Colombian Categories in presentation order. Use the stable id, not the Spanish label or list position, when recording or correcting a Transaction."
-      )
-      .annotateMerge(read)
-  )
-  .add(
-    HttpApiEndpoint.get("listKeywordRules", keywordRulesPath, {
-      success: ListKeywordRulesResponse,
-    })
-      .annotate(
-        OpenApi.Description,
-        "List the caller's counterparty keyword instructions. These rules categorize future capture before the model fallback and never rewrite existing Transactions."
-      )
-      .annotateMerge(read)
-  )
-  .add(
-    HttpApiEndpoint.post("createKeywordRule", keywordRulesPath, {
-      payload: CreateKeywordRuleInput,
-      success: KeywordRuleResponse.pipe(HttpApiSchema.status(createdStatus)),
-      error: [NotFound, ValidationFailed],
-    })
-      .annotate(
-        OpenApi.Description,
-        "Teach future capture that a counterparty containing this case- and accent-insensitive keyword belongs to one stable Category. More specific longer matching keywords win."
-      )
-      .annotateMerge(additiveWrite)
-  )
-  .add(
-    HttpApiEndpoint.put("updateKeywordRule", retainedKeywordRulePath, {
-      params: retainedKeywordRuleParams(),
-      payload: UpdateKeywordRuleInput,
-      success: KeywordRuleResponse,
-      error: [NotFound, ValidationFailed],
-    })
-      .annotate(
-        OpenApi.Description,
-        "Replace one of the caller's keyword instructions for future capture. Existing Transaction Categories remain unchanged."
-      )
-      .annotateMerge(destructiveWrite)
-  )
-  .add(
-    HttpApiEndpoint.delete("deleteKeywordRule", retainedKeywordRulePath, {
-      params: retainedKeywordRuleParams(),
-      success: RemovedKeywordRuleResponse,
-      error: NotFound,
-    })
-      .annotate(
-        OpenApi.Description,
-        "Stop applying one of the caller's keyword instructions to future capture. Existing Transactions remain unchanged."
-      )
-      .annotateMerge(destructiveWrite)
-  );
+const categoryRecovery = (caller: SuggestedOperationCaller): ReadonlyArray<SuggestedOperation> =>
+  checkpointSuggestedOperations({
+    candidates: [
+      suggestOperation({
+        tool: "categories.listCategories",
+        hint: "List Categories to choose one of their stable ids.",
+      }),
+    ],
+    caller,
+  });
+
+const keywordRuleRecovery = (caller: SuggestedOperationCaller): ReadonlyArray<SuggestedOperation> =>
+  checkpointSuggestedOperations({
+    candidates: [
+      suggestOperation({
+        tool: "categories.listKeywordRules",
+        hint: "List keyword rules to choose one you can change.",
+      }),
+    ],
+    caller,
+  });
+
+type CategoryFailureInput<Failure extends CategoryFailure> = Readonly<{
+  failure: Failure;
+  caller: SuggestedOperationCaller;
+}>;
+
+/** Maps actionable Category failures to the complete canonical API failure vocabulary. */
+export function toApiFailure(
+  input: CategoryFailureInput<CategoryNotFound | KeywordRuleNotFound>
+): NotFound;
+export function toApiFailure(
+  input: CategoryFailureInput<KeywordRuleAlreadyExists | KeywordRuleLimitReached>
+): ValidationFailed;
+export function toApiFailure(
+  input: CategoryFailureInput<CategoryFailure>
+): NotFound | ValidationFailed;
+export function toApiFailure({
+  failure,
+  caller,
+}: CategoryFailureInput<CategoryFailure>): NotFound | ValidationFailed {
+  switch (failure._tag) {
+    case "CategoryNotFound":
+      return NotFound.make({
+        error: {
+          code: "not_found",
+          message: `No Category ${failure.categoryId} exists. List Categories and use one of their stable ids.`,
+        },
+        next: categoryRecovery(caller),
+      });
+    case "KeywordRuleAlreadyExists":
+      return ValidationFailed.make({
+        error: {
+          code: "validation_failed",
+          message:
+            "You already have an equivalent keyword rule. Edit the existing rule instead of creating an ambiguous duplicate.",
+          fields: [
+            {
+              path: "keyword",
+              message: `A case- and accent-insensitive rule for ${failure.keyword} already exists.`,
+            },
+          ],
+        },
+        next: keywordRuleRecovery(caller),
+      });
+    case "KeywordRuleLimitReached":
+      return ValidationFailed.make({
+        error: {
+          code: "validation_failed",
+          message: `A User may retain at most ${failure.maximum} keyword rules. Edit or delete an existing rule before creating another.`,
+          fields: [],
+        },
+        next: keywordRuleRecovery(caller),
+      });
+    case "KeywordRuleNotFound":
+      return NotFound.make({
+        error: {
+          code: "not_found",
+          message: `No keyword rule ${failure.keywordRuleId} belongs to you. List your keyword rules to find an id you can change.`,
+        },
+        next: keywordRuleRecovery(caller),
+      });
+  }
+}

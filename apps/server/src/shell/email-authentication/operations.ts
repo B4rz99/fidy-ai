@@ -13,7 +13,7 @@ import {
   EmailReplacementOriginRejectedApi,
   EmailReplacementPayloadTooLargeApi,
   EmailReplacementUnsupportedMediaTypeApi,
-} from "~/web-auth-api";
+} from "~/shell/web-authentication/contract";
 import { EmailReplacementPending, RequestEmailReplacementPayload } from "./contract";
 import { emailReplacementCompletionPath, emailReplacementPath } from "./path";
 

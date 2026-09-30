@@ -10,12 +10,12 @@ import { UtcTimestamp } from "~/core/_shared/time";
 import {
   BrowserLoginPrivateVerifier,
   StartedBrowserLoginPairing,
-} from "~/core/browser-login/model";
+  browserLoginPollingIntervalSeconds,
+} from "~/core/browser-login/contract";
 import { BrowserLoginPairingId } from "~/core/browser-login/reference";
-import { browserLoginPollingIntervalSeconds } from "~/core/browser-login/rules";
-import { EmailAddress, EmailVerificationCode } from "~/core/email-authentication/model";
+import { EmailAddress, EmailVerificationCode } from "~/core/email-authentication/contract";
 import { browserPairingEmailRetryAfterSeconds } from "~/core/email-authentication/rules";
-import { BackupRecoveryCode } from "~/core/recovery/model";
+import { BackupRecoveryCode } from "~/core/recovery/contract";
 
 const browserLoginUnavailableError = {
   code: "rate_limited",

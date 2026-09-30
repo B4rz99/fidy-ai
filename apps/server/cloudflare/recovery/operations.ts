@@ -1,7 +1,8 @@
 import { BackupRecoveryCode } from "../../src/core/recovery/contract";
 import { UserId } from "../../src/core/identity/contract";
 import { findRecoveryPairing, prepareRecoveryPairingApproval } from "../browser-login/operations";
-import { freshBrowserSession } from "../web-session/operations";
+import { freshBrowserSession } from "@fidy/server/web-session-runtime";
+import { freshSessionExists, freshSessionParams } from "@fidy/server/web-session";
 import { digestBackupCode, sampleBackupCode } from "./internal/backup-proof";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { JWTVerifyGetKey } from "jose";
@@ -51,7 +52,7 @@ export const rotateBackupRecoveryCode = ({
         catch: () => undefined,
       });
       if (Option.isNone(session)) return noSession();
-      const subject = Schema.decodeUnknownOption(UserId)(session.value.user_id);
+      const subject = Schema.decodeUnknownOption(UserId)(session.value.userId);
       if (Option.isNone(subject)) return unavailable();
       const code = Schema.decodeUnknownSync(BackupRecoveryCode)(sampleBackupCode());
       const codeDigest = yield* Effect.tryPromise({
@@ -63,17 +64,12 @@ export const rotateBackupRecoveryCode = ({
           db.batch([
             db
               .prepare(`UPDATE backup_recovery_credentials SET code_digest = ?, created_at_ms = ?, consumed_at_ms = NULL, revision = revision + 1
-        WHERE user_id = ? AND EXISTS (SELECT 1 FROM web_sessions WHERE id = ? AND user_id = ? AND revoked_at_ms IS NULL
-          AND fresh_until_ms > ? AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?)`)
+        WHERE user_id = ? AND ${freshSessionExists}`)
               .bind(
                 codeDigest,
                 usedAt,
                 subject.value,
-                session.value.id,
-                subject.value,
-                usedAt,
-                usedAt,
-                usedAt
+                ...freshSessionParams({ session: session.value, time: usedAt })
               ),
             db
               .prepare(`INSERT INTO canonical_security_mutations (id, user_id, session_id, operation, occurred_at_ms)

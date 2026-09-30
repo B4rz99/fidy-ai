@@ -1,8 +1,4 @@
-import {
-  currentUser,
-  logoutBrowser,
-  canonicalBrowserSession as transactionSession,
-} from "./web-session/operations";
+import { canonicalBrowserSession as transactionSession } from "./web-session/operations";
 import {
   ScopeMissing,
   UserActionRequired,
@@ -46,10 +42,7 @@ import {
 } from "./transactions/transaction-boundary";
 import { RequestBodyPolicy, boundedJsonBody } from "./http/request-body";
 import { pathId, rawPathId } from "./http/path";
-import {
-  completeBrowserPairingEmail,
-  startBrowserPairingEmail,
-} from "./identity/browser-pairing-email";
+import { handleWebAuthentication } from "./web-authentication/operations";
 import {
   type BrowserPairingEmailEnvironment,
   dispatchBrowserPairingEmail,
@@ -67,7 +60,6 @@ import {
   receiveWompiBillingEvent,
   reconcileBillingCandidates,
 } from "./billing/billing-collection";
-import { completeEmailReplacement, requestEmailReplacement } from "./identity/email-replacement";
 import {
   type EmailReplacementEnvironment,
   dispatchEmailReplacement,
@@ -105,8 +97,6 @@ import {
   keywordRuleUnknownId,
   listOwnKeywordRules,
 } from "./categories/canonical-keyword-rules";
-import { redeemBrowserPairing, startBrowserPairing } from "./browser-login/operations";
-import { rotateBackupRecoveryCode } from "./recovery/operations";
 import {
   type OnboardingEmailEnvironment,
   dispatchOnboardingEmail,
@@ -733,59 +723,6 @@ const supportRecoveryResponse = (
   );
 };
 
-type BrowserHandlers = Readonly<
-  Record<string, Readonly<{ method: string; handle: () => Promise<Response> }>>
->;
-
-const browserHandlers = ({ request, environment, publish }: RequestExecution): BrowserHandlers => {
-  const db = environment.DB;
-  const routes: Readonly<
-    Record<string, Readonly<{ method: string; handle: () => Promise<Response> }>>
-  > = {
-    "/web/pairings": { method: "POST", handle: () => startBrowserPairing(db) },
-    "/web/pairings/redeem": {
-      method: "POST",
-      handle: () => redeemBrowserPairing({ request, db }),
-    },
-    "/web/session/logout": {
-      method: "POST",
-      handle: () => logoutBrowser({ request, db }),
-    },
-    "/recovery/backup-code/rotate": {
-      method: "POST",
-      handle: () => rotateBackupRecoveryCode({ request, db }),
-    },
-    "/web/email/authentication/start": {
-      method: "POST",
-      handle: () =>
-        startBrowserPairingEmail({
-          request,
-          db,
-          onAccepted: (id) => publish("browserPairing", id),
-        }),
-    },
-    "/web/email/authentication/complete": {
-      method: "POST",
-      handle: () => completeBrowserPairingEmail({ request, db }),
-    },
-    [emailReplacementOperations.request.path]: {
-      method: emailReplacementOperations.request.method,
-      handle: () =>
-        requestEmailReplacement({
-          request,
-          db,
-          onAccepted: (id) => publish("emailReplacement", id),
-        }),
-    },
-    [emailReplacementOperations.complete.path]: {
-      method: emailReplacementOperations.complete.method,
-      handle: () => completeEmailReplacement({ request, db }),
-    },
-    "/user": { method: "GET", handle: () => currentUser({ request, db }) },
-  };
-  return routes;
-};
-
 const browserResponse = ({
   request,
   environment,
@@ -796,18 +733,7 @@ const browserResponse = ({
   if (path === "/internal/support-recovery") {
     return supportRecoveryResponse(request, environment, telemetry);
   }
-  const routes = browserHandlers({ request, environment, telemetry, publish });
-  const route = routes[path];
-  if (route === undefined || request.method !== route.method) {
-    return Effect.succeed(methodNotAllowed());
-  }
-  const work = Effect.tryPromise({ try: route.handle, catch: () => undefined }).pipe(
-    Effect.orElseSucceed(unavailable)
-  );
-  return path === emailReplacementOperations.request.path ||
-    path === emailReplacementOperations.complete.path
-    ? work.pipe(Effect.withSpan("emailReplacement.browser"))
-    : work;
+  return handleWebAuthentication({ request, db: environment.DB, publish });
 };
 
 const consentRevokedResponse = (): Response =>

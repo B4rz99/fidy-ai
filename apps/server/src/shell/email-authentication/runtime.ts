@@ -1,11 +1,24 @@
-import { Option } from "effect";
+import { Config, Context, Effect, Layer, Option, type Redacted, Schema } from "effect";
+
+import type { HttpClient } from "effect/unstable/http";
+
 import { UserId } from "~/core/identity/reference";
+
 import { WebSessionId } from "~/core/web-session/reference";
+
 import type { CanonicalImplementationCaller } from "~/shell/_shared/canonical-implementation";
+
 import { canonicalMutationImplementations } from "~/shell/_shared/canonical-mutation-registry";
-import { EmailReplacementMutation, type EmailReplacementMutationService } from "./mutation";
-import { FidyApi } from "~/shell/api";
+
 import { decideOperationAccess, getOperationPolicy } from "~/shell/_shared/operation-policy";
+
+import { FidyApi } from "~/shell/api";
+
+import { OutboundHttp, makeResendOutboundHttp } from "~/shell/outbound-http/operations";
+
+import type { EmailDeliveryPortService } from "./contract";
+
+import { EmailSendFailed, deliverySender } from "./internal/delivery";
 
 /** The Worker binds its two D1 handlers to these declared operations, not to a copied route table. */
 export const emailReplacementOperations = {
@@ -13,7 +26,6 @@ export const emailReplacementOperations = {
   complete: FidyApi.groups.emailAuthentication.endpoints.completeEmailReplacement,
 } as const;
 
-export { EmailReplacementMutation, type EmailReplacementMutationService };
 export const emailReplacementImplementations = {
   request: canonicalMutationImplementations["emailAuthentication.requestEmailReplacement"],
   complete: canonicalMutationImplementations["emailAuthentication.completeEmailReplacement"],
@@ -45,3 +57,41 @@ export const permitsFreshBrowserReplacement = (operation: ReplacementOperation):
     decideOperationAccess(access, { _tag: "WebSession", fresh: true })._tag === "Allowed"
   );
 };
+
+/** Send onboarding verification with the supplied Resend key; no other provider or local stub is used. */
+export const makeOnboardingEmailDelivery = (
+  input: Readonly<{
+    apiKey: Redacted.Redacted<string>;
+    httpClient: HttpClient.HttpClient;
+  }>
+): EmailDeliveryPortService =>
+  deliverySender({
+    outboundHttp: makeResendOutboundHttp(input),
+    from: "Fidy <obarboza@fidyapp.com>",
+  });
+
+export class EmailDeliveryPort extends Context.Service<
+  EmailDeliveryPort,
+  EmailDeliveryPortService
+>()("@fidy/server/shell/email-authentication/runtime/EmailDeliveryPort") {
+  static readonly layer = Layer.effect(
+    EmailDeliveryPort,
+    Effect.gen(function* () {
+      const environment = yield* Config.String("NODE_ENV").pipe(Config.withDefault("development"));
+      if (environment !== "production") {
+        return EmailDeliveryPort.of({
+          send: () => new EmailSendFailed({ certainty: "rejected", retryable: false }),
+        });
+      }
+      const outboundHttp = yield* OutboundHttp;
+      const fromEmail = yield* Config.schema(
+        Schema.Literal("obarboza@fidyapp.com"),
+        "RESEND_FROM_EMAIL"
+      );
+      const fromName = yield* Config.schema(Schema.Literal("Fidy"), "RESEND_FROM_NAME");
+      return EmailDeliveryPort.of(
+        deliverySender({ outboundHttp, from: `${fromName} <${fromEmail}>` })
+      );
+    })
+  );
+}

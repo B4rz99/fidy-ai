@@ -4,6 +4,7 @@ import {
   categoryUnavailable,
   listCategoriesPath,
 } from "@fidy/server/categories";
+
 import {
   MemoryId,
   type MemoryOperationId,
@@ -11,30 +12,47 @@ import {
   ReviseInput,
   memoryOperationIds,
 } from "@fidy/server/memory-runtime";
-import { emailReplacementOperations } from "@fidy/server/email-replacement";
+
+import { emailReplacementOperations } from "@fidy/server/email-authentication-runtime";
+
 import type { TelemetryService } from "@fidy/server/telemetry";
+
 import { Cause, Clock, Data, Effect, Exit, Option, Schema } from "effect";
+
 import { correctionInput } from "./transactions/transaction-corrections";
+
 import { BudgetId, CreateBudgetInput, UpdateBudgetInput } from "@fidy/server/budgets-runtime";
+
 import { DeliveryEvidenceInput, InsightEventId } from "@fidy/server/insights-runtime";
+
 import { browseBudgets } from "./budgets/budget-queries";
+
 import { listPendingInsights } from "./insights/insight-store";
+
 import { browseDashboard } from "./dashboard/dashboard";
+
 import { reconcileBudgetLatches } from "./budgets/budget-latches";
+
 import { budgetRefusal } from "./budgets/budget-outcome";
+
 import { transactionPairInput } from "./transactions/transaction-reconciliation";
+
 import { ownsTransactionPath as transactionPath } from "@fidy/server/transaction-routes";
+
 import { browseTransactions } from "./transactions/transaction-history";
+
 import {
   receiveConsentWebhook,
   recoverPendingDisclosures,
   sweepExpiredConsent,
 } from "./onboarding/consent-ingress";
+
 import {
   transactionInput,
   transactionSession,
   unauthenticatedTransaction,
 } from "./transactions/transactions";
+
 import {
   type TransactionCaller,
   isPATCaller,
@@ -43,21 +61,39 @@ import {
   rejectInvalidTransactionInput,
   transactionNow,
 } from "./transactions/transaction-boundary";
+
 import { RequestBodyPolicy, boundedJsonBody } from "./http/request-body";
+
 import { pathId, rawPathId } from "./http/path";
+
 import {
   completeBrowserPairingEmail,
+  completeEmailReplacement,
+  requestEmailReplacement,
   startBrowserPairingEmail,
-} from "./identity/browser-pairing-email";
+} from "./email-authentication/operations";
+
 import {
   type BrowserPairingEmailEnvironment,
+  type EmailReplacementEnvironment,
+  type OnboardingEmailEnvironment,
   dispatchBrowserPairingEmail,
+  dispatchEmailReplacement,
+  dispatchOnboardingEmail,
   isBrowserPairingEmailWork,
+  isEmailReplacementWork,
   receiveBrowserPairingEmail,
+  receiveEmailReplacement,
+  receiveOnboardingEmail,
   reconcileBrowserPairingEmail,
-} from "./identity/browser-pairing-email-delivery";
+  reconcileEmailReplacement,
+  reconcileOnboardingEmail,
+} from "./email-authentication/runtime";
+
 import { handleSupportRecovery } from "./identity/support-recovery";
+
 import { handleCardEnrollment } from "./card-enrollment/card-enrollment";
+
 import {
   type BillingCollectionEnvironment,
   dispatchBillingCollection,
@@ -66,18 +102,15 @@ import {
   receiveWompiBillingEvent,
   reconcileBillingCandidates,
 } from "./billing/billing-collection";
-import { completeEmailReplacement, requestEmailReplacement } from "./identity/email-replacement";
-import {
-  type EmailReplacementEnvironment,
-  dispatchEmailReplacement,
-  isEmailReplacementWork,
-  receiveEmailReplacement,
-  reconcileEmailReplacement,
-} from "./identity/email-replacement-delivery";
+
 import { handlePATRequest, patRoute } from "./pats/pat-routes";
+
 import { listPATs } from "./pats/pat-management";
+
 import { recallMemories, rejectMemoryMutation } from "./memory/memory";
+
 import { canonicalOperation, canonicalRoute } from "./routing/canonical-routes";
+
 import {
   BatchInput,
   type CanonicalWork,
@@ -85,7 +118,9 @@ import {
   type PATAuthority,
   type WebSessionAuthority,
 } from "./transactions/transaction-coordinator";
+
 import { repairDashboardProjections } from "./transactions/dashboard-repair";
+
 import {
   CanonicalOperationId,
   type CatalogOperation,
@@ -93,10 +128,15 @@ import {
   maximumAtomicBatchCalls,
   operationCatalog,
 } from "@fidy/server/canonical-runtime";
+
 import { sweepExpiredPATPairings } from "./pats/pat-pairing";
+
 import { authorizeCanonicalPAT } from "./pats/pat-authorization";
+
 import { executeProtectedCategories } from "./categories/canonical-category";
+
 import { executeProtectedSubscriptionQuery } from "./billing/subscription-queries";
+
 import {
   keywordRuleIdFromPath,
   keywordRuleInput,
@@ -104,6 +144,7 @@ import {
   keywordRuleUnknownId,
   listOwnKeywordRules,
 } from "./categories/canonical-keyword-rules";
+
 import {
   currentUser,
   logoutBrowser,
@@ -111,21 +152,20 @@ import {
   rotateBackupRecoveryCode,
   startBrowserPairing,
 } from "./identity/browser-login";
-import {
-  type OnboardingEmailEnvironment,
-  dispatchOnboardingEmail,
-  receiveOnboardingEmail,
-  reconcileOnboardingEmail,
-} from "./onboarding/onboarding-email";
+
 import { contractDigestPattern, gitRevisionPattern } from "./runtime/release-identity";
+
 import { smokeFailureHeader, smokePath, smokeProofAccepted } from "./runtime/smoke";
+
 import {
   ReleaseSmokeWorkflowV1,
   type SmokeEnvironment,
   handleSmoke,
   receiveSmoke,
 } from "./runtime/smoke-work";
+
 import { verifyOnboarding } from "./onboarding/verified-onboarding";
+
 import {
   type WorkerTelemetryEnvironment,
   cloudflareWorkerTelemetry,
@@ -133,9 +173,13 @@ import {
   observeWorkerPromise,
   observeWorkerRequest,
 } from "./runtime/telemetry";
+
 import { type WorkersAiEnvironment, sweepExpiredWorkersAiAdmission } from "./ai/workers-ai";
+
 import { sweepExpiredCardPreparationAdmission } from "./card-enrollment/card-preparation-admission";
+
 import { statementStagingPath } from "@fidy/server/statement-path";
+
 import {
   readStatementSubmission,
   submitForExtractionInput,
@@ -143,36 +187,51 @@ import {
   uploadStagedStatement,
   validationFailed,
 } from "./ingestion/statement-ingestion";
+
 import { EmailAddress } from "@fidy/server/client";
+
 import {
   type OperationalHealthEnvironment,
   type OperationalSignal,
   observeOperationalHealth,
 } from "./runtime/operational-health";
+
 import {
   type EventMetricSignal,
   observeOperationalEventMetrics,
   sweepOperationalEventBuckets,
 } from "./runtime/operational-event-metrics";
+
 import { type AlertSignal, decideOperationalAlerts } from "./runtime/operational-alerts";
+
 import {
   type CanaryHealth,
   readCanaryHealth,
   receiveCanary,
   sendCanary,
 } from "./runtime/operational-canary";
+
 import { type CapabilityProbe, inspectOperationalCapabilities } from "./runtime/operational-probes";
+
 import { recordOperationalHealth } from "./runtime/operational-health-view";
+
 import { runOperationalAlerts } from "./runtime/operational-alert-delivery";
+
 import { sendOperatorEmail } from "./runtime/operator-email";
+
 import { StatementStaging } from "./ingestion/statement-staging";
+
 import { forwardingAddressResponse } from "./ingestion/forwarding-address";
+
 import {
   isForwardedEmailWork,
   receiveForwardedEmailWork,
 } from "./ingestion/forwarded-email-delivery";
+
 import { expireStatementReviewEvidence } from "./ingestion/statement-review-retention";
+
 import { listNeedsReviewItems } from "./ingestion/statement-review";
+
 import {
   StatementExtractionWorkflowV1,
   dispatchStatementExtraction,
@@ -180,6 +239,7 @@ import {
   receiveStatementExtraction,
   reconcileStatementExtraction,
 } from "./ingestion/statement-delivery";
+
 import {
   HostedDeliveryAdmission,
   HostedProgressAdmission,
@@ -187,10 +247,15 @@ import {
   hostedDeliveryReceipt,
   hostedTurnInput,
 } from "./agent/hosted-turn";
+
 import { UserId } from "@fidy/server/agent-runtime";
+
 import { HostedTurnProgressRequest } from "../src/shell/agent/hosted-turn-api";
+
 import { sweepHostedTurns } from "./agent/hosted-turn-sweep";
+
 import { WhatsAppWork, dispatchWhatsAppWork, receiveWhatsAppWork } from "./agent/whatsapp-work";
+
 import {
   type WhatsAppStatusAdmission,
   type WhatsAppTurnAdmission,
@@ -198,14 +263,20 @@ import {
 } from "./agent/whatsapp-turn";
 
 export { UserTransactionCoordinator } from "./transactions/transaction-coordinator";
-export { OnboardingEmailWorkflowV1 } from "./onboarding/onboarding-email";
+
+export { OnboardingEmailWorkflowV1 } from "./email-authentication/runtime";
+
 export {
   BillingCollectionWorkflowV1,
   runBillingCollectionWorkflow,
 } from "./billing/billing-collection";
-export { BrowserPairingEmailWorkflowV1 } from "./identity/browser-pairing-email-delivery";
-export { EmailReplacementWorkflowV1 } from "./identity/email-replacement-delivery";
-export { StatementExtractionWorkflowV1, ReleaseSmokeWorkflowV1 };
+
+export { BrowserPairingEmailWorkflowV1 } from "./email-authentication/runtime";
+
+export { EmailReplacementWorkflowV1 } from "./email-authentication/runtime";
+
+export { ReleaseSmokeWorkflowV1, StatementExtractionWorkflowV1 };
+
 export { OperationalCanaryWorkflowV1 } from "./operational-canary-workflow";
 
 const ReleaseConfiguration = Schema.Struct({
@@ -280,6 +351,7 @@ type PublicationKind =
   | "emailReplacement"
   | "billing"
   | "whatsapp";
+
 type PublishAcceptedWork = (kind: PublicationKind, id: string) => void;
 
 const publicationActivities = (
@@ -367,11 +439,17 @@ const jsonHeaders = {
 } as const;
 
 const HTTP_OK = 200;
+
 const HTTP_ACCEPTED = 202;
+
 const HTTP_NOT_FOUND = 404;
+
 const HTTP_UNAUTHORIZED = 401;
+
 const HTTP_FORBIDDEN = 403;
+
 const HTTP_METHOD_NOT_ALLOWED = 405;
+
 const HTTP_SERVICE_UNAVAILABLE = 503;
 
 const jsonResponse = (body: string, status: number): Response =>
@@ -550,6 +628,7 @@ const sendToCoordinator = ({
 // One canonical child input is bounded by its own operation policy; a batch carries at most one
 // such input per declared child, and each child is decoded and attributed by the batch adapter.
 const maximumBatchBytes = maximumAtomicBatchCalls * maximumTransactionInputBytes;
+
 const batchPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: maximumBatchBytes,
   deadlineMilliseconds: 2000,
@@ -1104,6 +1183,7 @@ const insightBodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 1024,
   deadlineMilliseconds: 2000,
 });
+
 const budgetBodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 1024,
   deadlineMilliseconds: 2000,
@@ -1194,6 +1274,7 @@ const BudgetOperation = Schema.Literals([
   "budgets.getBudget",
   "budgets.getBudgetStatus",
 ]);
+
 const budgetResponse = ({
   request,
   environment,
@@ -1273,6 +1354,7 @@ const memoryResponse = (
     )
   );
 };
+
 /** Session-authorized statement byte staging; neither a PAT nor an anonymous caller may stage. */
 const statementUploadResponse = (
   request: Request,
@@ -1299,6 +1381,7 @@ const hostedTurnPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 16_384,
   deadlineMilliseconds: 2_000,
 });
+
 const hostedReceiptPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 512,
   deadlineMilliseconds: 2_000,
@@ -1574,6 +1657,7 @@ const transactionResponse = (
 };
 
 const insightRoutePosition = -2;
+
 /** Canonical Insight reads and User-coordinated lifecycle calls share the same D1 owner. */
 const insightResponse = (
   input: Readonly<{

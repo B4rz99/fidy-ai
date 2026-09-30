@@ -1,34 +1,30 @@
-import { UnknownJsonString, jsonStringSchema } from "~/shell/schema-codecs/contract";
-import {
-  Config,
-  Context,
-  Data,
-  Effect,
-  Layer,
-  Option,
-  type Redacted,
-  Result,
-  Schema,
-} from "effect";
-import type { HttpClient } from "effect/unstable/http";
+import { Data, Effect, Option, Result, Schema } from "effect";
+
 import type {
-  EmailAddress,
   EmailProofPurpose,
   EmailVerificationCode,
-} from "~/core/email-authentication/model";
+} from "~/core/email-authentication/contract";
+
 import type { OutboundHttpFailure, OutboundHttpResponse } from "~/shell/outbound-http/contract";
-import {
-  OutboundHttp,
-  type OutboundHttpService,
-  makeResendOutboundHttp,
-} from "~/shell/outbound-http/operations";
+
+import { type OutboundHttpService } from "~/shell/outbound-http/operations";
+
+import { UnknownJsonString, jsonStringSchema } from "~/shell/schema-codecs/contract";
+
+import type { EmailDeliveryPortService } from "../contract";
 
 const onboardingSubject = "Verifica tu correo en Fidy";
+
 const replacementSubject = "Verifica tu nuevo correo en Fidy";
+
 const browserPairingSubject = "Tu código para iniciar sesión en Fidy";
+
 const successfulStatusMinimum = 200;
+
 const successfulStatusMaximumExclusive = 300;
+
 const rateLimitedStatus = 429;
+
 const serverErrorStatusMinimum = 500;
 
 type VerificationEmail = Readonly<{ subject: string; text: string; html: string }>;
@@ -76,20 +72,14 @@ export class EmailSendFailed extends Data.TaggedError("EmailSendFailed")<{
   readonly retryable: boolean;
 }> {}
 
-export type EmailDeliveryPortService = {
-  readonly send: (input: {
-    readonly purpose: EmailProofPurpose;
-    readonly to: EmailAddress;
-    readonly combinedCode: EmailVerificationCode;
-    readonly idempotencyKey: string;
-  }) => Effect.Effect<void, EmailSendFailed>;
-};
-
 const maximumResendMessageIdLength = 128;
+
 const ResendSuccess = Schema.Struct({
   id: Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(maximumResendMessageIdLength)),
 });
+
 const decodeResendSuccess = Schema.decodeUnknownResult(ResendSuccess);
+
 const decodeJson = Schema.decodeUnknownResult(UnknownJsonString);
 
 const decodeBoundedResendResponse = Effect.fn(function* (response: OutboundHttpResponse) {
@@ -113,6 +103,7 @@ const ResendRequest = Schema.Struct({
   text: Schema.String,
   html: Schema.String,
 });
+
 const encodeResendRequest = Schema.encodeSync(jsonStringSchema(ResendRequest));
 
 const classifyResendResponse = (
@@ -155,10 +146,13 @@ const mapResendRequestFailure = (
   return new EmailSendFailed({ certainty, retryable: false });
 };
 
-const deliverySender = (
-  outboundHttp: OutboundHttpService,
-  from: string
-): EmailDeliveryPortService => ({
+export const deliverySender = ({
+  outboundHttp,
+  from,
+}: Readonly<{
+  outboundHttp: OutboundHttpService;
+  from: string;
+}>): EmailDeliveryPortService => ({
   send: (input) => {
     const projection = verificationEmailFor(input.purpose, input.combinedCode);
     return outboundHttp
@@ -180,36 +174,3 @@ const deliverySender = (
       );
   },
 });
-
-/** Send onboarding verification with the supplied Resend key; no other provider or local stub is used. */
-export const makeOnboardingEmailDelivery = (
-  input: Readonly<{
-    apiKey: Redacted.Redacted<string>;
-    httpClient: HttpClient.HttpClient;
-  }>
-): EmailDeliveryPortService =>
-  deliverySender(makeResendOutboundHttp(input), "Fidy <obarboza@fidyapp.com>");
-
-export class EmailDeliveryPort extends Context.Service<
-  EmailDeliveryPort,
-  EmailDeliveryPortService
->()("@fidy/server/shell/email-authentication/delivery/EmailDeliveryPort") {
-  static readonly layer = Layer.effect(
-    EmailDeliveryPort,
-    Effect.gen(function* () {
-      const environment = yield* Config.String("NODE_ENV").pipe(Config.withDefault("development"));
-      if (environment !== "production") {
-        return EmailDeliveryPort.of({
-          send: () => new EmailSendFailed({ certainty: "rejected", retryable: false }),
-        });
-      }
-      const outboundHttp = yield* OutboundHttp;
-      const fromEmail = yield* Config.schema(
-        Schema.Literal("obarboza@fidyapp.com"),
-        "RESEND_FROM_EMAIL"
-      );
-      const fromName = yield* Config.schema(Schema.Literal("Fidy"), "RESEND_FROM_NAME");
-      return EmailDeliveryPort.of(deliverySender(outboundHttp, `${fromName} <${fromEmail}>`));
-    })
-  );
-}

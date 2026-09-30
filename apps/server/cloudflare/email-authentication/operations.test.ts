@@ -1,22 +1,51 @@
-import { observeOperationalHealth } from "../runtime/operational-health";
-import { Miniflare } from "miniflare";
-import { afterEach, expect, it, vi } from "vitest";
-import { startBrowserPairing } from "../identity/browser-login";
-import {
-  deliverBrowserPairingEmail,
-  dispatchBrowserPairingEmail,
-} from "../identity/browser-pairing-email-delivery";
-import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
-import {
-  deliverEmailReplacement,
-  dispatchEmailReplacement,
-} from "../identity/email-replacement-delivery";
-import { SignJWT, exportJWK, generateKeyPair } from "jose";
-import coreWorker, { makeCoreWorker } from "../core-worker";
-import { DisabledTelemetryResource, makeTelemetryService } from "@fidy/server/telemetry";
-import { handleSupportRecovery } from "../identity/support-recovery";
-import publicWorker from "../public-worker";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
+
+import { DisabledTelemetryResource, makeTelemetryService } from "@fidy/server/telemetry";
+
+import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
+
+import { SignJWT, exportJWK, generateKeyPair } from "jose";
+
+import { Miniflare } from "miniflare";
+
+import { afterEach, expect, it, vi } from "vitest";
+
+import coreWorker, { makeCoreWorker } from "../core-worker";
+
+import { prepareOnboardingCredential } from "./operations";
+
+import { startBrowserPairing } from "../identity/browser-login";
+
+import { handleSupportRecovery } from "../identity/support-recovery";
+
+import publicWorker from "../public-worker";
+
+import { observeOperationalHealth } from "../runtime/operational-health";
+
+import { internals as pairingDelivery } from "./internal/pairing-delivery";
+
+import { dispatchBrowserPairingEmail, dispatchEmailReplacement } from "./runtime";
+
+import { internals as replacementDelivery } from "./internal/replacement-delivery";
+
+const { deliverBrowserPairingEmail } = pairingDelivery;
+
+const { deliverEmailReplacement } = replacementDelivery;
+
+it("leaves mailbox proof redeemable after the published owner rejects oversized input", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, send } = yield* Effect.tryPromise(() => setup());
+      const refused = yield* prepareOnboardingCredential({
+        db,
+        combinedCode: "x".repeat(513),
+        nowMs: yield* Clock.currentTimeMillis,
+      });
+      expect(Option.isNone(refused)).toBe(true);
+      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
+      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(400);
+    })
+  ));
 
 const signWebhook = (secret: string, body: string | Uint8Array): Promise<string> =>
   crypto.subtle
@@ -38,10 +67,15 @@ const encodeJson = (value: unknown): string =>
   Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(value);
 
 const mfInstances: Array<Miniflare> = [];
+
 const exchange = "10000000-0000-4000-8000-000000000001";
+
 const enrollment = "10000000-0000-4000-8000-000000000002";
+
 const code = "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ";
+
 let nextDatabase = 0;
+
 const digest = (text: string): Promise<Uint8Array> =>
   crypto.subtle
     .digest("SHA-256", new TextEncoder().encode(text))

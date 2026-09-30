@@ -319,7 +319,7 @@ const consumeApprovedPairing = (
       ])
     );
     const inserted = committed[1];
-    return inserted ? issued.complete(inserted) : invalid();
+    return inserted !== undefined ? issued.complete(inserted) : invalid();
   });
 
 const recordWrongVerifier = ({

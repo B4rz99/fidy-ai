@@ -1,4 +1,7 @@
 import { handleWebAuthentication } from "../web-authentication/operations";
+import { UserId } from "../../src/core/identity/contract";
+import { EmailAddress } from "@fidy/server/client";
+import { prepareOnboardingMailbox, prepareVerifiedEmailRead, readOnboardingEmailStatus, readOnboardingMailboxReplay } from "./operations";
 import { observeOperationalHealth } from "../runtime/operational-health";
 import { Miniflare } from "miniflare";
 import { afterEach, expect, it, vi } from "vitest";
@@ -29,6 +32,104 @@ it("leaves mailbox proof redeemable after the published owner rejects oversized 
       expect(Option.isNone(refused)).toBe(true);
       expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
       expect((yield* Effect.tryPromise(() => send(code))).status).toBe(400);
+    })
+  ));
+
+it("reports mailbox delivery state without exposing the pending enrollment", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db } = yield* Effect.tryPromise(() => setup());
+      expect(yield* readOnboardingEmailStatus({ db, exchangeId: exchange })).toBe("awaiting_proof");
+      expect(
+        yield* readOnboardingEmailStatus({ db, exchangeId: "10000000-0000-4000-8000-000000000099" })
+      ).toBe("awaiting_email");
+    })
+  ));
+
+it("composes a verified mailbox read for one explicit User without exposing another User's credential", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, send } = yield* Effect.tryPromise(() => setup());
+      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
+      const raw = yield* Effect.tryPromise(() =>
+        db.prepare("SELECT id FROM users LIMIT 1").first()
+      );
+      const first = yield* Schema.decodeUnknownEffect(Schema.Struct({ id: UserId }))(raw);
+      const second = UserId.make("10000000-0000-4000-8000-000000000088");
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db
+            .prepare(
+              "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',1)"
+            )
+            .bind(second),
+          db
+            .prepare(
+              "INSERT INTO verified_email_credentials(user_id,email_address,verified_at_ms) VALUES(?,'other@example.test',1)"
+            )
+            .bind(second),
+        ])
+      );
+      const own = prepareVerifiedEmailRead({ db, userId: first.id });
+      const other = prepareVerifiedEmailRead({ db, userId: second });
+      const results = yield* Effect.tryPromise(() => db.batch([own.statement, other.statement]));
+      expect(
+        yield* own.decode(yield* Effect.fromOption(Option.fromUndefinedOr(results[0])))
+      ).toEqual(Option.some("person@example.test"));
+      expect(
+        yield* other.decode(yield* Effect.fromOption(Option.fromUndefinedOr(results[1])))
+      ).toEqual(Option.some("other@example.test"));
+    })
+  ));
+
+it("accepts exactly the original mailbox evidence as replay and refuses altered evidence", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db } = yield* Effect.tryPromise(() => setup());
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("DELETE FROM pending_email_enrollments WHERE exchange_id = ?")
+          .bind(exchange)
+          .run()
+      );
+      expect(
+        yield* readOnboardingMailboxReplay({
+          db,
+          exchangeId: exchange,
+          messageId: "mailbox",
+          digest: "a".repeat(64),
+        })
+      ).toBe("missing");
+      const current = yield* Clock.currentTimeMillis;
+      const email = yield* Schema.decodeEffect(EmailAddress)("person@example.test");
+      yield* Effect.tryPromise(() =>
+        prepareOnboardingMailbox({
+          db,
+          id: enrollment,
+          exchangeId: exchange,
+          email,
+          messageId: "mailbox",
+          digest: "a".repeat(64),
+          createdAtMs: current,
+          expiresAtMs: current + 600_000,
+        }).run()
+      );
+      expect(
+        yield* readOnboardingMailboxReplay({
+          db,
+          exchangeId: exchange,
+          messageId: "mailbox",
+          digest: "a".repeat(64),
+        })
+      ).toBe("replay");
+      expect(
+        yield* readOnboardingMailboxReplay({
+          db,
+          exchangeId: exchange,
+          messageId: "mailbox",
+          digest: "b".repeat(64),
+        })
+      ).toBe("conflict");
     })
   ));
 

@@ -16,6 +16,7 @@ import { UserId } from "../../src/core/identity/contract";
 import { Clock, DateTime, Effect, Encoding, Option, Schema } from "effect";
 import { pairingId as newPairingId } from "./internal/worker-crypto";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
+import type { PairingEmailOwnership } from "../email-authentication/contract";
 
 const Proof = Schema.Struct({
   pairingId: BrowserLoginPairingId,
@@ -382,7 +383,7 @@ export const findRecoveryPairing = ({
   db
     .prepare(`SELECT p.id, p.expires_at_ms AS expiresAtMs FROM browser_login_pairings AS p
   WHERE p.public_code = ? AND p.state = 'pending_approval' AND p.expires_at_ms > ?
-    AND NOT EXISTS (SELECT 1 FROM browser_pairing_email_proofs AS e WHERE e.pairing_id = p.id AND e.user_id <> ?)`)
+    AND (p.user_id IS NULL OR p.user_id = ?)`)
     .bind(publicCode, atMs, userId)
     .first()
     .then(Schema.decodeUnknownOption(RecoveryPairing));
@@ -395,14 +396,16 @@ export const prepareRecoveryPairingApproval = ({
   userId,
   pairingId,
   atMs,
+  emailOwnership,
 }: {
   db: D1Database;
   userId: UserId;
   pairingId: BrowserLoginPairingId;
   atMs: number;
+  emailOwnership: PairingEmailOwnership;
 }): D1PreparedStatement =>
   db
     .prepare(`UPDATE browser_login_pairings SET state = 'ready', user_id = ?
   WHERE id = ? AND state = 'pending_approval' AND expires_at_ms > ? AND changes() = 1
-    AND NOT EXISTS (SELECT 1 FROM browser_pairing_email_proofs AS e WHERE e.pairing_id = browser_login_pairings.id AND e.user_id <> ?)`)
-    .bind(userId, pairingId, atMs, userId);
+    AND (${emailOwnership.predicate})`)
+    .bind(userId, pairingId, atMs, ...emailOwnership.bindings);

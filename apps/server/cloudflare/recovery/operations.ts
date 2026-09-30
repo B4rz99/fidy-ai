@@ -2,6 +2,8 @@ import { BackupRecoveryCode } from "../../src/core/recovery/contract";
 import { UserId } from "../../src/core/identity/contract";
 import { findRecoveryPairing, prepareRecoveryPairingApproval } from "../browser-login/operations";
 import { freshBrowserSession } from "@fidy/server/web-session-runtime";
+import { pairingEmailOwnership } from "../email-authentication/operations";
+import type { BrowserLoginPairingId } from "../../src/core/browser-login/contract";
 import { freshSessionExists, freshSessionParams } from "@fidy/server/web-session";
 import { sampleBackupCode, digestBackupCode, recoveryId } from "./internal/backup-proof";
 import { createRemoteJWKSet, jwtVerify } from "jose";
@@ -224,7 +226,8 @@ const CredentialSubject = Schema.Struct({
   revision: Schema.Int.check(Schema.isGreaterThan(0)),
 });
 
-const recoveryCandidate = (db: D1Database, input: CaseDecision) =>
+type RecoveryCandidate = Readonly<{ credential: typeof CredentialSubject.Type; pairing: Readonly<{ id: BrowserLoginPairingId; expiresAtMs: number }> }>;
+const recoveryCandidate = (db: D1Database, input: CaseDecision): Promise<Option.Option<RecoveryCandidate>> =>
   db
     .prepare(
       `SELECT user_id, revision FROM backup_recovery_credentials WHERE code_digest = ? AND consumed_at_ms IS NULL`
@@ -241,15 +244,10 @@ const recoveryCandidate = (db: D1Database, input: CaseDecision) =>
         atMs: input.now,
       }).then((pairing) => {
         if (Option.isNone(pairing)) return Option.none();
-        return db
-          .prepare("SELECT id FROM support_recovery_cases WHERE pairing_id = ?")
-          .bind(pairing.value.id)
-          .first()
-          .then((prior) =>
-            prior === null
-              ? Option.some({ credential: credential.value, pairing: pairing.value })
-              : Option.none()
-          );
+        const ownership = pairingEmailOwnership({ pairingId: pairing.value.id, userId: credential.value.user_id });
+        return db.prepare(`SELECT 1 AS eligible WHERE (${ownership.predicate}) AND NOT EXISTS (SELECT 1 FROM support_recovery_cases WHERE pairing_id = ?)`)
+          .bind(...ownership.bindings, pairing.value.id).first()
+          .then((eligible) => eligible === null ? Option.none() : Option.some({ credential: credential.value, pairing: pairing.value }));
       });
     });
 
@@ -301,6 +299,7 @@ const approveCase = (db: D1Database, input: CaseDecision): Promise<boolean> =>
           userId: credential.user_id,
           pairingId: pairing.id,
           atMs: now,
+          emailOwnership: pairingEmailOwnership({ pairingId: pairing.id, userId: credential.user_id }),
         }),
         db
           .prepare(supportCaseInsert)

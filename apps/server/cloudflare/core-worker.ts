@@ -16,7 +16,7 @@ import {
   ReviseInput,
   memoryOperationIds,
 } from "@fidy/server/memory-runtime";
-import { emailReplacementOperations } from "@fidy/server/email-replacement";
+import { emailReplacementOperations } from "@fidy/server/email-authentication-runtime";
 import type { TelemetryService } from "@fidy/server/telemetry";
 import { Cause, Clock, Data, Effect, Exit, Option, Schema } from "effect";
 import { correctionInput } from "./transactions/transaction-corrections";

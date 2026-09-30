@@ -109,6 +109,8 @@ export {
   BrowserLoginPairingInvalidApi,
   BrowserLoginPollingRateLimitedApi,
   BrowserPairingEmailAuthenticationInvalidApi,
+} from "~/shell/web-authentication/contract";
+export {
   EmailReplacementFreshPairingRequiredApi,
   EmailReplacementInvalidApi,
   emailReplacementFreshBody,

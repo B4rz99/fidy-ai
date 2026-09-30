@@ -309,7 +309,12 @@ export const redeemBrowserPairing = ({
       }
       if (decision._tag !== "Consume") return invalid();
       if (pairing.value.user_id === null) return invalid();
-      const issuance = yield* prepareWebSessionIssuance({ db, pairingId: proof.value.pairingId, userId: pairing.value.user_id, current });
+      const issuance = yield* prepareWebSessionIssuance({
+        db,
+        pairingId: proof.value.pairingId,
+        userId: pairing.value.user_id,
+        current,
+      });
       const committed = yield* attempt(() =>
         db.batch([
           db
@@ -327,9 +332,16 @@ export const redeemBrowserPairing = ({
 
 /** Recheck one known pending pairing inside a proof/outbox commit. This guard grants no User authority;
  * the caller must independently prove the browser verifier before preparing work. */
-export const pendingPairingAuthority = ({ pairingId, current }: {
-  pairingId: BrowserLoginPairingId; current: number;
-}): Readonly<{ predicate: string; bindings: readonly [BrowserLoginPairingId, number, number] }> => ({
+export const pendingPairingAuthority = ({
+  pairingId,
+  current,
+}: {
+  pairingId: BrowserLoginPairingId;
+  current: number;
+}): Readonly<{
+  predicate: string;
+  bindings: readonly [BrowserLoginPairingId, number, number];
+}> => ({
   predicate: `EXISTS (SELECT 1 FROM browser_login_pairings WHERE id = ? AND state = 'pending_approval' AND expires_at_ms > ? AND wrong_attempts < ?)`,
   bindings: [pairingId, current, maximumWrongVerifierAttempts],
 });
@@ -337,11 +349,21 @@ export const pendingPairingAuthority = ({ pairingId, current }: {
 /** Compose immediately after Email Authentication consumes the matching current User-owned proof.
  * The caller must include its rollback fence after this statement: a lost pending/expiry race must
  * roll back proof consumption. This approval never issues a WebSession or changes User identity. */
-export const prepareEmailPairingApproval = ({ db, userId, pairingId, atMs }: {
-  db: D1Database; userId: UserId; pairingId: BrowserLoginPairingId; atMs: number;
-}): D1PreparedStatement => db.prepare(`UPDATE browser_login_pairings SET state = 'ready', user_id = ?
+export const prepareEmailPairingApproval = ({
+  db,
+  userId,
+  pairingId,
+  atMs,
+}: {
+  db: D1Database;
+  userId: UserId;
+  pairingId: BrowserLoginPairingId;
+  atMs: number;
+}): D1PreparedStatement =>
+  db
+    .prepare(`UPDATE browser_login_pairings SET state = 'ready', user_id = ?
   WHERE id = ? AND state = 'pending_approval' AND expires_at_ms > ? AND wrong_attempts < ? AND changes() = 1`)
-  .bind(userId, pairingId, atMs, maximumWrongVerifierAttempts);
+    .bind(userId, pairingId, atMs, maximumWrongVerifierAttempts);
 
 const RecoveryPairing = Schema.Struct({ id: BrowserLoginPairingId, expiresAtMs: Schema.Finite });
 /** A Recovery-proven User may select only a pending, unexpired pairing without conflicting email ownership. */

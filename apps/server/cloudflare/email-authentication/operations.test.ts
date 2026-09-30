@@ -1,4 +1,3 @@
-import { NodeFileSystem } from "@effect/platform-node";
 import { handleWebAuthentication } from "../web-authentication/operations";
 import { observeOperationalHealth } from "../runtime/operational-health";
 import { Miniflare } from "miniflare";
@@ -8,7 +7,7 @@ import { prepareOnboardingCredential } from "./operations";
 import { internals as pairingDelivery } from "./internal/pairing-delivery";
 import { dispatchBrowserPairingEmail, dispatchEmailReplacement } from "./runtime";
 const { deliverBrowserPairingEmail } = pairingDelivery;
-import { Cause, Clock, Effect, Exit, FileSystem, Option, Schema } from "effect";
+import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
 import { internals as replacementDelivery } from "./internal/replacement-delivery";
 const { deliverEmailReplacement } = replacementDelivery;
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
@@ -19,13 +18,19 @@ import publicWorker from "../public-worker";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 
 it("leaves mailbox proof redeemable after the published owner rejects oversized input", () =>
-  Effect.runPromise(Effect.gen(function* () {
-    const { db, send } = yield* Effect.tryPromise(() => setup());
-    const refused = yield* prepareOnboardingCredential({ db, combinedCode: "x".repeat(513), nowMs: yield* Clock.currentTimeMillis });
-    expect(Option.isNone(refused)).toBe(true);
-    expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
-    expect((yield* Effect.tryPromise(() => send(code))).status).toBe(400);
-  })));
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, send } = yield* Effect.tryPromise(() => setup());
+      const refused = yield* prepareOnboardingCredential({
+        db,
+        combinedCode: "x".repeat(513),
+        nowMs: yield* Clock.currentTimeMillis,
+      });
+      expect(Option.isNone(refused)).toBe(true);
+      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
+      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(400);
+    })
+  ));
 
 const signWebhook = (secret: string, body: string | Uint8Array): Promise<string> =>
   crypto.subtle
@@ -107,20 +112,19 @@ const setup = (
       yield* Effect.tryPromise(() => mf.ready);
       const db = yield* Effect.tryPromise(() => mf.getD1Database("DB"));
       const applyMigration = (name: string): Promise<void> =>
-        Effect.runPromise(Effect.gen(function* () {
-          const files = yield* FileSystem.FileSystem;
-          return yield* files.readFileString(new URL(`../migrations/${name}.sql`, import.meta.url).pathname);
-        }).pipe(Effect.provide(NodeFileSystem.layer))).then((sql) =>
-          sql
-            .replace(/^--.*$/gmu, "")
-            .trim()
-            .split(/;\s*\n(?=CREATE |ALTER |$)/u)
-            .reduce<Promise<void>>(
-              (previous, statement) =>
-                previous.then(() => db.prepare(statement).run()).then(() => undefined),
-              Promise.resolve()
-            )
-        );
+        Bun.file(new URL(`../migrations/${name}.sql`, import.meta.url))
+          .text()
+          .then((sql) =>
+            sql
+              .replace(/^--.*$/gmu, "")
+              .trim()
+              .split(/;\s*\n(?=CREATE |ALTER |$)/u)
+              .reduce<Promise<void>>(
+                (previous, statement) =>
+                  previous.then(() => db.prepare(statement).run()).then(() => undefined),
+                Promise.resolve()
+              )
+          );
       // Applied migrations depend on the preceding schema, so they must run in order.
       yield* Effect.tryPromise(() =>
         [

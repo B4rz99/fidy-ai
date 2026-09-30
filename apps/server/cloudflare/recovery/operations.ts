@@ -26,7 +26,10 @@ export const prepareInitialBackupRecoveryCode = ({
   const backupRecoveryCode = Schema.decodeSync(BackupRecoveryCode)(sampleBackupCode());
   return digestBackupCode(backupRecoveryCode).then((codeDigest) => ({
     backupRecoveryCode,
-    statement: db.prepare("INSERT INTO backup_recovery_credentials (user_id, code_digest, created_at_ms) VALUES (?, ?, ?)")
+    statement: db
+      .prepare(
+        "INSERT INTO backup_recovery_credentials (user_id, code_digest, created_at_ms) VALUES (?, ?, ?)"
+      )
       .bind(userId, codeDigest, createdAtMs),
   }));
 };
@@ -231,10 +234,22 @@ const recoveryCandidate = (db: D1Database, input: CaseDecision) =>
     .then((row) => {
       const credential = Schema.decodeUnknownOption(CredentialSubject)(row);
       if (Option.isNone(credential)) return Option.none();
-      return findRecoveryPairing({ db, userId: credential.value.user_id, publicCode: input.publicCode, atMs: input.now }).then((pairing) => {
+      return findRecoveryPairing({
+        db,
+        userId: credential.value.user_id,
+        publicCode: input.publicCode,
+        atMs: input.now,
+      }).then((pairing) => {
         if (Option.isNone(pairing)) return Option.none();
-        return db.prepare("SELECT id FROM support_recovery_cases WHERE pairing_id = ?").bind(pairing.value.id).first()
-          .then((prior) => prior === null ? Option.some({ credential: credential.value, pairing: pairing.value }) : Option.none());
+        return db
+          .prepare("SELECT id FROM support_recovery_cases WHERE pairing_id = ?")
+          .bind(pairing.value.id)
+          .first()
+          .then((prior) =>
+            prior === null
+              ? Option.some({ credential: credential.value, pairing: pairing.value })
+              : Option.none()
+          );
       });
     });
 
@@ -262,51 +277,52 @@ type CaseDecision = Readonly<{
   now: number;
 }>;
 
-const approveCase = (db: D1Database, input: CaseDecision): Promise<boolean> => recoveryCandidate(db, input).then((candidate) => {
-  if (Option.isNone(candidate)) return false;
-  const { credential, pairing } = candidate.value;
-  const caseId = recoveryId();
-  const openedId = recoveryId();
-  const approvedId = recoveryId();
-  const { operator, codeDigest, now } = input;
-  return db
-    .batch([
-      db
-        .prepare(recoveryCredentialConsume)
-        .bind(
-          crypto.getRandomValues(new Uint8Array(digestBytes)),
-          now,
-          credential.user_id,
-          codeDigest,
-          credential.revision
-        ),
-      prepareRecoveryPairingApproval({
-        db,
-        userId: credential.user_id,
-        pairingId: pairing.id,
-        atMs: now,
-      }),
-      db
-        .prepare(supportCaseInsert)
-        .bind(
-          caseId,
-          credential.user_id,
-          pairing.id,
-          operator.issuer,
-          operator.subject,
-          credential.revision,
-          now,
-          pairing.expiresAtMs,
-          now
-        ),
-      db.prepare(supportCaseOpened).bind(openedId, now, caseId),
-      // If any conditional transition did not create its case, the final FK aborts the D1 batch.
-      db
-        .prepare(supportCaseApproved)
-        .bind(approvedId, caseId, caseId, operator.issuer, operator.subject, now),
-    ])
-    .then((pairing) => pairing.every((entry) => entry.meta.changes === 1));
-});
+const approveCase = (db: D1Database, input: CaseDecision): Promise<boolean> =>
+  recoveryCandidate(db, input).then((candidate) => {
+    if (Option.isNone(candidate)) return false;
+    const { credential, pairing } = candidate.value;
+    const caseId = recoveryId();
+    const openedId = recoveryId();
+    const approvedId = recoveryId();
+    const { operator, codeDigest, now } = input;
+    return db
+      .batch([
+        db
+          .prepare(recoveryCredentialConsume)
+          .bind(
+            crypto.getRandomValues(new Uint8Array(digestBytes)),
+            now,
+            credential.user_id,
+            codeDigest,
+            credential.revision
+          ),
+        prepareRecoveryPairingApproval({
+          db,
+          userId: credential.user_id,
+          pairingId: pairing.id,
+          atMs: now,
+        }),
+        db
+          .prepare(supportCaseInsert)
+          .bind(
+            caseId,
+            credential.user_id,
+            pairing.id,
+            operator.issuer,
+            operator.subject,
+            credential.revision,
+            now,
+            pairing.expiresAtMs,
+            now
+          ),
+        db.prepare(supportCaseOpened).bind(openedId, now, caseId),
+        // If any conditional transition did not create its case, the final FK aborts the D1 batch.
+        db
+          .prepare(supportCaseApproved)
+          .bind(approvedId, caseId, caseId, operator.issuer, operator.subject, now),
+      ])
+      .then((pairing) => pairing.every((entry) => entry.meta.changes === 1));
+  });
 
 const configuredAccess = (config: {
   CLOUDFLARE_ACCESS_ISSUER: string;

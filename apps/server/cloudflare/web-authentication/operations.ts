@@ -1,4 +1,4 @@
-import { emailReplacementOperations } from "@fidy/server/email-replacement";
+import { emailReplacementOperations } from "@fidy/server/email-authentication-runtime";
 import { currentUser, logoutBrowser } from "@fidy/server/web-session-runtime";
 import { Effect } from "effect";
 import { redeemBrowserPairing, startBrowserPairing } from "../browser-login/operations";

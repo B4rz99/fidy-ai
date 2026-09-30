@@ -8,7 +8,7 @@ import { browseBudgets } from "../budgets/budget-queries";
 import { reconcileBudgetLatches } from "../budgets/budget-latches";
 import { browseTransactions } from "../transactions/transaction-history";
 import { browseDashboard } from "../dashboard/dashboard";
-import { recallMemories } from "../memory/memory";
+import { recallMemories } from "../memory/operations";
 import { listPendingInsights } from "../insights/insight-store";
 import { forwardingAddressResponse } from "../ingestion/forwarding-address";
 import { readStatementSubmission } from "../ingestion/statement-ingestion";

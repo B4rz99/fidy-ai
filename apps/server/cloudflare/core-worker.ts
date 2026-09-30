@@ -10,7 +10,7 @@ import {
   RememberInput,
   ReviseInput,
   memoryOperationIds,
-} from "@fidy/server/memory-runtime";
+} from "@fidy/server/memory-contract";
 import { emailReplacementOperations } from "@fidy/server/email-replacement";
 import type { TelemetryService } from "@fidy/server/telemetry";
 import { Cause, Clock, Data, Effect, Exit, Option, Schema } from "effect";
@@ -76,7 +76,7 @@ import {
 } from "./identity/email-replacement-delivery";
 import { handlePATRequest, patRoute } from "./pats/pat-routes";
 import { listPATs } from "./pats/pat-management";
-import { recallMemories, rejectMemoryMutation } from "./memory/memory";
+import { recallMemories, rejectMemoryMutation } from "./memory/operations";
 import { canonicalOperation, canonicalRoute } from "./routing/canonical-routes";
 import {
   BatchInput,

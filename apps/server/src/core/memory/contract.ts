@@ -1,7 +1,21 @@
-import { Schema, SchemaTransformation } from "effect";
+import { Data, Schema, SchemaTransformation } from "effect";
 import { UtcTimestamp } from "~/core/_shared/time";
 
 const maximumMemoryTextLength = 2_000;
+
+/** Fixed content-free policy failure; Memory prose and identity never enter the error. */
+export class MemoryCapacityExceeded extends Data.TaggedError("MemoryCapacityExceeded")<{}> {
+  override get message(): string {
+    return "The User's current Memories have reached their aggregate token capacity";
+  }
+}
+
+/** Content-free absence shared by missing and foreign Memory identifiers. */
+export class MemoryNotFound extends Data.TaggedError("MemoryNotFound")<{}> {
+  override get message(): string {
+    return "No current Memory belongs to the User";
+  }
+}
 
 /** Stable server-generated identity for one current Memory. */
 export const MemoryId = Schema.String.check(Schema.isUUID())

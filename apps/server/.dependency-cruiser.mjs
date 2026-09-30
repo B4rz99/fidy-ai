@@ -216,6 +216,7 @@ export default {
         pathNot: [
           "^src/shell/_shared/",
           "^src/shell/public-http/contract\\.ts$",
+          "^src/shell/memory/contract\\.ts$",
           "^src/shell/[^/]+/operations\\.ts$",
         ],
       },
@@ -279,7 +280,7 @@ export default {
         "provider-specific code. Provider models, clients, tokenizers, capacity, wire requests, " +
         "and raw responses belong only in HostedInference internals (ADR 0014).",
       from: {
-        path: "^src/shell/(agent/(agent-service\\.ts|working-context\\.ts|__probe-.*hosted-(provider|model|tokenizer|js-tokenizer)/probe\\.ts)|memory/(memory-policy\\.ts|__probe-.*hosted-(provider|model|tokenizer|js-tokenizer)/probe\\.ts)|hosted-inference/(contract|operations)\\.ts)$",
+        path: "^src/shell/(agent/(agent-service\\.ts|working-context\\.ts|__probe-.*hosted-(provider|model|tokenizer|js-tokenizer)/probe\\.ts)|memory/(operations\\.ts|__probe-.*hosted-(provider|model|tokenizer|js-tokenizer)/probe\\.ts)|hosted-inference/(contract|operations)\\.ts)$",
       },
       to: {
         path: "(^|.*/)node_modules/effect/.*/unstable/ai/(index|LanguageModel|Tokenizer)",

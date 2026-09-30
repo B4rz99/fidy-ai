@@ -11,7 +11,7 @@ import { EmailAuthenticationGroup } from "~/shell/email-authentication/operation
 import { IdentityGroup } from "~/shell/identity/operations";
 import { InsightsGroup } from "~/shell/insights/operations";
 import { IngestionGroup } from "~/shell/ingestion/operations";
-import { MemoryGroup } from "~/shell/memory/operations";
+import { MemoryGroup } from "~/shell/memory/contract";
 import { makeOperationsGroup } from "~/shell/operations/operations";
 import { SubscriptionGroup } from "~/shell/subscription/operations";
 import { PATsGroup } from "~/shell/tokens/operations";

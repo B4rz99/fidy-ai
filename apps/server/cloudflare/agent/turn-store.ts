@@ -1,3 +1,4 @@
+import { readCurrentMemories } from "../memory/operations";
 import {
   AssistantTranscriptEntry,
   CanonicalToolCallEntry,
@@ -22,8 +23,6 @@ import {
   UserId,
   UserTranscriptEntry,
   decideHostedAdmission,
-  memoriesFromRows,
-  memoryRowsQuery,
   terminalPrefixCursor,
 } from "@fidy/server/agent-runtime";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
@@ -426,14 +425,9 @@ export const readHostedContinuity = ({
       Option.isSome(admittedWhatsAppTurn) && isWhatsAppHosted(subject)
         ? hostedIdentity({ subject, current: now })
         : hostedAuthority({ subject, current: now });
-    const query = memoryRowsQuery({ userId: subject.userId, authority });
-    const memoryRows = yield* Effect.tryPromise(() =>
-      db
-        .prepare(query.sql)
-        .bind(...query.params)
-        .all()
+    const memories = Option.getOrThrow(
+      yield* readCurrentMemories({ db, userId: subject.userId, authority })
     );
-    const memories = Option.getOrThrow(memoriesFromRows(memoryRows.results));
     if (memories.length > maximumCurrentMemories) {
       throw new Error("Hosted Memory capacity exceeded");
     }

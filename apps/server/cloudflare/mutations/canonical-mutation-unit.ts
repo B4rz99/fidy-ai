@@ -7,7 +7,7 @@ import {
   dailyAuditBudget,
 } from "../atomic/daily-canonical-budget";
 import { KeywordRule, KeywordRuleId } from "@fidy/server/categories";
-import { Memory, MemoryId } from "@fidy/server/memory-runtime";
+import { Memory, MemoryId } from "@fidy/server/memory-contract";
 import { Budget, BudgetId } from "@fidy/server/budgets-runtime";
 import { StatementSubmission } from "@fidy/server/statement-staging";
 import { EmailForwardingAddress } from "../../src/core/ingestion/model";
@@ -34,7 +34,7 @@ import {
   transactionUnavailable,
 } from "../transactions/transaction-boundary";
 import { TransactionOutput } from "../transactions/transaction-history";
-import { findMemoryValue, memoryBudgetRefusal } from "./memory-outcome";
+import { findMemoryValue, memoryBudgetRefusal } from "../memory/operations";
 import {
   findTransactionValue,
   transactionBudgetRefusal,

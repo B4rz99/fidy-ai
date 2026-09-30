@@ -1,6 +1,6 @@
 import { operationCatalog } from "~/shell/api";
 import { matchesRouteTemplate } from "~/shell/_shared/route-template";
-import { memoryOperationIds } from "./operations";
+import { memoryOperationIds } from "./contract";
 
 const routes = memoryOperationIds.map((id) => {
   const operation = operationCatalog.byId.get(id);

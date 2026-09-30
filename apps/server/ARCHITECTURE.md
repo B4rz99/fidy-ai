@@ -35,6 +35,15 @@ published interfaces; implementation files and `internal/` modules remain privat
 import shell or platform code. Shell adapters load external values, pass plain values to core, and
 map typed domain failures to the public contract.
 
+Memory publishes browser-safe declarations in `core/memory/contract.ts` and
+`shell/memory/contract.ts`, pure capacity decisions in `core/memory/operations.ts`, and
+inference-backed aggregate admission in `shell/memory/operations.ts`. Its substantive Cloudflare
+`memory/operations.ts` owns remember, recall, revise, forget, atomic-mutation preparation and
+readback, and explicit-User hosted-context reads. D1 projections and writes stay in
+`memory/internal/`; neither agent publication nor a Memory runtime barrel exports repositories or
+storage rows. Memory earns no separate runtime construction: HostedInference remains its independent
+published dependency, constructed by the User coordinator only where required.
+
 The canonical operation definition is the source for reflected operation ids, access metadata,
 suggested operations, OpenAPI, MCP definitions, and hosted-agent tool descriptions. The reflected
 registries remain complete even when their execution implementation is unavailable; a registry entry

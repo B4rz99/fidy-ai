@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Schema } from "effect";
-import { MemoryText, MemoryTextInput, RememberInput, ReviseInput } from "./model";
+import { MemoryText, MemoryTextInput, RememberInput, ReviseInput } from "./contract";
 
 const decode = Schema.decodeUnknownSync(MemoryTextInput);
 

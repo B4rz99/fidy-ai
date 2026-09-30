@@ -5,7 +5,7 @@ import type {
   KeywordRule,
   KeywordRuleId,
 } from "@fidy/server/categories";
-import type { Memory, MemoryId } from "@fidy/server/memory-runtime";
+import type { Memory, MemoryId } from "@fidy/server/memory-contract";
 import type { Budget, BudgetId } from "@fidy/server/budgets-runtime";
 import type { StatementSubmission } from "@fidy/server/statement-staging";
 import type { EmailForwardingAddress } from "../../src/core/ingestion/model";

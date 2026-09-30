@@ -1,9 +1,10 @@
-import { browserSession, createWebSession } from "../web-session/operations";
+import { browserSession, prepareWebSessionIssuance } from "@fidy/server/web-session-runtime";
 import {
   BrowserLoginPairingId,
   BrowserLoginPublicCodeSymbols,
   decideBrowserLoginRedemption,
   formatPublicCode,
+  maximumWrongVerifierAttempts,
   selectPublicCodeSymbols,
 } from "@fidy/server/identity-runtime";
 import { BackupRecoveryCode } from "@fidy/server/client";
@@ -15,6 +16,7 @@ const PairingProof = Schema.Struct({
   privateVerifier: Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/u)),
 });
 const Pairing = Schema.Struct({
+  user_id: Schema.NullOr(Schema.String.check(Schema.isUUID())),
   verifier_digest: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))),
   expires_at_ms: Schema.Finite,
   wrong_attempts: Schema.Int,
@@ -230,7 +232,7 @@ export const redeemBrowserPairing = ({
         const raw = yield* attempt(() =>
           db
             .prepare(
-              `SELECT verifier_digest, expires_at_ms, wrong_attempts, state,
+              `SELECT user_id, verifier_digest, expires_at_ms, wrong_attempts, state,
         last_poll_at_ms, minimum_poll_interval_seconds
       FROM browser_login_pairings WHERE id = ?`
             )
@@ -292,8 +294,32 @@ const redeemValidProof = (
         decision,
       });
     }
-    if (decision._tag !== "Consume") return invalid();
-    return yield* createWebSession({ db, pairingId: proof.pairingId, current });
+    if (decision._tag !== "Consume" || pairing.user_id === null) return invalid();
+    return yield* consumeApprovedPairing(db, {
+      pairingId: proof.pairingId,
+      userId: pairing.user_id,
+      current,
+    });
+  });
+
+const consumeApprovedPairing = (
+  db: D1Database,
+  input: Readonly<{ pairingId: string; userId: string; current: number }>
+): Effect.Effect<Response, void> =>
+  Effect.gen(function* () {
+    const issued = yield* prepareWebSessionIssuance({ db, ...input });
+    const committed = yield* attempt(() =>
+      db.batch([
+        db
+          .prepare(
+            `UPDATE browser_login_pairings SET state = 'consumed' WHERE id = ? AND state = 'ready' AND expires_at_ms > ? AND wrong_attempts < ?`
+          )
+          .bind(input.pairingId, input.current, maximumWrongVerifierAttempts),
+        issued.statement,
+      ])
+    );
+    const inserted = committed[1];
+    return inserted ? issued.complete(inserted) : invalid();
   });
 
 const recordWrongVerifier = ({

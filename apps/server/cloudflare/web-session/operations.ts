@@ -17,7 +17,6 @@ import {
   PlatformError,
   Schema,
 } from "effect";
-import { maximumWrongVerifierAttempts } from "../../src/core/browser-login/rules";
 import { SqlClient } from "effect/unstable/sql";
 
 /** Resolve canonical browser authority without extending idle life or bypassing Consent. */
@@ -253,48 +252,51 @@ const projectCurrentUser = ({
     });
   });
 
-/** Establish one session after BrowserLoginPairing has verified its private proof; consumption and issuance are atomic. */
-export const createWebSession = ({
+/** Prepare issuance for the User proved by BrowserLoginPairing. The caller must atomically consume
+ * that pairing with this statement and pass its successful insertion result to complete. Preparation
+ * grants no authority; the private bearer remains captured until the committed response is released. */
+export const prepareWebSessionIssuance = ({
   db,
   pairingId,
+  userId,
   current,
-}: Readonly<{ db: D1Database; pairingId: string; current: number }>): Effect.Effect<
-  Response,
+}: Readonly<{ db: D1Database; pairingId: string; userId: string; current: number }>): Effect.Effect<
+  Readonly<{
+    statement: D1PreparedStatement;
+    complete: (result: D1Result) => Response;
+  }>,
   void
 > =>
   Effect.gen(function* () {
-    const token = Encoding.encodeBase64Url(crypto.getRandomValues(new Uint8Array(digestBytes)));
+    const token = Encoding.encodeBase64Url(
+      yield* workerCrypto.randomBytes(digestBytes).pipe(Effect.orDie)
+    );
     const deadlines = calculateWebSessionDeadlines(DateTime.makeUnsafe(current));
     const tokenDigest = yield* attempt(() => sha256(token));
-    const committed = yield* attempt(() =>
-      db.batch([
-        db
-          .prepare(
-            `UPDATE browser_login_pairings SET state = 'consumed' WHERE id = ? AND state = 'ready' AND expires_at_ms > ? AND wrong_attempts < ?`
-          )
-          .bind(pairingId, current, maximumWrongVerifierAttempts),
-        db
-          .prepare(
-            `INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms,
-        fresh_until_ms, idle_expires_at_ms, hard_expires_at_ms)
-      SELECT ?, p.id, p.user_id, ?, ?, ?, ?, ? FROM browser_login_pairings AS p
-      WHERE p.id = ? AND p.state = 'consumed' AND p.user_id IS NOT NULL`
-          )
-          .bind(
-            uuid(),
-            tokenDigest,
-            current,
-            DateTime.toEpochMillis(deadlines.freshUntil),
-            DateTime.toEpochMillis(deadlines.idleExpiresAt),
-            DateTime.toEpochMillis(deadlines.hardExpiresAt),
-            pairingId
-          ),
-      ])
-    );
-    if (committed[1]?.meta.changes !== 1) return invalid();
-    return json({ status: "authenticated" }, HTTP_OK, {
-      "set-cookie": sessionSetCookie(token),
-    });
+    const statement = db
+      .prepare(`INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms,
+    fresh_until_ms, idle_expires_at_ms, hard_expires_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(
+        uuid(),
+        pairingId,
+        userId,
+        tokenDigest,
+        current,
+        DateTime.toEpochMillis(deadlines.freshUntil),
+        DateTime.toEpochMillis(deadlines.idleExpiresAt),
+        DateTime.toEpochMillis(deadlines.hardExpiresAt)
+      );
+    let disclosed = false;
+    return {
+      statement,
+      complete: (result: D1Result): Response => {
+        if (disclosed || !result.success || result.meta.changes !== 1) return invalid();
+        disclosed = true;
+        return json({ status: "authenticated" }, HTTP_OK, {
+          "set-cookie": sessionSetCookie(token),
+        });
+      },
+    };
   });
 
 const HTTP_OK = 200;

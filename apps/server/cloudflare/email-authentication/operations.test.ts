@@ -1,36 +1,29 @@
 import { handleWebAuthentication } from "../web-authentication/operations";
+import { UserId } from "../../src/core/identity/contract";
+import { EmailAddress } from "@fidy/server/client";
+import {
+  prepareOnboardingCredential,
+  prepareOnboardingMailbox,
+  prepareVerifiedEmailRead,
+  readOnboardingEmailStatus,
+  readOnboardingMailboxReplay,
+} from "./operations";
+import { observeOperationalHealth } from "../runtime/operational-health";
+import { Miniflare } from "miniflare";
+import { afterEach, expect, it, vi } from "vitest";
+import { startBrowserPairing } from "../browser-login/operations";
+import { internals as pairingDelivery } from "./internal/pairing-delivery";
+import { dispatchBrowserPairingEmail, dispatchEmailReplacement } from "./runtime";
+import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
+import { internals as replacementDelivery } from "./internal/replacement-delivery";
+import { SignJWT, exportJWK, generateKeyPair } from "jose";
+import coreWorker, { makeCoreWorker } from "../core-worker";
+import { DisabledTelemetryResource, makeTelemetryService } from "@fidy/server/telemetry";
+import { handleSupportRecovery } from "../recovery/operations";
+import publicWorker from "../public-worker";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 
-import { DisabledTelemetryResource, makeTelemetryService } from "@fidy/server/telemetry";
-
-import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
-
-import { SignJWT, exportJWK, generateKeyPair } from "jose";
-
-import { Miniflare } from "miniflare";
-
-import { afterEach, expect, it, vi } from "vitest";
-
-import coreWorker, { makeCoreWorker } from "../core-worker";
-
-import { prepareOnboardingCredential } from "./operations";
-
-import { startBrowserPairing } from "../browser-login/operations";
-
-import { handleSupportRecovery } from "../recovery/operations";
-
-import publicWorker from "../public-worker";
-
-import { observeOperationalHealth } from "../runtime/operational-health";
-
-import { internals as pairingDelivery } from "./internal/pairing-delivery";
-
-import { dispatchBrowserPairingEmail, dispatchEmailReplacement } from "./runtime";
-
-import { internals as replacementDelivery } from "./internal/replacement-delivery";
-
 const { deliverBrowserPairingEmail } = pairingDelivery;
-
 const { deliverEmailReplacement } = replacementDelivery;
 
 it("leaves mailbox proof redeemable after the published owner rejects oversized input", () =>
@@ -45,6 +38,104 @@ it("leaves mailbox proof redeemable after the published owner rejects oversized 
       expect(Option.isNone(refused)).toBe(true);
       expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
       expect((yield* Effect.tryPromise(() => send(code))).status).toBe(400);
+    })
+  ));
+
+it("reports mailbox delivery state without exposing the pending enrollment", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db } = yield* Effect.tryPromise(() => setup());
+      expect(yield* readOnboardingEmailStatus({ db, exchangeId: exchange })).toBe("awaiting_proof");
+      expect(
+        yield* readOnboardingEmailStatus({ db, exchangeId: "10000000-0000-4000-8000-000000000099" })
+      ).toBe("awaiting_email");
+    })
+  ));
+
+it("composes a verified mailbox read for one explicit User without exposing another User's credential", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, send } = yield* Effect.tryPromise(() => setup());
+      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
+      const raw = yield* Effect.tryPromise(() =>
+        db.prepare("SELECT id FROM users LIMIT 1").first()
+      );
+      const first = yield* Schema.decodeUnknownEffect(Schema.Struct({ id: UserId }))(raw);
+      const second = UserId.make("10000000-0000-4000-8000-000000000088");
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db
+            .prepare(
+              "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES(?,'CO','es-CO','America/Bogota',1)"
+            )
+            .bind(second),
+          db
+            .prepare(
+              "INSERT INTO verified_email_credentials(user_id,email_address,verified_at_ms) VALUES(?,'other@example.test',1)"
+            )
+            .bind(second),
+        ])
+      );
+      const own = prepareVerifiedEmailRead({ db, userId: first.id });
+      const other = prepareVerifiedEmailRead({ db, userId: second });
+      const results = yield* Effect.tryPromise(() => db.batch([own.statement, other.statement]));
+      expect(
+        yield* own.decode(yield* Effect.fromOption(Option.fromUndefinedOr(results[0])))
+      ).toEqual(Option.some("person@example.test"));
+      expect(
+        yield* other.decode(yield* Effect.fromOption(Option.fromUndefinedOr(results[1])))
+      ).toEqual(Option.some("other@example.test"));
+    })
+  ));
+
+it("accepts exactly the original mailbox evidence as replay and refuses altered evidence", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db } = yield* Effect.tryPromise(() => setup());
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("DELETE FROM pending_email_enrollments WHERE exchange_id = ?")
+          .bind(exchange)
+          .run()
+      );
+      expect(
+        yield* readOnboardingMailboxReplay({
+          db,
+          exchangeId: exchange,
+          messageId: "mailbox",
+          digest: "a".repeat(64),
+        })
+      ).toBe("missing");
+      const current = yield* Clock.currentTimeMillis;
+      const email = yield* Schema.decodeEffect(EmailAddress)("person@example.test");
+      yield* Effect.tryPromise(() =>
+        prepareOnboardingMailbox({
+          db,
+          id: enrollment,
+          exchangeId: exchange,
+          email,
+          messageId: "mailbox",
+          digest: "a".repeat(64),
+          createdAtMs: current,
+          expiresAtMs: current + 600_000,
+        }).run()
+      );
+      expect(
+        yield* readOnboardingMailboxReplay({
+          db,
+          exchangeId: exchange,
+          messageId: "mailbox",
+          digest: "a".repeat(64),
+        })
+      ).toBe("replay");
+      expect(
+        yield* readOnboardingMailboxReplay({
+          db,
+          exchangeId: exchange,
+          messageId: "mailbox",
+          digest: "b".repeat(64),
+        })
+      ).toBe("conflict");
     })
   ));
 
@@ -68,15 +159,10 @@ const encodeJson = (value: unknown): string =>
   Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(value);
 
 const mfInstances: Array<Miniflare> = [];
-
 const exchange = "10000000-0000-4000-8000-000000000001";
-
 const enrollment = "10000000-0000-4000-8000-000000000002";
-
 const code = "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ";
-
 let nextDatabase = 0;
-
 const digest = (text: string): Promise<Uint8Array> =>
   crypto.subtle
     .digest("SHA-256", new TextEncoder().encode(text))
@@ -1491,6 +1577,39 @@ it("does not impose a shared login lockout after concurrent pairing starts", () 
       );
       expect(starts.every((response) => response.status === 200)).toBe(true);
       expect((yield* Effect.tryPromise(() => startBrowserPairing(db))).status).toBe(200);
+    })
+  ));
+
+it("counts concurrent wrong verifiers atomically before permitting another browser proof", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, sendRequest } = yield* Effect.tryPromise(() => setup());
+      const pairing = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
+      )(
+        yield* Effect.tryPromise(() => startBrowserPairing(db).then((response) => response.json()))
+      );
+      const redeem = (privateVerifier: string): Promise<Response> =>
+        sendRequest(
+          new Request("https://api.fidyapp.com/web/pairings/redeem", {
+            method: "POST",
+            headers: { "content-type": "application/json", origin: "https://app.fidyapp.com" },
+            body: encodeJson({ pairingId: pairing.pairingId, privateVerifier }),
+          })
+        );
+      const rejected = yield* Effect.tryPromise(() =>
+        Promise.all(Array.from({ length: 5 }, () => redeem("A".repeat(43))))
+      );
+      expect(rejected.map((response) => response.status)).toEqual([400, 400, 400, 400, 400]);
+      expect((yield* Effect.tryPromise(() => redeem(pairing.privateVerifier))).status).toBe(400);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT state, wrong_attempts FROM browser_login_pairings WHERE id = ?")
+            .bind(pairing.pairingId)
+            .first()
+        )
+      ).toEqual({ state: "invalidated", wrong_attempts: 5 });
     })
   ));
 

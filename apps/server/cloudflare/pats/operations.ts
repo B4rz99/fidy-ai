@@ -1,3 +1,4 @@
+import { browserSession } from "@fidy/server/web-session-runtime";
 import { claimPATPairing } from "./internal/pat-claim";
 import { approvePATPairing, inspectPATPairing, startPATPairing } from "./internal/pat-pairing";
 import { createManualPAT, revokeAllPATs, revokePAT } from "./internal/pat-management";
@@ -39,7 +40,6 @@ import {
   unauthorized,
   serviceUnavailable as unavailable,
   validBearer,
-  webSession,
 } from "./internal/pat-shared";
 
 const StoredPAT = Schema.Struct({ ...PATRow.fields, bearer_digest: Schema.Array(Schema.Int) });
@@ -130,7 +130,9 @@ export const listPATs = ({
 }: Readonly<{ request: Request; db: D1Database }>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const session = yield* Effect.tryPromise(() => webSession({ request, db, fresh: false }));
+      const session = yield* Effect.tryPromise(() =>
+        browserSession({ request, db, input: { current: currentMillis(), fresh: false } })
+      );
       if (Option.isNone(session)) return unauthorized();
       const current = currentMillis();
       return yield* Effect.gen(function* () {
@@ -139,7 +141,7 @@ export const listPATs = ({
             db.batch([
               prepareOwnedStatement({
                 db,
-                statement: patMetadataQuery({ userId: session.value.user_id, current, session }),
+                statement: patMetadataQuery({ userId: session.value.userId, current, session }),
               }),
               prepareOwnedStatement({
                 db,

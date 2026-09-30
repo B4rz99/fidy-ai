@@ -1,3 +1,5 @@
+import type { FreshSessionSubject } from "@fidy/server/web-session";
+import { browserSession } from "@fidy/server/web-session-runtime";
 import {
   CreateManualPATPayload,
   IssuedManualPATResponse,
@@ -15,7 +17,6 @@ import { issueManualPAT, recordSessionPATTransition } from "@fidy/server/tokens-
 import { type Cause, DateTime, Effect, Option, Redacted, Result, Schema } from "effect";
 import { grantManualPATConsent } from "@fidy/server/consent-pat";
 import {
-  type SessionRow,
   canonical,
   currentMillis,
   dayMilliseconds,
@@ -35,7 +36,6 @@ import {
   response,
   unauthorized,
   serviceUnavailable as unavailable,
-  webSession,
 } from "./pat-shared";
 import { commitPATUnit } from "./pat-unit";
 import { prepareOwnedStatement } from "../../atomic/operations";
@@ -97,7 +97,7 @@ const consumed = (): Response =>
   });
 type Issuance = Readonly<{
   input: CreateManualPATPayload;
-  session: SessionRow;
+  session: FreshSessionSubject;
   current: number;
   expires: number;
   patId: string;
@@ -166,7 +166,7 @@ const issuedResponse = (issue: Issuance): Response => {
   const { input, session, current, expires, patId, shortId, bearer } = issue;
   const pat = patFrom({
     id: patId,
-    user_id: session.user_id,
+    user_id: session.userId,
     short_id: shortId,
     recipient_label: input.grant.recipientLabel,
     scopes_json: JSON.stringify(input.grant.scopes),
@@ -230,7 +230,9 @@ export const createManualPAT = ({
 }: Readonly<{ request: Request; db: D1Database }>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const session = yield* Effect.tryPromise(() => webSession({ request, db, fresh: true }));
+      const session = yield* Effect.tryPromise(() =>
+        browserSession({ request, db, input: { current: currentMillis(), fresh: true } })
+      );
       if (Option.isNone(session)) return unauthorized();
       const input = yield* Effect.tryPromise(() =>
         decodeBody({ request, schema: Schema.toCodecJson(CreateManualPATPayload) })
@@ -254,6 +256,6 @@ export const createManualPAT = ({
         const issued = yield* Effect.try(() => issuedResponse(issue)).pipe(Effect.result);
         if (Result.isSuccess(issued)) return issued.success;
       }
-      return yield* failedIssuance(db, input.value.requestId, session.value.user_id);
+      return yield* failedIssuance(db, input.value.requestId, session.value.userId);
     })
   );

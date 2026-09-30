@@ -1,4 +1,9 @@
 import {
+  currentUser,
+  logoutBrowser,
+  canonicalBrowserSession as transactionSession,
+} from "./web-session/operations";
+import {
   ScopeMissing,
   UserActionRequired,
   categoryUnavailable,
@@ -30,11 +35,7 @@ import {
   recoverPendingDisclosures,
   sweepExpiredConsent,
 } from "./onboarding/consent-ingress";
-import {
-  transactionInput,
-  transactionSession,
-  unauthenticatedTransaction,
-} from "./transactions/transactions";
+import { transactionInput, unauthenticatedTransaction } from "./transactions/transactions";
 import {
   type TransactionCaller,
   isPATCaller,
@@ -108,8 +109,6 @@ import {
   listOwnKeywordRules,
 } from "./categories/canonical-keyword-rules";
 import {
-  currentUser,
-  logoutBrowser,
   redeemBrowserPairing,
   rotateBackupRecoveryCode,
   startBrowserPairing,

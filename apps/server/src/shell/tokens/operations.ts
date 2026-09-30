@@ -14,7 +14,7 @@ import {
   type FreshSessionSubject,
   freshSessionExists,
   freshSessionParams,
-} from "~/shell/identity/browser-runtime";
+} from "~/shell/web-session/operations";
 import type { CanonicalCapability } from "~/core/canonical-operations/contract";
 import type { AuditedPATOperation } from "./contract";
 
@@ -48,7 +48,7 @@ export const issueManualPAT = ({
     AND (SELECT count(*) FROM pats WHERE user_id = ? AND issued_at_ms > ?) < ?`,
   params: [
     input.patId,
-    session.user_id,
+    session.userId,
     input.shortId,
     input.bearerDigest,
     input.grant.recipientLabel,
@@ -59,11 +59,11 @@ export const issueManualPAT = ({
     input.expires,
     input.requestId,
     ...freshSessionParams({ session, time: input.current }),
-    session.user_id,
-    session.user_id,
+    session.userId,
+    session.userId,
     input.current,
     maxActivePATs,
-    session.user_id,
+    session.userId,
     input.current - issuanceWindowMilliseconds,
     maxIssuancesPerUserWindow,
   ],
@@ -79,13 +79,13 @@ export const approvePairingGrant = ({
     WHERE id = ? AND state = 'pending_approval' AND expires_at_ms > ? AND ${freshSessionExists}
     AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = ?)`,
   params: [
-    session.user_id,
+    session.userId,
     input.current,
     input.expires,
     input.pairingId,
     input.current,
     ...freshSessionParams({ session, time: input.current }),
-    session.user_id,
+    session.userId,
   ],
 });
 
@@ -221,7 +221,7 @@ export const revokeOnePAT = ({
     AND r.session_id = ? AND r.occurred_at_ms = ?)`,
   params: [
     input.current,
-    session.user_id,
+    session.userId,
     input.shortId,
     input.current,
     ...freshSessionParams({ session, time: input.current }),
@@ -240,7 +240,7 @@ export const revokeEveryPAT = ({
     AND EXISTS (SELECT 1 FROM pat_revocation_consents r WHERE r.pat_id = pats.id AND r.session_id = ?)`,
   params: [
     current,
-    session.user_id,
+    session.userId,
     current,
     ...freshSessionParams({ session, time: current }),
     session.id,
@@ -255,7 +255,7 @@ export const revokeEveryPairing = ({
   sql: `UPDATE pat_pairings SET state = 'revoked_unclaimed' WHERE user_id = ?
     AND state = 'approved_awaiting_claim' AND ${freshSessionExists}
     AND EXISTS (SELECT 1 FROM pat_revocation_consents r WHERE r.pairing_id = pat_pairings.id AND r.session_id = ?)`,
-  params: [session.user_id, ...freshSessionParams({ session, time: current }), session.id],
+  params: [session.userId, ...freshSessionParams({ session, time: current }), session.id],
 });
 
 /** Apply scheduled policy expiry only to approvals backed by their append-only Consent evidence. */
@@ -457,14 +457,14 @@ export const recordSessionPATTransition = ({
     ? {
         sql: `INSERT INTO pat_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
         SELECT ?,?,?,?,'accepted',? WHERE changes() = 1`,
-        params: [input.id, session.user_id, session.id, input.operation, input.current],
+        params: [input.id, session.userId, session.id, input.operation, input.current],
       }
     : {
         sql: `INSERT INTO pat_audit (id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms)
         SELECT ?,?,?,?,?,'accepted',? WHERE changes() = 1`,
         params: [
           input.id,
-          session.user_id,
+          session.userId,
           session.id,
           input.patId.value,
           input.operation,
@@ -492,14 +492,14 @@ export const recordPATList = ({
     AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = ?)`,
   params: [
     input.id,
-    session.user_id,
+    session.userId,
     session.id,
     input.current,
     session.id,
-    session.user_id,
+    session.userId,
     input.current,
     input.current,
-    session.user_id,
+    session.userId,
   ],
 });
 
@@ -512,7 +512,7 @@ export const recordOnePATRevocation = ({
   sql: `INSERT INTO pat_audit (id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms)
     SELECT ?,?,?,id,'pats.revokePAT','accepted',? FROM pats
     WHERE user_id = ? AND short_id = ? AND changes() = 1`,
-  params: [input.id, session.user_id, session.id, input.current, session.user_id, input.shortId],
+  params: [input.id, session.userId, session.id, input.current, session.userId, input.shortId],
 });
 
 /** The revoke-all audit is guarded by the same fresh User decision as its PAT transition. */
@@ -524,7 +524,7 @@ export const recordAllPATRevocations = ({
     SELECT ?,?,?,'pats.revokeAllPATs','accepted',? WHERE ${freshSessionExists}`,
   params: [
     input.id,
-    session.user_id,
+    session.userId,
     session.id,
     input.current,
     ...freshSessionParams({ session, time: input.current }),
@@ -621,7 +621,7 @@ export const patMetadataQuery = ({
   params: [
     userId,
     current,
-    ...(Option.isSome(session) ? [session.value.id, session.value.user_id, current, current] : []),
+    ...(Option.isSome(session) ? [session.value.id, session.value.userId, current, current] : []),
   ],
 });
 

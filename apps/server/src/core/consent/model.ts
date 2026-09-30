@@ -5,7 +5,7 @@ import { UserId, WhatsAppCallerReference } from "~/core/identity/reference";
 import { InsightKind } from "~/core/insights/reference";
 import { PATId } from "~/core/tokens/reference";
 import { UtcTimestamp } from "~/core/_shared/time";
-import { WebSessionId } from "~/core/web-session/reference";
+import { WebSessionId } from "~/core/web-session/contract";
 import {
   ConsentRecordId,
   DisclosureRevision,

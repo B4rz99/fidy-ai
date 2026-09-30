@@ -25,7 +25,8 @@ import { newId } from "../platform/operations";
 import { transactionNow } from "./transaction-boundary";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
-import { transactionInput, transactionSession } from "./transactions";
+import { transactionInput } from "./transactions";
+import { canonicalBrowserSession as transactionSession } from "../web-session/operations";
 import { browseTransactions } from "./transaction-history";
 import { dailyAuditCount } from "../atomic/daily-canonical-budget";
 

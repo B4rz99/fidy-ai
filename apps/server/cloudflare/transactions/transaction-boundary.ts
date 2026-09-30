@@ -4,7 +4,7 @@ import {
   type ErrorCode,
   atomicBatchOperation,
 } from "@fidy/server/canonical-runtime";
-import { type WebSessionAuthority, liveWebSessionAuthority } from "@fidy/server/identity-runtime";
+import { type WebSessionAuthority, liveWebSessionAuthority } from "@fidy/server/web-session";
 import {
   type AuditedPATMutation,
   type PATAuthority,

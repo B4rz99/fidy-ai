@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
-import { WebSessionBearer } from "./reference";
+import { WebSessionBearer } from "./contract";
 
 const decodeBearer = Schema.decodeUnknownResult(WebSessionBearer);
 const validBearer = "A".repeat(43);

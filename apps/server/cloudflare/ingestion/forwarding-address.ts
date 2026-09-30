@@ -1,6 +1,6 @@
 import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
-import { activeProUserParams, activeProUserSql } from "../access-tier";
+import { activeProUserPredicate } from "@fidy/server/access-tier";
 import { refusedByAuditBudget } from "../audit/audit-triggers";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import {
@@ -38,12 +38,13 @@ export type ForwardingAddressOperation =
 
 const rows = (db: D1Database, userId: string, current: number): D1PreparedStatement => {
   const period = emailAllowancePeriod(DateTime.makeUnsafe(current));
+  const pro = activeProUserPredicate({ userId, nowEpochMs: current });
   return db
     .prepare(
       `SELECT a.id, a.local_part, a.created_at_ms,
       (SELECT count(*) FROM forwarded_email_receipts r WHERE r.user_id = a.user_id
        AND r.received_at_ms >= ? AND r.received_at_ms < ?) AS consumed,
-      ${activeProUserSql} AS pro
+      ${pro.sql} AS pro
      FROM email_forwarding_addresses a WHERE a.user_id = ?
        AND EXISTS (SELECT 1 FROM onboarding_consent_records c WHERE c.user_id = a.user_id)
        AND NOT EXISTS (SELECT 1 FROM consent_user_revocations c WHERE c.user_id = a.user_id)`
@@ -51,7 +52,7 @@ const rows = (db: D1Database, userId: string, current: number): D1PreparedStatem
     .bind(
       DateTime.toEpochMillis(period.from),
       DateTime.toEpochMillis(period.toExclusive),
-      ...activeProUserParams({ userId, nowEpochMs: current }),
+      ...pro.params,
       userId
     );
 };

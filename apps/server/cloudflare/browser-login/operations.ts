@@ -1,4 +1,4 @@
-import { BrowserLoginPairingId } from "../../src/core/browser-login/reference";
+import { BrowserLoginPairingId } from "../../src/core/browser-login/contract";
 import {
   BrowserLoginPrivateVerifier,
   BrowserLoginPublicCodeSymbols,
@@ -13,6 +13,7 @@ import {
 import { calculateWebSessionDeadlines } from "../../src/core/web-session/operations";
 import type { UserId } from "../../src/core/identity/reference";
 import { Clock, DateTime, Effect, Encoding, Option, Schema } from "effect";
+import { pairingId as newPairingId } from "./internal/worker-crypto";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
 
 const Proof = Schema.Struct({
@@ -102,7 +103,7 @@ export const startBrowserPairing = (db: D1Database): Promise<Response> =>
       const privateVerifier = Encoding.encodeBase64Url(
         crypto.getRandomValues(new Uint8Array(digestBytes))
       );
-      const pairingId = crypto.randomUUID();
+      const pairingId = newPairingId();
       const proofDigest = yield* attempt(() => digest(privateVerifier));
       const result = yield* attempt(() =>
         db
@@ -190,7 +191,7 @@ export const verifyPendingBrowserPairing = ({
 }): Promise<Option.Option<number>> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const proof = Schema.decodeUnknownOption(Proof)({ pairingId, privateVerifier });
+      const proof = Schema.decodeOption(Proof)({ pairingId, privateVerifier });
       if (Option.isNone(proof)) return Option.none();
       const raw = yield* attempt(() =>
         db
@@ -321,7 +322,7 @@ export const redeemBrowserPairing = ({
       SELECT ?, p.id, p.user_id, ?, ?, ?, ?, ? FROM browser_login_pairings AS p
       WHERE p.id = ? AND p.state = 'consumed' AND p.user_id IS NOT NULL`)
             .bind(
-              crypto.randomUUID(),
+              newPairingId(),
               tokenDigest,
               current,
               DateTime.toEpochMillis(deadlines.freshUntil),

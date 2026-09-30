@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { NodeFileSystem } from "@effect/platform-node";
 import { handleWebAuthentication } from "../web-authentication/operations";
 import { observeOperationalHealth } from "../runtime/operational-health";
 import { Miniflare } from "miniflare";
@@ -8,7 +8,7 @@ import {
   deliverBrowserPairingEmail,
   dispatchBrowserPairingEmail,
 } from "../identity/browser-pairing-email-delivery";
-import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
+import { Cause, Clock, Effect, Exit, FileSystem, Option, Schema } from "effect";
 import {
   deliverEmailReplacement,
   dispatchEmailReplacement,
@@ -100,7 +100,10 @@ const setup = (
       yield* Effect.tryPromise(() => mf.ready);
       const db = yield* Effect.tryPromise(() => mf.getD1Database("DB"));
       const applyMigration = (name: string): Promise<void> =>
-        readFile(new URL(`../migrations/${name}.sql`, import.meta.url), "utf8").then((sql) =>
+        Effect.runPromise(Effect.gen(function* () {
+          const files = yield* FileSystem.FileSystem;
+          return yield* files.readFileString(new URL(`../migrations/${name}.sql`, import.meta.url).pathname);
+        }).pipe(Effect.provide(NodeFileSystem.layer))).then((sql) =>
           sql
             .replace(/^--.*$/gmu, "")
             .trim()

@@ -1,6 +1,6 @@
 import { DateTime, Schema } from "effect";
 import { UtcTimestamp } from "~/core/_shared/time";
-import { BrowserLoginPairingId } from "~/core/browser-login/reference";
+import { BrowserLoginPairingId } from "~/core/browser-login/contract";
 import { UserId } from "~/core/identity/reference";
 
 const sha256ByteLength = 32;

@@ -12,7 +12,7 @@ import {
   StartedBrowserLoginPairing,
   browserLoginPollingIntervalSeconds,
 } from "~/core/browser-login/contract";
-import { BrowserLoginPairingId } from "~/core/browser-login/reference";
+import { BrowserLoginPairingId } from "~/core/browser-login/contract";
 import { EmailAddress, EmailVerificationCode } from "~/core/email-authentication/contract";
 import { browserPairingEmailRetryAfterSeconds } from "~/core/email-authentication/rules";
 import { BackupRecoveryCode } from "~/core/recovery/contract";

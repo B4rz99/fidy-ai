@@ -2,7 +2,7 @@ import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
-import { BrowserLoginPairingId } from "~/core/browser-login/reference";
+import { BrowserLoginPairingId } from "~/core/browser-login/contract";
 import {
   type CanonicalRejectedFailure,
   NextOperations,

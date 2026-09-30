@@ -1,29 +1,36 @@
 import { EmailAddress, EmailVerificationCode } from "@fidy/server/client";
-import { BrowserLoginPairingId } from "../../src/core/browser-login/reference";
-import { decidePendingBrowserLoginProof } from "../../src/core/browser-login/rules";
+
+import { BrowserLoginPairingId } from "../../../src/core/browser-login/reference";
+import { decidePendingBrowserLoginProof } from "../../../src/core/browser-login/operations";
+
 import { Clock, Crypto, DateTime, Effect, Option, PlatformError, Schema } from "effect";
-import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
+
+import { RequestBodyPolicy, readBoundedRequestBody } from "../../http/request-body";
 
 const Start = Schema.Struct({
   pairingId: BrowserLoginPairingId,
   privateVerifier: Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/u)),
   email: EmailAddress,
 });
+
 const Complete = Schema.Struct({
   pairingId: BrowserLoginPairingId,
   privateVerifier: Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/u)),
   combinedCode: EmailVerificationCode,
 });
+
 const Pairing = Schema.Struct({
   state: Schema.Literals(["pending_approval", "ready", "consumed", "invalidated"]),
   verifier_digest: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))),
   wrong_attempts: Schema.Int,
   expires_at_ms: Schema.Finite,
 });
+
 const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 512,
-  deadlineMilliseconds: 2_000,
+  deadlineMilliseconds: 2000,
 });
+
 const workerCrypto = Crypto.make({
   randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),
   digest: (algorithm, data) =>
@@ -41,11 +48,17 @@ const workerCrypto = Crypto.make({
         }),
     }),
 });
+
 const newId = (): string => Effect.runSync(workerCrypto.randomUUIDv4.pipe(Effect.orDie));
+
 const digestLength = 32;
-const emailCooldownMilliseconds = 60_000;
+
+const emailCooldownMilliseconds = 60000;
+
 const publicCodeLength = 9;
+
 const secretOffset = 10;
+
 const invalid = (): Response =>
   Response.json(
     {
@@ -56,20 +69,24 @@ const invalid = (): Response =>
     },
     { status: 400, headers: { "cache-control": "no-store" } }
   );
+
 const pending = (): Response =>
   Response.json(
     { status: "pending", retryAfterSeconds: 60 },
     { status: 202, headers: { "cache-control": "no-store" } }
   );
+
 const unavailable = (): Response =>
   Response.json(
     { status: "unavailable" },
     { status: 503, headers: { "cache-control": "no-store" } }
   );
+
 const digest = (value: string): Promise<Uint8Array> =>
   crypto.subtle
     .digest("SHA-256", new TextEncoder().encode(value))
     .then((bytes) => new Uint8Array(bytes));
+
 const equalDigest = (left: ReadonlyArray<number>, right: Uint8Array): boolean => {
   if (left.length !== digestLength || right.length !== digestLength) return false;
   let difference = 0;
@@ -78,8 +95,10 @@ const equalDigest = (left: ReadonlyArray<number>, right: Uint8Array): boolean =>
   }
   return difference === 0;
 };
+
 const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, void> =>
   Effect.tryPromise({ try: run, catch: () => undefined });
+
 const readProof = <A>(request: Request, schema: Schema.Codec<A>): Promise<Option.Option<A>> => {
   if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
     return Promise.resolve(Option.none());
@@ -143,67 +162,6 @@ const checkPairing = (
     })
   );
 
-/** Start one bounded email proof only after the browser proves ownership of a pending pairing. */
-export const startBrowserPairingEmail = (input: {
-  request: Request;
-  db: D1Database;
-  onAccepted: (id: string) => void;
-}): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { request, db } = input;
-      const proof = yield* attempt(() => readProof(request, Start));
-      if (Option.isNone(proof)) return invalid();
-      const expiresAt = yield* attempt(() =>
-        checkPairing(db, proof.value.pairingId, proof.value.privateVerifier)
-      );
-      if (Option.isNone(expiresAt)) return invalid();
-      const current = yield* Clock.currentTimeMillis;
-      const workId = newId();
-      // The proof generation and outbox identity commit together; an unknown mailbox has no effect.
-      yield* attempt(() =>
-        db.batch([
-          db
-            .prepare(`INSERT INTO browser_pairing_email_proofs
-        (pairing_id, work_id, user_id, email_address, credential_verified_at_ms,
-         state, expires_at_ms, generation, last_requested_at_ms)
-        SELECT p.id, ?, v.user_id, v.email_address, v.verified_at_ms,
-          'awaiting_delivery', p.expires_at_ms, 1, ?
-        FROM browser_login_pairings AS p JOIN verified_email_credentials AS v ON v.email_address = ?
-        WHERE p.id = ? AND p.state = 'pending_approval' AND p.expires_at_ms > ?
-          AND p.expires_at_ms = ? AND p.wrong_attempts < 5
-        ON CONFLICT(pairing_id) DO UPDATE SET work_id = excluded.work_id,
-          email_address = excluded.email_address,
-          user_id = excluded.user_id,
-          credential_verified_at_ms = excluded.credential_verified_at_ms,
-          state = 'awaiting_delivery', generation = generation + 1,
-          last_requested_at_ms = excluded.last_requested_at_ms,
-          public_code = NULL, proof_digest = NULL, proof_expires_at_ms = NULL,
-          wrong_attempts = 0
-        WHERE browser_pairing_email_proofs.state NOT IN ('approved', 'sending')
-          AND browser_pairing_email_proofs.generation < 5
-          AND browser_pairing_email_proofs.last_requested_at_ms <= ?`)
-            .bind(
-              workId,
-              current,
-              proof.value.email,
-              proof.value.pairingId,
-              current,
-              expiresAt.value,
-              current - emailCooldownMilliseconds
-            ),
-          db
-            .prepare(`INSERT INTO browser_pairing_email_outbox (id, created_at_ms)
-        SELECT work_id, ? FROM browser_pairing_email_proofs
-        WHERE work_id = ? AND state = 'awaiting_delivery'`)
-            .bind(current, workId),
-        ])
-      );
-      input.onAccepted(workId);
-      return pending();
-    }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
-  );
-
 const rejectWrongEmailProof = (db: D1Database, workId: string): Promise<void> =>
   Effect.runPromise(
     attempt(() =>
@@ -221,7 +179,12 @@ const rejectWrongEmailProof = (db: D1Database, workId: string): Promise<void> =>
 
 const approveEmailPairing = (
   db: D1Database,
-  input: { pairingId: string; workId: string; publicCode: string; current: number }
+  input: {
+    pairingId: string;
+    workId: string;
+    publicCode: string;
+    current: number;
+  }
 ): Promise<boolean> => {
   const { pairingId, workId, publicCode, current } = input;
   return Effect.runPromise(
@@ -271,59 +234,26 @@ const EmailProofRow = Schema.Struct({
   work_id: Schema.String.check(Schema.isUUID()),
 });
 
-/** Consume a mailbox proof and bind only its credential's stable User to the same browser challenge. */
-export const completeBrowserPairingEmail = (input: {
-  request: Request;
-  db: D1Database;
-}): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { request, db } = input;
-      const proof = yield* attempt(() => readProof(request, Complete));
-      if (Option.isNone(proof)) return invalid();
-      {
-        const expiresAt = yield* attempt(() =>
-          checkPairing(db, proof.value.pairingId, proof.value.privateVerifier)
-        );
-        if (Option.isNone(expiresAt)) return invalid();
-        const current = yield* Clock.currentTimeMillis;
-        const publicCode = proof.value.combinedCode.slice(0, publicCodeLength);
-        const raw = yield* attempt(() =>
-          db
-            .prepare(`SELECT proof_digest, wrong_attempts, work_id
-      FROM browser_pairing_email_proofs WHERE pairing_id = ? AND public_code = ?
-        AND state = 'awaiting_proof' AND proof_expires_at_ms > ? AND expires_at_ms > ?`)
-            .bind(proof.value.pairingId, publicCode, current, current)
-            .first()
-        );
-        if (raw === null) return invalid();
-        const row = Schema.decodeUnknownOption(EmailProofRow)(raw);
-        if (Option.isNone(row)) return unavailable();
-        if (
-          !equalDigest(
-            row.value.proof_digest,
-            yield* attempt(() => digest(proof.value.combinedCode.slice(secretOffset)))
-          )
-        ) {
-          yield* attempt(() => rejectWrongEmailProof(db, row.value.work_id));
-          return invalid();
-        }
-        if (
-          !(yield* attempt(() =>
-            approveEmailPairing(db, {
-              pairingId: proof.value.pairingId,
-              workId: row.value.work_id,
-              publicCode,
-              current,
-            })
-          ))
-        ) {
-          return invalid();
-        }
-        return Response.json(
-          { status: "pairing_approved" },
-          { headers: { "cache-control": "no-store" } }
-        );
-      }
-    }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
-  );
+export const internals = {
+  Start,
+  Complete,
+  Pairing,
+  policy,
+  workerCrypto,
+  newId,
+  digestLength,
+  emailCooldownMilliseconds,
+  publicCodeLength,
+  secretOffset,
+  invalid,
+  pending,
+  unavailable,
+  digest,
+  equalDigest,
+  attempt,
+  readProof,
+  checkPairing,
+  rejectWrongEmailProof,
+  approveEmailPairing,
+  EmailProofRow,
+};

@@ -29,7 +29,7 @@ import {
 } from "@fidy/server/consent-ingress";
 import { EmailAddress } from "@fidy/server/client";
 import type { UserId } from "../../src/core/identity/contract";
-import { approveBrowserPairing } from "../identity/browser-login";
+import { approveBrowserPairing } from "../browser-login/operations";
 import { findWhatsAppUser } from "../identity/operations";
 import {
   type WhatsAppStatusAdmission,

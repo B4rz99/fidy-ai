@@ -74,20 +74,20 @@ export {
   StartBrowserPairingEmailAuthenticationPayload,
   WebAuthApi,
   type WebAuthApiGroups,
-} from "./web-auth-api";
-export { StartedBrowserLoginPairing } from "~/core/browser-login/model";
-export { EmailAddress, EmailVerificationCode } from "~/core/email-authentication/model";
-export { CompleteEmailReplacementPayload } from "./web-auth-api";
+} from "~/shell/web-authentication/contract";
+export { StartedBrowserLoginPairing } from "~/core/browser-login/contract";
+export { EmailAddress, EmailVerificationCode } from "~/core/email-authentication/contract";
+export { CompleteEmailReplacementPayload } from "~/shell/web-authentication/contract";
 export { RequestEmailReplacementPayload } from "~/shell/email-authentication/contract";
 export {
   emailReplacementPath,
   emailReplacementCompletionPath,
-} from "~/shell/email-authentication/path";
+} from "~/shell/email-authentication/contract";
 export { BillingAttemptId, PaymentRequestId } from "~/core/subscription/model";
 export type { SubscriptionStatus } from "~/core/subscription/model";
 export { PriceId } from "~/core/subscription/reference";
 export { IanaTimeZone } from "~/core/_shared/context";
-export { BackupRecoveryCode, RotatedBackupRecoveryCode } from "~/core/recovery/model";
+export { BackupRecoveryCode, RotatedBackupRecoveryCode } from "~/core/recovery/contract";
 export {
   BillingEmail,
   CardEnrollment,
@@ -113,4 +113,4 @@ export {
   EmailReplacementInvalidApi,
   emailReplacementFreshBody,
   emailReplacementInvalidBody,
-} from "./web-auth-api";
+} from "~/shell/web-authentication/contract";

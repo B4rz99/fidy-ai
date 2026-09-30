@@ -1,8 +1,4 @@
-import {
-  currentUser,
-  logoutBrowser,
-  canonicalBrowserSession as transactionSession,
-} from "./web-session/operations";
+import { canonicalBrowserSession as transactionSession } from "./web-session/operations";
 import { ScopeMissing, UserActionRequired } from "../src/shell/public-http/contract";
 import { categoryUnavailable } from "../src/shell/categories/operations";
 import { listCategoriesPath } from "../src/shell/categories/contract";
@@ -13,7 +9,7 @@ import {
   ReviseInput,
   memoryOperationIds,
 } from "@fidy/server/memory-runtime";
-import { emailReplacementOperations } from "@fidy/server/email-replacement";
+import { emailReplacementOperations } from "@fidy/server/email-authentication-runtime";
 import { type TelemetryService } from "@fidy/server/telemetry";
 import { Cause, Clock, Data, Effect, Exit, Option, Schema } from "effect";
 import { correctionInput } from "./transactions/transaction-corrections";
@@ -43,18 +39,24 @@ import {
 } from "./transactions/transaction-boundary";
 import { RequestBodyPolicy, boundedJsonBody } from "./http/request-body";
 import { pathId, rawPathId } from "./http/path";
-import {
-  completeBrowserPairingEmail,
-  startBrowserPairingEmail,
-} from "./identity/browser-pairing-email";
+import { handleWebAuthentication } from "./web-authentication/operations";
 import {
   type BrowserPairingEmailEnvironment,
+  type EmailReplacementEnvironment,
+  type OnboardingEmailEnvironment,
   dispatchBrowserPairingEmail,
+  dispatchEmailReplacement,
+  dispatchOnboardingEmail,
   isBrowserPairingEmailWork,
+  isEmailReplacementWork,
   receiveBrowserPairingEmail,
+  receiveEmailReplacement,
+  receiveOnboardingEmail,
   reconcileBrowserPairingEmail,
-} from "./identity/browser-pairing-email-delivery";
-import { handleSupportRecovery } from "./identity/support-recovery";
+  reconcileEmailReplacement,
+  reconcileOnboardingEmail,
+} from "./email-authentication/runtime";
+import { handleSupportRecovery } from "./recovery/operations";
 import { handleCardEnrollment } from "./card-enrollment/card-enrollment";
 import {
   type BillingCollectionEnvironment,
@@ -64,14 +66,6 @@ import {
   receiveWompiBillingEvent,
   reconcileBillingCandidates,
 } from "./billing/billing-collection";
-import { completeEmailReplacement, requestEmailReplacement } from "./identity/email-replacement";
-import {
-  type EmailReplacementEnvironment,
-  dispatchEmailReplacement,
-  isEmailReplacementWork,
-  receiveEmailReplacement,
-  reconcileEmailReplacement,
-} from "./identity/email-replacement-delivery";
 import { handlePATRequest, patRoute } from "./pats/pat-routes";
 import { listPATs } from "./pats/pat-management";
 import { recallMemories, rejectMemoryMutation } from "./memory/memory";
@@ -102,17 +96,6 @@ import {
   listOwnKeywordRules,
 } from "./categories/operations";
 import { executeProtectedSubscriptionQuery } from "./billing/subscription-queries";
-import {
-  redeemBrowserPairing,
-  rotateBackupRecoveryCode,
-  startBrowserPairing,
-} from "./identity/browser-login";
-import {
-  type OnboardingEmailEnvironment,
-  dispatchOnboardingEmail,
-  receiveOnboardingEmail,
-  reconcileOnboardingEmail,
-} from "./onboarding/onboarding-email";
 import { contractDigestPattern, gitRevisionPattern } from "./runtime/release-identity";
 import { smokeFailureHeader, smokePath, smokeProofAccepted } from "./runtime/smoke";
 import {
@@ -194,13 +177,13 @@ import {
 } from "./agent/whatsapp-turn";
 
 export { UserTransactionCoordinator } from "./transactions/transaction-coordinator";
-export { OnboardingEmailWorkflowV1 } from "./onboarding/onboarding-email";
+export { OnboardingEmailWorkflowV1 } from "./email-authentication/runtime";
 export {
   BillingCollectionWorkflowV1,
   runBillingCollectionWorkflow,
 } from "./billing/billing-collection";
-export { BrowserPairingEmailWorkflowV1 } from "./identity/browser-pairing-email-delivery";
-export { EmailReplacementWorkflowV1 } from "./identity/email-replacement-delivery";
+export { BrowserPairingEmailWorkflowV1 } from "./email-authentication/runtime";
+export { EmailReplacementWorkflowV1 } from "./email-authentication/runtime";
 export { StatementExtractionWorkflowV1, ReleaseSmokeWorkflowV1 };
 export { OperationalCanaryWorkflowV1 } from "./operational-canary-workflow";
 
@@ -733,59 +716,6 @@ const supportRecoveryResponse = (
   );
 };
 
-type BrowserHandlers = Readonly<
-  Record<string, Readonly<{ method: string; handle: () => Promise<Response> }>>
->;
-
-const browserHandlers = ({ request, environment, publish }: RequestExecution): BrowserHandlers => {
-  const db = environment.DB;
-  const routes: Readonly<
-    Record<string, Readonly<{ method: string; handle: () => Promise<Response> }>>
-  > = {
-    "/web/pairings": { method: "POST", handle: () => startBrowserPairing(db) },
-    "/web/pairings/redeem": {
-      method: "POST",
-      handle: () => redeemBrowserPairing({ request, db }),
-    },
-    "/web/session/logout": {
-      method: "POST",
-      handle: () => logoutBrowser({ request, db }),
-    },
-    "/recovery/backup-code/rotate": {
-      method: "POST",
-      handle: () => rotateBackupRecoveryCode({ request, db }),
-    },
-    "/web/email/authentication/start": {
-      method: "POST",
-      handle: () =>
-        startBrowserPairingEmail({
-          request,
-          db,
-          onAccepted: (id) => publish("browserPairing", id),
-        }),
-    },
-    "/web/email/authentication/complete": {
-      method: "POST",
-      handle: () => completeBrowserPairingEmail({ request, db }),
-    },
-    [emailReplacementOperations.request.path]: {
-      method: emailReplacementOperations.request.method,
-      handle: () =>
-        requestEmailReplacement({
-          request,
-          db,
-          onAccepted: (id) => publish("emailReplacement", id),
-        }),
-    },
-    [emailReplacementOperations.complete.path]: {
-      method: emailReplacementOperations.complete.method,
-      handle: () => completeEmailReplacement({ request, db }),
-    },
-    "/user": { method: "GET", handle: () => currentUser({ request, db }) },
-  };
-  return routes;
-};
-
 const browserResponse = ({
   request,
   environment,
@@ -796,18 +726,7 @@ const browserResponse = ({
   if (path === "/internal/support-recovery") {
     return supportRecoveryResponse(request, environment, telemetry);
   }
-  const routes = browserHandlers({ request, environment, telemetry, publish });
-  const route = routes[path];
-  if (route === undefined || request.method !== route.method) {
-    return Effect.succeed(methodNotAllowed());
-  }
-  const work = Effect.tryPromise({ try: route.handle, catch: () => undefined }).pipe(
-    Effect.orElseSucceed(unavailable)
-  );
-  return path === emailReplacementOperations.request.path ||
-    path === emailReplacementOperations.complete.path
-    ? work.pipe(Effect.withSpan("emailReplacement.browser"))
-    : work;
+  return handleWebAuthentication({ request, db: environment.DB, publish });
 };
 
 const consentRevokedResponse = (): Response =>

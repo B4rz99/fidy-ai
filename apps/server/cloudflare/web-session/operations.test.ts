@@ -1,7 +1,52 @@
 import { Miniflare } from "miniflare";
 import { afterEach, expect, it } from "vitest";
 import { Effect, Option } from "effect";
-import { browserSession, currentUser, logoutBrowser } from "./operations";
+import {
+  browserSession,
+  currentUser,
+  logoutBrowser,
+  prepareWebSessionIssuance,
+} from "@fidy/server/web-session-runtime";
+
+it("prepares session issuance for an explicit User and releases its cookie only after insertion", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* fromTestPromise(() => db.prepare("DROP TABLE web_sessions").run());
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            `CREATE TABLE web_sessions (id TEXT PRIMARY KEY, pairing_id TEXT UNIQUE, user_id TEXT NOT NULL, token_digest BLOB NOT NULL, created_at_ms INTEGER, fresh_until_ms INTEGER, idle_expires_at_ms INTEGER, hard_expires_at_ms INTEGER, revoked_at_ms INTEGER) STRICT`
+          )
+          .run()
+      );
+      const prepared = yield* prepareWebSessionIssuance({
+        db,
+        pairingId: sessionA,
+        userId: userA,
+        current: 99,
+      });
+      const absent = yield* fromTestPromise(() =>
+        db.prepare("SELECT count(*) AS count FROM web_sessions").first()
+      );
+      expect(absent).toEqual({ count: 0 });
+      const inserted = yield* fromTestPromise(() => prepared.statement.run());
+      const response = prepared.complete(inserted);
+      expect(response.status).toBe(200);
+      const replay = prepared.complete(inserted);
+      expect(replay.status).toBe(400);
+      expect(replay.headers.has("set-cookie")).toBe(false);
+      const cookie = response.headers.get("set-cookie")?.split(";")[0] ?? "";
+      const resolved = yield* fromTestPromise(() =>
+        browserSession({
+          request: new Request("https://api.fidyapp.com", { headers: { cookie } }),
+          db,
+          input: { current: 100, fresh: true },
+        })
+      );
+      expect(Option.map(resolved, (session) => session.userId)).toEqual(Option.some(userA));
+    })
+  ));
 
 const instances: Array<Miniflare> = [];
 const fromTestPromise = <A>(run: () => Promise<A>): Effect.Effect<A> =>

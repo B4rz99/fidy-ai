@@ -6,7 +6,9 @@ import {
   InsightEventId,
   type InsightGenerationInput,
   type InsightLifecycleState,
-} from "@fidy/server/insights-runtime";
+} from "@fidy/server/insights-contract";
+import { insightTransitionSources } from "@fidy/server/insights-operations";
+import { decodeAttempt, decodeEvent } from "./internal/codecs";
 import {
   type TransactionCaller,
   callerAuthority,
@@ -34,49 +36,6 @@ import {
 const maximumPendingInsights = 64;
 const HTTP_NOT_FOUND = 404;
 const HTTP_BAD_REQUEST = 400;
-
-const EventRow = Schema.Struct({
-  id: Schema.String,
-  kind: Schema.String,
-  schedule_id: Schema.String,
-  schedule_version: Schema.Finite,
-  service_market: Schema.String,
-  locale: Schema.String,
-  time_zone: Schema.String,
-  scheduled_at: Schema.String,
-  money_groups_json: Schema.String,
-  lifecycle_state: Schema.String,
-});
-const AttemptRow = Schema.Struct({
-  id: Schema.String,
-  insight_event_id: Schema.String,
-  sent_at: Schema.String,
-  channel: Schema.String,
-  provider: Schema.String,
-  provider_message_id: Schema.String,
-});
-
-const decodeEvent = (raw: unknown): Option.Option<InsightEvent> =>
-  Option.flatMap(Schema.decodeUnknownOption(EventRow)(raw), (row) => {
-    const groups = Schema.decodeOption(
-      Schema.fromJsonString(Schema.toCodecJson(InsightEvent.fields.moneyGroups))
-    )(row.money_groups_json);
-    if (Option.isNone(groups)) return Option.none();
-    return Schema.decodeOption(Schema.toCodecJson(InsightEvent))({
-      id: row.id,
-      kind: row.kind,
-      scheduleId: row.schedule_id,
-      scheduleVersion: row.schedule_version,
-      serviceMarket: row.service_market,
-      locale: row.locale,
-      timeZone: row.time_zone,
-      scheduledAt: row.scheduled_at,
-      moneyGroups: Schema.encodeSync(Schema.toCodecJson(InsightEvent.fields.moneyGroups))(
-        groups.value
-      ),
-      lifecycleState: row.lifecycle_state,
-    });
-  });
 
 /** Read the authoritative occurrence for one User; an opaque id alone grants no access. */
 export const findInsight = ({
@@ -189,7 +148,7 @@ export type InsightOperation =
 type MutationOperation = Exclude<InsightOperation, "insights.listPendingInsights">;
 
 /** Record a query or refusal only under the live caller; no financial contents enter Audit. */
-export const recordInsightCall = ({
+const recordInsightCall = ({
   db,
   subject,
   operation,
@@ -356,18 +315,6 @@ const targetOf = (operation: MutationOperation): InsightLifecycleState => {
       return "read";
     case "insights.dismissInsight":
       return "dismissed";
-  }
-};
-const allowed = (target: InsightLifecycleState): ReadonlyArray<InsightLifecycleState> => {
-  switch (target) {
-    case "delivered":
-      return ["pending"];
-    case "read":
-      return ["pending", "delivered"];
-    case "dismissed":
-      return ["pending", "delivered", "read"];
-    case "pending":
-      return [];
   }
 };
 
@@ -546,11 +493,11 @@ const transitionStatements = (
   const authority = callerAuthority({ subject, current });
   const write = db
     .prepare(`UPDATE insight_events SET lifecycle_state = ? WHERE user_id = ? AND id = ?
-    AND lifecycle_state IN (${allowed(target)
+    AND lifecycle_state IN (${insightTransitionSources(target)
       .map(() => "?")
       .join(",")})
     AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
-    .bind(target, subject.userId, id, ...allowed(target), ...authority.bindings);
+    .bind(target, subject.userId, id, ...insightTransitionSources(target), ...authority.bindings);
   const attemptId = Option.map(evidence, () =>
     InsightDeliveryAttempt.fields.id.make(transactionId())
   );
@@ -605,7 +552,7 @@ export const prepareInsightTransition = (
         insightRefusal({ db, subject, operation, current, code: "not_found" })
       );
     }
-    if (!allowed(targetOf(operation)).includes(event.value.lifecycleState)) {
+    if (!insightTransitionSources(targetOf(operation)).includes(event.value.lifecycleState)) {
       return refusedPreparation(
         insightRefusal({ db, subject, operation, current, code: "validation_failed" })
       );
@@ -629,17 +576,4 @@ export const findInsightAttempt = ({
     provider_message_id FROM insight_delivery_attempts WHERE user_id = ? AND insight_event_id = ?`)
       .bind(userId, id)
       .first()
-  ).pipe(
-    Effect.map((raw) =>
-      Option.flatMap(Schema.decodeUnknownOption(AttemptRow)(raw), (row) =>
-        Schema.decodeOption(InsightDeliveryAttempt)({
-          id: row.id,
-          insightEventId: row.insight_event_id,
-          sentAt: row.sent_at,
-          channel: row.channel,
-          provider: row.provider,
-          providerMessageId: row.provider_message_id,
-        })
-      )
-    )
-  );
+  ).pipe(Effect.map(decodeAttempt));

@@ -9,7 +9,7 @@ import { CategoriesGroup } from "~/shell/categories/operations";
 import { DashboardGroup } from "~/shell/dashboard/operations";
 import { EmailAuthenticationGroup } from "~/shell/email-authentication/operations";
 import { IdentityGroup } from "~/shell/identity/operations";
-import { InsightsGroup } from "~/shell/insights/operations";
+import { InsightsGroup } from "~/shell/insights/contract";
 import { IngestionGroup } from "~/shell/ingestion/operations";
 import { MemoryGroup } from "~/shell/memory/operations";
 import { makeOperationsGroup } from "~/shell/operations/operations";

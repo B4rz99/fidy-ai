@@ -9,7 +9,7 @@ import { reconcileBudgetLatches } from "../budgets/budget-latches";
 import { browseTransactions } from "../transactions/transaction-history";
 import { browseDashboard } from "../dashboard/dashboard";
 import { recallMemories } from "../memory/memory";
-import { listPendingInsights } from "../insights/insight-store";
+import { listPendingInsights } from "../insights/operations";
 import { forwardingAddressResponse } from "../ingestion/forwarding-address";
 import { readStatementSubmission } from "../ingestion/statement-ingestion";
 import { listNeedsReviewItems } from "../ingestion/statement-review";

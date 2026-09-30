@@ -2,8 +2,8 @@ import { Miniflare } from "miniflare";
 import { afterEach, expect } from "vitest";
 import { it as effectIt } from "@effect/vitest";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { InsightEventId, InsightGenerationInput } from "@fidy/server/insights-runtime";
-import { DeliveredInsight } from "../../src/shell/insights/operations";
+import { InsightEventId, InsightGenerationInput } from "@fidy/server/insights-contract";
+import { DeliveredInsight } from "../../src/shell/insights/contract";
 import {
   discoverDueInsights,
   findInsight,
@@ -11,7 +11,7 @@ import {
   generateInsight,
   listPendingInsights,
   prepareInsightTransition,
-} from "./insight-store";
+} from "./operations";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
 import coreWorker from "../core-worker";
@@ -356,23 +356,131 @@ effectIt.effect(
     })
 );
 
-effectIt.effect("rejects a foreign event before writing any lifecycle or delivery evidence", () =>
+effectIt.effect("keeps a directly read then dismissed occurrence terminal for every consumer", () =>
   Effect.gen(function* () {
     const db = yield* setup();
+    yield* fromTestPromise(() => authorizeBrowser(db));
     const event = Option.getOrThrow(yield* generated(db));
-    const result = yield* prepareInsightTransition({
-      db,
-      subject: subject(1),
-      operation: "insights.dismissInsight",
-      id: InsightEventId.make(event.id),
-      evidence: Option.none(),
-      current: DateTime.nowUnsafe().epochMilliseconds,
-    });
-    expect(result._tag).toBe("Refused");
+    for (const [path, state] of [
+      ["read", "read"],
+      ["dismissed", "dismissed"],
+    ] as const) {
+      const response = yield* fromTestPromise(() =>
+        send({
+          db,
+          index: 0,
+          path: `/insights/${event.id}/${path}`,
+          method: "POST",
+          body: Option.none(),
+        })
+      );
+      expect(response.status).toBe(200);
+      const result = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ data: Schema.Struct({ lifecycleState: Schema.String }) })
+      )(yield* fromTestPromise(() => response.json()));
+      expect(result.data.lifecycleState).toBe(state);
+    }
+    for (const path of ["read", "dismissed", "delivered"] as const) {
+      const response = yield* fromTestPromise(() =>
+        send({
+          db,
+          index: 0,
+          path: `/insights/${event.id}/${path}`,
+          method: "POST",
+          body:
+            path === "delivered"
+              ? Option.some({
+                  sentAt: "2026-08-09T23:00:08Z",
+                  channel: "whatsapp",
+                  provider: "kapso",
+                  providerMessageId: "wamid.late",
+                })
+              : Option.none(),
+        })
+      );
+      expect(response.status).toBe(400);
+    }
+    expect(
+      Option.getOrThrow(yield* findInsight({ db, userId: users[0] ?? "", id: event.id }))
+        .lifecycleState
+    ).toBe("dismissed");
+    expect(
+      Option.isNone(yield* findInsightAttempt({ db, userId: users[0] ?? "", id: event.id }))
+    ).toBe(true);
+  })
+);
+
+effectIt.effect("rejects a foreign delivery before writing any lifecycle or send evidence", () =>
+  Effect.gen(function* () {
+    const db = yield* setup();
+    yield* fromTestPromise(() => authorizeBrowser(db));
+    const event = Option.getOrThrow(yield* generated(db));
+    const response = yield* fromTestPromise(() =>
+      send({
+        db,
+        index: 1,
+        path: `/insights/${event.id}/delivered`,
+        method: "POST",
+        body: Option.some({
+          sentAt: "2026-08-09T23:00:08Z",
+          channel: "whatsapp",
+          provider: "kapso",
+          providerMessageId: "wamid.foreign",
+        }),
+      })
+    );
+    expect(response.status).toBe(404);
     expect(
       Option.getOrThrow(yield* findInsight({ db, userId: users[0] ?? "", id: event.id }))
         .lifecycleState
     ).toBe("pending");
+    for (const userId of users) {
+      expect(Option.isNone(yield* findInsightAttempt({ db, userId, id: event.id }))).toBe(true);
+    }
+    const pending = yield* fromTestPromise(() =>
+      send({ db, index: 1, path: "/insights/pending", method: "GET" })
+    );
+    expect(pending.status).toBe(200);
+    const result = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ data: Schema.Array(Schema.Unknown) })
+    )(yield* fromTestPromise(() => pending.json()));
+    expect(result.data).toEqual([]);
+  })
+);
+
+effectIt.effect("refuses oversized send evidence without advancing the owned occurrence", () =>
+  Effect.gen(function* () {
+    const db = yield* setup();
+    yield* fromTestPromise(() => authorizeBrowser(db));
+    const event = Option.getOrThrow(yield* generated(db));
+    const response = yield* fromTestPromise(() =>
+      send({
+        db,
+        index: 0,
+        path: `/insights/${event.id}/delivered`,
+        method: "POST",
+        body: Option.some({
+          sentAt: "2026-08-09T23:00:08Z",
+          channel: "whatsapp",
+          provider: "kapso",
+          providerMessageId: "m".repeat(257),
+        }),
+      })
+    );
+    expect(response.status).toBe(400);
+    expect(
+      Option.getOrThrow(yield* findInsight({ db, userId: users[0] ?? "", id: event.id }))
+        .lifecycleState
+    ).toBe("pending");
+    expect(
+      Option.isNone(yield* findInsightAttempt({ db, userId: users[0] ?? "", id: event.id }))
+    ).toBe(true);
+    const accepted = yield* fromTestPromise(() =>
+      db
+        .prepare("SELECT COUNT(*) AS count FROM insight_audit WHERE outcome = 'accepted'")
+        .first<{ count: number }>()
+    );
+    expect(accepted?.count).toBe(0);
   })
 );
 

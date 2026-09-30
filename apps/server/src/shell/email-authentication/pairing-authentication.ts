@@ -1,6 +1,6 @@
 import { Data, Effect, type Redacted } from "effect";
 import type { EmailAddress, EmailVerificationCode } from "~/core/email-authentication/model";
-import type { BrowserLoginPrivateVerifier } from "~/core/browser-login/model";
+import type { BrowserLoginPrivateVerifier } from "~/core/browser-login/contract";
 import type { BrowserLoginPairingId } from "~/core/browser-login/reference";
 import { BrowserLoginPairingInvalid } from "~/shell/browser-login/errors";
 

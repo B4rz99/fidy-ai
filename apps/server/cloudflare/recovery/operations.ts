@@ -1,9 +1,104 @@
-import { BackupRecoveryCode } from "@fidy/server/client";
+import { BackupRecoveryCode } from "../../src/core/recovery/contract";
+import { UserId } from "../../src/core/identity/reference";
+import { findRecoveryPairing, prepareRecoveryPairingApproval } from "../browser-login/operations";
+import { freshBrowserSession } from "../identity/browser-login";
+import { sampleBackupCode, digestBackupCode } from "./internal/backup-proof";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { JWTVerifyGetKey } from "jose";
-import { Clock, Data, Effect, Option, Schema } from "effect";
-import { newId } from "../pats/pat-shared";
+import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
+
+/** Prepare one-time disclosure and its digest-only insert for the onboarding owner's atomic D1 batch.
+ * No persistence occurs here. Disclose backupRecoveryCode only after the caller commits the statement
+ * together with creation of this exact stable User. A failed batch grants no recovery authority. */
+export const prepareInitialBackupRecoveryCode = async ({
+  db,
+  userId,
+  createdAtMs,
+}: {
+  db: D1Database;
+  userId: UserId;
+  createdAtMs: number;
+}): Promise<
+  Readonly<{ backupRecoveryCode: BackupRecoveryCode; statement: D1PreparedStatement }>
+> => {
+  const backupRecoveryCode = Schema.decodeUnknownSync(BackupRecoveryCode)(sampleBackupCode());
+  const codeDigest = await digestBackupCode(backupRecoveryCode);
+  return {
+    backupRecoveryCode,
+    statement: db
+      .prepare(
+        "INSERT INTO backup_recovery_credentials (user_id, code_digest, created_at_ms) VALUES (?, ?, ?)"
+      )
+      .bind(userId, codeDigest, createdAtMs),
+  };
+};
+
+/** Rotate only the explicit fresh WebSession's User proof; recheck freshness in the same D1 unit
+ * as the replacement and security evidence. The new raw code is disclosed once after commit. */
+export const rotateBackupRecoveryCode = ({
+  request,
+  db,
+}: {
+  request: Request;
+  db: D1Database;
+}): Promise<Response> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const usedAt = yield* Clock.currentTimeMillis;
+      const session = yield* Effect.tryPromise({
+        try: () => freshBrowserSession({ request, db, current: usedAt }),
+        catch: () => undefined,
+      });
+      if (Option.isNone(session)) return noSession();
+      const subject = Schema.decodeUnknownOption(UserId)(session.value.user_id);
+      if (Option.isNone(subject)) return unavailable();
+      const code = Schema.decodeUnknownSync(BackupRecoveryCode)(sampleBackupCode());
+      const codeDigest = yield* Effect.tryPromise({
+        try: () => digestBackupCode(code),
+        catch: () => undefined,
+      });
+      const rotated = yield* Effect.tryPromise({
+        try: () =>
+          db.batch([
+            db
+              .prepare(`UPDATE backup_recovery_credentials SET code_digest = ?, created_at_ms = ?, consumed_at_ms = NULL, revision = revision + 1
+        WHERE user_id = ? AND EXISTS (SELECT 1 FROM web_sessions WHERE id = ? AND user_id = ? AND revoked_at_ms IS NULL
+          AND fresh_until_ms > ? AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?)`)
+              .bind(
+                codeDigest,
+                usedAt,
+                subject.value,
+                session.value.id,
+                subject.value,
+                usedAt,
+                usedAt,
+                usedAt
+              ),
+            db
+              .prepare(`INSERT INTO canonical_security_mutations (id, user_id, session_id, operation, occurred_at_ms)
+        SELECT ?, ?, ?, 'recovery.rotateBackupRecoveryCode', ? WHERE changes() = 1`)
+              .bind(crypto.randomUUID(), subject.value, session.value.id, usedAt),
+          ]),
+        catch: () => undefined,
+      });
+      if (rotated[0]?.meta.changes !== 1 || rotated[1]?.meta.changes !== 1) return noSession();
+      return response(httpOk, {
+        data: {
+          status: "rotated",
+          backupRecoveryCode: code,
+          rotatedAt: DateTime.formatIso(DateTime.makeUnsafe(usedAt)),
+        },
+        next: [],
+      });
+    }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
+  );
+
+const noSession = (): Response =>
+  response(httpUnauthorized, {
+    error: { code: "unauthenticated", message: "Present a valid credential and retry." },
+    next: [],
+  });
 
 const Payload = Schema.Struct({
   pairingCode: Schema.String.check(Schema.isPattern(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/u)),
@@ -34,10 +129,6 @@ const response = (status: number, body: object): Response =>
   Response.json(body, { status, headers: { "cache-control": "no-store" } });
 const notApproved = (): Response => response(httpBadRequest, { status: "not_approved" });
 const unavailable = (): Response => response(httpServiceUnavailable, { status: "unavailable" });
-const digest = (value: string): Promise<Uint8Array> =>
-  crypto.subtle
-    .digest("SHA-256", new TextEncoder().encode(value))
-    .then((bytes) => new Uint8Array(bytes));
 
 const eligibleAssertion = (
   assertion: Option.Option<string>,
@@ -133,44 +224,45 @@ const admitOperator = (
       return attempts.value.attempts >= maximumOperatorAttempts ? "limited" : "allowed";
     });
 
-const matchingRecoveryCandidate = (
-  db: D1Database,
-  input: { codeDigest: Uint8Array; publicCode: string; now: number }
-): Promise<boolean> => {
-  const { codeDigest, publicCode, now } = input;
-  return db
-    .prepare(`SELECT p.id FROM browser_login_pairings AS p
-    JOIN backup_recovery_credentials AS b ON b.code_digest = ? AND b.consumed_at_ms IS NULL
-    WHERE p.public_code = ? AND p.state = 'pending_approval' AND p.expires_at_ms > ?
-      AND NOT EXISTS (SELECT 1 FROM browser_pairing_email_proofs AS e
-        WHERE e.pairing_id = p.id AND e.user_id <> b.user_id)
-      AND NOT EXISTS (SELECT 1 FROM support_recovery_cases WHERE pairing_id = p.id)`)
-    .bind(codeDigest, publicCode, now)
-    .first()
-    .then((candidate) => candidate !== null);
-};
+const CredentialSubject = Schema.Struct({
+  user_id: UserId,
+  revision: Schema.Int.check(Schema.isGreaterThan(0)),
+});
 
-const supportPairingUpdate = `UPDATE browser_login_pairings SET state = 'ready', user_id = (
-  SELECT b.user_id FROM backup_recovery_credentials AS b
-  WHERE b.code_digest = ? AND b.consumed_at_ms IS NULL)
-  WHERE public_code = ? AND state = 'pending_approval' AND expires_at_ms > ?
-    AND NOT EXISTS (SELECT 1 FROM support_recovery_cases WHERE pairing_id = browser_login_pairings.id)
-    AND EXISTS (SELECT 1 FROM backup_recovery_credentials AS b
-      WHERE b.code_digest = ? AND b.consumed_at_ms IS NULL
-        AND NOT EXISTS (SELECT 1 FROM browser_pairing_email_proofs AS e
-          WHERE e.pairing_id = browser_login_pairings.id AND e.user_id <> b.user_id))`;
-const recoveryCredentialConsume = `UPDATE backup_recovery_credentials SET code_digest = ?,
-  consumed_at_ms = ? WHERE code_digest = ? AND consumed_at_ms IS NULL
-  AND EXISTS (SELECT 1 FROM browser_login_pairings AS p
-    WHERE p.public_code = ? AND p.user_id = backup_recovery_credentials.user_id
-      AND p.state = 'ready' AND p.expires_at_ms > ?) AND changes() = 1`;
+const recoveryCandidate = (db: D1Database, input: CaseDecision) =>
+  db
+    .prepare(
+      `SELECT user_id, revision FROM backup_recovery_credentials WHERE code_digest = ? AND consumed_at_ms IS NULL`
+    )
+    .bind(input.codeDigest)
+    .first()
+    .then(async (row) => {
+      const credential = Schema.decodeUnknownOption(CredentialSubject)(row);
+      if (Option.isNone(credential)) return Option.none();
+      const pairing = await findRecoveryPairing({
+        db,
+        userId: credential.value.user_id,
+        publicCode: input.publicCode,
+        atMs: input.now,
+      });
+      if (Option.isNone(pairing)) return Option.none();
+      const prior = await db
+        .prepare("SELECT id FROM support_recovery_cases WHERE pairing_id = ?")
+        .bind(pairing.value.id)
+        .first();
+      return prior === null
+        ? Option.some({ credential: credential.value, pairing: pairing.value })
+        : Option.none();
+    });
+
+const matchingRecoveryCandidate = (db: D1Database, input: CaseDecision): Promise<boolean> =>
+  recoveryCandidate(db, input).then(Option.isSome);
+
+const recoveryCredentialConsume = `UPDATE backup_recovery_credentials SET code_digest = ?, consumed_at_ms = ?
+  WHERE user_id = ? AND code_digest = ? AND consumed_at_ms IS NULL AND revision = ?`;
 const supportCaseInsert = `INSERT INTO support_recovery_cases (id, user_id, pairing_id,
-  operator_issuer, operator_subject, credential_revision, opened_at_ms, expires_at_ms,
-  state, closed_at_ms) SELECT ?, p.user_id, p.id, ?, ?, b.revision, ?, p.expires_at_ms,
-  'approved', ? FROM browser_login_pairings AS p
-  JOIN backup_recovery_credentials AS b ON b.user_id = p.user_id
-  WHERE p.public_code = ? AND p.state = 'ready' AND p.expires_at_ms > ?
-    AND b.consumed_at_ms = ? AND changes() = 1`;
+  operator_issuer, operator_subject, credential_revision, opened_at_ms, expires_at_ms, state, closed_at_ms)
+  SELECT ?, ?, ?, ?, ?, ?, ?, ?, 'approved', ? WHERE changes() = 1`;
 const supportCaseOpened = `INSERT INTO support_recovery_events
   (id, case_id, user_id, operator_issuer, operator_subject, action, at_ms)
   SELECT ?, id, user_id, operator_issuer, operator_subject, 'opened', ?
@@ -187,26 +279,44 @@ type CaseDecision = Readonly<{
   now: number;
 }>;
 
-const approveCase = (db: D1Database, input: CaseDecision): Promise<boolean> => {
-  const caseId = newId();
-  const openedId = newId();
-  const approvedId = newId();
-  const { operator, codeDigest, publicCode, now } = input;
+const approveCase = async (db: D1Database, input: CaseDecision): Promise<boolean> => {
+  const candidate = await recoveryCandidate(db, input);
+  if (Option.isNone(candidate)) return false;
+  const { credential, pairing } = candidate.value;
+  const caseId = crypto.randomUUID();
+  const openedId = crypto.randomUUID();
+  const approvedId = crypto.randomUUID();
+  const { operator, codeDigest, now } = input;
   return db
     .batch([
-      db.prepare(supportPairingUpdate).bind(codeDigest, publicCode, now, codeDigest),
       db
         .prepare(recoveryCredentialConsume)
         .bind(
           crypto.getRandomValues(new Uint8Array(digestBytes)),
           now,
+          credential.user_id,
           codeDigest,
-          publicCode,
-          now
+          credential.revision
         ),
+      prepareRecoveryPairingApproval({
+        db,
+        userId: credential.user_id,
+        pairingId: pairing.id,
+        atMs: now,
+      }),
       db
         .prepare(supportCaseInsert)
-        .bind(caseId, operator.issuer, operator.subject, now, now, publicCode, now, now),
+        .bind(
+          caseId,
+          credential.user_id,
+          pairing.id,
+          operator.issuer,
+          operator.subject,
+          credential.revision,
+          now,
+          pairing.expiresAtMs,
+          now
+        ),
       db.prepare(supportCaseOpened).bind(openedId, now, caseId),
       // If any conditional transition did not create its case, the final FK aborts the D1 batch.
       db
@@ -282,7 +392,7 @@ export const handleSupportRecovery = ({
     if (admission !== "allowed") return admissionResponse(admission);
     const payload = yield* waitFor(() => readPayload(request));
     if (Option.isNone(payload)) return notApproved();
-    const codeDigest = yield* waitFor(() => digest(payload.value.backupRecoveryCode));
+    const codeDigest = yield* waitFor(() => digestBackupCode(payload.value.backupRecoveryCode));
     const decision = {
       operator: operator.value,
       codeDigest,

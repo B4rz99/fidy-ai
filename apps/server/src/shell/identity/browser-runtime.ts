@@ -12,12 +12,3 @@ export {
   webSessionCredentialAuthority,
 } from "./session-guard";
 export type { FreshSessionSubject, WebSessionAuthority } from "./session-guard";
-export { BrowserLoginPairingId } from "~/core/browser-login/reference";
-export {
-  BrowserLoginPublicCodeSymbols,
-  decideBrowserLoginRedemption,
-  decidePendingBrowserLoginProof,
-  maximumWrongVerifierAttempts,
-  selectPublicCodeSymbols,
-  formatPublicCode,
-} from "~/core/browser-login/rules";

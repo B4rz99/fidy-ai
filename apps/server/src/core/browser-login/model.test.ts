@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
-import { BrowserLoginPrivateVerifier } from "./model";
+import { BrowserLoginPrivateVerifier } from "./contract";
 
 const decodePrivateVerifier = Schema.decodeUnknownResult(BrowserLoginPrivateVerifier);
 const validPrivateVerifier = "A".repeat(43);

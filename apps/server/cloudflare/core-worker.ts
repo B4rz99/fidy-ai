@@ -56,7 +56,7 @@ import {
   receiveBrowserPairingEmail,
   reconcileBrowserPairingEmail,
 } from "./identity/browser-pairing-email-delivery";
-import { handleSupportRecovery } from "./identity/support-recovery";
+import { handleSupportRecovery, rotateBackupRecoveryCode } from "./recovery/operations";
 import { handleCardEnrollment } from "./card-enrollment/card-enrollment";
 import {
   type BillingCollectionEnvironment,
@@ -104,13 +104,8 @@ import {
   keywordRuleUnknownId,
   listOwnKeywordRules,
 } from "./categories/canonical-keyword-rules";
-import {
-  currentUser,
-  logoutBrowser,
-  redeemBrowserPairing,
-  rotateBackupRecoveryCode,
-  startBrowserPairing,
-} from "./identity/browser-login";
+import { currentUser, logoutBrowser } from "./identity/browser-login";
+import { redeemBrowserPairing, startBrowserPairing } from "./browser-login/operations";
 import {
   type OnboardingEmailEnvironment,
   dispatchOnboardingEmail,

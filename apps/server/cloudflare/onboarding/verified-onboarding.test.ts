@@ -1,7 +1,8 @@
+import { readFile } from "node:fs/promises";
 import { observeOperationalHealth } from "../runtime/operational-health";
 import { Miniflare } from "miniflare";
 import { afterEach, expect, it, vi } from "vitest";
-import { startBrowserPairing } from "../identity/browser-login";
+import { startBrowserPairing } from "../browser-login/operations";
 import {
   deliverBrowserPairingEmail,
   dispatchBrowserPairingEmail,
@@ -14,7 +15,7 @@ import {
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import coreWorker, { makeCoreWorker } from "../core-worker";
 import { DisabledTelemetryResource, makeTelemetryService } from "@fidy/server/telemetry";
-import { handleSupportRecovery } from "../identity/support-recovery";
+import { handleSupportRecovery } from "../recovery/operations";
 import publicWorker from "../public-worker";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 
@@ -98,19 +99,17 @@ const setup = (
       yield* Effect.tryPromise(() => mf.ready);
       const db = yield* Effect.tryPromise(() => mf.getD1Database("DB"));
       const applyMigration = (name: string): Promise<void> =>
-        Bun.file(new URL(`../migrations/${name}.sql`, import.meta.url))
-          .text()
-          .then((sql) =>
-            sql
-              .replace(/^--.*$/gmu, "")
-              .trim()
-              .split(/;\s*\n(?=CREATE |ALTER |$)/u)
-              .reduce<Promise<void>>(
-                (previous, statement) =>
-                  previous.then(() => db.prepare(statement).run()).then(() => undefined),
-                Promise.resolve()
-              )
-          );
+        readFile(new URL(`../migrations/${name}.sql`, import.meta.url), "utf8").then((sql) =>
+          sql
+            .replace(/^--.*$/gmu, "")
+            .trim()
+            .split(/;\s*\n(?=CREATE |ALTER |$)/u)
+            .reduce<Promise<void>>(
+              (previous, statement) =>
+                previous.then(() => db.prepare(statement).run()).then(() => undefined),
+              Promise.resolve()
+            )
+        );
       // Applied migrations depend on the preceding schema, so they must run in order.
       yield* Effect.tryPromise(() =>
         [
@@ -1433,6 +1432,39 @@ it("does not impose a shared login lockout after concurrent pairing starts", () 
       );
       expect(starts.every((response) => response.status === 200)).toBe(true);
       expect((yield* Effect.tryPromise(() => startBrowserPairing(db))).status).toBe(200);
+    })
+  ));
+
+it("counts concurrent wrong verifiers atomically before permitting another browser proof", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, sendRequest } = yield* Effect.tryPromise(() => setup());
+      const pairing = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
+      )(
+        yield* Effect.tryPromise(() => startBrowserPairing(db).then((response) => response.json()))
+      );
+      const redeem = (privateVerifier: string): Promise<Response> =>
+        sendRequest(
+          new Request("https://api.fidyapp.com/web/pairings/redeem", {
+            method: "POST",
+            headers: { "content-type": "application/json", origin: "https://app.fidyapp.com" },
+            body: encodeJson({ pairingId: pairing.pairingId, privateVerifier }),
+          })
+        );
+      const rejected = yield* Effect.tryPromise(() =>
+        Promise.all(Array.from({ length: 5 }, () => redeem("A".repeat(43))))
+      );
+      expect(rejected.map((response) => response.status)).toEqual([400, 400, 400, 400, 400]);
+      expect((yield* Effect.tryPromise(() => redeem(pairing.privateVerifier))).status).toBe(400);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT state, wrong_attempts FROM browser_login_pairings WHERE id = ?")
+            .bind(pairing.pairingId)
+            .first()
+        )
+      ).toEqual({ state: "invalidated", wrong_attempts: 5 });
     })
   ));
 

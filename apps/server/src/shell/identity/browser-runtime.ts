@@ -9,4 +9,4 @@ export {
   maximumWrongVerifierAttempts,
   selectPublicCodeSymbols,
   formatPublicCode,
-} from "~/core/browser-login/rules";
+} from "~/core/browser-login/operations";

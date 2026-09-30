@@ -105,11 +105,8 @@ import {
   keywordRuleUnknownId,
   listOwnKeywordRules,
 } from "./categories/canonical-keyword-rules";
-import {
-  redeemBrowserPairing,
-  rotateBackupRecoveryCode,
-  startBrowserPairing,
-} from "./identity/browser-login";
+import { redeemBrowserPairing, startBrowserPairing } from "./browser-login/operations";
+import { rotateBackupRecoveryCode } from "./recovery/operations";
 import {
   type OnboardingEmailEnvironment,
   dispatchOnboardingEmail,

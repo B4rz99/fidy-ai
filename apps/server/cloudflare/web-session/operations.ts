@@ -1,5 +1,6 @@
 import * as D1Client from "@effect/sql-d1/D1Client";
-import { User, UserId, getCurrentUser } from "@fidy/server/identity-runtime";
+import { User, UserId } from "../../src/core/identity/contract";
+import { getCurrentUser } from "@fidy/server/identity";
 import {
   calculateWebSessionDeadlines,
   webSessionIdleRenewalCandidate,
@@ -17,7 +18,7 @@ import {
   PlatformError,
   Schema,
 } from "effect";
-import { maximumWrongVerifierAttempts } from "../../src/core/browser-login/rules";
+import { maximumWrongVerifierAttempts } from "../../src/core/browser-login/operations";
 import { SqlClient } from "effect/unstable/sql";
 
 /** Resolve canonical browser authority without extending idle life or bypassing Consent. */

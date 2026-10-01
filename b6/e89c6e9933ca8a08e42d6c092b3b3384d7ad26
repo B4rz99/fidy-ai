@@ -1,0 +1,27 @@
+package.json
+  s_d7df9971aacaaa::t_8626d862a2de94 67-68
+tools/mutation/package.json
+  s_d7df9971aacaaa::t_b1ce5cf20f182a 15
+docs/ci-improvements-922-926.md
+  s_d7df9971aacaaa::t_4495a196e362d8 5-6,11-12,36-60,267-270
+bun.lock
+  s_d7df9971aacaaa::t_bc8f2d25fbbbe8 119-120,949,1151
+tools/mutation/bun.lock
+  s_d7df9971aacaaa::t_4e15124c094d9f 18,164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b6e89c6e9933ca8a08e42d6c092b3b3384d7ad26",
+  "prompts": {},
+  "sessions": {
+    "s_d7df9971aacaaa": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0f4f3-49da-71d3-90da-7eac5f7949f2",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,5 +1,5 @@
 import { prepareAuthorizedAuditCall, recordCanonicalPATWork } from "@fidy/server/audit";
-import { recordLivePATUse } from "@fidy/server/tokens-runtime";
+import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { Effect } from "effect";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import type { BudgetOutcome } from "../mutations/mutation-types";
@@ -46,7 +46,7 @@ export const recordBudgetCall = ({
             prepareOwnedStatement({
               db,
               statement: recordCanonicalPATWork({
-                subject,
+                authority: livePATAuthority({ subject, current }),
                 input: {
                   id: transactionId(),
                   current,

@@ -4,7 +4,7 @@ import {
   refusedByAuditBudget,
 } from "@fidy/server/audit";
 import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
-import { recordLivePATUse } from "@fidy/server/tokens-runtime";
+import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { activeProUserParams, activeProUserSql } from "../access-tier";
 import { prepareOwnedStatement } from "../pats/pat-unit";
@@ -77,7 +77,7 @@ export const forwardingAddressAudit = ({
       prepareOwnedStatement({
         db,
         statement: recordCanonicalPATWork({
-          subject,
+          authority: livePATAuthority({ subject, current }),
           input: {
             id: transactionId(),
             current,
@@ -117,7 +117,7 @@ export const forwardingAddressGuardAudit = ({
     return prepareOwnedStatement({
       db,
       statement: recordCanonicalPATWork({
-        subject,
+        authority: livePATAuthority({ subject, current }),
         input: {
           id: transactionId(),
           current,

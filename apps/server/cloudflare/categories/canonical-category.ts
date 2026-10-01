@@ -50,7 +50,7 @@ const categoryStatements = (
       prepareOwnedStatement({
         db,
         statement: recordCanonicalPATWork({
-          subject,
+          authority: livePATAuthority({ subject, current }),
           input: {
             id: newId(),
             current,

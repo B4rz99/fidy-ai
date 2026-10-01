@@ -1,4 +1,5 @@
 import { Effect, Option, Schema } from "effect";
+import { livePATAuthority } from "@fidy/server/tokens-runtime";
 import {
   type MemoryAuditOutcome,
   MemoryCapacityExceeded,
@@ -117,7 +118,7 @@ const rejectionStatement = ({
     ? prepareOwnedStatement({
         db,
         statement: recordCanonicalPATWork({
-          subject,
+          authority: livePATAuthority({ subject, current }),
           input: { id, current, operation, outcome: "rejected", afterOwnerWrite: false },
         }),
       })

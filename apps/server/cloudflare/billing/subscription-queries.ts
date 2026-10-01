@@ -80,7 +80,7 @@ const subscriptionStatements = (
     ? prepareOwnedStatement({
         db,
         statement: recordCanonicalPATWork({
-          subject,
+          authority: livePATAuthority({ subject, current }),
           input: { id: newId(), current, operation, outcome: "accepted", afterOwnerWrite: false },
         }),
       })

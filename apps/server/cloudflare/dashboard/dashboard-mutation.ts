@@ -1,6 +1,6 @@
 import { Data, DateTime, Effect, Option, Result, Schema } from "effect";
 import { prepareAuthorizedAuditCall, recordCanonicalPATWork } from "@fidy/server/audit";
-import { recordLivePATUse } from "@fidy/server/tokens-runtime";
+import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import { makeDefaultDashboard } from "../../src/core/dashboard/catalog";
 import { categoryIds } from "../../src/core/categories/taxonomy";
@@ -63,7 +63,7 @@ const audit = (
     return prepareOwnedStatement({
       db,
       statement: recordCanonicalPATWork({
-        subject,
+        authority: livePATAuthority({ subject, current }),
         input: { id: transactionId(), current, operation, outcome, afterOwnerWrite: false },
       }),
     });

@@ -5,6 +5,7 @@ import {
   refusedByAuditBudget,
 } from "@fidy/server/audit";
 import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
+import { livePATAuthority } from "@fidy/server/tokens-runtime";
 import { newId } from "../pats/pat-shared";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import {
@@ -110,7 +111,7 @@ const recordKeywordRuleGuard = ({
     ? prepareOwnedStatement({
         db,
         statement: recordCanonicalPATWork({
-          subject,
+          authority: livePATAuthority({ subject, current }),
           input: { id: newId(), current, operation, outcome: "rejected", afterOwnerWrite: false },
         }),
       })

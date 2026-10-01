@@ -13,7 +13,7 @@ import {
   recordBrowserMemoryWork,
 } from "@fidy/server/memory-runtime";
 import { dailyAuditExhausted, recordCanonicalPATWork } from "@fidy/server/audit";
-import { recordLivePATUse } from "@fidy/server/tokens-runtime";
+import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { type HostedInference } from "@fidy/server/hosted-inference";
 import type { AuthorizedPAT } from "../pats/pat-authorization";
@@ -128,7 +128,7 @@ const acceptedAudit = ({
     ? prepareOwnedStatement({
         db,
         statement: recordCanonicalPATWork({
-          subject,
+          authority: livePATAuthority({ subject, current }),
           input: {
             id: memoryId(),
             current,
@@ -513,7 +513,7 @@ const patRecallAudit = ({
   prepareOwnedStatement({
     db,
     statement: recordCanonicalPATWork({
-      subject,
+      authority: livePATAuthority({ subject, current }),
       input: {
         id: memoryId(),
         current,

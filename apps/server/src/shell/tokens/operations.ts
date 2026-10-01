@@ -32,8 +32,7 @@ import {
   webOrHosted,
 } from "~/shell/_shared/operation-policy";
 
-/** Held credential authority for owner-composed canonical work; no bearer resolution or runtime construction. */
-export { livePATAuthority } from "./pat-authority";
+/** Held credential authority type for owner-composed canonical work. */
 export type { PATAuthority } from "./pat-authority";
 export type { AuditedPATOperation } from "./pat-audited-operations";
 

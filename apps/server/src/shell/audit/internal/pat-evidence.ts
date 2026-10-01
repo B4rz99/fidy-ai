@@ -6,19 +6,8 @@ import {
   freshSessionExists,
   freshSessionParams,
 } from "~/shell/identity/browser-runtime";
-import {
-  type AuditedPATOperation,
-  type PATAuthority,
-  livePATAuthority,
-} from "~/shell/tokens/operations";
-import type { CanonicalCapability } from "~/core/canonical-operations/contract";
+import type { AuditedPATOperation, PATAuthority } from "~/shell/tokens/operations";
 
-type PATSubject = Readonly<{
-  patId: string;
-  userId: string;
-  digest: Uint8Array;
-  requiredScope: Option.Option<CanonicalCapability>;
-}>;
 type AuditTime = Readonly<{ id: string; current: number }>;
 
 /** A correlated proof that the PAT row's exact successful canonical call exists. */
@@ -125,22 +114,12 @@ type CanonicalAuditInput = AuditTime &
     afterOwnerWrite: boolean;
   }>;
 
-/** Audit protected canonical work only while the PAT bearer and User Consent remain live. */
-export const recordCanonicalPATWork = ({
-  subject,
-  input,
-}: Readonly<{ subject: PATSubject; input: CanonicalAuditInput }>): OwnedStatement =>
-  recordCanonicalPATWorkFromAuthority({
-    authority: livePATAuthority({ subject, current: input.current }),
-    input,
-  });
-
 /**
  * The same canonical PAT audit built from the exact live-authority gate a consumer already holds,
  * so a caller that is not the subject can still account for protected work without restating the
  * bearer, Consent, and scope decision.
  */
-export const recordCanonicalPATWorkFromAuthority = ({
+export const recordCanonicalPATWork = ({
   authority,
   input,
 }: Readonly<{ authority: PATAuthority; input: CanonicalAuditInput }>): OwnedStatement =>
@@ -158,7 +137,7 @@ export const recordRejectedPATWork = ({
   authority: PATAuthority;
   input: AuditTime & Readonly<{ operation: AuditedPATOperation }>;
 }>): OwnedStatement =>
-  recordCanonicalPATWorkFromAuthority({
+  recordCanonicalPATWork({
     authority,
     input: { ...input, afterOwnerWrite: false, outcome: "rejected" },
   });

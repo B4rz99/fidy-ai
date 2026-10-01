@@ -18,7 +18,7 @@ import {
   replaceKeywordRule,
 } from "@fidy/server/categories";
 import { recordCanonicalPATWork } from "@fidy/server/audit";
-import { recordLivePATUse } from "@fidy/server/tokens-runtime";
+import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
@@ -160,7 +160,7 @@ const writeStatements = ({
       db,
       statement: pat
         ? recordCanonicalPATWork({
-            subject,
+            authority: livePATAuthority({ subject, current }),
             input: {
               id: uuid(),
               current,
@@ -393,7 +393,7 @@ const listStatements = ({
       db,
       statement: pat
         ? recordCanonicalPATWork({
-            subject,
+            authority: livePATAuthority({ subject, current }),
             input: {
               id: uuid(),
               current,

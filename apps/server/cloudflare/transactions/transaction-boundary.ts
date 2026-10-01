@@ -2,7 +2,6 @@ import { Clock, Data, Effect, Option, Schema } from "effect";
 import {
   prepareAuthorizedAuditCall,
   recordCanonicalPATWork,
-  recordCanonicalPATWorkFromAuthority,
   refusedByAuditBudget,
 } from "@fidy/server/audit";
 import {
@@ -124,7 +123,7 @@ export const acceptedPATAccountability = ({
   return [
     prepareOwnedStatement({
       db: database,
-      statement: recordCanonicalPATWorkFromAuthority({
+      statement: recordCanonicalPATWork({
         authority,
         input: { afterOwnerWrite, current, id: auditId, operation, outcome: "accepted" },
       }),
@@ -176,7 +175,7 @@ const refusalStatement = ({
     ? prepareOwnedStatement({
         db,
         statement: recordCanonicalPATWork({
-          subject,
+          authority: livePATAuthority({ subject, current }),
           input: {
             id: transactionId(),
             current,

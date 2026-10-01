@@ -12,7 +12,7 @@ import {
   refusedByAuditBudget,
 } from "@fidy/server/audit";
 import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
-import { recordLivePATUse } from "@fidy/server/tokens-runtime";
+import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { Data, Effect, Function, Option, Result, Schema } from "effect";
 import type { StatementPublicationRefusal } from "./statement-staging";
 import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
@@ -467,7 +467,7 @@ const readStatements = (
           operation,
           outcome: "accepted",
         },
-        subject,
+        authority: livePATAuthority({ subject, current }),
       }),
     }),
   ];

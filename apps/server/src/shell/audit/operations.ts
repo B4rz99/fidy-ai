@@ -88,10 +88,8 @@ export const recordPATList = patEvidence.recordPATList;
 export const recordOnePATRevocation = patEvidence.recordOnePATRevocation;
 /** Append revoke-all evidence under the same fresh User decision as its credential transition. */
 export const recordAllPATRevocations = patEvidence.recordAllPATRevocations;
-/** Append canonical-call evidence under the PAT owner's live bearer, Consent, and scope gate. */
+/** Append canonical-call evidence under the exact live authority supplied by the PAT owner. */
 export const recordCanonicalPATWork = patEvidence.recordCanonicalPATWork;
-/** Append canonical-call evidence under an already-held, exact PAT authority. */
-export const recordCanonicalPATWorkFromAuthority = patEvidence.recordCanonicalPATWorkFromAuthority;
 /** Append a refused canonical call under the live authority that attempted it. */
 export const recordRejectedPATWork = patEvidence.recordRejectedPATWork;
 

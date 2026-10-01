@@ -22,7 +22,7 @@ import {
   transactionNow,
   transactionUnavailable,
 } from "../transactions/transaction-boundary";
-import { recordLivePATUse } from "@fidy/server/tokens-runtime";
+import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import { budgetAuditLimitRefusal } from "../budgets/budget-outcome";
 import {
@@ -213,7 +213,7 @@ export const recordInsightCall = ({
         prepareOwnedStatement({
           db,
           statement: recordCanonicalPATWork({
-            subject,
+            authority: livePATAuthority({ subject, current }),
             input: {
               id: transactionId(),
               current,
@@ -556,7 +556,7 @@ const transitionStatements = (
     ? prepareOwnedStatement({
         db,
         statement: recordCanonicalPATWork({
-          subject,
+          authority: livePATAuthority({ subject, current }),
           input: {
             id: transactionId(),
             current,

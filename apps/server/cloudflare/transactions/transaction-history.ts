@@ -510,7 +510,7 @@ const patHistoryStatements = (
     prepareOwnedStatement({
       db,
       statement: recordCanonicalPATWork({
-        subject,
+        authority: livePATAuthority({ subject, current }),
         input: {
           id: uuid(),
           operation: historyOperation(selection),

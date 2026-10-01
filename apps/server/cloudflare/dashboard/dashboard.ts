@@ -4,7 +4,7 @@ import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
 import { makeDashboardCatalog } from "../../src/core/dashboard/catalog";
 import { categoryIds } from "../../src/core/categories/taxonomy";
 import { DashboardCatalog, DashboardEdit } from "../../src/core/dashboard/model";
-import { recordLivePATUse } from "@fidy/server/tokens-runtime";
+import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import {
   type TransactionCaller,
@@ -46,7 +46,7 @@ const catalog = ({
       ? prepareOwnedStatement({
           db,
           statement: recordCanonicalPATWork({
-            subject,
+            authority: livePATAuthority({ subject, current }),
             input: {
               id: transactionId(),
               current,

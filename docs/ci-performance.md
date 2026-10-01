@@ -1,5 +1,8 @@
 # CI performance
 
+For the measured follow-up and remaining Linux evidence requirements for #922–#926, see
+[CI follow-up: #922–#926](ci-improvements-922-926.md).
+
 ## Linux CI confirmation
 
 [Checks run 36649040251](https://github.com/B4rz99/fidy-ai/actions/runs/36649040251) on

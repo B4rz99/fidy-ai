@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 
+import { Schema } from "effect";
+
 const serverRoot = Bun.fileURLToPath(new URL("..", import.meta.url));
 const workspaceRoot = Bun.fileURLToPath(new URL("../../../", import.meta.url));
 const decode = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
@@ -129,22 +131,36 @@ try {
     probeFiles.map(({ path, source }) => Bun.write(`${serverRoot}${path}`, source))
   );
 
+  // Keep each probe's path and rule assertion, but construct the type-aware lint program once.
+  const result = Bun.spawnSync(
+    [
+      "bunx",
+      "oxlint",
+      "--deny-warnings",
+      "--config",
+      ".oxlintrc.json",
+      "--type-aware",
+      "--format=json",
+      ...probeFiles.map((probe) => `apps/server/${probe.path}`),
+    ],
+    { cwd: workspaceRoot, stdout: "pipe", stderr: "pipe" }
+  );
+  const report = Schema.decodeSync(
+    Schema.fromJsonString(
+      Schema.Struct({
+        number_of_files: Schema.Int,
+        diagnostics: Schema.Array(Schema.Struct({ filename: Schema.String, code: Schema.String })),
+      })
+    )
+  )(decode(result.stdout));
+  if (result.exitCode !== 1 || report.number_of_files !== probeFiles.length) {
+    throw new Error(`Lint probes did not all execute.\n${decode(result.stderr)}`);
+  }
   for (const probe of probeFiles) {
-    const process = Bun.spawnSync(
-      [
-        "bunx",
-        "oxlint",
-        "--deny-warnings",
-        "--config",
-        ".oxlintrc.json",
-        "--type-aware",
-        `apps/server/${probe.path}`,
-      ],
-      { cwd: workspaceRoot, stdout: "pipe", stderr: "pipe" }
+    const diagnostics = report.diagnostics.filter(
+      (diagnostic) => diagnostic.filename === `apps/server/${probe.path}`
     );
-    const report = `${decode(process.stdout)}\n${decode(process.stderr)}`;
-
-    assertProbeResult(probe, process.exitCode, report);
+    assertProbeResult(probe, diagnostics.length === 0 ? 0 : 1, JSON.stringify(diagnostics));
   }
 } finally {
   await Promise.all(probeFiles.map(({ path }) => Bun.file(`${serverRoot}${path}`).delete()));

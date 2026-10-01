@@ -35,9 +35,21 @@ describe("pull-request checks workflow policy", () => {
     );
 
     expect(browserJob).toContain("~/.cache/ms-playwright");
-    expect(browserJob.indexOf("actions/cache@")).toBeLessThan(
-      browserJob.indexOf("playwright install --with-deps chromium")
+    const restore = browserJob.indexOf("actions/cache@");
+    const systemDependencies = browserJob.indexOf("playwright install-deps chromium");
+    const binaries = browserJob.indexOf("playwright install --only-shell chromium");
+    expect(restore).toBeGreaterThan(0);
+    expect(systemDependencies).toBeGreaterThan(restore);
+    expect(binaries).toBeGreaterThan(systemDependencies);
+    expect(browserJob).toContain(
+      "${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}-headless-shell"
     );
+    const installation = browserJob.slice(
+      browserJob.indexOf("- name: Install Chromium system dependencies"),
+      browserJob.indexOf("- name: Static-shell browser validation")
+    );
+    // Both system dependencies and missing binaries must be repaired on warm caches too.
+    expect(installation).not.toContain("if:");
     expect(bunInstallAction).not.toContain("restore-keys:");
   });
 

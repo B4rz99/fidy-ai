@@ -1,11 +1,7 @@
 import { Effect, Exit, Option, Schema } from "effect";
 import { maximumAtomicBatchCalls } from "@fidy/server/canonical-runtime";
 import type { ToolCallId, TranscriptTurnId } from "@fidy/server/agent-runtime";
-import {
-  auditDayBindings,
-  auditDayCountExpression,
-  dailyAuditBudget,
-} from "../atomic/daily-canonical-budget";
+import { prepareCanonicalAuditBudgetGuard, refusedByAuditBudget } from "@fidy/server/audit";
 import { KeywordRule, KeywordRuleId } from "@fidy/server/categories";
 import { Memory, MemoryId } from "@fidy/server/memory-runtime";
 import { Budget, BudgetId } from "@fidy/server/budgets-runtime";
@@ -16,7 +12,7 @@ import {
   RestoredTransactionPair,
   TransactionPresentation,
 } from "@fidy/server/transactions-runtime";
-import { canonicalTriggerNames, canonicalTriggerOf } from "../audit/audit-triggers";
+import { canonicalTriggerOf } from "./canonical-triggers";
 import {
   lostStatementReplay,
   readOwnedStatementSubmission,
@@ -96,12 +92,7 @@ const childBudget = ({
   index: number;
   operation: string;
 }>): D1PreparedStatement =>
-  db
-    .prepare(`INSERT INTO canonical_child_guard (child_index,operation,accepted,budget_ok)
-    SELECT ?,?,1,CASE WHEN (${auditDayCountExpression}) < ? THEN 1 ELSE 0 END
-    ON CONFLICT(child_index) DO UPDATE SET operation = excluded.operation,
-      accepted = excluded.accepted, budget_ok = excluded.budget_ok`)
-    .bind(index, operation, ...auditDayBindings({ userId, current }), dailyAuditBudget);
+  prepareCanonicalAuditBudgetGuard({ db, userId, current, index, operation });
 
 /** Decode only a known CHECK failure; a trigger with similar prose is not proof of a child. */
 const childGuardMarker = (
@@ -240,26 +231,12 @@ const triggerAttribution = ({
   mutations: ReadonlyArray<PreparedCanonicalMutation>;
   detail: string;
 }>): Option.Option<Readonly<{ index: number; kind: TriggerKind }>> => {
-  const trigger = canonicalTriggerOf(detail);
-  if (Option.isNone(trigger)) return Option.none();
-  // Every declared trigger name is matched here, so a new one must name the child class it
-  // blames or this build fails.
-  switch (trigger.value) {
-    case canonicalTriggerNames.resourceLimit:
-      // Recounting after rollback can include another caller's commit: no indexed CHECK, no owner.
-      return Option.none();
-    case canonicalTriggerNames.keywordRuleLimit:
-      // Rolled-back deletions make a capacity recount unsound; only indexed owner CHECKs prove it.
-      return Option.none();
-    case canonicalTriggerNames.memoryCapacity:
-      // A committed-state replay misses earlier forgets and concurrent writes; require indexed proof.
-      return Option.none();
-    case canonicalTriggerNames.auditLimit:
-    case canonicalTriggerNames.statementAuditLimit: {
-      const index = auditBudgetIndex(mutations);
-      return Option.map(index, (value) => ({ index: value, kind: "audit" as const }));
-    }
+  // Owner resource/capacity triggers require indexed proof: recounting rolled-back state
+  // cannot attribute a child. Audit classifies its own persistence failure independently.
+  if (Option.isSome(canonicalTriggerOf(detail)) || !refusedByAuditBudget(detail)) {
+    return Option.none();
   }
+  return Option.map(auditBudgetIndex(mutations), (index) => ({ index, kind: "audit" as const }));
 };
 
 /** Record one attributed trigger's child refusal, or answer Unavailable when it names no owner. */

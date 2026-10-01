@@ -87,10 +87,13 @@ const migrationNames = [
   "0017_forwarded_email",
   "0017_statement_dispatch",
   "0018_batch_envelope_audit",
+  "0018_dashboard",
+  "0018_insight_events",
   "0018_forwarded_email_processing",
   "0019_canonical_child_guards",
   "0020_dashboard_projection",
   ...hostedTurnTestMigrations,
+  "0029_audit_owner_retention",
 ] as const;
 
 const digest = (text: string): Promise<Uint8Array> =>

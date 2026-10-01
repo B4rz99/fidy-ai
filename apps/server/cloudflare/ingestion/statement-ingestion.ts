@@ -5,10 +5,15 @@ import {
   StatementSubmissionId,
   SubmitForExtractionInput,
 } from "@fidy/server/statement-staging";
-import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
+import {
+  dailyAuditExhausted,
+  prepareAuthorizedAuditCall,
+  recordCanonicalPATWork,
+  refusedByAuditBudget,
+} from "@fidy/server/audit";
+import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
+import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { Data, Effect, Function, Option, Result, Schema } from "effect";
-import { refusedByAuditBudget } from "../audit/audit-triggers";
-import { dailyAuditExhausted } from "../atomic/daily-canonical-budget";
 import type { StatementPublicationRefusal } from "./statement-staging";
 import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
 import { currentMillis } from "../pats/pat-shared";
@@ -30,7 +35,6 @@ import {
 import {
   type TransactionCaller,
   type TransactionSubject,
-  callerAuthority,
   isPATCaller,
   refusedTransactionWork,
 } from "../transactions/transaction-boundary";
@@ -430,15 +434,18 @@ const readStatements = (
 ): ReadonlyArray<D1PreparedStatement> => {
   const { current, database, subject, submissionId, operation } = input;
   if (!isPATCaller(subject)) {
-    const authority = callerAuthority({ subject, current });
+    const authority = liveWebSessionAuthority({ subject, current });
     return [
       operation === "ingestion.listNeedsReviewItems"
-        ? database
-            .prepare(`INSERT INTO statement_review_audit
-          (id, user_id, operation, outcome, occurred_at_ms)
-          SELECT ?, ${authority.table}.user_id, 'ingestion.listNeedsReviewItems', 'success', ?
-          FROM ${authority.table} WHERE ${authority.predicate}`)
-            .bind(newIngestionId(), current, ...authority.bindings)
+        ? prepareAuthorizedAuditCall({
+            db: database,
+            authority,
+            id: newIngestionId(),
+            operation,
+            outcome: "success",
+            current,
+            afterOwnerWrite: false,
+          })
         : statementSubmissionReadAudit({
             authority,
             current,
@@ -460,7 +467,7 @@ const readStatements = (
           operation,
           outcome: "accepted",
         },
-        subject,
+        authority: livePATAuthority({ subject, current }),
       }),
     }),
   ];

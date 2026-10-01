@@ -1,5 +1,6 @@
 import { readConsentStatus } from "../consent/operations";
 import type { ConsentUnavailable } from "../consent/contract";
+import { recordSessionPATTransition } from "@fidy/server/audit";
 import {
   CreateManualPATPayload,
   IssuedManualPATResponse,
@@ -13,7 +14,6 @@ import {
   issuanceConsumedMessage,
   issuanceLimitedMessage,
   issueManualPAT,
-  recordSessionPATTransition,
   reviewExpiredMessage,
 } from "@fidy/server/tokens-runtime";
 import { type Cause, DateTime, Effect, Option, Redacted, Result, Schema } from "effect";

@@ -1,4 +1,6 @@
 import { prepareConsentAction } from "../consent/operations";
+import { protectConsentStatement } from "@fidy/server/consent-operations";
+import { prepareOwnerAuditCall } from "@fidy/server/audit";
 import { CreateTransactionInput, encodeMoneyAmount } from "@fidy/server/transactions-runtime";
 import {
   type CategoryId,
@@ -102,15 +104,23 @@ const captureAudit = (
   capture: Omit<Capture, "subject"> & Readonly<{ subject: TransactionSubject }>
 ): D1PreparedStatement => {
   const { subject, id, current } = capture;
-  return prepareConsentAction({
+  return prepareOwnerAuditCall({
     db,
-    statement: {
-      sql: `INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-      SELECT ?, user_id, ?, 'transactions.createTransaction', 'success', ? FROM transactions WHERE user_id = ? AND id = ? AND changes() = 1`,
-      params: [transactionId(), subject.id, current, subject.userId, id],
-    },
-    subject: { _tag: "Owner", column: "transactions.user_id" },
-    requirement: "unrevoked",
+    id: transactionId(),
+    userId: subject.userId,
+    caller: { _tag: "WebSession", id: subject.id },
+    operation: "transactions.createTransaction",
+    outcome: "success",
+    current,
+    afterOwnerWrite: true,
+    when: protectConsentStatement({
+      statement: {
+        sql: "SELECT 1 FROM transactions WHERE user_id = ? AND id = ?",
+        params: [subject.userId, id],
+      },
+      subject: { _tag: "Owner", column: "transactions.user_id" },
+      requirement: "unrevoked",
+    }),
   });
 };
 

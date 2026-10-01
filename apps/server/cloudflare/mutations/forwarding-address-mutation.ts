@@ -1,8 +1,7 @@
 import { prepareConsentAction } from "../consent/operations";
 import { EmailForwardingAddress } from "../../src/core/ingestion/model";
 import { Effect, Option, Schema } from "effect";
-import { dailyAuditExhausted } from "../atomic/daily-canonical-budget";
-import { refusedByAuditBudget } from "../audit/audit-triggers";
+import { dailyAuditExhausted, refusedByAuditBudget } from "@fidy/server/audit";
 import {
   forwardingAddressAudit,
   forwardingAddressGuardAudit,

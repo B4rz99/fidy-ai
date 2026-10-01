@@ -1,3 +1,10 @@
+import {
+  dailyAuditExhausted,
+  prepareAuditQueryCall,
+  prepareAuthorizedAuditCall,
+  recordCanonicalPATWork,
+  refusedByAuditBudget,
+} from "@fidy/server/audit";
 import { nextTransactionPage } from "@fidy/server/transaction-continuation";
 import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
 import {
@@ -12,14 +19,8 @@ import {
 } from "@fidy/server/transactions-runtime";
 import { effectiveTransactionRelation } from "./effective-transaction";
 import { DateTime, Option, Schema } from "effect";
-import { dailyAuditExhausted } from "../atomic/daily-canonical-budget";
 import type { AuthorizedPAT } from "../pats/pat-authorization";
-import {
-  livePATAuthority,
-  recordCanonicalPATWork,
-  recordLivePATUse,
-} from "@fidy/server/tokens-runtime";
-import { refusedByAuditBudget } from "../audit/audit-triggers";
+import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import {
   type TransactionAuthority,
@@ -411,16 +412,15 @@ const invalidQueryAudit = (
     .then((exhausted) => {
       if (exhausted) return rateLimited();
       const authority = liveWebSessionAuthority({ subject, current });
-      return db
-        .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-      SELECT ?, user_id, id, ?, ?, ? FROM ${authority.table} WHERE ${authority.predicate}`)
-        .bind(
-          uuid(),
-          historyOperation(selection),
-          invalidGet ? "not_found" : "validation_failed",
-          current,
-          ...authority.bindings
-        )
+      return prepareAuthorizedAuditCall({
+        db,
+        authority,
+        id: uuid(),
+        operation: historyOperation(selection),
+        outcome: invalidGet ? "not_found" : "validation_failed",
+        current,
+        afterOwnerWrite: false,
+      })
         .run()
         .then((audit) => {
           if (audit.meta.changes !== 1) return noSession();
@@ -465,20 +465,20 @@ const browserHistoryStatements = (
       query,
       authority,
     }),
-    db
-      .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-        SELECT ?, user_id, id, ?,
-          CASE WHEN ? IS NOT NULL AND NOT EXISTS (SELECT 1 FROM transactions WHERE transactions.user_id = web_sessions.user_id AND transactions.id = ?)
-            THEN 'not_found' ELSE 'success' END,
-          ? FROM ${authority.table} WHERE ${authority.predicate}`)
-      .bind(
-        uuid(),
-        historyOperation(selection),
-        Option.getOrNull(selection.id),
-        Option.getOrNull(selection.id),
-        current,
-        ...authority.bindings
-      ),
+    prepareAuditQueryCall({
+      db,
+      authority,
+      id: uuid(),
+      operation: historyOperation(selection),
+      current,
+      missingWhen: Option.match(selection.id, {
+        onNone: () => ({ sql: "SELECT 1 WHERE 0", params: [] }),
+        onSome: (id) => ({
+          sql: "SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM transactions WHERE transactions.user_id = web_sessions.user_id AND transactions.id = ?)",
+          params: [id],
+        }),
+      }),
+    }),
   ];
 };
 
@@ -510,7 +510,7 @@ const patHistoryStatements = (
     prepareOwnedStatement({
       db,
       statement: recordCanonicalPATWork({
-        subject,
+        authority: livePATAuthority({ subject, current }),
         input: {
           id: uuid(),
           operation: historyOperation(selection),

@@ -10,8 +10,6 @@ export const canonicalTriggerNames = {
   resourceLimit: "transaction_resource_limit",
   keywordRuleLimit: "keyword_rule_limit",
   memoryCapacity: "memory_capacity_exceeded",
-  auditLimit: "transaction_audit_limit",
-  statementAuditLimit: "statement_audit_limit",
 } as const;
 
 /** One commit-time trigger name a D1 failure message can carry. */
@@ -22,13 +20,4 @@ export type CanonicalTriggerName =
 export const canonicalTriggerOf = (cause: unknown): Option.Option<CanonicalTriggerName> =>
   Option.fromUndefinedOr(
     Object.values(canonicalTriggerNames).find((name) => String(cause).includes(name))
-  );
-
-/** True when a D1 write failed because the shared stable-User daily budget refused it. */
-export const refusedByAuditBudget = (cause: unknown): boolean =>
-  Option.exists(
-    canonicalTriggerOf(cause),
-    (trigger) =>
-      trigger === canonicalTriggerNames.auditLimit ||
-      trigger === canonicalTriggerNames.statementAuditLimit
   );

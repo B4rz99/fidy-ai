@@ -1,18 +1,19 @@
 import { Option } from "effect";
+import { recordedPATCallProof } from "~/shell/audit/operations";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
-import {
-  protectConsentAuthority,
-  protectConsentStatement,
-  protectPATRevocationStatement,
-} from "~/shell/consent/operations";
+import { protectConsentStatement, protectPATRevocationStatement } from "~/shell/consent/operations";
 import {
   type FreshSessionSubject,
   freshSessionExists,
   freshSessionParams,
 } from "~/shell/identity/browser-runtime";
 import { type CreateManualPATPayload } from "~/core/tokens/model";
-import type { CanonicalCapability } from "~/core/canonical-operations/contract";
+import { type PATAuthority, type PATSubject, livePATAuthority } from "./pat-authority";
+
 import type { AuditedPATOperation } from "./pat-audited-operations";
+
+export { livePATAuthority, livePATCredential } from "./pat-authority";
+export type { PATAuthority } from "./pat-authority";
 
 export const pairingMilliseconds = 600_000;
 // One source cannot exhaust this pool under the edge's 60-per-10-second budget.
@@ -127,52 +128,6 @@ export const claimPairingGrant = (
   };
 };
 
-type PATSubject = Readonly<{
-  patId: string;
-  userId: string;
-  digest: Uint8Array;
-  requiredScope: Option.Option<CanonicalCapability>;
-}>;
-/** One live-authority gate over the `pats` table: its table, predicate, and bindings. */
-export type PATAuthority = Readonly<{
-  table: "pats";
-  predicate: string;
-  bindings: ReadonlyArray<string | number | Uint8Array>;
-}>;
-const liveCredentialPredicate = `id = ? AND user_id = ? AND bearer_digest = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?`;
-
-/**
- * The live bearer, lifetime, and Consent decision without any scope clause. Only a classification
- * read: protected work always rechecks the exact required scope through `livePATAuthority`.
- */
-export const livePATCredential = ({
-  subject,
-  current,
-}: Readonly<{ subject: PATSubject; current: number }>): PATAuthority =>
-  protectConsentAuthority({
-    authority: {
-      table: "pats",
-      predicate: liveCredentialPredicate,
-      bindings: [subject.patId, subject.userId, subject.digest, current],
-    },
-    subject: { _tag: "Owner", column: "pats.user_id" },
-    requirement: "unrevoked",
-  });
-
-/** Guard protected D1 work with the same live bearer and Consent decision as PAT use. */
-export const livePATAuthority = ({
-  subject,
-  current,
-}: Readonly<{ subject: PATSubject; current: number }>): PATAuthority => {
-  const credential = livePATCredential({ subject, current });
-  return {
-    ...credential,
-    predicate: `${credential.predicate}
-      AND ${Option.isSome(subject.requiredScope) ? "EXISTS (SELECT 1 FROM json_each(pats.scopes_json) WHERE value = ?)" : "0"}`,
-    bindings: [...credential.bindings, ...Option.toArray(subject.requiredScope)],
-  };
-};
-
 /** Recheck bearer, Consent, scope, and lifetime alongside protected canonical work. */
 export const recordLivePATUse = ({
   subject,
@@ -220,12 +175,13 @@ export const recordAuditedPATUse = ({
 export const recordAuditedPATUseFromAuthority = ({
   authority,
   input,
-}: Readonly<{ authority: PATAuthority; input: AuditedUseInput }>): OwnedStatement => ({
-  sql: `UPDATE pats SET last_used_at_ms = ? WHERE ${authority.predicate} AND changes() = 1
-    AND EXISTS (SELECT 1 FROM pat_audit WHERE id = ? AND user_id = pats.user_id
-    AND pat_id = pats.id AND operation = ? AND outcome = 'accepted')`,
-  params: [input.current, ...authority.bindings, input.auditId, input.operation],
-});
+}: Readonly<{ authority: PATAuthority; input: AuditedUseInput }>): OwnedStatement => {
+  const evidence = recordedPATCallProof(input);
+  return {
+    sql: `UPDATE pats SET last_used_at_ms = ? WHERE ${authority.predicate} AND changes() = 1 AND EXISTS (${evidence.sql})`,
+    params: [input.current, ...authority.bindings, ...evidence.params],
+  };
+};
 
 type RevokeOneInput = Readonly<{ shortId: string; current: number }>;
 /** Revoke a single live User-owned PAT only after matching Consent evidence is in this D1 unit. */

@@ -1,3 +1,4 @@
+import { recordAuthorizedCall } from "~/shell/audit/operations";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 import { liveWebSessionAuthority } from "~/shell/identity/browser-runtime";
 import type { MemoryOperationId } from "./operations";
@@ -28,12 +29,14 @@ export const recordBrowserMemoryWork = ({
   }>;
 }>): OwnedStatement => {
   const authority = liveWebSessionAuthority({ subject, current: input.current });
-  return {
-    sql: `INSERT INTO memory_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
-      SELECT ?,user_id,id,?,?,? FROM ${authority.table} WHERE ${authority.predicate}
-      ${input.afterMutation ? "AND changes() = 1" : ""}`,
-    params: [input.id, input.operation, input.outcome, input.current, ...authority.bindings],
-  };
+  return recordAuthorizedCall({
+    authority,
+    id: input.id,
+    operation: input.operation,
+    outcome: input.outcome,
+    current: input.current,
+    afterOwnerWrite: input.afterMutation,
+  });
 };
 
 /** The Memory owner refuses a mutation whose final guarded AuditLogEntry changed no row. */

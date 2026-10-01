@@ -7,7 +7,7 @@ export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
   forbidOnly: isCI,
-  retries: isCI ? 2 : 0,
+  retries: 0,
   workers: 2,
   reporter: isCI
     ? [["line"], ["json", { outputFile: "test-results/browser-timings.json" }]]

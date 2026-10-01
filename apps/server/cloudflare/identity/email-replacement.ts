@@ -1,3 +1,4 @@
+import { prepareEmailReplacementEvidence } from "@fidy/server/audit";
 import {
   CompleteEmailReplacementPayload,
   RequestEmailReplacementPayload,
@@ -122,25 +123,29 @@ export const requestEmailReplacement = ({
     }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
   );
 
-const startProof = (
-  db: D1Database,
-  input: {
-    session: SessionSubject;
-    candidateEmail: string;
-    workId: string;
-    current: number;
-  }
-): Promise<void> => {
+type ReplacementRequest = Readonly<{
+  session: SessionSubject;
+  candidateEmail: string;
+  workId: string;
+  current: number;
+}>;
+
+const startProof = (db: D1Database, input: ReplacementRequest): Promise<void> => {
   const { session, candidateEmail, workId, current } = input;
   return Effect.runPromise(
     attempt(() =>
       db.batch([
         admissionStatement(db, { userId: session.user_id, workId, current }),
-        db
-          .prepare(`INSERT INTO email_replacement_audit
-      (id, user_id, session_id, operation, outcome, occurred_at_ms)
-      VALUES (?, ?, ?, 'requestEmailReplacement', 'accepted', ?)`)
-          .bind(newId(), session.user_id, session.id, current),
+        prepareEmailReplacementEvidence({
+          db,
+          id: newId(),
+          userId: session.user_id,
+          sessionId: session.id,
+          operation: "requestEmailReplacement",
+          outcome: "accepted",
+          current,
+          afterOwnerWrite: false,
+        }),
         db
           .prepare(`INSERT INTO email_replacements
       (user_id, work_id, session_id, candidate_email, prior_email, prior_verified_at_ms,
@@ -361,12 +366,16 @@ const recordRejected = (
   const auditId = newId();
   return Effect.runPromise(
     attempt(() =>
-      db
-        .prepare(`INSERT INTO email_replacement_audit
-    (id, user_id, session_id, operation, outcome, occurred_at_ms)
-    VALUES (?, ?, ?, 'completeEmailReplacement', 'rejected', ?)`)
-        .bind(auditId, session.user_id, session.id, current)
-        .run()
+      prepareEmailReplacementEvidence({
+        db,
+        id: auditId,
+        userId: session.user_id,
+        sessionId: session.id,
+        operation: "completeEmailReplacement",
+        outcome: "rejected",
+        current,
+        afterOwnerWrite: false,
+      }).run()
     ).pipe(Effect.asVoid)
   );
 };
@@ -387,11 +396,16 @@ const rejectWrongProof = (
     proof_expires_at_ms = CASE WHEN wrong_attempts + 1 >= 5 THEN NULL ELSE proof_expires_at_ms END
     WHERE work_id = ? AND state = 'awaiting_proof' AND wrong_attempts < 5`)
           .bind(workId),
-        db
-          .prepare(`INSERT INTO email_replacement_audit
-      (id, user_id, session_id, operation, outcome, occurred_at_ms)
-      VALUES (?, ?, ?, 'completeEmailReplacement', 'rejected', ?)`)
-          .bind(newId(), session.user_id, session.id, current),
+        prepareEmailReplacementEvidence({
+          db,
+          id: newId(),
+          userId: session.user_id,
+          sessionId: session.id,
+          operation: "completeEmailReplacement",
+          outcome: "rejected",
+          current,
+          afterOwnerWrite: false,
+        }),
       ])
     ).pipe(Effect.asVoid)
   );
@@ -440,11 +454,16 @@ const commitReplacement = (
         db
           .prepare(`DELETE FROM email_replacements WHERE work_id = ? AND changes() = 1`)
           .bind(workId),
-        db
-          .prepare(`INSERT INTO email_replacement_audit
-        (id, user_id, session_id, operation, outcome, occurred_at_ms)
-        SELECT ?, ?, ?, 'completeEmailReplacement', 'replaced', ? WHERE changes() = 1`)
-          .bind(newId(), userId, sessionId, current),
+        prepareEmailReplacementEvidence({
+          db,
+          id: newId(),
+          userId,
+          sessionId,
+          operation: "completeEmailReplacement",
+          outcome: "replaced",
+          current,
+          afterOwnerWrite: true,
+        }),
       ])
     )
   );

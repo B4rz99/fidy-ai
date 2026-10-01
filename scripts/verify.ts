@@ -208,9 +208,12 @@ if (Option.isSome(requestedGroup)) {
   process.stdout.write(`Verification group: ${requestedGroup.value}\n`);
 }
 
+const verificationStarted = performance.now();
+const timings: Array<{ label: string; elapsedMilliseconds: number; exitCode: number }> = [];
 const failed: Array<string> = [];
 for (const check of selectedChecks) {
   process.stdout.write(`\n=== ${check.label} ===\n`);
+  const started = performance.now();
   const result = Bun.spawnSync([...check.command], {
     cwd: check.cwd,
     env: check.env,
@@ -218,7 +221,32 @@ for (const check of selectedChecks) {
     stdout: "inherit",
     stderr: "inherit",
   });
+  const elapsedMilliseconds = Math.round(performance.now() - started);
+  timings.push({ label: check.label, elapsedMilliseconds, exitCode: result.exitCode });
+  process.stdout.write(`Timing: ${check.label}: ${elapsedMilliseconds}ms\n`);
   if (result.exitCode !== 0) failed.push(check.label);
+}
+const elapsedMilliseconds = Math.round(performance.now() - verificationStarted);
+process.stdout.write(`Verification elapsed: ${elapsedMilliseconds}ms (excludes job setup)\n`);
+if (Bun.env.VERIFY_TIMING_REPORT !== undefined) {
+  await Bun.write(
+    Bun.env.VERIFY_TIMING_REPORT,
+    JSON.stringify(
+      {
+        revision: gitRevision,
+        platform: process.platform,
+        architecture: process.arch,
+        runId: Bun.env.GITHUB_RUN_ID,
+        attempt: Bun.env.GITHUB_RUN_ATTEMPT,
+        group: Option.getOrElse(requestedGroup, () => "all"),
+        shard: Bun.env.CLOUDFLARE_TEST_SHARD,
+        elapsedMilliseconds,
+        checks: timings,
+      },
+      null,
+      2
+    )
+  );
 }
 
 if (failed.length > 0) {

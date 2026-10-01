@@ -1,3 +1,4 @@
+import { recordSessionPATTransition } from "@fidy/server/audit";
 import {
   ApprovePATPairingPayload,
   PATPairingPublicCodeInput,
@@ -11,7 +12,6 @@ import {
   expireFixedPATs,
   pairingExpiryCompletion,
   patExpiryCompletion,
-  recordSessionPATTransition,
   selectPATPairingPublicCodeSymbols,
   startPairingGrant,
   sweepPairingAdmission,

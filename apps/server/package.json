@@ -4,6 +4,16 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./audit": {
+      "types": "./src/shell/audit/operations.ts",
+      "import": "./src/shell/audit/operations.ts",
+      "default": "./src/shell/audit/operations.ts"
+    },
+    "./audit-runtime": {
+      "types": "./src/shell/audit/runtime.ts",
+      "import": "./src/shell/audit/runtime.ts",
+      "default": "./src/shell/audit/runtime.ts"
+    },
     "./canonical-runtime": {
       "types": "./src/shell/canonical-runtime.ts",
       "import": "./src/shell/canonical-runtime.ts",

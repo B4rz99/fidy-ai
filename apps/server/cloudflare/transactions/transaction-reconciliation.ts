@@ -11,6 +11,7 @@ import {
   orderTransactionPair,
 } from "@fidy/server/transaction-reconciliation";
 import { DateTime, Effect, Option, Schema } from "effect";
+import { prepareOwnerAuditCall } from "@fidy/server/audit";
 import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
 import {
   ReconciliationDecisionRow,
@@ -173,21 +174,20 @@ const successStatements = ({
     return acceptedPATStatements({ db, subject, operation, current });
   }
   return [
-    db
-      .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-        SELECT ?, user_id, ?, ?, 'success', ? FROM transaction_reconciliation_decisions
-        WHERE user_id = ? AND first_transaction_id = ? AND second_transaction_id = ?
-          AND state = ? AND changes() = 1`)
-      .bind(
-        transactionId(),
-        subject.id,
-        operation,
-        current,
-        subject.userId,
-        pair.firstTransactionId,
-        pair.secondTransactionId,
-        state
-      ),
+    prepareOwnerAuditCall({
+      db,
+      id: transactionId(),
+      userId: subject.userId,
+      caller: { _tag: "WebSession", id: subject.id },
+      operation,
+      outcome: "success",
+      current,
+      afterOwnerWrite: true,
+      when: {
+        sql: "SELECT 1 FROM transaction_reconciliation_decisions WHERE user_id = ? AND first_transaction_id = ? AND second_transaction_id = ? AND state = ?",
+        params: [subject.userId, pair.firstTransactionId, pair.secondTransactionId, state],
+      },
+    }),
   ];
 };
 

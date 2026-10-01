@@ -58,6 +58,15 @@ Routing rule enables inbound delivery.
 Telemetry is metadata-only and provider-neutral. Secrets, request bodies, model content, provider
 responses, and personal data do not cross the telemetry contract.
 
+Audit publishes approved schemas through `core/audit/contract.ts`, transaction-composable recording
+and budget operations through `shell/audit/operations.ts`, and D1 observation and separately built
+retention authority through `shell/audit/runtime.ts`. Its projections and lifecycle evidence writers
+are private under `shell/audit/internal/`. Peers supply held credential authority or a subject-scoped
+owner commit proof, never Audit table names or body projections. Credential activity consumes an
+Audit-owned proof instead of reading Audit persistence directly. The evidence observer distinguishes
+attributable canonical calls from supporting statement publication/review rows whose baseline stores
+no credential; it never invents missing attribution.
+
 ## 4. External providers
 
 `shell/outbound-http` is the only raw outbound provider transport boundary. It publishes closed
@@ -155,6 +164,12 @@ publication through the Core Worker's execution context after the durable commit
 has a two-second budget and cannot change the accepted response. It grants no authority and is not
 the durability mechanism: the every-minute schedule reoffers eligible outbox identities, including
 when the request ended before publication. Both paths share the same atomic publication cooldown.
+
+Audit retention removes only evidence strictly older than 365 days, in bounded subject-scoped D1
+batches (64 rows per projection, eight subjects per sweep). A deletion permit is private to the
+retention transaction and removed before commit; failed retention rolls back both deletion and permit.
+Ordinary recording exposes no rewrite or deletion authority. The Core schedule observes retention
+through the existing metadata-only scheduled Work span and closed failure projection.
 
 Every scheduled dispatch, reconciliation, and retention activity is attempted independently. One
 failure does not skip the remaining activities; the schedule reports a closed failure after all

@@ -172,6 +172,7 @@ import {
   receiveForwardedEmailWork,
 } from "./ingestion/forwarded-email-delivery";
 import { expireStatementReviewEvidence } from "./ingestion/statement-review-retention";
+import { makeAuditRetention } from "@fidy/server/audit-runtime";
 import { listNeedsReviewItems } from "./ingestion/statement-review";
 import {
   StatementExtractionWorkflowV1,
@@ -2278,6 +2279,14 @@ const eventBucketRetention = (
     ? sweepOperationalEventBuckets({ db: environment.DB, now: current })
     : Effect.void;
 
+const auditRetentionActivity = (
+  environment: CoreEnvironment,
+  current: number
+): Effect.Effect<number, void> =>
+  makeAuditRetention({ database: environment.DB })
+    .sweep(current)
+    .pipe(Effect.mapError(() => undefined));
+
 const scheduledActivities = (
   environment: CoreEnvironment,
   current: number
@@ -2293,6 +2302,7 @@ const scheduledActivities = (
   const publishers = publicationActivities(environment, Option.none());
   return {
     "async.health": scheduledHealth(environment),
+    "audit.retention": auditRetentionActivity(environment, current),
     "operational.events.retention": eventBucketRetention(environment, current),
     "operational.canary.publish": canaryPublication(environment, current),
     "onboarding.email.dispatch": publishers.onboarding(),

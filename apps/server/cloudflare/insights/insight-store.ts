@@ -1,5 +1,10 @@
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import {
+  prepareAuthorizedAuditCall,
+  prepareBrowserAuditBudgetGuard,
+  recordCanonicalPATWork,
+} from "@fidy/server/audit";
+import {
   type DeliveryEvidenceInput,
   InsightDeliveryAttempt,
   InsightEvent,
@@ -17,9 +22,8 @@ import {
   transactionNow,
   transactionUnavailable,
 } from "../transactions/transaction-boundary";
-import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
+import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { prepareOwnedStatement } from "../pats/pat-unit";
-import { dailyAuditBudget, utcDayMilliseconds } from "../atomic/daily-canonical-budget";
 import { budgetAuditLimitRefusal } from "../budgets/budget-outcome";
 import {
   type CanonicalMutationPreparation,
@@ -209,7 +213,7 @@ export const recordInsightCall = ({
         prepareOwnedStatement({
           db,
           statement: recordCanonicalPATWork({
-            subject,
+            authority: livePATAuthority({ subject, current }),
             input: {
               id: transactionId(),
               current,
@@ -231,12 +235,15 @@ export const recordInsightCall = ({
   }
   const authority = callerAuthority({ subject, current });
   return Effect.tryPromise(() =>
-    db
-      .prepare(`INSERT INTO insight_audit
-    (id, user_id, session_id, operation, outcome, occurred_at_ms)
-    SELECT ?, user_id, id, ?, ?, ? FROM ${authority.table} WHERE ${authority.predicate}`)
-      .bind(transactionId(), operation, outcome, current, ...authority.bindings)
-      .run()
+    prepareAuthorizedAuditCall({
+      db,
+      authority,
+      id: transactionId(),
+      operation,
+      outcome,
+      current,
+      afterOwnerWrite: false,
+    }).run()
   ).pipe(
     Effect.map((result) =>
       result.meta.changes === 1 ? ("recorded" as const) : ("unavailable" as const)
@@ -466,18 +473,9 @@ const insightCommitGuards = ({
   current: number;
   index: number;
   operation: string;
-}>): ReadonlyArray<D1PreparedStatement> => {
-  const start = Math.floor(current / utcDayMilliseconds) * utcDayMilliseconds;
-  return [
-    db
-      .prepare(`INSERT INTO canonical_child_guard (child_index,operation,accepted,budget_ok)
-    SELECT ?,?,1,CASE WHEN (SELECT count(*) FROM insight_audit
-      WHERE user_id = ? AND occurred_at_ms >= ? AND occurred_at_ms < ?) < ? THEN 1 ELSE 0 END
-    ON CONFLICT(child_index) DO UPDATE SET operation = excluded.operation,
-      accepted = excluded.accepted, budget_ok = excluded.budget_ok`)
-      .bind(index, operation, userId, start, start + utcDayMilliseconds, dailyAuditBudget),
-  ];
-};
+}>): ReadonlyArray<D1PreparedStatement> => [
+  prepareBrowserAuditBudgetGuard({ db, owner: "insights", userId, current, index, operation }),
+];
 
 const findCommittedInsight = ({
   db,
@@ -558,7 +556,7 @@ const transitionStatements = (
     ? prepareOwnedStatement({
         db,
         statement: recordCanonicalPATWork({
-          subject,
+          authority: livePATAuthority({ subject, current }),
           input: {
             id: transactionId(),
             current,
@@ -568,11 +566,15 @@ const transitionStatements = (
           },
         }),
       })
-    : db
-        .prepare(`INSERT INTO insight_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-      SELECT ?, user_id, id, ?, 'accepted', ? FROM ${authority.table} WHERE ${authority.predicate}
-      AND changes() = 1`)
-        .bind(transactionId(), operation, current, ...authority.bindings);
+    : prepareAuthorizedAuditCall({
+        db,
+        authority,
+        id: transactionId(),
+        operation,
+        outcome: "accepted",
+        current,
+        afterOwnerWrite: true,
+      });
   return {
     _tag: "Prepared",
     mutation: {

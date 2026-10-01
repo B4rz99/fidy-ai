@@ -4,8 +4,13 @@ import {
   type UpdateBudgetInput,
 } from "@fidy/server/budgets-runtime";
 import { DateTime, Effect, Option } from "effect";
+import {
+  prepareAuthorizedAuditCall,
+  prepareBrowserAuditBudgetGuard,
+  recordCanonicalPATWork,
+} from "@fidy/server/audit";
 import { encodeMoneyAmount } from "@fidy/server/transactions-runtime";
-import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
+import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import {
   type TransactionBoundaryFailure,
@@ -27,8 +32,6 @@ import {
   refusedPreparation,
 } from "../mutations/mutation-types";
 import { budgetOutcome, budgetRefusal, findOwnedBudget } from "./budget-outcome";
-import { dailyBudgetAuditLimit } from "./budget-audit";
-import { utcDayMilliseconds } from "../atomic/daily-canonical-budget";
 
 /** The owner cap enforced by budget_capacity in migration 0016. */
 const maximumBudgetsPerUser = 128;
@@ -48,35 +51,23 @@ const budgetCommitGuards = ({
   index: number;
   operation: BudgetOutcome["operation"];
   browser: boolean;
-}>): ReadonlyArray<D1PreparedStatement> => {
-  const day = Math.floor(current / utcDayMilliseconds) * utcDayMilliseconds;
-  return [
-    ...(browser
-      ? [
-          db
-            .prepare(`INSERT INTO canonical_child_guard
-      (child_index,operation,accepted,budget_ok)
-      SELECT ?,?,1,CASE WHEN (SELECT count(*) FROM budget_audit WHERE user_id = ?
-        AND occurred_at_ms >= ? AND occurred_at_ms < ?) < ? THEN 1 ELSE 0 END
-      ON CONFLICT(child_index) DO UPDATE SET operation = excluded.operation,
-        accepted = excluded.accepted, budget_ok = excluded.budget_ok`)
-            .bind(index, operation, userId, day, day + utcDayMilliseconds, dailyBudgetAuditLimit),
-        ]
-      : []),
-    ...(operation === "budgets.createBudget"
-      ? [
-          db
-            .prepare(`INSERT INTO canonical_child_guard
+}>): ReadonlyArray<D1PreparedStatement> => [
+  ...(browser
+    ? [prepareBrowserAuditBudgetGuard({ db, owner: "budgets", userId, current, index, operation })]
+    : []),
+  ...(operation === "budgets.createBudget"
+    ? [
+        db
+          .prepare(`INSERT INTO canonical_child_guard
       (child_index,operation,accepted,capacity_ok)
       SELECT ?,?,1,CASE WHEN (SELECT count(*) FROM budgets WHERE user_id = ?) < ?
         THEN 1 ELSE 0 END
       ON CONFLICT(child_index) DO UPDATE SET operation = excluded.operation,
         accepted = excluded.accepted, capacity_ok = excluded.capacity_ok`)
-            .bind(index, operation, userId, maximumBudgetsPerUser),
-        ]
-      : []),
-  ];
-};
+          .bind(index, operation, userId, maximumBudgetsPerUser),
+      ]
+    : []),
+];
 
 const budgetAudit = ({
   db,
@@ -93,7 +84,7 @@ const budgetAudit = ({
     return prepareOwnedStatement({
       db,
       statement: recordCanonicalPATWork({
-        subject,
+        authority: livePATAuthority({ subject, current }),
         input: {
           id: transactionId(),
           current,
@@ -105,11 +96,15 @@ const budgetAudit = ({
     });
   }
   const authority = callerAuthority({ subject, current });
-  return db
-    .prepare(`INSERT INTO budget_audit (id, user_id, session_id, operation, occurred_at_ms)
-    SELECT ?, user_id, ?, ?, ? FROM ${authority.table}
-    WHERE ${authority.predicate} AND changes() = 1`)
-    .bind(transactionId(), subject.id, operation, current, ...authority.bindings);
+  return prepareAuthorizedAuditCall({
+    db,
+    authority,
+    id: transactionId(),
+    operation,
+    outcome: "accepted",
+    current,
+    afterOwnerWrite: true,
+  });
 };
 
 /** Explain a proved Budget completion using retained earlier children and the post-rollback owner row. */

@@ -2,7 +2,7 @@ import { Context, type Crypto, type DateTime, type Effect, type Layer } from "ef
 import { HttpClientRequest } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import { HttpApiMiddleware, HttpApiSecurity, OpenApi } from "effect/unstable/httpapi";
-import type { AuditCaller, AuditOutcome } from "~/core/audit/model";
+import type { AuditCaller, AuditOutcome } from "~/core/audit/contract";
 import type {
   CanonicalCapabilities,
   CanonicalOperationId,

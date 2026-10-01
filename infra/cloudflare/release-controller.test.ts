@@ -1,4 +1,4 @@
-import { Cause, Effect, Exit, Option } from "effect";
+import { Cause, Deferred, Effect, Exit, Option } from "effect";
 import { describe, expect, it } from "vitest";
 import {
   type Deployment,
@@ -105,6 +105,47 @@ const failure = (effect: Effect.Effect<unknown, Error>, message: string): Effect
   );
 
 describe("zero-traffic Worker release", () => {
+  it("captures both stable Workers with overlapping reads and no traffic writes", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = harness();
+        const bothStarted = yield* Deferred.make<void>();
+        const names = new Set<string>();
+        const port: ReleasePort = {
+          ...fixture.port,
+          current: (name) =>
+            Effect.gen(function* () {
+              names.add(name);
+              if (names.size === 2) yield* Deferred.succeed(bothStarted, undefined);
+              yield* Deferred.await(bothStarted);
+              return yield* fixture.port.current(name);
+            }),
+        };
+        const snapshot = yield* captured(port).pipe(Effect.timeout("1 second"));
+        expect(snapshot.public.stableVersionId).toBe(versions.publicStable);
+        expect(snapshot.core.stableVersionId).toBe(versions.coreStable);
+        expect(fixture.changes).toEqual([]);
+      })
+    ));
+
+  it.each([publicName, coreName])(
+    "refuses capture when the %s read fails without traffic writes",
+    (name) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const fixture = harness();
+          const port: ReleasePort = {
+            ...fixture.port,
+            current: (worker) =>
+              worker === name
+                ? Effect.fail(Error("read unavailable"))
+                : fixture.port.current(worker),
+          };
+          yield* failure(captured(port), "read unavailable");
+          expect(fixture.changes).toEqual([]);
+        })
+      )
+  );
   it("keeps stable versions at 100% while staging exact candidates", () =>
     Effect.runPromise(
       Effect.gen(function* () {

@@ -283,19 +283,27 @@ export const verifyProductionSmoke = Effect.fn(function* (env: unknown) {
   }
   const config = decoded.value;
   const headers = candidateHeaders(config, config.PUBLIC_VERSION_ID);
-  yield* awaitSyntheticWork(config, headers, {
-    gitRevision: config.RELEASE_GIT_SHA,
-    contractDigest: config.CONTRACT_DIGEST,
-    workerVersionId: config.PUBLIC_VERSION_ID,
-  });
-  yield* checkEdge(config, headers);
-  // The next promotion changes Core first. This exact old-public/new-Core pairing must work
-  // before normal traffic can see it; a healthy new/new pair is not sufficient evidence.
-  yield* awaitSyntheticWork(config, candidateHeaders(config, config.STABLE_PUBLIC_VERSION_ID), {
-    gitRevision: config.STABLE_RELEASE_GIT_SHA,
-    contractDigest: config.STABLE_CONTRACT_DIGEST,
-    workerVersionId: config.STABLE_PUBLIC_VERSION_ID,
-  });
+  // Each pairing owns a distinct probe ID. Both must pass before the caller can attest;
+  // Core-first promotion still requires the exact old-public/new-Core pairing.
+  yield* Effect.all(
+    {
+      candidate: awaitSyntheticWork(config, headers, {
+        gitRevision: config.RELEASE_GIT_SHA,
+        contractDigest: config.CONTRACT_DIGEST,
+        workerVersionId: config.PUBLIC_VERSION_ID,
+      }).pipe(Effect.andThen(checkEdge(config, headers))),
+      intermediate: awaitSyntheticWork(
+        config,
+        candidateHeaders(config, config.STABLE_PUBLIC_VERSION_ID),
+        {
+          gitRevision: config.STABLE_RELEASE_GIT_SHA,
+          contractDigest: config.STABLE_CONTRACT_DIGEST,
+          workerVersionId: config.STABLE_PUBLIC_VERSION_ID,
+        }
+      ),
+    },
+    { concurrency: 2, discard: true }
+  );
 });
 
 /** Probe normal traffic after promotion; an exact-version override would hide a routing failure. */

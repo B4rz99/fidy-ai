@@ -142,8 +142,10 @@ const captureRelease = Effect.fn(function* (
     }
     return { name, deploymentId: current.id, stableVersionId: current.versions[0].id };
   });
-  const publicWorker = yield* get(input.publicName);
-  const coreWorker = yield* get(input.coreName);
+  const { publicWorker, coreWorker } = yield* Effect.all(
+    { publicWorker: get(input.publicName), coreWorker: get(input.coreName) },
+    { concurrency: 2 }
+  );
   const snapshot = yield* Schema.decodeEffect(ReleaseSnapshotSchema)({
     revision: input.revision,
     stableRevision: input.stableRevision,

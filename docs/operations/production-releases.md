@@ -54,17 +54,24 @@ The [Kapso real-user launch check](kapso-launch-readiness.md) is separate from o
 
 1. Check out the exact `github.sha` revision and install the locked workspace.
 2. Calculate the canonical contract digest and bind it with `RELEASE_GIT_SHA` for later steps.
-3. Run the focused Worker-boundary tests.
-4. Build and validate the Production web artifact, including immutable release metadata, hashed
-   assets, headers, and secret-free contents.
-5. Create an ephemeral local Alchemy profile.
-6. Compare Production's applied D1 migration names and hashes with checked-in SQL before bootstrapping
-   or planning; fail closed on any missing file, hash mismatch, incomplete history, or inability to
-   query the ledger.
-7. Idempotently bootstrap the persistent Cloudflare state authority with
-   `alchemy provider cloudflare bootstrap`, reject topology drift, and run
-   `alchemy plan --stage production --no-input`.
-8. Recheck trunk, then capture each active public/Core deployment and its sole stable 100% version;
+3. Create an ephemeral local Alchemy profile.
+4. Run four parallel preflight lanes in the same runner: focused Worker-boundary tests, live Workers
+   AI conformance, Production web build/validation, and Cloudflare state checks. The web artifact
+   retains immutable release metadata, hashed assets, headers, and secret-free validation.
+5. In the Cloudflare lane, compare Production's applied D1 migration names and hashes with checked-in
+   SQL before bootstrapping; fail closed on any missing file, hash mismatch, incomplete history, or
+   inability to query the ledger.
+6. Only after the migration check succeeds, idempotently bootstrap the persistent Cloudflare state
+   authority with `alchemy provider cloudflare bootstrap`, then reject topology drift. These three
+   checks remain sequential.
+7. Wait for every preflight lane to finish, failing the release if any lane failed. Runner cancellation
+   terminates their process groups. Grouped logs retain each lane's outcome and elapsed seconds;
+   GitHub step timing observes the complete barrier. No extra telemetry or provider payload capture
+   is needed. Require the reviewed edge policy, then run
+   `alchemy plan --stage production --no-input`. No planning or candidate upload can bypass the barrier.
+8. Recheck trunk through the bounded Git reference response (not commit patches), then capture each
+   active public/Core deployment and its sole stable 100% version. Independent public/Core capture
+   reads overlap with concurrency capped at two;
    prove both stable identities through the reserved smoke path. Refuse an ambiguous deployment.
    Alchemy may retain a replacement receipt while old-generation cleanup is pending; use its current
    generation only when the Worker identity and rollout hash are present. For an interrupted update,
@@ -81,7 +88,13 @@ The [Kapso real-user launch check](kapso-launch-readiness.md) is separate from o
     its captured stable version (100%). It re-reads Cloudflare after each write. Never replace 0%
     with a nonzero percentage to accommodate a differing API schema.
 11. Run `verify-production-smoke.ts` against the exact candidate pair **and** the old-public/new-Core
-    pairing using explicit version overrides. Both must succeed before any normal traffic changes.
+    pairing concurrently (at most two), using explicit version overrides and distinct synthetic probe
+    IDs. Each probe owns its D1 status and Queue/Workflow identity; both use the same fixed, idempotent
+    R2 marker and compatibility-only Durable Object check. Candidate edge rejection checks still
+    follow successful candidate synthetic work. Both pairings and edge checks must succeed before
+    any normal traffic changes. Failure interrupts the sibling's runner-side work, never qualifies a
+    partial success as an attestation, and does not cancel already admitted platform work; its
+    existing admission cap and five-minute expiry remain unchanged.
 12. Recheck trunk and current deployment IDs before each promotion. Route the tested Core candidate
     to 100%, then the tested public candidate to 100%. No mutable tag or latest-version selector
     participates. Verify the redirect, static metadata, and bound health response afterward.

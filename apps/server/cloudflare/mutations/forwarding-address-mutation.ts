@@ -1,3 +1,4 @@
+import { prepareConsentAction } from "../consent/operations";
 import { EmailForwardingAddress } from "../../src/core/ingestion/model";
 import { Effect, Option, Schema } from "effect";
 import { dailyAuditExhausted, refusedByAuditBudget } from "@fidy/server/audit";
@@ -69,14 +70,15 @@ export const prepareForwardingAddress = Effect.fn(function* (
   work: Parameters<CanonicalMutationAdapter["prepare"]>[0]
 ) {
   const existing = yield* Effect.tryPromise(() =>
-    work.db
-      .prepare(
-        `SELECT id FROM email_forwarding_addresses WHERE user_id = ? AND
-       EXISTS (SELECT 1 FROM onboarding_consent_records WHERE user_id = ?) AND
-       NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = ?)`
-      )
-      .bind(work.subject.userId, work.subject.userId, work.subject.userId)
-      .first()
+    prepareConsentAction({
+      db: work.db,
+      subject: { _tag: "User", userId: work.subject.userId },
+      requirement: "active",
+      statement: {
+        sql: "SELECT id FROM email_forwarding_addresses WHERE user_id = ?",
+        params: [work.subject.userId],
+      },
+    }).first()
   ).pipe(Effect.option);
   if (Option.isNone(existing) || existing.value === null) return failedPreparation();
   const exhausted = yield* Effect.tryPromise(() =>

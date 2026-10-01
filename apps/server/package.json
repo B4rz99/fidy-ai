@@ -104,16 +104,6 @@
       "import": "./src/shell/email-authentication/delivery.ts",
       "default": "./src/shell/email-authentication/delivery.ts"
     },
-    "./consent-pat": {
-      "types": "./src/shell/consent/pat-runtime.ts",
-      "import": "./src/shell/consent/pat-runtime.ts",
-      "default": "./src/shell/consent/pat-runtime.ts"
-    },
-    "./consent-ingress": {
-      "types": "./src/shell/consent/ingress.ts",
-      "import": "./src/shell/consent/ingress.ts",
-      "default": "./src/shell/consent/ingress.ts"
-    },
     "./whatsapp-hosted": {
       "types": "./src/shell/channels/whatsapp/hosted-sender.ts",
       "import": "./src/shell/channels/whatsapp/hosted-sender.ts",
@@ -168,6 +158,16 @@
       "types": "./src/shell/hosted-inference/model.ts",
       "import": "./src/shell/hosted-inference/model.ts",
       "default": "./src/shell/hosted-inference/model.ts"
+    },
+    "./consent-contract": {
+      "types": "./src/shell/consent/contract.ts",
+      "import": "./src/shell/consent/contract.ts",
+      "default": "./src/shell/consent/contract.ts"
+    },
+    "./consent-operations": {
+      "types": "./src/shell/consent/operations.ts",
+      "import": "./src/shell/consent/operations.ts",
+      "default": "./src/shell/consent/operations.ts"
     }
   },
   "scripts": {
@@ -184,7 +184,7 @@
     "test:email-interpretation": "bun --bun vitest run --config vitest.email-interpretation.config.ts",
     "test:mutation": "node ../../tools/mutation/run.mjs",
     "check:browser-client": "bun scripts/check-browser-client.ts",
-    "lint:deps": "bun ../../tools/depcruise/run.mjs . src scripts tools",
+    "lint:deps": "bun ../../tools/depcruise/run.mjs . src scripts tools cloudflare",
     "lint:deps:probes": "bun scripts/check-dependency-guards.ts",
     "check:lint-guards": "bun scripts/check-lint-guards.ts"
   },

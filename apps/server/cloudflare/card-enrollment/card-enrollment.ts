@@ -1,3 +1,4 @@
+import { prepareConsentAction } from "../consent/operations";
 import {
   BillingAttempt,
   BillingAttemptId,
@@ -201,14 +202,19 @@ const authority = (
   const token = matches[0]?.slice("__Host-fidy_session=".length) ?? "";
   if (!/^[A-Za-z0-9_-]{43}$/u.test(token)) return Promise.resolve(Option.none());
   return digest(token).then((tokenDigest) =>
-    db
-      .prepare(`SELECT s.user_id, u.time_zone, v.email_address FROM web_sessions AS s
-    JOIN users AS u ON u.id = s.user_id
-    JOIN verified_email_credentials AS v ON v.user_id = s.user_id
-    JOIN onboarding_consent_records AS c ON c.user_id = s.user_id
-    WHERE s.token_digest = ? AND s.revoked_at_ms IS NULL AND s.fresh_until_ms > ?
-      AND s.idle_expires_at_ms > ? AND s.hard_expires_at_ms > ?`)
-      .bind(tokenDigest, at, at, at)
+    prepareConsentAction({
+      db,
+      statement: {
+        sql: `SELECT s.user_id, u.time_zone, v.email_address FROM web_sessions AS s
+        JOIN users AS u ON u.id = s.user_id
+        JOIN verified_email_credentials AS v ON v.user_id = s.user_id
+        WHERE s.token_digest = ? AND s.revoked_at_ms IS NULL AND s.fresh_until_ms > ?
+          AND s.idle_expires_at_ms > ? AND s.hard_expires_at_ms > ?`,
+        params: [tokenDigest, at, at, at],
+      },
+      subject: { _tag: "Owner", column: "s.user_id" },
+      requirement: "granted",
+    })
       .first()
       .then((row) => decodeRow(Session, row))
   );

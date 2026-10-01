@@ -1,8 +1,10 @@
 import { NodeFileSystem } from "@effect/platform-node";
 import { it as effectIt } from "@effect/vitest";
-import { Data, Effect, Exit, Fiber, FileSystem, Result } from "effect";
+import { Data, Effect, Exit, Fiber, FileSystem, Option, Result } from "effect";
 import { Miniflare } from "miniflare";
 import { rolldown } from "rolldown";
+import { currentDisclosureFor } from "@fidy/server/consent-operations";
+import { installTestSchema } from "../d1-test-fixture";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { makeAdmittedWorkersAiRun, sweepExpiredWorkersAiAdmission } from "../ai/workers-ai";
 import { afterEach, describe, expect, it } from "vitest";
@@ -85,6 +87,32 @@ const migrateDatabase = (database: D1Database): Promise<void> =>
           )
       );
     })
+  );
+
+const modelUserId = "10000000-0000-4000-8000-000000000001";
+const seedModelConsent = (database: D1Database): Promise<unknown> =>
+  installTestSchema({
+    db: database,
+    sources: [
+      "0001_categories",
+      "0003_pending_consent",
+      "0004_onboarding_email",
+      "0005_verified_onboarding",
+      "0006_browser_login",
+      "0009_transactions",
+      "0010_pat_lifecycle",
+    ].map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
+  }).then(() =>
+    database.batch([
+      database
+        .prepare("INSERT INTO users VALUES (?, 'CO', 'es-CO', 'America/Bogota', 1000)")
+        .bind(modelUserId),
+      database
+        .prepare(
+          "INSERT INTO onboarding_consent_records VALUES ('30000000-0000-4000-8000-000000000001', ?, ?, 'disclosed', 'accepted', 1000, 1000)"
+        )
+        .bind(modelUserId, JSON.stringify(currentDisclosureFor())),
+    ])
   );
 
 const prepareDatabase = (miniflare: Miniflare): Promise<D1Database> =>
@@ -411,9 +439,11 @@ describe("Cloudflare resource admission", () => {
         const miniflare = yield* fromTestPromise(() => makeMiniflare());
         const database = yield* fromTestPromise(() => prepareDatabase(miniflare));
         let calls = 0;
+        yield* fromTestPromise(() => seedModelConsent(database));
         const run = makeAdmittedWorkersAiRun({
           db: database,
-          userId: "user-one",
+          userId: modelUserId,
+          admittedTurnId: Option.none,
           nowEpochMs: () => epochMs(10_000),
           run: () => {
             calls += 1;
@@ -462,9 +492,11 @@ describe("Cloudflare resource admission", () => {
               ? (): Promise<never> => Promise.reject(new Error("D1 unavailable"))
               : Reflect.get(target, key, target),
         });
+        yield* fromTestPromise(() => seedModelConsent(database));
         const run = makeAdmittedWorkersAiRun({
           db: unavailableDb,
-          userId: "user-one",
+          userId: modelUserId,
+          admittedTurnId: Option.none,
           nowEpochMs: () => epochMs(10_000),
           run: () => {
             providerCalls++;
@@ -502,9 +534,11 @@ describe("Cloudflare resource admission", () => {
       Effect.gen(function* () {
         const miniflare = yield* fromTestPromise(() => makeMiniflare());
         const database = yield* fromTestPromise(() => prepareDatabase(miniflare));
+        yield* fromTestPromise(() => seedModelConsent(database));
         const run = makeAdmittedWorkersAiRun({
           db: database,
-          userId: "user-one",
+          userId: modelUserId,
+          admittedTurnId: Option.none,
           nowEpochMs: () => epochMs(100_000_000),
           run: () => Promise.resolve(Response.json({})),
         });

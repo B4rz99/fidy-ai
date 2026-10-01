@@ -1,3 +1,5 @@
+import { prepareConsentAction } from "../consent/operations";
+import { protectConsentStatement } from "@fidy/server/consent-operations";
 import { prepareOwnerAuditCall } from "@fidy/server/audit";
 import { CreateTransactionInput, encodeMoneyAmount } from "@fidy/server/transactions-runtime";
 import {
@@ -79,12 +81,15 @@ export const transactionSession = ({
   if (Option.isNone(cookie)) return Promise.resolve(Option.none());
   return sha256(cookie.value).then((digest) => {
     const current = now();
-    return db
-      .prepare(
-        `SELECT id, user_id FROM web_sessions WHERE token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
-      AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = web_sessions.user_id)`
-      )
-      .bind(digest, current, current)
+    return prepareConsentAction({
+      db,
+      statement: {
+        sql: `SELECT id, user_id FROM web_sessions WHERE token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?`,
+        params: [digest, current, current],
+      },
+      subject: { _tag: "Owner", column: "web_sessions.user_id" },
+      requirement: "unrevoked",
+    })
       .first()
       .then((raw) => sessionSubject(raw, digest));
   });
@@ -108,10 +113,14 @@ const captureAudit = (
     outcome: "success",
     current,
     afterOwnerWrite: true,
-    when: {
-      sql: "SELECT 1 FROM transactions WHERE user_id = ? AND id = ? AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = transactions.user_id)",
-      params: [subject.userId, id],
-    },
+    when: protectConsentStatement({
+      statement: {
+        sql: "SELECT 1 FROM transactions WHERE user_id = ? AND id = ?",
+        params: [subject.userId, id],
+      },
+      subject: { _tag: "Owner", column: "transactions.user_id" },
+      requirement: "unrevoked",
+    }),
   });
 };
 

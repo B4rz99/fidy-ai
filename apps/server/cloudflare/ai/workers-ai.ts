@@ -5,7 +5,9 @@ import {
   type WorkersAiBindingRun,
   makeWorkersAiHostedInference,
 } from "@fidy/server/hosted-inference";
-import { type Cause, Effect, type Layer, Option } from "effect";
+import { type Cause, Data, Effect, type Layer, Option } from "effect";
+import type { TranscriptTurnId } from "@fidy/server/agent-runtime";
+import { withConsentEgress } from "../consent/operations";
 import { cloudflareWorkerTelemetry, observeModelRun } from "../runtime/telemetry";
 import { newId } from "../pats/pat-shared";
 import {
@@ -98,18 +100,37 @@ const spendRequest = (userId: string, cost: ResourceAdmissionUnits): ResourceAdm
   },
 });
 
-/** Reserve the maximum provider-token proxy before every paid call, even on provider failure. */
+class WorkersAiBindingFailure extends Data.TaggedError("WorkersAiBindingFailure")<{
+  readonly cause: unknown;
+}> {}
+
+const inferenceAdmissionFailure = (failure: unknown): HostedInferenceError =>
+  new HostedInferenceError({
+    reason: {
+      _tag: failure instanceof ResourceAdmissionRefused ? "ResourceLimit" : "AdmissionUnavailable",
+    },
+    retryable: false,
+    retryAfter: Option.none(),
+  });
+
+/**
+ * Recheck the User's Consent purpose immediately before every provider call and reserve the maximum
+ * token proxy even on failure. Only an exact, still-Pending admitted Turn can retain its accepted
+ * Consent basis after revocation; preflight and standalone work require current standing.
+ */
 export const makeAdmittedWorkersAiRun =
   ({
     db,
     userId,
     run,
     nowEpochMs,
+    admittedTurnId,
   }: Readonly<{
     db: D1Database;
     userId: string;
     run: WorkersAiBindingRun;
     nowEpochMs: () => number;
+    admittedTurnId: () => Option.Option<TranscriptTurnId>;
   }>): WorkersAiBindingRun =>
   (model, request, options) => {
     const current = ResourceAdmissionEpochMs.make(nowEpochMs());
@@ -121,20 +142,30 @@ export const makeAdmittedWorkersAiRun =
     const cost = ResourceAdmissionUnits.make(
       new TextEncoder().encode(JSON.stringify(request)).length + request.max_tokens
     );
-    return Effect.runPromise(authority.admitWithAttemptPressure(spendRequest(userId, cost)))
-      .catch((failure: unknown) => {
-        throw new HostedInferenceError({
-          reason: {
-            _tag:
-              failure instanceof ResourceAdmissionRefused
-                ? "ResourceLimit"
-                : "AdmissionUnavailable",
-          },
-          retryable: false,
-          retryAfter: Option.none(),
-        });
-      })
-      .then(() => run(model, request, options));
+    return Effect.runPromise(
+      authority.admitWithAttemptPressure(spendRequest(userId, cost)).pipe(
+        Effect.mapError(inferenceAdmissionFailure),
+        Effect.flatMap(() =>
+          withConsentEgress({
+            db,
+            userId,
+            admittedTurnId: admittedTurnId(),
+            action: Effect.tryPromise({
+              try: () => run(model, request, options),
+              catch: (cause) => new WorkersAiBindingFailure({ cause }),
+            }),
+          }).pipe(
+            Effect.mapError((failure) =>
+              failure instanceof WorkersAiBindingFailure
+                ? failure
+                : inferenceAdmissionFailure(failure)
+            )
+          )
+        )
+      )
+    ).catch((failure: unknown) => {
+      throw failure instanceof WorkersAiBindingFailure ? failure.cause : failure;
+    });
   };
 
 /** Remove bounded expired AI admission evidence; never refund unexpired spend or retry grants. */
@@ -176,7 +207,11 @@ export type WorkersAiEnvironment = Readonly<{
  */
 const constructInference = (
   environment: WorkersAiEnvironment,
-  admission?: Readonly<{ db: D1Database; userId: string }>
+  admission?: Readonly<{
+    db: D1Database;
+    userId: string;
+    admittedTurnId: () => Option.Option<TranscriptTurnId>;
+  }>
 ): Effect.Effect<HostedInferenceService, HostedInferenceError> => {
   const binding = Option.fromNullishOr(environment.AI);
   return makeWorkersAiHostedInference({
@@ -203,26 +238,32 @@ export const makeCloudflareHostedInference = (
   environment: WorkersAiEnvironment
 ): Effect.Effect<HostedInferenceService, HostedInferenceError> => constructInference(environment);
 
-/** Production inference has a stable User and private D1 spend authority. */
+/** Production inference rechecks User-owned Consent and spend authority at every provider egress. */
 export const makeUserCloudflareHostedInference = ({
   environment,
   db,
   userId,
+  admittedTurnId,
 }: Readonly<{
   environment: WorkersAiEnvironment;
   db: D1Database;
   userId: string;
+  admittedTurnId: () => Option.Option<TranscriptTurnId>;
 }>): Effect.Effect<HostedInferenceService, HostedInferenceError> =>
-  constructInference(environment, { db, userId });
+  constructInference(environment, { db, userId, admittedTurnId });
 
 /** Cloudflare-configured production composition for Memory and hosted Turns. */
 export const cloudflareHostedInferenceLive = ({
   environment,
   db,
   userId,
+  admittedTurnId,
 }: Readonly<{
   environment: WorkersAiEnvironment;
   db: D1Database;
   userId: string;
+  admittedTurnId: () => Option.Option<TranscriptTurnId>;
 }>): Layer.Layer<HostedInference, HostedInferenceError> =>
-  HostedInference.layer(makeUserCloudflareHostedInference({ environment, db, userId }));
+  HostedInference.layer(
+    makeUserCloudflareHostedInference({ environment, db, userId, admittedTurnId })
+  );

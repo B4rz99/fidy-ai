@@ -1,3 +1,4 @@
+import { readConsentStatus } from "../consent/operations";
 import { Clock, Data, Effect, Option, Schema } from "effect";
 import {
   prepareAuthorizedAuditCall,
@@ -437,13 +438,9 @@ export const refusedPATWork = ({
   db,
   userId,
 }: Readonly<{ db: D1Database; userId: string }>): Promise<Response> =>
-  Effect.tryPromise({
-    try: () =>
-      db.prepare("SELECT 1 FROM consent_user_revocations WHERE user_id = ?").bind(userId).first(),
-    catch: () => undefined,
-  }).pipe(
-    Effect.map((withdrawn) =>
-      withdrawn === null
+  readConsentStatus({ db, userId }).pipe(
+    Effect.map((standing) =>
+      standing !== "Revoked"
         ? transactionFailure({
             code: "unauthenticated",
             status: HTTP_UNAUTHENTICATED,

@@ -33,7 +33,7 @@ import {
 } from "~/shell/_shared/operation-policy";
 
 /** Held credential authority type for owner-composed canonical work. */
-export type { PATAuthority } from "./pat-authority";
+export type { PATAuthority } from "./contract";
 export type { AuditedPATOperation } from "./pat-audited-operations";
 
 export const issuanceConsumedMessage =

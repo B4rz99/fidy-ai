@@ -17,7 +17,7 @@ import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { DisclosureSnapshot } from "@fidy/server/agent-runtime";
 import { CategoryId, CategoryKeyword, KeywordRuleId } from "@fidy/server/categories";
 import { keywordRuleGuardFailure } from "../mutations/keyword-rule-outcome";
-import { currentDisclosureFor } from "@fidy/server/consent-ingress";
+import { currentDisclosureFor } from "@fidy/server/consent-operations";
 import { hostedDeliveryReceipt } from "../agent/hosted-turn";
 import { hostedTurnTestMigrations } from "../agent/hosted-turn-test-migrations";
 import { sweepHostedTurns } from "../agent/hosted-turn-sweep";

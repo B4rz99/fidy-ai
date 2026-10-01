@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { ConfigProvider, Data, Effect } from "effect";
-import { CURRENT_DISCLOSURE_TEXT, currentDisclosure } from "./current-disclosure";
+import { currentDisclosure } from "./operations";
 
 class PolicyFixtureUnavailable extends Data.TaggedError("PolicyFixtureUnavailable")<{}> {}
 
@@ -22,7 +22,7 @@ it.effect("pins the exact chat disclosure and web-owned policy metadata", () =>
   Effect.gen(function* () {
     const disclosure = yield* loadCurrentDisclosure;
 
-    expect(sha256(CURRENT_DISCLOSURE_TEXT)).toBe(disclosure.contentSha256);
+    expect(sha256(disclosure.text)).toBe(disclosure.contentSha256);
     const policy = yield* Effect.tryPromise({
       try: () =>
         Bun.file(

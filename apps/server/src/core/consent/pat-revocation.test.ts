@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { decidePATRevocation } from "./pat-revocation";
+import { decidePATRevocation } from "./operations";
 
 it("distinguishes a User's authenticated revocation from automatic PAT expiry", () => {
   expect(decidePATRevocation("user-revoke-one")).toMatchObject({

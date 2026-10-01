@@ -1,3 +1,4 @@
+import { readConsentStanding } from "../consent/operations";
 import {
   AssistantTranscriptEntry,
   CanonicalToolCallEntry,
@@ -5,7 +6,6 @@ import {
   CanonicalToolOutcome,
   CanonicalToolResultEntry,
   type CompactedConversationOutput,
-  DisclosureSnapshot,
   FailedTurnTranscriptEntry,
   type HostedAdmissionState,
   HostedAgentSessionConsentBasis,
@@ -26,7 +26,7 @@ import {
   memoryRowsQuery,
   terminalPrefixCursor,
 } from "@fidy/server/agent-runtime";
-import { type Cause, DateTime, Effect, Option, Schema } from "effect";
+import { Cause, DateTime, Effect, Option, Schema } from "effect";
 import type { TransactionSubject } from "../transactions/transaction-boundary";
 import { transactionNow } from "../transactions/transaction-boundary";
 import {
@@ -64,13 +64,10 @@ const TurnRow = Schema.Struct({
   started_at_ms: Schema.Int,
   proposed_at_ms: Schema.NullOr(Schema.Int),
 });
-const ConsentUserRow = Schema.Struct({
+const UserContextRow = Schema.Struct({
   service_market: ServiceMarket,
   locale: Locale,
   time_zone: IanaTimeZone,
-  id: Schema.String,
-  disclosure_json: Schema.String,
-  revoked: Schema.Int,
 });
 const CompactRow = Schema.Struct({
   text: Schema.String.check(Schema.isMinLength(1)),
@@ -93,7 +90,7 @@ const EntryRow = Schema.Struct({
   outcome_json: Schema.NullOr(Schema.String),
 });
 
-type ConsentUserRow = typeof ConsentUserRow.Type;
+type UserContextRow = typeof UserContextRow.Type;
 type SessionRow = typeof SessionRow.Type;
 type TurnRow = typeof TurnRow.Type;
 type EntryRow = typeof EntryRow.Type;
@@ -101,9 +98,9 @@ type EntryRow = typeof EntryRow.Type;
 /** No decoded private data is returned when the current credential or Consent is not live. */
 export type HostedTurnSnapshot = Readonly<{
   user: Readonly<{
-    serviceMarket: ConsentUserRow["service_market"];
-    locale: ConsentUserRow["locale"];
-    timeZone: ConsentUserRow["time_zone"];
+    serviceMarket: UserContextRow["service_market"];
+    locale: UserContextRow["locale"];
+    timeZone: UserContextRow["time_zone"];
   }>;
   consentBasis: HostedAgentSessionConsentBasis;
   revoked: boolean;
@@ -111,19 +108,6 @@ export type HostedTurnSnapshot = Readonly<{
   session: Option.Option<SessionRow>;
   pending: Option.Option<TurnRow>;
 }>;
-
-const decodeConsent = (row: ConsentUserRow): HostedAgentSessionConsentBasis => {
-  const disclosure = Schema.decodeSync(Schema.fromJsonString(DisclosureSnapshot))(
-    row.disclosure_json
-  );
-  return Schema.decodeSync(HostedAgentSessionConsentBasis)({
-    grantId: row.id,
-    disclosureRevision: disclosure.revision,
-    disclosureSha256: disclosure.contentSha256,
-    policyRevision: disclosure.policy.revision,
-    policySha256: disclosure.policy.contentSha256,
-  });
-};
 
 /** Recheck the supplied WebSession or verified WhatsApp association and read the User's hosted lifecycle; revoked Consent remains visible for refusal. */
 export const readHostedSnapshot = ({
@@ -139,15 +123,17 @@ export const readHostedSnapshot = ({
     const authority = hostedIdentity({ subject, current: now });
     const raw = yield* Effect.tryPromise(() =>
       db
-        .prepare(`SELECT u.service_market, u.locale, u.time_zone, c.id, c.disclosure_json,
-      EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = u.id) AS revoked
-      FROM users AS u JOIN onboarding_consent_records AS c ON c.user_id = u.id
+        .prepare(`SELECT u.service_market, u.locale, u.time_zone FROM users AS u
       WHERE u.id = ? AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
         .bind(subject.userId, ...authority.bindings)
         .first()
     );
     if (raw === null) return Option.none();
-    const user = yield* Schema.decodeUnknownEffect(ConsentUserRow)(raw);
+    const user = yield* Schema.decodeUnknownEffect(UserContextRow)(raw);
+    const standing = yield* readConsentStanding({ db, userId: subject.userId }).pipe(
+      Effect.mapError((cause) => new Cause.UnknownError(cause))
+    );
+    if (standing._tag === "Missing") return Option.none();
     const sessionRaw = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT id, user_id, consent_basis_json, started_at_ms, last_activity_at_ms, status
@@ -181,8 +167,8 @@ export const readHostedSnapshot = ({
     );
     return Option.some({
       user: { serviceMarket: user.service_market, locale: user.locale, timeZone: user.time_zone },
-      consentBasis: decodeConsent(user),
-      revoked: user.revoked === 1,
+      consentBasis: standing.basis,
+      revoked: standing._tag === "Revoked",
       capacityAvailable: Option.exists(budgetRow, (row) => row.used < maximumDailyTurns),
       session:
         sessionRaw === null

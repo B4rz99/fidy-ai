@@ -1,3 +1,4 @@
+import { readConsentStatus } from "../consent/operations";
 import {
   ListCategoriesResponse,
   categoryResponseFromRows,
@@ -80,15 +81,10 @@ const refusedCategoryWork = (
 ): Effect.Effect<Response, void> =>
   Effect.gen(function* () {
     if (isPATCaller(subject)) {
-      const withdrawn = yield* Effect.tryPromise({
-        try: () =>
-          db
-            .prepare("SELECT 1 FROM consent_user_revocations WHERE user_id = ?")
-            .bind(subject.userId)
-            .first(),
-        catch: () => undefined,
-      });
-      if (withdrawn !== null) return userActionRequired();
+      const standing = yield* readConsentStatus({ db, userId: subject.userId }).pipe(
+        Effect.mapError(() => undefined)
+      );
+      if (standing === "Revoked") return userActionRequired();
     }
     return unauthenticated();
   });

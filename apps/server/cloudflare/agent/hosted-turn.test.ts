@@ -1,7 +1,7 @@
 import { applyTestMigration, installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { type Cause, Clock, DateTime, Effect, Option, Redacted, Schema } from "effect";
-import { currentDisclosureFor, decodeKapsoWebhook } from "@fidy/server/consent-ingress";
+import { currentDisclosureFor, decodeKapsoWebhook } from "@fidy/server/consent-operations";
 import {
   CanonicalToolOutcome,
   DisclosureSnapshot,

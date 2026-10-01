@@ -88,6 +88,29 @@ export default {
       },
     },
     {
+      name: "foreign-module-imports-cloudflare-consent-internal",
+      severity: "error",
+      comment:
+        "Consent's Cloudflare rows, SQL, and lifecycle implementation are private to that owner. " +
+        "Other adapters, portable modules, tests, and tools must use Consent contract.ts, " +
+        "operations.ts, or an explicit runtime composition instead (#594, ADR 0003).",
+      from: {
+        path: "^(src|cloudflare|scripts|tools)/",
+        pathNot: "^cloudflare/consent/",
+      },
+      to: { path: "^cloudflare/consent/internal/" },
+    },
+    {
+      name: "cloudflare-imports-portable-consent-internal",
+      severity: "error",
+      comment:
+        "Cloudflare adapters, including the same-named Consent adapter, consume the portable " +
+        "Consent owner's published contract and operations. Core and shell Consent internals " +
+        "remain private across the platform boundary (#594, ADR 0003).",
+      from: { path: "^cloudflare/" },
+      to: { path: "^src/(core|shell)/consent/internal/" },
+    },
+    {
       name: "provider-callers-import-raw-http",
       severity: "error",
       comment:

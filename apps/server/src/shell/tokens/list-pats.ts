@@ -4,6 +4,7 @@ import { ActivePATMetadata, PATRecipientLabel, PATScopes, TokenShortId } from "~
 import type { UserId } from "~/core/identity/reference";
 import { Unavailable } from "~/shell/public-http/contract";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
+import { protectConsentStatement } from "~/shell/consent/operations";
 import type { FreshSessionSubject } from "~/shell/identity/browser-runtime";
 
 const activeLimit = 100;
@@ -33,23 +34,33 @@ export const patMetadataQuery = ({
   userId: string;
   current: number;
   session: Option.Option<FreshSessionSubject>;
-}>): OwnedStatement => ({
-  sql: `SELECT short_id,recipient_label,scopes_json,created_at_ms,last_used_at_ms,expires_at_ms
-    FROM pats WHERE user_id = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?
-    AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = pats.user_id)
-    ${
-      Option.isSome(session)
-        ? `AND EXISTS (SELECT 1 FROM web_sessions WHERE id = ? AND user_id = ?
-      AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?)`
-        : ""
-    }
-    ORDER BY created_at_ms DESC LIMIT ${activeLimit + 1}`,
-  params: [
-    userId,
-    current,
-    ...(Option.isSome(session) ? [session.value.id, session.value.user_id, current, current] : []),
-  ],
-});
+}>): OwnedStatement => {
+  const protectedQuery = protectConsentStatement({
+    statement: {
+      sql: `SELECT short_id,recipient_label,scopes_json,created_at_ms,last_used_at_ms,expires_at_ms
+        FROM pats WHERE user_id = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?`,
+      params: [userId, current],
+    },
+    subject: { _tag: "Owner", column: "pats.user_id" },
+    requirement: "unrevoked",
+  });
+  return {
+    sql: `${protectedQuery.sql}
+      ${
+        Option.isSome(session)
+          ? `AND EXISTS (SELECT 1 FROM web_sessions WHERE id = ? AND user_id = ?
+        AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?)`
+          : ""
+      }
+      ORDER BY created_at_ms DESC LIMIT ${activeLimit + 1}`,
+    params: [
+      ...protectedQuery.params,
+      ...(Option.isSome(session)
+        ? [session.value.id, session.value.user_id, current, current]
+        : []),
+    ],
+  };
+};
 
 const decodeMetadata = (
   row: typeof PATMetadataRow.Type

@@ -61,7 +61,7 @@ type Probe = {
 const decode = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
 
 const runGraph = (
-  sourceRoots: readonly string[] = ["src", "scripts", "tools"]
+  sourceRoots: readonly string[] = ["src", "scripts", "tools", "cloudflare"]
 ): { readonly exitCode: Option.Option<number>; readonly report: string } => {
   const spawned = Bun.spawnSync(["bun", "../../tools/depcruise/run.mjs", ".", ...sourceRoots], {
     cwd: serverRoot,
@@ -126,8 +126,80 @@ const scriptRuntime = `scripts/${PROBE_PREFIX}runtime-composition`;
 const landmarkInternal = `src/${PROBE_PREFIX}landmark-internal`;
 const landmarkInternalTarget = `src/shell/${PROBE_PREFIX}landmark-internal-target`;
 const emptyGraph = `tools/${PROBE_PREFIX}empty-graph`;
+const cloudflareConsentPublished = `cloudflare/${PROBE_PREFIX}consent-published`;
+const cloudflareConsentPrivate = `cloudflare/${PROBE_PREFIX}consent-private`;
+const cloudflareConsentShellPrivate = `cloudflare/consent/${PROBE_PREFIX}shell-private`;
+const cloudflareConsentCorePrivate = `cloudflare/consent/${PROBE_PREFIX}core-private`;
 
 const PROBES: readonly Probe[] = [
+  {
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `${cloudflareConsentPublished}/probe.ts`,
+        source:
+          'import type { ConsentStatus } from "../consent/contract";\n' +
+          'import { readConsentStatus } from "../consent/operations";\n' +
+          'import { DisclosureSnapshot } from "@fidy/server/consent-contract";\n' +
+          'import { protectConsentStatement } from "@fidy/server/consent-operations";\n\n' +
+          "export type PublishedStatus = ConsentStatus;\n" +
+          "export const published = [readConsentStatus, DisclosureSnapshot, protectConsentStatement];\n",
+      },
+    ],
+    name: "Cloudflare consumers may use the published Consent contract and operations",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-consent-internal: ${cloudflareConsentPrivate}/probe.test.ts → cloudflare/consent/internal/standing.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${cloudflareConsentPrivate}/probe.test.ts`,
+        source:
+          'import { loadStanding } from "../consent/internal/standing";\n\n' +
+          "export const privateStanding = loadStanding;\n",
+      },
+    ],
+    name: "foreign Cloudflare tests cannot bypass the private Consent adapter",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error cloudflare-imports-portable-consent-internal: ${cloudflareConsentShellPrivate}/probe.ts → src/shell/consent/internal/protected-actions.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${cloudflareConsentShellPrivate}/probe.ts`,
+        source:
+          'import { consentConditions } from "~/shell/consent/internal/protected-actions";\n\n' +
+          "export const privateConditions = consentConditions;\n",
+      },
+    ],
+    name: "the Cloudflare Consent owner cannot import portable shell Consent internals",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error cloudflare-imports-portable-consent-internal: ${cloudflareConsentCorePrivate}/probe.ts → src/core/consent/internal/replies.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${cloudflareConsentCorePrivate}/probe.ts`,
+        source:
+          'import { normalizeReply } from "~/core/consent/internal/replies";\n\n' +
+          "export const privateReplyPolicy = normalizeReply;\n",
+      },
+    ],
+    name: "the Cloudflare Consent owner cannot import portable core Consent internals",
+  },
+
   {
     expect: { kind: "allowed" },
     files: [
@@ -809,7 +881,7 @@ const remove = (path: string): void => {
   }
 };
 
-const stale = ["src", "scripts", "tools"].flatMap((root) =>
+const stale = ["src", "scripts", "tools", "cloudflare"].flatMap((root) =>
   Array.from(
     new Bun.Glob("**/__probe-*").scanSync({ cwd: `${serverRoot}/${root}`, onlyFiles: false })
   ).map((entry) => `${root}/${entry}`)

@@ -1,3 +1,4 @@
+import { prepareAcceptedConsentCaller, recordOnboardingConsent } from "../consent/operations";
 import { EmailAddress, EmailVerificationCode } from "@fidy/server/client";
 import {
   canRedeemOnboardingProof,
@@ -100,21 +101,19 @@ const createUser = (db: D1Database, row: Enrollment, now: number): Promise<Respo
           .prepare(`INSERT INTO users (id, service_market, locale, time_zone, created_at_ms)
       VALUES (?, ?, ?, ?, ?)`)
           .bind(userId, context.serviceMarket, context.locale, context.timeZone, now),
-        db
-          .prepare(`INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms)
-      SELECT ?, portfolio_id, bsuid, ? FROM pending_consent_exchanges WHERE id = ? AND state = 'accepted'`)
-          .bind(userId, now, row.exchange_id),
+        prepareAcceptedConsentCaller({
+          db,
+          statement: {
+            sql: `INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms)
+              SELECT ?, portfolio_id, bsuid, ? FROM accepted_consent_callers WHERE exchange_id = ?`,
+            params: [userId, now, row.exchange_id],
+          },
+        }),
         db
           .prepare(`INSERT INTO verified_email_credentials (user_id, email_address, verified_at_ms)
       VALUES (?, ?, ?)`)
           .bind(userId, row.email_address, now),
-        db
-          .prepare(`INSERT INTO onboarding_consent_records
-      (id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms)
-      SELECT d.exchange_id, ?, d.disclosure_json, d.disclosure_message_id,
-        d.decision_message_id, d.received_at_ms, d.occurred_at_ms FROM pending_consent_decisions AS d
-      WHERE d.exchange_id = ? AND d.decision = 'accepted'`)
-          .bind(userId, row.exchange_id),
+        recordOnboardingConsent({ db, userId, exchangeId: row.exchange_id }),
         db
           .prepare(`INSERT INTO trial_periods (user_id, started_at_ms, ends_at_ms)
       VALUES (?, ?, ?)`)

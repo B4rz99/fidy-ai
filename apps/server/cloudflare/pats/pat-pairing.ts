@@ -23,7 +23,7 @@ import {
   expirePATConsents,
   expirePairingConsents,
   grantPairedPATConsent,
-} from "@fidy/server/consent-pat";
+} from "@fidy/server/consent-operations";
 import {
   type SessionRow,
   canonical,
@@ -111,13 +111,13 @@ export const sweepExpiredPATPairings = (db: D1Database): Promise<void> =>
             statement: expirePairingConsents({ current, limit: scheduledSweepLimit }),
           }),
           prepareOwnedStatement({ db, statement: expireApprovedPairings(current) }),
-          db.prepare(pairingExpiryCompletion).bind(current),
+          prepareOwnedStatement({ db, statement: pairingExpiryCompletion(current) }),
           prepareOwnedStatement({
             db,
             statement: expirePATConsents({ current, limit: scheduledSweepLimit }),
           }),
           prepareOwnedStatement({ db, statement: expireFixedPATs(current) }),
-          db.prepare(patExpiryCompletion).bind(current),
+          prepareOwnedStatement({ db, statement: patExpiryCompletion(current) }),
           prepareOwnedStatement({
             db,
             statement: sweepUnapprovedPairings({ current, limit: scheduledSweepLimit }),

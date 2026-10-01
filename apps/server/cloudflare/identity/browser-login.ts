@@ -1,3 +1,4 @@
+import { prepareConsentAction } from "../consent/operations";
 import {
   BrowserLoginPairingId,
   BrowserLoginPublicCodeSymbols,
@@ -204,27 +205,29 @@ export const approveBrowserPairing = ({
   Effect.runPromise(
     Effect.gen(function* () {
       const result = yield* attempt(() =>
-        db
-          .prepare(
-            `INSERT INTO browser_login_approvals (portfolio_id, message_id, pairing_id, user_id)
-      SELECT ?, ?, p.id, w.user_id FROM browser_login_pairings AS p
-      JOIN whatsapp_identities AS w ON w.portfolio_id = ? AND w.bsuid = ?
-      JOIN onboarding_consent_records AS c ON c.user_id = w.user_id
-      WHERE p.public_code = ? AND p.state = 'pending_approval'
-        AND p.expires_at_ms > ? AND p.expires_at_ms > ?
-        AND ? >= (p.created_at_ms / 1000) * 1000`
-          )
-          .bind(
-            input.portfolioId,
-            input.messageId,
-            input.portfolioId,
-            input.bsuid,
-            input.publicCode,
-            input.receivedAtMs,
-            input.occurredAtMs,
-            input.occurredAtMs
-          )
-          .run()
+        prepareConsentAction({
+          db,
+          statement: {
+            sql: `INSERT INTO browser_login_approvals (portfolio_id, message_id, pairing_id, user_id)
+              SELECT ?, ?, p.id, w.user_id FROM browser_login_pairings AS p
+              JOIN whatsapp_identities AS w ON w.portfolio_id = ? AND w.bsuid = ?
+              WHERE p.public_code = ? AND p.state = 'pending_approval'
+                AND p.expires_at_ms > ? AND p.expires_at_ms > ?
+                AND ? >= (p.created_at_ms / 1000) * 1000`,
+            params: [
+              input.portfolioId,
+              input.messageId,
+              input.portfolioId,
+              input.bsuid,
+              input.publicCode,
+              input.receivedAtMs,
+              input.occurredAtMs,
+              input.occurredAtMs,
+            ],
+          },
+          subject: { _tag: "Owner", column: "w.user_id" },
+          requirement: "granted",
+        }).run()
       );
       return result.meta.changes > 0 ? new Response(null, { status: 200 }) : invalid();
     }).pipe(Effect.catchCause(() => Effect.succeed(invalid())))

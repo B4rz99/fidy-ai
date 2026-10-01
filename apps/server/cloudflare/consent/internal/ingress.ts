@@ -1,3 +1,16 @@
+import type { ConsentIngressEnvironment as Environment } from "../contract";
+import {
+  canRecordConsentIngressDecision,
+  classifyConsentIngressReplay,
+  currentDisclosureFor,
+  decideConsentReply,
+  decodeKapsoDisclosureLifecycleWebhook,
+  decodeKapsoWebhook,
+  isConsentIngressDecisionPhase,
+  makeDisclosureSender,
+  makeEmailStatusSender,
+  makeVoiceUnavailableSender,
+} from "@fidy/server/consent-operations";
 import {
   ConsentIngressExchange,
   type ConsentIngressMessage,
@@ -14,28 +27,13 @@ import {
   type WhatsAppDeliveryKey,
   type WhatsAppInboundEvent,
   WhatsAppProviderMessageId,
-  canRecordConsentIngressDecision,
-  classifyConsentIngressReplay,
-  currentDisclosureFor,
-  decideConsentReply,
-  decodeKapsoDisclosureLifecycleWebhook,
-  decodeKapsoWebhook,
-  isConsentIngressDecisionPhase,
-  makeDisclosureSender,
-  makeEmailStatusSender,
-  makeVoiceUnavailableSender,
   maxKapsoFutureTimestampMinutes,
   maxKapsoWebhookBytes,
-} from "@fidy/server/consent-ingress";
+} from "@fidy/server/consent-contract";
 import { EmailAddress } from "@fidy/server/client";
-import type { UserId } from "../../src/core/identity/reference";
-import { approveBrowserPairing } from "../identity/browser-login";
-import {
-  type WhatsAppStatusAdmission,
-  type WhatsAppTurnAdmission,
-  findWhatsAppDeliveryUser,
-  findWhatsAppUser,
-} from "../agent/whatsapp-turn";
+import type { UserId } from "../../../src/core/identity/reference";
+import { approveBrowserPairing } from "../../identity/browser-login";
+import { findWhatsAppDeliveryUser, findWhatsAppUser } from "../../agent/whatsapp-turn";
 import { decodeKapsoHostedLifecycleWebhook } from "@fidy/server/whatsapp-hosted";
 import {
   Clock,
@@ -53,7 +51,7 @@ import {
   Schema,
 } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
-import { cloudflareWorkerTelemetry, observeProviderFetch } from "../runtime/telemetry";
+import { cloudflareWorkerTelemetry, observeProviderFetch } from "../../runtime/telemetry";
 import {
   ResourceAdmissionAuthority,
   type ResourceAdmissionAuthorityService,
@@ -68,7 +66,7 @@ import {
   ResourceAdmissionRefused,
   ResourceAdmissionScopeKey,
   ResourceAdmissionUnits,
-} from "../resource-admission/authority";
+} from "../../resource-admission/authority";
 
 const dayMs = 86_400_000;
 // Initiation must become ineligible before its receipt-based exchange expires, even
@@ -186,15 +184,6 @@ const DeliveryRow = Schema.Struct({
   occurred_at_ms: Schema.Finite,
 });
 
-type Environment = Readonly<{
-  readonly DB: D1Database;
-  readonly KAPSO_API_KEY: string;
-  readonly KAPSO_WEBHOOK_SECRET: string;
-  readonly WHATSAPP_BUSINESS_PORTFOLIO_ID: string;
-  readonly onAccepted: (id: string) => void;
-  readonly onHostedText: (admission: WhatsAppTurnAdmission) => Promise<Response>;
-  readonly onHostedStatus: (admission: WhatsAppStatusAdmission) => Promise<Response>;
-}>;
 type WebhookInbound = Readonly<{
   readonly event: WhatsAppInboundEvent;
   readonly deliveryKey: WhatsAppDeliveryKey;
@@ -889,7 +878,7 @@ const sendRecoveredDisclosure = (
   });
 
 /** Resume only exchanges whose irreversible provider boundary was never claimed. */
-export const recoverPendingDisclosures = ({
+export const recoverDisclosures = ({
   db,
   apiKey,
 }: Readonly<{ db: D1Database; apiKey: string }>): Effect.Effect<void, void> =>
@@ -1310,7 +1299,7 @@ const workerCrypto = Crypto.make({
 });
 
 /** Expire pre-User evidence even when no new webhook arrives. */
-export const sweepExpiredConsent = (db: D1Database) => (): Effect.Effect<void, void> =>
+export const sweepExpired = (db: D1Database) => (): Effect.Effect<void, void> =>
   Effect.gen(function* () {
     const now = yield* DateTime.now;
     const nowMs = DateTime.toEpochMillis(now);
@@ -1364,7 +1353,7 @@ export const sweepExpiredConsent = (db: D1Database) => (): Effect.Effect<void, v
   });
 
 /** One authenticated, bounded provider ingress. No decision can bypass provider delivery proof. */
-export const receiveConsentWebhook =
+export const receiveIngress =
   (environment: Environment): ((request: Request) => Effect.Effect<Response>) =>
   (request) =>
     Effect.scoped(

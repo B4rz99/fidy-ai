@@ -1,6 +1,7 @@
 import { Option } from "effect";
 import { recordedPATCallProof } from "~/shell/audit/operations";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
+import { protectConsentStatement, protectPATRevocationStatement } from "~/shell/consent/operations";
 import {
   type FreshSessionSubject,
   freshSessionExists,
@@ -36,76 +37,96 @@ type ManualPATInput = Readonly<{
 export const issueManualPAT = ({
   session,
   input,
-}: Readonly<{ session: FreshSessionSubject; input: ManualPATInput }>): OwnedStatement => ({
-  sql: `INSERT INTO pats (id,user_id,short_id,bearer_digest,recipient_label,scopes_json,lifetime_days,
-    created_at_ms,issued_at_ms,expires_at_ms,request_id) SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE ${freshSessionExists}
-    AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = ?)
-    AND (SELECT count(*) FROM pats WHERE user_id = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?) < ?
-    AND (SELECT count(*) FROM pats WHERE user_id = ? AND issued_at_ms > ?) < ?`,
-  params: [
-    input.patId,
-    session.user_id,
-    input.shortId,
-    input.bearerDigest,
-    input.grant.recipientLabel,
-    JSON.stringify(input.grant.scopes),
-    input.grant.lifetimeDays,
-    input.current,
-    input.current,
-    input.expires,
-    input.requestId,
-    ...freshSessionParams({ session, time: input.current }),
-    session.user_id,
-    session.user_id,
-    input.current,
-    maxActivePATs,
-    session.user_id,
-    input.current - issuanceWindowMilliseconds,
-    maxIssuancesPerUserWindow,
-  ],
-});
+}: Readonly<{ session: FreshSessionSubject; input: ManualPATInput }>): OwnedStatement => {
+  const protectedIssue = protectConsentStatement({
+    statement: {
+      sql: `INSERT INTO pats (id,user_id,short_id,bearer_digest,recipient_label,scopes_json,lifetime_days,
+        created_at_ms,issued_at_ms,expires_at_ms,request_id) SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE ${freshSessionExists}`,
+      params: [
+        input.patId,
+        session.user_id,
+        input.shortId,
+        input.bearerDigest,
+        input.grant.recipientLabel,
+        JSON.stringify(input.grant.scopes),
+        input.grant.lifetimeDays,
+        input.current,
+        input.current,
+        input.expires,
+        input.requestId,
+        ...freshSessionParams({ session, time: input.current }),
+      ],
+    },
+    subject: { _tag: "User", userId: session.user_id },
+    requirement: "unrevoked",
+  });
+  return {
+    sql: `${protectedIssue.sql}
+      AND (SELECT count(*) FROM pats WHERE user_id = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?) < ?
+      AND (SELECT count(*) FROM pats WHERE user_id = ? AND issued_at_ms > ?) < ?`,
+    params: [
+      ...protectedIssue.params,
+      session.user_id,
+      input.current,
+      maxActivePATs,
+      session.user_id,
+      input.current - issuanceWindowMilliseconds,
+      maxIssuancesPerUserWindow,
+    ],
+  };
+};
 
 type ApprovalInput = Readonly<{ pairingId: string; current: number; expires: number }>;
 /** Bind an approved PATPairing to its reviewed User before the initiating client claims it. */
 export const approvePairingGrant = ({
   session,
   input,
-}: Readonly<{ session: FreshSessionSubject; input: ApprovalInput }>): OwnedStatement => ({
-  sql: `UPDATE pat_pairings SET state = 'approved_awaiting_claim', user_id = ?, approved_at_ms = ?, pat_expires_at_ms = ?
-    WHERE id = ? AND state = 'pending_approval' AND expires_at_ms > ? AND ${freshSessionExists}
-    AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = ?)`,
-  params: [
-    session.user_id,
-    input.current,
-    input.expires,
-    input.pairingId,
-    input.current,
-    ...freshSessionParams({ session, time: input.current }),
-    session.user_id,
-  ],
-});
+}: Readonly<{ session: FreshSessionSubject; input: ApprovalInput }>): OwnedStatement =>
+  protectConsentStatement({
+    statement: {
+      sql: `UPDATE pat_pairings SET state = 'approved_awaiting_claim', user_id = ?, approved_at_ms = ?, pat_expires_at_ms = ?
+        WHERE id = ? AND state = 'pending_approval' AND expires_at_ms > ? AND ${freshSessionExists}`,
+      params: [
+        session.user_id,
+        input.current,
+        input.expires,
+        input.pairingId,
+        input.current,
+        ...freshSessionParams({ session, time: input.current }),
+      ],
+    },
+    subject: { _tag: "User", userId: session.user_id },
+    requirement: "unrevoked",
+  });
 
 /** Consume a single User-bound PATPairing approval under current Consent and issuance limits. */
 export const claimPairingGrant = (
   input: Readonly<{ pairingId: string; userId: string; current: number }>
-): OwnedStatement => ({
-  sql: `UPDATE pat_pairings SET state = 'claimed' WHERE id = ? AND state = 'approved_awaiting_claim'
-    AND user_id = ? AND expires_at_ms > ?
-    AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = pat_pairings.user_id)
-    AND (SELECT count(*) FROM pats WHERE user_id = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?) < ?
-    AND (SELECT count(*) FROM pats WHERE user_id = ? AND issued_at_ms > ?) < ?`,
-  params: [
-    input.pairingId,
-    input.userId,
-    input.current,
-    input.userId,
-    input.current,
-    maxActivePATs,
-    input.userId,
-    input.current - issuanceWindowMilliseconds,
-    maxIssuancesPerUserWindow,
-  ],
-});
+): OwnedStatement => {
+  const protectedClaim = protectConsentStatement({
+    statement: {
+      sql: `UPDATE pat_pairings SET state = 'claimed' WHERE id = ? AND state = 'approved_awaiting_claim'
+        AND user_id = ? AND expires_at_ms > ?`,
+      params: [input.pairingId, input.userId, input.current],
+    },
+    subject: { _tag: "Owner", column: "pat_pairings.user_id" },
+    requirement: "unrevoked",
+  });
+  return {
+    sql: `${protectedClaim.sql}
+      AND (SELECT count(*) FROM pats WHERE user_id = ? AND revoked_at_ms IS NULL AND expires_at_ms > ?) < ?
+      AND (SELECT count(*) FROM pats WHERE user_id = ? AND issued_at_ms > ?) < ?`,
+    params: [
+      ...protectedClaim.params,
+      input.userId,
+      input.current,
+      maxActivePATs,
+      input.userId,
+      input.current - issuanceWindowMilliseconds,
+      maxIssuancesPerUserWindow,
+    ],
+  };
+};
 
 /** Recheck bearer, Consent, scope, and lifetime alongside protected canonical work. */
 export const recordLivePATUse = ({
@@ -167,64 +188,75 @@ type RevokeOneInput = Readonly<{ shortId: string; current: number }>;
 export const revokeOnePAT = ({
   session,
   input,
-}: Readonly<{ session: FreshSessionSubject; input: RevokeOneInput }>): OwnedStatement => ({
-  sql: `UPDATE pats SET revoked_at_ms = ? WHERE user_id = ? AND short_id = ? AND revoked_at_ms IS NULL
-    AND expires_at_ms > ? AND ${freshSessionExists} AND EXISTS (SELECT 1 FROM pat_revocation_consents r WHERE r.pat_id = pats.id
-    AND r.session_id = ? AND r.occurred_at_ms = ?)`,
-  params: [
-    input.current,
-    session.user_id,
-    input.shortId,
-    input.current,
-    ...freshSessionParams({ session, time: input.current }),
-    session.id,
-    input.current,
-  ],
-});
+}: Readonly<{ session: FreshSessionSubject; input: RevokeOneInput }>): OwnedStatement =>
+  protectPATRevocationStatement({
+    statement: {
+      sql: `UPDATE pats SET revoked_at_ms = ? WHERE user_id = ? AND short_id = ? AND revoked_at_ms IS NULL
+        AND expires_at_ms > ? AND ${freshSessionExists}`,
+      params: [
+        input.current,
+        session.user_id,
+        input.shortId,
+        input.current,
+        ...freshSessionParams({ session, time: input.current }),
+      ],
+    },
+    evidence: { _tag: "UserPAT", sessionId: session.id, occurredAtMs: Option.some(input.current) },
+  });
 
 /** Revoke every live PAT under this fresh User decision and its committed Consent evidence. */
 export const revokeEveryPAT = ({
   session,
   current,
-}: Readonly<{ session: FreshSessionSubject; current: number }>): OwnedStatement => ({
-  sql: `UPDATE pats SET revoked_at_ms = ? WHERE user_id = ? AND revoked_at_ms IS NULL
-    AND expires_at_ms > ? AND ${freshSessionExists}
-    AND EXISTS (SELECT 1 FROM pat_revocation_consents r WHERE r.pat_id = pats.id AND r.session_id = ?)`,
-  params: [
-    current,
-    session.user_id,
-    current,
-    ...freshSessionParams({ session, time: current }),
-    session.id,
-  ],
-});
+}: Readonly<{ session: FreshSessionSubject; current: number }>): OwnedStatement =>
+  protectPATRevocationStatement({
+    statement: {
+      sql: `UPDATE pats SET revoked_at_ms = ? WHERE user_id = ? AND revoked_at_ms IS NULL
+        AND expires_at_ms > ? AND ${freshSessionExists}`,
+      params: [
+        current,
+        session.user_id,
+        current,
+        ...freshSessionParams({ session, time: current }),
+      ],
+    },
+    evidence: { _tag: "UserPAT", sessionId: session.id, occurredAtMs: Option.none() },
+  });
 
 /** Close every approved unclaimed pairing covered by this User's revocation evidence. */
 export const revokeEveryPairing = ({
   session,
   current,
-}: Readonly<{ session: FreshSessionSubject; current: number }>): OwnedStatement => ({
-  sql: `UPDATE pat_pairings SET state = 'revoked_unclaimed' WHERE user_id = ?
-    AND state = 'approved_awaiting_claim' AND ${freshSessionExists}
-    AND EXISTS (SELECT 1 FROM pat_revocation_consents r WHERE r.pairing_id = pat_pairings.id AND r.session_id = ?)`,
-  params: [session.user_id, ...freshSessionParams({ session, time: current }), session.id],
-});
+}: Readonly<{ session: FreshSessionSubject; current: number }>): OwnedStatement =>
+  protectPATRevocationStatement({
+    statement: {
+      sql: `UPDATE pat_pairings SET state = 'revoked_unclaimed' WHERE user_id = ?
+        AND state = 'approved_awaiting_claim' AND ${freshSessionExists}`,
+      params: [session.user_id, ...freshSessionParams({ session, time: current })],
+    },
+    evidence: { _tag: "UserPairing", sessionId: session.id },
+  });
 
 /** Apply scheduled policy expiry only to approvals backed by their append-only Consent evidence. */
-export const expireApprovedPairings = (current: number): OwnedStatement => ({
-  sql: `UPDATE pat_pairings SET state = 'revoked_unclaimed' WHERE state = 'approved_awaiting_claim'
-    AND expires_at_ms <= ? AND EXISTS (SELECT 1 FROM pat_revocation_consents r
-    WHERE r.pairing_id = pat_pairings.id AND r.policy_reason = 'pat-approved-unclaimed-expiry')`,
-  params: [current],
-});
+export const expireApprovedPairings = (current: number): OwnedStatement =>
+  protectPATRevocationStatement({
+    statement: {
+      sql: `UPDATE pat_pairings SET state = 'revoked_unclaimed' WHERE state = 'approved_awaiting_claim'
+        AND expires_at_ms <= ?`,
+      params: [current],
+    },
+    evidence: { _tag: "ExpiredPairing" },
+  });
 
 /** Apply fixed-lifetime expiry without letting successful use extend the committed instant. */
-export const expireFixedPATs = (current: number): OwnedStatement => ({
-  sql: `UPDATE pats SET revoked_at_ms = ? WHERE revoked_at_ms IS NULL AND expires_at_ms <= ?
-    AND EXISTS (SELECT 1 FROM pat_revocation_consents r WHERE r.pat_id = pats.id
-    AND r.policy_reason = 'pat-fixed-lifetime-expiry')`,
-  params: [current, current],
-});
+export const expireFixedPATs = (current: number): OwnedStatement =>
+  protectPATRevocationStatement({
+    statement: {
+      sql: `UPDATE pats SET revoked_at_ms = ? WHERE revoked_at_ms IS NULL AND expires_at_ms <= ?`,
+      params: [current, current],
+    },
+    evidence: { _tag: "ExpiredPAT" },
+  });
 
 /** Reclaim anonymous metadata without deleting approved User-bound grant evidence. */
 export const sweepUnapprovedPairings = ({

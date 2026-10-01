@@ -1,3 +1,4 @@
+import { readConsentStatus } from "../consent/operations";
 import {
   type CatalogOperation,
   decideOperationAccess,
@@ -46,13 +47,6 @@ type CategoryAuthorization =
   | "unauthenticated"
   | "scope_missing"
   | "user_action_required";
-const consentRevoked = (
-  db: D1Database,
-  userId: string
-): Effect.Effect<boolean, Cause.UnknownError> =>
-  Effect.tryPromise(() =>
-    db.prepare("SELECT 1 FROM consent_user_revocations WHERE user_id = ?").bind(userId).first()
-  ).pipe(Effect.map((row) => row !== null));
 export type AuthorizedPAT = Readonly<{
   patId: string;
   userId: string;
@@ -83,7 +77,9 @@ export const authorizeCanonicalPAT = ({
     Effect.gen(function* () {
       const pat = yield* authenticate(request, db);
       if (Option.isNone(pat)) return "unauthenticated";
-      if (yield* consentRevoked(db, pat.value.user_id)) return "user_action_required";
+      if ((yield* readConsentStatus({ db, userId: pat.value.user_id })) === "Revoked") {
+        return "user_action_required";
+      }
       const decision = scopeDecision(scopesFrom(pat.value.scopes_json), operation);
       return decision === "accepted"
         ? {

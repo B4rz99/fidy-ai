@@ -199,6 +199,23 @@ codebase has no institution Connection authority, sender-to-institution mapping,
 result at the Email Worker. No Email Routing rule is provisioned; enable inbound delivery only
 when both policies can be enforced before retention and automatic Transaction finalization. The full hosted-Turn path still requires its own adapter and platform evidence.
 
+### Consent owner composition
+
+Consent publishes its declarations and decisions through `core/consent/contract.ts` and
+`operations.ts`, and its protected actions and append-only evidence through
+`shell/consent/contract.ts` and `operations.ts`. Private disclosure facts, ledger SQL, and row
+schemas stay in the owner’s `internal/` modules. The Cloudflare Consent module publishes decoded
+standing, native statement composition, and its ingress runtime; callers never import its storage
+implementation.
+
+Protected owner statements and credential authorities incorporate Consent inside the same D1
+statement or caller-owned atomic batch as their action, evidence, and Audit. A standing read is
+admission or refusal-classification evidence, never a reusable permission token. Existing per-User
+Durable Objects still serialize hosted and multi-step work. Model egress invokes a Consent-owned
+protected action at the actual provider boundary: ordinary work requires current Consent, while an
+exact retained Pending Turn uses its admitted basis. Revocation prevents the next Turn without
+interrupting the bounded admitted Turn, and PAT work keeps its per-call current-Consent guard.
+
 ## 6. Testing seams
 
 Use the smallest seam that proves the behavior:

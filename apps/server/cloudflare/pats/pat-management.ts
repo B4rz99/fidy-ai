@@ -19,7 +19,7 @@ import {
   revokeAllPATConsents,
   revokeAllPairingConsents,
   revokeOnePATConsent,
-} from "@fidy/server/consent-pat";
+} from "@fidy/server/consent-operations";
 import {
   type SessionRow,
   canonical,

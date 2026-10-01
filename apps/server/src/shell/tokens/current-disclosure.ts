@@ -1,8 +1,8 @@
 import { Crypto, DateTime, Effect, Encoding } from "effect";
 import type { ManualPATGrantInput } from "~/core/tokens/model";
 import { buildPATDisclosure, buildPairedPATDisclosure } from "~/core/tokens/rules";
-import { DisclosureRevision, DisclosureSnapshot, Sha256Digest } from "~/core/consent/model";
-import { currentDisclosure } from "~/shell/consent/current-disclosure";
+import { DisclosureRevision, DisclosureSnapshot, Sha256Digest } from "~/core/consent/contract";
+import { currentDisclosure } from "~/shell/consent/operations";
 
 /** Immutable revision of the Spanish manual-PAT grant disclosure template. */
 export const manualPATDisclosureRevision = DisclosureRevision.make("pat-grant-2026-09");

@@ -1,7 +1,7 @@
 import { Miniflare } from "miniflare";
 import { applyTestMigration } from "../d1-test-fixture";
 import { type Cause, Clock, DateTime, Effect, Equal, Exit, Option, Schema } from "effect";
-import { recoverPendingDisclosures, sweepExpiredConsent } from "./consent-ingress";
+import { recoverPendingDisclosures, sweepExpiredConsent } from "../consent/runtime";
 import { WhatsAppStatusAdmission, WhatsAppTurnAdmission } from "../agent/whatsapp-turn";
 import {
   deliverOnboardingEmail,
@@ -13,7 +13,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
-import { maxKapsoWebhookBytes } from "@fidy/server/consent-ingress";
+import { maxKapsoWebhookBytes } from "@fidy/server/consent-contract";
 
 const signWebhook = (secret: string, body: string | Uint8Array): Promise<string> =>
   crypto.subtle

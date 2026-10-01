@@ -1,24 +1,13 @@
 import { Schema } from "effect";
 import { UtcTimestamp } from "~/core/_shared/time";
-import {
-  ConsentRecordId,
-  DisclosureRevision,
-  PolicyRevision,
-  Sha256Digest,
-} from "~/core/consent/reference";
+import { OnboardingConsentBasis } from "~/core/consent/contract";
 import { UserId } from "~/core/identity/reference";
 import { HostedAgentSessionId } from "./reference";
 
 export { HostedAgentSessionId } from "./reference";
 
 /** Exact onboarding Consent basis captured when a Hosted Agent Session begins. */
-export const HostedAgentSessionConsentBasis = Schema.Struct({
-  grantId: ConsentRecordId,
-  disclosureRevision: DisclosureRevision,
-  disclosureSha256: Sha256Digest,
-  policyRevision: PolicyRevision,
-  policySha256: Sha256Digest,
-});
+export const HostedAgentSessionConsentBasis = OnboardingConsentBasis;
 export type HostedAgentSessionConsentBasis = typeof HostedAgentSessionConsentBasis.Type;
 
 /** Durable lifecycle of one Fidy-owned hosted conversational session. */

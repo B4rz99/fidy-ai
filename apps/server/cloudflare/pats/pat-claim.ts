@@ -1,3 +1,4 @@
+import { recordClaimedPAT } from "@fidy/server/audit";
 import {
   ClaimPATPairingPayload,
   PAT,
@@ -6,7 +7,6 @@ import {
   claimPairingGrant,
   decidePATPairingClaim,
   insertClaimedPAT,
-  recordClaimedPAT,
   recordPendingPoll,
   recordWrongPairingProof,
   slowPairingPoll,

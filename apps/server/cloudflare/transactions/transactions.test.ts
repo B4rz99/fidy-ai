@@ -28,7 +28,7 @@ import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { transactionInput, transactionSession } from "./transactions";
 import { browseTransactions } from "./transaction-history";
-import { dailyAuditCount } from "../atomic/daily-canonical-budget";
+import { dailyAuditCount } from "@fidy/server/audit";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure") {}
 const fromTestPromise = <A>(promise: () => PromiseLike<A>): Effect.Effect<A> =>

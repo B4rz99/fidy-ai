@@ -1,9 +1,6 @@
+import { prepareAuthorizedAuditCall, recordCanonicalPATWork } from "@fidy/server/audit";
 import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
-import {
-  livePATAuthority,
-  recordCanonicalPATWork,
-  recordLivePATUse,
-} from "@fidy/server/tokens-runtime";
+import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import {
   SubscriptionOffers,
   SubscriptionStatus,
@@ -87,10 +84,15 @@ const subscriptionStatements = (
           input: { id: newId(), current, operation, outcome: "accepted", afterOwnerWrite: false },
         }),
       })
-    : db
-        .prepare(`INSERT INTO pat_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-        SELECT ?, user_id, id, ?, 'accepted', ? FROM web_sessions WHERE ${authority.predicate}`)
-        .bind(newId(), operation, current, ...authority.bindings);
+    : prepareAuthorizedAuditCall({
+        db,
+        authority,
+        id: newId(),
+        operation,
+        outcome: "accepted",
+        current,
+        afterOwnerWrite: false,
+      });
   return [...work, ...use, audit];
 };
 

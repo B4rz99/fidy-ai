@@ -12,12 +12,12 @@ import {
   memoryRowsQuery,
   recordBrowserMemoryWork,
 } from "@fidy/server/memory-runtime";
-import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
+import { dailyAuditExhausted, recordCanonicalPATWork } from "@fidy/server/audit";
+import { recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { type HostedInference } from "@fidy/server/hosted-inference";
 import type { AuthorizedPAT } from "../pats/pat-authorization";
 import { prepareOwnedStatement } from "../pats/pat-unit";
-import { dailyAuditExhausted } from "../atomic/daily-canonical-budget";
 import { currentMillis, newId } from "../pats/pat-shared";
 import {
   type TransactionBoundaryFailure,

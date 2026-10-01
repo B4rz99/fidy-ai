@@ -1,8 +1,12 @@
 import { Effect, Option, Schema } from "effect";
-import { recordCanonicalPATWork } from "@fidy/server/tokens-runtime";
+import {
+  prepareAuthorizedAuditCall,
+  recordCanonicalPATWork,
+  refusedByAuditBudget,
+} from "@fidy/server/audit";
+import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
 import { newId } from "../pats/pat-shared";
 import { prepareOwnedStatement } from "../pats/pat-unit";
-import { refusedByAuditBudget } from "../audit/audit-triggers";
 import {
   type CategoryFailure,
   CategoryNotFound,
@@ -34,11 +38,7 @@ import type {
   KeywordRuleOutcome,
   OwnerOutcome,
 } from "./mutation-types";
-import {
-  type TransactionCaller,
-  callerAuthority,
-  isPATCaller,
-} from "../transactions/transaction-boundary";
+import { type TransactionCaller, isPATCaller } from "../transactions/transaction-boundary";
 import { dailyAuditMessage } from "./transaction-outcome";
 
 const HTTP_UNAVAILABLE = 503;
@@ -115,13 +115,16 @@ const recordKeywordRuleGuard = ({
         }),
       })
     : ((): D1PreparedStatement => {
-        const authority = callerAuthority({ subject, current });
-        return db
-          .prepare(`INSERT INTO category_audit
-          (id,user_id,session_id,operation,occurred_at_ms,outcome)
-          SELECT ?,user_id,id,?,?,'validation_failed' FROM ${authority.table}
-          WHERE ${authority.predicate}`)
-          .bind(newId(), operation, current, ...authority.bindings);
+        const authority = liveWebSessionAuthority({ subject, current });
+        return prepareAuthorizedAuditCall({
+          db,
+          authority,
+          id: newId(),
+          operation,
+          outcome: "validation_failed",
+          current,
+          afterOwnerWrite: false,
+        });
       })();
   return Effect.tryPromise(() => statement.run()).pipe(
     Effect.map((result) =>

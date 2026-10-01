@@ -1,4 +1,5 @@
 import { Option, Schema } from "effect";
+import { recordAuthorizedCall } from "~/shell/audit/operations";
 import { KeywordRule } from "~/core/categories/model";
 import { maximumKeywordRulesPerUser } from "~/core/categories/rules";
 import { liveWebSessionAuthority } from "~/shell/identity/browser-runtime";
@@ -141,12 +142,14 @@ const browserKeywordRuleAudit = (
   afterWrite: boolean
 ): OwnedStatement => {
   const authority = liveWebSessionAuthority({ subject, current });
-  return {
-    sql: `INSERT INTO category_audit (id,user_id,session_id,operation,occurred_at_ms)
-      SELECT ?, user_id, ?, ?, ? FROM ${authority.table}
-      WHERE ${authority.predicate}${afterWrite ? " AND changes() = 1" : ""}`,
-    params: [id, subject.id, operation, current, ...authority.bindings],
-  };
+  return recordAuthorizedCall({
+    authority,
+    id,
+    operation,
+    outcome: "success",
+    current,
+    afterOwnerWrite: afterWrite,
+  });
 };
 
 /** One accepted browser rule change, attributable to its exact live WebSession. */

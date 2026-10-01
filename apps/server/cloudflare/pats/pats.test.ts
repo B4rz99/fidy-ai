@@ -110,9 +110,12 @@ const setup = (
         "0017_forwarded_email",
         "0017_statement_dispatch",
         "0018_batch_envelope_audit",
+        "0018_dashboard",
+        "0018_insight_events",
         "0019_canonical_child_guards",
         "0020_dashboard_projection",
         ...hostedTurnTestMigrations,
+        "0029_audit_owner_retention",
       ];
       yield* awaitPromise(
         installTestSchema({
@@ -2502,7 +2505,7 @@ it("gates every declared canonical path by live PAT and exact operation scope be
             payload: {},
           })
         )).status
-      ).toBe(503);
+      ).toBe(400);
       expect(
         (yield* awaitPromise(
           send({
@@ -2884,7 +2887,8 @@ it("shares one Category projection and row codec between HTTP and the hosted-age
 it("fails closed with declared unavailable for an authenticated WebSession when Insight storage is unavailable", () =>
   runTest(
     Effect.gen(function* () {
-      const { send, sessions } = yield* awaitPromise(setup());
+      const { db, send, sessions } = yield* awaitPromise(setup());
+      yield* awaitPromise(db.prepare("DROP TABLE insight_events").run());
       const authenticated = yield* awaitPromise(
         send({
           path: "/insights/30000000-0000-4000-8000-000000000001/read",

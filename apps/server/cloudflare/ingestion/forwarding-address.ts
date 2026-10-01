@@ -1,11 +1,15 @@
-import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
+import {
+  prepareAuthorizedAuditCall,
+  recordCanonicalPATWork,
+  refusedByAuditBudget,
+} from "@fidy/server/audit";
+import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
+import { recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { activeProUserParams, activeProUserSql } from "../access-tier";
-import { refusedByAuditBudget } from "../audit/audit-triggers";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import {
   type TransactionCaller,
-  callerAuthority,
   isPATCaller,
   refusedTransactionWork,
   transactionId,
@@ -85,15 +89,17 @@ export const forwardingAddressAudit = ({
       }),
     ];
   }
-  const authority = callerAuthority({ subject, current });
+  const authority = liveWebSessionAuthority({ subject, current });
   return [
-    db
-      .prepare(
-        `INSERT INTO statement_submission_audit (id, user_id, operation, outcome, occurred_at_ms)
-     SELECT ?, ${authority.table}.user_id, ?, 'success', ?
-     FROM ${authority.table} WHERE ${authority.predicate}`
-      )
-      .bind(transactionId(), operation, current, ...authority.bindings),
+    prepareAuthorizedAuditCall({
+      db,
+      authority,
+      id: transactionId(),
+      operation,
+      outcome: "success",
+      current,
+      afterOwnerWrite: false,
+    }),
   ];
 };
 
@@ -122,13 +128,16 @@ export const forwardingAddressGuardAudit = ({
       }),
     });
   }
-  const authority = callerAuthority({ subject, current });
-  return db
-    .prepare(`INSERT INTO statement_submission_audit
-    (id,user_id,operation,outcome,occurred_at_ms)
-    SELECT ?,user_id,'ingestion.enableEmailForwarding','validation_failed',?
-    FROM ${authority.table} WHERE ${authority.predicate}`)
-    .bind(transactionId(), current, ...authority.bindings);
+  const authority = liveWebSessionAuthority({ subject, current });
+  return prepareAuthorizedAuditCall({
+    db,
+    authority,
+    id: transactionId(),
+    operation: "ingestion.enableEmailForwarding",
+    outcome: "validation_failed",
+    current,
+    afterOwnerWrite: false,
+  });
 };
 
 const auditCommitted = (results: D1Result[], subject: TransactionCaller): boolean => {

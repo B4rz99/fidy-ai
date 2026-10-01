@@ -1,7 +1,7 @@
 import { getCanonicalOperationInput } from "@fidy/server/canonical-runtime";
 import { StatementSubmission } from "@fidy/server/statement-staging";
 import { Effect, Option, Schema } from "effect";
-import { dailyAuditExhausted } from "../atomic/daily-canonical-budget";
+import { dailyAuditExhausted } from "@fidy/server/audit";
 import type { StatementPublicationRefusal } from "../ingestion/statement-staging";
 import {
   statementDailyBudgetMessage,

@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
 import {
   ActivePATList,
@@ -30,6 +31,11 @@ import {
   operationPolicy,
   webOrHosted,
 } from "~/shell/_shared/operation-policy";
+
+/** Held credential authority for owner-composed canonical work; no bearer resolution or runtime construction. */
+export { livePATAuthority } from "./pat-authority";
+export type { PATAuthority } from "./pat-authority";
+export type { AuditedPATOperation } from "./pat-audited-operations";
 
 export const issuanceConsumedMessage =
   "This manual PAT issuance request was already consumed. Start a new reviewed request.";

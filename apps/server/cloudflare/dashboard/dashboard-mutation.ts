@@ -1,5 +1,6 @@
 import { Data, DateTime, Effect, Option, Result, Schema } from "effect";
-import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
+import { prepareAuthorizedAuditCall, recordCanonicalPATWork } from "@fidy/server/audit";
+import { recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import { makeDefaultDashboard } from "../../src/core/dashboard/catalog";
 import { categoryIds } from "../../src/core/categories/taxonomy";
@@ -68,10 +69,15 @@ const audit = (
     });
   }
   const authority = callerAuthority({ subject, current });
-  return db
-    .prepare(`INSERT INTO dashboard_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-      SELECT ?, user_id, id, ?, ?, ? FROM ${authority.table} WHERE ${authority.predicate}`)
-    .bind(transactionId(), operation, outcome, current, ...authority.bindings);
+  return prepareAuthorizedAuditCall({
+    db,
+    authority,
+    id: transactionId(),
+    operation,
+    outcome,
+    current,
+    afterOwnerWrite: false,
+  });
 };
 
 const credentialUse = (work: Work): ReadonlyArray<D1PreparedStatement> =>

@@ -1,3 +1,4 @@
+import { recordAuthorizedCall } from "~/shell/audit/operations";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 import { liveWebSessionAuthority } from "~/shell/identity/browser-runtime";
 
@@ -10,9 +11,12 @@ export const recordBrowserCategoryWork = ({
   current,
 }: Readonly<{ subject: BrowserCategorySubject; id: string; current: number }>): OwnedStatement => {
   const authority = liveWebSessionAuthority({ subject, current });
-  return {
-    sql: `INSERT INTO category_audit (id,user_id,session_id,operation,occurred_at_ms)
-      SELECT ?,user_id,id,'categories.listCategories',? FROM web_sessions WHERE ${authority.predicate}`,
-    params: [id, current, ...authority.bindings],
-  };
+  return recordAuthorizedCall({
+    authority,
+    id,
+    operation: "categories.listCategories",
+    outcome: "success",
+    current,
+    afterOwnerWrite: false,
+  });
 };

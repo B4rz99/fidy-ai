@@ -1,9 +1,10 @@
 import { Effect, Option, Schema } from "effect";
+import { prepareAuthorizedAuditCall, recordCanonicalPATWork } from "@fidy/server/audit";
 import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
 import { makeDashboardCatalog } from "../../src/core/dashboard/catalog";
 import { categoryIds } from "../../src/core/categories/taxonomy";
 import { DashboardCatalog, DashboardEdit } from "../../src/core/dashboard/model";
-import { recordCanonicalPATWork, recordLivePATUse } from "@fidy/server/tokens-runtime";
+import { recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import {
   type TransactionCaller,
@@ -55,11 +56,15 @@ const catalog = ({
             },
           }),
         })
-      : db
-          .prepare(`INSERT INTO dashboard_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-          SELECT ?, user_id, id, 'dashboard.listDashboardCatalog', 'accepted', ?
-          FROM ${authority.table} WHERE ${authority.predicate}`)
-          .bind(transactionId(), current, ...authority.bindings);
+      : prepareAuthorizedAuditCall({
+          db,
+          authority,
+          id: transactionId(),
+          operation: "dashboard.listDashboardCatalog",
+          outcome: "accepted",
+          current,
+          afterOwnerWrite: false,
+        });
     return db.batch([
       ...(isPATCaller(subject)
         ? [prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) })]

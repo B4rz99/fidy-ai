@@ -10,7 +10,7 @@ import {
   memoryRowQuery,
   recordBrowserMemoryWork,
 } from "@fidy/server/memory-runtime";
-import { recordCanonicalPATWork } from "@fidy/server/tokens-runtime";
+import { recordCanonicalPATWork, refusedByAuditBudget } from "@fidy/server/audit";
 import type {
   CanonicalMutationRefusal,
   CommittedMutationValue,
@@ -18,7 +18,6 @@ import type {
   MemoryOutcome,
 } from "./mutation-types";
 import { newId } from "../pats/pat-shared";
-import { refusedByAuditBudget } from "../audit/audit-triggers";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import {
   type TransactionCaller,

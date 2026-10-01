@@ -1,12 +1,16 @@
 import { Option } from "effect";
+import { authorizedCallStatement } from "./recording";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 import {
   type FreshSessionSubject,
   freshSessionExists,
   freshSessionParams,
 } from "~/shell/identity/browser-runtime";
-import { type PATAuthority, livePATAuthority } from "./pat-write";
-import type { AuditedPATOperation } from "./pat-audited-operations";
+import {
+  type AuditedPATOperation,
+  type PATAuthority,
+  livePATAuthority,
+} from "~/shell/tokens/operations";
 import type { CanonicalCapability } from "~/core/canonical-operations/contract";
 
 type PATSubject = Readonly<{
@@ -16,6 +20,15 @@ type PATSubject = Readonly<{
   requiredScope: Option.Option<CanonicalCapability>;
 }>;
 type AuditTime = Readonly<{ id: string; current: number }>;
+
+/** A correlated proof that the PAT row's exact successful canonical call exists. */
+export const recordedPATCallProof = ({
+  auditId,
+  operation,
+}: Readonly<{ auditId: string; operation: AuditedPATOperation }>): OwnedStatement => ({
+  sql: "SELECT 1 FROM pat_audit WHERE id = ? AND user_id = pats.user_id AND pat_id = pats.id AND operation = ? AND outcome = 'accepted'",
+  params: [auditId, operation],
+});
 
 type TransitionInput = AuditTime &
   Readonly<{
@@ -130,12 +143,8 @@ export const recordCanonicalPATWork = ({
 export const recordCanonicalPATWorkFromAuthority = ({
   authority,
   input,
-}: Readonly<{ authority: PATAuthority; input: CanonicalAuditInput }>): OwnedStatement => ({
-  sql: `INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
-    SELECT ?,user_id,id,?,?,? FROM pats WHERE ${authority.predicate}
-    ${input.afterOwnerWrite ? "AND changes() = 1" : ""}`,
-  params: [input.id, input.operation, input.outcome, input.current, ...authority.bindings],
-});
+}: Readonly<{ authority: PATAuthority; input: CanonicalAuditInput }>): OwnedStatement =>
+  authorizedCallStatement({ authority, ...input });
 
 /**
  * Audit one rejected canonical PAT call from the exact live-authority gate the caller presented.

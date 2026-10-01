@@ -5,6 +5,7 @@ import {
   encodeMoneyAmount,
 } from "@fidy/server/transactions-runtime";
 import { DateTime, Effect, Option, Schema } from "effect";
+import { prepareOwnerAuditCall } from "@fidy/server/audit";
 import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
 import {
   type TransactionBoundaryFailure,
@@ -172,11 +173,20 @@ const auditStatements = ({
         current,
       })
     : [
-        db
-          .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-        SELECT ?, user_id, ?, 'transactions.updateTransaction', 'success', ? FROM transaction_corrections
-        WHERE id = ? AND user_id = ? AND changes() = 1`)
-          .bind(transactionId(), subject.id, current, correctionId, subject.userId),
+        prepareOwnerAuditCall({
+          db,
+          id: transactionId(),
+          userId: subject.userId,
+          caller: { _tag: "WebSession", id: subject.id },
+          operation: "transactions.updateTransaction",
+          outcome: "success",
+          current,
+          afterOwnerWrite: true,
+          when: {
+            sql: "SELECT 1 FROM transaction_corrections WHERE id = ? AND user_id = ?",
+            params: [correctionId, subject.userId],
+          },
+        }),
       ];
 
 const emptyChangeMessage =

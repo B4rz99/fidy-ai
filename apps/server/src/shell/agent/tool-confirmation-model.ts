@@ -1,6 +1,6 @@
 import type { Effect, Schema as SchemaNamespace } from "effect";
 import { Option, Schema } from "effect";
-import type { ProviderQualifiedMessages } from "~/core/consent/model";
+import type { ProviderQualifiedMessages } from "~/core/consent/contract";
 import type { SqlClient } from "effect/unstable/sql";
 import type { AgentOperationBinding } from "./agent-operation-binding";
 

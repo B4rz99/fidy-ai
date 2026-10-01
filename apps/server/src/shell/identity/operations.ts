@@ -2,6 +2,7 @@ import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { User, UserPreferences } from "~/core/identity/model";
 import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
 import { OperationResponse, Unavailable } from "~/shell/public-http/contract";
+import type { FreshSessionSubject } from "./contract";
 
 /**
  * Canonical stable-User operations. The update payload is the model-derived
@@ -44,3 +45,19 @@ export const IdentityGroup = HttpApiGroup.make("identity").add(
       })
     )
 );
+
+/** Recheck a fresh User-owned WebSession within the same D1 unit as an authority change. */
+export const freshSessionExists = `EXISTS (SELECT 1 FROM web_sessions WHERE id = ? AND user_id = ? AND revoked_at_ms IS NULL
+  AND fresh_until_ms > ? AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?)`;
+
+type SessionParams = readonly [string, string, number, number, number];
+export const freshSessionParams = ({
+  session,
+  time,
+}: Readonly<{ session: FreshSessionSubject; time: number }>): SessionParams => [
+  session.id,
+  session.user_id,
+  time,
+  time,
+  time,
+];

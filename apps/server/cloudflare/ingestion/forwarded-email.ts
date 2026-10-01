@@ -1,3 +1,5 @@
+import { protectConsentStatement } from "@fidy/server/consent-operations";
+import { prepareConsentAction, prepareConsentWithdrawalProjection } from "../consent/operations";
 import { Clock, Crypto, Data, Effect, Option, PlatformError, Result, Schema, Stream } from "effect";
 import PostalMime from "postal-mime";
 import {
@@ -156,15 +158,16 @@ export const receiveForwardedEmail = Effect.fn(function* (
   }
   const localPart = message.to.slice(0, message.to.indexOf("@"));
   const candidate = yield* io(() =>
-    environment.DB.prepare(
-      `SELECT a.user_id, u.time_zone FROM email_forwarding_addresses a
-     JOIN users u ON u.id = a.user_id
-     JOIN onboarding_consent_records c ON c.user_id = a.user_id
-     WHERE a.local_part = ? AND NOT EXISTS (
-       SELECT 1 FROM consent_user_revocations r WHERE r.user_id = a.user_id)`
-    )
-      .bind(localPart)
-      .first()
+    prepareConsentAction({
+      db: environment.DB,
+      subject: { _tag: "Owner", column: "a.user_id" },
+      requirement: "active",
+      statement: {
+        sql: `SELECT a.user_id, u.time_zone FROM email_forwarding_addresses a
+          JOIN users u ON u.id = a.user_id WHERE a.local_part = ?`,
+        params: [localPart],
+      },
+    }).first()
   );
   if (candidate === null) {
     reject(message);
@@ -348,18 +351,21 @@ export const receiveForwardedEmail = Effect.fn(function* (
 /** Publish only an opaque receipt identity and its explicit UserId; redelivery is expected. */
 export const dispatchForwardedEmail = Effect.fn(function* (environment: ForwardedEmailEnvironment) {
   const now = yield* Clock.currentTimeMillis;
+  const dispatch = protectConsentStatement({
+    subject: { _tag: "Owner", column: "o.user_id" },
+    requirement: "active",
+    statement: {
+      sql: `SELECT o.receipt_id, o.user_id FROM forwarded_email_outbox o
+        JOIN forwarded_email_receipts r ON r.id = o.receipt_id AND r.user_id = o.user_id
+        WHERE (o.sent_at_ms IS NULL OR o.sent_at_ms < ?)
+          AND r.state = 'queued' AND r.expires_at_ms > ?
+          AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes f WHERE f.receipt_id = r.id)`,
+      params: [now - dispatchCooldownMs, now],
+    },
+  });
   const rows = yield* io(() =>
-    environment.DB.prepare(
-      `SELECT o.receipt_id, o.user_id FROM forwarded_email_outbox o
-     JOIN forwarded_email_receipts r ON r.id = o.receipt_id AND r.user_id = o.user_id
-     WHERE (o.sent_at_ms IS NULL OR o.sent_at_ms < ?)
-       AND r.state = 'queued' AND r.expires_at_ms > ?
-       AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes f WHERE f.receipt_id = r.id)
-       AND EXISTS (SELECT 1 FROM onboarding_consent_records c WHERE c.user_id = o.user_id)
-       AND NOT EXISTS (SELECT 1 FROM consent_user_revocations c WHERE c.user_id = o.user_id)
-     LIMIT 25`
-    )
-      .bind(now - dispatchCooldownMs, now)
+    environment.DB.prepare(`${dispatch.sql} LIMIT 25`)
+      .bind(...dispatch.params)
       .all()
   );
   const jobs = Schema.decodeUnknownOption(Schema.Array(PendingJob))(rows.results);
@@ -380,40 +386,64 @@ export const dispatchForwardedEmail = Effect.fn(function* (environment: Forwarde
   }
 });
 
+const prepareCleanupSelection = (db: D1Database, now: number): D1PreparedStatement =>
+  prepareConsentWithdrawalProjection({
+    db,
+    statement: {
+      sql: `SELECT id, user_id, object_key, state FROM forwarded_email_receipts
+        WHERE state IN ('storing', 'queued') AND (expires_at_ms <= ?
+          OR (state = 'storing' AND received_at_ms <= ?)
+          OR (state = 'queued' AND EXISTS
+            (SELECT 1 FROM consent_withdrawals c WHERE c.user_id = forwarded_email_receipts.user_id)))
+        ORDER BY expires_at_ms ASC, id ASC LIMIT ?`,
+      params: [now + sweepLookaheadMs, now - storingInterruptionMs, maximumSweep],
+    },
+  });
+
+const prepareCleanupReview = ({
+  db,
+  userId,
+  receiptId,
+  reviewId,
+  current,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  receiptId: string;
+  reviewId: string;
+  current: number;
+}>): D1PreparedStatement =>
+  prepareConsentWithdrawalProjection({
+    db,
+    statement: {
+      sql: `INSERT INTO forwarded_email_needs_review
+        (id, receipt_id, user_id, reason, created_at_ms, evidence_expires_at_ms)
+        SELECT ?, id, user_id,
+        CASE WHEN EXISTS (SELECT 1 FROM consent_withdrawals c WHERE c.user_id = r.user_id)
+          THEN 'consent-revoked' ELSE 'processing-interrupted' END, ?, ?
+        FROM forwarded_email_receipts r WHERE r.id = ? AND r.user_id = ?
+        AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes o WHERE o.receipt_id = r.id)`,
+      params: [reviewId, current, current, receiptId, userId],
+    },
+  });
+
 /** Delete private bytes on revocation or expiry; retain replay and review tombstones. */
 export const sweepForwardedEmail = Effect.fn(function* (environment: ForwardedEmailEnvironment) {
   const now = yield* Clock.currentTimeMillis;
-  const rows = yield* io(() =>
-    environment.DB.prepare(
-      `SELECT id, user_id, object_key, state FROM forwarded_email_receipts
-     WHERE state IN ('storing', 'queued') AND (expires_at_ms <= ?
-       OR (state = 'storing' AND received_at_ms <= ?)
-       OR (state = 'queued' AND EXISTS
-         (SELECT 1 FROM consent_user_revocations c WHERE c.user_id = forwarded_email_receipts.user_id)))
-     ORDER BY expires_at_ms ASC, id ASC LIMIT ?`
-    )
-      .bind(now + sweepLookaheadMs, now - storingInterruptionMs, maximumSweep)
-      .all()
-  );
+  const rows = yield* io(() => prepareCleanupSelection(environment.DB, now).all());
   const expired = Schema.decodeUnknownOption(Schema.Array(ExpiredReceipt))(rows.results);
   if (Option.isNone(expired)) return yield* authorityUnavailable();
   for (const row of expired.value) {
     const reviewId = yield* emailCrypto.randomUUIDv4;
     yield* io(() =>
       environment.DB.batch([
-        environment.DB.prepare(`INSERT INTO forwarded_email_needs_review
-          (id, receipt_id, user_id, reason, created_at_ms, evidence_expires_at_ms)
-          SELECT ?, id, user_id,
-          CASE WHEN EXISTS (SELECT 1 FROM consent_user_revocations c WHERE c.user_id = r.user_id)
-            THEN 'consent-revoked' ELSE 'processing-interrupted' END, ?, ?
-          FROM forwarded_email_receipts r WHERE r.id = ? AND r.user_id = ?
-          AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes o WHERE o.receipt_id = r.id)`).bind(
+        prepareCleanupReview({
+          db: environment.DB,
+          userId: row.user_id,
+          receiptId: row.id,
           reviewId,
-          now,
-          now,
-          row.id,
-          row.user_id
-        ),
+          current: now,
+        }),
         environment.DB.prepare(`INSERT INTO forwarded_email_outcomes
           (receipt_id, user_id, outcome, transaction_id, review_id, completed_at_ms)
           SELECT ?, ?, 'needs-review', NULL, ?, ?

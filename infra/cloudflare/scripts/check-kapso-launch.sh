@@ -5,7 +5,7 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 evidence=${1:-"$root/docs/operations/kapso-launch-evidence.json"}
 policy=$(grep -o 'policy-[0-9-]*[a-z-]*' "$root/apps/web/src/features/public-site/legal/policy.html" | head -n 1)
-onboarding=$(grep -o 'onboarding-[0-9-]*-[a-z-]*' "$root/apps/server/src/shell/consent/current-disclosure.ts" | head -n 1)
+onboarding=$(bun "$root/infra/cloudflare/print-consent-revision.ts")
 
 if [[ ! -f "$evidence" ]] || ! jq -e --arg policy "$policy" --arg onboarding "$onboarding" '
   def verified: type == "string" and length > 0 and . != "PENDING";

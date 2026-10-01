@@ -1,3 +1,5 @@
+import type { OwnedStatement } from "@fidy/server/tokens-runtime";
+import { prepareConsentAction } from "../consent/operations";
 import { fallbackCaptureCategory } from "@fidy/server/categories";
 import { Clock, Data, DateTime, Effect, Option, type PlatformError, Schema } from "effect";
 import PostalMime from "postal-mime";
@@ -69,9 +71,7 @@ const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, EmailProcessingUnav
   Effect.tryPromise({ try: run, catch: (cause) => new EmailProcessingUnavailable({ cause }) });
 const active = `EXISTS (SELECT 1 FROM forwarded_email_receipts r
   WHERE r.id = ? AND r.user_id = ? AND r.state = 'queued' AND r.expires_at_ms > ?
-  AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes o WHERE o.receipt_id = r.id)
-  AND EXISTS (SELECT 1 FROM onboarding_consent_records c WHERE c.user_id = r.user_id)
-  AND NOT EXISTS (SELECT 1 FROM consent_user_revocations c WHERE c.user_id = r.user_id))`;
+  AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes o WHERE o.receipt_id = r.id))`;
 
 // Only these fixed HTML tags may leave the personal-evidence boundary; never store tag names
 // supplied by the email, attributes, text, URLs, dimensions, or content-dependent lengths.
@@ -100,14 +100,18 @@ const findOwnedReceipt = (
   Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
     const raw = yield* attempt(() =>
-      input.DB.prepare(`SELECT r.id, r.object_key, r.delivery_digest, r.byte_length,
-    r.received_at_ms, r.expires_at_ms, r.time_zone FROM forwarded_email_receipts r
-    WHERE r.id = ? AND r.user_id = ? AND r.state = 'queued' AND r.expires_at_ms > ?
-      AND EXISTS (SELECT 1 FROM onboarding_consent_records c WHERE c.user_id = r.user_id)
-      AND NOT EXISTS (SELECT 1 FROM consent_user_revocations c WHERE c.user_id = r.user_id)
-      AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes o WHERE o.receipt_id = r.id)`)
-        .bind(input.receiptId, input.userId, current)
-        .first()
+      prepareConsentAction({
+        db: input.DB,
+        subject: { _tag: "Owner", column: "r.user_id" },
+        requirement: "active",
+        statement: {
+          sql: `SELECT r.id, r.object_key, r.delivery_digest, r.byte_length,
+            r.received_at_ms, r.expires_at_ms, r.time_zone FROM forwarded_email_receipts r
+            WHERE r.id = ? AND r.user_id = ? AND r.state = 'queued' AND r.expires_at_ms > ?
+              AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes o WHERE o.receipt_id = r.id)`,
+          params: [input.receiptId, input.userId, current],
+        },
+      }).first()
     );
     if (raw === null) return Option.none();
     return Option.some(yield* Schema.decodeUnknownEffect(Receipt)(raw));
@@ -200,6 +204,17 @@ const readMaterial = (
     };
   });
 
+const prepareSettlementStatement = (
+  settlement: Settlement,
+  statement: OwnedStatement
+): D1PreparedStatement =>
+  prepareConsentAction({
+    db: settlement.input.DB,
+    subject: { _tag: "User", userId: settlement.input.userId },
+    requirement: "active",
+    statement,
+  });
+
 const acceptedStatements = (
   settlement: Settlement
 ): Effect.Effect<
@@ -217,56 +232,70 @@ const acceptedStatements = (
       Schema.fromJsonString(ProviderMessageEvidence)
     )({ channel: "email", provider: "cloudflare-email", providerMessageId: input.receiptId });
     return [
-      input.DB.prepare(`INSERT INTO transactions (id, user_id, amount, currency,
+      prepareSettlementStatement(settlement, {
+        sql: `INSERT INTO transactions (id, user_id, amount, currency,
       direction, counterparty, category_id, notes, occurred_at, created_at)
-      SELECT ?, ?, ?, ?, ?, ?, ?, NULL, ?, ? WHERE ${active}`).bind(
-        id,
-        input.userId,
-        encodeMoneyAmount(extraction.money.amount),
-        extraction.money.currency,
-        extraction.direction,
-        Option.getOrNull(extraction.counterparty),
-        fallbackCaptureCategory(extraction.direction),
-        DateTime.formatIso(extraction.occurredAt),
-        when,
-        ...guard
-      ),
-      input.DB.prepare(`INSERT INTO source_attestations
+      SELECT ?, ?, ?, ?, ?, ${Option.isSome(extraction.counterparty) ? "?" : "NULL"}, ?, NULL, ?, ? WHERE ${active}`,
+        params: [
+          id,
+          input.userId,
+          encodeMoneyAmount(extraction.money.amount),
+          extraction.money.currency,
+          extraction.direction,
+          ...Option.toArray(extraction.counterparty),
+          fallbackCaptureCategory(extraction.direction),
+          DateTime.formatIso(extraction.occurredAt),
+          when,
+          ...guard,
+        ],
+      }),
+      prepareSettlementStatement(settlement, {
+        sql: `INSERT INTO source_attestations
       (id, user_id, transaction_id, kind, service_market, locale, time_zone,
        interpretation_revision, created_at, received_email_id, message_content_sha256,
        source_format, message_evidence, deterministic_interpretation, extractor_revision)
       SELECT ?, ?, ?, 'notification-email', 'CO', 'es-CO', ?, ?, ?, ?, ?,
-        'notification-email', ?, ?, ? WHERE ${active}`).bind(
-        yield* emailCrypto.randomUUIDv4,
-        input.userId,
-        id,
-        settlement.receipt.time_zone,
-        interpreted.revision,
-        when,
-        input.receiptId,
-        material.digest,
-        messageEvidence,
-        evidence,
-        "forwarded-email-deterministic-v1",
-        ...guard
-      ),
+        'notification-email', ?, ?, ? WHERE ${active}`,
+        params: [
+          yield* emailCrypto.randomUUIDv4,
+          input.userId,
+          id,
+          settlement.receipt.time_zone,
+          interpreted.revision,
+          when,
+          input.receiptId,
+          material.digest,
+          messageEvidence,
+          evidence,
+          "forwarded-email-deterministic-v1",
+          ...guard,
+        ],
+      }),
     ];
   });
 
 const reviewStatement = (settlement: Settlement): D1PreparedStatement => {
   const { input, receipt, material, id, now, guard } = settlement;
   if (material.interpretation._tag !== "NeedsReview") throw new Error("Expected review decision");
-  return input.DB.prepare(`INSERT INTO forwarded_email_needs_review
+  return prepareConsentAction({
+    db: input.DB,
+    subject: { _tag: "User", userId: input.userId },
+    requirement: "active",
+    statement: {
+      sql: `INSERT INTO forwarded_email_needs_review
     (id, receipt_id, user_id, reason, created_at_ms, evidence_expires_at_ms)
-    SELECT ?, ?, ?, ?, ?, ? WHERE ${active}`).bind(
-    id,
-    input.receiptId,
-    input.userId,
-    material.interpretation.reason,
-    now,
-    receipt.expires_at_ms,
-    ...guard
-  );
+    SELECT ?, ?, ?, ?, ?, ? WHERE ${active}`,
+      params: [
+        id,
+        input.receiptId,
+        input.userId,
+        material.interpretation.reason,
+        now,
+        receipt.expires_at_ms,
+        ...guard,
+      ],
+    },
+  });
 };
 
 const sampleStatement = (
@@ -274,17 +303,25 @@ const sampleStatement = (
   sampleId: string,
   html: string
 ): D1PreparedStatement =>
-  settlement.input.DB.prepare(`INSERT INTO anonymized_email_samples
+  prepareConsentAction({
+    db: settlement.input.DB,
+    subject: { _tag: "User", userId: settlement.input.userId },
+    requirement: "active",
+    statement: {
+      sql: `INSERT INTO anonymized_email_samples
       (id, service_market, source_format, source_provider, parser_revision,
        anonymization_revision, structure, policy_approved_at_ms, retained_at_ms)
       SELECT ?, 'CO', 'notification-email', 'cloudflare-email', 'cloudflare-mime-v1',
-        'structural-tags-v1', ?, ?, ? WHERE ${active}`).bind(
-    sampleId,
-    anonymizeStructure(html),
-    settlement.now,
-    settlement.now,
-    ...settlement.guard
-  );
+        'structural-tags-v1', ?, ?, ? WHERE ${active}`,
+      params: [
+        sampleId,
+        anonymizeStructure(html),
+        settlement.now,
+        settlement.now,
+        ...settlement.guard,
+      ],
+    },
+  });
 
 const settle = (
   input: Input,
@@ -317,17 +354,24 @@ const settle = (
       statements.push(sampleStatement(settlement, sampleId, material.html.value));
     }
     statements.push(
-      input.DB.prepare(`INSERT INTO forwarded_email_outcomes
+      prepareConsentAction({
+        db: input.DB,
+        subject: { _tag: "User", userId: input.userId },
+        requirement: "active",
+        statement: {
+          sql: `INSERT INTO forwarded_email_outcomes
     (receipt_id, user_id, outcome, transaction_id, review_id, completed_at_ms)
-    SELECT ?, ?, ?, ?, ?, ? WHERE ${active}`).bind(
-        input.receiptId,
-        input.userId,
-        material.interpretation._tag === "Interpreted" ? "accepted" : "needs-review",
-        material.interpretation._tag === "Interpreted" ? id : null,
-        material.interpretation._tag === "NeedsReview" ? id : null,
-        now,
-        ...settlement.guard
-      )
+    SELECT ?, ?, ?, ${material.interpretation._tag === "Interpreted" ? "?, NULL" : "NULL, ?"}, ? WHERE ${active}`,
+          params: [
+            input.receiptId,
+            input.userId,
+            material.interpretation._tag === "Interpreted" ? "accepted" : "needs-review",
+            id,
+            now,
+            ...settlement.guard,
+          ],
+        },
+      })
     );
     // A racing revocation or another coordinator cannot commit an orphan result.
     statements.push(

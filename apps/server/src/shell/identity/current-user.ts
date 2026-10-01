@@ -3,6 +3,7 @@ import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { User } from "~/core/identity/model";
 import { UserId } from "~/core/identity/reference";
 import { Unavailable } from "~/shell/public-http/contract";
+import { protectConsentStatement } from "~/shell/consent/operations";
 
 const UserRow = Schema.Struct({
   id: UserId,
@@ -32,11 +33,19 @@ export const getCurrentUser = (
     SqlSchema.findOneOption({
       Request: UserId,
       Result: UserRow,
-      execute: (
-        subject
-      ) => sql`SELECT u.id, u.service_market, u.locale, u.time_zone, u.created_at_ms,
-        t.started_at_ms, t.ends_at_ms FROM users AS u JOIN trial_periods AS t ON t.user_id = u.id
-        WHERE u.id = ${subject} AND EXISTS (SELECT 1 FROM onboarding_consent_records AS c WHERE c.user_id = u.id)`,
+      execute: (subject) => {
+        const query = protectConsentStatement({
+          statement: {
+            sql: `SELECT u.id, u.service_market, u.locale, u.time_zone, u.created_at_ms,
+              t.started_at_ms, t.ends_at_ms FROM users AS u JOIN trial_periods AS t ON t.user_id = u.id
+              WHERE u.id = ?`,
+            params: [subject],
+          },
+          subject: { _tag: "Owner", column: "u.id" },
+          requirement: "granted",
+        });
+        return sql.unsafe(query.sql, query.params);
+      },
     })(userId)
   ).pipe(
     Effect.flatMap((row) =>

@@ -1,6 +1,6 @@
 import type { Option } from "effect";
 import type { AccessTier } from "~/core/access-tier/contract";
-import type { ProviderQualifiedMessages } from "~/core/consent/model";
+import type { ProviderQualifiedMessages } from "~/core/consent/contract";
 import type { CanonicalCaller } from "./authz";
 
 /** Caller facts supplied to every canonical implementation once the executor has resolved one. */

@@ -1,5 +1,6 @@
 import { Option } from "effect";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
+import { protectConsentStatement } from "~/shell/consent/operations";
 import {
   type FreshSessionSubject,
   freshSessionExists,
@@ -59,23 +60,26 @@ export const recordClaimedPAT = (
 export const recordPATList = ({
   session,
   input,
-}: Readonly<{ session: FreshSessionSubject; input: AuditTime }>): OwnedStatement => ({
-  sql: `INSERT INTO pat_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
-    SELECT ?,?,?,'pats.listPATs','accepted',? WHERE EXISTS (SELECT 1 FROM web_sessions
-    WHERE id = ? AND user_id = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?)
-    AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = ?)`,
-  params: [
-    input.id,
-    session.user_id,
-    session.id,
-    input.current,
-    session.id,
-    session.user_id,
-    input.current,
-    input.current,
-    session.user_id,
-  ],
-});
+}: Readonly<{ session: FreshSessionSubject; input: AuditTime }>): OwnedStatement =>
+  protectConsentStatement({
+    statement: {
+      sql: `INSERT INTO pat_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
+        SELECT ?,?,?,'pats.listPATs','accepted',? WHERE EXISTS (SELECT 1 FROM web_sessions
+        WHERE id = ? AND user_id = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?)`,
+      params: [
+        input.id,
+        session.user_id,
+        session.id,
+        input.current,
+        session.id,
+        session.user_id,
+        input.current,
+        input.current,
+      ],
+    },
+    subject: { _tag: "User", userId: session.user_id },
+    requirement: "unrevoked",
+  });
 
 type RevokeAuditInput = AuditTime & Readonly<{ shortId: string }>;
 /** Link the exact revoked PAT to its User's audit in the same atomic lifecycle unit. */

@@ -1,3 +1,4 @@
+import { protectConsentAuthority } from "@fidy/server/consent-operations";
 import { Schema } from "effect";
 import { UserId } from "@fidy/server/agent-runtime";
 import {
@@ -60,11 +61,13 @@ export const hostedAuthority = ({
   current,
 }: Readonly<{ subject: HostedSubject; current: number }>): HostedSqlAuthority =>
   isWhatsAppHosted(subject)
-    ? {
-        table: "whatsapp_identities" as const,
-        predicate: `user_id = ? AND portfolio_id = ? AND bsuid = ?
-          AND EXISTS (SELECT 1 FROM onboarding_consent_records WHERE user_id = whatsapp_identities.user_id)
-          AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = whatsapp_identities.user_id)`,
-        bindings: [subject.userId, subject.portfolioId, subject.bsuid] as const,
-      }
+    ? protectConsentAuthority({
+        authority: {
+          table: "whatsapp_identities" as const,
+          predicate: "user_id = ? AND portfolio_id = ? AND bsuid = ?",
+          bindings: [subject.userId, subject.portfolioId, subject.bsuid] as const,
+        },
+        subject: { _tag: "Owner", column: "whatsapp_identities.user_id" },
+        requirement: "active",
+      })
     : liveWebSessionAuthority({ subject, current });

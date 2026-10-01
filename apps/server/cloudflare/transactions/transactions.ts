@@ -1,3 +1,4 @@
+import { prepareConsentAction } from "../consent/operations";
 import { CreateTransactionInput, encodeMoneyAmount } from "@fidy/server/transactions-runtime";
 import {
   type CategoryId,
@@ -78,12 +79,15 @@ export const transactionSession = ({
   if (Option.isNone(cookie)) return Promise.resolve(Option.none());
   return sha256(cookie.value).then((digest) => {
     const current = now();
-    return db
-      .prepare(
-        `SELECT id, user_id FROM web_sessions WHERE token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?
-      AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = web_sessions.user_id)`
-      )
-      .bind(digest, current, current)
+    return prepareConsentAction({
+      db,
+      statement: {
+        sql: `SELECT id, user_id FROM web_sessions WHERE token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?`,
+        params: [digest, current, current],
+      },
+      subject: { _tag: "Owner", column: "web_sessions.user_id" },
+      requirement: "unrevoked",
+    })
       .first()
       .then((raw) => sessionSubject(raw, digest));
   });
@@ -98,12 +102,16 @@ const captureAudit = (
   capture: Omit<Capture, "subject"> & Readonly<{ subject: TransactionSubject }>
 ): D1PreparedStatement => {
   const { subject, id, current } = capture;
-  return db
-    .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-      SELECT ?, user_id, ?, 'transactions.createTransaction', 'success', ? FROM transactions WHERE user_id = ? AND id = ?
-      AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = transactions.user_id)
-      AND changes() = 1`)
-    .bind(transactionId(), subject.id, current, subject.userId, id);
+  return prepareConsentAction({
+    db,
+    statement: {
+      sql: `INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
+      SELECT ?, user_id, ?, 'transactions.createTransaction', 'success', ? FROM transactions WHERE user_id = ? AND id = ? AND changes() = 1`,
+      params: [transactionId(), subject.id, current, subject.userId, id],
+    },
+    subject: { _tag: "Owner", column: "transactions.user_id" },
+    requirement: "unrevoked",
+  });
 };
 
 const captureInsert = (db: D1Database, capture: Capture): D1PreparedStatement => {

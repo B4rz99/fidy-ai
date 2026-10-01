@@ -1,7 +1,14 @@
 import { Schema } from "effect";
 import { Locale, ServiceMarket } from "~/core/_shared/context";
-import { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
-import { UserId, WhatsAppCallerReference } from "~/core/identity/reference";
+import {
+  ProviderMessageEvidence,
+  WhatsAppProviderMessageId,
+} from "~/core/provider-evidence/contract";
+import {
+  UserId,
+  WhatsAppBusinessPhoneNumberId,
+  WhatsAppCallerReference,
+} from "~/core/identity/reference";
 import { InsightKind } from "~/core/insights/reference";
 import { PATId } from "~/core/tokens/reference";
 import { UtcTimestamp } from "~/core/_shared/time";
@@ -153,3 +160,108 @@ export const ConsentInboundContent = Schema.Union([
   }),
 ]);
 export type ConsentInboundContent = typeof ConsentInboundContent.Type;
+
+/** The only three outcomes allowed before the consent gate performs any effect. */
+export type ConsentReplyDecision =
+  | Readonly<{ readonly _tag: "Accepted" }>
+  | Readonly<{ readonly _tag: "Declined" }>
+  | Readonly<{ readonly _tag: "Clarify" }>;
+
+type AwaitingDisclosureDelivery = Extract<
+  PendingConsentExchange,
+  { readonly _tag: "AwaitingDisclosureDelivery" }
+>;
+
+type ReadonlyPolicySnapshot = Readonly<PolicySnapshot>;
+
+type ReadonlyDisclosureSnapshot = Omit<
+  Readonly<DisclosureSnapshot>,
+  "policy" | "purposes" | "dataCategories"
+> & {
+  readonly policy: ReadonlyPolicySnapshot;
+  readonly purposes: ReadonlyArray<DisclosureSnapshot["purposes"][number]>;
+  readonly dataCategories: ReadonlyArray<DisclosureSnapshot["dataCategories"][number]>;
+};
+
+/** Caller-independent authenticated initiation and the exact disclosure to present. */
+export type PendingConsentInput = Omit<
+  Readonly<AwaitingDisclosureDelivery>,
+  "_tag" | "caller" | "disclosure" | "expiresAt"
+> & {
+  readonly disclosure: ReadonlyDisclosureSnapshot;
+};
+
+/** Pending legal exchange before its caller association is attached by the ingress owner. */
+export type PendingConsentDraft = Omit<AwaitingDisclosureDelivery, "caller">;
+
+/** Temporary Consent evidence; delivery and settlement phases carry the proof each decision requires. */
+export const ConsentIngressExchange = Schema.Struct({
+  initiatingMessageId: WhatsAppProviderMessageId,
+  initiatingBodySha256: Sha256Digest,
+  businessPhoneNumberId: WhatsAppBusinessPhoneNumberId,
+  expiresAtMs: Schema.Finite,
+  phase: Schema.Union([
+    Schema.TaggedStruct("BeforeDelivery", {
+      stage: Schema.Literals(["awaiting_delivery", "outbound_started"]),
+      disclosureMessageId: Schema.NullOr(WhatsAppProviderMessageId),
+    }),
+    Schema.TaggedStruct("AwaitingDecision", {
+      disclosureMessageId: WhatsAppProviderMessageId,
+      disclosedAtMs: Schema.Finite,
+      decisionNotBeforeMs: Schema.Finite,
+    }),
+    Schema.TaggedStruct("Settled", {
+      decision: Schema.Literals(["accepted", "declined"]),
+      disclosureMessageId: WhatsAppProviderMessageId,
+      disclosedAtMs: Schema.Finite,
+      decisionNotBeforeMs: Schema.Finite,
+    }),
+  ]),
+});
+export type ConsentIngressExchange = typeof ConsentIngressExchange.Type;
+
+/** Provider-qualified message facts supplied by ingress after authentication and bounded decoding. */
+export type ConsentIngressMessage = Readonly<{
+  providerMessageId: WhatsAppProviderMessageId;
+  bodySha256: Sha256Digest;
+  businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
+  occurredAtMs: number;
+  receivedAtMs: number;
+}>;
+
+/** Closed origins for symmetric PAT Consent revocations; only expiry is automatic. */
+export const PATRevocationOrigin = Schema.Literals([
+  "user-revoke-one",
+  "user-revoke-all",
+  "user-revoke-unclaimed",
+  "approved-unclaimed-expiry",
+  "fixed-lifetime-expiry",
+]);
+export type PATRevocationOrigin = typeof PATRevocationOrigin.Type;
+
+/** Attribution preserved by each terminal PAT grant transition. */
+export type PATRevocationDisclosure<Origin extends PATRevocationOrigin = PATRevocationOrigin> =
+  Readonly<{ revision: string; text: string }> &
+    {
+      "user-revoke-one": Readonly<{ _tag: "AuthenticatedWeb" }>;
+      "user-revoke-all": Readonly<{ _tag: "AuthenticatedWeb" }>;
+      "user-revoke-unclaimed": Readonly<{ _tag: "AuthenticatedWeb" }>;
+      "approved-unclaimed-expiry": Readonly<{
+        _tag: "AutomaticPolicy";
+        policyReason: "pat-approved-unclaimed-expiry";
+      }>;
+      "fixed-lifetime-expiry": Readonly<{
+        _tag: "AutomaticPolicy";
+        policyReason: "pat-fixed-lifetime-expiry";
+      }>;
+    }[Origin];
+
+/** Exact immutable onboarding grant and legal revisions authorizing a protected decision. */
+export const OnboardingConsentBasis = Schema.Struct({
+  grantId: ConsentRecordId,
+  disclosureRevision: DisclosureRevision,
+  disclosureSha256: Sha256Digest,
+  policyRevision: PolicyRevision,
+  policySha256: Sha256Digest,
+});
+export type OnboardingConsentBasis = typeof OnboardingConsentBasis.Type;

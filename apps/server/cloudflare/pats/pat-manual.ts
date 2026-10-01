@@ -1,3 +1,5 @@
+import { readConsentStatus } from "../consent/operations";
+import type { ConsentUnavailable } from "../consent/contract";
 import {
   CreateManualPATPayload,
   IssuedManualPATResponse,
@@ -15,7 +17,7 @@ import {
   reviewExpiredMessage,
 } from "@fidy/server/tokens-runtime";
 import { type Cause, DateTime, Effect, Option, Redacted, Result, Schema } from "effect";
-import { grantManualPATConsent } from "@fidy/server/consent-pat";
+import { grantManualPATConsent } from "@fidy/server/consent-operations";
 import {
   type SessionRow,
   canonical,
@@ -200,7 +202,7 @@ const failedIssuance = (
   db: D1Database,
   requestId: string,
   userId: string
-): Effect.Effect<Response, Cause.UnknownError> =>
+): Effect.Effect<Response, Cause.UnknownError | ConsentUnavailable> =>
   Effect.gen(function* () {
     const prior = yield* Effect.tryPromise(() =>
       db
@@ -209,10 +211,8 @@ const failedIssuance = (
         .first()
     );
     if (prior !== null) return consumed();
-    const revokedConsent = yield* Effect.tryPromise(() =>
-      db.prepare("SELECT 1 FROM consent_user_revocations WHERE user_id = ?").bind(userId).first()
-    );
-    if (revokedConsent !== null) return consentActionRequired();
+    const standing = yield* readConsentStatus({ db, userId });
+    if (standing === "Revoked") return consentActionRequired();
     const issued = yield* Effect.tryPromise(() =>
       db
         .prepare("SELECT count(*) AS total FROM pats WHERE user_id = ? AND issued_at_ms > ?")

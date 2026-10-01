@@ -1,3 +1,4 @@
+import { prepareConsentOperationalMetadata } from "../consent/operations";
 import { Clock, Effect, Exit, Option, Schema } from "effect";
 
 const WorkKind = Schema.Literals([
@@ -190,18 +191,29 @@ const inspectWorkflow = (
   });
 
 const readWhatsAppSample = (
-  db: D1Database,
-  sql: string,
-  bindings: ReadonlyArray<number> = []
+  statement: D1PreparedStatement
 ): Effect.Effect<ReadonlyArray<typeof WhatsAppAge.Type>, void> =>
-  Effect.tryPromise(() =>
-    db
-      .prepare(sql)
-      .bind(...bindings, sampleLimit)
-      .all()
-  ).pipe(
+  Effect.tryPromise(() => statement.all()).pipe(
     Effect.flatMap((rows) => Schema.decodeUnknownEffect(Schema.Array(WhatsAppAge))(rows.results)),
     Effect.mapError(() => undefined)
+  );
+
+const readPendingWhatsApp = (
+  db: D1Database
+): Effect.Effect<ReadonlyArray<typeof WhatsAppAge.Type>, void> =>
+  readWhatsAppSample(
+    prepareConsentOperationalMetadata({
+      db,
+      statement: {
+        sql: `SELECT created FROM (
+                SELECT created_at_ms AS created FROM consent_pending_deliveries
+                UNION ALL SELECT d.proposed_at_ms FROM hosted_whatsapp_delivery AS d
+                  JOIN hosted_turns AS t ON t.id = d.turn_id AND t.user_id = d.user_id
+                  WHERE t.status = 'pending' AND d.state IN ('sending', 'accepted', 'ambiguous')
+              ) ORDER BY created LIMIT ?`,
+        params: [sampleLimit],
+      },
+    })
   );
 
 /** Each condition has its own bounded sample; old pending work cannot mask failed delivery. */
@@ -209,36 +221,35 @@ const inspectWhatsApp = (db: D1Database, current: number): Effect.Effect<Operati
   Effect.gen(function* () {
     const result = yield* Effect.exit(
       Effect.all({
-        pending: readWhatsAppSample(
-          db,
-          `SELECT created FROM (
-        SELECT created_at_ms AS created FROM pending_consent_exchanges
-          WHERE state IN ('awaiting_delivery', 'outbound_started')
-        UNION ALL SELECT d.proposed_at_ms FROM hosted_whatsapp_delivery AS d
-          JOIN hosted_turns AS t ON t.id = d.turn_id AND t.user_id = d.user_id
-          WHERE t.status = 'pending' AND d.state IN ('sending', 'accepted', 'ambiguous')
-      ) ORDER BY created LIMIT ?`
-        ),
+        pending: readPendingWhatsApp(db),
         failed: readWhatsAppSample(
-          db,
-          `SELECT created FROM (
-        SELECT proposed_at_ms AS created FROM hosted_whatsapp_delivery
-          WHERE state IN ('rejected', 'unconfirmed') AND proposed_at_ms >= ?
-        UNION ALL SELECT t.terminal_at_ms FROM hosted_turns AS t
-          JOIN hosted_whatsapp_inbound AS i ON i.turn_id = t.id AND i.user_id = t.user_id
-          WHERE t.status = 'failed' AND t.failure_reason = 'DeliveryFailed'
-            AND t.terminal_at_ms >= ? AND NOT EXISTS
-              (SELECT 1 FROM hosted_whatsapp_delivery AS d WHERE d.turn_id = t.id)
-      ) ORDER BY created LIMIT ?`,
-          [current - rejectedWindowMilliseconds, current - rejectedWindowMilliseconds]
+          db
+            .prepare(`SELECT created FROM (
+            SELECT proposed_at_ms AS created FROM hosted_whatsapp_delivery
+              WHERE state IN ('rejected', 'unconfirmed') AND proposed_at_ms >= ?
+            UNION ALL SELECT t.terminal_at_ms FROM hosted_turns AS t
+              JOIN hosted_whatsapp_inbound AS i ON i.turn_id = t.id AND i.user_id = t.user_id
+              WHERE t.status = 'failed' AND t.failure_reason = 'DeliveryFailed'
+                AND t.terminal_at_ms >= ? AND NOT EXISTS
+                  (SELECT 1 FROM hosted_whatsapp_delivery AS d WHERE d.turn_id = t.id)
+          ) ORDER BY created LIMIT ?`)
+            .bind(
+              current - rejectedWindowMilliseconds,
+              current - rejectedWindowMilliseconds,
+              sampleLimit
+            )
         ),
         cleanup: readWhatsAppSample(
-          db,
-          `SELECT created FROM (
-        SELECT closes_at_ms AS created FROM hosted_whatsapp_windows WHERE closes_at_ms <= ?
-        UNION ALL SELECT expires_at_ms FROM pending_consent_exchanges WHERE expires_at_ms <= ?
-      ) ORDER BY created LIMIT ?`,
-          [current, current]
+          prepareConsentOperationalMetadata({
+            db,
+            statement: {
+              sql: `SELECT created FROM (
+                SELECT closes_at_ms AS created FROM hosted_whatsapp_windows WHERE closes_at_ms <= ?
+                UNION ALL SELECT expires_at_ms FROM consent_expiry_deadlines WHERE expires_at_ms <= ?
+              ) ORDER BY created LIMIT ?`,
+              params: [current, current, sampleLimit],
+            },
+          })
         ),
       })
     );

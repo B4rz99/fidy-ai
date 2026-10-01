@@ -1,0 +1,71 @@
+apps/server/package.json
+  s_d7df9971aacaaa::t_bd5d09733330a7 193
+  s_d7df9971aacaaa::t_ad6a27dc4b81e7 201
+infra/cloudflare/package.json
+  s_d7df9971aacaaa::t_ba513cd0de4920 20
+package.json
+  s_d7df9971aacaaa::t_912c2e0597cab7 34
+apps/server/cloudflare/test-shards.test.ts
+  s_d7df9971aacaaa::t_b0dc407b44e8db 26-33
+  s_d7df9971aacaaa::t_884e701b5f080f 38-40
+apps/web/e2e/browser-pairing.spec.ts
+  s_d7df9971aacaaa::t_17deb4092e556a 519-521,549-557,568,586,603
+  s_d7df9971aacaaa::t_54d178142397d0 524-525,527-529,539-540,544-546,560,562,567,569-571,576,585,587-594,604-605
+  s_d7df9971aacaaa::t_9531ec7fae6fe1 564-566
+  s_d7df9971aacaaa::t_6594bc52a2965f 572-575,577-584,595-601
+  s_d7df9971aacaaa::t_c1572215ab3154 561,563
+.github/workflows/ci.yml
+  s_d7df9971aacaaa::t_a612d584a1ce97 68,70-77,164,168-178,180-181,188-190
+  s_d7df9971aacaaa::t_dc209fb3709750 127,134-136
+docs/ci-performance.md
+  s_d7df9971aacaaa::t_6fae25266870a5 3-5
+apps/web/playwright.config.ts
+  s_d7df9971aacaaa::t_9f6596f4c68795 10
+apps/web/scripts/ci-workflow.test.ts
+  s_d7df9971aacaaa::t_452384df7d603a 38-45,47-52
+apps/web/package.json
+  s_d7df9971aacaaa::t_555e5d3d41b254 30
+scripts/adapter-timings.test.ts
+  s_d7df9971aacaaa::t_eae78471e5284f 1-4,6-14,23-28,34,41-45,63,99-105,109-110
+  s_d7df9971aacaaa::t_c47cf69f24d04b 52-58
+  s_d7df9971aacaaa::t_6594bc52a2965f 5,15-22,29-33,35-39,46-51,60-62,64-98,106-108
+  s_d7df9971aacaaa::t_28f051439e9690 40,59
+scripts/verify.ts
+  s_d7df9971aacaaa::t_cb6471d48a146a 211-212,216,224-226,229-233,249
+  s_d7df9971aacaaa::t_6594bc52a2965f 234,246-248
+  s_d7df9971aacaaa::t_6c25533bf2851a 235-245
+  s_d7df9971aacaaa::t_9798bdafbb4c65 250
+docs/ci-improvements-922-926.md
+  s_d7df9971aacaaa::t_9aa2336843aab4 1-10,12-14,17-54,58-60,64-82,91-103,111-150,155-175,177-211,217-227
+  s_d7df9971aacaaa::t_a175eecfb08db7 61-63
+  s_d7df9971aacaaa::t_3492de6136db3b 55-57,83-90,212-216
+  s_d7df9971aacaaa::t_49c1623dac868d 228-242
+  s_d7df9971aacaaa::t_bc79c11aea1d43 15-16,104-110
+  s_d7df9971aacaaa::t_ddebba951f3894 11,151-154,176
+apps/server/scripts/check-lint-guards.ts
+  s_d7df9971aacaaa::t_d1125de961d6e4 3-4,134-150,152-158,160-161,163
+  s_d7df9971aacaaa::t_8b4576683908a7 151
+scripts/adapter-timings.ts
+  s_d7df9971aacaaa::t_6594bc52a2965f 49-58,72-76,87-97,104,108-114,116
+  s_d7df9971aacaaa::t_7f0a344a1d9c3a 14-15
+  s_d7df9971aacaaa::t_0ebafd54ea70bb 28-45,69,103,105,107,115
+  s_d7df9971aacaaa::t_0b91b20e611a13 1-13,16-27,46-48,59-68,70-71,77-86,98-102,106,117
+bun.lock
+  s_d7df9971aacaaa::t_453932b136bb4b 38,46,64,103,268,572,694,696,698,700,702,704,706,708,710,712,714,716,718,720,722,786,1568
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "8bd45b833efb24590cb92e7fd61d82f3fd2d0fd7",
+  "prompts": {},
+  "sessions": {
+    "s_d7df9971aacaaa": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0f4f3-49da-71d3-90da-7eac5f7949f2",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

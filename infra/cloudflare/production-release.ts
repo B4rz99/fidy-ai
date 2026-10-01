@@ -532,15 +532,13 @@ const readStablePair = Effect.fn(function* ({
   proof: string;
   client: HttpClient.HttpClient;
 }) {
-  const publicDeployment = yield* port.current(workers.public.workerName).pipe(
-    Effect.mapError(
-      () =>
-        new ReleaseFailure({
-          message: "Release capture could not read stable Worker deployments",
-        })
-    )
-  );
-  const coreDeployment = yield* port.current(workers.core.workerName).pipe(
+  const { publicDeployment, coreDeployment } = yield* Effect.all(
+    {
+      publicDeployment: port.current(workers.public.workerName),
+      coreDeployment: port.current(workers.core.workerName),
+    },
+    { concurrency: 2 }
+  ).pipe(
     Effect.mapError(
       () =>
         new ReleaseFailure({

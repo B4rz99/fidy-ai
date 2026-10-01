@@ -1,4 +1,5 @@
-import { Cause, Context, Effect, Exit, Layer, Option } from "effect";
+import { Cause, Context, Effect, Exit, Layer, Option, Schema } from "effect";
+import { SmokeRequest } from "../../apps/server/cloudflare/runtime/smoke";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import {
@@ -42,6 +43,11 @@ const recordingResponse = (input: {
     input.bodies.push(body);
     return input.response;
   });
+
+const gatedResponse = (
+  ready: Promise<void>,
+  input: Parameters<typeof recordingResponse>[0]
+): Promise<Response> => ready.then(() => recordingResponse(input));
 
 const routingModes: ReadonlyArray<"candidate" | "promoted"> = ["candidate", "promoted"];
 describe("read-only routing readiness", () => {
@@ -126,6 +132,94 @@ describe("read-only routing readiness", () => {
 
 /** A wrong public version in the second smoke must never generate a passing release gate. */
 describe("intermediate production smoke", () => {
+  it.each([200, 503])(
+    "overlaps isolated pairings and requires both to pass (intermediate HTTP %i)",
+    (intermediateStatus) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const bodies: string[] = [];
+          const pairings = new Set<string>();
+          const bothStarted = Promise.withResolvers<void>();
+          const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+            const request = new Request(input, init);
+            const path = new URL(request.url).pathname;
+            const override = request.headers.get("cloudflare-workers-version-overrides") ?? "";
+            const oldPublic = override.includes(`fidy-public="${publicStable}"`);
+            if (path === "/internal/release-smoke") {
+              const publicVersion = oldPublic ? publicStable : publicCandidate;
+              pairings.add(publicVersion);
+              if (pairings.size === 2) bothStarted.resolve();
+              const response = Response.json(
+                {
+                  status: "passed",
+                  public: {
+                    gitRevision: oldPublic ? previousRevision : revision,
+                    contractDigest: digest,
+                    workerVersionId: publicVersion,
+                  },
+                  core: {
+                    gitRevision: revision,
+                    contractDigest: digest,
+                    workerVersionId: coreCandidate,
+                  },
+                  manifest: { protocolVersion: 1, asyncWorkVersion: 1 },
+                },
+                {
+                  status: oldPublic ? intermediateStatus : 200,
+                  headers: { ...securityHeaders, "x-fidy-smoke-worker-version": publicVersion },
+                }
+              );
+              // Sequential smoke deadlocks here instead of accidentally passing a timing assertion.
+              return gatedResponse(bothStarted.promise, { request, bodies, response });
+            }
+            const status =
+              new Map([
+                ["/health", 200],
+                ["/categories", 401],
+                ["/providers/kapso/callback", 401],
+                ["/providers/wompi/billing-events", 400],
+                ["/web/hosted-turns", 403],
+              ]).get(path) ?? 404;
+            return Promise.resolve(
+              new Response(null, {
+                status,
+                headers: { ...securityHeaders, "x-fidy-smoke-worker-version": publicCandidate },
+              })
+            );
+          });
+          try {
+            const exit = yield* Effect.scoped(
+              Effect.gen(function* () {
+                const services = yield* Layer.build(FetchHttpClient.layer);
+                return yield* Effect.exit(
+                  verifyProductionSmoke(config).pipe(
+                    Effect.provideService(FetchHttpClient.Fetch, mockedFetch),
+                    Effect.provideService(
+                      HttpClient.HttpClient,
+                      Context.get(services, HttpClient.HttpClient)
+                    ),
+                    Effect.timeout("1 second")
+                  )
+                );
+              })
+            );
+            expect(Exit.isSuccess(exit)).toBe(intermediateStatus === 200);
+            expect(pairings.size).toBe(2);
+            const probes = yield* Effect.forEach(bodies, (body) =>
+              Schema.decodeEffect(Schema.fromJsonString(SmokeRequest))(body)
+            );
+            expect(probes).toHaveLength(2);
+            expect(new Set(probes.map((probe) => probe.probeId)).size).toBe(2);
+            expect(probes.every((probe) => probe.expectedCoreVersionId === coreCandidate)).toBe(
+              true
+            );
+          } finally {
+            bothStarted.resolve();
+            mockedFetch.mockRestore();
+          }
+        })
+      )
+  );
   it.each([403, 503])("refuses HTTP %i without retrying synthetic work", (status) =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -152,7 +246,7 @@ describe("intermediate production smoke", () => {
           })
         );
         expect(Exit.isFailure(exit)).toBe(true);
-        expect(mockedFetch).toHaveBeenCalledTimes(1);
+        expect(mockedFetch).toHaveBeenCalledTimes(2);
         mockedFetch.mockRestore();
       })
     )
@@ -199,7 +293,7 @@ describe("intermediate production smoke", () => {
               expect(reason).not.toContain("secret-provider-body");
             }
           }
-          expect(mockedFetch).toHaveBeenCalledTimes(1);
+          expect(mockedFetch).toHaveBeenCalledTimes(2);
           mockedFetch.mockRestore();
         })
       )
@@ -273,7 +367,9 @@ describe("intermediate production smoke", () => {
           );
           expect(Exit.isSuccess(exit)).toBe(true);
           expect(bodies).toHaveLength(3);
-          expect(bodies[1]).toBe(bodies[0]);
+          const candidateBodies = bodies.filter((body) => body.includes(publicCandidate));
+          expect(candidateBodies).toHaveLength(2);
+          expect(candidateBodies[1]).toBe(candidateBodies[0]);
         } finally {
           mockedFetch.mockRestore();
         }

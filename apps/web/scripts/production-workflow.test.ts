@@ -8,8 +8,8 @@ const manualRollback = await Bun.file(
 const profileAction = await Bun.file(
   `${repositoryRoot}/.github/actions/configure-alchemy-cloudflare-profile/action.yml`
 ).text();
-const bootstrapAction = await Bun.file(
-  `${repositoryRoot}/.github/actions/bootstrap-alchemy-cloudflare-state/action.yml`
+const preflight = await Bun.file(
+  `${repositoryRoot}/infra/cloudflare/scripts/production-preflight.sh`
 ).text();
 
 describe("Production release workflow policy", () => {
@@ -19,7 +19,7 @@ describe("Production release workflow policy", () => {
     expect(workflow).not.toMatch(
       /BOOTSTRAP_RELEASE|RESUME_RELEASE|bootstrap-capture|bootstrap-verify|resume-capture/u
     );
-    const driftGate = workflow.indexOf("bash scripts/check-topology-drift.sh");
+    const driftGate = workflow.indexOf("bash infra/cloudflare/scripts/production-preflight.sh");
     const upload = workflow.indexOf("alchemy deploy --stage production --yes --no-input");
     expect(driftGate).toBeGreaterThan(0);
     expect(driftGate).toBeLessThan(upload);
@@ -50,13 +50,14 @@ describe("Production release workflow policy", () => {
 
   it("builds exact release metadata before planning the Alchemy topology", () => {
     const metadata = workflow.indexOf("CONTRACT_DIGEST=");
-    const webBuild = workflow.indexOf("build:production");
+    const webBuild = workflow.indexOf("bash infra/cloudflare/scripts/production-preflight.sh");
     const plan = workflow.indexOf("alchemy plan");
 
     expect(workflow).toContain("RELEASE_GIT_SHA: ${{ github.sha }}");
     expect(metadata).toBeGreaterThan(0);
     expect(metadata).toBeLessThan(webBuild);
     expect(webBuild).toBeLessThan(plan);
+    expect(preflight).toContain("bun run --cwd apps/web build:production");
   });
 
   it("keeps the CI Alchemy profile ephemeral and environment-backed", () => {
@@ -110,30 +111,29 @@ describe("Production release workflow policy", () => {
   });
 
   it("runs the deterministic Worker boundary suite before deployment", () => {
-    expect(workflow).toContain("bun run --cwd infra/cloudflare test -- workers.test.ts");
+    expect(preflight).toContain("bun run --cwd infra/cloudflare test -- workers.test.ts");
+    expect(preflight).toContain("bun run --cwd infra/cloudflare test:workers-ai-conformance");
   });
 
   it("rejects migration and provider drift before planning and approves the non-interactive deploy", () => {
     const profile = workflow.indexOf(
       "uses: ./.github/actions/configure-alchemy-cloudflare-profile"
     );
-    const migrationDriftGate = workflow.indexOf(
-      "run: bun scripts/check-applied-migration-drift.ts"
-    );
-    const bootstrap = workflow.indexOf(
-      "uses: ./.github/actions/bootstrap-alchemy-cloudflare-state"
-    );
-    const providerDriftGate = workflow.indexOf("bash scripts/check-topology-drift.sh");
+    const preflightGate = workflow.indexOf("bash infra/cloudflare/scripts/production-preflight.sh");
+    const migrationDriftGate = preflight.indexOf("bun scripts/check-applied-migration-drift.ts");
+    const bootstrap = preflight.indexOf("provider cloudflare bootstrap");
+    const providerDriftGate = preflight.indexOf("bash scripts/check-topology-drift.sh");
     const plan = workflow.indexOf("alchemy plan");
 
     expect(profile).toBeGreaterThan(0);
-    expect(workflow).toContain("name: Reject drift in applied D1 migration history");
+    expect(preflightGate).toBeGreaterThan(profile);
+    expect(preflightGate).toBeLessThan(plan);
     expect(migrationDriftGate).toBeGreaterThan(0);
-    expect(profile).toBeLessThan(migrationDriftGate);
     expect(migrationDriftGate).toBeLessThan(bootstrap);
     expect(bootstrap).toBeLessThan(providerDriftGate);
-    expect(providerDriftGate).toBeLessThan(plan);
-    expect(bootstrapAction).toContain("alchemy provider cloudflare bootstrap");
+    expect(preflight).toContain(
+      "../../node_modules/alchemy/bin/alchemy.ts provider cloudflare bootstrap"
+    );
     expect(workflow).toContain("alchemy deploy --stage production --yes --no-input");
   });
 
@@ -201,7 +201,8 @@ describe("Production release workflow policy", () => {
     expect(verification).toBeLessThan(postDeploymentDrift);
     expect(postDeploymentDriftCommand).toBeGreaterThan(postDeploymentDrift);
     expect(postDeploymentDriftCommand).toBeLessThan(releaseRecord);
-    expect(workflow.match(/bash scripts\/check-topology-drift\.sh/gu)).toHaveLength(2);
+    expect(workflow.match(/bash scripts\/check-topology-drift\.sh/gu)).toHaveLength(1);
+    expect(preflight.match(/bash scripts\/check-topology-drift\.sh/gu)).toHaveLength(1);
     expect(workflow).not.toContain("alchemy drift --stage production --no-input");
     expect(workflow).toContain("https://fidyapp.com/health-check");
     expect(workflow).toContain("https://app.fidyapp.com/deployment-metadata.json");
@@ -228,6 +229,9 @@ describe("Production release workflow policy", () => {
 
     expect(plan).toBeLessThan(recheck);
     expect(recheck).toBeLessThan(deploy);
+    expect(workflow).toContain("repos/$GITHUB_REPOSITORY/git/ref/heads/");
+    expect(workflow).toContain("--jq .object.sha");
+    expect(workflow).not.toContain("repos/$GITHUB_REPOSITORY/commits/");
     expect(workflow).not.toContain("docker push");
   });
 

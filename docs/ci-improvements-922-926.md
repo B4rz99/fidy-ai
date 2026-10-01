@@ -2,13 +2,14 @@
 
 ## Status and measurement boundaries
 
-This is **local evidence and measurement tooling, not completion of the Linux acceptance criteria**.
+This is **local evidence, one Linux validation sample, and measurement tooling—not completion of
+the repeated Linux acceptance criteria**.
 The available successful Linux runs use different revisions. In particular, do not pool runs
 36658908035 and 36659691624 into a same-revision median. No scheduling weights have been refreshed
 from those incompatible samples. The issues remain open pending controlled Linux confirmation.
 
-Baseline source: `ba60765241c58da9ab258c39c1237523739eaaa0`. Local follow-up measurements use the
-uncommitted follow-up changes, macOS arm64, Bun 1.4.1, Vitest 5.0.1, Playwright 1.63.0, Node 26.5.0,
+Baseline source: `ba60765241c58da9ab258c39c1237523739eaaa0`. Local follow-up measurements were collected
+before the first follow-up commit, on macOS arm64, Bun 1.4.1, Vitest 5.0.1, Playwright 1.63.0, Node 26.5.0,
 and warmed dependency/browser caches. They are not measurements on GitHub's Linux runners.
 The dependency-age gate also required rolldown 1.2.9 → 1.2.10 and React Router
 1.170.38 → 1.170.39; these patch upgrades are a confounder for whole-gate/browser comparisons.
@@ -31,6 +32,31 @@ After the UTC date boundary, the gate additionally required development-only Wor
   dependencies from binary work; new separate steps will provide that distinction.
 - Adapter suite elapsed times: 68.81s, 62.50s, 48.51s, 82.60s; spread 34.09s. These include
   imports/startup and differ from both summed file costs and complete job durations.
+
+### First Linux PR validation sample
+
+[Run 36806656514](https://github.com/B4rz99/fidy-ai/actions/runs/36806656514), PR #927,
+revision `8bd45b833efb24590cb92e7fd61d82f3fd2d0fd7`: all functional checks, Secrets, and SAST passed.
+SCA blocked the required aggregate on pre-existing brace-expansion and fast-uri advisories. The
+follow-up pins brace-expansion 5.0.12 in the root and mutation-tool installs and fast-uri 3.1.8 in
+root overrides. Their npm publication dates are September 14 and 15 respectively: both satisfy the
+unchanged seven-day delay. No scanner exclusion or accepted-vulnerability exception was added.
+
+| Linux observation           |                                Historical baseline |                    First PR run |
+| --------------------------- | -------------------------------------------------: | ------------------------------: |
+| Workspace Gate complete job |                                               105s |                             73s |
+| Static validation           |             approximately 46s from step timestamps |       39.950s from phase report |
+| Type-aware lint phase       |           approximately 13.25s from log boundaries |        9.358s from phase report |
+| Browser complete job        |                           88s (warm browser cache) | 102s (cold new shell cache key) |
+| Browser validation          |             approximately 48s from step timestamps |       46.561s from phase report |
+| Mocked slowdown test        | no exact historical Linux per-test sample retained |                          0.597s |
+
+The browser report records 37 expected tests, zero unexpected/skipped/flaky tests, and no retries.
+This is **not** evidence that every job or end-to-end CI is faster: the first browser job was slower,
+and runner/setup/cache differences and dependency patches prevent a controlled percentage claim.
+Do not pool this revision with the later SCA-fix revision into a same-revision median. All required
+checks must pass on the final PR head before merge; repeated equivalent Linux measurements remain
+follow-up work.
 
 ## #922: Workspace Gate
 
@@ -238,5 +264,7 @@ checks on the exact final revision.
   assigned all 38 discovered files exactly once and passed the same 512 tests.
 - Browser/accessibility: all 37 tests passed twice, zero skipped/flaky/retried cases, using the
   temporary isolated-port arrangement described above.
-- Required GitHub Actions checks and repeated equivalent Linux measurements have **not** run on
-  these changes. No issue is closed on the strength of local results alone.
+- The local results above precede PR creation. GitHub Actions validation for the committed changes
+  is tracked in PR #927; its first Linux sample and SCA blocker are recorded above. Merge requires
+  all checks to pass on the final head. Repeated equivalent Linux measurements are still pending;
+  no issue is closed on the strength of local results or a single Linux sample alone.

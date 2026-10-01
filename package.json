@@ -58,7 +58,7 @@
     "lefthook": "2.1.14",
     "oxfmt": "0.70.0",
     "oxlint": "1.85.0",
-    "oxlint-tsgolint": "7.0.2002",
+    "oxlint-tsgolint": "7.0.2003",
     "typescript": "7.0.2"
   },
   "overrides": {
@@ -66,7 +66,7 @@
     "@hono/node-server": "1.19.17",
     "brace-expansion": "5.0.12",
     "fast-uri": "3.1.8",
-    "hono": "4.13.5",
+    "hono": "4.13.7",
     "js-yaml": "4.3.2",
     "lodash": "4.18.1",
     "postcss": "8.5.26",

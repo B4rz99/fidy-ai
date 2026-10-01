@@ -1,10 +1,127 @@
-import { Cause, Option } from "effect";
-import { describe, expect, it } from "vitest";
+import { Cause, Effect, Exit, Option } from "effect";
+import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { it } from "@effect/vitest";
+import { describe, expect } from "vitest";
 import {
   decodeCaptureWorkerReceipts,
   decodeWorkerReceipts,
   releaseFailureMessage,
+  releasePort,
 } from "./production-release";
+import { type ReleasePort, releaseController } from "./release-controller";
+
+const revision = "a".repeat(40);
+const publicVersion = "11111111-1111-4111-8111-111111111111";
+const coreVersion = "22222222-2222-4222-8222-222222222222";
+const trunkReference = {
+  ref: "refs/heads/trunk",
+  object: { type: "commit", sha: revision },
+};
+const captureInput = {
+  revision,
+  stableRevision: "b".repeat(40),
+  stableContractDigest: "c".repeat(64),
+  publicName: "prod-ingress",
+  coreName: "prod-core",
+};
+const referenceHarness = (
+  reference: unknown = trunkReference
+): { port: ReleasePort; requests: ReadonlyArray<string> } => {
+  const requests: string[] = [];
+  const client = HttpClient.make((request) => {
+    requests.push(`${request.method} ${request.url}`);
+    let body: unknown;
+    if (request.url === "https://api.github.com/repos/test/fidy/git/ref/heads/trunk") {
+      body = reference;
+    } else if (request.url === "https://api.github.com/repos/test/fidy/commits/trunk") {
+      // The commit is valid but its patches exceed the release response budget.
+      body = { sha: revision, files: [{ patch: "x".repeat(200_000) }] };
+    } else {
+      const isPublic = request.url.endsWith("/prod-ingress/deployments");
+      body = {
+        success: true,
+        result: {
+          deployments: [
+            {
+              id: isPublic ? publicVersion : coreVersion,
+              versions: [{ version_id: isPublic ? publicVersion : coreVersion, percentage: 100 }],
+            },
+          ],
+        },
+      };
+    }
+    return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(body)));
+  });
+  const port = releasePort({
+    env: {
+      account: "0".repeat(32),
+      token: "test-only-cloudflare",
+      revision,
+      repository: "test/fidy",
+      githubToken: "test-only-github",
+      file: "/unused-snapshot",
+      smokeProof: "0".repeat(64),
+      smokeAttestationFile: "/unused-attestation",
+    },
+    client,
+  });
+  return { port, requests };
+};
+
+describe("Production release trunk guard", () => {
+  it.effect(
+    "captures a stable snapshot for a commit whose patches exceed the response budget",
+    Effect.fn(function* () {
+      const { port } = referenceHarness();
+      const snapshot = yield* releaseController.captureRelease(port, captureInput);
+      expect(snapshot).toEqual({
+        revision,
+        stableRevision: captureInput.stableRevision,
+        stableContractDigest: captureInput.stableContractDigest,
+        public: {
+          name: "prod-ingress",
+          deploymentId: publicVersion,
+          stableVersionId: publicVersion,
+        },
+        core: { name: "prod-core", deploymentId: coreVersion, stableVersionId: coreVersion },
+      });
+    })
+  );
+
+  it.effect(
+    "rejects malformed, wrong-branch, and superseding references before touching Workers",
+    Effect.fn(function* () {
+      const rejected = [
+        { ref: "refs/heads/trunk", object: { type: "commit", sha: "invalid" } },
+        { ref: "refs/heads/trunk" },
+        { ...trunkReference, ref: "refs/heads/other" },
+        { ...trunkReference, object: { type: "tag", sha: revision } },
+        { ...trunkReference, object: { type: "commit", sha: "d".repeat(40) } },
+      ];
+      for (const reference of rejected) {
+        const { port, requests } = referenceHarness(reference);
+        const result = yield* Effect.exit(releaseController.captureRelease(port, captureInput));
+        expect(Exit.isFailure(result)).toBe(true);
+        expect(requests).toEqual([
+          "GET https://api.github.com/repos/test/fidy/git/ref/heads/trunk",
+        ]);
+      }
+    })
+  );
+
+  it.effect(
+    "still rejects an oversized reference response before touching Workers",
+    Effect.fn(function* () {
+      const { port, requests } = referenceHarness({
+        ...trunkReference,
+        extra: "x".repeat(100_001),
+      });
+      const result = yield* Effect.exit(releaseController.captureRelease(port, captureInput));
+      expect(Exit.isFailure(result)).toBe(true);
+      expect(requests).toEqual(["GET https://api.github.com/repos/test/fidy/git/ref/heads/trunk"]);
+    })
+  );
+});
 
 it("keeps foreign failures and defects out of release CLI diagnostics", () => {
   const foreign = Error("secret-provider-body-and-token");

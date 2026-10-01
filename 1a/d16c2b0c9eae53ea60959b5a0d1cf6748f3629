@@ -1,0 +1,67 @@
+apps/server/package.json
+  s_240aa912ff7e1c::t_950bc1a7aaeadc 203,211
+tools/mutation/package.json
+  s_240aa912ff7e1c::t_437d707b078b1f 15
+apps/web/package.json
+  s_240aa912ff7e1c::t_8e24a75795c2ee 30
+infra/cloudflare/package.json
+  s_240aa912ff7e1c::t_9fecba6bea2e95 20
+apps/server/cloudflare/budgets/budget-audit.ts
+  s_240aa912ff7e1c::t_48ebd8b3ae04a6 2,49
+apps/server/cloudflare/dashboard/dashboard.ts
+  s_240aa912ff7e1c::t_f583bc9a89c13e 7,49
+apps/server/cloudflare/ingestion/statement-ingestion.ts
+  s_240aa912ff7e1c::t_8786aab7b32bdb 15,470
+apps/server/cloudflare/insights/insight-store.ts
+  s_240aa912ff7e1c::t_06187e2fbd8d16 25,216,559
+apps/server/cloudflare/dashboard/dashboard-mutation.ts
+  s_240aa912ff7e1c::t_0c992b8ddaace3 3,66
+apps/server/src/shell/audit/internal/pat-evidence.ts
+  s_240aa912ff7e1c::t_824a0d1a6ebae8 9,122,140
+apps/server/cloudflare/memory/memory.ts
+  s_240aa912ff7e1c::t_02a7f0854cff9b 16,131,516
+apps/server/src/shell/audit/operations.ts
+  s_240aa912ff7e1c::t_57af09911d303e 91
+apps/server/cloudflare/transactions/transaction-history.ts
+  s_240aa912ff7e1c::t_2d95787eaf0827 513
+apps/server/cloudflare/categories/canonical-category.ts
+  s_240aa912ff7e1c::t_77069d2bc3202f 53
+apps/server/cloudflare/budgets/budgets.ts
+  s_240aa912ff7e1c::t_dd242c89a1d9f5 13,87
+apps/server/cloudflare/transactions/transaction-boundary.ts
+  s_240aa912ff7e1c::t_13c32d756be6b0 126,178
+apps/server/src/shell/tokens/operations.ts
+  s_240aa912ff7e1c::t_28889e39a51702 35
+apps/server/cloudflare/billing/subscription-queries.ts
+  s_240aa912ff7e1c::t_38f03c38183b07 83
+apps/server/cloudflare/ingestion/forwarding-address.ts
+  s_240aa912ff7e1c::t_847d87dc418e83 7,80,120
+apps/server/cloudflare/mutations/keyword-rule-outcome.ts
+  s_240aa912ff7e1c::t_2a7a4f5c32d517 8,114
+apps/server/cloudflare/categories/canonical-keyword-rules.ts
+  s_240aa912ff7e1c::t_237d7b75cced4f 21,163,396
+package.json
+  s_240aa912ff7e1c::t_b2f9b2f1b8fe07 67-68
+apps/server/cloudflare/mutations/memory-outcome.ts
+  s_240aa912ff7e1c::t_a2e883f8398837 2,121
+bun.lock
+  s_240aa912ff7e1c::t_8152e8f8df247c 38,46,64,103,119-120,269,573,695,697,699,701,703,705,707,709,711,713,715,717,719,721,723,787,949,1151,1569
+tools/mutation/bun.lock
+  s_240aa912ff7e1c::t_a4451cdd795d80 18,164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "1ad16c2b0c9eae53ea60959b5a0d1cf6748f3629",
+  "prompts": {},
+  "sessions": {
+    "s_240aa912ff7e1c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0f4f4-01d9-7700-b23b-522e9b9dec60",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

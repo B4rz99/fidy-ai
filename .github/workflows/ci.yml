@@ -65,7 +65,16 @@ jobs:
           BASE_REF: origin/${{ github.event.pull_request.base.ref }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           GH_TOKEN: ${{ github.token }}
+          VERIFY_TIMING_REPORT: test-results/verify-static.json
         run: bun run verify -- --group static
+      - name: Preserve Workspace Gate phase timings
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: workspace-gate-timings
+          path: test-results/verify-static.json
+          if-no-files-found: error
+          retention-days: 7
 
   builds:
     needs: changes
@@ -115,13 +124,16 @@ jobs:
         env:
           CLOUDFLARE_TEST_SHARD: ${{ matrix.shard }}/4
           CLOUDFLARE_TEST_REPORT: "true"
+          VERIFY_TIMING_REPORT: apps/server/test-results/verify-adapters.json
         run: bun run verify -- --group cloudflare-adapters
       - name: Preserve adapter timing evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cloudflare-adapter-timings-${{ matrix.shard }}
-          path: apps/server/test-results/cloudflare-adapters.json
+          path: |
+            apps/server/test-results/cloudflare-adapters.json
+            apps/server/test-results/verify-adapters.json
           if-no-files-found: error
           retention-days: 7
 
@@ -149,20 +161,33 @@ jobs:
         working-directory: apps/web
         run: bun -e 'console.log("version=" + require("@playwright/test/package.json").version)' >> "$GITHUB_OUTPUT"
       - name: Restore Playwright browser cache
+        id: browser-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}
-      - name: Install Chromium
-        run: bunx --bun playwright install --with-deps chromium
+          key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}-headless-shell
+      - name: Install Chromium system dependencies
+        run: time bunx --bun playwright install-deps chromium
+      # Default headless Chromium launches the shell, not the full headed browser.
+      # Still run installation on cache hits to validate/download any missing binaries.
+      - name: Install Chromium headless shell
+        env:
+          BROWSER_CACHE_HIT: ${{ steps.browser-cache.outputs.cache-hit }}
+        run: |
+          echo "Browser cache hit: $BROWSER_CACHE_HIT"
+          time bunx --bun playwright install --only-shell chromium
       - name: Static-shell browser validation
+        env:
+          VERIFY_TIMING_REPORT: apps/web/test-results/verify-browser.json
         run: bun run verify -- --group browser
       - name: Preserve browser timing evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: browser-timings
-          path: apps/web/test-results/browser-timings.json
+          path: |
+            apps/web/test-results/browser-timings.json
+            apps/web/test-results/verify-browser.json
           if-no-files-found: error
           retention-days: 7
 

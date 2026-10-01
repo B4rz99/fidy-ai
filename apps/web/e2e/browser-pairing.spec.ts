@@ -516,13 +516,17 @@ test("a SupportRecoveryCase approves the browser-private pairing through the rea
       expect(yield* wait(page.evaluate(() => localStorage.length + sessionStorage.length))).toBe(0);
     })
   ));
-test("honors server slowdown before showing the generic terminal refusal", ({ page }) =>
+const slowdownDelayMilliseconds = 10000;
+const pendingRequestAdvanceMilliseconds = 6000;
+const installSlowdownRoutes = (page: Page): Promise<{ events: string[]; pendingRoutes: Route[] }> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      let redeemCount = 0;
+      const events: string[] = [];
+      const pendingRoutes: Route[] = [];
       yield* wait(
-        page.route("**/web/pairings", (route) =>
-          route.fulfill({
+        page.route("**/web/pairings", (route) => {
+          events.push("start");
+          return route.fulfill({
             contentType: "application/json",
             status: successStatus,
             body: json({
@@ -532,34 +536,73 @@ test("honors server slowdown before showing the generic terminal refusal", ({ pa
               expiresAt,
               pollingIntervalSeconds: 5,
             }),
-          })
-        )
+          });
+        })
       );
       yield* wait(
         page.route("**/web/pairings/redeem", (route) => {
-          redeemCount += 1;
-          return route.fulfill(
-            redeemCount === 1
-              ? {
-                  contentType: "application/json",
-                  status: rateLimitedStatus,
-                  headers: { "retry-after": "10" },
-                  body: json({ error: { code: "rate_limited", retryAfterSeconds: 10 } }),
-                }
-              : {
-                  contentType: "application/json",
-                  status: invalidStatus,
-                  body: json({
-                    error: { code: "pairing_invalid", message: invalidPairingMessage },
-                  }),
-                }
-          );
+          expect(route.request().postDataJSON()).toEqual({ pairingId, privateVerifier });
+          pendingRoutes.push(route);
+          events.push(`redeem-${pendingRoutes.length}`);
         })
       );
+      return { events, pendingRoutes };
+    })
+  );
+
+test("honors server slowdown before showing the generic terminal refusal", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(page.clock.install());
+      const { events, pendingRoutes } = yield* wait(installSlowdownRoutes(page));
       yield* wait(page.goto("/auth/pair"));
       yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());
+      yield* wait(expect(page.getByText(publicCode, { exact: true })).toBeVisible());
+      yield* wait(page.clock.fastForward(minimumPollIntervalMilliseconds));
+      yield* wait(expect.poll(() => pendingRoutes.length).toBe(1));
+      // Pause timer execution, not just the displayed wall time. runFor executes every due timer.
+      yield* wait(
+        page.clock.pauseAt((yield* Clock.currentTimeMillis) + minimumPollIntervalMilliseconds)
+      );
+      // A request is deliberately left in flight; advancing time must not overlap or replace it.
+      yield* wait(page.clock.runFor(pendingRequestAdvanceMilliseconds));
+      expect(events).toEqual(["start", "redeem-1"]);
+      yield* wait(expect(page.getByText(invalidPairingMessage)).not.toBeVisible());
+      const first = Option.getOrThrow(Option.fromUndefinedOr(pendingRoutes[0]));
+      const slowed = page.waitForResponse(
+        (reply) =>
+          reply.url().endsWith("/web/pairings/redeem") && reply.status() === rateLimitedStatus
+      );
+      events.push("slowdown");
+      yield* wait(
+        first.fulfill({
+          contentType: "application/json",
+          status: rateLimitedStatus,
+          headers: { "retry-after": "10" },
+          body: json({ error: { code: "rate_limited", retryAfterSeconds: 10 } }),
+        })
+      );
+      yield* wait((yield* wait(slowed)).finished());
+      yield* wait(page.clock.runFor(slowdownDelayMilliseconds - 1));
+      expect(events).toEqual(["start", "redeem-1", "slowdown"]);
+      yield* wait(expect(page.getByText(invalidPairingMessage)).not.toBeVisible());
+      yield* wait(page.clock.runFor(1));
+      yield* wait(expect.poll(() => pendingRoutes.length).toBe(2));
+      expect(events).toEqual(["start", "redeem-1", "slowdown", "redeem-2"]);
+      yield* wait(expect(page.getByText(invalidPairingMessage)).not.toBeVisible());
+      const second = Option.getOrThrow(Option.fromUndefinedOr(pendingRoutes[1]));
+      events.push("invalid");
+      yield* wait(
+        second.fulfill({
+          contentType: "application/json",
+          status: invalidStatus,
+          body: json({ error: { code: "pairing_invalid", message: invalidPairingMessage } }),
+        })
+      );
       yield* wait(expect(page.getByText(invalidPairingMessage)).toBeVisible({ timeout: 20000 }));
-      expect(redeemCount).toBe(2);
+      yield* wait(page.clock.runFor(slowdownDelayMilliseconds));
+      expect(events).toEqual(["start", "redeem-1", "slowdown", "redeem-2", "invalid"]);
+      expect(pendingRoutes).toHaveLength(2);
     })
   ));
 const installExpiringPairingRoutes = (

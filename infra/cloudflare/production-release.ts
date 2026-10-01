@@ -444,7 +444,36 @@ const createDeployment = Effect.fn(function* (
   const response = yield* Schema.decodeUnknownEffect(CreateResponse)(raw);
   return asDeployment(response.result);
 });
-const releasePort = (env: Config, client: HttpClient.HttpClient): ReleasePort => {
+const readTrunk = Effect.fn(function* (env: Config) {
+  // Full commit responses contain file patches whose size grows with the commit.
+  const raw = yield* providerJson(
+    HttpClientRequest.get(`https://api.github.com/repos/${env.repository}/git/ref/heads/trunk`, {
+      headers: {
+        authorization: `Bearer ${env.githubToken}`,
+        accept: "application/vnd.github+json",
+      },
+    })
+  );
+  const response = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      ref: Schema.Literal("refs/heads/trunk"),
+      object: Schema.Struct({
+        type: Schema.Literal("commit"),
+        sha: SmokeIdentity.fields.gitRevision,
+      }),
+    })
+  )(raw);
+  return response.object.sha;
+});
+
+/** Authenticated routing adapter with bounded reads and validated release identities. */
+export const releasePort = ({
+  env,
+  client,
+}: {
+  env: Config;
+  client: HttpClient.HttpClient;
+}): ReleasePort => {
   const json = (request: HttpClientRequest.HttpClientRequest): Effect.Effect<unknown, Error> =>
     providerJson(request).pipe(Effect.provideService(HttpClient.HttpClient, client));
   const url = (name: string): string =>
@@ -462,21 +491,7 @@ const releasePort = (env: Config, client: HttpClient.HttpClient): ReleasePort =>
       return asDeployment(active);
     });
   return {
-    trunk: () =>
-      Effect.gen(function* () {
-        const raw = yield* json(
-          HttpClientRequest.get(`https://api.github.com/repos/${env.repository}/commits/trunk`, {
-            headers: {
-              authorization: `Bearer ${env.githubToken}`,
-              accept: "application/vnd.github+json",
-            },
-          })
-        );
-        const response = yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ sha: SmokeIdentity.fields.gitRevision })
-        )(raw);
-        return response.sha;
-      }),
+    trunk: () => readTrunk(env).pipe(Effect.provideService(HttpClient.HttpClient, client)),
     current,
     deploy: (name, versions) =>
       Effect.gen(function* () {
@@ -885,7 +900,7 @@ if (import.meta.main) {
     const environment = config();
     const services = yield* Layer.build(FetchHttpClient.layer);
     const client = Context.get(services, HttpClient.HttpClient);
-    const port = releasePort(environment, client);
+    const port = releasePort({ env: environment, client });
     yield* runRouting({ command, port, env: environment, client });
     yield* writeFile(Bun.stdout, "Production release routing step passed.\n");
   }).pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }), Effect.scoped);

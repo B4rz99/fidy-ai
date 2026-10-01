@@ -1,12 +1,11 @@
 import { Schema } from "effect";
+import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 
-export const utcDayMilliseconds = 86_400_000;
+import { dailyAuditBudget, utcDayMilliseconds } from "~/shell/audit/contract";
+
 const DailyAuditTotal = Schema.Struct({
   total: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
-
-/** Matches the 256-entry stable-User triggers rebuilt in 0018_batch_envelope_audit.sql. */
-export const dailyAuditBudget = 256;
 
 /**
  * The canonical AuditLogEntry rows one User's UTC day counts. Batch-envelope refusals are
@@ -47,6 +46,30 @@ export const dailyAuditCount = ({
     .bind(...auditDayBindings({ userId, current }))
     .first<unknown>()
     .then((row) => Schema.decodeUnknownSync(DailyAuditTotal)(row).total);
+
+/** Enforces the separate browser Budget/Insight budget under the indexed canonical child guard. */
+export const browserBudgetGuard = ({
+  owner,
+  userId,
+  current,
+  index,
+  operation,
+}: Readonly<{
+  owner: "budgets" | "insights";
+  userId: string;
+  current: number;
+  index: number;
+  operation: string;
+}>): OwnedStatement => {
+  const table = owner === "budgets" ? "budget_audit" : "insight_audit";
+  const start = Math.floor(current / utcDayMilliseconds) * utcDayMilliseconds;
+  return {
+    sql: `INSERT INTO canonical_child_guard (child_index,operation,accepted,budget_ok)
+      SELECT ?,?,1,CASE WHEN (SELECT count(*) FROM ${table} WHERE user_id = ? AND occurred_at_ms >= ? AND occurred_at_ms < ?) < ? THEN 1 ELSE 0 END
+      ON CONFLICT(child_index) DO UPDATE SET operation = excluded.operation, accepted = excluded.accepted, budget_ok = excluded.budget_ok`,
+    params: [index, operation, userId, start, start + utcDayMilliseconds, dailyAuditBudget],
+  };
+};
 
 /** True while the User's shared daily canonical-work budget is already spent. */
 export const dailyAuditExhausted = ({

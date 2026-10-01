@@ -15,9 +15,11 @@ const operationsGroupName = "operations";
 const atomicBatchEndpointName = "executeAtomicBatch";
 
 /** Identity of the canonical mutation that executes one ordered atomic batch. */
-export const atomicBatchOperation = CanonicalOperationId.make(
+export const atomicBatchOperation = Schema.Literal(
   `${operationsGroupName}.${atomicBatchEndpointName}`
-);
+)
+  .pipe(Schema.brand("CanonicalOperationId"))
+  .make(`${operationsGroupName}.${atomicBatchEndpointName}`);
 
 /** Maximum child mutations accepted by one atomic batch request. */
 export const maximumAtomicBatchCalls = 12;

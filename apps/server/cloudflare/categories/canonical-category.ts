@@ -6,11 +6,8 @@ import {
   recordBrowserCategoryWork,
 } from "@fidy/server/categories";
 import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
-import {
-  livePATAuthority,
-  recordCanonicalPATWork,
-  recordLivePATUse,
-} from "@fidy/server/tokens-runtime";
+import { recordCanonicalPATWork } from "@fidy/server/audit";
+import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { Effect, Option, Schema } from "effect";
 import { currentMillis, newId } from "../pats/pat-shared";
 import { commitPATUnit, prepareOwnedStatement } from "../pats/pat-unit";
@@ -53,7 +50,7 @@ const categoryStatements = (
       prepareOwnedStatement({
         db,
         statement: recordCanonicalPATWork({
-          subject,
+          authority: livePATAuthority({ subject, current }),
           input: {
             id: newId(),
             current,

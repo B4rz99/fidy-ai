@@ -57,16 +57,6 @@ export {
   recordPendingPoll,
   type PATAuthority,
 } from "./pat-write";
-export {
-  recordSessionPATTransition,
-  recordClaimedPAT,
-  recordPATList,
-  recordOnePATRevocation,
-  recordAllPATRevocations,
-  recordCanonicalPATWork,
-  recordCanonicalPATWorkFromAuthority,
-  recordRejectedPATWork,
-} from "./pat-audit";
 export type { AuditedPATMutation } from "./pat-write";
 export {
   patAtomicAssertion,

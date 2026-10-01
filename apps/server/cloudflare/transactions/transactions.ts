@@ -1,3 +1,4 @@
+import { prepareOwnerAuditCall } from "@fidy/server/audit";
 import { CreateTransactionInput, encodeMoneyAmount } from "@fidy/server/transactions-runtime";
 import {
   type CategoryId,
@@ -98,12 +99,20 @@ const captureAudit = (
   capture: Omit<Capture, "subject"> & Readonly<{ subject: TransactionSubject }>
 ): D1PreparedStatement => {
   const { subject, id, current } = capture;
-  return db
-    .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-      SELECT ?, user_id, ?, 'transactions.createTransaction', 'success', ? FROM transactions WHERE user_id = ? AND id = ?
-      AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = transactions.user_id)
-      AND changes() = 1`)
-    .bind(transactionId(), subject.id, current, subject.userId, id);
+  return prepareOwnerAuditCall({
+    db,
+    id: transactionId(),
+    userId: subject.userId,
+    caller: { _tag: "WebSession", id: subject.id },
+    operation: "transactions.createTransaction",
+    outcome: "success",
+    current,
+    afterOwnerWrite: true,
+    when: {
+      sql: "SELECT 1 FROM transactions WHERE user_id = ? AND id = ? AND NOT EXISTS (SELECT 1 FROM consent_user_revocations WHERE user_id = transactions.user_id)",
+      params: [subject.userId, id],
+    },
+  });
 };
 
 const captureInsert = (db: D1Database, capture: Capture): D1PreparedStatement => {

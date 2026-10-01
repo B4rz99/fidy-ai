@@ -1,4 +1,5 @@
 import { Effect, Option, Schema } from "effect";
+import { livePATAuthority } from "@fidy/server/tokens-runtime";
 import {
   type MemoryAuditOutcome,
   MemoryCapacityExceeded,
@@ -10,7 +11,7 @@ import {
   memoryRowQuery,
   recordBrowserMemoryWork,
 } from "@fidy/server/memory-runtime";
-import { recordCanonicalPATWork } from "@fidy/server/tokens-runtime";
+import { recordCanonicalPATWork, refusedByAuditBudget } from "@fidy/server/audit";
 import type {
   CanonicalMutationRefusal,
   CommittedMutationValue,
@@ -18,7 +19,6 @@ import type {
   MemoryOutcome,
 } from "./mutation-types";
 import { newId } from "../pats/pat-shared";
-import { refusedByAuditBudget } from "../audit/audit-triggers";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import {
   type TransactionCaller,
@@ -118,7 +118,7 @@ const rejectionStatement = ({
     ? prepareOwnedStatement({
         db,
         statement: recordCanonicalPATWork({
-          subject,
+          authority: livePATAuthority({ subject, current }),
           input: { id, current, operation, outcome: "rejected", afterOwnerWrite: false },
         }),
       })

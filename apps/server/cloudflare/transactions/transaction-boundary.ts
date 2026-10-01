@@ -1,5 +1,10 @@
 import { Clock, Data, Effect, Option, Schema } from "effect";
 import {
+  prepareAuthorizedAuditCall,
+  recordCanonicalPATWork,
+  refusedByAuditBudget,
+} from "@fidy/server/audit";
+import {
   type CanonicalCapability,
   type ErrorCode,
   atomicBatchOperation,
@@ -11,13 +16,10 @@ import {
   livePATAuthority,
   livePATCredential,
   recordAuditedPATUseFromAuthority,
-  recordCanonicalPATWork,
-  recordCanonicalPATWorkFromAuthority,
 } from "@fidy/server/tokens-runtime";
 import type { AuthorizedPAT } from "../pats/pat-authorization";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import { newId } from "../pats/pat-shared";
-import { refusedByAuditBudget } from "../audit/audit-triggers";
 
 /**
  * How one decided refusal was durably handled. `"recorded"` means the refusal stands and the
@@ -121,7 +123,7 @@ export const acceptedPATAccountability = ({
   return [
     prepareOwnedStatement({
       db: database,
-      statement: recordCanonicalPATWorkFromAuthority({
+      statement: recordCanonicalPATWork({
         authority,
         input: { afterOwnerWrite, current, id: auditId, operation, outcome: "accepted" },
       }),
@@ -173,7 +175,7 @@ const refusalStatement = ({
     ? prepareOwnedStatement({
         db,
         statement: recordCanonicalPATWork({
-          subject,
+          authority: livePATAuthority({ subject, current }),
           input: {
             id: transactionId(),
             current,
@@ -199,10 +201,15 @@ const sessionRefusalStatement = ({
   current: number;
 }>): D1PreparedStatement => {
   const authority = liveWebSessionAuthority({ subject, current });
-  return db
-    .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-      SELECT ?, user_id, id, ?, ?, ? FROM ${authority.table} WHERE ${authority.predicate}`)
-    .bind(transactionId(), operation, outcome, current, ...authority.bindings);
+  return prepareAuthorizedAuditCall({
+    db,
+    authority,
+    id: transactionId(),
+    operation,
+    outcome,
+    current,
+    afterOwnerWrite: false,
+  });
 };
 
 /**
@@ -372,16 +379,26 @@ const batchEnvelopeStatement = ({
 }>): D1PreparedStatement => {
   if (isPATCaller(subject)) {
     const authority = livePATCredential({ subject, current });
-    return db
-      .prepare(`INSERT INTO pat_audit (id, user_id, pat_id, operation, outcome, occurred_at_ms)
-        SELECT ?, user_id, id, ?, 'rejected', ? FROM ${authority.table} WHERE ${authority.predicate}`)
-      .bind(transactionId(), atomicBatchOperation, current, ...authority.bindings);
+    return prepareAuthorizedAuditCall({
+      db,
+      authority,
+      id: transactionId(),
+      operation: atomicBatchOperation,
+      outcome: "rejected",
+      current,
+      afterOwnerWrite: false,
+    });
   }
   const authority = liveWebSessionAuthority({ subject, current });
-  return db
-    .prepare(`INSERT INTO transaction_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
-      SELECT ?, user_id, id, ?, 'validation_failed', ? FROM ${authority.table} WHERE ${authority.predicate}`)
-    .bind(transactionId(), atomicBatchOperation, current, ...authority.bindings);
+  return prepareAuthorizedAuditCall({
+    db,
+    authority,
+    id: transactionId(),
+    operation: atomicBatchOperation,
+    outcome: "validation_failed",
+    current,
+    afterOwnerWrite: false,
+  });
 };
 
 /**

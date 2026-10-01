@@ -1,21 +1,23 @@
 import { Option } from "effect";
+import { authorizedCallStatement } from "./recording";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 import {
   type FreshSessionSubject,
   freshSessionExists,
   freshSessionParams,
 } from "~/shell/identity/browser-runtime";
-import { type PATAuthority, livePATAuthority } from "./pat-write";
-import type { AuditedPATOperation } from "./pat-audited-operations";
-import type { CanonicalCapability } from "~/core/canonical-operations/contract";
+import type { AuditedPATOperation, PATAuthority } from "~/shell/tokens/operations";
 
-type PATSubject = Readonly<{
-  patId: string;
-  userId: string;
-  digest: Uint8Array;
-  requiredScope: Option.Option<CanonicalCapability>;
-}>;
 type AuditTime = Readonly<{ id: string; current: number }>;
+
+/** A correlated proof that the PAT row's exact successful canonical call exists. */
+export const recordedPATCallProof = ({
+  auditId,
+  operation,
+}: Readonly<{ auditId: string; operation: AuditedPATOperation }>): OwnedStatement => ({
+  sql: "SELECT 1 FROM pat_audit WHERE id = ? AND user_id = pats.user_id AND pat_id = pats.id AND operation = ? AND outcome = 'accepted'",
+  params: [auditId, operation],
+});
 
 type TransitionInput = AuditTime &
   Readonly<{
@@ -112,30 +114,16 @@ type CanonicalAuditInput = AuditTime &
     afterOwnerWrite: boolean;
   }>;
 
-/** Audit protected canonical work only while the PAT bearer and User Consent remain live. */
-export const recordCanonicalPATWork = ({
-  subject,
-  input,
-}: Readonly<{ subject: PATSubject; input: CanonicalAuditInput }>): OwnedStatement =>
-  recordCanonicalPATWorkFromAuthority({
-    authority: livePATAuthority({ subject, current: input.current }),
-    input,
-  });
-
 /**
  * The same canonical PAT audit built from the exact live-authority gate a consumer already holds,
  * so a caller that is not the subject can still account for protected work without restating the
  * bearer, Consent, and scope decision.
  */
-export const recordCanonicalPATWorkFromAuthority = ({
+export const recordCanonicalPATWork = ({
   authority,
   input,
-}: Readonly<{ authority: PATAuthority; input: CanonicalAuditInput }>): OwnedStatement => ({
-  sql: `INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
-    SELECT ?,user_id,id,?,?,? FROM pats WHERE ${authority.predicate}
-    ${input.afterOwnerWrite ? "AND changes() = 1" : ""}`,
-  params: [input.id, input.operation, input.outcome, input.current, ...authority.bindings],
-});
+}: Readonly<{ authority: PATAuthority; input: CanonicalAuditInput }>): OwnedStatement =>
+  authorizedCallStatement({ authority, ...input });
 
 /**
  * Audit one rejected canonical PAT call from the exact live-authority gate the caller presented.
@@ -149,7 +137,7 @@ export const recordRejectedPATWork = ({
   authority: PATAuthority;
   input: AuditTime & Readonly<{ operation: AuditedPATOperation }>;
 }>): OwnedStatement =>
-  recordCanonicalPATWorkFromAuthority({
+  recordCanonicalPATWork({
     authority,
     input: { ...input, afterOwnerWrite: false, outcome: "rejected" },
   });

@@ -20,7 +20,14 @@ import {
   statementSourceFormat,
 } from "@fidy/server/statement-format";
 import { CanonicalOperationId, type ErrorCode } from "@fidy/server/canonical-runtime";
-import { recordRejectedPATWork } from "@fidy/server/tokens-runtime";
+import {
+  prepareAuditQueryCall,
+  prepareAuthorizedAuditCall,
+  prepareOwnerAuditCall,
+  recordRejectedPATWork,
+  refusedByAuditBudget,
+} from "@fidy/server/audit";
+import type { WebSessionAuthority } from "@fidy/server/identity-runtime";
 import {
   Context,
   Crypto,
@@ -35,7 +42,6 @@ import {
   Schema,
 } from "effect";
 import { activeProUserParams, activeProUserSql } from "../access-tier";
-import { refusedByAuditBudget } from "../audit/audit-triggers";
 import {
   type BoundedBodyReadFailed,
   collectBoundedRequestBody,
@@ -697,17 +703,17 @@ export const statementSubmissionReadAudit = ({
   id: string;
   submissionId: string;
 }>): D1PreparedStatement =>
-  database
-    .prepare(
-      `INSERT INTO statement_submission_audit (id, user_id, operation, outcome, occurred_at_ms)
-       SELECT ?, ${authority.table}.user_id, 'ingestion.getStatementSubmission',
-         CASE WHEN EXISTS (
-           SELECT 1 FROM statement_submissions
-           WHERE id = ? AND user_id = ${authority.table}.user_id
-         ) THEN 'success' ELSE 'not_found' END, ?
-       FROM ${authority.table} WHERE ${authority.predicate}`
-    )
-    .bind(id, submissionId, current, ...authority.bindings);
+  prepareAuditQueryCall({
+    db: database,
+    authority,
+    id,
+    operation: "ingestion.getStatementSubmission",
+    current,
+    missingWhen: {
+      sql: `SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM statement_submissions WHERE id = ? AND user_id = ${authority.table}.user_id)`,
+      params: [submissionId],
+    },
+  });
 
 /**
  * The two outcomes a statement refusal audit can record. The closed publication refusal map already
@@ -729,19 +735,21 @@ const statementSubmissionRefusalAudit = ({
   id,
   outcome,
 }: Readonly<{
-  authority: TransactionAuthority;
+  authority: WebSessionAuthority;
   current: number;
   database: D1Database;
   id: string;
   outcome: "resource_limit" | "validation_failed";
 }>): D1PreparedStatement =>
-  database
-    .prepare(
-      `INSERT INTO statement_submission_audit (id, user_id, operation, outcome, occurred_at_ms)
-       SELECT ?, ${authority.table}.user_id, 'ingestion.submitForExtraction', ?, ?
-       FROM ${authority.table} WHERE ${authority.predicate}`
-    )
-    .bind(id, outcome, current, ...authority.bindings);
+  prepareAuthorizedAuditCall({
+    db: database,
+    authority,
+    id,
+    operation: "ingestion.submitForExtraction",
+    outcome,
+    current,
+    afterOwnerWrite: false,
+  });
 
 /** Metadata-only audit for one canonical submission replay by its live session caller: the stored
  * submission is returned unchanged, so the replay stays attributable without new authoritative
@@ -752,18 +760,20 @@ const statementSubmissionReplayAudit = ({
   database,
   id,
 }: Readonly<{
-  authority: TransactionAuthority;
+  authority: WebSessionAuthority;
   current: number;
   database: D1Database;
   id: string;
 }>): D1PreparedStatement =>
-  database
-    .prepare(
-      `INSERT INTO statement_submission_audit (id, user_id, operation, outcome, occurred_at_ms)
-       SELECT ?, ${authority.table}.user_id, 'ingestion.submitForExtraction', 'success', ?
-       FROM ${authority.table} WHERE ${authority.predicate}`
-    )
-    .bind(id, current, ...authority.bindings);
+  prepareAuthorizedAuditCall({
+    db: database,
+    authority,
+    id,
+    operation: "ingestion.submitForExtraction",
+    outcome: "success",
+    current,
+    afterOwnerWrite: false,
+  });
 
 /**
  * The guarded writes that own the staged material, the Free-backfill reservation, the
@@ -798,14 +808,20 @@ const publicationAccountabilityStatements = (
                 ELSE excluded.submission_id END`
       )
       .bind(userId, ...proParams, submissionId, ...proParams),
-    database
-      .prepare(
-        `INSERT INTO statement_submission_audit (id, user_id, operation, outcome, occurred_at_ms)
-         SELECT ?, user_id, 'ingestion.submitForExtraction', 'success', ?
-         FROM statement_submissions
-         WHERE user_id = ? AND id = ? AND changes() = 1`
-      )
-      .bind(auditId, nowEpochMs, userId, submissionId),
+    prepareOwnerAuditCall({
+      db: database,
+      id: auditId,
+      userId,
+      caller: { _tag: "Publication" },
+      operation: "ingestion.submitForExtraction",
+      outcome: "success",
+      current: nowEpochMs,
+      afterOwnerWrite: true,
+      when: {
+        sql: "SELECT 1 FROM statement_submissions WHERE user_id = ? AND id = ?",
+        params: [userId, submissionId],
+      },
+    }),
     database
       .prepare(
         `INSERT INTO statement_ingestion_outbox (submission_id, user_id, revision, published_at_ms)

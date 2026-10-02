@@ -1,18 +1,15 @@
+import type { BudgetOutcome } from "../contract";
 import { prepareAuthorizedAuditCall, recordCanonicalPATWork } from "@fidy/server/audit";
 import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-operations";
 import { Effect } from "effect";
-import { prepareOwnedStatement } from "../database/operations";
-import type { BudgetOutcome } from "../mutations/mutation-types";
+import { prepareOwnedStatement } from "../../database/operations";
 import {
   type TransactionCaller,
   callerAuthority,
   isPATCaller,
   liveTransactionAuthority,
   transactionId,
-} from "../canonical-work/operations";
-
-/** Matches budget_audit_daily_budget in migration 0016; Budget browser Audits have a separate cap. */
-export const dailyBudgetAuditLimit = 256;
+} from "../../canonical-work/operations";
 
 type BudgetAuditOperation =
   | BudgetOutcome["operation"]

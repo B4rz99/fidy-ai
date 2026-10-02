@@ -1,13 +1,9 @@
+import { hasExactBudgetProgress } from "~/core/budgets/operations";
 import { Schema, Struct } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
 import { Currency, Money, MoneyGroups, type ReadonlyMoney } from "~/core/_shared/money";
 import { UtcTimestamp } from "~/core/_shared/time";
-import {
-  OverBudget,
-  ReachedBudget,
-  UnderBudget,
-  hasExactBudgetProgress,
-} from "~/core/budgets/model";
+import { OverBudget, ReachedBudget, UnderBudget } from "~/core/budgets/contract";
 import { Category } from "~/core/categories/contract";
 import {
   AppliedDashboardPeriod,

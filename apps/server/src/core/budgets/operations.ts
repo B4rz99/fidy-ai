@@ -1,12 +1,15 @@
-import { BigDecimal, DateTime, Effect } from "effect";
+import type { Transaction } from "~/core/transactions/contract";
+import { BigDecimal, DateTime, Effect, Schema } from "effect";
 import { type IanaTimeZone } from "~/core/_shared/context";
 import { CurrencyMismatch, Money, type ReadonlyMoney } from "~/core/_shared/money";
 import {
   type AppliedBudgetMonth,
   type Budget,
   type BudgetMonthLatch,
+  BudgetProgress,
+  type BudgetProgressFact,
   type BudgetStatus,
-} from "./model";
+} from "./contract";
 
 /** Derives one calendar month's half-open UTC bounds from an explicit instant and IANA zone. */
 export const deriveCurrentBudgetMonth = ({
@@ -41,12 +44,8 @@ type BudgetStatusInput = Readonly<{
   }>;
 }>;
 
-type BudgetMovement = Readonly<{
-  money: ReadonlyMoney;
-  categoryId: Budget["categoryId"];
-  direction: "inflow" | "outflow";
-  occurredAt: DateTime.Utc;
-}>;
+type BudgetMovement = Pick<Transaction, "categoryId" | "direction" | "occurredAt"> &
+  Readonly<{ money: ReadonlyMoney }>;
 
 /**
  * Sum only outflows of the Budget's Category and Currency within the applied half-open month.
@@ -175,3 +174,7 @@ export const calculateBudgetStatus: (
     }),
   } satisfies BudgetStatus;
 });
+
+/** Whether a decoded projection exactly describes one positive cap and its spending. */
+export const hasExactBudgetProgress = (progress: BudgetProgressFact): boolean =>
+  Schema.is(BudgetProgress)(progress);

@@ -1,12 +1,9 @@
+import { evaluateBudgetAlerts, readBudgetCaps, readBudgetSpending } from "./operations";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { afterAll, expect, it } from "vitest";
-import { type Cause, DateTime, Effect, Schema } from "effect";
-import {
-  Budget,
-  BudgetStatusReport,
-  IanaTimeZone,
-  deriveCurrentBudgetMonth,
-} from "@fidy/server/budgets-runtime";
+import { type Cause, DateTime, Effect, Option, Schema } from "effect";
+import { Budget, BudgetStatusReport, IanaTimeZone } from "@fidy/server/budgets-contract";
+import { deriveCurrentBudgetMonth } from "@fidy/server/budget-decisions";
 import { Transaction, encodeMoneyAmount } from "@fidy/server/transactions-contract";
 import { AtomicBatchRejected } from "@fidy/server/canonical-runtime";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
@@ -14,7 +11,10 @@ import { UserTransactionCoordinator } from "../transactions/runtime";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 
-const users = ["10000000-0000-4000-8000-000000000051", "10000000-0000-4000-8000-000000000052"];
+const users = [
+  "10000000-0000-4000-8000-000000000051",
+  "10000000-0000-4000-8000-000000000052",
+] as const;
 const category = "10000000-0000-4000-8000-000000000016";
 const sessions = ["10000000-0000-4000-8000-000000000061", "10000000-0000-4000-8000-000000000062"];
 const databases = isolatedTestDatabases();
@@ -257,7 +257,7 @@ const patRequest = (
     headers: {
       origin: "https://app.fidyapp.com",
       authorization: `Bearer ${token}`,
-      "x-provider-id": users[0] ?? "",
+      "x-provider-id": users[0],
       ...(body === undefined ? {} : { "content-type": "application/json" }),
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -1374,5 +1374,88 @@ it("denies read-scoped PAT writes and write-scoped PAT reads without disclosure 
           .first<{ count: number }>()
       );
       expect(count?.count).toBe(1);
+    })
+  ));
+
+it("keeps peer Budget cap and spending projections within one explicit User", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      for (const index of [0, 1]) {
+        expect(
+          (yield* Effect.tryPromise(() =>
+            send(db, request(index, "/budgets", "POST", payload(index === 0 ? "100" : "200")))
+          )).status
+        ).toBe(201);
+        expect(
+          (yield* Effect.tryPromise(() =>
+            send(
+              db,
+              request(index, "/transactions", "POST", {
+                money: { amount: index === 0 ? "80.01" : "5.02", currency: "COP" },
+                categoryId: category,
+                direction: "outflow",
+                occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+              })
+            )
+          )).status
+        ).toBe(201);
+      }
+      const first = Option.getOrThrow(yield* readBudgetCaps({ db, userId: users[0] }));
+      const second = Option.getOrThrow(yield* readBudgetCaps({ db, userId: users[1] }));
+      expect(first.map((budget) => encodeMoneyAmount(budget.cap.amount))).toEqual(["100"]);
+      expect(second.map((budget) => encodeMoneyAmount(budget.cap.amount))).toEqual(["200"]);
+      expect(second.map((budget) => budget.id)).not.toEqual(first.map((budget) => budget.id));
+      const read = (userId: string): Effect.Effect<Option.Option<BudgetStatusReport>> =>
+        readBudgetSpending({
+          db,
+          userId,
+          query: { timeZone: IanaTimeZone.make("America/Bogota") },
+          now: DateTime.nowUnsafe(),
+        });
+      const firstReport = Option.getOrThrow(yield* read(users[0]));
+      const secondReport = Option.getOrThrow(yield* read(users[1]));
+      expect(firstReport.statuses.map((status) => encodeMoneyAmount(status.spent.amount))).toEqual([
+        "80.01",
+      ]);
+      expect(secondReport.statuses.map((status) => encodeMoneyAmount(status.spent.amount))).toEqual(
+        ["5.02"]
+      );
+    })
+  ));
+
+it("does not drain another User's pending Budget alerts from a non-request evaluation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      expect(
+        (yield* Effect.tryPromise(() => send(db, request(0, "/budgets", "POST", payload())))).status
+      ).toBe(201);
+      const occurredAt = DateTime.formatIso(DateTime.nowUnsafe());
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(`INSERT INTO transactions
+        (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
+        VALUES ('30000000-0000-4000-8000-000000000099', ?, '80.01', 'COP', 'outflow', ?, ?, ?)`)
+          .bind(users[0], category, occurredAt, occurredAt)
+          .run()
+      );
+      expect(yield* evaluateBudgetAlerts({ db, userId: users[1] })).toBe(true);
+      const thresholds = (): Promise<D1Result<{ threshold: number }>> =>
+        db
+          .prepare(
+            "SELECT threshold FROM budget_threshold_alerts WHERE user_id = ? ORDER BY threshold"
+          )
+          .bind(users[0])
+          .all<{ threshold: number }>();
+      expect((yield* Effect.tryPromise(thresholds)).results).toEqual([]);
+      expect(yield* evaluateBudgetAlerts({ db, userId: users[0] })).toBe(true);
+      expect((yield* Effect.tryPromise(thresholds)).results.map((row) => row.threshold)).toEqual([
+        80,
+      ]);
+      expect(yield* evaluateBudgetAlerts({ db, userId: users[1] })).toBe(true);
+      expect((yield* Effect.tryPromise(thresholds)).results.map((row) => row.threshold)).toEqual([
+        80,
+      ]);
     })
   ));

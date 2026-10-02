@@ -1,15 +1,16 @@
+import { hasExactBudgetProgress } from "./operations";
 import { expect, it } from "@effect/vitest";
 import { BigDecimal, Result, Schema } from "effect";
 import {
   AppliedBudgetMonth,
   Budget,
   BudgetMonthLatch,
+  BudgetProgress,
   type BudgetProgressFact,
   BudgetStatus,
   CreateBudgetInput,
   UpdateBudgetInput,
-  hasExactBudgetProgress,
-} from "./model";
+} from "./contract";
 
 const money = (amount: string): BudgetProgressFact["cap"] => ({
   amount: BigDecimal.fromStringUnsafe(amount),
@@ -239,4 +240,30 @@ it("accepts every reachable monthly threshold state and excludes 100% without 80
     expect(Result.isSuccess(decode({ ...common, ...marks }))).toBe(true);
   }
   expect(Result.isFailure(decode({ ...common, reached80: false, reached100: true }))).toBe(true);
+});
+
+it("rejects mixed-Currency progress before comparing or subtracting its amounts", () => {
+  const decode = Schema.decodeUnknownResult(Schema.toCodecJson(BudgetProgress));
+  const cap = { amount: "100", currency: "COP" };
+  const sameSpent = { amount: "25", currency: "COP" };
+  for (const progress of [
+    {
+      cap,
+      spent: { amount: "25", currency: "USD" },
+      status: { type: "under", remaining: { amount: "75", currency: "COP" } },
+    },
+    {
+      cap,
+      spent: sameSpent,
+      status: { type: "under", remaining: { amount: "75", currency: "EUR" } },
+    },
+    { cap, spent: { amount: "100", currency: "USD" }, status: { type: "reached" } },
+    {
+      cap,
+      spent: { amount: "125", currency: "COP" },
+      status: { type: "over", overBy: { amount: "25", currency: "USD" } },
+    },
+  ]) {
+    expect(Result.isFailure(decode(progress))).toBe(true);
+  }
 });

@@ -7,7 +7,7 @@ import { listCategories } from "../categories/operations";
 import { type DashboardDocument, collectLayoutWidgets } from "../../src/core/dashboard/model";
 import { dashboardProjectionRanges } from "../../src/core/dashboard/projection";
 import type { DashboardFacts } from "../../src/shell/dashboard/presentation";
-import { listOwnedBudgets } from "../budgets/budget-queries";
+import { readBudgetCaps } from "../budgets/operations";
 import { findDashboardAggregate, readDashboardTransactions } from "../transactions/operations";
 
 type Context = UserContext;
@@ -54,7 +54,7 @@ const loadBase = (
       )
     );
     if (Option.isNone(listFacts)) return Option.none();
-    const budgets = yield* listOwnedBudgets({ db, userId });
+    const budgets = yield* readBudgetCaps({ db, userId });
     return Option.map(budgets, (owned) => ({
       lists: new Map(listFacts.value),
       budgets: owned,

@@ -54,11 +54,6 @@
       "import": "./src/core/insights/model.ts",
       "default": "./src/core/insights/model.ts"
     },
-    "./budgets-runtime": {
-      "types": "./src/shell/budgets/runtime.ts",
-      "import": "./src/shell/budgets/runtime.ts",
-      "default": "./src/shell/budgets/runtime.ts"
-    },
     "./categories": {
       "types": "./src/shell/categories/runtime.ts",
       "import": "./src/shell/categories/runtime.ts",
@@ -203,6 +198,16 @@
       "types": "./src/core/tokens/operations.ts",
       "import": "./src/core/tokens/operations.ts",
       "default": "./src/core/tokens/operations.ts"
+    },
+    "./budgets-contract": {
+      "types": "./src/core/budgets/contract.ts",
+      "import": "./src/core/budgets/contract.ts",
+      "default": "./src/core/budgets/contract.ts"
+    },
+    "./budget-decisions": {
+      "types": "./src/core/budgets/operations.ts",
+      "import": "./src/core/budgets/operations.ts",
+      "default": "./src/core/budgets/operations.ts"
     }
   },
   "scripts": {

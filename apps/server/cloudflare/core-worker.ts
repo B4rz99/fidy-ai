@@ -49,13 +49,11 @@ import {
   transactionPairInput,
   transactionSession,
 } from "./transactions/operations";
-import { BudgetId, CreateBudgetInput, UpdateBudgetInput } from "@fidy/server/budgets-runtime";
+import { BudgetId, CreateBudgetInput, UpdateBudgetInput } from "@fidy/server/budgets-contract";
 import { DeliveryEvidenceInput, InsightEventId } from "@fidy/server/insights-runtime";
-import { browseBudgets } from "./budgets/budget-queries";
+import { browseBudgets, budgetRefusal, evaluateBudgetAlerts } from "./budgets/operations";
 import { listPendingInsights } from "./insights/insight-store";
 import { browseDashboard } from "./dashboard/dashboard";
-import { reconcileBudgetLatches } from "./budgets/budget-latches";
-import { budgetRefusal } from "./budgets/budget-outcome";
 import { ownsTransactionPath as transactionPath } from "@fidy/server/transaction-runtime";
 import {
   receiveConsentWebhook,
@@ -1230,7 +1228,7 @@ const budgetResponse = ({
             request,
             subject,
             operation: selectedId,
-            reconcile: () => reconcileBudgetLatches({ db: environment.DB, userId: subject.userId }),
+            reconcile: () => evaluateBudgetAlerts({ db: environment.DB, userId: subject.userId }),
           })
         ).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan(operation.id))
       );

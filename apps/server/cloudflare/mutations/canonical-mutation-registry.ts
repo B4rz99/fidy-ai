@@ -19,8 +19,12 @@ import {
   presentDashboard,
 } from "../dashboard/dashboard-mutation";
 import { forwardingAddressMutationAdapter } from "./forwarding-address-mutation";
-import { prepareCreateBudget, prepareDeleteBudget, prepareUpdateBudget } from "../budgets/budgets";
-import { budgetRefusal } from "../budgets/budget-outcome";
+import {
+  budgetRefusal,
+  prepareCreateBudget,
+  prepareDeleteBudget,
+  prepareUpdateBudget,
+} from "../budgets/operations";
 import {
   prepareCapture,
   prepareCorrection,

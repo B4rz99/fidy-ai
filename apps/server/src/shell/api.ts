@@ -4,7 +4,7 @@ import { CanonicalTelemetry } from "~/shell/_shared/canonical-telemetry";
 import { ValidationGate } from "~/shell/public-http/contract";
 import { bindOperationCatalog, makeOperationCatalog } from "~/shell/_shared/operation-catalog";
 import { BrowserLoginGroup } from "~/shell/browser-login/operations";
-import { BudgetsGroup } from "~/shell/budgets/operations";
+import { BudgetsGroup } from "~/shell/budgets/contract";
 import { CategoriesGroup } from "~/shell/categories/contract";
 import { DashboardGroup } from "~/shell/dashboard/operations";
 import { EmailAuthenticationGroup } from "~/shell/email-authentication/contract";

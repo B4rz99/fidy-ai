@@ -9,7 +9,7 @@
     "tsBuildInfoFile": "../../.tsbuild/server.tsbuildinfo",
     "lib": ["ESNext", "WebWorker"],
     "types": ["bun-types", "@cloudflare/workers-types"],
-    // Imports that leave a directory are aliased (`~/core/budgets/model`);
+    // Imports that leave a directory are aliased (`~/core/budgets/contract`);
     // imports within one stay relative. Both halves are enforced by
     // `.dependency-cruiser.mjs`, which explains itself when either fires.
     "paths": {

@@ -1,4 +1,4 @@
-import { Budget, BudgetId } from "@fidy/server/budgets-runtime";
+import { Budget, BudgetId } from "@fidy/server/budgets-contract";
 import { Option, Schema } from "effect";
 
 /** Decode a retained Budget through its public Money and UTC timestamp contract. */

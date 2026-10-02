@@ -16,6 +16,7 @@ import {
 } from "@fidy/server/insights-runtime";
 import {
   type TransactionCaller,
+  auditLimitRefusal,
   callerAuthority,
   callerScope,
   isPATCaller,
@@ -26,7 +27,6 @@ import {
 } from "../canonical-work/operations";
 import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-operations";
 import { prepareOwnedStatement } from "../database/operations";
-import { budgetAuditLimitRefusal } from "../budgets/budget-outcome";
 import {
   type CanonicalMutationPreparation,
   type CanonicalMutationRefusal,
@@ -539,7 +539,7 @@ const insightOutcome = ({
   collisionKey: Option.none(),
   read: (db, userId) => findCommittedInsight({ db, userId, insightEventId, attemptId }),
   triggerRefusal: (_work, kind) =>
-    kind === "audit" ? Option.some(budgetAuditLimitRefusal()) : Option.none(),
+    kind === "audit" ? Option.some(auditLimitRefusal()) : Option.none(),
 });
 
 const transitionStatements = (

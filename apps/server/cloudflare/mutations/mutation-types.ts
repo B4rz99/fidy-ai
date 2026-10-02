@@ -1,3 +1,4 @@
+import type { BudgetOutcome } from "../budgets/contract";
 import type { TransactionOutcome } from "../transactions/contract";
 import type { CanonicalCapability, ErrorCode } from "@fidy/server/canonical-runtime";
 import type {
@@ -7,7 +8,7 @@ import type {
   KeywordRuleId,
 } from "@fidy/server/categories";
 import type { Memory, MemoryId } from "@fidy/server/memory-runtime";
-import type { Budget, BudgetId } from "@fidy/server/budgets-runtime";
+import type { Budget, BudgetId } from "@fidy/server/budgets-contract";
 import type { StatementSubmission } from "@fidy/server/statement-staging";
 import type { EmailForwardingAddress } from "../../src/core/ingestion/model";
 import type {
@@ -22,6 +23,7 @@ import type {
 import type { Effect, Option, Schema } from "effect";
 import type { CanonicalRefusalDisposition, TransactionCaller } from "../canonical-work/operations";
 
+export type { BudgetOutcome } from "../budgets/contract";
 export type { TransactionOutcome } from "../transactions/contract";
 
 /**
@@ -60,18 +62,6 @@ export type MemoryOutcome =
       memoryId: MemoryId;
     }>;
 
-/**
- * One owner's committed readback descriptor: what the owner must read after the unit commits and
- * how that read presents. A new owner adds one variant, so the unit's exhaustive switches fail to
- * build until its readback, refusal, and abort attribution are answered.
- */
-/** The Budget whose guarded write the unit commits or whose deletion it proves. */
-export type BudgetOutcome = Readonly<{
-  _tag: "Budget";
-  operation: "budgets.createBudget" | "budgets.updateBudget" | "budgets.deleteBudget";
-  budgetId: BudgetId;
-}>;
-
 export type MutationTriggerKind = "movement" | "capacity" | "audit";
 
 type OwnerWork = Readonly<{ db: D1Database; subject: TransactionCaller; current: number }>;
@@ -90,6 +80,11 @@ export type OwnerOutcome = Readonly<{
   ) => Option.Option<CanonicalMutationRefusal>;
 }>;
 
+/**
+ * One owner's committed readback descriptor: what the owner must read after the unit commits and
+ * how that read presents. A new owner adds one variant, so the unit's exhaustive switches fail to
+ * build until its readback, refusal, and abort attribution are answered.
+ */
 export type CanonicalMutationOutcome =
   | OwnerOutcome
   | TransactionOutcome

@@ -3,8 +3,7 @@ import type { CatalogOperation } from "../../src/shell/_shared/operation-catalog
 import type { TransactionSubject } from "../canonical-work/operations";
 import { executeProtectedCategories, listOwnKeywordRules } from "../categories/operations";
 import { executeProtectedSubscriptionQuery } from "../subscription/operations";
-import { browseBudgets } from "../budgets/budget-queries";
-import { reconcileBudgetLatches } from "../budgets/budget-latches";
+import { browseBudgets, evaluateBudgetAlerts } from "../budgets/operations";
 import { browseTransactions } from "../transactions/operations";
 import { browseDashboard } from "../dashboard/dashboard";
 import { recallMemories } from "../memory/memory";
@@ -55,7 +54,7 @@ const budgetOwner =
         subject,
         request,
         operation,
-        reconcile: () => reconcileBudgetLatches({ db, userId: subject.userId }),
+        reconcile: () => evaluateBudgetAlerts({ db, userId: subject.userId }),
       })
     );
 const historyOwner =

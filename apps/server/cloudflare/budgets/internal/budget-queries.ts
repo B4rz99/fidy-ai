@@ -1,13 +1,16 @@
+import type { BudgetQueryOperation } from "../contract";
 import {
   Budget,
   BudgetId,
-  BudgetStatusQueryValues,
+  BudgetStatusQueryParameters,
   BudgetStatusReport,
+  Money,
+} from "@fidy/server/budgets-contract";
+import {
   calculateBudgetStatus,
   deriveCurrentBudgetMonth,
   sumBudgetContributions,
-} from "@fidy/server/budgets-runtime";
-import { Money } from "@fidy/server/transactions-contract";
+} from "@fidy/server/budget-decisions";
 import { BigDecimal, DateTime, Effect, Option, Ref, Schema } from "effect";
 import {
   type TransactionCaller,
@@ -15,8 +18,8 @@ import {
   transactionNoStore,
   transactionNow,
   transactionUnavailable,
-} from "../canonical-work/operations";
-import { readBudgetContributions } from "../transactions/operations";
+} from "../../canonical-work/operations";
+import { readBudgetContributions } from "../../transactions/operations";
 import { budgetFromRow } from "./budget-row";
 import { recordBudgetCall } from "./budget-audit";
 import {
@@ -29,12 +32,7 @@ import {
 
 const maximumBudgetCount = 128;
 const maximumReportPages = 8;
-const Query = Schema.Struct({
-  categoryId: Schema.optionalKey(BudgetStatusQueryValues.fields.categoryId),
-  currency: Schema.optionalKey(BudgetStatusQueryValues.fields.currency),
-  timeZone: BudgetStatusQueryValues.fields.timeZone,
-});
-type BudgetQueryOperation = "budgets.listBudgets" | "budgets.getBudget" | "budgets.getBudgetStatus";
+
 const respond = <A>(schema: Schema.Codec<A, Schema.Json>, data: A): Response =>
   Response.json(
     { data: Schema.encodeSync(schema)(data), next: [] },
@@ -159,7 +157,7 @@ export const currentBudgetReport = ({
 }: Readonly<{
   db: D1Database;
   userId: string;
-  query: typeof Query.Type;
+  query: typeof BudgetStatusQueryParameters.Type;
   now: DateTime.Utc;
 }>): Effect.Effect<Option.Option<BudgetStatusReport>> =>
   Effect.gen(function* () {
@@ -185,7 +183,7 @@ export const currentBudgetReport = ({
     return Option.some({ period, statuses });
   }).pipe(Effect.orElseSucceed(() => Option.none()));
 
-const statusParameters = (url: URL): Option.Option<typeof Query.Type> => {
+const statusParameters = (url: URL): Option.Option<typeof BudgetStatusQueryParameters.Type> => {
   const keys = [...url.searchParams.keys()];
   if (
     keys.length !== new Set(keys).size ||
@@ -193,7 +191,9 @@ const statusParameters = (url: URL): Option.Option<typeof Query.Type> => {
   ) {
     return Option.none();
   }
-  return Schema.decodeUnknownOption(Query)(Object.fromEntries(url.searchParams));
+  return Schema.decodeUnknownOption(BudgetStatusQueryParameters)(
+    Object.fromEntries(url.searchParams)
+  );
 };
 
 const budgetParameters = (
@@ -201,7 +201,7 @@ const budgetParameters = (
   url: URL
 ): Option.Option<{
   id: Option.Option<BudgetId>;
-  query: Option.Option<typeof Query.Type>;
+  query: Option.Option<typeof BudgetStatusQueryParameters.Type>;
 }> => {
   if (operation === "budgets.getBudget") {
     if (url.searchParams.size > 0) return Option.none();
@@ -230,7 +230,7 @@ const readAuthorizedBudget = ({
   subject: TransactionCaller;
   operation: BudgetQueryOperation;
   id: Option.Option<BudgetId>;
-  query: Option.Option<typeof Query.Type>;
+  query: Option.Option<typeof BudgetStatusQueryParameters.Type>;
 }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
     if (operation === "budgets.getBudget") {

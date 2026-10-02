@@ -543,3 +543,24 @@ decision; quota exhaustion and authority refusal retain their existing distinct 
 repository, runtime composition, migration or independent tier store is added, and existing data
 remains retained when access expires. This publication introduces no external workflow or telemetry
 purpose; the callers' bounded work and metadata-only accountability remain unchanged.
+
+### Web Authentication coordinator
+
+Web Authentication is a data-free protocol coordinator. Its shell `contract.ts` assembles the
+browser-safe API from Browser Login, Email Authentication and WebSession declarations and projects
+owner-declared paths for Recovery and the current User. The package's direct-client facade exposes
+that assembled contract without native implementation. The direct secret-bearing API remains
+separate from canonical operations; Tokens retains its separately declared proof and management APIs.
+
+The native `web-authentication/operations.ts` composes only published owner operations for pairing,
+mailbox proof, recovery, session observation/logout and Tokens dispatch. Browser Login retains its
+persistence gateway and is the sole initiator of one-use WebSession establishment. The coordinator
+never reads a proof row, prepares SQL, issues a credential, constructs a provider or owns a Queue.
+Origin and ingress policy stay at the public Worker; each owner rechecks its own proof, exact User,
+expiry and replay conditions at the authoritative commit.
+
+Core supplies only the existing request binding, closed telemetry and identity-only post-commit
+publication callback. Its Queue and Workflow runtime remains the durability authority. Private
+Support Recovery keeps its Access verification and metadata-only failure observation, and cannot
+enter the published browser API. Existing bounded telemetry is preserved; the extraction adds no
+external workflow, provider call, persistent authority or diagnostic data.

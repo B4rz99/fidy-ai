@@ -24,3 +24,6 @@ export type InitialRecoveryEnrollment = Readonly<{
   createdAtMs: number;
   commit: (credential: D1PreparedStatement) => Promise<void>;
 }>;
+
+/** Private operator transport; never part of the browser or canonical API. */
+export const supportRecoveryPath = "/internal/support-recovery";

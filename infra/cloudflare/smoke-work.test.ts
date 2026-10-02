@@ -80,6 +80,7 @@ describe("private release smoke", () => {
         );
         expect(refusedReadiness.status).toBe(404);
         expect(refusedReadiness.headers.get("x-fidy-smoke-failure")).toBeNull();
+        expect(refusedReadiness.headers.get("x-fidy-smoke-identity")).toBeNull();
         const ready = yield* Effect.tryPromise(() =>
           handleSmoke({
             request: new Request("https://core.internal/internal/release-smoke?readiness=1", {
@@ -98,6 +99,21 @@ describe("private release smoke", () => {
         );
         expect(mismatch.status).toBe(503);
         expect(mismatch.headers.get("x-fidy-smoke-failure")).toBe("identity");
+        expect(mismatch.headers.get("x-fidy-smoke-identity")).toBe("011");
+        for (const overrides of [
+          { RELEASE_GIT_SHA: "f".repeat(40), expected: "101" },
+          { CONTRACT_DIGEST: "f".repeat(64), expected: "110" },
+        ]) {
+          const rejection = yield* Effect.tryPromise(() =>
+            handleSmoke({
+              request: request(body, true),
+              environment: { ...environment, CF_VERSION_METADATA: { id: version }, ...overrides },
+            })
+          );
+          expect(rejection.status).toBe(503);
+          expect(rejection.headers.get("x-fidy-smoke-identity")).toBe(overrides.expected);
+          expect(yield* Effect.tryPromise(() => rejection.text())).toBe('{"status":"unavailable"}');
+        }
         const admissionFailure = yield* Effect.tryPromise(() =>
           handleSmoke({
             request: request(body, true),

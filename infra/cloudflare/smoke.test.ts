@@ -124,7 +124,13 @@ describe("production smoke ingress", () => {
         expect(failed.status).toBe(503);
         expect(failed.headers.get("x-fidy-smoke-failure")).toBe("public_forwarding");
         expect(yield* Effect.tryPromise(() => failed.text())).not.toContain("secret-provider-body");
-        for (const stage of ["schema", "secret-provider-body", ""]) {
+        for (const [stage, equality, expectedEquality] of [
+          ["identity", "011", "011"],
+          ["identity", "secret-provider-body", null],
+          ["schema", "011", null],
+          ["secret-provider-body", "011", null],
+          ["", "011", null],
+        ]) {
           const sanitized = yield* Effect.tryPromise(() =>
             publicWorker.fetch(
               new Request("https://api.fidyapp.com/internal/release-smoke", {
@@ -138,7 +144,10 @@ describe("production smoke ingress", () => {
                     Promise.resolve(
                       new Response("secret-provider-body", {
                         status: 503,
-                        headers: { "x-fidy-smoke-failure": stage },
+                        headers: {
+                          "x-fidy-smoke-failure": stage ?? "",
+                          "x-fidy-smoke-identity": equality ?? "",
+                        },
                       })
                     ),
                 },
@@ -147,8 +156,9 @@ describe("production smoke ingress", () => {
           );
           expect(sanitized.status).toBe(503);
           expect(sanitized.headers.get("x-fidy-smoke-failure")).toBe(
-            stage === "schema" ? "schema" : "core_response"
+            stage === "schema" || stage === "identity" ? stage : "core_response"
           );
+          expect(sanitized.headers.get("x-fidy-smoke-identity")).toBe(expectedEquality);
           expect(yield* Effect.tryPromise(() => sanitized.text())).not.toContain(
             "secret-provider-body"
           );

@@ -1,18 +1,10 @@
+import { type DashboardProjectionRange, type Widget } from "~/core/dashboard/contract";
 import { DateTime, Function } from "effect";
 import type { IanaTimeZone } from "~/core/_shared/context";
-import type { CategoryId } from "~/core/categories/reference";
 import { resolveDashboardPeriod } from "./calculation";
-import type { Widget } from "./model";
 
 const monthCharacters = 7;
 const dayCharacters = 10;
-
-/** One UTC range whose aggregated facts form one local Dashboard chart bucket. */
-export type DashboardProjectionRange = Readonly<{
-  key: string;
-  from: number;
-  toExclusive: number;
-}>;
 
 /** Resolve requested periods and local chart buckets without consulting retained history. */
 export const dashboardProjectionRanges: {
@@ -67,11 +59,3 @@ export const dashboardProjectionRanges: {
     return ranges;
   }
 );
-
-type CategoryFact = Readonly<{ id: CategoryId; label: string }>;
-
-/** One spending-chart bucket key, resolved in the User's time zone for calendar dimensions. */
-export type DashboardBucket<Category extends CategoryFact> =
-  | Readonly<{ kind: "category"; category: Category }>
-  | Readonly<{ kind: "day"; date: string }>
-  | Readonly<{ kind: "month"; month: string }>;

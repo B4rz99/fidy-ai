@@ -1,11 +1,11 @@
 import { Effect, Option, Schema } from "effect";
 import { prepareAuthorizedAuditCall, recordCanonicalPATWork } from "@fidy/server/audit";
-import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
-import { makeDashboardCatalog } from "../../src/core/dashboard/catalog";
-import { categoryIds } from "../../src/core/categories/operations";
-import { DashboardCatalog, DashboardEdit } from "../../src/core/dashboard/model";
+import { RequestBodyPolicy, boundedJsonBody } from "../../http/request-body";
+import { makeDashboardCatalog } from "../../../src/core/dashboard/operations";
+import { categoryIds } from "../../../src/core/categories/operations";
+import { DashboardCatalog, DashboardEdit } from "../../../src/core/dashboard/contract";
 import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-operations";
-import { prepareOwnedStatement } from "../database/operations";
+import { prepareOwnedStatement } from "../../database/operations";
 import {
   type TransactionCaller,
   callerAuthority,
@@ -16,20 +16,14 @@ import {
   transactionNoStore,
   transactionNow,
   transactionUnavailable,
-} from "../canonical-work/operations";
-import { executeSingleCanonicalMutation } from "../mutations/canonical-mutation-unit";
-import { dashboardCompletion, prepareDashboard, presentDashboard } from "./dashboard-mutation";
+} from "../../canonical-work/operations";
+import { dashboardCompletion } from "./dashboard-mutation";
+import type { DashboardRequest } from "../contract";
 
 const editBodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 16_384,
   deadlineMilliseconds: 2_000,
 });
-type DashboardOperation =
-  | "dashboard.getDashboard"
-  | "dashboard.getDashboardView"
-  | "dashboard.listDashboardCatalog"
-  | "dashboard.applyDashboardEdit";
-
 /** Catalog is a query; the three document-writing calls instead use the shared mutation unit. */
 const catalog = ({
   db,
@@ -82,19 +76,10 @@ const catalog = ({
     Effect.orElseSucceed(transactionUnavailable)
   );
 
-/** Execute Dashboard calls through live User authority without a nested document D1 batch. */
-export const browseDashboard = ({
-  db,
-  subject,
-  operation,
-  request,
-}: Readonly<{
-  db: D1Database;
-  subject: TransactionCaller;
-  operation: DashboardOperation;
-  request: Request;
-}>): Effect.Effect<Response> =>
+/** Validate live caller input and delegate document work to the same User's coordinated unit. */
+export const browseDashboard = (input: DashboardRequest): Effect.Effect<Response> =>
   Effect.gen(function* () {
+    const { db, subject, request } = input;
     const current = transactionNow();
     const live = yield* Effect.tryPromise(() =>
       liveTransactionAuthority({ db, subject, current })
@@ -107,10 +92,10 @@ export const browseDashboard = ({
         message: "Present a valid credential and retry.",
       });
     }
-    if (operation === "dashboard.listDashboardCatalog") {
+    if (input.operation === "dashboard.listDashboardCatalog") {
       return yield* catalog({ db, subject, current });
     }
-    if (operation !== "dashboard.applyDashboardEdit" && request.url.includes("?")) {
+    if (input.operation !== "dashboard.applyDashboardEdit" && request.url.includes("?")) {
       return transactionFailure({
         code: "validation_failed",
         status: 400,
@@ -118,7 +103,7 @@ export const browseDashboard = ({
       });
     }
     const edit =
-      operation === "dashboard.applyDashboardEdit"
+      input.operation === "dashboard.applyDashboardEdit"
         ? yield* Effect.tryPromise(() =>
             boundedJsonBody({
               request,
@@ -127,19 +112,10 @@ export const browseDashboard = ({
             })
           ).pipe(Effect.orElseSucceed(() => Option.none()))
         : Option.none<DashboardEdit>();
-    const preparation = yield* prepareDashboard({
-      work: { db, subject, current },
-      operation,
-      edit,
-    });
-    return yield* executeSingleCanonicalMutation({
-      db,
-      subject,
-      current,
-      preparation,
-      present: (value) =>
-        value._tag === "Owner" ? presentDashboard(value) : Effect.succeed(transactionUnavailable()),
-      retryStatement: Option.none(),
-      hostedFence: Option.none(),
-    });
+    return input.operation === "dashboard.applyDashboardEdit"
+      ? yield* input.runMutation({
+          operation: input.operation,
+          input: Option.map(edit, (payload) => ({ payload })),
+        })
+      : yield* input.runMutation({ operation: input.operation, input: Option.some({}) });
   }).pipe(Effect.orElseSucceed(transactionUnavailable));

@@ -1,21 +1,15 @@
-import { Data, Option } from "effect";
-import { type CategoryId } from "~/core/categories/reference";
-import { type DashboardFailure, type DashboardIssue } from "~/core/dashboard/errors";
+import {
+  type DashboardApiFailure,
+  type DashboardCategoryNotFound,
+} from "~/shell/dashboard/contract";
+import { Option } from "effect";
+import { type DashboardFailure, type DashboardIssue } from "~/core/dashboard/contract";
 import { NotFound, type SuggestedOperation, ValidationFailed } from "~/shell/public-http/contract";
 import {
   type SuggestedOperationCaller,
   checkpointSuggestedOperations,
   suggestOperation,
 } from "~/shell/_shared/suggested-operations";
-
-/** A candidate dashboard references a Category unavailable to the authenticated User. */
-export class DashboardCategoryNotFound extends Data.TaggedError("DashboardCategoryNotFound")<{
-  readonly categoryId: CategoryId;
-  readonly path: string;
-}> {}
-
-/** Declared canonical failures returned by dashboard operations. */
-export type DashboardApiFailure = NotFound | ValidationFailed;
 
 const dashboardRecovery = (caller: SuggestedOperationCaller): ReadonlyArray<SuggestedOperation> =>
   checkpointSuggestedOperations({
@@ -138,9 +132,7 @@ const toNonInvalidApiFailure = (
   }
 };
 
-const toFieldIssue = (
-  issue: DashboardIssue
-): Readonly<{ message: string }> | Readonly<{ path: string; message: string }> =>
+const toFieldIssue = (issue: DashboardIssue): ValidationFailed["error"]["fields"][number] =>
   Option.match(issue.path, {
     onNone: () => ({ message: issue.message }),
     onSome: (path) => ({ path, message: issue.message }),

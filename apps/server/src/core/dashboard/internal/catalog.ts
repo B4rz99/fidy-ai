@@ -11,7 +11,7 @@ import {
   TransactionListLimit,
   type Widget,
   type WidgetId,
-} from "./model";
+} from "~/core/dashboard/contract";
 
 const recentTransactionsPresetLimit = 10;
 

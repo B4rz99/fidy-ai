@@ -1,8 +1,8 @@
 import { expect, it } from "@effect/vitest";
 import { Schema } from "effect";
 import { CategoryId } from "~/core/categories/reference";
-import { makeCatalogWidget, makeDashboardCatalog, makeDefaultDashboard } from "./catalog";
-import { DashboardDocument, Widget, WidgetId } from "./model";
+import { makeCatalogWidget, makeDashboardCatalog, makeDefaultDashboard } from "./operations";
+import { DashboardDocument, Widget, WidgetId } from "./contract";
 
 it("provides one valid direct-launch preset for every closed widget type", () => {
   const ids = [

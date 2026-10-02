@@ -2,15 +2,18 @@ import { UserId } from "@fidy/server/identity-reference";
 import type { EffectiveTransactionAggregate } from "@fidy/server/transactions-contract";
 import { type DateTime, Effect, Option, Schema } from "effect";
 import { UserContext } from "@fidy/server/identity-contract";
-import { prepareUserContext } from "../identity/user-context/operations";
-import { listCategories } from "../categories/operations";
-import { type DashboardDocument, collectLayoutWidgets } from "../../src/core/dashboard/model";
-import { dashboardProjectionRanges } from "../../src/core/dashboard/projection";
-import type { DashboardFacts } from "../../src/shell/dashboard/presentation";
-import { readBudgetCaps } from "../budgets/operations";
-import { findDashboardAggregate, readDashboardTransactions } from "../transactions/operations";
+import { prepareUserContext } from "../../identity/user-context/operations";
+import { listCategories } from "../../categories/operations";
+import { type DashboardDocument, type ProjectedRange } from "../../../src/core/dashboard/contract";
+import {
+  collectLayoutWidgets,
+  dashboardProjectionRanges,
+} from "../../../src/core/dashboard/operations";
 
-type Context = UserContext;
+import type { DashboardFacts } from "../../../src/shell/dashboard/contract";
+import { readBudgetCaps } from "../../budgets/operations";
+import { findDashboardAggregate, readDashboardTransactions } from "../../transactions/operations";
+
 type LayoutWidgets = ReturnType<typeof collectLayoutWidgets>;
 type Groups = DashboardFacts["groups"];
 
@@ -65,7 +68,7 @@ const loadBase = (
 
 const findCached = (
   cache: Map<string, ReadonlyArray<EffectiveTransactionAggregate>>,
-  input: Readonly<{ db: D1Database; userId: string; from: number; toExclusive: number }>
+  input: Parameters<typeof findDashboardAggregate>[0]
 ): Effect.Effect<Option.Option<ReadonlyArray<EffectiveTransactionAggregate>>> =>
   Effect.gen(function* () {
     const key = `${input.from}:${input.toExclusive}`;
@@ -86,20 +89,12 @@ const findRanges = ({
   db: D1Database;
   userId: string;
   now: DateTime.Utc;
-  context: Context;
+  context: UserContext;
   widgets: LayoutWidgets;
 }>): Effect.Effect<Option.Option<Groups>> =>
   Effect.gen(function* () {
     const cached = new Map<string, ReadonlyArray<EffectiveTransactionAggregate>>();
-    const groups = new Map<
-      string,
-      ReadonlyArray<
-        Readonly<{
-          key: string;
-          contributions: ReadonlyArray<EffectiveTransactionAggregate>;
-        }>
-      >
-    >();
+    const groups = new Map<string, ReadonlyArray<ProjectedRange>>();
     for (const widget of widgets) {
       if (widget.type === "transaction-list") continue;
       const buckets = [];

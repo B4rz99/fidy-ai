@@ -1,3 +1,9 @@
+import {
+  type AppliedDashboardPeriod,
+  type DashboardDirectionalAmountFact,
+  type DashboardMetricFact,
+  type DashboardPeriod,
+} from "~/core/dashboard/contract";
 import { BigDecimal, DateTime, Function } from "effect";
 import type { IanaTimeZone } from "~/core/_shared/context";
 import {
@@ -7,7 +13,6 @@ import {
   type ReadonlyMoney,
   currencyMetadata,
 } from "~/core/_shared/money";
-import type { AppliedDashboardPeriod, DashboardPeriod } from "./model";
 
 const rollingWeekPreviousDays = 6;
 const rollingMonthPreviousDays = 29;
@@ -18,15 +23,6 @@ type PeriodInput = Readonly<{
   period: DashboardPeriod;
   timeZone: IanaTimeZone;
 }>;
-
-const toAppliedPeriod = (
-  input: Readonly<{
-    from: DateTime.Utc;
-    toExclusive: DateTime.Utc;
-    requested: DashboardPeriod;
-    timeZone: IanaTimeZone;
-  }>
-): AppliedDashboardPeriod => input;
 
 /** Resolves a relative period against local calendar boundaries in the explicitly supplied zone. */
 export const resolveDashboardPeriod = ({
@@ -41,69 +37,49 @@ export const resolveDashboardPeriod = ({
 
   switch (period) {
     case "this-week":
-      return toAppliedPeriod({
+      return {
         requested: period,
         timeZone,
         from: DateTime.toUtc(weekStart),
         toExclusive: DateTime.toUtc(DateTime.add(weekStart, { weeks: 1 })),
-      });
+      };
     case "this-month":
-      return toAppliedPeriod({
+      return {
         requested: period,
         timeZone,
         from: DateTime.toUtc(monthStart),
         toExclusive: DateTime.toUtc(DateTime.add(monthStart, { months: 1 })),
-      });
+      };
     case "last-week":
-      return toAppliedPeriod({
+      return {
         requested: period,
         timeZone,
         from: DateTime.toUtc(DateTime.subtract(weekStart, { weeks: 1 })),
         toExclusive: DateTime.toUtc(weekStart),
-      });
+      };
     case "last-month":
-      return toAppliedPeriod({
+      return {
         requested: period,
         timeZone,
         from: DateTime.toUtc(DateTime.subtract(monthStart, { months: 1 })),
         toExclusive: DateTime.toUtc(monthStart),
-      });
+      };
     case "last-7-days":
-      return toAppliedPeriod({
+      return {
         requested: period,
         timeZone,
         from: DateTime.toUtc(DateTime.subtract(dayStart, { days: rollingWeekPreviousDays })),
         toExclusive: DateTime.toUtc(DateTime.add(dayStart, { days: 1 })),
-      });
+      };
     case "last-30-days":
-      return toAppliedPeriod({
+      return {
         requested: period,
         timeZone,
         from: DateTime.toUtc(DateTime.subtract(dayStart, { days: rollingMonthPreviousDays })),
         toExclusive: DateTime.toUtc(DateTime.add(dayStart, { days: 1 })),
-      });
+      };
   }
 };
-
-/** Minimal exact aggregate published to Dashboard core decisions by Transaction ownership. */
-export type DashboardDirectionalAmountFact = Readonly<{
-  direction: "inflow" | "outflow";
-  money: ReadonlyMoney;
-}>;
-
-/** Minimal exact aggregate required to finalize one configured custom metric. */
-export type DashboardMetricFact =
-  | Readonly<{
-      aggregation: "sum" | "maximum";
-      direction: "inflow" | "outflow";
-      money: ReadonlyMoney;
-    }>
-  | Readonly<{
-      aggregation: "average";
-      direction: "inflow" | "outflow";
-      sum: ReadonlyMoney;
-      count: bigint;
-    }>;
 
 const money = (currency: Currency, amount: ReadonlyMoney["amount"]): Money =>
   Money.make({ currency, amount });

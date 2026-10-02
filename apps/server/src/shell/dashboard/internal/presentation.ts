@@ -1,33 +1,20 @@
-import { Data, type DateTime, Effect, Option } from "effect";
+import { type DashboardDocument, type LayoutNode, type Widget } from "~/core/dashboard/contract";
+import { type DateTime, Effect, Option } from "effect";
 
-import type { UserContext } from "~/core/identity/contract";
-import type { Category } from "~/core/categories/contract";
-import type { Budget } from "~/core/budgets/contract";
 import { calculateBudgetStatus } from "~/core/budgets/operations";
-import { resolveDashboardPeriod } from "~/core/dashboard/calculation";
 import {
-  type ProjectedRange,
   projectAggregateBudgetSpent,
   projectAggregateChart,
   projectAggregateMetric,
-} from "~/core/dashboard/aggregation";
-import { type DashboardDocument, type LayoutNode, type Widget } from "~/core/dashboard/model";
-import type { Transaction } from "~/shell/transactions/contract";
-import { type DashboardView, type DashboardWidgetView } from "./operations";
+  resolveDashboardPeriod,
+} from "~/core/dashboard/operations";
 
-class DashboardUnavailable extends Data.TaggedError("DashboardUnavailable") {}
-
-/** Decoded User-owned facts supplied by the storage adapter for one Dashboard projection. */
-export type DashboardFacts = Readonly<{
-  groups: ReadonlyMap<string, ReadonlyArray<ProjectedRange>>;
-  lists: ReadonlyMap<
-    string,
-    ReadonlyArray<Readonly<{ transaction: Transaction; category: Category }>>
-  >;
-  budgets: ReadonlyArray<Budget>;
-  categories: ReadonlyMap<string, Category>;
-  context: UserContext;
-}>;
+import {
+  type DashboardFacts,
+  DashboardUnavailable,
+  type DashboardView,
+  type DashboardWidgetView,
+} from "~/shell/dashboard/contract";
 
 type ChartWidget = Extract<Widget, { type: "spending-chart" }>;
 

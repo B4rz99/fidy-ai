@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
-import { DashboardView } from "./operations";
+import { DashboardView } from "./contract";
 
 const widgetId = "f1d1a000-0000-4000-8000-00000000030a";
 const category = {

@@ -1,20 +1,24 @@
-import { listCategories } from "../categories/operations";
+import type { DashboardMutationOperation } from "../contract";
+import { listCategories } from "../../categories/operations";
 import { Data, DateTime, Effect, Option, Result, Schema } from "effect";
 import { prepareAuthorizedAuditCall, recordCanonicalPATWork } from "@fidy/server/audit";
 import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-operations";
-import { prepareOwnedStatement } from "../database/operations";
-import { makeDefaultDashboard } from "../../src/core/dashboard/catalog";
-import { categoryIds } from "../../src/core/categories/operations";
+import { prepareOwnedStatement } from "../../database/operations";
+import {
+  applyDashboardEdit,
+  collectDashboardCategoryReferences,
+  makeDefaultDashboard,
+} from "../../../src/core/dashboard/operations";
+import { categoryIds } from "../../../src/core/categories/operations";
 import {
   DashboardDocument,
   type DashboardEdit,
   WidgetId,
-  collectDashboardCategoryReferences,
-} from "../../src/core/dashboard/model";
-import { applyDashboardEdit } from "../../src/core/dashboard/rules";
-import { DashboardView } from "../../src/shell/dashboard/operations";
+} from "../../../src/core/dashboard/contract";
+
+import { DashboardView } from "../../../src/shell/dashboard/contract";
 import { loadDashboardFacts } from "./dashboard-view";
-import { renderDashboardView } from "../../src/shell/dashboard/presentation";
+import { renderDashboardView } from "../../../src/shell/dashboard/operations";
 import {
   type TransactionCaller,
   callerAuthority,
@@ -25,7 +29,7 @@ import {
   transactionId,
   transactionNoStore,
   transactionUnavailable,
-} from "../canonical-work/operations";
+} from "../../canonical-work/operations";
 import {
   type CanonicalMutationPreparation,
   type CanonicalMutationRefusal,
@@ -34,16 +38,12 @@ import {
   credentialRefusedPreparation,
   failedPreparation,
   refusedPreparation,
-} from "../mutations/mutation-types";
+} from "../../mutations/mutation-types";
 
 /** The persisted Dashboard is decoded before it is used to plan any mutation. */
 const DocumentJson = Schema.fromJsonString(Schema.toCodecJson(DashboardDocument));
 const StoredDocument = Schema.Struct({ document_json: Schema.String, revision: Schema.Int });
-type DashboardMutationOperation =
-  | "dashboard.getDashboard"
-  | "dashboard.getDashboardView"
-  | "dashboard.applyDashboardEdit";
-type Work = Readonly<{
+type MutationContext = Readonly<{
   db: D1Database;
   subject: TransactionCaller;
   current: number;
@@ -55,7 +55,7 @@ export const dashboardCompletion = `INSERT INTO dashboard_assertion (id, accepte
   ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`;
 
 const audit = (
-  work: Work,
+  work: MutationContext,
   operation: DashboardMutationOperation,
   outcome: "accepted" | "rejected"
 ): D1PreparedStatement => {
@@ -81,7 +81,7 @@ const audit = (
   });
 };
 
-const credentialUse = (work: Work): ReadonlyArray<D1PreparedStatement> =>
+const credentialUse = (work: MutationContext): ReadonlyArray<D1PreparedStatement> =>
   isPATCaller(work.subject)
     ? [
         prepareOwnedStatement({
@@ -136,7 +136,7 @@ const defaultDocument = (): DashboardDocument =>
   });
 
 const firstUse = (
-  work: Work,
+  work: MutationContext,
   document: DashboardDocument
 ): Effect.Effect<D1PreparedStatement, Schema.SchemaError> =>
   Schema.encodeEffect(DocumentJson)(document).pipe(
@@ -165,7 +165,7 @@ export const dashboardRefusal = ({
   operation,
   code,
 }: Readonly<{
-  work: Work;
+  work: MutationContext;
   operation: DashboardMutationOperation;
   code: "validation_failed" | "not_found";
 }>): CanonicalMutationRefusal => ({
@@ -208,7 +208,7 @@ const decideDocument = ({
   edit,
   base,
 }: Readonly<{
-  work: Work;
+  work: MutationContext;
   operation: DashboardMutationOperation;
   edit: Option.Option<DashboardEdit>;
   base: DashboardDocument;
@@ -240,7 +240,7 @@ const editWrite = ({
   document,
   revision,
 }: Readonly<{
-  work: Work;
+  work: MutationContext;
   operation: DashboardMutationOperation;
   document: DashboardDocument;
   revision: number;
@@ -263,7 +263,7 @@ const preparedDashboard = ({
   initial,
   write,
 }: Readonly<{
-  work: Work;
+  work: MutationContext;
   operation: DashboardMutationOperation;
   initial: Option.Option<D1PreparedStatement>;
   write: ReadonlyArray<D1PreparedStatement>;
@@ -302,7 +302,7 @@ const dashboardAccess = ({
   operation,
   edit,
 }: Readonly<{
-  work: Work;
+  work: MutationContext;
   operation: DashboardMutationOperation;
   edit: Option.Option<DashboardEdit>;
 }>): Effect.Effect<Option.Option<CanonicalMutationPreparation>> =>
@@ -325,7 +325,7 @@ export const prepareDashboard = ({
   operation,
   edit,
 }: Readonly<{
-  work: Work;
+  work: MutationContext;
   operation: DashboardMutationOperation;
   edit: Option.Option<DashboardEdit>;
 }>): Effect.Effect<CanonicalMutationPreparation> =>

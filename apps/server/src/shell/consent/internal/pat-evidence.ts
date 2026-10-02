@@ -1,3 +1,4 @@
+import type { PATGrantSelection, PairingGrantSelection } from "~/shell/tokens/contract";
 import type { PATRevocationDisclosure } from "~/core/consent/contract";
 import type { FreshSessionSubject } from "~/shell/web-session/contract";
 import { freshSessionExists, freshSessionParams } from "~/shell/web-session/operations";
@@ -12,9 +13,11 @@ type RevokeOneInput = Readonly<{ id: string; shortId: string; current: number }>
 /** Append a User-origin revocation only for the live grant owned by this fresh WebSession. */
 export const revokeOnePATConsentStatement = ({
   disclosure,
+  candidates,
   session,
   input,
 }: Readonly<{
+  candidates: PATGrantSelection;
   disclosure: PATRevocationDisclosure<"user-revoke-one">;
   session: FreshSessionSubject;
   input: RevokeOneInput;
@@ -22,10 +25,9 @@ export const revokeOnePATConsentStatement = ({
   sql: `INSERT INTO pat_revocation_consents
     (id,grant_consent_id,user_id,pat_id,session_id,disclosure_revision,disclosure_text,occurred_at_ms)
     SELECT ?,g.id,p.user_id,p.id,?,?,?,?
-    FROM pats p JOIN pat_grant_consents g ON g.user_id = p.user_id
+    FROM (${candidates.statement.sql}) p JOIN pat_grant_consents g ON g.user_id = p.user_id
       AND (g.request_id = p.request_id OR g.pairing_id = p.pairing_id)
-    WHERE p.user_id = ? AND p.short_id = ? AND p.revoked_at_ms IS NULL AND p.expires_at_ms > ?
-      AND ${freshSessionExists}
+    WHERE p.user_id = ? AND ${freshSessionExists}
       AND NOT EXISTS (SELECT 1 FROM pat_revocation_consents r WHERE r.grant_consent_id = g.id)`,
   params: [
     input.id,
@@ -33,9 +35,8 @@ export const revokeOnePATConsentStatement = ({
     disclosure.revision,
     disclosure.text,
     input.current,
+    ...candidates.statement.params,
     session.user_id,
-    input.shortId,
-    input.current,
     ...freshSessionParams({ session, time: input.current }),
   ],
 });
@@ -43,9 +44,11 @@ export const revokeOnePATConsentStatement = ({
 /** Append one origin-qualified revocation per active PAT grant under the same User. */
 export const revokeAllPATConsentsStatement = ({
   disclosure,
+  candidates,
   session,
   current,
 }: Readonly<{
+  candidates: PATGrantSelection;
   disclosure: PATRevocationDisclosure<"user-revoke-all">;
   session: FreshSessionSubject;
   current: number;
@@ -53,18 +56,17 @@ export const revokeAllPATConsentsStatement = ({
   sql: `INSERT INTO pat_revocation_consents
     (id,grant_consent_id,user_id,pat_id,session_id,disclosure_revision,disclosure_text,occurred_at_ms)
     SELECT ${randomConsentId},g.id,p.user_id,p.id,?,?,?,?
-    FROM pats p JOIN pat_grant_consents g ON g.user_id = p.user_id
+    FROM (${candidates.statement.sql}) p JOIN pat_grant_consents g ON g.user_id = p.user_id
       AND (g.request_id = p.request_id OR g.pairing_id = p.pairing_id)
-    WHERE p.user_id = ? AND p.revoked_at_ms IS NULL AND p.expires_at_ms > ?
-      AND ${freshSessionExists}
+    WHERE p.user_id = ? AND ${freshSessionExists}
       AND NOT EXISTS (SELECT 1 FROM pat_revocation_consents r WHERE r.grant_consent_id = g.id)`,
   params: [
     session.id,
     disclosure.revision,
     disclosure.text,
     current,
+    ...candidates.statement.params,
     session.user_id,
-    current,
     ...freshSessionParams({ session, time: current }),
   ],
 });
@@ -72,9 +74,11 @@ export const revokeAllPATConsentsStatement = ({
 /** Include approved but unclaimed PATPairing grants in a User's revoke-all decision. */
 export const revokeAllPairingConsentsStatement = ({
   disclosure,
+  candidates,
   session,
   current,
 }: Readonly<{
+  candidates: PairingGrantSelection;
   disclosure: PATRevocationDisclosure<"user-revoke-unclaimed">;
   session: FreshSessionSubject;
   current: number;
@@ -82,15 +86,15 @@ export const revokeAllPairingConsentsStatement = ({
   sql: `INSERT INTO pat_revocation_consents
     (id,grant_consent_id,user_id,pairing_id,session_id,disclosure_revision,disclosure_text,occurred_at_ms)
     SELECT ${randomConsentId},g.id,q.user_id,q.id,?,?,?,?
-    FROM pat_pairings q JOIN pat_grant_consents g ON g.pairing_id = q.id AND g.user_id = q.user_id
-    WHERE q.user_id = ? AND q.state = 'approved_awaiting_claim'
-      AND ${freshSessionExists}
+    FROM (${candidates.statement.sql}) q JOIN pat_grant_consents g ON g.pairing_id = q.id AND g.user_id = q.user_id
+    WHERE q.user_id = ? AND ${freshSessionExists}
       AND NOT EXISTS (SELECT 1 FROM pat_revocation_consents r WHERE r.grant_consent_id = g.id)`,
   params: [
     session.id,
     disclosure.revision,
     disclosure.text,
     current,
+    ...candidates.statement.params,
     session.user_id,
     ...freshSessionParams({ session, time: current }),
   ],
@@ -99,42 +103,50 @@ export const revokeAllPairingConsentsStatement = ({
 /** Scheduled expiry appends policy-origin evidence for approved unclaimed pairings. */
 export const expirePairingConsentsStatement = ({
   disclosure,
+  candidates,
   current,
-  limit,
 }: Readonly<{
+  candidates: PairingGrantSelection;
   disclosure: PATRevocationDisclosure<"approved-unclaimed-expiry">;
   current: number;
-  limit: number;
 }>): OwnedStatement => ({
   sql: `INSERT INTO pat_revocation_consents
     (id,grant_consent_id,user_id,pairing_id,policy_reason,disclosure_revision,disclosure_text,occurred_at_ms)
     SELECT ${randomConsentId},g.id,q.user_id,q.id,?,?,?,?
-    FROM pat_pairings q JOIN pat_grant_consents g ON g.pairing_id = q.id AND g.user_id = q.user_id
-    WHERE q.id IN (SELECT id FROM pat_pairings WHERE state = 'approved_awaiting_claim'
-      AND expires_at_ms <= ? ORDER BY expires_at_ms LIMIT ?)
-      AND NOT EXISTS (SELECT 1 FROM pat_revocation_consents r WHERE r.grant_consent_id = g.id)`,
-  params: [disclosure.policyReason, disclosure.revision, disclosure.text, current, current, limit],
+    FROM (${candidates.statement.sql}) q JOIN pat_grant_consents g ON g.pairing_id = q.id AND g.user_id = q.user_id
+    WHERE NOT EXISTS (SELECT 1 FROM pat_revocation_consents r WHERE r.grant_consent_id = g.id)`,
+  params: [
+    disclosure.policyReason,
+    disclosure.revision,
+    disclosure.text,
+    current,
+    ...candidates.statement.params,
+  ],
 });
 
 /** Scheduled expiry appends policy-origin evidence for every selected fixed-lifetime PAT. */
 export const expirePATConsentsStatement = ({
   disclosure,
+  candidates,
   current,
-  limit,
 }: Readonly<{
+  candidates: PATGrantSelection;
   disclosure: PATRevocationDisclosure<"fixed-lifetime-expiry">;
   current: number;
-  limit: number;
 }>): OwnedStatement => ({
   sql: `INSERT INTO pat_revocation_consents
     (id,grant_consent_id,user_id,pat_id,policy_reason,disclosure_revision,disclosure_text,occurred_at_ms)
     SELECT ${randomConsentId},g.id,p.user_id,p.id,?,?,?,?
-    FROM pats p JOIN pat_grant_consents g ON g.user_id = p.user_id
+    FROM (${candidates.statement.sql}) p JOIN pat_grant_consents g ON g.user_id = p.user_id
       AND (g.request_id = p.request_id OR g.pairing_id = p.pairing_id)
-    WHERE p.id IN (SELECT id FROM pats WHERE revoked_at_ms IS NULL
-      AND expires_at_ms <= ? ORDER BY expires_at_ms LIMIT ?)
-      AND NOT EXISTS (SELECT 1 FROM pat_revocation_consents r WHERE r.grant_consent_id = g.id)`,
-  params: [disclosure.policyReason, disclosure.revision, disclosure.text, current, current, limit],
+    WHERE NOT EXISTS (SELECT 1 FROM pat_revocation_consents r WHERE r.grant_consent_id = g.id)`,
+  params: [
+    disclosure.policyReason,
+    disclosure.revision,
+    disclosure.text,
+    current,
+    ...candidates.statement.params,
+  ],
 });
 
 type ManualGrantInput = Readonly<{

@@ -1,23 +1,29 @@
+import {
+  admitPairingReview,
+  admitPairingSource,
+  approvePairingGrant,
+  expireApprovedPairings,
+  expireFixedPATs,
+  expiredPATGrants,
+  expiredPairingGrants,
+  pairingExpiryCompletion,
+  patExpiryCompletion,
+  startPairingGrant,
+  sweepPairingAdmission,
+  sweepPairingReviews,
+  sweepUnapprovedPairings,
+} from "@fidy/server/tokens-operations";
 import { recordSessionPATTransition } from "@fidy/server/audit";
 import {
   ApprovePATPairingPayload,
   PATPairingPublicCodeInput,
   PATPairingReview,
   StartPATPairingPayload,
-  admitPairingReview,
-  admitPairingSource,
-  approvePairingGrant,
+} from "@fidy/server/tokens-domain";
+import {
   buildPairedPATDisclosure,
-  expireApprovedPairings,
-  expireFixedPATs,
-  pairingExpiryCompletion,
-  patExpiryCompletion,
   selectPATPairingPublicCodeSymbols,
-  startPairingGrant,
-  sweepPairingAdmission,
-  sweepPairingReviews,
-  sweepUnapprovedPairings,
-} from "@fidy/server/tokens-runtime";
+} from "@fidy/server/tokens-decisions";
 import { type Cause, DateTime, Effect, Encoding, Option, Result, Schema } from "effect";
 import {
   expirePATConsents,
@@ -27,14 +33,12 @@ import {
 import {
   type SessionRow,
   canonical,
-  currentMillis,
   dayMilliseconds,
   decodeBody,
   digest,
   httpRateLimited,
   invalid,
   iso,
-  newId,
   newProof,
   pairingMilliseconds,
   rejected,
@@ -44,7 +48,10 @@ import {
   unavailable,
   webSession,
 } from "./pat-shared";
-import { commitPATUnit, prepareOwnedStatement } from "./pat-unit";
+import { newId } from "../../secret-material/operations";
+import { currentMillis } from "../../runtime/clock";
+import { commitPATUnit } from "./pat-unit";
+import { prepareOwnedStatement } from "../../database/operations";
 
 const symbolCount = 8;
 const sampleBytes = 16;
@@ -108,13 +115,19 @@ export const sweepExpiredPATPairings = (db: D1Database): Promise<void> =>
         db.batch([
           prepareOwnedStatement({
             db,
-            statement: expirePairingConsents({ current, limit: scheduledSweepLimit }),
+            statement: expirePairingConsents({
+              current,
+              candidates: expiredPairingGrants({ current, limit: scheduledSweepLimit }),
+            }),
           }),
           prepareOwnedStatement({ db, statement: expireApprovedPairings(current) }),
           prepareOwnedStatement({ db, statement: pairingExpiryCompletion(current) }),
           prepareOwnedStatement({
             db,
-            statement: expirePATConsents({ current, limit: scheduledSweepLimit }),
+            statement: expirePATConsents({
+              current,
+              candidates: expiredPATGrants({ current, limit: scheduledSweepLimit }),
+            }),
           }),
           prepareOwnedStatement({ db, statement: expireFixedPATs(current) }),
           prepareOwnedStatement({ db, statement: patExpiryCompletion(current) }),

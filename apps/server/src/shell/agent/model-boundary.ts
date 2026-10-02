@@ -1,5 +1,5 @@
 import { Function, Option, Schema } from "effect";
-import { TokenBearer } from "~/core/tokens/model";
+import { TokenBearer } from "~/core/tokens/contract";
 import { TranscriptText } from "~/core/transcript/model";
 import {
   type TranscriptSelectionEntry,

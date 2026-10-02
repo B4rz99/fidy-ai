@@ -1,7 +1,7 @@
 import { Data } from "effect";
-import type { PATAuthority } from "@fidy/server/tokens-runtime";
+import type { PATAuthority } from "@fidy/server/tokens-contract";
 import type { WebSessionAuthority } from "@fidy/server/web-session-contract";
-import type { AuthorizedPAT } from "../pats/pat-authorization";
+import type { AuthorizedPAT } from "../tokens/contract";
 
 /**
  * How one decided refusal was durably handled. `"recorded"` means the refusal stands and the

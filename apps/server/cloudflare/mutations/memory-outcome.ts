@@ -1,5 +1,5 @@
 import { Effect, Option, Schema } from "effect";
-import { livePATAuthority } from "@fidy/server/tokens-runtime";
+import { livePATAuthority } from "@fidy/server/tokens-operations";
 import {
   type MemoryAuditOutcome,
   MemoryCapacityExceeded,
@@ -18,8 +18,8 @@ import type {
   GuardRefusalWork,
   MemoryOutcome,
 } from "./mutation-types";
-import { newId } from "../pats/pat-shared";
-import { prepareOwnedStatement } from "../pats/pat-unit";
+import { newId } from "../secret-material/operations";
+import { prepareOwnedStatement } from "../database/operations";
 import {
   type TransactionCaller,
   isPATCaller,

@@ -7,7 +7,7 @@ import {
   maximumOnboardingProofFailures,
 } from "@fidy/server/email-authentication-decisions";
 import { Clock, Data, Effect, Option, Schema } from "effect";
-import { newId } from "../../pats/pat-shared";
+import { newId } from "../../secret-material/operations";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../../http/request-body";
 
 const Payload = Schema.Struct({ combinedCode: EmailVerificationCode });

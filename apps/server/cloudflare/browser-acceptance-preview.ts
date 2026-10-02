@@ -5,7 +5,7 @@ import {
   makeCoreWorker,
   runBillingCollectionWorkflow,
 } from "./browser-acceptance-core-module";
-import { newId } from "./pats/pat-shared";
+import { newId } from "./secret-material/operations";
 import { db, firstCardUserId, fixtureUserId } from "./browser-acceptance-seed";
 import {
   providerPrivateKey,

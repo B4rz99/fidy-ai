@@ -1,6 +1,12 @@
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
-import { ActivePATMetadata, PATRecipientLabel, PATScopes, TokenShortId } from "~/core/tokens/model";
+import {
+  type ActivePATList,
+  ActivePATMetadata,
+  PATRecipientLabel,
+  PATScopes,
+  TokenShortId,
+} from "~/core/tokens/contract";
 import type { UserId } from "~/core/identity/reference";
 import { Unavailable } from "~/shell/public-http/contract";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
@@ -79,7 +85,7 @@ export const patMetadataResponseFromRows = (
   raw: unknown
 ): Effect.Effect<
   {
-    readonly data: { readonly pats: ReadonlyArray<ActivePATMetadata> };
+    readonly data: ActivePATList;
     readonly next: ReadonlyArray<never>;
   },
   Unavailable
@@ -96,7 +102,7 @@ export const listPATsResponse = (
   userId: UserId
 ): Effect.Effect<
   {
-    readonly data: { readonly pats: ReadonlyArray<ActivePATMetadata> };
+    readonly data: ActivePATList;
     readonly next: ReadonlyArray<never>;
   },
   Unavailable,

@@ -15,6 +15,7 @@ import { Clock, Effect, Option } from "effect";
 import {
   prepareAuthorizedAuditCall,
   recordCanonicalPATWork,
+  recordedPATCallProof,
   refusedByAuditBudget,
 } from "@fidy/server/audit";
 import {
@@ -24,16 +25,15 @@ import {
 } from "@fidy/server/canonical-runtime";
 
 import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
+import { type AuditedPATMutation, type PATAuthority } from "@fidy/server/tokens-contract";
 import {
-  type AuditedPATMutation,
-  type PATAuthority,
   livePATAuthority,
   livePATCredential,
   recordAuditedPATUseFromAuthority,
-} from "@fidy/server/tokens-runtime";
-import type { AuthorizedPAT } from "../pats/pat-authorization";
-import { prepareOwnedStatement } from "../pats/pat-unit";
-import { newId } from "../pats/pat-shared";
+} from "@fidy/server/tokens-operations";
+import type { AuthorizedPAT } from "../tokens/contract";
+import { prepareOwnedStatement } from "../database/operations";
+import { newId } from "../secret-material/operations";
 
 /** Wrap one rejected dependency promise so the failure channel stays typed. */
 export const boundaryFailure = (cause: unknown): TransactionBoundaryFailure =>
@@ -91,7 +91,8 @@ export const acceptedPATAccountability = ({
       db: database,
       statement: recordAuditedPATUseFromAuthority({
         authority,
-        input: { auditId, current, operation },
+        current,
+        evidence: recordedPATCallProof({ auditId, operation }),
       }),
     }),
   ];

@@ -26,7 +26,7 @@ import { hostedDeliveryReceipt } from "../agent/hosted-turn";
 import { hostedTurnTestMigrations } from "../agent/hosted-turn-test-migrations";
 import { sweepHostedTurns } from "../agent/hosted-turn-sweep";
 import { pendingExecutionRecoveryMs } from "../agent/turn-store";
-import { newId } from "../pats/pat-shared";
+import { newId } from "../secret-material/operations";
 import { transactionNow } from "../canonical-work/operations";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";

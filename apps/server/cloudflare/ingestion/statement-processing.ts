@@ -25,7 +25,7 @@ import {
 } from "../../src/core/ingestion/rules";
 import { TransactionExtraction } from "../../src/core/transactions/contract";
 import { prepareStatementCapture } from "../transactions/operations";
-import { currentMillis } from "../pats/pat-shared";
+import { currentMillis } from "../runtime/clock";
 import { StatementStaging, newIngestionId } from "./statement-staging";
 import { maximumRetainedReviewEvidence } from "./statement-review-retention";
 import { statementChunkSize } from "./statement-processing-limits";

@@ -9,7 +9,7 @@ import { type Cause, Data, Effect, type Layer, Option } from "effect";
 import type { TranscriptTurnId } from "@fidy/server/agent-runtime";
 import { withConsentEgress } from "../consent/operations";
 import { cloudflareWorkerTelemetry, observeModelRun } from "../runtime/telemetry";
-import { newId } from "../pats/pat-shared";
+import { newId } from "../secret-material/operations";
 import {
   type ResourceAdmissionAttempt,
   ResourceAdmissionAuthority,

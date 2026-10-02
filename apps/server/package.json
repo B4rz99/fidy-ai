@@ -19,11 +19,6 @@
       "import": "./src/shell/canonical-runtime.ts",
       "default": "./src/shell/canonical-runtime.ts"
     },
-    "./tokens-runtime": {
-      "types": "./src/shell/tokens/runtime.ts",
-      "import": "./src/shell/tokens/runtime.ts",
-      "default": "./src/shell/tokens/runtime.ts"
-    },
     "./transaction-operations": {
       "types": "./src/shell/transactions/operations.ts",
       "import": "./src/shell/transactions/operations.ts",
@@ -188,6 +183,26 @@
       "types": "./src/shell/email-authentication/runtime.ts",
       "import": "./src/shell/email-authentication/runtime.ts",
       "default": "./src/shell/email-authentication/runtime.ts"
+    },
+    "./tokens-contract": {
+      "types": "./src/shell/tokens/contract.ts",
+      "import": "./src/shell/tokens/contract.ts",
+      "default": "./src/shell/tokens/contract.ts"
+    },
+    "./tokens-operations": {
+      "types": "./src/shell/tokens/operations.ts",
+      "import": "./src/shell/tokens/operations.ts",
+      "default": "./src/shell/tokens/operations.ts"
+    },
+    "./tokens-domain": {
+      "types": "./src/core/tokens/contract.ts",
+      "import": "./src/core/tokens/contract.ts",
+      "default": "./src/core/tokens/contract.ts"
+    },
+    "./tokens-decisions": {
+      "types": "./src/core/tokens/operations.ts",
+      "import": "./src/core/tokens/operations.ts",
+      "default": "./src/core/tokens/operations.ts"
     }
   },
   "scripts": {

@@ -4,8 +4,8 @@ import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
 import { makeDashboardCatalog } from "../../src/core/dashboard/catalog";
 import { categoryIds } from "../../src/core/categories/operations";
 import { DashboardCatalog, DashboardEdit } from "../../src/core/dashboard/model";
-import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
-import { prepareOwnedStatement } from "../pats/pat-unit";
+import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-operations";
+import { prepareOwnedStatement } from "../database/operations";
 import {
   type TransactionCaller,
   callerAuthority,

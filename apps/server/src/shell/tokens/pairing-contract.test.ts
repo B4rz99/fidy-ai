@@ -7,7 +7,7 @@ import {
   PATPairingPollingRateLimitedApi,
   PATPairingRateLimitedApi,
   patPairingUnavailableBody,
-} from "./pat-pairing-api";
+} from "./contract";
 
 const proof = { pairingId: "pairing", privateDeviceCode: "private-proof" };
 const sourceRefusal =

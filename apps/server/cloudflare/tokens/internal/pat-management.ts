@@ -1,18 +1,19 @@
 import {
+  patRevokeAllCompletion,
+  preparePATMetadata,
+  revocablePATGrants,
+  revocablePairingGrants,
+  revokeEveryPAT,
+  revokeEveryPairing,
+  revokeOnePAT,
+} from "@fidy/server/tokens-operations";
+import {
   recordAllPATRevocations,
   recordOnePATRevocation,
   recordPATList,
   refusedByAuditBudget,
 } from "@fidy/server/audit";
-import {
-  ActivePATList,
-  patMetadataQuery,
-  patMetadataResponseFromRows,
-  patRevokeAllCompletion,
-  revokeEveryPAT,
-  revokeEveryPairing,
-  revokeOnePAT,
-} from "@fidy/server/tokens-runtime";
+import { ActivePATList } from "@fidy/server/tokens-domain";
 import { type Cause, Effect, Option, Schema } from "effect";
 import { freshSessionParams } from "@fidy/server/web-session-operations";
 import {
@@ -23,9 +24,7 @@ import {
 import {
   type SessionRow,
   canonical,
-  currentMillis,
   httpRateLimited,
-  newId,
   notFound,
   response,
   sessionExists,
@@ -34,7 +33,10 @@ import {
   serviceUnavailable as unavailable,
   webSession,
 } from "./pat-shared";
-import { commitPATUnit, prepareOwnedStatement } from "./pat-unit";
+import { newId } from "../../secret-material/operations";
+import { currentMillis } from "../../runtime/clock";
+import { commitPATUnit } from "./pat-unit";
+import { prepareOwnedStatement } from "../../database/operations";
 
 export { createManualPAT } from "./pat-manual";
 
@@ -48,13 +50,14 @@ export const listPATs = ({
       const session = yield* Effect.tryPromise(() => webSession({ request, db, fresh: false }));
       if (Option.isNone(session)) return unauthorized();
       const current = currentMillis();
+      const metadata = preparePATMetadata({ userId: session.value.user_id, current, session });
       return yield* Effect.gen(function* () {
         const [rows, recorded] = yield* Effect.tryPromise({
           try: () =>
             db.batch([
               prepareOwnedStatement({
                 db,
-                statement: patMetadataQuery({ userId: session.value.user_id, current, session }),
+                statement: metadata.statement,
               }),
               prepareOwnedStatement({
                 db,
@@ -69,7 +72,7 @@ export const listPATs = ({
         });
         if (recorded?.meta.changes !== 1) return unauthorized();
         if (rows === undefined) return unavailable();
-        const listed = yield* patMetadataResponseFromRows(rows.results).pipe(Effect.option);
+        const listed = yield* metadata.decode(rows.results).pipe(Effect.option);
         return Option.isSome(listed)
           ? canonical(
               yield* Schema.encodeEffect(Schema.toCodecJson(ActivePATList))(listed.value.data)
@@ -136,6 +139,11 @@ export const revokePAT = ({
               statement: revokeOnePATConsent({
                 session: session.value,
                 input: { id: newId(), shortId, current },
+                candidates: revocablePATGrants({
+                  userId: session.value.user_id,
+                  shortId: Option.some(shortId),
+                  current,
+                }),
               }),
             }),
             prepareOwnedStatement({
@@ -174,7 +182,15 @@ export const revokeAllPATs = ({
           statements: [
             prepareOwnedStatement({
               db,
-              statement: revokeAllPATConsents({ session: session.value, current }),
+              statement: revokeAllPATConsents({
+                session: session.value,
+                current,
+                candidates: revocablePATGrants({
+                  userId: session.value.user_id,
+                  current,
+                  shortId: Option.none(),
+                }),
+              }),
             }),
             prepareOwnedStatement({
               db,
@@ -182,7 +198,11 @@ export const revokeAllPATs = ({
             }),
             prepareOwnedStatement({
               db,
-              statement: revokeAllPairingConsents({ session: session.value, current }),
+              statement: revokeAllPairingConsents({
+                session: session.value,
+                current,
+                candidates: revocablePairingGrants(session.value.user_id),
+              }),
             }),
             prepareOwnedStatement({
               db,

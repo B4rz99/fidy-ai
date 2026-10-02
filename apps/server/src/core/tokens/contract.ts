@@ -1,4 +1,4 @@
-import { Duration, Effect, Schema, SchemaTransformation } from "effect";
+import { type DateTime, Duration, Effect, type Option, Schema, SchemaTransformation } from "effect";
 import { PATId } from "./reference";
 import { UserId } from "~/core/identity/reference";
 import { CanonicalCapability } from "~/core/canonical-operations/contract";
@@ -110,13 +110,14 @@ export const CreateManualPATPayload = Schema.Struct({
 }).annotate({ identifier: "CreateManualPATPayload" });
 export type CreateManualPATPayload = typeof CreateManualPATPayload.Type;
 
-const bearerPrefix = "fin_";
+/** Public PAT namespace; the prefix identifies its format and conveys no authority. */
+export const patBearerPrefix = "fin_";
 /** Number of public naming characters embedded in every opaque PAT bearer. */
 export const patShortIdLength = 8;
 const patShortIdPattern = `[a-z0-9]{${patShortIdLength}}`;
 const bearerSecretPattern = "[A-Za-z0-9_-]{32,}";
 /** Human-readable notation for the one opaque bearer encoding. */
-export const TokenBearerFormat = "fin_<short-id>_<secret>";
+export const TokenBearerFormat = `${patBearerPrefix}<short-id>_<secret>`;
 
 /** Random bytes a caller must draw for one bearer secret before encoding it. */
 export const bearerSecretBytes = 32;
@@ -148,29 +149,11 @@ export type TokenSecret = typeof TokenSecret.Type;
  * never persisted; storage retains only its hash and safe naming id.
  */
 export const TokenBearer = Schema.String.check(
-  Schema.isPattern(new RegExp(`^${bearerPrefix}${patShortIdPattern}_${bearerSecretPattern}$`))
+  Schema.isPattern(new RegExp(`^${patBearerPrefix}${patShortIdPattern}_${bearerSecretPattern}$`))
 )
   .pipe(Schema.brand("TokenBearer"))
   .annotate({ identifier: "TokenBearer" });
 export type TokenBearer = typeof TokenBearer.Type;
-
-type TokenBearerSegments = Readonly<{
-  shortId: Readonly<TokenShortId>;
-  secret: Readonly<TokenSecret>;
-}>;
-
-/** Builds the sole valid opaque bearer encoding from its validated segments. */
-export const makeTokenBearer = ({
-  shortId,
-  secret,
-}: TokenBearerSegments): Effect.Effect<TokenBearer> =>
-  Effect.succeed(TokenBearer.make(`${bearerPrefix}${String(shortId)}_${String(secret)}`));
-
-/** Reads the safe naming id embedded in a previously validated opaque bearer. */
-export const getTokenShortId = (bearer: Readonly<TokenBearer>): Effect.Effect<TokenShortId> =>
-  Effect.succeed(
-    TokenShortId.make(bearer.slice(bearerPrefix.length, bearerPrefix.length + patShortIdLength))
-  );
 
 type TokenInstant = Readonly<{ epochMilliseconds: number }>;
 type OptionalTokenInstant =
@@ -298,3 +281,146 @@ export const ResolvedToken = Schema.Struct({
   lastUsedAt: UtcTimestamp,
 });
 export type ResolvedToken = typeof ResolvedToken.Type;
+
+/** Stable non-secret identity of one PATPairing. */
+export const PATPairingId = Schema.String.check(Schema.isUUID(4))
+  .pipe(Schema.brand("PATPairingId"))
+  .annotate({ identifier: "PATPairingId" });
+export type PATPairingId = typeof PATPairingId.Type;
+
+/** High-entropy claim proof disclosed once to the initiating User-owned client. */
+export const PATPairingDeviceCode = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/u))
+  .pipe(Schema.brand("PATPairingDeviceCode"))
+  .annotate({ identifier: "PATPairingDeviceCode" });
+export type PATPairingDeviceCode = typeof PATPairingDeviceCode.Type;
+
+const publicCodePattern = /^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/u;
+const publicCodeSymbolsPattern = /^[BCDFGHJKLMNPQRSTVWXZ]{8}$/u;
+
+/** Public human-entered request identity; possession grants neither approval nor claim authority. */
+export const PATPairingPublicCode = Schema.String.check(Schema.isPattern(publicCodePattern))
+  .pipe(Schema.brand("PATPairingPublicCode"))
+  .annotate({ identifier: "PATPairingPublicCode" });
+export type PATPairingPublicCode = typeof PATPairingPublicCode.Type;
+
+const normalizePublicCode = (input: string): string => {
+  const upper = input.replace(/^[\t\n\r ]+|[\t\n\r ]+$/gu, "").toUpperCase();
+  if (publicCodePattern.test(upper)) return upper;
+  return publicCodeSymbolsPattern.test(upper) ? `${upper.slice(0, 4)}-${upper.slice(4)}` : upper;
+};
+
+/** Public decoder with narrow ASCII presentation normalization and canonical encoding. */
+export const PATPairingPublicCodeInput = Schema.String.pipe(
+  Schema.decodeTo(
+    PATPairingPublicCode,
+    SchemaTransformation.transform({
+      decode: normalizePublicCode,
+      encode: (code) => code,
+    })
+  )
+);
+
+/** Fixed server-owned PATPairing lifetime. */
+export const patPairingLifetime = "10 minutes" as const;
+
+/** Minimum cadence advertised to a User-owned client polling a PATPairing. */
+export const patPairingPollingIntervalSeconds = 5;
+
+/** Client-selected immutable request values accepted by direct PATPairing start. */
+export const StartPATPairingPayload = Schema.Struct({
+  recipientLabel: PATRecipientLabelInput,
+  scopes: PATScopes,
+  lifetimeDays: PATLifetimeDays.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(defaultPATLifetimeDays))
+  ),
+}).annotate({ identifier: "StartPATPairingPayload" });
+export type StartPATPairingPayload = typeof StartPATPairingPayload.Type;
+
+/** Secret-bearing start response returned only over the direct no-store API. */
+export const StartedPATPairing = Schema.Struct({
+  pairingId: PATPairingId,
+  privateDeviceCode: Schema.RedactedFromValue(PATPairingDeviceCode),
+  publicCode: PATPairingPublicCode,
+  expiresAt: UtcTimestamp,
+  pollingIntervalSeconds: Schema.Literal(patPairingPollingIntervalSeconds),
+}).annotate({ identifier: "StartedPATPairing" });
+export type StartedPATPairing = typeof StartedPATPairing.Type;
+
+/** Correct proof before approval receives only bounded polling metadata. */
+export const PendingPATPairingClaim = Schema.Struct({
+  status: Schema.Literal("pending_approval"),
+  expiresAt: UtcTimestamp,
+  pollingIntervalSeconds: Schema.Int.check(
+    Schema.isGreaterThanOrEqualTo(patPairingPollingIntervalSeconds)
+  ),
+}).annotate({ identifier: "PendingPATPairingClaim", httpApiStatus: 202 });
+export type PendingPATPairingClaim = typeof PendingPATPairingClaim.Type;
+
+/** One successful claim discloses the paired PAT bearer exactly once. */
+export const ClaimedPATPairing = IssuedPAT.annotate({
+  identifier: "ClaimedPATPairing",
+  httpApiStatus: 200,
+});
+
+/** Safe immutable snapshot reviewed in a fresh WebSession. */
+export const PATPairingReview = Schema.Struct({
+  pairingId: PATPairingId,
+  recipientLabel: PATRecipientLabel,
+  scopes: PATScopes,
+  lifetimeDays: PATLifetimeDays,
+  claimBy: UtcTimestamp,
+}).annotate({ identifier: "PATPairingReview" });
+export type PATPairingReview = typeof PATPairingReview.Type;
+
+/** Approval binds the reviewed pairing; its fixed lifetime begins at approval. */
+export const ApprovePATPairingPayload = Schema.Struct({
+  pairingId: PATPairingId,
+}).annotate({ identifier: "ApprovePATPairingPayload" });
+export type ApprovePATPairingPayload = typeof ApprovePATPairingPayload.Type;
+
+/** Safe browser success: the initiating client, not this browser, receives the bearer. */
+export const ApprovedPATPairing = Schema.Struct({
+  pairingId: PATPairingId,
+  patExpiresAt: UtcTimestamp,
+  claimBy: UtcTimestamp,
+}).annotate({ identifier: "ApprovedPATPairing" });
+export type ApprovedPATPairing = typeof ApprovedPATPairing.Type;
+
+/** The one authoritative persisted PATPairing lifecycle. */
+export const PATPairingLifecycle = Schema.Literals([
+  "pending_approval",
+  "approved_awaiting_claim",
+  "claimed",
+  "expired_unapproved",
+  "revoked_unclaimed",
+]);
+export type PATPairingLifecycle = typeof PATPairingLifecycle.Type;
+
+/** Persisted pairing state and verified proof at one server-observed attempt instant. */
+export type PATPairingClaimInput = Readonly<{
+  lifecycle: PATPairingLifecycle;
+  proofMatches: boolean;
+  wrongProofAttempts: number;
+  minimumPollIntervalSeconds: number;
+  lastAcceptedPollAt: Option.Option<DateTime.Utc>;
+  expiresAt: DateTime.Utc;
+  attemptedAt: DateTime.Utc;
+}>;
+
+/** Closed pure decisions interpreted atomically by the proof-bearing claim shell. */
+export type PATPairingClaimDecision =
+  | Readonly<{
+      _tag: "Pending";
+      acceptedAt: DateTime.Utc;
+      minimumPollIntervalSeconds: number;
+    }>
+  | Readonly<{ _tag: "Claim" }>
+  | Readonly<{ _tag: "WrongProof"; wrongProofAttempts: number }>
+  | Readonly<{
+      _tag: "SlowDown";
+      minimumPollIntervalSeconds: number;
+      retryAfterSeconds: number;
+    }>
+  | Readonly<{ _tag: "ExpireUnapproved" }>
+  | Readonly<{ _tag: "RevokeUnclaimed" }>
+  | Readonly<{ _tag: "Invalid" }>;

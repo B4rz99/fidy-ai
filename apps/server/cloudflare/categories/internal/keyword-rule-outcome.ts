@@ -6,9 +6,9 @@ import {
   refusedByAuditBudget,
 } from "@fidy/server/audit";
 import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
-import { livePATAuthority } from "@fidy/server/tokens-runtime";
-import { newId } from "../../pats/pat-shared";
-import { prepareOwnedStatement } from "../../pats/pat-unit";
+import { livePATAuthority } from "@fidy/server/tokens-operations";
+import { newId } from "../../secret-material/operations";
+import { prepareOwnedStatement } from "../../database/operations";
 import {
   type CategoryFailure,
   CategoryNotFound,

@@ -8,7 +8,7 @@ it("separates the two slowest suites and fills spare capacity with smaller suite
   const transactions = file("transactions/transactions");
   const statements = file("ingestion/statement-ingestion");
   const dashboard = file("dashboard/dashboard");
-  const pats = file("pats/pats");
+  const pats = file("tokens/pats");
   expect(
     cloudflareTestShards({
       files: [pats, dashboard, statements, transactions],

@@ -1,7 +1,7 @@
 import { prepareWhatsAppIdentity } from "../identity/operations";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { TranscriptText, TranscriptTurnId, UserId } from "@fidy/server/agent-runtime";
-import { newId } from "../pats/pat-shared";
+import { newId } from "../secret-material/operations";
 import { deliveryAcknowledgmentWindowMs, finishHostedTurn } from "./turn-store";
 import { WhatsAppHostedSubject } from "./hosted-authority";
 import type { WhatsAppStatusAdmission } from "./whatsapp-turn";

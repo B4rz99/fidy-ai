@@ -1,3 +1,4 @@
+import { patOwnershipQuery } from "~/shell/tokens/operations";
 import { Option } from "effect";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 import { sessionOwnershipQuery } from "~/shell/web-session/operations";
@@ -43,10 +44,7 @@ const callerOwnership = (input: OwnerAuditCall): OwnedStatement => {
     case "Publication":
       return { sql: "SELECT 1", params: [] };
     case "PAT":
-      return {
-        sql: "SELECT 1 FROM pats WHERE id = ? AND user_id = ?",
-        params: [input.caller.id, input.userId],
-      };
+      return patOwnershipQuery({ patId: input.caller.id, userId: input.userId });
     case "WebSession":
       return sessionOwnershipQuery({ sessionId: input.caller.id, userId: input.userId });
   }

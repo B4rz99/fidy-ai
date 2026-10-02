@@ -1,34 +1,33 @@
 import { recordClaimedPAT } from "@fidy/server/audit";
+import { ClaimPATPairingPayload } from "@fidy/server/tokens-contract";
+import { PAT, PATPairingDeviceCode, PATPairingId } from "@fidy/server/tokens-domain";
 import {
-  ClaimPATPairingPayload,
-  PAT,
-  PATPairingDeviceCode,
-  PATPairingId,
   claimPairingGrant,
-  decidePATPairingClaim,
   insertClaimedPAT,
   recordPendingPoll,
   recordWrongPairingProof,
   slowPairingPoll,
-} from "@fidy/server/tokens-runtime";
+} from "@fidy/server/tokens-operations";
+import { decidePATPairingClaim } from "@fidy/server/tokens-decisions";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { PairingRow } from "./pat-pairing";
 import {
-  currentMillis,
   decodeBody,
   digest,
   equalsDigest,
   invalid,
   iso,
   newBearer,
-  newId,
   newShortId,
   patFrom,
   response,
   scopesFrom,
   unavailable,
 } from "./pat-shared";
-import { commitPATUnit, prepareOwnedStatement } from "./pat-unit";
+import { newId } from "../../secret-material/operations";
+import { currentMillis } from "../../runtime/clock";
+import { commitPATUnit } from "./pat-unit";
+import { prepareOwnedStatement } from "../../database/operations";
 
 const maximumPollSeconds = 60;
 const pendingStatus = 202;

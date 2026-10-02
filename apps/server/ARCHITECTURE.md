@@ -381,3 +381,28 @@ in visible private internals. A candidate mailbox replaces the prior credential 
 subject-bound atomic proof-consumption unit. Workflow activities never persist mailbox or raw proof
 material, and a lost provider response cannot trigger an automatic resend. Existing bounded telemetry
 and operational samples retain their purposes; no new provider call or diagnostic content is added.
+
+### Tokens owner composition
+
+Tokens publishes PAT and PATPairing browser-safe declarations through `core/tokens/contract.ts`
+and fixed-lifetime, scope-disclosure and proof-decision behavior through `operations.ts`. Its shell
+contract declares both authenticated canonical management and the distinct pre-User, proof-bearing
+PATPairing API. Portable operations publish current scope/Consent authority and transaction-composable
+lifecycle work. Private metadata queries and decoded persistence remain in `internal/`; consumers
+receive bounded safe metadata with its decoder, never bearer-verification or row implementation.
+
+`cloudflare/tokens/operations.ts` owns pairing, manual issuance, authentication, safe listing,
+revocation and expiry at the native boundary. Proof parsing, private-device verification, entropy,
+bearer generation and lifecycle rows remain internal. Only the immediate issuance or claim response
+contains a raw bearer. Approval still fixes the expiration; claim, polling and use cannot extend it.
+Admission returns the exact User, PAT proof and required scope for live rechecking at protected D1
+work, never a reusable permission.
+
+Tokens selects its own grant references for Consent evidence and historical identities for Audit.
+Consent owns only append-only evidence; Tokens asserts that both automatic-expiry transitions match
+that evidence before commit. Canonical PAT activity consumes Audit's exact-call proof in the same
+unit as the guarded action. Failed guards or evidence writes retain the existing whole-unit rollback
+semantics, without a process lock or a post-commit repair. Platform statement binding, clock reads
+and non-secret identity generation are independent of Tokens and confer no credential authority.
+Existing bounded Core/public Worker telemetry covers these paths; this ownership refactor adds no
+provider call, persistent credential, external workflow or telemetry payload.

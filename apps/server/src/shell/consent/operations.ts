@@ -21,10 +21,12 @@ import type {
   ConsentSubject,
   EmailStatus,
   ExpirePATConsentsInput,
+  ExpirePairingConsentsInput,
   ManualPATConsentInput,
   PATRevocationProtection,
   PairedPATConsentInput,
   RevokeAllPATConsentsInput,
+  RevokeAllPairingConsentsInput,
   RevokeOnePATConsentInput,
 } from "./contract";
 import { currentDisclosureFacts } from "~/shell/consent/internal/current-disclosure";
@@ -41,8 +43,8 @@ import {
 
 import {
   consentConditions,
-  fixedExpiryCompletionSql,
-  pairingExpiryCompletionSql,
+  fixedExpiryEvidenceSql,
+  pairingExpiryEvidenceSql,
   revocationEvidence,
 } from "~/shell/consent/internal/protected-actions";
 
@@ -184,7 +186,7 @@ export const revokeAllPATConsents = (input: RevokeAllPATConsentsInput): OwnedSta
  * Prepare authenticated revocation of this User's approved, unclaimed pairing grants.
  * The caller commits these records and the paired terminal transitions in the same unit.
  */
-export const revokeAllPairingConsents = (input: RevokeAllPATConsentsInput): OwnedStatement =>
+export const revokeAllPairingConsents = (input: RevokeAllPairingConsentsInput): OwnedStatement =>
   revokeAllPairingConsentsStatement({
     ...input,
     disclosure: decidePATRevocation("user-revoke-unclaimed"),
@@ -194,7 +196,7 @@ export const revokeAllPairingConsents = (input: RevokeAllPATConsentsInput): Owne
  * Prepare automatic-policy evidence for the oldest bounded set of expired unclaimed approvals.
  * Commit with the expiry transition using the identical decision instant and selection limit.
  */
-export const expirePairingConsents = (input: ExpirePATConsentsInput): OwnedStatement =>
+export const expirePairingConsents = (input: ExpirePairingConsentsInput): OwnedStatement =>
   expirePairingConsentsStatement({
     ...input,
     disclosure: decidePATRevocation("approved-unclaimed-expiry"),
@@ -285,19 +287,19 @@ export const protectPATRevocationStatement = ({
 };
 
 /**
- * Prepare the final assertion that this instant's fixed-lifetime expiry evidence has terminal PAT
- * state. Commit after evidence and transitions in the same unit; a mismatch aborts that whole unit.
+ * Project the PAT identities covered by this instant's fixed-lifetime expiry evidence.
+ * The Tokens owner asserts their corresponding terminal state in the same atomic unit.
  */
-export const completeFixedPATConsentExpiry = (current: number): OwnedStatement => ({
-  sql: fixedExpiryCompletionSql,
+export const expiredPATConsentIdentities = (current: number): OwnedStatement => ({
+  sql: fixedExpiryEvidenceSql,
   params: [current],
 });
 
 /**
- * Prepare the final assertion that this instant's unclaimed-approval expiry evidence has terminal
- * pairing state. Commit after evidence and transitions in the same unit; a mismatch aborts it all.
+ * Project the pairing identities covered by this instant's unclaimed-approval expiry evidence.
+ * The Tokens owner asserts their corresponding terminal state in the same atomic unit.
  */
-export const completePairingConsentExpiry = (current: number): OwnedStatement => ({
-  sql: pairingExpiryCompletionSql,
+export const expiredPairingConsentIdentities = (current: number): OwnedStatement => ({
+  sql: pairingExpiryEvidenceSql,
   params: [current],
 });

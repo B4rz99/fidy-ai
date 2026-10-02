@@ -147,7 +147,74 @@ const subscriptionPortablePrivate = `cloudflare/subscription/${PROBE_PREFIX}port
 const subscriptionToolPrivate = `tools/${PROBE_PREFIX}subscription-private`;
 const subscriptionLaundering = `cloudflare/${PROBE_PREFIX}subscription-laundering`;
 
+const tokensPublished = `cloudflare/${PROBE_PREFIX}tokens-published`;
+const tokensPrivate = `cloudflare/${PROBE_PREFIX}tokens-private`;
+const tokensPortablePrivate = `cloudflare/tokens/${PROBE_PREFIX}portable-private`;
+const tokensToolPrivate = `tools/${PROBE_PREFIX}tokens-private`;
+
 const PROBES: readonly Probe[] = [
+  {
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `${tokensPublished}/probe.ts`,
+        source:
+          'import { authorizeCanonicalPAT, handlePATRequest } from "../tokens/operations";\n' +
+          'import { livePATAuthority, preparePATMetadata } from "~/shell/tokens/operations";\n' +
+          'import { PATsGroup, PATPairingApi } from "~/shell/tokens/contract";\n' +
+          "export const published = [authorizeCanonicalPAT, handlePATRequest, livePATAuthority, preparePATMetadata, PATsGroup, PATPairingApi];\n",
+      },
+    ],
+    name: "Tokens callers use published pairing, safe metadata and commit-time authority operations",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-tokens-internal: ${tokensPrivate}/probe.test.ts → cloudflare/tokens/internal/pat-shared.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${tokensPrivate}/probe.test.ts`,
+        source:
+          'import { PATRow, digest } from "../tokens/internal/pat-shared";\nexport const bypass = [PATRow, digest];\n',
+      },
+    ],
+    name: "foreign tests cannot import private PAT rows or bearer verification",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error cloudflare-imports-portable-tokens-internal: ${tokensPortablePrivate}/probe.ts → src/shell/tokens/internal/list-pats.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${tokensPortablePrivate}/probe.ts`,
+        source:
+          'import { patMetadataQuery } from "~/shell/tokens/internal/list-pats";\nexport const bypass = patMetadataQuery;\n',
+      },
+    ],
+    name: "native Tokens consumes prepared metadata instead of private portable persistence",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-tokens-internal: ${tokensToolPrivate}/probe.ts → cloudflare/tokens/internal/pat-pairing.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${tokensToolPrivate}/probe.ts`,
+        source:
+          'import type { PairingRow } from "../../cloudflare/tokens/internal/pat-pairing";\nexport type StoredPairing = PairingRow;\n',
+      },
+    ],
+    name: "operational tools cannot import private PATPairing state even as a type",
+  },
   {
     expect: { kind: "allowed" },
     files: [

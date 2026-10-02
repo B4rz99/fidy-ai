@@ -137,13 +137,24 @@ jobs:
             echo "PUBLIC_WORKER_NAME=$(jq -r .snapshot.public.name "$RELEASE_SNAPSHOT_FILE")"
             echo "CORE_WORKER_NAME=$(jq -r .snapshot.core.name "$RELEASE_SNAPSHOT_FILE")"
             echo "STABLE_PUBLIC_VERSION_ID=$(jq -r .snapshot.public.stableVersionId "$RELEASE_SNAPSHOT_FILE")"
+            echo "STABLE_CORE_VERSION_ID=$(jq -r .snapshot.core.stableVersionId "$RELEASE_SNAPSHOT_FILE")"
             echo "STABLE_RELEASE_GIT_SHA=$(jq -r .snapshot.stableRevision "$RELEASE_SNAPSHOT_FILE")"
             echo "STABLE_CONTRACT_DIGEST=$(jq -r .snapshot.stableContractDigest "$RELEASE_SNAPSHOT_FILE")"
           } >> "$GITHUB_ENV"
 
+      - name: Compare GET and pre-admission POST routing without synthetic work
+        working-directory: infra/cloudflare
+        run: bun diagnose-smoke-routing.ts
+
       - name: Prove both candidate and intermediate Worker pairings
+        id: candidate_smoke
         working-directory: infra/cloudflare
         run: bun verify-production-smoke.ts
+
+      - name: Observe routing again before cleaning up a failed smoke
+        if: ${{ failure() && steps.candidate_smoke.outcome == 'failure' }}
+        working-directory: infra/cloudflare
+        run: bun diagnose-smoke-routing.ts
 
       - name: Promote the exact smoke-tested Workers
         id: promote

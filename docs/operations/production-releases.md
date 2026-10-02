@@ -197,6 +197,19 @@ are never retried by this rule. Proof-admitted identity failures carry only thre
 identity values and foreign text never enter the diagnostic. This tolerates a transient pre-admission
 routing race without proving that such a race caused every historical failure.
 
+For the recurring identity failure, the protected release runs `diagnose-smoke-routing.ts` after
+staging and again after a failed pairing smoke, before cleanup. Six rounds compare candidate and
+intermediate GET/POST requests concurrently, using the same readiness URL and version overrides.
+GET observes identity only. POST supplies the reserved all-zero Git revision and is rejected before
+admission, binding checks or publication—even in local zero-revision configuration. Older Production
+Core code also rejects it because its configured revision is nonzero. The runner caps each request
+at eight seconds, the run at 65 seconds and streamed GET responses at 4 KiB; redirects and automatic
+HTTP tracing are disabled. Output contains only method, pairing, round, status, validated public/Core
+version IDs and identity source. New Core rejection headers carry a validated version ID; older Core
+can be identified by true equality against the captured stable version, marked `equality`, never
+assumed from a fallback. Missing/malformed identity remains `unavailable`. Observations are not smoke
+attestations and cannot authorize promotion; ordinary readiness and synthetic gates still run.
+
 Never deploy a mutable tag, a later checkout, or provider-controlled source. Production has no
 persistent staging sibling. The stack rejects missing, malformed, and all-zero Production release
 metadata before creating resources.

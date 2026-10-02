@@ -91,6 +91,7 @@ describe("production smoke ingress", () => {
           expect(response.status).toBe(404);
           expect(response.headers.get("cache-control")).toBe("no-store");
           expect(response.headers.get("x-fidy-smoke-failure")).toBeNull();
+          expect(response.headers.get("x-fidy-smoke-core-version")).toBeNull();
         }
         expect(coreCalls).toBe(0);
         const authorized = yield* Effect.tryPromise(() =>
@@ -124,12 +125,12 @@ describe("production smoke ingress", () => {
         expect(failed.status).toBe(503);
         expect(failed.headers.get("x-fidy-smoke-failure")).toBe("public_forwarding");
         expect(yield* Effect.tryPromise(() => failed.text())).not.toContain("secret-provider-body");
-        for (const [stage, equality, expectedEquality] of [
-          ["identity", "011", "011"],
-          ["identity", "secret-provider-body", null],
-          ["schema", "011", null],
-          ["secret-provider-body", "011", null],
-          ["", "011", null],
+        for (const [stage, equality, expectedEquality, observedVersion, expectedVersion] of [
+          ["identity", "011", "011", version, version],
+          ["identity", "secret-provider-body", null, "secret-provider-body", null],
+          ["schema", "011", null, version, null],
+          ["secret-provider-body", "011", null, version, null],
+          ["", "011", null, version, null],
         ]) {
           const sanitized = yield* Effect.tryPromise(() =>
             publicWorker.fetch(
@@ -147,6 +148,7 @@ describe("production smoke ingress", () => {
                         headers: {
                           "x-fidy-smoke-failure": stage ?? "",
                           "x-fidy-smoke-identity": equality ?? "",
+                          "x-fidy-smoke-core-version": observedVersion ?? "",
                         },
                       })
                     ),
@@ -159,6 +161,7 @@ describe("production smoke ingress", () => {
             stage === "schema" || stage === "identity" ? stage : "core_response"
           );
           expect(sanitized.headers.get("x-fidy-smoke-identity")).toBe(expectedEquality);
+          expect(sanitized.headers.get("x-fidy-smoke-core-version")).toBe(expectedVersion);
           expect(yield* Effect.tryPromise(() => sanitized.text())).not.toContain(
             "secret-provider-body"
           );

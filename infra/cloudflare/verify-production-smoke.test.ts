@@ -379,6 +379,123 @@ describe("intermediate production smoke", () => {
         })
       )
   );
+  it("replays the same intermediate probe after a pre-admission Core identity rejection", () =>
+    Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const bodies: string[] = [];
+          let rejected = false;
+          const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+            const request = new Request(input, init);
+            const path = new URL(request.url).pathname;
+            if (path !== "/internal/release-smoke") return Promise.resolve(edgeResponse(path));
+            const oldPublic = intermediateRequest(request);
+            const reject = oldPublic && !rejected;
+            if (reject) rejected = true;
+            return recordingResponse({
+              request,
+              bodies,
+              response: reject
+                ? new Response(null, {
+                    status: 503,
+                    headers: {
+                      ...securityHeaders,
+                      "x-fidy-smoke-worker-version": publicStable,
+                      "x-fidy-smoke-failure": "identity",
+                      "x-fidy-smoke-identity": "001",
+                    },
+                  })
+                : pairingResponse({ oldPublic, coreRevision: revision, readiness: false }),
+            });
+          });
+          try {
+            const services = yield* Layer.build(FetchHttpClient.layer);
+            const exit = yield* Effect.exit(
+              verifyProductionSmoke(config).pipe(
+                Effect.provideService(
+                  HttpClient.HttpClient,
+                  Context.get(services, HttpClient.HttpClient)
+                ),
+                Effect.provideService(FetchHttpClient.Fetch, mockedFetch)
+              )
+            );
+            expect(Exit.isSuccess(exit)).toBe(true);
+            const intermediateBodies = bodies.filter((body) => body.includes(publicStable));
+            expect(intermediateBodies).toHaveLength(2);
+            expect(intermediateBodies[1]).toBe(intermediateBodies[0]);
+          } finally {
+            mockedFetch.mockRestore();
+          }
+        })
+      )
+    ));
+
+  it.each(["001", "secret-provider-body"])(
+    "bounds persistent pre-admission identity retries and reports only equality bits (%s)",
+    (equality) =>
+      Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const bodies: string[] = [];
+            const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+              const request = new Request(input, init);
+              const path = new URL(request.url).pathname;
+              if (path !== "/internal/release-smoke") return Promise.resolve(edgeResponse(path));
+              const oldPublic = intermediateRequest(request);
+              return recordingResponse({
+                request,
+                bodies,
+                response: oldPublic
+                  ? new Response(null, {
+                      status: 503,
+                      headers: {
+                        ...securityHeaders,
+                        "x-fidy-smoke-worker-version": publicStable,
+                        "x-fidy-smoke-failure": "identity",
+                        "x-fidy-smoke-identity": equality,
+                      },
+                    })
+                  : pairingResponse({ oldPublic, coreRevision: revision, readiness: false }),
+              });
+            });
+            try {
+              const services = yield* Layer.build(FetchHttpClient.layer);
+              const exit = yield* Effect.exit(
+                verifyProductionSmoke(config).pipe(
+                  Effect.provideService(
+                    HttpClient.HttpClient,
+                    Context.get(services, HttpClient.HttpClient)
+                  ),
+                  Effect.provideService(FetchHttpClient.Fetch, mockedFetch)
+                )
+              );
+              expect(Exit.isFailure(exit)).toBe(true);
+              const intermediateBodies = bodies.filter((body) => body.includes(publicStable));
+              expect(intermediateBodies).toHaveLength(7);
+              expect(new Set(intermediateBodies).size).toBe(1);
+              if (Exit.isFailure(exit)) {
+                const error = Cause.findErrorOption(exit.cause);
+                expect(
+                  Option.isSome(error) && "reason" in error.value && error.value.reason
+                ).toContain("intermediate pairing:");
+                const reason =
+                  Option.isSome(error) && "reason" in error.value ? error.value.reason : "";
+                expect(reason).not.toContain("secret-provider-body");
+                if (equality === "001") {
+                  expect(reason).toContain(
+                    "coreVersion=false, coreRevision=false, coreDigest=true"
+                  );
+                }
+              }
+            } finally {
+              mockedFetch.mockRestore();
+            }
+          })
+        )
+      ),
+    15_000
+  );
+
   it.each([403, 503])("refuses HTTP %i without retrying synthetic work", (status) =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -622,6 +739,42 @@ describe("intermediate production smoke", () => {
 afterAll(() => vi.restoreAllMocks());
 
 describe("post-promotion production smoke", () => {
+  it("does not retry a Core identity rejection on normal traffic", () =>
+    Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+            Promise.resolve(
+              new Response(null, {
+                status: 503,
+                headers: {
+                  ...securityHeaders,
+                  "x-fidy-smoke-worker-version": publicCandidate,
+                  "x-fidy-smoke-failure": "identity",
+                  "x-fidy-smoke-identity": "001",
+                },
+              })
+            )
+          );
+          try {
+            const services = yield* Layer.build(FetchHttpClient.layer);
+            const exit = yield* Effect.exit(
+              verifyPromotedSmoke(config).pipe(
+                Effect.provideService(
+                  HttpClient.HttpClient,
+                  Context.get(services, HttpClient.HttpClient)
+                ),
+                Effect.provideService(FetchHttpClient.Fetch, mockedFetch)
+              )
+            );
+            expect(Exit.isFailure(exit)).toBe(true);
+            expect(mockedFetch).toHaveBeenCalledTimes(1);
+          } finally {
+            mockedFetch.mockRestore();
+          }
+        })
+      )
+    ));
   it("refuses a healthy version override when normal traffic still reaches stable code", () =>
     Effect.runPromise(
       Effect.gen(function* () {

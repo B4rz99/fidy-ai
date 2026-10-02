@@ -5,6 +5,9 @@ export const smokePath = "/internal/release-smoke";
 export const smokeVersionHeader = "cloudflare-workers-version-overrides";
 export const smokeProofHeader = "x-fidy-smoke-proof";
 export const smokeFailureHeader = "x-fidy-smoke-failure";
+export const smokeIdentityHeader = "x-fidy-smoke-identity";
+/** Equality bits for Core version, revision, and digest; no observed values cross this boundary. */
+export const SmokeIdentityEquality = Schema.String.check(Schema.isPattern(/^[01]{3}$/u));
 /** Only closed stages cross the proof-admitted smoke boundary, never foreign error text. */
 export const SmokeFailureStage = Schema.Literals([
   "identity",

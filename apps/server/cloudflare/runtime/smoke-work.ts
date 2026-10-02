@@ -8,6 +8,7 @@ import {
   SmokeRequest,
   type SmokeRequest as SmokeRequestType,
   smokeFailureHeader,
+  smokeIdentityHeader,
   smokeManifest,
   smokeProofAccepted,
 } from "./smoke";
@@ -191,7 +192,20 @@ const startProbe = Effect.fn(function* (request: Request, environment: SmokeEnvi
   );
   if (Option.isNone(decoded)) return refused();
   const probe = decoded.value;
-  if (!matchesCore(probe, environment)) return fail("identity");
+  if (!matchesCore(probe, environment)) {
+    const response = fail("identity");
+    response.headers.set(
+      smokeIdentityHeader,
+      [
+        probe.expectedCoreVersionId === environment.CF_VERSION_METADATA.id,
+        probe.expectedGitRevision === environment.RELEASE_GIT_SHA,
+        probe.expectedContractDigest === environment.CONTRACT_DIGEST,
+      ]
+        .map((equal) => (equal ? "1" : "0"))
+        .join("")
+    );
+    return response;
+  }
   const now = yield* Clock.currentTimeMillis;
   // One serialized statement caps concurrent distinct probes; replays are idempotent.
   yield* platform(

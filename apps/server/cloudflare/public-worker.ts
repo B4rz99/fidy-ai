@@ -18,8 +18,10 @@ import {
 import { browserOrigins } from "./runtime/topology";
 import {
   SmokeFailureStage,
+  SmokeIdentityEquality,
   SmokeResponse,
   smokeFailureHeader,
+  smokeIdentityHeader,
   smokeManifest,
   smokePath,
   smokeProofAccepted,
@@ -478,6 +480,28 @@ const gateOwnedRequest = (
   );
 };
 
+const coreSmokeFailure = (
+  request: Request,
+  environment: PublicEnvironment,
+  response: Response
+): Response => {
+  const stage = Schema.decodeUnknownOption(SmokeFailureStage)(
+    response.headers.get(smokeFailureHeader)
+  );
+  const unavailableResponse = smokeUnavailable(
+    request,
+    environment,
+    Option.getOrElse(stage, () => "core_response")
+  );
+  const equality = Schema.decodeUnknownOption(SmokeIdentityEquality)(
+    response.headers.get(smokeIdentityHeader)
+  );
+  if (Option.contains(stage, "identity") && Option.isSome(equality)) {
+    unavailableResponse.headers.set(smokeIdentityHeader, equality.value);
+  }
+  return unavailableResponse;
+};
+
 const routeOwnedRequest = (
   request: Request,
   environment: PublicEnvironment,
@@ -495,14 +519,7 @@ const routeOwnedRequest = (
     });
     if (new URL(request.url).pathname !== smokePath) return response;
     if (response.status === serviceUnavailableStatus) {
-      const stage = Schema.decodeUnknownOption(SmokeFailureStage)(
-        response.headers.get(smokeFailureHeader)
-      );
-      return smokeUnavailable(
-        request,
-        environment,
-        Option.getOrElse(stage, () => "core_response")
-      );
+      return coreSmokeFailure(request, environment, response);
     }
     if (!response.ok) return response;
     const version = environment.CF_VERSION_METADATA?.id;

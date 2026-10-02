@@ -22,8 +22,10 @@ import {
 import {
   SmokeFailureStage,
   SmokeIdentity,
+  SmokeIdentityEquality,
   SmokeResponse,
   smokeFailureHeader,
+  smokeIdentityHeader,
   smokePath,
   verifySmokeIdentity,
 } from "../../apps/server/cloudflare/runtime/smoke";
@@ -54,6 +56,7 @@ const apiOrigin = "https://api.fidyapp.com";
 const maxAttempts = 20;
 const pollDelayMs = 1500;
 const authorityRefusedStatus = 403;
+const unavailableStatus = 503;
 const successStart = 200;
 const successEnd = 300;
 const probeEntropyBytes = 16;
@@ -91,7 +94,17 @@ const candidateResponseDiagnostic = (
   if (observedVersion === undefined) versionState = "missing";
   else if (observedVersion === expectedPublic.workerVersionId) versionState = "expected";
   const stage = Schema.decodeUnknownOption(SmokeFailureStage)(response.headers[smokeFailureHeader]);
-  const detail = Option.match(stage, { onNone: () => "", onSome: (value) => `, stage=${value}` });
+  const equality = Schema.decodeUnknownOption(SmokeIdentityEquality)(
+    response.headers[smokeIdentityHeader]
+  );
+  const identityDetail =
+    Option.contains(stage, "identity") && Option.isSome(equality)
+      ? `, coreVersion=${equality.value[0] === "1"}, coreRevision=${equality.value[1] === "1"}, coreDigest=${equality.value[2] === "1"}`
+      : "";
+  const detail = Option.match(stage, {
+    onNone: () => "",
+    onSome: (value) => `, stage=${value}${identityDetail}`,
+  });
   return `Candidate smoke response rejected (status=${response.status}, version=${versionState}, noStore=${response.headers["cache-control"] === "no-store"}${detail})`;
 };
 
@@ -173,14 +186,22 @@ const awaitSyntheticWork = Effect.fn(function* (
     expectedGitRevision: config.RELEASE_GIT_SHA,
     expectedContractDigest: config.CONTRACT_DIGEST,
   });
-  // Cloudflare may briefly ignore an override after staging. Replay this single,
-  // idempotent probe only for a valid public-version fallback, never transport or authority errors.
+  // Overrides can fall back after readiness too. Core's identity rejection precedes all
+  // admission/effects; replay the same probe within the existing bound, never other failures.
   let status = yield* Effect.gen(function* () {
-    return yield* check(
-      yield* call(smokePath, headers, Option.some(request)),
-      config,
-      expectedPublic
-    );
+    const response = yield* call(smokePath, headers, Option.some(request));
+    if (
+      "cloudflare-workers-version-overrides" in headers &&
+      response.status === unavailableStatus &&
+      response.headers[smokeFailureHeader] === "identity" &&
+      response.headers["cache-control"] === "no-store" &&
+      response.headers["x-fidy-smoke-worker-version"] === expectedPublic.workerVersionId
+    ) {
+      return yield* new CandidateRoutingPending({
+        reason: candidateResponseDiagnostic(response, expectedPublic),
+      });
+    }
+    return yield* check(response, config, expectedPublic);
   }).pipe(
     Effect.retry({
       times: 6,

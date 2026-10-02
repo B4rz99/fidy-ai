@@ -186,6 +186,17 @@ that a recent deployment can briefly fall back to normal traffic even when an ov
 This addresses the observed wrong-public-version attempt; it does not establish that every
 previous HTTP 503 had the same cause.
 
+Readiness does not guarantee the next request uses the override. During pinned candidate or
+intermediate synthetic POSTs, the runner also replays a Core `identity` rejection only when the
+public version is the expected one and the response is `no-store`. Core rejects this request before
+D1 admission, binding checks, or publication. Replays keep the exact probe body and share the
+existing seven-attempt, 1.5-second-spacing bound with public-version fallback retries. A persistent
+mismatch still fails; normal-traffic probes, transport/authority errors, and failures after admission
+are never retried by this rule. Proof-admitted identity failures carry only three equality bits
+(Core version/revision/digest), decoded by ingress and printed as booleans by the runner. Observed
+identity values and foreign text never enter the diagnostic. This tolerates a transient pre-admission
+routing race without proving that such a race caused every historical failure.
+
 Never deploy a mutable tag, a later checkout, or provider-controlled source. Production has no
 persistent staging sibling. The stack rejects missing, malformed, and all-zero Production release
 metadata before creating resources.

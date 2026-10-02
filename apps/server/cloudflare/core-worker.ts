@@ -1,16 +1,21 @@
 import { type MemoryOperationId, memoryOperationIds } from "@fidy/server/memory-api";
+import { UserId } from "@fidy/server/agent-runtime";
+import { makeAuditRetention } from "@fidy/server/audit-runtime";
+import { EmailAddress } from "@fidy/server/client";
+import { HostedTurnProgressRequest } from "../src/shell/agent/hosted-turn-api";
+import {
+  HostedDeliveryAdmission,
+  HostedProgressAdmission,
+  HostedTurnAdmission,
+  hostedDeliveryReceipt,
+  hostedTurnInput,
+} from "./agent/hosted-turn";
+import { sweepHostedTurns } from "./agent/hosted-turn-sweep";
 import {
   type BrowserPairingEmailEnvironment,
   type EmailReplacementEnvironment,
   type OnboardingEmailEnvironment,
 } from "./email-authentication/contract";
-import {
-  completeBrowserPairingEmail,
-  completeEmailReplacement,
-  requestEmailReplacement,
-  startBrowserPairingEmail,
-  verifyOnboarding,
-} from "./email-authentication/operations";
 import {
   dispatchBrowserPairingEmail,
   dispatchEmailReplacement,
@@ -138,10 +143,6 @@ import {
   reconcileStatementExtraction,
   statementRetention,
 } from "./ingestion/runtime";
-import { listPendingInsights } from "./insights/insight-store";
-import { recallMemories, rejectMemoryMutation } from "./memory/memory";
-import { handleSupportRecovery, rotateBackupRecoveryCode } from "./recovery/operations";
-import { canonicalOperation, canonicalRoute } from "./routing/canonical-routes";
 import { runOperationalAlerts } from "./runtime/operational-alert-delivery";
 import { type AlertSignal, decideOperationalAlerts } from "./runtime/operational-alerts";
 import {
@@ -163,57 +164,6 @@ import {
 import { recordOperationalHealth } from "./runtime/operational-health-view";
 import { type CapabilityProbe, inspectOperationalCapabilities } from "./runtime/operational-probes";
 import { sendOperatorEmail } from "./runtime/operator-email";
-import { contractDigestPattern, gitRevisionPattern } from "./runtime/release-identity";
-import { smokeFailureHeader, smokePath, smokeProofAccepted } from "./runtime/smoke";
-import {
-  ReleaseSmokeWorkflowV1,
-  type SmokeEnvironment,
-  handleSmoke,
-  receiveSmoke,
-} from "./runtime/smoke-work";
-import {
-  type WorkerTelemetryEnvironment,
-  cloudflareWorkerTelemetry,
-  observeWorkerExecution,
-  observeWorkerPromise,
-  observeWorkerRequest,
-} from "./runtime/telemetry";
-import { type BillingCollectionEnvironment } from "./subscription/contract";
-import { executeProtectedSubscriptionQuery, handleCardEnrollment } from "./subscription/operations";
-import {
-  dispatchBillingCollection,
-  isBillingCollectionWork,
-  receiveBillingCollection,
-  receiveWompiBillingEvent,
-  reconcileBillingCandidates,
-  sweepExpiredCardPreparationAdmission,
-} from "./subscription/runtime";
-import {
-  authorizeCanonicalPAT,
-  handlePATRequest,
-  listPATs,
-  patRoute,
-  sweepExpiredPATPairings,
-} from "./tokens/operations";
-import {
-  browseTransactions,
-  correctionInput,
-  repairDashboardProjections,
-  transactionInput,
-  transactionPairInput,
-  transactionSession,
-} from "./transactions/operations";
-import {
-  BatchInput,
-  type CanonicalWork,
-  CanonicalWorkAdmission,
-  type PATAuthority,
-  type WebSessionAuthority,
-} from "./transactions/runtime";
-import {
-  currentWebSessionUser as currentUser,
-  logoutWebSession as logoutBrowser,
-} from "./web-session/operations";
 import {
   type WhatsAppStatusAdmission,
   type WhatsAppTurnAdmission,

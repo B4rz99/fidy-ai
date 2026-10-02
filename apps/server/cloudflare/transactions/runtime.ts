@@ -56,7 +56,6 @@ import {
   cloudflareHostedInferenceLive,
   makeUserCloudflareHostedInference,
 } from "../ai/workers-ai";
-import { reconcileBudgetLatches } from "../budgets/budget-latches";
 import {
   type TransactionCaller,
   transactionNow,
@@ -92,7 +91,6 @@ import {
   workerRelease,
 } from "../runtime/telemetry";
 
-import { coordinatorProbeName } from "../runtime/operational-probes";
 import { evaluateBudgetAlerts } from "../budgets/operations";
 import {
   WhatsAppStatusAdmission as StatusAdmission,

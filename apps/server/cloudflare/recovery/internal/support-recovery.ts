@@ -1,10 +1,18 @@
-import { emailPairingAllowsUser } from "../email-authentication/operations";
-import { BackupRecoveryCode } from "@fidy/server/client";
+import {
+  approvedRecoveryBrowserPairingQuery,
+  pendingRecoveryBrowserPairingQuery,
+  prepareRecoveryBrowserPairingApproval,
+} from "../../browser-login/operations";
+import { prepareOwnedStatement } from "../../database/operations";
+import type { OwnedStatement } from "../../../src/shell/_shared/owned-statement";
+import { emailPairingAllowsUser } from "@fidy/server/email-authentication-operations";
+import { BackupRecoveryCode } from "../../../src/core/recovery/contract";
+import { recoveryCodeDigest } from "./material";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { JWTVerifyGetKey } from "jose";
 import { Clock, Data, Effect, Option, Schema } from "effect";
-import { newId } from "../secret-material/operations";
-import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
+import { newId } from "../../secret-material/operations";
+import { RequestBodyPolicy, readBoundedRequestBody } from "../../http/request-body";
 
 const Payload = Schema.Struct({
   pairingCode: Schema.String.check(Schema.isPattern(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/u)),
@@ -35,10 +43,6 @@ const response = (status: number, body: object): Response =>
   Response.json(body, { status, headers: { "cache-control": "no-store" } });
 const notApproved = (): Response => response(httpBadRequest, { status: "not_approved" });
 const unavailable = (): Response => response(httpServiceUnavailable, { status: "unavailable" });
-const digest = (value: string): Promise<Uint8Array> =>
-  crypto.subtle
-    .digest("SHA-256", new TextEncoder().encode(value))
-    .then((bytes) => new Uint8Array(bytes));
 
 const eligibleAssertion = (
   assertion: Option.Option<string>,
@@ -58,7 +62,7 @@ const currentClaims = (claims: Option.Option<typeof Claims.Type>, now: number): 
   claims.value.exp - now <= maximumAssertionLifetimeSeconds;
 
 /** Origin-side Access JWT validation, including signed issuer, audience and short lived identity. */
-export const verifySupportAccess = ({
+const verifySupportAccess = ({
   assertion,
   issuer,
   audience,
@@ -134,51 +138,61 @@ const admitOperator = (
       return attempts.value.attempts >= maximumOperatorAttempts ? "limited" : "allowed";
     });
 
-const matchingRecoveryCandidate = (
-  db: D1Database,
-  input: { codeDigest: Uint8Array; publicCode: string; now: number }
-): Promise<boolean> => {
-  const { codeDigest, publicCode, now } = input;
-  const allowed = emailPairingAllowsUser({
-    subject: { sql: "SELECT p.id AS pairingId, b.user_id AS userId", params: [] },
+const recoveryCandidateQuery = ({
+  codeDigest,
+  publicCode,
+  now,
+}: Readonly<{ codeDigest: Uint8Array; publicCode: string; now: number }>): OwnedStatement => {
+  const pending = pendingRecoveryBrowserPairingQuery({ publicCode, current: now });
+  return emailPairingAllowsUser({
+    subject: {
+      sql: `SELECT p.pairingId, b.user_id AS userId FROM (${pending.sql}) AS p
+        JOIN backup_recovery_credentials AS b ON b.code_digest = ? AND b.consumed_at_ms IS NULL
+        WHERE NOT EXISTS (SELECT 1 FROM support_recovery_cases WHERE pairing_id = p.pairingId)`,
+      params: [...pending.params, codeDigest],
+    },
   });
-  return db
-    .prepare(`SELECT p.id FROM browser_login_pairings AS p
-    JOIN backup_recovery_credentials AS b ON b.code_digest = ? AND b.consumed_at_ms IS NULL
-    WHERE p.public_code = ? AND p.state = 'pending_approval' AND p.expires_at_ms > ?
-      AND EXISTS (${allowed.sql})
-      AND NOT EXISTS (SELECT 1 FROM support_recovery_cases WHERE pairing_id = p.id)`)
-    .bind(codeDigest, publicCode, now, ...allowed.params)
-    .first()
-    .then((candidate) => candidate !== null);
 };
 
-const supportPairingAllowed = emailPairingAllowsUser({
-  subject: {
-    sql: "SELECT browser_login_pairings.id AS pairingId, b.user_id AS userId",
-    params: [],
-  },
+const matchingRecoveryCandidate = (
+  db: D1Database,
+  input: Readonly<{ codeDigest: Uint8Array; publicCode: string; now: number }>
+): Promise<boolean> =>
+  prepareOwnedStatement({ db, statement: recoveryCandidateQuery(input) })
+    .first()
+    .then((candidate) => candidate !== null);
+
+const recoveryCredentialConsume = ({
+  ready,
+  codeDigest,
+  now,
+}: Readonly<{ ready: OwnedStatement; codeDigest: Uint8Array; now: number }>): OwnedStatement => ({
+  sql: `UPDATE backup_recovery_credentials SET code_digest = ?, consumed_at_ms = ?
+    WHERE code_digest = ? AND consumed_at_ms IS NULL
+      AND EXISTS (SELECT 1 FROM (${ready.sql}) AS p
+        WHERE p.userId = backup_recovery_credentials.user_id) AND changes() = 1`,
+  params: [crypto.getRandomValues(new Uint8Array(digestBytes)), now, codeDigest, ...ready.params],
 });
-const supportPairingUpdate = `UPDATE browser_login_pairings SET state = 'ready', user_id = (
-  SELECT b.user_id FROM backup_recovery_credentials AS b
-  WHERE b.code_digest = ? AND b.consumed_at_ms IS NULL)
-  WHERE public_code = ? AND state = 'pending_approval' AND expires_at_ms > ?
-    AND NOT EXISTS (SELECT 1 FROM support_recovery_cases WHERE pairing_id = browser_login_pairings.id)
-    AND EXISTS (SELECT 1 FROM backup_recovery_credentials AS b
-      WHERE b.code_digest = ? AND b.consumed_at_ms IS NULL
-        AND EXISTS (${supportPairingAllowed.sql}))`;
-const recoveryCredentialConsume = `UPDATE backup_recovery_credentials SET code_digest = ?,
-  consumed_at_ms = ? WHERE code_digest = ? AND consumed_at_ms IS NULL
-  AND EXISTS (SELECT 1 FROM browser_login_pairings AS p
-    WHERE p.public_code = ? AND p.user_id = backup_recovery_credentials.user_id
-      AND p.state = 'ready' AND p.expires_at_ms > ?) AND changes() = 1`;
-const supportCaseInsert = `INSERT INTO support_recovery_cases (id, user_id, pairing_id,
-  operator_issuer, operator_subject, credential_revision, opened_at_ms, expires_at_ms,
-  state, closed_at_ms) SELECT ?, p.user_id, p.id, ?, ?, b.revision, ?, p.expires_at_ms,
-  'approved', ? FROM browser_login_pairings AS p
-  JOIN backup_recovery_credentials AS b ON b.user_id = p.user_id
-  WHERE p.public_code = ? AND p.state = 'ready' AND p.expires_at_ms > ?
-    AND b.consumed_at_ms = ? AND changes() = 1`;
+
+const supportCaseInsert = ({
+  ready,
+  caseId,
+  operator,
+  now,
+}: Readonly<{
+  ready: OwnedStatement;
+  caseId: string;
+  operator: { issuer: string; subject: string };
+  now: number;
+}>): OwnedStatement => ({
+  sql: `INSERT INTO support_recovery_cases (id, user_id, pairing_id,
+    operator_issuer, operator_subject, credential_revision, opened_at_ms, expires_at_ms,
+    state, closed_at_ms) SELECT ?, p.userId, p.pairingId, ?, ?, b.revision, ?, p.expiresAt,
+    'approved', ? FROM (${ready.sql}) AS p
+    JOIN backup_recovery_credentials AS b ON b.user_id = p.userId
+    WHERE b.consumed_at_ms = ? AND changes() = 1`,
+  params: [caseId, operator.issuer, operator.subject, now, now, ...ready.params, now],
+});
 const supportCaseOpened = `INSERT INTO support_recovery_events
   (id, case_id, user_id, operator_issuer, operator_subject, action, at_ms)
   SELECT ?, id, user_id, operator_issuer, operator_subject, 'opened', ?
@@ -200,23 +214,19 @@ const approveCase = (db: D1Database, input: CaseDecision): Promise<boolean> => {
   const openedId = newId();
   const approvedId = newId();
   const { operator, codeDigest, publicCode, now } = input;
+  const ready = approvedRecoveryBrowserPairingQuery({ publicCode, current: now });
   return db
     .batch([
-      db
-        .prepare(supportPairingUpdate)
-        .bind(codeDigest, publicCode, now, codeDigest, ...supportPairingAllowed.params),
-      db
-        .prepare(recoveryCredentialConsume)
-        .bind(
-          crypto.getRandomValues(new Uint8Array(digestBytes)),
-          now,
-          codeDigest,
-          publicCode,
-          now
-        ),
-      db
-        .prepare(supportCaseInsert)
-        .bind(caseId, operator.issuer, operator.subject, now, now, publicCode, now, now),
+      prepareRecoveryBrowserPairingApproval({
+        db,
+        subject: recoveryCandidateQuery(input),
+        current: now,
+      }),
+      prepareOwnedStatement({
+        db,
+        statement: recoveryCredentialConsume({ ready, codeDigest, now }),
+      }),
+      prepareOwnedStatement({ db, statement: supportCaseInsert({ ready, caseId, operator, now }) }),
       db.prepare(supportCaseOpened).bind(openedId, now, caseId),
       // If any conditional transition did not create its case, the final FK aborts the D1 batch.
       db
@@ -292,7 +302,7 @@ export const handleSupportRecovery = ({
     if (admission !== "allowed") return admissionResponse(admission);
     const payload = yield* waitFor(() => readPayload(request));
     if (Option.isNone(payload)) return notApproved();
-    const codeDigest = yield* waitFor(() => digest(payload.value.backupRecoveryCode));
+    const codeDigest = yield* waitFor(() => recoveryCodeDigest(payload.value.backupRecoveryCode));
     const decision = {
       operator: operator.value,
       codeDigest,

@@ -1,3 +1,4 @@
+import { issueInitialBackupRecoveryCode } from "../../recovery/operations";
 import { UserId } from "@fidy/server/identity-reference";
 import { prepareVerifiedIdentity } from "../../identity/operations";
 import { recordOnboardingConsent } from "../../consent/operations";
@@ -33,7 +34,6 @@ const requestBodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
   deadlineMilliseconds: 2_000,
 });
 const digestLength = 32;
-const recoverySymbols = 25;
 const publicCodeLength = 9;
 const proofOffset = 10;
 const invalid = (): Response =>
@@ -51,12 +51,6 @@ const unavailable = (): Response =>
     { status: "unavailable" },
     { status: 503, headers: { "cache-control": "no-store" } }
   );
-const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-const randomCode = (): string => {
-  const bytes = crypto.getRandomValues(new Uint8Array(recoverySymbols));
-  const symbols = Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
-  return symbols.match(/.{1,5}/gu)?.join("-") ?? "";
-};
 const digest = (text: string): Promise<Uint8Array> =>
   crypto.subtle
     .digest("SHA-256", new TextEncoder().encode(text))
@@ -93,40 +87,40 @@ const readCode = (request: Request): Promise<Option.Option<string>> => {
 
 const createUser = (db: D1Database, row: Enrollment, now: number): Promise<Response> => {
   const userId = UserId.make(newId());
-  const recoveryCode = randomCode();
-  return digest(recoveryCode).then((recoveryDigest) => {
-    const identity = prepareVerifiedIdentity({
-      db,
-      userId,
-      exchangeId: row.exchange_id,
-      createdAtMs: now,
-    });
-    return db
-      .batch([
-        identity.createUser,
-        identity.associateCaller,
-        db
-          .prepare(`INSERT INTO verified_email_credentials (user_id, email_address, verified_at_ms)
-      VALUES (?, ?, ?)`)
-          .bind(userId, row.email_address, now),
-        recordOnboardingConsent({ db, userId, exchangeId: row.exchange_id }),
-        identity.startTrial,
-        db
-          .prepare(`INSERT INTO backup_recovery_credentials (user_id, code_digest, created_at_ms)
-      VALUES (?, ?, ?)`)
-          .bind(userId, recoveryDigest, now),
-        db
-          .prepare(`INSERT INTO completed_email_enrollments (enrollment_id, user_id, completed_at_ms)
-      VALUES (?, ?, ?)`)
-          .bind(row.id, userId, now),
-      ])
-      .then(() =>
-        Response.json(
-          { status: "created", backupRecoveryCode: recoveryCode },
-          { headers: { "cache-control": "no-store" } }
-        )
-      );
+  const identity = prepareVerifiedIdentity({
+    db,
+    userId,
+    exchangeId: row.exchange_id,
+    createdAtMs: now,
   });
+  return issueInitialBackupRecoveryCode({
+    db,
+    userId,
+    createdAtMs: now,
+    commit: (credential) =>
+      db
+        .batch([
+          identity.createUser,
+          identity.associateCaller,
+          db
+            .prepare(`INSERT INTO verified_email_credentials (user_id, email_address, verified_at_ms)
+      VALUES (?, ?, ?)`)
+            .bind(userId, row.email_address, now),
+          recordOnboardingConsent({ db, userId, exchangeId: row.exchange_id }),
+          identity.startTrial,
+          credential,
+          db
+            .prepare(`INSERT INTO completed_email_enrollments (enrollment_id, user_id, completed_at_ms)
+      VALUES (?, ?, ?)`)
+            .bind(row.id, userId, now),
+        ])
+        .then(() => undefined),
+  }).then((recoveryCode) =>
+    Response.json(
+      { status: "created", backupRecoveryCode: recoveryCode },
+      { headers: { "cache-control": "no-store" } }
+    )
+  );
 };
 
 class OnboardingBoundaryFailure extends Data.TaggedError("OnboardingBoundaryFailure")<{

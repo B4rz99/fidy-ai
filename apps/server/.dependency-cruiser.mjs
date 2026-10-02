@@ -88,6 +88,53 @@ export default {
       },
     },
     {
+      name: "foreign-module-imports-cloudflare-recovery-internal",
+      severity: "error",
+      comment:
+        "Recovery code material, support decisions and persistence remain owner-private (#601).",
+      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/recovery/" },
+      to: { path: "^cloudflare/recovery/internal/" },
+    },
+    {
+      name: "cloudflare-imports-portable-login-recovery-internal",
+      severity: "error",
+      comment:
+        "Native Browser Login and Recovery consume published portable declarations and decisions (#601).",
+      from: { path: "^cloudflare/" },
+      to: { path: "^src/(core|shell)/(browser-login|recovery)/internal/" },
+    },
+    {
+      name: "recovery-interface-reexports-internal",
+      severity: "error",
+      comment:
+        "Recovery publication declares bounded behavior without laundering private code or case implementation (#601).",
+      from: { path: "^cloudflare/recovery/(contract|operations|runtime)\\.ts$" },
+      to: { path: "^cloudflare/recovery/internal/", dependencyTypes: ["export"] },
+    },
+    {
+      name: "login-recovery-contract-imports-implementation",
+      severity: "error",
+      comment:
+        "Browser Login and Recovery declarations do not acquire proof or persistence implementation (#601).",
+      from: { path: "^cloudflare/(browser-login|recovery)/contract\\.ts$" },
+      to: { path: "^cloudflare/$1/(internal/|operations\\.ts$|runtime\\.ts$)" },
+    },
+    {
+      name: "login-recovery-internal-imports-outward-interface",
+      severity: "error",
+      comment: "Browser Login and Recovery implementation depends inward on declarations (#601).",
+      from: { path: "^cloudflare/(browser-login|recovery)/internal/" },
+      to: { path: "^cloudflare/$1/(operations|runtime)\\.ts$" },
+    },
+    {
+      name: "login-recovery-operations-imports-runtime",
+      severity: "error",
+      comment:
+        "Browser Login and Recovery operations do not acquire runtime construction authority (#601).",
+      from: { path: "^cloudflare/(browser-login|recovery)/operations\\.ts$" },
+      to: { path: "^cloudflare/$1/runtime\\.ts$" },
+    },
+    {
       name: "foreign-module-imports-cloudflare-tokens-internal",
       severity: "error",
       comment:
@@ -548,7 +595,7 @@ export default {
         pathNot: [
           "^src/shell/_shared/",
           "^src/shell/public-http/contract\\.ts$",
-          "^src/shell/(identity|categories|transactions|subscription|email-authentication|tokens|budgets)/contract\\.ts$",
+          "^src/shell/(identity|categories|transactions|subscription|email-authentication|tokens|budgets|browser-login|recovery)/contract\\.ts$",
           "^src/shell/[^/]+/operations\\.ts$",
         ],
       },
@@ -573,9 +620,12 @@ export default {
       name: "web-auth-api-imports-server-code",
       severity: "error",
       comment:
-        "The browser authentication facade may compose only Email Authentication declarations, never owner implementation.",
+        "The browser authentication facade may compose only Email Authentication and BrowserLogin declarations, never owner implementation.",
       from: { path: "^src/web-auth-api\\.ts$" },
-      to: { path: "^src/shell/", pathNot: "^src/shell/email-authentication/contract\\.ts$" },
+      to: {
+        path: "^src/shell/",
+        pathNot: "^src/shell/(email-authentication|browser-login)/contract\\.ts$",
+      },
     },
     {
       // Keep the facade narrow even while the dependency graph is being assembled: the transitive

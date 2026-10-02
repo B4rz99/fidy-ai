@@ -1,5 +1,4 @@
 import type {
-  EmailPairingSubject,
   EmailPendingWorkObservationInput,
   EmailProofRequest,
   EmailProofStart,
@@ -18,10 +17,7 @@ import {
   readOnboardingEmailStatus as readStatus,
   startOnboardingEmailEnrollment as startEnrollment,
 } from "./internal/ingress-enrollment";
-import {
-  emailPairingAllowsUser as compatibleSubject,
-  verifiedEmailQuery as mailboxQuery,
-} from "./internal/ancillary-projections";
+import { verifiedEmailQuery as mailboxQuery } from "./internal/ancillary-projections";
 import {
   prepareEmailPendingWorkObservation as pendingWork,
   prepareEmailRejectedWorkObservation as rejectedWork,
@@ -71,13 +67,6 @@ export const readOnboardingEmailStatus = (
  */
 export const verifiedEmailQuery = (input: VerifiedEmailQueryInput): OwnedStatement =>
   mailboxQuery(input);
-/**
- * Retain only pairingId/userId subjects compatible with existing mailbox approval at commit.
- * The caller supplies trusted static SQL projecting pairingId and userId with parameterized values,
- * then composes the returned query into its own guarded statement. No proof evidence is released.
- */
-export const emailPairingAllowsUser = (input: EmailPairingSubject): OwnedStatement =>
-  compatibleSubject(input);
 /** Observe at most eight pending work identities and deadlines; no User, mailbox or proof is released. */
 export const prepareEmailPendingWorkObservation = (
   input: EmailPendingWorkObservationInput

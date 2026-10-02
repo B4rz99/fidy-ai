@@ -1,6 +1,7 @@
+import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 import { Data, type Effect, Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
-import { BrowserLoginPrivateVerifier } from "~/core/browser-login/model";
+import { BrowserLoginPrivateVerifier } from "~/core/browser-login/contract";
 import { BrowserLoginPairingId } from "~/core/browser-login/reference";
 import {
   EmailAddress,
@@ -9,7 +10,7 @@ import {
   browserPairingEmailRetryAfterSeconds,
 } from "~/core/email-authentication/contract";
 import type { UserId } from "~/core/identity/reference";
-import { BackupRecoveryCode } from "~/core/recovery/model";
+import { BackupRecoveryCode } from "~/core/recovery/contract";
 import {
   AtomicBatchEligible,
   freshWebSessionOnly,
@@ -285,3 +286,6 @@ export type EmailReplacementMutationService = Readonly<{
   request: (subject: UserId, candidate: EmailAddress) => Effect.Effect<void>;
   complete: (subject: UserId, combinedCode: string) => Effect.Effect<boolean>;
 }>;
+
+/** Trusted static subject query carries exact pairingId/userId for live same-User composition. */
+export type EmailPairingSubject = Readonly<{ subject: OwnedStatement }>;

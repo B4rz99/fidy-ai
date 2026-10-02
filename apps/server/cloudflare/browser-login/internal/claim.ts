@@ -1,11 +1,15 @@
-import { maximumWrongVerifierAttempts } from "../../../src/core/browser-login/rules";
-import type { BrowserPairingClaim, BrowserPairingProof } from "../contract";
+import { maximumWrongVerifierAttempts } from "../../../src/core/browser-login/contract";
+import type { BrowserPairingClaim } from "../contract";
 
 export const prepareClaim = ({
   pairingId,
   verifierDigest,
   current,
-}: BrowserPairingProof): BrowserPairingClaim => ({
+}: Readonly<{
+  pairingId: string;
+  verifierDigest: Uint8Array;
+  current: number;
+}>): BrowserPairingClaim => ({
   current,
   consume: {
     sql: `UPDATE browser_login_pairings SET state = 'consumed' WHERE id = ? AND state = 'ready'

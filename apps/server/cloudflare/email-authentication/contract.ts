@@ -4,7 +4,6 @@ import type {
   WhatsAppProviderMessageId,
 } from "@fidy/server/consent-contract";
 import type { EmailAddress } from "@fidy/server/client";
-import type { OwnedStatement } from "../../src/shell/_shared/owned-statement";
 import type { UserId } from "@fidy/server/identity-reference";
 import type { WorkflowStepConfig } from "cloudflare:workers";
 import { type Option, Schema } from "effect";
@@ -26,7 +25,6 @@ export type OnboardingEmailStatusInput = Readonly<{
   exchangeId: PendingConsentExchangeId;
 }>;
 export type VerifiedEmailQueryInput = Readonly<{ userId: UserId }>;
-export type EmailPairingSubject = Readonly<{ subject: OwnedStatement }>;
 export type EmailWorkOperation = "onboarding" | "browserPairing" | "emailReplacement";
 export type EmailPendingWorkObservationInput = Readonly<{
   db: D1Database;

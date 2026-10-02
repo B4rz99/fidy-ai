@@ -1,3 +1,4 @@
+import { emailPairingAllowsUser } from "@fidy/server/email-authentication-operations";
 import { afterAll, expect, it } from "vitest";
 import { Clock, Effect, Exit, Option, Schema } from "effect";
 import { UserId } from "@fidy/server/identity-reference";
@@ -10,7 +11,6 @@ import { isolatedTestDatabases } from "../d1-test-fixture";
 import { freshSessionQuery } from "@fidy/server/web-session-operations";
 import { protectConsentStatement } from "@fidy/server/consent-operations";
 import {
-  emailPairingAllowsUser,
   findOnboardingEmailReplay,
   prepareEmailPendingWorkObservation,
   prepareEmailRejectedWorkObservation,

@@ -1,3 +1,6 @@
+import type { OwnedStatement } from "~/shell/_shared/owned-statement";
+import type { EmailPairingSubject } from "./contract";
+import { emailPairingAllowsUser as compatibleSubject } from "~/shell/email-authentication/internal/pairing-subject";
 import { Context, Effect, Option } from "effect";
 import { UserId } from "~/core/identity/reference";
 import { WebSessionId } from "~/core/web-session/reference";
@@ -93,3 +96,11 @@ export const permitsFreshBrowserReplacement = (operation: ReplacementOperation):
     decideOperationAccess(access, { _tag: "WebSession", fresh: true })._tag === "Allowed"
   );
 };
+
+/**
+ * Retain only pairingId/userId subjects compatible with existing mailbox approval at commit.
+ * The caller supplies trusted static SQL projecting pairingId and userId with parameterized values,
+ * then composes the returned query into its own guarded statement. No proof evidence is released.
+ */
+export const emailPairingAllowsUser = (input: EmailPairingSubject): OwnedStatement =>
+  compatibleSubject(input);

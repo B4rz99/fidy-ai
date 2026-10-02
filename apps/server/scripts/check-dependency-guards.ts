@@ -154,6 +154,34 @@ const tokensToolPrivate = `tools/${PROBE_PREFIX}tokens-private`;
 
 const PROBES: readonly Probe[] = [
   {
+    name: "native callers use the published data-less AccessTier coordinator",
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}access-tier-public/probe.ts`,
+        source:
+          'import { activeProUserCondition } from "~/shell/access-tier/operations";\nexport const condition = activeProUserCondition;\n',
+      },
+    ],
+  },
+  {
+    name: "AccessTier cannot bypass Identity or Subscription published operations",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-internal: src/shell/access-tier/${PROBE_PREFIX}private/probe.ts → src/shell/identity/internal/user-query.ts`,
+        `error foreign-module-imports-internal: src/shell/access-tier/${PROBE_PREFIX}private/probe.ts → src/shell/subscription/internal/query-sql.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `src/shell/access-tier/${PROBE_PREFIX}private/probe.ts`,
+        source:
+          'import { findUser } from "~/shell/identity/internal/user-query";\nimport { subscriptionStandingQuery } from "~/shell/subscription/internal/query-sql";\nexport const forbidden = [findUser, subscriptionStandingQuery];\n',
+      },
+    ],
+  },
+  {
     name: "Insights callers use owner operations and bounded due identities",
     expect: { kind: "allowed" },
     files: [

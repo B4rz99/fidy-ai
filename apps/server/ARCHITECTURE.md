@@ -526,3 +526,20 @@ in the existing one-User D1 unit. Malformed retained occurrences and unreadable 
 not absent. Read/dismiss races and delivery replay cannot regress or duplicate the authoritative event.
 This ownership publication adds no migration, scheduler, provider send, runtime or telemetry purpose;
 existing canonical spans and metadata-only accountability remain in force.
+
+### AccessTier coordinator composition
+
+AccessTier publishes the closed Free/Pro declaration and pure decision through
+`core/access-tier/contract.ts` and `operations.ts`. The data-less
+`shell/access-tier/operations.ts` coordinator composes only Identity's published original
+TrialPeriod condition and Subscription's published settled paid-period condition. It carries the
+explicit stable User and one decision instant into both owners; neither another User's period nor
+an interval outside its half-open bounds can grant Pro.
+
+Native callers evaluate that condition inside their existing protected D1 unit, alongside their
+live credential, Consent and accounting guards. The condition itself grants no authorization and
+never caches or persists a tier. Subscription's safe standing projection uses the same pure tier
+decision; quota exhaustion and authority refusal retain their existing distinct outcomes. No
+repository, runtime composition, migration or independent tier store is added, and existing data
+remains retained when access expires. This publication introduces no external workflow or telemetry
+purpose; the callers' bounded work and metadata-only accountability remain unchanged.

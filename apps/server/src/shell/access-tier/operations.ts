@@ -1,15 +1,19 @@
-import { UserId } from "@fidy/server/identity-reference";
+import { UserId } from "~/core/identity/reference";
+import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 import { Option, Schema } from "effect";
 import { activePaidSubscriptionCondition } from "~/shell/subscription/operations";
-import { activeTrialPeriodCondition } from "@fidy/server/identity-operations";
+import { activeTrialPeriodCondition } from "~/shell/identity/operations";
 
 /**
  * Decide Pro standing inside the caller's D1 unit from the original TrialPeriod or a settled
- * paid period at the same instant as its protected action. No independent tier fact is stored.
+ * paid period at the same instant as its protected action. The explicit stable User is not
+ * authorization: callers must compose their live credential/Consent guard in that same unit.
+ * Invalid identities and missing or inactive periods are false; storage failure remains the
+ * caller's closed unavailable outcome. No independent tier fact or runtime authority is stored.
  */
 export const activeProUserCondition = (
   input: Readonly<{ userId: string; nowEpochMs: number }>
-): Readonly<{ sql: string; params: ReadonlyArray<string | number | Uint8Array> }> => {
+): OwnedStatement => {
   const subject = Schema.decodeOption(UserId)(input.userId);
   if (Option.isNone(subject)) return { sql: "0", params: [] };
   const trial = activeTrialPeriodCondition({ ...input, userId: subject.value });

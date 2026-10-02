@@ -1,0 +1,49 @@
+infra/cloudflare/smoke.test.ts
+  s_b2d711e54dc456::t_5ee12424a1fbe3 4-9,199,237
+  s_b2d711e54dc456::t_af57b3a6bda402 177-198,200-236,238-255
+  s_b2d711e54dc456::t_b3148b843514a6 256-257
+infra/cloudflare/diagnose-smoke-routing.test.ts
+  s_b2d711e54dc456::t_e41289e3b2ba39 1,63-90,103,108-109,137-143,158-160,162-177,221,230
+  s_b2d711e54dc456::t_abf93ce8d83497 2-3
+infra/cloudflare/diagnose-smoke-routing.ts
+  s_b2d711e54dc456::t_a778a631d5f4e1 16,34,41-45,51-54,138,140-143,145,173-176,226-228,234,241
+  s_b2d711e54dc456::t_64ec46d6b81e1e 22,192-195,205-206,216-220,231-233
+  s_b2d711e54dc456::t_af57b3a6bda402 188-191,196-204,207-215
+  s_b2d711e54dc456::t_7658dc9b07ce85 221
+infra/cloudflare/verify-edge-policy.test.ts
+  s_b2d711e54dc456::t_93deaf51bcbf52 7
+apps/server/cloudflare/runtime/smoke.ts
+  s_b2d711e54dc456::t_e3ef2582b1602e 10-12
+apps/server/cloudflare/public-worker.ts
+  s_b2d711e54dc456::t_af57b3a6bda402 515-518,521-529
+  s_b2d711e54dc456::t_f2c0ad28d76219 519,548,550
+  s_b2d711e54dc456::t_6de7f88541af02 24,520,530-531,585
+  s_b2d711e54dc456::t_e0ee1ad12e1915 32,542-546,584,586
+  s_b2d711e54dc456::t_abfab994108b98 532
+  s_b2d711e54dc456::t_53e06c98872cdd 587
+infra/cloudflare/verify-edge-policy.ts
+  s_b2d711e54dc456::t_118c68eef61f31 5
+.github/workflows/production.yml
+  s_b2d711e54dc456::t_afc765984439a0 157-158
+  s_b2d711e54dc456::t_80b9f6d0ebfe01 154-155
+docs/operations/production-releases.md
+  s_b2d711e54dc456::t_06fd09d1955435 197,202-209,213-215,221-227
+  s_b2d711e54dc456::t_fcbe00b9b07d53 201
+  s_b2d711e54dc456::t_1c43f309456267 228
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "9ecd74cc5055bec7a031531b3092df1e632e120d",
+  "prompts": {},
+  "sessions": {
+    "s_b2d711e54dc456": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0fd6b-d5b4-71a3-9a6f-12874fd048cb",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

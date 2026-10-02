@@ -1,0 +1,273 @@
+apps/server/cloudflare/transactions/internal/budget-query.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-86
+apps/server/src/shell/categories/internal/list-categories.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-41
+apps/server/cloudflare/categories/internal/projection.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-65
+apps/server/cloudflare/ingestion/statement-ingestion.ts
+  s_a260c2c348024c::t_3434ad305c17a4 17-25,48
+apps/server/cloudflare/memory/memory.ts
+  s_a260c2c348024c::t_3434ad305c17a4 34
+apps/server/cloudflare/categories/operations.test.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-228
+apps/server/cloudflare/ingestion/forwarded-email.test.ts
+  s_a260c2c348024c::t_3434ad305c17a4 12
+apps/server/src/shell/categories/contract.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-138
+apps/server/cloudflare/transactions/internal/ingestion-capture.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-150
+apps/server/cloudflare/budgets/budget-progress.ts
+  s_a260c2c348024c::t_3434ad305c17a4 2
+apps/server/src/core/transactions/contract.test.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-165
+apps/server/cloudflare/budgets/budget-audit.ts
+  s_a260c2c348024c::t_3434ad305c17a4 12
+apps/server/src/shell/budgets/errors.ts
+  s_a260c2c348024c::t_3434ad305c17a4 7,14
+apps/server/cloudflare/insights/insight-store.test.ts
+  s_a260c2c348024c::t_3434ad305c17a4 16
+apps/server/cloudflare/transactions/ingestion-capture.test.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-204
+apps/server/cloudflare/categories/internal/canonical-keyword-rules.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-448
+apps/server/cloudflare/transactions/internal/reconciliation-state.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-6
+apps/server/src/shell/ingestion/email-interpretation/format-support.test.ts
+  s_a260c2c348024c::t_3434ad305c17a4 5
+apps/server/cloudflare/categories/runtime.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-8
+apps/server/cloudflare/mutations/memory-outcome.ts
+  s_a260c2c348024c::t_3434ad305c17a4 29
+apps/server/cloudflare/transactions/internal/transaction-outcome.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-395
+apps/server/cloudflare/dashboard/dashboard.ts
+  s_a260c2c348024c::t_3434ad305c17a4 5,19
+apps/server/cloudflare/ingestion/statement-staging.ts
+  s_a260c2c348024c::t_3434ad305c17a4 56
+apps/server/cloudflare/transactions/internal/dashboard-projection.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-179
+apps/server/src/core/categories/internal/taxonomy.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-37
+apps/server/cloudflare/ingestion/forwarded-email-processing.ts
+  s_a260c2c348024c::t_3434ad305c17a4 8,69,71-72,215-240
+apps/server/cloudflare/mutations/mutation-types.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1,19,21,23,25,160
+apps/server/cloudflare/transactions/contract.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-146
+apps/server/cloudflare/transactions/internal/transactions.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-322
+apps/server/src/shell/hosted-inference/conformance.test.ts
+  s_a260c2c348024c::t_3434ad305c17a4 5
+apps/server/cloudflare/transactions/runtime.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-1164
+apps/server/src/shell/transactions/internal/continuation.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-30
+apps/server/src/shell/dashboard/presentation.ts
+  s_a260c2c348024c::t_3434ad305c17a4 4
+apps/server/cloudflare/ingestion/statement-review.ts
+  s_a260c2c348024c::t_3434ad305c17a4 10
+apps/server/cloudflare/memory/memory.test.ts
+  s_a260c2c348024c::t_3434ad305c17a4 9
+apps/server/src/core/categories/contract.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-111
+apps/server/cloudflare/ingestion/statement-processing.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1,13-14,26-27,178,180-182,200-220,331,460-473,497-510,513-519,526
+apps/server/cloudflare/transactions/internal/transaction-reconciliation.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-398
+apps/server/stryker.config.mjs
+  s_a260c2c348024c::t_3434ad305c17a4 53
+apps/server/cloudflare/categories/internal/canonical-category.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-120
+apps/server/src/shell/ingestion/email-interpretation/formats/bbva-pse/format.ts
+  s_a260c2c348024c::t_3434ad305c17a4 4
+apps/server/cloudflare/mutations/canonical-mutation-unit.ts
+  s_a260c2c348024c::t_3434ad305c17a4 13,15,32,39,632
+apps/server/src/core/transactions/rules.test.ts
+  s_a260c2c348024c::t_3434ad305c17a4 3-4
+apps/server/src/core/transactions/contract.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-490
+apps/server/cloudflare/agent/hosted-authority.ts
+  s_a260c2c348024c::t_3434ad305c17a4 14
+apps/server/cloudflare/categories/internal/canonical-work.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-22
+apps/server/cloudflare/categories/keyword-rules.test.ts
+  s_a260c2c348024c::t_3434ad305c17a4 7
+apps/server/src/core/categories/internal/rules.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-79
+apps/server/cloudflare/mutations/canonical-mutation-registry.ts
+  s_a260c2c348024c::t_3434ad305c17a4 10-12,24-30,37,43
+apps/server/src/shell/hosted-inference/internal/prompt.ts
+  s_a260c2c348024c::t_3434ad305c17a4 4,33
+apps/server/cloudflare/insights/insight-store.ts
+  s_a260c2c348024c::t_3434ad305c17a4 26
+apps/server/src/shell/categories/runtime.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-2,8-9,13-15
+apps/server/cloudflare/budgets/budget-queries.ts
+  s_a260c2c348024c::t_3434ad305c17a4 10,18-19,124-130,136,140-141,146
+apps/server/cloudflare/categories/internal/keyword-rule-outcome.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-412
+apps/server/cloudflare/subscription/internal/subscription-queries.ts
+  s_a260c2c348024c::t_941424f16049b1 13
+apps/server/cloudflare/ingestion/forwarding-address.ts
+  s_a260c2c348024c::t_3434ad305c17a4 19
+apps/server/src/shell/transactions/operations.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-2,4-11,13-16,18-19,21-34,36-118,121-124,126-149
+apps/server/cloudflare/categories/contract.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-26
+apps/server/cloudflare/agent/hosted-confirmation.ts
+  s_a260c2c348024c::t_3434ad305c17a4 10
+apps/server/cloudflare/canonical-work/contract.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-72
+apps/server/src/shell/ingestion/email-interpretation/catalog-validation.test.ts
+  s_a260c2c348024c::t_3434ad305c17a4 10
+apps/server/src/core/categories/operations.test.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-141
+apps/server/src/core/categories/operations.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-98
+apps/server/cloudflare/budgets/budgets.test.ts
+  s_a260c2c348024c::t_3434ad305c17a4 10,13
+apps/server/cloudflare/transactions/operations.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-137
+apps/server/cloudflare/agent/hosted-turn.test.ts
+  s_a260c2c348024c::t_3434ad305c17a4 17,52
+apps/server/src/shell/_shared/suggested-operations.test.ts
+  s_a260c2c348024c::t_3434ad305c17a4 4
+apps/server/src/shell/ingestion/input.ts
+  s_a260c2c348024c::t_3434ad305c17a4 2
+apps/server/cloudflare/subscription/contract.ts
+  s_a260c2c348024c::t_973be6749389d8 3
+apps/server/cloudflare/canonical-work/operations.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-508
+apps/server/package.json
+  s_a260c2c348024c::t_3434ad305c17a4 27-45,98-100
+apps/server/src/shell/categories/operations.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-13,15-18,20-46,49-51,53-56,58-61
+apps/server/cloudflare/core-worker.ts
+  s_a260c2c348024c::t_3434ad305c17a4 18-25,33,46-47,89,100,106,199
+apps/server/src/core/transactions/reconciliation.test.ts
+  s_a260c2c348024c::t_3434ad305c17a4 4-10
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_a260c2c348024c::t_3434ad305c17a4 23
+apps/server/src/shell/ingestion/email-interpretation/interpret.ts
+  s_a260c2c348024c::t_3434ad305c17a4 2-5,10-13
+apps/server/cloudflare/transactions/internal/transaction-corrections.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-314
+apps/server/.dependency-cruiser.mjs
+  s_a260c2c348024c::t_3434ad305c17a4 138-200,525
+  s_a260c2c348024c::t_72afc2d3f3d18a 137,401,413
+apps/server/src/shell/ingestion/email-interpretation/formats/davibank-card/format.ts
+  s_a260c2c348024c::t_3434ad305c17a4 4
+apps/server/cloudflare/public-worker.ts
+  s_a260c2c348024c::t_3434ad305c17a4 8
+apps/server/cloudflare/categories/internal/keyword-rule-shared.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-41
+apps/server/cloudflare/transactions/internal/effective-transaction.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-27
+apps/server/src/core/transactions/operations.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-150
+apps/server/cloudflare/dashboard/dashboard-view.ts
+  s_a260c2c348024c::t_3434ad305c17a4 2,6,11,24-45,47,51,56,62
+apps/server/src/shell/api.ts
+  s_a260c2c348024c::t_3434ad305c17a4 8,19
+apps/server/src/shell/ingestion/email-interpretation/format-definition.ts
+  s_a260c2c348024c::t_3434ad305c17a4 11
+apps/server/cloudflare/categories/internal/keyword-rules.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-154
+apps/server/src/shell/agent/transaction-receipt.ts
+  s_a260c2c348024c::t_3434ad305c17a4 4,6,73-75
+apps/server/cloudflare/categories/internal/capture.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-30
+apps/server/cloudflare/agent/turn-store.ts
+  s_a260c2c348024c::t_3434ad305c17a4 31
+apps/server/src/shell/categories/internal/errors.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-98
+apps/server/cloudflare/dashboard/dashboard.test.ts
+  s_a260c2c348024c::t_3434ad305c17a4 4,6,12
+apps/server/cloudflare/budgets/budgets.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-2,14,26,212-217,333-350,369-387
+apps/server/cloudflare/runtime/smoke-work.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1,126-128
+apps/server/src/shell/transactions/contract.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-164
+apps/server/src/shell/transactions/runtime.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-42
+apps/server/cloudflare/dashboard/dashboard-mutation.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1,7,28,197-200
+apps/server/src/shell/ingestion/email-interpretation/format-support.ts
+  s_a260c2c348024c::t_3434ad305c17a4 4
+apps/server/cloudflare/transactions/peer-reads.test.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-259
+apps/server/cloudflare/transactions/internal/transaction-history.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-595
+apps/server/src/shell/ingestion/operations.ts
+  s_a260c2c348024c::t_3434ad305c17a4 11
+apps/server/cloudflare/agent/hosted-turn.ts
+  s_a260c2c348024c::t_3434ad305c17a4 34,47
+apps/server/src/shell/dashboard/operations.ts
+  s_a260c2c348024c::t_3434ad305c17a4 11,25
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_a260c2c348024c::t_3434ad305c17a4 12-19,23,30,33,3076-3080
+  s_a260c2c348024c::t_a71b798890e532 3095
+apps/server/src/shell/categories/internal/query.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-32
+apps/server/scripts/check-browser-client.ts
+  s_a260c2c348024c::t_996ed3fa9d5689 21
+apps/server/cloudflare/pats/pats.test.ts
+  s_a260c2c348024c::t_3434ad305c17a4 10
+apps/server/cloudflare/categories/internal/keyword-rule-conflict.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-12
+apps/server/cloudflare/transactions/internal/dashboard-read.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-65
+apps/server/cloudflare/agent/hosted-canonical-query.ts
+  s_a260c2c348024c::t_3434ad305c17a4 3-4,8
+apps/server/cloudflare/categories/operations.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-65
+apps/server/cloudflare/mutations/statement-mutation.ts
+  s_a260c2c348024c::t_3434ad305c17a4 7,14-18,24
+apps/server/cloudflare/mutations/canonical-mutation-batch.ts
+  s_a260c2c348024c::t_3434ad305c17a4 21,31
+apps/server/cloudflare/transactions/transaction-platform-fixture.ts
+  s_a260c2c348024c::t_3434ad305c17a4 2
+apps/server/scripts/check-dependency-guards.ts
+  s_a260c2c348024c::t_3434ad305c17a4 235,239,241,246,250-251,256,258,263,267,272,274,279,283,288,290-348,416-477,978-979,986-987,989,998,1005-1006
+apps/server/ARCHITECTURE.md
+  s_a260c2c348024c::t_3434ad305c17a4 223-270
+apps/server/src/shell/ingestion/email-interpretation/formats/rappicard-purchase/format.ts
+  s_a260c2c348024c::t_3434ad305c17a4 4
+infra/cloudflare/verify-edge-policy.test.ts
+  s_a260c2c348024c::t_3434ad305c17a4 7
+apps/server/src/core/transactions/account-hints.test.ts
+  s_a260c2c348024c::t_3434ad305c17a4 3
+apps/server/cloudflare/budgets/budget-outcome.ts
+  s_a260c2c348024c::t_3434ad305c17a4 7
+apps/server/src/shell/_shared/canonical-operation-registry.ts
+  s_a260c2c348024c::t_3434ad305c17a4 14
+apps/server/src/shell/agent/transaction-receipt.test.ts
+  s_a260c2c348024c::t_3434ad305c17a4 5
+apps/server/src/shell/hosted-inference/conformance.ts
+  s_a260c2c348024c::t_3434ad305c17a4 2
+apps/server/cloudflare/transactions/internal/dashboard-repair.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-218
+apps/server/cloudflare/transactions/internal/dashboard-query.ts
+  s_a260c2c348024c::t_3434ad305c17a4 1-152
+apps/server/cloudflare/mutations/forwarding-address-mutation.ts
+  s_a260c2c348024c::t_3434ad305c17a4 14
+infra/cloudflare/verify-edge-policy.ts
+  s_a260c2c348024c::t_3434ad305c17a4 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "26b471b449bc8836bcb6c51a259b77aed59b23a4",
+  "prompts": {},
+  "sessions": {
+    "s_a260c2c348024c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0faca-1b69-73d2-b162-83bc0795cdca",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

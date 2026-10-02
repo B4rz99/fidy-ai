@@ -1,3 +1,4 @@
+import { webSessionCredentialAuthority } from "@fidy/server/web-session-operations";
 import { prepareWhatsAppIdentity } from "../identity/operations";
 import type { UserContext } from "@fidy/server/identity-contract";
 import { readUserContext } from "../identity/user-context/operations";
@@ -923,15 +924,14 @@ export const acknowledgeHostedDelivery = ({
   Effect.gen(function* () {
     const current = transactionNow();
     const digest = yield* receiptHash(receipt);
+    const authority = webSessionCredentialAuthority({ subject, current });
     const raw = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT p.text, p.proposed_at_ms, t.started_at_ms FROM hosted_delivery_proposals AS p
     JOIN hosted_turns AS t ON t.id = p.turn_id AND t.user_id = p.user_id
-    JOIN web_sessions AS w ON w.user_id = p.user_id
     WHERE p.user_id = ? AND p.turn_id = ? AND p.receipt_digest = ?
-      AND t.status = 'pending' AND w.id = ? AND w.token_digest = ?
-      AND w.revoked_at_ms IS NULL AND w.idle_expires_at_ms > ? AND w.hard_expires_at_ms > ?`)
-        .bind(subject.userId, turnId, digest, subject.id, subject.digest, current, current)
+      AND t.status = 'pending' AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
+        .bind(subject.userId, turnId, digest, ...authority.bindings)
         .first()
     );
     if (raw === null) {
@@ -1165,7 +1165,12 @@ const hostedFinishStatements = ({
   const text = result._tag === "Completed" ? result.text : null;
   const kind = result._tag === "Completed" ? "assistant" : status;
   const entryId = TranscriptEntryId.make(newId());
-  const guard = isWhatsAppHosted(subject)
+  const sessionAuthority = isWhatsAppHosted(subject)
+    ? Option.none()
+    : Option.some(
+        webSessionCredentialAuthority({ subject: { ...subject, userId }, current: time })
+      );
+  const guard = Option.isNone(sessionAuthority)
     ? {
         sql: `AND (? <> 'completed' OR EXISTS (SELECT 1 FROM hosted_whatsapp_delivery AS d
           WHERE d.turn_id = hosted_turns.id AND d.user_id = hosted_turns.user_id
@@ -1173,10 +1178,9 @@ const hostedFinishStatements = ({
         bindings: [status],
       }
     : {
-        sql: `AND (? <> 'completed' OR EXISTS (SELECT 1 FROM web_sessions AS w
-          WHERE w.id = ? AND w.user_id = hosted_turns.user_id AND w.token_digest = ?
-          AND w.revoked_at_ms IS NULL AND w.idle_expires_at_ms > ? AND w.hard_expires_at_ms > ?))`,
-        bindings: [status, subject.id, subject.digest, time, time],
+        sql: `AND (? <> 'completed' OR EXISTS (SELECT 1 FROM ${sessionAuthority.value.table}
+          WHERE ${sessionAuthority.value.predicate}))`,
+        bindings: [status, ...sessionAuthority.value.bindings],
       };
   return [
     db

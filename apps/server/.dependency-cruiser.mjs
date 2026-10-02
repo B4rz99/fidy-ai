@@ -88,6 +88,38 @@ export default {
       },
     },
     {
+      name: "foreign-module-imports-cloudflare-web-session-internal",
+      severity: "error",
+      comment:
+        "WebSession credentials, rows and lifecycle are private; use the published owner contract and operations (#596).",
+      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/web-session/" },
+      to: { path: "^cloudflare/web-session/internal/" },
+    },
+    {
+      name: "foreign-module-imports-cloudflare-browser-login-internal",
+      severity: "error",
+      comment:
+        "BrowserLogin verifier handling and pairing rows stay private; callers use its published operations (#596).",
+      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/browser-login/" },
+      to: { path: "^cloudflare/browser-login/internal/" },
+    },
+    {
+      name: "cloudflare-imports-portable-web-session-internal",
+      severity: "error",
+      comment:
+        "WebSession SQL policies stay private across the portable/Cloudflare boundary (#596).",
+      from: { path: "^cloudflare/" },
+      to: { path: "^src/(core|shell)/web-session/internal/" },
+    },
+    {
+      name: "session-interface-reexports-internal",
+      severity: "error",
+      comment:
+        "Session and pairing publication declares behavior without re-exporting private implementation (#596).",
+      from: { path: "^cloudflare/(web-session|browser-login)/(contract|operations|runtime)\\.ts$" },
+      to: { path: "^cloudflare/$1/internal/", dependencyTypes: ["export"] },
+    },
+    {
       name: "foreign-module-imports-cloudflare-identity-internal",
       severity: "error",
       comment:

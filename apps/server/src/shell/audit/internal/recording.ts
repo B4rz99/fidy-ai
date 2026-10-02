@@ -1,5 +1,6 @@
 import { Option } from "effect";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
+import { sessionOwnershipQuery } from "~/shell/web-session/operations";
 import type {
   AuditAuthority,
   AuditCredentialOperation,
@@ -37,13 +38,19 @@ const outcomeColumns = (table: string, outcome: string): ReadonlyArray<string> =
   table === "category_audit" && outcome === "success" ? [] : ["outcome"];
 const commitGuard = (afterOwnerWrite: boolean): string =>
   afterOwnerWrite ? "AND changes() = 1" : "";
-const callerOwnership = (input: OwnerAuditCall): OwnedStatement =>
-  input.caller._tag === "Publication"
-    ? { sql: "SELECT 1", params: [] }
-    : {
-        sql: `SELECT 1 FROM ${input.caller._tag === "PAT" ? "pats" : "web_sessions"} WHERE id = ? AND user_id = ?`,
+const callerOwnership = (input: OwnerAuditCall): OwnedStatement => {
+  switch (input.caller._tag) {
+    case "Publication":
+      return { sql: "SELECT 1", params: [] };
+    case "PAT":
+      return {
+        sql: "SELECT 1 FROM pats WHERE id = ? AND user_id = ?",
         params: [input.caller.id, input.userId],
       };
+    case "WebSession":
+      return sessionOwnershipQuery({ sessionId: input.caller.id, userId: input.userId });
+  }
+};
 const authorityCaller = (authority: AuditAuthority): boolean => authority.table === "pats";
 
 /** Records fixed metadata after an owner-scoped existence proof, retaining the owner's atomic guard. */

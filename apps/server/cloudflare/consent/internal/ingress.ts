@@ -33,7 +33,7 @@ import {
 } from "@fidy/server/consent-contract";
 import { EmailAddress } from "@fidy/server/client";
 import type { UserId } from "../../../src/core/identity/reference";
-import { approveBrowserPairing } from "../../identity/browser-login";
+import { approveBrowserPairing } from "../../browser-login/operations";
 import { findWhatsAppDeliveryUser } from "../../agent/whatsapp-turn";
 import { decodeKapsoHostedLifecycleWebhook } from "@fidy/server/whatsapp-hosted";
 import {

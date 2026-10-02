@@ -1,0 +1,96 @@
+apps/server/cloudflare/onboarding/verified-onboarding.test.ts
+  s_a260c2c348024c::t_88b671875ec0e4 5,1818-1928
+apps/server/cloudflare/web-session/internal/authentication.ts
+  s_a260c2c348024c::t_88b671875ec0e4 1-43
+apps/server/scripts/check-dependency-guards.ts
+  s_a260c2c348024c::t_88b671875ec0e4 139-143,252-312
+  s_a260c2c348024c::t_8b1a3d80c1b291 313
+apps/server/src/shell/tokens/list-pats.ts
+  s_a260c2c348024c::t_88b671875ec0e4 9,48-50,53,57
+apps/server/cloudflare/transactions/transactions.ts
+  s_a260c2c348024c::t_88b671875ec0e4 10,55,59-60
+apps/server/src/core/web-session/operations.test.ts
+  s_a260c2c348024c::t_88b671875ec0e4 1-45
+apps/server/cloudflare/identity/email-replacement-delivery.ts
+  s_a260c2c348024c::t_88b671875ec0e4 1,151-156,163-164,170,198-204,212,219
+apps/server/cloudflare/web-session/internal/lifecycle.ts
+  s_a260c2c348024c::t_88b671875ec0e4 1-78
+apps/server/cloudflare/web-session/contract.ts
+  s_a260c2c348024c::t_88b671875ec0e4 1-19
+apps/server/cloudflare/consent/internal/ingress.ts
+  s_a260c2c348024c::t_88b671875ec0e4 36
+apps/server/cloudflare/core-worker.ts
+  s_a260c2c348024c::t_88b671875ec0e4 108-112
+apps/server/cloudflare/identity/email-replacement.ts
+  s_a260c2c348024c::t_88b671875ec0e4 1,17,426-429,440,453
+apps/server/src/shell/audit/internal/pat-evidence.ts
+  s_a260c2c348024c::t_88b671875ec0e4 6-10,66-68,71-72,77
+apps/server/src/core/web-session/operations.ts
+  s_a260c2c348024c::t_88b671875ec0e4 1-28
+apps/server/src/shell/web-session/operations.ts
+  s_a260c2c348024c::t_88b671875ec0e4 1,3-11,14,16-22,25-49,51-53,55-84
+apps/server/cloudflare/pats/pat-shared.ts
+  s_a260c2c348024c::t_88b671875ec0e4 16
+apps/server/src/core/web-session/contract.ts
+  s_a260c2c348024c::t_88b671875ec0e4 1-8
+apps/server/cloudflare/transactions/transaction-history.ts
+  s_a260c2c348024c::t_88b671875ec0e4 477-478
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_a260c2c348024c::t_88b671875ec0e4 3073-3077
+  s_a260c2c348024c::t_9410bb3b0e08a4 3092
+apps/server/cloudflare/web-session/internal/credentials.ts
+  s_a260c2c348024c::t_88b671875ec0e4 1-23
+apps/server/src/shell/web-session/internal/authority.ts
+  s_a260c2c348024c::t_88b671875ec0e4 1-68
+apps/server/cloudflare/browser-login/contract.ts
+  s_a260c2c348024c::t_88b671875ec0e4 1-31
+apps/server/cloudflare/card-enrollment/card-enrollment.test.ts
+  s_a260c2c348024c::t_88b671875ec0e4 74,109-117
+apps/server/cloudflare/browser-login/internal/claim.ts
+  s_a260c2c348024c::t_88b671875ec0e4 1-20
+apps/server/cloudflare/browser-login/operations.ts
+  s_a260c2c348024c::t_88b671875ec0e4 1-27
+apps/server/cloudflare/identity/internal/recovery.ts
+  s_a260c2c348024c::t_88b671875ec0e4 1-120
+apps/server/src/shell/audit/internal/recording.ts
+  s_a260c2c348024c::t_88b671875ec0e4 3,41-47,50-53
+apps/server/cloudflare/agent/turn-store.ts
+  s_a260c2c348024c::t_88b671875ec0e4 1,927,933-934,1168-1173,1181-1183
+apps/server/cloudflare/card-enrollment/card-enrollment.ts
+  s_a260c2c348024c::t_88b671875ec0e4 1-2,198-221,223-224
+apps/server/cloudflare/identity/operations.ts
+  s_a260c2c348024c::t_88b671875ec0e4 1,49-53
+apps/server/cloudflare/web-session/internal/support.ts
+  s_a260c2c348024c::t_88b671875ec0e4 1-51
+apps/server/cloudflare/web-session/internal/current-user.ts
+  s_a260c2c348024c::t_88b671875ec0e4 1-108
+apps/server/cloudflare/browser-login/internal/pairing.ts
+  s_a260c2c348024c::t_88b671875ec0e4 1-397
+apps/server/.dependency-cruiser.mjs
+  s_a260c2c348024c::t_88b671875ec0e4 115-145
+  s_a260c2c348024c::t_3f387f65d5e833 114
+apps/server/cloudflare/web-session/operations.ts
+  s_a260c2c348024c::t_88b671875ec0e4 1-65
+apps/server/ARCHITECTURE.md
+  s_a260c2c348024c::t_88b671875ec0e4 296-313
+apps/server/cloudflare/web-session/operations.test.ts
+  s_a260c2c348024c::t_88b671875ec0e4 1-267
+apps/server/cloudflare/agent/hosted-confirmation.ts
+  s_a260c2c348024c::t_88b671875ec0e4 149
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a8ead35c22e1c4a8a92ae6246c97341fcbd7f11a",
+  "prompts": {},
+  "sessions": {
+    "s_a260c2c348024c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0faca-1b69-73d2-b162-83bc0795cdca",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

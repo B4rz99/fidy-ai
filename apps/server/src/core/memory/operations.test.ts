@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, expect, it } from "@effect/vitest";
 import { DateTime, Effect, Exit } from "effect";
-import { Memory, MemoryId, MemoryText } from "./model";
 import {
+  Memory,
   MemoryCapacityExceeded,
+  MemoryId,
   MemoryNotFound,
-  admitMemory,
+  MemoryText,
   maximumAggregateMemoryTokens,
-} from "./rules";
+} from "./contract";
+import { admitMemory } from "./operations";
 
 const candidate = Memory.make({
   id: MemoryId.make("01912345-6789-7abc-8def-0123456789ab"),

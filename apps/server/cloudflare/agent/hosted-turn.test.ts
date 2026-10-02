@@ -3500,6 +3500,34 @@ it("prepares current evidence only for its User and session, never mixing a seco
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => setup());
+      const instant = DateTime.formatIso(DateTime.makeUnsafe(now()));
+      const memories = [
+        {
+          id: "20000000-0000-4000-8000-0000000000a1",
+          user_id: users[0],
+          text: "retained-Memory-A",
+          created_at: instant,
+          updated_at: instant,
+        },
+        {
+          id: "20000000-0000-4000-8000-0000000000a2",
+          user_id: users[1],
+          text: "retained-Memory-B",
+          created_at: instant,
+          updated_at: instant,
+        },
+      ];
+      yield* Effect.tryPromise(() =>
+        db.batch(
+          memories.map((memory) =>
+            db
+              .prepare(
+                "INSERT INTO memories (id, user_id, text, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
+              )
+              .bind(memory.id, memory.user_id, memory.text, memory.created_at, memory.updated_at)
+          )
+        )
+      );
       const prompts: Array<unknown> = [];
       const model = yield* Effect.tryPromise(() =>
         inference((request) => {
@@ -3525,6 +3553,21 @@ it("prepares current evidence only for its User and session, never mixing a seco
       expect(serialized[2]).toContain("private-A");
       expect(serialized[2]).not.toContain("private-B");
       expect(serialized[1]).not.toContain("private-A");
+      for (const index of [0, 2]) {
+        expect(serialized[index]).toContain("retained-Memory-A");
+        expect(serialized[index]).not.toContain("retained-Memory-B");
+      }
+      expect(serialized[1]).toContain("retained-Memory-B");
+      expect(serialized[1]).not.toContain("retained-Memory-A");
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT id, user_id, text, created_at, updated_at FROM memories ORDER BY user_id, id"
+            )
+            .all()
+        )).results
+      ).toEqual(memories);
       expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toHaveLength(4);
       expect((yield* Effect.tryPromise(() => retained(db, users[1]))).results).toHaveLength(2);
     })

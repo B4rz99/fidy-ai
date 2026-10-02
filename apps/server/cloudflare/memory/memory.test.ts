@@ -3,7 +3,7 @@ import { afterAll, expect, it, vi } from "vitest";
 import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
 import { ErrorCode } from "@fidy/server/canonical-runtime";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
-import { Memory, MemoryId, maximumAggregateMemoryTokens } from "@fidy/server/memory-runtime";
+import { Memory, MemoryId, maximumAggregateMemoryTokens } from "@fidy/server/memory-contract";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { UserTransactionCoordinator } from "../transactions/runtime";

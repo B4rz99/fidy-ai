@@ -44,11 +44,6 @@
       "import": "./src/shell/memory/runtime.ts",
       "default": "./src/shell/memory/runtime.ts"
     },
-    "./memory-routes": {
-      "types": "./src/shell/memory/cloudflare-routes.ts",
-      "import": "./src/shell/memory/cloudflare-routes.ts",
-      "default": "./src/shell/memory/cloudflare-routes.ts"
-    },
     "./insights-contract": {
       "types": "./src/core/insights/contract.ts",
       "import": "./src/core/insights/contract.ts",
@@ -208,6 +203,21 @@
       "types": "./src/shell/web-authentication/contract.ts",
       "import": "./src/shell/web-authentication/contract.ts",
       "default": "./src/shell/web-authentication/contract.ts"
+    },
+    "./memory-contract": {
+      "types": "./src/core/memory/contract.ts",
+      "import": "./src/core/memory/contract.ts",
+      "default": "./src/core/memory/contract.ts"
+    },
+    "./memory-api": {
+      "types": "./src/shell/memory/contract.ts",
+      "import": "./src/shell/memory/contract.ts",
+      "default": "./src/shell/memory/contract.ts"
+    },
+    "./memory-operations": {
+      "types": "./src/shell/memory/operations.ts",
+      "import": "./src/shell/memory/operations.ts",
+      "default": "./src/shell/memory/operations.ts"
     }
   },
   "scripts": {
@@ -226,7 +236,8 @@
     "check:browser-client": "bun scripts/check-browser-client.ts",
     "lint:deps": "bun ../../tools/depcruise/run.mjs . src scripts tools cloudflare",
     "lint:deps:probes": "bun scripts/check-dependency-guards.ts",
-    "check:lint-guards": "bun scripts/check-lint-guards.ts"
+    "check:lint-guards": "bun scripts/check-lint-guards.ts",
+    "test:memory": "bun --bun vitest run --config vitest.config.ts src/shell/memory --coverage.enabled=false"
   },
   "dependencies": {
     "@effect/sql-d1": "4.0.0-rc.115",

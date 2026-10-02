@@ -3,16 +3,24 @@ import {
   Memory,
   type MemoryCapacityExceeded,
   MemoryId,
-  type MemoryOperationId,
   type RememberInput,
   type ReviseInput,
+} from "@fidy/server/memory-contract";
+import { type MemoryOperationId } from "@fidy/server/memory-api";
+import {
   countAndAdmitMemory,
   countAndAdmitMemoryRevision,
-  maximumAggregateMemoryTokens,
-  memoriesFromRows,
-  memoryRowsQuery,
   recordBrowserMemoryWork,
-} from "@fidy/server/memory-runtime";
+} from "@fidy/server/memory-operations";
+import {
+  deleteMemory,
+  insertMemory,
+  memoriesFromRows,
+  memoryCapacityGuards,
+  memoryRowsQuery,
+  readCurrentMemories,
+  replaceMemory,
+} from "./internal/storage";
 import { dailyAuditExhausted, recordCanonicalPATWork } from "@fidy/server/audit";
 import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-operations";
 import { DateTime, Effect, Option, Schema } from "effect";
@@ -35,20 +43,22 @@ import {
 } from "../canonical-work/operations";
 import {
   type CanonicalMutationPreparation,
-  type MemoryOutcome,
+  type CanonicalMutationRefusal,
   type PreparedCanonicalMutation,
   failedPreparation,
   refusedPreparation,
   unavailablePreparation,
 } from "../mutations/mutation-types";
 import {
+  type MemoryOutcome,
   type MemoryRefusalOutcome,
   memoryBudgetRefusal,
   memoryGuardRefusal,
+  memoryOutcome,
   memoryRateLimited,
   memoryRefusal,
   memoryUnavailable,
-} from "../mutations/memory-outcome";
+} from "./internal/outcome";
 
 const HTTP_OK = 200;
 const MemoryCodec = Schema.toCodecJson(Memory);
@@ -178,72 +188,6 @@ const acceptedStatements = ({
       ]
     : [mutation, acceptedAudit({ db, subject, operation, current })];
 
-const insertMemory = ({
-  db,
-  subject,
-  candidate,
-  current,
-}: Readonly<{
-  db: D1Database;
-  subject: TransactionCaller;
-  candidate: Memory;
-  current: number;
-}>): D1PreparedStatement => {
-  const authority = callerAuthority({ subject, current });
-  return db
-    .prepare(`INSERT INTO memories (id, user_id, text, created_at, updated_at)
-      SELECT ?, user_id, ?, ?, ? FROM ${authority.table} WHERE ${authority.predicate}`)
-    .bind(
-      candidate.id,
-      candidate.text,
-      DateTime.formatIso(candidate.createdAt),
-      DateTime.formatIso(candidate.updatedAt),
-      ...authority.bindings
-    );
-};
-
-const replaceMemory = ({
-  db,
-  subject,
-  candidate,
-  current,
-}: Readonly<{
-  db: D1Database;
-  subject: TransactionCaller;
-  candidate: Memory;
-  current: number;
-}>): D1PreparedStatement => {
-  const authority = callerAuthority({ subject, current });
-  return db
-    .prepare(`UPDATE memories SET text = ?, updated_at = ? WHERE user_id = ? AND id = ?
-      AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
-    .bind(
-      candidate.text,
-      DateTime.formatIso(candidate.updatedAt),
-      subject.userId,
-      candidate.id,
-      ...authority.bindings
-    );
-};
-
-const deleteMemory = ({
-  db,
-  subject,
-  id,
-  current,
-}: Readonly<{
-  db: D1Database;
-  subject: TransactionCaller;
-  id: string;
-  current: number;
-}>): D1PreparedStatement => {
-  const authority = callerAuthority({ subject, current });
-  return db
-    .prepare(`DELETE FROM memories WHERE user_id = ? AND id = ?
-      AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
-    .bind(subject.userId, id, ...authority.bindings);
-};
-
 /**
  * Decide one canonical `memory.remember` against live caller authority, the shared work budget, and
  * the complete aggregate capacity. The returned statements are guard-chained writes; the caller's
@@ -285,10 +229,8 @@ export const prepareRemember = ({
       );
     }
     const outcome: MemoryOutcome = {
-      _tag: "Memory",
       operation: "memory.remember",
       memoryId: candidate.id,
-      candidate,
     };
     return {
       _tag: "Prepared",
@@ -297,7 +239,7 @@ export const prepareRemember = ({
         guardRefusal: memoryGuardRefusal(outcome),
         auditBudget: "shared",
         commitGuards: Option.some(memoryCapacityGuards(candidate)),
-        outcome,
+        outcome: memoryOutcome(outcome),
         statements: acceptedStatements({
           db,
           subject,
@@ -308,43 +250,6 @@ export const prepareRemember = ({
       },
     } as const;
   }).pipe(Effect.orElseSucceed(failedPreparation));
-
-/** The Memory owner's exact trigger metric, asserted for a named child before its write. */
-const memoryCapacityGuards =
-  (candidate: Memory) =>
-  ({
-    db,
-    userId,
-    index,
-    operation,
-  }: Readonly<{
-    db: D1Database;
-    userId: string;
-    index: number;
-    operation: string;
-  }>): ReadonlyArray<D1PreparedStatement> => [
-    db
-      .prepare(`INSERT INTO canonical_child_guard (child_index,operation,accepted,capacity_ok)
-      SELECT ?,?,1,CASE WHEN
-        (SELECT COALESCE(SUM(length(CAST(json_object('id', id, 'text', text) AS BLOB))), 0)
-          FROM memories WHERE user_id = ? AND id <> ?)
-        + length(CAST(json_object('id', ?, 'text', ?) AS BLOB))
-        + (SELECT count(*) FROM memories WHERE user_id = ? AND id <> ?) <= ?
-        THEN 1 ELSE 0 END
-      ON CONFLICT(child_index) DO UPDATE SET operation = excluded.operation,
-        accepted = excluded.accepted, capacity_ok = excluded.capacity_ok`)
-      .bind(
-        index,
-        operation,
-        userId,
-        candidate.id,
-        candidate.id,
-        candidate.text,
-        userId,
-        candidate.id,
-        maximumAggregateMemoryTokens
-      ),
-  ];
 
 /** The guarded replacement write and its success AuditLogEntry for one admitted revision. */
 const reviseMutation = ({
@@ -359,17 +264,15 @@ const reviseMutation = ({
   current: number;
 }>): PreparedCanonicalMutation => {
   const outcome: MemoryOutcome = {
-    _tag: "Memory",
     operation: "memory.revise",
     memoryId: candidate.id,
-    candidate,
   };
   return {
     requiredScope: callerScope(subject),
     guardRefusal: memoryGuardRefusal(outcome),
     auditBudget: "shared",
     commitGuards: Option.some(memoryCapacityGuards(candidate)),
-    outcome,
+    outcome: memoryOutcome(outcome),
     statements: acceptedStatements({
       db,
       subject,
@@ -452,7 +355,7 @@ export const prepareForget = ({
     if (yield* budgetExhausted({ db, subject, current })) {
       return refusedPreparation(memoryBudgetRefusal());
     }
-    const outcome: MemoryOutcome = { _tag: "Memory", operation: "memory.forget", memoryId: id };
+    const outcome: MemoryOutcome = { operation: "memory.forget", memoryId: id };
     return {
       _tag: "Prepared",
       mutation: {
@@ -460,7 +363,7 @@ export const prepareForget = ({
         guardRefusal: memoryGuardRefusal(outcome),
         auditBudget: "shared",
         commitGuards: Option.none(),
-        outcome,
+        outcome: memoryOutcome(outcome),
         statements: acceptedStatements({
           db,
           subject,
@@ -619,3 +522,30 @@ export const recallMemories = ({
       HTTP_OK
     );
   }).pipe(Effect.orElseSucceed(memoryUnavailable));
+
+/**
+ * Load only current Memory prose for one explicitly authorized hosted context. The supplied live
+ * authority must project semantic userId; it is correlated again to the requested User. A borrowed
+ * subject returns no prose and a malformed aggregate is unavailable, never partially decoded.
+ * Admission owns the Consent timing for the Turn; this read grants no new model or tool authority.
+ */
+export const readMemoryContext = (
+  input: Readonly<{
+    db: D1Database;
+    userId: string;
+    authority: OwnedStatement;
+  }>
+): Effect.Effect<Option.Option<ReadonlyArray<Pick<Memory, "text">>>> =>
+  readCurrentMemories(input).pipe(
+    Effect.map(Option.map((memories) => memories.map(({ text }) => ({ text }))))
+  );
+
+/** Prepare metadata-only refusal evidence for an invalid canonical Memory input. */
+export const invalidMemoryInput = (
+  input: Readonly<{
+    db: D1Database;
+    subject: TransactionCaller;
+    operation: MemoryOperationId;
+    current: number;
+  }>
+): CanonicalMutationRefusal => memoryRefusal({ ...input, outcome: "validation_failed" });

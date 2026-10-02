@@ -160,6 +160,13 @@ const checks: Array<Check> = [
     "apps/server",
     "test:email-interpretation",
   ]),
+  rootCheck("unit", "Memory owner policy tests", [
+    "bun",
+    "run",
+    "--cwd",
+    "apps/server",
+    "test:memory",
+  ]),
   // Coverage executes the whole web suite, including scripts/production-workflow.test.ts and
   // scripts/cloudflare-adapter.test.ts; separate uninstrumented runs duplicate that evidence.
   rootCheck("unit", "Web tests and Istanbul coverage", [

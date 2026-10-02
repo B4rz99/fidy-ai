@@ -587,3 +587,27 @@ Pre-verification admission, bounded accepted-Consent mailbox collection, identit
 retry and retention remain with their existing owners. This extraction neither enables onboarding
 nor adds an external workflow, provider call or telemetry purpose; the existing bounded Core/public
 Worker observation is retained.
+
+### Memory owner composition
+
+Memory publishes normalized arbitrary prose, current-record schemas and content-free failures through
+`core/memory/contract.ts`, with capacity decisions in core operations. Its shell contract owns the
+four canonical declarations; shell operations count the complete recall-ordered aggregate through
+HostedInference's local counting capability and prepare metadata-only Audit evidence. Route
+composition is the only Memory runtime interface. Workers AI remains the only inference platform;
+Memory introduces no embedding store, semantic classifier, provider fallback or model request.
+
+The native Memory operations own remember, recall, revise and forget. Current-row decoding, guarded
+D1 persistence, aggregate-capacity checks, readback and refusal classification remain private. The
+shared canonical unit receives owner behavior for collision, commit guards, refusal and public
+readback, never a Memory candidate or stored-row contract. Writes retain their single D1 unit with
+live credential authority, PAT accountability and success Audit. Revision replaces stale prose and
+forgetting physically removes the current record; no revision history is introduced.
+
+Hosted continuity requests only current text under the explicit User and a subject-correlated live
+authority. Malformed aggregates fail closed. Agent admission still owns the existing per-Turn
+Consent timing, and HostedInference/Workers AI retains its separate model-egress Consent check.
+The existing hosted-context count limit does not become a new canonical Memory limit. Free text
+remains limited to the intended Memory and model purposes and excluded from logs, error contracts,
+Audit and SuggestedOperations. Existing request telemetry is sufficient for this ownership-only
+refactor; it adds no external workflow, persistence substrate or telemetry payload.

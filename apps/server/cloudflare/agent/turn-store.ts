@@ -1,3 +1,4 @@
+import { readMemoryContext } from "../memory/operations";
 import { webSessionCredentialAuthority } from "@fidy/server/web-session-operations";
 import { prepareWhatsAppIdentity } from "../identity/operations";
 import type { UserContext } from "@fidy/server/identity-contract";
@@ -23,8 +24,6 @@ import {
   UserId,
   UserTranscriptEntry,
   decideHostedAdmission,
-  memoriesFromRows,
-  memoryRowsQuery,
   terminalPrefixCursor,
 } from "@fidy/server/agent-runtime";
 import { Cause, DateTime, Effect, Option, Schema } from "effect";
@@ -400,14 +399,9 @@ export const readHostedContinuity = ({
       Option.isSome(admittedWhatsAppTurn) && isWhatsAppHosted(subject)
         ? hostedIdentity({ subject, current: now })
         : hostedAuthority({ subject, current: now });
-    const query = memoryRowsQuery({ userId: subject.userId, authority });
-    const memoryRows = yield* Effect.tryPromise(() =>
-      db
-        .prepare(query.sql)
-        .bind(...query.params)
-        .all()
+    const memories = Option.getOrThrow(
+      yield* readMemoryContext({ db, userId: subject.userId, authority })
     );
-    const memories = Option.getOrThrow(memoriesFromRows(memoryRows.results));
     if (memories.length > maximumCurrentMemories) {
       throw new Error("Hosted Memory capacity exceeded");
     }
@@ -438,7 +432,7 @@ export const readHostedContinuity = ({
     }
     const entries = yield* Schema.decodeUnknownEffect(Schema.Array(EntryRow))(raw.results);
     return {
-      memories: memories.map(({ text }) => ({ text })),
+      memories,
       compactedConversation: Option.map(
         compactedConversation,
         ({ text, through_sequence, revision }) => ({

@@ -62,7 +62,6 @@ const referenceHarness = (
       file: "/unused-snapshot",
       smokeProof: "0".repeat(64),
       smokeAttestationFile: "/unused-attestation",
-      logTimestamp: Option.none(),
     },
     client,
   });

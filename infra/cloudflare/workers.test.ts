@@ -716,9 +716,16 @@ describe("Cloudflare Worker topology (scheduled)", () => {
       const records: Array<TelemetryWorkRecord> = [];
       const worker = makeCoreWorker(collectingTelemetry(records));
 
-      yield* Effect.tryPromise(() =>
-        expect(worker.scheduled(scheduledController, coreEnvironment)).rejects.toThrow()
+      const result = yield* Effect.tryPromise(() =>
+        worker
+          .scheduled(scheduledController, coreEnvironment)
+          .then(Result.succeed<void>, Result.fail<unknown>)
       );
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(String(result.failure)).toContain("ScheduledWorkFailed");
+        expect(String(result.failure)).not.toContain(privateFailureDetail);
+      }
       expect(records).toHaveLength(1);
       expect(records[0]).toMatchObject({
         operation: "worker.core.scheduled",

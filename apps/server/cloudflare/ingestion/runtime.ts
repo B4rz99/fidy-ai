@@ -1,19 +1,17 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import { Crypto, Data, Effect, Exit } from "effect";
-import type { TelemetryService } from "@fidy/server/telemetry";
+import { Crypto, Effect } from "effect";
 import type { ForwardedEmailEnvironment, ForwardedEmailMessage } from "./contract";
 import {
   cloudflareWorkerTelemetry,
-  observeWorkerExecution,
   observeWorkerPromise,
   workerRelease,
 } from "../runtime/telemetry";
 import { captureWorkflowFailure } from "../runtime/operational-workflow-failure";
 import {
-  dispatchForwardedEmail,
+  dispatchForwardedEmail as dispatchEmail,
   emailCrypto,
-  receiveForwardedEmail,
-  sweepForwardedEmail,
+  receiveForwardedEmail as receiveEmail,
+  sweepForwardedEmail as retainEmail,
 } from "./internal/forwarded-email";
 import {
   dispatchStatementExtraction as dispatchStatements,
@@ -27,6 +25,8 @@ import {
   isForwardedEmailWork as recognizesEmail,
 } from "./internal/forwarded-email-delivery";
 import { StatementStaging } from "./internal/statement-staging";
+import { sweepExpiredUploadAdmission as sweepUploadAdmission } from "./internal/statement-ingestion";
+import { expireStatementReviewEvidence as expireReview } from "./internal/statement-review-retention";
 
 /** Reoffer bounded committed extraction identities; a Queue offer never authorizes extraction. */
 export const dispatchStatementExtraction: typeof dispatchStatements = (input) =>
@@ -94,44 +94,29 @@ export class StatementExtractionWorkflowV1 extends WorkflowEntrypoint<
   }
 }
 
-class EmailScheduleUnavailable extends Data.TaggedError("EmailScheduleUnavailable") {}
+/** Admit forwarded material only through the Email Worker, retaining the owner's bounded byte and Consent checks. */
+export const receiveForwardedEmail = ({
+  message,
+  environment,
+}: Readonly<{
+  message: ForwardedEmailMessage;
+  environment: ForwardedEmailEnvironment;
+}>): Effect.Effect<void, Effect.Error<ReturnType<typeof receiveEmail>>> =>
+  receiveEmail(message, environment).pipe(
+    Effect.withSpan("forwarded-email.receive"),
+    Effect.provideService(Crypto.Crypto, emailCrypto)
+  );
 
-type EmailWorker = Readonly<{
-  email: (message: ForwardedEmailMessage, environment: ForwardedEmailEnvironment) => Promise<void>;
-  scheduled: (controller: unknown, environment: ForwardedEmailEnvironment) => Promise<void>;
-}>;
+/** Reoffer only retained same-User receipt identities; an offer grants no processing authority. */
+export const dispatchForwardedEmail: typeof dispatchEmail = (environment) =>
+  dispatchEmail(environment);
 
-export const makeEmailWorker = (telemetry: TelemetryService): EmailWorker => ({
-  email: (message: ForwardedEmailMessage, environment: ForwardedEmailEnvironment): Promise<void> =>
-    Effect.runPromise(
-      receiveForwardedEmail(message, environment).pipe(
-        Effect.withSpan("forwarded-email.receive"),
-        Effect.provideService(Crypto.Crypto, emailCrypto),
-        observeWorkerExecution({
-          telemetry,
-          environment: workerRelease(environment),
-          operation: "worker.email.receive",
-        })
-      )
-    ),
-  scheduled: (_controller: unknown, environment: ForwardedEmailEnvironment): Promise<void> =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const sweep = yield* Effect.exit(
-          sweepForwardedEmail(environment).pipe(Effect.withSpan("forwarded-email.sweep"))
-        );
-        const dispatch = yield* Effect.exit(
-          dispatchForwardedEmail(environment).pipe(Effect.withSpan("forwarded-email.dispatch"))
-        );
-        if (Exit.isFailure(sweep) || Exit.isFailure(dispatch)) {
-          return yield* new EmailScheduleUnavailable();
-        }
-      }).pipe(
-        observeWorkerExecution({
-          telemetry,
-          environment: workerRelease(environment),
-          operation: "worker.email.scheduled",
-        })
-      )
-    ),
-});
+/** Expire private bytes and retain only the owner's bounded replay/review evidence. */
+export const sweepForwardedEmail: typeof retainEmail = (environment) => retainEmail(environment);
+
+/** Remove only expired Ingestion upload-admission records; live spend and other owners remain intact. now is the decision instant in Unix epoch milliseconds. */
+export const sweepExpiredUploadAdmission: typeof sweepUploadAdmission = (input) =>
+  sweepUploadAdmission(input);
+
+/** Clear expired personal review evidence while retaining classification and conserved accounting. */
+export const expireStatementReviewEvidence: typeof expireReview = (input) => expireReview(input);

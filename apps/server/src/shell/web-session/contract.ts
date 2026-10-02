@@ -1,3 +1,5 @@
+import { HttpApiEndpoint, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
+
 /** One stable User and the fresh authenticated WebSession authorizing an account change. */
 export type FreshSessionSubject = Readonly<{ id: string; user_id: string }>;
 
@@ -9,3 +11,8 @@ export type WebSessionAuthority = Readonly<{
   predicate: string;
   bindings: ReadonlyArray<string | number | Uint8Array>;
 }>;
+
+/** Browser-only revocation of the presented WebSession, retaining the established logout path. */
+export const logoutWebSessionEndpoint = HttpApiEndpoint.post("logout", "/web/session/logout", {
+  success: HttpApiSchema.NoContent,
+}).annotate(OpenApi.Description, "Revoke the current browser WebSession and expire its cookie.");

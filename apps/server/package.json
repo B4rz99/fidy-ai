@@ -203,6 +203,11 @@
       "types": "./src/shell/ingestion/runtime.ts",
       "import": "./src/shell/ingestion/runtime.ts",
       "default": "./src/shell/ingestion/runtime.ts"
+    },
+    "./web-authentication-contract": {
+      "types": "./src/shell/web-authentication/contract.ts",
+      "import": "./src/shell/web-authentication/contract.ts",
+      "default": "./src/shell/web-authentication/contract.ts"
     }
   },
   "scripts": {

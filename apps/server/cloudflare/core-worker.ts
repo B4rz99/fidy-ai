@@ -17,13 +17,6 @@ import {
   reconcileEmailReplacement,
   reconcileOnboardingEmail,
 } from "./email-authentication/runtime";
-import {
-  completeBrowserPairingEmail,
-  completeEmailReplacement,
-  requestEmailReplacement,
-  startBrowserPairingEmail,
-  verifyOnboarding,
-} from "./email-authentication/operations";
 import { type BillingCollectionEnvironment } from "./subscription/contract";
 import {
   ScopeMissing,
@@ -38,9 +31,8 @@ import {
   ReviseInput,
   memoryOperationIds,
 } from "@fidy/server/memory-runtime";
-import { emailReplacementOperations } from "@fidy/server/email-authentication-operations";
 import { type TelemetryService } from "@fidy/server/telemetry";
-import { Cause, Clock, Data, Effect, Exit, Option, Schema } from "effect";
+import { type Cause, Clock, Data, Effect, Exit, Option, Schema } from "effect";
 import {
   browseTransactions,
   correctionInput,
@@ -72,7 +64,10 @@ import {
 import { RequestBodyPolicy, boundedJsonBody } from "./http/request-body";
 import { pathId, rawPathId } from "./http/path";
 
-import { handleSupportRecovery, rotateBackupRecoveryCode } from "./recovery/operations";
+import {
+  handleWebAuthentication,
+  ownsWebAuthenticationPath,
+} from "./web-authentication/operations";
 import { executeProtectedSubscriptionQuery, handleCardEnrollment } from "./subscription/operations";
 import {
   dispatchBillingCollection,
@@ -83,13 +78,7 @@ import {
   sweepExpiredCardPreparationAdmission,
 } from "./subscription/runtime";
 
-import {
-  authorizeCanonicalPAT,
-  handlePATRequest,
-  listPATs,
-  patRoute,
-  sweepExpiredPATPairings,
-} from "./tokens/operations";
+import { authorizeCanonicalPAT, listPATs, sweepExpiredPATPairings } from "./tokens/operations";
 import { recallMemories, rejectMemoryMutation } from "./memory/memory";
 import { canonicalOperation, canonicalRoute } from "./routing/canonical-routes";
 import {
@@ -114,12 +103,6 @@ import {
   keywordRuleUnknownId,
   listOwnKeywordRules,
 } from "./categories/operations";
-import {
-  currentWebSessionUser as currentUser,
-  logoutWebSession as logoutBrowser,
-} from "./web-session/operations";
-import { redeemBrowserPairing, startBrowserPairing } from "./browser-login/operations";
-
 import { contractDigestPattern, gitRevisionPattern } from "./runtime/release-identity";
 import { smokeFailureHeader, smokePath, smokeProofAccepted } from "./runtime/smoke";
 import {
@@ -442,14 +425,6 @@ const providerCallbackEffect = (
   }).pipe(Effect.withSpan("billing.collection.event"));
 };
 
-const verificationEffect = (request: Request, db: D1Database): Effect.Effect<Response> =>
-  request.method === "POST"
-    ? Effect.tryPromise({
-        try: () => verifyOnboarding({ request, db }),
-        catch: () => undefined,
-      }).pipe(Effect.orElseSucceed(unavailable))
-    : Effect.succeed(methodNotAllowed());
-
 const enrollmentCorePath = (path: string): boolean =>
   path === "/web/subscription/card-enrollments/prepare" ||
   path === "/web/subscription/card-enrollments/submit" ||
@@ -682,137 +657,13 @@ const ownedCorePath = (path: string): boolean =>
     listCategoriesPath,
     "/providers/kapso/callback",
     "/providers/wompi/billing-events",
-    "/web/onboarding/email/verify",
-    "/web/pairings",
-    "/web/pairings/redeem",
-    "/web/session/logout",
-    "/recovery/backup-code/rotate",
-    "/web/email/authentication/start",
-    "/web/email/authentication/complete",
-    emailReplacementOperations.request.path,
-    emailReplacementOperations.complete.path,
-    "/internal/support-recovery",
-    "/user",
     statementStagingPath,
     "/web/hosted-turns",
     "/web/hosted-turns/delivery",
   ].includes(path) ||
   transactionPath(path) ||
-  patRoute(path) ||
+  ownsWebAuthenticationPath(path) ||
   canonicalRoute(path);
-
-const supportRecoveryResponse = (
-  request: Request,
-  environment: CoreEnvironment,
-  telemetry: TelemetryService
-): Effect.Effect<Response> => {
-  if (request.method !== "POST") return Effect.succeed(methodNotAllowed());
-  return telemetry.rootSpan(
-    {
-      component: "api",
-      operation: "http.supportRecovery",
-      trigger: "api",
-      spanOperation: "http.server",
-      workKind: "http_request",
-      metadata: {
-        _tag: "Http",
-        method: "POST",
-        route: "/internal/support-recovery",
-        status: Option.none(),
-      },
-    },
-    handleSupportRecovery({ request, db: environment.DB, config: environment }).pipe(
-      Effect.catchCauseIf(Cause.hasDies, () =>
-        telemetry
-          .captureFailure({
-            _tag: "Defect",
-            component: "api",
-            operation: "http.supportRecovery",
-            error: "unexpected_defect",
-            cause: undefined,
-          })
-          .pipe(Effect.as(unavailable()))
-      )
-    )
-  );
-};
-
-type BrowserHandlers = Readonly<
-  Record<string, Readonly<{ method: string; handle: () => Promise<Response> }>>
->;
-
-const browserHandlers = ({ request, environment, publish }: RequestExecution): BrowserHandlers => {
-  const db = environment.DB;
-  const routes: Readonly<
-    Record<string, Readonly<{ method: string; handle: () => Promise<Response> }>>
-  > = {
-    "/web/pairings": { method: "POST", handle: () => startBrowserPairing(db) },
-    "/web/pairings/redeem": {
-      method: "POST",
-      handle: () => redeemBrowserPairing({ request, db }),
-    },
-    "/web/session/logout": {
-      method: "POST",
-      handle: () => logoutBrowser({ request, db }),
-    },
-    "/recovery/backup-code/rotate": {
-      method: "POST",
-      handle: () => rotateBackupRecoveryCode({ request, db }),
-    },
-    "/web/email/authentication/start": {
-      method: "POST",
-      handle: () =>
-        startBrowserPairingEmail({
-          request,
-          db,
-          onAccepted: (id) => publish("browserPairing", id),
-        }),
-    },
-    "/web/email/authentication/complete": {
-      method: "POST",
-      handle: () => completeBrowserPairingEmail({ request, db }),
-    },
-    [emailReplacementOperations.request.path]: {
-      method: emailReplacementOperations.request.method,
-      handle: () =>
-        requestEmailReplacement({
-          request,
-          db,
-          onAccepted: (id) => publish("emailReplacement", id),
-        }),
-    },
-    [emailReplacementOperations.complete.path]: {
-      method: emailReplacementOperations.complete.method,
-      handle: () => completeEmailReplacement({ request, db }),
-    },
-    "/user": { method: "GET", handle: () => currentUser({ request, db }) },
-  };
-  return routes;
-};
-
-const browserResponse = ({
-  request,
-  environment,
-  telemetry,
-  publish,
-}: RequestExecution): Effect.Effect<Response> => {
-  const path = new URL(request.url).pathname;
-  if (path === "/internal/support-recovery") {
-    return supportRecoveryResponse(request, environment, telemetry);
-  }
-  const routes = browserHandlers({ request, environment, telemetry, publish });
-  const route = routes[path];
-  if (route === undefined || request.method !== route.method) {
-    return Effect.succeed(methodNotAllowed());
-  }
-  const work = Effect.tryPromise({ try: route.handle, catch: () => undefined }).pipe(
-    Effect.orElseSucceed(unavailable)
-  );
-  return path === emailReplacementOperations.request.path ||
-    path === emailReplacementOperations.complete.path
-    ? work.pipe(Effect.withSpan("emailReplacement.browser"))
-    : work;
-};
 
 const consentRevokedResponse = (): Response =>
   jsonResponse(
@@ -1415,9 +1266,6 @@ const directPathResponse = (
   environment: CoreEnvironment
 ): Option.Option<Effect.Effect<Response>> => {
   const path = new URL(request.url).pathname;
-  if (path === "/web/onboarding/email/verify") {
-    return Option.some(verificationEffect(request, environment.DB));
-  }
   if (path === statementStagingPath) {
     return Option.some(statementUploadResponse(request, environment));
   }
@@ -1874,27 +1722,17 @@ const fetchEffect = ({
   if (Option.isSome(patListing)) {
     return authorizedCanonicalResponse(request, environment, patListing.value);
   }
-  if (patRoute(url.pathname)) {
-    return Effect.tryPromise({
-      try: () => handlePATRequest({ request, db: environment.DB }),
-      catch: () => undefined,
-    }).pipe(Effect.orElseSucceed(unavailable));
-  }
-  if (
-    [
-      "/web/pairings",
-      "/web/pairings/redeem",
-      "/web/session/logout",
-      "/recovery/backup-code/rotate",
-      "/web/email/authentication/start",
-      "/web/email/authentication/complete",
-      emailReplacementOperations.request.path,
-      emailReplacementOperations.complete.path,
-      "/internal/support-recovery",
-      "/user",
-    ].includes(url.pathname)
-  ) {
-    return browserResponse({ request, environment, telemetry, publish });
+  if (ownsWebAuthenticationPath(url.pathname)) {
+    return handleWebAuthentication({
+      request,
+      db: environment.DB,
+      support: {
+        CLOUDFLARE_ACCESS_ISSUER: environment.CLOUDFLARE_ACCESS_ISSUER,
+        CLOUDFLARE_ACCESS_AUDIENCE: environment.CLOUDFLARE_ACCESS_AUDIENCE,
+      },
+      telemetry,
+      publish,
+    });
   }
   return canonicalOrHealthResponse(request, environment, url.pathname);
 };

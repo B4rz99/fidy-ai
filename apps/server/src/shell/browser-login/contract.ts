@@ -1,9 +1,10 @@
+import { logoutWebSessionEndpoint } from "~/shell/web-session/contract";
 import {
   StartedBrowserLoginPairing,
   browserLoginPollingIntervalSeconds,
 } from "~/core/browser-login/contract";
 import { Schema } from "effect";
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
+import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { BrowserLoginPairingId } from "~/core/browser-login/reference";
@@ -199,8 +200,4 @@ export const BrowserLoginWebAuthGroup = HttpApiGroup.make("browserLogin")
       "Poll one browser pairing and atomically redeem it after hosted approval."
     )
   )
-  .add(
-    HttpApiEndpoint.post("logout", "/web/session/logout", {
-      success: HttpApiSchema.NoContent,
-    }).annotate(OpenApi.Description, "Revoke the current browser WebSession and expire its cookie.")
-  );
+  .add(logoutWebSessionEndpoint);

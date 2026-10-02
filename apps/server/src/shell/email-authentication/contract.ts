@@ -1,6 +1,7 @@
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 import { Data, type Effect, Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
+import { BrowserLoginPairingInvalidApi } from "~/shell/browser-login/contract";
 import { BrowserLoginPrivateVerifier } from "~/core/browser-login/contract";
 import { BrowserLoginPairingId } from "~/core/browser-login/reference";
 import {
@@ -289,3 +290,35 @@ export type EmailReplacementMutationService = Readonly<{
 
 /** Trusted static subject query carries exact pairingId/userId for live same-User composition. */
 export type EmailPairingSubject = Readonly<{ subject: OwnedStatement }>;
+
+/** Direct-browser start and completion operations; neither operation creates a WebSession. */
+export const BrowserPairingEmailAuthenticationWebAuthGroup = HttpApiGroup.make(
+  "browserPairingEmailAuthentication"
+)
+  .add(
+    HttpApiEndpoint.post("start", "/web/email/authentication/start", {
+      payload: StartBrowserPairingEmailAuthenticationPayload,
+      success: PendingBrowserPairingEmailAuthentication,
+      error: [
+        BrowserLoginPairingInvalidApi,
+        BrowserPairingEmailAuthenticationInvalidApi,
+        BrowserPairingEmailAuthenticationOriginRejectedApi,
+        BrowserPairingEmailAuthenticationPayloadTooLargeApi,
+        BrowserPairingEmailAuthenticationUnsupportedMediaTypeApi,
+        BrowserPairingEmailAuthenticationUnavailableApi,
+      ],
+    })
+  )
+  .add(
+    HttpApiEndpoint.post("complete", "/web/email/authentication/complete", {
+      payload: CompleteBrowserPairingEmailAuthenticationPayload,
+      success: ApprovedBrowserPairingEmailAuthentication,
+      error: [
+        BrowserPairingEmailAuthenticationInvalidApi,
+        BrowserPairingEmailAuthenticationOriginRejectedApi,
+        BrowserPairingEmailAuthenticationPayloadTooLargeApi,
+        BrowserPairingEmailAuthenticationUnsupportedMediaTypeApi,
+        BrowserPairingEmailAuthenticationUnavailableApi,
+      ],
+    })
+  );

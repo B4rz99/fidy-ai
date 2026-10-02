@@ -154,6 +154,54 @@ const tokensToolPrivate = `tools/${PROBE_PREFIX}tokens-private`;
 
 const PROBES: readonly Probe[] = [
   {
+    name: "foreign scripts cannot acquire private Web Authentication dispatch",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-web-authentication-internal: scripts/${PROBE_PREFIX}web-auth-private/probe.ts → cloudflare/web-authentication/internal/protocol.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `scripts/${PROBE_PREFIX}web-auth-private/probe.ts`,
+        source:
+          'import { respond } from "../../cloudflare/web-authentication/internal/protocol";\nexport const bypass = respond;\n',
+      },
+    ],
+  },
+  {
+    name: "Web Authentication cannot acquire foreign runtime authority",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error web-authentication-imports-unpublished-native-authority: cloudflare/web-authentication/${PROBE_PREFIX}foreign-runtime/probe.ts → cloudflare/email-authentication/runtime.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/web-authentication/${PROBE_PREFIX}foreign-runtime/probe.ts`,
+        source:
+          'import { dispatchBrowserPairingEmail } from "../../email-authentication/runtime";\nexport const bypass = dispatchBrowserPairingEmail;\n',
+      },
+    ],
+  },
+  {
+    name: "Web Authentication cannot import foreign persistence",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error web-authentication-imports-unpublished-native-authority: cloudflare/web-authentication/${PROBE_PREFIX}foreign-proof/probe.ts → cloudflare/browser-login/internal/claim.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/web-authentication/${PROBE_PREFIX}foreign-proof/probe.ts`,
+        source:
+          'import { prepareClaim } from "../../browser-login/internal/claim";\nexport const bypass = prepareClaim;\n',
+      },
+    ],
+  },
+  {
     name: "native callers use the published data-less AccessTier coordinator",
     expect: { kind: "allowed" },
     files: [

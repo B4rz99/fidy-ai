@@ -74,6 +74,60 @@ export default {
       to: { path: "^cloudflare/ingestion/runtime\\.ts$" },
     },
     {
+      name: "foreign-module-imports-cloudflare-web-authentication-internal",
+      severity: "error",
+      comment:
+        "Web Authentication dispatch is private; callers consume its bounded operations (#610).",
+      from: {
+        path: "^(src|cloudflare|scripts|tools)/",
+        pathNot: "^cloudflare/web-authentication/",
+      },
+      to: { path: "^cloudflare/web-authentication/internal/" },
+    },
+    {
+      name: "web-authentication-imports-unpublished-native-authority",
+      severity: "error",
+      comment:
+        "The data-free coordinator invokes published owners; persistence and runtime authority stay private (#610).",
+      from: { path: "^cloudflare/web-authentication/", pathNot: "\\.test\\.ts$" },
+      to: {
+        path: "^cloudflare/",
+        pathNot: [
+          "^cloudflare/web-authentication/",
+          "^cloudflare/(browser-login|email-authentication|recovery|tokens|web-session)/(contract|operations)\\.ts$",
+        ],
+      },
+    },
+    {
+      name: "web-authentication-interface-reexports-internal",
+      severity: "error",
+      comment:
+        "Web Authentication publication declares behavior without laundering private dispatch (#610).",
+      from: { path: "^cloudflare/web-authentication/(contract|operations|runtime)\\.ts$" },
+      to: { path: "^cloudflare/web-authentication/internal/", dependencyTypes: ["export"] },
+    },
+    {
+      name: "web-authentication-contract-imports-implementation",
+      severity: "error",
+      comment: "Web Authentication declarations carry no native execution authority (#610).",
+      from: { path: "^cloudflare/web-authentication/contract\\.ts$" },
+      to: { path: "^cloudflare/web-authentication/(internal/|operations\\.ts$|runtime\\.ts$)" },
+    },
+    {
+      name: "web-authentication-internal-imports-outward-interface",
+      severity: "error",
+      comment: "Private Web Authentication execution depends inward on declarations (#610).",
+      from: { path: "^cloudflare/web-authentication/internal/" },
+      to: { path: "^cloudflare/web-authentication/(operations|runtime)\\.ts$" },
+    },
+    {
+      name: "web-authentication-operations-imports-runtime",
+      severity: "error",
+      comment: "Web Authentication operations cannot acquire construction authority (#610).",
+      from: { path: "^cloudflare/web-authentication/operations\\.ts$" },
+      to: { path: "^cloudflare/web-authentication/runtime\\.ts$" },
+    },
+    {
       name: "core-imports-shell",
       severity: "error",
       comment:
@@ -748,11 +802,11 @@ export default {
       name: "web-auth-api-imports-server-code",
       severity: "error",
       comment:
-        "The browser authentication facade may compose only Email Authentication and BrowserLogin declarations, never owner implementation.",
+        "The browser authentication facade publishes the Web Authentication contract, never owner implementation.",
       from: { path: "^src/web-auth-api\\.ts$" },
       to: {
         path: "^src/shell/",
-        pathNot: "^src/shell/(email-authentication|browser-login)/contract\\.ts$",
+        pathNot: "^src/shell/web-authentication/contract\\.ts$",
       },
     },
     {

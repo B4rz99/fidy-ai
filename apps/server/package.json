@@ -74,26 +74,6 @@
       "import": "./src/client.ts",
       "default": "./src/client.ts"
     },
-    "./statement-parser": {
-      "types": "./src/shell/ingestion/parser.ts",
-      "import": "./src/shell/ingestion/parser.ts",
-      "default": "./src/shell/ingestion/parser.ts"
-    },
-    "./statement-staging": {
-      "types": "./src/core/ingestion/staging.ts",
-      "import": "./src/core/ingestion/staging.ts",
-      "default": "./src/core/ingestion/staging.ts"
-    },
-    "./statement-format": {
-      "types": "./src/shell/ingestion/source-format.ts",
-      "import": "./src/shell/ingestion/source-format.ts",
-      "default": "./src/shell/ingestion/source-format.ts"
-    },
-    "./statement-path": {
-      "types": "./src/shell/ingestion/path.ts",
-      "import": "./src/shell/ingestion/path.ts",
-      "default": "./src/shell/ingestion/path.ts"
-    },
     "./telemetry": {
       "types": "./src/shell/observability/runtime.ts",
       "import": "./src/shell/observability/runtime.ts",
@@ -208,13 +188,28 @@
       "types": "./src/core/budgets/operations.ts",
       "import": "./src/core/budgets/operations.ts",
       "default": "./src/core/budgets/operations.ts"
+    },
+    "./ingestion-contract": {
+      "types": "./src/shell/ingestion/contract.ts",
+      "import": "./src/shell/ingestion/contract.ts",
+      "default": "./src/shell/ingestion/contract.ts"
+    },
+    "./ingestion-operations": {
+      "types": "./src/shell/ingestion/operations.ts",
+      "import": "./src/shell/ingestion/operations.ts",
+      "default": "./src/shell/ingestion/operations.ts"
+    },
+    "./ingestion-runtime": {
+      "types": "./src/shell/ingestion/runtime.ts",
+      "import": "./src/shell/ingestion/runtime.ts",
+      "default": "./src/shell/ingestion/runtime.ts"
     }
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "contracts:generate": "bun tools/contracts/generate.ts",
-    "email-formats:generate": "bun tools/email-formats/generate.ts",
-    "email-formats:check": "bun tools/email-formats/generate.ts --check",
+    "email-formats:generate": "bun tools/email-formats/generate-runtime.ts",
+    "email-formats:check": "bun tools/email-formats/generate-runtime.ts --check",
     "contracts:digest": "bun tools/contracts/digest-artifacts.ts contracts/openapi.json contracts/operation-policy.json",
     "test:contracts": "bun --bun vitest run --config tools/contracts/vitest.config.ts",
     "test": "bun --bun vitest run --config vitest.config.ts",

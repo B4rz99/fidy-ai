@@ -5,21 +5,16 @@ import { prepareCanonicalAuditBudgetGuard, refusedByAuditBudget } from "@fidy/se
 import { KeywordRule, KeywordRuleId } from "@fidy/server/categories";
 import { Memory, MemoryId } from "@fidy/server/memory-runtime";
 import { Budget, BudgetId } from "@fidy/server/budgets-contract";
-import { StatementSubmission } from "@fidy/server/statement-staging";
-import { EmailForwardingAddress } from "../../src/core/ingestion/model";
-import { readForwardingAddress } from "../ingestion/forwarding-address";
+import { StatementSubmission } from "@fidy/server/ingestion-contract";
+import { EmailForwardingAddress } from "../../src/core/ingestion/contract";
+import { readForwardingAddress, statementDailyBudgetRefusal } from "../ingestion/operations";
 import {
   RestoredTransactionPair,
   Transaction,
   TransactionPresentation,
 } from "@fidy/server/transactions-contract";
 import { canonicalTriggerOf } from "./canonical-triggers";
-import {
-  lostStatementReplay,
-  readOwnedStatementSubmission,
-  submissionProjection,
-} from "../ingestion/statement-staging";
-import { statementDailyBudgetRefusal } from "./statement-mutation";
+
 import {
   type CanonicalRefusalDisposition,
   type TransactionCaller,
@@ -288,7 +283,7 @@ const refuseChildGuard = ({
     // A same-material publication that won the race is a retry, not a refused child.
     if (
       mutation.outcome._tag === "StatementSubmission" &&
-      (yield* lostStatementReplay(mutation.outcome.config, mutation.outcome.publication))
+      (yield* mutation.outcome.publication.lostReplay)
     ) {
       return { _tag: "Aborted" } as const;
     }
@@ -416,26 +411,14 @@ const findCommittedValue = ({
       return readForwardingAddress(db, userId, mutation.outcome.current).pipe(
         Effect.map(Option.map((address) => ({ _tag: "ForwardingAddress" as const, address })))
       );
-    case "StatementSubmission": {
-      const statement = mutation.outcome;
-      return Effect.gen(function* () {
-        const read = readOwnedStatementSubmission(statement.config, {
-          userId,
-          submissionId: statement.publication.submissionId,
-        });
-        let result = yield* Effect.exit(read);
-        for (let attempt = 1; attempt < 3 && Exit.isFailure(result); attempt += 1) {
-          result = yield* Effect.exit(read);
-        }
-        if (Exit.isFailure(result)) return Option.none();
-        return Option.flatMap(result.value, (row) =>
-          Option.map(submissionProjection(row), (submission) => ({
-            _tag: "StatementSubmission" as const,
-            submission,
-          }))
+    case "StatementSubmission":
+      return mutation.outcome.publication
+        .readCommitted(userId)
+        .pipe(
+          Effect.map(
+            Option.map((submission) => ({ _tag: "StatementSubmission" as const, submission }))
+          )
         );
-      });
-    }
   }
 };
 
@@ -755,7 +738,7 @@ const executePreparedSingle = ({
       ) {
         return singleResponse({ db, subject, execution, present });
       }
-      return lostStatementReplay(outcome.config, outcome.publication).pipe(
+      return outcome.publication.lostReplay.pipe(
         Effect.flatMap((sameMaterial) =>
           sameMaterial
             ? retryStatement.value().pipe(

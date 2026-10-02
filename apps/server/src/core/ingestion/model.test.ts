@@ -16,7 +16,7 @@ import {
   XlsxCellEvidence,
   type XlsxRowEvidence,
   maximumStatementBytes,
-} from "./model";
+} from "./contract";
 
 const timestamp = "2026-08-01T12:00:00Z";
 const submissionId = "f1d1a000-0000-4000-8000-000000000401";

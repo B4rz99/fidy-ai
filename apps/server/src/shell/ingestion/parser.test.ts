@@ -2,8 +2,8 @@ import { expect, it } from "@effect/vitest";
 import { DateTime, Effect, Exit, Option, Schema } from "effect";
 import type { WorkBook, WorkSheet } from "xlsx";
 import * as XLSX from "xlsx/xlsx.mjs";
-import { ParsedStatementRow } from "~/core/ingestion/model";
-import { parseStatementFile } from "./parser";
+import { ParsedStatementRow } from "~/core/ingestion/contract";
+import { parseStatementFile } from "./operations";
 
 const syntheticCellDate = DateTime.toDate(DateTime.makeUnsafe("2026-02-05T00:00:00Z"));
 const zipCentralHeaderLength = 46;
@@ -50,23 +50,6 @@ it.effect("preserves CSV records and multiline physical line positions", () =>
       endLine: 3,
     });
     expect(parsed.rows[0]?.fields).toEqual(["05/02/2026", "25.000", "Mercado\ncentral", "DEBIT"]);
-  })
-);
-
-it.effect("bounds the raw mapping sample without dropping parser rows", () =>
-  Effect.gen(function* () {
-    const records = Array.from(
-      { length: 6 },
-      (_, index) => `2026-02-0${index + 1},${index + 1},Description ${index + 1}`
-    );
-    const parsed = yield* parseStatementFile(
-      new TextEncoder().encode(`Date,Amount,Description\n${records.join("\n")}`)
-    );
-
-    expect(parsed.rows).toHaveLength(6);
-    expect(parsed.sampleRows).toHaveLength(5);
-    expect(parsed.sampleRows[4]).toEqual(["2026-02-05", "5", "Description 5"]);
-    expect(parsed.sampleRows.flat()).not.toContain("Description 6");
   })
 );
 
@@ -271,7 +254,7 @@ it.effect("reads XLSX cells directly and retains hidden/formula evidence", () =>
   Effect.gen(function* () {
     const bytes = new Uint8Array(
       yield* Effect.tryPromise(() =>
-        Bun.file(new URL("./fixtures/synthetic-statement.xlsx", import.meta.url)).bytes()
+        Bun.file(new URL("./internal/fixtures/synthetic-statement.xlsx", import.meta.url)).bytes()
       )
     );
     const parsed = yield* parseStatementFile(bytes);

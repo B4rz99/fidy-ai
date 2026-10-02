@@ -1,8 +1,9 @@
 import { Schema } from "effect";
-import {
-  maximumEmailEvidenceIdCharacters,
-  maximumForwardedEmailDeliveryIdCharacters,
-} from "./email-policy";
+
+/** Content and provider message identifiers are bounded metadata, never open-ended evidence. */
+export const maximumEmailEvidenceIdCharacters = 256;
+/** Delivery identifiers are bounded to replay verification input and evidence. */
+export const maximumForwardedEmailDeliveryIdCharacters = 128;
 
 /** Stable kind code for deterministic tabular statement formats. */
 export const StatementSourceFormat = Schema.Literals(["csv", "xlsx"]);

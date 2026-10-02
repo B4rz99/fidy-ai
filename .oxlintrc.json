@@ -174,7 +174,7 @@
     // SMTP admission is one ordered trust boundary: splitting its receipt-before-R2,
     // publication, and ambiguity cleanup steps would obscure their required sequence.
     {
-      "files": ["apps/server/cloudflare/ingestion/forwarded-email.ts"],
+      "files": ["apps/server/cloudflare/ingestion/internal/forwarded-email.ts"],
       "rules": {
         "complexity": "off",
         "max-lines-per-function": "off"

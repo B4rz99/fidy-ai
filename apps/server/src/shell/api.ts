@@ -10,7 +10,7 @@ import { DashboardGroup } from "~/shell/dashboard/operations";
 import { EmailAuthenticationGroup } from "~/shell/email-authentication/contract";
 import { IdentityGroup } from "~/shell/identity/contract";
 import { InsightsGroup } from "~/shell/insights/operations";
-import { IngestionGroup } from "~/shell/ingestion/operations";
+import { IngestionGroup } from "~/shell/ingestion/contract";
 import { MemoryGroup } from "~/shell/memory/operations";
 import { makeOperationsGroup } from "~/shell/operations/operations";
 import { SubscriptionGroup } from "~/shell/subscription/contract";

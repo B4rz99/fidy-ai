@@ -12,13 +12,19 @@ import type { MemoryOperationId } from "@fidy/server/memory-runtime";
 import type { HostedInference } from "@fidy/server/hosted-inference";
 import { DeliveryEvidenceInput, InsightEventId } from "@fidy/server/insights-runtime";
 import { insightRefusal, prepareInsightTransition } from "../insights/insight-store";
-import { statementMutationAdapter } from "./statement-mutation";
+import {
+  invalidForwardingAddress,
+  invalidStatementSubmission,
+  prepareForwardingAddress,
+  prepareStatementSubmission,
+  presentForwardingAddress,
+  presentStatementSubmission,
+} from "../ingestion/operations";
 import {
   dashboardRefusal,
   prepareDashboard,
   presentDashboard,
 } from "../dashboard/dashboard-mutation";
-import { forwardingAddressMutationAdapter } from "./forwarding-address-mutation";
 import {
   budgetRefusal,
   prepareCreateBudget,
@@ -337,8 +343,22 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
         }),
     },
   ],
-  [CanonicalOperationId.make("ingestion.submitForExtraction"), statementMutationAdapter],
-  [CanonicalOperationId.make("ingestion.enableEmailForwarding"), forwardingAddressMutationAdapter],
+  [
+    CanonicalOperationId.make("ingestion.submitForExtraction"),
+    {
+      prepare: prepareStatementSubmission,
+      present: presentStatementSubmission,
+      invalidRefusal: invalidStatementSubmission,
+    },
+  ],
+  [
+    CanonicalOperationId.make("ingestion.enableEmailForwarding"),
+    {
+      prepare: prepareForwardingAddress,
+      present: presentForwardingAddress,
+      invalidRefusal: invalidForwardingAddress,
+    },
+  ],
   [
     CanonicalOperationId.make("transactions.createTransaction"),
     {

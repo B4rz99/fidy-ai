@@ -67,12 +67,14 @@ import {
   executeHostedCanonicalBatch,
   rawOperation,
 } from "../mutations/canonical-mutation-batch";
-import { unavailableStatement } from "../ingestion/statement-ingestion";
 import {
   failStatementSubmission,
+  processForwardedEmail,
   processStatementSubmission,
-} from "../ingestion/statement-processing";
-import { StatementCoordinatorActivity } from "../ingestion/statement-work";
+  unavailableStatement,
+} from "../ingestion/operations";
+
+import { ForwardedEmailWork, StatementCoordinatorActivity } from "../ingestion/contract";
 import {
   cloudflareWorkerTelemetry,
   observeProviderFetch,
@@ -80,9 +82,8 @@ import {
   observeWorkerResponse,
   workerRelease,
 } from "../runtime/telemetry";
-import { ForwardedEmailWork } from "../ingestion/forwarded-email-delivery";
+
 import { coordinatorProbeName } from "../runtime/operational-probes";
-import { processForwardedEmail } from "../ingestion/forwarded-email-processing";
 import { evaluateBudgetAlerts } from "../budgets/operations";
 import {
   type HostedCommitFence,

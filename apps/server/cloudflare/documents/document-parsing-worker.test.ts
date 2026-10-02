@@ -1,4 +1,5 @@
-import { statementParserLimits } from "@fidy/server/statement-parser";
+import * as XLSX from "xlsx/xlsx.mjs";
+import { statementParserLimits } from "@fidy/server/ingestion-contract";
 import { it } from "@effect/vitest";
 import { Data, Effect } from "effect";
 import { describe, expect, vi } from "vitest";
@@ -43,9 +44,17 @@ describe("Document parsing Worker proof", () => {
   it.effect("parses the representative XLSX fixture without evaluating active content", () =>
     Effect.gen(function* () {
       const outboundFetch = vi.spyOn(globalThis, "fetch");
-      const bytes = yield* readFixture(
-        "../../src/shell/ingestion/fixtures/synthetic-statement.xlsx"
-      );
+      const workbook = XLSX.utils.book_new();
+      const sheet = XLSX.utils.aoa_to_sheet([
+        ["Date", "Amount", "Description"],
+        ["2026-01-01", 1000, "Synthetic coffee"],
+        ["2026-01-02", 2000, "Synthetic fare"],
+      ]);
+      sheet.B3 = { t: "n", v: 2000, f: "1000*2" };
+      sheet["!rows"] = [{}, {}, { hidden: true }];
+      XLSX.utils.book_append_sheet(workbook, sheet, "Statement");
+      const bytes: unknown = XLSX.write(workbook, { type: "array", bookType: "xlsx" });
+      if (!(bytes instanceof ArrayBuffer)) return yield* Effect.die("Expected XLSX ArrayBuffer");
       const response = yield* Effect.tryPromise(() => parse(new Uint8Array(bytes)));
 
       expect(response.status).toBe(200);

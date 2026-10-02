@@ -52,7 +52,7 @@ export {
   StartPATPairingPayload,
 } from "~/core/tokens/contract";
 export { buildPATDisclosure, patScopeCopy } from "~/core/tokens/operations";
-export { StagedStatementReference, SubmitForExtractionInput } from "~/core/ingestion/model";
+export { StagedStatementReference, SubmitForExtractionInput } from "~/core/ingestion/contract";
 export type { CanonicalInput } from "~/shell/_shared/canonical-input";
 export type { CanonicalSuccess } from "~/shell/_shared/canonical-success";
 export {

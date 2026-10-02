@@ -3,7 +3,7 @@ import {
   emailReplacementCompletionPath,
   emailReplacementPath,
 } from "@fidy/server/email-authentication-api";
-import { statementStagingPath } from "@fidy/server/statement-path";
+import { statementStagingPath } from "@fidy/server/ingestion-contract";
 import type * as Cloudflare from "alchemy/Cloudflare";
 import { browserOrigins, productionTopology } from "../../apps/server/cloudflare/runtime/topology";
 

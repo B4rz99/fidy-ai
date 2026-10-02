@@ -1,115 +1,82 @@
-import { Schema } from "effect";
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
+import type { StatementSourceFormat } from "~/core/ingestion/reference";
+import { Effect, Option, Schema } from "effect";
+import { maximumStatementBytes } from "~/core/ingestion/contract";
+import type { CapturedInterpretationContext } from "~/core/interpretation-evidence/contract";
+import { ReceivedEmailContent } from "~/shell/ingestion/internal/material";
 import {
-  EmailForwardingAddress,
-  EmailForwardingStatus,
-  NeedsReviewItem,
-  StatementSubmission,
-  SubmitForExtractionInput,
-} from "~/core/ingestion/model";
-import { NeedsReviewItemId, StatementSubmissionId } from "~/core/ingestion/reference";
-import { Transaction } from "~/core/transactions/contract";
-import {
-  NotFound,
-  OperationResponse,
-  PaywallRequired,
-  ValidationFailed,
-  acceptedStatus,
-} from "~/shell/public-http/contract";
-import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
-import { ResolveNeedsReviewItemInput } from "./input";
+  type NotificationEmailOutcome,
+  type ParsedStatement,
+  StatementParseFailed,
+} from "./contract";
+import { parseCsv, parseXlsx } from "~/shell/ingestion/internal/parser";
+import { interpretNotificationEmail as interpretDecodedEmail } from "~/shell/ingestion/internal/email-interpretation/interpret";
 
-const read = operationPolicy({
-  access: patScoped("read"),
-  requiredTier: "free",
-  agentConfirmation: "not-required",
-  kind: "query",
-});
-const write = operationPolicy({
-  access: patScoped("write"),
-  requiredTier: "free",
-  agentConfirmation: "not-required",
-  kind: "mutation",
-});
-const confirmedWrite = operationPolicy({
-  access: patScoped("write"),
-  requiredTier: "free",
-  agentConfirmation: "required",
-  kind: "mutation",
-});
+const zipFirstByte = 0x50;
+const zipSecondByte = 0x4b;
 
-/** Canonical durable statement, forwarded-email, and visible review capabilities. */
-export const IngestionGroup = HttpApiGroup.make("ingestion")
-  .add(
-    HttpApiEndpoint.post("enableEmailForwarding", "/ingestion/email-forwarding", {
-      success: OperationResponse(EmailForwardingAddress),
-    })
-      .annotate(
-        OpenApi.Description,
-        "Idempotently enable one permanent unpredictable forwarding address for the caller. Later calls return the same address."
-      )
-      .annotateMerge(write)
-  )
-  .add(
-    HttpApiEndpoint.get("getEmailForwarding", "/ingestion/email-forwarding", {
-      success: OperationResponse(EmailForwardingStatus),
-    })
-      .annotate(
-        OpenApi.Description,
-        "Read the enabled address, remaining Free units in the current America/Bogota month, deferred email count, and exact reset instant. Trial and Pro report an uncapped remaining allowance."
-      )
-      .annotateMerge(read)
-  )
-  .add(
-    HttpApiEndpoint.post("submitForExtraction", "/ingestion/statements", {
-      payload: SubmitForExtractionInput,
-      success: OperationResponse(StatementSubmission).pipe(HttpApiSchema.status(acceptedStatus)),
-      error: [PaywallRequired, ValidationFailed],
-    })
-      .annotate(
-        OpenApi.Description,
-        "Idempotently queue one bounded CSV or XLSX statement whose bytes were first staged through the authenticated statement staging transport. Free includes one lifetime backfill; Pro access permits ongoing submissions. Poll the returned submission and inspect NeedsReviewItems after completion."
-      )
-      .annotateMerge(write)
-  )
-  .add(
-    HttpApiEndpoint.get("getStatementSubmission", "/ingestion/statements/:id", {
-      params: Schema.Struct({ id: StatementSubmissionId }),
-      success: OperationResponse(StatementSubmission),
-      error: NotFound,
-    })
-      .annotate(
-        OpenApi.Description,
-        "Read one owned statement submission and its complete accepted/review row accounting."
-      )
-      .annotateMerge(read)
-  )
-  .add(
-    HttpApiEndpoint.get("listNeedsReviewItems", "/ingestion/needs-review", {
-      query: Schema.Struct({
-        offset: Schema.OptionFromOptionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
-        limit: Schema.OptionFromOptionalKey(
-          Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 }))
-        ),
-      }),
-      success: OperationResponse(Schema.Array(NeedsReviewItem)),
-    })
-      .annotate(
-        OpenApi.Description,
-        "List up to 100 of the caller's visible statement rows and forwarded emails requiring review, followed by retained resolution metadata. Use offset and limit to page; pending statement items include parser-bounded original row evidence and email items reference their expiring IngestSample."
-      )
-      .annotateMerge(read)
-  )
-  .add(
-    HttpApiEndpoint.post("resolveNeedsReviewItem", "/ingestion/needs-review/:id/resolve", {
-      params: Schema.Struct({ id: NeedsReviewItemId }),
-      payload: ResolveNeedsReviewItemInput,
-      success: OperationResponse(Transaction),
-      error: [NotFound, ValidationFailed],
-    })
-      .annotate(
-        OpenApi.Description,
-        "Resolve one pending statement row using its captured ServiceMarket, locale, and time zone. Atomically create the Transaction and immutable statement-line SourceAttestation, then erase original row evidence."
-      )
-      .annotateMerge(confirmedWrite)
-  );
+/** Base64 signatures of common non-tabular uploads; content decides, never a claimed type. */
+const unsupportedSignatures = ["JVBERg==", "iVBORw==", "/9j/", "R0lGOA==", "Qk0=", "UklGRg=="].map(
+  (signature) => Uint8Array.fromBase64(signature)
+);
+// Encrypted Office documents use OLE Compound File, not the ZIP container of supported XLSX.
+const protectedOfficeSignature = Uint8Array.fromBase64("0M8R4KGxGuE=");
+
+const startsWith = (bytes: Uint8Array, signature: Uint8Array): boolean =>
+  signature.every((value, index) => bytes[index] === value);
+
+/**
+ * True when the leading bytes identify an unsupported format — PDF, protected Office documents,
+ * PNG, JPEG, GIF, BMP, or RIFF/WebP. Staging and parsing share this gate, so a mismatched claim cannot decide
+ * whether hostile content is admitted.
+ */
+export const knownUnsupportedStatementBytes = (bytes: Uint8Array): boolean =>
+  unsupportedSignatures.some((signature) => startsWith(bytes, signature)) ||
+  startsWith(bytes, protectedOfficeSignature);
+
+/** Sniffs the deterministic parser from uploaded bytes rather than untrusted MIME metadata. */
+export const statementSourceFormat = (bytes: Uint8Array): StatementSourceFormat =>
+  bytes.slice(0, 2).join(",") === `${zipFirstByte},${zipSecondByte}` ? "xlsx" : "csv";
+
+/**
+ * Decodes one bounded untrusted statement without executing active workbook content. Only rows
+ * required by native finalization leave the owner; mapping samples and parser details stay private.
+ */
+export const parseStatementFile = (
+  bytes: Uint8Array
+): Effect.Effect<ParsedStatement, StatementParseFailed> =>
+  Effect.try({
+    try: () => {
+      if (bytes.length === 0) throw new StatementParseFailed({ safeReason: "malformed-file" });
+      if (bytes.length > maximumStatementBytes) {
+        throw new StatementParseFailed({ safeReason: "resource-limit" });
+      }
+      if (knownUnsupportedStatementBytes(bytes)) {
+        throw new StatementParseFailed({ safeReason: "unsupported-format" });
+      }
+      const parsed = statementSourceFormat(bytes) === "xlsx" ? parseXlsx(bytes) : parseCsv(bytes);
+      return { sourceFormat: parsed.sourceFormat, headers: parsed.headers, rows: parsed.rows };
+    },
+    catch: (failure) =>
+      failure instanceof StatementParseFailed
+        ? failure
+        : new StatementParseFailed({ safeReason: "malformed-file" }),
+  });
+
+/**
+ * Validate one provider-decoded retained email and return its canonical extraction or closed review
+ * reason. The input is encoded untrusted material, including an ISO timestamp and optional text/HTML;
+ * no raw content, schema, format catalog, model request, or fetched reference escapes this operation.
+ */
+export const interpretNotificationEmail = (
+  input: Readonly<{
+    content: unknown;
+    context: CapturedInterpretationContext;
+  }>
+): Effect.Effect<NotificationEmailOutcome> =>
+  Effect.gen(function* () {
+    const content = Schema.decodeUnknownOption(ReceivedEmailContent)(input.content);
+    if (Option.isNone(content)) {
+      return { _tag: "NeedsReview", reason: "canonical-validation-failed" };
+    }
+    return yield* interpretDecodedEmail({ content: content.value, context: input.context });
+  });

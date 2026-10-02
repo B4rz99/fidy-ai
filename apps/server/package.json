@@ -210,7 +210,7 @@
   },
   "dependencies": {
     "@effect/sql-d1": "4.0.0-rc.115",
-    "csv-parse": "7.0.2",
+    "csv-parse": "7.0.3",
     "effect": "4.0.0-rc.115",
     "fflate": "0.8.3",
     "jose": "6.2.12",
@@ -224,13 +224,13 @@
     "@effect/platform-bun": "4.0.0-rc.115",
     "@effect/platform-node": "4.0.0-rc.115",
     "@effect/vitest": "4.0.0-rc.115",
-    "@vitest/coverage-istanbul": "5.0.1",
+    "@vitest/coverage-istanbul": "5.0.2",
     "bun-types": "1.4.2",
     "esbuild": "0.28.2",
     "miniflare": "5.20260911.1-alpha",
     "rolldown": "1.2.11",
     "typescript": "7.0.2",
-    "vitest": "5.0.1",
-    "wrangler": "4.139.0"
+    "vitest": "5.0.2",
+    "wrangler": "4.140.0"
   }
 }

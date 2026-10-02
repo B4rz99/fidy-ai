@@ -22,6 +22,18 @@ if (unexpectedSharedKernelFiles.length > 0) {
   );
 }
 
+const sharedTestHarnesses = new Set(["credential-evidence-harness.ts", "crypto-harness.ts"]);
+const sharedTestSupport = Array.from(
+  new Bun.Glob("**/*.ts").scanSync({ cwd: `${serverRoot}/src/shell/testing` })
+);
+const unexpectedTestSupport = sharedTestSupport.filter((file) => !sharedTestHarnesses.has(file));
+if (unexpectedTestSupport.length > 0) {
+  throw new Error(
+    "Shared test support is restricted to the named credential-evidence and cryptography harnesses; owner fixtures belong beside their owner (#616): " +
+      unexpectedTestSupport.join(", ")
+  );
+}
+
 const retiredOutboundHttpFiles = [
   "src/shell/_shared/bounded-external-http.ts",
   "src/shell/_shared/bounded-external-http.test.ts",
@@ -176,6 +188,135 @@ const canonicalAlias = `cloudflare/canonical-operations/${PROBE_PREFIX}alias`;
 const canonicalTypeAlias = `cloudflare/canonical-operations/${PROBE_PREFIX}type-alias`;
 
 const PROBES: readonly Probe[] = [
+  {
+    name: "owner-local fixtures remain usable from their own tests",
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}own-fixture/state.test-fixture.ts`,
+        source: "export type State = { readonly accepted: boolean };\n",
+      },
+      {
+        path: `cloudflare/${PROBE_PREFIX}own-fixture/probe.test.ts`,
+        source:
+          'import type { State } from "./state.test-fixture";\nexport type FixtureState = State;\n',
+      },
+    ],
+  },
+  {
+    name: "foreign native tests cannot type-import owner fixtures",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error test-support-owner-private: cloudflare/${PROBE_PREFIX}foreign-native-fixture/probe.test.ts → cloudflare/${PROBE_PREFIX}native-fixture/state.test-fixture.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}native-fixture/state.test-fixture.ts`,
+        source: "export type State = { readonly accepted: boolean };\n",
+      },
+      {
+        path: `cloudflare/${PROBE_PREFIX}foreign-native-fixture/probe.test.ts`,
+        source: `import type { State } from "../${PROBE_PREFIX}native-fixture/state.test-fixture";\nexport type FixtureState = State;\n`,
+      },
+    ],
+  },
+  {
+    name: "tools cannot re-export owner fixtures as a broad harness",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error test-support-landmark-private: tools/${PROBE_PREFIX}fixture-laundering/probe-harness.ts → src/shell/hosted-inference/context.test-fixture.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `tools/${PROBE_PREFIX}fixture-laundering/probe-harness.ts`,
+        source:
+          'export { hostedInitialTextContext } from "~/shell/hosted-inference/context.test-fixture";\n',
+      },
+    ],
+  },
+  {
+    name: "published interfaces cannot launder their own test fixtures",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error production-imports-test-support: src/shell/${PROBE_PREFIX}fixture-interface/operations.ts → src/shell/${PROBE_PREFIX}fixture-interface/state.test-fixture.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `src/shell/${PROBE_PREFIX}fixture-interface/state.test-fixture.ts`,
+        source: "export const fixture = true;\n",
+      },
+      {
+        path: `src/shell/${PROBE_PREFIX}fixture-interface/operations.ts`,
+        source:
+          'import { fixture } from "./state.test-fixture";\nconst alias = fixture;\nexport { alias };\n',
+      },
+    ],
+  },
+  {
+    name: "native production cannot acquire shared D1 test bindings",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error production-imports-test-support: cloudflare/${PROBE_PREFIX}production-fixture/probe.ts → cloudflare/d1-test-fixture.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}production-fixture/probe.ts`,
+        source:
+          'import { isolatedTestDatabases } from "../d1-test-fixture";\nexport const fixture = isolatedTestDatabases;\n',
+      },
+    ],
+  },
+  {
+    name: "provider tests retain the published Outbound HTTP test seam",
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}outbound-test-seam/probe.test.ts`,
+        source:
+          'import { testOutboundTransportLayer } from "~/shell/outbound-http/testing";\nexport const transport = testOutboundTransportLayer;\n',
+      },
+    ],
+  },
+  {
+    name: "native harnesses cannot type-import portable internals",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error native-test-composition-imports-portable-internal: cloudflare/${PROBE_PREFIX}portable-private/probe-harness.ts → src/shell/hosted-inference/internal/authority.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}portable-private/probe-harness.ts`,
+        source:
+          'import type { PreparedLifecycle } from "~/shell/hosted-inference/internal/authority";\nexport type Leaked = PreparedLifecycle;\n',
+      },
+    ],
+  },
+  {
+    name: "foreign tests cannot acquire an owner's private fixture",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error test-support-owner-private: src/shell/${PROBE_PREFIX}foreign-fixture/probe.test.ts → src/shell/hosted-inference/context.test-fixture.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `src/shell/${PROBE_PREFIX}foreign-fixture/probe.test.ts`,
+        source:
+          'import { hostedInitialTextContext } from "~/shell/hosted-inference/context.test-fixture";\nexport const leakedFixture = hostedInitialTextContext;\n',
+      },
+    ],
+  },
   {
     name: "ordinary owners cannot construct the application Queue runtime",
     expect: { kind: "rejected", mustContain: ["error composition-runtime-outside-root"] },

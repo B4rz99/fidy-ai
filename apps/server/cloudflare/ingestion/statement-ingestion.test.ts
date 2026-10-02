@@ -8,7 +8,11 @@ import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { Clock, Data, Effect, Option, Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { afterAll, afterEach, expect, it } from "vitest";
-import { installTestSchema, isolatedTestStorage } from "../d1-test-fixture";
+import {
+  hostedTurnTestMigrations,
+  installTestSchema,
+  isolatedTestStorage,
+} from "../d1-test-fixture";
 import {
   BatchEnvelope,
   batchCallId,
@@ -18,7 +22,6 @@ import {
   defectiveBatchDb,
   seedTransaction,
 } from "./statement-batch.test-fixture";
-import { hostedTurnTestMigrations } from "../test-fixtures/hosted-turn";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import { statementConflictMessage } from "./internal/statement-staging";
 import {
@@ -119,9 +122,7 @@ const platformModule = (): Promise<string> =>
   });
 const buildPlatformModule = (): Promise<string> =>
   Bun.build({
-    entrypoints: [
-      new URL("../transactions/transaction-platform-fixture.ts", import.meta.url).pathname,
-    ],
+    entrypoints: [new URL("../coordinator-test-harness.ts", import.meta.url).pathname],
     target: "browser",
   }).then((built) => {
     const output = built.outputs[0];

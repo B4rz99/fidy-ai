@@ -12,7 +12,7 @@ import {
   HostedToolCallMaximum,
 } from "./contract";
 import { makeHostedInferenceStub } from "./operations";
-import { hostedInitialTextContext as context } from "./test-fixtures";
+import { hostedInitialTextContext as context } from "./context.test-fixture";
 
 const request = (text: string): HostedTextRequest => ({
   context: context(text),

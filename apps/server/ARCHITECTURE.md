@@ -362,6 +362,34 @@ of real Durable Object bindings, runtime restart, and platform lifecycle keep fr
 Fixture isolation tests cover contaminated schemas, rows, R2 bytes, and allocation beyond one
 process's binding pool. Files remain serial within each runner.
 
+Owner-private builders and provider samples live beside their owners. `*.test-fixture.ts` is a
+private test interface: only that owner’s tests and fixtures may consume it. Tests may reach their
+own visible internals; foreign tests use published contracts and operations. A test, runtime or
+harness filename never grants foreign internal access, including across portable/native layers or
+through a type-only import. Production and Published Trio interfaces cannot import or re-export test
+support, including via a local alias.
+
+The shared test compositions are explicitly bounded:
+
+- `shell/testing/credential-evidence-harness.ts` observes typed failures and credential redaction;
+- `shell/testing/crypto-harness.ts` supplies test-only platform cryptography;
+- `shell/outbound-http/testing.ts` is the existing published transport-test interface, beneath the
+  real bounded Outbound HTTP policy;
+- `cloudflare/d1-test-fixture.ts` owns isolated platform bindings and ordered migration setup,
+  including the schema additions shared by cross-owner hosted-work integration cases;
+- `cloudflare/coordinator-test-harness.ts` bundles the published Transactions coordinator runtime
+  for broad D1/DO integration tests; it owns no domain behavior;
+- `cloudflare/workflow-test-runtime.ts` supplies the native constructor placeholder for local
+  Workflow activity tests, without claiming platform suspension/restart evidence;
+- `cloudflare/d1-migration-test-worker.fixture.ts` and the browser-acceptance modules remain broad
+  schema and application harnesses. They compose published Worker/runtime interfaces. Synthetic
+  platform seeds and controlled fault premises remain test setup, never production APIs.
+
+Observability and HostedInference test builders stay owner-local. No generic feature-fixture bucket,
+compatibility re-export or private test adapter serves foreign owners. Existing API, browser,
+provider and native outcome assertions remain unchanged by this ownership-only arrangement; it
+introduces no new external workflow or telemetry purpose.
+
 Tests whose only owner was a removed runtime or provider implementation are deleted. Portable
 domain, schema, security, contract, browser, provider-boundary, and isolation evidence remains
 authoritative.

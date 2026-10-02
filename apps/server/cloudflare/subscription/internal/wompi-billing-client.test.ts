@@ -1,4 +1,4 @@
-import { TestCrypto } from "~/shell/testing/crypto";
+import { TestCrypto } from "~/shell/testing/crypto-harness";
 import { expect, it, layer } from "@effect/vitest";
 import { type Config, ConfigProvider, Effect, Layer, Option, Schema } from "effect";
 import { OutboundHttp } from "~/shell/outbound-http/operations";
@@ -14,7 +14,7 @@ import {
   exitFailure,
   expectNotInspected,
   renderedFailure,
-} from "~/shell/testing/credential-failure";
+} from "~/shell/testing/credential-evidence-harness";
 import { WompiBillingClient } from "./wompi-billing-client";
 
 const privateKeyFixture = `prv_test_${"f1d7c0de".repeat(3)}`;

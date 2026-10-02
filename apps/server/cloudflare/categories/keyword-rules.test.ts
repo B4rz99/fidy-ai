@@ -1,11 +1,14 @@
-import { applyTestMigration, isolatedTestDatabases } from "../d1-test-fixture";
+import {
+  applyTestMigration,
+  hostedTurnTestMigrations,
+  isolatedTestDatabases,
+} from "../d1-test-fixture";
 import { afterAll, expect, it } from "vitest";
 import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { UserTransactionCoordinator } from "../transactions/runtime";
-import { hostedTurnTestMigrations } from "../test-fixtures/hosted-turn";
 
 const databases = isolatedTestDatabases();
 const userA = "10000000-0000-4000-8000-000000000001";

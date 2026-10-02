@@ -12,7 +12,7 @@ import {
   HostedToolCallMaximum,
 } from "./contract";
 import { approvedWorkersAiModel } from "./model";
-import { hostedInitialTextContext } from "./test-fixtures";
+import { hostedInitialTextContext } from "./context.test-fixture";
 import {
   type WorkersAiBindingRun,
   type WorkersAiRequest,

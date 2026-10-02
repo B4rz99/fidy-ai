@@ -28,7 +28,12 @@ import {
   WhatsAppProviderMessageId,
 } from "../../src/shell/channels/whatsapp/contract";
 import { makeCloudflareHostedInference } from "../ai/workers-ai";
-import { applyTestMigration, installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import {
+  applyTestMigration,
+  hostedTurnTestMigrations,
+  installTestSchema,
+  isolatedTestDatabases,
+} from "../d1-test-fixture";
 import { findWhatsAppUser } from "../identity/operations";
 import { observeOperationalHealth } from "../runtime/operational-health";
 import { newId } from "../secret-material/operations";
@@ -62,7 +67,6 @@ import {
   completeHostedTurn as completeHostedTurnWithAlarm,
   completeWhatsAppTurnWithAdmission,
 } from "./internal/hosted-turn";
-import { hostedTurnTestMigrations } from "../test-fixtures/hosted-turn";
 import {
   admitHostedTurn,
   commitHostedCompaction,

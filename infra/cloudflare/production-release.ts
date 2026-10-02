@@ -1,6 +1,19 @@
 /// <reference types="bun-types" />
 
-import { Cause, Context, Data, Effect, Encoding, Layer, Option, Schema, Stream } from "effect";
+import {
+  Cause,
+  Context,
+  Data,
+  Effect,
+  Encoding,
+  Layer,
+  Option,
+  Redacted,
+  Schema,
+  Stream,
+} from "effect";
+import { makeCloudflareObservabilityOutboundHttp } from "@fidy/server/outbound-http";
+import { inspectWorkerTelemetryReport } from "./inspect-worker-telemetry";
 import {
   FetchHttpClient,
   HttpBody,
@@ -133,6 +146,7 @@ type Config = Readonly<{
   file: string;
   smokeProof: string;
   smokeAttestationFile: string;
+  logTimestamp: Option.Option<string>;
 }>;
 const config = (): Config => {
   const environment = process.env;
@@ -148,6 +162,7 @@ const config = (): Config => {
       RELEASE_SNAPSHOT_FILE: Schema.String.check(Schema.isPattern(/^\//u)),
       SMOKE_ATTESTATION_FILE: Schema.String.check(Schema.isPattern(/^\//u)),
       SMOKE_PROOF: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
+      INSPECT_LOG_TIMESTAMP: Schema.optionalKey(Schema.String),
     })
   )(environment);
   if (Option.isNone(decoded)) {
@@ -162,6 +177,7 @@ const config = (): Config => {
     file: decoded.value.RELEASE_SNAPSHOT_FILE,
     smokeProof: decoded.value.SMOKE_PROOF,
     smokeAttestationFile: decoded.value.SMOKE_ATTESTATION_FILE,
+    logTimestamp: Option.fromUndefinedOr(decoded.value.INSPECT_LOG_TIMESTAMP),
   };
 };
 
@@ -680,6 +696,18 @@ const inspectTraffic = Effect.fn(function* (env: Config, client: HttpClient.Http
     core: yield* deployments(workers.core.workerName),
   };
   yield* writeFile(Bun.stdout, `${encodeJson(observed)}\n`);
+  if (Option.isSome(env.logTimestamp) && env.logTimestamp.value !== "") {
+    const report = yield* inspectWorkerTelemetryReport({
+      timestamp: env.logTimestamp.value,
+      workerName: workers.core.workerName,
+      outbound: makeCloudflareObservabilityOutboundHttp({
+        accountId: env.account,
+        apiToken: Redacted.make(env.token),
+        httpClient: client,
+      }),
+    });
+    yield* writeFile(Bun.stdout, `${report}\n`);
+  }
 });
 const reportTraffic = Effect.fn(function* (port: ReleasePort, env: Config) {
   const exists = yield* Effect.tryPromise({

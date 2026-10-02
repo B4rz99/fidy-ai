@@ -59,4 +59,10 @@ export type OutboundHttpRequest =
   | Readonly<{ readonly _tag: "WompiVerifyPaymentSource"; readonly sourceId: number }>
   | Readonly<{ readonly _tag: "WompiCreateTransaction"; readonly body: WompiTransactionBody }>
   | Readonly<{ readonly _tag: "WompiFindTransaction"; readonly transactionId: string }>
-  | Readonly<{ readonly _tag: "CloudflareAccessSupportRecovery"; readonly body: string }>;
+  | Readonly<{ readonly _tag: "CloudflareAccessSupportRecovery"; readonly body: string }>
+  | Readonly<{
+      readonly _tag: "CloudflareWorkerTelemetry";
+      readonly workerName: string;
+      readonly from: number;
+      readonly to: number;
+    }>;

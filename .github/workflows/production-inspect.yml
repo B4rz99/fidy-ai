@@ -2,6 +2,11 @@ name: Inspect Production Worker traffic
 
 on:
   workflow_dispatch:
+    inputs:
+      log_timestamp:
+        description: "Optional Core log window center (UTC, YYYY-MM-DDTHH:mm:ssZ; two-minute window)"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -42,6 +47,8 @@ jobs:
         uses: ./.github/actions/configure-alchemy-cloudflare-profile
       - name: Report public and Core Worker deployments without changing traffic
         working-directory: infra/cloudflare
+        env:
+          INSPECT_LOG_TIMESTAMP: ${{ inputs.log_timestamp }}
         run: bun production-release.ts inspect
       - name: Classify Production drift without printing provider attributes
         working-directory: infra/cloudflare

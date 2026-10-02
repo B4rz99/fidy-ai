@@ -1,0 +1,33 @@
+infra/cloudflare/smoke.test.ts
+  s_b2d711e54dc456::t_281fa705fc48a0 227,229
+  s_b2d711e54dc456::t_650590967036b7 177,186,212-213,216-221,226
+  s_b2d711e54dc456::t_811d42b005628c 228
+infra/cloudflare/diagnose-smoke-routing.ts
+  s_b2d711e54dc456::t_ad6148d881e8ea 48,136,183-184,210,233,240
+infra/cloudflare/diagnose-smoke-routing.test.ts
+  s_b2d711e54dc456::t_1945ce1ef05510 122,177,206
+infra/cloudflare/verify-edge-policy.test.ts
+  s_b2d711e54dc456::t_621eba4677e015 7
+docs/operations/production-releases.md
+  s_b2d711e54dc456::t_4a8d2c2ff98713 205,207-210,216,233-236
+infra/cloudflare/verify-edge-policy.ts
+  s_b2d711e54dc456::t_eb7993580071b2 5
+apps/server/cloudflare/public-worker.ts
+  s_b2d711e54dc456::t_fbc44e29a61373 524-527,561
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d8c2f0ef6c72682ecbf2d5d23e6a91fcad9d65d7",
+  "prompts": {},
+  "sessions": {
+    "s_b2d711e54dc456": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0fd6b-d5b4-71a3-9a6f-12874fd048cb",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

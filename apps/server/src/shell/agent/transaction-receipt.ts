@@ -3,7 +3,7 @@ import type { IanaTimeZone, Locale } from "~/core/_shared/context";
 import { type ReadonlyMoney, currencyMetadata, encodeMoneyAmount } from "~/core/_shared/money";
 import { listLaunchCategories } from "~/core/categories/operations";
 import { TranscriptText } from "~/core/transcript/model";
-import { CreateTransactionResponse } from "~/shell/transactions/operations";
+import { CreateTransactionResponse } from "~/shell/transactions/contract";
 
 const groupThousands = (integer: string): string =>
   integer.replaceAll(/\B(?=(?:\d{3})+(?!\d))/g, ".");

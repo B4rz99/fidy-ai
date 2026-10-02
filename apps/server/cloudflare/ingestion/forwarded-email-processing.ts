@@ -1,4 +1,3 @@
-import type { OwnedStatement } from "@fidy/server/tokens-runtime";
 import { prepareConsentAction } from "../consent/operations";
 import { fallbackCaptureCategory } from "@fidy/server/categories";
 import { Clock, Data, DateTime, Effect, Option, type PlatformError, Schema } from "effect";
@@ -6,11 +5,9 @@ import PostalMime from "postal-mime";
 import { ReceivedEmailContent } from "../../src/core/ingestion/model";
 import { ReceivedEmailId } from "../../src/core/ingestion/reference";
 import { CapturedInterpretationContext } from "../../src/core/interpretation-evidence/contract";
-import { ProviderMessageEvidence } from "../../src/core/provider-evidence/contract";
-import { encodeMoneyAmount } from "../../src/core/transactions/model";
+import { prepareNotificationEmailCapture } from "../transactions/operations";
 import {
   type NotificationEmailInterpretation,
-  NotificationEmailInterpretationEvidence,
   interpretNotificationEmail,
 } from "../../src/shell/ingestion/email-interpretation/interpret";
 import { emailCrypto } from "./forwarded-email";
@@ -69,9 +66,10 @@ class EmailProcessingUnavailable extends Data.TaggedError("EmailProcessingUnavai
 }> {}
 const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, EmailProcessingUnavailable> =>
   Effect.tryPromise({ try: run, catch: (cause) => new EmailProcessingUnavailable({ cause }) });
-const active = `EXISTS (SELECT 1 FROM forwarded_email_receipts r
+const activeSource = `SELECT r.user_id FROM forwarded_email_receipts r
   WHERE r.id = ? AND r.user_id = ? AND r.state = 'queued' AND r.expires_at_ms > ?
-  AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes o WHERE o.receipt_id = r.id))`;
+  AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes o WHERE o.receipt_id = r.id)`;
+const active = `EXISTS (${activeSource})`;
 
 // Only these fixed HTML tags may leave the personal-evidence boundary; never store tag names
 // supplied by the email, attributes, text, URLs, dimensions, or content-dependent lengths.
@@ -204,17 +202,6 @@ const readMaterial = (
     };
   });
 
-const prepareSettlementStatement = (
-  settlement: Settlement,
-  statement: OwnedStatement
-): D1PreparedStatement =>
-  prepareConsentAction({
-    db: settlement.input.DB,
-    subject: { _tag: "User", userId: settlement.input.userId },
-    requirement: "active",
-    statement,
-  });
-
 const acceptedStatements = (
   settlement: Settlement
 ): Effect.Effect<
@@ -225,53 +212,32 @@ const acceptedStatements = (
     const { input, material, id, when, guard } = settlement;
     if (material.interpretation._tag !== "Interpreted") return [];
     const { extraction, evidence: interpreted } = material.interpretation;
-    const evidence = yield* Schema.encodeUnknownEffect(
-      Schema.fromJsonString(NotificationEmailInterpretationEvidence)
-    )(interpreted);
-    const messageEvidence = yield* Schema.encodeUnknownEffect(
-      Schema.fromJsonString(ProviderMessageEvidence)
-    )({ channel: "email", provider: "cloudflare-email", providerMessageId: input.receiptId });
-    return [
-      prepareSettlementStatement(settlement, {
-        sql: `INSERT INTO transactions (id, user_id, amount, currency,
-      direction, counterparty, category_id, notes, occurred_at, created_at)
-      SELECT ?, ?, ?, ?, ?, ${Option.isSome(extraction.counterparty) ? "?" : "NULL"}, ?, NULL, ?, ? WHERE ${active}`,
-        params: [
-          id,
-          input.userId,
-          encodeMoneyAmount(extraction.money.amount),
-          extraction.money.currency,
-          extraction.direction,
-          ...Option.toArray(extraction.counterparty),
-          fallbackCaptureCategory(extraction.direction),
-          DateTime.formatIso(extraction.occurredAt),
-          when,
-          ...guard,
-        ],
-      }),
-      prepareSettlementStatement(settlement, {
-        sql: `INSERT INTO source_attestations
-      (id, user_id, transaction_id, kind, service_market, locale, time_zone,
-       interpretation_revision, created_at, received_email_id, message_content_sha256,
-       source_format, message_evidence, deterministic_interpretation, extractor_revision)
-      SELECT ?, ?, ?, 'notification-email', 'CO', 'es-CO', ?, ?, ?, ?, ?,
-        'notification-email', ?, ?, ? WHERE ${active}`,
-        params: [
-          yield* emailCrypto.randomUUIDv4,
-          input.userId,
-          id,
-          settlement.receipt.time_zone,
-          interpreted.revision,
-          when,
-          input.receiptId,
-          material.digest,
-          messageEvidence,
-          evidence,
-          "forwarded-email-deterministic-v1",
-          ...guard,
-        ],
-      }),
-    ];
+    return yield* prepareNotificationEmailCapture({
+      db: input.DB,
+      userId: input.userId,
+      transactionId: id,
+      extraction,
+      categoryId: fallbackCaptureCategory(extraction.direction),
+      attestation: {
+        id: yield* emailCrypto.randomUUIDv4,
+        serviceMarket: "CO",
+        locale: "es-CO",
+        timeZone: settlement.receipt.time_zone,
+        interpretationRevision: interpreted.revision,
+        createdAt: when,
+        receivedEmailId: input.receiptId,
+        messageContentSha256: material.digest,
+        sourceFormat: "notification-email",
+        messageEvidence: {
+          channel: "email",
+          provider: "cloudflare-email",
+          providerMessageId: input.receiptId,
+        },
+        extractorRevision: "forwarded-email-deterministic-v1",
+      },
+      interpretation: interpreted,
+      sourceGuard: { sql: activeSource, params: guard },
+    });
   });
 
 const reviewStatement = (settlement: Settlement): D1PreparedStatement => {

@@ -1,15 +1,15 @@
+import { dailyAuditMessage } from "../../canonical-work/contract";
 import { Effect, Option, Schema } from "effect";
-import type { TransactionPair } from "@fidy/server/transaction-reconciliation";
-import type {
-  CanonicalMutationPreparation,
-  CanonicalMutationRefusal,
-  CommittedMutationValue,
-  GuardRefusalWork,
-  TransactionOutcome,
-} from "./mutation-types";
-import { refusedPreparation } from "./mutation-types";
+import type { TransactionPair, TransactionPresentation } from "@fidy/server/transactions-contract";
 import {
-  ReconciliationDecisionRow,
+  type CanonicalMutationPreparation,
+  type CanonicalMutationRefusal,
+  type CommittedMutationValue,
+  type GuardRefusalWork,
+  type TransactionOutcome,
+  refusedPreparation,
+} from "../../mutations/mutation-types";
+import {
   type TransactionCaller,
   type TransactionMutationOperation,
   type TransactionRefusal,
@@ -23,19 +23,17 @@ import {
   refusedTransactionResponse,
   transactionUnavailable,
   unlinkedPairMessage,
-} from "../transactions/transaction-boundary";
+} from "../../canonical-work/operations";
+import { ReconciliationDecisionRow } from "./reconciliation-state";
 import {
   type StoredTransaction,
   findTransaction,
   findTransactionPresentation,
-} from "../transactions/transaction-history";
-import type { TransactionPresentation } from "@fidy/server/transactions-runtime";
-
+} from "./transaction-history";
 /** The one message both the individual caller and a batch child report for an observed revision. */
 export const staleCorrectionMessage =
   "The Transaction changed since it was read. Re-read it and retry the correction.";
-/** The one message both the individual caller and a batch child report for an exhausted day. */
-export const dailyAuditMessage = "The caller's daily canonical write budget is exhausted.";
+
 const staleCorrectionRefusal: TransactionRefusal = {
   outcome: "validation_failed",
   message: staleCorrectionMessage,

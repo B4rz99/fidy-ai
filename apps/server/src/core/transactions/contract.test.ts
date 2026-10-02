@@ -9,7 +9,7 @@ import {
   TransactionExtraction,
   TransactionQueryValues,
   UpdateTransactionInput,
-} from "./model";
+} from "./contract";
 
 const decodeDirection = Schema.decodeUnknownResult(Direction);
 const decodeTransaction = Schema.decodeUnknownResult(Transaction);

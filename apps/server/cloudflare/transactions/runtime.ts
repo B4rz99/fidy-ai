@@ -97,7 +97,7 @@ import {
   type TransactionCaller,
   transactionNow,
   transactionUnavailable,
-} from "./transaction-boundary";
+} from "../canonical-work/operations";
 
 const digestBytes = 32;
 const HTTP_OK = 200;

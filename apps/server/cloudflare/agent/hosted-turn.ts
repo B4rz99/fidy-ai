@@ -31,12 +31,12 @@ import {
 } from "../../src/shell/_shared/hosted-turn-bounds";
 import { executeHostedQuery, isInstalledHostedQuery } from "./hosted-canonical-query";
 import {
+  type ConfirmationRow,
   consumeHostedConfirmation,
   findHostedConfirmation,
   isHostedConfirmationAttempt,
   issueHostedConfirmation,
 } from "./hosted-confirmation";
-import type { ConfirmationRow } from "./hosted-confirmation";
 import { canonicalMutationAdapter } from "../mutations/canonical-mutation-registry";
 import type { HostedCommitFence } from "../mutations/canonical-mutation-unit";
 import {
@@ -44,7 +44,7 @@ import {
   HostedTurnReceipt,
   HostedTurnRequest,
 } from "../../src/shell/agent/hosted-turn-api";
-import type { TransactionSubject } from "../transactions/transaction-boundary";
+import { type TransactionSubject, transactionNow } from "../canonical-work/operations";
 import {
   type HostedSubject,
   type WhatsAppHostedSubject,
@@ -62,7 +62,6 @@ import type {
   HostedDeliveryCorrelationToken,
   WhatsAppProviderMessageId,
 } from "../../src/shell/channels/whatsapp/model";
-import { transactionNow } from "../transactions/transaction-boundary";
 import { newId } from "../pats/pat-shared";
 import {
   type HostedAdmissionChannel,
@@ -83,7 +82,6 @@ import {
   selectHostedSession,
   stageHostedDelivery,
 } from "./turn-store";
-
 // Only installed owners whose caller policy permits this authority enter the toolkit.
 const hostedExecutableOperations = operationCatalog.operations.filter(
   ({ id, policy }) =>

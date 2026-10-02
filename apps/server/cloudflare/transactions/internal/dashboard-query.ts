@@ -1,10 +1,9 @@
 import { Option, Schema } from "effect";
-import { Money } from "../../src/core/_shared/money";
-import { Category } from "../../src/core/categories/contract";
-import { Transaction } from "../../src/core/transactions/model";
+import { Money } from "../../../src/core/_shared/money";
+import { Category } from "../../../src/core/categories/contract";
+import { Transaction } from "../../../src/core/transactions/contract";
 
-/** Transaction-owned, User-scoped storage interface for Dashboard fact queries. */
-export type DashboardTransactionFact = Readonly<{ transaction: Transaction; category: Category }>;
+import type { DashboardTransactionFact } from "../contract";
 
 const TransactionRow = Schema.Struct({
   id: Transaction.fields.id,

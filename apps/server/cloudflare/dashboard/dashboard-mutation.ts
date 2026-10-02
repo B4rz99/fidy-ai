@@ -25,7 +25,7 @@ import {
   transactionId,
   transactionNoStore,
   transactionUnavailable,
-} from "../transactions/transaction-boundary";
+} from "../canonical-work/operations";
 import {
   type CanonicalMutationPreparation,
   type CanonicalMutationRefusal,

@@ -14,7 +14,15 @@ import {
 import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
 import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { Data, Effect, Function, Option, Result, Schema } from "effect";
-import type { StatementPublicationRefusal } from "./statement-staging";
+import {
+  type StatementPublicationRefusal,
+  StatementStaging,
+  type StoredStatementSubmission,
+  newIngestionId,
+  stagedMaterialMessage,
+  statementSubmissionReadAudit,
+  submissionProjection,
+} from "./statement-staging";
 import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
 import { currentMillis } from "../pats/pat-shared";
 import { prepareOwnedStatement } from "../pats/pat-unit";
@@ -37,16 +45,7 @@ import {
   type TransactionSubject,
   isPATCaller,
   refusedTransactionWork,
-} from "../transactions/transaction-boundary";
-import {
-  StatementStaging,
-  type StoredStatementSubmission,
-  newIngestionId,
-  stagedMaterialMessage,
-  statementSubmissionReadAudit,
-  submissionProjection,
-} from "./statement-staging";
-
+} from "../canonical-work/operations";
 /** One audit batch that could not settle; its cause's stable marker classifies the refusal. */
 class IngestionAuditFailed extends Data.TaggedError("IngestionAuditFailed")<{
   readonly cause: unknown;

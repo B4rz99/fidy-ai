@@ -11,7 +11,7 @@ import {
   prepareBrowserAuditBudgetGuard,
   recordCanonicalPATWork,
 } from "@fidy/server/audit";
-import { encodeMoneyAmount } from "@fidy/server/transactions-runtime";
+import { encodeMoneyAmount } from "@fidy/server/transactions-contract";
 import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import {
@@ -23,7 +23,7 @@ import {
   isPATCaller,
   liveTransactionAuthority,
   transactionId,
-} from "../transactions/transaction-boundary";
+} from "../canonical-work/operations";
 import {
   type BudgetOutcome,
   type CanonicalMutationPreparation,

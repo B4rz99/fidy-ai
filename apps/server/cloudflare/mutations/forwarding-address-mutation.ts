@@ -11,7 +11,7 @@ import {
   transactionFailure,
   transactionNoStore,
   transactionUnavailable,
-} from "../transactions/transaction-boundary";
+} from "../canonical-work/operations";
 import type { CanonicalMutationAdapter } from "./canonical-mutation-registry";
 import {
   type CanonicalMutationRefusal,

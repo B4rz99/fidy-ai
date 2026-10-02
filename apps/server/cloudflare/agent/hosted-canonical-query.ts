@@ -1,11 +1,11 @@
 import { Cause, Effect, Exit, Option, Schema } from "effect";
 import type { CatalogOperation } from "../../src/shell/_shared/operation-catalog";
-import type { TransactionSubject } from "../transactions/transaction-boundary";
+import type { TransactionSubject } from "../canonical-work/operations";
 import { executeProtectedCategories, listOwnKeywordRules } from "../categories/operations";
 import { executeProtectedSubscriptionQuery } from "../billing/subscription-queries";
 import { browseBudgets } from "../budgets/budget-queries";
 import { reconcileBudgetLatches } from "../budgets/budget-latches";
-import { browseTransactions } from "../transactions/transaction-history";
+import { browseTransactions } from "../transactions/operations";
 import { browseDashboard } from "../dashboard/dashboard";
 import { recallMemories } from "../memory/memory";
 import { listPendingInsights } from "../insights/insight-store";

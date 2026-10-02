@@ -9,7 +9,7 @@ import { afterEach, expect } from "vitest";
 import emailWorker, { makeEmailWorker } from "./email-worker";
 import { processForwardedEmail } from "./forwarded-email-processing";
 import { receiveForwardedEmailWork } from "./forwarded-email-delivery";
-import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
+import { UserTransactionCoordinator } from "../transactions/runtime";
 import { listNeedsReviewItems } from "./statement-review";
 
 const userA = "10000000-0000-4000-8000-000000000101";

@@ -208,7 +208,11 @@ const locallyExportedBindings = (sourceFile) =>
 const reportLaunderedInternals = (report) => {
   let violations = 0;
   for (const module of report.modules) {
-    if (!/^src\/(core|shell)\/.+\/(contract|operations|runtime)\.ts$/u.test(module.source)) {
+    if (
+      !/^(?:src\/(?:core|shell)|cloudflare)\/.+\/(contract|operations|runtime)\.ts$/u.test(
+        module.source
+      )
+    ) {
       continue;
     }
     const sourceFile = ts.createSourceFile(

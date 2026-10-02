@@ -220,6 +220,31 @@ creates no new session, reassociation, preference mutation or runtime authority.
 Durable Objects and closed unavailable paths retain their behavior. No new external workflow or
 telemetry purpose is introduced.
 
+### Transactions owner composition
+
+Transactions publishes exact normalized facts, captured SourceAttestation evidence and closed domain
+failures through `core/transactions/contract.ts`; `operations.ts` owns pure occurrence, User-decision
+and Reconciliation policy. Its shell contract is the browser-safe canonical declaration; portable
+failure/continuation behavior and derived route composition have separate operations and runtime
+interfaces. No peer imports a Transaction model, stored row, effective SQL relation or repository.
+
+The native owner publishes User-scoped capture, correction, reversible Reconciliation, canonical
+history/search, ingestion capture composition and bounded peer projections. Canonical mutations use
+the existing one-User D1 unit; source capture supplies its source owner's eligibility query and
+commits both normalized facts and append-only evidence with the caller's outcome assertion. Guards
+re-evaluate ownership, current authority, revision and source eligibility at commit. Correction
+retains identity, Reversal remains a separate completed movement, and linking retains both originals
+and all SourceAttestations while recomputing effective facts on read.
+
+Budget receives exact decoded contribution pages with an explicit continuation rather than reading
+Transaction persistence. Dashboard reads normalized bounded lists, readiness and the caller's
+Identity snapshot in one D1 batch; aggregate reads and repair stay Transaction-owned. Invalid or
+incomplete projections fail closed. The shared `cloudflare/canonical-work` module owns existing
+credential/refusal/accountability primitives so peer owners never depend on Transaction persistence
+to authorize their own work. The original per-User coordinator is published from the Transaction
+runtime; it introduces no second ledger or alternate lock. This is an ownership refactor, with no new
+external workflow or telemetry purpose; existing canonical spans and metadata-only audits remain.
+
 ### Categories owner composition
 
 Categories publishes its stable identities, public metadata, keyword inputs and closed failures through

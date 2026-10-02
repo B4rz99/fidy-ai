@@ -1,7 +1,8 @@
+import { type HostedCommitFence, pendingExecutionRecoveryMs } from "../contract";
 import {
   executeCanonicalQuery,
   installedCanonicalOperations,
-} from "../canonical-operations/operations";
+} from "../../canonical-operations/operations";
 import {
   CanonicalToolCallEntry,
   CanonicalToolEvidence,
@@ -12,12 +13,14 @@ import {
   TranscriptEntryId,
   TranscriptText,
   TranscriptTurnId,
-  UserId,
-  assembleWorkingContext,
+} from "@fidy/server/agent-contract";
+import { UserId } from "@fidy/server/identity-reference";
+import { assembleWorkingContext } from "./working-context";
+import {
   compactionEntryTrigger,
   defaultCompactionMaximumTokens,
   shouldCompactConversation,
-} from "@fidy/server/agent-runtime";
+} from "~/core/agent/operations";
 import { atomicBatchOperation } from "~/shell/operations/contract";
 import { operationCatalog } from "~/shell/api";
 import {
@@ -32,23 +35,19 @@ import {
   maximumHostedTurnIterations,
   maximumModelRoundMillis,
   maximumToolCallsPerTurn,
-} from "../../src/shell/_shared/hosted-turn-bounds";
-import { decideOperationAccess } from "../../src/shell/canonical-policy/operations";
-import {
-  HostedTurnProgressRequest,
-  HostedTurnReceipt,
-  HostedTurnRequest,
-} from "../../src/shell/agent/hosted-turn-api";
+} from "../../../src/shell/_shared/hosted-turn-bounds";
+import { decideOperationAccess } from "../../../src/shell/canonical-policy/operations";
 import {
   type HostedDeliveryCorrelationToken,
   type WhatsAppProviderMessageId,
-} from "../../src/shell/channels/whatsapp/contract";
-import { type TransactionSubject, transactionNow } from "../canonical-work/operations";
-
-import type { HostedCommitFence } from "./contract";
-import { newId } from "../secret-material/operations";
-import type { WhatsAppUnavailable } from "../whatsapp/contract";
-import { type WhatsAppHostedSubject, type WhatsAppInboundEvidence } from "../whatsapp/contract";
+} from "../../../src/shell/channels/whatsapp/contract";
+import { type TransactionSubject, transactionNow } from "../../canonical-work/operations";
+import { newId } from "../../secret-material/operations";
+import {
+  type WhatsAppHostedSubject,
+  type WhatsAppInboundEvidence,
+  type WhatsAppUnavailable,
+} from "../../whatsapp/contract";
 import {
   isWhatsAppWindowOpen,
   readWhatsAppPendingWork,
@@ -56,9 +55,8 @@ import {
   rejectUnstartedWhatsAppDelivery,
   stageWhatsAppDelivery,
   startWhatsAppSend,
-} from "../whatsapp/operations";
+} from "../../whatsapp/operations";
 import { type HostedSubject, isWhatsAppHosted } from "./hosted-authority";
-
 import {
   type ConfirmationRow,
   consumeHostedConfirmation,
@@ -76,7 +74,6 @@ import {
   commitHostedCompaction,
   deliveryAcknowledgmentWindowMs,
   finishHostedTurn,
-  pendingExecutionRecoveryMs,
   readHostedContinuity,
   readHostedSnapshot,
   recoverHostedTurn,
@@ -85,6 +82,7 @@ import {
   selectHostedSession,
   stageHostedDelivery,
 } from "./turn-store";
+
 // Only installed owners whose caller policy permits this authority enter the toolkit.
 const hostedExecutableOperations = installedCanonicalOperations().filter(
   ({ policy }) =>
@@ -1559,25 +1557,6 @@ export const acknowledgeBrowserTurn = ({
     })
   );
 
-/** Decode a bounded User request; the authenticated channel owns its credential separately. */
-export const hostedTurnInput = HostedTurnRequest;
-/** Bounded Core-to-DO admission with explicit User identity and ephemeral credential proof. */
-export const HostedTurnAdmission = Schema.Struct({
-  userId: UserId,
-  sessionId: Schema.String.check(Schema.isUUID()),
-  digest: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))),
-  text: TranscriptText,
-});
-/** The browser sends this receipt only after it has visibly rendered the exact reply. */
-export const hostedDeliveryReceipt = HostedTurnReceipt;
-/** A progress poll never admits or executes a second Turn. */
-export const HostedProgressAdmission = Schema.Struct({
-  userId: UserId,
-  sessionId: Schema.String.check(Schema.isUUID()),
-  digest: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))),
-  ...HostedTurnProgressRequest.fields,
-});
-
 /** Read the outcome of one pending Turn under the same live WebSession authority. */
 export const readHostedProgress = ({
   db,
@@ -1619,12 +1598,5 @@ export const readHostedProgress = ({
       return yield* Effect.tryPromise(() => browserHostedDelivery({ ...refreshed.value, turnId }));
     })
   );
-/** Receipt forwarded by Core with a fresh WebSession proof, never from public input. */
-export const HostedDeliveryAdmission = Schema.Struct({
-  userId: UserId,
-  sessionId: Schema.String.check(Schema.isUUID()),
-  digest: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))),
-  ...hostedDeliveryReceipt.fields,
-});
 /** No model or D1 work is bought for invalid input. */
 export const invalidHostedTurn = invalid;

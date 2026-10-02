@@ -14,13 +14,13 @@ import {
   TranscriptText,
   TranscriptTurnId,
   UserTranscriptEntry,
-} from "./model";
+} from "./contract";
 import {
   TranscriptWindowCharacterLimit,
   type TranscriptWindowEntry,
   TranscriptWindowTurnLimit,
   selectTranscriptWindow,
-} from "./rules";
+} from "~/core/agent/internal/rules";
 
 const occurredAt = DateTime.makeUnsafe("2026-07-20T12:00:00Z");
 

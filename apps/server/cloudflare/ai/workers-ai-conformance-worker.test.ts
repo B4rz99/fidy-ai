@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import handler from "./workers-ai-conformance-worker";
-import type { WorkersAiEnvironment } from "./workers-ai";
+import type { WorkersAiEnvironment } from "./contract";
 
 it.effect("reports only the failed conformance check and closed error category", () =>
   Effect.gen(function* () {

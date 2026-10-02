@@ -2,8 +2,8 @@ import {
   HostedAgentSessionId,
   TranscriptText,
   type TranscriptTurnId,
-  UserId,
-} from "@fidy/server/agent-runtime";
+} from "@fidy/server/agent-contract";
+import { UserId } from "@fidy/server/identity-reference";
 import { type Cause, Effect, Option, Schema } from "effect";
 import {
   WhatsAppBusinessPortfolioId,

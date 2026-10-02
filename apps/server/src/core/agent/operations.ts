@@ -1,38 +1,5 @@
 import { Option } from "effect";
-import type { UserId } from "~/core/identity/reference";
-import type { HostedAgentSessionConsentBasis } from "./hosted-agent-session";
-import type { HostedAgentSessionId } from "./reference";
-
-/** The latest durable session and Turn facts read while holding one User's coordination lock. */
-export type HostedAdmissionState = Readonly<{
-  session: Option.Option<
-    Readonly<{
-      id: HostedAgentSessionId;
-      userId: UserId;
-      consentBasis: HostedAgentSessionConsentBasis;
-      startedAtMs: number;
-      lastActivityAtMs: Option.Option<number>;
-      status: "active" | "idle-ended" | "revoked";
-    }>
-  >;
-  pendingStartedAtMs: Option.Option<number>;
-}>;
-
-/** A current onboarding grant is required for every admission, even in an existing session. */
-export type HostedAdmissionRequest = Readonly<{
-  userId: UserId;
-  nowMs: number;
-  currentConsent: Option.Option<HostedAgentSessionConsentBasis>;
-  revoked: boolean;
-  state: HostedAdmissionState;
-}>;
-
-/** A pending Turn must be recovered as Interrupted before a new Turn can be admitted. */
-export type HostedAdmissionDecision =
-  | Readonly<{ _tag: "Refused"; reason: "ConsentRequired" | "InvalidState" }>
-  | Readonly<{ _tag: "RecoverPending" }>
-  | Readonly<{ _tag: "ContinueSession"; sessionId: HostedAgentSessionId }>
-  | Readonly<{ _tag: "BeginSession"; consentBasis: HostedAgentSessionConsentBasis }>;
+import type { HostedAdmissionDecision, HostedAdmissionRequest } from "./contract";
 
 const millisecondsPerSecond = 1_000;
 const secondsPerMinute = 60;
@@ -73,3 +40,31 @@ export const decideHostedAdmission = (request: HostedAdmissionRequest): HostedAd
   }
   return { _tag: "BeginSession", consentBasis: request.currentConsent.value };
 };
+
+/** Production exact-Transcript token threshold that requests Compaction. */
+export const defaultCompactionTriggerTokens = 100_000;
+
+/** Production maximum for one generated CompactedConversation replacement. */
+export const defaultCompactionMaximumTokens = 15_000;
+
+/** Compaction also precedes the exact-entry capacity of a long, low-token Hosted Agent Session. */
+export const compactionEntryTrigger = 80;
+
+/** The last complete terminal Turn in the contiguous retained prefix, never a Pending User entry. */
+export const terminalPrefixCursor = (
+  entries: ReadonlyArray<
+    Readonly<{ sequence: number; status: "pending" | "completed" | "failed" | "interrupted" }>
+  >
+): Option.Option<number> => {
+  const pending = entries.findIndex((entry) => entry.status === "pending");
+  return pending === 0
+    ? Option.none()
+    : Option.fromNullishOr(entries.at(pending < 0 ? -1 : pending - 1)?.sequence);
+};
+
+/** Decide when exact retained continuity should be replaced before the next hosted Turn. */
+export const shouldCompactConversation = ({
+  entryCount,
+  tokenCount,
+}: Readonly<{ entryCount: number; tokenCount: number }>): boolean =>
+  entryCount >= compactionEntryTrigger || tokenCount >= defaultCompactionTriggerTokens;

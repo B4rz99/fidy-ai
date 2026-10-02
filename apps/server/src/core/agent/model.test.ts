@@ -14,7 +14,7 @@ import {
   TranscriptTurnId,
   TurnContinuationEntry,
   UserTranscriptEntry,
-} from "./model";
+} from "./contract";
 
 const decodeTranscriptText = Schema.decodeUnknownResult(Schema.toType(TranscriptText));
 

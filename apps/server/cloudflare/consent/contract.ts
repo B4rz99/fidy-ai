@@ -1,4 +1,4 @@
-import { type TranscriptTurnId } from "@fidy/server/agent-runtime";
+import { type TranscriptTurnId } from "@fidy/server/agent-contract";
 import { type OnboardingConsentBasis } from "@fidy/server/consent-contract";
 import { Data, type Effect, type Option } from "effect";
 

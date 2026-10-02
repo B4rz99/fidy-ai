@@ -3,7 +3,7 @@ import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { UserId } from "~/core/identity/reference";
 import { PATId } from "~/core/tokens/reference";
-import { HostedAgentSessionId } from "~/core/transcript/reference";
+import { HostedAgentSessionId } from "~/core/agent/contract";
 import { WebSessionId } from "~/core/web-session/reference";
 
 /** A stable UUID naming one append-only AuditLogEntry. */

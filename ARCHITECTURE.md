@@ -41,7 +41,7 @@ separately; staging's limits and publication boundary are specified in
 The hosted Turn channel (`/web/hosted-turns` and `/web/hosted-turns/delivery`) accepts one User message
 and a separate visible-delivery receipt. Neither endpoint is a tool-callable operation or belongs in
 an atomic batch. Its browser-safe typed API is server-declared in
-`apps/server/src/shell/agent/hosted-turn-api.ts`; public and Core Worker adapters enforce cookie,
+`apps/server/src/shell/agent/contract.ts`; public and Core Worker adapters enforce cookie,
 origin, CSRF, D1, and per-User Durable Object policy. Completion requires an exact authenticated
 receipt after visible rendering. A Durable Object alarm interrupts abandoned proposals, with an
 independent private Core cron sweep for missing alarms and bounded retention. This channel never

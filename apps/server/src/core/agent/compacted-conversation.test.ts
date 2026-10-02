@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime, Effect, Exit, Schema } from "effect";
-import { CompactedConversation, CompactedConversationOutput } from "./compacted-conversation";
+import { CompactedConversation, CompactedConversationOutput } from "./contract";
 
 const decodeConversation = Schema.decodeUnknownEffect(CompactedConversation);
 const decodeOutput = Schema.decodeUnknownEffect(CompactedConversationOutput);

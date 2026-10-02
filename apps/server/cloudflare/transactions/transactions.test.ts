@@ -1,3 +1,4 @@
+import { hostedDeliveryReceipt, pendingExecutionRecoveryMs } from "../agent/contract";
 import { Miniflare } from "miniflare";
 import { afterAll, afterEach, expect, it } from "vitest";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
@@ -18,14 +19,12 @@ import {
 } from "~/shell/operations/contract";
 import { ErrorCode } from "~/shell/public-http/contract";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
-import { DisclosureSnapshot } from "@fidy/server/agent-runtime";
+import { DisclosureSnapshot } from "@fidy/server/consent-contract";
 import { CategoryId, CategoryKeyword, KeywordRuleId } from "@fidy/server/categories";
 import { keywordRuleGuardFailure } from "../categories/operations";
 import { currentDisclosureFor } from "@fidy/server/consent-operations";
-import { hostedDeliveryReceipt } from "../agent/hosted-turn";
-import { hostedTurnTestMigrations } from "../agent/hosted-turn-test-migrations";
-import { sweepHostedTurns } from "../agent/hosted-turn-sweep";
-import { pendingExecutionRecoveryMs } from "../agent/turn-store";
+import { hostedTurnTestMigrations } from "../test-fixtures/hosted-turn";
+import { makeAgentRetention } from "../agent/runtime";
 import { newId } from "../secret-material/operations";
 import { transactionNow } from "../canonical-work/operations";
 import coreWorker from "../core-worker";
@@ -1002,10 +1001,7 @@ effectIt.effect(
       expect(
         (yield* fromTestPromise(() => db.prepare("SELECT status FROM hosted_turns").all())).results
       ).toEqual([{ status: "pending" }]);
-      yield* sweepHostedTurns({
-        db,
-        now: transactionNow() + pendingExecutionRecoveryMs + 1,
-      });
+      yield* makeAgentRetention({ db }).sweep(transactionNow() + pendingExecutionRecoveryMs + 1);
       expect(
         (yield* fromTestPromise(() => db.prepare("SELECT status FROM hosted_turns").all())).results
       ).toEqual([{ status: "interrupted" }]);

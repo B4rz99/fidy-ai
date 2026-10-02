@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Option, Result, Schema } from "effect";
-import { HostedAgentSession, HostedAgentSessionId } from "./hosted-agent-session";
+import { HostedAgentSession, HostedAgentSessionId } from "./contract";
 
 it("accepts only canonical UUID Hosted Agent Session identities", () => {
   const decode = Schema.decodeUnknownResult(HostedAgentSessionId);

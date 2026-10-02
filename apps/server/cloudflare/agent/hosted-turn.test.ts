@@ -1,13 +1,15 @@
-import { prepareHostedMutationCommit } from "./operations";
+import { makeAgentRetention, makeAgentService } from "./runtime";
+import { AgentUnavailable } from "./contract";
+import { prepareHostedMutationCommit, readAdmittedHostedConsent } from "./operations";
 import {
   CanonicalToolOutcome,
-  DisclosureSnapshot,
   HostedAgentSessionId,
   ToolCallId,
   TranscriptText,
   TranscriptTurnId,
-  UserId,
-} from "@fidy/server/agent-runtime";
+} from "@fidy/server/agent-contract";
+import { DisclosureSnapshot } from "@fidy/server/consent-contract";
+import { UserId } from "@fidy/server/identity-reference";
 import { currentDisclosureFor } from "@fidy/server/consent-operations";
 import { type HostedInferenceService } from "@fidy/server/hosted-inference";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
@@ -34,6 +36,7 @@ import { UserTransactionCoordinator } from "../transactions/runtime";
 import {
   WhatsAppHostedSubject,
   WhatsAppInboundEvidence,
+  WhatsAppStatusAdmission,
   WhatsAppUnavailable,
   type WhatsAppWork,
 } from "../whatsapp/contract";
@@ -41,6 +44,7 @@ import {
   expireWhatsAppEvidence,
   findWhatsAppReplay,
   readWhatsAppPendingWork,
+  reconcileWhatsAppStatus,
   recordWhatsAppSend,
   recordWhatsAppStatus,
   stageWhatsAppDelivery,
@@ -54,9 +58,8 @@ import {
   browserHostedDelivery,
   completeHostedTurn as completeHostedTurnWithAlarm,
   completeWhatsAppTurnWithAdmission,
-} from "./hosted-turn";
-import { sweepHostedTurns } from "./hosted-turn-sweep";
-import { hostedTurnTestMigrations } from "./hosted-turn-test-migrations";
+} from "./internal/hosted-turn";
+import { hostedTurnTestMigrations } from "../test-fixtures/hosted-turn";
 import {
   admitHostedTurn,
   commitHostedCompaction,
@@ -67,7 +70,7 @@ import {
   readHostedSnapshot,
   recoverHostedTurn,
   selectHostedSession,
-} from "./turn-store";
+} from "./internal/turn-store";
 
 const completeHostedTurn = (
   input: Omit<
@@ -1539,19 +1542,32 @@ it("serializes duplicate verified WhatsApp admissions and completes only after t
           .bind(newId(), users[0], grants[0], sessions[0], now())
           .run()
       );
+      const statusAdmission = WhatsAppStatusAdmission.make({
+        userId: UserId.make(users[0]),
+        correlationToken: stored.correlation_token,
+        businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+        providerMessageId: WhatsAppProviderMessageId.make("wamid.output"),
+        outcome: "delivered",
+        occurredAtMs: now(),
+        receivedAtMs: now(),
+      });
+      expect(
+        (yield* reconcileWhatsAppStatus({
+          db,
+          admission: { ...statusAdmission, userId: UserId.make(users[1]) },
+        }))._tag
+      ).toBe("Refused");
+      const channelEvidence = yield* reconcileWhatsAppStatus({ db, admission: statusAdmission });
+      expect(channelEvidence._tag).toBe("TerminalEvidence");
+      expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
+        { status: "pending", kind: "user", text: "Hola" },
+      ]);
+      expect((yield* Effect.tryPromise(() => retained(db, users[1]))).results).toEqual([]);
       const status = yield* Effect.tryPromise(() =>
         coordinator.fetch(
           new Request("https://coordinator.internal/hosted-turn/whatsapp/status", {
             method: "POST",
-            body: encodeJson({
-              userId: users[0],
-              correlationToken: stored.correlation_token,
-              businessPhoneNumberId: "123456789",
-              providerMessageId: "wamid.output",
-              outcome: "delivered",
-              occurredAtMs: now(),
-              receivedAtMs: now(),
-            }),
+            body: encodeJson(statusAdmission),
           })
         )
       );
@@ -2652,7 +2668,7 @@ it.each(["memory.forget", "operations.executeAtomicBatch"] as const)(
             )
             .run()
         );
-        yield* sweepHostedTurns({ db, now: current });
+        yield* makeAgentRetention({ db }).sweep(current);
         expect(
           (yield* Effect.tryPromise(() =>
             db.prepare("SELECT id FROM hosted_confirmations WHERE id = ?").bind(expiredId).all()
@@ -2864,7 +2880,7 @@ it.each([
             );
             expect(recovered).toMatchObject({ status: "interrupted" });
           } else if (recoverBeforeCommit) {
-            yield* sweepHostedTurns({ db, now: now() + 136_000 });
+            yield* makeAgentRetention({ db }).sweep(now() + 136_000);
           } else {
             // The committed owner can return after the model-round deadline but before recovery.
             yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(96_001));
@@ -2887,7 +2903,7 @@ it.each([
         expect(remaining).toHaveLength(recoverBeforeCommit ? 1 : 0);
         expect(commits).toHaveLength(recoverBeforeCommit ? 0 : 1);
         if (lostResponse) {
-          yield* sweepHostedTurns({ db, now: now() + 136_000 });
+          yield* makeAgentRetention({ db }).sweep(now() + 136_000);
           const recovered = yield* Effect.tryPromise(() => retained(db, users[0]));
           expect(recovered.results).toContainEqual(
             expect.objectContaining({ status: "interrupted", kind: "tool_result" })
@@ -3756,7 +3772,7 @@ it("expires old CompactedConversation content without exposing it in a later Wor
         admittedWhatsAppTurn: Option.none(),
       });
       expect(Option.isNone(before.compactedConversation)).toBe(true);
-      yield* sweepHostedTurns({ db, now: now() });
+      yield* makeAgentRetention({ db }).sweep(now());
       const after = yield* Effect.tryPromise(() =>
         db
           .prepare("SELECT text FROM hosted_compacted_conversations WHERE user_id = ?")
@@ -4288,7 +4304,7 @@ it("allows only the timed User-scoped retention sweep to remove old terminal evi
           db.prepare("DELETE FROM transcript_entries WHERE user_id = ?").bind(users[0]).run()
         ).rejects.toThrow()
       );
-      yield* sweepHostedTurns({ db, now: now() });
+      yield* makeAgentRetention({ db }).sweep(now());
       expect(
         (yield* Effect.tryPromise(() =>
           db.prepare("SELECT kind FROM transcript_entries WHERE turn_id = ?").bind(id).all()
@@ -4370,7 +4386,7 @@ it("retains the complete Turn until thirty days after its terminal marker", () =
             .bind(recent, id),
         ])
       );
-      yield* sweepHostedTurns({ db, now: now() });
+      yield* makeAgentRetention({ db }).sweep(now());
       expect(
         (yield* Effect.tryPromise(() =>
           db.prepare("SELECT kind FROM transcript_entries WHERE turn_id = ?").bind(id).all()
@@ -4703,5 +4719,83 @@ it("interrupts in-flight work with only a metadata marker and recovers without p
         { status: "interrupted", kind: "user", text: "Interrupted request" },
         { status: "interrupted", kind: "interrupted", text: null, marker: null },
       ]);
+    })
+  ));
+
+it("refuses another User's complete live proof at the Agent service before model work or retention", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const credentials = yield* Effect.tryPromise(() => subject(1));
+      const model = vi.fn(() => Promise.resolve(reply("Never disclosed")));
+      const service = makeAgentService({
+        environment: { DB: db, HOSTED_AI_MODEL: approvedWorkersAiModel, AI: { run: model } },
+        userId: UserId.make(users[0]),
+        scheduleRecovery: () => Promise.resolve(),
+      });
+      const accepted = service.accept({
+        request: new Request("https://coordinator.internal/hosted-turn", {
+          method: "POST",
+          body: encodeJson({
+            userId: credentials.userId,
+            sessionId: credentials.id,
+            digest: Array.from(credentials.digest),
+            text: "Retain this for the other User",
+          }),
+        }),
+        preceding: Promise.resolve(),
+      });
+      if (Option.isNone(accepted)) return yield* Effect.die("missing hosted request");
+      const response = yield* Effect.tryPromise(() => accepted.value.response);
+      yield* Effect.tryPromise(() => accepted.value.settled);
+      expect(response.status).toBe(503);
+      expect(yield* Effect.tryPromise(() => response.json())).toEqual({ status: "unavailable" });
+      expect(model).not.toHaveBeenCalled();
+      expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toEqual([]);
+      expect((yield* Effect.tryPromise(() => retained(db, users[1]))).results).toEqual([]);
+    })
+  ));
+
+it("contains retention persistence failure behind the closed Agent failure", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      yield* Effect.tryPromise(() => db.prepare("DROP TABLE hosted_turns").run());
+      const outcome = yield* Effect.exit(makeAgentRetention({ db }).sweep(now()));
+      assert.deepStrictEqual(outcome, Exit.fail(new AgentUnavailable()));
+    })
+  ));
+
+it("releases an admitted Consent basis only for its exact User and still-Pending Turn", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const caller = yield* Effect.tryPromise(() => subject(0));
+      const current = now();
+      const snapshot = yield* readHostedSnapshot({ db, subject: caller, now: current });
+      if (Option.isNone(snapshot)) return yield* Effect.die("missing fixture authority");
+      const userId = UserId.make(users[0]);
+      const turnId = TranscriptTurnId.make(newId());
+      yield* admitHostedTurn({
+        db,
+        channel: { _tag: "Browser", subject: caller },
+        selection: selectHostedSession({ snapshot: snapshot.value, userId, now: current }),
+        text: TranscriptText.make("One admitted purpose"),
+        now: current,
+        id: turnId,
+      });
+      const basis = yield* readAdmittedHostedConsent({ db, userId, turnId });
+      expect(Option.map(basis, (value) => value.grantId)).toEqual(Option.some(grants[0]));
+      expect(
+        yield* readAdmittedHostedConsent({ db, userId: UserId.make(users[1]), turnId })
+      ).toEqual(Option.none());
+      yield* recoverHostedTurn({
+        db,
+        userId,
+        turn: { id: turnId, started_at_ms: current, proposed_at_ms: null },
+        now: current + 135_001,
+      });
+      expect(yield* readAdmittedHostedConsent({ db, userId, turnId })).toEqual(Option.none());
+      expect((yield* Effect.tryPromise(() => retained(db, users[1]))).results).toEqual([]);
     })
   ));

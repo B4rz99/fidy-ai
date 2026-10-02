@@ -1,4 +1,5 @@
-import { TranscriptTurnId, UserId } from "@fidy/server/agent-runtime";
+import { TranscriptTurnId } from "@fidy/server/agent-contract";
+import { UserId } from "@fidy/server/identity-reference";
 import { type Cause, Clock, Effect, Exit, Option, Schema } from "effect";
 import { hostedChannelTurnObservation } from "../../agent/operations";
 import { WhatsAppWork } from "../contract";

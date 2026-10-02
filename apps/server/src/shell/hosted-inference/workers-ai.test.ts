@@ -3,7 +3,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect, Exit, Fiber, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
-import { ToolCallId } from "~/core/transcript/model";
+import { ToolCallId } from "~/core/agent/contract";
 import {
   HostedInferenceError,
   type HostedInferenceFailureReason,

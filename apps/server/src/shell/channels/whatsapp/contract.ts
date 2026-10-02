@@ -20,7 +20,7 @@ import {
   ProviderMessageEvidence,
   WhatsAppProviderMessageId,
 } from "~/core/provider-evidence/contract";
-import { type TranscriptText } from "~/core/transcript/model";
+import { type TranscriptText } from "~/core/agent/contract";
 import { type TelemetryHttpStatus } from "~/shell/observability/contract";
 
 const maximumProviderIdentifierLength = 256;

@@ -7,7 +7,7 @@ import {
   type FailedTurnTranscriptEntry,
   type InterruptedTurnTranscriptEntry,
   type UserTranscriptEntry,
-} from "./model";
+} from "~/core/agent/contract";
 
 type DeepReadonly<Value> =
   Value extends ReadonlyArray<infer Element>

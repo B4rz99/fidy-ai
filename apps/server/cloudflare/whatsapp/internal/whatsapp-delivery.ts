@@ -1,4 +1,5 @@
-import { TranscriptText, TranscriptTurnId, UserId } from "@fidy/server/agent-runtime";
+import { TranscriptText, TranscriptTurnId } from "@fidy/server/agent-contract";
+import { UserId } from "@fidy/server/identity-reference";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import {
   HostedDeliveryCorrelationToken,
@@ -9,12 +10,12 @@ import { deliveryAcknowledgmentWindowMs } from "../../agent/contract";
 import { hostedChannelTurnQuery, prepareHostedChannelTurn } from "../../agent/operations";
 import { prepareWhatsAppIdentity } from "../../identity/operations";
 import { newId } from "../../secret-material/operations";
-import type { WhatsAppUnavailable } from "../contract";
 import {
-  type CompleteWhatsAppTurn,
   type WhatsAppDeliveryProposal,
   WhatsAppHostedSubject,
   type WhatsAppStatusAdmission,
+  type WhatsAppStatusReconciliation,
+  type WhatsAppUnavailable,
 } from "../contract";
 
 const Proposal = Schema.Struct({
@@ -320,12 +321,13 @@ const admittedStatusEvidence = (admission: WhatsAppStatusAdmission): Authenticat
 export const reconcileWhatsAppStatus = ({
   db,
   admission,
-  completeTurn,
 }: Readonly<{
   db: D1Database;
   admission: WhatsAppStatusAdmission;
-  completeTurn: CompleteWhatsAppTurn;
-}>): Effect.Effect<boolean, Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable> =>
+}>): Effect.Effect<
+  WhatsAppStatusReconciliation,
+  Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable
+> =>
   Effect.gen(function* () {
     const matched = yield* recordWhatsAppStatus({
       db,
@@ -333,8 +335,10 @@ export const reconcileWhatsAppStatus = ({
       evidence: admittedStatusEvidence(admission),
       receivedAtMs: admission.receivedAtMs,
     });
-    if (Option.isNone(matched) || matched.value.userId !== admission.userId) return false;
-    if (!["delivered", "rejected"].includes(matched.value.state)) return true;
+    if (Option.isNone(matched) || matched.value.userId !== admission.userId) {
+      return { _tag: "Refused" };
+    }
+    if (!["delivered", "rejected"].includes(matched.value.state)) return { _tag: "Recorded" };
     const raw = yield* Effect.tryPromise(() =>
       prepareHostedChannelTurn({
         db,
@@ -354,20 +358,22 @@ export const reconcileWhatsAppStatus = ({
         bsuid: WhatsAppHostedSubject.fields.bsuid,
       })
     )(raw);
-    yield* completeTurn({
-      userId: admission.userId,
-      turnId: matched.value.turnId,
-      startedAtMs: original.started_at_ms,
-      result:
-        matched.value.state === "delivered"
-          ? { _tag: "Completed", text: TranscriptText.make(matched.value.text) }
-          : { _tag: "Failed", reason: "DeliveryFailed" },
-      subject: WhatsAppHostedSubject.make({
+    return {
+      _tag: "TerminalEvidence",
+      completion: {
         userId: admission.userId,
-        portfolioId: original.portfolio_id,
-        bsuid: original.bsuid,
-      }),
-      now: admission.receivedAtMs,
-    });
-    return true;
+        turnId: matched.value.turnId,
+        startedAtMs: original.started_at_ms,
+        result:
+          matched.value.state === "delivered"
+            ? { _tag: "Completed", text: TranscriptText.make(matched.value.text) }
+            : { _tag: "Failed", reason: "DeliveryFailed" },
+        subject: WhatsAppHostedSubject.make({
+          userId: admission.userId,
+          portfolioId: original.portfolio_id,
+          bsuid: original.bsuid,
+        }),
+        now: admission.receivedAtMs,
+      },
+    };
   });

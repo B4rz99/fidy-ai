@@ -1,6 +1,6 @@
 import type { Effect, Option, Schema } from "effect";
 import type { Prompt } from "effect/unstable/ai";
-import type { TranscriptEntry } from "~/core/transcript/model";
+import type { TranscriptEntry } from "~/core/agent/contract";
 import type {
   HostedInferenceError,
   HostedTextResult,

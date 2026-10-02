@@ -2,13 +2,13 @@ import {
   CanonicalToolEvidence,
   TranscriptText,
   type TranscriptTurnId,
-  type UserId,
-} from "@fidy/server/agent-runtime";
+} from "@fidy/server/agent-contract";
+import { type UserId } from "@fidy/server/identity-reference";
 import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
 import { type Cause, Effect, Option, Schema } from "effect";
-import type { CatalogOperation } from "../../src/shell/canonical-catalog/contract";
-import type { TransactionSubject } from "../canonical-work/operations";
-import { newId } from "../secret-material/operations";
+import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
+import type { TransactionSubject } from "../../canonical-work/operations";
+import { newId } from "../../secret-material/operations";
 
 const lifetimeMs = 600_000;
 const nonceBytes = 32;

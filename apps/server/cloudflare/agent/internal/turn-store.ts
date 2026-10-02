@@ -1,4 +1,4 @@
-import { readMemoryContext } from "../memory/operations";
+import { readMemoryContext } from "../../memory/operations";
 import {
   AssistantTranscriptEntry,
   CanonicalToolCallEntry,
@@ -10,29 +10,28 @@ import {
   type HostedAdmissionState,
   HostedAgentSessionConsentBasis,
   HostedAgentSessionId,
-  type SessionTranscriptEntry,
   TranscriptEntry,
   TranscriptEntryId,
   TranscriptText,
   TranscriptTurnId,
   TurnFailureReason,
-  UserId,
   UserTranscriptEntry,
-  decideHostedAdmission,
-  terminalPrefixCursor,
-} from "@fidy/server/agent-runtime";
+} from "@fidy/server/agent-contract";
+import { type SessionTranscriptEntry } from "./working-context";
+import { UserId } from "@fidy/server/identity-reference";
+import { decideHostedAdmission, terminalPrefixCursor } from "~/core/agent/operations";
 import { type UserContext } from "@fidy/server/identity-contract";
 import { webSessionCredentialAuthority } from "@fidy/server/web-session-operations";
 import { Cause, DateTime, Effect, Option, Schema } from "effect";
-import { type TransactionSubject, transactionNow } from "../canonical-work/operations";
-import { readConsentStanding } from "../consent/operations";
-import { readUserContext } from "../identity/user-context/operations";
-import { newId } from "../secret-material/operations";
+import { type TransactionSubject, transactionNow } from "../../canonical-work/operations";
+import { readConsentStanding } from "../../consent/operations";
+import { readUserContext } from "../../identity/user-context/operations";
+import { newId } from "../../secret-material/operations";
 import {
   type WhatsAppHostedSubject,
   type WhatsAppInboundEvidence,
-  WhatsAppUnavailable,
-} from "../whatsapp/contract";
+  type WhatsAppUnavailable,
+} from "../../whatsapp/contract";
 import {
   expireWhatsAppEvidence,
   prepareWhatsAppInbound,
@@ -41,8 +40,12 @@ import {
   whatsAppCompletionGuard,
   whatsAppInterruptionGuard,
   whatsAppProposalTimes,
-} from "../whatsapp/operations";
-import { deliveryAcknowledgmentWindowMs, hostedTranscriptRetentionMs } from "./contract";
+} from "../../whatsapp/operations";
+import {
+  deliveryAcknowledgmentWindowMs,
+  hostedTranscriptRetentionMs,
+  pendingExecutionRecoveryMs,
+} from "../contract";
 import {
   type HostedSubject,
   hostedAuthority,
@@ -56,8 +59,8 @@ const millisecondsPerDay = 86_400_000;
 const maximumDailyTurns = 50;
 const receiptBytes = 32;
 const hexRadix = 16;
-export { deliveryAcknowledgmentWindowMs } from "./contract";
-export const pendingExecutionRecoveryMs = 135_000;
+export { deliveryAcknowledgmentWindowMs } from "../contract";
+
 const SessionRow = Schema.Struct({
   id: HostedAgentSessionId,
   user_id: UserId,
@@ -197,12 +200,8 @@ export const recoverHostedTurn = ({
       turnId: turn.id,
       startedAtMs: turn.started_at_ms,
       now,
-      completeTurn: (completion) =>
-        finishHostedTurn({ db, ...completion }).pipe(
-          Effect.mapError(() => new WhatsAppUnavailable())
-        ),
     });
-    if (Option.isSome(channel)) return channel.value;
+    if (Option.isSome(channel)) return yield* finishHostedTurn({ db, ...channel.value });
     const timestamp = Math.max(now, turn.started_at_ms);
     const marker = TranscriptEntryId.make(newId());
     const results = yield* Effect.tryPromise(() =>
@@ -860,7 +859,7 @@ export const acknowledgeHostedDelivery = ({
   });
 
 /** Retain exact Transcript content for at most thirty days after its terminal Turn. */
-export { hostedTranscriptRetentionMs } from "./contract";
+export { hostedTranscriptRetentionMs } from "../contract";
 
 const sweepHostedTranscript = (
   db: D1Database,

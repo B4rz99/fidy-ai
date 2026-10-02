@@ -1,5 +1,5 @@
 import { deepStrictEqual } from "node:assert";
-import { TranscriptTurnId } from "@fidy/server/agent-runtime";
+import { TranscriptTurnId } from "@fidy/server/agent-contract";
 import { currentDisclosureFor } from "@fidy/server/consent-operations";
 import { HostedInferenceError, type WorkersAiBindingRun } from "@fidy/server/hosted-inference";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";

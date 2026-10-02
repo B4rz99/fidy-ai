@@ -1,9 +1,12 @@
+import {
+  type HostedAdmissionRequest,
+  HostedAgentSessionConsentBasis,
+  HostedAgentSessionId,
+} from "./contract";
 import { expect, it } from "@effect/vitest";
 import { Option, Schema } from "effect";
 import { UserId } from "~/core/identity/reference";
-import { HostedAgentSessionId } from "./reference";
-import { HostedAgentSessionConsentBasis } from "./hosted-agent-session";
-import { type HostedAdmissionRequest, decideHostedAdmission } from "./turn-admission";
+import { decideHostedAdmission } from "./operations";
 
 const consent = Schema.decodeSync(HostedAgentSessionConsentBasis)({
   grantId: "f1d1a000-0000-4000-8000-000000000283",

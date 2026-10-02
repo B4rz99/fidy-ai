@@ -74,6 +74,59 @@ export default {
       to: { path: "^cloudflare/ingestion/runtime\\.ts$" },
     },
     {
+      name: "foreign-module-imports-cloudflare-onboarding-internal",
+      severity: "error",
+      comment: "Onboarding composition is private; callers consume its bounded operations (#611).",
+      from: {
+        path: "^(src|cloudflare|scripts|tools)/",
+        pathNot: "^cloudflare/onboarding/",
+      },
+      to: { path: "^cloudflare/onboarding/internal/" },
+    },
+    {
+      name: "onboarding-imports-unpublished-native-authority",
+      severity: "error",
+      comment:
+        "The data-free coordinator invokes published owners; persistence and runtime authority stay private (#611).",
+      from: { path: "^cloudflare/onboarding/", pathNot: "\\.test\\.ts$" },
+      to: {
+        path: "^cloudflare/",
+        pathNot: [
+          "^cloudflare/onboarding/",
+          "^cloudflare/(consent|email-authentication|identity|recovery|secret-material)/(contract|operations)\\.ts$",
+        ],
+      },
+    },
+    {
+      name: "onboarding-interface-reexports-internal",
+      severity: "error",
+      comment:
+        "Onboarding publication declares behavior without laundering private composition (#611).",
+      from: { path: "^cloudflare/onboarding/(contract|operations|runtime)\\.ts$" },
+      to: { path: "^cloudflare/onboarding/internal/", dependencyTypes: ["export"] },
+    },
+    {
+      name: "onboarding-contract-imports-implementation",
+      severity: "error",
+      comment: "Onboarding declarations carry no native execution authority (#611).",
+      from: { path: "^cloudflare/onboarding/contract\\.ts$" },
+      to: { path: "^cloudflare/onboarding/(internal/|operations\\.ts$|runtime\\.ts$)" },
+    },
+    {
+      name: "onboarding-internal-imports-outward-interface",
+      severity: "error",
+      comment: "Private Onboarding execution depends inward on declarations (#611).",
+      from: { path: "^cloudflare/onboarding/internal/" },
+      to: { path: "^cloudflare/onboarding/(operations|runtime)\\.ts$" },
+    },
+    {
+      name: "onboarding-operations-imports-runtime",
+      severity: "error",
+      comment: "Onboarding operations cannot acquire construction authority (#611).",
+      from: { path: "^cloudflare/onboarding/operations\\.ts$" },
+      to: { path: "^cloudflare/onboarding/runtime\\.ts$" },
+    },
+    {
       name: "foreign-module-imports-cloudflare-web-authentication-internal",
       severity: "error",
       comment:
@@ -94,7 +147,7 @@ export default {
         path: "^cloudflare/",
         pathNot: [
           "^cloudflare/web-authentication/",
-          "^cloudflare/(browser-login|email-authentication|recovery|tokens|web-session)/(contract|operations)\\.ts$",
+          "^cloudflare/(browser-login|email-authentication|onboarding|recovery|tokens|web-session)/(contract|operations)\\.ts$",
         ],
       },
     },

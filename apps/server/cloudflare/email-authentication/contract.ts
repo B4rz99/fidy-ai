@@ -38,6 +38,32 @@ export type EmailRejectedWorkObservationInput = EmailPendingWorkObservationInput
 
 /** The native request boundary decodes proof-bearing input and never returns private evidence. */
 export type EmailProofRequest = Readonly<{ request: Request; db: D1Database }>;
+/**
+ * An exact accepted exchange whose current mailbox proof was verified. The one-use commit adds
+ * that mailbox and final proof assertion to the supplied owner statements in one D1 batch.
+ * Supply creation of this same User, WhatsAppIdentity, Consent, original TrialPeriod and recovery
+ * credential; never execute those statements separately. Rejection rolls back the whole unit.
+ * No mailbox, proof material or persistence row is disclosed to the coordinator.
+ */
+export type VerifiedOnboardingEmail = Readonly<{
+  exchangeId: PendingConsentExchangeId;
+  verifiedAtMs: number;
+  commit: (
+    input: Readonly<{
+      userId: UserId;
+      statements: ReadonlyArray<D1PreparedStatement>;
+    }>
+  ) => Promise<void>;
+}>;
+/**
+ * Complete only within this proof-verification request. The callback composes the required owner
+ * statements and releases its one-time response only after commit; it must not persist the
+ * capability or start unrelated work. Invalid proof and commit failure produce the same refusal.
+ */
+export type OnboardingEmailVerification = EmailProofRequest &
+  Readonly<{
+    complete: (verified: VerifiedOnboardingEmail) => Promise<Response>;
+  }>;
 /** A commit callback offers only a durable identity; a missed offer is recovered by the schedule. */
 export type EmailProofStart = EmailProofRequest & Readonly<{ onAccepted: (id: string) => void }>;
 /** Provider binding used only while executing a private proof-delivery Activity. */

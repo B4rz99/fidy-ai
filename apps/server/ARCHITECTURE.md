@@ -415,8 +415,9 @@ verification and replacement declarations; canonical replacement behavior and na
 live in shell operations. Resend request projection, response decoding and failure certainty remain
 private, constructed only through the owner's runtime interface.
 
-The native `email-authentication/operations.ts` owns verified onboarding, ordinary mailbox pairing
-approval and credential replacement. Consent submits only its already-accepted exchange to the
+The native `email-authentication/operations.ts` owns onboarding mailbox proof, ordinary mailbox pairing
+approval and credential replacement. Onboarding composes stable creation through its one-use atomic
+completion operation, without receiving mailbox or proof rows. Consent submits only its already-accepted exchange to the
 bounded enrollment operation. Subscription composes the exact User's mailbox projection with its
 fresh-session and Consent statement; recovery composes the live same-User pairing predicate. Neither
 caller knows the credential or proof storage shape. BrowserLogin separately verifies the browser-held
@@ -465,7 +466,7 @@ session owner's issuance in one D1 unit. Public references and recovery approval
 
 Recovery publishes only the intended one-time code response and browser operation declarations.
 Native Recovery operations privately generate and digest the initial code, passing only its
-insertion to Email Authentication's verified enrollment unit and disclosing the code after commit.
+insertion to Onboarding's verified enrollment composition and disclosing the code after commit.
 Fresh-session rotation rechecks the exact User's authority at its write. Support's origin-verified
 Access identity, bounded attempts, credential consumption and metadata-only case evidence stay in
 Recovery internals. The code can approve only its existing User and cannot change WhatsAppIdentity.
@@ -564,3 +565,25 @@ publication callback. Its Queue and Workflow runtime remains the durability auth
 Support Recovery keeps its Access verification and metadata-only failure observation, and cannot
 enter the published browser API. Existing bounded telemetry is preserved; the extraction adds no
 external workflow, provider call, persistent authority or diagnostic data.
+
+### Onboarding coordinator
+
+Onboarding publishes its native request and completion operation in `cloudflare/onboarding`.
+It owns no tables, stored aggregate, provider, Queue or Workflow. Its visible private composition
+calls only published owner operations. Web Authentication dispatches the existing proof-bearing
+browser route to this coordinator after ingress and origin policy.
+
+Email Authentication verifies the bounded mailbox proof and lends a one-use completion that commits
+its private credential and final current-proof assertion with the supplied owner statements in one
+D1 batch. Onboarding composes Identity's stable User, WhatsAppIdentity and original TrialPeriod,
+Consent's exact accepted historical evidence, and Recovery's initial digest insertion. Every owner
+commits or rolls back together, including uniqueness conflicts, declined or expired decisions,
+concurrent redemption and replay. No mailbox or proof material crosses the composition interface.
+The recovery code is disclosed only after successful commit in the existing no-store response.
+Onboarding does not issue a WebSession; Browser Login still requires independent pairing approval
+and the browser-private verifier for that same stable User.
+
+Pre-verification admission, bounded accepted-Consent mailbox collection, identity-only delivery,
+retry and retention remain with their existing owners. This extraction neither enables onboarding
+nor adds an external workflow, provider call or telemetry purpose; the existing bounded Core/public
+Worker observation is retained.

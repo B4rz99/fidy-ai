@@ -74,9 +74,6 @@ describe("read-only smoke routing diagnosis", () => {
           round: Math.floor(index / 8) + 1,
           pairing,
           method,
-          call: "request",
-          observedCall: "request",
-          overrides: "paired",
           replica: index % 4 < 2 ? 1 : 2,
           window: "settled",
           status: method === "GET" ? 200 : 503,
@@ -93,7 +90,6 @@ describe("read-only smoke routing diagnosis", () => {
       observations.map((value, index) => (index === 0 ? { ...value, replica: 2 as const } : value)),
       observations.map((value) => ({ ...value, coreVersion: coreStable })),
       observations.map((value) => ({ ...value, publicVersion: publicCandidate })),
-      observations.map((value) => ({ ...value, observedCall: "unavailable" as const })),
       observations.map((value) => ({ ...value, coreSource: "unavailable" as const })),
       observations.map((value) => ({ ...value, status: 200 })),
       observations.map((value) => ({ ...value, round: value.round + 0.5 })),
@@ -123,7 +119,7 @@ describe("read-only smoke routing diagnosis", () => {
           expect(requests).toBe(0);
           yield* TestClock.adjust("10 seconds");
           const observations = yield* Fiber.join(fiber);
-          expect(requests).toBe(96);
+          expect(requests).toBe(48);
           expect(
             observations.every(
               (value) => value.window === "settled" && value.coreVersion === "unavailable"
@@ -151,8 +147,6 @@ describe("read-only smoke routing diagnosis", () => {
             const headers = {
               "cache-control": "no-store",
               "x-fidy-smoke-worker-version": publicVersion,
-              "x-fidy-smoke-routing-call":
-                request.headers.get("x-fidy-smoke-routing-call") ?? "request",
             };
             if (request.method === "POST") {
               return rejectedPostResponse(request, headers);
@@ -180,13 +174,7 @@ describe("read-only smoke routing diagnosis", () => {
           });
           try {
             const observations = yield* runDiagnostic(config, mockedFetch);
-            expect(observations).toHaveLength(96);
-            expect(observations.every((value) => value.observedCall === value.call)).toBe(true);
-            for (const call of ["request", "url"]) {
-              expect(
-                observations.filter((value) => value.pairing === "candidate" && value.call === call)
-              ).toHaveLength(24);
-            }
+            expect(observations).toHaveLength(48);
             expect(
               observations
                 .filter((value) => value.method === "GET")
@@ -209,16 +197,13 @@ describe("read-only smoke routing diagnosis", () => {
               expect([
                 `fidy-public="${publicCandidate}", fidy-core="${coreCandidate}"`,
                 `fidy-public="${publicStable}", fidy-core="${coreCandidate}"`,
-                `fidy-core="${coreCandidate}"`,
               ]).toContain(override);
               expect(
                 requests.some(
                   (other) =>
                     other.method !== request.method &&
                     other.url === request.url &&
-                    other.headers.get("cloudflare-workers-version-overrides") === override &&
-                    other.headers.get("x-fidy-smoke-routing-call") ===
-                      request.headers.get("x-fidy-smoke-routing-call")
+                    other.headers.get("cloudflare-workers-version-overrides") === override
                 )
               ).toBe(true);
             }
@@ -264,7 +249,6 @@ describe("read-only smoke routing diagnosis", () => {
                 : new Response(null, {
                     status: 503,
                     headers: {
-                      "x-fidy-smoke-routing-call": "secret-foreign-text",
                       "x-fidy-smoke-failure": "identity",
                       "x-fidy-smoke-core-version": coreCandidate,
                     },
@@ -273,7 +257,6 @@ describe("read-only smoke routing diagnosis", () => {
           });
           try {
             const observations = yield* runDiagnostic(config, mockedFetch);
-            expect(observations.every((value) => value.observedCall === "unavailable")).toBe(true);
             expect(
               observations
                 .filter((value) => value.method === "GET")

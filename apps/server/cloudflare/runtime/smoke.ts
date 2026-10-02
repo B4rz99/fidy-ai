@@ -7,9 +7,6 @@ export const smokeProofHeader = "x-fidy-smoke-proof";
 export const smokeFailureHeader = "x-fidy-smoke-failure";
 export const smokeIdentityHeader = "x-fidy-smoke-identity";
 export const smokeCoreVersionHeader = "x-fidy-smoke-core-version";
-export const smokeRoutingHeader = "x-fidy-smoke-routing-call";
-/** Diagnostic service-binding call forms; ordinary traffic always uses Request forwarding. */
-export const SmokeRoutingCall = Schema.Literals(["request", "url"]);
 /** Reserved invalid release revision: diagnostic POSTs always stop before admission. */
 export const smokeDiagnosticRevision = "0000000000000000000000000000000000000000";
 /** Equality bits for Core version, revision, and digest; no observed values cross this boundary. */

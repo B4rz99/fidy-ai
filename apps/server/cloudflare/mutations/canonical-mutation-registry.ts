@@ -10,8 +10,8 @@ import {
 import { TransactionId } from "@fidy/server/transactions-contract";
 import type { MemoryOperationId } from "@fidy/server/memory-runtime";
 import type { HostedInference } from "@fidy/server/hosted-inference";
-import { DeliveryEvidenceInput, InsightEventId } from "@fidy/server/insights-runtime";
-import { insightRefusal, prepareInsightTransition } from "../insights/insight-store";
+import { DeliveryEvidenceInput, InsightEventId } from "@fidy/server/insights-contract";
+import { insightRefusal, prepareInsightTransition } from "../insights/operations";
 import {
   invalidForwardingAddress,
   invalidStatementSubmission,
@@ -178,7 +178,6 @@ const insightAdapter = (
       subject: work.subject,
       operation,
       id: params.id,
-      evidence: Option.none(),
       current: work.current,
     })
   ),
@@ -246,7 +245,7 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
           subject: work.subject,
           operation: "insights.markInsightDelivered",
           id: params.id,
-          evidence: Option.some(payload),
+          evidence: payload,
           current: work.current,
         })
       ),

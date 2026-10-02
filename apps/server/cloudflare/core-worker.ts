@@ -50,9 +50,9 @@ import {
   transactionSession,
 } from "./transactions/operations";
 import { BudgetId, CreateBudgetInput, UpdateBudgetInput } from "@fidy/server/budgets-contract";
-import { DeliveryEvidenceInput, InsightEventId } from "@fidy/server/insights-runtime";
+import { DeliveryEvidenceInput, InsightEventId } from "@fidy/server/insights-contract";
 import { browseBudgets, budgetRefusal, evaluateBudgetAlerts } from "./budgets/operations";
-import { listPendingInsights } from "./insights/insight-store";
+import { listPendingInsights } from "./insights/operations";
 import { browseDashboard } from "./dashboard/operations";
 import { ownsTransactionPath as transactionPath } from "@fidy/server/transaction-runtime";
 import {

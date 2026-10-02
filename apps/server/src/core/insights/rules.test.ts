@@ -1,8 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Result } from "effect";
-import type { InvalidInsightTransition } from "./errors";
-import type { InsightLifecycleState } from "./model";
-import { transitionInsight } from "./rules";
+import type { InsightLifecycleState, InvalidInsightTransition } from "./contract";
+import { transitionInsight } from "./operations";
 
 const decide = (
   current: "pending" | "delivered" | "read" | "dismissed",

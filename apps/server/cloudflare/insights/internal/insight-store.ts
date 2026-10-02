@@ -1,5 +1,7 @@
+import { DueInsight, InsightUnavailable } from "../contract";
+import { allowedInsightTransitions } from "../../../src/core/insights/operations";
 import { UserId } from "@fidy/server/identity-reference";
-import { prepareUserContext } from "../identity/user-context/operations";
+import { prepareUserContext } from "../../identity/user-context/operations";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import {
   prepareAuthorizedAuditCall,
@@ -12,8 +14,8 @@ import {
   InsightEvent,
   InsightEventId,
   type InsightGenerationInput,
-  type InsightLifecycleState,
-} from "@fidy/server/insights-runtime";
+  InsightLifecycleState,
+} from "@fidy/server/insights-contract";
 import {
   type TransactionCaller,
   auditLimitRefusal,
@@ -24,9 +26,9 @@ import {
   transactionId,
   transactionNow,
   transactionUnavailable,
-} from "../canonical-work/operations";
+} from "../../canonical-work/operations";
 import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-operations";
-import { prepareOwnedStatement } from "../database/operations";
+import { prepareOwnedStatement } from "../../database/operations";
 import {
   type CanonicalMutationPreparation,
   type CanonicalMutationRefusal,
@@ -35,7 +37,7 @@ import {
   type OwnerOutcome,
   failedPreparation,
   refusedPreparation,
-} from "../mutations/mutation-types";
+} from "../../mutations/mutation-types";
 
 const maximumPendingInsights = 64;
 const HTTP_NOT_FOUND = 404;
@@ -93,7 +95,7 @@ export const findInsight = ({
   db: D1Database;
   userId: string;
   id: InsightEventId;
-}>): Effect.Effect<Option.Option<InsightEvent>, Cause.UnknownError> =>
+}>): Effect.Effect<Option.Option<InsightEvent>, InsightUnavailable> =>
   Effect.tryPromise(() =>
     db
       .prepare(`SELECT id, kind, schedule_id, schedule_version, service_market,
@@ -101,7 +103,14 @@ export const findInsight = ({
     WHERE user_id = ? AND id = ?`)
       .bind(userId, id)
       .first()
-  ).pipe(Effect.map(decodeEvent));
+  ).pipe(
+    Effect.flatMap((raw) => {
+      if (raw === null) return Effect.succeed(Option.none<InsightEvent>());
+      const event = decodeEvent(raw);
+      return Option.isSome(event) ? Effect.succeed(event) : Effect.fail(new InsightUnavailable());
+    }),
+    Effect.mapError(() => new InsightUnavailable())
+  );
 
 /** Insert one immutable scheduled occurrence; replay returns the original, never rewrites context. */
 export const generateInsight = ({
@@ -112,7 +121,7 @@ export const generateInsight = ({
   db: D1Database;
   userId: string;
   input: InsightGenerationInput;
-}>): Effect.Effect<Option.Option<InsightEvent>, Cause.UnknownError | Schema.SchemaError> =>
+}>): Effect.Effect<Option.Option<InsightEvent>, InsightUnavailable> =>
   Effect.gen(function* () {
     const groups = yield* Schema.encodeEffect(
       Schema.fromJsonString(Schema.toCodecJson(InsightEvent.fields.moneyGroups))
@@ -150,113 +159,97 @@ export const generateInsight = ({
         .bind(userId, input.scheduleId, input.scheduleVersion, scheduledAt)
         .first()
     );
+    if (row === null) return Option.none<InsightEvent>();
     const identity = Schema.decodeUnknownOption(Schema.Struct({ id: InsightEventId }))(row);
-    return Option.isSome(identity)
-      ? yield* findInsight({ db, userId, id: identity.value.id })
-      : Option.none();
-  });
+    if (Option.isNone(identity)) return yield* new InsightUnavailable();
+    return yield* findInsight({ db, userId, id: identity.value.id });
+  }).pipe(Effect.mapError(() => new InsightUnavailable()));
 
 /** Global due lookup reveals only bounded identities; the User coordinator must re-read the event. */
 export const discoverDueInsights = ({
   db,
   now,
-}: Readonly<{ db: D1Database; now: string }>): Effect.Effect<
-  Option.Option<
-    ReadonlyArray<{
-      userId: string;
-      id: InsightEventId;
-    }>
-  >
+}: Readonly<{ db: D1Database; now: DateTime.Utc }>): Effect.Effect<
+  Option.Option<ReadonlyArray<DueInsight>>
 > =>
   Effect.tryPromise(() =>
     db
-      .prepare(`SELECT user_id, id FROM insight_events
+      .prepare(`SELECT user_id AS userId, id FROM insight_events
   WHERE lifecycle_state = 'pending' AND scheduled_at <= ? ORDER BY scheduled_at, id LIMIT 64`)
-      .bind(now)
+      .bind(DateTime.formatIso(now))
       .all()
   ).pipe(
-    Effect.map((result) => {
-      const identities: Array<{ userId: string; id: InsightEventId }> = [];
-      for (const raw of result.results) {
-        const row = Schema.decodeUnknownOption(
-          Schema.Struct({ user_id: Schema.String.check(Schema.isUUID()), id: InsightEventId })
-        )(raw);
-        if (Option.isNone(row)) {
-          return Option.none<ReadonlyArray<{ userId: string; id: InsightEventId }>>();
-        }
-        identities.push({ userId: row.value.user_id, id: row.value.id });
-      }
-      return Option.some(identities);
-    }),
+    Effect.map((result) => Schema.decodeUnknownOption(Schema.Array(DueInsight))(result.results)),
     Effect.orElseSucceed(() => Option.none())
   );
 
-export type InsightOperation =
+type InsightOperation =
   | "insights.listPendingInsights"
   | "insights.markInsightDelivered"
   | "insights.markInsightRead"
   | "insights.dismissInsight";
 type MutationOperation = Exclude<InsightOperation, "insights.listPendingInsights">;
 
-/** Record a query or refusal only under the live caller; no financial contents enter Audit. */
-export const recordInsightCall = ({
-  db,
-  subject,
-  operation,
-  outcome,
-  current,
-}: Readonly<{
+type InsightCall = Readonly<{
   db: D1Database;
   subject: TransactionCaller;
   operation: InsightOperation;
   outcome: "accepted" | "rejected";
   current: number;
-}>): Effect.Effect<"recorded" | "unavailable"> => {
-  if (isPATCaller(subject)) {
-    return Effect.tryPromise(() =>
-      db.batch([
-        prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) }),
-        prepareOwnedStatement({
-          db,
-          statement: recordCanonicalPATWork({
-            authority: livePATAuthority({ subject, current }),
-            input: {
-              id: transactionId(),
-              current,
-              operation,
-              outcome,
-              afterOwnerWrite: false,
-            },
-          }),
-        }),
-      ])
-    ).pipe(
-      Effect.map((rows) =>
-        rows.every((row) => row.meta.changes === 1)
-          ? ("recorded" as const)
-          : ("unavailable" as const)
-      ),
-      Effect.orElseSucceed(() => "unavailable" as const)
-    );
-  }
+}>;
+
+/** Compose required accountability with the caller-owned read or mutation. */
+const insightAuditStatement = ({
+  db,
+  subject,
+  operation,
+  outcome,
+  current,
+  afterOwnerWrite,
+}: InsightCall & Readonly<{ afterOwnerWrite: boolean }>): D1PreparedStatement => {
   const authority = callerAuthority({ subject, current });
-  return Effect.tryPromise(() =>
-    prepareAuthorizedAuditCall({
-      db,
-      authority,
-      id: transactionId(),
-      operation,
-      outcome,
-      current,
-      afterOwnerWrite: false,
-    }).run()
-  ).pipe(
-    Effect.map((result) =>
-      result.meta.changes === 1 ? ("recorded" as const) : ("unavailable" as const)
-    ),
+  return isPATCaller(subject)
+    ? prepareOwnedStatement({
+        db,
+        statement: recordCanonicalPATWork({
+          authority: livePATAuthority({ subject, current }),
+          input: { id: transactionId(), current, operation, outcome, afterOwnerWrite },
+        }),
+      })
+    : prepareAuthorizedAuditCall({
+        db,
+        authority,
+        id: transactionId(),
+        operation,
+        outcome,
+        current,
+        afterOwnerWrite,
+      });
+};
+
+/** Account for the live caller inside the same unit as the query or refusal it attests. */
+const insightCallStatements = (input: InsightCall): ReadonlyArray<D1PreparedStatement> => {
+  const { db, subject, current } = input;
+  const authority = callerAuthority({ subject, current });
+  return [
+    ...(isPATCaller(subject)
+      ? [prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) })]
+      : []),
+    insightAuditStatement({ ...input, afterOwnerWrite: false }),
+    db
+      .prepare(`INSERT INTO insight_mutation_assertion (id, accepted)
+      VALUES (1, CASE WHEN changes() = 1 AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}) THEN 1 ELSE 0 END)
+      ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`)
+      .bind(...authority.bindings),
+  ];
+};
+
+/** Record a refusal only under the live caller; failed authority leaves no partial accountability. */
+const recordInsightCall = (input: InsightCall): Effect.Effect<"recorded" | "unavailable"> =>
+  Effect.tryPromise(() => input.db.batch([...insightCallStatements(input)])).pipe(
+    Effect.map(() => "recorded" as const),
     Effect.orElseSucceed(() => "unavailable" as const)
   );
-};
 
 const pendingCursor = (url: URL): Option.Option<Readonly<{ scheduledAt: string; id: string }>> => {
   const raw = url.searchParams.get("cursor");
@@ -275,24 +268,33 @@ const pendingCursor = (url: URL): Option.Option<Readonly<{ scheduledAt: string; 
 };
 
 const pendingPage = (
-  db: D1Database,
-  userId: string,
+  input: InsightCall,
   cursor: Readonly<{ scheduledAt: string; id: string }>
 ): Effect.Effect<
   Option.Option<Readonly<{ events: ReadonlyArray<InsightEvent>; hasMore: boolean }>>,
   Cause.UnknownError
 > =>
   Effect.gen(function* () {
-    const rows = yield* Effect.tryPromise(() =>
-      db
-        .prepare(`SELECT id, kind, schedule_id, schedule_version,
-    service_market, locale, time_zone, scheduled_at, money_groups_json, lifecycle_state
-    FROM insight_events WHERE user_id = ? AND lifecycle_state = 'pending'
-    AND scheduled_at <= ? AND (scheduled_at, id) > (?, ?)
-    ORDER BY scheduled_at, id LIMIT ${maximumPendingInsights + 1}`)
-        .bind(userId, DateTime.formatIso(DateTime.nowUnsafe()), cursor.scheduledAt, cursor.id)
-        .all()
+    const { db, subject, current } = input;
+    const results = yield* Effect.tryPromise(() =>
+      db.batch([
+        ...insightCallStatements(input),
+        db
+          .prepare(`SELECT id, kind, schedule_id, schedule_version,
+          service_market, locale, time_zone, scheduled_at, money_groups_json, lifecycle_state
+          FROM insight_events WHERE user_id = ? AND lifecycle_state = 'pending'
+          AND scheduled_at <= ? AND (scheduled_at, id) > (?, ?)
+          ORDER BY scheduled_at, id LIMIT ${maximumPendingInsights + 1}`)
+          .bind(
+            subject.userId,
+            DateTime.formatIso(DateTime.makeUnsafe(current)),
+            cursor.scheduledAt,
+            cursor.id
+          ),
+      ])
     );
+    const rows = results.at(-1);
+    if (rows === undefined) return Option.none();
     const events: Array<InsightEvent> = [];
     for (const row of rows.results.slice(0, maximumPendingInsights)) {
       const event = decodeEvent(row);
@@ -336,27 +338,24 @@ export const listPendingInsights = ({
   request: Request;
 }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
-    if (
-      (yield* recordInsightCall({
-        db,
-        subject,
-        operation: "insights.listPendingInsights",
-        outcome: "accepted",
-        current: transactionNow(),
-      })) !== "recorded"
-    ) {
-      return transactionUnavailable();
-    }
+    const call: InsightCall = {
+      db,
+      subject,
+      operation: "insights.listPendingInsights",
+      outcome: "accepted",
+      current: transactionNow(),
+    };
     const url = new URL(request.url);
     const cursor = pendingCursor(url);
     if (Option.isNone(cursor)) {
+      if ((yield* recordInsightCall(call)) !== "recorded") return transactionUnavailable();
       return transactionFailure({
         code: "validation_failed",
         status: HTTP_BAD_REQUEST,
         message: "Invalid InsightEvent cursor.",
       });
     }
-    const page = yield* pendingPage(db, subject.userId, cursor.value);
+    const page = yield* pendingPage(call, cursor.value);
     if (Option.isNone(page)) return transactionUnavailable();
     return yield* pendingPageResponse(url, page.value);
   }).pipe(Effect.orElseSucceed(transactionUnavailable));
@@ -371,18 +370,10 @@ const targetOf = (operation: MutationOperation): InsightLifecycleState => {
       return "dismissed";
   }
 };
-const allowed = (target: InsightLifecycleState): ReadonlyArray<InsightLifecycleState> => {
-  switch (target) {
-    case "delivered":
-      return ["pending"];
-    case "read":
-      return ["pending", "delivered"];
-    case "dismissed":
-      return ["pending", "delivered", "read"];
-    case "pending":
-      return [];
-  }
-};
+const allowed = (target: InsightLifecycleState): ReadonlyArray<InsightLifecycleState> =>
+  InsightLifecycleState.literals.filter((current) =>
+    allowedInsightTransitions(current).includes(target)
+  );
 
 export const insightRefusal = ({
   db,
@@ -418,18 +409,25 @@ export const insightRefusal = ({
 type TransitionInput = Readonly<{
   db: D1Database;
   subject: TransactionCaller;
-  operation: MutationOperation;
   id: InsightEventId;
-  evidence: Option.Option<DeliveryEvidenceInput>;
   current: number;
-}>;
+}> &
+  (
+    | Readonly<{
+        operation: "insights.markInsightDelivered";
+        evidence: DeliveryEvidenceInput;
+      }>
+    | Readonly<{
+        operation: "insights.markInsightRead" | "insights.dismissInsight";
+      }>
+  );
 
 const sendStatement = (
   input: TransitionInput,
-  attemptId: InsightDeliveryAttempt["id"]
+  attemptId: InsightDeliveryAttempt["id"],
+  sent: DeliveryEvidenceInput
 ): D1PreparedStatement => {
-  const { db, subject, id, evidence } = input;
-  const sent = Option.getOrThrow(evidence);
+  const { db, subject, id } = input;
   return db
     .prepare(`INSERT INTO insight_delivery_attempts (id, user_id, insight_event_id, sent_at,
     channel, provider, provider_message_id) SELECT ?, user_id, id, ?, ?, ?, ? FROM insight_events
@@ -545,7 +543,7 @@ const insightOutcome = ({
 const transitionStatements = (
   input: TransitionInput
 ): Extract<CanonicalMutationPreparation, { _tag: "Prepared" }> => {
-  const { db, subject, id, operation, current, evidence } = input;
+  const { db, subject, id, operation, current } = input;
   const target = targetOf(operation);
   const authority = callerAuthority({ subject, current });
   const write = db
@@ -555,32 +553,14 @@ const transitionStatements = (
       .join(",")})
     AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
     .bind(target, subject.userId, id, ...allowed(target), ...authority.bindings);
-  const attemptId = Option.map(evidence, () =>
-    InsightDeliveryAttempt.fields.id.make(transactionId())
-  );
-  const audit = isPATCaller(subject)
-    ? prepareOwnedStatement({
-        db,
-        statement: recordCanonicalPATWork({
-          authority: livePATAuthority({ subject, current }),
-          input: {
-            id: transactionId(),
-            current,
-            operation,
-            outcome: "accepted",
-            afterOwnerWrite: true,
-          },
-        }),
-      })
-    : prepareAuthorizedAuditCall({
-        db,
-        authority,
-        id: transactionId(),
-        operation,
-        outcome: "accepted",
-        current,
-        afterOwnerWrite: true,
-      });
+  const delivery =
+    input.operation === "insights.markInsightDelivered"
+      ? Option.some({
+          id: InsightDeliveryAttempt.fields.id.make(transactionId()),
+          evidence: input.evidence,
+        })
+      : Option.none();
+  const attemptId = Option.map(delivery, (attempt) => attempt.id);
   return {
     _tag: "Prepared",
     mutation: {
@@ -594,8 +574,17 @@ const transitionStatements = (
           ? [prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) })]
           : []),
         write,
-        ...Option.toArray(Option.map(attemptId, (value) => sendStatement(input, value))),
-        audit,
+        ...Option.toArray(
+          Option.map(delivery, (value) => sendStatement(input, value.id, value.evidence))
+        ),
+        insightAuditStatement({
+          db,
+          subject,
+          operation,
+          current,
+          outcome: "accepted",
+          afterOwnerWrite: true,
+        }),
       ],
     },
   };
@@ -630,7 +619,7 @@ export const findInsightAttempt = ({
   db: D1Database;
   userId: string;
   id: InsightEventId;
-}>): Effect.Effect<Option.Option<InsightDeliveryAttempt>, Cause.UnknownError> =>
+}>): Effect.Effect<Option.Option<InsightDeliveryAttempt>, InsightUnavailable> =>
   Effect.tryPromise(() =>
     db
       .prepare(`SELECT id, insight_event_id, sent_at, channel, provider,
@@ -638,8 +627,9 @@ export const findInsightAttempt = ({
       .bind(userId, id)
       .first()
   ).pipe(
-    Effect.map((raw) =>
-      Option.flatMap(Schema.decodeUnknownOption(AttemptRow)(raw), (row) =>
+    Effect.flatMap((raw) => {
+      if (raw === null) return Effect.succeed(Option.none<InsightDeliveryAttempt>());
+      const attempt = Option.flatMap(Schema.decodeUnknownOption(AttemptRow)(raw), (row) =>
         Schema.decodeOption(InsightDeliveryAttempt)({
           id: row.id,
           insightEventId: row.insight_event_id,
@@ -648,6 +638,10 @@ export const findInsightAttempt = ({
           provider: row.provider,
           providerMessageId: row.provider_message_id,
         })
-      )
-    )
+      );
+      return Option.isSome(attempt)
+        ? Effect.succeed(attempt)
+        : Effect.fail(new InsightUnavailable());
+    }),
+    Effect.mapError(() => new InsightUnavailable())
   );

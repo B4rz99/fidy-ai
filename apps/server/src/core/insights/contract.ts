@@ -1,9 +1,17 @@
-import { Schema, Struct } from "effect";
+import { Data, Schema, Struct } from "effect";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
 import { MoneyGroups } from "~/core/_shared/money";
 import { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
-import { InsightKind } from "./reference";
 import { UtcTimestamp } from "~/core/_shared/time";
+
+/** The four proactive decisions committed by the MVP specification. */
+export const InsightKind = Schema.Literals([
+  "budget-threshold",
+  "new-recurring-series",
+  "weekly-summary",
+  "manual-entry-reminder",
+]);
+export type InsightKind = typeof InsightKind.Type;
 
 /** Stable identity of one generated occurrence. */
 export const InsightEventId = Schema.String.check(Schema.isUUID())
@@ -71,3 +79,18 @@ export const DeliveryEvidenceInput = InsightDeliveryAttempt.mapFields(
   Struct.omit(["id", "insightEventId"])
 ).annotate({ identifier: "DeliveryEvidenceInput" });
 export type DeliveryEvidenceInput = typeof DeliveryEvidenceInput.Type;
+
+/** The asked-for occurrence is absent from this User's InsightEvent stream. */
+export class InsightNotFound extends Data.TaggedError("InsightNotFound")<{
+  readonly insightEventId: InsightEventId;
+}> {}
+
+/** A requested lifecycle movement would move backward or repeat the current state. */
+export class InvalidInsightTransition extends Data.TaggedError("InvalidInsightTransition")<{
+  readonly current: InsightLifecycleState;
+  readonly target: InsightLifecycleState;
+  readonly allowedTargets: ReadonlyArray<InsightLifecycleState>;
+}> {}
+
+/** Every caller-actionable failure raised by the insights core. */
+export type InsightFailure = InsightNotFound | InvalidInsightTransition;

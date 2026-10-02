@@ -1,9 +1,12 @@
+import assert from "node:assert/strict";
+import { InsightUnavailable } from "./contract";
+import { UserId } from "@fidy/server/identity-reference";
 import { applyTestMigration, isolatedTestDatabases } from "../d1-test-fixture";
 import { afterAll, expect } from "vitest";
 import { it as effectIt } from "@effect/vitest";
-import { DateTime, Effect, Option, Schema } from "effect";
-import { InsightEventId, InsightGenerationInput } from "@fidy/server/insights-runtime";
-import { DeliveredInsight } from "../../src/shell/insights/operations";
+import { DateTime, Effect, Exit, Option, Schema } from "effect";
+import { InsightEventId, InsightGenerationInput } from "@fidy/server/insights-contract";
+import { DeliveredInsight } from "../../src/shell/insights/contract";
 import {
   discoverDueInsights,
   findInsight,
@@ -11,7 +14,7 @@ import {
   generateInsight,
   listPendingInsights,
   prepareInsightTransition,
-} from "./insight-store";
+} from "./operations";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import coreWorker from "../core-worker";
@@ -20,7 +23,10 @@ import publicWorker from "../public-worker";
 const fromTestPromise = <A>(run: () => PromiseLike<A>): Effect.Effect<A> =>
   Effect.tryPromise(() => Promise.resolve(run())).pipe(Effect.orDie);
 
-const users = ["10000000-0000-4000-8000-000000000051", "10000000-0000-4000-8000-000000000052"];
+const users = [
+  UserId.make("10000000-0000-4000-8000-000000000051"),
+  UserId.make("10000000-0000-4000-8000-000000000052"),
+] as const;
 const sessions = ["10000000-0000-4000-8000-000000000061", "10000000-0000-4000-8000-000000000062"];
 const databases = isolatedTestDatabases();
 /** Direct owner-statement tests keep their historical assertion; the unit uses indexed guards. */
@@ -35,7 +41,7 @@ const migrate = (db: D1Database, migration: string): Effect.Effect<void> =>
   );
 const seedUser = (db: D1Database, index: number, current: number): Effect.Effect<void> =>
   Effect.gen(function* () {
-    const user = users[index] ?? "";
+    const user = users[index] ?? users[0];
     yield* fromTestPromise(() =>
       db
         .prepare(
@@ -135,11 +141,11 @@ const input = Schema.decodeSync(Schema.toCodecJson(InsightGenerationInput))({
 });
 const subject = (index: number): Readonly<{ id: string; userId: string; digest: Uint8Array }> => ({
   id: sessions[index] ?? "",
-  userId: users[index] ?? "",
+  userId: users[index] ?? users[0],
   digest: new Uint8Array(32).fill(index + 1),
 });
 const generated = (db: D1Database, index = 0): ReturnType<typeof generateInsight> =>
-  generateInsight({ db, userId: users[index] ?? "", input });
+  generateInsight({ db, userId: users[index] ?? users[0], input });
 const send = (
   input: Readonly<{ db: D1Database; path: string }> &
     (Readonly<{ index: number }> | Readonly<{ pat: string }>) &
@@ -237,16 +243,27 @@ effectIt.effect(
       expect(Option.isSome(first)).toBe(true);
       const again = yield* generateInsight({
         db,
-        userId: users[0] ?? "",
+        userId: users[0],
         input: { ...input, moneyGroups: [] },
       });
       expect(again).toEqual(first);
-      const due = yield* discoverDueInsights({ db, now: "2026-08-10T00:00:00Z" });
+      const due = yield* discoverDueInsights({
+        db,
+        now: DateTime.makeUnsafe("2026-08-10T00:00:00Z"),
+      });
       expect(due).toEqual(Option.some([{ userId: users[0], id: Option.getOrThrow(first).id }]));
+      const second = Option.getOrThrow(
+        yield* generateInsight({ db, userId: users[1], input: { ...input, moneyGroups: [] } })
+      );
+      expect(second.id).not.toBe(Option.getOrThrow(first).id);
+      expect(second.moneyGroups).toEqual([]);
       expect(
-        Option.isNone(
-          yield* findInsight({ db, userId: users[1] ?? "", id: Option.getOrThrow(first).id })
-        )
+        Option.getOrThrow(
+          yield* findInsight({ db, userId: users[0], id: Option.getOrThrow(first).id })
+        ).moneyGroups
+      ).toEqual(input.moneyGroups);
+      expect(
+        Option.isNone(yield* findInsight({ db, userId: users[1], id: Option.getOrThrow(first).id }))
       ).toBe(true);
     })
 );
@@ -265,12 +282,12 @@ effectIt.effect(
         subject: subject(0),
         operation: "insights.markInsightDelivered",
         id: event.id,
-        evidence: Option.some({
+        evidence: {
           sentAt: evidence,
           channel: "whatsapp",
           provider: "kapso",
           providerMessageId: "wamid.1",
-        }),
+        },
         current: DateTime.nowUnsafe().epochMilliseconds,
       });
       expect(prepared._tag).toBe("Prepared");
@@ -279,20 +296,19 @@ effectIt.effect(
         db.batch([...prepared.mutation.statements, insightCompletion(db)])
       );
       expect(
-        Option.getOrThrow(yield* findInsight({ db, userId: users[0] ?? "", id: event.id }))
-          .lifecycleState
+        Option.getOrThrow(yield* findInsight({ db, userId: users[0], id: event.id })).lifecycleState
       ).toBe("delivered");
       const replay = yield* prepareInsightTransition({
         db,
         subject: subject(0),
         operation: "insights.markInsightDelivered",
         id: event.id,
-        evidence: Option.some({
+        evidence: {
           sentAt: evidence,
           channel: "whatsapp",
           provider: "kapso",
           providerMessageId: "wamid.2",
-        }),
+        },
         current: DateTime.nowUnsafe().epochMilliseconds,
       });
       expect(replay._tag).toBe("Refused");
@@ -301,7 +317,6 @@ effectIt.effect(
         subject: subject(0),
         operation: "insights.markInsightRead",
         id: event.id,
-        evidence: Option.none(),
         current: DateTime.nowUnsafe().epochMilliseconds,
       });
       if (read._tag !== "Prepared") throw new Error("read should be prepared");
@@ -314,8 +329,7 @@ effectIt.effect(
         })).status
       ).toBe(200);
       expect(
-        Option.getOrThrow(yield* findInsight({ db, userId: users[0] ?? "", id: event.id }))
-          .lifecycleState
+        Option.getOrThrow(yield* findInsight({ db, userId: users[0], id: event.id })).lifecycleState
       ).toBe("read");
     })
 );
@@ -329,13 +343,11 @@ effectIt.effect("rejects a foreign event before writing any lifecycle or deliver
       subject: subject(1),
       operation: "insights.dismissInsight",
       id: InsightEventId.make(event.id),
-      evidence: Option.none(),
       current: DateTime.nowUnsafe().epochMilliseconds,
     });
     expect(result._tag).toBe("Refused");
     expect(
-      Option.getOrThrow(yield* findInsight({ db, userId: users[0] ?? "", id: event.id }))
-        .lifecycleState
+      Option.getOrThrow(yield* findInsight({ db, userId: users[0], id: event.id })).lifecycleState
     ).toBe("pending");
   })
 );
@@ -350,7 +362,6 @@ effectIt.effect("a stale read prepared before dismissal cannot regress the dismi
       subject: subject(0),
       operation: "insights.markInsightRead",
       id: event.id,
-      evidence: Option.none(),
       current,
     });
     const dismiss = yield* prepareInsightTransition({
@@ -358,7 +369,6 @@ effectIt.effect("a stale read prepared before dismissal cannot regress the dismi
       subject: subject(0),
       operation: "insights.dismissInsight",
       id: event.id,
-      evidence: Option.none(),
       current,
     });
     if (read._tag !== "Prepared" || dismiss._tag !== "Prepared") {
@@ -369,8 +379,7 @@ effectIt.effect("a stale read prepared before dismissal cannot regress the dismi
       expect(db.batch([...read.mutation.statements, insightCompletion(db)])).rejects.toThrow()
     );
     expect(
-      Option.getOrThrow(yield* findInsight({ db, userId: users[0] ?? "", id: event.id }))
-        .lifecycleState
+      Option.getOrThrow(yield* findInsight({ db, userId: users[0], id: event.id })).lifecycleState
     ).toBe("dismissed");
     const audits = yield* fromTestPromise(() =>
       db
@@ -393,11 +402,21 @@ effectIt.effect(
         (index) =>
           generateInsight({
             db,
-            userId: users[0] ?? "",
+            userId: users[0],
             input: { ...input, scheduledAt: DateTime.add(input.scheduledAt, { seconds: index }) },
           }),
         { concurrency: 1, discard: true }
       );
+      const due = Option.getOrThrow(
+        yield* discoverDueInsights({ db, now: DateTime.add(input.scheduledAt, { minutes: 2 }) })
+      );
+      expect(due).toHaveLength(64);
+      expect(
+        due.every((identity) => identity.userId === users[0] && Object.keys(identity).length === 2)
+      ).toBe(true);
+      const firstDue = Option.getOrThrow(Option.fromUndefinedOr(due[0]));
+      const earliest = Option.getOrThrow(yield* findInsight({ db, ...firstDue }));
+      expect(DateTime.formatIso(earliest.scheduledAt)).toBe("2026-08-09T23:00:00.000Z");
       const first = yield* fromTestPromise(() =>
         send({ db, index: 0, path: "/insights/pending", method: "GET" })
       );
@@ -453,6 +472,14 @@ effectIt.effect("rejects an under-scoped or revoked PAT before an InsightEvent w
         }),
       })
     )(yield* fromTestPromise(() => issue.json()));
+    const readable = yield* fromTestPromise(() =>
+      send({ db, pat: data.bearer, path: "/insights/pending", method: "GET" })
+    );
+    expect(readable.status).toBe(200);
+    const visible = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ data: Schema.Array(Schema.Struct({ id: InsightEventId })) })
+    )(yield* fromTestPromise(() => readable.json()));
+    expect(visible.data.map((insight) => insight.id)).toEqual([event.id]);
     const denied = yield* fromTestPromise(() =>
       send({
         db,
@@ -487,8 +514,7 @@ effectIt.effect("rejects an under-scoped or revoked PAT before an InsightEvent w
     );
     expect(revoked.status).toBe(401);
     expect(
-      Option.getOrThrow(yield* findInsight({ db, userId: users[0] ?? "", id: event.id }))
-        .lifecycleState
+      Option.getOrThrow(yield* findInsight({ db, userId: users[0], id: event.id })).lifecycleState
     ).toBe("pending");
     expect(
       (yield* fromTestPromise(() =>
@@ -514,7 +540,7 @@ effectIt.effect(
       yield* fromTestPromise(() => db.prepare("DROP TABLE insight_delivery_attempts").run());
       yield* fromTestPromise(() =>
         expect(
-          Effect.runPromiseExit(findInsightAttempt({ db, userId: users[0] ?? "", id: event.id }))
+          Effect.runPromiseExit(findInsightAttempt({ db, userId: users[0], id: event.id }))
         ).resolves.toMatchObject({ _tag: "Failure" })
       );
     })
@@ -568,8 +594,7 @@ effectIt.effect(
       );
       expect(foreign.status).toBe(404);
       expect(
-        Option.getOrThrow(yield* findInsight({ db, userId: users[0] ?? "", id: event.id }))
-          .lifecycleState
+        Option.getOrThrow(yield* findInsight({ db, userId: users[0], id: event.id })).lifecycleState
       ).toBe("pending");
       const delivered = yield* fromTestPromise(() =>
         send({
@@ -615,5 +640,94 @@ effectIt.effect(
           })
         )).status
       ).toBe(400);
+    })
+);
+
+effectIt.effect("refuses a malformed retained occurrence without misclassifying it as absent", () =>
+  Effect.gen(function* () {
+    const db = yield* setup();
+    yield* fromTestPromise(() => authorizeBrowser(db));
+    const event = Option.getOrThrow(yield* generated(db));
+    yield* fromTestPromise(() => db.prepare("DROP TRIGGER insight_events_immutable").run());
+    yield* fromTestPromise(() =>
+      db
+        .prepare("UPDATE insight_events SET money_groups_json = 'invalid' WHERE id = ?")
+        .bind(event.id)
+        .run()
+    );
+    const response = yield* fromTestPromise(() =>
+      send({
+        db,
+        index: 0,
+        path: `/insights/${event.id}/read`,
+        method: "POST",
+        body: Option.none(),
+      })
+    );
+    expect(response.status).toBe(503);
+    expect(
+      (yield* fromTestPromise(() =>
+        db
+          .prepare("SELECT lifecycle_state FROM insight_events WHERE id = ?")
+          .bind(event.id)
+          .first<{ lifecycle_state: string }>()
+      ))?.lifecycle_state
+    ).toBe("pending");
+    expect(
+      (yield* fromTestPromise(() =>
+        db
+          .prepare("SELECT COUNT(*) AS count FROM insight_audit WHERE outcome = 'accepted'")
+          .first<{ count: number }>()
+      ))?.count
+    ).toBe(0);
+  })
+);
+
+effectIt.effect(
+  "does not release pending facts when live authority disappears during query accountability",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* fromTestPromise(() => authorizeBrowser(db));
+      const event = Option.getOrThrow(yield* generated(db));
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`CREATE TRIGGER insight_test_revocation AFTER INSERT ON insight_audit
+      WHEN NEW.operation = 'insights.listPendingInsights'
+      BEGIN UPDATE web_sessions SET revoked_at_ms = 1 WHERE user_id = NEW.user_id; END`)
+          .run()
+      );
+      const response = yield* fromTestPromise(() =>
+        send({ db, index: 0, path: "/insights/pending", method: "GET" })
+      );
+      expect(response.status).toBe(503);
+      expect(
+        (yield* fromTestPromise(() =>
+          db.prepare("SELECT COUNT(*) AS count FROM insight_audit").first<{ count: number }>()
+        ))?.count
+      ).toBe(0);
+      expect(
+        Option.getOrThrow(yield* findInsight({ db, userId: users[0], id: event.id })).lifecycleState
+      ).toBe("pending");
+    })
+);
+
+effectIt.effect(
+  "fails closed when schedule replay finds a malformed retained occurrence identity",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const event = Option.getOrThrow(yield* generated(db));
+      yield* fromTestPromise(() => db.prepare("DROP TRIGGER insight_events_immutable").run());
+      yield* fromTestPromise(() =>
+        db.prepare("UPDATE insight_events SET id = 'invalid' WHERE id = ?").bind(event.id).run()
+      );
+      const replay = yield* Effect.exit(generated(db));
+      assert.deepStrictEqual(replay, Exit.fail(new InsightUnavailable()));
+      expect(
+        (yield* fromTestPromise(() =>
+          db.prepare("SELECT COUNT(*) AS count FROM insight_events").first<{ count: number }>()
+        ))?.count
+      ).toBe(1);
     })
 );

@@ -1,7 +1,6 @@
-import type { WhatsAppStatusAdmission, WhatsAppTurnAdmission } from "../agent/whatsapp-turn";
+import { type TranscriptTurnId } from "@fidy/server/agent-runtime";
+import { type OnboardingConsentBasis } from "@fidy/server/consent-contract";
 import { Data, type Effect, type Option } from "effect";
-import type { TranscriptTurnId } from "@fidy/server/agent-runtime";
-import type { OnboardingConsentBasis } from "@fidy/server/consent-contract";
 
 /** A current decision for one explicit User; absence never borrows another User's grant. */
 export type ConsentStatus = "Missing" | "Granted" | "Revoked";
@@ -25,15 +24,11 @@ export type ConsentEgressAction<A, E, R> = Readonly<{
   action: Effect.Effect<A, E, R>;
 }>;
 
-/** Binding and callbacks required by the authenticated Consent ingress composition. */
+/** Pre-User Consent work is reached only after the WhatsApp owner authenticates exact inbound bytes. */
 export type ConsentIngressEnvironment = Readonly<{
-  readonly DB: D1Database;
-  readonly KAPSO_API_KEY: string;
-  readonly KAPSO_WEBHOOK_SECRET: string;
-  readonly WHATSAPP_BUSINESS_PORTFOLIO_ID: string;
-  readonly onAccepted: (id: string) => void;
-  readonly onHostedText: (admission: WhatsAppTurnAdmission) => Promise<Response>;
-  readonly onHostedStatus: (admission: WhatsAppStatusAdmission) => Promise<Response>;
+  DB: D1Database;
+  KAPSO_API_KEY: string;
+  onAccepted: (id: string) => void;
 }>;
 
 /** Stable subject and accepted pre-User exchange composed in verified onboarding. */

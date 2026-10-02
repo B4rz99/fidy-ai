@@ -1,9 +1,4 @@
 import { readMemoryContext } from "../memory/operations";
-import { webSessionCredentialAuthority } from "@fidy/server/web-session-operations";
-import { prepareWhatsAppIdentity } from "../identity/operations";
-import type { UserContext } from "@fidy/server/identity-contract";
-import { readUserContext } from "../identity/user-context/operations";
-import { readConsentStanding } from "../consent/operations";
 import {
   AssistantTranscriptEntry,
   CanonicalToolCallEntry,
@@ -26,21 +21,34 @@ import {
   decideHostedAdmission,
   terminalPrefixCursor,
 } from "@fidy/server/agent-runtime";
+import { type UserContext } from "@fidy/server/identity-contract";
+import { webSessionCredentialAuthority } from "@fidy/server/web-session-operations";
 import { Cause, DateTime, Effect, Option, Schema } from "effect";
 import { type TransactionSubject, transactionNow } from "../canonical-work/operations";
+import { readConsentStanding } from "../consent/operations";
+import { readUserContext } from "../identity/user-context/operations";
+import { newId } from "../secret-material/operations";
 import {
-  WhatsAppBusinessPortfolioId,
-  WhatsAppBusinessScopedUserId,
-} from "../../src/core/identity/reference";
-import {
-  type HostedSubject,
   type WhatsAppHostedSubject,
   type WhatsAppInboundEvidence,
+  WhatsAppUnavailable,
+} from "../whatsapp/contract";
+import {
+  expireWhatsAppEvidence,
+  prepareWhatsAppInbound,
+  prepareWhatsAppWorkCleanup,
+  recoverWhatsAppDelivery,
+  whatsAppCompletionGuard,
+  whatsAppInterruptionGuard,
+  whatsAppProposalTimes,
+} from "../whatsapp/operations";
+import { deliveryAcknowledgmentWindowMs, hostedTranscriptRetentionMs } from "./contract";
+import {
+  type HostedSubject,
   hostedAuthority,
   hostedIdentity,
   isWhatsAppHosted,
 } from "./hosted-authority";
-import { newId } from "../secret-material/operations";
 
 const maximumRetainedEntries = 200;
 const maximumCurrentMemories = 100;
@@ -48,7 +56,7 @@ const millisecondsPerDay = 86_400_000;
 const maximumDailyTurns = 50;
 const receiptBytes = 32;
 const hexRadix = 16;
-export const deliveryAcknowledgmentWindowMs = 120_000;
+export { deliveryAcknowledgmentWindowMs } from "./contract";
 export const pendingExecutionRecoveryMs = 135_000;
 const SessionRow = Schema.Struct({
   id: HostedAgentSessionId,
@@ -107,7 +115,10 @@ export const readHostedSnapshot = ({
   db: D1Database;
   subject: HostedSubject;
   now: number;
-}>): Effect.Effect<Option.Option<HostedTurnSnapshot>, Cause.UnknownError | Schema.SchemaError> =>
+}>): Effect.Effect<
+  Option.Option<HostedTurnSnapshot>,
+  Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable
+> =>
   Effect.gen(function* () {
     const authority = hostedIdentity({ subject, current: now });
     const userId = yield* Schema.decodeEffect(UserId)(subject.userId);
@@ -129,15 +140,16 @@ export const readHostedSnapshot = ({
         .bind(subject.userId)
         .first()
     );
+    const channelProposals = whatsAppProposalTimes(userId);
     const pendingRaw = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT id, started_at_ms,
       COALESCE(
         (SELECT proposed_at_ms FROM hosted_delivery_proposals WHERE turn_id = hosted_turns.id),
-        (SELECT proposed_at_ms FROM hosted_whatsapp_delivery WHERE turn_id = hosted_turns.id)
+        (SELECT proposedAtMs FROM (${channelProposals.sql}) WHERE turnId = hosted_turns.id)
       ) AS proposed_at_ms
       FROM hosted_turns WHERE user_id = ? AND status = 'pending'`)
-        .bind(subject.userId)
+        .bind(...channelProposals.params, subject.userId)
         .first()
     );
     const day = Math.floor(now / millisecondsPerDay) * millisecondsPerDay;
@@ -168,87 +180,6 @@ export const readHostedSnapshot = ({
     });
   });
 
-const RecoverableWhatsAppDelivery = Schema.Struct({
-  text: TranscriptText,
-  send_started_at_ms: Schema.NullOr(Schema.Int),
-  state: Schema.Literals([
-    "sending",
-    "accepted",
-    "ambiguous",
-    "rejected",
-    "delivered",
-    "unconfirmed",
-  ]),
-  portfolio_id: WhatsAppBusinessPortfolioId,
-  bsuid: WhatsAppBusinessScopedUserId,
-});
-
-const isUnstartedWhatsAppSend = (delivery: typeof RecoverableWhatsAppDelivery.Type): boolean =>
-  delivery.state === "sending" && delivery.send_started_at_ms === null;
-
-/** Once a provider call might have begun, interruption is no longer an honest delivery outcome. */
-const recoverWhatsAppDelivery = ({
-  db,
-  userId,
-  turn,
-  now,
-}: Readonly<{ db: D1Database; userId: UserId; turn: TurnRow; now: number }>): Effect.Effect<
-  Option.Option<boolean>,
-  Cause.UnknownError | Schema.SchemaError
-> =>
-  Effect.gen(function* () {
-    const raw = yield* Effect.tryPromise(() =>
-      db
-        .prepare(`SELECT d.text, d.state, d.send_started_at_ms, i.portfolio_id, i.bsuid
-        FROM hosted_whatsapp_delivery AS d JOIN hosted_whatsapp_inbound AS i
-          ON i.turn_id = d.turn_id AND i.user_id = d.user_id
-        WHERE d.turn_id = ? AND d.user_id = ?`)
-        .bind(turn.id, userId)
-        .first()
-    );
-    if (raw === null) return Option.none();
-    const delivery = yield* Schema.decodeUnknownEffect(RecoverableWhatsAppDelivery)(raw);
-    if (isUnstartedWhatsAppSend(delivery)) {
-      return Option.none(); // Pre-send abandonment: normal Pending Turn recovery writes Interrupted.
-    }
-    if (
-      delivery.state === "sending" ||
-      delivery.state === "accepted" ||
-      delivery.state === "ambiguous"
-    ) {
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(`UPDATE hosted_whatsapp_delivery SET state = 'unconfirmed'
-          WHERE turn_id = ? AND user_id = ? AND state IN ('sending','accepted','ambiguous')`)
-          .bind(turn.id, userId)
-          .run()
-      );
-    }
-    const outcome: HostedTurnOutcome =
-      delivery.state === "delivered"
-        ? { _tag: "Completed", text: delivery.text }
-        : {
-            _tag: "Failed",
-            reason: delivery.state === "rejected" ? "DeliveryFailed" : "DeliveryUnconfirmed",
-          };
-    return Option.some(
-      yield* finishHostedTurn({
-        db,
-        userId,
-        turnId: turn.id,
-        startedAtMs: turn.started_at_ms,
-        result: outcome,
-        subject: {
-          _tag: "WhatsAppHosted",
-          userId,
-          portfolioId: delivery.portfolio_id,
-          bsuid: delivery.bsuid,
-        },
-        now,
-      })
-    );
-  });
-
 /** Recovery works even after revocation: it never admits new work or sends User content. */
 export const recoverHostedTurn = ({
   db,
@@ -257,10 +188,20 @@ export const recoverHostedTurn = ({
   now,
 }: Readonly<{ db: D1Database; userId: UserId; turn: TurnRow; now: number }>): Effect.Effect<
   boolean,
-  Cause.UnknownError | Schema.SchemaError
+  Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable
 > =>
   Effect.gen(function* () {
-    const channel = yield* recoverWhatsAppDelivery({ db, userId, turn, now });
+    const channel = yield* recoverWhatsAppDelivery({
+      db,
+      userId,
+      turnId: turn.id,
+      startedAtMs: turn.started_at_ms,
+      now,
+      completeTurn: (completion) =>
+        finishHostedTurn({ db, ...completion }).pipe(
+          Effect.mapError(() => new WhatsAppUnavailable())
+        ),
+    });
     if (Option.isSome(channel)) return channel.value;
     const timestamp = Math.max(now, turn.started_at_ms);
     const marker = TranscriptEntryId.make(newId());
@@ -290,23 +231,17 @@ export const recoverHostedTurn = ({
       (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms)
       SELECT ?, user_id, hosted_session_id, id, 'interrupted', ? FROM hosted_turns
       WHERE id = ? AND user_id = ? AND status = 'pending'
-        AND NOT EXISTS (SELECT 1 FROM hosted_whatsapp_delivery AS d
-          WHERE d.turn_id = hosted_turns.id AND d.user_id = hosted_turns.user_id
-            AND d.send_started_at_ms IS NOT NULL)`)
+        ${whatsAppInterruptionGuard()}`)
           .bind(marker, timestamp, turn.id, userId),
         db
           .prepare(`UPDATE hosted_turns SET status = 'interrupted', terminal_at_ms = ?
       WHERE id = ? AND user_id = ? AND status = 'pending'
-        AND NOT EXISTS (SELECT 1 FROM hosted_whatsapp_delivery AS d
-          WHERE d.turn_id = hosted_turns.id AND d.user_id = hosted_turns.user_id
-            AND d.send_started_at_ms IS NOT NULL)`)
+        ${whatsAppInterruptionGuard()}`)
           .bind(timestamp, turn.id, userId),
         db
           .prepare(`DELETE FROM hosted_delivery_proposals WHERE turn_id = ? AND user_id = ?`)
           .bind(turn.id, userId),
-        db
-          .prepare("DELETE FROM hosted_whatsapp_outbox WHERE turn_id = ? AND user_id = ?")
-          .bind(turn.id, userId),
+        prepareWhatsAppWorkCleanup({ db, turnId: turn.id, userId, requireTerminal: false }),
         // A recovered Pending Turn's activity was its start, not this recovery instant.
         db
           .prepare(`UPDATE hosted_agent_sessions SET last_activity_at_ms = ? WHERE user_id = ?
@@ -391,7 +326,7 @@ export const readHostedContinuity = ({
     transcript: ReadonlyArray<SessionTranscriptEntry>;
     terminalThroughSequence: Option.Option<number>;
   }>,
-  Cause.UnknownError | Schema.SchemaError
+  Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable
 > =>
   Effect.gen(function* () {
     // Explicit revocation forbids the next admission, not continuity of an admitted Turn.
@@ -464,7 +399,7 @@ export const appendHostedToolEntry = ({
   db: D1Database;
   userId: UserId;
   entry: CanonicalToolCallEntry | CanonicalToolResultEntry;
-}>): Effect.Effect<boolean, Cause.UnknownError | Schema.SchemaError> =>
+}>): Effect.Effect<boolean, Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable> =>
   Effect.gen(function* () {
     const call = entry._tag === "CanonicalToolCallEntry";
     const inputJson = call
@@ -507,7 +442,7 @@ export const reserveHostedCompaction = ({
   db: D1Database;
   subject: HostedSubject;
   sessionId: HostedAgentSessionId;
-}>): Effect.Effect<boolean, Cause.UnknownError | Schema.SchemaError> =>
+}>): Effect.Effect<boolean, Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable> =>
   Effect.gen(function* () {
     const current = transactionNow();
     const authority = hostedAuthority({ subject, current });
@@ -543,7 +478,7 @@ export const commitHostedCompaction = ({
   throughSequence: number;
   text: CompactedConversationOutput["compactedConversation"];
   signal: AbortSignal;
-}>): Effect.Effect<boolean, Cause.UnknownError | Schema.SchemaError> =>
+}>): Effect.Effect<boolean, Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable> =>
   Effect.gen(function* () {
     const userId = UserId.make(subject.userId);
     const current = transactionNow();
@@ -686,7 +621,7 @@ export type HostedAdmissionChannel =
       inbound: WhatsAppInboundEvidence;
     }>;
 
-const hostedInboundStatements = ({
+const prepareChannelAdmission = ({
   db,
   channel,
   id,
@@ -696,51 +631,10 @@ const hostedInboundStatements = ({
   channel: HostedAdmissionChannel;
   id: TranscriptTurnId;
   now: number;
-}>): ReadonlyArray<D1PreparedStatement> => {
-  if (channel._tag === "Browser") return [];
-  const { subject, inbound } = channel;
-  return [
-    db
-      .prepare(`INSERT INTO hosted_whatsapp_inbound
-      (turn_id, user_id, portfolio_id, bsuid, message_id, business_phone_number_id,
-       occurred_at_ms, received_at_ms)
-      SELECT id, user_id, ?, ?, ?, ?, ?, ? FROM hosted_turns
-      WHERE id = ? AND user_id = ? AND status = 'pending'`)
-      .bind(
-        subject.portfolioId,
-        subject.bsuid,
-        inbound.messageId,
-        inbound.businessPhoneNumberId,
-        inbound.occurredAtMs,
-        inbound.receivedAtMs,
-        id,
-        subject.userId
-      ),
-    db
-      .prepare(`INSERT INTO hosted_whatsapp_outbox (turn_id, user_id, created_at_ms)
-      SELECT turn_id, user_id, ? FROM hosted_whatsapp_inbound WHERE turn_id = ? AND user_id = ?`)
-      .bind(now, id, subject.userId),
-    prepareWhatsAppIdentity({
-      db,
-      userId: subject.userId,
-      statement: {
-        sql: `INSERT INTO hosted_whatsapp_windows
-      (user_id, portfolio_id, bsuid, last_verified_inbound_at_ms, closes_at_ms)
-      SELECT i.user_id, i.portfolio_id, i.bsuid, MIN(i.occurred_at_ms, i.received_at_ms),
-        MIN(i.occurred_at_ms, i.received_at_ms) + 86400000
-      FROM hosted_whatsapp_inbound AS i
-      JOIN identity_associations AS w ON w.userId = i.user_id AND w.businessPortfolioId = i.portfolio_id
-        AND w.businessScopedUserId = i.bsuid
-      WHERE i.turn_id = ? AND i.user_id = ?
-      ON CONFLICT (user_id, portfolio_id, bsuid) DO UPDATE SET
-        last_verified_inbound_at_ms = excluded.last_verified_inbound_at_ms,
-        closes_at_ms = excluded.closes_at_ms
-      WHERE excluded.last_verified_inbound_at_ms > hosted_whatsapp_windows.last_verified_inbound_at_ms`,
-        params: [id, subject.userId],
-      },
-    }),
-  ];
-};
+}>): ReadonlyArray<D1PreparedStatement> =>
+  channel._tag === "WhatsApp"
+    ? prepareWhatsAppInbound({ db, subject: channel.subject, inbound: channel.inbound, id, now })
+    : [];
 
 /** Append the exact User entry and Pending Turn atomically after the complete model preflight. */
 export const admitHostedTurn = ({
@@ -757,7 +651,10 @@ export const admitHostedTurn = ({
   text: TranscriptText;
   now: number;
   id: TranscriptTurnId;
-}>): Effect.Effect<Option.Option<TranscriptTurnId>, Cause.UnknownError | Schema.SchemaError> =>
+}>): Effect.Effect<
+  Option.Option<TranscriptTurnId>,
+  Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable
+> =>
   Effect.gen(function* () {
     const subject = channel.subject;
     const entryId = TranscriptEntryId.make(newId());
@@ -776,7 +673,7 @@ export const admitHostedTurn = ({
             `UPDATE hosted_agent_sessions SET status = 'active' WHERE id = ? AND user_id = ? AND status = 'active'`
           )
           .bind(selection.id, subject.userId);
-    const channelStatements = hostedInboundStatements({ db, channel, id, now });
+    const channelStatements = prepareChannelAdmission({ db, channel, id, now });
     const results = yield* Effect.tryPromise(() =>
       db.batch([
         createSession,
@@ -806,7 +703,7 @@ export const admitHostedTurn = ({
 
 const receiptHash = (
   receipt: string
-): Effect.Effect<Uint8Array, Cause.UnknownError | Schema.SchemaError> =>
+): Effect.Effect<Uint8Array, Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable> =>
   Effect.tryPromise(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode(receipt))).pipe(
     Effect.map((value) => new Uint8Array(value))
   );
@@ -822,7 +719,7 @@ export const stageHostedDelivery = ({
   userId: UserId;
   turnId: TranscriptTurnId;
   text: TranscriptText;
-}>): Effect.Effect<string, Cause.UnknownError | Schema.SchemaError> =>
+}>): Effect.Effect<string, Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable> =>
   Effect.gen(function* () {
     const receipt = Array.from(crypto.getRandomValues(new Uint8Array(receiptBytes)), (byte) =>
       byte.toString(hexRadix).padStart(2, "0")
@@ -854,7 +751,7 @@ export const refreshHostedDelivery = ({
   turnId: TranscriptTurnId;
 }>): Effect.Effect<
   Option.Option<Readonly<{ text: TranscriptText; receipt: string }>>,
-  Cause.UnknownError | Schema.SchemaError
+  Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable
 > =>
   Effect.gen(function* () {
     const snapshot = yield* readHostedSnapshot({ db, subject, now: transactionNow() });
@@ -913,7 +810,10 @@ export const acknowledgeHostedDelivery = ({
   subject: TransactionSubject;
   turnId: TranscriptTurnId;
   receipt: string;
-}>): Effect.Effect<Option.Option<TranscriptText>, Cause.UnknownError | Schema.SchemaError> =>
+}>): Effect.Effect<
+  Option.Option<TranscriptText>,
+  Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable
+> =>
   Effect.gen(function* () {
     const current = transactionNow();
     const digest = yield* receiptHash(receipt);
@@ -960,13 +860,16 @@ export const acknowledgeHostedDelivery = ({
   });
 
 /** Retain exact Transcript content for at most thirty days after its terminal Turn. */
-export const hostedTranscriptRetentionMs = 2_592_000_000;
+export { hostedTranscriptRetentionMs } from "./contract";
 
 const sweepHostedTranscript = (
   db: D1Database,
   userId: UserId,
   now: number
-): Effect.Effect<Option.Option<number>, Cause.UnknownError | Schema.SchemaError> =>
+): Effect.Effect<
+  Option.Option<number>,
+  Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable
+> =>
   Effect.gen(function* () {
     const cutoff = now - hostedTranscriptRetentionMs;
     yield* Effect.tryPromise(() =>
@@ -983,31 +886,7 @@ const sweepHostedTranscript = (
         .bind(userId, userId, cutoff)
         .run()
     );
-    yield* Effect.tryPromise(() =>
-      db
-        .prepare(`DELETE FROM hosted_whatsapp_delivery_events WHERE correlation_token IN
-        (SELECT d.correlation_token FROM hosted_whatsapp_delivery AS d
-          JOIN hosted_turns AS t ON t.id = d.turn_id AND t.user_id = d.user_id
-          WHERE t.user_id = ? AND t.status <> 'pending' AND t.terminal_at_ms < ?)`)
-        .bind(userId, cutoff)
-        .run()
-    );
-    yield* Effect.tryPromise(() =>
-      db
-        .prepare(`DELETE FROM hosted_whatsapp_delivery WHERE user_id = ? AND turn_id IN
-        (SELECT id FROM hosted_turns WHERE user_id = ? AND status <> 'pending'
-          AND terminal_at_ms < ?)`)
-        .bind(userId, userId, cutoff)
-        .run()
-    );
-    yield* Effect.tryPromise(() =>
-      db
-        .prepare(`DELETE FROM hosted_whatsapp_inbound WHERE user_id = ? AND turn_id IN
-        (SELECT id FROM hosted_turns WHERE user_id = ? AND status <> 'pending'
-          AND terminal_at_ms < ?)`)
-        .bind(userId, userId, cutoff)
-        .run()
-    );
+    yield* expireWhatsAppEvidence({ db, userId, now });
     yield* Effect.tryPromise(() =>
       db
         .prepare(`DELETE FROM transcript_entries WHERE user_id = ? AND turn_id IN
@@ -1036,7 +915,10 @@ const sweepHostedTranscript = (
 const readHostedRetentionDeadline = (
   db: D1Database,
   userId: UserId
-): Effect.Effect<Option.Option<number>, Cause.UnknownError | Schema.SchemaError> =>
+): Effect.Effect<
+  Option.Option<number>,
+  Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable
+> =>
   Effect.gen(function* () {
     const compacted = yield* Effect.tryPromise(() =>
       db
@@ -1100,18 +982,22 @@ export const expireHostedPending = ({
   db: D1Database;
   userId: UserId;
   now: number;
-}>): Effect.Effect<Option.Option<number>, Cause.UnknownError | Schema.SchemaError> =>
+}>): Effect.Effect<
+  Option.Option<number>,
+  Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable
+> =>
   Effect.gen(function* () {
     const nextRetention = yield* sweepHostedTranscript(db, userId, now);
+    const channelProposals = whatsAppProposalTimes(userId);
     const raw = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT id, started_at_ms,
     COALESCE(
       (SELECT proposed_at_ms FROM hosted_delivery_proposals WHERE turn_id = hosted_turns.id),
-      (SELECT proposed_at_ms FROM hosted_whatsapp_delivery WHERE turn_id = hosted_turns.id)
+      (SELECT proposedAtMs FROM (${channelProposals.sql}) WHERE turnId = hosted_turns.id)
     ) AS proposed_at_ms
     FROM hosted_turns WHERE user_id = ? AND status = 'pending'`)
-        .bind(userId)
+        .bind(...channelProposals.params, userId)
         .first()
     );
     if (raw === null) return nextRetention;
@@ -1164,12 +1050,7 @@ const hostedFinishStatements = ({
         webSessionCredentialAuthority({ subject: { ...subject, userId }, current: time })
       );
   const guard = Option.isNone(sessionAuthority)
-    ? {
-        sql: `AND (? <> 'completed' OR EXISTS (SELECT 1 FROM hosted_whatsapp_delivery AS d
-          WHERE d.turn_id = hosted_turns.id AND d.user_id = hosted_turns.user_id
-            AND d.state = 'delivered'))`,
-        bindings: [status],
-      }
+    ? whatsAppCompletionGuard(status)
     : {
         sql: `AND (? <> 'completed' OR EXISTS (SELECT 1 FROM ${sessionAuthority.value.table}
           WHERE ${sessionAuthority.value.predicate}))`,
@@ -1190,10 +1071,7 @@ const hostedFinishStatements = ({
       .prepare(`DELETE FROM hosted_delivery_proposals WHERE turn_id = ? AND user_id = ?
       AND EXISTS (SELECT 1 FROM hosted_turns WHERE id = ? AND user_id = ? AND status <> 'pending')`)
       .bind(turnId, userId, turnId, userId),
-    db
-      .prepare(`DELETE FROM hosted_whatsapp_outbox WHERE turn_id = ? AND user_id = ?
-      AND EXISTS (SELECT 1 FROM hosted_turns WHERE id = ? AND user_id = ? AND status <> 'pending')`)
-      .bind(turnId, userId, turnId, userId),
+    prepareWhatsAppWorkCleanup({ db, turnId, userId, requireTerminal: true }),
     db
       .prepare(`UPDATE hosted_agent_sessions SET last_activity_at_ms = ? WHERE user_id = ?
       AND id = (SELECT hosted_session_id FROM hosted_turns WHERE id = ? AND user_id = ?
@@ -1205,7 +1083,7 @@ const hostedFinishStatements = ({
 /** One terminal transition, with exact visible text or fixed metadata-only marker in the same batch. */
 export const finishHostedTurn = (
   input: HostedFinishInput
-): Effect.Effect<boolean, Cause.UnknownError | Schema.SchemaError> =>
+): Effect.Effect<boolean, Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable> =>
   Effect.gen(function* () {
     const results = yield* Effect.tryPromise(() => input.db.batch(hostedFinishStatements(input)));
     return results[0]?.meta.changes === 1 && results[1]?.meta.changes === 1;

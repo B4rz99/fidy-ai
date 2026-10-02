@@ -1,8 +1,3 @@
-import { findWhatsAppUser } from "../identity/operations";
-import { applyTestMigration, installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
-import { afterAll, afterEach, expect, it, vi } from "vitest";
-import { type Cause, Clock, DateTime, Effect, Option, Redacted, Schema } from "effect";
-import { currentDisclosureFor, decodeKapsoWebhook } from "@fidy/server/consent-operations";
 import {
   CanonicalToolOutcome,
   DisclosureSnapshot,
@@ -11,11 +6,55 @@ import {
   TranscriptTurnId,
   UserId,
 } from "@fidy/server/agent-runtime";
+import { currentDisclosureFor } from "@fidy/server/consent-operations";
+import { type HostedInferenceService } from "@fidy/server/hosted-inference";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
-import type { HostedInferenceService } from "@fidy/server/hosted-inference";
+import { authenticateWhatsAppInbound } from "@fidy/server/whatsapp-operations";
+import { type Cause, Clock, DateTime, Effect, Exit, Option, Redacted, Schema } from "effect";
+import assert from "node:assert/strict";
+import { afterAll, afterEach, expect, it, vi } from "vitest";
+import {
+  WhatsAppBusinessPortfolioId,
+  WhatsAppBusinessScopedUserId,
+} from "../../src/core/identity/reference";
+import {
+  HostedDeliveryCorrelationToken,
+  WhatsAppBusinessPhoneNumberId,
+  type WhatsAppHostedLifecycleEvidence,
+  WhatsAppProviderMessageId,
+} from "../../src/shell/channels/whatsapp/contract";
 import { makeCloudflareHostedInference } from "../ai/workers-ai";
-import { UserTransactionCoordinator } from "../transactions/runtime";
+import { applyTestMigration, installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { findWhatsAppUser } from "../identity/operations";
+import { observeOperationalHealth } from "../runtime/operational-health";
 import { newId } from "../secret-material/operations";
+import { UserTransactionCoordinator } from "../transactions/runtime";
+import {
+  WhatsAppHostedSubject,
+  WhatsAppInboundEvidence,
+  WhatsAppUnavailable,
+  type WhatsAppWork,
+} from "../whatsapp/contract";
+import {
+  expireWhatsAppEvidence,
+  findWhatsAppReplay,
+  readWhatsAppPendingWork,
+  recordWhatsAppSend,
+  recordWhatsAppStatus,
+  stageWhatsAppDelivery,
+  startWhatsAppSend,
+  sweepExpiredWhatsAppWindows,
+} from "../whatsapp/operations";
+import { dispatchWhatsAppWork, receiveWhatsAppWork } from "../whatsapp/runtime";
+import {
+  type HostedDelivery,
+  acknowledgeBrowserTurn,
+  browserHostedDelivery,
+  completeHostedTurn as completeHostedTurnWithAlarm,
+  completeWhatsAppTurnWithAdmission,
+} from "./hosted-turn";
+import { sweepHostedTurns } from "./hosted-turn-sweep";
+import { hostedTurnTestMigrations } from "./hosted-turn-test-migrations";
 import {
   admitHostedTurn,
   commitHostedCompaction,
@@ -27,35 +66,6 @@ import {
   recoverHostedTurn,
   selectHostedSession,
 } from "./turn-store";
-import { sweepHostedTurns } from "./hosted-turn-sweep";
-import { hostedTurnTestMigrations } from "./hosted-turn-test-migrations";
-import { WhatsAppHostedSubject, WhatsAppInboundEvidence } from "./hosted-authority";
-import { findWhatsAppReplay, sweepExpiredWhatsAppWindows } from "./whatsapp-turn";
-import { observeOperationalHealth } from "../runtime/operational-health";
-import {
-  recordWhatsAppSend,
-  recordWhatsAppStatus,
-  stageWhatsAppDelivery,
-  startWhatsAppSend,
-} from "./whatsapp-delivery";
-import {
-  HostedDeliveryCorrelationToken,
-  WhatsAppBusinessPhoneNumberId,
-  WhatsAppProviderMessageId,
-} from "../../src/shell/channels/whatsapp/model";
-import type { KapsoHostedLifecycleEvidence } from "../../src/shell/channels/whatsapp/kapso-webhook";
-import {
-  WhatsAppBusinessPortfolioId,
-  WhatsAppBusinessScopedUserId,
-} from "../../src/core/identity/reference";
-import {
-  type HostedDelivery,
-  acknowledgeBrowserTurn,
-  browserHostedDelivery,
-  completeHostedTurn as completeHostedTurnWithAlarm,
-  completeWhatsAppTurnWithAdmission,
-} from "./hosted-turn";
-import { type WhatsAppWork, dispatchWhatsAppWork, receiveWhatsAppWork } from "./whatsapp-work";
 
 const completeHostedTurn = (
   input: Omit<
@@ -605,7 +615,7 @@ it("admits one exact User entry through WhatsApp without borrowing browser sessi
       const status = (
         outcome: "sent" | "delivered",
         phone = "123456789"
-      ): KapsoHostedLifecycleEvidence => ({
+      ): WhatsAppHostedLifecycleEvidence => ({
         correlationToken: staged.value,
         businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make(phone),
         messageEvidence: {
@@ -618,12 +628,26 @@ it("admits one exact User entry through WhatsApp without borrowing browser sessi
       });
       const forged = yield* recordWhatsAppStatus({
         db,
+        userId: UserId.make(users[0]),
         evidence: status("delivered", "987654321"),
         receivedAtMs: now(),
       });
       expect(Option.isNone(forged)).toBe(true);
+      const wrongUserStatus = yield* recordWhatsAppStatus({
+        db,
+        userId: UserId.make(users[1]),
+        evidence: status("delivered"),
+        receivedAtMs: now(),
+      });
+      expect(Option.isNone(wrongUserStatus)).toBe(true);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT COUNT(*) AS count FROM hosted_whatsapp_delivery_events").first()
+        )
+      ).toEqual({ count: 0 });
       const sent = yield* recordWhatsAppStatus({
         db,
+        userId: UserId.make(users[0]),
         evidence: status("sent"),
         receivedAtMs: now(),
       });
@@ -640,6 +664,7 @@ it("admits one exact User entry through WhatsApp without borrowing browser sessi
       expect(premature).toBe(false);
       const delivered = yield* recordWhatsAppStatus({
         db,
+        userId: UserId.make(users[0]),
         evidence: status("delivered"),
         receivedAtMs: now(),
       });
@@ -844,6 +869,197 @@ it("delivers a no-tool Workers AI reply and retains exact User and assistant evi
         { status: "completed", kind: "user", text: "Hola" },
         { status: "completed", kind: "assistant", text: "Respuesta exacta" },
       ]);
+    })
+  ));
+
+const queuedWhatsAppTurn = (
+  db: D1Database,
+  index: 0 | 1,
+  text: string
+): Promise<TranscriptTurnId> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const userId = UserId.make(users[index]);
+      const bsuid = WhatsAppBusinessScopedUserId.make(`CO.1349120865530274191${index}`);
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(`INSERT INTO whatsapp_identities
+          (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?, ?, ?, ?)`)
+          .bind(userId, "portfolio-1", bsuid, now())
+          .run()
+      );
+      const subject = WhatsAppHostedSubject.make({
+        _tag: "WhatsAppHosted",
+        userId,
+        portfolioId: WhatsAppBusinessPortfolioId.make("portfolio-1"),
+        bsuid,
+      });
+      const snapshot = yield* readHostedSnapshot({ db, subject, now: now() });
+      if (Option.isNone(snapshot)) return yield* Effect.die("missing consent");
+      const id = TranscriptTurnId.make(newId());
+      const admitted = yield* admitHostedTurn({
+        db,
+        channel: {
+          _tag: "WhatsApp",
+          subject,
+          inbound: WhatsAppInboundEvidence.make({
+            messageId: WhatsAppProviderMessageId.make(`wamid.isolation.${index}`),
+            businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+            occurredAtMs: now(),
+            receivedAtMs: now(),
+          }),
+        },
+        selection: selectHostedSession({ snapshot: snapshot.value, userId, now: now() }),
+        text: TranscriptText.make(text),
+        now: now(),
+        id,
+      });
+      expect(Option.isSome(admitted)).toBe(true);
+      return id;
+    })
+  );
+
+const retainedChannelState = (db: D1Database): Promise<ReadonlyArray<unknown>> =>
+  db
+    .batch([
+      db.prepare("SELECT * FROM hosted_turns ORDER BY id"),
+      db.prepare("SELECT * FROM transcript_entries ORDER BY user_id, sequence"),
+      db.prepare("SELECT * FROM hosted_whatsapp_outbox ORDER BY turn_id"),
+      db.prepare("SELECT * FROM hosted_whatsapp_delivery ORDER BY turn_id"),
+    ])
+    .then((batches) => batches.map(({ results }) => results));
+
+it("rejects crossed User and Turn queue identities before inference, delivery or any retained change", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const turnA = yield* Effect.tryPromise(() => queuedWhatsAppTurn(db, 0, "Texto privado de A"));
+      const turnB = yield* Effect.tryPromise(() => queuedWhatsAppTurn(db, 1, "Texto privado de B"));
+      const before = yield* Effect.tryPromise(() => retainedChannelState(db));
+      const model = vi.fn(() => Promise.resolve(reply("No debe ejecutarse")));
+      const provider = vi.fn(() =>
+        Promise.resolve(
+          Response.json({
+            messaging_product: "whatsapp",
+            messages: [{ id: "wamid.should-not-send" }],
+          })
+        )
+      );
+      vi.stubGlobal("fetch", provider);
+      const owners = [coordinatorFor(db, model, 0), coordinatorFor(db, model, 1)] as const;
+      const ack = vi.fn();
+      const retry = vi.fn();
+      yield* Effect.tryPromise(() =>
+        receiveWhatsAppWork({
+          messages: [
+            { body: { _tag: "HostedWhatsAppWork", userId: users[1], turnId: turnA }, ack, retry },
+            { body: { _tag: "HostedWhatsAppWork", userId: users[0], turnId: turnB }, ack, retry },
+          ],
+          coordinator: {
+            getByName: (name) => {
+              expect(users).toContain(name);
+              return owners[name === users[0] ? 0 : 1];
+            },
+          },
+        })
+      );
+      expect(ack).toHaveBeenCalledTimes(2);
+      expect(retry).not.toHaveBeenCalled();
+      expect(model).not.toHaveBeenCalled();
+      expect(provider).not.toHaveBeenCalled();
+      expect(yield* Effect.tryPromise(() => retainedChannelState(db))).toEqual(before);
+    })
+  ));
+
+it("retries malformed retained WhatsApp continuation without acknowledging or executing it", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const turnId = yield* Effect.tryPromise(() => queuedWhatsAppTurn(db, 0, "Texto pendiente"));
+      // Fault injection models malformed retained evidence without changing production guards.
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db.prepare("DROP TRIGGER transcript_no_update"),
+          db
+            .prepare("UPDATE transcript_entries SET text = ' ' WHERE turn_id = ? AND kind = 'user'")
+            .bind(turnId),
+        ])
+      );
+      const result = yield* Effect.exit(
+        readWhatsAppPendingWork({ db, userId: UserId.make(users[0]), turnId })
+      );
+      assert.deepStrictEqual(result, Exit.fail(new WhatsAppUnavailable()));
+      const before = yield* Effect.tryPromise(() => retainedChannelState(db));
+      const model = vi.fn(() => Promise.resolve(reply("No debe ejecutarse")));
+      const provider = vi.fn(() => Promise.resolve(new Response(null, { status: 500 })));
+      vi.stubGlobal("fetch", provider);
+      const owner = coordinatorFor(db, model, 0);
+      const ack = vi.fn();
+      const retry = vi.fn();
+      yield* Effect.tryPromise(() =>
+        receiveWhatsAppWork({
+          messages: [
+            { body: { _tag: "HostedWhatsAppWork", userId: users[0], turnId }, ack, retry },
+          ],
+          coordinator: { getByName: () => owner },
+        })
+      );
+      expect(ack).not.toHaveBeenCalled();
+      expect(retry).toHaveBeenCalledTimes(1);
+      expect(model).not.toHaveBeenCalled();
+      expect(provider).not.toHaveBeenCalled();
+      expect(yield* Effect.tryPromise(() => retainedChannelState(db))).toEqual(before);
+    })
+  ));
+
+it("rejects malformed delivery proposals before retaining authenticated status evidence", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const userId = UserId.make(users[0]);
+      const turnId = yield* Effect.tryPromise(() => queuedWhatsAppTurn(db, 0, "Texto pendiente"));
+      const staged = yield* stageWhatsAppDelivery({
+        db,
+        userId,
+        turnId,
+        text: TranscriptText.make("Respuesta"),
+        now: now(),
+      });
+      if (Option.isNone(staged)) return yield* Effect.die("missing delivery proposal");
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db.prepare("DROP TRIGGER hosted_whatsapp_delivery_identity_immutable"),
+          db
+            .prepare("UPDATE hosted_whatsapp_delivery SET text = ' ' WHERE turn_id = ?")
+            .bind(turnId),
+        ])
+      );
+      const before = yield* Effect.tryPromise(() => retainedChannelState(db));
+      const result = yield* Effect.exit(
+        recordWhatsAppStatus({
+          db,
+          userId,
+          evidence: {
+            correlationToken: staged.value,
+            businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+            messageEvidence: {
+              channel: "whatsapp",
+              provider: "kapso",
+              providerMessageId: WhatsAppProviderMessageId.make("wamid.malformed"),
+            },
+            occurredAt: DateTime.makeUnsafe(now()),
+            outcome: "sent",
+          },
+          receivedAtMs: now(),
+        })
+      );
+      assert.deepStrictEqual(result, Exit.fail(new WhatsAppUnavailable()));
+      expect(yield* Effect.tryPromise(() => retainedChannelState(db))).toEqual(before);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT COUNT(*) AS count FROM hosted_whatsapp_delivery_events").first()
+        )
+      ).toEqual({ count: 0 });
     })
   ));
 
@@ -1052,6 +1268,7 @@ it("runs WhatsApp text through hosted inference but awaits signed delivery befor
       if (token === undefined) return yield* Effect.die("no correlation token");
       const evidence = yield* recordWhatsAppStatus({
         db,
+        userId: UserId.make(users[0]),
         evidence: {
           correlationToken: yield* Schema.decodeEffect(HostedDeliveryCorrelationToken)(token),
           businessPhoneNumberId: inbound.businessPhoneNumberId,
@@ -1070,7 +1287,7 @@ it("runs WhatsApp text through hosted inference but awaits signed delivery befor
         yield* finishHostedTurn({
           db,
           userId: UserId.make(users[0]),
-          turnId: evidence.value.turn_id,
+          turnId: evidence.value.turnId,
           startedAtMs: now(),
           result: { _tag: "Completed", text: TranscriptText.make(evidence.value.text) },
           subject: caller,
@@ -1094,7 +1311,7 @@ it("runs WhatsApp text through hosted inference but awaits signed delivery befor
         db
           .prepare(`SELECT hosted_session_id FROM hosted_turns
         WHERE id = ?`)
-          .bind(evidence.value.turn_id)
+          .bind(evidence.value.turnId)
           .first()
       );
       const storedSession = yield* Schema.decodeUnknownEffect(
@@ -1314,7 +1531,7 @@ it("treats signed voice instructions as User text without granting identity or t
       );
       const secret = "test-voice-webhook-secret-32-characters";
       const signature = new Bun.CryptoHasher("sha256", secret).update(rawBody).digest("hex");
-      const receipt = yield* decodeKapsoWebhook({
+      const receipt = yield* authenticateWhatsAppInbound({
         rawBody,
         signature,
         secret: Redacted.make(secret),
@@ -1772,6 +1989,7 @@ it("fails an ambiguous WhatsApp send as DeliveryUnconfirmed without replaying a 
       ]);
       const late = yield* recordWhatsAppStatus({
         db,
+        userId: UserId.make(users[0]),
         evidence: {
           correlationToken: token,
           businessPhoneNumberId: inbound.businessPhoneNumberId,
@@ -3808,6 +4026,126 @@ it("recovers an abandoned staged reply by durable alarm without another User req
       );
       if (oldest === null) throw Error("missing terminal Turn");
       expect(Number(scheduled.at(-1))).toBe(oldest.due + hostedTranscriptRetentionMs + 1);
+    })
+  ));
+
+it("expires only one User's eligible channel evidence while preserving pending, recent and foreign replay", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const timestamp = now();
+      const cutoff = timestamp - hostedTranscriptRetentionMs;
+      const cases = [
+        { userId: UserId.make(users[0]), terminalAt: cutoff - 1, pending: false, expires: true },
+        { userId: UserId.make(users[1]), terminalAt: cutoff - 1, pending: false, expires: false },
+        { userId: UserId.make(users[0]), terminalAt: cutoff, pending: false, expires: false },
+        { userId: UserId.make(users[0]), terminalAt: cutoff - 1, pending: true, expires: false },
+      ].map((entry) => ({
+        ...entry,
+        turnId: TranscriptTurnId.make(newId()),
+        sessionId: HostedAgentSessionId.make(newId()),
+        token: HostedDeliveryCorrelationToken.make(newId()),
+      }));
+      const evidenceFor = (turnId: TranscriptTurnId): Promise<ReadonlyArray<unknown>> =>
+        db
+          .batch([
+            db.prepare("SELECT * FROM hosted_whatsapp_inbound WHERE turn_id = ?").bind(turnId),
+            db.prepare("SELECT * FROM hosted_whatsapp_delivery WHERE turn_id = ?").bind(turnId),
+            db
+              .prepare(`SELECT e.* FROM hosted_whatsapp_delivery_events AS e
+            JOIN hosted_whatsapp_delivery AS d ON d.correlation_token = e.correlation_token
+            WHERE d.turn_id = ?`)
+              .bind(turnId),
+          ])
+          .then((batches) => batches.map(({ results }) => results));
+      for (const entry of cases) {
+        yield* Effect.tryPromise(() =>
+          db.batch([
+            db
+              .prepare(`INSERT INTO hosted_agent_sessions
+            (id, user_id, consent_basis_json, started_at_ms, status) VALUES (?, ?, '{}', ?, 'active')`)
+              .bind(entry.sessionId, entry.userId, entry.terminalAt - 1),
+            db
+              .prepare(`INSERT INTO hosted_turns
+            (id, user_id, hosted_session_id, started_at_ms, status) VALUES (?, ?, ?, ?, 'pending')`)
+              .bind(entry.turnId, entry.userId, entry.sessionId, entry.terminalAt - 1),
+            db
+              .prepare(`INSERT INTO transcript_entries
+            (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text)
+            VALUES (?, ?, ?, ?, 'user', ?, 'Retained exact User text')`)
+              .bind(newId(), entry.userId, entry.sessionId, entry.turnId, entry.terminalAt - 1),
+            db
+              .prepare(`INSERT INTO hosted_whatsapp_inbound
+            (turn_id, user_id, portfolio_id, bsuid, message_id, business_phone_number_id, occurred_at_ms, received_at_ms)
+            VALUES (?, ?, 'portfolio-1', 'CO.13491208655302741918', ?, '123456789', ?, ?)`)
+              .bind(
+                entry.turnId,
+                entry.userId,
+                `wamid.retention.${entry.turnId}`,
+                entry.terminalAt - 1,
+                entry.terminalAt - 1
+              ),
+            db
+              .prepare(`INSERT INTO hosted_whatsapp_delivery
+            (turn_id, user_id, text, correlation_token, business_phone_number_id, proposed_at_ms,
+              state, provider_message_id, delivered_at_ms, send_started_at_ms)
+            VALUES (?, ?, 'Retained exact reply', ?, '123456789', ?, 'delivered', ?, ?, ?)`)
+              .bind(
+                entry.turnId,
+                entry.userId,
+                entry.token,
+                entry.terminalAt - 1,
+                `wamid.answer.${entry.turnId}`,
+                entry.terminalAt,
+                entry.terminalAt - 1
+              ),
+            db
+              .prepare(`INSERT INTO hosted_whatsapp_delivery_events
+            (correlation_token, provider_message_id, status, occurred_at_ms, received_at_ms)
+            VALUES (?, ?, 'delivered', ?, ?)`)
+              .bind(
+                entry.token,
+                `wamid.answer.${entry.turnId}`,
+                entry.terminalAt,
+                entry.terminalAt
+              ),
+          ])
+        );
+        if (!entry.pending) {
+          yield* Effect.tryPromise(() =>
+            db.batch([
+              db
+                .prepare(`INSERT INTO transcript_entries
+              (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text)
+              VALUES (?, ?, ?, ?, 'assistant', ?, 'Retained exact reply')`)
+                .bind(newId(), entry.userId, entry.sessionId, entry.turnId, entry.terminalAt),
+              db
+                .prepare(
+                  "UPDATE hosted_turns SET status = 'completed', terminal_at_ms = ? WHERE id = ?"
+                )
+                .bind(entry.terminalAt, entry.turnId),
+            ])
+          );
+        }
+      }
+      const before = yield* Effect.tryPromise(() =>
+        Promise.all(cases.map(({ turnId }) => evidenceFor(turnId)))
+      );
+      yield* expireWhatsAppEvidence({ db, userId: UserId.make(users[0]), now: timestamp });
+      for (const [index, entry] of cases.entries()) {
+        const retained = yield* Effect.tryPromise(() => evidenceFor(entry.turnId));
+        expect(retained).toEqual(entry.expires ? [[], [], []] : before[index]);
+        expect(
+          yield* findWhatsAppReplay({
+            db,
+            userId: entry.userId,
+            portfolioId: WhatsAppBusinessPortfolioId.make("portfolio-1"),
+            bsuid: WhatsAppBusinessScopedUserId.make("CO.13491208655302741918"),
+            messageId: WhatsAppProviderMessageId.make(`wamid.retention.${entry.turnId}`),
+            text: TranscriptText.make("Retained exact User text"),
+          })
+        ).toBe(entry.expires ? "fresh" : "replay");
+      }
     })
   ));
 

@@ -1,5 +1,5 @@
 import { Data, type Option } from "effect";
-import type { WhatsAppBusinessPhoneNumberId } from "~/shell/channels/whatsapp/model";
+import { type WhatsAppBusinessPhoneNumberId } from "~/shell/channels/whatsapp/contract";
 
 /** Closed coordinate-free reason reported by the Outbound HTTP interface. */
 export type OutboundHttpFailureReason =

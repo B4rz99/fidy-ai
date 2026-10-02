@@ -1,7 +1,3 @@
-import assert from "node:assert/strict";
-import { TestCrypto } from "~/shell/testing/crypto";
-import { WhatsAppBusinessPhoneNumberId } from "~/shell/channels/whatsapp/model";
-import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { expect, it } from "@effect/vitest";
 import {
   Cause,
@@ -27,10 +23,14 @@ import {
   type HttpClientRequest,
   HttpClientResponse,
 } from "effect/unstable/http";
-import { OutboundHttpFailure, type OutboundHttpRequest } from "./contract";
+import assert from "node:assert/strict";
+import { WhatsAppBusinessPhoneNumberId } from "~/shell/channels/whatsapp/contract";
 import { makeCloudflareAccessOutboundHttp } from "~/shell/outbound-http/internal/outbound-http";
-import { OutboundHttp, type OutboundHttpService } from "./operations";
+import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { expectNotInspected } from "~/shell/testing/credential-failure";
+import { TestCrypto } from "~/shell/testing/crypto";
+import { OutboundHttpFailure, type OutboundHttpRequest } from "./contract";
+import { OutboundHttp, type OutboundHttpService } from "./operations";
 
 const kapsoRequest = {
   _tag: "KapsoMessages" as const,

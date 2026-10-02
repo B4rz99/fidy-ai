@@ -154,6 +154,65 @@ const tokensToolPrivate = `tools/${PROBE_PREFIX}tokens-private`;
 
 const PROBES: readonly Probe[] = [
   {
+    name: "channel peers cannot acquire private Turn or Transcript projections",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-agent-internal: cloudflare/whatsapp/${PROBE_PREFIX}turn-private/probe.ts → cloudflare/agent/internal/channel-evidence.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/whatsapp/${PROBE_PREFIX}turn-private/probe.ts`,
+        source:
+          'import { channelContinuationQuery } from "../../agent/internal/channel-evidence";\nexport const bypass = channelContinuationQuery;\n',
+      },
+    ],
+  },
+  {
+    name: "native callers cannot bypass authenticated WhatsApp transport",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error cloudflare-imports-portable-whatsapp-internal: cloudflare/${PROBE_PREFIX}whatsapp-private/probe.ts → src/shell/channels/whatsapp/internal/kapso-client.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}whatsapp-private/probe.ts`,
+        source:
+          'import { makeWhatsAppDelivery } from "~/shell/channels/whatsapp/internal/kapso-client";\nexport const bypass = makeWhatsAppDelivery;\n',
+      },
+    ],
+  },
+  {
+    name: "tooling cannot acquire WhatsApp replay or delivery persistence",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-whatsapp-internal: tools/${PROBE_PREFIX}whatsapp-private/probe.ts → cloudflare/whatsapp/internal/whatsapp-delivery.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `tools/${PROBE_PREFIX}whatsapp-private/probe.ts`,
+        source:
+          'import { recordWhatsAppStatus } from "../../cloudflare/whatsapp/internal/whatsapp-delivery";\nexport const bypass = recordWhatsAppStatus;\n',
+      },
+    ],
+  },
+  {
+    name: "published WhatsApp operations remain available without implementation access",
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}whatsapp-published/probe.ts`,
+        source:
+          'import { classifyWhatsAppAdmission, recordWhatsAppStatus } from "../whatsapp/operations";\nimport { WhatsAppTurnAdmission } from "../whatsapp/contract";\nexport const published = [classifyWhatsAppAdmission, recordWhatsAppStatus, WhatsAppTurnAdmission];\n',
+      },
+    ],
+  },
+  {
     expect: { kind: "allowed" },
     files: [
       {

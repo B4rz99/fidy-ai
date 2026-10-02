@@ -1,0 +1,78 @@
+import { Option, type Redacted } from "effect";
+import { type HttpClient } from "effect/unstable/http";
+import { type WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
+import { TranscriptText } from "~/core/transcript/model";
+import { makeWhatsAppDelivery as buildDelivery } from "~/shell/channels/whatsapp/internal/kapso-client";
+import { makeKapsoOutboundHttp } from "~/shell/outbound-http/operations";
+import {
+  type HostedDeliveryCorrelationToken,
+  type WhatsAppBusinessPhoneNumberId,
+  type WhatsAppDelivery,
+  type WhatsAppInboundEvent,
+} from "./contract";
+
+/** One bounded provider attempt; no send acceptance is a delivery receipt. */
+export const makeHostedSender = ({
+  apiKey,
+  httpClient,
+}: Readonly<{
+  apiKey: Redacted.Redacted<string>;
+  httpClient: HttpClient.HttpClient;
+}>) => {
+  const client = makeWhatsAppDelivery({
+    deliveryMode: "bsuid",
+    outboundHttp: makeKapsoOutboundHttp({ apiKey, httpClient }),
+  });
+  return ({
+    recipient,
+    businessPhoneNumberId,
+    text,
+    correlationToken,
+  }: Readonly<{
+    recipient: WhatsAppBusinessScopedUserId;
+    businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
+    text: TranscriptText;
+    correlationToken: HostedDeliveryCorrelationToken;
+  }>): ReturnType<WhatsAppDelivery["sendText"]> =>
+    client.sendText({
+      businessPhoneNumberId,
+      destination: { recipient, sandboxPhone: Option.none() },
+      text,
+      opaqueCallbackData: Option.some(correlationToken),
+    });
+};
+
+/** Build a bounded channel sender at the published Outbound HTTP seam. Production uses BSUID; sandbox routing requires an explicit mode. */
+export const makeWhatsAppDelivery: (
+  input: Parameters<typeof buildDelivery>[0]
+) => WhatsAppDelivery = (input) => buildDelivery(input);
+
+/** Send one fixed, non-secret voice failure reply without using transcript content. */
+export const makeVoiceUnavailableSender = (
+  input: Readonly<{
+    apiKey: Redacted.Redacted<string>;
+    httpClient: HttpClient.HttpClient;
+  }>
+): ((
+  request: Readonly<{
+    caller: WhatsAppInboundEvent["caller"];
+    phoneNumberId: WhatsAppBusinessPhoneNumberId;
+  }>
+) => ReturnType<WhatsAppDelivery["sendText"]>) => {
+  const client = makeWhatsAppDelivery({
+    deliveryMode: "bsuid",
+    outboundHttp: makeKapsoOutboundHttp(input),
+  });
+  return (
+    request: Readonly<{
+      caller: WhatsAppInboundEvent["caller"];
+      phoneNumberId: WhatsAppBusinessPhoneNumberId;
+    }>
+  ): ReturnType<WhatsAppDelivery["sendText"]> =>
+    client.sendText({
+      businessPhoneNumberId: request.phoneNumberId,
+      destination: { recipient: request.caller.businessScopedUserId, sandboxPhone: Option.none() },
+      text: TranscriptText.make("No pude procesar la nota de voz. Envíala de nuevo o escríbeme."),
+      opaqueCallbackData: Option.none(),
+    });
+};

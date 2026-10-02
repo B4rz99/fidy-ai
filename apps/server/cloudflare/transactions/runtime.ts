@@ -1,37 +1,9 @@
-import { HostedInference, type HostedInferenceService } from "@fidy/server/hosted-inference";
-import { makeHostedSender } from "@fidy/server/whatsapp-hosted";
-import {
-  WhatsAppStatusAdmission as StatusAdmission,
-  WhatsAppTurnAdmission as TurnAdmission,
-  type WhatsAppTurnAdmission,
-  classifyWhatsAppAdmission,
-} from "../agent/whatsapp-turn";
-import { WhatsAppHostedSubject } from "../agent/hosted-authority";
-import { WhatsAppWork } from "../agent/whatsapp-work";
-import { reconcileWhatsAppStatus } from "../agent/whatsapp-delivery";
-import type {
-  HostedDeliveryCorrelationToken,
-  WhatsAppProviderMessageId,
-} from "../../src/shell/channels/whatsapp/model";
-
 import {
   type CanonicalToolEvidence,
   type TranscriptText,
   type TranscriptTurnId,
   UserId,
 } from "@fidy/server/agent-runtime";
-import { expireHostedPending, pendingExecutionRecoveryMs } from "../agent/turn-store";
-import {
-  HostedDeliveryAdmission,
-  HostedProgressAdmission,
-  HostedTurnAdmission,
-  acknowledgeBrowserTurn,
-  browserHostedDelivery,
-  completeHostedTurnWithAdmission,
-  completeWhatsAppTurnWithAdmission,
-  readHostedProgress,
-  resumeWhatsAppTurn,
-} from "../agent/hosted-turn";
 import {
   CanonicalCapability,
   CanonicalOperationId,
@@ -40,6 +12,8 @@ import {
   operationCatalog,
 } from "@fidy/server/canonical-runtime";
 import { memoryOperationIds } from "@fidy/server/memory-api";
+import { HostedInference, type HostedInferenceService } from "@fidy/server/hosted-inference";
+import { makeHostedSender } from "@fidy/server/whatsapp-runtime";
 import {
   Cause,
   Context,
@@ -58,23 +32,58 @@ import {
 } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 import {
+  type HostedDeliveryCorrelationToken,
+  type WhatsAppProviderMessageId,
+} from "../../src/shell/channels/whatsapp/contract";
+import {
+  HostedDeliveryAdmission,
+  HostedProgressAdmission,
+  HostedTurnAdmission,
+  acknowledgeBrowserTurn,
+  browserHostedDelivery,
+  completeHostedTurnWithAdmission,
+  completeWhatsAppTurnWithAdmission,
+  readHostedProgress,
+  resumeWhatsAppTurn,
+} from "../agent/hosted-turn";
+import {
+  expireHostedPending,
+  finishHostedTurn,
+  pendingExecutionRecoveryMs,
+} from "../agent/turn-store";
+import {
   type WorkersAiEnvironment,
   cloudflareHostedInferenceLive,
   makeUserCloudflareHostedInference,
 } from "../ai/workers-ai";
+import { reconcileBudgetLatches } from "../budgets/budget-latches";
 import {
-  executeCanonicalBatch,
-  executeHostedCanonicalBatch,
-  rawOperation,
-} from "../mutations/canonical-mutation-batch";
+  type TransactionCaller,
+  transactionNow,
+  transactionUnavailable,
+} from "../canonical-work/operations";
+import { ForwardedEmailWork, StatementCoordinatorActivity } from "../ingestion/contract";
 import {
   failStatementSubmission,
   processForwardedEmail,
   processStatementSubmission,
   unavailableStatement,
 } from "../ingestion/operations";
-
-import { ForwardedEmailWork, StatementCoordinatorActivity } from "../ingestion/contract";
+import {
+  executeCanonicalBatch,
+  executeHostedCanonicalBatch,
+  rawOperation,
+} from "../mutations/canonical-mutation-batch";
+import {
+  type CanonicalMutationAdapter,
+  canonicalMutationAdapter,
+} from "../mutations/canonical-mutation-registry";
+import {
+  type HostedCommitFence,
+  executeSingleCanonicalMutation,
+} from "../mutations/canonical-mutation-unit";
+import { type CanonicalMutationPreparation, refusedPreparation } from "../mutations/mutation-types";
+import { coordinatorProbeName } from "../runtime/operational-probes";
 import {
   cloudflareWorkerTelemetry,
   observeProviderFetch,
@@ -86,19 +95,14 @@ import {
 import { coordinatorProbeName } from "../runtime/operational-probes";
 import { evaluateBudgetAlerts } from "../budgets/operations";
 import {
-  type HostedCommitFence,
-  executeSingleCanonicalMutation,
-} from "../mutations/canonical-mutation-unit";
-import {
-  type CanonicalMutationAdapter,
-  canonicalMutationAdapter,
-} from "../mutations/canonical-mutation-registry";
-import { type CanonicalMutationPreparation, refusedPreparation } from "../mutations/mutation-types";
-import {
-  type TransactionCaller,
-  transactionNow,
-  transactionUnavailable,
-} from "../canonical-work/operations";
+  WhatsAppStatusAdmission as StatusAdmission,
+  WhatsAppTurnAdmission as TurnAdmission,
+  WhatsAppHostedSubject,
+  type WhatsAppTurnAdmission,
+  WhatsAppUnavailable,
+  WhatsAppWork,
+} from "../whatsapp/contract";
+import { classifyWhatsAppAdmission, reconcileWhatsAppStatus } from "../whatsapp/operations";
 
 const digestBytes = 32;
 const HTTP_OK = 200;
@@ -180,7 +184,7 @@ type WebSessionAuthority = Omit<
  * before any D1 unit commits. The work itself is excluded — it is what the authority admits.
  */
 type PATAuthority = Omit<Extract<CanonicalWorkAdmission, { _tag: "PATWork" }>, "_tag" | "work">;
-export type { WebSessionAuthority, PATAuthority };
+export type { PATAuthority, WebSessionAuthority };
 
 /** Rebuild the exact live subject the work admission was issued for. */
 const admissionSubject = (admission: CanonicalWorkAdmission): TransactionCaller =>
@@ -973,7 +977,14 @@ export class UserTransactionCoordinator {
         if (Option.isNone(admission) || admission.value.userId !== userId) {
           return transactionUnavailable();
         }
-        const accepted = yield* reconcileWhatsAppStatus({ db: env.DB, admission: admission.value });
+        const accepted = yield* reconcileWhatsAppStatus({
+          db: env.DB,
+          admission: admission.value,
+          completeTurn: (completion) =>
+            finishHostedTurn({ db: env.DB, ...completion }).pipe(
+              Effect.mapError(() => new WhatsAppUnavailable())
+            ),
+        });
         return accepted ? new Response(null, { status: 200 }) : transactionUnavailable();
       }).pipe(
         Effect.withSpan("agent.whatsappTurn.status"),

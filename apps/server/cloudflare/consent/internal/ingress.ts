@@ -1,45 +1,28 @@
-import {
-  findOnboardingEmailReplay,
-  readOnboardingEmailStatus,
-  startOnboardingEmailEnrollment,
-} from "../../email-authentication/operations";
-import { findWhatsAppUser, prepareWhatsAppIdentity } from "../../identity/operations";
-import type { ConsentIngressEnvironment as Environment } from "../contract";
-import {
-  canRecordConsentIngressDecision,
-  classifyConsentIngressReplay,
-  currentDisclosureFor,
-  decideConsentReply,
-  decodeKapsoDisclosureLifecycleWebhook,
-  decodeKapsoWebhook,
-  isConsentIngressDecisionPhase,
-  makeDisclosureSender,
-  makeEmailStatusSender,
-  makeVoiceUnavailableSender,
-} from "@fidy/server/consent-operations";
+import { EmailAddress } from "@fidy/server/client";
 import {
   ConsentIngressExchange,
   type ConsentIngressMessage,
   DisclosureDeliveryCorrelationToken,
-  type KapsoSendFailed,
-  type KapsoSentMessage,
   PendingConsentExchangeId,
   PendingDisclosureJson,
   Sha256Digest,
   WhatsAppBusinessPhoneNumberId,
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
-  type WhatsAppDeliveryKey,
   type WhatsAppInboundEvent,
   WhatsAppProviderMessageId,
-  maxKapsoFutureTimestampMinutes,
-  maxKapsoWebhookBytes,
+  type WhatsAppSendFailed,
+  type WhatsAppSentMessage,
+  maxWhatsAppFutureTimestampMinutes,
 } from "@fidy/server/consent-contract";
-import { EmailAddress } from "@fidy/server/client";
-import type { UserId } from "../../../src/core/identity/reference";
-import { approveBrowserPairing } from "../../browser-login/operations";
-import { findWhatsAppDeliveryUser } from "../../agent/whatsapp-turn";
-import { decodeKapsoHostedLifecycleWebhook } from "@fidy/server/whatsapp-hosted";
+import {
+  canRecordConsentIngressDecision,
+  classifyConsentIngressReplay,
+  currentDisclosureFor,
+  decideConsentReply,
+  isConsentIngressDecisionPhase,
+} from "@fidy/server/consent-operations";
+import { makeDisclosureSender, makeEmailStatusSender } from "@fidy/server/consent-runtime";
 import {
   Clock,
   Context,
@@ -56,7 +39,11 @@ import {
   Schema,
 } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
-import { cloudflareWorkerTelemetry, observeProviderFetch } from "../../runtime/telemetry";
+import {
+  findOnboardingEmailReplay,
+  readOnboardingEmailStatus,
+  startOnboardingEmailEnrollment,
+} from "../../email-authentication/operations";
 import {
   ResourceAdmissionAuthority,
   type ResourceAdmissionAuthorityService,
@@ -72,23 +59,25 @@ import {
   ResourceAdmissionScopeKey,
   ResourceAdmissionUnits,
 } from "../../resource-admission/authority";
+import { type WhatsAppAuthenticatedInbound as WebhookInbound } from "../../whatsapp/contract";
+import { expireVoiceRefusals } from "../../whatsapp/operations";
+import { type ConsentIngressEnvironment as Environment } from "../contract";
+
+type StoredExchange = typeof PendingExchangeRow.Type & {
+  readonly lifecycle: ConsentIngressExchange;
+};
 
 const dayMs = 86_400_000;
 // Initiation must become ineligible before its receipt-based exchange expires, even
 // when Kapso's signed event clock leads our receipt clock by its full tolerance.
-const maxKapsoFutureSkewMs = Duration.toMillis(Duration.minutes(maxKapsoFutureTimestampMinutes));
-const maxInitiatingEventAgeMs = dayMs - maxKapsoFutureSkewMs;
+const maxKapsoFutureSkewMs = Duration.toMillis(Duration.minutes(maxWhatsAppFutureTimestampMinutes));
 const hourMs = 3_600_000;
-const voiceRefusalRetentionMs = 604_800_000;
 const statusReplyCooldownMs = 60_000;
 const maximumHourlyDisclosures = 500;
 const expiredExchangeSweepLimit = 32;
 const scheduledExchangeSweepLimit = 128;
 const HTTP_OK = 200;
-const HTTP_UNAUTHORIZED = 401;
 const HTTP_CONFLICT = 409;
-const HTTP_PAYLOAD_TOO_LARGE = 413;
-const HTTP_RATE_LIMITED = 429;
 const HTTP_UNPROCESSABLE = 422;
 const HTTP_UNAVAILABLE = 503;
 const oneUnit = ResourceAdmissionUnits.make(1);
@@ -185,69 +174,18 @@ const DeliveryRow = Schema.Struct({
   occurred_at_ms: Schema.Finite,
 });
 
-type WebhookInbound = Readonly<{
-  readonly event: WhatsAppInboundEvent;
-  readonly deliveryKey: WhatsAppDeliveryKey;
-  readonly digest: Sha256Digest;
-  readonly receivedAtMs: number;
-}>;
 type Inbound = WebhookInbound &
-  Readonly<{
-    event: WhatsAppInboundEvent & {
-      content: Exclude<WhatsAppInboundEvent["content"], { _tag: "UnusableVoiceTranscript" }>;
-    };
-  }>;
-type TextInbound = Inbound &
   Readonly<{
     event: WhatsAppInboundEvent & {
       content: Extract<WhatsAppInboundEvent["content"], { _tag: "Text" }>;
     };
   }>;
-
 const answer = (status: number): Response =>
   new Response(null, { status, headers: { "cache-control": "no-store" } });
 
 /** Keep foreign I/O failures distinct from an absent result; the ingress maps them to 503. */
 const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, void> =>
   Effect.tryPromise({ try: run, catch: () => undefined });
-
-/** Bound the actual streamed raw bytes, not the untrusted Content-Length claim. */
-const boundedBody = (request: Request): Effect.Effect<Option.Option<Uint8Array>, void> => {
-  const stream = request.body;
-  if (stream === null) return Effect.succeedSome(new Uint8Array());
-  return Effect.acquireUseRelease(
-    Effect.sync(() => stream.getReader()),
-    (reader) =>
-      Effect.gen(function* () {
-        const chunks: Array<Uint8Array> = [];
-        let length = 0;
-        for (;;) {
-          const part = yield* attempt(() => reader.read());
-          if (part.done) break;
-          const chunk: unknown = part.value;
-          if (!(chunk instanceof Uint8Array)) return Option.none();
-          length += chunk.byteLength;
-          if (length > maxKapsoWebhookBytes) return Option.none();
-          chunks.push(chunk);
-        }
-        const body = new Uint8Array(length);
-        let offset = 0;
-        for (const chunk of chunks) {
-          body.set(chunk, offset);
-          offset += chunk.byteLength;
-        }
-        return Option.some(body);
-      }),
-    (reader) =>
-      Effect.exit(attempt(() => reader.cancel())).pipe(
-        Effect.andThen(Effect.sync(() => reader.releaseLock()))
-      )
-  );
-};
-
-type StoredExchange = typeof PendingExchangeRow.Type & {
-  readonly lifecycle: ConsentIngressExchange;
-};
 
 const beforeDeliveryState = (
   state: typeof PendingExchangeRow.Type.state
@@ -634,7 +572,10 @@ const findDelivery = (
     )
   );
 
-const recordDelivery = (db: D1Database, input: DeliveryInput): Effect.Effect<Response, void> =>
+export const recordDelivery = ({
+  db,
+  input,
+}: Readonly<{ db: D1Database; input: DeliveryInput }>): Effect.Effect<Response, void> =>
   Effect.gen(function* () {
     const existing = yield* findDelivery(db, input.correlationToken);
     if (Option.isSome(existing)) {
@@ -671,7 +612,7 @@ const deliveryEffect = (
     readonly correlationToken: DisclosureDeliveryCorrelationToken;
     readonly disclosure: ReturnType<typeof currentDisclosureFor>;
   }>
-): Effect.Effect<KapsoSentMessage, KapsoSendFailed, HttpClient.HttpClient> =>
+): Effect.Effect<WhatsAppSentMessage, WhatsAppSendFailed, HttpClient.HttpClient> =>
   Effect.gen(function* () {
     const httpClient = yield* HttpClient.HttpClient;
     return yield* makeDisclosureSender({
@@ -779,7 +720,7 @@ const runDisclosureAttempt = <R>({
 }: Readonly<{
   db: D1Database;
   id: PendingConsentExchangeId;
-  send: Effect.Effect<KapsoSentMessage, KapsoSendFailed, R>;
+  send: Effect.Effect<WhatsAppSentMessage, WhatsAppSendFailed, R>;
 }>): Effect.Effect<boolean, void, R> =>
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
@@ -945,28 +886,6 @@ const startExchange = (
     return yield* sendExchange(environment, exchange);
   });
 
-type WebhookBase = Readonly<{
-  rawBody: Uint8Array;
-  secret: Redacted.Redacted<string>;
-  signature: string;
-  receivedAt: DateTime.Utc;
-}>;
-
-const handleDelivery = (base: WebhookBase, db: D1Database): Effect.Effect<Response, void> =>
-  Effect.gen(function* () {
-    const result = yield* Effect.exit(
-      decodeKapsoDisclosureLifecycleWebhook({ ...base, eventName: "whatsapp.message.delivered" })
-    );
-    if (Exit.isFailure(result)) return answer(HTTP_UNAUTHORIZED);
-    return yield* recordDelivery(db, {
-      correlationToken: result.value.correlationToken,
-      phoneNumberId: result.value.businessPhoneNumberId,
-      messageId: result.value.messageEvidence.providerMessageId,
-      occurredAtMs: DateTime.toEpochMillis(result.value.occurredAt),
-      receivedAtMs: DateTime.toEpochMillis(base.receivedAt),
-    });
-  });
-
 const requestsEmailStatus = (input: Inbound): boolean =>
   input.event.content.text.trim().toLocaleLowerCase("es-CO") === "estado";
 
@@ -983,129 +902,15 @@ const routeAcceptedInbound = (
       : yield* recordMailbox(environment, input, pending);
   });
 
-const sendVoiceRefusal = (
-  environment: Environment,
-  input: WebhookInbound,
-  userId: UserId
-): Effect.Effect<Response, void, HttpClient.HttpClient> =>
+export const receiveConsentText = ({
+  environment,
+  input,
+}: Readonly<{ environment: Environment; input: Inbound }>): Effect.Effect<
+  Response,
+  void,
+  Crypto.Crypto | HttpClient.HttpClient
+> =>
   Effect.gen(function* () {
-    const httpClient = yield* HttpClient.HttpClient;
-    const sent = yield* Effect.exit(
-      makeVoiceUnavailableSender({
-        apiKey: Redacted.make(environment.KAPSO_API_KEY),
-        httpClient,
-      })({ caller: input.event.caller, phoneNumberId: input.event.businessPhoneNumberId })
-    ).pipe(
-      Effect.tap((exit) =>
-        Effect.annotateCurrentSpan("outcome", Exit.isSuccess(exit) ? "succeeded" : "failed")
-      ),
-      Effect.withSpan("whatsapp.voice.refusal")
-    );
-    // An ambiguous send is never replayed: the claim precedes provider I/O.
-    const settled = yield* attempt(() =>
-      environment.DB.prepare(`UPDATE hosted_voice_refusals SET outcome = ?
-        WHERE portfolio_id = ? AND message_id = ? AND user_id = ? AND outcome = 'started'`)
-        .bind(
-          Exit.isSuccess(sent) ? "accepted" : "failed",
-          input.event.caller.businessPortfolioId,
-          input.event.messageEvidence.providerMessageId,
-          userId
-        )
-        .run()
-    );
-    return answer(Exit.isSuccess(sent) && settled.meta.changes === 1 ? HTTP_OK : HTTP_UNAVAILABLE);
-  });
-
-const refuseVoice = (
-  environment: Environment,
-  input: WebhookInbound,
-  userId: UserId
-): Effect.Effect<Response, void, HttpClient.HttpClient> =>
-  Effect.gen(function* () {
-    if (environment.KAPSO_API_KEY.length === 0) return answer(HTTP_UNAVAILABLE);
-    const claimed = yield* attempt(() =>
-      prepareWhatsAppIdentity({
-        db: environment.DB,
-        userId,
-        statement: {
-          sql: `INSERT INTO hosted_voice_refusals
-        (portfolio_id, message_id, user_id, claimed_at_ms)
-        SELECT ?, ?, w.userId, ? FROM identity_associations AS w
-        WHERE w.userId = ? AND w.businessPortfolioId = ? AND w.businessScopedUserId = ?
-          AND EXISTS (SELECT 1 FROM onboarding_consent_records AS c WHERE c.user_id = w.userId)
-          AND NOT EXISTS (SELECT 1 FROM consent_user_revocations AS r WHERE r.user_id = w.userId)
-          AND (SELECT count(*) FROM hosted_voice_refusals
-            WHERE user_id = w.userId AND claimed_at_ms > ?) < 5
-        ON CONFLICT (portfolio_id, message_id) DO NOTHING`,
-          params: [
-            input.event.caller.businessPortfolioId,
-            input.event.messageEvidence.providerMessageId,
-            input.receivedAtMs,
-            userId,
-            input.event.caller.businessPortfolioId,
-            input.event.caller.businessScopedUserId,
-            input.receivedAtMs - hourMs,
-          ],
-        },
-      }).run()
-    );
-    if (claimed.meta.changes !== 1) {
-      const replay = yield* attempt(() =>
-        environment.DB.prepare(`SELECT outcome FROM hosted_voice_refusals
-          WHERE portfolio_id = ? AND message_id = ? AND user_id = ?`)
-          .bind(
-            input.event.caller.businessPortfolioId,
-            input.event.messageEvidence.providerMessageId,
-            userId
-          )
-          .first()
-      );
-      if (replay === null) return answer(HTTP_RATE_LIMITED);
-      const outcome = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({ outcome: Schema.Literals(["started", "accepted", "failed"]) })
-      )(replay).pipe(Effect.mapError(() => undefined));
-      return answer(outcome.outcome === "accepted" ? HTTP_OK : HTTP_UNAVAILABLE);
-    }
-    return yield* sendVoiceRefusal(environment, input, userId);
-  });
-
-const routeHostedInbound = (
-  environment: Environment,
-  input: WebhookInbound
-): Effect.Effect<Option.Option<Response>, void, HttpClient.HttpClient> =>
-  Effect.gen(function* () {
-    const known = yield* findWhatsAppUser({
-      db: environment.DB,
-      portfolioId: input.event.caller.businessPortfolioId,
-      bsuid: input.event.caller.businessScopedUserId,
-    }).pipe(Effect.mapError(() => undefined));
-    if (Option.isNone(known)) return Option.none();
-    if (input.event.content._tag === "UnusableVoiceTranscript") {
-      return Option.some(yield* refuseVoice(environment, input, known.value));
-    }
-    const text = input.event.content.text;
-    const response = yield* attempt(() =>
-      environment.onHostedText({
-        userId: known.value,
-        portfolioId: input.event.caller.businessPortfolioId,
-        bsuid: input.event.caller.businessScopedUserId,
-        messageId: input.event.messageEvidence.providerMessageId,
-        businessPhoneNumberId: input.event.businessPhoneNumberId,
-        occurredAtMs: DateTime.toEpochMillis(input.event.occurredAt),
-        receivedAtMs: input.receivedAtMs,
-        text,
-      })
-    );
-    return Option.some(response);
-  });
-
-const routeConsentInbound = (
-  environment: Environment,
-  input: Inbound
-): Effect.Effect<Response, void, Crypto.Crypto | HttpClient.HttpClient> =>
-  Effect.gen(function* () {
-    const hosted = yield* routeHostedInbound(environment, input);
-    if (Option.isSome(hosted)) return hosted.value;
     const pending = yield* findExchange(environment.DB, input.event);
     if (Option.isSome(pending) && pending.value.state === "accepted") {
       return yield* routeAcceptedInbound(environment, input, pending.value);
@@ -1121,150 +926,6 @@ const routeConsentInbound = (
     return yield* startExchange(environment, input);
   });
 
-const routeTextInbound = (
-  environment: Environment,
-  input: TextInbound
-): Effect.Effect<Response, void, Crypto.Crypto | HttpClient.HttpClient> =>
-  Effect.gen(function* () {
-    const approval =
-      /^Aprueba el código de inicio de sesión ([BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4})$/u.exec(
-        input.event.content.text.trim()
-      );
-    if (approval !== null) {
-      const code = approval[1];
-      if (code === undefined) return answer(HTTP_CONFLICT);
-      return yield* attempt(() =>
-        approveBrowserPairing({
-          db: environment.DB,
-          input: {
-            portfolioId: environment.WHATSAPP_BUSINESS_PORTFOLIO_ID,
-            bsuid: input.event.caller.businessScopedUserId,
-            messageId: input.event.messageEvidence.providerMessageId,
-            publicCode: code,
-            occurredAtMs: DateTime.toEpochMillis(input.event.occurredAt),
-            receivedAtMs: input.receivedAtMs,
-          },
-        })
-      );
-    }
-    return yield* routeConsentInbound(environment, input);
-  });
-
-const handleInbound = (
-  base: WebhookBase,
-  request: Request,
-  environment: Environment
-): Effect.Effect<Response, void, Crypto.Crypto | HttpClient.HttpClient> =>
-  Effect.gen(function* () {
-    const decoded = yield* Effect.exit(
-      decodeKapsoWebhook({
-        ...base,
-        deliveryKey: request.headers.get("x-idempotency-key") ?? "",
-        businessPortfolioId: environment.WHATSAPP_BUSINESS_PORTFOLIO_ID,
-      })
-    );
-    if (Exit.isFailure(decoded)) return answer(HTTP_UNAUTHORIZED);
-    // Never partially settle a buffered retry delivery or re-admit stale signed events.
-    if (decoded.value.events.length !== 1) return answer(HTTP_UNPROCESSABLE);
-    if (
-      DateTime.toEpochMillis(decoded.value.events[0].occurredAt) + maxInitiatingEventAgeMs <=
-      DateTime.toEpochMillis(base.receivedAt)
-    ) {
-      return answer(HTTP_CONFLICT);
-    }
-    const cryptoService = yield* Crypto.Crypto;
-    const digest = Sha256Digest.make(
-      Encoding.encodeHex(yield* cryptoService.digest("SHA-256", base.rawBody).pipe(Effect.orDie))
-    );
-    const input = {
-      event: decoded.value.events[0],
-      deliveryKey: decoded.value.deliveryKey,
-      digest,
-      receivedAtMs: DateTime.toEpochMillis(base.receivedAt),
-    };
-    // Only typed text may operate the pre-User Consent and credential control surface.
-    if (input.event.content._tag !== "Text") {
-      const hosted = yield* routeHostedInbound(environment, input);
-      return Option.isSome(hosted) ? hosted.value : answer(HTTP_UNPROCESSABLE);
-    }
-    return yield* routeTextInbound(environment, {
-      ...input,
-      event: { ...input.event, content: input.event.content },
-    });
-  });
-
-const handleHostedLifecycle = (
-  base: WebhookBase,
-  eventName: string,
-  environment: Environment
-): Effect.Effect<Response, void> =>
-  Effect.gen(function* () {
-    const hosted = yield* Effect.exit(decodeKapsoHostedLifecycleWebhook({ ...base, eventName }));
-    if (Exit.isFailure(hosted)) return answer(HTTP_UNAUTHORIZED);
-    const user = yield* findWhatsAppDeliveryUser({
-      db: environment.DB,
-      correlationToken: hosted.value.correlationToken,
-      businessPhoneNumberId: hosted.value.businessPhoneNumberId,
-    }).pipe(Effect.mapError(() => undefined));
-    if (Option.isSome(user)) {
-      return yield* attempt(() =>
-        environment.onHostedStatus({
-          userId: user.value,
-          correlationToken: hosted.value.correlationToken,
-          businessPhoneNumberId: hosted.value.businessPhoneNumberId,
-          providerMessageId: hosted.value.messageEvidence.providerMessageId,
-          outcome: hosted.value.outcome,
-          occurredAtMs: DateTime.toEpochMillis(hosted.value.occurredAt),
-          receivedAtMs: DateTime.toEpochMillis(base.receivedAt),
-        })
-      );
-    }
-    return eventName === "whatsapp.message.delivered"
-      ? yield* handleDelivery(base, environment.DB)
-      : answer(HTTP_OK);
-  });
-
-const isLifecycleEvent = (name: string): boolean =>
-  name === "whatsapp.message.sent" ||
-  name === "whatsapp.message.delivered" ||
-  name === "whatsapp.message.failed";
-
-const handleWebhook = (
-  request: Request,
-  environment: Environment
-): Effect.Effect<Response, void, Crypto.Crypto | HttpClient.HttpClient> =>
-  Effect.gen(function* () {
-    if (
-      request.headers.get("content-length") !== null &&
-      Number(request.headers.get("content-length")) > maxKapsoWebhookBytes
-    ) {
-      return answer(HTTP_PAYLOAD_TOO_LARGE);
-    }
-    const rawBody = yield* boundedBody(request);
-    if (Option.isNone(rawBody)) return answer(HTTP_PAYLOAD_TOO_LARGE);
-    const receivedAt = yield* DateTime.now;
-    const base = {
-      rawBody: rawBody.value,
-      secret: Redacted.make(environment.KAPSO_WEBHOOK_SECRET),
-      signature: request.headers.get("x-webhook-signature") ?? "",
-      receivedAt,
-    };
-    const eventName = request.headers.get("x-webhook-event");
-    if (eventName !== null && isLifecycleEvent(eventName)) {
-      return yield* handleHostedLifecycle(base, eventName, environment);
-    }
-    if (eventName !== "whatsapp.message.received") return answer(HTTP_UNPROCESSABLE);
-    return yield* handleInbound(base, request, environment);
-  });
-
-const workerCrypto = Crypto.make({
-  randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),
-  digest: (algorithm, data) =>
-    attempt(() =>
-      crypto.subtle.digest(algorithm, new Uint8Array(data)).then((buffer) => new Uint8Array(buffer))
-    ).pipe(Effect.orDie),
-});
-
 /** Expire pre-User evidence even when no new webhook arrives. */
 export const sweepExpired = (db: D1Database) => (): Effect.Effect<void, void> =>
   Effect.gen(function* () {
@@ -1279,15 +940,7 @@ export const sweepExpired = (db: D1Database) => (): Effect.Effect<void, void> =>
         .bind(nowMs, scheduledExchangeSweepLimit)
         .run()
     );
-    yield* attempt(() =>
-      db
-        .prepare(`DELETE FROM hosted_voice_refusals WHERE rowid IN (
-        SELECT rowid FROM hosted_voice_refusals WHERE claimed_at_ms < ?
-        ORDER BY claimed_at_ms LIMIT ?
-      )`)
-        .bind(nowMs - voiceRefusalRetentionMs, scheduledExchangeSweepLimit)
-        .run()
-    );
+    yield* expireVoiceRefusals({ db, now: nowMs });
     const expired = yield* attempt(() =>
       db
         .prepare(`SELECT g.id FROM resource_admission_grants AS g
@@ -1318,27 +971,3 @@ export const sweepExpired = (db: D1Database) => (): Effect.Effect<void, void> =>
       ])
     );
   });
-
-/** One authenticated, bounded provider ingress. No decision can bypass provider delivery proof. */
-export const receiveIngress =
-  (environment: Environment): ((request: Request) => Effect.Effect<Response>) =>
-  (request) =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const clients = yield* Layer.build(FetchHttpClient.layer);
-        return yield* handleWebhook(request, environment).pipe(
-          Effect.provideService(HttpClient.HttpClient, Context.get(clients, HttpClient.HttpClient)),
-          Effect.provideService(Crypto.Crypto, workerCrypto)
-        );
-      })
-    ).pipe(
-      Effect.provideService(
-        FetchHttpClient.Fetch,
-        observeProviderFetch(globalThis.fetch, {
-          provider: "kapso",
-          environment,
-          telemetry: cloudflareWorkerTelemetry,
-        })
-      ),
-      Effect.catchCause(() => Effect.succeed(answer(HTTP_UNAVAILABLE)))
-    );

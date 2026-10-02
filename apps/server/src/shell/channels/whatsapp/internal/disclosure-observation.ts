@@ -6,7 +6,7 @@ import {
   TelemetryAttempt,
 } from "~/shell/observability/contract";
 import { Telemetry, type TelemetryService } from "~/shell/observability/operations";
-import type { DisclosureDeliveryAttemptNumber } from "./disclosure-model";
+import { type DisclosureDeliveryAttemptNumber } from "./disclosure-model";
 
 const recordExit = (
   telemetry: TelemetryService,

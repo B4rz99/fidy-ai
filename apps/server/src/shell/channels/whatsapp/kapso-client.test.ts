@@ -1,24 +1,29 @@
-import assert from "node:assert/strict";
-import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { expect, it } from "@effect/vitest";
 import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
+import assert from "node:assert/strict";
 import { E164PhoneNumber, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import { TranscriptText } from "~/core/transcript/model";
+import { TelemetryHttpStatus } from "~/shell/observability/contract";
 import {
   OutboundHttpFailure,
   type OutboundHttpRequest,
   type OutboundHttpResponse,
 } from "~/shell/outbound-http/contract";
-import type { OutboundHttpService } from "~/shell/outbound-http/operations";
-import { TelemetryHttpStatus } from "~/shell/observability/contract";
-import { type KapsoClientService, KapsoSendFailed, makeKapsoClientService } from "./kapso-client";
-import { DisclosureDeliveryCorrelationToken } from "./disclosure-model";
-import { HostedDeliveryCorrelationToken, WhatsAppBusinessPhoneNumberId } from "./model";
+import { type OutboundHttpService } from "~/shell/outbound-http/operations";
+import { UnknownJsonString } from "~/shell/schema-codecs/contract";
+import {
+  DisclosureDeliveryCorrelationToken,
+  HostedDeliveryCorrelationToken,
+  WhatsAppBusinessPhoneNumberId,
+  type WhatsAppDelivery,
+  WhatsAppSendFailed,
+} from "./contract";
+import { makeWhatsAppDelivery } from "./runtime";
 
 const sendInput = (
-  overrides: Partial<Parameters<KapsoClientService["sendText"]>[0]> = {}
-): Parameters<KapsoClientService["sendText"]>[0] => ({
+  overrides: Partial<Parameters<WhatsAppDelivery["sendText"]>[0]> = {}
+): Parameters<WhatsAppDelivery["sendText"]>[0] => ({
   businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
   destination: {
     recipient: WhatsAppBusinessScopedUserId.make("CO.573001234567"),
@@ -56,7 +61,7 @@ const fakeOutboundHttp = (response: () => Response): OutboundHttpService => ({
 const makeService = (
   outboundHttp: OutboundHttpService,
   deliveryMode: "bsuid" | "sandbox-phone" = "bsuid"
-): KapsoClientService => makeKapsoClientService({ deliveryMode, outboundHttp });
+): WhatsAppDelivery => makeWhatsAppDelivery({ deliveryMode, outboundHttp });
 
 const responseWithStatusOutsideFetchRange = (): Response => {
   const response = Response.json({}, { status: 599 });
@@ -311,7 +316,7 @@ it.effect("classifies every known rejection with safe retry semantics", () =>
       const failure = yield* service.sendText(sendInput()).pipe(Effect.flip);
       expect(failure).toEqual(
         expect.objectContaining({
-          _tag: "KapsoSendFailed",
+          _tag: "WhatsAppSendFailed",
           safeReason: testCase.expected[0],
           deliveryCertainty: "rejected",
           automaticRetry: testCase.expected[1],
@@ -341,7 +346,7 @@ it.effect("maps redirect responses to closed definitive failures", () =>
       assert.deepStrictEqual(
         unannotatedExit,
         Exit.fail(
-          new KapsoSendFailed({
+          new WhatsAppSendFailed({
             safeReason: "invalid_response",
             deliveryCertainty: "rejected",
             automaticRetry: false,
@@ -480,7 +485,7 @@ it.effect("keeps provider bodies and send inputs out of typed failures", () =>
       bsuid: "CO.privatebsuid",
       response: "remote-private-body",
     };
-    const service = makeKapsoClientService({
+    const service = makeWhatsAppDelivery({
       deliveryMode: "bsuid",
       outboundHttp: fakeOutboundHttp(() =>
         Response.json(
@@ -510,7 +515,7 @@ it.effect("keeps provider bodies and send inputs out of typed failures", () =>
     const ordinaryOutput = yield* Schema.encodeEffect(UnknownJsonString)(failure);
 
     expect(ordinaryOutput).toBe(
-      '{"safeReason":"invalid_response","deliveryCertainty":"rejected","automaticRetry":false,"responseStatus":{"_id":"Option","_tag":"Some","value":400},"_tag":"KapsoSendFailed"}'
+      '{"safeReason":"invalid_response","deliveryCertainty":"rejected","automaticRetry":false,"responseStatus":{"_id":"Option","_tag":"Some","value":400},"_tag":"WhatsAppSendFailed"}'
     );
     for (const secret of Object.values(sensitive)) expect(ordinaryOutput).not.toContain(secret);
   })

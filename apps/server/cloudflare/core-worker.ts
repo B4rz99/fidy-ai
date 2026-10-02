@@ -4,7 +4,13 @@ import {
   type EmailReplacementEnvironment,
   type OnboardingEmailEnvironment,
 } from "./email-authentication/contract";
-
+import {
+  completeBrowserPairingEmail,
+  completeEmailReplacement,
+  requestEmailReplacement,
+  startBrowserPairingEmail,
+  verifyOnboarding,
+} from "./email-authentication/operations";
 import {
   dispatchBrowserPairingEmail,
   dispatchEmailReplacement,
@@ -42,11 +48,7 @@ import { browseBudgets, budgetRefusal, evaluateBudgetAlerts } from "./budgets/op
 import { listPendingInsights } from "./insights/operations";
 import { browseDashboard } from "./dashboard/operations";
 import { ownsTransactionPath as transactionPath } from "@fidy/server/transaction-runtime";
-import {
-  receiveConsentWebhook,
-  recoverPendingDisclosures,
-  sweepExpiredConsent,
-} from "./consent/runtime";
+import { recoverPendingDisclosures, sweepExpiredConsent } from "./consent/runtime";
 import {
   type TransactionCaller,
   isPATCaller,
@@ -126,28 +128,6 @@ import {
   uploadStagedStatement,
   validationFailed,
 } from "./ingestion/operations";
-import { EmailAddress } from "@fidy/server/client";
-import {
-  type OperationalHealthEnvironment,
-  type OperationalSignal,
-  observeOperationalHealth,
-} from "./runtime/operational-health";
-import {
-  type EventMetricSignal,
-  observeOperationalEventMetrics,
-  sweepOperationalEventBuckets,
-} from "./runtime/operational-event-metrics";
-import { type AlertSignal, decideOperationalAlerts } from "./runtime/operational-alerts";
-import {
-  type CanaryHealth,
-  readCanaryHealth,
-  receiveCanary,
-  sendCanary,
-} from "./runtime/operational-canary";
-import { type CapabilityProbe, inspectOperationalCapabilities } from "./runtime/operational-probes";
-import { recordOperationalHealth } from "./runtime/operational-health-view";
-import { runOperationalAlerts } from "./runtime/operational-alert-delivery";
-import { sendOperatorEmail } from "./runtime/operator-email";
 import {
   StatementExtractionWorkflowV1,
   dispatchStatementExtraction,
@@ -158,33 +138,103 @@ import {
   reconcileStatementExtraction,
   statementRetention,
 } from "./ingestion/runtime";
-
-import { makeAuditRetention } from "@fidy/server/audit-runtime";
-
+import { listPendingInsights } from "./insights/insight-store";
+import { recallMemories, rejectMemoryMutation } from "./memory/memory";
+import { handleSupportRecovery, rotateBackupRecoveryCode } from "./recovery/operations";
+import { canonicalOperation, canonicalRoute } from "./routing/canonical-routes";
+import { runOperationalAlerts } from "./runtime/operational-alert-delivery";
+import { type AlertSignal, decideOperationalAlerts } from "./runtime/operational-alerts";
 import {
-  HostedDeliveryAdmission,
-  HostedProgressAdmission,
-  HostedTurnAdmission,
-  hostedDeliveryReceipt,
-  hostedTurnInput,
-} from "./agent/hosted-turn";
-import { UserId } from "@fidy/server/agent-runtime";
-import { HostedTurnProgressRequest } from "../src/shell/agent/hosted-turn-api";
-import { sweepHostedTurns } from "./agent/hosted-turn-sweep";
-import { WhatsAppWork, dispatchWhatsAppWork, receiveWhatsAppWork } from "./agent/whatsapp-work";
+  type CanaryHealth,
+  readCanaryHealth,
+  receiveCanary,
+  sendCanary,
+} from "./runtime/operational-canary";
+import {
+  type EventMetricSignal,
+  observeOperationalEventMetrics,
+  sweepOperationalEventBuckets,
+} from "./runtime/operational-event-metrics";
+import {
+  type OperationalHealthEnvironment,
+  type OperationalSignal,
+  observeOperationalHealth,
+} from "./runtime/operational-health";
+import { recordOperationalHealth } from "./runtime/operational-health-view";
+import { type CapabilityProbe, inspectOperationalCapabilities } from "./runtime/operational-probes";
+import { sendOperatorEmail } from "./runtime/operator-email";
+import { contractDigestPattern, gitRevisionPattern } from "./runtime/release-identity";
+import { smokeFailureHeader, smokePath, smokeProofAccepted } from "./runtime/smoke";
+import {
+  ReleaseSmokeWorkflowV1,
+  type SmokeEnvironment,
+  handleSmoke,
+  receiveSmoke,
+} from "./runtime/smoke-work";
+import {
+  type WorkerTelemetryEnvironment,
+  cloudflareWorkerTelemetry,
+  observeWorkerExecution,
+  observeWorkerPromise,
+  observeWorkerRequest,
+} from "./runtime/telemetry";
+import { type BillingCollectionEnvironment } from "./subscription/contract";
+import { executeProtectedSubscriptionQuery, handleCardEnrollment } from "./subscription/operations";
+import {
+  dispatchBillingCollection,
+  isBillingCollectionWork,
+  receiveBillingCollection,
+  receiveWompiBillingEvent,
+  reconcileBillingCandidates,
+  sweepExpiredCardPreparationAdmission,
+} from "./subscription/runtime";
+import {
+  authorizeCanonicalPAT,
+  handlePATRequest,
+  listPATs,
+  patRoute,
+  sweepExpiredPATPairings,
+} from "./tokens/operations";
+import {
+  browseTransactions,
+  correctionInput,
+  repairDashboardProjections,
+  transactionInput,
+  transactionPairInput,
+  transactionSession,
+} from "./transactions/operations";
+import {
+  BatchInput,
+  type CanonicalWork,
+  CanonicalWorkAdmission,
+  type PATAuthority,
+  type WebSessionAuthority,
+} from "./transactions/runtime";
+import {
+  currentWebSessionUser as currentUser,
+  logoutWebSession as logoutBrowser,
+} from "./web-session/operations";
 import {
   type WhatsAppStatusAdmission,
   type WhatsAppTurnAdmission,
-  sweepExpiredWhatsAppWindows,
-} from "./agent/whatsapp-turn";
+  WhatsAppWork,
+} from "./whatsapp/contract";
+import { sweepExpiredWhatsAppWindows } from "./whatsapp/operations";
+import {
+  dispatchWhatsAppWork,
+  receiveWhatsAppWebhook,
+  receiveWhatsAppWork,
+} from "./whatsapp/runtime";
 
-export { UserTransactionCoordinator } from "./transactions/runtime";
-export { OnboardingEmailWorkflowV1 } from "./email-authentication/runtime";
-export { BillingCollectionWorkflowV1, runBillingCollectionWorkflow } from "./subscription/runtime";
-export { BrowserPairingEmailWorkflowV1 } from "./email-authentication/runtime";
-export { EmailReplacementWorkflowV1 } from "./email-authentication/runtime";
-export { StatementExtractionWorkflowV1, ReleaseSmokeWorkflowV1 };
+export {
+  BrowserPairingEmailWorkflowV1,
+  EmailReplacementWorkflowV1,
+  OnboardingEmailWorkflowV1,
+} from "./email-authentication/runtime";
 export { OperationalCanaryWorkflowV1 } from "./operational-canary-workflow";
+export { BillingCollectionWorkflowV1, runBillingCollectionWorkflow } from "./subscription/runtime";
+export { UserTransactionCoordinator } from "./transactions/runtime";
+export { ReleaseSmokeWorkflowV1, StatementExtractionWorkflowV1 };
 
 const ReleaseConfiguration = Schema.Struct({
   CONTRACT_DIGEST: Schema.String.check(Schema.isPattern(contractDigestPattern)),
@@ -392,7 +442,7 @@ const callbackEffect = (
   publish: PublishAcceptedWork
 ): Effect.Effect<Response> =>
   request.method === "POST"
-    ? receiveConsentWebhook({
+    ? receiveWhatsAppWebhook({
         ...environment,
         onAccepted: (id) => publish("onboarding", id),
         onHostedText: (admission) =>

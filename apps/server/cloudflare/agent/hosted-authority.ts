@@ -1,36 +1,12 @@
-import type { OwnedStatement } from "../../src/shell/_shared/owned-statement";
-import { whatsAppIdentityQuery } from "../identity/operations";
 import { protectConsentStatement } from "@fidy/server/consent-operations";
-import { Schema } from "effect";
-import { UserId } from "@fidy/server/agent-runtime";
-import {
-  WhatsAppBusinessPortfolioId,
-  WhatsAppBusinessScopedUserId,
-} from "../../src/core/identity/reference";
-import {
-  WhatsAppBusinessPhoneNumberId,
-  WhatsAppProviderMessageId,
-} from "../../src/shell/channels/whatsapp/model";
-import type { TransactionSubject } from "../canonical-work/operations";
 import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
 import { webSessionCredentialAuthority } from "@fidy/server/web-session-operations";
+import { type OwnedStatement } from "../../src/shell/_shared/owned-statement";
+import { type TransactionSubject } from "../canonical-work/operations";
+import { whatsAppIdentityQuery } from "../identity/operations";
+import { type WhatsAppHostedSubject } from "../whatsapp/contract";
 
-/** A claimed channel subject, not authority until D1 rechecks the stable User association. */
-export const WhatsAppHostedSubject = Schema.TaggedStruct("WhatsAppHosted", {
-  userId: UserId,
-  portfolioId: WhatsAppBusinessPortfolioId,
-  bsuid: WhatsAppBusinessScopedUserId,
-});
-export type WhatsAppHostedSubject = typeof WhatsAppHostedSubject.Type;
 export type HostedSubject = TransactionSubject | WhatsAppHostedSubject;
-/** Metadata retained with one exact User Transcript entry, never the content itself. */
-export const WhatsAppInboundEvidence = Schema.Struct({
-  messageId: WhatsAppProviderMessageId,
-  businessPhoneNumberId: WhatsAppBusinessPhoneNumberId,
-  occurredAtMs: Schema.Int,
-  receivedAtMs: Schema.Int,
-});
-export type WhatsAppInboundEvidence = typeof WhatsAppInboundEvidence.Type;
 export const isWhatsAppHosted = (subject: HostedSubject): subject is WhatsAppHostedSubject =>
   "_tag" in subject;
 

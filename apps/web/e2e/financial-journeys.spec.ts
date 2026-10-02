@@ -141,16 +141,16 @@ test("captures a Transaction by canonical mutation and displays the confirmed re
         page.getByRole("button", { name: "Registrar transacción" }).click()
       );
       yield* Effect.tryPromise(() => expect(page.getByRole("alert")).toHaveCount(0));
-      expect(captured).toMatchObject({
-        money: { amount: "12500", currency: "COP" },
-        counterparty: "La Cocina",
-        direction: "outflow",
-      });
       yield* Effect.tryPromise(() =>
         expect(page.getByText("Transacción guardada. Actualizando el historial…")).toBeVisible()
       );
       yield* Effect.tryPromise(() =>
         expect(page.getByLabel("Transacción recién registrada")).toContainText("La Cocina")
       );
+      expect(captured).toMatchObject({
+        money: { amount: "12500", currency: "COP" },
+        counterparty: "La Cocina",
+        direction: "outflow",
+      });
     })
   ));

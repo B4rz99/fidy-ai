@@ -7,7 +7,6 @@ import type {
   KeywordRule,
   KeywordRuleId,
 } from "@fidy/server/categories";
-import type { Memory, MemoryId } from "@fidy/server/memory-runtime";
 import type { Budget, BudgetId } from "@fidy/server/budgets-contract";
 import type { StatementSubmission } from "@fidy/server/ingestion-contract";
 import type { EmailForwardingAddress } from "../../src/core/ingestion/contract";
@@ -41,24 +40,6 @@ export type KeywordRuleOutcome =
       ruleId: KeywordRuleId;
     }>;
 
-/**
- * One Memory change's retained facts. A remember or revise carries the record it wrote for
- * commit-time capacity attribution; a forget carries only the identity it removes.
- */
-export type MemoryOutcome =
-  | Readonly<{
-      _tag: "Memory";
-      operation: "memory.remember" | "memory.revise";
-      memoryId: MemoryId;
-      /** The exact record a remember or revise wrote, for commit-time capacity attribution. */
-      candidate: Memory;
-    }>
-  | Readonly<{
-      _tag: "Memory";
-      operation: "memory.forget";
-      memoryId: MemoryId;
-    }>;
-
 export type MutationTriggerKind = "movement" | "capacity" | "audit";
 
 type OwnerWork = Readonly<{ db: D1Database; subject: TransactionCaller; current: number }>;
@@ -85,7 +66,6 @@ export type OwnerOutcome = Readonly<{
 export type CanonicalMutationOutcome =
   | OwnerOutcome
   | TransactionOutcome
-  | MemoryOutcome
   | Readonly<{
       _tag: "ForwardingAddress";
       operation: "ingestion.enableEmailForwarding";
@@ -153,8 +133,6 @@ export type CommittedMutationValue =
   | Readonly<{ _tag: "RestoredPair"; pair: RestoredTransactionPair }>
   | Readonly<{ _tag: "KeywordRule"; rule: KeywordRule }>
   | Readonly<{ _tag: "RemovedKeywordRule"; id: KeywordRuleId }>
-  | Readonly<{ _tag: "Memory"; memory: Memory }>
-  | Readonly<{ _tag: "RemovedMemory"; id: MemoryId }>
   | Readonly<{ _tag: "StatementSubmission"; submission: StatementSubmission }>
   | Readonly<{ _tag: "ForwardingAddress"; address: EmailForwardingAddress }>;
 

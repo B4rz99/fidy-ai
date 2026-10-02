@@ -26,6 +26,53 @@
 export default {
   forbidden: [
     {
+      name: "foreign-module-imports-cloudflare-memory-internal",
+      severity: "error",
+      comment:
+        "Memory owns current prose, persistence, capacity and readback. Peers use its published operations, never retained rows or SQL (#607).",
+      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/memory/" },
+      to: { path: "^cloudflare/memory/internal/" },
+    },
+    {
+      name: "cloudflare-imports-portable-memory-internal",
+      severity: "error",
+      comment:
+        "Native Memory consumes only portable declarations and operations; formatting, model-adapter and private implementation remain owner-local (#607).",
+      from: { path: "^cloudflare/" },
+      to: { path: "^src/(core|shell)/memory/internal/" },
+    },
+    {
+      name: "memory-interface-reexports-internal",
+      severity: "error",
+      comment:
+        "Memory publishes substantive behavior rather than laundering private persistence or free-text projections (#607).",
+      from: { path: "^cloudflare/memory/(contract|operations|runtime)\\.ts$" },
+      to: { path: "^cloudflare/memory/internal/", dependencyTypes: ["export"] },
+    },
+    {
+      name: "memory-contract-imports-implementation",
+      severity: "error",
+      comment:
+        "Memory declarations are independent of private implementation and runtime construction (#607).",
+      from: { path: "^cloudflare/memory/contract\\.ts$" },
+      to: { path: "^cloudflare/memory/(internal/|operations\\.ts$|runtime\\.ts$)" },
+    },
+    {
+      name: "memory-internal-imports-outward-interface",
+      severity: "error",
+      comment:
+        "Memory internals depend inward on private storage and declarations, never backwards on published operations or runtime (#607).",
+      from: { path: "^cloudflare/memory/internal/" },
+      to: { path: "^cloudflare/memory/(operations|runtime)\\.ts$" },
+    },
+    {
+      name: "memory-operations-imports-runtime",
+      severity: "error",
+      comment: "Memory operations do not acquire runtime construction authority (#607).",
+      from: { path: "^cloudflare/memory/operations\\.ts$" },
+      to: { path: "^cloudflare/memory/runtime\\.ts$" },
+    },
+    {
       name: "foreign-module-imports-cloudflare-ingestion-internal",
       severity: "error",
       comment:
@@ -830,7 +877,7 @@ export default {
         pathNot: [
           "^src/shell/_shared/",
           "^src/shell/public-http/contract\\.ts$",
-          "^src/shell/(identity|categories|transactions|subscription|email-authentication|tokens|budgets|browser-login|recovery|ingestion|dashboard|insights)/contract\\.ts$",
+          "^src/shell/(identity|categories|transactions|subscription|email-authentication|tokens|budgets|browser-login|recovery|ingestion|dashboard|insights|memory)/contract\\.ts$",
           "^src/shell/[^/]+/operations\\.ts$",
         ],
       },
@@ -905,7 +952,7 @@ export default {
         "provider-specific code. Provider models, clients, tokenizers, capacity, wire requests, " +
         "and raw responses belong only in HostedInference internals (ADR 0014).",
       from: {
-        path: "^src/shell/(agent/(agent-service\\.ts|working-context\\.ts|__probe-.*hosted-(provider|model|tokenizer|js-tokenizer)/probe\\.ts)|memory/(memory-policy\\.ts|__probe-.*hosted-(provider|model|tokenizer|js-tokenizer)/probe\\.ts)|hosted-inference/(contract|operations)\\.ts)$",
+        path: "^src/shell/(agent/(agent-service\\.ts|working-context\\.ts|__probe-.*hosted-(provider|model|tokenizer|js-tokenizer)/probe\\.ts)|memory/(operations\\.ts|__probe-.*hosted-(provider|model|tokenizer|js-tokenizer)/probe\\.ts)|hosted-inference/(contract|operations)\\.ts)$",
       },
       to: {
         path: "(^|.*/)node_modules/effect/.*/unstable/ai/(index|LanguageModel|Tokenizer)",

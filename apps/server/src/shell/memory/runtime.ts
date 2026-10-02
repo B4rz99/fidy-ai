@@ -1,28 +1,13 @@
-/** Runtime Memory schema, owner decisions, and D1 statements published to the private Core Worker. */
-export {
-  Memory,
-  MemoryId,
-  MemoryText,
-  MemoryTextInput,
-  RecallOutput,
-  RememberInput,
-  ReviseInput,
-} from "~/core/memory/model";
-export {
-  MemoryCapacityExceeded,
-  MemoryNotFound,
-  admitMemory,
-  maximumAggregateMemoryTokens,
-} from "~/core/memory/rules";
-export {
-  countAndAdmitMemory,
-  countAndAdmitMemoryRevision,
-  projectMemoryAggregate,
-} from "./memory-policy";
-export { MemoryCapacityExceededApi, mapMemoryFailure } from "./errors";
-export { Unavailable } from "~/shell/public-http/contract";
-export { MemoryGroup, memoryOperationIds } from "./operations";
-export type { MemoryOperationId } from "./operations";
-export { memoriesFromRows, memoryRowQuery, memoryRowsQuery } from "./query";
-export { memoryCompletion, recordBrowserMemoryWork } from "./canonical-work";
-export type { MemoryAuditOperation, MemoryAuditOutcome } from "./canonical-work";
+import { operationCatalog } from "~/shell/api";
+import { matchesRouteTemplate } from "~/shell/_shared/route-template";
+import { memoryOperationIds } from "./contract";
+
+const routes = memoryOperationIds.map((id) => {
+  const operation = operationCatalog.byId.get(id);
+  if (operation === undefined) throw new Error(`Missing canonical operation ${id}`);
+  return operation;
+});
+
+/** True only for paths backed by an implemented canonical Memory adapter. */
+export const ownsMemoryPath = (path: string): boolean =>
+  routes.some((operation) => matchesRouteTemplate({ template: operation.route, path }));

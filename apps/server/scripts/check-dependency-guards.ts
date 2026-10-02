@@ -154,6 +154,52 @@ const tokensToolPrivate = `tools/${PROBE_PREFIX}tokens-private`;
 
 const PROBES: readonly Probe[] = [
   {
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}memory-published/probe.ts`,
+        source:
+          'import { prepareRemember, prepareRevise, prepareForget, recallMemories, readMemoryContext } from "../memory/operations";\nexport const published = [prepareRemember, prepareRevise, prepareForget, recallMemories, readMemoryContext];\n',
+      },
+    ],
+    name: "callers compose the four durable Memory operations and purpose-bound current context",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-memory-internal: cloudflare/${PROBE_PREFIX}memory-private/probe.test.ts → cloudflare/memory/internal/storage.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}memory-private/probe.test.ts`,
+        source:
+          'import { memoryRowsQuery } from "../memory/internal/storage";\nexport const bypass = memoryRowsQuery;\n',
+      },
+    ],
+    name: "foreign tests cannot obtain private Memory row projections",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-memory-internal: tools/${PROBE_PREFIX}memory-private/probe.ts → cloudflare/memory/internal/${PROBE_PREFIX}storage/private.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/memory/internal/${PROBE_PREFIX}storage/private.ts`,
+        source: "export const privateMemoryStorage = 1;\n",
+      },
+      {
+        path: `tools/${PROBE_PREFIX}memory-private/probe.ts`,
+        source: `import { privateMemoryStorage } from "../../cloudflare/memory/internal/${PROBE_PREFIX}storage/private";\nexport const bypass = privateMemoryStorage;\n`,
+      },
+    ],
+    name: "tooling cannot acquire private Memory storage or free-text projections",
+  },
+  {
     name: "callers consume Onboarding through its data-free operation",
     expect: { kind: "allowed" },
     files: [

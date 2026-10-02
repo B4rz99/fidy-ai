@@ -6,7 +6,7 @@ import { executeProtectedSubscriptionQuery } from "../subscription/operations";
 import { browseBudgets, evaluateBudgetAlerts } from "../budgets/operations";
 import { browseTransactions } from "../transactions/operations";
 import { browseDashboard } from "../dashboard/operations";
-import { recallMemories } from "../memory/memory";
+import { recallMemories } from "../memory/operations";
 import { listPendingInsights } from "../insights/operations";
 import {
   forwardingAddressResponse,

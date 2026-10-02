@@ -1,32 +1,30 @@
 import { Effect, Option, Schema } from "effect";
 import { livePATAuthority } from "@fidy/server/tokens-operations";
+import { Memory, MemoryCapacityExceeded, MemoryId } from "@fidy/server/memory-contract";
 import {
   type MemoryAuditOutcome,
-  MemoryCapacityExceeded,
   MemoryCapacityExceededApi,
   type MemoryOperationId,
-  Unavailable,
-  mapMemoryFailure,
-  memoriesFromRows,
-  memoryRowQuery,
-  recordBrowserMemoryWork,
-} from "@fidy/server/memory-runtime";
+} from "@fidy/server/memory-api";
+import { mapMemoryFailure, recordBrowserMemoryWork } from "@fidy/server/memory-operations";
+import { Unavailable } from "../../../src/shell/public-http/contract";
+import { memoriesFromRows, memoryRowQuery } from "./storage";
 import { recordCanonicalPATWork, refusedByAuditBudget } from "@fidy/server/audit";
 import type {
   CanonicalMutationRefusal,
   CommittedMutationValue,
   GuardRefusalWork,
-  MemoryOutcome,
-} from "./mutation-types";
-import { newId } from "../secret-material/operations";
-import { prepareOwnedStatement } from "../database/operations";
+  OwnerOutcome,
+} from "../../mutations/mutation-types";
+import { newId } from "../../secret-material/operations";
+import { prepareOwnedStatement } from "../../database/operations";
 import {
   type TransactionCaller,
   isPATCaller,
   refusedCredentialResponse,
   transactionFailure,
   transactionNoStore,
-} from "../canonical-work/operations";
+} from "../../canonical-work/operations";
 
 /**
  * The Memory audit outcomes one refusal can report: the owner's individual entry point and its
@@ -277,7 +275,11 @@ export const findMemoryValue = ({
   outcome: MemoryOutcome;
 }>): Effect.Effect<Option.Option<CommittedMutationValue>> =>
   outcome.operation === "memory.forget"
-    ? Effect.succeedSome({ _tag: "RemovedMemory" as const, id: outcome.memoryId })
+    ? Effect.succeedSome({
+        _tag: "Owner" as const,
+        payload: outcome.memoryId,
+        encode: () => Schema.encodeEffect(Schema.toCodecJson(MemoryId))(outcome.memoryId),
+      })
     : Effect.tryPromise(() => {
         const query = memoryRowQuery({ userId, id: outcome.memoryId });
         return db
@@ -290,8 +292,29 @@ export const findMemoryValue = ({
             const memory = memories.find((value) => value.id === outcome.memoryId);
             return memory === undefined
               ? Option.none<CommittedMutationValue>()
-              : Option.some({ _tag: "Memory" as const, memory });
+              : Option.some({
+                  _tag: "Owner" as const,
+                  payload: memory,
+                  encode: () => Schema.encodeEffect(Schema.toCodecJson(Memory))(memory),
+                });
           })
         ),
         Effect.orElseSucceed(() => Option.none<CommittedMutationValue>())
       );
+
+/** Private retained identity; write prose stays inside its owner preparation closure. */
+export type MemoryOutcome = Readonly<{
+  operation: "memory.remember" | "memory.revise" | "memory.forget";
+  memoryId: MemoryId;
+}>;
+
+/** Only collision, refusal and committed readback behavior cross the shared mutation boundary. */
+export const memoryOutcome = (outcome: MemoryOutcome): OwnerOutcome => ({
+  _tag: "Owner",
+  operation: outcome.operation,
+  collisionKey: Option.some(`memory:${outcome.memoryId}`),
+  guardFacts: Option.none(),
+  read: (db, userId) => findMemoryValue({ db, userId, outcome }),
+  triggerRefusal: (_work, kind) =>
+    kind === "audit" ? Option.some(memoryBudgetRefusal()) : Option.none(),
+});

@@ -3,7 +3,6 @@ import { maximumAtomicBatchCalls } from "@fidy/server/canonical-runtime";
 import type { ToolCallId, TranscriptTurnId } from "@fidy/server/agent-runtime";
 import { prepareCanonicalAuditBudgetGuard, refusedByAuditBudget } from "@fidy/server/audit";
 import { KeywordRule, KeywordRuleId } from "@fidy/server/categories";
-import { Memory, MemoryId } from "@fidy/server/memory-runtime";
 import { Budget, BudgetId } from "@fidy/server/budgets-contract";
 import { StatementSubmission } from "@fidy/server/ingestion-contract";
 import { EmailForwardingAddress } from "../../src/core/ingestion/contract";
@@ -25,7 +24,6 @@ import {
   transactionNoStore,
   transactionUnavailable,
 } from "../canonical-work/operations";
-import { findMemoryValue, memoryBudgetRefusal } from "./memory-outcome";
 import {
   findTransactionValue,
   transactionBudgetRefusal,
@@ -176,8 +174,6 @@ const triggerRefusal = ({
         outcome: mutation.outcome,
         kind,
       });
-    case "Memory":
-      return auditOnly(memoryBudgetRefusal());
     case "ForwardingAddress":
       return auditOnly(forwardingAuditLimitRefusal());
     case "StatementSubmission":
@@ -405,8 +401,6 @@ const findCommittedValue = ({
       return mutation.outcome.read(db, userId);
     case "Transaction":
       return findTransactionValue({ db, userId, outcome: mutation.outcome });
-    case "Memory":
-      return findMemoryValue({ db, userId, outcome: mutation.outcome });
     case "ForwardingAddress":
       return readForwardingAddress(db, userId, mutation.outcome.current).pipe(
         Effect.map(Option.map((address) => ({ _tag: "ForwardingAddress" as const, address })))
@@ -532,7 +526,6 @@ const retainedMutationPayload = (
         | "EffectiveTransaction"
         | "RestoredPair"
         | "KeywordRule"
-        | "Memory"
         | "StatementSubmission";
     }
   >
@@ -545,8 +538,6 @@ const retainedMutationPayload = (
       return value.pair;
     case "KeywordRule":
       return value.rule;
-    case "Memory":
-      return value.memory;
     case "StatementSubmission":
       return value.submission;
   }
@@ -557,11 +548,7 @@ export const committedMutationPayload = (value: CommittedMutationValue): unknown
   if (value._tag === "ForwardingAddress") return value.address;
   if (value._tag === "Budget") return value.budget;
   if (value._tag === "Owner") return value.payload;
-  if (
-    value._tag === "RemovedKeywordRule" ||
-    value._tag === "RemovedMemory" ||
-    value._tag === "RemovedBudget"
-  ) {
+  if (value._tag === "RemovedKeywordRule" || value._tag === "RemovedBudget") {
     return value.id;
   }
   return retainedMutationPayload(value);
@@ -570,43 +557,17 @@ export const committedMutationPayload = (value: CommittedMutationValue): unknown
 type ExistingCommittedValue = Exclude<CommittedMutationValue, { _tag: "ForwardingAddress" }>;
 
 const encodeRemovedValue = (
-  value: Extract<
-    CommittedMutationValue,
-    { _tag: "RemovedBudget" | "RemovedKeywordRule" | "RemovedMemory" }
-  >
+  value: Extract<CommittedMutationValue, { _tag: "RemovedBudget" | "RemovedKeywordRule" }>
 ): Effect.Effect<unknown, Schema.SchemaError> =>
   value._tag === "RemovedKeywordRule"
     ? Schema.encodeEffect(Schema.toCodecJson(KeywordRuleId))(value.id)
-    : encodeOtherRemovedValue(value);
-
-const encodeOtherRemovedValue = (
-  value: Extract<CommittedMutationValue, { _tag: "RemovedBudget" | "RemovedMemory" }>
-): Effect.Effect<unknown, Schema.SchemaError> =>
-  value._tag === "RemovedBudget"
-    ? Schema.encodeEffect(Schema.toCodecJson(BudgetId))(value.id)
-    : Schema.encodeEffect(Schema.toCodecJson(MemoryId))(value.id);
-
-const encodeSubmissionOrMemory = (
-  value: Extract<CommittedMutationValue, { _tag: "StatementSubmission" | "Memory" }>
-): Effect.Effect<unknown, Schema.SchemaError> => {
-  if (value._tag === "StatementSubmission") {
-    return Schema.encodeEffect(Schema.toCodecJson(StatementSubmission))(value.submission);
-  }
-  return Schema.encodeEffect(Schema.toCodecJson(Memory))(value.memory);
-};
+    : Schema.encodeEffect(Schema.toCodecJson(BudgetId))(value.id);
 
 const encodeEntityValue = (
   value: Exclude<
     ExistingCommittedValue,
     {
-      _tag:
-        | "RemovedBudget"
-        | "RemovedKeywordRule"
-        | "RemovedMemory"
-        | "Budget"
-        | "Memory"
-        | "StatementSubmission"
-        | "Owner";
+      _tag: "RemovedBudget" | "RemovedKeywordRule" | "Budget" | "StatementSubmission" | "Owner";
     }
   >
 ): Effect.Effect<unknown, Schema.SchemaError> => {
@@ -628,8 +589,8 @@ const encodeExistingValue = (
   if (value._tag === "Owner") return value.encode();
   if ("id" in value) return encodeRemovedValue(value);
   if (value._tag === "Budget") return Schema.encodeEffect(Schema.toCodecJson(Budget))(value.budget);
-  if ("submission" in value || "memory" in value) {
-    return encodeSubmissionOrMemory(value);
+  if (value._tag === "StatementSubmission") {
+    return Schema.encodeEffect(Schema.toCodecJson(StatementSubmission))(value.submission);
   }
   return encodeEntityValue(value);
 };

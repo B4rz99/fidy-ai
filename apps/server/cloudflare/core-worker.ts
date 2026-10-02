@@ -1,3 +1,4 @@
+import { type MemoryOperationId, memoryOperationIds } from "@fidy/server/memory-api";
 import {
   type BrowserPairingEmailEnvironment,
   type EmailReplacementEnvironment,
@@ -24,13 +25,7 @@ import {
   categoryUnavailable,
   listCategoriesPath,
 } from "@fidy/server/categories";
-import {
-  MemoryId,
-  type MemoryOperationId,
-  RememberInput,
-  ReviseInput,
-  memoryOperationIds,
-} from "@fidy/server/memory-runtime";
+import { MemoryId, RememberInput, ReviseInput } from "@fidy/server/memory-contract";
 import { type TelemetryService } from "@fidy/server/telemetry";
 import { type Cause, Clock, Data, Effect, Exit, Option, Schema } from "effect";
 import {
@@ -79,7 +74,7 @@ import {
 } from "./subscription/runtime";
 
 import { authorizeCanonicalPAT, listPATs, sweepExpiredPATPairings } from "./tokens/operations";
-import { recallMemories, rejectMemoryMutation } from "./memory/memory";
+import { recallMemories, rejectMemoryMutation } from "./memory/operations";
 import { canonicalOperation, canonicalRoute } from "./routing/canonical-routes";
 import {
   BatchInput,

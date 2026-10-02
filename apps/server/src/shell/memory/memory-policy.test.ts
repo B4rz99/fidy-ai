@@ -1,15 +1,10 @@
 import assert from "node:assert/strict";
 import { expect, it } from "@effect/vitest";
 import { DateTime, Effect, Exit, Ref } from "effect";
-import { Memory, MemoryId, MemoryText } from "~/core/memory/model";
-import { MemoryCapacityExceeded } from "~/core/memory/rules";
+import { Memory, MemoryCapacityExceeded, MemoryId, MemoryText } from "~/core/memory/contract";
 import type { HostedInferenceService } from "~/shell/hosted-inference/contract";
 import { HostedInference } from "~/shell/hosted-inference/operations";
-import {
-  countAndAdmitMemory,
-  countAndAdmitMemoryRevision,
-  projectMemoryAggregate,
-} from "./memory-policy";
+import { countAndAdmitMemory, countAndAdmitMemoryRevision } from "./operations";
 
 const at = DateTime.makeUnsafe("2026-08-12T10:00:00Z");
 const memory = (id: string, text: string): Memory =>
@@ -38,7 +33,9 @@ it.effect("counts the complete recall-ordered aggregate including the final cand
         Effect.provideService(HostedInference, service)
       )
     ).toBe(candidate);
-    expect(yield* Ref.get(counted)).toEqual([projectMemoryAggregate([...current, candidate])]);
+    expect(yield* Ref.get(counted)).toEqual([
+      '{"id":"01912345-6789-7abc-8def-0123456789ab","text":"primera"}\n{"id":"01912345-6789-7abc-8def-0123456789ac","text":"segunda"}',
+    ]);
   })
 );
 
@@ -53,7 +50,9 @@ it.effect("counts a same-instant candidate in the final recall identity order", 
       Effect.provideService(HostedInference, service)
     );
 
-    expect(yield* Ref.get(counted)).toBe(projectMemoryAggregate([candidate, ...current]));
+    expect(yield* Ref.get(counted)).toBe(
+      '{"id":"01912345-6789-7abc-8def-0123456789ab","text":"primera"}\n{"id":"01912345-6789-7abc-8def-0123456789ac","text":"segunda"}'
+    );
   })
 );
 
@@ -70,7 +69,9 @@ it.effect("counts revision against the replaced aggregate without duplicating id
         Effect.provideService(HostedInference, service)
       )
     ).toBe(replacement);
-    expect(yield* Ref.get(counted)).toBe(projectMemoryAggregate([replacement, second]));
+    expect(yield* Ref.get(counted)).toBe(
+      '{"id":"01912345-6789-7abc-8def-0123456789ab","text":"reemplazo"}\n{"id":"01912345-6789-7abc-8def-0123456789ac","text":"segunda"}'
+    );
   })
 );
 

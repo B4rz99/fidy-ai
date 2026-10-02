@@ -8,7 +8,7 @@ import {
   getCanonicalOperationInput,
 } from "@fidy/server/canonical-runtime";
 import { TransactionId } from "@fidy/server/transactions-contract";
-import type { MemoryOperationId } from "@fidy/server/memory-runtime";
+import type { MemoryOperationId } from "@fidy/server/memory-api";
 import type { HostedInference } from "@fidy/server/hosted-inference";
 import { DeliveryEvidenceInput, InsightEventId } from "@fidy/server/insights-contract";
 import { insightRefusal, prepareInsightTransition } from "../insights/operations";
@@ -34,7 +34,6 @@ import {
   prepareUnlink,
   transactionRefusal,
 } from "../transactions/operations";
-import { memoryRefusal } from "./memory-outcome";
 import {
   type TransactionCaller,
   type TransactionMutationOperation,
@@ -47,7 +46,12 @@ import {
   prepareDeleteKeywordRule,
   prepareUpdateKeywordRule,
 } from "../categories/operations";
-import { prepareForget, prepareRemember, prepareRevise } from "../memory/memory";
+import {
+  invalidMemoryInput,
+  prepareForget,
+  prepareRemember,
+  prepareRevise,
+} from "../memory/operations";
 import { committedJsonResponse } from "./canonical-mutation-unit";
 import {
   type CanonicalMutationPreparation,
@@ -143,11 +147,10 @@ const keywordRuleInvalidRefusal = (_work: CanonicalMutationWork): CanonicalMutat
 const memoryInvalidRefusal =
   (operation: MemoryOperationId) =>
   (work: CanonicalMutationWork): CanonicalMutationRefusal =>
-    memoryRefusal({
+    invalidMemoryInput({
       db: work.db,
       subject: work.subject,
       operation,
-      outcome: "validation_failed",
       current: work.current,
     });
 

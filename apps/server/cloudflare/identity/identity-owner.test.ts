@@ -1,4 +1,4 @@
-import { memoryRowsQuery } from "@fidy/server/memory-runtime";
+import { readMemoryContext } from "../memory/operations";
 import {
   UserId,
   WhatsAppBusinessPortfolioId,
@@ -237,12 +237,12 @@ it("does not release another User's Memory through a valid but borrowed associat
             .bind(userA),
           db
             .prepare(
-              "INSERT INTO memories VALUES ('memory-a', ?, 'A private context', '2026-10-01', '2026-10-01')"
+              "INSERT INTO memories VALUES ('30000000-0000-4000-8000-000000000001', ?, 'A private context', '2026-10-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z')"
             )
             .bind(userA),
           db
             .prepare(
-              "INSERT INTO memories VALUES ('memory-b', ?, 'B private context', '2026-10-01', '2026-10-01')"
+              "INSERT INTO memories VALUES ('30000000-0000-4000-8000-000000000002', ?, 'B private context', '2026-10-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z')"
             )
             .bind(userB),
         ])
@@ -252,23 +252,27 @@ it("does not release another User's Memory through a valid but borrowed associat
         portfolioId: WhatsAppBusinessPortfolioId.make("portfolio-a"),
         bsuid: WhatsAppBusinessScopedUserId.make("CO.caller"),
       });
-      const foreign = memoryRowsQuery({ userId: userB, authority });
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(foreign.sql)
-            .bind(...foreign.params)
-            .all()
-        )
-      ).toMatchObject({ results: [] });
-      const own = memoryRowsQuery({ userId: userA, authority });
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(own.sql)
-            .bind(...own.params)
-            .all()
-        )
-      ).toMatchObject({ results: [{ id: "memory-a", text: "A private context" }] });
+      expect(yield* readMemoryContext({ db, userId: userB, authority })).toEqual(Option.some([]));
+      expect(yield* readMemoryContext({ db, userId: userA, authority })).toEqual(
+        Option.some([{ text: "A private context" }])
+      );
+      const retained = yield* Effect.tryPromise(() =>
+        db.prepare("SELECT text FROM memories ORDER BY id").all()
+      );
+      expect(retained.results).toEqual([
+        { text: "A private context" },
+        { text: "B private context" },
+      ]);
+      // A malformed current row makes the entire owned context unavailable, not partially visible.
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO memories VALUES ('invalid', ?, 'malformed private context', '2026-10-01', '2026-10-01')"
+          )
+          .bind(userA)
+          .run()
+      );
+      expect(yield* readMemoryContext({ db, userId: userA, authority })).toEqual(Option.none());
+      expect(yield* readMemoryContext({ db, userId: userB, authority })).toEqual(Option.some([]));
     })
   ));

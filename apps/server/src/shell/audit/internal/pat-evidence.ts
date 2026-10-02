@@ -3,7 +3,11 @@ import { authorizedCallStatement } from "./recording";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 import { protectConsentStatement } from "~/shell/consent/operations";
 import type { FreshSessionSubject } from "~/shell/web-session/contract";
-import { freshSessionExists, freshSessionParams } from "~/shell/web-session/operations";
+import {
+  freshSessionExists,
+  freshSessionParams,
+  liveSessionConditions,
+} from "~/shell/web-session/operations";
 import type { AuditedPATOperation, PATAuthority } from "~/shell/tokens/operations";
 
 type AuditTime = Readonly<{ id: string; current: number }>;
@@ -59,26 +63,18 @@ export const recordClaimedPAT = (
 export const recordPATList = ({
   session,
   input,
-}: Readonly<{ session: FreshSessionSubject; input: AuditTime }>): OwnedStatement =>
-  protectConsentStatement({
+}: Readonly<{ session: FreshSessionSubject; input: AuditTime }>): OwnedStatement => {
+  const sessionGuard = liveSessionConditions({ session, current: input.current });
+  return protectConsentStatement({
     statement: {
       sql: `INSERT INTO pat_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
-        SELECT ?,?,?,'pats.listPATs','accepted',? WHERE EXISTS (SELECT 1 FROM web_sessions
-        WHERE id = ? AND user_id = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?)`,
-      params: [
-        input.id,
-        session.user_id,
-        session.id,
-        input.current,
-        session.id,
-        session.user_id,
-        input.current,
-        input.current,
-      ],
+        SELECT ?,?,?,'pats.listPATs','accepted',? WHERE ${sessionGuard.sql}`,
+      params: [input.id, session.user_id, session.id, input.current, ...sessionGuard.params],
     },
     subject: { _tag: "User", userId: session.user_id },
     requirement: "unrevoked",
   });
+};
 
 type RevokeAuditInput = AuditTime & Readonly<{ shortId: string }>;
 /** Link the exact revoked PAT to its User's audit in the same atomic lifecycle unit. */

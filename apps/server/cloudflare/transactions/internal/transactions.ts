@@ -1,14 +1,13 @@
 import { UserId } from "@fidy/server/identity-reference";
 import { readUserContext } from "../../identity/user-context/operations";
 import type { UserContext } from "@fidy/server/identity-contract";
-import { prepareConsentAction } from "../../consent/operations";
 import { protectConsentStatement } from "@fidy/server/consent-operations";
 import { prepareOwnerAuditCall } from "@fidy/server/audit";
 import { CreateTransactionInput, encodeMoneyAmount } from "@fidy/server/transactions-contract";
 import type { CategoryId } from "@fidy/server/categories";
 import { categorizeCaptures, requireCategory } from "../../categories/operations";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { sessionCookie, sha256 } from "../../identity/browser-login";
+import { authenticateCanonicalWebSession } from "../../web-session/operations";
 import { RequestBodyPolicy, boundedJsonBody } from "../../http/request-body";
 import {
   type TransactionBoundaryFailure,
@@ -36,7 +35,6 @@ import {
 import { refusedTransactionMutation, transactionGuardRefusal } from "./transaction-outcome";
 
 const Input = Schema.toCodecJson(CreateTransactionInput);
-const Session = Schema.Struct({ id: Schema.String, user_id: Schema.String });
 const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: maximumTransactionInputBytes,
   deadlineMilliseconds: 2000,
@@ -51,38 +49,12 @@ type Capture = Readonly<{
   current: number;
 }>;
 
-const sessionSubject = (raw: unknown, digest: Uint8Array): Option.Option<TransactionSubject> =>
-  Option.map(Schema.decodeUnknownOption(Session)(raw), (value) => ({
-    id: value.id,
-    userId: value.user_id,
-    digest,
-  }));
-
-/** Resolve a live WebSession on every canonical call; neither an object id nor a User id is authority. */
+/** Resolve current browser authority before entering the User coordinator; work rechecks it at commit. */
 export const transactionSession = ({
   request,
   db,
-}: {
-  request: Request;
-  db: D1Database;
-}): Promise<Option.Option<TransactionSubject>> => {
-  const cookie = sessionCookie(request);
-  if (Option.isNone(cookie)) return Promise.resolve(Option.none());
-  return sha256(cookie.value).then((digest) => {
-    const current = now();
-    return prepareConsentAction({
-      db,
-      statement: {
-        sql: `SELECT id, user_id FROM web_sessions WHERE token_digest = ? AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?`,
-        params: [digest, current, current],
-      },
-      subject: { _tag: "Owner", column: "web_sessions.user_id" },
-      requirement: "unrevoked",
-    })
-      .first()
-      .then((raw) => sessionSubject(raw, digest));
-  });
-};
+}: Readonly<{ request: Request; db: D1Database }>): Promise<Option.Option<TransactionSubject>> =>
+  authenticateCanonicalWebSession({ request, db, current: now() });
 
 /** Decode bounded canonical input before dispatching a mutation to the User coordinator. */
 export const transactionInput = (request: Request): Promise<Option.Option<typeof Input.Type>> =>

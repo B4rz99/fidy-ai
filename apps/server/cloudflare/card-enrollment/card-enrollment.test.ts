@@ -71,7 +71,7 @@ const setup = (): Promise<{
         "CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL, service_market TEXT NOT NULL DEFAULT 'CO', locale TEXT NOT NULL DEFAULT 'es-CO') STRICT",
         "CREATE TABLE verified_email_credentials (user_id TEXT PRIMARY KEY, email_address TEXT NOT NULL) STRICT",
         "CREATE TABLE onboarding_consent_records (user_id TEXT PRIMARY KEY) STRICT",
-        `CREATE TABLE web_sessions (user_id TEXT NOT NULL, token_digest BLOB NOT NULL,
+        `CREATE TABLE web_sessions (id TEXT NOT NULL, user_id TEXT NOT NULL, token_digest BLOB NOT NULL,
       revoked_at_ms INTEGER, fresh_until_ms INTEGER NOT NULL, idle_expires_at_ms INTEGER NOT NULL,
       hard_expires_at_ms INTEGER NOT NULL) STRICT`,
       ]);
@@ -106,8 +106,15 @@ const setup = (): Promise<{
       const now = yield* Clock.currentTimeMillis;
       yield* fromTestPromise(() =>
         db
-          .prepare("INSERT INTO web_sessions VALUES (?, ?, NULL, ?, ?, ?)")
-          .bind(userA, digest, now + 600_000, now + 600_000, now + 600_000)
+          .prepare("INSERT INTO web_sessions VALUES (?, ?, ?, NULL, ?, ?, ?)")
+          .bind(
+            "20000000-0000-4000-8000-000000000001",
+            userA,
+            digest,
+            now + 600_000,
+            now + 600_000,
+            now + 600_000
+          )
           .run()
       );
       const environment = {

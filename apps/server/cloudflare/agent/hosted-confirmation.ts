@@ -146,7 +146,7 @@ export const consumeHostedConfirmation = ({
         WHERE prior.id = issued_turn_id AND prior.user_id = ? AND prior.status = 'completed')
       AND EXISTS (SELECT 1 FROM hosted_turns AS active
         WHERE active.id = ? AND active.user_id = ? AND active.status = 'pending')
-      AND EXISTS (SELECT 1 FROM web_sessions WHERE ${authority.predicate})`)
+      AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
         .bind(
           turnId,
           now,

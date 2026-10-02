@@ -1,3 +1,4 @@
+import { freshSessionQuery } from "@fidy/server/web-session-operations";
 import { prepareEmailReplacementEvidence } from "@fidy/server/audit";
 import {
   CompleteEmailReplacementPayload,
@@ -13,7 +14,7 @@ import {
   permitsFreshBrowserReplacement,
 } from "@fidy/server/email-replacement";
 import { Clock, Crypto, Data, Effect, Exit, Option, PlatformError, Schema } from "effect";
-import { freshBrowserSession } from "./browser-login";
+import { freshBrowserSession } from "../web-session/operations";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
 
 const Proof = Schema.Struct({
@@ -422,6 +423,10 @@ const commitReplacement = (
   }
 ): Promise<D1Result[]> => {
   const { workId, userId, sessionId, publicCode, current } = input;
+  const session = freshSessionQuery({
+    subject: { sql: "SELECT r.session_id AS sessionId, r.user_id AS userId", params: [] },
+    current,
+  });
   return Effect.runPromise(
     attempt(() =>
       db.batch([
@@ -429,12 +434,10 @@ const commitReplacement = (
           .prepare(`UPDATE verified_email_credentials SET email_address = (
           SELECT candidate_email FROM email_replacements WHERE work_id = ?), verified_at_ms = ?
         WHERE user_id = ? AND EXISTS (SELECT 1 FROM email_replacements AS r
-          JOIN web_sessions AS s ON s.id = r.session_id AND s.user_id = r.user_id
           WHERE r.work_id = ? AND r.user_id = ? AND r.session_id = ?
             AND r.state = 'awaiting_proof' AND r.public_code = ?
             AND r.proof_expires_at_ms > ? AND r.expires_at_ms > ?
-            AND s.revoked_at_ms IS NULL AND s.fresh_until_ms > ?
-            AND s.idle_expires_at_ms > ? AND s.hard_expires_at_ms > ?
+            AND EXISTS (${session.sql})
             AND verified_email_credentials.email_address = r.prior_email
             AND verified_email_credentials.verified_at_ms = r.prior_verified_at_ms)`)
           .bind(
@@ -447,9 +450,7 @@ const commitReplacement = (
             publicCode,
             current,
             current,
-            current,
-            current,
-            current
+            ...session.params
           ),
         db
           .prepare(`DELETE FROM email_replacements WHERE work_id = ? AND changes() = 1`)

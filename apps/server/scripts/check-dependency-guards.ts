@@ -136,6 +136,11 @@ const cloudflareIdentityPrivate = `cloudflare/${PROBE_PREFIX}identity-private`;
 const cloudflareIdentityShellPrivate = `cloudflare/identity/${PROBE_PREFIX}shell-private`;
 const cloudflareIdentityContextPrivate = `tools/${PROBE_PREFIX}identity-context-private`;
 
+const cloudflareSessionPublished = `cloudflare/${PROBE_PREFIX}session-published`;
+const cloudflareSessionPrivate = `cloudflare/${PROBE_PREFIX}session-private`;
+const cloudflareSessionShellPrivate = `cloudflare/web-session/${PROBE_PREFIX}shell-private`;
+const cloudflarePairingPrivate = `tools/${PROBE_PREFIX}pairing-private`;
+
 const PROBES: readonly Probe[] = [
   {
     name: "native Transaction peers consume capture and bounded reads through owner operations",
@@ -317,6 +322,68 @@ const PROBES: readonly Probe[] = [
       },
     ],
     name: "tooling cannot import private Identity context projections",
+  },
+
+  {
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `${cloudflareSessionPublished}/probe.ts`,
+        source:
+          'import { authenticateWebSession, logoutWebSession } from "../web-session/operations";\n' +
+          'import { freshSessionQuery } from "@fidy/server/web-session-operations";\n' +
+          "export const published = [authenticateWebSession, logoutWebSession, freshSessionQuery];\n",
+      },
+    ],
+    name: "Cloudflare callers use published WebSession authentication and commit-time guards",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-web-session-internal: ${cloudflareSessionPrivate}/probe.test.ts → cloudflare/web-session/internal/credentials.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${cloudflareSessionPrivate}/probe.test.ts`,
+        source:
+          'import { sessionCookie } from "../web-session/internal/credentials";\nexport const privateCredential = sessionCookie;\n',
+      },
+    ],
+    name: "foreign tests cannot reach WebSession credential handling",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error cloudflare-imports-portable-web-session-internal: ${cloudflareSessionShellPrivate}/probe.ts → src/shell/web-session/internal/authority.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${cloudflareSessionShellPrivate}/probe.ts`,
+        source:
+          'import { sessionCredentialAuthority } from "~/shell/web-session/internal/authority";\nexport const privateAuthority = sessionCredentialAuthority;\n',
+      },
+    ],
+    name: "Cloudflare WebSession must respect portable owner internals",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-browser-login-internal: ${cloudflarePairingPrivate}/probe.ts → cloudflare/browser-login/internal/pairing.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${cloudflarePairingPrivate}/probe.ts`,
+        source:
+          'import { redeemBrowserPairing } from "../../cloudflare/browser-login/internal/pairing";\nexport const privateVerifier = redeemBrowserPairing;\n',
+      },
+    ],
+    name: "tools cannot bypass the browser verifier owner",
   },
 
   {

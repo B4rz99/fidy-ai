@@ -318,3 +318,21 @@ process's binding pool. Files remain serial within each runner.
 Tests whose only owner was a removed runtime or provider implementation are deleted. Portable
 domain, schema, security, contract, browser, provider-boundary, and isolation evidence remains
 authoritative.
+
+### WebSession owner composition
+
+WebSession publishes stable references and deadline decisions in `core/web-session`, and
+commit-time credential, freshness and historical-ownership operations in `shell/web-session`.
+The Cloudflare `web-session/operations.ts` boundary owns browser authentication, renewal, logout and
+one-time session establishment; cookie parsing, bearer generation/digests and persisted rows remain
+in its `internal/` implementation. BrowserLogin publishes bounded pairing and approval operations,
+keeping private-verifier checks and polling state internal. Its authenticated redemption composes
+pairing consumption with WebSession issuance in one D1 unit, never a process lock or reusable permit.
+
+Authentication returns only the exact User/session proof required by the existing per-User Durable
+Object and protected D1 work. Every protected mutation rechecks its credential owner in that same
+commit; account-security and email delivery also recheck the owner-defined fresh deadline. Published
+native SQL fragments are composable authority, not cached authorization. Other owners neither parse
+browser credentials nor reproduce WebSession lifecycle predicates or import session storage.
+The existing bounded Core/public-worker telemetry covers these workflows; the refactor creates no
+additional provider call, persisted credential copy or telemetry payload.

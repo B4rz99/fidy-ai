@@ -13,7 +13,7 @@ import {
 import { Clock, Crypto, DateTime, Effect, Encoding, Option, PlatformError, Schema } from "effect";
 import { freshSessionExists } from "@fidy/server/web-session-operations";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
-import { browserSession } from "../identity/browser-login";
+import { browserSession } from "../web-session/operations";
 
 const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 1024,

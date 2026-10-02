@@ -1,3 +1,4 @@
+import { rotateBackupRecoveryCode as rotateRecovery } from "./internal/recovery";
 import { bootstrapStatements } from "./internal/bootstrap";
 import type { Effect, Option } from "effect";
 import type { UserId } from "../../src/core/identity/reference";
@@ -45,3 +46,8 @@ export const prepareWhatsAppIdentity = (
  */
 export const prepareVerifiedIdentity = (input: VerifiedIdentityInput): VerifiedIdentityStatements =>
   bootstrapStatements(input);
+
+/** Rotate the stable User's recovery proof only under fresh WebSession authority, disclosed once. */
+export const rotateBackupRecoveryCode = (
+  input: Readonly<{ request: Request; db: D1Database }>
+): Promise<Response> => rotateRecovery(input);

@@ -105,12 +105,11 @@ import {
   listOwnKeywordRules,
 } from "./categories/operations";
 import {
-  currentUser,
-  logoutBrowser,
-  redeemBrowserPairing,
-  rotateBackupRecoveryCode,
-  startBrowserPairing,
-} from "./identity/browser-login";
+  currentWebSessionUser as currentUser,
+  logoutWebSession as logoutBrowser,
+} from "./web-session/operations";
+import { redeemBrowserPairing, startBrowserPairing } from "./browser-login/operations";
+import { rotateBackupRecoveryCode } from "./identity/operations";
 import {
   type OnboardingEmailEnvironment,
   dispatchOnboardingEmail,

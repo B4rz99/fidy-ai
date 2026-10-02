@@ -1,4 +1,3 @@
-import assert from "node:assert/strict";
 import { TestCrypto } from "~/shell/testing/crypto";
 import { expect, it, layer } from "@effect/vitest";
 import {
@@ -15,13 +14,16 @@ import {
 } from "effect";
 import { OutboundHttp } from "~/shell/outbound-http/operations";
 import { testOutboundTransportLayer } from "~/shell/outbound-http/testing";
-import { BillingEmail, WompiSourceId } from "~/core/subscription/enrollment-model";
+import { BillingEmail } from "~/core/subscription/contract";
+import { WompiSourceId } from "./wompi-model";
 import { exitFailure, renderedFailure } from "~/shell/testing/credential-failure";
 import {
   WompiEnrollmentClient,
   WompiSourceCreationFailed,
   WompiSourceLookupFailed,
 } from "./wompi-client";
+
+import assert from "node:assert/strict";
 
 const exampleKey = (visibility: "pub" | "prv", environment: "prod" | "test"): string =>
   [visibility, environment, "f1d7c0de".repeat(3)].join("_");

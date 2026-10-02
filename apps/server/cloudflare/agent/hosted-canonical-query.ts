@@ -2,7 +2,7 @@ import { Cause, Effect, Exit, Option, Schema } from "effect";
 import type { CatalogOperation } from "../../src/shell/_shared/operation-catalog";
 import type { TransactionSubject } from "../transactions/transaction-boundary";
 import { executeProtectedCategories } from "../categories/canonical-category";
-import { executeProtectedSubscriptionQuery } from "../billing/subscription-queries";
+import { executeProtectedSubscriptionQuery } from "../subscription/operations";
 import { listOwnKeywordRules } from "../categories/canonical-keyword-rules";
 import { browseBudgets } from "../budgets/budget-queries";
 import { reconcileBudgetLatches } from "../budgets/budget-latches";

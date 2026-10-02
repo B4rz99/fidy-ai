@@ -1,37 +1,39 @@
-import { authenticateWebSession } from "../web-session/operations";
+import { WompiEnvironment } from "~/shell/secret-material/contract";
+import { authenticateWebSession } from "../../web-session/operations";
 import { freshSessionQuery } from "@fidy/server/web-session-operations";
 import { protectConsentStatement } from "@fidy/server/consent-operations";
 import { UserContext } from "@fidy/server/identity-contract";
-import { prepareUserContext } from "../identity/user-context/operations";
+import { prepareUserContext } from "../../identity/user-context/operations";
 import {
   BillingAttempt,
   BillingAttemptId,
   BillingEmail,
   CardEnrollment,
   CardEnrollmentId,
-  CardPaymentSourceId,
   CardPaymentSubmission,
   PaymentRequestId,
-  PrepareCardEnrollmentPayload,
   Price,
   RecurringDisclosure,
-  SubmitCardEnrollmentPayload,
   WompiContractEvidenceSet,
-  type WompiEnrollmentClientService,
-  WompiSourceId,
+} from "~/core/subscription/contract";
+import { CardPaymentSourceId, WompiSourceId } from "./wompi-model";
+import {
+  PrepareCardEnrollmentPayload,
+  SubmitCardEnrollmentPayload,
   cardEnrollmentInvalidBody,
   cardEnrollmentRateLimitedBody,
   cardEnrollmentUnavailableBody,
-  makeWompiEnrollmentClient,
-} from "@fidy/server/subscription-runtime";
+} from "~/shell/subscription/contract";
+import { type WompiEnrollmentClientService, makeWompiEnrollmentClient } from "./wompi-client";
 import { Cause, Clock, Data, DateTime, Effect, Exit, Option, Schema } from "effect";
 import { UserId } from "@fidy/server/identity-reference";
 import { claimPreparedCardEnrollment } from "./card-enrollment-claim";
 import { admitCardPreparationAttempt } from "./card-preparation-admission";
-import { ResourceAdmissionRefused } from "../resource-admission/authority";
-import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
-import { browserOrigins } from "../runtime/topology";
-import { wompiOutboundHttp, workerCrypto } from "../wompi/wompi-runtime";
+import { ResourceAdmissionRefused } from "../../resource-admission/authority";
+import { RequestBodyPolicy, readBoundedRequestBody } from "../../http/request-body";
+import { browserOrigins } from "../../runtime/topology";
+import { wompiOutboundHttp, workerCrypto } from "./wompi-runtime";
+import { type EnrollmentEnvironment } from "../contract";
 
 const Origin = Schema.Literals([
   browserOrigins.production,
@@ -40,7 +42,7 @@ const Origin = Schema.Literals([
 ]);
 const WompiConfiguration = Schema.Struct({
   BROWSER_ORIGIN: Origin,
-  WOMPI_ENVIRONMENT: Schema.Literals(["sandbox", "production"]),
+  WOMPI_ENVIRONMENT: WompiEnvironment,
   WOMPI_PUBLIC_KEY: Schema.String.check(Schema.isPattern(/^pub_(?:test|prod)_[A-Za-z0-9_-]{8,}$/u)),
   WOMPI_PRIVATE_KEY: Schema.String.check(
     Schema.isPattern(/^prv_(?:test|prod)_[A-Za-z0-9_-]{8,}$/u)
@@ -165,16 +167,6 @@ const parse = <A, E>(schema: Schema.Codec<A, E>, text: string): Option.Option<A>
 const decodeRow = <A, E>(schema: Schema.Codec<A, E>, row: unknown): Option.Option<A> =>
   Schema.decodeUnknownOption(schema)(row);
 
-type EnrollmentEnvironment = {
-  readonly DB: D1Database;
-  readonly onAccepted: (id: string) => void;
-} & Partial<{
-  readonly BROWSER_ORIGIN: string;
-  readonly WOMPI_ENVIRONMENT: string;
-  readonly WOMPI_PUBLIC_KEY: string;
-  readonly WOMPI_PRIVATE_KEY: string;
-  readonly WOMPI_INTEGRITY_SECRET: string;
-}>;
 type ConfiguredEnrollmentEnvironment = typeof WompiConfiguration.Type & {
   readonly DB: D1Database;
   readonly onAccepted: (id: string) => void;

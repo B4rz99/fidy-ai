@@ -1,67 +1,82 @@
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
+import { type PreparedSubscriptionRead, type SubscriptionReadAuthority } from "./contract";
 import {
-  SubscriptionOffers,
-  SubscriptionStatus,
-  UpgradeDestination,
-} from "~/core/subscription/model";
-import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
-import { OperationResponse, Unavailable } from "~/shell/public-http/contract";
+  subscriptionAttemptsQuery,
+  subscriptionOffersQuery,
+  subscriptionStandingQuery,
+} from "~/shell/subscription/internal/query-sql";
+import {
+  projectSubscriptionOffers,
+  projectSubscriptionStatus,
+  listSubscriptionOffersResponse as readOffers,
+  readSubscriptionStatus,
+} from "~/shell/subscription/internal/queries";
+import { Effect, Option, Schema } from "effect";
+import { type SqlClient } from "effect/unstable/sql";
+import { type UserId } from "~/core/identity/reference";
+import { SubscriptionOffers, SubscriptionStatus } from "~/core/subscription/contract";
+import { type OwnedStatement } from "~/shell/_shared/owned-statement";
+import { type Unavailable } from "~/shell/public-http/contract";
 
-const getUpgradeUrl = HttpApiEndpoint.get("getUpgradeUrl", "/subscription/upgrade-url", {
-  success: OperationResponse(UpgradeDestination),
-})
-  .annotate(
-    OpenApi.Description,
-    "Get the public web destination for starting Pro access. Use it after a Paywall or Free " +
-      "allowance response when the User asks how to upgrade."
-  )
-  .annotateMerge(
-    operationPolicy({
-      access: patScoped("read"),
-      requiredTier: "free",
-      agentConfirmation: "not-required",
-      kind: "query",
-    })
-  );
+/** Read the complete immutable published offer set, or fail closed if it is unavailable. */
+export const listSubscriptionOffersResponse: Effect.Effect<
+  { readonly data: SubscriptionOffers; readonly next: ReadonlyArray<never> },
+  Unavailable,
+  SqlClient.SqlClient
+> = Effect.suspend(() => readOffers);
 
-const listSubscriptionOffers = HttpApiEndpoint.get(
-  "listSubscriptionOffers",
-  "/subscription/offers",
-  { success: OperationResponse(SubscriptionOffers), error: Unavailable }
-)
-  .annotate(
-    OpenApi.Description,
-    "List the authoritative immutable Colombia Prices and renewal terms available before " +
-      "payment-method enrollment."
-  )
-  .annotateMerge(
-    operationPolicy({
-      access: patScoped("read"),
-      requiredTier: "free",
-      agentConfirmation: "not-required",
-      kind: "query",
-    })
-  );
+/** Read one User's original trial, settled paid standing and bounded safe BillingAttempts. */
+export const getSubscriptionStatus = (
+  userId: UserId
+): Effect.Effect<
+  { readonly data: SubscriptionStatus; readonly next: ReadonlyArray<never> },
+  Unavailable,
+  SqlClient.SqlClient
+> => readSubscriptionStatus(userId);
 
-const getSubscriptionStatus = HttpApiEndpoint.get("getSubscriptionStatus", "/subscription/status", {
-  success: OperationResponse(SubscriptionStatus),
-  error: Unavailable,
-})
-  .annotate(
-    OpenApi.Description,
-    "Check your current trial and paid Subscription periods, AccessTier, and recent BillingAttempts. Use it to explain current access without treating exhausted allowances as a Paywall."
-  )
-  .annotateMerge(
-    operationPolicy({
-      access: patScoped("read"),
-      requiredTier: "free",
-      agentConfirmation: "not-required",
-      kind: "query",
-    })
-  );
+/**
+ * Recheck settled paid access at the caller's decision instant within its own protected unit.
+ * The interval is half-open; another User's Subscription cannot establish this condition.
+ */
+export const activePaidSubscriptionCondition = ({
+  userId,
+  nowEpochMs,
+}: Readonly<{ userId: UserId; nowEpochMs: number }>): OwnedStatement => ({
+  sql: `EXISTS (SELECT 1 FROM subscriptions AS subscription
+    WHERE subscription.user_id = ? AND subscription.paid_period_ends_at_ms > ?
+    AND EXISTS (SELECT 1 FROM billing_paid_periods AS period
+      WHERE period.attempt_id = subscription.attempt_id AND period.starts_at_ms <= ?))`,
+  params: [userId, nowEpochMs, nowEpochMs],
+});
 
-/** Canonical Free operation group for discovering and presenting Subscription standing and offers. */
-export const SubscriptionGroup = HttpApiGroup.make("subscription")
-  .add(getUpgradeUrl)
-  .add(listSubscriptionOffers)
-  .add(getSubscriptionStatus);
+/** Prepare complete public Prices with a live authority recheck and closed JSON projection. */
+export const prepareSubscriptionOffers = (
+  authority: SubscriptionReadAuthority
+): PreparedSubscriptionRead => ({
+  statements: [subscriptionOffersQuery(Option.some(authority))],
+  decode: (rows) =>
+    Schema.encodeSync(Schema.toCodecJson(SubscriptionOffers))(
+      projectSubscriptionOffers(rows[0] ?? [])
+    ),
+});
+
+/** Prepare one User's safe standing and attempts at the same decision instant as its protected read. */
+export const prepareSubscriptionStatus = (
+  input: Readonly<{
+    userId: UserId;
+    authority: SubscriptionReadAuthority;
+    current: number;
+  }>
+): PreparedSubscriptionRead => ({
+  statements: [
+    subscriptionStandingQuery({ userId: input.userId, authority: Option.some(input.authority) }),
+    subscriptionAttemptsQuery({ userId: input.userId, authority: Option.some(input.authority) }),
+  ],
+  decode: (rows) =>
+    Schema.encodeSync(Schema.toCodecJson(SubscriptionStatus))(
+      projectSubscriptionStatus({
+        standingRow: rows[0]?.[0],
+        attemptRows: rows[1] ?? [],
+        now: input.current,
+      })
+    ),
+});

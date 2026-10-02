@@ -1,5 +1,42 @@
-import { DateTime, Function } from "effect";
+import { DateTime, Effect, Function } from "effect";
+import type { IanaTimeZone } from "~/core/_shared/context";
+import type { BillingPeriod } from "./contract";
 import type { PriceId } from "./reference";
+
+/** Calendar paid-period facts derived from verified settlement in the captured named time zone. */
+export type PaidPeriodWindow = Readonly<{
+  startsAt: DateTime.Utc;
+  endsAt: DateTime.Utc;
+  renewalAnchor: DateTime.Utc;
+}>;
+
+/** Derives a calendar period from verified finalization in the captured named time zone. */
+export const paidPeriodFor: {
+  (
+    timeZone: IanaTimeZone,
+    finalizedAt: DateTime.Utc
+  ): (billingPeriod: BillingPeriod) => Effect.Effect<PaidPeriodWindow>;
+  (
+    billingPeriod: BillingPeriod,
+    timeZone: IanaTimeZone,
+    finalizedAt: DateTime.Utc
+  ): Effect.Effect<PaidPeriodWindow>;
+} = Function.dual(
+  3,
+  (billingPeriod: BillingPeriod, timeZone: IanaTimeZone, finalizedAt: DateTime.Utc) => {
+    const zonedStart = DateTime.setZone(finalizedAt, DateTime.zoneMakeNamedUnsafe(timeZone));
+    let zonedEnd: DateTime.Zoned;
+    if (billingPeriod === "weekly") {
+      zonedEnd = DateTime.add(zonedStart, { weeks: 1 });
+    } else if (billingPeriod === "monthly") {
+      zonedEnd = DateTime.add(zonedStart, { months: 1 });
+    } else {
+      zonedEnd = DateTime.add(zonedStart, { years: 1 });
+    }
+    const endsAt = DateTime.toUtc(zonedEnd);
+    return Effect.succeed({ startsAt: finalizedAt, endsAt, renewalAnchor: endsAt });
+  }
+);
 
 /**
  * Persisted enrollment lifecycle: prepared waits for submission; creating has been claimed;

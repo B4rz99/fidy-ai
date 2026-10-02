@@ -1,10 +1,11 @@
-import type { Miniflare } from "miniflare";
+import { type Miniflare } from "miniflare";
 import { afterEach, expect, it, vi } from "vitest";
 import { CardEnrollment, PaymentRequestId } from "@fidy/server/client";
 import { UserId } from "@fidy/server/identity-reference";
 import { Clock, Data, Effect, Schema } from "effect";
-import { billingAttemptIdFor, handleCardEnrollment } from "./card-enrollment";
-import { sweepExpiredCardPreparationAdmission } from "./card-preparation-admission";
+import { billingAttemptIdFor } from "./internal/card-enrollment";
+import { handleCardEnrollment } from "./operations";
+import { sweepExpiredCardPreparationAdmission } from "./runtime";
 import { browserOrigins, localCanonicalReadBearer } from "../runtime/topology";
 import { makePublicWorker } from "../public-worker";
 import { cloudflareWorkerTelemetry } from "../runtime/telemetry";

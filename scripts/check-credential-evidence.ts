@@ -31,12 +31,12 @@ const credentialEvidence = [
   },
   {
     configuration: "WOMPI_PRIVATE_KEY",
-    testFile: "apps/server/src/shell/subscription/wompi-client.test.ts",
+    testFile: "apps/server/cloudflare/subscription/internal/wompi-client.test.ts",
     testName: "keeps provider credentials, card tokens, and response bodies out of failures",
   },
   {
     configuration: "WOMPI_INTEGRITY_SECRET",
-    testFile: "apps/server/src/shell/subscription/wompi-billing-client.test.ts",
+    testFile: "apps/server/cloudflare/subscription/internal/wompi-billing-client.test.ts",
     testName: "keeps Wompi integrity credentials and response bodies out of failures",
   },
 ] as const satisfies ReadonlyArray<CredentialEvidence>;

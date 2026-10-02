@@ -1,6 +1,8 @@
 import { Miniflare } from "miniflare";
 import { expect, it } from "vitest";
 import { Effect } from "effect";
+import { activePaidSubscriptionCondition } from "~/shell/subscription/operations";
+import { UserId } from "@fidy/server/identity-reference";
 import { activeProUserCondition } from "./access-tier";
 
 const userId = "10000000-0000-4000-8000-000000000001";
@@ -62,6 +64,17 @@ it("does not grant Pro before either the original TrialPeriod or the paid period
       expect(yield* Effect.tryPromise(() => tier(300))).toBe(0);
       expect(yield* Effect.tryPromise(() => tier(400))).toBe(1);
       expect(yield* Effect.tryPromise(() => tier(500))).toBe(0);
+      const paid = activePaidSubscriptionCondition({
+        userId: UserId.make("20000000-0000-4000-8000-000000000002"),
+        nowEpochMs: 450,
+      });
+      const otherUser = yield* Effect.tryPromise(() =>
+        db
+          .prepare(`SELECT ${paid.sql} AS active`)
+          .bind(...paid.params)
+          .first<{ active: number }>()
+      );
+      expect(otherUser?.active).toBe(0);
     } finally {
       yield* Effect.tryPromise(() => mf.dispose());
     }

@@ -88,6 +88,53 @@ export default {
       },
     },
     {
+      name: "foreign-module-imports-cloudflare-subscription-internal",
+      severity: "error",
+      comment:
+        "Subscription billing rows, enrollment, Wompi and Workflows remain owner-private (#599). Call its published contract, operations or runtime composition.",
+      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/subscription/" },
+      to: { path: "^cloudflare/subscription/internal/" },
+    },
+    {
+      name: "cloudflare-imports-portable-subscription-internal",
+      severity: "error",
+      comment:
+        "Native Subscription adapters consume published portable operations, never raw query or row internals (#599).",
+      from: { path: "^cloudflare/" },
+      to: { path: "^src/(core|shell)/subscription/internal/" },
+    },
+    {
+      name: "subscription-interface-reexports-internal",
+      severity: "error",
+      comment:
+        "Native Subscription publication declares behavior rather than laundering private provider or persistence implementation (#599).",
+      from: { path: "^cloudflare/subscription/(contract|operations|runtime)\\.ts$" },
+      to: { path: "^cloudflare/subscription/internal/", dependencyTypes: ["export"] },
+    },
+    {
+      name: "subscription-contract-imports-implementation",
+      severity: "error",
+      comment:
+        "Subscription's native contract is independently readable and never acquires provider, persistence or Workflow implementation (#599).",
+      from: { path: "^cloudflare/subscription/contract\\.ts$" },
+      to: { path: "^cloudflare/subscription/(internal/|operations\\.ts$|runtime\\.ts$)" },
+    },
+    {
+      name: "subscription-internal-imports-outward-interface",
+      severity: "error",
+      comment:
+        "Subscription internals depend inward on declarations, never on the outward operations or runtime interface (#599).",
+      from: { path: "^cloudflare/subscription/internal/" },
+      to: { path: "^cloudflare/subscription/(operations|runtime)\\.ts$" },
+    },
+    {
+      name: "subscription-operations-imports-runtime",
+      severity: "error",
+      comment: "Subscription operations do not acquire Workflow construction authority (#599).",
+      from: { path: "^cloudflare/subscription/operations\\.ts$" },
+      to: { path: "^cloudflare/subscription/runtime\\.ts$" },
+    },
+    {
       name: "foreign-module-imports-cloudflare-web-session-internal",
       severity: "error",
       comment:
@@ -182,7 +229,7 @@ export default {
         path:
           "^src/shell/(agent/__probe-[0-9]+-provider-raw-http/probe\\.test\\.ts|" +
           "channels/whatsapp/kapso-client\\.test\\.ts|" +
-          "subscription/wompi-(billing-)?client\\.test\\.ts)$",
+          "subscription/wompi-(billing-)?client\\.test\\.ts)$|^cloudflare/subscription/internal/wompi-(billing-)?client\\.test\\.ts$",
       },
       to: {
         path: "^(?:\\.\\./)*node_modules/effect/dist/unstable/http/index\\.js$",
@@ -299,7 +346,7 @@ export default {
         pathNot: [
           "^src/shell/_shared/",
           "^src/shell/public-http/contract\\.ts$",
-          "^src/shell/identity/contract\\.ts$",
+          "^src/shell/(identity|subscription)/contract\\.ts$",
           "^src/shell/[^/]+/operations\\.ts$",
         ],
       },

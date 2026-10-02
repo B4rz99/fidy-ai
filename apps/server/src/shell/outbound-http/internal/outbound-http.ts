@@ -1,3 +1,4 @@
+import { type WompiEnvironment } from "~/shell/secret-material/contract";
 import { type Crypto, Effect, Encoding, Match, Option, Redacted } from "effect";
 import {
   FetchHttpClient,
@@ -36,7 +37,7 @@ type PreparedRequest = Readonly<{
 }>;
 
 type WompiTransportConfig = Readonly<{
-  environment: "sandbox" | "production";
+  environment: WompiEnvironment;
   publicKey: string;
   privateKey: Redacted.Redacted<string>;
   integritySecret: Redacted.Redacted<string>;

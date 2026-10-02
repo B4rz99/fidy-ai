@@ -10,8 +10,8 @@ import {
   ResourceAdmissionPolicyKey,
   ResourceAdmissionScopeKey,
   ResourceAdmissionUnits,
-} from "../resource-admission/authority";
-import { newId } from "../pats/pat-shared";
+} from "../../resource-admission/authority";
+import { newId } from "../../pats/pat-shared";
 
 const windowMilliseconds = 3_600_000;
 const userAttemptLimit = 24;

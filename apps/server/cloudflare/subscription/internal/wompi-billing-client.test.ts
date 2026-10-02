@@ -7,8 +7,8 @@ import {
   testOutboundTransportLayer,
 } from "~/shell/outbound-http/testing";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
-import { BillingEmail, WompiSourceId } from "~/core/subscription/enrollment-model";
-import { WompiTransactionId, WompiTransactionReference } from "~/core/subscription/model";
+import { BillingEmail } from "~/core/subscription/contract";
+import { WompiSourceId, WompiTransactionId, WompiTransactionReference } from "./wompi-model";
 import {
   buildLayerExit,
   exitFailure,

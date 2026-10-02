@@ -16,11 +16,11 @@ const estimatedSeconds: Readonly<Record<string, number>> = {
   "ingestion/forwarded-email.test.ts": 11.1,
   "onboarding/verified-onboarding.test.ts": 11.6,
   "ingestion/statement-staging.test.ts": 3.5,
-  "billing/billing-collection.test.ts": 4.8,
-  "card-enrollment/card-enrollment.test.ts": 4,
+  "subscription/billing-collection.test.ts": 4.8,
+  "subscription/card-enrollment.test.ts": 4,
   "resource-admission/resource-admission.test.ts": 3.1,
   "runtime/operational-alert-delivery.test.ts": 1.4,
-  "billing/subscription-queries.test.ts": 1.3,
+  "subscription/subscription-queries.test.ts": 1.3,
 };
 
 /** Assigns every discovered file once, longest estimated work first, to the lightest shard. */

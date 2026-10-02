@@ -1,15 +1,82 @@
 import { Schema } from "effect";
+import { type OwnedStatement } from "~/shell/_shared/owned-statement";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
 import {
+  BillingAttempt,
+  BillingAttemptId,
   BillingEmail,
   CardEnrollment,
   CardEnrollmentDecisions,
   CardEnrollmentId,
   CardPaymentSubmission,
+  PaymentRequestId,
+  SubscriptionOffers,
+  SubscriptionStatus,
+  UpgradeDestination,
   maximumTransientCardTokenCharacters,
-} from "~/core/subscription/enrollment-model";
-import { BillingAttempt, BillingAttemptId, PaymentRequestId } from "~/core/subscription/model";
+} from "~/core/subscription/contract";
+import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
+import { OperationResponse, Unavailable } from "~/shell/public-http/contract";
 import { PriceId } from "~/core/subscription/reference";
+
+const getUpgradeUrl = HttpApiEndpoint.get("getUpgradeUrl", "/subscription/upgrade-url", {
+  success: OperationResponse(UpgradeDestination),
+})
+  .annotate(
+    OpenApi.Description,
+    "Get the public web destination for starting Pro access. Use it after a Paywall or Free " +
+      "allowance response when the User asks how to upgrade."
+  )
+  .annotateMerge(
+    operationPolicy({
+      access: patScoped("read"),
+      requiredTier: "free",
+      agentConfirmation: "not-required",
+      kind: "query",
+    })
+  );
+
+const listSubscriptionOffers = HttpApiEndpoint.get(
+  "listSubscriptionOffers",
+  "/subscription/offers",
+  { success: OperationResponse(SubscriptionOffers), error: Unavailable }
+)
+  .annotate(
+    OpenApi.Description,
+    "List the authoritative immutable Colombia Prices and renewal terms available before " +
+      "payment-method enrollment."
+  )
+  .annotateMerge(
+    operationPolicy({
+      access: patScoped("read"),
+      requiredTier: "free",
+      agentConfirmation: "not-required",
+      kind: "query",
+    })
+  );
+
+const getSubscriptionStatus = HttpApiEndpoint.get("getSubscriptionStatus", "/subscription/status", {
+  success: OperationResponse(SubscriptionStatus),
+  error: Unavailable,
+})
+  .annotate(
+    OpenApi.Description,
+    "Check your current trial and paid Subscription periods, AccessTier, and recent BillingAttempts. Use it to explain current access without treating exhausted allowances as a Paywall."
+  )
+  .annotateMerge(
+    operationPolicy({
+      access: patScoped("read"),
+      requiredTier: "free",
+      agentConfirmation: "not-required",
+      kind: "query",
+    })
+  );
+
+/** Canonical Free operation group for discovering and presenting Subscription standing and offers. */
+export const SubscriptionGroup = HttpApiGroup.make("subscription")
+  .add(getUpgradeUrl)
+  .add(listSubscriptionOffers)
+  .add(getSubscriptionStatus);
 
 const invalidError = {
   code: "card_enrollment_invalid",
@@ -164,3 +231,19 @@ export const cardEnrollmentInvalidBody = { error: invalidError } as const;
 export const cardEnrollmentUnavailableBody = { error: unavailableError } as const;
 /** Shared bounded preparation-attempt refusal, distinct from provider/configuration outage. */
 export const cardEnrollmentRateLimitedBody = { error: rateLimitedError } as const;
+
+/** Live credential predicate composed into a Subscription read within the caller's atomic unit. */
+export type SubscriptionReadAuthority = Readonly<{
+  table: "pats" | "web_sessions";
+  predicate: string;
+  bindings: ReadonlyArray<string | number | Uint8Array>;
+}>;
+
+/**
+ * A bounded read to commit with the caller's authority and required Audit evidence. Decode only
+ * its ordered results after that same commit succeeds; no persistence shape leaves this owner.
+ */
+export type PreparedSubscriptionRead = Readonly<{
+  statements: ReadonlyArray<OwnedStatement>;
+  decode: (rows: ReadonlyArray<ReadonlyArray<unknown>>) => Schema.Json;
+}>;

@@ -1,3 +1,4 @@
+import { WompiEnvironment } from "~/shell/secret-material/contract";
 import {
   Config,
   Context,
@@ -11,11 +12,11 @@ import {
 } from "effect";
 import {
   WompiBillingStatus,
-  WompiEnvironment,
+  WompiSourceId,
   WompiTransactionId,
   WompiTransactionReference,
-} from "~/core/subscription/model";
-import { type BillingEmail, WompiSourceId } from "~/core/subscription/enrollment-model";
+} from "./wompi-model";
+import { type BillingEmail } from "~/core/subscription/contract";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { OutboundHttp, type OutboundHttpService } from "~/shell/outbound-http/operations";
 
@@ -175,6 +176,6 @@ const loadBillingAdapter = Effect.gen(function* () {
 export class WompiBillingClient extends Context.Service<
   WompiBillingClient,
   WompiBillingClientService
->()("@fidy/server/shell/subscription/wompi-billing-client/WompiBillingClient") {
+>()("@fidy/server/cloudflare/subscription/internal/wompi-billing-client/WompiBillingClient") {
   static readonly layer = Layer.effect(WompiBillingClient, loadBillingAdapter);
 }

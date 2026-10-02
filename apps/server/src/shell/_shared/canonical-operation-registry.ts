@@ -10,7 +10,7 @@ import type { CanonicalSuccess } from "./canonical-success";
 import {
   getSubscriptionStatus,
   listSubscriptionOffersResponse,
-} from "~/shell/subscription/queries";
+} from "~/shell/subscription/operations";
 import { listCategoriesResponse } from "~/shell/categories/list-categories";
 import { getCurrentUser } from "~/shell/identity/operations";
 import { listPATsResponse } from "~/shell/tokens/list-pats";

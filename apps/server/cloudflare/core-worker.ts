@@ -1,3 +1,4 @@
+import { type BillingCollectionEnvironment } from "./subscription/contract";
 import {
   ScopeMissing,
   UserActionRequired,
@@ -12,7 +13,7 @@ import {
   memoryOperationIds,
 } from "@fidy/server/memory-runtime";
 import { emailReplacementOperations } from "@fidy/server/email-replacement";
-import type { TelemetryService } from "@fidy/server/telemetry";
+import { type TelemetryService } from "@fidy/server/telemetry";
 import { Cause, Clock, Data, Effect, Exit, Option, Schema } from "effect";
 import { correctionInput } from "./transactions/transaction-corrections";
 import { BudgetId, CreateBudgetInput, UpdateBudgetInput } from "@fidy/server/budgets-runtime";
@@ -57,15 +58,15 @@ import {
   reconcileBrowserPairingEmail,
 } from "./identity/browser-pairing-email-delivery";
 import { handleSupportRecovery } from "./identity/support-recovery";
-import { handleCardEnrollment } from "./card-enrollment/card-enrollment";
+import { executeProtectedSubscriptionQuery, handleCardEnrollment } from "./subscription/operations";
 import {
-  type BillingCollectionEnvironment,
   dispatchBillingCollection,
   isBillingCollectionWork,
   receiveBillingCollection,
   receiveWompiBillingEvent,
   reconcileBillingCandidates,
-} from "./billing/billing-collection";
+  sweepExpiredCardPreparationAdmission,
+} from "./subscription/runtime";
 import { completeEmailReplacement, requestEmailReplacement } from "./identity/email-replacement";
 import {
   type EmailReplacementEnvironment,
@@ -96,7 +97,6 @@ import {
 import { sweepExpiredPATPairings } from "./pats/pat-pairing";
 import { authorizeCanonicalPAT } from "./pats/pat-authorization";
 import { executeProtectedCategories } from "./categories/canonical-category";
-import { executeProtectedSubscriptionQuery } from "./billing/subscription-queries";
 import {
   keywordRuleIdFromPath,
   keywordRuleInput,
@@ -133,7 +133,6 @@ import {
   observeWorkerRequest,
 } from "./runtime/telemetry";
 import { type WorkersAiEnvironment, sweepExpiredWorkersAiAdmission } from "./ai/workers-ai";
-import { sweepExpiredCardPreparationAdmission } from "./card-enrollment/card-preparation-admission";
 import { statementStagingPath } from "@fidy/server/statement-path";
 import {
   readStatementSubmission,
@@ -199,10 +198,7 @@ import {
 
 export { UserTransactionCoordinator } from "./transactions/transaction-coordinator";
 export { OnboardingEmailWorkflowV1 } from "./onboarding/onboarding-email";
-export {
-  BillingCollectionWorkflowV1,
-  runBillingCollectionWorkflow,
-} from "./billing/billing-collection";
+export { BillingCollectionWorkflowV1, runBillingCollectionWorkflow } from "./subscription/runtime";
 export { BrowserPairingEmailWorkflowV1 } from "./identity/browser-pairing-email-delivery";
 export { EmailReplacementWorkflowV1 } from "./identity/email-replacement-delivery";
 export { StatementExtractionWorkflowV1, ReleaseSmokeWorkflowV1 };

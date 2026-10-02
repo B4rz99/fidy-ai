@@ -1,5 +1,5 @@
+import type { WompiEnvironment } from "./contract";
 import { type Config, Crypto, Effect, Encoding, type Redacted, Schema } from "effect";
-import type { WompiEnvironment } from "~/core/subscription/model";
 import type { TokenBearer } from "~/core/tokens/model";
 import { configuredSecret } from "~/shell/secret-material/internal/configured-secret";
 

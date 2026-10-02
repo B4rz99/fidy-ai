@@ -1,6 +1,7 @@
-import { WompiTransactionId } from "@fidy/server/subscription-runtime";
+import { type WompiEnvironment } from "~/shell/secret-material/contract";
+import { WompiTransactionId } from "./wompi-model";
 import { Effect, Option, Schema } from "effect";
-import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
+import { RequestBodyPolicy, readBoundedRequestBody } from "../../http/request-body";
 
 const maximumEventBytes = 8192;
 const eventDeadlineMs = 2000;
@@ -124,7 +125,7 @@ const readEvent = (
 
 /** Verify Wompi's ordered event properties with the separate events secret before using the id as a lookup hint. */
 export const verifiedWompiEventHint = (
-  input: Readonly<{ request: Request; secret: string; environment: "sandbox" | "production" }>
+  input: Readonly<{ request: Request; secret: string; environment: WompiEnvironment }>
 ): Effect.Effect<
   Option.Option<
     Readonly<{ transactionId: WompiTransactionId; signedAt: number; signedStatus: string }>

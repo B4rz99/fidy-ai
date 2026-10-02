@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { Effect, Option } from "effect";
-import { verifiedWompiEventHint } from "./wompi-event";
+import { verifiedWompiEventHint } from "./internal/wompi-event";
 
 const secret = "prod_events_OcHnIzeBl5socpwByQ4hA52Em3USQ93Z";
 // SHA-256 of the ordered Wompi example values, timestamp and separate events secret.

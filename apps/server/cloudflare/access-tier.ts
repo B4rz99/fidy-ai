@@ -1,5 +1,6 @@
 import { UserId } from "@fidy/server/identity-reference";
 import { Option, Schema } from "effect";
+import { activePaidSubscriptionCondition } from "~/shell/subscription/operations";
 import { activeTrialPeriodCondition } from "@fidy/server/identity-operations";
 
 /**
@@ -12,11 +13,9 @@ export const activeProUserCondition = (
   const subject = Schema.decodeOption(UserId)(input.userId);
   if (Option.isNone(subject)) return { sql: "0", params: [] };
   const trial = activeTrialPeriodCondition({ ...input, userId: subject.value });
+  const paid = activePaidSubscriptionCondition({ ...input, userId: subject.value });
   return {
-    sql: `(${trial.sql} OR EXISTS (SELECT 1 FROM subscriptions AS subscription
-      WHERE subscription.user_id = ? AND subscription.paid_period_ends_at_ms > ?
-      AND EXISTS (SELECT 1 FROM billing_paid_periods AS period
-        WHERE period.attempt_id = subscription.attempt_id AND period.starts_at_ms <= ?)))`,
-    params: [...trial.params, input.userId, input.nowEpochMs, input.nowEpochMs],
+    sql: `(${trial.sql} OR ${paid.sql})`,
+    params: [...trial.params, ...paid.params],
   };
 };

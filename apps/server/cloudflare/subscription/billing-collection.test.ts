@@ -1,25 +1,18 @@
-import type { Miniflare } from "miniflare";
-import type { WorkflowStepConfig } from "cloudflare:workers";
+import { type Miniflare } from "miniflare";
+import { type WorkflowStepConfig } from "cloudflare:workers";
 import { afterEach, expect, it, vi } from "vitest";
-import { type Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
-import {
-  type WompiBillingClientService,
-  WompiSourceId,
-  type WompiTransaction,
-  WompiTransactionId,
-  WompiTransactionReference,
-} from "@fidy/server/subscription-runtime";
-import { makeCardEnrollmentD1 } from "../card-enrollment/card-enrollment-d1.test-fixture";
-import coreWorker from "../core-worker";
-import publicWorker from "../public-worker";
+import { type Cause, Clock, Effect, Option, Schema } from "effect";
+import { makeCardEnrollmentD1 } from "./card-enrollment-d1.test-fixture";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import {
   dispatchBillingCollection,
   receiveBillingCollection,
   reconcileBillingCandidates,
-  reconcileBillingTransaction,
   runBillingCollectionWorkflow,
-} from "./billing-collection";
+} from "./runtime";
+
+import coreWorker from "../core-worker";
+import publicWorker from "../public-worker";
 
 const userId = "10000000-0000-4000-8000-000000000001";
 const enrollmentId = "20000000-0000-4000-8000-000000000001";
@@ -27,8 +20,8 @@ const sourceId = "30000000-0000-4000-8000-000000000001";
 const attemptId = "40000000-0000-4000-8000-000000000001";
 const paymentRequestId = "50000000-0000-4000-8000-000000000001";
 const priceId = "22700000-0000-4000-8000-000000000001";
-const reference = WompiTransactionReference.make(`fidy-${attemptId}`);
-const transactionId = WompiTransactionId.make("provider-transaction-1");
+const reference = `fidy-${attemptId}`;
+const transactionId = "provider-transaction-1";
 let instance: Option.Option<Miniflare> = Option.none();
 let fixtureCounter = 0;
 afterEach(() => {
@@ -113,21 +106,39 @@ const publicBillingCallback = (db: D1Database, request: Request): Promise<Respon
     },
   });
 
-const transaction = (status: WompiTransaction["status"]): WompiTransaction => ({
-  transactionId,
+const ProviderTransactionFixture = Schema.Struct({
+  id: Schema.String,
+  reference: Schema.String,
+  status: Schema.Literals(["PENDING", "APPROVED", "DECLINED"]),
+  amount_in_cents: Schema.Int,
+  currency: Schema.Literal("COP"),
+  payment_source_id: Schema.Int,
+  finalized_at: Schema.NullOr(Schema.String),
+});
+type ProviderTransactionFixture = typeof ProviderTransactionFixture.Type;
+const transaction = (status: ProviderTransactionFixture["status"]): ProviderTransactionFixture => ({
+  id: transactionId,
   reference,
   status,
-  amountInCents: 990000,
+  amount_in_cents: 990000,
   currency: "COP",
-  sourceId: Option.some(WompiSourceId.make(3891)),
-  finalizedAt:
-    status === "PENDING" ? Option.none() : Option.some(DateTime.makeUnsafe("2026-09-08T12:00:00Z")),
+  payment_source_id: 3891,
+  finalized_at: status === "PENDING" ? null : "2026-09-08T12:00:00Z",
 });
-const client = (read: () => WompiTransaction): WompiBillingClientService => ({
-  environment: "sandbox",
-  createTransaction: () => Effect.succeed(read()),
-  findTransaction: () => Effect.succeed(read()),
-});
+
+const verifyProviderTransaction = (
+  db: D1Database,
+  read: () => ReturnType<typeof transaction>,
+  lookupId: string = transactionId
+): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.tryPromise(() => {
+    vi.stubGlobal("fetch", () => Promise.resolve(Response.json({ data: read() })));
+    return runBillingCollectionWorkflow({
+      environment: billingRuntime(db),
+      payload: { version: 1, kind: "lookup", transactionId: lookupId },
+      activity: (_name, _options, run) => run(),
+    });
+  });
 type BillingRuntimeFixture = Readonly<{
   DB: D1Database;
   WOMPI_ENVIRONMENT: "sandbox";
@@ -200,8 +211,8 @@ it("settles verified approval with standing, Audit and follow-up exactly once ac
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(fixture);
       let observed = transaction("APPROVED");
-      const verify = (): ReturnType<typeof reconcileBillingTransaction> =>
-        reconcileBillingTransaction({ db, client: client(() => observed), transactionId });
+      const verify = (): Effect.Effect<void, Cause.UnknownError> =>
+        verifyProviderTransaction(db, () => observed);
       yield* verify();
       expect(yield* Effect.tryPromise(() => state(db))).toBe("succeeded");
       observed = transaction("DECLINED");
@@ -236,8 +247,8 @@ it("holds verified negative until the retry opportunity and admits a later verif
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(fixture);
       let observed = transaction("DECLINED");
-      const verify = (): ReturnType<typeof reconcileBillingTransaction> =>
-        reconcileBillingTransaction({ db, client: client(() => observed), transactionId });
+      const verify = (): Effect.Effect<void, Cause.UnknownError> =>
+        verifyProviderTransaction(db, () => observed);
       yield* verify();
       expect(yield* Effect.tryPromise(() => state(db))).toBe("pending");
       expect(
@@ -312,8 +323,8 @@ it("restarts the negative retry opportunity after a verified pending observation
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(fixture);
       let observed = transaction("DECLINED");
-      const verify = (): ReturnType<typeof reconcileBillingTransaction> =>
-        reconcileBillingTransaction({ db, client: client(() => observed), transactionId });
+      const verify = (): Effect.Effect<void, Cause.UnknownError> =>
+        verifyProviderTransaction(db, () => observed);
       yield* verify();
       yield* Effect.tryPromise(() =>
         db
@@ -536,11 +547,7 @@ it("durably claims each lookup before Workflow handoff, even if the handoff is a
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(fixture);
-      yield* reconcileBillingTransaction({
-        db,
-        client: client(() => transaction("PENDING")),
-        transactionId,
-      });
+      yield* verifyProviderTransaction(db, () => transaction("PENDING"));
       const create = vi.fn((_options: { id: string; params: unknown }): Promise<unknown> =>
         Promise.reject(new Error("handoff unavailable"))
       );
@@ -577,11 +584,7 @@ it("bounds pending provider-ID lookups and resumes only from a confirmed lookup 
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(fixture);
-      yield* reconcileBillingTransaction({
-        db,
-        client: client(() => transaction("PENDING")),
-        transactionId,
-      });
+      yield* verifyProviderTransaction(db, () => transaction("PENDING"));
       const create = vi.fn((_options: { id: string; params: unknown }) => Promise.resolve({}));
       const workflow = { create, get: (_id: string): Promise<unknown> => Promise.resolve({}) };
       for (let index = 0; index < 8; index++) {
@@ -905,13 +908,9 @@ it("coordinates two out-of-order BillingAttempts by stable User in the Subscript
       const secondEnrollment = "20000000-0000-4000-8000-000000000002";
       const secondAttempt = "40000000-0000-4000-8000-000000000002";
       const secondRequest = "50000000-0000-4000-8000-000000000002";
-      const secondReference = WompiTransactionReference.make(`fidy-${secondAttempt}`);
-      const secondTransaction = WompiTransactionId.make("provider-transaction-2");
-      yield* reconcileBillingTransaction({
-        db,
-        client: client(() => transaction("APPROVED")),
-        transactionId,
-      });
+      const secondReference = `fidy-${secondAttempt}`;
+      const secondTransaction = "provider-transaction-2";
+      yield* verifyProviderTransaction(db, () => transaction("APPROVED"));
       // A settled attempt releases admission for a separately authorized action.
       yield* Effect.tryPromise(() =>
         db.batch([
@@ -943,15 +942,11 @@ it("coordinates two out-of-order BillingAttempts by stable User in the Subscript
       );
       const older = {
         ...transaction("APPROVED"),
-        transactionId: secondTransaction,
+        id: secondTransaction,
         reference: secondReference,
-        finalizedAt: Option.some(DateTime.makeUnsafe("2026-09-01T12:00:00Z")),
+        finalized_at: "2026-09-01T12:00:00Z",
       };
-      yield* reconcileBillingTransaction({
-        db,
-        client: client(() => older),
-        transactionId: secondTransaction,
-      });
+      yield* verifyProviderTransaction(db, () => older, secondTransaction);
       const standing = yield* Effect.tryPromise(() =>
         db
           .prepare("SELECT attempt_id FROM subscriptions WHERE user_id = ?")
@@ -973,13 +968,8 @@ it("refuses a mismatched source even with a valid provider id and reference", ()
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(fixture);
-      const forged = client(() => ({
-        ...transaction("APPROVED"),
-        sourceId: Option.some(WompiSourceId.make(3892)),
-      }));
-      const result = yield* Effect.exit(
-        reconcileBillingTransaction({ db, client: forged, transactionId })
-      );
+      const forged = { ...transaction("APPROVED"), payment_source_id: 3892 };
+      const result = yield* Effect.exit(verifyProviderTransaction(db, () => forged));
       expect(result._tag).toBe("Failure");
       expect(yield* Effect.tryPromise(() => state(db))).toBe("pending");
       expect(

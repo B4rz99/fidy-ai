@@ -1,3 +1,4 @@
+import { WompiEnvironment } from "~/shell/secret-material/contract";
 import { Config, Context, Crypto, Effect, Layer, Option, type Redacted, Schema } from "effect";
 import { HttpClient } from "effect/unstable/http";
 import {
@@ -8,7 +9,6 @@ import {
 import { makeOutboundHttp } from "~/shell/outbound-http/internal/outbound-http";
 import type { OutboundHttpFailure, OutboundHttpRequest, OutboundHttpResponse } from "./contract";
 
-const WompiEnvironment = Schema.Literals(["sandbox", "production"]);
 const WompiPublicKey = Schema.String.check(
   Schema.isPattern(/^pub_(?:test|prod)_[A-Za-z0-9_-]{8,}$/u)
 );
@@ -57,7 +57,7 @@ export const makeResendOutboundHttp = (
 /** Restricts one Worker-owned Wompi credential set to the published bounded provider transport. */
 export const makeWompiOutboundHttp = (
   input: Readonly<{
-    environment: "sandbox" | "production";
+    environment: WompiEnvironment;
     publicKey: string;
     privateKey: Redacted.Redacted<string>;
     integritySecret: Redacted.Redacted<string>;

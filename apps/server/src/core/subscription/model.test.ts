@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
-import { Price, SubscriptionOffers } from "./model";
+import { Price, SubscriptionOffers } from "./contract";
 
 const price = (
   id: string,

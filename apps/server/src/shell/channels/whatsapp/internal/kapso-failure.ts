@@ -1,4 +1,4 @@
-import type { DisclosureDeliveryFailureReason } from "./disclosure-model";
+import { type DisclosureDeliveryFailureReason } from "~/shell/channels/whatsapp/contract";
 
 export type KapsoMetaFailureDisposition = Readonly<{
   readonly safeReason: DisclosureDeliveryFailureReason;

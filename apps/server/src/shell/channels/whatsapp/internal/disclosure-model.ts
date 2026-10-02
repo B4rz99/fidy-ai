@@ -1,6 +1,7 @@
 import { Function, Schema } from "effect";
-import { DisclosureDeliveryCorrelationToken } from "~/core/provider-evidence/contract";
 import { PendingConsentExchangeId } from "~/core/consent/contract";
+import { DisclosureDeliveryCorrelationToken } from "~/core/provider-evidence/contract";
+import { DisclosureDeliveryFailureReason } from "~/shell/channels/whatsapp/contract";
 
 export { DisclosureDeliveryCorrelationToken } from "~/core/provider-evidence/contract";
 
@@ -36,19 +37,6 @@ export const DisclosureDeliveryAttemptCapability = Schema.Struct({
   correlationToken: DisclosureDeliveryCorrelationToken,
 });
 export type DisclosureDeliveryAttemptCapability = typeof DisclosureDeliveryAttemptCapability.Type;
-
-/** Safe operational reason retained after a provider send does not complete. */
-export const DisclosureDeliveryFailureReason = Schema.Literals([
-  "sandbox_bsuid_unsupported",
-  "invalid_recipient",
-  "conversation_window_closed",
-  "rate_limited",
-  "authentication_failed",
-  "provider_unavailable",
-  "timeout",
-  "invalid_response",
-]);
-export type DisclosureDeliveryFailureReason = typeof DisclosureDeliveryFailureReason.Type;
 
 /** Provider evidence lifecycle, independent of execution scheduling. */
 export const DisclosureDeliveryState = Schema.Literals([

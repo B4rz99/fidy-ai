@@ -1,15 +1,15 @@
-import type { PATGrantSelection, PairingGrantSelection } from "~/shell/tokens/contract";
 import { type Option, Schema } from "effect";
 import { DisclosureSnapshot } from "~/core/consent/contract";
-import type { OwnedStatement } from "~/shell/_shared/owned-statement";
-import type { FreshSessionSubject } from "~/shell/web-session/contract";
+import { type OwnedStatement } from "~/shell/_shared/owned-statement";
+import { type PATGrantSelection, type PairingGrantSelection } from "~/shell/tokens/contract";
+import { type FreshSessionSubject } from "~/shell/web-session/contract";
 
 export {
   ConsentIngressExchange,
-  type ConsentIngressMessage,
   DisclosureSnapshot,
   OnboardingConsentBasis,
   PATRevocationOrigin,
+  type ConsentIngressMessage,
 } from "~/core/consent/contract";
 export {
   ConsentRecordId,
@@ -18,20 +18,24 @@ export {
   PolicyRevision,
   Sha256Digest,
 } from "~/core/consent/reference";
-export { DisclosureDeliveryCorrelationToken } from "~/shell/channels/whatsapp/disclosure-model";
-export { WhatsAppProviderMessageId } from "~/core/provider-evidence/contract";
-export { WhatsAppDeliveryKey } from "~/shell/channels/whatsapp/model";
 export {
   WhatsAppBusinessPhoneNumberId,
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
 } from "~/core/identity/reference";
-export type { KapsoSendFailed, KapsoSentMessage } from "~/shell/channels/whatsapp/kapso-client";
-export type { WhatsAppInboundEvent, WhatsAppWebhookReceipt } from "~/shell/channels/whatsapp/model";
+export { WhatsAppProviderMessageId } from "~/core/provider-evidence/contract";
 export {
-  maxKapsoFutureTimestampMinutes,
-  maxKapsoWebhookBytes,
-} from "~/shell/channels/whatsapp/kapso-webhook";
+  DisclosureDeliveryCorrelationToken,
+  WhatsAppDeliveryKey,
+  maxWhatsAppFutureTimestampMinutes,
+  maxWhatsAppWebhookBytes,
+} from "~/shell/channels/whatsapp/contract";
+export type {
+  WhatsAppInboundEvent,
+  WhatsAppSendFailed,
+  WhatsAppSentMessage,
+  WhatsAppWebhookReceipt,
+} from "~/shell/channels/whatsapp/contract";
 
 /** Persist and decode only a validated version of the exact disclosure shown to the caller. */
 export const PendingDisclosureJson = Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot));

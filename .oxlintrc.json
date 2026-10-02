@@ -462,6 +462,7 @@
         "apps/server/vitest.config.ts",
         "apps/server/vitest.core.config.ts",
         "apps/server/vitest.email-interpretation.config.ts",
+        "apps/server/vitest.whatsapp.config.ts",
         "apps/server/stryker.config.mjs",
         "apps/web/.dependency-cruiser.mjs",
         "apps/server/.dependency-cruiser.mjs",

@@ -1,43 +1,25 @@
-import { prepareWhatsAppIdentity } from "../identity/operations";
-import { type Cause, Effect, Option, Schema } from "effect";
 import {
   HostedAgentSessionId,
   TranscriptText,
   type TranscriptTurnId,
   UserId,
 } from "@fidy/server/agent-runtime";
+import { type Cause, Effect, Option, Schema } from "effect";
 import {
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
-} from "../../src/core/identity/reference";
-import { WhatsAppInboundEvidence } from "./hosted-authority";
+} from "../../../src/core/identity/reference";
 import {
-  HostedDeliveryCorrelationToken,
+  type HostedDeliveryCorrelationToken,
   WhatsAppBusinessPhoneNumberId,
-  WhatsAppProviderMessageId,
-} from "../../src/shell/channels/whatsapp/model";
-
-/** Private Core-to-User-coordinator text work. Never a public bearer or a Queue envelope. */
-export const WhatsAppTurnAdmission = Schema.Struct({
-  userId: UserId,
-  portfolioId: WhatsAppBusinessPortfolioId,
-  bsuid: WhatsAppBusinessScopedUserId,
-  ...WhatsAppInboundEvidence.fields,
-  text: TranscriptText,
-});
-export type WhatsAppTurnAdmission = typeof WhatsAppTurnAdmission.Type;
-
-/** Internal, authenticated Core-to-User-coordinator status projection; no text or bearer. */
-export const WhatsAppStatusAdmission = Schema.Struct({
-  userId: UserId,
-  correlationToken: HostedDeliveryCorrelationToken,
-  businessPhoneNumberId: WhatsAppBusinessPhoneNumberId,
-  providerMessageId: WhatsAppProviderMessageId,
-  outcome: Schema.Literals(["sent", "delivered", "failed"]),
-  occurredAtMs: Schema.Int,
-  receivedAtMs: Schema.Int,
-});
-export type WhatsAppStatusAdmission = typeof WhatsAppStatusAdmission.Type;
+  type WhatsAppProviderMessageId,
+} from "../../../src/shell/channels/whatsapp/contract";
+import {
+  hostedChannelContinuationQuery,
+  hostedChannelUserEntryQuery,
+} from "../../agent/operations";
+import { prepareWhatsAppIdentity } from "../../identity/operations";
+import { type WhatsAppPendingWork, type WhatsAppTurnAdmission } from "../contract";
 
 /** Well inside the 30-day Turn evidence retention, even after delayed delivery. */
 export const hostedInboundReplayWindowMs = 604_800_000;
@@ -57,7 +39,7 @@ export const findWhatsAppDeliveryUser = ({
   db: D1Database;
   correlationToken: HostedDeliveryCorrelationToken;
   businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
-}>): Effect.Effect<Option.Option<UserId>, Cause.UnknownError> =>
+}>): Effect.Effect<Option.Option<UserId>, Cause.UnknownError | Schema.SchemaError> =>
   Effect.gen(function* () {
     const row = yield* Effect.tryPromise(() =>
       db
@@ -66,7 +48,9 @@ export const findWhatsAppDeliveryUser = ({
         .bind(correlationToken, businessPhoneNumberId)
         .first()
     );
-    return Option.map(Schema.decodeUnknownOption(UserRow)(row), ({ user_id }) => user_id);
+    if (row === null) return Option.none();
+    const decoded = yield* Schema.decodeUnknownEffect(UserRow)(row);
+    return Option.some(decoded.user_id);
   });
 /** Window evidence never authorizes the User or the Turn; it only refuses late free-form sends. */
 export const isWhatsAppWindowOpen = ({
@@ -136,13 +120,13 @@ export const findWhatsAppReplay = ({
   text: TranscriptText;
 }>): Effect.Effect<"fresh" | "replay" | "conflict", Cause.UnknownError | Schema.SchemaError> =>
   Effect.gen(function* () {
+    const entries = hostedChannelUserEntryQuery(userId);
     const row = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT i.user_id, i.bsuid, e.text FROM hosted_whatsapp_inbound AS i
-        LEFT JOIN transcript_entries AS e ON e.turn_id = i.turn_id AND e.user_id = i.user_id
-          AND e.kind = 'user'
+        LEFT JOIN (${entries.sql}) AS e ON e.turn_id = i.turn_id AND e.user_id = i.user_id
         WHERE i.portfolio_id = ? AND i.message_id = ?`)
-        .bind(portfolioId, messageId)
+        .bind(...entries.params, portfolioId, messageId)
         .first()
     );
     if (row === null) return "fresh";
@@ -185,10 +169,11 @@ export const readWhatsAppPendingWork = ({
   userId,
   turnId,
 }: Readonly<{ db: D1Database; userId: UserId; turnId: TranscriptTurnId }>): Effect.Effect<
-  Option.Option<typeof PendingWork.Type>,
-  Cause.UnknownError
+  Option.Option<WhatsAppPendingWork>,
+  Cause.UnknownError | Schema.SchemaError
 > =>
   Effect.gen(function* () {
+    const continuation = hostedChannelContinuationQuery(userId);
     const raw = yield* Effect.tryPromise(() =>
       prepareWhatsAppIdentity({
         db,
@@ -196,18 +181,27 @@ export const readWhatsAppPendingWork = ({
         statement: {
           sql: `SELECT
       t.started_at_ms, t.hosted_session_id, i.portfolio_id, i.bsuid,
-      i.business_phone_number_id, e.text,
+      i.business_phone_number_id, t.user_text AS text,
       EXISTS (SELECT 1 FROM identity_associations AS w
         WHERE w.userId = t.user_id AND w.businessPortfolioId = i.portfolio_id AND w.businessScopedUserId = i.bsuid)
         AS association_current
-      FROM hosted_turns AS t JOIN hosted_whatsapp_inbound AS i ON i.turn_id = t.id
+      FROM (${continuation.sql}) AS t JOIN hosted_whatsapp_inbound AS i ON i.turn_id = t.id
       JOIN hosted_whatsapp_outbox AS o ON o.turn_id = t.id AND o.user_id = t.user_id
-      JOIN transcript_entries AS e ON e.turn_id = t.id AND e.user_id = t.user_id AND e.kind = 'user'
       WHERE t.id = ? AND t.user_id = ? AND t.status = 'pending'
         AND NOT EXISTS (SELECT 1 FROM hosted_whatsapp_delivery WHERE turn_id = t.id)`,
-          params: [turnId, userId],
+          params: [...continuation.params, turnId, userId],
         },
       }).first()
     );
-    return Schema.decodeUnknownOption(PendingWork)(raw);
+    if (raw === null) return Option.none();
+    const row = yield* Schema.decodeUnknownEffect(PendingWork)(raw);
+    return Option.some({
+      startedAtMs: row.started_at_ms,
+      sessionId: row.hosted_session_id,
+      portfolioId: row.portfolio_id,
+      bsuid: row.bsuid,
+      businessPhoneNumberId: row.business_phone_number_id,
+      associationCurrent: row.association_current === 1,
+      text: row.text,
+    });
   });

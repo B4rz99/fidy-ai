@@ -73,6 +73,71 @@ export default {
       to: { path: "^cloudflare/memory/runtime\\.ts$" },
     },
     {
+      name: "foreign-module-imports-cloudflare-agent-internal",
+      severity: "error",
+      comment:
+        "The Turn owner keeps exact Transcript and lifecycle projection implementation private; channel peers consume published operations (#608).",
+      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/agent/" },
+      to: { path: "^cloudflare/agent/internal/" },
+    },
+    {
+      name: "foreign-module-imports-cloudflare-whatsapp-internal",
+      severity: "error",
+      comment:
+        "WhatsApp owns replay, delivery, provider evidence and retention; peers use bounded published operations (#608).",
+      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/whatsapp/" },
+      to: { path: "^cloudflare/whatsapp/internal/" },
+    },
+    {
+      name: "cloudflare-imports-portable-whatsapp-internal",
+      severity: "error",
+      comment:
+        "Native channel work uses authenticated portable operations, never Kapso adapters or private transcript projections (#608).",
+      from: { path: "^cloudflare/" },
+      to: { path: "^src/shell/channels/whatsapp/internal/" },
+    },
+    {
+      name: "tooling-imports-whatsapp-internal",
+      severity: "error",
+      comment:
+        "Operational tools cannot acquire private Kapso transport, fixtures or delivery implementation (#608).",
+      from: { path: "^(scripts|tools)/" },
+      to: { path: "^src/shell/channels/whatsapp/internal/" },
+    },
+    {
+      name: "whatsapp-interface-reexports-internal",
+      severity: "error",
+      comment:
+        "WhatsApp publication declares bounded owner behavior without laundering private implementations (#608).",
+      from: { path: "^cloudflare/whatsapp/(contract|operations|runtime)\\.ts$" },
+      to: { path: "^cloudflare/whatsapp/internal/", dependencyTypes: ["export"] },
+    },
+    {
+      name: "whatsapp-contract-imports-implementation",
+      severity: "error",
+      comment:
+        "WhatsApp declarations carry safe channel evidence, never transport or persistence implementation (#608).",
+      from: { path: "^cloudflare/whatsapp/contract\\.ts$" },
+      to: { path: "^cloudflare/whatsapp/(internal/|operations\\.ts$|runtime\\.ts$)" },
+    },
+    {
+      name: "whatsapp-internal-imports-outward-interface",
+      severity: "error",
+      comment:
+        "WhatsApp internals depend inward on declarations, not outward on published operations or runtime (#608).",
+      from: { path: "^cloudflare/whatsapp/internal/" },
+      to: { path: "^cloudflare/whatsapp/(operations|runtime)\\.ts$" },
+    },
+    {
+      name: "whatsapp-operations-imports-runtime",
+      severity: "error",
+      comment:
+        "WhatsApp lifecycle operations cannot acquire Worker or queue construction authority (#608).",
+      from: { path: "^cloudflare/whatsapp/operations\\.ts$" },
+      to: { path: "^cloudflare/whatsapp/runtime\\.ts$" },
+    },
+
+    {
       name: "foreign-module-imports-cloudflare-ingestion-internal",
       severity: "error",
       comment:

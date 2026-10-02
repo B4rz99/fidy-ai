@@ -1,14 +1,10 @@
-import assert from "node:assert/strict";
-import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { expect, it } from "@effect/vitest";
 import { Cause, DateTime, Effect, Exit, Redacted, Schema } from "effect";
+import assert from "node:assert/strict";
+import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { expectNotInspected } from "~/shell/testing/credential-failure";
-import {
-  InvalidKapsoSignature,
-  decodeKapsoDisclosureLifecycleWebhook,
-  decodeKapsoHostedLifecycleWebhook,
-  maxKapsoWebhookBytes,
-} from "./kapso-webhook";
+import { InvalidWhatsAppSignature, maxWhatsAppWebhookBytes } from "./contract";
+import { authenticateDisclosureStatus, authenticateHostedStatus } from "./operations";
 
 const secret = `kapso-webhook-secret-${"f1d7c0de".repeat(2)}`;
 const correlationToken = "11111111-1111-4111-8111-111111111111";
@@ -46,7 +42,7 @@ const decode = (
   eventName: string,
   statuses: ReadonlyArray<unknown>,
   override: DecodeOverride = { _tag: "None" }
-): ReturnType<typeof decodeKapsoDisclosureLifecycleWebhook> => {
+): ReturnType<typeof authenticateDisclosureStatus> => {
   const webhookSecret = override._tag === "Secret" ? override.value : secret;
   const messageId = override._tag === "MessageId" ? override.value : undefined;
   const body = override._tag === "Body" ? override.value : encodedBody(statuses, messageId);
@@ -54,7 +50,7 @@ const decode = (
     override._tag === "Signature"
       ? override.value
       : new Bun.CryptoHasher("sha256", webhookSecret).update(body).digest("hex");
-  return decodeKapsoDisclosureLifecycleWebhook({
+  return authenticateDisclosureStatus({
     rawBody: body,
     secret: Redacted.make(webhookSecret),
     signature,
@@ -68,7 +64,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const body = encodedBody([status("delivered", "1775217960")]);
-      const evidence = yield* decodeKapsoHostedLifecycleWebhook({
+      const evidence = yield* authenticateHostedStatus({
         rawBody: body,
         secret: Redacted.make(secret),
         signature: new Bun.CryptoHasher("sha256", secret).update(body).digest("hex"),
@@ -79,7 +75,7 @@ it.effect(
       expect(evidence.messageEvidence.providerMessageId).toBe(providerMessageId);
       expect(evidence.correlationToken).toBe(correlationToken);
       const forged = yield* Effect.exit(
-        decodeKapsoHostedLifecycleWebhook({
+        authenticateHostedStatus({
           rawBody: body,
           secret: Redacted.make(secret),
           signature: "00".repeat(32),
@@ -89,7 +85,7 @@ it.effect(
       );
       expect(Exit.isFailure(forged)).toBe(true);
       const sent = encodedBody([status("sent", "1775217960")]);
-      const sentEvidence = yield* decodeKapsoHostedLifecycleWebhook({
+      const sentEvidence = yield* authenticateHostedStatus({
         rawBody: sent,
         secret: Redacted.make(secret),
         signature: new Bun.CryptoHasher("sha256", secret).update(sent).digest("hex"),
@@ -98,7 +94,7 @@ it.effect(
       });
       expect(sentEvidence.outcome).toBe("sent");
       const mismatchedEvent = yield* Effect.exit(
-        decodeKapsoHostedLifecycleWebhook({
+        authenticateHostedStatus({
           rawBody: sent,
           secret: Redacted.make(secret),
           signature: new Bun.CryptoHasher("sha256", secret).update(sent).digest("hex"),
@@ -223,19 +219,19 @@ it.effect("keeps the webhook secret out of authentication failures", () =>
       { _tag: "Signature", value: "0".repeat(64) }
     ).pipe(Effect.flip);
 
-    expect(failure._tag).toBe("InvalidKapsoSignature");
+    expect(failure._tag).toBe("InvalidWhatsAppSignature");
     expectNotInspected(failure, secret);
   })
 );
 
 it.effect("rejects oversized lifecycle bytes before decoding", () =>
   Effect.gen(function* () {
-    const body = new Uint8Array(maxKapsoWebhookBytes + 1);
+    const body = new Uint8Array(maxWhatsAppWebhookBytes + 1);
     const failure = yield* decode("whatsapp.message.delivered", [], {
       _tag: "Body",
       value: body,
     }).pipe(Effect.flip);
-    expect(failure._tag).toBe("KapsoPayloadTooLarge");
+    expect(failure._tag).toBe("WhatsAppPayloadTooLarge");
   })
 );
 
@@ -249,8 +245,8 @@ const vectorSignature = "5b1babb145b0a2550a9788dceaf627582c55be37590c7f3c8e38e42
 const decodeVector = (
   signature: string,
   rawBody: Uint8Array = vectorBody
-): ReturnType<typeof decodeKapsoDisclosureLifecycleWebhook> =>
-  decodeKapsoDisclosureLifecycleWebhook({
+): ReturnType<typeof authenticateDisclosureStatus> =>
+  authenticateDisclosureStatus({
     rawBody,
     secret: Redacted.make(vectorSecret),
     signature,
@@ -281,7 +277,7 @@ it.effect("authenticates a known HMAC-SHA256 vector and rejects malformed signat
           onFailure: (cause) => Exit.fail(Cause.squash(cause)),
           onSuccess: Exit.succeed,
         }),
-        Exit.fail(new InvalidKapsoSignature())
+        Exit.fail(new InvalidWhatsAppSignature())
       );
     }
     assert.deepStrictEqual(
@@ -294,7 +290,7 @@ it.effect("authenticates a known HMAC-SHA256 vector and rejects malformed signat
           onSuccess: Exit.succeed,
         }
       ),
-      Exit.fail(new InvalidKapsoSignature())
+      Exit.fail(new InvalidWhatsAppSignature())
     );
   })
 );

@@ -14,6 +14,7 @@ import {
   defaultCompactionMaximumTokens,
   shouldCompactConversation,
 } from "@fidy/server/agent-runtime";
+import { atomicBatchOperation, operationCatalog } from "@fidy/server/canonical-runtime";
 import {
   HostedInferenceError,
   type HostedInferenceService,
@@ -22,13 +23,36 @@ import {
   type PreparedHostedText,
 } from "@fidy/server/hosted-inference";
 import { Cause, DateTime, Duration, Effect, Exit, Option, Schema } from "effect";
-import { atomicBatchOperation, operationCatalog } from "@fidy/server/canonical-runtime";
-import { decideOperationAccess } from "../../src/shell/_shared/operation-policy";
 import {
   maximumHostedTurnIterations,
   maximumModelRoundMillis,
   maximumToolCallsPerTurn,
 } from "../../src/shell/_shared/hosted-turn-bounds";
+import { decideOperationAccess } from "../../src/shell/_shared/operation-policy";
+import {
+  HostedTurnProgressRequest,
+  HostedTurnReceipt,
+  HostedTurnRequest,
+} from "../../src/shell/agent/hosted-turn-api";
+import {
+  type HostedDeliveryCorrelationToken,
+  type WhatsAppProviderMessageId,
+} from "../../src/shell/channels/whatsapp/contract";
+import { type TransactionSubject, transactionNow } from "../canonical-work/operations";
+import { canonicalMutationAdapter } from "../mutations/canonical-mutation-registry";
+import { type HostedCommitFence } from "../mutations/canonical-mutation-unit";
+import { newId } from "../secret-material/operations";
+import type { WhatsAppUnavailable } from "../whatsapp/contract";
+import { type WhatsAppHostedSubject, type WhatsAppInboundEvidence } from "../whatsapp/contract";
+import {
+  isWhatsAppWindowOpen,
+  readWhatsAppPendingWork,
+  recordWhatsAppSend,
+  rejectUnstartedWhatsAppDelivery,
+  stageWhatsAppDelivery,
+  startWhatsAppSend,
+} from "../whatsapp/operations";
+import { type HostedSubject, isWhatsAppHosted } from "./hosted-authority";
 import { executeHostedQuery, isInstalledHostedQuery } from "./hosted-canonical-query";
 import {
   type ConfirmationRow,
@@ -37,32 +61,6 @@ import {
   isHostedConfirmationAttempt,
   issueHostedConfirmation,
 } from "./hosted-confirmation";
-import { canonicalMutationAdapter } from "../mutations/canonical-mutation-registry";
-import type { HostedCommitFence } from "../mutations/canonical-mutation-unit";
-import {
-  HostedTurnProgressRequest,
-  HostedTurnReceipt,
-  HostedTurnRequest,
-} from "../../src/shell/agent/hosted-turn-api";
-import { type TransactionSubject, transactionNow } from "../canonical-work/operations";
-import {
-  type HostedSubject,
-  type WhatsAppHostedSubject,
-  type WhatsAppInboundEvidence,
-  isWhatsAppHosted,
-} from "./hosted-authority";
-import {
-  recordWhatsAppSend,
-  rejectUnstartedWhatsAppDelivery,
-  stageWhatsAppDelivery,
-  startWhatsAppSend,
-} from "./whatsapp-delivery";
-import { isWhatsAppWindowOpen, readWhatsAppPendingWork } from "./whatsapp-turn";
-import type {
-  HostedDeliveryCorrelationToken,
-  WhatsAppProviderMessageId,
-} from "../../src/shell/channels/whatsapp/model";
-import { newId } from "../secret-material/operations";
 import {
   type HostedAdmissionChannel,
   type HostedTurnOutcome,
@@ -255,28 +253,22 @@ export const resumeWhatsAppTurn = ({
     Effect.gen(function* () {
       const work = yield* readWhatsAppPendingWork({ db, userId, turnId });
       if (Option.isNone(work)) return new Response(null, { status: 200 });
-      const {
-        started_at_ms,
-        hosted_session_id,
-        portfolio_id,
-        bsuid,
-        business_phone_number_id,
-        text,
-      } = work.value;
+      const { startedAtMs, sessionId, portfolioId, bsuid, businessPhoneNumberId, text } =
+        work.value;
       const subject: WhatsAppHostedSubject = {
         _tag: "WhatsAppHosted",
         userId,
-        portfolioId: portfolio_id,
+        portfolioId,
         bsuid,
       };
       const now = transactionNow();
       const snapshot = yield* readHostedSnapshot({ db, subject, now });
-      if (Option.isNone(snapshot) || work.value.association_current !== 1) {
+      if (Option.isNone(snapshot) || !work.value.associationCurrent) {
         yield* finishHostedTurn({
           db,
           userId,
           turnId,
-          startedAtMs: started_at_ms,
+          startedAtMs,
           result: { _tag: "Interrupted" },
           subject,
           now,
@@ -287,11 +279,11 @@ export const resumeWhatsAppTurn = ({
         prepareHostedWork({
           db,
           subject,
-          selection: { id: hosted_session_id },
+          selection: { id: sessionId },
           snapshot: snapshot.value,
           userId,
           activeTurnId: turnId,
-          startedAtMs: started_at_ms,
+          startedAtMs,
           text,
           inference,
           signal,
@@ -305,7 +297,7 @@ export const resumeWhatsAppTurn = ({
             db,
             userId,
             turnId,
-            startedAtMs: started_at_ms,
+            startedAtMs,
             result: { _tag: "Failed", reason: "HostedInferenceFailed" },
             subject,
             now: transactionNow(),
@@ -321,9 +313,9 @@ export const resumeWhatsAppTurn = ({
           subject,
           bucket: Option.none(),
           executeMutation: Option.none(),
-          startedAtMs: started_at_ms,
+          startedAtMs,
           prepared: prepared.value,
-          deliver: deliver({ bsuid, businessPhoneNumberId: business_phone_number_id }),
+          deliver: deliver({ bsuid, businessPhoneNumberId }),
           signal,
           scheduleRecovery,
         })
@@ -722,7 +714,10 @@ const recoverPending = ({
   userId: UserId;
   pending: Option.Option<Parameters<typeof recoverHostedTurn>[0]["turn"]>;
   now: number;
-}>): Effect.Effect<"clear" | "awaiting" | "error", Cause.UnknownError | Schema.SchemaError> => {
+}>): Effect.Effect<
+  "clear" | "awaiting" | "error",
+  Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable
+> => {
   if (Option.isNone(pending)) return Effect.succeed("clear");
   if (
     pending.value.proposed_at_ms !== null &&
@@ -782,7 +777,7 @@ const executeAdmittedTurn = ({
         active: PreparedHostedText,
         iteration: number,
         usedCalls: number
-      ): Effect.Effect<Response, Cause.UnknownError | Schema.SchemaError> =>
+      ): Effect.Effect<Response, Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable> =>
         Effect.gen(function* () {
           if (iteration > maximumHostedTurnIterations) {
             yield* finish({ _tag: "Failed", reason: "HostedInferenceFailed" });

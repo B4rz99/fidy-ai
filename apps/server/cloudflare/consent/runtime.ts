@@ -1,11 +1,5 @@
-import type { Effect } from "effect";
-import type { ConsentIngressEnvironment } from "./contract";
-import { receiveIngress, recoverDisclosures, sweepExpired } from "./internal/ingress";
-
-/** Construct one authenticated, bounded ingress with native provider transport and telemetry. */
-export const receiveConsentWebhook = (
-  environment: ConsentIngressEnvironment
-): ((request: Request) => Effect.Effect<Response>) => receiveIngress(environment);
+import { type Effect } from "effect";
+import { recoverDisclosures, sweepExpired } from "./internal/ingress";
 
 /** Resume only disclosures that never claimed their irreversible provider-send boundary. */
 export const recoverPendingDisclosures = (

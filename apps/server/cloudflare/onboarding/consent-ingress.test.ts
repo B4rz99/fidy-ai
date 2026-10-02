@@ -1,18 +1,19 @@
-import { Miniflare } from "miniflare";
-import { applyTestMigration } from "../d1-test-fixture";
+import { maxWhatsAppWebhookBytes } from "@fidy/server/consent-contract";
+import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { type Cause, Clock, DateTime, Effect, Equal, Exit, Option, Schema } from "effect";
+import { Miniflare } from "miniflare";
+import { afterEach, expect, it, vi } from "vitest";
 import { recoverPendingDisclosures, sweepExpiredConsent } from "../consent/runtime";
-import { WhatsAppStatusAdmission, WhatsAppTurnAdmission } from "../agent/whatsapp-turn";
+import { applyTestMigration } from "../d1-test-fixture";
 import {
   dispatchOnboardingEmail,
   receiveOnboardingEmail,
   runOnboardingEmailWorkflow,
 } from "../email-authentication/runtime";
-import { afterEach, expect, it, vi } from "vitest";
+import { WhatsAppStatusAdmission, WhatsAppTurnAdmission } from "../whatsapp/contract";
+
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
-import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
-import { maxKapsoWebhookBytes } from "@fidy/server/consent-contract";
 
 const signWebhook = (secret: string, body: string | Uint8Array): Promise<string> =>
   crypto.subtle
@@ -1482,7 +1483,7 @@ it("rejects an oversized streamed webhook before admission or provider work", ()
       const provider = vi.fn(() => Promise.reject(new Error("provider must not be called")));
       vi.stubGlobal("fetch", provider);
       expect(
-        (yield* Effect.tryPromise(() => send("x".repeat(maxKapsoWebhookBytes + 1)))).status
+        (yield* Effect.tryPromise(() => send("x".repeat(maxWhatsAppWebhookBytes + 1)))).status
       ).toBe(413);
       expect(
         (yield* Effect.tryPromise(() =>

@@ -611,3 +611,36 @@ The existing hosted-context count limit does not become a new canonical Memory l
 remains limited to the intended Memory and model purposes and excluded from logs, error contracts,
 Audit and SuggestedOperations. Existing request telemetry is sufficient for this ownership-only
 refactor; it adds no external workflow, persistence substrate or telemetry payload.
+
+### WhatsApp owner composition
+
+WhatsApp publishes bounded authenticated channel evidence and closed delivery failures through
+`shell/channels/whatsapp/contract.ts`, raw-byte authentication through `operations.ts`, and explicit
+sender construction through `runtime.ts`. Kapso request/response projection, streamed bounds,
+provider failure classification, lifecycle decoding, fixtures and attempt details remain private.
+Consent owns its fixed disclosure and onboarding-status content, composing the channel sender only
+at its own runtime boundary.
+
+The native WhatsApp runtime owns the authenticated webhook, identity-only Queue handoff and its
+bounded delivery projection. It passes only authenticated typed text and immutable delivery
+metadata to Consent's pre-User ingress operations. Identity alone resolves stable Users; every
+protected action rechecks the exact User/portfolio/BSUID association and applicable Consent.
+Voice transcript material remains external channel data, never independent authority.
+
+Native operations own replay classification, current conversation windows, one-time send claims,
+send ambiguity, exact signed delivery, recovery, retention and bounded operational observation.
+The Turn owner composes WhatsApp-owned statements and live completion/interruption guards with its
+existing atomic Transcript unit. It never reads channel tables or decodes delivery rows. A signed
+status for another User is refused before retaining evidence or changing an attempt. Send acceptance
+never completes a Turn, ambiguous sends are never blindly retried, and abandonment after a possible
+send remains truthfully unconfirmed. No runtime, provider configuration, launch decision, external
+workflow or telemetry purpose changes; the existing metadata-only channel observations remain.
+
+Turn-owned native operations provide explicit User-scoped lifecycle, exact User-entry replay and
+continuation projections for channel composition. Private operational observation exposes only the
+minimal lifecycle metadata needed by bounded health and identity-only dispatch. WhatsApp never reads
+Turn or Transcript tables directly, and its public asynchronous operations collapse persistence and
+decode failures into the closed WhatsAppUnavailable outcome while preserving interruption. The
+published pre-User Consent operation represents typed text only; voice material cannot become a
+Consent or credential command. Two-User Queue substitution evidence proves that a mismatched
+User/Turn pair cannot invoke inference or delivery or change either User’s retained state.

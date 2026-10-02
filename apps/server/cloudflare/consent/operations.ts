@@ -1,20 +1,20 @@
-import { acceptedCallerProjection, operationalProjection } from "./internal/pre-user-projections";
-import { withdrawalProjection } from "./internal/withdrawal-projection";
+import { type ConsentProtectedStatement } from "@fidy/server/consent-contract";
 import { protectConsentStatement } from "@fidy/server/consent-operations";
-import type { ConsentProtectedStatement } from "@fidy/server/consent-contract";
-import { onboardingEvidence, revocationEvidence } from "./internal/evidence";
-import { performEgress } from "./internal/egress";
-import type { Effect } from "effect";
-import type {
-  ConsentEgressAction,
-  ConsentEgressRefused,
-  ConsentRevocationInput,
-  ConsentStanding,
-  ConsentStatus,
-  ConsentUnavailable,
-  OnboardingConsentInput,
+import { type Effect } from "effect";
+import {
+  type ConsentEgressAction,
+  type ConsentEgressRefused,
+  type ConsentRevocationInput,
+  type ConsentStanding,
+  type ConsentStatus,
+  type ConsentUnavailable,
+  type OnboardingConsentInput,
 } from "./contract";
+import { performEgress } from "./internal/egress";
+import { onboardingEvidence, revocationEvidence } from "./internal/evidence";
+import { acceptedCallerProjection, operationalProjection } from "./internal/pre-user-projections";
 import { loadStanding, loadStatus } from "./internal/standing";
+import { withdrawalProjection } from "./internal/withdrawal-projection";
 
 /**
  * Read the exact historical Consent basis for the explicit User. This is admission evidence,

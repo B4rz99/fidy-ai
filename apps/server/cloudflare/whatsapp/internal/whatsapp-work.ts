@@ -1,12 +1,8 @@
-import { type Cause, Clock, Effect, Exit, Option, Schema } from "effect";
 import { TranscriptTurnId, UserId } from "@fidy/server/agent-runtime";
+import { type Cause, Clock, Effect, Exit, Option, Schema } from "effect";
+import { hostedChannelTurnObservation } from "../../agent/operations";
+import { WhatsAppWork } from "../contract";
 
-/** Identity only: exact inbound text stays in the User Transcript, never in Queue. */
-export const WhatsAppWork = Schema.TaggedStruct("HostedWhatsAppWork", {
-  userId: UserId,
-  turnId: TranscriptTurnId,
-});
-export type WhatsAppWork = typeof WhatsAppWork.Type;
 const outboxLimit = 32;
 const offerCooldownMs = 60_000;
 const serverFailureStatus = 500;
@@ -27,7 +23,7 @@ export const dispatchWhatsAppWork = ({
     const raw = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT o.user_id, o.turn_id
-      FROM hosted_whatsapp_outbox AS o JOIN hosted_turns AS t ON t.id = o.turn_id
+      FROM hosted_whatsapp_outbox AS o JOIN (${hostedChannelTurnObservation()}) AS t ON t.id = o.turn_id
       WHERE t.status = 'pending' AND (o.offered_at_ms IS NULL OR o.offered_at_ms < ?)
         AND (? IS NULL OR o.user_id = ?)
       ORDER BY o.created_at_ms LIMIT ?`)
@@ -84,32 +80,30 @@ export const receiveWhatsAppWork = ({
     }>
   >;
   coordinator: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
-}>): Promise<void> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      for (const message of messages) {
-        const work = Schema.decodeUnknownOption(WhatsAppWork)(message.body);
-        if (Option.isNone(work)) {
-          message.ack();
-          continue;
-        }
-        const owner = coordinator.getByName(work.value.userId);
-        const body = yield* Schema.encodeEffect(Schema.fromJsonString(WhatsAppWork))(work.value);
-        const response = yield* Effect.exit(
-          Effect.tryPromise(() =>
-            owner.fetch(
-              new Request("https://coordinator.internal/hosted-turn/whatsapp/work", {
-                method: "POST",
-                body,
-              })
-            )
-          )
-        );
-        if (Exit.isFailure(response) || response.value.status >= serverFailureStatus) {
-          message.retry();
-          continue;
-        }
+}>): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    for (const message of messages) {
+      const work = Schema.decodeUnknownOption(WhatsAppWork)(message.body);
+      if (Option.isNone(work)) {
         message.ack();
+        continue;
       }
-    })
-  );
+      const owner = coordinator.getByName(work.value.userId);
+      const body = yield* Schema.encodeEffect(Schema.fromJsonString(WhatsAppWork))(work.value);
+      const response = yield* Effect.exit(
+        Effect.tryPromise(() =>
+          owner.fetch(
+            new Request("https://coordinator.internal/hosted-turn/whatsapp/work", {
+              method: "POST",
+              body,
+            })
+          )
+        )
+      );
+      if (Exit.isFailure(response) || response.value.status >= serverFailureStatus) {
+        message.retry();
+        continue;
+      }
+      message.ack();
+    }
+  });

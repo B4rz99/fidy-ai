@@ -1,6 +1,4 @@
-import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import {
-  Data,
   DateTime,
   Effect,
   Array as EffectArray,
@@ -22,51 +20,35 @@ import { TranscriptText } from "~/core/transcript/model";
 import {
   DisclosureDeliveryCorrelationToken,
   type DisclosureDeliveryFailureReason,
-} from "./disclosure-model";
-import { classifyKapsoMetaFailureCode } from "./kapso-failure";
-import {
   HostedDeliveryCorrelationToken,
+  InvalidWhatsAppPayload,
+  InvalidWhatsAppSignature,
+  WhatsAppBatchTooLarge,
   WhatsAppBusinessPhoneNumberId,
   WhatsAppDeliveryKey,
+  type WhatsAppDisclosureLifecycleEvidence,
+  type WhatsAppHostedLifecycleEvidence,
   type WhatsAppIdentityChangeEvent,
   type WhatsAppInboundContent,
   type WhatsAppInboundEvent,
   WhatsAppMediaId,
-  type WhatsAppMessageEvidence,
+  WhatsAppPayloadTooLarge,
   WhatsAppProviderMessageId,
   type WhatsAppWebhookReceipt,
-} from "./model";
-
-/** Maximum raw Kapso delivery accepted before payload decoding. */
-export const maxKapsoWebhookBytes = 1_048_576;
-/** Maximum lead of a signed Kapso event clock over receipt; Consent replay windows must reserve it. */
-export const maxKapsoFutureTimestampMinutes = 5;
-/** Kapso's documented maximum number of events in one buffered delivery. */
-export const maxKapsoDeliveryEvents = 100;
+  maxWhatsAppDeliveryEvents,
+  maxWhatsAppFutureTimestampMinutes,
+  maxWhatsAppWebhookBytes,
+} from "~/shell/channels/whatsapp/contract";
+import { UnknownJsonString } from "~/shell/schema-codecs/contract";
+import { classifyKapsoMetaFailureCode } from "./kapso-failure";
 
 const hmacSha256Bytes = 32;
 const minimumWebhookSecretLength = 16;
 const millisecondsPerSecond = 1_000;
-
-/** Signature is absent, malformed, or does not authenticate the exact raw bytes. */
-export class InvalidKapsoSignature extends Data.TaggedError("InvalidKapsoSignature")<{}> {}
-/** Raw webhook bytes exceed Fidy's fixed launch resource bound. */
-export class KapsoPayloadTooLarge extends Data.TaggedError("KapsoPayloadTooLarge")<{}> {}
-/** Authentic JSON does not match the supported Kapso v2 message projection. */
-export class InvalidKapsoPayload extends Data.TaggedError("InvalidKapsoPayload")<{
-  readonly cause: unknown;
-}> {
-  override get message(): string {
-    return "The authentic Kapso payload did not match the supported projection";
-  }
-}
-
-const invalidKapsoPayload = (cause: unknown): InvalidKapsoPayload =>
-  new InvalidKapsoPayload({ cause });
-const invalidKapsoInvariant = (reason: string): InvalidKapsoPayload =>
-  invalidKapsoPayload(new Error(reason));
-/** Authentic buffered delivery exceeds Kapso's documented event maximum. */
-export class KapsoBatchTooLarge extends Data.TaggedError("KapsoBatchTooLarge")<{}> {}
+const invalidKapsoPayload = (_cause: unknown): InvalidWhatsAppPayload =>
+  new InvalidWhatsAppPayload();
+const invalidKapsoInvariant = (_reason: string): InvalidWhatsAppPayload =>
+  new InvalidWhatsAppPayload();
 
 const rawMessageFields = {
   id: WhatsAppProviderMessageId,
@@ -119,24 +101,6 @@ const RawDisclosureLifecycleEvent = Schema.Struct({
   }),
   phone_number_id: WhatsAppBusinessPhoneNumberId,
 });
-
-type KapsoDisclosureLifecycleEvidenceBase = Readonly<{
-  correlationToken: DisclosureDeliveryCorrelationToken;
-  messageEvidence: WhatsAppMessageEvidence;
-  occurredAt: DateTime.Utc;
-}>;
-
-/** Authenticated, metadata-only lifecycle evidence projected from a Kapso webhook. */
-export type KapsoDisclosureLifecycleEvidence = KapsoDisclosureLifecycleEvidenceBase &
-  (
-    | Readonly<{ readonly outcome: "sent" }>
-    | Readonly<{ readonly outcome: "accepted" }>
-    | Readonly<{
-        readonly outcome: "failed";
-        readonly reason: DisclosureDeliveryFailureReason;
-        readonly automaticRetry: boolean;
-      }>
-  );
 
 const RawMetaEnvelope = Schema.Struct({
   object: Schema.Literal("whatsapp_business_account"),
@@ -194,12 +158,12 @@ const authenticateAndDecodeKapsoBody = Effect.fn(function* (input: {
   readonly secret: Redacted.Redacted<string>;
   readonly signature: string;
 }) {
-  if (input.rawBody.byteLength > maxKapsoWebhookBytes) {
-    return yield* new KapsoPayloadTooLarge();
+  if (input.rawBody.byteLength > maxWhatsAppWebhookBytes) {
+    return yield* new WhatsAppPayloadTooLarge();
   }
   const secret = Redacted.value(input.secret);
   if (secret.length < minimumWebhookSecretLength) {
-    return yield* new InvalidKapsoSignature();
+    return yield* new InvalidWhatsAppSignature();
   }
   const expected = yield* Effect.tryPromise({
     try: () =>
@@ -213,10 +177,10 @@ const authenticateAndDecodeKapsoBody = Effect.fn(function* (input: {
         )
         .then((key) => globalThis.crypto.subtle.sign("HMAC", key, Uint8Array.from(input.rawBody)))
         .then((digest) => new Uint8Array(digest)),
-    catch: () => new InvalidKapsoSignature(),
+    catch: () => new InvalidWhatsAppSignature(),
   });
   if (!authenticatesDigest(input.signature, expected)) {
-    return yield* new InvalidKapsoSignature();
+    return yield* new InvalidWhatsAppSignature();
   }
   return yield* Schema.decodeEffect(UnknownJsonString)(
     new TextDecoder().decode(input.rawBody)
@@ -236,7 +200,7 @@ const parseOccurredAt = Effect.fn(function* (timestamp: string, receivedAt: Date
   if (
     DateTime.Order(
       occurredAt,
-      DateTime.add(receivedAt, { minutes: maxKapsoFutureTimestampMinutes })
+      DateTime.add(receivedAt, { minutes: maxWhatsAppFutureTimestampMinutes })
     ) > 0
   ) {
     return yield* invalidKapsoInvariant("Kapso timestamp exceeded the future-time tolerance");
@@ -316,8 +280,8 @@ const projectEvent = Effect.fn(function* (
  * must satisfy the Business Portfolio schema, and is projected into every caller rather than read
  * from the payload.
  * `receivedAt` is Fidy's receipt clock used for the five-minute future-timestamp tolerance. Projects
- * at most 100 supported v2 events. Fails with InvalidKapsoSignature,
- * KapsoPayloadTooLarge, KapsoBatchTooLarge, or InvalidKapsoPayload and reveals no decoded content
+ * at most 100 supported v2 events. Fails with InvalidWhatsAppSignature,
+ * WhatsAppPayloadTooLarge, WhatsAppBatchTooLarge, or InvalidWhatsAppPayload and reveals no decoded content
  * when authentication fails.
  */
 export const decodeKapsoWebhook = Effect.fn(function* (input: {
@@ -339,8 +303,8 @@ export const decodeKapsoWebhook = Effect.fn(function* (input: {
     Effect.mapError(invalidKapsoPayload)
   );
   const rawEvents = "data" in envelope ? envelope.data : [envelope];
-  if (rawEvents.length > maxKapsoDeliveryEvents) {
-    return yield* new KapsoBatchTooLarge();
+  if (rawEvents.length > maxWhatsAppDeliveryEvents) {
+    return yield* new WhatsAppBatchTooLarge();
   }
   const events = yield* Effect.forEach(
     rawEvents,
@@ -352,18 +316,6 @@ export const decodeKapsoWebhook = Effect.fn(function* (input: {
   const [first, ...rest] = events;
   return { deliveryKey, events: [first, ...rest] } satisfies WhatsAppWebhookReceipt;
 });
-
-/** Authenticated Kapso status for a hosted reply, not evidence of browser rendering. */
-export type KapsoHostedLifecycleEvidence = Readonly<{
-  correlationToken: HostedDeliveryCorrelationToken;
-  messageEvidence: WhatsAppMessageEvidence;
-  businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
-  occurredAt: DateTime.Utc;
-}> &
-  (
-    | Readonly<{ outcome: "sent" | "delivered" }>
-    | Readonly<{ outcome: "failed"; reason: DisclosureDeliveryFailureReason }>
-  );
 
 /** Kapso event names routed through disclosure lifecycle reconciliation. */
 export const DisclosureLifecycleEventName = Schema.Literals([
@@ -402,12 +354,15 @@ const projectDecodedDisclosureLifecycleStatus = Effect.fn(function* (input: {
       ...evidence,
       outcome: "failed" as const,
       ...lifecycleFailure(errorCode),
-    } satisfies KapsoDisclosureLifecycleEvidence;
+    } satisfies WhatsAppDisclosureLifecycleEvidence;
   }
   if (providerStatus.status === "sent") {
-    return { ...evidence, outcome: "sent" as const } satisfies KapsoDisclosureLifecycleEvidence;
+    return { ...evidence, outcome: "sent" as const } satisfies WhatsAppDisclosureLifecycleEvidence;
   }
-  return { ...evidence, outcome: "accepted" as const } satisfies KapsoDisclosureLifecycleEvidence;
+  return {
+    ...evidence,
+    outcome: "accepted" as const,
+  } satisfies WhatsAppDisclosureLifecycleEvidence;
 });
 
 const lifecycleStatus = (
@@ -434,7 +389,7 @@ const latestDisclosureLifecycleStatus = Effect.fn(function* (
   );
   return projected.reduce<
     Option.Option<{
-      readonly evidence: KapsoDisclosureLifecycleEvidence;
+      readonly evidence: WhatsAppDisclosureLifecycleEvidence;
       readonly status: typeof RawDisclosureStatus.Type;
     }>
   >(
@@ -498,8 +453,8 @@ export const decodeKapsoHostedLifecycleWebhook = Effect.fn(function* (input: Kap
         ...evidence,
         outcome: "failed",
         reason: latest.evidence.outcome === "failed" ? latest.evidence.reason : "invalid_response",
-      } satisfies KapsoHostedLifecycleEvidence)
-    : ({ ...evidence, outcome: status.status } satisfies KapsoHostedLifecycleEvidence);
+      } satisfies WhatsAppHostedLifecycleEvidence)
+    : ({ ...evidence, outcome: status.status } satisfies WhatsAppHostedLifecycleEvidence);
 });
 
 /**
@@ -593,7 +548,7 @@ export const decodeKapsoIdentityWebhook = Effect.fn(function* (input: {
   const messages = envelope.entry.flatMap((entry) =>
     entry.changes.flatMap((change) => change.value.messages ?? [])
   );
-  if (messages.length > maxKapsoDeliveryEvents) return yield* new KapsoBatchTooLarge();
+  if (messages.length > maxWhatsAppDeliveryEvents) return yield* new WhatsAppBatchTooLarge();
 
   const projected = yield* Effect.forEach(
     messages,

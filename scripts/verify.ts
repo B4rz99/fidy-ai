@@ -153,6 +153,13 @@ const checks: Array<Check> = [
     "infra/cloudflare",
     "test",
   ]),
+  rootCheck("unit", "WhatsApp provider boundary tests", [
+    "bun",
+    "run",
+    "--cwd",
+    "apps/server",
+    "test:whatsapp",
+  ]),
   rootCheck("unit", "Notification-email interpretation tests", [
     "bun",
     "run",

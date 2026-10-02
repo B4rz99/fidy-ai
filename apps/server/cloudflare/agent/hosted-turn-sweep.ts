@@ -1,5 +1,7 @@
 import { UserId } from "@fidy/server/agent-runtime";
 import { type Cause, Effect, type Schema } from "effect";
+import type { WhatsAppUnavailable } from "../whatsapp/contract";
+import { whatsAppRecoveryPriority } from "../whatsapp/operations";
 import {
   expireHostedPending,
   hostedTranscriptRetentionMs,
@@ -16,15 +18,14 @@ export const sweepHostedTurns = ({
   now,
 }: Readonly<{ db: D1Database; now: number }>): Effect.Effect<
   void,
-  Cause.UnknownError | Schema.SchemaError
+  Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable
 > =>
   Effect.gen(function* () {
     const due = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT user_id FROM (
-    SELECT t.user_id, COALESCE(o.created_at_ms, t.started_at_ms) AS due_ms
-      FROM hosted_turns AS t LEFT JOIN hosted_whatsapp_outbox AS o
-        ON o.turn_id = t.id AND o.user_id = t.user_id
+    SELECT t.user_id, ${whatsAppRecoveryPriority()} AS due_ms
+      FROM hosted_turns AS t
       WHERE t.status = 'pending' AND t.started_at_ms < ?
     UNION ALL
     SELECT t.user_id, t.terminal_at_ms AS due_ms FROM hosted_turns AS t

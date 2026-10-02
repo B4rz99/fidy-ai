@@ -136,6 +136,21 @@ than the revision: distinct runs of one revision can have different traffic repo
 a key with a different payload produces HTTP 409. This corrects the collision risk seen
 in the failed resume; actual inbox delivery still needs verification.
 
+For an inconclusive identity failure, dispatch the protected `production-inspect.yml`
+workflow on `trunk` with optional `log_timestamp`, for example
+`gh workflow run production-inspect.yml --ref trunk -f log_timestamp=2026-10-02T15:16:41Z`.
+It queries only existing Core logs within one minute either side, capped at 100 events,
+1 MiB streamed response bytes, and 30 seconds; logging configuration and traffic remain
+unchanged. Output contains validated time, version UUID, revision, GET/POST method,
+status class, and outcome only. Raw log payloads, request coordinates, headers, and
+foreign errors are never printed or retained as artifacts. Unrecognized records,
+missing identities, and possible truncation are explicit: absence is not success and
+window proximity is not proof of which Core rejected a particular smoke request.
+The [Cloudflare telemetry query API](https://developers.cloudflare.com/api/resources/workers/subresources/observability/subresources/telemetry/methods/query/)
+requires `Workers Observability Write`, even for temporary read queries. A missing
+permission is reported as `query-denied`; do not change credentials or widen privileges
+automatically. Log retention may make older failures unavailable.
+
 After the original drift CLI rejects a plan, an additional dry-run inspection
 reports only closed changed attribute names for these two Workers, including
 upload-receipt fields. It is bounded to 45 seconds and cannot change the original

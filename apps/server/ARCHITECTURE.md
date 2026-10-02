@@ -73,6 +73,10 @@ no credential; it never invents missing attribution.
 requests for the retained specialist providers—Kapso/Meta, Wompi, and outbound Resend—and owns fixed
 destinations, credential handling, redirects, byte limits, status projection, and safe failures.
 Provider adapters cannot import raw transport or private implementation modules.
+Protected Production inspection uses a separately constructed Cloudflare observability authority
+through this published boundary. It accepts temporary Worker log queries only, bounds the window,
+event count and streamed response bytes, suppresses propagation, and refuses other provider operations.
+The release CLI reports closed diagnostic metadata rather than adding application Work telemetry.
 
 Hosted inference exposes a provider-neutral contract backed only by the direct Workers AI binding
 the User coordinator Durable Object builds for Memory work and hosted Turns, which the Core Worker

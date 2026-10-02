@@ -1,5 +1,5 @@
 import { type WompiEnvironment } from "~/shell/secret-material/contract";
-import { type Crypto, Effect, Encoding, Match, Option, Redacted } from "effect";
+import { type Crypto, Effect, Encoding, Match, Option, Redacted, Schema } from "effect";
 import {
   FetchHttpClient,
   HttpBody,
@@ -247,6 +247,7 @@ const prepareNonProviderGroup = (
           }),
       });
     case "CloudflareAccessSupportRecovery":
+    case "CloudflareWorkerTelemetry":
       return rejectRequest();
   }
 };
@@ -259,6 +260,7 @@ const prepareRequest = (
     Match.tagsExhaustive({
       KapsoMessages: (value) => prepareNonProviderGroup(value, context),
       CloudflareAccessSupportRecovery: (value) => prepareNonProviderGroup(value, context),
+      CloudflareWorkerTelemetry: (value) => prepareNonProviderGroup(value, context),
       ResendEmailDelivery: (value) => prepareResend(value, context),
       WompiMerchant: (value) => prepareWompi(value, context),
       WompiCreatePaymentSource: (value) => prepareWompi(value, context),
@@ -304,6 +306,70 @@ export const makeOutboundHttp = (config: OutboundHttpConfig): PrivateOutboundHtt
   return {
     execute: (request) => prepareRequest(request, context).pipe(Effect.flatMap(executePrepared)),
   };
+};
+
+const TelemetryQuery = Schema.Struct({
+  workerName: Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_-]{1,80}$/u)),
+  from: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  to: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+});
+const CloudflareAccountId = Schema.String.check(Schema.isPattern(/^[0-9a-f]{32}$/u));
+const maximumTelemetryWindowMilliseconds = 120_000;
+const maximumTelemetryResponseBytes = 1_048_576;
+
+export const makeCloudflareObservabilityOutboundHttp = ({
+  accountId,
+  apiToken,
+  httpClient,
+}: Readonly<{
+  accountId: string;
+  apiToken: Redacted.Redacted<string>;
+  httpClient: HttpClient.HttpClient;
+}>): PrivateOutboundHttpService => {
+  const http = makeProviderTransport("cloudflare-observability")(httpClient);
+  return makeService((request) => {
+    if (
+      request._tag !== "CloudflareWorkerTelemetry" ||
+      !Schema.is(CloudflareAccountId)(accountId)
+    ) {
+      return rejectRequest();
+    }
+    const decoded = Schema.decodeOption(TelemetryQuery)(request);
+    return Option.match(decoded, {
+      onNone: rejectRequest,
+      onSome: (query) => {
+        if (query.to <= query.from || query.to - query.from > maximumTelemetryWindowMilliseconds) {
+          return rejectRequest();
+        }
+        return Effect.succeed({
+          http,
+          request: jsonRequest(
+            `https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/observability/telemetry/query`,
+            JSON.stringify({
+              queryId: "production-worker-inspection",
+              timeframe: { from: query.from, to: query.to },
+              view: "events",
+              limit: 100,
+              parameters: {
+                datasets: ["cloudflare-workers"],
+                filters: [
+                  {
+                    key: "$workers.scriptName",
+                    operation: "eq",
+                    type: "string",
+                    value: query.workerName,
+                  },
+                ],
+              },
+            }),
+            { authorization: `Bearer ${Redacted.value(apiToken)}` }
+          ),
+          maximumResponseBytes: maximumTelemetryResponseBytes,
+          redirect: "error" as const,
+        });
+      },
+    });
+  });
 };
 
 export const makeCloudflareAccessOutboundHttp = ({

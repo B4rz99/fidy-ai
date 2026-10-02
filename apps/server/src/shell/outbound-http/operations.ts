@@ -6,7 +6,10 @@ import {
   loadWompiIntegritySecret,
   loadWompiPrivateKey,
 } from "~/shell/secret-material/operations";
-import { makeOutboundHttp } from "~/shell/outbound-http/internal/outbound-http";
+import {
+  makeCloudflareObservabilityOutboundHttp as makeObservabilityTransport,
+  makeOutboundHttp,
+} from "~/shell/outbound-http/internal/outbound-http";
 import type { OutboundHttpFailure, OutboundHttpRequest, OutboundHttpResponse } from "./contract";
 
 const WompiPublicKey = Schema.String.check(
@@ -23,6 +26,19 @@ export type OutboundHttpService = Readonly<{
     request: OutboundHttpRequest
   ) => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure>;
 }>;
+
+/**
+ * Operational authority for temporary Worker log queries only: a fixed Cloudflare API destination,
+ * no redirects or trace propagation, at most two minutes and 100 events, with a 1 MiB streamed cap.
+ * All other provider requests fail closed. The caller must keep returned bytes out of logs.
+ */
+export const makeCloudflareObservabilityOutboundHttp = (
+  input: Readonly<{
+    accountId: string;
+    apiToken: Redacted.Redacted<string>;
+    httpClient: HttpClient.HttpClient;
+  }>
+): OutboundHttpService => makeObservabilityTransport(input);
 
 /** A Kapso-only Outbound HTTP authority; every other provider request fails closed. */
 export const makeKapsoOutboundHttp = (

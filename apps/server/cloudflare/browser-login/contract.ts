@@ -13,13 +13,6 @@ export type BrowserPairingApproval = Readonly<{
   }>;
 }>;
 
-/** The exact browser-private proof presented for a single pairing at this decision instant. */
-export type BrowserPairingProof = Readonly<{
-  pairingId: string;
-  verifierDigest: Uint8Array;
-  current: number;
-}>;
-
 /**
  * BrowserLogin-owned one-use consumption and stable User projection, composed in one D1 batch.
  * The subject exposes only pairingId and userId after this exact proof's successful consumption.
@@ -42,6 +35,15 @@ export type PendingBrowserPairingQuery = Readonly<{ subject: OwnedStatement; cur
 export type BrowserPairingApprovalStatement = Readonly<{
   db: D1Database;
   pairingId: string;
+  subject: OwnedStatement;
+  current: number;
+}>;
+
+/** Public code selects one exact live pairing; its projection conveys no browser authority. */
+export type RecoveryBrowserPairingQuery = Readonly<{ publicCode: string; current: number }>;
+/** Trusted proof-owner subject projects pairingId and its existing userId in the same atomic unit. */
+export type RecoveryBrowserPairingApproval = Readonly<{
+  db: D1Database;
   subject: OwnedStatement;
   current: number;
 }>;

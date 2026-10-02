@@ -1,9 +1,9 @@
-import { prepareBrowserPairingClaim } from "../browser-login/operations";
+import { redeemBrowserPairing } from "../browser-login/operations";
 import { freshSessionQuery } from "@fidy/server/web-session-operations";
-import { Effect, Option } from "effect";
+import { Clock, Effect, Option } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { isolatedTestDatabases } from "../d1-test-fixture";
-import { authenticateWebSession, establishWebSession, logoutWebSession } from "./operations";
+import { authenticateWebSession, logoutWebSession } from "./operations";
 
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
@@ -213,34 +213,40 @@ it("rechecks the correlated fresh session's exact User at commit and refuses rev
     })
   ));
 
-it("refuses session establishment without the exact browser verifier digest and leaves the pairing reusable by its owner", () =>
+it("refuses session establishment without the exact browser-private verifier and leaves the pairing reusable by its owner", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => databases.acquire());
       const pairingId = "30000000-0000-4000-8000-000000000001";
-      const verifierDigest = new Uint8Array(32).fill(7);
+      const privateVerifier = "q".repeat(43);
+      const current = yield* Clock.currentTimeMillis;
+      const verifierDigest = new Uint8Array(
+        yield* Effect.tryPromise(() =>
+          crypto.subtle.digest("SHA-256", new TextEncoder().encode(privateVerifier))
+        )
+      );
+      const redeem = (verifier: string): Promise<Response> =>
+        redeemBrowserPairing({
+          db,
+          request: new Request("https://api.fidyapp.com/web/pairings/redeem", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ pairingId, privateVerifier: verifier }),
+          }),
+        });
       yield* Effect.tryPromise(() =>
         db.batch([
           db.prepare(
-            "CREATE TABLE browser_login_pairings (id TEXT, state TEXT, user_id TEXT, expires_at_ms INTEGER, wrong_attempts INTEGER, verifier_digest BLOB)"
+            "CREATE TABLE browser_login_pairings (id TEXT, state TEXT, user_id TEXT, expires_at_ms INTEGER, wrong_attempts INTEGER, verifier_digest BLOB, last_poll_at_ms INTEGER, minimum_poll_interval_seconds INTEGER)"
           ),
           db
-            .prepare("INSERT INTO browser_login_pairings VALUES (?, 'ready', ?, 2000, 0, ?)")
-            .bind(pairingId, userA, verifierDigest),
+            .prepare("INSERT INTO browser_login_pairings VALUES (?, 'ready', ?, ?, 0, ?, NULL, 5)")
+            .bind(pairingId, userA, current + 600_000, verifierDigest),
           db.prepare(`CREATE TABLE web_sessions (id TEXT, pairing_id TEXT UNIQUE, user_id TEXT, token_digest BLOB,
           created_at_ms INTEGER, fresh_until_ms INTEGER, idle_expires_at_ms INTEGER, hard_expires_at_ms INTEGER)`),
         ])
       );
-      const rejected = yield* Effect.tryPromise(() =>
-        establishWebSession({
-          db,
-          claim: prepareBrowserPairingClaim({
-            pairingId,
-            current: 1000,
-            verifierDigest: new Uint8Array(32).fill(8),
-          }),
-        })
-      );
+      const rejected = yield* Effect.tryPromise(() => redeem("r".repeat(43)));
       expect(rejected.status).toBe(400);
       expect(rejected.headers.get("set-cookie")).toBeNull();
       expect(
@@ -253,12 +259,7 @@ it("refuses session establishment without the exact browser verifier digest and 
           db.prepare("SELECT count(*) AS count FROM web_sessions").first()
         )
       ).toEqual({ count: 0 });
-      const accepted = yield* Effect.tryPromise(() =>
-        establishWebSession({
-          db,
-          claim: prepareBrowserPairingClaim({ pairingId, current: 1000, verifierDigest }),
-        })
-      );
+      const accepted = yield* Effect.tryPromise(() => redeem(privateVerifier));
       expect(accepted.status).toBe(200);
       expect(
         yield* Effect.tryPromise(() => db.prepare("SELECT user_id FROM web_sessions").first())

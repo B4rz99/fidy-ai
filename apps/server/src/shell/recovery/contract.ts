@@ -1,5 +1,5 @@
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
-import { RotatedBackupRecoveryCode } from "~/core/recovery/model";
+import { RotatedBackupRecoveryCode } from "~/core/recovery/contract";
 import {
   AtomicBatchEligible,
   freshWebSessionOnly,

@@ -1,3 +1,4 @@
+import { BrowserLoginPublicCodeSymbols } from "../../../src/core/browser-login/contract";
 import { prepareClaim } from "./claim";
 import { retainedSessionPairingsQuery } from "@fidy/server/web-session-operations";
 import { establishWebSession } from "../../web-session/operations";
@@ -5,11 +6,10 @@ import { findWhatsAppUser, prepareWhatsAppIdentity } from "../../identity/operat
 import { protectConsentStatement } from "@fidy/server/consent-operations";
 import { BrowserLoginPairingId } from "../../../src/core/browser-login/reference";
 import {
-  BrowserLoginPublicCodeSymbols,
   decideBrowserLoginRedemption,
   formatPublicCode,
   selectPublicCodeSymbols,
-} from "../../../src/core/browser-login/rules";
+} from "../../../src/core/browser-login/operations";
 import { WhatsAppCallerReference } from "@fidy/server/identity-reference";
 import { Clock, Crypto, DateTime, Effect, Encoding, Option, PlatformError, Schema } from "effect";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../../http/request-body";

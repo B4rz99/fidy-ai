@@ -75,7 +75,7 @@ export {
   WebAuthApi,
   type WebAuthApiGroups,
 } from "./web-auth-api";
-export { StartedBrowserLoginPairing } from "~/core/browser-login/model";
+export { StartedBrowserLoginPairing } from "~/core/browser-login/contract";
 export { EmailAddress, EmailVerificationCode } from "~/core/email-authentication/contract";
 export { CompleteEmailReplacementPayload } from "./web-auth-api";
 export { RequestEmailReplacementPayload } from "~/shell/email-authentication/contract";
@@ -87,7 +87,7 @@ export { BillingAttemptId, PaymentRequestId } from "~/core/subscription/contract
 export type { SubscriptionStatus } from "~/core/subscription/contract";
 export { PriceId } from "~/core/subscription/reference";
 export { IanaTimeZone } from "~/core/_shared/context";
-export { BackupRecoveryCode, RotatedBackupRecoveryCode } from "~/core/recovery/model";
+export { BackupRecoveryCode, RotatedBackupRecoveryCode } from "~/core/recovery/contract";
 export {
   BillingEmail,
   CardEnrollment,

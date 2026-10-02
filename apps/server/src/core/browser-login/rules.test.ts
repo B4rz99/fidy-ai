@@ -5,14 +5,16 @@ import {
   BrowserLoginPublicCode,
   BrowserLoginPublicCodeInput,
   BrowserLoginPublicCodeSymbols,
-  browserLoginPairingExpiry,
   browserLoginPublicCodeAlphabet,
+} from "./contract";
+import {
+  browserLoginPairingExpiry,
   decideApprovalTransition,
   decideBrowserLoginRedemption,
   decidePendingBrowserLoginProof,
   formatPublicCode,
   selectPublicCodeSymbols,
-} from "./rules";
+} from "./operations";
 
 const decode = Schema.decodeUnknownOption(BrowserLoginPublicCodeInput);
 const decodeCode = Schema.decodeUnknownOption(BrowserLoginPublicCode);

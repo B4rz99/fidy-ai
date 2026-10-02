@@ -1,7 +1,8 @@
-import { BackupRecoveryCode } from "@fidy/server/client";
 import type { FreshSessionSubject } from "@fidy/server/web-session-contract";
 import { freshSessionExists, freshSessionParams } from "@fidy/server/web-session-operations";
-import { Clock, Crypto, DateTime, Effect, Option, PlatformError, Schema } from "effect";
+import { Clock, DateTime, Effect, Option } from "effect";
+import { newId } from "../../secret-material/operations";
+import { recoveryCodeDigest, sampleRecoveryCode } from "./material";
 import { freshBrowserSession } from "../../web-session/operations";
 
 const unavailable = (): Response => Response.json({ status: "unavailable" }, { status: 503 });
@@ -16,47 +17,14 @@ const noSession = (): Response =>
     },
     { status: 401 }
   );
-const sha256 = (value: string): Promise<Uint8Array> =>
-  crypto.subtle
-    .digest("SHA-256", new TextEncoder().encode(value))
-    .then((digest) => new Uint8Array(digest));
 const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, void> =>
   Effect.tryPromise({ try: run, catch: () => undefined });
-const workerCrypto = Crypto.make({
-  randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),
-  digest: (algorithm, data) =>
-    Effect.tryPromise({
-      try: () =>
-        crypto.subtle
-          .digest(algorithm, Uint8Array.from(data))
-          .then((bytes) => new Uint8Array(bytes)),
-      catch: (cause) =>
-        PlatformError.systemError({
-          _tag: "Unknown",
-          module: "WorkerCrypto",
-          method: "digest",
-          cause,
-        }),
-    }),
-});
-const uuid = (): string => Effect.runSync(workerCrypto.randomUUIDv4.pipe(Effect.orDie));
 const instant = (epochMs: number): string => DateTime.formatIso(DateTime.makeUnsafe(epochMs));
 const json = (body: object, status = 200, headers?: HeadersInit): Response => {
   const responseHeaders = new Headers(headers);
   responseHeaders.set("cache-control", "no-store");
   return Response.json(body, { status, headers: responseHeaders });
 };
-
-const recoveryAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-const recoverySymbolCount = 25;
-const sampleRecoveryCode = (): string =>
-  Array.from(
-    crypto.getRandomValues(new Uint8Array(recoverySymbolCount)),
-    (byte) => recoveryAlphabet[byte % recoveryAlphabet.length]
-  )
-    .join("")
-    .match(/.{5}/gu)
-    ?.join("-") ?? "";
 
 /** Require a still-fresh browser session before rotating its User's emergency proof. */
 export const rotateBackupRecoveryCode = ({
@@ -81,9 +49,8 @@ const rotateFreshSessionProof = (
   usedAt: number
 ): Effect.Effect<Response, void> =>
   Effect.gen(function* () {
-    const code = Schema.decodeOption(BackupRecoveryCode)(sampleRecoveryCode());
-    if (Option.isNone(code)) return unavailable();
-    const codeDigest = yield* attempt(() => sha256(code.value));
+    const code = sampleRecoveryCode();
+    const codeDigest = yield* attempt(() => recoveryCodeDigest(code));
     const rotated = yield* attempt(() =>
       db.batch([
         db
@@ -103,7 +70,7 @@ const rotateFreshSessionProof = (
             `INSERT INTO canonical_security_mutations (id, user_id, session_id, operation, occurred_at_ms)
         SELECT ?, ?, ?, 'recovery.rotateBackupRecoveryCode', ? WHERE changes() = 1`
           )
-          .bind(uuid(), session.user_id, session.id, usedAt),
+          .bind(newId(), session.user_id, session.id, usedAt),
       ])
     );
     if (rotated[0]?.meta.changes !== 1 || rotated[1]?.meta.changes !== 1) {
@@ -112,7 +79,7 @@ const rotateFreshSessionProof = (
     return json({
       data: {
         status: "rotated",
-        backupRecoveryCode: code.value,
+        backupRecoveryCode: code,
         rotatedAt: instant(usedAt),
       },
       next: [],

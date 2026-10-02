@@ -430,3 +430,27 @@ semantics, without a process lock or a post-commit repair. Platform statement bi
 and non-secret identity generation are independent of Tokens and confer no credential authority.
 Existing bounded Core/public Worker telemetry covers these paths; this ownership refactor adds no
 provider call, persistent credential, external workflow or telemetry payload.
+
+### Browser Login and Recovery owner composition
+
+Browser Login publishes its browser-safe declarations in `core/browser-login/contract.ts` and
+`shell/browser-login/contract.ts`, with pure proof, expiry and polling decisions in core operations.
+The direct WebAuth facade composes those declarations. Native operations own all pairing creation,
+proof verification, approval and redemption; verifier digests and claim preparation remain private.
+Browser Login alone initiates WebSession establishment, composing the exact one-use claim with the
+session owner's issuance in one D1 unit. Public references and recovery approval never mint a session.
+
+Recovery publishes only the intended one-time code response and browser operation declarations.
+Native Recovery operations privately generate and digest the initial code, passing only its
+insertion to Email Authentication's verified enrollment unit and disclosing the code after commit.
+Fresh-session rotation rechecks the exact User's authority at its write. Support's origin-verified
+Access identity, bounded attempts, credential consumption and metadata-only case evidence stay in
+Recovery internals. The code can approve only its existing User and cannot change WhatsAppIdentity.
+
+Support Recovery composes Browser Login's pending/approved projections and approval operation with
+Email Authentication's same-User subject predicate. No foreign pairing row or mailbox proof is
+read directly. That predicate is a portable published Email Authentication operation, avoiding a
+cycle between verified enrollment and recovery. The guarded pairing transition, one-use credential
+consumption and tracked case events commit or roll back together. All proof paths retain expiry,
+replay, independent browser-verifier and cross-User safeguards. Existing Core request telemetry covers
+the unchanged bounded workflows; no new provider call, runtime substrate or diagnostic data is added.

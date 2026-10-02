@@ -1,10 +1,10 @@
 import type {
   BrowserPairingApproval,
   BrowserPairingApprovalStatement,
-  BrowserPairingClaim,
-  BrowserPairingProof,
   PendingBrowserPairingQuery,
   PendingBrowserPairingRequest,
+  RecoveryBrowserPairingApproval,
+  RecoveryBrowserPairingQuery,
 } from "./contract";
 import type { Option } from "effect";
 import type { OwnedStatement } from "../../src/shell/_shared/owned-statement";
@@ -14,7 +14,11 @@ import {
   prepareProvedApproval,
   provePendingPairing,
 } from "./internal/email-approval";
-import { prepareClaim } from "./internal/claim";
+import {
+  approvedRecoveryPairingQuery,
+  pendingRecoveryPairingQuery,
+  prepareRecoveryApproval,
+} from "./internal/recovery-approval";
 
 import {
   approveBrowserPairing as approve,
@@ -34,14 +38,6 @@ export const redeemBrowserPairing = (
   input: Readonly<{ request: Request; db: D1Database }>
 ): Promise<Response> => redeem(input);
 
-/**
- * Prepare exact-verifier, unexpired one-use consumption and its established User projection.
- * Commit the consumption immediately before WebSession issuance in one D1 unit; the returned
- * statements do not run here and a projection alone grants no authority.
- */
-export const prepareBrowserPairingClaim = (input: BrowserPairingProof): BrowserPairingClaim =>
-  prepareClaim(input);
-
 /** Check the browser-private verifier against the pending pairing and apply the bounded wrong-proof policy. */
 export const provePendingBrowserPairing = (
   input: PendingBrowserPairingRequest
@@ -53,3 +49,18 @@ export const pendingBrowserPairingQuery = (input: PendingBrowserPairingQuery): O
 export const prepareProvedBrowserPairingApproval = (
   input: BrowserPairingApprovalStatement
 ): D1PreparedStatement => prepareProvedApproval(input);
+
+/** Project only the exact pending public pairing identity and deadline for a proof-owner decision. */
+export const pendingRecoveryBrowserPairingQuery = (
+  input: RecoveryBrowserPairingQuery
+): OwnedStatement => pendingRecoveryPairingQuery(input);
+
+/** Project the exact ready pairing's bound User and deadline inside the same proof-consumption batch. */
+export const approvedRecoveryBrowserPairingQuery = (
+  input: RecoveryBrowserPairingQuery
+): OwnedStatement => approvedRecoveryPairingQuery(input);
+
+/** Bind one still-pending pairing to the proof owner's exact live User; never establish a WebSession. */
+export const prepareRecoveryBrowserPairingApproval = (
+  input: RecoveryBrowserPairingApproval
+): D1PreparedStatement => prepareRecoveryApproval(input);

@@ -16,7 +16,7 @@ import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import coreWorker, { makeCoreWorker } from "../core-worker";
 import { DisabledTelemetryResource, makeTelemetryService } from "@fidy/server/telemetry";
-import { handleSupportRecovery } from "../identity/support-recovery";
+import { handleSupportRecovery } from "../recovery/operations";
 import publicWorker from "../public-worker";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 
@@ -1459,6 +1459,60 @@ it("binds an Access-approved recovery case to one stable User, consumes its code
             .first<{ count: number }>()
         ))?.count
       ).toBe(0);
+      const expiredPairing = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ pairingId: Schema.String, publicCode: Schema.String })
+      )(yield* Effect.tryPromise(() => startBrowserPairing(db).then((result) => result.json())));
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "UPDATE browser_login_pairings SET created_at_ms = created_at_ms - 600001, expires_at_ms = created_at_ms - 1 WHERE id = ?"
+          )
+          .bind(expiredPairing.pairingId)
+          .run()
+      );
+      expect(
+        (yield* Effect.tryPromise(() =>
+          approve(created.backupRecoveryCode, assertion, expiredPairing.publicCode)
+        )).status
+      ).toBe(400);
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(`CREATE TRIGGER reject_recovery_evidence BEFORE INSERT ON support_recovery_events
+          WHEN NEW.action = 'approved' BEGIN SELECT RAISE(ABORT, 'recovery evidence unavailable'); END`)
+          .run()
+      );
+      expect((yield* Effect.tryPromise(() => approve(created.backupRecoveryCode))).status).toBe(
+        503
+      );
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT state, user_id FROM browser_login_pairings WHERE id = ?")
+            .bind(pairing.pairingId)
+            .first()
+        )
+      ).toEqual({ state: "pending_approval", user_id: null });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT consumed_at_ms FROM backup_recovery_credentials").first()
+        )
+      ).toEqual({ consumed_at_ms: null });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM support_recovery_cases").first()
+        )
+      ).toEqual({ count: 0 });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM support_recovery_events").first()
+        )
+      ).toEqual({ count: 0 });
+      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER reject_recovery_evidence").run());
+      const identitiesBefore = yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT user_id, portfolio_id, bsuid FROM whatsapp_identities ORDER BY user_id")
+          .all()
+      );
       const competing = yield* Effect.tryPromise(() =>
         Promise.all([approve(created.backupRecoveryCode), approve(created.backupRecoveryCode)])
       );
@@ -1501,6 +1555,41 @@ it("binds an Access-approved recovery case to one stable User, consumes its code
       );
       expect(subject).toMatchObject({ paired_user: subject?.proof_user });
       expect(subject?.consumed).not.toBeNull();
+      const redeemWith = (privateVerifier: string): Promise<Response> =>
+        sendRequest(
+          new Request("https://api.fidyapp.com/web/pairings/redeem", {
+            method: "POST",
+            headers: { origin: "https://app.fidyapp.com", "content-type": "application/json" },
+            body: encodeJson({ pairingId: pairing.pairingId, privateVerifier }),
+          })
+        );
+      for (const wrongPurpose of [created.backupRecoveryCode, "x".repeat(43)]) {
+        const rejected = yield* Effect.tryPromise(() => redeemWith(wrongPurpose));
+        expect(rejected.status).toBe(400);
+        expect(rejected.headers.get("set-cookie")).toBeNull();
+      }
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM web_sessions").first()
+        )
+      ).toEqual({ count: 0 });
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT user_id, portfolio_id, bsuid FROM whatsapp_identities ORDER BY user_id"
+            )
+            .all()
+        )).results
+      ).toEqual(identitiesBefore.results);
+      expect(
+        yield* Effect.tryPromise(() => db.prepare("SELECT count(*) AS count FROM users").first())
+      ).toEqual({ count: 2 });
+      const caseEvidence = yield* Effect.tryPromise(() =>
+        db.prepare("SELECT * FROM support_recovery_events").all()
+      );
+      expect(encodeJson(caseEvidence.results)).not.toContain(created.backupRecoveryCode);
+      expect(encodeJson(caseEvidence.results)).not.toContain(pairing.privateVerifier);
       const redeemed = yield* Effect.tryPromise(() =>
         sendRequest(
           new Request("https://api.fidyapp.com/web/pairings/redeem", {

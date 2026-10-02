@@ -72,7 +72,7 @@ import {
 import { RequestBodyPolicy, boundedJsonBody } from "./http/request-body";
 import { pathId, rawPathId } from "./http/path";
 
-import { handleSupportRecovery } from "./identity/support-recovery";
+import { handleSupportRecovery, rotateBackupRecoveryCode } from "./recovery/operations";
 import { executeProtectedSubscriptionQuery, handleCardEnrollment } from "./subscription/operations";
 import {
   dispatchBillingCollection,
@@ -119,7 +119,6 @@ import {
   logoutWebSession as logoutBrowser,
 } from "./web-session/operations";
 import { redeemBrowserPairing, startBrowserPairing } from "./browser-login/operations";
-import { rotateBackupRecoveryCode } from "./identity/operations";
 
 import { contractDigestPattern, gitRevisionPattern } from "./runtime/release-identity";
 import { smokeFailureHeader, smokePath, smokeProofAccepted } from "./runtime/smoke";

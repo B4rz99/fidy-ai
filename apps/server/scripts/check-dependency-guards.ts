@@ -218,6 +218,67 @@ const PROBES: readonly Probe[] = [
     expect: { kind: "allowed" },
     files: [
       {
+        path: `cloudflare/${PROBE_PREFIX}recovery-published/probe.ts`,
+        source:
+          'import { handleSupportRecovery, rotateBackupRecoveryCode } from "../recovery/operations";\n' +
+          'import { redeemBrowserPairing, prepareRecoveryBrowserPairingApproval } from "../browser-login/operations";\n' +
+          "export const published = [handleSupportRecovery, rotateBackupRecoveryCode, redeemBrowserPairing, prepareRecoveryBrowserPairingApproval];\n",
+      },
+    ],
+    name: "callers consume bounded Browser Login and Recovery owner operations",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-recovery-internal: tools/${PROBE_PREFIX}recovery-material/probe.ts → cloudflare/recovery/internal/material.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `tools/${PROBE_PREFIX}recovery-material/probe.ts`,
+        source:
+          'import { recoveryCodeDigest } from "../../cloudflare/recovery/internal/material";\nexport const bypass = recoveryCodeDigest;\n',
+      },
+    ],
+    name: "tooling cannot acquire private recovery material",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error cloudflare-imports-portable-login-recovery-internal: cloudflare/recovery/${PROBE_PREFIX}private-case/probe.ts → src/core/recovery/internal/model.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/recovery/${PROBE_PREFIX}private-case/probe.ts`,
+        source:
+          'import { BackupRecoveryCredential } from "~/core/recovery/internal/model";\nexport const bypass = BackupRecoveryCredential;\n',
+      },
+    ],
+    name: "native callers cannot expose portable recovery credential or case internals",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-recovery-internal: cloudflare/${PROBE_PREFIX}recovery-private/probe.test.ts → cloudflare/recovery/internal/support-recovery.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}recovery-private/probe.test.ts`,
+        source:
+          'import { handleSupportRecovery } from "../recovery/internal/support-recovery";\nexport const bypass = handleSupportRecovery;\n',
+      },
+    ],
+    name: "foreign tests cannot import private Support Recovery decisions",
+  },
+  {
+    expect: { kind: "allowed" },
+    files: [
+      {
         path: `${tokensPublished}/probe.ts`,
         source:
           'import { authorizeCanonicalPAT, handlePATRequest } from "../tokens/operations";\n' +

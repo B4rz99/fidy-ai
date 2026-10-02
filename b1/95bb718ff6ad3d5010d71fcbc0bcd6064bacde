@@ -1,0 +1,34 @@
+infra/cloudflare/diagnose-smoke-routing.ts
+  s_b2d711e54dc456::t_7ab49e414c2a80 225-226,234-237
+  s_b2d711e54dc456::t_83888650a31e9a 62,223-224,227-232,238-240,251-259,309-310
+  s_b2d711e54dc456::t_8b8f95febce8c7 233,241-249,261-263,308,311-317
+  s_b2d711e54dc456::t_8c7f1395436fa4 250,260
+infra/cloudflare/diagnose-smoke-routing.test.ts
+  s_b2d711e54dc456::t_42d58e2a8297c5 89,102
+  s_b2d711e54dc456::t_7ab49e414c2a80 104-106
+  s_b2d711e54dc456::t_42745f82ace633 6-8,10,67-88,90-92,94-101,103,107-108
+  s_b2d711e54dc456::t_cefb1da20fd931 9,93
+apps/web/scripts/production-workflow.test.ts
+  s_b2d711e54dc456::t_c99c8d8d4b1370 157-161
+docs/operations/production-releases.md
+  s_b2d711e54dc456::t_7e2b5d466d198e 201-207,223-225,233-238
+.github/workflows/production.yml
+  s_b2d711e54dc456::t_d2cfceebf47da7 149,155-158
+  s_b2d711e54dc456::t_dcb4bb2681ca4e 159
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b195bb718ff6ad3d5010d71fcbc0bcd6064bacde",
+  "prompts": {},
+  "sessions": {
+    "s_b2d711e54dc456": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0fd6b-d5b4-71a3-9a6f-12874fd048cb",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

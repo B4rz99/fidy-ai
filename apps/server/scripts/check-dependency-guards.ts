@@ -154,6 +154,66 @@ const tokensToolPrivate = `tools/${PROBE_PREFIX}tokens-private`;
 
 const PROBES: readonly Probe[] = [
   {
+    name: "Insights callers use owner operations and bounded due identities",
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}insights-public/probe.ts`,
+        source:
+          'import { discoverDueInsights, generateInsight, prepareInsightTransition } from "../insights/operations";\nexport const operations = [discoverDueInsights, generateInsight, prepareInsightTransition];\n',
+      },
+    ],
+  },
+  {
+    name: "foreign tests cannot access Insights storage or delivery mechanics",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-insights-internal: cloudflare/${PROBE_PREFIX}insights-private/probe.test.ts → cloudflare/insights/internal/insight-store.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}insights-private/probe.test.ts`,
+        source:
+          'import { findInsight } from "../insights/internal/insight-store";\nexport const leak = findInsight;\n',
+      },
+    ],
+  },
+  {
+    name: "tooling cannot bypass the InsightEvent owner",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-insights-internal: tools/${PROBE_PREFIX}insights-private/probe.ts → cloudflare/insights/internal/insight-store.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `tools/${PROBE_PREFIX}insights-private/probe.ts`,
+        source:
+          'import { generateInsight } from "../../cloudflare/insights/internal/insight-store";\nexport const leak = generateInsight;\n',
+      },
+    ],
+  },
+  {
+    name: "portable callers cannot bypass native Insights operations",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-insights-internal: src/shell/${PROBE_PREFIX}insights-private/probe.ts → cloudflare/insights/internal/insight-store.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `src/shell/${PROBE_PREFIX}insights-private/probe.ts`,
+        source:
+          'import { findInsightAttempt } from "../../../cloudflare/insights/internal/insight-store";\nexport const leak = findInsightAttempt;\n',
+      },
+    ],
+  },
+
+  {
     name: "Dashboard callers use validated owner operations",
     expect: { kind: "allowed" },
     files: [

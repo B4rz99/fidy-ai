@@ -328,6 +328,46 @@ export default {
       to: { path: "^cloudflare/subscription/runtime\\.ts$" },
     },
     {
+      name: "foreign-module-imports-cloudflare-insights-internal",
+      severity: "error",
+      comment:
+        "Insights owns scheduled occurrences, lifecycle and delivery evidence. Peers use published operations, never private SQL or rows (#606).",
+      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/insights/" },
+      to: { path: "^cloudflare/insights/internal/" },
+    },
+    {
+      name: "cloudflare-imports-portable-insights-internal",
+      severity: "error",
+      comment:
+        "Native Insights consumes portable contracts and operations; core and shell internals remain private across the platform boundary (#606).",
+      from: { path: "^cloudflare/" },
+      to: { path: "^src/(core|shell)/insights/internal/" },
+    },
+    {
+      name: "insights-interface-reexports-internal",
+      severity: "error",
+      comment:
+        "Insights publishes substantive behavior and declarations, never re-exported private rows, SQL or projection mechanics (#606).",
+      from: { path: "^cloudflare/insights/(contract|operations|runtime)\\.ts$" },
+      to: { path: "^cloudflare/insights/internal/", dependencyTypes: ["export"] },
+    },
+    {
+      name: "insights-contract-imports-implementation",
+      severity: "error",
+      comment:
+        "The native Insights contract declares semantic inputs and projections independently of implementation or runtime authority (#606).",
+      from: { path: "^cloudflare/insights/contract\\.ts$" },
+      to: { path: "^cloudflare/insights/(internal/|operations\\.ts$|runtime\\.ts$)" },
+    },
+    {
+      name: "insights-internal-imports-outward-interface",
+      severity: "error",
+      comment:
+        "Native Insights implementation depends on its contract and sibling internals, never backwards on its own outward behavior or runtime (#606).",
+      from: { path: "^cloudflare/insights/internal/" },
+      to: { path: "^cloudflare/insights/(operations|runtime)\\.ts$" },
+    },
+    {
       name: "foreign-module-imports-cloudflare-dashboard-internal",
       severity: "error",
       comment:
@@ -683,7 +723,7 @@ export default {
         pathNot: [
           "^src/shell/_shared/",
           "^src/shell/public-http/contract\\.ts$",
-          "^src/shell/(identity|categories|transactions|subscription|email-authentication|tokens|budgets|browser-login|recovery|ingestion|dashboard)/contract\\.ts$",
+          "^src/shell/(identity|categories|transactions|subscription|email-authentication|tokens|budgets|browser-login|recovery|ingestion|dashboard|insights)/contract\\.ts$",
           "^src/shell/[^/]+/operations\\.ts$",
         ],
       },

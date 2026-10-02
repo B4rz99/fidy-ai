@@ -49,10 +49,10 @@
       "import": "./src/shell/memory/cloudflare-routes.ts",
       "default": "./src/shell/memory/cloudflare-routes.ts"
     },
-    "./insights-runtime": {
-      "types": "./src/core/insights/model.ts",
-      "import": "./src/core/insights/model.ts",
-      "default": "./src/core/insights/model.ts"
+    "./insights-contract": {
+      "types": "./src/core/insights/contract.ts",
+      "import": "./src/core/insights/contract.ts",
+      "default": "./src/core/insights/contract.ts"
     },
     "./categories": {
       "types": "./src/shell/categories/runtime.ts",

@@ -1,6 +1,5 @@
 import { Effect } from "effect";
-import { InvalidInsightTransition } from "./errors";
-import { type InsightLifecycleState } from "./model";
+import { type InsightLifecycleState, InvalidInsightTransition } from "./contract";
 
 const allowedTargets: Readonly<
   Record<InsightLifecycleState, ReadonlyArray<InsightLifecycleState>>

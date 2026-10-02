@@ -501,3 +501,28 @@ bounded owner metadata. Existing two-User, hostile-input, atomic rollback, dupli
 execution and retention evidence remains at the public or explicit platform-adapter seams. No new
 provider call, workflow version, telemetry purpose, institution authority or inbound routing is added;
 the existing unavailable institution Connection and sender-proof prerequisites remain closed.
+
+### Insights owner composition
+
+Insights publishes immutable scheduled occurrences, exact Currency-separated Money groups, lifecycle
+states, delivery evidence and closed domain failures through `core/insights/contract.ts`; pure
+forward-only decisions live in `operations.ts`. Its shell contract owns the browser-safe canonical
+declarations and its operations publish caller-scoped failure recovery. Native scheduling, persistence,
+pagination, delivery evidence and accountability mechanics remain private under
+`cloudflare/insights/internal/`.
+
+The native owner publishes bounded due discovery, generation, authoritative reads and canonical
+lifecycle preparation through `cloudflare/insights/operations.ts`. Due discovery reveals at most 64
+User/event identities; these are coordination hints, never delivery content or authorization. A
+consumer enters the existing User coordinator and establishes current processing authority before
+reading or generating an occurrence. Generation accepts validated historical context and Money facts
+through published declarations, without reading Transaction persistence or creating another fact store.
+Schedule replay keeps the original context and lifecycle; later preferences cannot reinterpret it.
+
+Canonical HTTP, hosted queries and the atomic mutation registry compose the same owner. Pending-page
+reads commit live authority, credential use and Audit together with their bounded data snapshot. Prepared
+transitions recheck live credential, Consent and lifecycle with immutable delivery evidence and Audit
+in the existing one-User D1 unit. Malformed retained occurrences and unreadable evidence are unavailable,
+not absent. Read/dismiss races and delivery replay cannot regress or duplicate the authoritative event.
+This ownership publication adds no migration, scheduler, provider send, runtime or telemetry purpose;
+existing canonical spans and metadata-only accountability remain in force.

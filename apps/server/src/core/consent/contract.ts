@@ -9,7 +9,7 @@ import {
   WhatsAppBusinessPhoneNumberId,
   WhatsAppCallerReference,
 } from "~/core/identity/reference";
-import { InsightKind } from "~/core/insights/reference";
+import { InsightKind } from "~/core/insights/contract";
 import { PATId } from "~/core/tokens/reference";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { WebSessionId } from "~/core/web-session/reference";

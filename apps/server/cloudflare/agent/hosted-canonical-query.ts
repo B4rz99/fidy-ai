@@ -7,7 +7,7 @@ import { browseBudgets, evaluateBudgetAlerts } from "../budgets/operations";
 import { browseTransactions } from "../transactions/operations";
 import { browseDashboard } from "../dashboard/operations";
 import { recallMemories } from "../memory/memory";
-import { listPendingInsights } from "../insights/insight-store";
+import { listPendingInsights } from "../insights/operations";
 import {
   forwardingAddressResponse,
   listNeedsReviewItems,

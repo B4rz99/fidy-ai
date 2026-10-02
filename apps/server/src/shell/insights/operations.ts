@@ -1,112 +1,127 @@
-import { Schema } from "effect";
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
+import { Option } from "effect";
 import {
-  DeliveryEvidenceInput,
-  InsightDeliveryAttempt,
-  InsightEvent,
-  InsightEventId,
-} from "~/core/insights/model";
-import { NotFound, OperationResponse, ValidationFailed } from "~/shell/public-http/contract";
-import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
+  type InsightEventId,
+  type InsightFailure,
+  type InsightLifecycleState,
+} from "~/core/insights/contract";
+import { allowedInsightTransitions } from "~/core/insights/operations";
+import { NotFound, type SuggestedOperation, ValidationFailed } from "~/shell/public-http/contract";
+import {
+  type SuggestedOperationCaller,
+  type SuggestedOperationCandidate,
+  checkpointSuggestedOperations,
+  suggestOperation,
+} from "~/shell/_shared/suggested-operations";
 
-/** Canonical operations over the caller's shared InsightEvent stream. */
-const InsightParams = Schema.Struct({ id: InsightEventId });
-const InsightOperationFailures = [NotFound, ValidationFailed] as const;
+import type { InsightApiFailure } from "./contract";
 
-/** Canonical result pairing one delivered InsightEvent with its immutable provider evidence. */
-export const DeliveredInsight = Schema.Struct({
-  insight: InsightEvent,
-  deliveryAttempt: InsightDeliveryAttempt,
-});
+const suggestionFor = (
+  insightEventId: InsightEventId,
+  target: InsightLifecycleState
+): Option.Option<SuggestedOperationCandidate> => {
+  const args = Option.some({ params: { id: insightEventId } });
+  switch (target) {
+    case "pending":
+      return Option.none();
+    case "delivered":
+      return Option.some(
+        suggestOperation({
+          tool: "insights.markInsightDelivered",
+          args,
+          hint: "Record delivery only after an external provider accepts the send.",
+        })
+      );
+    case "read":
+      return Option.some(
+        suggestOperation({
+          tool: "insights.markInsightRead",
+          args,
+          hint: "Mark this insight read after the user or their agent consumes it.",
+        })
+      );
+    case "dismissed":
+      return Option.some(
+        suggestOperation({
+          tool: "insights.dismissInsight",
+          args,
+          hint: "Dismiss this insight when it should receive no further attention.",
+        })
+      );
+  }
+};
+
+const lifecycleSuggestions = (
+  insightEventId: InsightEventId,
+  allowedTargets: ReadonlyArray<InsightLifecycleState>,
+  caller: SuggestedOperationCaller
+): ReadonlyArray<SuggestedOperation> =>
+  checkpointSuggestedOperations({
+    candidates: allowedTargets.flatMap((target) =>
+      Option.toArray(suggestionFor(insightEventId, target))
+    ),
+    caller,
+  });
 
 /**
- * Canonical contract for one caller's shared InsightEvent stream. Reads require
- * `read`; lifecycle movement requires `write`; ownership comes only from the
- * authenticated caller, never from request payloads or opaque event ids.
+ * Makes a lifecycle failure actionable without leaking ownership. The event id
+ * comes from operation context because pure transition failures carry no entity;
+ * caller facts control whether recovery may advertise each canonical operation.
  */
-export const InsightsGroup = HttpApiGroup.make("insights")
-  .add(
-    HttpApiEndpoint.get("listPendingInsights", "/insights/pending", {
-      query: Schema.Struct({ cursor: Schema.optional(Schema.String) }),
-      success: OperationResponse(Schema.Array(InsightEvent)),
-    })
-      .annotate(
-        OpenApi.Description,
-        "List the caller's pending InsightEvents, oldest scheduled occurrence first. Reach for " +
-          "this when you want proactive financial facts fidy has generated but the user has not " +
-          "yet consumed or dismissed. An empty stream is a successful answer. Results are " +
-          "bounded to 64 per page; follow the Link rel=next response header with its cursor " +
-          "to continue without skipping pending occurrences."
-      )
-      .annotateMerge(
-        operationPolicy({
-          access: patScoped("read"),
-          requiredTier: "free",
-          agentConfirmation: "not-required",
-          kind: "query",
-        })
-      )
-  )
-  .add(
-    HttpApiEndpoint.post("markInsightDelivered", "/insights/:id/delivered", {
-      params: InsightParams,
-      payload: DeliveryEvidenceInput,
-      success: OperationResponse(DeliveredInsight),
-      error: InsightOperationFailures,
-    })
-      .annotate(
-        OpenApi.Description,
-        "Record one actual external send attempt for the caller's pending InsightEvent and mark " +
-          "it delivered. Use this only after a provider accepted the send: supply its UTC send " +
-          "instant, channel, provider, and message id. This operation sends nothing itself."
-      )
-      .annotateMerge(
-        operationPolicy({
-          access: patScoped("write"),
-          requiredTier: "free",
-          agentConfirmation: "required",
-          kind: "mutation",
-        })
-      )
-  )
-  .add(
-    HttpApiEndpoint.post("markInsightRead", "/insights/:id/read", {
-      params: InsightParams,
-      success: OperationResponse(InsightEvent),
-      error: InsightOperationFailures,
-    })
-      .annotate(
-        OpenApi.Description,
-        "Mark one pending or delivered InsightEvent of the caller as read. Use this after the " +
-          "User or their agent has consumed the generated occurrence; delivery evidence is not " +
-          "required when an agent pulled it directly."
-      )
-      .annotateMerge(
-        operationPolicy({
-          access: patScoped("write"),
-          requiredTier: "free",
-          agentConfirmation: "required",
-          kind: "mutation",
-        })
-      )
-  )
-  .add(
-    HttpApiEndpoint.post("dismissInsight", "/insights/:id/dismissed", {
-      params: InsightParams,
-      success: OperationResponse(InsightEvent),
-      error: InsightOperationFailures,
-    })
-      .annotate(
-        OpenApi.Description,
-        "Dismiss one pending, delivered, or read InsightEvent of the caller. Use this when the " +
-          "occurrence should receive no further attention; dismissed events cannot move again."
-      )
-      .annotateMerge(
-        operationPolicy({
-          access: patScoped("write"),
-          requiredTier: "free",
-          agentConfirmation: "required",
-          kind: "mutation",
-        })
-      )
-  );
+export const toApiFailure = ({
+  failure,
+  insightEventId,
+  caller,
+}: {
+  readonly failure: InsightFailure;
+  readonly insightEventId: InsightEventId;
+  readonly caller: SuggestedOperationCaller;
+}): InsightApiFailure => {
+  switch (failure._tag) {
+    case "InsightNotFound":
+      return NotFound.make({
+        error: {
+          code: "not_found",
+          message:
+            `No insight ${failure.insightEventId} is in your stream. ` +
+            "List pending insights to see occurrences you can act on.",
+        },
+        next: checkpointSuggestedOperations({
+          candidates: [
+            suggestOperation({
+              tool: "insights.listPendingInsights",
+              args: Option.none(),
+              hint: "List pending insights to find an occurrence you can act on.",
+            }),
+          ],
+          caller,
+        }),
+      });
+
+    case "InvalidInsightTransition":
+      return ValidationFailed.make({
+        error: {
+          code: "validation_failed",
+          message:
+            `Insight ${insightEventId} is ${failure.current} and cannot move to ` +
+            `${failure.target}. ` +
+            (failure.allowedTargets.length === 0
+              ? "No further lifecycle operation is valid for it."
+              : "Choose one of the suggested valid lifecycle operations."),
+          fields: [],
+        },
+        next: lifecycleSuggestions(insightEventId, failure.allowedTargets, caller),
+      });
+  }
+};
+
+/** Returns state-valid lifecycle calls after applying the caller-authorization checkpoint. */
+export const nextLifecycleOperations = ({
+  insightEventId,
+  current,
+  caller,
+}: {
+  readonly insightEventId: InsightEventId;
+  readonly current: InsightLifecycleState;
+  readonly caller: SuggestedOperationCaller;
+}): ReadonlyArray<SuggestedOperation> =>
+  lifecycleSuggestions(insightEventId, allowedInsightTransitions(current), caller);

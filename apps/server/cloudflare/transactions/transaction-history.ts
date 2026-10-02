@@ -474,8 +474,8 @@ const browserHistoryStatements = (
       missingWhen: Option.match(selection.id, {
         onNone: () => ({ sql: "SELECT 1 WHERE 0", params: [] }),
         onSome: (id) => ({
-          sql: "SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM transactions WHERE transactions.user_id = web_sessions.user_id AND transactions.id = ?)",
-          params: [id],
+          sql: "SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM transactions WHERE user_id = ? AND id = ?)",
+          params: [subject.userId, id],
         }),
       }),
     }),

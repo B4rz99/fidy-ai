@@ -3070,6 +3070,11 @@ it("rejects forged browser origins and malformed Money before any public mutatio
         )
       );
       expect(foreignWithBearer.status).toBe(404);
+      expect(
+        (yield* fromTestPromise(() =>
+          browse(1, "/transactions/00000000-0000-4000-8000-000000000099")
+        )).status
+      ).toBe(404);
       expect((yield* fromTestPromise(() => browse(1, "/transactions/not-an-id"))).status).toBe(404);
       expect((yield* fromTestPromise(() => browse(0, "/transactions?unknown=1"))).status).toBe(400);
       const outcomes = yield* fromTestPromise(() =>
@@ -3081,6 +3086,7 @@ it("rejects forged browser origins and malformed Money before any public mutatio
           .all<{ outcome: string }>()
       );
       expect(outcomes.results.map(({ outcome }) => outcome)).toEqual([
+        "not_found",
         "not_found",
         "not_found",
         "not_found",

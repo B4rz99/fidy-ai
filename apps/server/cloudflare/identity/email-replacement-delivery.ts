@@ -1,3 +1,4 @@
+import { freshSessionQuery } from "@fidy/server/web-session-operations";
 import { EmailAddress, EmailVerificationCode } from "@fidy/server/client";
 import { WorkflowEntrypoint } from "cloudflare:workers";
 import {
@@ -147,23 +148,26 @@ const findDeliverable = (
   db: D1Database,
   id: string,
   current: number
-): Promise<Option.Option<typeof Pending.Type>> =>
-  Effect.runPromise(
+): Promise<Option.Option<typeof Pending.Type>> => {
+  const session = freshSessionQuery({
+    subject: { sql: "SELECT r.session_id AS sessionId, r.user_id AS userId", params: [] },
+    current,
+  });
+  return Effect.runPromise(
     Effect.map(
       attempt(() =>
         db
           .prepare(`SELECT r.candidate_email, r.expires_at_ms, r.state
     FROM email_replacements AS r JOIN verified_email_credentials AS v ON v.user_id = r.user_id
       AND v.email_address = r.prior_email AND v.verified_at_ms = r.prior_verified_at_ms
-    JOIN web_sessions AS s ON s.id = r.session_id AND s.user_id = r.user_id
-    WHERE r.work_id = ? AND s.revoked_at_ms IS NULL AND s.fresh_until_ms > ?
-      AND s.idle_expires_at_ms > ? AND s.hard_expires_at_ms > ?`)
-          .bind(id, current, current, current)
+    WHERE r.work_id = ? AND EXISTS (${session.sql})`)
+          .bind(id, ...session.params)
           .first()
       ),
       Schema.decodeUnknownOption(Pending)
     )
   );
+};
 
 /** Claim one candidate generation before the provider call; an ambiguous send never retries its proof. */
 type Send = (
@@ -191,6 +195,13 @@ export const deliverEmailReplacement =
           `${publicCode}-${secret}`
         ).pipe(Effect.orDie);
         const proofDigest = yield* attempt(() => digest(secret));
+        const session = freshSessionQuery({
+          subject: {
+            sql: "SELECT email_replacements.session_id AS sessionId, email_replacements.user_id AS userId",
+            params: [],
+          },
+          current,
+        });
         const claimed = yield* attempt(() =>
           db
             .prepare(`UPDATE email_replacements SET state = 'sending', public_code = ?,
@@ -198,18 +209,14 @@ export const deliverEmailReplacement =
         AND expires_at_ms > ? AND EXISTS (SELECT 1 FROM verified_email_credentials AS v
           WHERE v.user_id = email_replacements.user_id AND v.email_address = prior_email
             AND v.verified_at_ms = prior_verified_at_ms)
-        AND EXISTS (SELECT 1 FROM web_sessions AS s WHERE s.id = session_id
-          AND s.user_id = email_replacements.user_id AND s.revoked_at_ms IS NULL
-          AND s.fresh_until_ms > ? AND s.idle_expires_at_ms > ? AND s.hard_expires_at_ms > ?)`)
+        AND EXISTS (${session.sql})`)
             .bind(
               publicCode,
               proofDigest,
               Math.min(current + proofLifetimeMilliseconds, pending.value.expires_at_ms),
               id,
               current,
-              current,
-              current,
-              current
+              ...session.params
             )
             .run()
         );

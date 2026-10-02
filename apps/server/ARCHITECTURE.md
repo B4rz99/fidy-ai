@@ -729,3 +729,25 @@ metadata-only provider observations remain sufficient. Native tests preserve Use
 confirmation and delivery evidence, Consent timing, canonical rollback, Compaction continuity and
 interruption. Published runtime tests additionally reject a complete foreign User proof before
 inference or retention and close persistence failures without exposing stored or diagnostic data.
+
+### Maintenance composition
+
+Maintenance owns only scheduling and composition in `cloudflare/maintenance`. The private Core
+entrypoint supplies normalized bindings to one ordered, independent tick; the Email Worker supplies
+only its existing narrow DB/R2/Queue bindings to its separate five-minute tick. Both compose published
+owner runtimes. The schedule reports a closed failure after all independent activities have been
+attempted; interruption stops subsequent work and preserves cleanup. Activity names and one bounded
+Worker Work record retain their existing telemetry purposes, with no owner failure content exported.
+
+Audit, Email Authentication, Consent, Subscription, Tokens, WhatsApp, Agent and Ingestion retain their
+own eligibility, expiry, replay and retention decisions. Transactions retains effective-projection
+repair, and native AI retains admission-spend cleanup. Platform runtime owns operational health,
+event-bucket retention, canary publication and release-smoke expiry. Maintenance contains no SQL,
+aggregate data, retention cutoff, provider execution or reusable authorization. Best-effort cleanup
+cannot extend an expired proof or authorize retained material. Request-time identity-targeted Queue
+publication remains the owner's bounded acceleration, distinct from cron recovery.
+
+Dependency guards reject foreign implementation and operation imports from Maintenance, reverse owner
+runtime dependencies, private platform imports and interface laundering. Native acceptance exercises
+retention through Core and the Email Worker, including independent failure, expired-work refusal,
+current other-User preservation, interrupted sends, bounded batches and safe diagnostic projection.

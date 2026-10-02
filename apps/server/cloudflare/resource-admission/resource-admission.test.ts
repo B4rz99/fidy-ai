@@ -6,7 +6,8 @@ import { rolldown } from "rolldown";
 import { currentDisclosureFor } from "@fidy/server/consent-operations";
 import { installTestSchema } from "../d1-test-fixture";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
-import { makeAdmittedWorkersAiRun, sweepExpiredWorkersAiAdmission } from "../ai/workers-ai";
+import { makeAdmittedWorkersAiRun } from "../ai/workers-ai";
+import { sweepExpiredWorkersAiAdmission } from "../ai/runtime";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   ResourceAdmissionAuthority,

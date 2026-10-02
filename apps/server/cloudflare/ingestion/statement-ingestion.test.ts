@@ -26,9 +26,9 @@ import {
   executeStatementExtraction,
   receiveStatementExtraction,
   reconcileStatementExtraction,
+  sweepExpiredUploadAdmission,
 } from "./runtime";
 import coreWorker from "../core-worker";
-import { sweepExpiredUploadAdmission } from "./operations";
 import { observeOperationalHealth } from "../runtime/operational-health";
 import publicWorker from "../public-worker";
 
@@ -3653,12 +3653,29 @@ it("reclaims expired statement material even when an unrelated email dispatcher 
   Effect.runPromise(
     Effect.gen(function* () {
       const runtime = yield* fromTestPromise(() => setup());
-      yield* fromTestPromise(() => stageOne(runtime));
+      const expired = yield* fromTestPromise(() => stageOne(runtime));
       yield* fromTestPromise(() =>
         runtime.db
           .prepare("UPDATE statement_staging_objects SET created_at_ms = 0, expires_at_ms = 1")
           .run()
       );
+      const current = yield* fromTestPromise(() => stageOne(runtime, 1));
+      const rejectExpired = (): Promise<Response> =>
+        submit(runtime, {
+          index: 0,
+          idempotencyKey: "20000000-0000-4000-8000-000000000614",
+          reference: expired.staged,
+        });
+      expect(yield* fromTestPromise(() => stagedObjectKeys(runtime))).toHaveLength(2);
+      const beforeSweep = yield* fromTestPromise(rejectExpired);
+      expect(beforeSweep.status).toBe(400);
+      expect(yield* fromTestPromise(() => failureCode(beforeSweep))).toBe("validation_failed");
+      yield* expectCanonicalState(runtime.db, {
+        statement_submissions: 0,
+        statement_ingestion_outbox: 0,
+        transactions: 0,
+        statement_backfill_entitlements: 0,
+      });
       const failedEmailDatabase: D1Database = {
         prepare: (query) => {
           if (query.includes("browser_pairing_email_outbox")) {
@@ -3691,7 +3708,35 @@ it("reclaims expired statement material even when an unrelated email dispatcher 
           )
       );
       expect(result).toBe("failed");
-      expect(yield* fromTestPromise(() => stagedObjectKeys(runtime))).toHaveLength(0);
+      expect(yield* fromTestPromise(() => stagedObjectKeys(runtime))).toHaveLength(1);
+      const afterSweep = yield* fromTestPromise(rejectExpired);
+      expect(afterSweep.status).toBe(400);
+      expect(yield* fromTestPromise(() => failureCode(afterSweep))).toBe("validation_failed");
+      yield* expectCanonicalState(runtime.db, {
+        statement_submissions: 0,
+        statement_ingestion_outbox: 0,
+        transactions: 0,
+        statement_backfill_entitlements: 0,
+      });
+      const accepted = yield* fromTestPromise(() =>
+        submit(runtime, {
+          index: 1,
+          idempotencyKey: "20000000-0000-4000-8000-000000000615",
+          reference: current.staged,
+        })
+      );
+      expect(accepted.status).toBe(202);
+      const published = yield* fromTestPromise(() => submissionOf(accepted));
+      expect((yield* fromTestPromise(() => getSubmission(runtime, 0, published.id))).status).toBe(
+        404
+      );
+      expect(
+        (yield* fromTestPromise(() =>
+          runtime.db
+            .prepare("SELECT user_id FROM statement_submission_audit WHERE outcome = 'success'")
+            .all()
+        )).results
+      ).toEqual([{ user_id: userB }]);
     })
   ));
 
@@ -3774,3 +3819,99 @@ it(
     ),
   30_000
 );
+
+it("Core scheduling expires only old terminal Agent content and preserves current Users and Turns", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const current = yield* Clock.currentTimeMillis;
+      yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(
+            "INSERT INTO onboarding_consent_records (id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) SELECT id, id, '{}', 'fixture', 'fixture', 1, 1 FROM users WHERE id IN (?, ?)"
+          )
+          .bind(userA, userB)
+          .run()
+      );
+      const cases = [
+        {
+          userId: userA,
+          sessionId: "a0000000-0000-4000-8000-000000000614",
+          turnId: "b0000000-0000-4000-8000-000000000614",
+          at: current - 31 * dayMilliseconds,
+          terminal: true,
+        },
+        {
+          userId: userB,
+          sessionId: "a0000000-0000-4000-8000-000000000615",
+          turnId: "b0000000-0000-4000-8000-000000000615",
+          at: current - dayMilliseconds,
+          terminal: true,
+        },
+        {
+          userId: userB,
+          sessionId: "a0000000-0000-4000-8000-000000000615",
+          turnId: "b0000000-0000-4000-8000-000000000616",
+          at: current,
+          terminal: false,
+        },
+      ];
+      for (const entry of cases) {
+        yield* fromTestPromise(() =>
+          runtime.db.batch([
+            runtime.db
+              .prepare(
+                "INSERT OR IGNORE INTO hosted_agent_sessions (id, user_id, consent_basis_json, started_at_ms, status) VALUES (?, ?, '{}', ?, 'active')"
+              )
+              .bind(entry.sessionId, entry.userId, entry.at),
+            runtime.db
+              .prepare(
+                "INSERT INTO hosted_turns (id, user_id, hosted_session_id, status, started_at_ms) VALUES (?, ?, ?, 'pending', ?)"
+              )
+              .bind(entry.turnId, entry.userId, entry.sessionId, entry.at),
+            runtime.db
+              .prepare(
+                "INSERT INTO transcript_entries (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text) VALUES (?, ?, ?, ?, 'user', ?, 'Retained User content')"
+              )
+              .bind(entry.turnId, entry.userId, entry.sessionId, entry.turnId, entry.at),
+          ])
+        );
+        if (entry.terminal) {
+          yield* fromTestPromise(() =>
+            runtime.db.batch([
+              runtime.db
+                .prepare(
+                  "INSERT INTO transcript_entries (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, failure_reason) VALUES (?, ?, ?, ?, 'failed', ?, 'HostedInferenceFailed')"
+                )
+                .bind(entry.sessionId, entry.userId, entry.sessionId, entry.turnId, entry.at + 1),
+              runtime.db
+                .prepare(
+                  "UPDATE hosted_turns SET status = 'failed', terminal_at_ms = ?, failure_reason = 'HostedInferenceFailed' WHERE id = ?"
+                )
+                .bind(entry.at + 1, entry.turnId),
+            ])
+          );
+        }
+      }
+      for (const tick of [1, 2]) {
+        yield* fromTestPromise(() =>
+          coreWorker.scheduled(
+            { cron: "* * * * *", noRetry: () => undefined, scheduledTime: tick },
+            coreEnvironment(runtime)
+          )
+        );
+        const retained = yield* fromTestPromise(() =>
+          runtime.db
+            .prepare(
+              "SELECT t.user_id, t.status, COUNT(e.id) AS entries FROM hosted_turns t LEFT JOIN transcript_entries e ON e.turn_id = t.id AND e.user_id = t.user_id GROUP BY t.id ORDER BY t.id"
+            )
+            .all()
+        );
+        expect(retained.results).toEqual([
+          { user_id: userA, status: "failed", entries: 0 },
+          { user_id: userB, status: "failed", entries: 2 },
+          { user_id: userB, status: "pending", entries: 1 },
+        ]);
+      }
+    })
+  ));

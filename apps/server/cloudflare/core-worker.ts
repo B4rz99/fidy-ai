@@ -1,8 +1,8 @@
+import type { CoreMaintenanceInput } from "./maintenance/contract";
+import { runCoreMaintenance } from "./maintenance/runtime";
 import { type MemoryOperationId, memoryOperationIds } from "@fidy/server/memory-api";
 import { BatchInput, type CanonicalWork } from "./canonical-operations/contract";
 import { UserId } from "@fidy/server/identity-reference";
-import { makeAuditRetention } from "@fidy/server/audit-runtime";
-import { EmailAddress } from "@fidy/server/client";
 import { HostedTurnProgressRequest } from "../src/shell/agent/contract";
 import {
   HostedDeliveryAdmission,
@@ -11,7 +11,6 @@ import {
   hostedDeliveryReceipt,
   hostedTurnInput,
 } from "./agent/contract";
-import { makeAgentRetention } from "./agent/runtime";
 import type { WorkersAiEnvironment } from "./ai/contract";
 import {
   type BrowserPairingEmailEnvironment,
@@ -27,9 +26,6 @@ import {
   receiveBrowserPairingEmail,
   receiveEmailReplacement,
   receiveOnboardingEmail,
-  reconcileBrowserPairingEmail,
-  reconcileEmailReplacement,
-  reconcileOnboardingEmail,
 } from "./email-authentication/runtime";
 import { type BillingCollectionEnvironment } from "./subscription/contract";
 import {
@@ -44,7 +40,6 @@ import { type Cause, Clock, Data, Effect, Exit, Option, Schema } from "effect";
 import {
   browseTransactions,
   correctionInput,
-  repairDashboardProjections,
   transactionInput,
   transactionPairInput,
   transactionSession,
@@ -55,7 +50,6 @@ import { browseBudgets, budgetRefusal, evaluateBudgetAlerts } from "./budgets/op
 import { listPendingInsights } from "./insights/operations";
 import { browseDashboard } from "./dashboard/operations";
 import { ownsTransactionPath as transactionPath } from "@fidy/server/transaction-runtime";
-import { recoverPendingDisclosures, sweepExpiredConsent } from "./consent/runtime";
 import {
   type TransactionCaller,
   isPATCaller,
@@ -78,11 +72,9 @@ import {
   isBillingCollectionWork,
   receiveBillingCollection,
   receiveWompiBillingEvent,
-  reconcileBillingCandidates,
-  sweepExpiredCardPreparationAdmission,
 } from "./subscription/runtime";
 
-import { authorizeCanonicalPAT, listPATs, sweepExpiredPATPairings } from "./tokens/operations";
+import { authorizeCanonicalPAT, listPATs } from "./tokens/operations";
 import { recallMemories, rejectMemoryMutation } from "./memory/operations";
 import { canonicalOperation, canonicalRoute } from "./routing/canonical-routes";
 import {
@@ -118,55 +110,28 @@ import {
   observeWorkerPromise,
   observeWorkerRequest,
 } from "./runtime/telemetry";
-import { sweepExpiredWorkersAiAdmission } from "./ai/workers-ai";
 import { statementStagingPath } from "@fidy/server/ingestion-contract";
 import {
-  expireStatementReviewEvidence,
   forwardingAddressResponse,
   listNeedsReviewItems,
   readStatementSubmission,
   submitForExtractionInput,
-  sweepExpiredUploadAdmission,
   uploadStagedStatement,
   validationFailed,
 } from "./ingestion/operations";
 import {
   StatementExtractionWorkflowV1,
-  dispatchStatementExtraction,
   isForwardedEmailWork,
   isStatementExtractionWork,
   receiveForwardedEmailWork,
   receiveStatementExtraction,
-  reconcileStatementExtraction,
-  statementRetention,
 } from "./ingestion/runtime";
-import { runOperationalAlerts } from "./runtime/operational-alert-delivery";
-import { type AlertSignal, decideOperationalAlerts } from "./runtime/operational-alerts";
-import {
-  type CanaryHealth,
-  readCanaryHealth,
-  receiveCanary,
-  sendCanary,
-} from "./runtime/operational-canary";
-import {
-  type EventMetricSignal,
-  observeOperationalEventMetrics,
-  sweepOperationalEventBuckets,
-} from "./runtime/operational-event-metrics";
-import {
-  type OperationalHealthEnvironment,
-  type OperationalSignal,
-  observeOperationalHealth,
-} from "./runtime/operational-health";
-import { recordOperationalHealth } from "./runtime/operational-health-view";
-import { type CapabilityProbe, inspectOperationalCapabilities } from "./runtime/operational-probes";
-import { sendOperatorEmail } from "./runtime/operator-email";
+import { receiveCanary } from "./runtime/operational-canary";
 import {
   type WhatsAppStatusAdmission,
   type WhatsAppTurnAdmission,
   WhatsAppWork,
 } from "./whatsapp/contract";
-import { sweepExpiredWhatsAppWindows } from "./whatsapp/operations";
 import {
   dispatchWhatsAppWork,
   receiveWhatsAppWebhook,
@@ -1853,355 +1818,52 @@ class ForwardedEmailDeliveryUnavailable extends Data.TaggedError(
   "ForwardedEmailDeliveryUnavailable"
 ) {}
 
-/** A failed schedule reports only a closed classification, never database or provider details. */
-class ScheduledWorkFailed extends Data.TaggedError("ScheduledWorkFailed") {}
-
-const deliverOperationalSignals = (
-  environment: CoreEnvironment,
-  signals: ReadonlyArray<OperationalSignal | EventMetricSignal | CanaryHealth | CapabilityProbe>
-): Effect.Effect<void, void> =>
-  Effect.flatMap(Clock.currentTimeMillis, (now) =>
-    Effect.tryPromise({
-      try: (signal) => {
-        const recipient = Schema.decodeUnknownOption(EmailAddress)(
-          environment.OPERATOR_ALERT_EMAIL
-        );
-        if (Option.isNone(recipient) || environment.RESEND_API_KEY === undefined) {
-          throw new Error("Operator email configuration unavailable");
-        }
-        const to = recipient.value;
-        const apiKey = environment.RESEND_API_KEY;
-        return runOperationalAlerts({
-          db: environment.DB,
-          now,
-          alerts: decideOperationalAlerts(signals),
-          signal,
-          send: (alert, idempotencyKey, delivery) =>
-            sendOperatorEmail({
-              alert,
-              idempotencyKey,
-              to,
-              apiKey,
-              release: environment.RELEASE_GIT_SHA,
-              signal: delivery.signal,
-              phase: delivery.phase,
-            }),
-        });
-      },
-      catch: () => undefined,
-    })
-  );
-
-const operationalWorkQueues = (
-  environment: CoreEnvironment
-): OperationalHealthEnvironment["workQueues"] => ({
-  ...(environment.ONBOARDING_EMAIL_QUEUE && {
-    onboardingQueue: environment.ONBOARDING_EMAIL_QUEUE,
-  }),
-  ...(environment.BROWSER_PAIRING_EMAIL_QUEUE && {
-    browserPairingQueue: environment.BROWSER_PAIRING_EMAIL_QUEUE,
-  }),
-  ...(environment.EMAIL_REPLACEMENT_HEALTH_QUEUE && {
-    emailReplacementQueue: environment.EMAIL_REPLACEMENT_HEALTH_QUEUE,
-  }),
-  ...(environment.BILLING_COLLECTION_QUEUE && {
-    billingQueue: environment.BILLING_COLLECTION_QUEUE,
-  }),
-  ...(environment.STATEMENT_EXTRACTION_QUEUE && {
-    statementQueue: environment.STATEMENT_EXTRACTION_QUEUE,
-  }),
-  ...(environment.FORWARDED_EMAIL_QUEUE && {
-    forwardedEmailQueue: environment.FORWARDED_EMAIL_QUEUE,
-  }),
-  ...(environment.HOSTED_WHATSAPP_QUEUE && { whatsappQueue: environment.HOSTED_WHATSAPP_QUEUE }),
-});
-
-const providerConfigured = (environment: CoreEnvironment): boolean =>
-  [
-    environment.KAPSO_API_KEY,
-    environment.KAPSO_WEBHOOK_SECRET,
-    environment.RESEND_API_KEY,
-    environment.HOSTED_AI_MODEL,
-    environment.WOMPI_ENVIRONMENT,
-    environment.WOMPI_PUBLIC_KEY,
-    environment.WOMPI_PRIVATE_KEY,
-    environment.WOMPI_INTEGRITY_SECRET,
-    environment.WOMPI_EVENT_SECRET,
-  ].every((value) => typeof value === "string" && value.trim().length > 0);
-
-const requiredBindings = (environment: CoreEnvironment): ReadonlyArray<boolean> =>
-  [
-    environment.DB,
-    environment.AI,
-    environment.USER_TRANSACTION_COORDINATOR,
-    environment.ASYNC_DEAD_LETTERS,
-    environment.OPERATIONAL_CANARY_QUEUE,
-    environment.OPERATIONAL_CANARY_WORKFLOW,
-    environment.EMAIL_BUCKET,
-    environment.STATEMENT_STAGING_BUCKET,
-    environment.STATEMENT_EXTRACTION_QUEUE,
-    environment.STATEMENT_EXTRACTION_WORKFLOW,
-    environment.ONBOARDING_EMAIL_QUEUE,
-    environment.ONBOARDING_EMAIL_WORKFLOW,
-    environment.BROWSER_PAIRING_EMAIL_QUEUE,
-    environment.BROWSER_PAIRING_EMAIL_WORKFLOW,
-    environment.EMAIL_REPLACEMENT_QUEUE,
-    environment.EMAIL_REPLACEMENT_WORKFLOW,
-    environment.BILLING_COLLECTION_QUEUE,
-    environment.BILLING_COLLECTION_WORKFLOW,
-    environment.HOSTED_WHATSAPP_QUEUE,
-    environment.FORWARDED_EMAIL_QUEUE,
-    environment.EMAIL_REPLACEMENT_HEALTH_QUEUE,
-  ].map((binding) => binding !== undefined);
-
-const operationalWorkflows = (
-  environment: CoreEnvironment
-): OperationalHealthEnvironment["workflows"] => ({
-  ...(environment.STATEMENT_EXTRACTION_WORKFLOW && {
-    statement: environment.STATEMENT_EXTRACTION_WORKFLOW,
-  }),
-  ...(environment.ONBOARDING_EMAIL_WORKFLOW && {
-    onboarding: environment.ONBOARDING_EMAIL_WORKFLOW,
-  }),
-  ...(environment.BROWSER_PAIRING_EMAIL_WORKFLOW && {
-    browserPairing: environment.BROWSER_PAIRING_EMAIL_WORKFLOW,
-  }),
-  ...(environment.EMAIL_REPLACEMENT_WORKFLOW && {
-    emailReplacement: environment.EMAIL_REPLACEMENT_WORKFLOW,
-  }),
-  ...(environment.BILLING_COLLECTION_WORKFLOW && {
-    billing: environment.BILLING_COLLECTION_WORKFLOW,
-  }),
-});
-
-const reportOperationalSignals = (
-  environment: CoreEnvironment,
-  signals: ReadonlyArray<AlertSignal>
-): Effect.Effect<void, void> =>
-  Effect.forEach(
-    signals,
-    (signal) => (signal.state === "healthy" ? Effect.logInfo(signal) : Effect.logWarning(signal)),
-    { discard: true }
-  ).pipe(
-    Effect.andThen(
-      Effect.flatMap(Clock.currentTimeMillis, (observedAtMs) =>
-        Effect.tryPromise({
-          try: () => recordOperationalHealth({ db: environment.DB, signals, observedAtMs }),
-          catch: () => undefined,
-        })
-      ).pipe(Effect.orElseSucceed(() => undefined))
-    ),
-    Effect.andThen(deliverOperationalSignals(environment, signals))
-  );
-
-const observeAdditionalSignals = (
-  environment: CoreEnvironment,
-  signals: ReadonlyArray<OperationalSignal>
-): Effect.Effect<ReadonlyArray<OperationalSignal | EventMetricSignal | CanaryHealth>, void> =>
-  Effect.flatMap(Clock.currentTimeMillis, (now) =>
-    observeOperationalEventMetrics({ db: environment.DB, now }).pipe(
-      Effect.flatMap((events) =>
-        Effect.tryPromise({
-          try: () => readCanaryHealth({ db: environment.DB, now }),
-          catch: () => undefined,
-        }).pipe(
-          Effect.map(
-            (canaries): ReadonlyArray<OperationalSignal | EventMetricSignal | CanaryHealth> => [
-              ...signals,
-              ...events,
-              ...canaries,
-            ]
-          )
-        )
-      )
-    )
-  );
-
-const scheduledHealth = (environment: CoreEnvironment): Effect.Effect<void, void> =>
-  environment.ASYNC_HEALTH_ENABLED !== "enabled"
-    ? Effect.void
-    : observeOperationalHealth({
-        DB: environment.DB,
-        deadLetters: Option.fromUndefinedOr(environment.ASYNC_DEAD_LETTERS),
-        workQueues: operationalWorkQueues(environment),
-        workflows: operationalWorkflows(environment),
-      }).pipe(
-        Effect.flatMap((signals) => observeAdditionalSignals(environment, signals)),
-        Effect.flatMap((signals) =>
-          inspectOperationalCapabilities({
-            d1: environment.DB,
-            coordinator: environment.USER_TRANSACTION_COORDINATOR,
-            requiredBindings: requiredBindings(environment),
-            providerConfigured: providerConfigured(environment),
-          }).pipe(
-            Effect.map(
-              (
-                capabilities
-              ): ReadonlyArray<
-                OperationalSignal | EventMetricSignal | CanaryHealth | CapabilityProbe
-              > => [...signals, ...capabilities]
-            )
-          )
-        ),
-        Effect.flatMap((signals) => reportOperationalSignals(environment, signals))
-      );
-
-const statementActivities = (
-  environment: CoreEnvironment
-): Record<string, Effect.Effect<unknown, void>> => ({
-  "ingestion.reviewEvidenceExpiry":
-    environment.STATEMENT_STAGING_BUCKET === undefined
-      ? Effect.void
-      : Effect.tryPromise({
-          try: () => expireStatementReviewEvidence({ DB: environment.DB }),
-          catch: () => undefined,
-        }),
-  "ingestion.statementReconcile":
-    environment.STATEMENT_EXTRACTION_WORKFLOW === undefined
-      ? Effect.void
-      : reconcileStatementExtraction({
-          DB: environment.DB,
-          STATEMENT_EXTRACTION_WORKFLOW: environment.STATEMENT_EXTRACTION_WORKFLOW,
-          USER_TRANSACTION_COORDINATOR: environment.USER_TRANSACTION_COORDINATOR,
-        }).pipe(Effect.mapError(() => undefined)),
-  "ingestion.statementDispatch":
-    environment.STATEMENT_EXTRACTION_QUEUE === undefined
-      ? Effect.void
-      : dispatchStatementExtraction({
-          DB: environment.DB,
-          STATEMENT_EXTRACTION_QUEUE: environment.STATEMENT_EXTRACTION_QUEUE,
-        }).pipe(Effect.mapError(() => undefined)),
-});
-
-const admissionActivities = (
-  db: D1Database,
-  now: number,
-  smokeConfigured: boolean
-): Record<string, Effect.Effect<unknown, void>> => ({
-  "ingestion.uploadAdmissionSweep": sweepExpiredUploadAdmission({ db, now }).pipe(
-    Effect.mapError(() => undefined)
+/** Normalize only the bindings needed by the published scheduled composition. */
+const maintenanceInput = (environment: CoreEnvironment): CoreMaintenanceInput => ({
+  DB: environment.DB,
+  USER_TRANSACTION_COORDINATOR: environment.USER_TRANSACTION_COORDINATOR,
+  AI: environment.AI,
+  RELEASE_GIT_SHA: environment.RELEASE_GIT_SHA,
+  KAPSO_API_KEY: environment.KAPSO_API_KEY,
+  KAPSO_WEBHOOK_SECRET: environment.KAPSO_WEBHOOK_SECRET,
+  HOSTED_AI_MODEL: environment.HOSTED_AI_MODEL,
+  WOMPI_ENVIRONMENT: environment.WOMPI_ENVIRONMENT,
+  WOMPI_PUBLIC_KEY: environment.WOMPI_PUBLIC_KEY,
+  WOMPI_PRIVATE_KEY: environment.WOMPI_PRIVATE_KEY,
+  WOMPI_INTEGRITY_SECRET: environment.WOMPI_INTEGRITY_SECRET,
+  ASYNC_HEALTH_ENABLED: Option.fromUndefinedOr(environment.ASYNC_HEALTH_ENABLED),
+  ASYNC_DEAD_LETTERS: Option.fromUndefinedOr(environment.ASYNC_DEAD_LETTERS),
+  FORWARDED_EMAIL_QUEUE: Option.fromUndefinedOr(environment.FORWARDED_EMAIL_QUEUE),
+  EMAIL_REPLACEMENT_HEALTH_QUEUE: Option.fromUndefinedOr(
+    environment.EMAIL_REPLACEMENT_HEALTH_QUEUE
   ),
-  "agent.workersAiAdmissionSweep": sweepExpiredWorkersAiAdmission({ db, now }).pipe(
-    Effect.mapError(() => undefined)
+  OPERATIONAL_CANARY_QUEUE: Option.fromUndefinedOr(environment.OPERATIONAL_CANARY_QUEUE),
+  OPERATIONAL_CANARY_WORKFLOW: Option.fromUndefinedOr(environment.OPERATIONAL_CANARY_WORKFLOW),
+  EMAIL_BUCKET: Option.fromUndefinedOr(environment.EMAIL_BUCKET),
+  STATEMENT_STAGING_BUCKET: Option.fromUndefinedOr(environment.STATEMENT_STAGING_BUCKET),
+  ONBOARDING_EMAIL_QUEUE: Option.fromUndefinedOr(environment.ONBOARDING_EMAIL_QUEUE),
+  BROWSER_PAIRING_EMAIL_QUEUE: Option.fromUndefinedOr(environment.BROWSER_PAIRING_EMAIL_QUEUE),
+  EMAIL_REPLACEMENT_QUEUE: Option.fromUndefinedOr(environment.EMAIL_REPLACEMENT_QUEUE),
+  BILLING_COLLECTION_QUEUE: Option.fromUndefinedOr(environment.BILLING_COLLECTION_QUEUE),
+  STATEMENT_EXTRACTION_QUEUE: Option.fromUndefinedOr(environment.STATEMENT_EXTRACTION_QUEUE),
+  HOSTED_WHATSAPP_QUEUE: Option.fromUndefinedOr(environment.HOSTED_WHATSAPP_QUEUE),
+  ONBOARDING_EMAIL_WORKFLOW: Option.fromUndefinedOr(environment.ONBOARDING_EMAIL_WORKFLOW),
+  BROWSER_PAIRING_EMAIL_WORKFLOW: Option.fromUndefinedOr(
+    environment.BROWSER_PAIRING_EMAIL_WORKFLOW
   ),
-  "billing.cardPreparationAdmissionSweep": sweepExpiredCardPreparationAdmission({ db, now }).pipe(
-    Effect.mapError(() => undefined)
-  ),
-  "release.smoke.expiry": smokeConfigured
-    ? Effect.tryPromise({
-        try: () =>
-          db.prepare("DELETE FROM release_smoke_probes WHERE expires_at_ms < ?").bind(now).run(),
-        catch: () => undefined,
-      })
-    : Effect.void,
+  EMAIL_REPLACEMENT_WORKFLOW: Option.fromUndefinedOr(environment.EMAIL_REPLACEMENT_WORKFLOW),
+  BILLING_COLLECTION_WORKFLOW: Option.fromUndefinedOr(environment.BILLING_COLLECTION_WORKFLOW),
+  STATEMENT_EXTRACTION_WORKFLOW: Option.fromUndefinedOr(environment.STATEMENT_EXTRACTION_WORKFLOW),
+  OPERATOR_ALERT_EMAIL: Option.fromUndefinedOr(environment.OPERATOR_ALERT_EMAIL),
+  RESEND_API_KEY: Option.fromUndefinedOr(environment.RESEND_API_KEY),
+  WOMPI_EVENT_SECRET: Option.fromUndefinedOr(environment.WOMPI_EVENT_SECRET),
+  SMOKE_BUCKET: Option.fromUndefinedOr(environment.SMOKE_BUCKET),
+  SMOKE_QUEUE: Option.fromUndefinedOr(environment.SMOKE_QUEUE),
+  SMOKE_WORKFLOW: Option.fromUndefinedOr(environment.SMOKE_WORKFLOW),
+  SMOKE_QUEUE_NAME: Option.fromUndefinedOr(environment.SMOKE_QUEUE_NAME),
+  SMOKE_PROOF: Option.fromUndefinedOr(environment.SMOKE_PROOF),
+  CF_VERSION_METADATA: Option.fromUndefinedOr(environment.CF_VERSION_METADATA),
 });
-
-const canaryPublication = (
-  environment: CoreEnvironment,
-  current: number
-): Effect.Effect<void, void> => {
-  if (environment.ASYNC_HEALTH_ENABLED !== "enabled") return Effect.void;
-  const queue = environment.OPERATIONAL_CANARY_QUEUE;
-  return queue === undefined
-    ? Effect.fail(undefined)
-    : Effect.tryPromise({
-        try: () => sendCanary({ queue, now: current }),
-        catch: () => undefined,
-      });
-};
-
-const eventBucketRetention = (
-  environment: CoreEnvironment,
-  current: number
-): Effect.Effect<void, void> =>
-  environment.ASYNC_HEALTH_ENABLED === "enabled"
-    ? sweepOperationalEventBuckets({ db: environment.DB, now: current })
-    : Effect.void;
-
-const auditRetentionActivity = (
-  environment: CoreEnvironment,
-  current: number
-): Effect.Effect<number, void> =>
-  makeAuditRetention({ database: environment.DB })
-    .sweep(current)
-    .pipe(Effect.mapError(() => undefined));
-
-const scheduledActivities = (
-  environment: CoreEnvironment,
-  current: number
-): Record<string, Effect.Effect<unknown, void>> => {
-  const staging =
-    environment.STATEMENT_STAGING_BUCKET === undefined
-      ? undefined
-      : statementRetention({
-          bucket: environment.STATEMENT_STAGING_BUCKET,
-          database: environment.DB,
-          nowEpochMs: () => current,
-        });
-  const publishers = publicationActivities(environment, Option.none());
-  return {
-    "async.health": scheduledHealth(environment),
-    "audit.retention": auditRetentionActivity(environment, current),
-    "operational.events.retention": eventBucketRetention(environment, current),
-    "operational.canary.publish": canaryPublication(environment, current),
-    "onboarding.email.dispatch": publishers.onboarding(),
-    "onboarding.email.reconcile": reconcileOnboardingEmail(environment.DB),
-    "browserPairing.email.dispatch": publishers.browserPairing(),
-    "browserPairing.email.reconcile": reconcileBrowserPairingEmail(environment.DB),
-    "emailReplacement.dispatch": publishers.emailReplacement(),
-    "emailReplacement.reconcile": reconcileEmailReplacement(environment.DB),
-    "billing.collection.dispatch": publishers.billing(),
-    "billing.collection.reconcile":
-      environment.BILLING_COLLECTION_WORKFLOW === undefined
-        ? Effect.void
-        : reconcileBillingCandidates({
-            DB: environment.DB,
-            BILLING_COLLECTION_WORKFLOW: environment.BILLING_COLLECTION_WORKFLOW,
-          }).pipe(Effect.mapError(() => undefined)),
-    "consent.sweep": sweepExpiredConsent(environment.DB)(),
-    "consent.disclosureRecovery": recoverPendingDisclosures({
-      db: environment.DB,
-      apiKey: environment.KAPSO_API_KEY,
-    }),
-    "hostedTurn.whatsapp.dispatch": publishers.whatsapp(),
-    "hostedTurn.whatsapp.windowSweep": sweepExpiredWhatsAppWindows({
-      db: environment.DB,
-      now: current,
-    }).pipe(Effect.mapError(() => undefined)),
-    "hostedTurn.sweep": makeAgentRetention({ db: environment.DB })
-      .sweep(current)
-      .pipe(Effect.mapError(() => undefined)),
-    "patPairing.sweep": Effect.tryPromise({
-      try: () => sweepExpiredPATPairings(environment.DB),
-      catch: () => undefined,
-    }),
-    "dashboard.projectionRepair": repairDashboardProjections(environment.DB).pipe(
-      Effect.mapError(() => undefined)
-    ),
-    "ingestion.submissionRetention":
-      staging?.expireSubmissions.pipe(Effect.mapError(() => undefined)) ?? Effect.void,
-    "ingestion.stagingSweep":
-      staging?.sweepStaging.pipe(Effect.mapError(() => undefined)) ?? Effect.void,
-    ...admissionActivities(environment.DB, current, smokeReady(environment)),
-    ...statementActivities(environment),
-  };
-};
-
-/** Independent activities all run, including retention, before the schedule reports any failure. */
-const scheduledWork = (environment: CoreEnvironment): Effect.Effect<void, ScheduledWorkFailed> =>
-  Effect.gen(function* () {
-    const current = yield* Clock.currentTimeMillis;
-    const activities = scheduledActivities(environment, current);
-    let failed = false;
-    for (const [operation, work] of Object.entries(activities)) {
-      const result = yield* Effect.exit(work.pipe(Effect.withSpan(operation)));
-      if (Exit.isFailure(result)) {
-        failed = true;
-        yield* Effect.logWarning({ component: "scheduled-work", operation, outcome: "failed" });
-      }
-    }
-    if (failed) return yield* new ScheduledWorkFailed();
-  });
 
 /** Builds the private Core target with one telemetry service for each request Work span. */
 export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
@@ -2222,7 +1884,7 @@ export const makeCoreWorker = (telemetry: TelemetryService): CoreWorker => ({
       Effect.runPromise
     ),
   scheduled: (_controller, environment) =>
-    scheduledWork(environment).pipe(
+    runCoreMaintenance(maintenanceInput(environment)).pipe(
       (work) =>
         observeWorkerExecution(work, {
           environment,

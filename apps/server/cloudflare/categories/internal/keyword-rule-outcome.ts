@@ -1,3 +1,4 @@
+import { keywordRuleFromRows, keywordRuleQuery } from "./keyword-rules";
 import { Effect, Option, Schema } from "effect";
 import {
   prepareAuthorizedAuditCall,
@@ -6,8 +7,8 @@ import {
 } from "@fidy/server/audit";
 import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
 import { livePATAuthority } from "@fidy/server/tokens-runtime";
-import { newId } from "../pats/pat-shared";
-import { prepareOwnedStatement } from "../pats/pat-unit";
+import { newId } from "../../pats/pat-shared";
+import { prepareOwnedStatement } from "../../pats/pat-unit";
 import {
   type CategoryFailure,
   CategoryNotFound,
@@ -18,8 +19,6 @@ import {
   NotFound,
   type SuggestedOperationCaller,
   ValidationFailed,
-  keywordRuleFromRows,
-  keywordRuleQuery,
   maximumKeywordRulesPerUser,
   normalizeCategoryKeyword,
   toApiFailure,
@@ -30,17 +29,17 @@ import {
   findExistingCategory,
   findOwnedKeywordRules,
   keywordRuleJsonHeaders,
-} from "../categories/keyword-rule-shared";
-import { decideKeywordRuleConflict } from "../categories/keyword-rule-conflict";
+} from "./keyword-rule-shared";
+import { decideKeywordRuleConflict } from "./keyword-rule-conflict";
 import type {
   CanonicalMutationRefusal,
   CommittedMutationValue,
   GuardRefusalWork,
   KeywordRuleOutcome,
   OwnerOutcome,
-} from "./mutation-types";
-import { type TransactionCaller, isPATCaller } from "../transactions/transaction-boundary";
-import { dailyAuditMessage } from "./transaction-outcome";
+} from "../../mutations/mutation-types";
+import { type TransactionCaller, isPATCaller } from "../../transactions/transaction-boundary";
+import { dailyAuditMessage } from "../../mutations/transaction-outcome";
 
 const HTTP_UNAVAILABLE = 503;
 

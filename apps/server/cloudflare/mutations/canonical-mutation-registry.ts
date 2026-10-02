@@ -37,7 +37,7 @@ import {
   prepareCreateKeywordRule,
   prepareDeleteKeywordRule,
   prepareUpdateKeywordRule,
-} from "../categories/canonical-keyword-rules";
+} from "../categories/operations";
 import { prepareForget, prepareRemember, prepareRevise } from "../memory/memory";
 import { committedJsonResponse } from "./canonical-mutation-unit";
 import {

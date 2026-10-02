@@ -1,7 +1,7 @@
 import { Data, Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { Unavailable } from "~/shell/public-http/contract";
-import type { ListCategoriesResponse } from "./operations";
+import type { ListCategoriesResponse } from "~/shell/categories/contract";
 import { categoryResponseFromRows, categoryRowsQuery } from "./query";
 
 /** Safe reason returned when authoritative Category data cannot be loaded. */

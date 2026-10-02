@@ -95,15 +95,15 @@ import {
 } from "@fidy/server/canonical-runtime";
 import { sweepExpiredPATPairings } from "./pats/pat-pairing";
 import { authorizeCanonicalPAT } from "./pats/pat-authorization";
-import { executeProtectedCategories } from "./categories/canonical-category";
 import { executeProtectedSubscriptionQuery } from "./billing/subscription-queries";
 import {
+  executeProtectedCategories,
   keywordRuleIdFromPath,
   keywordRuleInput,
   keywordRuleInvalidInput,
   keywordRuleUnknownId,
   listOwnKeywordRules,
-} from "./categories/canonical-keyword-rules";
+} from "./categories/operations";
 import {
   currentWebSessionUser as currentUser,
   logoutWebSession as logoutBrowser,

@@ -143,65 +143,47 @@ const cloudflarePairingPrivate = `tools/${PROBE_PREFIX}pairing-private`;
 
 const PROBES: readonly Probe[] = [
   {
+    name: "Category callers use the published owner operations",
     expect: { kind: "allowed" },
     files: [
       {
-        path: `${cloudflareSessionPublished}/probe.ts`,
+        path: `cloudflare/${PROBE_PREFIX}categories-public/probe.ts`,
         source:
-          'import { authenticateWebSession, logoutWebSession } from "../web-session/operations";\n' +
-          'import { freshSessionQuery } from "@fidy/server/web-session-operations";\n' +
-          "export const published = [authenticateWebSession, logoutWebSession, freshSessionQuery];\n",
+          'import { requireCategory, categorizeCaptures } from "../categories/operations";\nexport const reads = [requireCategory, categorizeCaptures];\n',
       },
     ],
-    name: "Cloudflare callers use published WebSession authentication and commit-time guards",
   },
   {
+    name: "foreign tests cannot read Category persistence",
     expect: {
       kind: "rejected",
       mustContain: [
-        `error foreign-module-imports-cloudflare-web-session-internal: ${cloudflareSessionPrivate}/probe.test.ts → cloudflare/web-session/internal/credentials.ts`,
+        `error foreign-module-imports-cloudflare-categories-internal: cloudflare/${PROBE_PREFIX}categories-private/probe.test.ts → cloudflare/categories/internal/keyword-rule-shared.ts`,
       ],
     },
     files: [
       {
-        path: `${cloudflareSessionPrivate}/probe.test.ts`,
+        path: `cloudflare/${PROBE_PREFIX}categories-private/probe.test.ts`,
         source:
-          'import { sessionCookie } from "../web-session/internal/credentials";\nexport const privateCredential = sessionCookie;\n',
+          'import { findOwnedKeywordRules } from "../categories/internal/keyword-rule-shared";\nexport const privateRead = findOwnedKeywordRules;\n',
       },
     ],
-    name: "foreign tests cannot reach WebSession credential handling",
   },
   {
+    name: "native Category adapters cannot reach portable private policy",
     expect: {
       kind: "rejected",
       mustContain: [
-        `error cloudflare-imports-portable-web-session-internal: ${cloudflareSessionShellPrivate}/probe.ts → src/shell/web-session/internal/authority.ts`,
+        `error cloudflare-imports-portable-categories-internal: cloudflare/categories/${PROBE_PREFIX}portable-private/probe.ts → src/core/categories/internal/rules.ts`,
       ],
     },
     files: [
       {
-        path: `${cloudflareSessionShellPrivate}/probe.ts`,
+        path: `cloudflare/categories/${PROBE_PREFIX}portable-private/probe.ts`,
         source:
-          'import { sessionCredentialAuthority } from "~/shell/web-session/internal/authority";\nexport const privateAuthority = sessionCredentialAuthority;\n',
+          'import { findKeywordCategory } from "../../../src/core/categories/internal/rules";\nexport const privatePolicy = findKeywordCategory;\n',
       },
     ],
-    name: "Cloudflare WebSession must respect portable owner internals",
-  },
-  {
-    expect: {
-      kind: "rejected",
-      mustContain: [
-        `error foreign-module-imports-cloudflare-browser-login-internal: ${cloudflarePairingPrivate}/probe.ts → cloudflare/browser-login/internal/pairing.ts`,
-      ],
-    },
-    files: [
-      {
-        path: `${cloudflarePairingPrivate}/probe.ts`,
-        source:
-          'import { redeemBrowserPairing } from "../../cloudflare/browser-login/internal/pairing";\nexport const privateVerifier = redeemBrowserPairing;\n',
-      },
-    ],
-    name: "tools cannot bypass the browser verifier owner",
   },
 
   {
@@ -265,6 +247,68 @@ const PROBES: readonly Probe[] = [
       },
     ],
     name: "tooling cannot import private Identity context projections",
+  },
+
+  {
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `${cloudflareSessionPublished}/probe.ts`,
+        source:
+          'import { authenticateWebSession, logoutWebSession } from "../web-session/operations";\n' +
+          'import { freshSessionQuery } from "@fidy/server/web-session-operations";\n' +
+          "export const published = [authenticateWebSession, logoutWebSession, freshSessionQuery];\n",
+      },
+    ],
+    name: "Cloudflare callers use published WebSession authentication and commit-time guards",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-web-session-internal: ${cloudflareSessionPrivate}/probe.test.ts → cloudflare/web-session/internal/credentials.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${cloudflareSessionPrivate}/probe.test.ts`,
+        source:
+          'import { sessionCookie } from "../web-session/internal/credentials";\nexport const privateCredential = sessionCookie;\n',
+      },
+    ],
+    name: "foreign tests cannot reach WebSession credential handling",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error cloudflare-imports-portable-web-session-internal: ${cloudflareSessionShellPrivate}/probe.ts → src/shell/web-session/internal/authority.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${cloudflareSessionShellPrivate}/probe.ts`,
+        source:
+          'import { sessionCredentialAuthority } from "~/shell/web-session/internal/authority";\nexport const privateAuthority = sessionCredentialAuthority;\n',
+      },
+    ],
+    name: "Cloudflare WebSession must respect portable owner internals",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-browser-login-internal: ${cloudflarePairingPrivate}/probe.ts → cloudflare/browser-login/internal/pairing.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${cloudflarePairingPrivate}/probe.ts`,
+        source:
+          'import { redeemBrowserPairing } from "../../cloudflare/browser-login/internal/pairing";\nexport const privateVerifier = redeemBrowserPairing;\n',
+      },
+    ],
+    name: "tools cannot bypass the browser verifier owner",
   },
 
   {
@@ -767,22 +811,18 @@ const PROBES: readonly Probe[] = [
     expect: {
       kind: "rejected",
       mustContain: [
-        `error core-slice-reaches-sibling-slice: ${SIBLING_IMPLEMENTATION}/probe.ts → src/core/categories/model.ts`,
-        `error core-slice-reaches-sibling-slice: ${SIBLING_IMPLEMENTATION}/probe.ts → src/core/categories/rules.ts`,
-        `error core-slice-reaches-sibling-slice: ${SIBLING_IMPLEMENTATION}/probe.ts → src/core/categories/errors.ts`,
-        `error core-slice-reaches-sibling-slice: ${SIBLING_IMPLEMENTATION}/probe.ts → src/core/categories/taxonomy.ts`,
+        `error core-slice-reaches-sibling-slice: ${SIBLING_IMPLEMENTATION}/probe.ts → src/core/categories/internal/rules.ts`,
+        `error core-slice-reaches-sibling-slice: ${SIBLING_IMPLEMENTATION}/probe.ts → src/core/categories/internal/taxonomy.ts`,
       ],
     },
     files: [
       {
         path: `${SIBLING_IMPLEMENTATION}/probe.ts`,
         source:
-          'import { Category } from "~/core/categories/model";\n' +
-          'import { CategoryNotFound } from "~/core/categories/errors";\n' +
-          'import { findKnownCaptureCategory } from "~/core/categories/rules";\n' +
-          'import { categoryIds } from "~/core/categories/taxonomy";\n\n' +
+          'import { findKnownCaptureCategory } from "~/core/categories/internal/rules";\n' +
+          'import { categoryRows } from "~/core/categories/internal/taxonomy";\n\n' +
           "export const siblingImplementationProbe = [\n" +
-          "  Category,\n  CategoryNotFound,\n  findKnownCaptureCategory,\n  categoryIds,\n];\n",
+          "  findKnownCaptureCategory,\n  categoryRows,\n];\n",
       },
     ],
     name: "core-slice-reaches-sibling-slice rejects a sibling's implementation",
@@ -791,15 +831,15 @@ const PROBES: readonly Probe[] = [
     expect: {
       kind: "rejected",
       mustContain: [
-        `error core-slice-reaches-sibling-slice: ${TYPE_ONLY}/probe.ts → src/core/categories/model.ts`,
+        `error core-slice-reaches-sibling-slice: ${TYPE_ONLY}/probe.ts → src/core/categories/internal/taxonomy.ts`,
       ],
     },
     files: [
       {
         path: `${TYPE_ONLY}/probe.ts`,
         source:
-          'import type { Category } from "~/core/categories/model";\n\n' +
-          "export type TypeOnlyProbe = Category;\n",
+          'import type { categoryRows } from "~/core/categories/internal/taxonomy";\n\n' +
+          "export type TypeOnlyProbe = typeof categoryRows;\n",
       },
     ],
     name: "an `import type` is an edge the graph can see (tsPreCompilationDeps)",

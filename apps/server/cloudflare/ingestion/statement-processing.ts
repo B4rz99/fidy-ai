@@ -1,3 +1,4 @@
+import type { CaptureCategoryInput } from "../categories/contract";
 import {
   type ParsedStatement,
   StatementParseFailed,
@@ -9,14 +10,8 @@ import {
   StatementStagingId,
   maximumStatementBytes,
 } from "@fidy/server/statement-staging";
-import {
-  type CategoryId,
-  type KeywordRule,
-  fallbackCaptureCategory,
-  findKeywordCategory,
-  keywordRulesFromRows,
-  keywordRulesQuery,
-} from "@fidy/server/categories";
+import type { CategoryId } from "@fidy/server/categories";
+import { categorizeCaptures } from "../categories/operations";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import {
   type InterpretedStatementRow,
@@ -179,7 +174,7 @@ type RowWork = Readonly<{
   row: ParsedStatementRow;
   result: InterpretedStatementRow<TransactionExtraction>;
   context: SubmissionRow;
-  rules: ReadonlyArray<KeywordRule>;
+  categoryId: CategoryId;
 }>;
 const active = `EXISTS (SELECT 1 FROM statement_submissions WHERE id = ? AND user_id = ?
     AND status = 'processing' AND retention_expires_at_ms > ?)`;
@@ -352,15 +347,7 @@ const rowOutcome = (work: RowWork): Effect.Effect<void, StatementProcessingUnava
             {
               ...work,
               result,
-              categoryId: Option.isSome(result.extraction.counterparty)
-                ? Option.getOrElse(
-                    yield* findKeywordCategory({
-                      counterparty: result.extraction.counterparty.value,
-                      rules: work.rules,
-                    }),
-                    () => fallbackCaptureCategory(result.extraction.direction)
-                  )
-                : fallbackCaptureCategory(result.extraction.direction),
+              categoryId: work.categoryId,
             },
             id,
             activeArgs
@@ -489,26 +476,20 @@ const readProgress = (
     return yield* Schema.decodeUnknownEffect(countRow)(raw);
   });
 
-const ownedStatementRules = (
-  db: D1Database,
-  userId: string
-): Effect.Effect<ReadonlyArray<KeywordRule>, StatementProcessingUnavailable> =>
-  Effect.gen(function* () {
-    const query = keywordRulesQuery({ userId });
-    const rows = yield* attempt(() =>
-      db
-        .prepare(query.sql)
-        .bind(...query.params)
-        .all()
-    );
-    const decoded = keywordRulesFromRows(rows.results);
-    if (Option.isNone(decoded)) {
-      return yield* new StatementProcessingUnavailable({
-        cause: new Error("Statement keyword rules unavailable"),
-      });
-    }
-    return decoded.value;
-  });
+const captureCategoryInput = (
+  outcome: Option.Option<InterpretedStatementRow<TransactionExtraction>>
+): CaptureCategoryInput =>
+  Option.isSome(outcome) && outcome.value.outcome === "accepted"
+    ? {
+        caller: Option.none<CategoryId>(),
+        counterparty: outcome.value.extraction.counterparty,
+        direction: outcome.value.extraction.direction,
+      }
+    : {
+        caller: Option.none<CategoryId>(),
+        counterparty: Option.none<string>(),
+        direction: "outflow",
+      };
 
 const finalizeChunk = ({
   input,
@@ -526,22 +507,42 @@ const finalizeChunk = ({
   Effect.gen(function* () {
     const chunk = rows.slice(progress.total, progress.total + statementChunkSize);
     const mapping = mechanicalMappingFor(parsed.headers);
-    const rules = Option.isSome(mapping) ? yield* ownedStatementRules(input.DB, input.userId) : [];
     const interpreted = Option.isSome(mapping)
       ? yield* interpretStatementRows(
           { rows: chunk, mapping: mapping.value, timeZone: context.time_zone },
           Schema.decodeUnknownEffect(Schema.toCodecJson(TransactionExtraction))
         )
       : undefined;
+    const categories = yield* categorizeCaptures({
+      db: input.DB,
+      userId: input.userId,
+      captures: chunk.map((_, index) =>
+        captureCategoryInput(Option.fromUndefinedOr(interpreted?.outcomes[index]))
+      ),
+    }).pipe(
+      Effect.mapError(
+        () =>
+          new StatementProcessingUnavailable({
+            cause: new Error("Statement categorization unavailable"),
+          })
+      )
+    );
     // D1 batches must settle sequentially; a parallel batch could reorder this durable cursor.
     for (const [index, row] of chunk.entries()) {
+      const categoryId = yield* Effect.fromOption(
+        Option.fromUndefinedOr(categories[index]),
+        () =>
+          new StatementProcessingUnavailable({
+            cause: new Error("Statement categorization unavailable"),
+          })
+      );
       yield* rowOutcome({
         db: input.DB,
         userId: input.userId,
         submissionId: input.submissionId,
         row,
         context,
-        rules,
+        categoryId,
         result: interpreted?.outcomes[index] ?? unmappedStatementRow(row),
       });
     }

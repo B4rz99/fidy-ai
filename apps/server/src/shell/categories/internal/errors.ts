@@ -4,7 +4,7 @@ import {
   type KeywordRuleAlreadyExists,
   type KeywordRuleLimitReached,
   type KeywordRuleNotFound,
-} from "~/core/categories/errors";
+} from "~/core/categories/contract";
 import { NotFound, type SuggestedOperation, ValidationFailed } from "~/shell/public-http/contract";
 import {
   type SuggestedOperationCaller,

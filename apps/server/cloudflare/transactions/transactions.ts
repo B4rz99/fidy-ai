@@ -4,14 +4,8 @@ import type { UserContext } from "@fidy/server/identity-contract";
 import { protectConsentStatement } from "@fidy/server/consent-operations";
 import { prepareOwnerAuditCall } from "@fidy/server/audit";
 import { CreateTransactionInput, encodeMoneyAmount } from "@fidy/server/transactions-runtime";
-import {
-  type CategoryId,
-  fallbackCaptureCategory,
-  findKeywordCategory,
-  findKnownCaptureCategory,
-  keywordRulesFromRows,
-  keywordRulesQuery,
-} from "@fidy/server/categories";
+import type { CategoryId } from "@fidy/server/categories";
+import { categorizeCaptures, requireCategory } from "../categories/operations";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { authenticateCanonicalWebSession } from "../web-session/operations";
 import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
@@ -151,14 +145,17 @@ const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedSt
   ];
 };
 
-const hasUnknownCategory = (db: D1Database, categoryId: Option.Option<string>): Promise<boolean> =>
+const hasUnknownCategory = (
+  db: D1Database,
+  categoryId: Option.Option<CategoryId>
+): Effect.Effect<boolean, TransactionBoundaryFailure> =>
   Option.isNone(categoryId)
-    ? Promise.resolve(false)
-    : db
-        .prepare("SELECT id FROM categories WHERE id = ?")
-        .bind(categoryId.value)
-        .first()
-        .then((category) => category === null);
+    ? Effect.succeed(false)
+    : requireCategory({ db, categoryId: categoryId.value }).pipe(
+        Effect.as(false),
+        Effect.catchTag("CategoryNotFound", () => Effect.succeed(true)),
+        Effect.mapError(boundaryFailure)
+      );
 
 const captureUserContext = (
   db: D1Database,
@@ -169,32 +166,7 @@ const captureUserContext = (
     Effect.mapError(boundaryFailure)
   );
 
-const findRuleCategory = ({
-  db,
-  userId,
-  counterparty,
-}: Readonly<{ db: D1Database; userId: string; counterparty: string }>): Effect.Effect<
-  Option.Option<CategoryId>,
-  TransactionBoundaryFailure
-> =>
-  Effect.gen(function* () {
-    const query = keywordRulesQuery({ userId });
-    const stored = yield* Effect.tryPromise({
-      try: () =>
-        db
-          .prepare(query.sql)
-          .bind(...query.params)
-          .all(),
-      catch: boundaryFailure,
-    });
-    const rules = keywordRulesFromRows(stored.results);
-    if (Option.isNone(rules)) {
-      return yield* boundaryFailure("keyword_rules_unreadable");
-    }
-    return yield* findKeywordCategory({ counterparty, rules: rules.value });
-  });
-
-/** Explicit Category, then the User's keyword policy, then the direction fallback. */
+/** Category ownership resolves explicit choice, User instructions and the direction fallback. */
 const resolveCaptureCategory = ({
   db,
   subject,
@@ -204,20 +176,20 @@ const resolveCaptureCategory = ({
   subject: TransactionCaller;
   input: typeof Input.Type;
 }>): Effect.Effect<CategoryId, TransactionBoundaryFailure> =>
-  Effect.gen(function* () {
-    const keywordRule = Option.isNone(input.counterparty)
-      ? Option.none<CategoryId>()
-      : yield* findRuleCategory({
-          db,
-          userId: subject.userId,
-          counterparty: input.counterparty.value,
-        });
-    const known = yield* findKnownCaptureCategory({
-      caller: input.categoryId,
-      keywordRule,
-    });
-    return Option.getOrElse(known, () => fallbackCaptureCategory(input.direction));
-  });
+  categorizeCaptures({
+    db,
+    userId: subject.userId,
+    captures: [
+      { caller: input.categoryId, counterparty: input.counterparty, direction: input.direction },
+    ],
+  }).pipe(
+    Effect.flatMap((categories) =>
+      Effect.fromOption(Option.fromUndefinedOr(categories[0]), () =>
+        boundaryFailure("capture_category_unavailable")
+      )
+    ),
+    Effect.mapError(boundaryFailure)
+  );
 
 /** One capture refusal built from the shared Transaction refusal vocabulary. */
 const refusedCapture = ({
@@ -324,10 +296,7 @@ export const prepareCapture = ({
     }
     const context = yield* captureUserContext(db, subject.userId);
     if (Option.isNone(context)) return unavailablePreparation();
-    const unrecognizedCategory = yield* Effect.tryPromise({
-      try: () => hasUnknownCategory(db, input.categoryId),
-      catch: boundaryFailure,
-    });
+    const unrecognizedCategory = yield* hasUnknownCategory(db, input.categoryId);
     if (unrecognizedCategory) {
       return refusedCapture({
         db,

@@ -1,9 +1,6 @@
-import {
-  type CategoryId,
-  type KeywordRule,
-  keywordRulesFromRows,
-  keywordRulesQuery,
-} from "@fidy/server/categories";
+import { requiredCategory } from "./projection";
+import { keywordRulesFromRows, keywordRulesQuery } from "./keyword-rules";
+import { type CategoryId, type KeywordRule } from "@fidy/server/categories";
 import { Effect, Option } from "effect";
 
 /** The status a declared `ValidationFailed` keyword-rule refusal answers with. */
@@ -37,9 +34,8 @@ export const findExistingCategory = ({
   db,
   categoryId,
 }: Readonly<{ db: D1Database; categoryId: CategoryId }>): Effect.Effect<Option.Option<boolean>> =>
-  Effect.tryPromise(() =>
-    db.prepare("SELECT 1 FROM categories WHERE id = ?").bind(categoryId).first()
-  ).pipe(
-    Effect.map((category) => Option.some(category !== null)),
+  requiredCategory({ db, categoryId }).pipe(
+    Effect.as(Option.some(true)),
+    Effect.catchTag("CategoryNotFound", () => Effect.succeedSome(false)),
     Effect.orElseSucceed(() => Option.none())
   );

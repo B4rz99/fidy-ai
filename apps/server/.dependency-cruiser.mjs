@@ -88,6 +88,30 @@ export default {
       },
     },
     {
+      name: "foreign-module-imports-cloudflare-categories-internal",
+      severity: "error",
+      comment:
+        "Categories owns keyword persistence, matching policy and native query assembly. Other owners use its published operations (#597).",
+      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/categories/" },
+      to: { path: "^cloudflare/categories/internal/" },
+    },
+    {
+      name: "cloudflare-imports-portable-categories-internal",
+      severity: "error",
+      comment:
+        "Native Categories consumes portable contracts and operations, never core or shell internals (#597).",
+      from: { path: "^cloudflare/" },
+      to: { path: "^src/(core|shell)/categories/internal/" },
+    },
+    {
+      name: "categories-interface-reexports-internal",
+      severity: "error",
+      comment:
+        "The Category owner declares its native public interface without re-exporting private persistence or policy.",
+      from: { path: "^cloudflare/categories/(contract|operations|runtime)\\.ts$" },
+      to: { path: "^cloudflare/categories/internal/", dependencyTypes: ["export"] },
+    },
+    {
       name: "foreign-module-imports-cloudflare-web-session-internal",
       severity: "error",
       comment:
@@ -287,7 +311,7 @@ export default {
       severity: "error",
       comment:
         "src/shell/api.ts imported something other than a slice's operations.ts, " +
-        "shell/_shared, or the Identity/Public HTTP declaration contracts. The assembly composes operation definitions " +
+        "shell/_shared, or the Identity/Categories/Public HTTP declaration contracts. The assembly composes operation definitions " +
         "and their universal validation declaration and nothing else. A slice's " +
         "handlers.ts *must* import api.ts, because HttpApiBuilder.group takes the assembled " +
         "HttpApi as its first argument, so the acyclic direction is the one this rule holds: " +
@@ -299,7 +323,7 @@ export default {
         pathNot: [
           "^src/shell/_shared/",
           "^src/shell/public-http/contract\\.ts$",
-          "^src/shell/identity/contract\\.ts$",
+          "^src/shell/(identity|categories)/contract\\.ts$",
           "^src/shell/[^/]+/operations\\.ts$",
         ],
       },

@@ -1,9 +1,10 @@
+import { listCategories } from "../categories/operations";
 import { Data, DateTime, Effect, Option, Result, Schema } from "effect";
 import { prepareAuthorizedAuditCall, recordCanonicalPATWork } from "@fidy/server/audit";
 import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import { makeDefaultDashboard } from "../../src/core/dashboard/catalog";
-import { categoryIds } from "../../src/core/categories/taxonomy";
+import { categoryIds } from "../../src/core/categories/operations";
 import {
   DashboardDocument,
   type DashboardEdit,
@@ -193,13 +194,10 @@ const validCategories = (
     ...new Set(collectDashboardCategoryReferences(document).map((item) => item.categoryId)),
   ];
   if (ids.length === 0) return Effect.succeedSome(true);
-  return Effect.tryPromise(() =>
-    db
-      .prepare(`SELECT id FROM categories WHERE id IN (${ids.map(() => "?").join(",")})`)
-      .bind(...ids)
-      .all()
-  ).pipe(
-    Effect.map((rows) => Option.some(rows.results.length === ids.length)),
+  return listCategories({ db }).pipe(
+    Effect.map((categories) =>
+      Option.some(ids.every((id) => categories.some((category) => category.id === id)))
+    ),
     Effect.orElseSucceed(() => Option.none())
   );
 };

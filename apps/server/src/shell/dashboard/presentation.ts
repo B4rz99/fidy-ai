@@ -1,6 +1,6 @@
 import { Data, type DateTime, Effect, Option } from "effect";
 
-import type { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
+import type { UserContext } from "~/core/identity/contract";
 import type { Category } from "~/core/categories/model";
 import { type Budget, calculateBudgetStatus } from "~/shell/budgets/contract";
 import { resolveDashboardPeriod } from "~/core/dashboard/calculation";
@@ -25,11 +25,7 @@ export type DashboardFacts = Readonly<{
   >;
   budgets: ReadonlyArray<Budget>;
   categories: ReadonlyMap<string, Category>;
-  context: Readonly<{
-    service_market: ServiceMarket;
-    locale: Locale;
-    time_zone: IanaTimeZone;
-  }>;
+  context: UserContext;
 }>;
 
 type ChartWidget = Extract<Widget, { type: "spending-chart" }>;
@@ -43,7 +39,7 @@ const renderChart = (
     const period = resolveDashboardPeriod({
       now,
       period: widget.period,
-      timeZone: facts.context.time_zone,
+      timeZone: facts.context.timeZone,
     });
     const ranges = facts.groups.get(widget.id);
     if (ranges === undefined) return yield* new DashboardUnavailable();
@@ -87,7 +83,7 @@ const renderMetric = (
     const period = resolveDashboardPeriod({
       now,
       period: widget.period,
-      timeZone: facts.context.time_zone,
+      timeZone: facts.context.timeZone,
     });
     const ranges = facts.groups.get(widget.id);
     if (ranges === undefined) return yield* new DashboardUnavailable();
@@ -103,7 +99,7 @@ const renderBudget = (
   now: DateTime.Utc
 ): Effect.Effect<DashboardWidgetView, DashboardUnavailable> =>
   Effect.gen(function* () {
-    const zone = facts.context.time_zone;
+    const zone = facts.context.timeZone;
     const period = resolveDashboardPeriod({ now, period: "this-month", timeZone: zone });
     const category = facts.categories.get(widget.categoryId);
     if (category === undefined) return yield* new DashboardUnavailable();
@@ -205,9 +201,9 @@ export const renderDashboardView = ({
       title: document.title,
       layout,
       context: {
-        serviceMarket: facts.context.service_market,
+        serviceMarket: facts.context.serviceMarket,
         locale: facts.context.locale,
-        timeZone: facts.context.time_zone,
+        timeZone: facts.context.timeZone,
         calculatedAt: now,
       },
     }))

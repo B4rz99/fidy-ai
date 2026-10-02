@@ -1,17 +1,20 @@
-import { prepareConsentAction } from "../consent/operations";
+import { findWhatsAppUser, prepareWhatsAppIdentity } from "./operations";
+import { protectConsentStatement } from "@fidy/server/consent-operations";
+import { BrowserLoginPairingId } from "../../src/core/browser-login/reference";
 import {
-  BrowserLoginPairingId,
   BrowserLoginPublicCodeSymbols,
-  User,
-  UserId,
-  calculateWebSessionDeadlines,
   decideBrowserLoginRedemption,
   formatPublicCode,
-  getCurrentUser,
   maximumWrongVerifierAttempts,
   selectPublicCodeSymbols,
+} from "../../src/core/browser-login/rules";
+import { User } from "@fidy/server/identity-contract";
+import { UserId, WhatsAppCallerReference } from "@fidy/server/identity-reference";
+import {
+  calculateWebSessionDeadlines,
   webSessionIdleRenewalCandidate,
-} from "@fidy/server/identity-runtime";
+} from "../../src/core/web-session/rules";
+import { getCurrentUser } from "@fidy/server/identity-operations";
 import * as D1Client from "@effect/sql-d1/D1Client";
 import { BackupRecoveryCode } from "@fidy/server/client";
 import {
@@ -204,29 +207,43 @@ export const approveBrowserPairing = ({
 }): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
+      const caller = Schema.decodeOption(WhatsAppCallerReference)({
+        businessPortfolioId: input.portfolioId,
+        businessScopedUserId: input.bsuid,
+      });
+      if (Option.isNone(caller)) return invalid();
+      const user = yield* findWhatsAppUser({
+        db,
+        portfolioId: caller.value.businessPortfolioId,
+        bsuid: caller.value.businessScopedUserId,
+      });
+      if (Option.isNone(user)) return invalid();
       const result = yield* attempt(() =>
-        prepareConsentAction({
+        prepareWhatsAppIdentity({
           db,
-          statement: {
-            sql: `INSERT INTO browser_login_approvals (portfolio_id, message_id, pairing_id, user_id)
-              SELECT ?, ?, p.id, w.user_id FROM browser_login_pairings AS p
-              JOIN whatsapp_identities AS w ON w.portfolio_id = ? AND w.bsuid = ?
+          userId: user.value,
+          statement: protectConsentStatement({
+            statement: {
+              sql: `INSERT INTO browser_login_approvals (portfolio_id, message_id, pairing_id, user_id)
+              SELECT ?, ?, p.id, w.userId FROM browser_login_pairings AS p
+              JOIN identity_associations AS w ON w.businessPortfolioId = ? AND w.businessScopedUserId = ?
               WHERE p.public_code = ? AND p.state = 'pending_approval'
                 AND p.expires_at_ms > ? AND p.expires_at_ms > ?
                 AND ? >= (p.created_at_ms / 1000) * 1000`,
-            params: [
-              input.portfolioId,
-              input.messageId,
-              input.portfolioId,
-              input.bsuid,
-              input.publicCode,
-              input.receivedAtMs,
-              input.occurredAtMs,
-              input.occurredAtMs,
-            ],
-          },
-          subject: { _tag: "Owner", column: "w.user_id" },
-          requirement: "granted",
+              params: [
+                input.portfolioId,
+                input.messageId,
+                input.portfolioId,
+                input.bsuid,
+                input.publicCode,
+                input.receivedAtMs,
+                input.occurredAtMs,
+                input.occurredAtMs,
+              ],
+            },
+            subject: { _tag: "User", userId: user.value },
+            requirement: "granted",
+          }),
         }).run()
       );
       return result.meta.changes > 0 ? new Response(null, { status: 200 }) : invalid();

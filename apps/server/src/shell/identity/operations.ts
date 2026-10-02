@@ -1,63 +1,76 @@
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
-import { User, UserPreferences } from "~/core/identity/model";
-import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
-import { OperationResponse, Unavailable } from "~/shell/public-http/contract";
-import type { FreshSessionSubject } from "./contract";
+import { Effect, Option } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { User } from "~/core/identity/contract";
+import type { UserId } from "~/core/identity/reference";
+import type { OwnedStatement } from "~/shell/_shared/owned-statement";
+import { Unavailable } from "~/shell/public-http/contract";
+import { protectConsentAuthority } from "~/shell/consent/operations";
+import type { WebSessionAuthority, WebSessionSubject } from "~/shell/web-session/contract";
+import { webSessionCredentialAuthority } from "~/shell/web-session/operations";
+import { findUser } from "~/shell/identity/internal/user-query";
+
+const userUnavailable = (): Unavailable =>
+  Unavailable.make({
+    error: { code: "unavailable", message: "User data is temporarily unavailable. Retry later." },
+    next: [],
+  });
 
 /**
- * Canonical stable-User operations. The update payload is the model-derived
- * preference projection, so ServiceMarket cannot become editable through a
- * second hand-written request schema.
+ * Load the resolved stable User while rechecking Consent in the authoritative read.
+ * Missing, inaccessible, or invalid state returns the same safe unavailable response.
  */
-export const IdentityGroup = HttpApiGroup.make("identity").add(
-  HttpApiEndpoint.get("getCurrentUser", "/user", {
-    success: OperationResponse(User),
-    error: Unavailable,
-  })
-    .annotate(
-      OpenApi.Description,
-      "Get the stable User behind the authenticated bearer and the independently stored ServiceMarket, " +
-        "locale, and IANA time zone. Use it before interpreting dates or presenting data to the User."
-    )
-    .annotateMerge(
-      operationPolicy({
-        access: patScoped("read"),
-        requiredTier: "free",
-        agentConfirmation: "not-required",
-        kind: "query",
+export const getCurrentUser = (
+  userId: UserId
+): Effect.Effect<
+  { readonly data: User; readonly next: ReadonlyArray<never> },
+  Unavailable,
+  SqlClient.SqlClient
+> =>
+  findUser(userId).pipe(
+    Effect.flatMap((user) =>
+      Option.match(user, {
+        onNone: () => Effect.fail(userUnavailable()),
+        onSome: (data) => Effect.succeed({ data, next: [] as const }),
       })
     ),
-  HttpApiEndpoint.patch("updateUserPreferences", "/user/preferences", {
-    payload: UserPreferences,
-    success: OperationResponse(User),
-  })
-    .annotate(
-      OpenApi.Description,
-      "Update the User's editable presentation locale and named IANA time zone. Use it when the " +
-        "User asks to change either preference; ServiceMarket cannot be changed here."
-    )
-    .annotateMerge(
-      operationPolicy({
-        access: patScoped("write"),
-        requiredTier: "free",
-        agentConfirmation: "not-required",
-        kind: "mutation",
-      })
-    )
-);
+    Effect.mapError(userUnavailable)
+  );
 
-/** Recheck a fresh User-owned WebSession within the same D1 unit as an authority change. */
-export const freshSessionExists = `EXISTS (SELECT 1 FROM web_sessions WHERE id = ? AND user_id = ? AND revoked_at_ms IS NULL
-  AND fresh_until_ms > ? AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?)`;
+/** D1 predicate that is re-evaluated with a protected browser canonical read. */
+export const liveWebSessionAuthority = (
+  input: Readonly<{ subject: WebSessionSubject; current: number }>
+): WebSessionAuthority => {
+  const credential = webSessionCredentialAuthority(input);
+  return protectConsentAuthority({
+    authority: credential,
+    subject: { _tag: "Owner", column: "web_sessions.user_id" },
+    requirement: "unrevoked",
+  });
+};
 
-type SessionParams = readonly [string, string, number, number, number];
-export const freshSessionParams = ({
-  session,
-  time,
-}: Readonly<{ session: FreshSessionSubject; time: number }>): SessionParams => [
-  session.id,
-  session.user_id,
-  time,
-  time,
-  time,
-];
+/**
+ * Select one User's original TrialPeriod for composition inside a caller-owned statement.
+ * The bounded projection exposes startedAtMs and endsAtMs as UTC epoch milliseconds;
+ * absent state produces no row. The caller retains responsibility for its access authority.
+ */
+export const userTrialPeriodQuery = (userId: UserId): OwnedStatement => ({
+  sql: `SELECT started_at_ms AS startedAtMs, ends_at_ms AS endsAtMs
+    FROM trial_periods WHERE user_id = ? LIMIT 1`,
+  params: [userId],
+});
+
+/**
+ * Recheck the original TrialPeriod's half-open interval inside the caller's protected work.
+ * Missing or out-of-window state is false; another User's trial never affects this condition.
+ */
+export const activeTrialPeriodCondition = ({
+  userId,
+  nowEpochMs,
+}: Readonly<{ userId: UserId; nowEpochMs: number }>): OwnedStatement => {
+  const trial = userTrialPeriodQuery(userId);
+  return {
+    sql: `EXISTS (SELECT 1 FROM (${trial.sql}) AS trial
+      WHERE trial.startedAtMs <= ? AND trial.endsAtMs > ?)`,
+    params: [...trial.params, nowEpochMs, nowEpochMs],
+  };
+};

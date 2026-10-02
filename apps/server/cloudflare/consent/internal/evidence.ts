@@ -1,5 +1,5 @@
 import type { ConsentRevocationInput, OnboardingConsentInput } from "../contract";
-import { webSessionCredentialAuthority } from "@fidy/server/identity-runtime";
+import { webSessionCredentialAuthority } from "@fidy/server/web-session-operations";
 
 export const onboardingEvidence = (input: OnboardingConsentInput): D1PreparedStatement =>
   input.db

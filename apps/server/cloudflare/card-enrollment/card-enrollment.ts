@@ -1,4 +1,6 @@
-import { prepareConsentAction } from "../consent/operations";
+import { protectConsentStatement } from "@fidy/server/consent-operations";
+import { UserContext } from "@fidy/server/identity-contract";
+import { prepareUserContext } from "../identity/user-context/operations";
 import {
   BillingAttempt,
   BillingAttemptId,
@@ -21,7 +23,7 @@ import {
   makeWompiEnrollmentClient,
 } from "@fidy/server/subscription-runtime";
 import { Cause, Clock, Data, DateTime, Effect, Exit, Option, Schema } from "effect";
-import { UserId } from "@fidy/server/identity-runtime";
+import { UserId } from "@fidy/server/identity-reference";
 import { claimPreparedCardEnrollment } from "./card-enrollment-claim";
 import { admitCardPreparationAttempt } from "./card-preparation-admission";
 import { ResourceAdmissionRefused } from "../resource-admission/authority";
@@ -46,8 +48,8 @@ const WompiConfiguration = Schema.Struct({
   ),
 });
 const Session = Schema.Struct({
-  user_id: Schema.String.check(Schema.isUUID()),
-  time_zone: Schema.String.check(Schema.isNonEmpty()),
+  user_id: UserId,
+  timeZone: UserContext.fields.timeZone,
   email_address: BillingEmail,
 });
 const PriceRow = Schema.Struct({
@@ -65,7 +67,7 @@ const Terms = Schema.Struct({
 });
 const EnrollmentRow = Schema.Struct({
   id: CardEnrollmentId,
-  user_id: Schema.String.check(Schema.isUUID()),
+  user_id: UserId,
   price_id: Price.fields.id,
   billing_email: BillingEmail,
   payment_source_mode: Schema.Literals(["create", "reuse"]),
@@ -201,22 +203,34 @@ const authority = (
   if (matches.length !== 1) return Promise.resolve(Option.none());
   const token = matches[0]?.slice("__Host-fidy_session=".length) ?? "";
   if (!/^[A-Za-z0-9_-]{43}$/u.test(token)) return Promise.resolve(Option.none());
+  // Resolution is only a subject hint; the context read rechecks the complete fresh credential.
   return digest(token).then((tokenDigest) =>
-    prepareConsentAction({
-      db,
-      statement: {
-        sql: `SELECT s.user_id, u.time_zone, v.email_address FROM web_sessions AS s
-        JOIN users AS u ON u.id = s.user_id
-        JOIN verified_email_credentials AS v ON v.user_id = s.user_id
-        WHERE s.token_digest = ? AND s.revoked_at_ms IS NULL AND s.fresh_until_ms > ?
-          AND s.idle_expires_at_ms > ? AND s.hard_expires_at_ms > ?`,
-        params: [tokenDigest, at, at, at],
-      },
-      subject: { _tag: "Owner", column: "s.user_id" },
-      requirement: "granted",
-    })
+    db
+      .prepare("SELECT user_id FROM web_sessions WHERE token_digest = ?")
+      .bind(tokenDigest)
       .first()
-      .then((row) => decodeRow(Session, row))
+      .then((raw) => {
+        const subject = decodeRow(Schema.Struct({ user_id: Session.fields.user_id }), raw);
+        if (Option.isNone(subject)) return Option.none<typeof Session.Type>();
+        return prepareUserContext({
+          db,
+          userId: subject.value.user_id,
+          statement: protectConsentStatement({
+            statement: {
+              sql: `SELECT s.user_id, u.timeZone, v.email_address FROM web_sessions AS s
+                JOIN identity_user_context AS u ON u.userId = s.user_id
+                JOIN verified_email_credentials AS v ON v.user_id = s.user_id
+                WHERE s.token_digest = ? AND s.revoked_at_ms IS NULL AND s.fresh_until_ms > ?
+                  AND s.idle_expires_at_ms > ? AND s.hard_expires_at_ms > ?`,
+              params: [tokenDigest, at, at, at],
+            },
+            subject: { _tag: "Owner", column: "s.user_id" },
+            requirement: "granted",
+          }),
+        })
+          .first()
+          .then((row) => decodeRow(Session, row));
+      })
   );
 };
 
@@ -585,7 +599,7 @@ const finish = ({
           row.id,
           requestId,
           sourceId,
-          session.time_zone,
+          session.timeZone,
           environment.WOMPI_ENVIRONMENT,
           reference,
           now,

@@ -2,7 +2,7 @@ import { afterAll, expect, it } from "vitest";
 import { Data, DateTime, Effect } from "effect";
 import { recordAuthorizedCall, recordOwnerCall } from "@fidy/server/audit";
 import { makeAudit, makeAuditRetention } from "@fidy/server/audit-runtime";
-import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
+import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
 import { installTestSchema, isolatedTestDatabases } from "../../d1-test-fixture";
 import coreWorker from "../../core-worker";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";

@@ -24,11 +24,6 @@
       "import": "./src/shell/tokens/runtime.ts",
       "default": "./src/shell/tokens/runtime.ts"
     },
-    "./identity-runtime": {
-      "types": "./src/shell/identity/browser-runtime.ts",
-      "import": "./src/shell/identity/browser-runtime.ts",
-      "default": "./src/shell/identity/browser-runtime.ts"
-    },
     "./subscription-runtime": {
       "types": "./src/shell/subscription/runtime.ts",
       "import": "./src/shell/subscription/runtime.ts",
@@ -168,6 +163,36 @@
       "types": "./src/shell/consent/operations.ts",
       "import": "./src/shell/consent/operations.ts",
       "default": "./src/shell/consent/operations.ts"
+    },
+    "./identity-contract": {
+      "types": "./src/core/identity/contract.ts",
+      "import": "./src/core/identity/contract.ts",
+      "default": "./src/core/identity/contract.ts"
+    },
+    "./identity-reference": {
+      "types": "./src/core/identity/reference.ts",
+      "import": "./src/core/identity/reference.ts",
+      "default": "./src/core/identity/reference.ts"
+    },
+    "./identity-decisions": {
+      "types": "./src/core/identity/operations.ts",
+      "import": "./src/core/identity/operations.ts",
+      "default": "./src/core/identity/operations.ts"
+    },
+    "./identity-operations": {
+      "types": "./src/shell/identity/operations.ts",
+      "import": "./src/shell/identity/operations.ts",
+      "default": "./src/shell/identity/operations.ts"
+    },
+    "./web-session-contract": {
+      "types": "./src/shell/web-session/contract.ts",
+      "import": "./src/shell/web-session/contract.ts",
+      "default": "./src/shell/web-session/contract.ts"
+    },
+    "./web-session-operations": {
+      "types": "./src/shell/web-session/operations.ts",
+      "import": "./src/shell/web-session/operations.ts",
+      "default": "./src/shell/web-session/operations.ts"
     }
   },
   "scripts": {
@@ -211,6 +236,6 @@
     "rolldown": "1.2.11",
     "typescript": "7.0.2",
     "vitest": "5.0.1",
-    "wrangler": "4.136.3"
+    "wrangler": "4.139.0"
   }
 }

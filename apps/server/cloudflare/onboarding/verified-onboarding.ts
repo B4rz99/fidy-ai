@@ -1,9 +1,10 @@
-import { prepareAcceptedConsentCaller, recordOnboardingConsent } from "../consent/operations";
+import { UserId } from "@fidy/server/identity-reference";
+import { prepareVerifiedIdentity } from "../identity/operations";
+import { recordOnboardingConsent } from "../consent/operations";
 import { EmailAddress, EmailVerificationCode } from "@fidy/server/client";
 import {
   canRedeemOnboardingProof,
   maximumOnboardingProofFailures,
-  verifiedOnboardingContext,
 } from "@fidy/server/onboarding-verification";
 import { Clock, Data, Effect, Option, Schema } from "effect";
 import { newId } from "../pats/pat-shared";
@@ -91,33 +92,25 @@ const readCode = (request: Request): Promise<Option.Option<string>> => {
 };
 
 const createUser = (db: D1Database, row: Enrollment, now: number): Promise<Response> => {
-  const userId = newId();
+  const userId = UserId.make(newId());
   const recoveryCode = randomCode();
   return digest(recoveryCode).then((recoveryDigest) => {
-    const context = verifiedOnboardingContext(now);
+    const identity = prepareVerifiedIdentity({
+      db,
+      userId,
+      exchangeId: row.exchange_id,
+      createdAtMs: now,
+    });
     return db
       .batch([
-        db
-          .prepare(`INSERT INTO users (id, service_market, locale, time_zone, created_at_ms)
-      VALUES (?, ?, ?, ?, ?)`)
-          .bind(userId, context.serviceMarket, context.locale, context.timeZone, now),
-        prepareAcceptedConsentCaller({
-          db,
-          statement: {
-            sql: `INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms)
-              SELECT ?, portfolio_id, bsuid, ? FROM accepted_consent_callers WHERE exchange_id = ?`,
-            params: [userId, now, row.exchange_id],
-          },
-        }),
+        identity.createUser,
+        identity.associateCaller,
         db
           .prepare(`INSERT INTO verified_email_credentials (user_id, email_address, verified_at_ms)
       VALUES (?, ?, ?)`)
           .bind(userId, row.email_address, now),
         recordOnboardingConsent({ db, userId, exchangeId: row.exchange_id }),
-        db
-          .prepare(`INSERT INTO trial_periods (user_id, started_at_ms, ends_at_ms)
-      VALUES (?, ?, ?)`)
-          .bind(userId, context.trialPeriod.startedAtMs, context.trialPeriod.endsAtMs),
+        identity.startTrial,
         db
           .prepare(`INSERT INTO backup_recovery_credentials (user_id, code_digest, created_at_ms)
       VALUES (?, ?, ?)`)

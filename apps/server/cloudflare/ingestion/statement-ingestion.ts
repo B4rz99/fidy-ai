@@ -11,7 +11,7 @@ import {
   recordCanonicalPATWork,
   refusedByAuditBudget,
 } from "@fidy/server/audit";
-import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
+import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
 import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { Data, Effect, Function, Option, Result, Schema } from "effect";
 import type { StatementPublicationRefusal } from "./statement-staging";

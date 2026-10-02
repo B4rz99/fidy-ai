@@ -1,35 +1,24 @@
 import { Option, Schema } from "effect";
 import { Memory, MemoryId, MemoryText } from "~/core/memory/model";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
-import type { WebSessionAuthority } from "~/shell/identity/session-guard";
-import type { PATAuthority } from "~/shell/tokens/pat-write";
-
-/** Live credential re-evaluated by D1 beside this owner-published Memory projection. */
-type MemoryAuthority =
-  | PATAuthority
-  | WebSessionAuthority
-  | Readonly<{
-      table: "whatsapp_identities";
-      predicate: string;
-      bindings: ReadonlyArray<string>;
-    }>;
-
 /** The exact Memory row projection every owner query returns, kept in one place. */
 const memoryRowColumns = "id,text,created_at,updated_at";
 
 /**
  * Every current Memory of one explicit User in stable ascending creation and identity order —
  * exactly the order the aggregate capacity is counted in. The projection is guarded by the live
- * credential so a revoked or withdrawn authority cannot read.
+ * credential so a revoked or withdrawn authority cannot read. Supply an owner-published query
+ * projecting semantic userId; it is correlated to this same User at execution, never trusted as
+ * a previously checked permission or allowed to release another User's Memory.
  */
 export const memoryRowsQuery = ({
   userId,
   authority,
-}: Readonly<{ userId: string; authority: MemoryAuthority }>): OwnedStatement => ({
+}: Readonly<{ userId: string; authority: OwnedStatement }>): OwnedStatement => ({
   sql: `SELECT ${memoryRowColumns} FROM memories
-    WHERE user_id = ? AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})
+    WHERE user_id = ? AND EXISTS (SELECT 1 FROM (${authority.sql}) AS memory_authority WHERE memory_authority.userId = memories.user_id)
     ORDER BY created_at, id`,
-  params: [userId, ...authority.bindings],
+  params: [userId, ...authority.params],
 });
 
 /**

@@ -119,7 +119,7 @@ const setup = Effect.fn(function* () {
   );
   const { DB: db, EMAIL_BUCKET: bucket } = bindings;
   yield* wait(() =>
-    db.exec(`CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL DEFAULT 'America/Bogota');
+    db.exec(`CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL DEFAULT 'America/Bogota', service_market TEXT NOT NULL DEFAULT 'CO', locale TEXT NOT NULL DEFAULT 'es-CO');
     CREATE TABLE onboarding_consent_records (user_id TEXT PRIMARY KEY, accepted_at_ms INTEGER NOT NULL);
     CREATE TABLE consent_user_revocations (user_id TEXT PRIMARY KEY);
     CREATE TABLE web_sessions (id TEXT PRIMARY KEY, user_id TEXT, token_digest BLOB, revoked_at_ms INTEGER, idle_expires_at_ms INTEGER, hard_expires_at_ms INTEGER);

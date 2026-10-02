@@ -1,3 +1,4 @@
+import { prepareUserContext } from "../identity/user-context/operations";
 import { UserId } from "@fidy/server/agent-runtime";
 import { Clock, Data, Effect, Option, Schema } from "effect";
 
@@ -23,10 +24,15 @@ const Subject = Schema.Struct({ user_id: UserId });
 const markForRepair = (db: D1Database, userId: string, nowMs: number): Promise<void> =>
   db
     .batch([
-      db
-        .prepare(`INSERT OR IGNORE INTO dashboard_projection_state
-      (user_id, version, readiness) SELECT id, 1, 'clearing-buckets' FROM users WHERE id = ?`)
-        .bind(userId),
+      prepareUserContext({
+        db,
+        userId: UserId.make(userId),
+        statement: {
+          sql: `INSERT OR IGNORE INTO dashboard_projection_state
+          (user_id, version, readiness) SELECT userId, 1, 'clearing-buckets' FROM identity_user_context`,
+          params: [],
+        },
+      }),
       db
         .prepare(`UPDATE dashboard_projection_state SET readiness = 'clearing-buckets', cursor_id = ''
       WHERE user_id = ? AND (readiness IN ('dirty', 'linking') OR version != 1)`)

@@ -4,10 +4,10 @@ import {
   recordCanonicalPATWork,
   refusedByAuditBudget,
 } from "@fidy/server/audit";
-import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
+import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
 import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
-import { activeProUserParams, activeProUserSql } from "../access-tier";
+import { activeProUserCondition } from "../access-tier";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import {
   type TransactionCaller,
@@ -43,6 +43,7 @@ export type ForwardingAddressOperation =
 
 const rows = (db: D1Database, userId: string, current: number): D1PreparedStatement => {
   const period = emailAllowancePeriod(DateTime.makeUnsafe(current));
+  const pro = activeProUserCondition({ userId, nowEpochMs: current });
   return prepareConsentAction({
     db,
     subject: { _tag: "Owner", column: "a.user_id" },
@@ -51,12 +52,12 @@ const rows = (db: D1Database, userId: string, current: number): D1PreparedStatem
       sql: `SELECT a.id, a.local_part, a.created_at_ms,
       (SELECT count(*) FROM forwarded_email_receipts r WHERE r.user_id = a.user_id
        AND r.received_at_ms >= ? AND r.received_at_ms < ?) AS consumed,
-      ${activeProUserSql} AS pro
+      ${pro.sql} AS pro
      FROM email_forwarding_addresses a WHERE a.user_id = ?`,
       params: [
         DateTime.toEpochMillis(period.from),
         DateTime.toEpochMillis(period.toExclusive),
-        ...activeProUserParams({ userId, nowEpochMs: current }),
+        ...pro.params,
         userId,
       ],
     },

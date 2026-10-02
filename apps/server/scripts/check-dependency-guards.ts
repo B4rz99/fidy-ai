@@ -131,7 +131,75 @@ const cloudflareConsentPrivate = `cloudflare/${PROBE_PREFIX}consent-private`;
 const cloudflareConsentShellPrivate = `cloudflare/consent/${PROBE_PREFIX}shell-private`;
 const cloudflareConsentCorePrivate = `cloudflare/consent/${PROBE_PREFIX}core-private`;
 
+const cloudflareIdentityPublished = `cloudflare/${PROBE_PREFIX}identity-published`;
+const cloudflareIdentityPrivate = `cloudflare/${PROBE_PREFIX}identity-private`;
+const cloudflareIdentityShellPrivate = `cloudflare/identity/${PROBE_PREFIX}shell-private`;
+const cloudflareIdentityContextPrivate = `tools/${PROBE_PREFIX}identity-context-private`;
+
 const PROBES: readonly Probe[] = [
+  {
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `${cloudflareIdentityPublished}/probe.ts`,
+        source:
+          'import { findWhatsAppUser, prepareVerifiedIdentity } from "../identity/operations";\n' +
+          'import { readUserContext } from "../identity/user-context/operations";\n' +
+          'import { User, WhatsAppIdentity } from "@fidy/server/identity-contract";\n' +
+          "export const published = [findWhatsAppUser, prepareVerifiedIdentity, readUserContext, User, WhatsAppIdentity];\n",
+      },
+    ],
+    name: "Cloudflare consumers may use the published Identity contract and operations",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-identity-internal: ${cloudflareIdentityPrivate}/probe.test.ts → cloudflare/identity/internal/association.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${cloudflareIdentityPrivate}/probe.test.ts`,
+        source:
+          'import { resolveCaller } from "../identity/internal/association";\nexport const privateResolver = resolveCaller;\n',
+      },
+    ],
+    name: "foreign Cloudflare tests cannot bypass the private Identity adapter",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error cloudflare-imports-portable-identity-internal: ${cloudflareIdentityShellPrivate}/probe.ts → src/shell/identity/internal/user-query.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${cloudflareIdentityShellPrivate}/probe.ts`,
+        source:
+          'import { findUser } from "~/shell/identity/internal/user-query";\nexport const privateUser = findUser;\n',
+      },
+    ],
+    name: "the Cloudflare Identity owner cannot import portable Identity internals",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-identity-internal: ${cloudflareIdentityContextPrivate}/probe.ts → cloudflare/identity/user-context/internal/context.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${cloudflareIdentityContextPrivate}/probe.ts`,
+        source:
+          'import { loadContext } from "../../cloudflare/identity/user-context/internal/context";\nexport const privateContext = loadContext;\n',
+      },
+    ],
+    name: "tooling cannot import private Identity context projections",
+  },
+
   {
     expect: { kind: "allowed" },
     files: [

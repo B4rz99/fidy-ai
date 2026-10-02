@@ -1,5 +1,7 @@
+import { UserContext } from "@fidy/server/identity-contract";
+import { prepareUserContext } from "../identity/user-context/operations";
 import { protectConsentStatement } from "@fidy/server/consent-operations";
-import { prepareConsentAction, prepareConsentWithdrawalProjection } from "../consent/operations";
+import { prepareConsentWithdrawalProjection } from "../consent/operations";
 import { Clock, Crypto, Data, Effect, Option, PlatformError, Result, Schema, Stream } from "effect";
 import PostalMime from "postal-mime";
 import {
@@ -57,10 +59,9 @@ const hexBase = 16;
 
 const uuid = Schema.String.check(Schema.isUUID());
 const count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
-const maximumTimeZoneCharacters = 128;
 const ApprovedRecipient = Schema.Struct({
   user_id: UserId,
-  time_zone: Schema.String.check(Schema.isLengthBetween(1, maximumTimeZoneCharacters)),
+  timeZone: UserContext.fields.timeZone,
 });
 const Capacity = Schema.Struct({
   global_count: count,
@@ -137,6 +138,46 @@ const readBounded = Effect.fn(function* (raw: ReadableStream) {
   return result;
 });
 
+const resolveForwardingRecipient = (
+  db: D1Database,
+  localPart: string
+): Effect.Effect<Option.Option<typeof ApprovedRecipient.Type>, EmailUnavailable> =>
+  Effect.gen(function* () {
+    // The address supplies a hint; its ownership and Consent are rechecked with the context read.
+    const subjectRow = yield* io(() =>
+      db
+        .prepare("SELECT user_id FROM email_forwarding_addresses WHERE local_part = ?")
+        .bind(localPart)
+        .first()
+    );
+    if (subjectRow === null) {
+      return Option.none();
+    }
+    const subject = Schema.decodeUnknownOption(Schema.Struct({ user_id: UserId }))(subjectRow);
+    if (Option.isNone(subject)) return yield* authorityUnavailable();
+    const candidate = yield* io(() =>
+      prepareUserContext({
+        db,
+        userId: subject.value.user_id,
+        statement: protectConsentStatement({
+          subject: { _tag: "Owner", column: "a.user_id" },
+          requirement: "active",
+          statement: {
+            sql: `SELECT a.user_id, u.timeZone FROM email_forwarding_addresses a
+            JOIN identity_user_context u ON u.userId = a.user_id WHERE a.local_part = ?`,
+            params: [localPart],
+          },
+        }),
+      }).first()
+    );
+    if (candidate === null) {
+      return Option.none();
+    }
+    const decoded = Schema.decodeUnknownOption(ApprovedRecipient)(candidate);
+    if (Option.isNone(decoded)) return yield* authorityUnavailable();
+    return decoded;
+  });
+
 /**
  * Admit one Cloudflare-routed delivery. Policy rejections are final without retained bytes;
  * authority failures escape for an SMTP retry. A unique receipt precedes R2 and outbox publication.
@@ -157,25 +198,12 @@ export const receiveForwardedEmail = Effect.fn(function* (
     return;
   }
   const localPart = message.to.slice(0, message.to.indexOf("@"));
-  const candidate = yield* io(() =>
-    prepareConsentAction({
-      db: environment.DB,
-      subject: { _tag: "Owner", column: "a.user_id" },
-      requirement: "active",
-      statement: {
-        sql: `SELECT a.user_id, u.time_zone FROM email_forwarding_addresses a
-          JOIN users u ON u.id = a.user_id WHERE a.local_part = ?`,
-        params: [localPart],
-      },
-    }).first()
-  );
-  if (candidate === null) {
+  const recipient = yield* resolveForwardingRecipient(environment.DB, localPart);
+  if (Option.isNone(recipient)) {
     reject(message);
     return;
   }
-  const decoded = Schema.decodeUnknownOption(ApprovedRecipient)(candidate);
-  if (Option.isNone(decoded)) return yield* authorityUnavailable();
-  const approved = decoded.value;
+  const approved = recipient.value;
   // Advisory cheap preflight: the D1 trigger enforces both capacities atomically at reservation.
   const capacity = yield* io(() =>
     environment.DB.prepare(
@@ -274,7 +302,7 @@ export const receiveForwardedEmail = Effect.fn(function* (
           bytes.byteLength,
           now,
           now + retentionMs,
-          approved.time_zone
+          approved.timeZone
         )
         .run()
     )

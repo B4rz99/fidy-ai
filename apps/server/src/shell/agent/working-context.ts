@@ -1,6 +1,6 @@
 import { Brand, Option } from "effect";
 import type { DateTime } from "effect";
-import type { User } from "~/core/identity/model";
+import type { User } from "~/core/identity/contract";
 import type { UserId } from "~/core/identity/reference";
 import type { TranscriptEntry, TranscriptTurnId } from "~/core/transcript/model";
 import type { HostedAgentSessionId } from "~/core/transcript/reference";

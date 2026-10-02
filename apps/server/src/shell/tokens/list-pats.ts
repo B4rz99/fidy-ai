@@ -5,7 +5,7 @@ import type { UserId } from "~/core/identity/reference";
 import { Unavailable } from "~/shell/public-http/contract";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 import { protectConsentStatement } from "~/shell/consent/operations";
-import type { FreshSessionSubject } from "~/shell/identity/browser-runtime";
+import type { FreshSessionSubject } from "~/shell/web-session/contract";
 
 const activeLimit = 100;
 const PATMetadataRow = Schema.Struct({

@@ -1,14 +1,15 @@
+import { UserId } from "@fidy/server/identity-reference";
+import { readUserContext } from "../identity/user-context/operations";
 import {
   BudgetId,
   type BudgetMonthLatch,
   type BudgetStatus,
-  IanaTimeZone,
+  type IanaTimeZone,
   advanceBudgetLatch,
 } from "@fidy/server/budgets-runtime";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { currentBudgetReport } from "./budget-queries";
 
-const UserZone = Schema.Struct({ time_zone: IanaTimeZone });
 const Marks = Schema.Struct({
   reached_80: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1 })),
   reached_100: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1 })),
@@ -121,12 +122,10 @@ export const reconcileBudgetLatches = ({
   userId: string;
 }>): Effect.Effect<boolean> =>
   Effect.gen(function* () {
-    const raw = yield* Effect.tryPromise(() =>
-      db.prepare("SELECT time_zone FROM users WHERE id = ?").bind(userId).first()
-    );
-    const context = Schema.decodeUnknownOption(UserZone)(raw);
+    const subject = yield* Schema.decodeEffect(UserId)(userId);
+    const context = yield* readUserContext({ db, userId: subject, authority: Option.none() });
     if (Option.isNone(context)) return false;
-    const timeZone = context.value.time_zone;
+    const timeZone = context.value.timeZone;
     const pending = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT occurred_at, version

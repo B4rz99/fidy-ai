@@ -1,3 +1,4 @@
+import { prepareWhatsAppIdentity } from "../identity/operations";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { TranscriptText, TranscriptTurnId, UserId } from "@fidy/server/agent-runtime";
 import { newId } from "../pats/pat-shared";
@@ -77,8 +78,11 @@ export const startWhatsAppSend = ({
 }>): Effect.Effect<boolean, Cause.UnknownError> =>
   Effect.gen(function* () {
     const saved = yield* Effect.tryPromise(() =>
-      db
-        .prepare(`UPDATE hosted_whatsapp_delivery
+      prepareWhatsAppIdentity({
+        db,
+        userId,
+        statement: {
+          sql: `UPDATE hosted_whatsapp_delivery
       SET send_started_at_ms = ?
       WHERE turn_id = ? AND user_id = ? AND correlation_token = ?
         AND state = 'sending' AND send_started_at_ms IS NULL
@@ -87,12 +91,13 @@ export const startWhatsAppSend = ({
         AND EXISTS (SELECT 1 FROM hosted_whatsapp_inbound AS i
           JOIN hosted_whatsapp_windows AS w ON w.user_id = i.user_id
             AND w.portfolio_id = i.portfolio_id AND w.bsuid = i.bsuid
-          JOIN whatsapp_identities AS identity ON identity.user_id = i.user_id
-            AND identity.portfolio_id = i.portfolio_id AND identity.bsuid = i.bsuid
+          JOIN identity_associations AS identity ON identity.userId = i.user_id
+            AND identity.businessPortfolioId = i.portfolio_id AND identity.businessScopedUserId = i.bsuid
           WHERE i.turn_id = hosted_whatsapp_delivery.turn_id AND i.user_id = ?
-            AND w.closes_at_ms > ?)`)
-        .bind(now, turnId, userId, token, userId, userId, now)
-        .run()
+            AND w.closes_at_ms > ?)`,
+          params: [now, turnId, userId, token, userId, userId, now],
+        },
+      }).run()
     );
     return saved.meta.changes === 1;
   });

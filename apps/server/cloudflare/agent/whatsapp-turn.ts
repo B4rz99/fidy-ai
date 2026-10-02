@@ -1,3 +1,4 @@
+import { prepareWhatsAppIdentity } from "../identity/operations";
 import { type Cause, Effect, Option, Schema } from "effect";
 import {
   HostedAgentSessionId,
@@ -81,15 +82,19 @@ export const isWhatsAppWindowOpen = ({
 }>): Effect.Effect<boolean, Cause.UnknownError> =>
   Effect.gen(function* () {
     const row = yield* Effect.tryPromise(() =>
-      db
-        .prepare(`SELECT 1 AS open FROM hosted_whatsapp_inbound AS i
+      prepareWhatsAppIdentity({
+        db,
+        userId,
+        statement: {
+          sql: `SELECT 1 AS open FROM hosted_whatsapp_inbound AS i
       JOIN hosted_whatsapp_windows AS w ON w.user_id = i.user_id
         AND w.portfolio_id = i.portfolio_id AND w.bsuid = i.bsuid
-      JOIN whatsapp_identities AS identity ON identity.user_id = i.user_id
-        AND identity.portfolio_id = i.portfolio_id AND identity.bsuid = i.bsuid
-      WHERE i.turn_id = ? AND i.user_id = ? AND w.closes_at_ms > ?`)
-        .bind(turnId, userId, now)
-        .first()
+      JOIN identity_associations AS identity ON identity.userId = i.user_id
+        AND identity.businessPortfolioId = i.portfolio_id AND identity.businessScopedUserId = i.bsuid
+      WHERE i.turn_id = ? AND i.user_id = ? AND w.closes_at_ms > ?`,
+          params: [turnId, userId, now],
+        },
+      }).first()
     );
     return row !== null;
   });
@@ -185,40 +190,24 @@ export const readWhatsAppPendingWork = ({
 > =>
   Effect.gen(function* () {
     const raw = yield* Effect.tryPromise(() =>
-      db
-        .prepare(`SELECT
+      prepareWhatsAppIdentity({
+        db,
+        userId,
+        statement: {
+          sql: `SELECT
       t.started_at_ms, t.hosted_session_id, i.portfolio_id, i.bsuid,
       i.business_phone_number_id, e.text,
-      EXISTS (SELECT 1 FROM whatsapp_identities AS w
-        WHERE w.user_id = t.user_id AND w.portfolio_id = i.portfolio_id AND w.bsuid = i.bsuid)
+      EXISTS (SELECT 1 FROM identity_associations AS w
+        WHERE w.userId = t.user_id AND w.businessPortfolioId = i.portfolio_id AND w.businessScopedUserId = i.bsuid)
         AS association_current
       FROM hosted_turns AS t JOIN hosted_whatsapp_inbound AS i ON i.turn_id = t.id
       JOIN hosted_whatsapp_outbox AS o ON o.turn_id = t.id AND o.user_id = t.user_id
       JOIN transcript_entries AS e ON e.turn_id = t.id AND e.user_id = t.user_id AND e.kind = 'user'
       WHERE t.id = ? AND t.user_id = ? AND t.status = 'pending'
-        AND NOT EXISTS (SELECT 1 FROM hosted_whatsapp_delivery WHERE turn_id = t.id)`)
-        .bind(turnId, userId)
-        .first()
+        AND NOT EXISTS (SELECT 1 FROM hosted_whatsapp_delivery WHERE turn_id = t.id)`,
+          params: [turnId, userId],
+        },
+      }).first()
     );
     return Schema.decodeUnknownOption(PendingWork)(raw);
-  });
-
-/** Pre-coordination lookup, not authorization: the coordinator must recheck the association. */
-export const findWhatsAppUser = ({
-  db,
-  portfolioId,
-  bsuid,
-}: Readonly<{
-  db: D1Database;
-  portfolioId: WhatsAppBusinessPortfolioId;
-  bsuid: WhatsAppBusinessScopedUserId;
-}>): Effect.Effect<Option.Option<UserId>, Cause.UnknownError> =>
-  Effect.gen(function* () {
-    const row = yield* Effect.tryPromise(() =>
-      db
-        .prepare("SELECT user_id FROM whatsapp_identities WHERE portfolio_id = ? AND bsuid = ?")
-        .bind(portfolioId, bsuid)
-        .first()
-    );
-    return Option.map(Schema.decodeUnknownOption(UserRow)(row), ({ user_id }) => user_id);
   });

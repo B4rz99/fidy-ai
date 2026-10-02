@@ -1,3 +1,5 @@
+import { UserId } from "@fidy/server/identity-reference";
+import { prepareUserContext } from "../identity/user-context/operations";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import {
   prepareAuthorizedAuditCall,
@@ -118,24 +120,28 @@ export const generateInsight = ({
     const scheduledAt = DateTime.formatIso(input.scheduledAt);
     const id = InsightEventId.make(transactionId());
     yield* Effect.tryPromise(() =>
-      db
-        .prepare(`INSERT INTO insight_events
+      prepareUserContext({
+        db,
+        userId: UserId.make(userId),
+        statement: {
+          sql: `INSERT INTO insight_events
       (id, user_id, kind, schedule_id, schedule_version, service_market, locale, time_zone,
-       scheduled_at, money_groups_json) SELECT ?, id, ?, ?, ?, ?, ?, ?, ?, ? FROM users
-       WHERE id = ? ON CONFLICT(user_id, schedule_id, schedule_version, scheduled_at) DO NOTHING`)
-        .bind(
-          id,
-          input.kind,
-          input.scheduleId,
-          input.scheduleVersion,
-          input.serviceMarket,
-          input.locale,
-          input.timeZone,
-          scheduledAt,
-          groups,
-          userId
-        )
-        .run()
+       scheduled_at, money_groups_json) SELECT ?, userId, ?, ?, ?, ?, ?, ?, ?, ? FROM identity_user_context
+       WHERE userId = ? ON CONFLICT(user_id, schedule_id, schedule_version, scheduled_at) DO NOTHING`,
+          params: [
+            id,
+            input.kind,
+            input.scheduleId,
+            input.scheduleVersion,
+            input.serviceMarket,
+            input.locale,
+            input.timeZone,
+            scheduledAt,
+            groups,
+            userId,
+          ],
+        },
+      }).run()
     );
     const row = yield* Effect.tryPromise(() =>
       db

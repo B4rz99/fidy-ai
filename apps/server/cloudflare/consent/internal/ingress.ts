@@ -1,3 +1,4 @@
+import { findWhatsAppUser, prepareWhatsAppIdentity } from "../../identity/operations";
 import type { ConsentIngressEnvironment as Environment } from "../contract";
 import {
   canRecordConsentIngressDecision,
@@ -33,7 +34,7 @@ import {
 import { EmailAddress } from "@fidy/server/client";
 import type { UserId } from "../../../src/core/identity/reference";
 import { approveBrowserPairing } from "../../identity/browser-login";
-import { findWhatsAppDeliveryUser, findWhatsAppUser } from "../../agent/whatsapp-turn";
+import { findWhatsAppDeliveryUser } from "../../agent/whatsapp-turn";
 import { decodeKapsoHostedLifecycleWebhook } from "@fidy/server/whatsapp-hosted";
 import {
   Clock,
@@ -1062,25 +1063,30 @@ const refuseVoice = (
   Effect.gen(function* () {
     if (environment.KAPSO_API_KEY.length === 0) return answer(HTTP_UNAVAILABLE);
     const claimed = yield* attempt(() =>
-      environment.DB.prepare(`INSERT INTO hosted_voice_refusals
+      prepareWhatsAppIdentity({
+        db: environment.DB,
+        userId,
+        statement: {
+          sql: `INSERT INTO hosted_voice_refusals
         (portfolio_id, message_id, user_id, claimed_at_ms)
-        SELECT ?, ?, w.user_id, ? FROM whatsapp_identities AS w
-        WHERE w.user_id = ? AND w.portfolio_id = ? AND w.bsuid = ?
-          AND EXISTS (SELECT 1 FROM onboarding_consent_records AS c WHERE c.user_id = w.user_id)
-          AND NOT EXISTS (SELECT 1 FROM consent_user_revocations AS r WHERE r.user_id = w.user_id)
+        SELECT ?, ?, w.userId, ? FROM identity_associations AS w
+        WHERE w.userId = ? AND w.businessPortfolioId = ? AND w.businessScopedUserId = ?
+          AND EXISTS (SELECT 1 FROM onboarding_consent_records AS c WHERE c.user_id = w.userId)
+          AND NOT EXISTS (SELECT 1 FROM consent_user_revocations AS r WHERE r.user_id = w.userId)
           AND (SELECT count(*) FROM hosted_voice_refusals
-            WHERE user_id = w.user_id AND claimed_at_ms > ?) < 5
-        ON CONFLICT (portfolio_id, message_id) DO NOTHING`)
-        .bind(
-          input.event.caller.businessPortfolioId,
-          input.event.messageEvidence.providerMessageId,
-          input.receivedAtMs,
-          userId,
-          input.event.caller.businessPortfolioId,
-          input.event.caller.businessScopedUserId,
-          input.receivedAtMs - hourMs
-        )
-        .run()
+            WHERE user_id = w.userId AND claimed_at_ms > ?) < 5
+        ON CONFLICT (portfolio_id, message_id) DO NOTHING`,
+          params: [
+            input.event.caller.businessPortfolioId,
+            input.event.messageEvidence.providerMessageId,
+            input.receivedAtMs,
+            userId,
+            input.event.caller.businessPortfolioId,
+            input.event.caller.businessScopedUserId,
+            input.receivedAtMs - hourMs,
+          ],
+        },
+      }).run()
     );
     if (claimed.meta.changes !== 1) {
       const replay = yield* attempt(() =>

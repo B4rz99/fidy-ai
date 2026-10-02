@@ -3,7 +3,7 @@ import { it } from "@effect/vitest";
 import { Data, Effect } from "effect";
 import { afterEach, expect } from "vitest";
 import { BillingEmail, CardEnrollmentId, PaymentRequestId } from "@fidy/server/client";
-import { UserId } from "@fidy/server/identity-runtime";
+import { UserId } from "@fidy/server/identity-reference";
 import { claimPreparedCardEnrollment } from "./card-enrollment-claim";
 import { makeCardEnrollmentD1 } from "./card-enrollment-d1.test-fixture";
 

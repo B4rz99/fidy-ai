@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { UserId } from "@fidy/server/identity-runtime";
+import { UserId } from "@fidy/server/identity-reference";
 import { BillingEmail, CardEnrollmentId, PaymentRequestId } from "@fidy/server/client";
 
 const Claim = Schema.Struct({

@@ -2,11 +2,8 @@ import { Option } from "effect";
 import { authorizedCallStatement } from "./recording";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 import { protectConsentStatement } from "~/shell/consent/operations";
-import {
-  type FreshSessionSubject,
-  freshSessionExists,
-  freshSessionParams,
-} from "~/shell/identity/browser-runtime";
+import type { FreshSessionSubject } from "~/shell/web-session/contract";
+import { freshSessionExists, freshSessionParams } from "~/shell/web-session/operations";
 import type { AuditedPATOperation, PATAuthority } from "~/shell/tokens/operations";
 
 type AuditTime = Readonly<{ id: string; current: number }>;

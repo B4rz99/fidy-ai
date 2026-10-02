@@ -7,7 +7,7 @@ import { observeWorkerPromise } from "../runtime/telemetry";
 export const makeCoreQueue =
   (telemetry: TelemetryService): CoreQueueHandler =>
   (batch, environment) =>
-    observeWorkerPromise(() => dispatchCoreQueue(batch, environment), {
+    observeWorkerPromise(() => dispatchCoreQueue({ batch, environment }), {
       environment,
       telemetry,
       operation: "worker.core.queue",

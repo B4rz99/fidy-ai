@@ -12,7 +12,7 @@ export const makeCoreHttp =
       request,
       environment,
       telemetry,
-      publish: acceptedWorkPublisher(environment, Option.fromUndefinedOr(context)),
+      publish: acceptedWorkPublisher({ environment, context: Option.fromUndefinedOr(context) }),
     }).pipe(
       observeWorkerRequest({ environment, telemetry, operation: "worker.core.fetch" }),
       Effect.runPromise

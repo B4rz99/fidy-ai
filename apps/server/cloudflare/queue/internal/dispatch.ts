@@ -144,7 +144,13 @@ class ForwardedEmailDeliveryUnavailable extends Data.TaggedError(
 ) {}
 
 /** Preserve the native Queue selection order; payload validation and acknowledgment stay owner-held. */
-export const dispatchCoreQueue: CoreQueueHandler = (batch, environment) =>
+export const dispatchCoreQueue = ({
+  batch,
+  environment,
+}: Readonly<{
+  batch: MessageBatch<unknown>;
+  environment: CoreQueueEnvironment;
+}>): Promise<void> =>
   batch.queue === environment.OPERATIONAL_CANARY_QUEUE_NAME
     ? receiveCanaryBatch(batch, environment)
     : receiveWorkQueue(batch, environment);

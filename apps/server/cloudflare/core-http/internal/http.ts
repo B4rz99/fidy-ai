@@ -165,10 +165,13 @@ const publicationActivities = (
 
 /** Publication is an acceleration only; committed D1 intent remains recoverable by cron. */
 export const acceptedWorkPublisher =
-  (
-    environment: CoreHttpEnvironment,
-    context: Option.Option<Pick<ExecutionContext, "waitUntil">>
-  ): PublishAcceptedWork =>
+  ({
+    environment,
+    context,
+  }: Readonly<{
+    environment: CoreHttpEnvironment;
+    context: Option.Option<Pick<ExecutionContext, "waitUntil">>;
+  }>): PublishAcceptedWork =>
   (kind, id) => {
     if (Option.isNone(context)) return;
     const identity = Option.some(id);

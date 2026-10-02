@@ -4,14 +4,14 @@ import {
   type BudgetFailure,
   type BudgetNotFound,
 } from "~/core/budgets/errors";
-import { type CategoryNotFound } from "~/core/categories/errors";
+import { type CategoryNotFound } from "~/core/categories/contract";
 import { NotFound, type SuggestedOperation, ValidationFailed } from "~/shell/public-http/contract";
 import {
   type SuggestedOperationCaller,
   checkpointSuggestedOperations,
   suggestOperation,
 } from "~/shell/_shared/suggested-operations";
-import { toApiFailure as categoryToApiFailure } from "~/shell/categories/errors";
+import { toApiFailure as categoryToApiFailure } from "~/shell/categories/operations";
 
 const budgetRecovery = (caller: SuggestedOperationCaller): ReadonlyArray<SuggestedOperation> =>
   checkpointSuggestedOperations({

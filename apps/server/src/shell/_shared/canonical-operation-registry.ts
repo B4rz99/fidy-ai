@@ -11,7 +11,7 @@ import {
   getSubscriptionStatus,
   listSubscriptionOffersResponse,
 } from "~/shell/subscription/operations";
-import { listCategoriesResponse } from "~/shell/categories/list-categories";
+import { listCategoriesResponse } from "~/shell/categories/operations";
 import { getCurrentUser } from "~/shell/identity/operations";
 import { listPATsResponse } from "~/shell/tokens/list-pats";
 import { canonicalMutationImplementations } from "./canonical-mutation-registry";

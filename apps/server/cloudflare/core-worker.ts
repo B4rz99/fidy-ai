@@ -15,7 +15,14 @@ import {
 import { emailReplacementOperations } from "@fidy/server/email-replacement";
 import { type TelemetryService } from "@fidy/server/telemetry";
 import { Cause, Clock, Data, Effect, Exit, Option, Schema } from "effect";
-import { correctionInput } from "./transactions/transaction-corrections";
+import {
+  browseTransactions,
+  correctionInput,
+  repairDashboardProjections,
+  transactionInput,
+  transactionPairInput,
+  transactionSession,
+} from "./transactions/operations";
 import { BudgetId, CreateBudgetInput, UpdateBudgetInput } from "@fidy/server/budgets-runtime";
 import { DeliveryEvidenceInput, InsightEventId } from "@fidy/server/insights-runtime";
 import { browseBudgets } from "./budgets/budget-queries";
@@ -23,19 +30,12 @@ import { listPendingInsights } from "./insights/insight-store";
 import { browseDashboard } from "./dashboard/dashboard";
 import { reconcileBudgetLatches } from "./budgets/budget-latches";
 import { budgetRefusal } from "./budgets/budget-outcome";
-import { transactionPairInput } from "./transactions/transaction-reconciliation";
-import { ownsTransactionPath as transactionPath } from "@fidy/server/transaction-routes";
-import { browseTransactions } from "./transactions/transaction-history";
+import { ownsTransactionPath as transactionPath } from "@fidy/server/transaction-runtime";
 import {
   receiveConsentWebhook,
   recoverPendingDisclosures,
   sweepExpiredConsent,
 } from "./consent/runtime";
-import {
-  transactionInput,
-  transactionSession,
-  unauthenticatedTransaction,
-} from "./transactions/transactions";
 import {
   type TransactionCaller,
   isPATCaller,
@@ -43,7 +43,8 @@ import {
   rejectBatchEnvelope,
   rejectInvalidTransactionInput,
   transactionNow,
-} from "./transactions/transaction-boundary";
+  unauthenticatedTransaction,
+} from "./canonical-work/operations";
 import { RequestBodyPolicy, boundedJsonBody } from "./http/request-body";
 import { pathId, rawPathId } from "./http/path";
 import {
@@ -85,8 +86,7 @@ import {
   CanonicalWorkAdmission,
   type PATAuthority,
   type WebSessionAuthority,
-} from "./transactions/transaction-coordinator";
-import { repairDashboardProjections } from "./transactions/dashboard-repair";
+} from "./transactions/runtime";
 import {
   CanonicalOperationId,
   type CatalogOperation,
@@ -96,14 +96,14 @@ import {
 } from "@fidy/server/canonical-runtime";
 import { sweepExpiredPATPairings } from "./pats/pat-pairing";
 import { authorizeCanonicalPAT } from "./pats/pat-authorization";
-import { executeProtectedCategories } from "./categories/canonical-category";
 import {
+  executeProtectedCategories,
   keywordRuleIdFromPath,
   keywordRuleInput,
   keywordRuleInvalidInput,
   keywordRuleUnknownId,
   listOwnKeywordRules,
-} from "./categories/canonical-keyword-rules";
+} from "./categories/operations";
 import {
   currentWebSessionUser as currentUser,
   logoutWebSession as logoutBrowser,
@@ -196,7 +196,7 @@ import {
   sweepExpiredWhatsAppWindows,
 } from "./agent/whatsapp-turn";
 
-export { UserTransactionCoordinator } from "./transactions/transaction-coordinator";
+export { UserTransactionCoordinator } from "./transactions/runtime";
 export { OnboardingEmailWorkflowV1 } from "./onboarding/onboarding-email";
 export { BillingCollectionWorkflowV1, runBillingCollectionWorkflow } from "./subscription/runtime";
 export { BrowserPairingEmailWorkflowV1 } from "./identity/browser-pairing-email-delivery";

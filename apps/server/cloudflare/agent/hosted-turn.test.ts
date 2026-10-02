@@ -14,7 +14,7 @@ import {
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import type { HostedInferenceService } from "@fidy/server/hosted-inference";
 import { makeCloudflareHostedInference } from "../ai/workers-ai";
-import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
+import { UserTransactionCoordinator } from "../transactions/runtime";
 import { newId } from "../pats/pat-shared";
 import {
   admitHostedTurn,
@@ -49,13 +49,13 @@ import {
   WhatsAppBusinessScopedUserId,
 } from "../../src/core/identity/reference";
 import {
+  type HostedDelivery,
   acknowledgeBrowserTurn,
   browserHostedDelivery,
   completeHostedTurn as completeHostedTurnWithAlarm,
   completeWhatsAppTurnWithAdmission,
 } from "./hosted-turn";
 import { type WhatsAppWork, dispatchWhatsAppWork, receiveWhatsAppWork } from "./whatsapp-work";
-import type { HostedDelivery } from "./hosted-turn";
 
 const completeHostedTurn = (
   input: Omit<

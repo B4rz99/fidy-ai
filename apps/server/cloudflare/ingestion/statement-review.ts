@@ -7,7 +7,7 @@ import {
   StatementRowEvidence,
 } from "../../src/core/ingestion/model";
 import { currentMillis } from "../pats/pat-shared";
-import type { TransactionCaller } from "../transactions/transaction-boundary";
+import type { TransactionCaller } from "../canonical-work/operations";
 import { commitReadAudit, unavailableStatement, validationFailed } from "./statement-ingestion";
 
 class ReviewReadUnavailable extends Data.TaggedError("ReviewReadUnavailable")<{}> {}

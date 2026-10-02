@@ -10,7 +10,7 @@ import { UserId } from "~/core/identity/reference";
 import { Effect } from "effect";
 import { prepareOwnedStatement } from "../../pats/pat-unit";
 import { currentMillis, newId } from "../../pats/pat-shared";
-import { isPATCaller } from "../../transactions/transaction-boundary";
+import { isPATCaller } from "../../canonical-work/operations";
 import { type SubscriptionQueryInput as QueryInput } from "../contract";
 
 const headers = { "cache-control": "no-store", "content-type": "application/json; charset=utf-8" };

@@ -9,25 +9,28 @@ import {
   Transaction,
   TransactionPresentation,
   encodeMoneyAmount,
-} from "@fidy/server/transactions-runtime";
-import { UserTransactionCoordinator } from "./transaction-coordinator";
-import { AtomicBatchCallId, AtomicBatchRejected, ErrorCode } from "@fidy/server/canonical-runtime";
-import type { AtomicBatchCall } from "@fidy/server/canonical-runtime";
+} from "@fidy/server/transactions-contract";
+import { UserTransactionCoordinator } from "./runtime";
+import {
+  type AtomicBatchCall,
+  AtomicBatchCallId,
+  AtomicBatchRejected,
+  ErrorCode,
+} from "@fidy/server/canonical-runtime";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { DisclosureSnapshot } from "@fidy/server/agent-runtime";
 import { CategoryId, CategoryKeyword, KeywordRuleId } from "@fidy/server/categories";
-import { keywordRuleGuardFailure } from "../mutations/keyword-rule-outcome";
+import { keywordRuleGuardFailure } from "../categories/operations";
 import { currentDisclosureFor } from "@fidy/server/consent-operations";
 import { hostedDeliveryReceipt } from "../agent/hosted-turn";
 import { hostedTurnTestMigrations } from "../agent/hosted-turn-test-migrations";
 import { sweepHostedTurns } from "../agent/hosted-turn-sweep";
 import { pendingExecutionRecoveryMs } from "../agent/turn-store";
 import { newId } from "../pats/pat-shared";
-import { transactionNow } from "./transaction-boundary";
+import { transactionNow } from "../canonical-work/operations";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
-import { transactionInput, transactionSession } from "./transactions";
-import { browseTransactions } from "./transaction-history";
+import { browseTransactions, transactionInput, transactionSession } from "./operations";
 import { dailyAuditCount } from "@fidy/server/audit";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure") {}
@@ -3070,6 +3073,11 @@ it("rejects forged browser origins and malformed Money before any public mutatio
         )
       );
       expect(foreignWithBearer.status).toBe(404);
+      expect(
+        (yield* fromTestPromise(() =>
+          browse(1, "/transactions/00000000-0000-4000-8000-000000000099")
+        )).status
+      ).toBe(404);
       expect((yield* fromTestPromise(() => browse(1, "/transactions/not-an-id"))).status).toBe(404);
       expect((yield* fromTestPromise(() => browse(0, "/transactions?unknown=1"))).status).toBe(400);
       const outcomes = yield* fromTestPromise(() =>
@@ -3081,6 +3089,7 @@ it("rejects forged browser origins and malformed Money before any public mutatio
           .all<{ outcome: string }>()
       );
       expect(outcomes.results.map(({ outcome }) => outcome)).toEqual([
+        "not_found",
         "not_found",
         "not_found",
         "not_found",

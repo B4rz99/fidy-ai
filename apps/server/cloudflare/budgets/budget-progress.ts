@@ -1,5 +1,5 @@
 import type { Budget, BudgetStatusReport } from "@fidy/server/budgets-runtime";
-import { Money, encodeMoneyAmount } from "@fidy/server/transactions-runtime";
+import { Money, encodeMoneyAmount } from "@fidy/server/transactions-contract";
 import { DateTime, Effect, Option, Schema } from "effect";
 
 const Version = Schema.Struct({ revision: Schema.Int });

@@ -1,115 +1,61 @@
-import { Schema } from "effect";
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
+import { categoryResponseFromRows, categoryRowsQuery } from "~/shell/categories/internal/query";
+import { Effect, Option } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type {
+  CategoryFailure,
+  CategoryNotFound,
+  KeywordRuleAlreadyExists,
+  KeywordRuleLimitReached,
+  KeywordRuleNotFound,
+} from "~/core/categories/contract";
+import type { SuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
+import type { NotFound, Unavailable, ValidationFailed } from "~/shell/public-http/contract";
+import { toApiFailure as projectFailure } from "~/shell/categories/internal/errors";
 import {
-  Category,
-  CreateKeywordRuleInput,
-  KeywordRule,
-  KeywordRuleId,
-  UpdateKeywordRuleInput,
-} from "~/core/categories/model";
-import {
-  NotFound,
-  OperationResponse,
+  listCategoriesResponse as listResponse,
+  categoryUnavailable as unavailable,
+} from "~/shell/categories/internal/list-categories";
+import type { CategoryReadInput, ListCategoriesResponse } from "./contract";
+
+type CategoryFailureInput<Failure extends CategoryFailure> = Readonly<{
+  failure: Failure;
+  caller: SuggestedOperationCaller;
+}>;
+/** Map the owner's closed failures to caller-scoped canonical recovery suggestions. */
+export function toApiFailure(
+  input: CategoryFailureInput<CategoryNotFound | KeywordRuleNotFound>
+): NotFound;
+export function toApiFailure(
+  input: CategoryFailureInput<KeywordRuleAlreadyExists | KeywordRuleLimitReached>
+): ValidationFailed;
+export function toApiFailure(
+  input: CategoryFailureInput<CategoryFailure>
+): NotFound | ValidationFailed;
+export function toApiFailure(
+  input: CategoryFailureInput<CategoryFailure>
+): NotFound | ValidationFailed {
+  return projectFailure(input);
+}
+/** The bounded canonical Category read shared by portable HTTP and hosted execution. */
+export const listCategoriesResponse: Effect.Effect<
+  typeof ListCategoriesResponse.Type,
   Unavailable,
-  ValidationFailed,
-  createdStatus,
-} from "~/shell/public-http/contract";
-import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
-import { keywordRulesPath, listCategoriesPath, retainedKeywordRulePath } from "./path";
-
-export const ListCategoriesResponse = OperationResponse(Schema.Array(Category));
-
-/** The caller's own rules, in stable creation order. */
-export const ListKeywordRulesResponse = OperationResponse(Schema.Array(KeywordRule));
-
-/** One created or replaced rule, or the id of a removed one. */
-export const KeywordRuleResponse = OperationResponse(KeywordRule);
-export const RemovedKeywordRuleResponse = OperationResponse(KeywordRuleId);
+  SqlClient.SqlClient
+> = Effect.suspend(() => listResponse);
+/** Safe public failure when Category authority is unavailable. */
+export const categoryUnavailable = (): Unavailable => unavailable();
 
 /**
- * The retained keyword-rule path parameter, rebuilt at each declaration. The published document
- * componentizes one schema instance reached from several declarations, so sharing the instance
- * would renumber the OpenAPI components; sharing the shape is what keeps them in step.
+ * Prepare the canonical bounded, ordered Category projection in a caller-owned native unit.
+ * Only the prepared action escapes; the owner retains SQL and row policy. Canonical callers compose
+ * their live-authority audit in the same unit before decoding or releasing the result.
  */
-const retainedKeywordRuleParams = (): Schema.Struct<{ readonly id: typeof KeywordRuleId }> =>
-  Schema.Struct({ id: KeywordRuleId });
+export const prepareCategoryRead = ({ db, authority }: CategoryReadInput): D1PreparedStatement => {
+  const query = categoryRowsQuery(Option.getOrUndefined(authority));
+  return db.prepare(query.sql).bind(...query.params);
+};
 
-const read = operationPolicy({
-  access: patScoped("read"),
-  requiredTier: "free",
-  agentConfirmation: "not-required",
-  kind: "query",
-});
-const additiveWrite = operationPolicy({
-  access: patScoped("write"),
-  requiredTier: "free",
-  agentConfirmation: "not-required",
-  kind: "mutation",
-});
-const destructiveWrite = operationPolicy({
-  access: patScoped("write"),
-  requiredTier: "free",
-  agentConfirmation: "required",
-  kind: "mutation",
-});
-
-/** Public Category discovery and caller-owned keyword-rule management. */
-export const CategoriesGroup = HttpApiGroup.make("categories")
-  .add(
-    HttpApiEndpoint.get("listCategories", listCategoriesPath, {
-      success: ListCategoriesResponse,
-      error: Unavailable,
-    })
-      .annotate(
-        OpenApi.Description,
-        "List the Colombian Categories in presentation order. Use the stable id, not the Spanish label or list position, when recording or correcting a Transaction."
-      )
-      .annotateMerge(read)
-  )
-  .add(
-    HttpApiEndpoint.get("listKeywordRules", keywordRulesPath, {
-      success: ListKeywordRulesResponse,
-    })
-      .annotate(
-        OpenApi.Description,
-        "List the caller's counterparty keyword instructions. These rules categorize future capture before the model fallback and never rewrite existing Transactions."
-      )
-      .annotateMerge(read)
-  )
-  .add(
-    HttpApiEndpoint.post("createKeywordRule", keywordRulesPath, {
-      payload: CreateKeywordRuleInput,
-      success: KeywordRuleResponse.pipe(HttpApiSchema.status(createdStatus)),
-      error: [NotFound, ValidationFailed],
-    })
-      .annotate(
-        OpenApi.Description,
-        "Teach future capture that a counterparty containing this case- and accent-insensitive keyword belongs to one stable Category. More specific longer matching keywords win."
-      )
-      .annotateMerge(additiveWrite)
-  )
-  .add(
-    HttpApiEndpoint.put("updateKeywordRule", retainedKeywordRulePath, {
-      params: retainedKeywordRuleParams(),
-      payload: UpdateKeywordRuleInput,
-      success: KeywordRuleResponse,
-      error: [NotFound, ValidationFailed],
-    })
-      .annotate(
-        OpenApi.Description,
-        "Replace one of the caller's keyword instructions for future capture. Existing Transaction Categories remain unchanged."
-      )
-      .annotateMerge(destructiveWrite)
-  )
-  .add(
-    HttpApiEndpoint.delete("deleteKeywordRule", retainedKeywordRulePath, {
-      params: retainedKeywordRuleParams(),
-      success: RemovedKeywordRuleResponse,
-      error: NotFound,
-    })
-      .annotate(
-        OpenApi.Description,
-        "Stop applying one of the caller's keyword instructions to future capture. Existing Transactions remain unchanged."
-      )
-      .annotateMerge(destructiveWrite)
-  );
+/** Decode a completed Category read; malformed or oversized projections are never partially returned. */
+export const decodeCategoryRead = (
+  result: unknown
+): Option.Option<typeof ListCategoriesResponse.Type> => categoryResponseFromRows(result);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Option, Schema } from "effect";
-import { AccountHints, InstrumentLabel, LastFourDigits } from "./account-hints";
+import { AccountHints, InstrumentLabel, LastFourDigits } from "./contract";
 
 describe("safe account hints", () => {
   it("rejects identifiers other than exactly four ASCII digits", () => {

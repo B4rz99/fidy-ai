@@ -28,8 +28,7 @@ import {
   terminalPrefixCursor,
 } from "@fidy/server/agent-runtime";
 import { Cause, DateTime, Effect, Option, Schema } from "effect";
-import type { TransactionSubject } from "../transactions/transaction-boundary";
-import { transactionNow } from "../transactions/transaction-boundary";
+import { type TransactionSubject, transactionNow } from "../canonical-work/operations";
 import {
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,

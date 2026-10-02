@@ -18,6 +18,7 @@ import {
   type CanonicalRefusalDisposition,
   type TransactionCaller,
   childCaller,
+  dailyAuditMessage,
   isPATCaller,
   liveTransactionAuthority,
   liveTransactionCredential,
@@ -27,7 +28,7 @@ import {
   rejectInvalidBatchInput,
   transactionNoStore,
   transactionUnavailable,
-} from "../transactions/transaction-boundary";
+} from "../canonical-work/operations";
 import {
   type CanonicalMutationUnitExecution,
   type HostedCommitFence,
@@ -43,8 +44,6 @@ import type {
   CanonicalMutationRefusal,
   PreparedCanonicalMutation,
 } from "./mutation-types";
-import { dailyAuditMessage } from "./transaction-outcome";
-
 /** One raw child as the published batch mutation carries it; the catalog call schema decodes it. */
 type CanonicalBatchCall = unknown;
 

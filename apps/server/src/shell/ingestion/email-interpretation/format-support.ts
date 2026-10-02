@@ -1,7 +1,7 @@
 import { DateTime, Function, Option, Schema } from "effect";
 import { Currency } from "~/core/_shared/money";
 import type { CapturedInterpretationContext } from "~/core/interpretation-evidence/contract";
-import { AccountHints, type NotificationCurrencyBasis } from "~/core/transactions/account-hints";
+import { AccountHints, type NotificationCurrencyBasis } from "~/core/transactions/contract";
 import type { EmailDocument } from "./document";
 import type { FormatInterpretation } from "./format-definition";
 

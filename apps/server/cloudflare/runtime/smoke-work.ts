@@ -1,3 +1,4 @@
+import { verifyCategoryStorage } from "../categories/runtime";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { Clock, Data, Effect, Option, Schema } from "effect";
 import {
@@ -122,10 +123,9 @@ const checkBindings = Effect.fn(function* (environment: SmokeEnvironment) {
   if (secrets.some((secret) => typeof secret !== "string" || secret.length === 0)) {
     return yield* new SmokeBindingFailed({ stage: "secrets" });
   }
-  // Zero rows: verify the schema without loading any Category or User content.
-  yield* platform(
-    () => environment.DB.prepare("SELECT id FROM categories LIMIT 0").all(),
-    "schema"
+  // The owner verifies its schema without loading Category or User content.
+  yield* verifyCategoryStorage({ db: environment.DB }).pipe(
+    Effect.mapError(() => new SmokeBindingFailed({ stage: "schema" }))
   );
   yield* platform(
     () => environment.DB.prepare("SELECT probe_id FROM release_smoke_probes LIMIT 0").all(),

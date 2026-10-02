@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime, Effect, Option, Result } from "effect";
-import type { TransactionNotYetOccurred } from "./errors";
-import { checkAlreadyOccurred, checkTransactionPeriod } from "./rules";
+import type { TransactionNotYetOccurred } from "./contract";
+import { checkAlreadyOccurred, checkTransactionPeriod } from "./operations";
 
 const at = (iso: string): DateTime.Utc => DateTime.makeUnsafe(iso);
 

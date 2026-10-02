@@ -4,7 +4,7 @@ import {
   type TransactionCaller,
   transactionFailure,
   transactionUnavailable,
-} from "../transactions/transaction-boundary";
+} from "../canonical-work/operations";
 import { recordBudgetCall } from "./budget-audit";
 import { budgetFromRow } from "./budget-row";
 import type {

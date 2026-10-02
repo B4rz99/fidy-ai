@@ -2,14 +2,9 @@ import { getCanonicalOperationInput } from "@fidy/server/canonical-runtime";
 import { StatementSubmission } from "@fidy/server/statement-staging";
 import { Effect, Option, Schema } from "effect";
 import { dailyAuditExhausted } from "@fidy/server/audit";
-import type { StatementPublicationRefusal } from "../ingestion/statement-staging";
-import {
-  statementDailyBudgetMessage,
-  statementDailyBudgetResponse,
-  statementRefusalResponse,
-} from "../ingestion/statement-ingestion";
 import {
   type PreparedStatementPublication,
+  type StatementPublicationRefusal,
   type StatementStagingConfig,
   prepareStagedStatementPublication,
   recordStatementRefusal,
@@ -17,11 +12,16 @@ import {
   statementRefusal,
 } from "../ingestion/statement-staging";
 import {
+  statementDailyBudgetMessage,
+  statementDailyBudgetResponse,
+  statementRefusalResponse,
+} from "../ingestion/statement-ingestion";
+import {
   callerAuthority,
   callerScope,
   transactionNoStore,
   transactionUnavailable,
-} from "../transactions/transaction-boundary";
+} from "../canonical-work/operations";
 import {
   type CanonicalMutationPreparation,
   type CanonicalMutationRefusal,

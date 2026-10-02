@@ -1,0 +1,31 @@
+infra/cloudflare/verify-edge-policy.test.ts
+  s_1c47427fffa96c::t_1dd9602526419f 7
+infra/cloudflare/verify-edge-policy.ts
+  s_1c47427fffa96c::t_62e6252e3adeac 5
+apps/server/cloudflare/public-worker.ts
+  s_1c47427fffa96c::t_f515bf1dfff028 521-524,558
+docs/operations/production-releases.md
+  s_1c47427fffa96c::t_c3cc06fbd5e0b6 205,207-210,216,233-236
+infra/cloudflare/diagnose-smoke-routing.test.ts
+  s_1c47427fffa96c::t_69f35eac160710 125,180,209
+infra/cloudflare/diagnose-smoke-routing.ts
+  s_1c47427fffa96c::t_8ac7c6ecb89b65 48,136,183-184,210,233,240
+infra/cloudflare/smoke.test.ts
+  s_1c47427fffa96c::t_c1ab6cb2927c3c 179,188,214-215,218-223,228-231
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "161a682ba1c89a51b99550139a97aa2293efa488",
+  "prompts": {},
+  "sessions": {
+    "s_1c47427fffa96c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0ff03-fc08-71a5-814c-e710b2bd3c51",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

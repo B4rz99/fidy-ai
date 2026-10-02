@@ -1,17 +1,18 @@
+import {
+  dispatchBrowserPairingEmail,
+  dispatchEmailReplacement,
+  runBrowserPairingEmailWorkflow,
+  runEmailReplacementWorkflow,
+} from "../email-authentication/runtime";
+import { EmailAddress, EmailVerificationCode } from "@fidy/server/client";
 import { observeOperationalHealth } from "../runtime/operational-health";
 import { Miniflare } from "miniflare";
 import { applyTestMigration } from "../d1-test-fixture";
 import { afterEach, expect, it, vi } from "vitest";
 import { startBrowserPairing } from "../browser-login/operations";
-import {
-  deliverBrowserPairingEmail,
-  dispatchBrowserPairingEmail,
-} from "../identity/browser-pairing-email-delivery";
+
 import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
-import {
-  deliverEmailReplacement,
-  dispatchEmailReplacement,
-} from "../identity/email-replacement-delivery";
+
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import coreWorker, { makeCoreWorker } from "../core-worker";
 import { DisabledTelemetryResource, makeTelemetryService } from "@fidy/server/telemetry";
@@ -799,6 +800,124 @@ it("admits email approval only for a browser-held verifier and an existing verif
     })
   ));
 
+it("rejects each User's email proof at the other browser pairing without consuming either proof", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, send, sendRequest } = yield* Effect.tryPromise(() => setup());
+      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
+      const otherUser = "10000000-0000-4000-8000-000000000004";
+      const now = yield* Clock.currentTimeMillis;
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db
+            .prepare("INSERT INTO users VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)")
+            .bind(otherUser, now),
+          db
+            .prepare("INSERT INTO verified_email_credentials VALUES (?, ?, ?)")
+            .bind(otherUser, "other@example.test", now),
+        ])
+      );
+      const startEmailProof = (
+        email: string
+      ): Effect.Effect<
+        Readonly<{ pairingId: string; privateVerifier: string; combinedCode: string }>,
+        Cause.UnknownError | Schema.SchemaError | void
+      > =>
+        Effect.gen(function* () {
+          const started = yield* Effect.tryPromise(() =>
+            sendRequest(
+              new Request("https://api.fidyapp.com/web/pairings", {
+                method: "POST",
+                headers: { origin: "https://app.fidyapp.com" },
+              })
+            )
+          );
+          const pairing = yield* Schema.decodeUnknownEffect(
+            Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
+          )(yield* Effect.tryPromise(() => started.json()));
+          const initiation = yield* Effect.tryPromise(() =>
+            sendRequest(
+              new Request("https://api.fidyapp.com/web/email/authentication/start", {
+                method: "POST",
+                headers: {
+                  origin: "https://app.fidyapp.com",
+                  "content-type": "application/json",
+                },
+                body: encodeJson({ ...pairing, email }),
+              })
+            )
+          );
+          expect(initiation.status).toBe(202);
+          let workId = "";
+          yield* dispatchBrowserPairingEmail({
+            identity: Option.none(),
+            DB: db,
+            BROWSER_PAIRING_EMAIL_QUEUE: {
+              send: (work) => {
+                workId = work.id;
+                return Promise.resolve();
+              },
+            },
+          });
+          let combinedCode = "";
+          yield* Effect.tryPromise(() =>
+            deliverBrowserPairingEmail({
+              db,
+              send: (to, receivedCode) => {
+                expect(to).toBe(email);
+                combinedCode = receivedCode;
+                return Promise.resolve("succeeded");
+              },
+            })(workId)
+          );
+          expect(combinedCode).not.toBe("");
+          return { ...pairing, combinedCode };
+        });
+      const first = yield* startEmailProof("person@example.test");
+      const second = yield* startEmailProof("other@example.test");
+      const snapshot = (): Promise<ReadonlyArray<D1Result>> =>
+        db.batch([
+          db.prepare("SELECT * FROM browser_login_pairings ORDER BY id"),
+          db.prepare("SELECT * FROM browser_pairing_email_proofs ORDER BY pairing_id"),
+        ]);
+      const before = (yield* Effect.tryPromise(snapshot)).map((result) => result.results);
+      const complete = (proof: typeof first): Promise<Response> =>
+        sendRequest(
+          new Request("https://api.fidyapp.com/web/email/authentication/complete", {
+            method: "POST",
+            headers: { origin: "https://app.fidyapp.com", "content-type": "application/json" },
+            body: encodeJson(proof),
+          })
+        );
+      for (const crossed of [
+        { ...first, combinedCode: second.combinedCode },
+        { ...second, combinedCode: first.combinedCode },
+      ]) {
+        const refused = yield* Effect.tryPromise(() => complete(crossed));
+        expect(refused.status).toBe(400);
+        expect(refused.headers.get("set-cookie")).toBeNull();
+        expect((yield* Effect.tryPromise(snapshot)).map((result) => result.results)).toEqual(
+          before
+        );
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT count(*) AS count FROM web_sessions").first()
+          )
+        ).toEqual({ count: 0 });
+      }
+      expect((yield* Effect.tryPromise(() => complete(first))).status).toBe(200);
+      expect((yield* Effect.tryPromise(() => complete(second))).status).toBe(200);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT user_id FROM browser_login_pairings WHERE id = ?")
+            .bind(second.pairingId)
+            .first()
+        )
+      ).toEqual({ user_id: otherUser });
+    })
+  ));
+
 it("replaces one credential only after fresh-session candidate proof and rejects replay", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -890,6 +1009,101 @@ it("replaces one credential only after fresh-session candidate proof and rejects
         operation: "completeEmailReplacement",
         outcome: "replaced",
       });
+    })
+  ));
+
+it("refuses malformed replacement work and revoked or foreign sessions before delivering a proof", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, send, sendRequest } = yield* Effect.tryPromise(() => setup());
+      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
+      const token = "K".repeat(43);
+      const started = yield* Effect.tryPromise(() => seedWebSession(db, token));
+      const request = replacementRequest(sendRequest, token);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          request("/email/replacement", { candidateEmail: "replacement@example.test" })
+        )).status
+      ).toBe(200);
+      const replacement = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ work_id: Schema.String, session_id: Schema.String })
+      )(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT work_id, session_id FROM email_replacements").first()
+        )
+      );
+      const snapshot = (): Effect.Effect<ReadonlyArray<D1Result["results"]>, Cause.UnknownError> =>
+        Effect.map(
+          Effect.tryPromise(() =>
+            db.batch([
+              db.prepare("SELECT * FROM email_replacements"),
+              db.prepare("SELECT * FROM email_replacement_outbox"),
+              db.prepare("SELECT * FROM verified_email_credentials ORDER BY user_id"),
+              db.prepare("SELECT * FROM email_replacement_audit"),
+            ])
+          ),
+          (results) => results.map((result) => result.results)
+        );
+      const provider = vi
+        .spyOn(globalThis, "fetch")
+        .mockRejectedValue(new Error("unexpected send"));
+      let activities = 0;
+      const run = (payload: unknown): Promise<void> =>
+        runEmailReplacementWorkflow({
+          environment: { DB: db, RESEND_API_KEY: "synthetic-test-provider-key" },
+          payload,
+          activity: (_name, _options, activity) => {
+            activities++;
+            return activity();
+          },
+        });
+      const work = { kind: "email-replacement", version: 1, id: replacement.work_id };
+      const beforeMalformed = yield* snapshot();
+      for (const payload of [
+        null,
+        { ...work, kind: "browser-pairing-email" },
+        { ...work, version: 2 },
+        { ...work, id: "invalid-work-id" },
+      ]) {
+        yield* Effect.tryPromise(() => run(payload));
+        expect(activities).toBe(0);
+        expect(provider).not.toHaveBeenCalled();
+        expect(yield* snapshot()).toEqual(beforeMalformed);
+      }
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("UPDATE web_sessions SET revoked_at_ms = ? WHERE id = ?")
+          .bind(started, replacement.session_id)
+          .run()
+      );
+      yield* Effect.tryPromise(() => run(work));
+      expect(activities).toBe(1);
+      expect(provider).not.toHaveBeenCalled();
+      expect(yield* snapshot()).toEqual(beforeMalformed);
+      const otherUser = "10000000-0000-4000-8000-000000000004";
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db
+            .prepare("INSERT INTO users VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)")
+            .bind(otherUser, started),
+          db
+            .prepare("INSERT INTO verified_email_credentials VALUES (?, ?, ?)")
+            .bind(otherUser, "foreign@example.test", started),
+          db
+            .prepare(
+              "UPDATE browser_login_pairings SET user_id = ? WHERE id = (SELECT pairing_id FROM web_sessions WHERE id = ?)"
+            )
+            .bind(otherUser, replacement.session_id),
+          db
+            .prepare("UPDATE web_sessions SET revoked_at_ms = NULL, user_id = ? WHERE id = ?")
+            .bind(otherUser, replacement.session_id),
+        ])
+      );
+      const beforeForeignSession = yield* snapshot();
+      yield* Effect.tryPromise(() => run(work));
+      expect(activities).toBe(2);
+      expect(provider).not.toHaveBeenCalled();
+      expect(yield* snapshot()).toEqual(beforeForeignSession);
     })
   ));
 
@@ -1926,3 +2140,57 @@ it("redeems one approved pairing under concurrent replay without accepting a fix
       expect(replay.headers.get("set-cookie")).toBeNull();
     })
   ));
+
+// Exercise the published Workflow with only the external Resend transport substituted.
+const runProofDelivery =
+  (
+    kind: "browser-pairing-email" | "email-replacement",
+    input: {
+      db: D1Database;
+      send: (
+        to: EmailAddress,
+        code: EmailVerificationCode,
+        id: string
+      ) => Promise<"succeeded" | "rejected" | "ambiguous">;
+    }
+  ) =>
+  (id: string): Promise<void> => {
+    const provider = vi.spyOn(globalThis, "fetch").mockImplementation((request, init) =>
+      new Request(request, init)
+        .json()
+        .then((body) => {
+          const email = Schema.decodeUnknownSync(
+            Schema.Struct({ to: Schema.Array(EmailAddress), text: Schema.String })
+          )(body);
+          const code = Schema.decodeUnknownSync(EmailVerificationCode)(
+            /[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}(?:-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}){5}/u.exec(
+              email.text
+            )?.[0]
+          );
+          return input.send(EmailAddress.make(email.to[0] ?? "missing@example.test"), code, id);
+        })
+        .then((result) =>
+          result === "succeeded"
+            ? Response.json({ id: "synthetic-message" })
+            : Response.json(
+                { error: "synthetic-refusal" },
+                { status: result === "rejected" ? 400 : 503 }
+              )
+        )
+    );
+    const run =
+      kind === "browser-pairing-email"
+        ? runBrowserPairingEmailWorkflow
+        : runEmailReplacementWorkflow;
+    return run({
+      environment: { DB: input.db, RESEND_API_KEY: "synthetic-test-provider-key" },
+      payload: { kind, version: 1, id },
+      activity: (_name, _options, activity) => activity(),
+    }).finally(() => provider.mockRestore());
+  };
+const deliverBrowserPairingEmail = (
+  input: Parameters<typeof runProofDelivery>[1]
+): ((id: string) => Promise<void>) => runProofDelivery("browser-pairing-email", input);
+const deliverEmailReplacement = (
+  input: Parameters<typeof runProofDelivery>[1]
+): ((id: string) => Promise<void>) => runProofDelivery("email-replacement", input);

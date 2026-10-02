@@ -1,21 +1,15 @@
+import {
+  type EmailReplacementEnvironment,
+  type EmailReplacementPublisher,
+  type EmailWorkflowInput,
+  EmailReplacementWork as Work,
+} from "../contract";
+
 import { freshSessionQuery } from "@fidy/server/web-session-operations";
 import { EmailAddress, EmailVerificationCode } from "@fidy/server/client";
-import { WorkflowEntrypoint } from "cloudflare:workers";
-import {
-  cloudflareWorkerTelemetry,
-  observeWorkerPromise,
-  workerRelease,
-} from "../runtime/telemetry";
-import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 import { Clock, Effect, Exit, Option, Schema } from "effect";
-import { deliveryState, sendThroughResend } from "../onboarding/onboarding-email";
-import { captureWorkflowFailure } from "../runtime/operational-workflow-failure";
+import { deliveryState, sendThroughResend } from "./onboarding-workflow";
 
-const Work = Schema.Struct({
-  kind: Schema.Literal("email-replacement"),
-  version: Schema.Literal(1),
-  id: Schema.String.check(Schema.isUUID()),
-});
 const Pending = Schema.Struct({
   candidate_email: EmailAddress,
   expires_at_ms: Schema.Finite,
@@ -46,16 +40,9 @@ const digest = (value: string): Promise<Uint8Array> =>
 const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, void> =>
   Effect.tryPromise({ try: run, catch: () => undefined });
 
-export type EmailReplacementEnvironment = {
-  DB: D1Database;
-  EMAIL_REPLACEMENT_QUEUE: { send: (work: typeof Work.Type) => Promise<unknown> };
-  EMAIL_REPLACEMENT_WORKFLOW: Workflow;
-  RESEND_API_KEY: string;
-};
-
 /** Publish bounded durable work identities; no mailbox or proof leaves D1 in the Queue. */
 export const dispatchEmailReplacement = (
-  environment: Pick<EmailReplacementEnvironment, "DB" | "EMAIL_REPLACEMENT_QUEUE"> & {
+  environment: Readonly<{ DB: D1Database; EMAIL_REPLACEMENT_QUEUE: EmailReplacementPublisher }> & {
     readonly identity: Option.Option<string>;
   }
 ): Effect.Effect<void, void> =>
@@ -101,9 +88,7 @@ export const dispatchEmailReplacement = (
 
 /** Identify the dedicated replacement Queue without interpreting its payload as authority. */
 export const isEmailReplacementWork = (value: unknown): boolean =>
-  Option.isSome(
-    Schema.decodeUnknownOption(Schema.Struct({ kind: Schema.Literal("email-replacement") }))(value)
-  );
+  Option.isSome(Schema.decodeUnknownOption(Schema.Struct({ kind: Work.fields.kind }))(value));
 
 /** Recheck D1 state before starting the durable delivery Activity. */
 export const receiveEmailReplacement =
@@ -169,12 +154,12 @@ const findDeliverable = (
   );
 };
 
-/** Claim one candidate generation before the provider call; an ambiguous send never retries its proof. */
 type Send = (
   to: EmailAddress,
   code: EmailVerificationCode,
   id: string
 ) => Promise<"succeeded" | "rejected" | "ambiguous">;
+/** Claim one candidate generation before the provider call; an ambiguous send never retries its proof. */
 export const deliverEmailReplacement =
   ({ db, send }: { db: D1Database; send: Send }) =>
   (id: string): Promise<void> =>
@@ -236,51 +221,35 @@ export const deliverEmailReplacement =
       })
     );
 
-/** Versioned Activity sends the only raw mailbox proof through the fixed Resend boundary. */
-export class EmailReplacementWorkflowV1 extends WorkflowEntrypoint<
-  EmailReplacementEnvironment,
-  unknown
-> {
-  run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return captureWorkflowFailure({
-      work: observeWorkerPromise(
-        () => {
-          const work = Schema.decodeUnknownOption(Work)(event.payload);
-          if (Option.isNone(work)) return Promise.resolve();
-          return step.do(
-            "send-email-replacement-v1",
-            { retries: { limit: 0, delay: "1 second" } },
-            () =>
-              Effect.tryPromise({
-                try: () =>
-                  deliverEmailReplacement({
-                    db: this.env.DB,
-                    send: (to, code, id) =>
-                      sendThroughResend({
-                        purpose: "credential-replacement",
-                        environment: this.env,
-                        to,
-                        combinedCode: code,
-                        id,
-                      }).then((result) => {
-                        const outcome = deliveryState(result);
-                        return outcome === "awaiting_proof" ? "succeeded" : outcome;
-                      }),
-                  })(work.value.id),
-                catch: () => undefined,
-              }).pipe(Effect.withSpan("emailReplacement.deliver"), Effect.runPromise)
-          );
-        },
-        {
-          environment: workerRelease(this.env),
-          telemetry: cloudflareWorkerTelemetry,
-          operation: "workflow.emailReplacement",
-        }
-      ),
-      db: this.env.DB,
-    });
-  }
-}
+/** Validate versioned identity-only work before entering the non-retrying provider Activity. */
+export const runEmailReplacementWorkflow = ({
+  environment,
+  payload,
+  activity,
+}: EmailWorkflowInput): Promise<void> => {
+  const work = Schema.decodeUnknownOption(Work)(payload);
+  if (Option.isNone(work)) return Promise.resolve();
+  return activity("send-email-replacement-v1", { retries: { limit: 0, delay: "1 second" } }, () =>
+    Effect.tryPromise({
+      try: () =>
+        deliverEmailReplacement({
+          db: environment.DB,
+          send: (to, code, id) =>
+            sendThroughResend({
+              purpose: "credential-replacement",
+              environment,
+              to,
+              combinedCode: code,
+              id,
+            }).then((result) => {
+              const outcome = deliveryState(result);
+              return outcome === "awaiting_proof" ? "succeeded" : outcome;
+            }),
+        })(work.value.id),
+      catch: () => undefined,
+    }).pipe(Effect.withSpan("emailReplacement.deliver"), Effect.runPromise)
+  );
+};
 
 /** Bound retention and abandon interrupted sends without reusing unobservable raw proofs. */
 export const reconcileEmailReplacement = (db: D1Database): Effect.Effect<void, void> =>

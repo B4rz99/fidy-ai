@@ -1,3 +1,4 @@
+import { verifiedEmailQuery } from "../../email-authentication/operations";
 import { WompiEnvironment } from "~/shell/secret-material/contract";
 import { authenticateWebSession } from "../../web-session/operations";
 import { freshSessionQuery } from "@fidy/server/web-session-operations";
@@ -197,15 +198,16 @@ const authority = (
       },
       current: at,
     });
+    const email = verifiedEmailQuery({ userId: UserId.make(subject.value.userId) });
     return prepareUserContext({
       db,
       userId: UserId.make(subject.value.userId),
       statement: protectConsentStatement({
         statement: {
-          sql: `SELECT s.userId AS user_id, u.timeZone, v.email_address FROM (${session.sql}) AS s
+          sql: `SELECT s.userId AS user_id, u.timeZone, v.emailAddress AS email_address FROM (${session.sql}) AS s
             JOIN identity_user_context AS u ON u.userId = s.userId
-            JOIN verified_email_credentials AS v ON v.user_id = s.userId WHERE 1 = 1`,
-          params: session.params,
+            JOIN (${email.sql}) AS v ON v.userId = s.userId WHERE 1 = 1`,
+          params: [...session.params, ...email.params],
         },
         subject: { _tag: "User", userId: subject.value.userId },
         requirement: "granted",

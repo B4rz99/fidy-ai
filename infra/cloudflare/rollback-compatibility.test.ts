@@ -48,6 +48,28 @@ describe("rollback compatibility evidence", () => {
           })
         ).toBe(false);
       }));
+  it("refuses automatic rollback when an Email Authentication private Workflow changes", () =>
+    Bun.file(
+      new URL("../../apps/server/cloudflare/email-authentication/runtime.ts", import.meta.url)
+    )
+      .text()
+      .then((runtime) => {
+        const imports = Array.from(
+          runtime.matchAll(/from "(\.\/internal\/[^"]+-workflow)"/gu),
+          (match) => match[1]
+        );
+        expect(imports).toHaveLength(3);
+        for (const implementation of imports) {
+          expect(
+            rollbackCompatible({
+              ...base,
+              changedPaths: [
+                `apps/server/cloudflare/email-authentication/${implementation?.slice(2)}.ts`,
+              ],
+            })
+          ).toBe(false);
+        }
+      }));
   it("refuses Durable Object lifecycle and binding changes", () => {
     expect(
       rollbackCompatible({

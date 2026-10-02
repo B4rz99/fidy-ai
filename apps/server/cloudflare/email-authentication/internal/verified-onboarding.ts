@@ -1,14 +1,14 @@
 import { UserId } from "@fidy/server/identity-reference";
-import { prepareVerifiedIdentity } from "../identity/operations";
-import { recordOnboardingConsent } from "../consent/operations";
+import { prepareVerifiedIdentity } from "../../identity/operations";
+import { recordOnboardingConsent } from "../../consent/operations";
 import { EmailAddress, EmailVerificationCode } from "@fidy/server/client";
 import {
   canRedeemOnboardingProof,
   maximumOnboardingProofFailures,
-} from "@fidy/server/onboarding-verification";
+} from "@fidy/server/email-authentication-decisions";
 import { Clock, Data, Effect, Option, Schema } from "effect";
-import { newId } from "../pats/pat-shared";
-import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
+import { newId } from "../../pats/pat-shared";
+import { RequestBodyPolicy, readBoundedRequestBody } from "../../http/request-body";
 
 const Payload = Schema.Struct({ combinedCode: EmailVerificationCode });
 const ProofRow = Schema.Struct({

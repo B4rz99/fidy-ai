@@ -69,26 +69,6 @@
       "import": "./src/shell/categories/runtime.ts",
       "default": "./src/shell/categories/runtime.ts"
     },
-    "./onboarding-verification": {
-      "types": "./src/shell/email-authentication/onboarding.ts",
-      "import": "./src/shell/email-authentication/onboarding.ts",
-      "default": "./src/shell/email-authentication/onboarding.ts"
-    },
-    "./email-replacement-path": {
-      "types": "./src/shell/email-authentication/path.ts",
-      "import": "./src/shell/email-authentication/path.ts",
-      "default": "./src/shell/email-authentication/path.ts"
-    },
-    "./email-replacement": {
-      "types": "./src/shell/email-authentication/runtime.ts",
-      "import": "./src/shell/email-authentication/runtime.ts",
-      "default": "./src/shell/email-authentication/runtime.ts"
-    },
-    "./onboarding-email-delivery": {
-      "types": "./src/shell/email-authentication/delivery.ts",
-      "import": "./src/shell/email-authentication/delivery.ts",
-      "default": "./src/shell/email-authentication/delivery.ts"
-    },
     "./whatsapp-hosted": {
       "types": "./src/shell/channels/whatsapp/hosted-sender.ts",
       "import": "./src/shell/channels/whatsapp/hosted-sender.ts",
@@ -183,6 +163,31 @@
       "types": "./src/shell/web-session/operations.ts",
       "import": "./src/shell/web-session/operations.ts",
       "default": "./src/shell/web-session/operations.ts"
+    },
+    "./email-authentication-contract": {
+      "types": "./src/core/email-authentication/contract.ts",
+      "import": "./src/core/email-authentication/contract.ts",
+      "default": "./src/core/email-authentication/contract.ts"
+    },
+    "./email-authentication-decisions": {
+      "types": "./src/core/email-authentication/operations.ts",
+      "import": "./src/core/email-authentication/operations.ts",
+      "default": "./src/core/email-authentication/operations.ts"
+    },
+    "./email-authentication-api": {
+      "types": "./src/shell/email-authentication/contract.ts",
+      "import": "./src/shell/email-authentication/contract.ts",
+      "default": "./src/shell/email-authentication/contract.ts"
+    },
+    "./email-authentication-operations": {
+      "types": "./src/shell/email-authentication/operations.ts",
+      "import": "./src/shell/email-authentication/operations.ts",
+      "default": "./src/shell/email-authentication/operations.ts"
+    },
+    "./email-authentication-runtime": {
+      "types": "./src/shell/email-authentication/runtime.ts",
+      "import": "./src/shell/email-authentication/runtime.ts",
+      "default": "./src/shell/email-authentication/runtime.ts"
     }
   },
   "scripts": {
@@ -205,7 +210,7 @@
   },
   "dependencies": {
     "@effect/sql-d1": "4.0.0-rc.115",
-    "csv-parse": "7.0.2",
+    "csv-parse": "7.0.3",
     "effect": "4.0.0-rc.115",
     "fflate": "0.8.3",
     "jose": "6.2.12",
@@ -219,13 +224,13 @@
     "@effect/platform-bun": "4.0.0-rc.115",
     "@effect/platform-node": "4.0.0-rc.115",
     "@effect/vitest": "4.0.0-rc.115",
-    "@vitest/coverage-istanbul": "5.0.1",
+    "@vitest/coverage-istanbul": "5.0.2",
     "bun-types": "1.4.2",
     "esbuild": "0.28.2",
     "miniflare": "5.20260911.1-alpha",
     "rolldown": "1.2.11",
     "typescript": "7.0.2",
-    "vitest": "5.0.1",
-    "wrangler": "4.139.0"
+    "vitest": "5.0.2",
+    "wrangler": "4.140.0"
   }
 }

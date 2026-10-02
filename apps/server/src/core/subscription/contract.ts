@@ -1,4 +1,4 @@
-import { canonicalEmailAddressChecks } from "~/core/email-authentication/reference";
+import { canonicalEmailAddressChecks } from "~/core/email-authentication/contract";
 import { BigDecimal, Schema, SchemaTransformation } from "effect";
 import { IanaTimeZone, ServiceMarket } from "~/core/_shared/context";
 import { Money } from "~/core/_shared/money";

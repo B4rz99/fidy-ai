@@ -1,27 +1,15 @@
-import { UnknownJsonString, jsonStringSchema } from "~/shell/schema-codecs/contract";
-import {
-  Config,
-  Context,
-  Data,
-  Effect,
-  Layer,
-  Option,
-  type Redacted,
-  Result,
-  Schema,
-} from "effect";
-import type { HttpClient } from "effect/unstable/http";
+import { Effect, Option, Result, Schema } from "effect";
 import type {
-  EmailAddress,
   EmailProofPurpose,
   EmailVerificationCode,
-} from "~/core/email-authentication/model";
+} from "~/core/email-authentication/contract";
+import { UnknownJsonString, jsonStringSchema } from "~/shell/schema-codecs/contract";
 import type { OutboundHttpFailure, OutboundHttpResponse } from "~/shell/outbound-http/contract";
+import type { OutboundHttpService } from "~/shell/outbound-http/operations";
 import {
-  OutboundHttp,
-  type OutboundHttpService,
-  makeResendOutboundHttp,
-} from "~/shell/outbound-http/operations";
+  type EmailDeliveryPortService,
+  EmailSendFailed,
+} from "~/shell/email-authentication/contract";
 
 const onboardingSubject = "Verifica tu correo en Fidy";
 const replacementSubject = "Verifica tu nuevo correo en Fidy";
@@ -34,23 +22,21 @@ const serverErrorStatusMinimum = 500;
 type VerificationEmail = Readonly<{ subject: string; text: string; html: string }>;
 
 /** Immutable provider projection; only the fixed-format combined code varies. */
-export const verificationEmail = (combinedCode: EmailVerificationCode): VerificationEmail => ({
+const verificationEmail = (combinedCode: EmailVerificationCode): VerificationEmail => ({
   subject: onboardingSubject,
   text: `Tu código de verificación es:\n\n${combinedCode}\n\nEscríbelo en https://fidyapp.com/auth/verify-email. Este código vence en 10 minutos.\n\nSi no solicitaste este correo, ignóralo.\n\nFidy nunca te pedirá este código por WhatsApp ni por soporte.`,
   html: `<p>Tu código de verificación es:</p><p><strong><code>${combinedCode}</code></strong></p><p>Escríbelo en <a href="https://fidyapp.com/auth/verify-email">https://fidyapp.com/auth/verify-email</a>. Este código vence en 10 minutos.</p><p>Si no solicitaste este correo, ignóralo.</p><p>Fidy nunca te pedirá este código por WhatsApp ni por soporte.</p>`,
 });
 
 /** Fixed replacement projection; the schema-bounded code is its only variable content. */
-export const replacementVerificationEmail = (
-  combinedCode: EmailVerificationCode
-): VerificationEmail => ({
+const replacementVerificationEmail = (combinedCode: EmailVerificationCode): VerificationEmail => ({
   subject: replacementSubject,
   text: `Tu código para cambiar el correo de acceso a Fidy es:\n\n${combinedCode}\n\nEscríbelo en https://fidyapp.com/settings/email. Este código vence en 10 minutos.\n\nSi no solicitaste este cambio, ignora este correo. Tu correo actual seguirá funcionando.\n\nFidy nunca te pedirá este código por WhatsApp ni por soporte.`,
   html: `<p>Tu código para cambiar el correo de acceso a Fidy es:</p><p><strong><code>${combinedCode}</code></strong></p><p>Escríbelo en <a href="https://fidyapp.com/settings/email">https://fidyapp.com/settings/email</a>. Este código vence en 10 minutos.</p><p>Si no solicitaste este cambio, ignora este correo. Tu correo actual seguirá funcionando.</p><p>Fidy nunca te pedirá este código por WhatsApp ni por soporte.</p>`,
 });
 
 /** Fixed login projection; no pairing identity, mailbox, or verifier enters provider content. */
-export const browserPairingVerificationEmail = (
+const browserPairingVerificationEmail = (
   combinedCode: EmailVerificationCode
 ): VerificationEmail => ({
   subject: browserPairingSubject,
@@ -70,20 +56,6 @@ const verificationEmailFor = (
   purpose: EmailProofPurpose,
   combinedCode: EmailVerificationCode
 ): VerificationEmail => verificationEmailByPurpose[purpose](combinedCode);
-
-export class EmailSendFailed extends Data.TaggedError("EmailSendFailed")<{
-  readonly certainty: "rejected" | "ambiguous";
-  readonly retryable: boolean;
-}> {}
-
-export type EmailDeliveryPortService = {
-  readonly send: (input: {
-    readonly purpose: EmailProofPurpose;
-    readonly to: EmailAddress;
-    readonly combinedCode: EmailVerificationCode;
-    readonly idempotencyKey: string;
-  }) => Effect.Effect<void, EmailSendFailed>;
-};
 
 const maximumResendMessageIdLength = 128;
 const ResendSuccess = Schema.Struct({
@@ -155,10 +127,10 @@ const mapResendRequestFailure = (
   return new EmailSendFailed({ certainty, retryable: false });
 };
 
-const deliverySender = (
-  outboundHttp: OutboundHttpService,
-  from: string
-): EmailDeliveryPortService => ({
+export const deliverySender = ({
+  outboundHttp,
+  from,
+}: Readonly<{ outboundHttp: OutboundHttpService; from: string }>): EmailDeliveryPortService => ({
   send: (input) => {
     const projection = verificationEmailFor(input.purpose, input.combinedCode);
     return outboundHttp
@@ -180,36 +152,3 @@ const deliverySender = (
       );
   },
 });
-
-/** Send onboarding verification with the supplied Resend key; no other provider or local stub is used. */
-export const makeOnboardingEmailDelivery = (
-  input: Readonly<{
-    apiKey: Redacted.Redacted<string>;
-    httpClient: HttpClient.HttpClient;
-  }>
-): EmailDeliveryPortService =>
-  deliverySender(makeResendOutboundHttp(input), "Fidy <obarboza@fidyapp.com>");
-
-export class EmailDeliveryPort extends Context.Service<
-  EmailDeliveryPort,
-  EmailDeliveryPortService
->()("@fidy/server/shell/email-authentication/delivery/EmailDeliveryPort") {
-  static readonly layer = Layer.effect(
-    EmailDeliveryPort,
-    Effect.gen(function* () {
-      const environment = yield* Config.String("NODE_ENV").pipe(Config.withDefault("development"));
-      if (environment !== "production") {
-        return EmailDeliveryPort.of({
-          send: () => new EmailSendFailed({ certainty: "rejected", retryable: false }),
-        });
-      }
-      const outboundHttp = yield* OutboundHttp;
-      const fromEmail = yield* Config.schema(
-        Schema.Literal("obarboza@fidyapp.com"),
-        "RESEND_FROM_EMAIL"
-      );
-      const fromName = yield* Config.schema(Schema.Literal("Fidy"), "RESEND_FROM_NAME");
-      return EmailDeliveryPort.of(deliverySender(outboundHttp, `${fromName} <${fromEmail}>`));
-    })
-  );
-}

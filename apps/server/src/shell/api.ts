@@ -7,7 +7,7 @@ import { BrowserLoginGroup } from "~/shell/browser-login/operations";
 import { BudgetsGroup } from "~/shell/budgets/operations";
 import { CategoriesGroup } from "~/shell/categories/contract";
 import { DashboardGroup } from "~/shell/dashboard/operations";
-import { EmailAuthenticationGroup } from "~/shell/email-authentication/operations";
+import { EmailAuthenticationGroup } from "~/shell/email-authentication/contract";
 import { IdentityGroup } from "~/shell/identity/contract";
 import { InsightsGroup } from "~/shell/insights/operations";
 import { IngestionGroup } from "~/shell/ingestion/operations";

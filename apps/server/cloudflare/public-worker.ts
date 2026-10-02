@@ -1,6 +1,6 @@
 import { keywordRulePath, listCategoriesPath } from "@fidy/server/categories-path";
 import { atomicBatchOperation } from "@fidy/server/canonical-runtime";
-import { emailReplacementOperations } from "@fidy/server/email-replacement";
+import { emailReplacementOperations } from "@fidy/server/email-authentication-operations";
 import { statementStagingPath } from "@fidy/server/statement-path";
 import {
   transactionMethods,

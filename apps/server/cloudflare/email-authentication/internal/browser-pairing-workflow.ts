@@ -1,20 +1,12 @@
-import { EmailAddress, EmailVerificationCode } from "@fidy/server/client";
-import { WorkflowEntrypoint } from "cloudflare:workers";
-import {
-  cloudflareWorkerTelemetry,
-  observeWorkerPromise,
-  workerRelease,
-} from "../runtime/telemetry";
-import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
-import { Clock, Effect, Exit, Option, Schema } from "effect";
-import { deliveryState, sendThroughResend } from "../onboarding/onboarding-email";
-import { captureWorkflowFailure } from "../runtime/operational-workflow-failure";
+import { type BrowserPairingEmailEnvironment, BrowserPairingEmailWork as Work } from "../contract";
 
-const Work = Schema.Struct({
-  kind: Schema.Literal("browser-pairing-email"),
-  version: Schema.Literal(1),
-  id: Schema.String.check(Schema.isUUID()),
-});
+import { pendingBrowserPairingQuery } from "../../browser-login/operations";
+
+import { EmailAddress, EmailVerificationCode } from "@fidy/server/client";
+import type { WorkflowStepConfig } from "cloudflare:workers";
+import { Clock, Effect, Exit, Option, Schema } from "effect";
+import { deliveryState, sendThroughResend } from "./onboarding-workflow";
+
 const Outbox = Schema.Struct({ id: Schema.String.check(Schema.isUUID()) });
 const Pending = Schema.Struct({
   email_address: EmailAddress,
@@ -48,7 +40,7 @@ const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, void> =>
 
 type DispatchEnvironment = {
   DB: D1Database;
-  BROWSER_PAIRING_EMAIL_QUEUE: { send: (work: typeof Work.Type) => Promise<unknown> };
+  BROWSER_PAIRING_EMAIL_QUEUE: { send: (work: Work) => Promise<unknown> };
 };
 
 const publishWork = (
@@ -87,19 +79,22 @@ export const dispatchBrowserPairingEmail = (
   Effect.gen(function* () {
     const identity = environment.identity;
     const current = yield* Clock.currentTimeMillis;
+    const pairing = pendingBrowserPairingQuery({
+      subject: { sql: "SELECT e.pairing_id AS pairingId", params: [] },
+      current,
+    });
     const rows = yield* attempt(() =>
       environment.DB.prepare(`SELECT o.id
     FROM browser_pairing_email_outbox AS o
     JOIN browser_pairing_email_proofs AS e ON e.work_id = o.id
-    JOIN browser_login_pairings AS p ON p.id = e.pairing_id
     WHERE e.state = 'awaiting_delivery' AND e.expires_at_ms > ?
-      AND p.state = 'pending_approval' AND p.expires_at_ms > ?
+      AND EXISTS (${pairing.sql})
       AND (o.last_attempt_at_ms IS NULL OR o.last_attempt_at_ms < ?)
       AND (? IS NULL OR o.id = ?)
     ORDER BY o.created_at_ms LIMIT 32`)
         .bind(
           current,
-          current,
+          ...pairing.params,
           current - dispatchCooldownMilliseconds,
           Option.getOrNull(identity),
           Option.getOrNull(identity)
@@ -119,11 +114,7 @@ export const dispatchBrowserPairingEmail = (
 
 /** Identify browser-pairing Queue batches without trusting or interpreting their payload as authority. */
 export const isBrowserPairingEmailWork = (value: unknown): boolean =>
-  Option.isSome(
-    Schema.decodeUnknownOption(Schema.Struct({ kind: Schema.Literal("browser-pairing-email") }))(
-      value
-    )
-  );
+  Option.isSome(Schema.decodeUnknownOption(Schema.Struct({ kind: Work.fields.kind }))(value));
 
 /** Resolve only bounded work identities; the Activity and Queue never retain raw proof material. */
 export const receiveBrowserPairingEmail =
@@ -175,24 +166,36 @@ type Send = (
   id: string
 ) => Promise<"succeeded" | "rejected" | "ambiguous">;
 
+const findPendingProof = (
+  db: D1Database,
+  id: string
+): Effect.Effect<Option.Option<typeof Pending.Type>, void> =>
+  Effect.gen(function* () {
+    const observedAt = yield* Clock.currentTimeMillis;
+    const pairing = pendingBrowserPairingQuery({
+      subject: { sql: "SELECT e.pairing_id AS pairingId", params: [] },
+      current: observedAt,
+    });
+    const raw = yield* attempt(() =>
+      db
+        .prepare(`SELECT e.email_address, e.expires_at_ms, e.state
+      FROM browser_pairing_email_proofs AS e
+      JOIN verified_email_credentials AS v ON v.user_id = e.user_id
+        AND v.email_address = e.email_address AND v.verified_at_ms = e.credential_verified_at_ms
+      WHERE e.work_id = ? AND EXISTS (${pairing.sql})`)
+        .bind(id, ...pairing.params)
+        .first()
+    );
+    return Schema.decodeUnknownOption(Pending)(raw);
+  });
+
 /** Claim one generation before any provider call, never retrying an ambiguous send with a new code. */
 export const deliverBrowserPairingEmail =
   ({ db, send }: { db: D1Database; send: Send }) =>
   (id: string): Promise<void> =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const observedAt = yield* Clock.currentTimeMillis;
-        const raw = yield* attempt(() =>
-          db
-            .prepare(`SELECT e.email_address, e.expires_at_ms, e.state
-      FROM browser_pairing_email_proofs AS e JOIN browser_login_pairings AS p ON p.id = e.pairing_id
-      JOIN verified_email_credentials AS v ON v.user_id = e.user_id
-        AND v.email_address = e.email_address AND v.verified_at_ms = e.credential_verified_at_ms
-      WHERE e.work_id = ? AND p.state = 'pending_approval' AND p.expires_at_ms > ?`)
-            .bind(id, observedAt)
-            .first()
-        );
-        const pending = Schema.decodeUnknownOption(Pending)(raw);
+        const pending = yield* findPendingProof(db, id);
         if (Option.isNone(pending) || pending.value.state !== "awaiting_delivery") return;
         const publicCode = group(symbols(publicSymbols));
         const secret = group(symbols(secretSymbols));
@@ -201,20 +204,26 @@ export const deliverBrowserPairingEmail =
         ).pipe(Effect.orDie);
         const current = yield* Clock.currentTimeMillis;
         const proofDigest = yield* attempt(() => digest(secret));
+        const pairing = pendingBrowserPairingQuery({
+          subject: {
+            sql: "SELECT browser_pairing_email_proofs.pairing_id AS pairingId",
+            params: [],
+          },
+          current,
+        });
         const claimed = yield* attempt(() =>
           db
             .prepare(`UPDATE browser_pairing_email_proofs
       SET state = 'sending', public_code = ?, proof_digest = ?, proof_expires_at_ms = ?
       WHERE work_id = ? AND state = 'awaiting_delivery' AND expires_at_ms > ?
-        AND EXISTS (SELECT 1 FROM browser_login_pairings AS p
-          WHERE p.id = pairing_id AND p.state = 'pending_approval' AND p.expires_at_ms > ?)`)
+        AND EXISTS (${pairing.sql})`)
             .bind(
               publicCode,
               proofDigest,
               Math.min(current + proofLifetimeMilliseconds, pending.value.expires_at_ms),
               id,
               current,
-              current
+              ...pairing.params
             )
             .run()
         );
@@ -254,37 +263,6 @@ type DeliveryActivity = (
   options: WorkflowStepConfig,
   run: () => Promise<void>
 ) => Promise<void>;
-export type BrowserPairingEmailEnvironment = {
-  DB: D1Database;
-  BROWSER_PAIRING_EMAIL_QUEUE: Queue;
-  BROWSER_PAIRING_EMAIL_WORKFLOW: Workflow;
-  RESEND_API_KEY: string;
-};
-
-/** Versioned durable delivery; the step result and payload contain no mailbox or proof. */
-export class BrowserPairingEmailWorkflowV1 extends WorkflowEntrypoint<
-  BrowserPairingEmailEnvironment,
-  unknown
-> {
-  run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return captureWorkflowFailure({
-      work: observeWorkerPromise(
-        () =>
-          runBrowserPairingEmailWorkflow({
-            environment: this.env,
-            payload: event.payload,
-            activity: (name, options, activity) => step.do(name, options, activity),
-          }),
-        {
-          environment: workerRelease(this.env),
-          telemetry: cloudflareWorkerTelemetry,
-          operation: "workflow.browserPairingEmail",
-        }
-      ),
-      db: this.env.DB,
-    });
-  }
-}
 
 /** Validate the Queue payload again at the Workflow boundary before accessing D1. */
 export const runBrowserPairingEmailWorkflow = ({

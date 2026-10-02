@@ -152,6 +152,68 @@ const PROBES: readonly Probe[] = [
     expect: { kind: "allowed" },
     files: [
       {
+        path: `cloudflare/${PROBE_PREFIX}email-published/probe.ts`,
+        source:
+          'import { requestEmailReplacement, completeBrowserPairingEmail } from "../email-authentication/operations";\n' +
+          'import { EmailAddress } from "~/core/email-authentication/contract";\n' +
+          "export const published = [requestEmailReplacement, completeBrowserPairingEmail, EmailAddress];\n",
+      },
+    ],
+    name: "Email Authentication callers consume published proof and replacement operations",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-email-authentication-internal: cloudflare/${PROBE_PREFIX}email-private/probe.test.ts → cloudflare/email-authentication/internal/email-replacement.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}email-private/probe.test.ts`,
+        source:
+          'import { requestEmailReplacement } from "../email-authentication/internal/email-replacement";\nexport const replacement = requestEmailReplacement;\n',
+      },
+    ],
+    name: "foreign tests cannot acquire private Email Authentication proof implementation",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-email-authentication-internal: tools/${PROBE_PREFIX}email-private/probe.ts → cloudflare/email-authentication/internal/onboarding-workflow.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `tools/${PROBE_PREFIX}email-private/probe.ts`,
+        source:
+          'import { sendThroughResend } from "../../cloudflare/email-authentication/internal/onboarding-workflow";\nexport const provider = sendThroughResend;\n',
+      },
+    ],
+    name: "tooling cannot acquire Email Authentication provider delivery authority",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error cloudflare-imports-portable-email-authentication-internal: cloudflare/email-authentication/${PROBE_PREFIX}portable-private/probe.ts → src/shell/email-authentication/internal/delivery.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/email-authentication/${PROBE_PREFIX}portable-private/probe.ts`,
+        source:
+          'import { makeEmailDelivery } from "~/shell/email-authentication/internal/delivery";\nexport const provider = makeEmailDelivery;\n',
+      },
+    ],
+    name: "native Email Authentication cannot bypass portable provider ownership",
+  },
+
+  {
+    expect: { kind: "allowed" },
+    files: [
+      {
         path: `${subscriptionPublished}/probe.ts`,
         source:
           'import { handleCardEnrollment, executeProtectedSubscriptionQuery } from "../subscription/operations";\n' +

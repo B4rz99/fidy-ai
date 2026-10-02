@@ -1,11 +1,14 @@
 import { DateTime, Effect, Option } from "effect";
-import { maximumEmailDeliveryGenerations } from "./model";
+import {
+  type EmailReplacementRequestDecision,
+  type ProofAttemptDecision,
+  type ProofAttemptInput,
+  maximumEmailDeliveryGenerations,
+} from "./contract";
 
 /** Uniform 32-symbol alphabet without visually ambiguous I, O, 0, or 1. */
 export const emailCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" as const;
 const maximumWrongProofAttempts = 5;
-/** Fixed public delay attached to every non-enumerating email-login start response. */
-export const browserPairingEmailRetryAfterSeconds = 60;
 
 /** Returns the exact end of a 24-hour bounded email-control workflow. */
 export const emailWorkflowExpiry = (startedAt: DateTime.Utc): DateTime.Utc =>
@@ -40,9 +43,6 @@ export const formatEmailCode = (input: {
   }
   return groups.join("-");
 };
-
-/** Persistence action selected for one locked replacement-workflow request. */
-export type EmailReplacementRequestDecision = "Start" | "ReplaceExpired" | "UseExisting" | "Reject";
 
 /** Decides resend/supersession admission from one already-locked replacement workflow. */
 export const decideEmailReplacementRequest = (input: {
@@ -105,25 +105,6 @@ export const isEmailEnrollmentExpired = (input: {
   readonly attemptedAt: DateTime.Utc;
 }): boolean => DateTime.isGreaterThanOrEqualTo(input.attemptedAt, input.expiresAt);
 
-/** Exhaustive result of comparing one submitted proof with locked enrollment state. */
-export type ProofAttemptDecision =
-  | Readonly<{ _tag: "Accept" }>
-  | Readonly<{ _tag: "Wrong"; wrongAttempts: number }>
-  | Readonly<{ _tag: "Delete" }>
-  | Readonly<{ _tag: "Expired" }>;
-
-/**
- * Decides proof use against already-locked current-generation state. Both lifetimes are half-open;
- * the fifth wrong proof requests physical deletion rather than a durable terminal secret state.
- */
-type ProofAttemptInput = Readonly<{
-  digestMatches: boolean;
-  wrongAttempts: number;
-  proofExpiresAt: DateTime.Utc;
-  enrollmentExpiresAt: DateTime.Utc;
-  attemptedAt: DateTime.Utc;
-}>;
-
 const hasProofAttemptExpired = (input: ProofAttemptInput): boolean =>
   DateTime.isGreaterThanOrEqualTo(input.attemptedAt, input.proofExpiresAt) ||
   isEmailEnrollmentExpired({
@@ -145,3 +126,19 @@ const liveProofDecision = (input: ProofAttemptInput): ProofAttemptDecision =>
  */
 export const decideProofAttempt = (input: ProofAttemptInput): Effect.Effect<ProofAttemptDecision> =>
   Effect.succeed(hasProofAttemptExpired(input) ? { _tag: "Expired" } : liveProofDecision(input));
+
+/** A fourth wrong proof closes the pending enrollment; later attempts cannot revive it. */
+export const maximumOnboardingProofFailures = 4;
+
+/** A proof is redeemable only during both its own lifetime and the pending enrollment's lifetime. */
+export const canRedeemOnboardingProof = (
+  input: Readonly<{
+    state: "awaiting_proof" | "awaiting_delivery" | "sending" | "rejected" | "ambiguous";
+    expiresAtMs: number;
+    proofExpiresAtMs: number;
+    nowMs: number;
+  }>
+): boolean =>
+  input.state === "awaiting_proof" &&
+  input.expiresAtMs > input.nowMs &&
+  input.proofExpiresAtMs > input.nowMs;

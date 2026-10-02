@@ -4,11 +4,10 @@ import { type Cause, Clock, DateTime, Effect, Equal, Exit, Option, Schema } from
 import { recoverPendingDisclosures, sweepExpiredConsent } from "../consent/runtime";
 import { WhatsAppStatusAdmission, WhatsAppTurnAdmission } from "../agent/whatsapp-turn";
 import {
-  deliverOnboardingEmail,
   dispatchOnboardingEmail,
   receiveOnboardingEmail,
   runOnboardingEmailWorkflow,
-} from "./onboarding-email";
+} from "../email-authentication/runtime";
 import { afterEach, expect, it, vi } from "vitest";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
@@ -1981,3 +1980,12 @@ it("records refusal without financial work and rejects a decision before verifie
       expect(results).toEqual([{ decision: "declined" }]);
     })
   ));
+
+const deliverOnboardingEmail =
+  (environment: { DB: D1Database; RESEND_API_KEY: string }) =>
+  (id: string): Promise<void> =>
+    runOnboardingEmailWorkflow({
+      environment,
+      payload: { version: 1, id },
+      activity: (_name, _options, run) => run(),
+    });

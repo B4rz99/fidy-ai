@@ -151,7 +151,9 @@ const check = Effect.fn(function* (
     })
   ) {
     return yield* new ReleaseSmokeFailed({
-      reason: "Candidate smoke did not prove the compatible public and Core release",
+      reason: Option.isNone(result)
+        ? "Smoke response did not match the owned schema"
+        : `Smoke identity mismatch (publicVersion=${result.value.public.workerVersionId === expectedPublic.workerVersionId}, publicRevision=${result.value.public.gitRevision === expectedPublic.gitRevision}, publicDigest=${result.value.public.contractDigest === expectedPublic.contractDigest}, coreVersion=${result.value.core.workerVersionId === config.CORE_VERSION_ID}, coreRevision=${result.value.core.gitRevision === config.RELEASE_GIT_SHA}, coreDigest=${result.value.core.contractDigest === config.CONTRACT_DIGEST})`,
     });
   }
   return result.value.status;
@@ -234,31 +236,43 @@ const checkEdge = Effect.fn(function* (
 /** Poll only proof-admitted, identity-only GETs while global routing propagates. */
 export const verifyReadOnlySmokeRouting = Effect.fn(function* (
   env: unknown,
-  mode: "candidate" | "promoted" = "candidate"
+  mode: "candidate" | "intermediate" | "promoted" = "candidate"
 ) {
   const decoded = Schema.decodeUnknownOption(RunnerConfig)(env);
   if (Option.isNone(decoded)) {
     return yield* new ReleaseSmokeFailed({ reason: "Incomplete routing readiness configuration" });
   }
   const config = decoded.value;
+  const expectedPublic =
+    mode === "intermediate"
+      ? {
+          gitRevision: config.STABLE_RELEASE_GIT_SHA,
+          contractDigest: config.STABLE_CONTRACT_DIGEST,
+          workerVersionId: config.STABLE_PUBLIC_VERSION_ID,
+        }
+      : {
+          gitRevision: config.RELEASE_GIT_SHA,
+          contractDigest: config.CONTRACT_DIGEST,
+          workerVersionId: config.PUBLIC_VERSION_ID,
+        };
   const headers =
-    mode === "candidate"
-      ? candidateHeaders(config, config.PUBLIC_VERSION_ID)
-      : { "x-fidy-smoke-proof": config.SMOKE_PROOF };
+    mode === "promoted"
+      ? { "x-fidy-smoke-proof": config.SMOKE_PROOF }
+      : candidateHeaders(config, expectedPublic.workerVersionId);
+  let diagnostic = "No valid readiness response";
   yield* Effect.gen(function* () {
     const response = yield* call(`${smokePath}?readiness=1`, headers, Option.none());
     if (response.status === authorityRefusedStatus) {
       return yield* new ReleaseSmokeFailed({ reason: "Read-only routing authority refused" });
     }
-    return yield* check(response, config, {
-      gitRevision: config.RELEASE_GIT_SHA,
-      contractDigest: config.CONTRACT_DIGEST,
-      workerVersionId: config.PUBLIC_VERSION_ID,
-    }).pipe(
-      Effect.catch(
-        () =>
-          new CandidateRoutingPending({ reason: "Read-only Worker identities have not converged" })
-      )
+    return yield* check(response, config, expectedPublic).pipe(
+      Effect.catch((error) => {
+        diagnostic =
+          error instanceof ReleaseSmokeFailed || error instanceof CandidateRoutingPending
+            ? error.reason
+            : "Readiness response could not be decoded";
+        return new CandidateRoutingPending({ reason: diagnostic });
+      })
     );
   }).pipe(
     Effect.retry({
@@ -268,9 +282,9 @@ export const verifyReadOnlySmokeRouting = Effect.fn(function* (
     }),
     Effect.timeout("45 seconds"),
     Effect.catch(
-      () =>
+      (error) =>
         new ReleaseSmokeFailed({
-          reason: "Read-only Worker routing did not converge; no synthetic work started",
+          reason: `Read-only ${mode} Worker routing did not converge; no synthetic work started: ${error instanceof ReleaseSmokeFailed ? error.reason : diagnostic}`,
         })
     )
   );
@@ -291,7 +305,15 @@ export const verifyProductionSmoke = Effect.fn(function* (env: unknown) {
         gitRevision: config.RELEASE_GIT_SHA,
         contractDigest: config.CONTRACT_DIGEST,
         workerVersionId: config.PUBLIC_VERSION_ID,
-      }).pipe(Effect.andThen(checkEdge(config, headers))),
+      }).pipe(
+        Effect.andThen(checkEdge(config, headers)),
+        Effect.mapError(
+          (error) =>
+            new ReleaseSmokeFailed({
+              reason: `candidate pairing: ${error instanceof ReleaseSmokeFailed || error instanceof CandidateRoutingPending ? error.reason : "unclassified smoke failure"}`,
+            })
+        )
+      ),
       intermediate: awaitSyntheticWork(
         config,
         candidateHeaders(config, config.STABLE_PUBLIC_VERSION_ID),
@@ -300,10 +322,26 @@ export const verifyProductionSmoke = Effect.fn(function* (env: unknown) {
           contractDigest: config.STABLE_CONTRACT_DIGEST,
           workerVersionId: config.STABLE_PUBLIC_VERSION_ID,
         }
+      ).pipe(
+        Effect.mapError(
+          (error) =>
+            new ReleaseSmokeFailed({
+              reason: `intermediate pairing: ${error instanceof ReleaseSmokeFailed || error instanceof CandidateRoutingPending ? error.reason : "unclassified smoke failure"}`,
+            })
+        )
       ),
     },
     { concurrency: 2, discard: true }
   );
+});
+
+/** Both exact pairings must be ready before either can admit synthetic work. */
+export const verifyCandidateSmoke = Effect.fn(function* (env: unknown) {
+  yield* Effect.all(
+    [verifyReadOnlySmokeRouting(env), verifyReadOnlySmokeRouting(env, "intermediate")],
+    { concurrency: 2, discard: true }
+  );
+  yield* verifyProductionSmoke(env);
 });
 
 /** Probe normal traffic after promotion; an exact-version override would hide a routing failure. */
@@ -336,9 +374,7 @@ if (import.meta.main) {
             ? verifyReadOnlySmokeRouting(process.env, "promoted").pipe(
                 Effect.andThen(verifyPromotedSmoke(process.env))
               )
-            : verifyReadOnlySmokeRouting(process.env).pipe(
-                Effect.andThen(verifyProductionSmoke(process.env))
-              )
+            : verifyCandidateSmoke(process.env)
         ).pipe(
           Effect.provideService(
             HttpClient.HttpClient,

@@ -2,11 +2,8 @@ import { Option } from "effect";
 import { recordedPATCallProof } from "~/shell/audit/operations";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 import { protectConsentStatement, protectPATRevocationStatement } from "~/shell/consent/operations";
-import {
-  type FreshSessionSubject,
-  freshSessionExists,
-  freshSessionParams,
-} from "~/shell/identity/browser-runtime";
+import type { FreshSessionSubject } from "~/shell/web-session/contract";
+import { freshSessionExists, freshSessionParams } from "~/shell/web-session/operations";
 import { type CreateManualPATPayload } from "~/core/tokens/model";
 import { type PATAuthority, type PATSubject, livePATAuthority } from "./pat-authority";
 

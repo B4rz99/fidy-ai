@@ -1,6 +1,6 @@
 import { recordAuthorizedCall } from "~/shell/audit/operations";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
-import { liveWebSessionAuthority } from "~/shell/identity/browser-runtime";
+import { liveWebSessionAuthority } from "~/shell/identity/operations";
 
 type BrowserCategorySubject = Readonly<{ id: string; userId: string; digest: Uint8Array }>;
 

@@ -14,7 +14,7 @@ import {
   revokeOnePAT,
 } from "@fidy/server/tokens-runtime";
 import { type Cause, Effect, Option, Schema } from "effect";
-import { freshSessionParams } from "@fidy/server/identity-runtime";
+import { freshSessionParams } from "@fidy/server/web-session-operations";
 import {
   revokeAllPATConsents,
   revokeAllPairingConsents,

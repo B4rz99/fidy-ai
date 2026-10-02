@@ -199,6 +199,27 @@ codebase has no institution Connection authority, sender-to-institution mapping,
 result at the Email Worker. No Email Routing rule is provisioned; enable inbound delivery only
 when both policies can be enforced before retention and automatic Transaction finalization. The full hosted-Turn path still requires its own adapter and platform evidence.
 
+### Identity owner composition
+
+Identity publishes stable User, WhatsAppIdentity, current UserContext and TrialPeriod declarations
+through `core/identity/contract.ts`, and pure User creation through `operations.ts`. Its shell
+contract contains browser-safe canonical declarations; shell operations own authoritative User and
+TrialPeriod reads. Storage projections stay under `internal/`. WebSession publishes its own fresh
+session and credential primitives; Identity composes current Consent with browser authority.
+
+The Cloudflare Identity operations resolve only an established Business Portfolio/BSUID pair and
+return a stable UserId as a coordination hint. Every protected action rechecks that same User and
+association inside its D1 statement. User-context operations expose a subject-scoped semantic
+projection for atomic snapshots and decoded reads, never a User persistence row. Recipient or
+credential hints cannot release context without the caller's complete current guard. Historical
+context remains captured at the original action, independent of later preferences.
+
+Verified onboarding composes Identity's User, association and original TrialPeriod statements with
+the existing mailbox, Consent, recovery and final proof assertion in one D1 batch. This extraction
+creates no new session, reassociation, preference mutation or runtime authority. Existing per-User
+Durable Objects and closed unavailable paths retain their behavior. No new external workflow or
+telemetry purpose is introduced.
+
 ### Consent owner composition
 
 Consent publishes its declarations and decisions through `core/consent/contract.ts` and

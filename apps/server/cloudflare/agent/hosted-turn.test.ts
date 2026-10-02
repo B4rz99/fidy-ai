@@ -1,3 +1,4 @@
+import { findWhatsAppUser } from "../identity/operations";
 import { applyTestMigration, installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { type Cause, Clock, DateTime, Effect, Option, Redacted, Schema } from "effect";
@@ -29,7 +30,7 @@ import {
 import { sweepHostedTurns } from "./hosted-turn-sweep";
 import { hostedTurnTestMigrations } from "./hosted-turn-test-migrations";
 import { WhatsAppHostedSubject, WhatsAppInboundEvidence } from "./hosted-authority";
-import { findWhatsAppReplay, findWhatsAppUser, sweepExpiredWhatsAppWindows } from "./whatsapp-turn";
+import { findWhatsAppReplay, sweepExpiredWhatsAppWindows } from "./whatsapp-turn";
 import { observeOperationalHealth } from "../runtime/operational-health";
 import {
   recordWhatsAppSend,

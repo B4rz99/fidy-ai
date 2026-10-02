@@ -1,7 +1,7 @@
 import { type Option, Schema } from "effect";
 import { DisclosureSnapshot } from "~/core/consent/contract";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
-import type { FreshSessionSubject } from "~/shell/identity/contract";
+import type { FreshSessionSubject } from "~/shell/web-session/contract";
 
 export {
   ConsentIngressExchange,
@@ -76,7 +76,6 @@ export type ConsentSubjectColumn =
   | "web_sessions.user_id"
   | "pats.user_id"
   | "pat_pairings.user_id"
-  | "whatsapp_identities.user_id"
   | "users.id"
   | "u.id"
   | "r.user_id"
@@ -104,7 +103,7 @@ export type ConsentProtectedStatement = Readonly<{
 
 /** The closed credential owners that compose their live authority with Consent standing. */
 export type ConsentAuthority = Readonly<{
-  table: "pats" | "pat_pairings" | "web_sessions" | "whatsapp_identities";
+  table: "pats" | "pat_pairings" | "web_sessions";
   predicate: string;
   bindings: ReadonlyArray<string | number | Uint8Array>;
 }>;

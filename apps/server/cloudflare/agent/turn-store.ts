@@ -1,3 +1,6 @@
+import { prepareWhatsAppIdentity } from "../identity/operations";
+import type { UserContext } from "@fidy/server/identity-contract";
+import { readUserContext } from "../identity/user-context/operations";
 import { readConsentStanding } from "../consent/operations";
 import {
   AssistantTranscriptEntry,
@@ -10,9 +13,6 @@ import {
   type HostedAdmissionState,
   HostedAgentSessionConsentBasis,
   HostedAgentSessionId,
-  IanaTimeZone,
-  Locale,
-  ServiceMarket,
   type SessionTranscriptEntry,
   TranscriptEntry,
   TranscriptEntryId,
@@ -64,11 +64,6 @@ const TurnRow = Schema.Struct({
   started_at_ms: Schema.Int,
   proposed_at_ms: Schema.NullOr(Schema.Int),
 });
-const UserContextRow = Schema.Struct({
-  service_market: ServiceMarket,
-  locale: Locale,
-  time_zone: IanaTimeZone,
-});
 const CompactRow = Schema.Struct({
   text: Schema.String.check(Schema.isMinLength(1)),
   through_sequence: Schema.Int,
@@ -90,18 +85,13 @@ const EntryRow = Schema.Struct({
   outcome_json: Schema.NullOr(Schema.String),
 });
 
-type UserContextRow = typeof UserContextRow.Type;
 type SessionRow = typeof SessionRow.Type;
 type TurnRow = typeof TurnRow.Type;
 type EntryRow = typeof EntryRow.Type;
 
-/** No decoded private data is returned when the current credential or Consent is not live. */
+/** A live credential selects its own User; retained Consent standing distinguishes refusal. */
 export type HostedTurnSnapshot = Readonly<{
-  user: Readonly<{
-    serviceMarket: UserContextRow["service_market"];
-    locale: UserContextRow["locale"];
-    timeZone: UserContextRow["time_zone"];
-  }>;
+  user: UserContext;
   consentBasis: HostedAgentSessionConsentBasis;
   revoked: boolean;
   capacityAvailable: boolean;
@@ -121,15 +111,13 @@ export const readHostedSnapshot = ({
 }>): Effect.Effect<Option.Option<HostedTurnSnapshot>, Cause.UnknownError | Schema.SchemaError> =>
   Effect.gen(function* () {
     const authority = hostedIdentity({ subject, current: now });
-    const raw = yield* Effect.tryPromise(() =>
-      db
-        .prepare(`SELECT u.service_market, u.locale, u.time_zone FROM users AS u
-      WHERE u.id = ? AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
-        .bind(subject.userId, ...authority.bindings)
-        .first()
-    );
-    if (raw === null) return Option.none();
-    const user = yield* Schema.decodeUnknownEffect(UserContextRow)(raw);
+    const userId = yield* Schema.decodeEffect(UserId)(subject.userId);
+    const user = yield* readUserContext({
+      db,
+      userId,
+      authority: Option.some(authority),
+    }).pipe(Effect.mapError((cause) => new Cause.UnknownError(cause)));
+    if (Option.isNone(user)) return Option.none();
     const standing = yield* readConsentStanding({ db, userId: subject.userId }).pipe(
       Effect.mapError((cause) => new Cause.UnknownError(cause))
     );
@@ -166,7 +154,7 @@ export const readHostedSnapshot = ({
       Schema.decodeUnknownOption(Schema.Struct({ used: Schema.Int }))
     );
     return Option.some({
-      user: { serviceMarket: user.service_market, locale: user.locale, timeZone: user.time_zone },
+      user: user.value,
       consentBasis: standing.basis,
       revoked: standing._tag === "Revoked",
       capacityAvailable: Option.exists(budgetRow, (row) => row.used < maximumDailyTurns),
@@ -535,10 +523,10 @@ export const reserveHostedCompaction = ({
         .prepare(`INSERT INTO hosted_compaction_attempts (user_id, day_ms, used)
     SELECT ?, ?, 1 WHERE EXISTS
       (SELECT 1 FROM hosted_agent_sessions WHERE user_id = ? AND id = ? AND status = 'active')
-    AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})
+    AND EXISTS (${authority.sql})
     ON CONFLICT(user_id, day_ms) DO UPDATE SET used = used + 1
     WHERE hosted_compaction_attempts.used < 3`)
-        .bind(subject.userId, day, subject.userId, sessionId, ...authority.bindings)
+        .bind(subject.userId, day, subject.userId, sessionId, ...authority.params)
         .run()
     );
     return reserved.meta.changes === 1;
@@ -591,7 +579,7 @@ export const commitHostedCompaction = ({
       (user_id, hosted_session_id, text, through_sequence, revision, nonce, updated_at_ms)
       SELECT ?, ?, ?, ?, ?, ?, ? WHERE EXISTS
         (SELECT 1 FROM hosted_agent_sessions WHERE user_id = ? AND id = ? AND status = 'active')
-      AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})
+      AND EXISTS (${authority.sql})
       AND (SELECT COUNT(*) FROM transcript_entries WHERE user_id = ? AND hosted_session_id = ?
         AND sequence <= ?) = ?
       AND NOT EXISTS (SELECT 1 FROM transcript_entries AS e JOIN hosted_turns AS t
@@ -612,7 +600,7 @@ export const commitHostedCompaction = ({
             current,
             userId,
             sessionId,
-            ...authority.bindings,
+            ...authority.params,
             userId,
             sessionId,
             throughSequence,
@@ -738,20 +726,25 @@ const hostedInboundStatements = ({
       .prepare(`INSERT INTO hosted_whatsapp_outbox (turn_id, user_id, created_at_ms)
       SELECT turn_id, user_id, ? FROM hosted_whatsapp_inbound WHERE turn_id = ? AND user_id = ?`)
       .bind(now, id, subject.userId),
-    db
-      .prepare(`INSERT INTO hosted_whatsapp_windows
+    prepareWhatsAppIdentity({
+      db,
+      userId: subject.userId,
+      statement: {
+        sql: `INSERT INTO hosted_whatsapp_windows
       (user_id, portfolio_id, bsuid, last_verified_inbound_at_ms, closes_at_ms)
       SELECT i.user_id, i.portfolio_id, i.bsuid, MIN(i.occurred_at_ms, i.received_at_ms),
         MIN(i.occurred_at_ms, i.received_at_ms) + 86400000
       FROM hosted_whatsapp_inbound AS i
-      JOIN whatsapp_identities AS w ON w.user_id = i.user_id AND w.portfolio_id = i.portfolio_id
-        AND w.bsuid = i.bsuid
+      JOIN identity_associations AS w ON w.userId = i.user_id AND w.businessPortfolioId = i.portfolio_id
+        AND w.businessScopedUserId = i.bsuid
       WHERE i.turn_id = ? AND i.user_id = ?
       ON CONFLICT (user_id, portfolio_id, bsuid) DO UPDATE SET
         last_verified_inbound_at_ms = excluded.last_verified_inbound_at_ms,
         closes_at_ms = excluded.closes_at_ms
-      WHERE excluded.last_verified_inbound_at_ms > hosted_whatsapp_windows.last_verified_inbound_at_ms`)
-      .bind(id, subject.userId),
+      WHERE excluded.last_verified_inbound_at_ms > hosted_whatsapp_windows.last_verified_inbound_at_ms`,
+        params: [id, subject.userId],
+      },
+    }),
   ];
 };
 
@@ -782,8 +775,8 @@ export const admitHostedTurn = ({
       ? db
           .prepare(`INSERT INTO hosted_agent_sessions
         (id, user_id, consent_basis_json, started_at_ms, status)
-        SELECT ?, user_id, ?, ?, 'active' FROM ${authority.table} WHERE ${authority.predicate}`)
-          .bind(selection.id, basisJson, now, ...authority.bindings)
+        SELECT ?, userId, ?, ?, 'active' FROM (${authority.sql})`)
+          .bind(selection.id, basisJson, now, ...authority.params)
       : db
           .prepare(
             `UPDATE hosted_agent_sessions SET status = 'active' WHERE id = ? AND user_id = ? AND status = 'active'`
@@ -795,8 +788,8 @@ export const admitHostedTurn = ({
         createSession,
         db
           .prepare(`INSERT INTO hosted_turns (id, user_id, hosted_session_id, started_at_ms, status)
-      SELECT ?, user_id, ?, ?, 'pending' FROM ${authority.table} WHERE ${authority.predicate}`)
-          .bind(id, selection.id, now, ...authority.bindings),
+      SELECT ?, userId, ?, ?, 'pending' FROM (${authority.sql})`)
+          .bind(id, selection.id, now, ...authority.params),
         db
           .prepare(`INSERT INTO transcript_entries
       (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text)

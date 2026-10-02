@@ -1,6 +1,8 @@
+import { UserId } from "@fidy/server/identity-reference";
 import type { EffectiveTransactionAggregate } from "@fidy/server/transactions-runtime";
 import { type DateTime, Effect, Option, Schema } from "effect";
-import { IanaTimeZone, Locale, ServiceMarket } from "../../src/core/_shared/context";
+import { UserContext } from "@fidy/server/identity-contract";
+import { prepareUserContext } from "../identity/user-context/operations";
 import { Category } from "../../src/core/categories/model";
 import { type DashboardDocument, collectLayoutWidgets } from "../../src/core/dashboard/model";
 import { dashboardProjectionRanges } from "../../src/core/dashboard/projection";
@@ -12,14 +14,37 @@ import {
 } from "../transactions/dashboard-query";
 import { findDashboardAggregate, projectionReady } from "../transactions/dashboard-projection";
 
-const UserContextRow = Schema.Struct({
-  service_market: ServiceMarket,
-  locale: Locale,
-  time_zone: IanaTimeZone,
-});
-type Context = typeof UserContextRow.Type;
+type Context = UserContext;
 type LayoutWidgets = ReturnType<typeof collectLayoutWidgets>;
 type Groups = DashboardFacts["groups"];
+
+const prepareBaseQueries = (
+  db: D1Database,
+  userId: string,
+  lists: ReadonlyArray<Extract<LayoutWidgets[number], { type: "transaction-list" }>>
+): ReadonlyArray<D1PreparedStatement> => [
+  prepareUserContext({
+    db,
+    userId: UserId.make(userId),
+    statement: {
+      sql: "SELECT serviceMarket, locale, timeZone FROM identity_user_context",
+      params: [],
+    },
+  }),
+  db.prepare("SELECT id, label FROM categories ORDER BY display_order LIMIT 32"),
+  db
+    .prepare("SELECT version, readiness FROM dashboard_projection_state WHERE user_id = ?")
+    .bind(userId),
+  ...dashboardTransactionQueries({
+    db,
+    userId,
+    lists: lists.map((widget) => ({
+      categories: widget.categories ?? [],
+      search: Option.fromUndefinedOr(widget.search),
+      limit: widget.limit,
+    })),
+  }),
+];
 
 const loadBase = (
   db: D1Database,
@@ -29,22 +54,7 @@ const loadBase = (
   Effect.gen(function* () {
     const lists = widgets.filter((widget) => widget.type === "transaction-list");
     const [user, categoryRows, state, ...pages] = yield* Effect.tryPromise(() =>
-      db.batch([
-        db.prepare("SELECT service_market, locale, time_zone FROM users WHERE id = ?").bind(userId),
-        db.prepare("SELECT id, label FROM categories ORDER BY display_order LIMIT 32"),
-        db
-          .prepare("SELECT version, readiness FROM dashboard_projection_state WHERE user_id = ?")
-          .bind(userId),
-        ...dashboardTransactionQueries({
-          db,
-          userId,
-          lists: lists.map((widget) => ({
-            categories: widget.categories ?? [],
-            search: Option.fromUndefinedOr(widget.search),
-            limit: widget.limit,
-          })),
-        }),
-      ])
+      db.batch([...prepareBaseQueries(db, userId, lists)])
     );
     if (pages.length !== lists.length) return Option.none();
     const selected = Option.all({
@@ -55,7 +65,7 @@ const loadBase = (
     if (Option.isNone(selected) || !projectionReady(selected.value.state.results[0])) {
       return Option.none();
     }
-    const context = Schema.decodeUnknownOption(UserContextRow)(selected.value.user.results[0]);
+    const context = Schema.decodeUnknownOption(UserContext)(selected.value.user.results[0]);
     const categories = Option.all(
       selected.value.categories.results.map((row) => Schema.decodeUnknownOption(Category)(row))
     );
@@ -119,7 +129,7 @@ const findRanges = ({
     for (const widget of widgets) {
       if (widget.type === "transaction-list") continue;
       const buckets = [];
-      for (const range of dashboardProjectionRanges(widget, now, context.time_zone)) {
+      for (const range of dashboardProjectionRanges(widget, now, context.timeZone)) {
         const loaded = yield* findCached(cached, {
           db,
           userId,

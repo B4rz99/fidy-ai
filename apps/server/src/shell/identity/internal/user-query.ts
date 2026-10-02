@@ -1,8 +1,7 @@
 import { DateTime, Effect, Option, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { User } from "~/core/identity/model";
+import { SqlClient, type SqlError, SqlSchema } from "effect/unstable/sql";
+import { User } from "~/core/identity/contract";
 import { UserId } from "~/core/identity/reference";
-import { Unavailable } from "~/shell/public-http/contract";
 import { protectConsentStatement } from "~/shell/consent/operations";
 
 const UserRow = Schema.Struct({
@@ -15,18 +14,12 @@ const UserRow = Schema.Struct({
   ends_at_ms: Schema.Finite,
 });
 
-const userUnavailable = (): Unavailable =>
-  Unavailable.make({
-    error: { code: "unavailable", message: "User data is temporarily unavailable. Retry later." },
-    next: [],
-  });
-
-/** Load one User from authoritative state, scoped solely by the resolved stable UserId. */
-export const getCurrentUser = (
+/** Decode the selected User without publishing its persisted representation. */
+export const findUser = (
   userId: UserId
 ): Effect.Effect<
-  { readonly data: User; readonly next: ReadonlyArray<never> },
-  Unavailable,
+  Option.Option<User>,
+  Schema.SchemaError | SqlError.SqlError,
   SqlClient.SqlClient
 > =>
   Effect.flatMap(SqlClient.SqlClient, (sql) =>
@@ -50,7 +43,7 @@ export const getCurrentUser = (
   ).pipe(
     Effect.flatMap((row) =>
       Option.match(row, {
-        onNone: () => Effect.fail(userUnavailable()),
+        onNone: () => Effect.succeedNone,
         onSome: (value) =>
           Schema.decodeUnknownEffect(Schema.toType(User))({
             id: value.id,
@@ -62,9 +55,7 @@ export const getCurrentUser = (
               startedAt: DateTime.makeUnsafe(value.started_at_ms),
               endsAt: DateTime.makeUnsafe(value.ends_at_ms),
             },
-          }).pipe(Effect.mapError(userUnavailable)),
+          }).pipe(Effect.asSome),
       })
-    ),
-    Effect.map((data) => ({ data, next: [] as const })),
-    Effect.mapError(userUnavailable)
+    )
   );

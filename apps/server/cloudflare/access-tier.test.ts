@@ -1,7 +1,7 @@
 import { Miniflare } from "miniflare";
 import { expect, it } from "vitest";
 import { Effect } from "effect";
-import { activeProUserParams, activeProUserSql } from "./access-tier";
+import { activeProUserCondition } from "./access-tier";
 
 const userId = "10000000-0000-4000-8000-000000000001";
 
@@ -41,16 +41,22 @@ it("does not grant Pro before either the original TrialPeriod or the paid period
           ),
           db.prepare("CREATE TABLE billing_paid_periods (attempt_id TEXT, starts_at_ms INTEGER)"),
           db.prepare("INSERT INTO trial_periods VALUES (?, 200, 300)").bind(userId),
+          db
+            .prepare("INSERT INTO trial_periods VALUES (?, 100, 600)")
+            .bind("20000000-0000-4000-8000-000000000002"),
           db.prepare("INSERT INTO subscriptions VALUES (?, 'attempt', 500)").bind(userId),
           db.prepare("INSERT INTO billing_paid_periods VALUES ('attempt', 400)"),
         ])
       );
-      const tier = (at: number): Promise<number> =>
-        db
-          .prepare(`SELECT ${activeProUserSql} AS active`)
-          .bind(...activeProUserParams({ userId, nowEpochMs: at }))
+      const tier = (at: number, subject: string = userId): Promise<number> => {
+        const pro = activeProUserCondition({ userId: subject, nowEpochMs: at });
+        return db
+          .prepare(`SELECT ${pro.sql} AS active`)
+          .bind(...pro.params)
           .first<{ active: number }>()
           .then((row) => row?.active ?? -1);
+      };
+      expect(yield* Effect.tryPromise(() => tier(250, "contact-123"))).toBe(0);
       expect(yield* Effect.tryPromise(() => tier(199))).toBe(0);
       expect(yield* Effect.tryPromise(() => tier(200))).toBe(1);
       expect(yield* Effect.tryPromise(() => tier(300))).toBe(0);

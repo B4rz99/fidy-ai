@@ -1,7 +1,7 @@
 import type { Miniflare } from "miniflare";
 import { afterEach, expect, it, vi } from "vitest";
 import { CardEnrollment, PaymentRequestId } from "@fidy/server/client";
-import { UserId } from "@fidy/server/identity-runtime";
+import { UserId } from "@fidy/server/identity-reference";
 import { Clock, Data, Effect, Schema } from "effect";
 import { billingAttemptIdFor, handleCardEnrollment } from "./card-enrollment";
 import { sweepExpiredCardPreparationAdmission } from "./card-preparation-admission";
@@ -68,7 +68,7 @@ const setup = (): Promise<{
     Effect.gen(function* () {
       const name = `card-flow-${++counter}`;
       const { db, instance } = yield* makeCardEnrollmentD1(name, [
-        "CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL) STRICT",
+        "CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL, service_market TEXT NOT NULL DEFAULT 'CO', locale TEXT NOT NULL DEFAULT 'es-CO') STRICT",
         "CREATE TABLE verified_email_credentials (user_id TEXT PRIMARY KEY, email_address TEXT NOT NULL) STRICT",
         "CREATE TABLE onboarding_consent_records (user_id TEXT PRIMARY KEY) STRICT",
         `CREATE TABLE web_sessions (user_id TEXT NOT NULL, token_digest BLOB NOT NULL,
@@ -78,7 +78,9 @@ const setup = (): Promise<{
       instances.push(instance);
       yield* fromTestPromise(() =>
         db
-          .prepare("INSERT INTO users VALUES (?, 'America/Bogota'), (?, 'America/Bogota')")
+          .prepare(
+            "INSERT INTO users (id, time_zone) VALUES (?, 'America/Bogota'), (?, 'America/Bogota')"
+          )
           .bind(userA, userB)
           .run()
       );

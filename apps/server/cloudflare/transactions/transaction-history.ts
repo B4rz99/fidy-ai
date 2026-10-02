@@ -6,7 +6,7 @@ import {
   refusedByAuditBudget,
 } from "@fidy/server/audit";
 import { nextTransactionPage } from "@fidy/server/transaction-continuation";
-import { liveWebSessionAuthority } from "@fidy/server/identity-runtime";
+import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
 import {
   Counterparty,
   Currency,

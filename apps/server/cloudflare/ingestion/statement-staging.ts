@@ -1,3 +1,5 @@
+import { UserId } from "@fidy/server/identity-reference";
+import { prepareUserContext } from "../identity/user-context/operations";
 import {
   type StagedStatementBytes,
   type StagedStatementReference,
@@ -27,7 +29,7 @@ import {
   recordRejectedPATWork,
   refusedByAuditBudget,
 } from "@fidy/server/audit";
-import type { WebSessionAuthority } from "@fidy/server/identity-runtime";
+import type { WebSessionAuthority } from "@fidy/server/web-session-contract";
 import {
   Context,
   Crypto,
@@ -41,7 +43,7 @@ import {
   PlatformError,
   Schema,
 } from "effect";
-import { activeProUserParams, activeProUserSql } from "../access-tier";
+import { activeProUserCondition } from "../access-tier";
 import {
   type BoundedBodyReadFailed,
   collectBoundedRequestBody,
@@ -576,8 +578,9 @@ const readOwnedStagedBytes = (
 const readAdmissionState = (
   config: StatementStagingConfig,
   input: Readonly<{ userId: string; nowEpochMs: number }>
-): Effect.Effect<Option.Option<AdmissionStateRow>, StatementStagingUnavailable> =>
-  platformUnavailable(() =>
+): Effect.Effect<Option.Option<AdmissionStateRow>, StatementStagingUnavailable> => {
+  const pro = activeProUserCondition(input);
+  return platformUnavailable(() =>
     config.database
       .prepare(
         `SELECT
@@ -588,17 +591,18 @@ const readAdmissionState = (
            EXISTS (SELECT 1 FROM statement_backfill_entitlements AS e
              WHERE e.user_id = ? AND (e.consumed_at_ms IS NOT NULL OR e.submission_id IS NOT NULL))
              AS backfill_reserved,
-           ${activeProUserSql} AS pro`
+           ${pro.sql} AS pro`
       )
       .bind(
         input.userId,
         input.userId,
         input.nowEpochMs - millisecondsPerHour,
         input.userId,
-        ...activeProUserParams({ nowEpochMs: input.nowEpochMs, userId: input.userId })
+        ...pro.params
       )
       .first()
   ).pipe(Effect.map((value) => Schema.decodeUnknownOption(AdmissionStateRow)(value)));
+};
 
 /** The closed refusal for exhausted submission pressure or a spent Free backfill, or `None`. */
 const admissionRefusal = (
@@ -639,16 +643,18 @@ const submissionInsertStatement = (
     }>
 ): D1PreparedStatement => {
   const { userId, idempotencyKey, stagingId, submissionId, nowEpochMs } = input;
-  const hourStartEpochMs = nowEpochMs - millisecondsPerHour;
-  return config.database
-    .prepare(
-      `INSERT INTO statement_submissions (
+  const pro = activeProUserCondition({ userId, nowEpochMs });
+  return prepareUserContext({
+    db: config.database,
+    userId: UserId.make(userId),
+    statement: {
+      sql: `INSERT INTO statement_submissions (
          id, user_id, idempotency_key, staging_id, source_format, parser_revision,
          service_market, locale, time_zone, status, submitted_at_ms, retention_expires_at_ms)
-       SELECT ?, staging.user_id, ?, staging.id, staging.source_format, ?, users.service_market,
-              users.locale, users.time_zone, 'queued', ?, ?
+       SELECT ?, staging.user_id, ?, staging.id, staging.source_format, ?, userContext.serviceMarket,
+              userContext.locale, userContext.timeZone, 'queued', ?, ?
        FROM statement_staging_objects AS staging
-       JOIN users ON users.id = staging.user_id
+       JOIN identity_user_context AS userContext ON userContext.userId = staging.user_id
        WHERE staging.id = ? AND staging.user_id = ? AND staging.status = 'available'
          AND staging.expires_at_ms > ? AND staging.source_format IS NOT NULL
          AND NOT EXISTS (
@@ -661,30 +667,31 @@ const submissionInsertStatement = (
          AND (SELECT count(*) FROM statement_submissions AS hourly
                WHERE hourly.user_id = staging.user_id AND hourly.submitted_at_ms > ?)
              < ?
-         AND (${activeProUserSql} OR NOT EXISTS (
+         AND (${pro.sql} OR NOT EXISTS (
                SELECT 1 FROM statement_backfill_entitlements AS entitlement
                WHERE entitlement.user_id = staging.user_id
                  AND (entitlement.consumed_at_ms IS NOT NULL
                    OR entitlement.submission_id IS NOT NULL)))
-         AND EXISTS (SELECT 1 FROM ${input.authority.table} WHERE ${input.authority.predicate})`
-    )
-    .bind(
-      submissionId,
-      idempotencyKey,
-      statementParserRevision,
-      nowEpochMs,
-      input.retentionExpiresAtEpochMs,
-      stagingId,
-      userId,
-      nowEpochMs,
-      userId,
-      idempotencyKey,
-      maximumOutstandingStatementSubmissions,
-      hourStartEpochMs,
-      maximumStatementSubmissionsPerHour,
-      ...activeProUserParams({ nowEpochMs, userId }),
-      ...input.authority.bindings
-    );
+         AND EXISTS (SELECT 1 FROM ${input.authority.table} WHERE ${input.authority.predicate})`,
+      params: [
+        submissionId,
+        idempotencyKey,
+        statementParserRevision,
+        nowEpochMs,
+        input.retentionExpiresAtEpochMs,
+        stagingId,
+        userId,
+        nowEpochMs,
+        userId,
+        idempotencyKey,
+        maximumOutstandingStatementSubmissions,
+        nowEpochMs - millisecondsPerHour,
+        maximumStatementSubmissionsPerHour,
+        ...pro.params,
+        ...input.authority.bindings,
+      ],
+    },
+  });
 };
 
 /** Metadata-only audit for one canonical read by its live session caller. The stable subject,
@@ -789,7 +796,7 @@ const publicationAccountabilityStatements = (
 ): ReadonlyArray<D1PreparedStatement> => {
   const { database } = config;
   const { userId, stagingId, submissionId, auditId, nowEpochMs } = input;
-  const proParams = activeProUserParams({ nowEpochMs, userId });
+  const pro = activeProUserCondition({ nowEpochMs, userId });
   return [
     database
       .prepare(
@@ -802,12 +809,12 @@ const publicationAccountabilityStatements = (
     database
       .prepare(
         `INSERT INTO statement_backfill_entitlements (user_id, submission_id)
-         SELECT ?, CASE WHEN ${activeProUserSql} THEN NULL ELSE ? END WHERE changes() = 1
+         SELECT ?, CASE WHEN ${pro.sql} THEN NULL ELSE ? END WHERE changes() = 1
          ON CONFLICT(user_id) DO UPDATE SET submission_id =
-           CASE WHEN ${activeProUserSql} THEN statement_backfill_entitlements.submission_id
+           CASE WHEN ${pro.sql} THEN statement_backfill_entitlements.submission_id
                 ELSE excluded.submission_id END`
       )
-      .bind(userId, ...proParams, submissionId, ...proParams),
+      .bind(userId, ...pro.params, submissionId, ...pro.params),
     prepareOwnerAuditCall({
       db: database,
       id: auditId,

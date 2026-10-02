@@ -11,7 +11,7 @@ import {
   patShortIdLength,
 } from "@fidy/server/tokens-runtime";
 import { Clock, Crypto, DateTime, Effect, Encoding, Option, PlatformError, Schema } from "effect";
-import { freshSessionExists } from "@fidy/server/identity-runtime";
+import { freshSessionExists } from "@fidy/server/web-session-operations";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
 import { browserSession } from "../identity/browser-login";
 

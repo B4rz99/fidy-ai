@@ -1,6 +1,6 @@
 import type { PATRevocationDisclosure } from "~/core/consent/contract";
-import type { FreshSessionSubject } from "~/shell/identity/contract";
-import { freshSessionExists, freshSessionParams } from "~/shell/identity/operations";
+import type { FreshSessionSubject } from "~/shell/web-session/contract";
+import { freshSessionExists, freshSessionParams } from "~/shell/web-session/operations";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 
 // One fresh evidence id per row, including multi-grant revocation; no bearer enters a statement.

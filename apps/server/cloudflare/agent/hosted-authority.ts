@@ -1,4 +1,6 @@
-import { protectConsentAuthority } from "@fidy/server/consent-operations";
+import type { OwnedStatement } from "../../src/shell/_shared/owned-statement";
+import { whatsAppIdentityQuery } from "../identity/operations";
+import { protectConsentStatement } from "@fidy/server/consent-operations";
 import { Schema } from "effect";
 import { UserId } from "@fidy/server/agent-runtime";
 import {
@@ -10,10 +12,8 @@ import {
   WhatsAppProviderMessageId,
 } from "../../src/shell/channels/whatsapp/model";
 import type { TransactionSubject } from "../transactions/transaction-boundary";
-import {
-  liveWebSessionAuthority,
-  webSessionCredentialAuthority,
-} from "@fidy/server/identity-runtime";
+import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
+import { webSessionCredentialAuthority } from "@fidy/server/web-session-operations";
 
 /** A claimed channel subject, not authority until D1 rechecks the stable User association. */
 export const WhatsAppHostedSubject = Schema.TaggedStruct("WhatsAppHosted", {
@@ -34,40 +34,31 @@ export type WhatsAppInboundEvidence = typeof WhatsAppInboundEvidence.Type;
 export const isWhatsAppHosted = (subject: HostedSubject): subject is WhatsAppHostedSubject =>
   "_tag" in subject;
 
-type HostedSqlAuthority =
-  | Readonly<{ table: "whatsapp_identities"; predicate: string; bindings: ReadonlyArray<string> }>
-  | Readonly<{
-      table: "web_sessions";
-      predicate: string;
-      bindings: ReadonlyArray<string | number | Uint8Array>;
-    }>;
+const browserSubjectQuery = (
+  authority: ReturnType<typeof webSessionCredentialAuthority>
+): OwnedStatement => ({
+  sql: `SELECT user_id AS userId FROM ${authority.table} WHERE ${authority.predicate}`,
+  params: authority.bindings,
+});
 
-/** Build the established channel credential check, including after Consent revocation, so callers can classify refusal. */
+/** Recheck an established channel credential, including after Consent revocation for refusal classification. */
 export const hostedIdentity = ({
   subject,
   current,
-}: Readonly<{ subject: HostedSubject; current: number }>): HostedSqlAuthority =>
+}: Readonly<{ subject: HostedSubject; current: number }>): OwnedStatement =>
   isWhatsAppHosted(subject)
-    ? {
-        table: "whatsapp_identities" as const,
-        predicate: "user_id = ? AND portfolio_id = ? AND bsuid = ?",
-        bindings: [subject.userId, subject.portfolioId, subject.bsuid] as const,
-      }
-    : webSessionCredentialAuthority({ subject, current });
+    ? whatsAppIdentityQuery(subject)
+    : browserSubjectQuery(webSessionCredentialAuthority({ subject, current }));
 
-/** Trusted SQL authority selection. Provider ids are evidence; the matching D1 association is authority. */
+/** Project only the same live User at execution; provider identifiers alone never authorize work. */
 export const hostedAuthority = ({
   subject,
   current,
-}: Readonly<{ subject: HostedSubject; current: number }>): HostedSqlAuthority =>
+}: Readonly<{ subject: HostedSubject; current: number }>): OwnedStatement =>
   isWhatsAppHosted(subject)
-    ? protectConsentAuthority({
-        authority: {
-          table: "whatsapp_identities" as const,
-          predicate: "user_id = ? AND portfolio_id = ? AND bsuid = ?",
-          bindings: [subject.userId, subject.portfolioId, subject.bsuid] as const,
-        },
-        subject: { _tag: "Owner", column: "whatsapp_identities.user_id" },
+    ? protectConsentStatement({
+        statement: whatsAppIdentityQuery(subject),
+        subject: { _tag: "User", userId: subject.userId },
         requirement: "active",
       })
-    : liveWebSessionAuthority({ subject, current });
+    : browserSubjectQuery(liveWebSessionAuthority({ subject, current }));

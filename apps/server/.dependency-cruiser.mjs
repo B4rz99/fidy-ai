@@ -88,6 +88,34 @@ export default {
       },
     },
     {
+      name: "foreign-module-imports-cloudflare-identity-internal",
+      severity: "error",
+      comment:
+        "Identity's User rows, WhatsApp association and context projections are private. " +
+        "Other adapters, portable modules, tests and tools use Identity contract.ts or operations.ts (#595).",
+      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/identity/" },
+      to: { path: "^cloudflare/identity/(internal/|user-context/internal/)" },
+    },
+    {
+      name: "cloudflare-imports-portable-identity-internal",
+      severity: "error",
+      comment:
+        "Cloudflare adapters consume Identity's published contract and operations; portable " +
+        "Identity internals remain private across the platform boundary (#595, ADR 0003).",
+      from: { path: "^cloudflare/" },
+      to: { path: "^src/(core|shell)/identity/internal/" },
+    },
+    {
+      name: "identity-interface-reexports-internal",
+      severity: "error",
+      comment:
+        "Identity's published Cloudflare interfaces declare their behavior rather than re-exporting internals.",
+      from: {
+        path: "^cloudflare/(identity|identity/user-context)/(contract|operations|runtime)\\.ts$",
+      },
+      to: { path: "^cloudflare/$1/internal/", dependencyTypes: ["export"] },
+    },
+    {
       name: "foreign-module-imports-cloudflare-consent-internal",
       severity: "error",
       comment:
@@ -227,7 +255,7 @@ export default {
       severity: "error",
       comment:
         "src/shell/api.ts imported something other than a slice's operations.ts, " +
-        "shell/_shared, or the Public HTTP contract. The assembly composes operation definitions " +
+        "shell/_shared, or the Identity/Public HTTP declaration contracts. The assembly composes operation definitions " +
         "and their universal validation declaration and nothing else. A slice's " +
         "handlers.ts *must* import api.ts, because HttpApiBuilder.group takes the assembled " +
         "HttpApi as its first argument, so the acyclic direction is the one this rule holds: " +
@@ -239,6 +267,7 @@ export default {
         pathNot: [
           "^src/shell/_shared/",
           "^src/shell/public-http/contract\\.ts$",
+          "^src/shell/identity/contract\\.ts$",
           "^src/shell/[^/]+/operations\\.ts$",
         ],
       },

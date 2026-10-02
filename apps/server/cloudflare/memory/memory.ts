@@ -1,3 +1,4 @@
+import type { OwnedStatement } from "../../src/shell/_shared/owned-statement";
 import {
   Memory,
   type MemoryCapacityExceeded,
@@ -69,6 +70,14 @@ const attempt = <A>(
     onSuccess: (value) => ({ _tag: "Ok" as const, value }),
   });
 
+const memoryAuthorityQuery = (input: Parameters<typeof callerAuthority>[0]): OwnedStatement => {
+  const authority = callerAuthority(input);
+  return {
+    sql: `SELECT user_id AS userId FROM ${authority.table} WHERE ${authority.predicate}`,
+    params: authority.bindings,
+  };
+};
+
 const readMemories = ({
   db,
   subject,
@@ -81,7 +90,7 @@ const readMemories = ({
   Effect.gen(function* () {
     const query = memoryRowsQuery({
       userId: subject.userId,
-      authority: callerAuthority({ subject, current }),
+      authority: memoryAuthorityQuery({ subject, current }),
     });
     const rows = yield* waitFor(() =>
       db
@@ -583,7 +592,7 @@ export const recallMemories = ({
     if (yield* budgetExhausted({ db, subject, current })) return memoryRateLimited();
     const query = memoryRowsQuery({
       userId: subject.userId,
-      authority: callerAuthority({ subject, current }),
+      authority: memoryAuthorityQuery({ subject, current }),
     });
     const committed = yield* attempt(
       Effect.tryPromise({

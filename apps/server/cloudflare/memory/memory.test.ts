@@ -6,7 +6,7 @@ import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { Memory, MemoryId, maximumAggregateMemoryTokens } from "@fidy/server/memory-runtime";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
-import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
+import { UserTransactionCoordinator } from "../transactions/runtime";
 import { hostedTurnTestMigrations } from "../agent/hosted-turn-test-migrations";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure")<{ cause: unknown }> {}

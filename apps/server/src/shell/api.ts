@@ -5,7 +5,7 @@ import { ValidationGate } from "~/shell/public-http/contract";
 import { bindOperationCatalog, makeOperationCatalog } from "~/shell/_shared/operation-catalog";
 import { BrowserLoginGroup } from "~/shell/browser-login/operations";
 import { BudgetsGroup } from "~/shell/budgets/operations";
-import { CategoriesGroup } from "~/shell/categories/operations";
+import { CategoriesGroup } from "~/shell/categories/contract";
 import { DashboardGroup } from "~/shell/dashboard/operations";
 import { EmailAuthenticationGroup } from "~/shell/email-authentication/contract";
 import { IdentityGroup } from "~/shell/identity/contract";
@@ -16,7 +16,7 @@ import { makeOperationsGroup } from "~/shell/operations/operations";
 import { SubscriptionGroup } from "~/shell/subscription/contract";
 import { PATsGroup } from "~/shell/tokens/operations";
 import { RecoveryGroup } from "~/shell/recovery/operations";
-import { TransactionsGroup } from "~/shell/transactions/operations";
+import { TransactionsGroup } from "~/shell/transactions/contract";
 
 const OrdinaryFidyApi = HttpApi.make("fidy")
   .add(BrowserLoginGroup)

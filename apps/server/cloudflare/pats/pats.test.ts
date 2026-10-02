@@ -7,7 +7,7 @@ import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
-import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
+import { UserTransactionCoordinator } from "../transactions/runtime";
 import { hostedTurnTestMigrations } from "../agent/hosted-turn-test-migrations";
 
 const databases = isolatedTestDatabases();

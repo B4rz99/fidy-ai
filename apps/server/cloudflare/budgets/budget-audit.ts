@@ -9,7 +9,7 @@ import {
   isPATCaller,
   liveTransactionAuthority,
   transactionId,
-} from "../transactions/transaction-boundary";
+} from "../canonical-work/operations";
 
 /** Matches budget_audit_daily_budget in migration 0016; Budget browser Audits have a separate cap. */
 export const dailyBudgetAuditLimit = 256;

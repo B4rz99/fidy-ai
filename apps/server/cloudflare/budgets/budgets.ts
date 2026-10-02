@@ -1,3 +1,5 @@
+import { CategoryId } from "@fidy/server/categories";
+import { prepareCategoryReference, requireCategory } from "../categories/operations";
 import {
   BudgetId,
   type CreateBudgetInput,
@@ -9,7 +11,7 @@ import {
   prepareBrowserAuditBudgetGuard,
   recordCanonicalPATWork,
 } from "@fidy/server/audit";
-import { encodeMoneyAmount } from "@fidy/server/transactions-runtime";
+import { encodeMoneyAmount } from "@fidy/server/transactions-contract";
 import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import {
@@ -21,7 +23,7 @@ import {
   isPATCaller,
   liveTransactionAuthority,
   transactionId,
-} from "../transactions/transaction-boundary";
+} from "../canonical-work/operations";
 import {
   type BudgetOutcome,
   type CanonicalMutationPreparation,
@@ -207,11 +209,12 @@ const findConflict = ({
     .then((row) => row !== null);
 
 const categoryExists = (db: D1Database, categoryId: string): Promise<boolean> =>
-  db
-    .prepare("SELECT 1 FROM categories WHERE id = ?")
-    .bind(categoryId)
-    .first()
-    .then((row) => row !== null);
+  Effect.runPromise(
+    requireCategory({ db, categoryId: CategoryId.make(categoryId) }).pipe(
+      Effect.as(true),
+      Effect.catchTag("CategoryNotFound", () => Effect.succeed(false))
+    )
+  );
 
 const authorityReady = ({
   db,
@@ -327,20 +330,24 @@ export const prepareCreateBudget = ({
       subject,
       current,
       outcome: { _tag: "Budget", operation: "budgets.createBudget", budgetId: id },
-      write: db
-        .prepare(`INSERT INTO budgets (id, user_id, category_id, currency, cap, created_at, updated_at)
-        SELECT ?, user_id, ?, ?, ?, ?, ? FROM ${authority.table} WHERE ${authority.predicate}
-        AND EXISTS (SELECT 1 FROM categories WHERE id = ?)`)
-        .bind(
-          id,
-          payload.categoryId,
-          payload.cap.currency,
-          encodeMoneyAmount(payload.cap.amount),
-          instant,
-          instant,
-          ...authority.bindings,
-          payload.categoryId
-        ),
+      write: prepareCategoryReference({
+        db,
+        categoryId: payload.categoryId,
+        statement: {
+          sql: `INSERT INTO budgets (id, user_id, category_id, currency, cap, created_at, updated_at)
+          SELECT ?, user_id, ?, ?, ?, ?, ? FROM ${authority.table} WHERE ${authority.predicate}
+          AND EXISTS (SELECT 1 FROM category_reference)`,
+          params: [
+            id,
+            payload.categoryId,
+            payload.cap.currency,
+            encodeMoneyAmount(payload.cap.amount),
+            instant,
+            instant,
+            ...authority.bindings,
+          ],
+        },
+      }),
     });
   }).pipe(Effect.orElseSucceed(failedPreparation));
 
@@ -359,21 +366,25 @@ const updateBudgetStatement = ({
 }>): D1PreparedStatement => {
   const authority = callerAuthority({ subject, current });
   const instant = DateTime.formatIso(DateTime.makeUnsafe(current));
-  return db
-    .prepare(`UPDATE budgets SET category_id = ?, cap = ?, updated_at = ?
-    WHERE id = ? AND user_id = ? AND currency = ?
-    AND EXISTS (SELECT 1 FROM categories WHERE id = ?)
-    AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
-    .bind(
-      payload.categoryId,
-      encodeMoneyAmount(payload.cap.amount),
-      instant,
-      id,
-      subject.userId,
-      payload.cap.currency,
-      payload.categoryId,
-      ...authority.bindings
-    );
+  return prepareCategoryReference({
+    db,
+    categoryId: payload.categoryId,
+    statement: {
+      sql: `UPDATE budgets SET category_id = ?, cap = ?, updated_at = ?
+      WHERE id = ? AND user_id = ? AND currency = ?
+      AND EXISTS (SELECT 1 FROM category_reference)
+      AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`,
+      params: [
+        payload.categoryId,
+        encodeMoneyAmount(payload.cap.amount),
+        instant,
+        id,
+        subject.userId,
+        payload.cap.currency,
+        ...authority.bindings,
+      ],
+    },
+  });
 };
 
 /** Prepare a replacement without allowing a Budget's Currency or owner to change. */

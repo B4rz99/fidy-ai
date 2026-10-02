@@ -1,9 +1,13 @@
 import { assert, expect, it } from "@effect/vitest";
 import { BigDecimal, Cause, DateTime, Effect, Exit, Function } from "effect";
 import { Currency, Money } from "~/core/_shared/money";
-import { IneligibleTransactionPair, SameTransactionPair } from "./errors";
-import { TransactionId } from "./model";
-import { type ReconciliationMember, decideTransactionLink } from "./reconciliation";
+import {
+  IneligibleTransactionPair,
+  type ReconciliationMember,
+  SameTransactionPair,
+  TransactionId,
+} from "./contract";
+import { decideTransactionLink } from "./operations";
 
 const member = (id: string): ReconciliationMember => ({
   id: TransactionId.make(id),

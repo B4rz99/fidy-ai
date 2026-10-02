@@ -1,0 +1,138 @@
+import type { AuditAuthority } from "~/shell/audit/contract";
+import { type Option, Schema } from "effect";
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
+import {
+  Category,
+  CreateKeywordRuleInput,
+  KeywordRule,
+  KeywordRuleId,
+  UpdateKeywordRuleInput,
+} from "~/core/categories/contract";
+import {
+  NotFound,
+  OperationResponse,
+  Unavailable,
+  ValidationFailed,
+  createdStatus,
+} from "~/shell/public-http/contract";
+import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
+
+/** Canonical public path for Category discovery. */
+export const listCategoriesPath = "/categories";
+
+/** Canonical public path for the caller's own keyword rules. */
+export const keywordRulesPath = "/category-keyword-rules";
+
+/** Canonical public path template for one retained keyword rule. */
+export const retainedKeywordRulePath = `${keywordRulesPath}/:id`;
+
+/**
+ * Whether a public path addresses the caller's keyword-rule family. The family prefix derives
+ * from the one declared collection path, and the Worker treats a match as the stricter case,
+ * so a new route under it inherits the browser-origin gate instead of escaping it.
+ */
+export const keywordRulePath = (path: string): boolean =>
+  path === keywordRulesPath || path.startsWith(`${keywordRulesPath}/`);
+
+export const ListCategoriesResponse = OperationResponse(Schema.Array(Category));
+
+/** The caller's own rules, in stable creation order. */
+export const ListKeywordRulesResponse = OperationResponse(Schema.Array(KeywordRule));
+
+/** One created or replaced rule, or the id of a removed one. */
+export const KeywordRuleResponse = OperationResponse(KeywordRule);
+export const RemovedKeywordRuleResponse = OperationResponse(KeywordRuleId);
+
+/**
+ * The retained keyword-rule path parameter, rebuilt at each declaration. The published document
+ * componentizes one schema instance reached from several declarations, so sharing the instance
+ * would renumber the OpenAPI components; sharing the shape is what keeps them in step.
+ */
+const retainedKeywordRuleParams = (): Schema.Struct<{ readonly id: typeof KeywordRuleId }> =>
+  Schema.Struct({ id: KeywordRuleId });
+
+const read = operationPolicy({
+  access: patScoped("read"),
+  requiredTier: "free",
+  agentConfirmation: "not-required",
+  kind: "query",
+});
+const additiveWrite = operationPolicy({
+  access: patScoped("write"),
+  requiredTier: "free",
+  agentConfirmation: "not-required",
+  kind: "mutation",
+});
+const destructiveWrite = operationPolicy({
+  access: patScoped("write"),
+  requiredTier: "free",
+  agentConfirmation: "required",
+  kind: "mutation",
+});
+
+/** Public Category discovery and caller-owned keyword-rule management. */
+export const CategoriesGroup = HttpApiGroup.make("categories")
+  .add(
+    HttpApiEndpoint.get("listCategories", listCategoriesPath, {
+      success: ListCategoriesResponse,
+      error: Unavailable,
+    })
+      .annotate(
+        OpenApi.Description,
+        "List the Colombian Categories in presentation order. Use the stable id, not the Spanish label or list position, when recording or correcting a Transaction."
+      )
+      .annotateMerge(read)
+  )
+  .add(
+    HttpApiEndpoint.get("listKeywordRules", keywordRulesPath, {
+      success: ListKeywordRulesResponse,
+    })
+      .annotate(
+        OpenApi.Description,
+        "List the caller's counterparty keyword instructions. These rules categorize future capture before the model fallback and never rewrite existing Transactions."
+      )
+      .annotateMerge(read)
+  )
+  .add(
+    HttpApiEndpoint.post("createKeywordRule", keywordRulesPath, {
+      payload: CreateKeywordRuleInput,
+      success: KeywordRuleResponse.pipe(HttpApiSchema.status(createdStatus)),
+      error: [NotFound, ValidationFailed],
+    })
+      .annotate(
+        OpenApi.Description,
+        "Teach future capture that a counterparty containing this case- and accent-insensitive keyword belongs to one stable Category. More specific longer matching keywords win."
+      )
+      .annotateMerge(additiveWrite)
+  )
+  .add(
+    HttpApiEndpoint.put("updateKeywordRule", retainedKeywordRulePath, {
+      params: retainedKeywordRuleParams(),
+      payload: UpdateKeywordRuleInput,
+      success: KeywordRuleResponse,
+      error: [NotFound, ValidationFailed],
+    })
+      .annotate(
+        OpenApi.Description,
+        "Replace one of the caller's keyword instructions for future capture. Existing Transaction Categories remain unchanged."
+      )
+      .annotateMerge(destructiveWrite)
+  )
+  .add(
+    HttpApiEndpoint.delete("deleteKeywordRule", retainedKeywordRulePath, {
+      params: retainedKeywordRuleParams(),
+      success: RemovedKeywordRuleResponse,
+      error: NotFound,
+    })
+      .annotate(
+        OpenApi.Description,
+        "Stop applying one of the caller's keyword instructions to future capture. Existing Transactions remain unchanged."
+      )
+      .annotateMerge(destructiveWrite)
+  );
+
+/** A Category read inside its caller's native unit; held authority is re-evaluated with the query. */
+export type CategoryReadInput = Readonly<{
+  db: D1Database;
+  authority: Option.Option<AuditAuthority>;
+}>;

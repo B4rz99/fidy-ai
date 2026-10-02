@@ -11,7 +11,7 @@ import {
   WhatsAppBusinessPhoneNumberId,
   WhatsAppProviderMessageId,
 } from "../../src/shell/channels/whatsapp/model";
-import type { TransactionSubject } from "../transactions/transaction-boundary";
+import type { TransactionSubject } from "../canonical-work/operations";
 import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
 import { webSessionCredentialAuthority } from "@fidy/server/web-session-operations";
 

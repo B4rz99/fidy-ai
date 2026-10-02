@@ -50,7 +50,7 @@ export default {
     //
     // The price is real and worth naming: `Schema.Literals(["inflow", ""])` and
     // `Schema.Literal("")` for the currency are behaviour, and this gate stops
-    // seeing them. src/core/transactions/model.test.ts covers both by hand —
+    // seeing them. src/core/transactions/contract.test.ts covers both by hand —
     // and the ArrayDeclaration mutant that empties that same literal union is
     // still gated here, so the tests that kill it cannot quietly disappear.
     excludedMutations: ["StringLiteral", "ObjectLiteral"],

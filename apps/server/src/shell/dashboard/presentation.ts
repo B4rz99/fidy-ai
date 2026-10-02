@@ -1,7 +1,7 @@
 import { Data, type DateTime, Effect, Option } from "effect";
 
 import type { UserContext } from "~/core/identity/contract";
-import type { Category } from "~/core/categories/model";
+import type { Category } from "~/core/categories/contract";
 import { type Budget, calculateBudgetStatus } from "~/shell/budgets/contract";
 import { resolveDashboardPeriod } from "~/core/dashboard/calculation";
 import {

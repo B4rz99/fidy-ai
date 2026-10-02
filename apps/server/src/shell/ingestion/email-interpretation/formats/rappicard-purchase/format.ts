@@ -1,7 +1,7 @@
 import { Option } from "effect";
 import { InterpretationRevision } from "~/core/interpretation-evidence/contract";
 import { Currency } from "~/core/_shared/money";
-import { NotificationFormatId } from "~/core/transactions/account-hints";
+import { NotificationFormatId } from "~/core/transactions/contract";
 import type { NotificationEmailFormat } from "~/shell/ingestion/email-interpretation/format-definition";
 import {
   decodeAccountHints,

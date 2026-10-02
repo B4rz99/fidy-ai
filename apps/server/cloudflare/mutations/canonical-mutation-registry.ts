@@ -7,9 +7,9 @@ import {
   getAtomicBatchChildIds,
   getCanonicalOperationInput,
 } from "@fidy/server/canonical-runtime";
-import { TransactionId } from "@fidy/server/transactions-runtime";
-import { type MemoryOperationId } from "@fidy/server/memory-runtime";
-import { type HostedInference } from "@fidy/server/hosted-inference";
+import { TransactionId } from "@fidy/server/transactions-contract";
+import type { MemoryOperationId } from "@fidy/server/memory-runtime";
+import type { HostedInference } from "@fidy/server/hosted-inference";
 import { DeliveryEvidenceInput, InsightEventId } from "@fidy/server/insights-runtime";
 import { insightRefusal, prepareInsightTransition } from "../insights/insight-store";
 import { statementMutationAdapter } from "./statement-mutation";
@@ -21,23 +21,26 @@ import {
 import { forwardingAddressMutationAdapter } from "./forwarding-address-mutation";
 import { prepareCreateBudget, prepareDeleteBudget, prepareUpdateBudget } from "../budgets/budgets";
 import { budgetRefusal } from "../budgets/budget-outcome";
-import { transactionRefusal } from "./transaction-outcome";
+import {
+  prepareCapture,
+  prepareCorrection,
+  prepareLink,
+  prepareUnlink,
+  transactionRefusal,
+} from "../transactions/operations";
 import { memoryRefusal } from "./memory-outcome";
 import {
   type TransactionCaller,
   type TransactionMutationOperation,
   missingTransactionMessage,
   transactionUnavailable,
-} from "../transactions/transaction-boundary";
-import { prepareCapture } from "../transactions/transactions";
-import { prepareCorrection } from "../transactions/transaction-corrections";
-import { prepareLink, prepareUnlink } from "../transactions/transaction-reconciliation";
+} from "../canonical-work/operations";
 import {
   keywordRuleInvalidInput,
   prepareCreateKeywordRule,
   prepareDeleteKeywordRule,
   prepareUpdateKeywordRule,
-} from "../categories/canonical-keyword-rules";
+} from "../categories/operations";
 import { prepareForget, prepareRemember, prepareRevise } from "../memory/memory";
 import { committedJsonResponse } from "./canonical-mutation-unit";
 import {
@@ -46,7 +49,6 @@ import {
   type CommittedMutationValue,
   failedPreparation,
 } from "./mutation-types";
-
 /** One canonical child as the batch carries it, plus the caller the owner prepares it under. */
 type CanonicalMutationWork = Readonly<{
   db: D1Database;

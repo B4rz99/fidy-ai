@@ -1,15 +1,15 @@
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { afterAll, expect, it } from "vitest";
 import { BigDecimal, type Cause, DateTime, Effect, Schema } from "effect";
-import { repairDashboardProjection } from "../transactions/dashboard-repair";
+import { repairDashboardProjection } from "../transactions/operations";
 import { DashboardDocument } from "../../src/core/dashboard/model";
-import { Transaction } from "../../src/core/transactions/model";
+import { Transaction } from "../../src/core/transactions/contract";
 import { IanaTimeZone } from "../../src/core/_shared/context";
 import { resolveDashboardPeriod } from "../../src/core/dashboard/calculation";
 import { DashboardView } from "../../src/shell/dashboard/operations";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import coreWorker from "../core-worker";
-import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
+import { UserTransactionCoordinator } from "../transactions/runtime";
 import publicWorker from "../public-worker";
 
 const users = ["10000000-0000-4000-8000-000000000051", "10000000-0000-4000-8000-000000000052"];

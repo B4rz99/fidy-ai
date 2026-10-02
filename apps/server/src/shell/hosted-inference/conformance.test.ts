@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { it } from "@effect/vitest";
 import { Effect, Exit, Ref, Schema } from "effect";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
-import { CreateTransactionInput } from "~/core/transactions/model";
+import { CreateTransactionInput } from "~/core/transactions/contract";
 import { type HostedInferenceService, type HostedTextResult } from "./contract";
 import { verifyHostedInferenceConformanceChecks } from "./conformance";
 import { makeHostedInferenceStub } from "./operations";

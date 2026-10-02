@@ -186,6 +186,70 @@ export default {
       to: { path: "^cloudflare/subscription/runtime\\.ts$" },
     },
     {
+      name: "foreign-module-imports-cloudflare-transactions-internal",
+      severity: "error",
+      comment:
+        "Transactions owns capture, exact effective relations, corrections and retained provenance. Peers use published operations, never private SQL or rows (#598).",
+      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/transactions/" },
+      to: { path: "^cloudflare/transactions/internal/" },
+    },
+    {
+      name: "cloudflare-imports-portable-transactions-internal",
+      severity: "error",
+      comment:
+        "Native Transactions consumes portable contracts and operations; core and shell internals remain private across the platform boundary (#598).",
+      from: { path: "^cloudflare/" },
+      to: { path: "^src/(core|shell)/transactions/internal/" },
+    },
+    {
+      name: "transactions-interface-reexports-internal",
+      severity: "error",
+      comment:
+        "Transactions publishes substantive behavior and declarations, never re-exported private rows, SQL or policy (#598).",
+      from: { path: "^cloudflare/transactions/(contract|operations|runtime)\\.ts$" },
+      to: { path: "^cloudflare/transactions/internal/", dependencyTypes: ["export"] },
+    },
+    {
+      name: "transactions-contract-imports-implementation",
+      severity: "error",
+      comment:
+        "The native Transaction contract declares semantic inputs and projections independently of implementation or runtime authority (#598).",
+      from: { path: "^cloudflare/transactions/contract\\.ts$" },
+      to: { path: "^cloudflare/transactions/(internal/|operations\\.ts$|runtime\\.ts$)" },
+    },
+    {
+      name: "transactions-internal-imports-outward-interface",
+      severity: "error",
+      comment:
+        "Native Transaction implementation depends on its contract and sibling internals, never backwards on its own outward behavior or runtime (#598).",
+      from: { path: "^cloudflare/transactions/internal/" },
+      to: { path: "^cloudflare/transactions/(operations|runtime)\\.ts$" },
+    },
+    {
+      name: "foreign-module-imports-cloudflare-categories-internal",
+      severity: "error",
+      comment:
+        "Categories owns keyword persistence, matching policy and native query assembly. Other owners use its published operations (#597).",
+      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/categories/" },
+      to: { path: "^cloudflare/categories/internal/" },
+    },
+    {
+      name: "cloudflare-imports-portable-categories-internal",
+      severity: "error",
+      comment:
+        "Native Categories consumes portable contracts and operations, never core or shell internals (#597).",
+      from: { path: "^cloudflare/" },
+      to: { path: "^src/(core|shell)/categories/internal/" },
+    },
+    {
+      name: "categories-interface-reexports-internal",
+      severity: "error",
+      comment:
+        "The Category owner declares its native public interface without re-exporting private persistence or policy.",
+      from: { path: "^cloudflare/categories/(contract|operations|runtime)\\.ts$" },
+      to: { path: "^cloudflare/categories/internal/", dependencyTypes: ["export"] },
+    },
+    {
       name: "foreign-module-imports-cloudflare-web-session-internal",
       severity: "error",
       comment:
@@ -385,7 +449,7 @@ export default {
       severity: "error",
       comment:
         "src/shell/api.ts imported something other than a slice's operations.ts, " +
-        "shell/_shared, or the Identity/Public HTTP declaration contracts. The assembly composes operation definitions " +
+        "shell/_shared, or the Identity/Categories/Transactions/Subscription/Public HTTP declaration contracts. The assembly composes operation definitions " +
         "and their universal validation declaration and nothing else. A slice's " +
         "handlers.ts *must* import api.ts, because HttpApiBuilder.group takes the assembled " +
         "HttpApi as its first argument, so the acyclic direction is the one this rule holds: " +
@@ -397,7 +461,7 @@ export default {
         pathNot: [
           "^src/shell/_shared/",
           "^src/shell/public-http/contract\\.ts$",
-          "^src/shell/(identity|subscription|email-authentication)/contract\\.ts$",
+          "^src/shell/(identity|categories|transactions|subscription|email-authentication)/contract\\.ts$",
           "^src/shell/[^/]+/operations\\.ts$",
         ],
       },
@@ -517,7 +581,7 @@ export default {
       severity: "error",
       comment:
         "An import that leaves its directory was written relatively. Across directories " +
-        "imports are aliased (`~/core/transactions/model`), so a crossing is visible as one " +
+        "imports are aliased (`~/core/transactions/contract`), so a crossing is visible as one " +
         "and `../../` never has to be counted. Use the `~/` alias.",
       from: { path: "^(src/|src/.*/)[^/]+$" },
       to: {

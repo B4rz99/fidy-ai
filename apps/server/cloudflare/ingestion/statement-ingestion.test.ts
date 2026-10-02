@@ -20,7 +20,7 @@ import {
 } from "./statement-batch.test-fixture";
 import { oversizedChildMessage } from "../mutations/canonical-mutation-batch";
 import { hostedTurnTestMigrations } from "../agent/hosted-turn-test-migrations";
-import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
+import { UserTransactionCoordinator } from "../transactions/runtime";
 import { statementConflictMessage } from "./statement-staging";
 import {
   dispatchStatementExtraction,

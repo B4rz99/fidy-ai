@@ -7,10 +7,10 @@ import {
   IanaTimeZone,
   deriveCurrentBudgetMonth,
 } from "@fidy/server/budgets-runtime";
-import { Transaction, encodeMoneyAmount } from "@fidy/server/transactions-runtime";
+import { Transaction, encodeMoneyAmount } from "@fidy/server/transactions-contract";
 import { AtomicBatchRejected } from "@fidy/server/canonical-runtime";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
-import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
+import { UserTransactionCoordinator } from "../transactions/runtime";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 

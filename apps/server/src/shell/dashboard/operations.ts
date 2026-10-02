@@ -8,7 +8,7 @@ import {
   UnderBudget,
   hasExactBudgetProgress,
 } from "~/core/budgets/model";
-import { Category } from "~/core/categories/model";
+import { Category } from "~/core/categories/contract";
 import {
   AppliedDashboardPeriod,
   BudgetBarWidget,
@@ -22,7 +22,7 @@ import {
   TransactionListWidget,
   makeLayoutNodeSchema,
 } from "~/core/dashboard/model";
-import { Transaction } from "~/core/transactions/model";
+import { Transaction } from "~/core/transactions/contract";
 import { NotFound, OperationResponse, ValidationFailed } from "~/shell/public-http/contract";
 import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
 

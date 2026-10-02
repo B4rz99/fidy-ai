@@ -7,7 +7,7 @@ import {
 } from "~/core/interpretation-evidence/contract";
 import { Currency } from "~/core/_shared/money";
 import { ReceivedEmailId } from "~/core/ingestion/reference";
-import { AccountHints, NotificationFormatId } from "~/core/transactions/account-hints";
+import { AccountHints, NotificationFormatId } from "~/core/transactions/contract";
 import type { NotificationEmailFormat } from "./format-definition";
 import type { interpretNotificationEmail as InterpretNotificationEmail } from "./interpret";
 

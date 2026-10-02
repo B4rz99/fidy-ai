@@ -4,7 +4,11 @@ import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import coreWorker from "../core-worker";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { sweepExpiredConsent } from "../consent/runtime";
-import { reconcileBrowserPairingEmail, reconcileEmailReplacement } from "./runtime";
+import {
+  reconcileBrowserPairingEmail,
+  reconcileEmailReplacement,
+  reconcileOnboardingEmail,
+} from "./runtime";
 
 const databases = isolatedTestDatabases();
 const now = 1_800_000_000_000;
@@ -457,5 +461,189 @@ it("runs every email retention activity even when an unrelated scheduled Queue p
         { user_id: id(1, 2), email_address: "user2@example.test" },
         { user_id: id(1, 3), email_address: "user3@example.test" },
       ]);
+    })
+  ));
+
+it("abandons interrupted pairing sends without retaining reusable proof or changing another User's live send", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* seedUser(db, 1);
+      yield* seedUser(db, 2);
+      // Leave one expired send observable after the owner's bounded deletion.
+      yield* Effect.forEach(
+        Array.from({ length: 33 }, (_, index) => index + 1),
+        (index) => seedPairingProof(db, index, { expires: now - 600_001, user: 1 }),
+        { discard: true }
+      );
+      yield* seedPairingProof(db, 34, { expires: now + 600_000, user: 2 });
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE browser_pairing_email_proofs SET state = 'sending'").run()
+      );
+      const live = db
+        .prepare("SELECT * FROM browser_pairing_email_proofs WHERE user_id = ?")
+        .bind(id(1, 2));
+      const outbox = db
+        .prepare("SELECT * FROM browser_pairing_email_outbox WHERE id = ?")
+        .bind(id(5, 34));
+      const pairings = db.prepare("SELECT * FROM browser_login_pairings ORDER BY id");
+      const sessions = db.prepare("SELECT * FROM web_sessions ORDER BY id");
+      const beforeLive = yield* Effect.tryPromise(() => live.first());
+      const beforeOutbox = yield* Effect.tryPromise(() => outbox.first());
+      const beforePairings = yield* Effect.tryPromise(() => pairings.all());
+      const beforeSessions = yield* Effect.tryPromise(() => sessions.all());
+
+      yield* reconcileBrowserPairingEmail(db);
+
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare(`SELECT state, public_code, proof_digest, proof_expires_at_ms
+              FROM browser_pairing_email_proofs WHERE user_id = ?`)
+            .bind(id(1, 1))
+            .all()
+        )).results
+      ).toEqual([
+        { state: "ambiguous", public_code: null, proof_digest: null, proof_expires_at_ms: null },
+      ]);
+      expect(yield* Effect.tryPromise(() => live.first())).toEqual(beforeLive);
+      expect(yield* Effect.tryPromise(() => outbox.first())).toEqual(beforeOutbox);
+      expect((yield* Effect.tryPromise(() => pairings.all())).results).toEqual(
+        beforePairings.results
+      );
+      expect((yield* Effect.tryPromise(() => sessions.all())).results).toEqual(
+        beforeSessions.results
+      );
+    })
+  ));
+
+it("abandons interrupted replacement sends without reusable proof, credential replacement or session changes", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      // One candidate per User requires distinct Users for the expired backlog.
+      yield* Effect.forEach(
+        Array.from({ length: 33 }, (_, index) => index + 1),
+        (index) => seedReplacement(db, index, { expires: now - 600_001 }),
+        { discard: true }
+      );
+      yield* seedReplacement(db, 34, { expires: now + 600_000 });
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE email_replacements SET state = 'sending'").run()
+      );
+      const live = db.prepare("SELECT * FROM email_replacements WHERE user_id = ?").bind(id(1, 34));
+      const outbox = db
+        .prepare("SELECT * FROM email_replacement_outbox WHERE id = ?")
+        .bind(id(6, 34));
+      const credentials = db.prepare("SELECT * FROM verified_email_credentials ORDER BY user_id");
+      const sessions = db.prepare("SELECT * FROM web_sessions ORDER BY id");
+      const beforeLive = yield* Effect.tryPromise(() => live.first());
+      const beforeOutbox = yield* Effect.tryPromise(() => outbox.first());
+      const beforeCredentials = yield* Effect.tryPromise(() => credentials.all());
+      const beforeSessions = yield* Effect.tryPromise(() => sessions.all());
+
+      yield* reconcileEmailReplacement(db);
+
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare(`SELECT state, public_code, proof_digest, proof_expires_at_ms
+              FROM email_replacements WHERE user_id <> ?`)
+            .bind(id(1, 34))
+            .all()
+        )).results
+      ).toEqual([
+        { state: "ambiguous", public_code: null, proof_digest: null, proof_expires_at_ms: null },
+      ]);
+      expect(yield* Effect.tryPromise(() => live.first())).toEqual(beforeLive);
+      expect(yield* Effect.tryPromise(() => outbox.first())).toEqual(beforeOutbox);
+      expect((yield* Effect.tryPromise(() => credentials.all())).results).toEqual(
+        beforeCredentials.results
+      );
+      expect((yield* Effect.tryPromise(() => sessions.all())).results).toEqual(
+        beforeSessions.results
+      );
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM email_replacement_audit").first()
+        )
+      ).toEqual({ count: 0 });
+    })
+  ));
+
+it("marks only sufficiently overdue onboarding sends ambiguous without deleting enrollment or creating a User", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.forEach([1, 2, 3], (index) =>
+        seedEnrollment(db, index, { expires: now + 1_200_000 })
+      );
+      yield* seedEnrollment(db, 4);
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db
+            .prepare(`UPDATE pending_email_enrollments SET state = 'sending',
+              proof_expires_at_ms = ? WHERE id = ?`)
+            .bind(now - 600_001, id(9, 1)),
+          db
+            .prepare(`UPDATE pending_email_enrollments SET state = 'sending',
+              proof_expires_at_ms = ? WHERE id = ?`)
+            .bind(now - 600_000, id(9, 2)),
+          db
+            .prepare("UPDATE pending_email_enrollments SET proof_expires_at_ms = ? WHERE id = ?")
+            .bind(now - 600_001, id(9, 3)),
+          db
+            .prepare(`UPDATE pending_email_enrollments SET state = 'awaiting_delivery',
+              public_code = NULL, proof_digest = NULL, proof_expires_at_ms = NULL WHERE id = ?`)
+            .bind(id(9, 4)),
+        ])
+      );
+      const states = db.prepare("SELECT state FROM pending_email_enrollments ORDER BY id");
+      const material = db.prepare(`SELECT id, exchange_id, email_address, public_code,
+        proof_digest, proof_expires_at_ms, expires_at_ms FROM pending_email_enrollments ORDER BY id`);
+      const outbox = db.prepare("SELECT * FROM onboarding_email_outbox ORDER BY id");
+      const decisions = db.prepare("SELECT * FROM pending_consent_decisions ORDER BY exchange_id");
+      const beforeMaterial = yield* Effect.tryPromise(() => material.all());
+      const beforeOutbox = yield* Effect.tryPromise(() => outbox.all());
+      const beforeDecisions = yield* Effect.tryPromise(() => decisions.all());
+
+      yield* reconcileOnboardingEmail(db);
+
+      expect((yield* Effect.tryPromise(() => states.all())).results).toEqual([
+        { state: "ambiguous" },
+        { state: "sending" },
+        { state: "awaiting_proof" },
+        { state: "awaiting_delivery" },
+      ]);
+
+      vi.setSystemTime(now + 1);
+      yield* reconcileOnboardingEmail(db);
+
+      expect((yield* Effect.tryPromise(() => states.all())).results).toEqual([
+        { state: "ambiguous" },
+        { state: "ambiguous" },
+        { state: "awaiting_proof" },
+        { state: "awaiting_delivery" },
+      ]);
+      expect((yield* Effect.tryPromise(() => material.all())).results).toEqual(
+        beforeMaterial.results
+      );
+      expect((yield* Effect.tryPromise(() => outbox.all())).results).toEqual(beforeOutbox.results);
+      expect((yield* Effect.tryPromise(() => decisions.all())).results).toEqual(
+        beforeDecisions.results
+      );
+      expect(
+        yield* Effect.tryPromise(() => db.prepare("SELECT count(*) AS count FROM users").first())
+      ).toEqual({ count: 0 });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM verified_email_credentials").first()
+        )
+      ).toEqual({ count: 0 });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM completed_email_enrollments").first()
+        )
+      ).toEqual({ count: 0 });
     })
   ));

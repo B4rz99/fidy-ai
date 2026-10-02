@@ -26,7 +26,6 @@ import {
   findWhatsAppReplay as findWhatsAppReplayOwned,
   isWhatsAppWindowOpen as isWhatsAppWindowOpenOwned,
   readWhatsAppPendingWork as readWhatsAppPendingWorkOwned,
-  sweepExpiredWhatsAppWindows as sweepExpiredWhatsAppWindowsOwned,
 } from "./internal/whatsapp-turn";
 /** Resolve signed correlation and business-phone evidence to a coordination hint; the exact User attempt must still be rechecked. */
 export const findWhatsAppDeliveryUser = (
@@ -42,13 +41,6 @@ export const isWhatsAppWindowOpen = (
   Effect.Success<ReturnType<typeof isWhatsAppWindowOpenOwned>>,
   WhatsAppUnavailable
 > => isWhatsAppWindowOpenOwned(input).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
-/** Expire at most 128 conversation windows that can no longer serve their channel purpose. */
-export const sweepExpiredWhatsAppWindows = (
-  input: Parameters<typeof sweepExpiredWhatsAppWindowsOwned>[0]
-): Effect.Effect<
-  Effect.Success<ReturnType<typeof sweepExpiredWhatsAppWindowsOwned>>,
-  WhatsAppUnavailable
-> => sweepExpiredWhatsAppWindowsOwned(input).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
 /** Classify exact provider-message replay without revealing another User’s prior content. */
 export const findWhatsAppReplay = (
   input: Parameters<typeof findWhatsAppReplayOwned>[0]

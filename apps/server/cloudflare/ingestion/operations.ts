@@ -5,7 +5,6 @@ import {
 import {
   submitForExtractionInput as decodeSubmission,
   readStatementSubmission as readSubmission,
-  sweepExpiredUploadAdmission as sweepUploadAdmission,
   unavailableStatement as unavailable,
   uploadStagedStatement as uploadStatement,
   validationFailed as validation,
@@ -20,7 +19,6 @@ import {
   processStatementSubmission as processSubmission,
 } from "./internal/statement-processing";
 import { processForwardedEmail as processEmail } from "./internal/forwarded-email-processing";
-import { expireStatementReviewEvidence as expireReview } from "./internal/statement-review-retention";
 import {
   statementDailyBudgetRefusal as budgetRefusal,
   statementMutationAdapter,
@@ -36,9 +34,6 @@ export const uploadStagedStatement: typeof uploadStatement = (input) => uploadSt
 export const readStatementSubmission: typeof readSubmission = (input) => readSubmission(input);
 /** Decode the bounded submission handle without accepting bytes or untrusted storage locators. */
 export const submitForExtractionInput: typeof decodeSubmission = (input) => decodeSubmission(input);
-/** Remove expired upload admission leases independently of material retention. */
-export const sweepExpiredUploadAdmission: typeof sweepUploadAdmission = (input) =>
-  sweepUploadAdmission(input);
 /** Return the same closed unavailable answer without parser or storage details. */
 export const unavailableStatement = (): Response => unavailable();
 /** Read the owned forwarding address and monthly allowance under the caller's current authority. */
@@ -55,8 +50,6 @@ export const processStatementSubmission: typeof processSubmission = (input) =>
 export const failStatementSubmission: typeof failSubmission = (input) => failSubmission(input);
 /** Recheck User, Consent, bytes and source eligibility before atomic Transaction-or-review finalization. */
 export const processForwardedEmail: typeof processEmail = (input) => processEmail(input);
-/** Expire personal review evidence while retaining item state and conserved accounting. */
-export const expireStatementReviewEvidence: typeof expireReview = (input) => expireReview(input);
 /** Prepare admission and outbox publication for the caller's D1 unit; no nested commit is made. */
 export const prepareStatementSubmission: typeof statementMutationAdapter.prepare = (work) =>
   statementMutationAdapter.prepare(work);

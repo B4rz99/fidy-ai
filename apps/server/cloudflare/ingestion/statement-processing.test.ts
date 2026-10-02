@@ -5,7 +5,7 @@ import { afterAll, expect } from "vitest";
 import { it as effectIt } from "@effect/vitest";
 import { currentMillis } from "../runtime/clock";
 import { failStatementSubmission, processStatementSubmission } from "./operations";
-import { expireStatementReviewEvidence } from "./internal/statement-review-retention";
+import { expireStatementReviewEvidence } from "./runtime";
 import { StatementStaging, submissionProjection } from "./internal/statement-staging";
 
 const fromTestPromise = <A>(run: () => PromiseLike<A>): Effect.Effect<A> =>

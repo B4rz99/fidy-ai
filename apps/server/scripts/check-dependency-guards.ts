@@ -162,6 +162,125 @@ const canonicalTypeAlias = `cloudflare/canonical-operations/${PROBE_PREFIX}type-
 
 const PROBES: readonly Probe[] = [
   {
+    name: "Maintenance runtime composes published owner runtimes and contracts",
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `cloudflare/maintenance/${PROBE_PREFIX}published/runtime.ts`,
+        source:
+          'import { makeAgentRetention } from "../../agent/runtime";\nimport type { AgentRetention } from "../../agent/contract";\nexport const build: (db: D1Database) => AgentRetention = (db) => makeAgentRetention({ db });\n',
+      },
+    ],
+  },
+  {
+    name: "Maintenance cannot import a foreign owner operation even as a type",
+    expect: { kind: "rejected", mustContain: ["error maintenance-imports-owner-implementation"] },
+    files: [
+      {
+        path: `cloudflare/maintenance/${PROBE_PREFIX}owner-operation/probe.ts`,
+        source:
+          'import type { prepareHostedMutationCommit } from "../../agent/operations";\nexport type Bypass = typeof prepareHostedMutationCommit;\n',
+      },
+    ],
+  },
+  {
+    name: "Maintenance cannot bypass platform runtime through a legacy operational helper",
+    expect: { kind: "rejected", mustContain: ["error maintenance-imports-owner-implementation"] },
+    files: [
+      {
+        path: `cloudflare/maintenance/${PROBE_PREFIX}platform-helper/probe.ts`,
+        source:
+          'import { observeOperationalHealth } from "../../runtime/operational-health";\nexport const bypass = observeOperationalHealth;\n',
+      },
+    ],
+  },
+  {
+    name: "Maintenance cannot acquire raw resource admission authority",
+    expect: { kind: "rejected", mustContain: ["error maintenance-imports-owner-implementation"] },
+    files: [
+      {
+        path: `cloudflare/maintenance/${PROBE_PREFIX}raw-admission/probe.ts`,
+        source:
+          'import { ResourceAdmissionAuthority } from "../../resource-admission/authority";\nexport const bypass = ResourceAdmissionAuthority;\n',
+      },
+    ],
+  },
+  {
+    name: "Maintenance declarations cannot construct runtime",
+    expect: {
+      kind: "rejected",
+      mustContain: ["error maintenance-contract-imports-implementation"],
+    },
+    files: [
+      {
+        path: `cloudflare/maintenance/${PROBE_PREFIX}contract-direction/contract.ts`,
+        source:
+          'import { runCoreMaintenance } from "../runtime";\nexport const bypass = runCoreMaintenance;\n',
+      },
+    ],
+  },
+  {
+    name: "Maintenance execution cannot acquire runtime",
+    expect: { kind: "rejected", mustContain: ["error maintenance-operations-imports-runtime"] },
+    files: [
+      {
+        path: `cloudflare/maintenance/${PROBE_PREFIX}operations-direction/operations.ts`,
+        source:
+          'import { runCoreMaintenance } from "../runtime";\nexport const bypass = runCoreMaintenance;\n',
+      },
+    ],
+  },
+  {
+    name: "Owner implementations cannot depend back on Maintenance",
+    expect: { kind: "rejected", mustContain: ["error maintenance-owner-backedge"] },
+    files: [
+      {
+        path: `cloudflare/agent/${PROBE_PREFIX}maintenance-backedge/probe.ts`,
+        source:
+          'import { runCoreMaintenance } from "../../maintenance/runtime";\nexport const bypass = runCoreMaintenance;\n',
+      },
+    ],
+  },
+  {
+    name: "Foreign consumers cannot import platform scheduled internals",
+    expect: { kind: "rejected", mustContain: ["error platform-maintenance-internal-private"] },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}platform-private/probe.test.ts`,
+        source:
+          'import { inspectScheduledHealth } from "../runtime/internal/scheduled-health";\nexport const bypass = inspectScheduledHealth;\n',
+      },
+    ],
+  },
+  {
+    name: "Maintenance interfaces cannot reexport private scheduling implementation",
+    expect: { kind: "rejected", mustContain: ["error scheduled-interface-reexports-internal"] },
+    files: [
+      {
+        path: `cloudflare/maintenance/${PROBE_PREFIX}reexport/runtime.ts`,
+        source: `export { state } from "../internal/${PROBE_PREFIX}reexport/state";\n`,
+      },
+      {
+        path: `cloudflare/maintenance/internal/${PROBE_PREFIX}reexport/state.ts`,
+        source: 'export const state = "private";\n',
+      },
+    ],
+  },
+  {
+    name: "Platform internals cannot depend on their outward runtime",
+    expect: {
+      kind: "rejected",
+      mustContain: ["error scheduled-internal-imports-outward-interface"],
+    },
+    files: [
+      {
+        path: `cloudflare/runtime/internal/${PROBE_PREFIX}outward/probe.ts`,
+        source:
+          'import { makePlatformMaintenance } from "../../runtime";\nexport const bypass = makePlatformMaintenance;\n',
+      },
+    ],
+  },
+  {
     name: "callers consume Onboarding through its data-free operation",
     expect: { kind: "allowed" },
     files: [

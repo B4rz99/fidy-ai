@@ -26,6 +26,76 @@
 export default {
   forbidden: [
     {
+      name: "maintenance-imports-owner-implementation",
+      severity: "error",
+      comment:
+        "Maintenance composes published owner runtimes and declarations only; SQL, policies, admission and lifecycle implementations remain with their owners (#614).",
+      from: { path: "^cloudflare/maintenance/", pathNot: "\\.test\\.ts$" },
+      to: {
+        path: ["^cloudflare/", "^src/(core|shell)/"],
+        pathNot: [
+          "^cloudflare/maintenance/",
+          "^cloudflare/[^/]+/(contract|runtime)\\.ts$",
+          "^src/(core|shell)/[^/]+/(contract|runtime)\\.ts$",
+        ],
+      },
+    },
+    {
+      name: "maintenance-contract-imports-implementation",
+      severity: "error",
+      comment:
+        "Maintenance declarations remain inert and do not acquire executable scheduling or owner runtime authority (#614).",
+      from: { path: "^cloudflare/(maintenance|maintenance/.+)/contract\\.ts$" },
+      to: { path: "^cloudflare/.+/(internal/|operations\\.ts$|runtime\\.ts$)" },
+    },
+    {
+      name: "maintenance-operations-imports-runtime",
+      severity: "error",
+      comment:
+        "Schedule execution is independent of runtime construction; only the composition interface binds owners (#614).",
+      from: { path: "^cloudflare/(maintenance|maintenance/.+)/operations\\.ts$" },
+      to: { path: "^cloudflare/.+/runtime\\.ts$" },
+    },
+    {
+      name: "maintenance-owner-backedge",
+      severity: "error",
+      comment:
+        "Owners do not depend on their scheduler. The Email Worker entrypoint composes its narrow owner and Maintenance runtimes without a cycle (#614).",
+      from: {
+        path: "^cloudflare/[^/]+/",
+        pathNot: [
+          "^cloudflare/maintenance/",
+          "^cloudflare/ingestion/email-worker\\.ts$",
+          "\\.test\\.ts$",
+        ],
+      },
+      to: { path: "^cloudflare/maintenance/(operations|runtime)\\.ts$" },
+    },
+    {
+      name: "platform-maintenance-internal-private",
+      severity: "error",
+      comment:
+        "Platform scheduled health and retention internals remain private; callers use the published platform runtime (#614).",
+      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/runtime/" },
+      to: { path: "^cloudflare/runtime/internal/" },
+    },
+    {
+      name: "scheduled-interface-reexports-internal",
+      severity: "error",
+      comment:
+        "Published scheduling and platform interfaces declare their contract rather than laundering private implementation (#614).",
+      from: { path: "^cloudflare/(maintenance|runtime)/.*(contract|operations|runtime)\\.ts$" },
+      to: { path: "^cloudflare/$1/internal/", dependencyTypes: ["export"] },
+    },
+    {
+      name: "scheduled-internal-imports-outward-interface",
+      severity: "error",
+      comment:
+        "Private scheduling and platform implementations depend inward on contracts, never their own outward runtime (#614).",
+      from: { path: "^cloudflare/(maintenance|runtime)/internal/" },
+      to: { path: "^cloudflare/$1/(operations|runtime)\\.ts$" },
+    },
+    {
       name: "foreign-module-imports-cloudflare-memory-internal",
       severity: "error",
       comment:

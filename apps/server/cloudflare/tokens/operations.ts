@@ -9,7 +9,6 @@ import {
   patRoute as route,
 } from "./internal/pat-routes";
 import { listPATs as list } from "./internal/pat-management";
-import { sweepExpiredPATPairings as expire } from "./internal/pat-pairing";
 import { commitPATUnit as commit } from "./internal/pat-unit";
 
 /** Admit one declared canonical operation using the exact bearer, User, lifetime, Consent and scope. Protected work rechecks the returned proof in its atomic unit. */
@@ -22,9 +21,6 @@ export const handlePATRequest = (input: PATRequest): Promise<Response> => handle
 
 /** List only safe active metadata for the presented WebSession's User after current Consent and Audit checks. */
 export const listPATs = (input: PATRequest): Promise<Response> => list(input);
-
-/** Apply both fixed PAT expiry and unclaimed approval expiry with their symmetric Consent evidence. */
-export const sweepExpiredPATPairings = (db: D1Database): Promise<void> => expire(db);
 
 /** Commit owner-composed PAT work with a final constraint that rolls back a skipped guard or Audit. */
 export const commitPATUnit = (

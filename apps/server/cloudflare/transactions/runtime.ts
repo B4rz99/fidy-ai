@@ -1,4 +1,5 @@
 import { makeAgentService } from "../agent/runtime";
+import { repairDashboardProjections as ownerRepairDashboardProjections } from "./internal/dashboard-repair";
 import { CanonicalWork } from "../canonical-operations/contract";
 import {
   canonicalWorkRequiresInference,
@@ -376,3 +377,7 @@ export class UserTransactionCoordinator {
     }).recover();
   }
 }
+
+/** Advance at most four incomplete Users once per private scheduled tick. */
+export const repairDashboardProjections: typeof ownerRepairDashboardProjections = (...args) =>
+  ownerRepairDashboardProjections(...args);

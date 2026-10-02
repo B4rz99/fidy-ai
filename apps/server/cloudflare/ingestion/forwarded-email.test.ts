@@ -1,13 +1,16 @@
+import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import type { TelemetryWorkRecord } from "@fidy/server/telemetry";
 import { makeWorkerTelemetry } from "../runtime/telemetry";
-import { Clock, Data, Effect, Option } from "effect";
+import { Clock, Data, Effect, Exit, Option } from "effect";
 import { Miniflare } from "miniflare";
 import { applyTestMigration } from "../d1-test-fixture";
 import { afterEach, expect } from "vitest";
-import emailWorker from "./email-worker";
-import { makeEmailWorker, receiveForwardedEmailWork } from "./runtime";
+import emailWorker, { makeEmailWorker } from "./email-worker";
+import { runEmailMaintenance } from "../maintenance/runtime";
+import { EmailScheduleUnavailable } from "../maintenance/contract";
+import { receiveForwardedEmailWork } from "./runtime";
 import { listNeedsReviewItems, processForwardedEmail } from "./operations";
 
 import { UserTransactionCoordinator } from "../transactions/runtime";
@@ -20,6 +23,43 @@ const raw = new TextEncoder().encode(
   "From: bank@example.test\r\nTo: other@example.test\r\nSubject: Compra\r\n\r\nPago confirmado"
 );
 const instances: Miniflare[] = [];
+
+it.live("still offers another User's current email when expired-byte deletion fails", () =>
+  Effect.gen(function* () {
+    const { env, db, jobs } = yield* setup();
+    yield* wait(() => emailWorker.email(delivery().message, env));
+    yield* wait(() => emailWorker.email(delivery(`${localB}@fidyapp.com`).message, env));
+    yield* wait(() =>
+      db
+        .prepare(
+          "UPDATE forwarded_email_receipts SET received_at_ms = 0, expires_at_ms = 1 WHERE user_id = ?"
+        )
+        .bind(userA)
+        .run()
+    );
+    yield* wait(() => db.prepare("UPDATE forwarded_email_outbox SET sent_at_ms = NULL").run());
+    jobs.splice(0);
+    const outcome = yield* runEmailMaintenance({
+      ...env,
+      EMAIL_BUCKET: {
+        put: (key, bytes, options) => env.EMAIL_BUCKET.put(key, bytes, options),
+        delete: () => Promise.reject(new Error("private byte deletion failure")),
+      },
+    }).pipe(Effect.exit);
+
+    assert.deepStrictEqual(outcome, Exit.fail(new EmailScheduleUnavailable()));
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]?.userId).toBe(userB);
+    expect(
+      (yield* wait(() =>
+        db
+          .prepare("SELECT state FROM forwarded_email_receipts WHERE user_id = ?")
+          .bind(userB)
+          .first<{ state: string }>()
+      ))?.state
+    ).toBe("queued");
+  })
+);
 
 it.effect("exports one bounded record for a successful Email schedule", () =>
   Effect.gen(function* () {

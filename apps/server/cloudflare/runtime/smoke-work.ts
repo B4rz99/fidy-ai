@@ -86,6 +86,18 @@ const platform = <A>(
 ): Effect.Effect<A, SmokeBindingFailed> =>
   Effect.tryPromise({ try: tryWork, catch: () => new SmokeBindingFailed({ stage }) });
 
+/** Remove probe metadata strictly before the supplied Unix epoch millisecond decision instant. */
+export const expireSmokeProbes = ({
+  db,
+  nowEpochMs,
+}: Readonly<{ db: D1Database; nowEpochMs: number }>): Effect.Effect<void, void> =>
+  platform(() =>
+    db.prepare("DELETE FROM release_smoke_probes WHERE expires_at_ms < ?").bind(nowEpochMs).run()
+  ).pipe(
+    Effect.asVoid,
+    Effect.mapError(() => undefined)
+  );
+
 const readProbe = Effect.fn(function* (environment: SmokeEnvironment, probeId: string) {
   const row = yield* platform(
     () =>

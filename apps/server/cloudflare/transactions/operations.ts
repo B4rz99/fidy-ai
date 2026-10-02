@@ -16,10 +16,7 @@ import {
   transactionInput as ownerTransactionInput,
   transactionSession as ownerTransactionSession,
 } from "./internal/transactions";
-import {
-  repairDashboardProjection as ownerRepairDashboardProjection,
-  repairDashboardProjections as ownerRepairDashboardProjections,
-} from "./internal/dashboard-repair";
+import { repairDashboardProjection as ownerRepairDashboardProjection } from "./internal/dashboard-repair";
 import {
   findTransactionValue as ownerFindTransactionValue,
   transactionBudgetRefusal as ownerTransactionBudgetRefusal,
@@ -53,10 +50,6 @@ export const transactionInput: typeof ownerTransactionInput = (...args) =>
 /** Resolve a live WebSession on every canonical call; neither an object id nor a User id is authority. */
 export const transactionSession: typeof ownerTransactionSession = (...args) =>
   ownerTransactionSession(...args);
-
-/** Advance at most four incomplete Users once per private scheduled tick. */
-export const repairDashboardProjections: typeof ownerRepairDashboardProjections = (...args) =>
-  ownerRepairDashboardProjections(...args);
 
 /** Repair one User's projection in bounded pages; views stay unavailable until guarded cutover. */
 export const repairDashboardProjection: typeof ownerRepairDashboardProjection = (...args) =>

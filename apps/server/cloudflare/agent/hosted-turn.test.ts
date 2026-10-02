@@ -49,9 +49,12 @@ import {
   recordWhatsAppStatus,
   stageWhatsAppDelivery,
   startWhatsAppSend,
-  sweepExpiredWhatsAppWindows,
 } from "../whatsapp/operations";
-import { dispatchWhatsAppWork, receiveWhatsAppWork } from "../whatsapp/runtime";
+import {
+  dispatchWhatsAppWork,
+  receiveWhatsAppWork,
+  sweepExpiredWhatsAppWindows,
+} from "../whatsapp/runtime";
 import {
   type HostedDelivery,
   acknowledgeBrowserTurn,

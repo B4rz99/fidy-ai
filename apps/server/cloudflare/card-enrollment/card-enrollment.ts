@@ -1,3 +1,5 @@
+import { authenticateWebSession } from "../web-session/operations";
+import { freshSessionQuery } from "@fidy/server/web-session-operations";
 import { protectConsentStatement } from "@fidy/server/consent-operations";
 import { UserContext } from "@fidy/server/identity-contract";
 import { prepareUserContext } from "../identity/user-context/operations";
@@ -193,46 +195,33 @@ const authority = (
   request: Request,
   db: D1Database,
   at: number
-): Promise<Option.Option<typeof Session.Type>> => {
-  const cookies =
-    request.headers
-      .get("cookie")
-      ?.split(";")
-      .map((part) => part.trim()) ?? [];
-  const matches = cookies.filter((part) => part.startsWith("__Host-fidy_session="));
-  if (matches.length !== 1) return Promise.resolve(Option.none());
-  const token = matches[0]?.slice("__Host-fidy_session=".length) ?? "";
-  if (!/^[A-Za-z0-9_-]{43}$/u.test(token)) return Promise.resolve(Option.none());
-  // Resolution is only a subject hint; the context read rechecks the complete fresh credential.
-  return digest(token).then((tokenDigest) =>
-    db
-      .prepare("SELECT user_id FROM web_sessions WHERE token_digest = ?")
-      .bind(tokenDigest)
+): Promise<Option.Option<typeof Session.Type>> =>
+  authenticateWebSession({ request, db, current: at, freshness: "fresh" }).then((subject) => {
+    if (Option.isNone(subject)) return Option.none<typeof Session.Type>();
+    const session = freshSessionQuery({
+      subject: {
+        sql: "SELECT ? AS sessionId, ? AS userId",
+        params: [subject.value.id, subject.value.userId],
+      },
+      current: at,
+    });
+    return prepareUserContext({
+      db,
+      userId: UserId.make(subject.value.userId),
+      statement: protectConsentStatement({
+        statement: {
+          sql: `SELECT s.userId AS user_id, u.timeZone, v.email_address FROM (${session.sql}) AS s
+            JOIN identity_user_context AS u ON u.userId = s.userId
+            JOIN verified_email_credentials AS v ON v.user_id = s.userId WHERE 1 = 1`,
+          params: session.params,
+        },
+        subject: { _tag: "User", userId: subject.value.userId },
+        requirement: "granted",
+      }),
+    })
       .first()
-      .then((raw) => {
-        const subject = decodeRow(Schema.Struct({ user_id: Session.fields.user_id }), raw);
-        if (Option.isNone(subject)) return Option.none<typeof Session.Type>();
-        return prepareUserContext({
-          db,
-          userId: subject.value.user_id,
-          statement: protectConsentStatement({
-            statement: {
-              sql: `SELECT s.user_id, u.timeZone, v.email_address FROM web_sessions AS s
-                JOIN identity_user_context AS u ON u.userId = s.user_id
-                JOIN verified_email_credentials AS v ON v.user_id = s.user_id
-                WHERE s.token_digest = ? AND s.revoked_at_ms IS NULL AND s.fresh_until_ms > ?
-                  AND s.idle_expires_at_ms > ? AND s.hard_expires_at_ms > ?`,
-              params: [tokenDigest, at, at, at],
-            },
-            subject: { _tag: "Owner", column: "s.user_id" },
-            requirement: "granted",
-          }),
-        })
-          .first()
-          .then((row) => decodeRow(Session, row));
-      })
-  );
-};
+      .then((row) => decodeRow(Session, row));
+  });
 
 const price = (db: D1Database, priceId: string): Promise<Option.Option<Price>> =>
   db

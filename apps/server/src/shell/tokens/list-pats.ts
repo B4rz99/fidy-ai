@@ -6,6 +6,7 @@ import { Unavailable } from "~/shell/public-http/contract";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 import { protectConsentStatement } from "~/shell/consent/operations";
 import type { FreshSessionSubject } from "~/shell/web-session/contract";
+import { liveSessionConditions } from "~/shell/web-session/operations";
 
 const activeLimit = 100;
 const PATMetadataRow = Schema.Struct({
@@ -44,20 +45,16 @@ export const patMetadataQuery = ({
     subject: { _tag: "Owner", column: "pats.user_id" },
     requirement: "unrevoked",
   });
+  const sessionGuard = Option.map(session, (subject) =>
+    liveSessionConditions({ session: subject, current })
+  );
   return {
     sql: `${protectedQuery.sql}
-      ${
-        Option.isSome(session)
-          ? `AND EXISTS (SELECT 1 FROM web_sessions WHERE id = ? AND user_id = ?
-        AND revoked_at_ms IS NULL AND idle_expires_at_ms > ? AND hard_expires_at_ms > ?)`
-          : ""
-      }
+      ${Option.isSome(sessionGuard) ? `AND ${sessionGuard.value.sql}` : ""}
       ORDER BY created_at_ms DESC LIMIT ${activeLimit + 1}`,
     params: [
       ...protectedQuery.params,
-      ...(Option.isSome(session)
-        ? [session.value.id, session.value.user_id, current, current]
-        : []),
+      ...(Option.isSome(sessionGuard) ? sessionGuard.value.params : []),
     ],
   };
 };

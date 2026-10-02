@@ -7,7 +7,7 @@ import * as Layer from "effect/Layer";
 import * as Encoding from "effect/Encoding";
 import * as Redacted from "effect/Redacted";
 import { ApprovedWorkersAiModel } from "@fidy/server/hosted-inference-model";
-import { EmailAddress } from "@fidy/server/client";
+import { EmailAddress } from "@fidy/server/email-authentication-contract";
 import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
 import { edgeSecurityPolicy } from "./edge-security";
 import { freeTierWorkerObservability } from "./worker-observability";

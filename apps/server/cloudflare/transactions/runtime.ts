@@ -1,13 +1,12 @@
 import { makeAgentService } from "../agent/runtime";
 import { repairDashboardProjections as ownerRepairDashboardProjections } from "./internal/dashboard-repair";
-import { CanonicalWork } from "../canonical-operations/contract";
+import { CanonicalWorkAdmission } from "../canonical-operations/contract";
 import {
   canonicalWorkRequiresInference,
   executeCanonicalWork,
 } from "../canonical-operations/operations";
 import type { HostedCommitFence } from "../agent/contract";
 import { UserId } from "@fidy/server/identity-reference";
-import { CanonicalCapability } from "~/core/canonical-operations/contract";
 
 import { Data, Effect, Exit, Option, Schema, type Scope } from "effect";
 
@@ -41,44 +40,6 @@ class StatementActivityUnavailable extends Data.TaggedError("StatementActivityUn
 }> {}
 class EmailActivityUnavailable extends Data.TaggedError("EmailActivityUnavailable") {}
 const httpServiceUnavailable = 503;
-const Credentials = {
-  userId: Schema.String.check(Schema.isUUID()),
-  digest: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))),
-} as const;
-const WebSession = { ...Credentials, sessionId: Schema.String.check(Schema.isUUID()) } as const;
-const PAT = {
-  ...Credentials,
-  patId: Schema.String.check(Schema.isUUID()),
-  requiredScope: Schema.NullOr(CanonicalCapability),
-} as const;
-/**
- * One work admission: the live subject authority plus the exact work it admits. It is not
- * itself a canonical mutation — the mutation travels inside `work` — so it is named for what it
- * does rather than for the thing it carries.
- */
-export const CanonicalWorkAdmission = Schema.Union([
-  Schema.TaggedStruct("WebSessionWork", { ...WebSession, work: CanonicalWork }),
-  Schema.TaggedStruct("PATWork", { ...PAT, work: CanonicalWork }),
-]);
-export type CanonicalWorkAdmission = typeof CanonicalWorkAdmission.Type;
-
-/**
- * The live WebSession facts an admission carries for one piece of work: the session id, its
- * User, and the proof digest the coordinator re-verifies against live authority before any D1 unit
- * commits. The work itself is excluded — it is what the authority admits, not part of it.
- */
-type WebSessionAuthority = Omit<
-  Extract<CanonicalWorkAdmission, { _tag: "WebSessionWork" }>,
-  "_tag" | "work"
->;
-/**
- * The live PAT facts an admission carries for one piece of work: the PAT id, its User, the
- * proof digest, and the required capability the coordinator re-verifies against live authority
- * before any D1 unit commits. The work itself is excluded — it is what the authority admits.
- */
-type PATAuthority = Omit<Extract<CanonicalWorkAdmission, { _tag: "PATWork" }>, "_tag" | "work">;
-export type { PATAuthority, WebSessionAuthority };
-
 /** Rebuild the exact live subject the work admission was issued for. */
 const admissionSubject = (admission: CanonicalWorkAdmission): TransactionCaller =>
   admission._tag === "PATWork"

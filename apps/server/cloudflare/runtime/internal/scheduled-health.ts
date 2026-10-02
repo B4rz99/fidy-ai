@@ -1,4 +1,4 @@
-import { EmailAddress } from "@fidy/server/client";
+import { EmailAddress } from "@fidy/server/email-authentication-contract";
 import { Clock, Effect, Option, Schema } from "effect";
 import type { PlatformMaintenanceInput } from "../contract";
 import { runOperationalAlerts } from "../operational-alert-delivery";

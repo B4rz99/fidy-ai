@@ -5,7 +5,7 @@ import {
   runBrowserPairingEmailWorkflow,
   runEmailReplacementWorkflow,
 } from "../email-authentication/runtime";
-import { EmailAddress, EmailVerificationCode } from "@fidy/server/client";
+import { EmailAddress, EmailVerificationCode } from "@fidy/server/email-authentication-contract";
 import { observeOperationalHealth } from "../runtime/operational-health";
 import { Miniflare } from "miniflare";
 import { applyTestMigration } from "../d1-test-fixture";

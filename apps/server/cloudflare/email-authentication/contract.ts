@@ -3,7 +3,7 @@ import type {
   Sha256Digest,
   WhatsAppProviderMessageId,
 } from "@fidy/server/consent-contract";
-import type { EmailAddress } from "@fidy/server/client";
+import type { EmailAddress } from "@fidy/server/email-authentication-contract";
 import type { UserId } from "@fidy/server/identity-reference";
 import type { WorkflowStepConfig } from "cloudflare:workers";
 import { type Option, Schema } from "effect";

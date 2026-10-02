@@ -1,3 +1,4 @@
+import type { SmokeBindings, SmokeEnvironment, SmokeQueueEnvironment } from "./contract";
 import { verifyCategoryStorage } from "../categories/runtime";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { Clock, Data, Effect, Option, Schema } from "effect";
@@ -23,24 +24,6 @@ const SmokeWork = Schema.Struct({
 type SmokeWork = typeof SmokeWork.Type;
 
 type SmokeRow = { git_revision: string; expires_at_ms: number; status: string };
-export type SmokeEnvironment = Readonly<{
-  DB: D1Database;
-  SMOKE_BUCKET: R2Bucket;
-  SMOKE_QUEUE: Queue;
-  SMOKE_WORKFLOW: Workflow;
-  SMOKE_QUEUE_NAME: string;
-  USER_TRANSACTION_COORDINATOR: { getByName: (name: string) => Pick<Fetcher, "fetch"> };
-  SMOKE_PROOF: string;
-  CF_VERSION_METADATA: { id: string };
-  RELEASE_GIT_SHA: string;
-  CONTRACT_DIGEST: string;
-  KAPSO_API_KEY: string;
-  KAPSO_WEBHOOK_SECRET: string;
-  RESEND_API_KEY: string;
-  WOMPI_PRIVATE_KEY: string;
-  WOMPI_INTEGRITY_SECRET: string;
-  WOMPI_EVENT_SECRET: string;
-}>;
 
 const fail = (stage: SmokeFailureStage = "platform"): Response =>
   Response.json(
@@ -264,7 +247,7 @@ export const handleSmoke = ({
 
 const receiveMessage = Effect.fn(function* (
   message: Message<unknown>,
-  environment: SmokeEnvironment
+  environment: SmokeQueueEnvironment
 ) {
   const decoded = Schema.decodeUnknownOption(SmokeWork)(message.body);
   if (Option.isNone(decoded)) return yield* new SmokeBindingFailed({ stage: "platform" });
@@ -292,7 +275,7 @@ const receiveMessage = Effect.fn(function* (
 export const receiveSmoke = ({
   batch,
   environment,
-}: Readonly<{ batch: MessageBatch<unknown>; environment: SmokeEnvironment }>): Promise<void> =>
+}: Readonly<{ batch: MessageBatch<unknown>; environment: SmokeQueueEnvironment }>): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
       if (batch.queue !== environment.SMOKE_QUEUE_NAME) {
@@ -338,3 +321,12 @@ export class ReleaseSmokeWorkflowV1 extends WorkflowEntrypoint<SmokeEnvironment,
     });
   }
 }
+
+/** Preserve the native smoke binding readiness gate before exercising synthetic work. */
+export const smokeReady = (environment: Partial<SmokeBindings>): environment is SmokeBindings =>
+  environment.SMOKE_BUCKET !== undefined &&
+  environment.SMOKE_QUEUE !== undefined &&
+  environment.SMOKE_WORKFLOW !== undefined &&
+  environment.SMOKE_QUEUE_NAME !== undefined &&
+  environment.SMOKE_PROOF !== undefined &&
+  environment.CF_VERSION_METADATA !== undefined;

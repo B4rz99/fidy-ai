@@ -751,3 +751,31 @@ Dependency guards reject foreign implementation and operation imports from Maint
 runtime dependencies, private platform imports and interface laundering. Native acceptance exercises
 retention through Core and the Email Worker, including independent failure, expired-work refusal,
 current other-User preservation, interrupted sends, bounded batches and safe diagnostic projection.
+
+### Native composition and browser publication roots
+
+`src/client.ts` is the only outward browser publication. It re-publishes the canonical API and
+final owner declarations for PAT pairing, Subscription enrollment, Web Authentication, HTTP origins
+and codecs. Server and infrastructure implementations consume those owners directly. The source
+root contains only this publication and ambient declarations; `src/shell/api.ts` remains the sole
+portable API assembly landmark. No implementation imports inward through a source-root facade.
+
+`cloudflare/core-worker.ts` composes HTTP, Queue and Maintenance runtimes and retains the deployed
+Workflow and Durable Object export identities. `core-http/runtime.ts` constructs the private HTTP
+handler: route policy, bounded decoding, response projection and identity-targeted post-commit
+publication are private. `queue/runtime.ts` constructs the existing ordered, identity-only handoff;
+owner runtimes retain payload validation, replay and acknowledgment. Each interface declares only
+its needed native inputs, and neither acquires its caller's root or the other's private dispatch.
+Canonical admission codecs live with Canonical Operations, independently of the Durable Object
+constructor. The coordinator's serialization, ledger, Agent settlement and alarms remain unchanged.
+
+The public Worker remains the ingress HTTP composition with no D1 binding. The Email Worker composes
+only its narrow Ingestion and Maintenance runtimes. Versioned Workflow construction remains with
+its owner and the existing Durable Object remains the sole per-User serialization authority.
+These explicit roots and their published interfaces are acyclic; native entrypoints cannot become
+inward-facing owner facades. Static-web hosting and Alchemy resource ownership are unchanged.
+
+This ownership-only closure introduces no new external workflow or telemetry purpose. Existing
+request, Queue, schedule, Workflow and coordinator Work observations remain at their original
+execution boundaries. Publication budgets, failure projection, authority checks and disabled launch
+configuration are unchanged.

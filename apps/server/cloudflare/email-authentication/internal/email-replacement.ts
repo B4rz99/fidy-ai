@@ -5,7 +5,7 @@ import {
   RequestEmailReplacementPayload,
   emailReplacementFreshBody,
   emailReplacementInvalidBody,
-} from "@fidy/server/client";
+} from "@fidy/server/email-authentication-api";
 import {
   EmailReplacementMutation,
   type EmailReplacementMutationService,

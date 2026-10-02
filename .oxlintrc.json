@@ -139,6 +139,22 @@
     "yoda": "error"
   },
   "overrides": [
+    {
+      "files": ["infra/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@fidy/server/client", "**/server/src/client", "**/server/src/client.ts"],
+                "message": "Infrastructure consumes final owner contracts, never the outward browser publication root (#615)."
+              }
+            ]
+          }
+        ]
+      }
+    },
     // Compaction is one ordered preflight with failure checks at each provider stage.
     {
       "files": ["apps/server/cloudflare/agent/internal/hosted-turn.ts"],

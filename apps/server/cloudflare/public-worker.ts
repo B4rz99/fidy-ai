@@ -18,8 +18,10 @@ import {
 import { browserOrigins } from "./runtime/topology";
 import {
   SmokeFailureStage,
+  SmokeIdentity,
   SmokeIdentityEquality,
   SmokeResponse,
+  smokeCoreVersionHeader,
   smokeFailureHeader,
   smokeIdentityHeader,
   smokeManifest,
@@ -498,6 +500,12 @@ const coreSmokeFailure = (
   );
   if (Option.contains(stage, "identity") && Option.isSome(equality)) {
     unavailableResponse.headers.set(smokeIdentityHeader, equality.value);
+  }
+  const version = Schema.decodeUnknownOption(SmokeIdentity.fields.workerVersionId)(
+    response.headers.get(smokeCoreVersionHeader)
+  );
+  if (Option.contains(stage, "identity") && Option.isSome(version)) {
+    unavailableResponse.headers.set(smokeCoreVersionHeader, version.value);
   }
   return unavailableResponse;
 };

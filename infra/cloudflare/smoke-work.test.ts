@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { DateTime, Effect } from "effect";
+import { DateTime, Effect, Schema } from "effect";
 import { describe, expect } from "vitest";
 import {
   SyntheticBindings,
@@ -81,6 +81,7 @@ describe("private release smoke", () => {
         expect(refusedReadiness.status).toBe(404);
         expect(refusedReadiness.headers.get("x-fidy-smoke-failure")).toBeNull();
         expect(refusedReadiness.headers.get("x-fidy-smoke-identity")).toBeNull();
+        expect(refusedReadiness.headers.get("x-fidy-smoke-core-version")).toBeNull();
         const ready = yield* Effect.tryPromise(() =>
           handleSmoke({
             request: new Request("https://core.internal/internal/release-smoke?readiness=1", {
@@ -100,6 +101,30 @@ describe("private release smoke", () => {
         expect(mismatch.status).toBe(503);
         expect(mismatch.headers.get("x-fidy-smoke-failure")).toBe("identity");
         expect(mismatch.headers.get("x-fidy-smoke-identity")).toBe("011");
+        expect(mismatch.headers.get("x-fidy-smoke-core-version")).toBe(
+          environment.CF_VERSION_METADATA.id
+        );
+        const diagnosticBody = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+          protocolVersion: 1,
+          probeId: "b".repeat(32),
+          expectedPublicVersionId: version,
+          expectedCoreVersionId: version,
+          expectedGitRevision: "0".repeat(40),
+          expectedContractDigest: digest,
+        });
+        const diagnostic = yield* Effect.tryPromise(() =>
+          handleSmoke({
+            request: request(diagnosticBody, true),
+            environment: {
+              ...environment,
+              CF_VERSION_METADATA: { id: version },
+              RELEASE_GIT_SHA: "0".repeat(40),
+            },
+          })
+        );
+        expect(diagnostic.status).toBe(503);
+        expect(diagnostic.headers.get("x-fidy-smoke-core-version")).toBe(version);
+        expect(diagnostic.headers.get("x-fidy-smoke-identity")).toBe("111");
         for (const overrides of [
           { RELEASE_GIT_SHA: "f".repeat(40), expected: "101" },
           { CONTRACT_DIGEST: "f".repeat(64), expected: "110" },

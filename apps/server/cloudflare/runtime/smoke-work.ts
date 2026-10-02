@@ -8,6 +8,8 @@ import {
   type SmokeIdentity as SmokeIdentityType,
   SmokeRequest,
   type SmokeRequest as SmokeRequestType,
+  smokeCoreVersionHeader,
+  smokeDiagnosticRevision,
   smokeFailureHeader,
   smokeIdentityHeader,
   smokeManifest,
@@ -168,6 +170,25 @@ const matchesCore = (probe: SmokeRequestType, environment: SmokeEnvironment): bo
   probe.expectedGitRevision === environment.RELEASE_GIT_SHA &&
   probe.expectedContractDigest === environment.CONTRACT_DIGEST;
 
+const identityFailure = (probe: SmokeRequestType, environment: SmokeEnvironment): Response => {
+  const response = fail("identity");
+  const version = Schema.decodeOption(SmokeIdentity.fields.workerVersionId)(
+    environment.CF_VERSION_METADATA.id
+  );
+  if (Option.isSome(version)) response.headers.set(smokeCoreVersionHeader, version.value);
+  response.headers.set(
+    smokeIdentityHeader,
+    [
+      probe.expectedCoreVersionId === environment.CF_VERSION_METADATA.id,
+      probe.expectedGitRevision === environment.RELEASE_GIT_SHA,
+      probe.expectedContractDigest === environment.CONTRACT_DIGEST,
+    ]
+      .map((equal) => (equal ? "1" : "0"))
+      .join("")
+  );
+  return response;
+};
+
 const startProbe = Effect.fn(function* (request: Request, environment: SmokeEnvironment) {
   if (Number(request.headers.get("content-length")) > maxBodyBytes) return refused();
   const decoded = yield* platform(() =>
@@ -175,19 +196,8 @@ const startProbe = Effect.fn(function* (request: Request, environment: SmokeEnvi
   );
   if (Option.isNone(decoded)) return refused();
   const probe = decoded.value;
-  if (!matchesCore(probe, environment)) {
-    const response = fail("identity");
-    response.headers.set(
-      smokeIdentityHeader,
-      [
-        probe.expectedCoreVersionId === environment.CF_VERSION_METADATA.id,
-        probe.expectedGitRevision === environment.RELEASE_GIT_SHA,
-        probe.expectedContractDigest === environment.CONTRACT_DIGEST,
-      ]
-        .map((equal) => (equal ? "1" : "0"))
-        .join("")
-    );
-    return response;
+  if (probe.expectedGitRevision === smokeDiagnosticRevision || !matchesCore(probe, environment)) {
+    return identityFailure(probe, environment);
   }
   const now = yield* Clock.currentTimeMillis;
   // One serialized statement caps concurrent distinct probes; replays are idempotent.

@@ -189,6 +189,220 @@ const canonicalTypeAlias = `cloudflare/canonical-operations/${PROBE_PREFIX}type-
 
 const PROBES: readonly Probe[] = [
   {
+    name: "server-root tooling cannot import native server private implementation",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error published-only: ${PROBE_PREFIX}root-tooling.config.ts → cloudflare/runtime/release-smoke/internal/protocol.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${PROBE_PREFIX}root-tooling.config.ts`,
+        source:
+          'import type { SmokeWork } from "./cloudflare/runtime/release-smoke/internal/protocol";\n' +
+          "export type PrivateSmokeWork = SmokeWork;\n",
+      },
+    ],
+  },
+  {
+    name: "repository-root tooling cannot import native server private implementation",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error published-only: ../../${PROBE_PREFIX}root-tooling.config.ts → cloudflare/runtime/release-smoke/internal/protocol.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `../../${PROBE_PREFIX}root-tooling.config.ts`,
+        source:
+          'import type { SmokeWork } from "./apps/server/cloudflare/runtime/release-smoke/internal/protocol";\n' +
+          "export type PrivateSmokeWork = SmokeWork;\n",
+      },
+    ],
+  },
+  {
+    name: "web src consumers cannot import native server private implementation",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error published-only: ../web/src/${PROBE_PREFIX}server-private/probe.ts → cloudflare/runtime/release-smoke/internal/protocol.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `../web/src/${PROBE_PREFIX}server-private/probe.ts`,
+        source:
+          'import type { SmokeWork } from "../../../server/cloudflare/runtime/release-smoke/internal/protocol";\n' +
+          "export type PrivateSmokeWork = SmokeWork;\n",
+      },
+    ],
+  },
+  {
+    name: "web scripts consumers cannot import native server private implementation",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error published-only: ../web/scripts/${PROBE_PREFIX}server-private/probe.ts → cloudflare/runtime/release-smoke/internal/protocol.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `../web/scripts/${PROBE_PREFIX}server-private/probe.ts`,
+        source:
+          'import type { SmokeWork } from "../../../server/cloudflare/runtime/release-smoke/internal/protocol";\n' +
+          "export type PrivateSmokeWork = SmokeWork;\n",
+      },
+    ],
+  },
+  {
+    name: "web e2e consumers cannot import native server private implementation",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error published-only: ../web/e2e/${PROBE_PREFIX}server-private/probe.ts → cloudflare/runtime/release-smoke/internal/protocol.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `../web/e2e/${PROBE_PREFIX}server-private/probe.ts`,
+        source:
+          'import type { SmokeWork } from "../../../server/cloudflare/runtime/release-smoke/internal/protocol";\n' +
+          "export type PrivateSmokeWork = SmokeWork;\n",
+      },
+    ],
+  },
+  {
+    name: "repository infrastructure cannot import a new owner's private rows",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error published-only: ../../infra/cloudflare/${PROBE_PREFIX}private-owner/probe.ts → cloudflare/${PROBE_PREFIX}repository-private/internal/rows.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}repository-private/internal/rows.ts`,
+        source: "export type Row = { readonly credential: string };\n",
+      },
+      {
+        path: `../../infra/cloudflare/${PROBE_PREFIX}private-owner/probe.ts`,
+        source: `import type { Row } from "../../../apps/server/cloudflare/${PROBE_PREFIX}repository-private/internal/rows";\nexport type Leaked = Row;\n`,
+      },
+    ],
+  },
+  {
+    name: "repository scripts cannot import flat portable implementation",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error published-only: ../../scripts/${PROBE_PREFIX}private-owner/probe.ts → src/shell/${PROBE_PREFIX}flat-private/model.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `src/shell/${PROBE_PREFIX}flat-private/model.ts`,
+        source: "export type Model = { readonly privateValue: string };\n",
+      },
+      {
+        path: `../../scripts/${PROBE_PREFIX}private-owner/probe.ts`,
+        source: `import type { Model } from "../../apps/server/src/shell/${PROBE_PREFIX}flat-private/model";\nexport type Leaked = Model;\n`,
+      },
+    ],
+  },
+  {
+    name: "repository tools cannot turn a harness filename into runtime authority",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error runtime-outside-composition: ../../tools/${PROBE_PREFIX}fake-harness/probe-harness.ts → cloudflare/${PROBE_PREFIX}runtime-owner/runtime.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}runtime-owner/runtime.ts`,
+        source: "export const construct = (): boolean => true;\n",
+      },
+      {
+        path: `../../tools/${PROBE_PREFIX}fake-harness/probe-harness.ts`,
+        source: `import { construct } from "../../apps/server/cloudflare/${PROBE_PREFIX}runtime-owner/runtime";\nexport const run = construct;\n`,
+      },
+    ],
+  },
+  {
+    name: "ordinary foreign tests cannot acquire native runtime construction",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error runtime-outside-composition: cloudflare/${PROBE_PREFIX}ordinary-test/probe.test.ts → cloudflare/${PROBE_PREFIX}test-runtime-owner/runtime.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}test-runtime-owner/runtime.ts`,
+        source: "export const construct = (): boolean => true;\n",
+      },
+      {
+        path: `cloudflare/${PROBE_PREFIX}ordinary-test/probe.test.ts`,
+        source: `import { construct } from "../${PROBE_PREFIX}test-runtime-owner/runtime";\nexport const run = construct;\n`,
+      },
+    ],
+  },
+  {
+    name: "portable core cannot import a native publication through a type-only edge",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error portable-imports-platform: src/core/${PROBE_PREFIX}native-backedge/operations.ts → cloudflare/${PROBE_PREFIX}native-declarations/contract.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}native-declarations/contract.ts`,
+        source: "export type Binding = { readonly native: true };\n",
+      },
+      {
+        path: `src/core/${PROBE_PREFIX}native-backedge/operations.ts`,
+        source: `import type { Binding } from "../../../cloudflare/${PROBE_PREFIX}native-declarations/contract";\nexport type NativeBinding = Binding;\n`,
+      },
+    ],
+  },
+  {
+    name: "an unresolved local import cannot report a clean graph",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error unresolved-dependency: tools/${PROBE_PREFIX}unresolved/probe.ts → ./missing-owner`,
+      ],
+    },
+    files: [
+      {
+        path: `tools/${PROBE_PREFIX}unresolved/probe.ts`,
+        source: 'import { hidden } from "./missing-owner";\nexport const leaked = hidden;\n',
+      },
+    ],
+  },
+  {
+    name: "new native owners are private without a migration allowlist",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error published-only: tools/${PROBE_PREFIX}unpublished-native/probe.ts → cloudflare/${PROBE_PREFIX}unpublished-owner/rows.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}unpublished-owner/rows.ts`,
+        source: "export type StoredRow = { readonly secret: string };\n",
+      },
+      {
+        path: `tools/${PROBE_PREFIX}unpublished-native/probe.ts`,
+        source: `import type { StoredRow } from "../../cloudflare/${PROBE_PREFIX}unpublished-owner/rows";\nexport type Leaked = StoredRow;\n`,
+      },
+    ],
+  },
+  {
     name: "owner-local fixtures remain usable from their own tests",
     expect: { kind: "allowed" },
     files: [
@@ -1143,7 +1357,7 @@ const PROBES: readonly Probe[] = [
     expect: {
       kind: "rejected",
       mustContain: [
-        `error published-interface-reexports-internal: ${canonicalAlias}/operations.ts → ./internal/dispatch`,
+        `error published-interface-reexports-internal: ${canonicalAlias}/operations.ts → ${canonicalAlias}/internal/dispatch.ts`,
       ],
     },
     files: [
@@ -1163,7 +1377,7 @@ const PROBES: readonly Probe[] = [
     expect: {
       kind: "rejected",
       mustContain: [
-        `error published-interface-reexports-internal: ${canonicalTypeAlias}/operations.ts → ./internal/unit`,
+        `error published-interface-reexports-internal: ${canonicalTypeAlias}/operations.ts → ${canonicalTypeAlias}/internal/unit.ts`,
       ],
     },
     files: [
@@ -1617,15 +1831,16 @@ const PROBES: readonly Probe[] = [
     expect: { kind: "allowed" },
     files: [
       {
-        path: `${subscriptionPublished}/probe.ts`,
+        path: `${subscriptionPublished}/runtime.ts`,
         source:
-          'import { handleCardEnrollment, executeProtectedSubscriptionQuery } from "../subscription/operations";\n' +
+          'import { handleCardEnrollment } from "../subscription/runtime";\n' +
+          'import { executeProtectedSubscriptionQuery } from "../subscription/operations";\n' +
           'import { activePaidSubscriptionCondition } from "~/shell/subscription/operations";\n' +
           'import { SubscriptionEnrollmentApi } from "~/shell/subscription/contract";\n' +
           "export const published = [handleCardEnrollment, executeProtectedSubscriptionQuery, activePaidSubscriptionCondition, SubscriptionEnrollmentApi];\n",
       },
     ],
-    name: "Subscription callers consume published enrollment, standing and paid-access operations",
+    name: "Subscription runtime composes enrollment while peers observe standing and paid access",
   },
   {
     expect: {
@@ -1679,7 +1894,7 @@ const PROBES: readonly Probe[] = [
     expect: {
       kind: "rejected",
       mustContain: [
-        `error published-interface-reexports-internal: ${subscriptionLaundering}/operations.ts → ./internal/provider`,
+        `error published-interface-reexports-internal: ${subscriptionLaundering}/operations.ts → ${subscriptionLaundering}/internal/provider.ts`,
       ],
     },
     files: [
@@ -2006,10 +2221,13 @@ const PROBES: readonly Probe[] = [
   {
     expect: { kind: "allowed" },
     files: [
-      { path: `${ownInternal}/internal/value.ts`, source: "export const value = true;\n" },
+      {
+        path: `${ownInternal}/internal/value.ts`,
+        source: "export const value = (input: boolean): boolean => !input;\n",
+      },
       {
         path: `${ownInternal}/operations.ts`,
-        source: `import { value } from "~/${ownInternal.replace("src/", "")}/internal/value";\n\nexport const operation = (): boolean => value;\n`,
+        source: `import { value } from "~/${ownInternal.replace("src/", "")}/internal/value";\n\nexport const operation = (input: boolean): boolean => value(input);\n`,
       },
     ],
     name: "a module may import its own visible internals",
@@ -2047,7 +2265,7 @@ const PROBES: readonly Probe[] = [
       },
       {
         path: `${nestedForeignInternalSource}/operations.ts`,
-        source: `import { value } from "~/${nestedForeignInternalTarget.replace("src/", "")}/internal/value";\n\nexport const operation = (): boolean => value;\n`,
+        source: `import { value } from "~/${nestedForeignInternalTarget.replace("src/", "")}/internal/value";\n\nexport const operation = (input: boolean): boolean => value(input);\n`,
       },
     ],
     name: "nested modules cannot import another module's visible internals",
@@ -2203,7 +2421,7 @@ const PROBES: readonly Probe[] = [
     expect: {
       kind: "rejected",
       mustContain: [
-        `error published-interface-reexports-internal: ${reexportInternal}/operations.ts → ./internal/value`,
+        `error published-interface-reexports-internal: ${reexportInternal}/operations.ts → ${reexportInternal}/internal/value.ts`,
         `error published-interface-reexports-internal: ${reexportInternal}/runtime.ts → ${reexportInternal}/internal/value.ts`,
       ],
     },
@@ -2225,7 +2443,7 @@ const PROBES: readonly Probe[] = [
     expect: {
       kind: "rejected",
       mustContain: [
-        `error published-interface-reexports-internal: ${reexportInternalAlias}/operations.ts → ./internal/value`,
+        `error published-interface-reexports-internal: ${reexportInternalAlias}/operations.ts → ${reexportInternalAlias}/internal/value.ts`,
       ],
     },
     files: [
@@ -2247,7 +2465,7 @@ const PROBES: readonly Probe[] = [
     expect: {
       kind: "rejected",
       mustContain: [
-        `error published-interface-reexports-internal: ${reexportInternalType}/operations.ts → ./internal/value`,
+        `error published-interface-reexports-internal: ${reexportInternalType}/operations.ts → ${reexportInternalType}/internal/value.ts`,
       ],
     },
     files: [
@@ -2346,26 +2564,36 @@ const PROBES: readonly Probe[] = [
     name: "scripts may use published operations",
   },
   {
-    expect: { kind: "allowed" },
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error runtime-outside-composition: ${scriptRuntime}/runtime.ts → ${runtimeTarget}/runtime.ts`,
+      ],
+    },
     files: [
       { path: `${runtimeTarget}/runtime.ts`, source: "export const runtime = true;\n" },
       {
-        path: `${scriptRuntime}/probe-runtime.ts`,
+        path: `${scriptRuntime}/runtime.ts`,
         source: `import { runtime } from "~/${runtimeTarget.replace("src/", "")}/runtime";\n\nexport const script = runtime;\n`,
       },
     ],
-    name: "a script may compose a published runtime",
+    name: "an unregistered script cannot claim runtime composition by filename",
   },
   {
-    expect: { kind: "allowed" },
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error runtime-outside-composition: ${toolRuntimeAllowed}/runtime.ts → ${toolRuntimeTarget}/runtime.ts`,
+      ],
+    },
     files: [
       { path: `${toolRuntimeTarget}/runtime.ts`, source: "export const runtime = true;\n" },
       {
-        path: `${toolRuntimeAllowed}/probe-runtime.ts`,
+        path: `${toolRuntimeAllowed}/runtime.ts`,
         source: `import { runtime } from "~/${toolRuntimeTarget.replace("src/", "")}/runtime";\n\nexport const tool = runtime;\n`,
       },
     ],
-    name: "an explicitly named tool runtime may compose published runtime authority",
+    name: "an unregistered tool cannot claim runtime composition by filename",
   },
   {
     expect: {
@@ -2424,12 +2652,12 @@ const PROBES: readonly Probe[] = [
       {
         path: `${SIBLING_REFERENCE}/probe.ts`,
         source:
-          'import { UserId } from "~/core/identity/reference";\n' +
-          'import { TokenId } from "~/core/tokens/reference";\n\n' +
+          'import { UserId } from "~/core/identity/contract";\n' +
+          'import { TokenId } from "~/core/tokens/contract";\n\n' +
           "export const siblingReferenceProbe = [UserId, TokenId];\n",
       },
     ],
-    name: "a core slice may import a sibling's published reference.ts",
+    name: "a core slice may import a sibling's published contract.ts",
   },
   {
     expect: {
@@ -2479,7 +2707,7 @@ const PROBES: readonly Probe[] = [
       {
         path: `${CORE_TO_SHELL}/probe.ts`,
         source:
-          'import { UserId } from "~/core/identity/reference";\n' +
+          'import { UserId } from "~/core/identity/contract";\n' +
           'import "~/shell/public-http/contract";\n\n' +
           "export const coreImportsShellProbe = UserId;\n",
       },
@@ -2583,14 +2811,14 @@ const PROBES: readonly Probe[] = [
     expect: {
       kind: "rejected",
       mustContain: [
-        `error cross-directory-import-is-relative: ${RELATIVE_CROSS_DIRECTORY}/probe.ts → src/core/identity/reference.ts`,
+        `error cross-directory-import-is-relative: ${RELATIVE_CROSS_DIRECTORY}/probe.ts → src/core/identity/contract.ts`,
       ],
     },
     files: [
       {
         path: `${RELATIVE_CROSS_DIRECTORY}/probe.ts`,
         source:
-          'import { UserId } from "../../identity/reference";\n\n' +
+          'import { UserId } from "../../identity/contract";\n\n' +
           "export const relativeCrossDirectoryProbe = UserId;\n",
       },
     ],
@@ -2665,6 +2893,8 @@ const assertProbeBatch = (probes: readonly Probe[], expectation: Expectation["ki
 };
 
 const probeRoot = ({ path }: ProbeFile): string => {
+  const filename = path.slice(path.lastIndexOf("/") + 1);
+  if (filename.startsWith(PROBE_PREFIX)) return path;
   const marker = path.indexOf("/__probe-");
   const end = path.indexOf("/", marker + 1);
   if (marker < 0 || end < 0) {
@@ -2680,11 +2910,29 @@ const remove = (path: string): void => {
   }
 };
 
-const stale = ["src", "scripts", "tools", "cloudflare"].flatMap((root) =>
+const stale = [
+  "src",
+  "scripts",
+  "tools",
+  "cloudflare",
+  "../../scripts",
+  "../../tools",
+  "../../infra/cloudflare",
+  "../web/src",
+  "../web/scripts",
+  "../web/e2e",
+].flatMap((root) =>
   Array.from(
     new Bun.Glob("**/__probe-*").scanSync({ cwd: `${serverRoot}/${root}`, onlyFiles: false })
   ).map((entry) => `${root}/${entry}`)
 );
+for (const root of [".", "../.."]) {
+  for (const file of new Bun.Glob("__probe-*.config.ts").scanSync({
+    cwd: `${serverRoot}/${root}`,
+  })) {
+    stale.push(`${root}/${file}`);
+  }
+}
 for (const entry of stale.sort((left, right) => right.length - left.length)) {
   remove(`${serverRoot}/${entry}`);
 }

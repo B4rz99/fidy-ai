@@ -1,7 +1,6 @@
 import { UserContext } from "~/core/identity/contract";
-import { Category } from "~/core/categories/contract";
+import { Category, CategoryId } from "~/core/categories/contract";
 import { Data, DateTime, Option, Schema, Struct } from "effect";
-import { CategoryId } from "~/core/categories/reference";
 import { IanaTimeZone } from "~/core/_shared/context";
 import type { Direction, EffectiveTransactionAggregate } from "~/core/transactions/contract";
 import { Currency, MoneyGroups, type ReadonlyMoney } from "~/core/_shared/money";

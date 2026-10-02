@@ -1,5 +1,5 @@
 import { Clock, Effect, Option } from "effect";
-import { makeAuditRetention } from "@fidy/server/audit-runtime";
+import { makeAuditRetention } from "../../src/shell/audit/runtime";
 import {
   type CoreMaintenanceInput,
   EmailScheduleUnavailable,
@@ -13,7 +13,7 @@ import type { PlatformMaintenance } from "../runtime/contract";
 import { makePlatformMaintenance } from "../runtime/runtime";
 import { makeAgentRetention } from "../agent/runtime";
 import { sweepExpiredWorkersAiAdmission } from "../ai/runtime";
-import { recoverPendingDisclosures, sweepExpiredConsent } from "../consent/runtime";
+import { recoverPendingDisclosures, sweepExpiredConsent } from "../consent/ingress/runtime";
 import {
   dispatchBrowserPairingEmail,
   dispatchEmailReplacement,

@@ -5,8 +5,8 @@ import {
   runBrowserPairingEmailWorkflow,
   runEmailReplacementWorkflow,
 } from "../email-authentication/runtime";
-import { EmailAddress, EmailVerificationCode } from "@fidy/server/email-authentication-contract";
-import { observeOperationalHealth } from "../runtime/operational-health";
+import { EmailAddress, EmailVerificationCode } from "../../src/core/email-authentication/contract";
+import { observeOperationalHealth } from "../runtime/operational-health/operations";
 import { Miniflare } from "miniflare";
 import { applyTestMigration } from "../d1-test-fixture";
 import { afterEach, expect, it, vi } from "vitest";
@@ -16,10 +16,14 @@ import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
 
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import coreWorker, { makeCoreWorker } from "../core-worker";
-import { DisabledTelemetryResource, makeTelemetryService } from "@fidy/server/telemetry";
+import {
+  DisabledTelemetryResource,
+  makeTelemetryService,
+} from "../../src/shell/observability/operations";
+
 import { handleSupportRecovery } from "../recovery/operations";
 import publicWorker from "../public-worker";
-import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
+import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 
 const signWebhook = (secret: string, body: string | Uint8Array): Promise<string> =>
   crypto.subtle

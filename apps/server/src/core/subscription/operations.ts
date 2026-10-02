@@ -1,7 +1,6 @@
 import { DateTime, Effect, Function } from "effect";
 import type { IanaTimeZone } from "~/core/_shared/context";
-import type { BillingPeriod } from "./contract";
-import type { PriceId } from "./reference";
+import { type BillingPeriod, type PriceId } from "./contract";
 
 /** Calendar paid-period facts derived from verified settlement in the captured named time zone. */
 export type PaidPeriodWindow = Readonly<{

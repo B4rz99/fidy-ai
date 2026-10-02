@@ -3,7 +3,8 @@ import { it } from "@effect/vitest";
 import { Data, Effect, Exit } from "effect";
 import { afterAll } from "vitest";
 import { isolatedTestDatabases } from "../d1-test-fixture";
-import { WorkersAiAdmissionUnavailable, sweepExpiredWorkersAiAdmission } from "./runtime";
+import { WorkersAiAdmissionUnavailable } from "./contract";
+import { sweepExpiredWorkersAiAdmission } from "./runtime";
 
 class TestDatabaseUnavailable extends Data.TaggedError("TestDatabaseUnavailable") {}
 const databases = isolatedTestDatabases();

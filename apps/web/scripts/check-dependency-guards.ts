@@ -27,6 +27,8 @@ const appInterface = appPath("interface");
 const uiApplication = uiPath("application");
 const testingFeaturePrivate = `src/testing/${probePrefix}feature-private`;
 const testingServerInternal = `src/testing/${probePrefix}server-internal`;
+const testingNativeInternal = `src/testing/${probePrefix}native-internal`;
+const transportNativeContract = transportPath("native-contract");
 const sessionFeature = sessionPath("feature");
 const sessionApplication = sessionPath("application");
 const sessionUi = sessionPath("ui");
@@ -187,6 +189,40 @@ const probes: readonly Probe[] = [
         source:
           'import type { Identity } from "../../../../server/src/core/identity/model";\n\n' +
           "export type ServerInternalProbe = Identity;\n",
+      },
+    ],
+  },
+  {
+    name: "web source cannot import native server private types",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error web-imports-server-internal: ${testingNativeInternal}/probe.ts → ../server/cloudflare/runtime/release-smoke/internal/protocol.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${testingNativeInternal}/probe.ts`,
+        source:
+          'import type { SmokeWork } from "../../../../server/cloudflare/runtime/release-smoke/internal/protocol";\n\n' +
+          "export type NativeInternalProbe = SmokeWork;\n",
+      },
+    ],
+  },
+  {
+    name: "browser transport cannot import published native server contracts",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error web-imports-server-internal: ${transportNativeContract}/probe.ts → ../server/cloudflare/runtime/release-smoke/contract.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${transportNativeContract}/probe.ts`,
+        source:
+          'import type { SmokeRequest } from "../../../../server/cloudflare/runtime/release-smoke/contract";\n\n' +
+          "export type NativeContractProbe = SmokeRequest;\n",
       },
     ],
   },

@@ -1,6 +1,6 @@
-import { verifyHostedInferenceConformanceChecks } from "@fidy/server/hosted-inference";
+import { verifyHostedInferenceConformanceChecks } from "../../src/shell/hosted-inference/operations";
 import { Cause, Effect, Exit, Option } from "effect";
-import { makeCloudflareHostedInference } from "./workers-ai";
+import { makeCloudflareHostedInference } from "./runtime";
 import type { WorkersAiEnvironment } from "./contract";
 
 const jsonHeaders = {

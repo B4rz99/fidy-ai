@@ -1,5 +1,5 @@
 import { prepareUserContext } from "../../identity/user-context/operations";
-import { UserId } from "@fidy/server/identity-reference";
+import { UserId } from "../../../src/core/identity/contract";
 import { Clock, Data, Effect, Option, Schema } from "effect";
 
 class ProjectionRepairFailed extends Data.TaggedError("ProjectionRepairFailed") {}

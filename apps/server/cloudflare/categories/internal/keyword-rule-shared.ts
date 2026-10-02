@@ -1,6 +1,6 @@
 import { requiredCategory } from "./projection";
 import { keywordRulesFromRows, keywordRulesQuery } from "./keyword-rules";
-import { type CategoryId, type KeywordRule } from "@fidy/server/categories";
+import { type CategoryId, type KeywordRule } from "../../../src/core/categories/contract";
 import { Effect, Option } from "effect";
 
 /** The status a declared `ValidationFailed` keyword-rule refusal answers with. */

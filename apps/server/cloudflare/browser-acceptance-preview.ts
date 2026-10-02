@@ -14,9 +14,9 @@ import {
 } from "./browser-acceptance-wompi";
 
 const { makePublicWorker } = await import("./public-worker");
-const { makeWorkerTelemetry } = await import("./runtime/telemetry");
-const { browserOrigins } = await import("./runtime/topology");
-const { approvedWorkersAiModel } = await import("@fidy/server/hosted-inference-model");
+const { makeWorkerTelemetry } = await import("./runtime/telemetry/operations");
+const { browserOrigins } = await import("./runtime/contract");
+const { approvedWorkersAiModel } = await import("@fidy/server/hosted-inference-contract");
 
 const certificate = Bun.env.PLAYWRIGHT_TLS_CERT;
 const key = Bun.env.PLAYWRIGHT_TLS_KEY;

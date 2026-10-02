@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import { DisclosureSnapshot, OnboardingConsentBasis } from "@fidy/server/consent-contract";
+import { DisclosureSnapshot, OnboardingConsentBasis } from "../../../src/shell/consent/contract";
 import { type ConsentStanding, type ConsentStatus, ConsentUnavailable } from "../contract";
 
 const StandingRow = Schema.Struct({

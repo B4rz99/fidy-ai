@@ -1,4 +1,4 @@
-import { WompiEnvironment } from "~/shell/secret-material/contract";
+import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
 import {
   Config,
   Context,
@@ -16,9 +16,12 @@ import {
   WompiTransactionId,
   WompiTransactionReference,
 } from "./wompi-model";
-import { type BillingEmail } from "~/core/subscription/contract";
-import { UnknownJsonString } from "~/shell/schema-codecs/contract";
-import { OutboundHttp, type OutboundHttpService } from "~/shell/outbound-http/operations";
+import { type BillingEmail } from "../../../src/core/subscription/contract";
+import { UnknownJsonString } from "../../../src/shell/schema-codecs/contract";
+import {
+  OutboundHttp,
+  type OutboundHttpService,
+} from "../../../src/shell/outbound-http/operations";
 
 const successfulStatusMinimum = 200;
 const successfulStatusMaximumExclusive = 300;

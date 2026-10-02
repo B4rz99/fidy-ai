@@ -5,17 +5,16 @@ import {
   EmailForwardingAddress,
   EmailForwardingStatus,
   NeedsReviewItem,
+  NeedsReviewItemId,
   NotificationEmailInterpretationReviewReason,
   type ParsedStatementRow,
+  type StatementSourceFormat,
   StatementSubmission,
+  StatementSubmissionId,
   SubmitForExtractionInput,
   maximumStatementBytes,
 } from "~/core/ingestion/contract";
-import {
-  NeedsReviewItemId,
-  type StatementSourceFormat,
-  StatementSubmissionId,
-} from "~/core/ingestion/reference";
+
 import {
   NotificationInterpretationEvidence,
   Transaction,
@@ -156,7 +155,7 @@ export {
   maximumStatementSubmissionsPerHour,
   statementParserRevision,
 } from "~/core/ingestion/contract";
-export { StatementSubmissionId, StatementSourceFormat } from "~/core/ingestion/reference";
+export { StatementSubmissionId, StatementSourceFormat } from "~/core/ingestion/contract";
 
 /** Safe terminal parser failure that never exposes uploaded statement contents. */
 export class StatementParseFailed extends Data.TaggedError("StatementParseFailed")<{

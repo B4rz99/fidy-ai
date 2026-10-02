@@ -1,6 +1,6 @@
-import type { StatementSourceFormat } from "~/core/ingestion/reference";
+import { type StatementSourceFormat, maximumStatementBytes } from "~/core/ingestion/contract";
 import { Effect, Option, Schema } from "effect";
-import { maximumStatementBytes } from "~/core/ingestion/contract";
+
 import type { CapturedInterpretationContext } from "~/core/interpretation-evidence/contract";
 import { ReceivedEmailContent } from "~/shell/ingestion/internal/material";
 import {

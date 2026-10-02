@@ -1,11 +1,11 @@
 import { afterAll, expect, it } from "vitest";
 import { Data, DateTime, Effect } from "effect";
-import { recordAuthorizedCall, recordOwnerCall } from "@fidy/server/audit";
-import { makeAudit, makeAuditRetention } from "@fidy/server/audit-runtime";
-import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
+import { recordAuthorizedCall, recordOwnerCall } from "../../../src/shell/audit/operations";
+import { makeAudit, makeAuditRetention } from "../../../src/shell/audit/runtime";
+import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
 import { installTestSchema, isolatedTestDatabases } from "../../d1-test-fixture";
 import coreWorker from "../../core-worker";
-import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
+import { approvedWorkersAiModel } from "../../../src/shell/hosted-inference/contract";
 
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());

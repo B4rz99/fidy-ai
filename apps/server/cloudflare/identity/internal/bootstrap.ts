@@ -1,6 +1,6 @@
 import { DateTime } from "effect";
-import { makeColombianUser } from "@fidy/server/identity-decisions";
-import { UserId } from "@fidy/server/identity-reference";
+import { makeColombianUser } from "../../../src/core/identity/operations";
+import { UserId } from "../../../src/core/identity/contract";
 import { prepareAcceptedConsentCaller } from "../../consent/operations";
 import type { VerifiedIdentityInput, VerifiedIdentityStatements } from "../contract";
 

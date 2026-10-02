@@ -1,5 +1,6 @@
 import { DateTime, Effect, Option, Schema } from "effect";
-import { Money, Transaction } from "../../../src/core/transactions/contract";
+import { Money } from "../../../src/core/_shared/money";
+import { Transaction } from "../../../src/core/transactions/contract";
 import type {
   BudgetContribution,
   BudgetContributionPage,

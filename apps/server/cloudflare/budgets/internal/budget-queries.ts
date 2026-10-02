@@ -4,13 +4,13 @@ import {
   BudgetId,
   BudgetStatusQueryParameters,
   BudgetStatusReport,
-  Money,
-} from "@fidy/server/budgets-contract";
+} from "../../../src/core/budgets/contract";
+import { Money } from "../../../src/core/_shared/money";
 import {
   calculateBudgetStatus,
   deriveCurrentBudgetMonth,
   sumBudgetContributions,
-} from "@fidy/server/budget-decisions";
+} from "../../../src/core/budgets/operations";
 import { BigDecimal, DateTime, Effect, Option, Ref, Schema } from "effect";
 import {
   type TransactionCaller,

@@ -1,5 +1,5 @@
 import { Option, Schema } from "effect";
-import { WebSessionBearer } from "../../../src/core/web-session/reference";
+import { WebSessionBearer } from "../../../src/core/web-session/contract";
 
 const cookieName = "__Host-fidy_session=";
 

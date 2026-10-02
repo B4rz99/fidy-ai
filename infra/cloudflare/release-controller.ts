@@ -1,6 +1,6 @@
 import { Cause, Effect, Schedule, Schema } from "effect";
-import { gitRevisionPattern } from "../../apps/server/cloudflare/runtime/release-identity";
-import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/smoke";
+import { gitRevisionPattern } from "../../apps/server/cloudflare/runtime/contract";
+import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 
 const VersionId = SmokeIdentity.fields.workerVersionId;
 const Revision = Schema.String.check(Schema.isPattern(gitRevisionPattern));

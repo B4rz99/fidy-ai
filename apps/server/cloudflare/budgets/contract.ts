@@ -1,4 +1,4 @@
-import type { BudgetId } from "@fidy/server/budgets-contract";
+import type { BudgetId } from "../../src/core/budgets/contract";
 
 /** The Budget whose guarded write the canonical unit commits or whose deletion it proves. */
 export type BudgetOutcome = Readonly<{

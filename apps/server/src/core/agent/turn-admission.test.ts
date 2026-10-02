@@ -5,7 +5,7 @@ import {
 } from "./contract";
 import { expect, it } from "@effect/vitest";
 import { Option, Schema } from "effect";
-import { UserId } from "~/core/identity/reference";
+import { UserId } from "~/core/identity/contract";
 import { decideHostedAdmission } from "./operations";
 
 const consent = Schema.decodeSync(HostedAgentSessionConsentBasis)({

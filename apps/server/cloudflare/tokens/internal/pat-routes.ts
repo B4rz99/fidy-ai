@@ -1,9 +1,9 @@
-import { PATPairingDirectGroup, PATsGroup } from "@fidy/server/tokens-contract";
+import { PATPairingDirectGroup, PATsGroup } from "../../../src/shell/tokens/contract";
 import { HttpApi } from "effect/unstable/httpapi";
 import { claimPATPairing } from "./pat-claim";
 import { approvePATPairing, inspectPATPairing, startPATPairing } from "./pat-pairing";
 import { createManualPAT, listPATs, revokeAllPATs, revokePAT } from "./pat-management";
-import { matchesRoute } from "../../routing/route-match";
+import { matchesRoute } from "../../routing/operations";
 
 type PATHandler = (
   input: Readonly<{ request: Request; db: D1Database; path: string }>

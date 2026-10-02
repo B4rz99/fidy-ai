@@ -1,19 +1,14 @@
 import { expect, it } from "@effect/vitest";
 import { Cause, Context, Effect, Exit, Layer, Option } from "effect";
 import { makeSpanDescriptor } from "./telemetry.test-fixture";
-import {
-  Telemetry,
-  type TelemetryAdapter,
-  TelemetryDisabled,
-  type TelemetrySpan,
-  decodeTraceParent,
-  encodeTraceParent,
-} from "./operations";
+import { Telemetry, TelemetryDisabled, decodeTraceParent, encodeTraceParent } from "./operations";
 import {
   DurableTraceContext,
+  type TelemetryAdapter,
   TelemetryAttempt,
   TelemetryCount,
   TelemetryHttpStatus,
+  type TelemetrySpan,
   TelemetrySpanId,
   TelemetryTraceId,
 } from "./contract";

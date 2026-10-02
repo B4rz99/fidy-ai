@@ -1,9 +1,9 @@
 import { Option, Schema } from "effect";
-import { recordAuthorizedCall } from "~/shell/audit/operations";
-import { KeywordRule } from "~/core/categories/contract";
-import { maximumKeywordRulesPerUser } from "~/core/categories/operations";
-import { liveWebSessionAuthority } from "~/shell/identity/operations";
-import type { OwnedStatement } from "~/shell/_shared/owned-statement";
+import { recordAuthorizedCall } from "../../../src/shell/audit/operations";
+import { KeywordRule, maximumKeywordRulesPerUser } from "../../../src/core/categories/contract";
+
+import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
+import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 
 import type { CategoryAuditOperation } from "../contract";
 

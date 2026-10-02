@@ -15,8 +15,8 @@ import {
   cloudflareWorkerTelemetry,
   observeWorkerPromise,
   workerRelease,
-} from "../runtime/telemetry";
-import { captureWorkflowFailure } from "../runtime/operational-workflow-failure";
+} from "../runtime/telemetry/operations";
+import { captureWorkflowFailure } from "../runtime/operational-health/operations";
 import {
   dispatchOnboardingEmail as dispatchOnboarding,
   receiveOnboardingEmail as receiveOnboarding,

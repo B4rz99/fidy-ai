@@ -1,16 +1,19 @@
 import type { TransactionOutcome } from "../contract";
+import { Currency, Money } from "../../../src/core/_shared/money";
 import {
-  Currency,
   Direction,
-  Money,
   type ReconciliationMember,
   TransactionId,
   TransactionPairInput,
-} from "@fidy/server/transactions-contract";
-import { decideTransactionLink, orderTransactionPair } from "@fidy/server/transaction-decisions";
+} from "../../../src/core/transactions/contract";
+import {
+  decideTransactionLink,
+  orderTransactionPair,
+} from "../../../src/core/transactions/operations";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { prepareOwnerAuditCall } from "@fidy/server/audit";
-import { RequestBodyPolicy, boundedJsonBody } from "../../http/request-body";
+import { prepareOwnerAuditCall } from "../../../src/shell/audit/operations";
+import { RequestBodyPolicy } from "../../http/contract";
+import { boundedJsonBody } from "../../http/operations";
 import {
   type TransactionAuthority,
   type TransactionBoundaryFailure,

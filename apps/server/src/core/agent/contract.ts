@@ -1,11 +1,21 @@
 import { OnboardingConsentBasis } from "~/core/consent/contract";
-import { UserId } from "~/core/identity/reference";
+import { UserId } from "~/core/identity/contract";
 import { type Option, Schema, Struct } from "effect";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
 
+/**
+ * Hard upper bounds on one hosted Turn: its iteration count, its tool calls, and the wall-clock
+ * bound on each model round. Native Turn execution and the provider adapter share these maxima so their
+ * admission, iteration and deadline policies cannot drift apart.
+ */
+export const maximumHostedTurnIterations = 32;
+/** Wall-clock limit for one admitted hosted model round, in milliseconds. */
+export const maximumModelRoundMillis = 120_000;
+/** Maximum canonical tool calls across all model rounds of one hosted Turn. */
+export const maximumToolCallsPerTurn = 64;
+
 const maximumToolCallIdLength = 256;
-const maximumAgentIterationsPerTurn = 32;
 const maximumTranscriptTextLength = 16_000;
 const maximumCanonicalToolEvidenceBytes = 1_000_000;
 
@@ -62,7 +72,7 @@ export type ToolCallId = typeof ToolCallId.Type;
 /** A one-based model round within a hosted-agent turn. */
 export const AgentIteration = Schema.Int.check(
   Schema.isGreaterThanOrEqualTo(1),
-  Schema.isLessThanOrEqualTo(maximumAgentIterationsPerTurn)
+  Schema.isLessThanOrEqualTo(maximumHostedTurnIterations)
 )
   .pipe(Schema.brand("AgentIteration"))
   .annotate({ identifier: "AgentIteration" });

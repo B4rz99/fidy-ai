@@ -1,3 +1,7 @@
+import {
+  admitResourceWithAttemptPressure,
+  releaseOutstandingResource,
+} from "../../resource-admission/operations";
 import { maximumSubmissionInputBytes } from "../contract";
 import {
   StagedStatementBytes,
@@ -5,15 +9,15 @@ import {
   StatementSubmission,
   StatementSubmissionId,
   SubmitForExtractionInput,
-} from "@fidy/server/ingestion-contract";
+} from "../../../src/shell/ingestion/contract";
 import {
   dailyAuditExhausted,
   prepareAuthorizedAuditCall,
   recordCanonicalPATWork,
   refusedByAuditBudget,
-} from "@fidy/server/audit";
-import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
-import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-operations";
+} from "../../../src/shell/audit/operations";
+import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
+import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import { Data, Effect, Function, Option, Result, Schema } from "effect";
 import {
   type StatementPublicationRefusal,
@@ -24,11 +28,12 @@ import {
   statementSubmissionReadAudit,
   submissionProjection,
 } from "./statement-staging";
-import { RequestBodyPolicy, boundedJsonBody } from "../../http/request-body";
-import { currentMillis } from "../../runtime/clock";
+import { RequestBodyPolicy } from "../../http/contract";
+import { boundedJsonBody } from "../../http/operations";
+import { currentMillis } from "../../runtime/operations";
 import { prepareOwnedStatement } from "../../database/operations";
 import {
-  ResourceAdmissionAuthority,
+  type ResourceAdmissionAuthorityConfig,
   ResourceAdmissionCharges,
   type ResourceAdmissionCharges as ResourceAdmissionChargesType,
   ResourceAdmissionDurationMs,
@@ -40,7 +45,7 @@ import {
   ResourceAdmissionRefused,
   ResourceAdmissionScopeKey,
   ResourceAdmissionUnits,
-} from "../../resource-admission/authority";
+} from "../../resource-admission/contract";
 import {
   type TransactionCaller,
   type TransactionSubject,
@@ -323,14 +328,14 @@ export const uploadStagedStatement = ({
     const nowEpochMs = currentMillis();
     const staging = stagingService(environment, nowEpochMs);
     if (Option.isNone(staging)) return unavailable();
-    const admission = ResourceAdmissionAuthority.make({
+    const admission: ResourceAdmissionAuthorityConfig = {
       database: environment.DB,
       nowEpochMs: () => ResourceAdmissionEpochMs.make(nowEpochMs),
       policies: ingestionPolicies,
-    });
+    };
     const grantId = ResourceAdmissionGrantId.make(`${uploadGrantPrefix}work-${newIngestionId()}`);
     const admitted = yield* Effect.result(
-      admission.admitWithAttemptPressure({
+      admitResourceWithAttemptPressure(admission, {
         attempt: {
           charges: uploadAttemptCharges(subject.userId),
           grantId: ResourceAdmissionGrantId.make(`${uploadGrantPrefix}attempt-${newIngestionId()}`),
@@ -348,7 +353,7 @@ export const uploadStagedStatement = ({
         .stageStatementBytes({ request, userId: subject.userId })
         .pipe(
           Effect.ensuring(
-            admission.releaseOutstandingWork({ grantId, statements: [] }).pipe(Effect.ignore)
+            releaseOutstandingResource(admission, { grantId, statements: [] }).pipe(Effect.ignore)
           )
         )
     );

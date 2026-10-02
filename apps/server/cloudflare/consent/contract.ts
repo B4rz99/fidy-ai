@@ -1,5 +1,5 @@
-import { type TranscriptTurnId } from "@fidy/server/agent-contract";
-import { type OnboardingConsentBasis } from "@fidy/server/consent-contract";
+import { type TranscriptTurnId } from "../../src/core/agent/contract";
+import { type OnboardingConsentBasis } from "../../src/shell/consent/contract";
 import { Data, type Effect, type Option } from "effect";
 
 /** A current decision for one explicit User; absence never borrows another User's grant. */
@@ -22,13 +22,6 @@ export type ConsentEgressAction<A, E, R> = Readonly<{
   userId: string;
   admittedTurnId: Option.Option<TranscriptTurnId>;
   action: Effect.Effect<A, E, R>;
-}>;
-
-/** Pre-User Consent work is reached only after the WhatsApp owner authenticates exact inbound bytes. */
-export type ConsentIngressEnvironment = Readonly<{
-  DB: D1Database;
-  KAPSO_API_KEY: string;
-  onAccepted: (id: string) => void;
 }>;
 
 /** Stable subject and accepted pre-User exchange composed in verified onboarding. */

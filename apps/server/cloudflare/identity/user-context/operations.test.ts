@@ -1,4 +1,4 @@
-import { UserId } from "@fidy/server/identity-reference";
+import { UserId } from "../../../src/core/identity/contract";
 import { deepStrictEqual } from "node:assert";
 import { Effect, Exit, Option } from "effect";
 import { afterAll, expect, it } from "vitest";

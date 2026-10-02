@@ -15,7 +15,7 @@ import {
   WhatsAppBusinessScopedUserId,
   WhatsAppParentBusinessScopedUserId,
   WhatsAppUsername,
-} from "~/core/identity/reference";
+} from "~/core/identity/contract";
 import { TranscriptText } from "~/core/agent/contract";
 import {
   DisclosureDeliveryCorrelationToken,

@@ -1,7 +1,7 @@
 import { Config, Schema } from "effect";
 import { DisclosureSnapshot } from "~/core/consent/contract";
 import { decidePATRevocation } from "~/core/consent/operations";
-import { type OwnedStatement } from "~/shell/_shared/owned-statement";
+import { type OwnedStatement } from "~/shell/owner-write/contract";
 import { currentDisclosureFacts } from "~/shell/consent/internal/current-disclosure";
 import {
   expirePATConsentsStatement,
@@ -14,8 +14,8 @@ import {
 } from "~/shell/consent/internal/pat-evidence";
 import {
   consentConditions,
-  fixedExpiryEvidenceSql,
-  pairingExpiryEvidenceSql,
+  fixedExpiryEvidenceStatement,
+  pairingExpiryEvidenceStatement,
   revocationEvidence,
 } from "~/shell/consent/internal/protected-actions";
 import {
@@ -175,16 +175,12 @@ export const protectPATRevocationStatement = ({
  * Project the PAT identities covered by this instant's fixed-lifetime expiry evidence.
  * The Tokens owner asserts their corresponding terminal state in the same atomic unit.
  */
-export const expiredPATConsentIdentities = (current: number): OwnedStatement => ({
-  sql: fixedExpiryEvidenceSql,
-  params: [current],
-});
+export const expiredPATConsentIdentities = (current: number): OwnedStatement =>
+  fixedExpiryEvidenceStatement(current);
 
 /**
  * Project the pairing identities covered by this instant's unclaimed-approval expiry evidence.
  * The Tokens owner asserts their corresponding terminal state in the same atomic unit.
  */
-export const expiredPairingConsentIdentities = (current: number): OwnedStatement => ({
-  sql: pairingExpiryEvidenceSql,
-  params: [current],
-});
+export const expiredPairingConsentIdentities = (current: number): OwnedStatement =>
+  pairingExpiryEvidenceStatement(current);

@@ -1,11 +1,11 @@
-import { patBearerPrefix } from "@fidy/server/tokens-domain";
+import { patBearerPrefix } from "../../../src/core/tokens/contract";
 import { readConsentStatus } from "../../consent/operations";
-import { type CatalogOperation } from "~/shell/canonical-catalog/contract";
-import { decideOperationAccess } from "~/shell/canonical-policy/operations";
-import { patScopeCapability } from "~/shell/canonical-policy/contract";
+import { type CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
+import { decideOperationAccess } from "../../../src/shell/canonical-policy/operations";
+import { patScopeCapability } from "../../../src/shell/canonical-policy/contract";
 import { type Cause, Effect, Option, Schema } from "effect";
 import { PATRow, digest, equalsDigest, scopesFrom, shortLength, validBearer } from "./pat-shared";
-import { currentMillis } from "../../runtime/clock";
+import { currentMillis } from "../../runtime/operations";
 import { type AuthorizedPAT, type PATAuthorizationDecision } from "../contract";
 
 const StoredPAT = Schema.Struct({ ...PATRow.fields, bearer_digest: Schema.Array(Schema.Int) });

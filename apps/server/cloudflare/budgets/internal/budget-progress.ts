@@ -1,9 +1,5 @@
-import {
-  type Budget,
-  type BudgetStatusReport,
-  Money,
-  encodeMoneyAmount,
-} from "@fidy/server/budgets-contract";
+import { type Budget, type BudgetStatusReport } from "../../../src/core/budgets/contract";
+import { Money, encodeMoneyAmount } from "../../../src/core/_shared/money";
 import { DateTime, Effect, Option, Schema } from "effect";
 
 const Version = Schema.Struct({ revision: Schema.Int });

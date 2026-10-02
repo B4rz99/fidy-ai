@@ -1,5 +1,5 @@
 import { Data, Struct } from "effect";
-import type { OwnedStatement } from "~/shell/_shared/owned-statement";
+import type { OwnedStatement } from "~/shell/owner-write/contract";
 import { AuditLogEntry } from "~/core/audit/contract";
 /** The closed canonical vocabulary shared with credential accountability. */
 export type AuditCredentialOperation =

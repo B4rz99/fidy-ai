@@ -1,9 +1,9 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime, Effect, Option, Redacted, Result, Schema } from "effect";
-import { PATId } from "./reference";
 import {
   IssuedPAT,
   ManualPATGrantInput,
+  PATId,
   PATLifetimeDays,
   PATRecipientLabel,
   PATScopes,

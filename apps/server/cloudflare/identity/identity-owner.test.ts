@@ -4,7 +4,7 @@ import {
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
   WhatsAppCallerReference,
-} from "@fidy/server/identity-reference";
+} from "../../src/core/identity/contract";
 import { afterAll, expect, it } from "vitest";
 import { Effect, Option, Result, Schema } from "effect";
 import { isolatedTestDatabases } from "../d1-test-fixture";

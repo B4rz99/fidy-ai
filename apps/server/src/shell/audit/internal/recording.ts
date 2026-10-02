@@ -1,6 +1,6 @@
 import { patOwnershipQuery } from "~/shell/tokens/operations";
 import { Option } from "effect";
-import type { OwnedStatement } from "~/shell/_shared/owned-statement";
+import type { OwnedStatement } from "~/shell/owner-write/contract";
 import { sessionOwnershipQuery } from "~/shell/web-session/operations";
 import type {
   AuditAuthority,

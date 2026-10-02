@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { type OwnedStatement } from "~/shell/_shared/owned-statement";
+import { type OwnedStatement } from "~/shell/owner-write/contract";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
 import {
   BillingAttempt,
@@ -10,6 +10,7 @@ import {
   CardEnrollmentId,
   CardPaymentSubmission,
   PaymentRequestId,
+  PriceId,
   SubscriptionOffers,
   SubscriptionStatus,
   UpgradeDestination,
@@ -17,7 +18,6 @@ import {
 } from "~/core/subscription/contract";
 import { operationPolicy, patScoped } from "~/shell/canonical-policy/contract";
 import { OperationResponse, Unavailable } from "~/shell/public-http/contract";
-import { PriceId } from "~/core/subscription/reference";
 
 const getUpgradeUrl = HttpApiEndpoint.get("getUpgradeUrl", "/subscription/upgrade-url", {
   success: OperationResponse(UpgradeDestination),

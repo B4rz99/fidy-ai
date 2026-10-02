@@ -13,7 +13,7 @@ import {
   SmokeRequest,
   SmokeResponse,
   smokePath,
-} from "../../apps/server/cloudflare/runtime/smoke";
+} from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 import { releaseCleanup } from "./release-cleanup";
 import { type RollbackPort, RollbackReceipt, releaseRollback } from "./release-rollback";
 import { type WorkerResources, rollbackCompatible } from "./rollback-compatibility";

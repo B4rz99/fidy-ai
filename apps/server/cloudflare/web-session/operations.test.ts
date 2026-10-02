@@ -1,5 +1,5 @@
 import { redeemBrowserPairing } from "../browser-login/operations";
-import { freshSessionQuery } from "@fidy/server/web-session-operations";
+import { freshSessionQuery } from "../../src/shell/web-session/operations";
 import { Clock, Effect, Option } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { isolatedTestDatabases } from "../d1-test-fixture";

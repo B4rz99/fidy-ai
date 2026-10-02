@@ -1,11 +1,12 @@
-import { TranscriptText, type TranscriptTurnId } from "@fidy/server/agent-contract";
-import { type UserId } from "@fidy/server/identity-reference";
-import { type Cause, Effect, Option, Schema } from "effect";
+import { TranscriptText, type TranscriptTurnId } from "../../../src/core/agent/contract";
 import {
+  type UserId,
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
-} from "../../../src/core/identity/reference";
-import { type OwnedStatement } from "../../../src/shell/_shared/owned-statement";
+} from "../../../src/core/identity/contract";
+import { type Cause, Effect, Option, Schema } from "effect";
+
+import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { hostedTranscriptRetentionMs } from "../../agent/contract";
 import { prepareHostedChannelTurn } from "../../agent/operations";
 import { prepareWhatsAppIdentity } from "../../identity/operations";

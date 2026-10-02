@@ -2,21 +2,22 @@ import {
   type HostedAgentSessionId,
   TranscriptText,
   TranscriptTurnId,
-} from "@fidy/server/agent-contract";
-import { UserId } from "@fidy/server/identity-reference";
-import { type Sha256Digest } from "@fidy/server/consent-contract";
+} from "../../src/core/agent/contract";
+import {
+  UserId,
+  WhatsAppBusinessPortfolioId,
+  WhatsAppBusinessScopedUserId,
+} from "../../src/core/identity/contract";
+import { type Sha256Digest } from "../../src/shell/consent/contract";
 import {
   HostedDeliveryCorrelationToken,
   WhatsAppBusinessPhoneNumberId,
   type WhatsAppDeliveryKey,
   type WhatsAppInboundEvent,
   WhatsAppProviderMessageId,
-} from "@fidy/server/whatsapp-contract";
+} from "../../src/shell/channels/whatsapp/contract";
 import { Data, type Option, Schema } from "effect";
-import {
-  WhatsAppBusinessPortfolioId,
-  WhatsAppBusinessScopedUserId,
-} from "../../src/core/identity/reference";
+
 /** A claimed channel subject, not authority until D1 rechecks the stable User association. */
 export const WhatsAppHostedSubject = Schema.TaggedStruct("WhatsAppHosted", {
   userId: UserId,

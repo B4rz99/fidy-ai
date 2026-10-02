@@ -1,4 +1,4 @@
-import { UserId } from "@fidy/server/identity-reference";
+import { UserId } from "../../../src/core/identity/contract";
 import { prepareUserContext } from "../../identity/user-context/operations";
 import {
   type StagedStatementBytes,
@@ -16,21 +16,21 @@ import {
   statementParserRevision,
   statementStagingLifetimeMilliseconds,
   statementSubmissionRetentionMilliseconds,
-} from "@fidy/server/ingestion-contract";
+} from "../../../src/shell/ingestion/contract";
 import {
   knownUnsupportedStatementBytes,
   statementSourceFormat,
-} from "@fidy/server/ingestion-operations";
-import { CanonicalOperationId } from "~/core/canonical-operations/contract";
-import { type ErrorCode } from "~/shell/public-http/contract";
+} from "../../../src/shell/ingestion/operations";
+import { CanonicalOperationId } from "../../../src/core/canonical-operations/contract";
+import { type ErrorCode } from "../../../src/shell/public-http/contract";
 import {
   prepareAuditQueryCall,
   prepareAuthorizedAuditCall,
   prepareOwnerAuditCall,
   recordRejectedPATWork,
   refusedByAuditBudget,
-} from "@fidy/server/audit";
-import type { WebSessionAuthority } from "@fidy/server/web-session-contract";
+} from "../../../src/shell/audit/operations";
+import type { WebSessionAuthority } from "../../../src/shell/web-session/contract";
 import {
   Context,
   Crypto,
@@ -44,11 +44,9 @@ import {
   PlatformError,
   Schema,
 } from "effect";
-import { activeProUserCondition } from "~/shell/access-tier/operations";
-import {
-  type BoundedBodyReadFailed,
-  collectBoundedRequestBody,
-} from "../../http/bounded-request-body";
+import { activeProUserCondition } from "../../../src/shell/access-tier/operations";
+import { type BoundedBodyReadFailed } from "../../http/contract";
+import { collectBoundedRequestBody } from "../../http/operations";
 import { prepareOwnedStatement } from "../../database/operations";
 import {
   type TransactionAuthority,

@@ -1,15 +1,15 @@
+import type { MemoryRefusalOutcome } from "../../../src/shell/memory/contract";
 import { Effect, Option, Schema } from "effect";
-import { livePATAuthority } from "@fidy/server/tokens-operations";
-import { Memory, MemoryCapacityExceeded, MemoryId } from "@fidy/server/memory-contract";
+import { livePATAuthority } from "../../../src/shell/tokens/operations";
+import { Memory, MemoryCapacityExceeded, MemoryId } from "../../../src/core/memory/contract";
 import {
-  type MemoryAuditOutcome,
   MemoryCapacityExceededApi,
   type MemoryOperationId,
-} from "@fidy/server/memory-api";
-import { mapMemoryFailure, recordBrowserMemoryWork } from "@fidy/server/memory-operations";
+} from "../../../src/shell/memory/contract";
+import { mapMemoryFailure, recordBrowserMemoryWork } from "../../../src/shell/memory/operations";
 import { Unavailable } from "../../../src/shell/public-http/contract";
 import { memoriesFromRows, memoryRowQuery } from "./storage";
-import { recordCanonicalPATWork, refusedByAuditBudget } from "@fidy/server/audit";
+import { recordCanonicalPATWork, refusedByAuditBudget } from "../../../src/shell/audit/operations";
 import type {
   CanonicalMutationRefusal,
   CommittedMutationValue,
@@ -25,12 +25,6 @@ import {
   transactionFailure,
   transactionNoStore,
 } from "../../canonical-work/operations";
-
-/**
- * The Memory audit outcomes one refusal can report: the owner's individual entry point and its
- * canonical refusal descriptor share this vocabulary.
- */
-export type MemoryRefusalOutcome = Exclude<MemoryAuditOutcome, "success">;
 
 const HTTP_INVALID = 400;
 const HTTP_NOT_FOUND = 404;

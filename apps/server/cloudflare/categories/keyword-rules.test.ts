@@ -5,7 +5,7 @@ import {
 } from "../d1-test-fixture";
 import { afterAll, expect, it } from "vitest";
 import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
-import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
+import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { UserTransactionCoordinator } from "../transactions/runtime";

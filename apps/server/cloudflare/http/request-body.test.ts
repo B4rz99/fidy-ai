@@ -6,8 +6,8 @@ import {
   RequestBodyCapacityExceeded,
   RequestBodyDeadlineExceeded,
   RequestBodyPolicy,
-  readBoundedRequestBody,
-} from "./request-body";
+} from "./contract";
+import { readBoundedRequestBody } from "./operations";
 
 const requestWithBody = (body: ReadableStream<Uint8Array>): Request =>
   new Request("https://api.fidyapp.com/canonical", { body, method: "POST" });

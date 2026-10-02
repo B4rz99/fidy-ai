@@ -1,3 +1,5 @@
+import { handleCardEnrollment as enroll } from "./internal/card-enrollment";
+import type { EnrollmentEnvironment } from "./contract";
 import {
   WorkflowEntrypoint,
   type WorkflowEvent,
@@ -16,8 +18,8 @@ import {
   cloudflareWorkerTelemetry,
   observeWorkerPromise,
   workerRelease,
-} from "../runtime/telemetry";
-import { captureWorkflowFailure } from "../runtime/operational-workflow-failure";
+} from "../runtime/telemetry/operations";
+import { captureWorkflowFailure } from "../runtime/operational-health/operations";
 import {
   receiveWompiBillingEvent as acceptEvent,
   dispatchBillingCollection as dispatch,
@@ -94,3 +96,8 @@ export const runBillingCollectionWorkflow = (
     ) => Promise<void>;
   }>
 ): Promise<void> => runWorkflow(input);
+
+/** Fresh-session browser enrollment; provider references and transient card material remain private. */
+export const handleCardEnrollment = (
+  input: Readonly<{ request: Request; environment: EnrollmentEnvironment }>
+): Promise<Response> => enroll(input);

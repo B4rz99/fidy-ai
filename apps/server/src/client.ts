@@ -37,7 +37,7 @@ export {
   TokenShortId,
   recipientLabelLimit,
 } from "~/core/tokens/contract";
-export { PATId } from "~/core/tokens/reference";
+export { PATId } from "~/core/tokens/contract";
 export {
   ApprovedPATPairing,
   ApprovePATPairingPayload,
@@ -85,7 +85,7 @@ export {
 } from "~/shell/email-authentication/contract";
 export { BillingAttemptId, PaymentRequestId } from "~/core/subscription/contract";
 export type { SubscriptionStatus } from "~/core/subscription/contract";
-export { PriceId } from "~/core/subscription/reference";
+export { PriceId } from "~/core/subscription/contract";
 export { IanaTimeZone } from "~/core/_shared/context";
 export { BackupRecoveryCode, RotatedBackupRecoveryCode } from "~/core/recovery/contract";
 export {

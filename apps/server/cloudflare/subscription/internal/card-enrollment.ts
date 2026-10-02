@@ -1,9 +1,9 @@
 import { verifiedEmailQuery } from "../../email-authentication/operations";
-import { WompiEnvironment } from "~/shell/secret-material/contract";
+import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
 import { authenticateWebSession } from "../../web-session/operations";
-import { freshSessionQuery } from "@fidy/server/web-session-operations";
-import { protectConsentStatement } from "@fidy/server/consent-operations";
-import { UserContext } from "@fidy/server/identity-contract";
+import { freshSessionQuery } from "../../../src/shell/web-session/operations";
+import { protectConsentStatement } from "../../../src/shell/consent/operations";
+import { UserContext, UserId } from "../../../src/core/identity/contract";
 import { prepareUserContext } from "../../identity/user-context/operations";
 import {
   BillingAttempt,
@@ -16,7 +16,7 @@ import {
   Price,
   RecurringDisclosure,
   WompiContractEvidenceSet,
-} from "~/core/subscription/contract";
+} from "../../../src/core/subscription/contract";
 import { CardPaymentSourceId, WompiSourceId } from "./wompi-model";
 import {
   PrepareCardEnrollmentPayload,
@@ -24,15 +24,16 @@ import {
   cardEnrollmentInvalidBody,
   cardEnrollmentRateLimitedBody,
   cardEnrollmentUnavailableBody,
-} from "~/shell/subscription/contract";
+} from "../../../src/shell/subscription/contract";
 import { type WompiEnrollmentClientService, makeWompiEnrollmentClient } from "./wompi-client";
 import { Cause, Clock, Data, DateTime, Effect, Exit, Option, Schema } from "effect";
-import { UserId } from "@fidy/server/identity-reference";
+
 import { claimPreparedCardEnrollment } from "./card-enrollment-claim";
 import { admitCardPreparationAttempt } from "./card-preparation-admission";
-import { ResourceAdmissionRefused } from "../../resource-admission/authority";
-import { RequestBodyPolicy, readBoundedRequestBody } from "../../http/request-body";
-import { browserOrigins } from "../../runtime/topology";
+import { ResourceAdmissionRefused } from "../../resource-admission/contract";
+import { RequestBodyPolicy } from "../../http/contract";
+import { readBoundedRequestBody } from "../../http/operations";
+import { browserOrigins } from "../../runtime/contract";
 import { wompiOutboundHttp, workerCrypto } from "./wompi-runtime";
 import { type EnrollmentEnvironment } from "../contract";
 

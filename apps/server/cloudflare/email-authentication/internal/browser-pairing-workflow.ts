@@ -2,7 +2,10 @@ import { type BrowserPairingEmailEnvironment, BrowserPairingEmailWork as Work } 
 
 import { pendingBrowserPairingQuery } from "../../browser-login/operations";
 
-import { EmailAddress, EmailVerificationCode } from "@fidy/server/email-authentication-contract";
+import {
+  EmailAddress,
+  EmailVerificationCode,
+} from "../../../src/core/email-authentication/contract";
 import type { WorkflowStepConfig } from "cloudflare:workers";
 import { Clock, Effect, Exit, Option, Schema } from "effect";
 import { deliveryState, sendThroughResend } from "./onboarding-workflow";

@@ -1,12 +1,16 @@
-import { EmailAddress, EmailVerificationCode } from "@fidy/server/email-authentication-contract";
+import {
+  EmailAddress,
+  EmailVerificationCode,
+} from "../../../src/core/email-authentication/contract";
 import {
   canRedeemOnboardingProof,
   maximumOnboardingProofFailures,
-} from "@fidy/server/email-authentication-decisions";
+} from "../../../src/core/email-authentication/operations";
 import { Clock, Data, Effect, Option, Schema } from "effect";
-import { PendingConsentExchangeId } from "@fidy/server/consent-contract";
+import { PendingConsentExchangeId } from "../../../src/shell/consent/contract";
 import type { OnboardingEmailVerification } from "../contract";
-import { RequestBodyPolicy, readBoundedRequestBody } from "../../http/request-body";
+import { RequestBodyPolicy } from "../../http/contract";
+import { readBoundedRequestBody } from "../../http/operations";
 
 const Payload = Schema.Struct({ combinedCode: EmailVerificationCode });
 const ProofRow = Schema.Struct({

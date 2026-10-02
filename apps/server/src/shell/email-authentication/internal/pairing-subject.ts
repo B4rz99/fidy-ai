@@ -1,4 +1,4 @@
-import type { OwnedStatement } from "~/shell/_shared/owned-statement";
+import type { OwnedStatement } from "~/shell/owner-write/contract";
 import type { EmailPairingSubject } from "~/shell/email-authentication/contract";
 
 export const emailPairingAllowsUser = ({ subject }: EmailPairingSubject): OwnedStatement => ({

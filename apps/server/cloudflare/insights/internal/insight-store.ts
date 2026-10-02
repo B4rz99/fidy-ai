@@ -1,13 +1,13 @@
 import { DueInsight, InsightUnavailable } from "../contract";
 import { allowedInsightTransitions } from "../../../src/core/insights/operations";
-import { UserId } from "@fidy/server/identity-reference";
+import { UserId } from "../../../src/core/identity/contract";
 import { prepareUserContext } from "../../identity/user-context/operations";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import {
   prepareAuthorizedAuditCall,
   prepareBrowserAuditBudgetGuard,
   recordCanonicalPATWork,
-} from "@fidy/server/audit";
+} from "../../../src/shell/audit/operations";
 import {
   type DeliveryEvidenceInput,
   InsightDeliveryAttempt,
@@ -15,7 +15,7 @@ import {
   InsightEventId,
   type InsightGenerationInput,
   InsightLifecycleState,
-} from "@fidy/server/insights-contract";
+} from "../../../src/core/insights/contract";
 import {
   type TransactionCaller,
   auditLimitRefusal,
@@ -29,7 +29,7 @@ import {
   transactionNow,
   transactionUnavailable,
 } from "../../canonical-work/operations";
-import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-operations";
+import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import { prepareOwnedStatement } from "../../database/operations";
 import {
   type CanonicalMutationPreparation,

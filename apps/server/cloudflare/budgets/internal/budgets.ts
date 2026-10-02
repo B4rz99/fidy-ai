@@ -1,19 +1,19 @@
 import type { BudgetOutcome } from "../contract";
-import { CategoryId } from "@fidy/server/categories";
+import { CategoryId } from "../../../src/core/categories/contract";
 import { prepareCategoryReference, requireCategory } from "../../categories/operations";
 import {
   BudgetId,
   type CreateBudgetInput,
   type UpdateBudgetInput,
-  encodeMoneyAmount,
-} from "@fidy/server/budgets-contract";
+} from "../../../src/core/budgets/contract";
+import { encodeMoneyAmount } from "../../../src/core/_shared/money";
 import { DateTime, Effect, Option } from "effect";
 import {
   prepareAuthorizedAuditCall,
   prepareBrowserAuditBudgetGuard,
   recordCanonicalPATWork,
-} from "@fidy/server/audit";
-import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-operations";
+} from "../../../src/shell/audit/operations";
+import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import { prepareOwnedStatement } from "../../database/operations";
 import {
   type TransactionBoundaryFailure,

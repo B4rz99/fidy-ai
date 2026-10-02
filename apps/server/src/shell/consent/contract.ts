@@ -1,6 +1,6 @@
 import { type Option, Schema } from "effect";
 import { DisclosureSnapshot } from "~/core/consent/contract";
-import { type OwnedStatement } from "~/shell/_shared/owned-statement";
+import { type OwnedStatement } from "~/shell/owner-write/contract";
 import { type PATGrantSelection, type PairingGrantSelection } from "~/shell/tokens/contract";
 import { type FreshSessionSubject } from "~/shell/web-session/contract";
 
@@ -17,12 +17,12 @@ export {
   PendingConsentExchangeId,
   PolicyRevision,
   Sha256Digest,
-} from "~/core/consent/reference";
+} from "~/core/consent/contract";
 export {
   WhatsAppBusinessPhoneNumberId,
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
-} from "~/core/identity/reference";
+} from "~/core/identity/contract";
 export { WhatsAppProviderMessageId } from "~/core/provider-evidence/contract";
 export {
   DisclosureDeliveryCorrelationToken,

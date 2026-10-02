@@ -1,5 +1,5 @@
 import { type BigDecimal, DateTime, Duration, Effect, Option } from "effect";
-import { encodeMoneyAmount } from "~/core/_shared/money";
+import { encodeMoneyAmount } from "../../../src/core/_shared/money";
 import { type WompiBillingStatus } from "./wompi-model";
 
 /** Converts validated two-decimal billing Money to Wompi's exact integer minor unit. */

@@ -1,7 +1,8 @@
-import { type WompiEnvironment } from "~/shell/secret-material/contract";
+import { type WompiEnvironment } from "../../../src/shell/secret-material/contract";
 import { WompiTransactionId } from "./wompi-model";
 import { Effect, Option, Schema } from "effect";
-import { RequestBodyPolicy, readBoundedRequestBody } from "../../http/request-body";
+import { RequestBodyPolicy } from "../../http/contract";
+import { readBoundedRequestBody } from "../../http/operations";
 
 const maximumEventBytes = 8192;
 const eventDeadlineMs = 2000;

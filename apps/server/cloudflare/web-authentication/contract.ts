@@ -1,4 +1,4 @@
-import type { TelemetryService } from "@fidy/server/telemetry";
+import type { TelemetryService } from "../../src/shell/observability/contract";
 import type { SupportAccessConfiguration } from "../recovery/contract";
 
 /** Identity-only acceleration after owner commit; the Core runtime retains durable publication. */

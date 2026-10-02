@@ -4,15 +4,16 @@ import {
   prepareRecoveryBrowserPairingApproval,
 } from "../../browser-login/operations";
 import { prepareOwnedStatement } from "../../database/operations";
-import type { OwnedStatement } from "../../../src/shell/_shared/owned-statement";
-import { emailPairingAllowsUser } from "@fidy/server/email-authentication-operations";
+import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
+import { emailPairingAllowsUser } from "../../../src/shell/email-authentication/operations";
 import { BackupRecoveryCode } from "../../../src/core/recovery/contract";
 import { recoveryCodeDigest } from "./material";
-import { createRemoteJWKSet, jwtVerify } from "jose";
-import type { JWTVerifyGetKey } from "jose";
+import { type JWTVerifyGetKey, createRemoteJWKSet, jwtVerify } from "jose";
+
 import { Clock, Data, Effect, Option, Schema } from "effect";
 import { newId } from "../../secret-material/operations";
-import { RequestBodyPolicy, readBoundedRequestBody } from "../../http/request-body";
+import { RequestBodyPolicy } from "../../http/contract";
+import { readBoundedRequestBody } from "../../http/operations";
 
 const Payload = Schema.Struct({
   pairingCode: Schema.String.check(Schema.isPattern(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/u)),

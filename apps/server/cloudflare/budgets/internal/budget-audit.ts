@@ -1,6 +1,9 @@
 import type { BudgetOutcome } from "../contract";
-import { prepareAuthorizedAuditCall, recordCanonicalPATWork } from "@fidy/server/audit";
-import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-operations";
+import {
+  prepareAuthorizedAuditCall,
+  recordCanonicalPATWork,
+} from "../../../src/shell/audit/operations";
+import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import { Effect } from "effect";
 import { prepareOwnedStatement } from "../../database/operations";
 import {

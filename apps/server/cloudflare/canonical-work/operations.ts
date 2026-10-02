@@ -21,18 +21,18 @@ import {
   recordCanonicalPATWork,
   recordedPATCallProof,
   refusedByAuditBudget,
-} from "@fidy/server/audit";
-import { type CanonicalCapability } from "~/core/canonical-operations/contract";
-import { type ErrorCode } from "~/shell/public-http/contract";
-import { atomicBatchOperation } from "~/shell/operations/contract";
+} from "../../src/shell/audit/operations";
+import { type CanonicalCapability } from "../../src/core/canonical-operations/contract";
+import { type ErrorCode } from "../../src/shell/public-http/contract";
+import { atomicBatchOperation } from "../../src/shell/operations/contract";
 
-import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
-import { type AuditedPATMutation, type PATAuthority } from "@fidy/server/tokens-contract";
+import { liveWebSessionAuthority } from "../../src/shell/identity/operations";
+import { type AuditedPATMutation, type PATAuthority } from "../../src/shell/tokens/contract";
 import {
   livePATAuthority,
   livePATCredential,
   recordAuditedPATUseFromAuthority,
-} from "@fidy/server/tokens-operations";
+} from "../../src/shell/tokens/operations";
 import type { AuthorizedPAT } from "../tokens/contract";
 import { prepareOwnedStatement } from "../database/operations";
 import { newId } from "../secret-material/operations";

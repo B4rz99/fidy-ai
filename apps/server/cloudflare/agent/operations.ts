@@ -1,10 +1,10 @@
 import type { Effect, Option } from "effect";
-import type { OnboardingConsentBasis } from "@fidy/server/consent-contract";
-import type { TranscriptTurnId } from "@fidy/server/agent-contract";
+import type { OnboardingConsentBasis } from "../../src/shell/consent/contract";
+import type { TranscriptTurnId } from "../../src/core/agent/contract";
 import { readAdmittedBasis } from "./internal/admitted-consent";
 import type { AgentUnavailable, HostedCommitFence } from "./contract";
-import type { UserId } from "@fidy/server/identity-reference";
-import type { OwnedStatement } from "../../src/shell/_shared/owned-statement";
+import type { UserId } from "../../src/core/identity/contract";
+import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import {
   channelContinuationQuery,
   channelTurnObservation,

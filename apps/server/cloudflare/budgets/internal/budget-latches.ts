@@ -1,12 +1,12 @@
-import { UserId } from "@fidy/server/identity-reference";
+import { UserId } from "../../../src/core/identity/contract";
 import { readUserContext } from "../../identity/user-context/operations";
 import {
   BudgetId,
   type BudgetMonthLatch,
   type BudgetStatus,
-  type IanaTimeZone,
-} from "@fidy/server/budgets-contract";
-import { advanceBudgetLatch } from "@fidy/server/budget-decisions";
+} from "../../../src/core/budgets/contract";
+import { type IanaTimeZone } from "../../../src/core/_shared/context";
+import { advanceBudgetLatch } from "../../../src/core/budgets/operations";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { currentBudgetReport } from "./budget-queries";
 

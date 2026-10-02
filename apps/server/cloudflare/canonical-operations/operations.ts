@@ -1,10 +1,11 @@
 import { Cause, Effect, Exit, Option, Schema } from "effect";
-import { HostedInference, type HostedInferenceService } from "@fidy/server/hosted-inference";
-import { type CanonicalOperationId } from "~/core/canonical-operations/contract";
-import type { CatalogOperation } from "~/shell/canonical-catalog/contract";
-import { atomicBatchOperation } from "~/shell/operations/contract";
-import { operationCatalog } from "~/shell/api";
-import { memoryOperationIds } from "@fidy/server/memory-api";
+import { HostedInference } from "../../src/shell/hosted-inference/operations";
+import { type HostedInferenceService } from "../../src/shell/hosted-inference/contract";
+import { type CanonicalOperationId } from "../../src/core/canonical-operations/contract";
+import type { CatalogOperation } from "../../src/shell/canonical-catalog/contract";
+import { atomicBatchOperation } from "../../src/shell/operations/contract";
+import { operationCatalog } from "../../src/shell/api";
+import { memoryOperationIds } from "../../src/shell/memory/contract";
 import type { HostedCommitFence } from "../agent/contract";
 import type { CanonicalMutationPreparation, CanonicalWork } from "./contract";
 import { executeCanonicalBatch, executeHostedCanonicalBatch, rawOperation } from "./internal/batch";

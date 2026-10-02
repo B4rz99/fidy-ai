@@ -21,6 +21,41 @@ state or a different provider. Railway,
 PostgreSQL, and the Bun process runtime were superseded by
 [ADR 0026](docs/adr/0026-cloudflare-native-production-replatform.md).
 
+## Owner publication
+
+The server uses optional Published Trio interfaces: `contract.ts` declares schemas and meaning,
+`operations.ts` owns substantive behavior, and `runtime.ts` owns construction and fixed-policy
+runtime authority. Implementation remains visibly private under its owner. Cross-module dependencies
+use earned publications; source, tests, scripts, tools and infrastructure obey the same resolved
+boundary. Core purity and the explicit Cloudflare compositions remain separate requirements.
+See [ADR 0031](docs/adr/0031-published-owner-interfaces-and-visible-internals.md).
+
+### Public-surface review
+
+A published interface must not forward private implementation identities or private storage/provider
+shapes through aliases, object members, factories, inferred return values, or exported types. Review
+what callers can actually obtain, including indirect exports: renaming a private function or returning
+it from a factory does not make it a public operation. A substantive public wrapper that owns its
+behavior and a deliberate public data projection are allowed; they may invoke private implementation
+without exposing it. Automated dependency and export checks cover bounded syntactic patterns, not
+all semantic leakage. During code review, agents must inspect the public surface and trace forwarded
+values and types to their owners, even when every automated check passes.
+
+For each changed published interface, reviewers check:
+
+- **Forbidden forwarding:** `export { privateRead as read }`, `export const api = { privateRead }`,
+  or `export const makeApi = () => privateRead` exposes the private function itself. The same rule
+  applies through intermediate aliases, mutations, computed members, class members and type aliases.
+- **Forbidden type exposure:** publishing an internal row/provider type, or an API signature that
+  exposes that implementation shape, couples callers to private representation even without a value export.
+- **Allowed boundary:** an owner operation invokes `privateRead`, applies its domain policy and
+  returns a deliberate public result defined by its contract. Runtime construction may return its
+  intended public service, keeping private adapters and implementation handles enclosed. Reusing
+  another owner's published declaration is allowed without copying or exposing its private model.
+- **Finding evidence:** name the exported symbol, trace the private value or type it exposes and
+  explain which implementation detail the caller can now depend on. An unsupported hypothetical
+  syntax form in the checker is not itself a violation; a concrete leak in the changed public surface is.
+
 ## Cross-application contract
 
 The server declares canonical operations once for HTTP, typed clients, MCP, and the hosted agent.

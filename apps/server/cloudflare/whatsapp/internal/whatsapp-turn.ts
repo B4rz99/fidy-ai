@@ -2,13 +2,14 @@ import {
   HostedAgentSessionId,
   TranscriptText,
   type TranscriptTurnId,
-} from "@fidy/server/agent-contract";
-import { UserId } from "@fidy/server/identity-reference";
-import { type Cause, Effect, Option, Schema } from "effect";
+} from "../../../src/core/agent/contract";
 import {
+  UserId,
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
-} from "../../../src/core/identity/reference";
+} from "../../../src/core/identity/contract";
+import { type Cause, Effect, Option, Schema } from "effect";
+
 import {
   type HostedDeliveryCorrelationToken,
   WhatsAppBusinessPhoneNumberId,

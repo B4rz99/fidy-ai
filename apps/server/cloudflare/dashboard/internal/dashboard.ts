@@ -1,10 +1,14 @@
 import { Effect, Option, Schema } from "effect";
-import { prepareAuthorizedAuditCall, recordCanonicalPATWork } from "@fidy/server/audit";
-import { RequestBodyPolicy, boundedJsonBody } from "../../http/request-body";
+import {
+  prepareAuthorizedAuditCall,
+  recordCanonicalPATWork,
+} from "../../../src/shell/audit/operations";
+import { RequestBodyPolicy } from "../../http/contract";
+import { boundedJsonBody } from "../../http/operations";
 import { makeDashboardCatalog } from "../../../src/core/dashboard/operations";
-import { categoryIds } from "../../../src/core/categories/operations";
+import { categoryIds } from "../../../src/core/categories/contract";
 import { DashboardCatalog, DashboardEdit } from "../../../src/core/dashboard/contract";
-import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-operations";
+import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import { prepareOwnedStatement } from "../../database/operations";
 import {
   type TransactionCaller,

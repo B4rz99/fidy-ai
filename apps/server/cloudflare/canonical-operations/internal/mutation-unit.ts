@@ -1,9 +1,12 @@
 import { Effect, Exit, Option, Schema } from "effect";
-import { maximumAtomicBatchCalls } from "~/shell/operations/contract";
+import { maximumAtomicBatchCalls } from "../../../src/shell/operations/contract";
 import type { HostedCommitFence } from "../../agent/contract";
 import { prepareHostedMutationCommit } from "../../agent/operations";
-import { prepareCanonicalAuditBudgetGuard, refusedByAuditBudget } from "@fidy/server/audit";
-import { StatementSubmission } from "@fidy/server/ingestion-contract";
+import {
+  prepareCanonicalAuditBudgetGuard,
+  refusedByAuditBudget,
+} from "../../../src/shell/audit/operations";
+import { StatementSubmission } from "../../../src/shell/ingestion/contract";
 import { EmailForwardingAddress } from "../../../src/core/ingestion/contract";
 import {
   forwardingAuditLimitRefusal,
@@ -14,7 +17,7 @@ import {
   RestoredTransactionPair,
   Transaction,
   TransactionPresentation,
-} from "@fidy/server/transactions-contract";
+} from "../../../src/core/transactions/contract";
 import { canonicalTriggerOf } from "./triggers";
 
 import {

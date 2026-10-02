@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
-import type { TelemetryWorkRecord } from "@fidy/server/telemetry";
-import { makeWorkerTelemetry } from "../runtime/telemetry";
+import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import type { TelemetryWorkRecord } from "../../src/shell/observability/contract";
+import { makeWorkerTelemetry } from "../runtime/telemetry/operations";
 import { Clock, Data, Effect, Exit, Option } from "effect";
 import { Miniflare } from "miniflare";
 import { applyTestMigration } from "../d1-test-fixture";

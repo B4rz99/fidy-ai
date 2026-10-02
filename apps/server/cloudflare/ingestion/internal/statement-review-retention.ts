@@ -1,4 +1,4 @@
-import { currentMillis } from "../../runtime/clock";
+import { currentMillis } from "../../runtime/operations";
 
 // The per-minute sweep clears the entire globally admitted raw-evidence capacity.
 export const maximumRetainedReviewEvidence = 5_000;

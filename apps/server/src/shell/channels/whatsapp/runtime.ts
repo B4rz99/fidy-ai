@@ -1,6 +1,6 @@
 import { Option, type Redacted } from "effect";
 import { type HttpClient } from "effect/unstable/http";
-import { type WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
+import { type WhatsAppBusinessScopedUserId } from "~/core/identity/contract";
 import { TranscriptText } from "~/core/agent/contract";
 import { makeWhatsAppDelivery as buildDelivery } from "~/shell/channels/whatsapp/internal/kapso-client";
 import { makeKapsoOutboundHttp } from "~/shell/outbound-http/operations";

@@ -1,7 +1,7 @@
 import { readConsentStatus } from "../../consent/operations";
 import { type ConsentUnavailable } from "../../consent/contract";
-import { recordSessionPATTransition } from "@fidy/server/audit";
-import { CreateManualPATPayload, TokenBearer } from "@fidy/server/tokens-domain";
+import { recordSessionPATTransition } from "../../../src/shell/audit/operations";
+import { CreateManualPATPayload, TokenBearer } from "../../../src/core/tokens/contract";
 import {
   IssuedManualPATResponse,
   ManualPATIssuanceConsumed,
@@ -10,12 +10,12 @@ import {
   issuanceConsumedMessage,
   issuanceLimitedMessage,
   reviewExpiredMessage,
-} from "@fidy/server/tokens-contract";
-import { UserActionRequired, ValidationFailed } from "~/shell/public-http/contract";
-import { buildPATDisclosure } from "@fidy/server/tokens-decisions";
-import { issueManualPAT } from "@fidy/server/tokens-operations";
+} from "../../../src/shell/tokens/contract";
+import { UserActionRequired, ValidationFailed } from "../../../src/shell/public-http/contract";
+import { buildPATDisclosure } from "../../../src/core/tokens/operations";
+import { issueManualPAT } from "../../../src/shell/tokens/operations";
 import { type Cause, DateTime, Effect, Option, Redacted, Result, Schema } from "effect";
-import { grantManualPATConsent } from "@fidy/server/consent-operations";
+import { grantManualPATConsent } from "../../../src/shell/consent/operations";
 import {
   type SessionRow,
   canonical,
@@ -38,7 +38,7 @@ import {
   webSession,
 } from "./pat-shared";
 import { newId } from "../../secret-material/operations";
-import { currentMillis } from "../../runtime/clock";
+import { currentMillis } from "../../runtime/operations";
 import { commitPATUnit } from "./pat-unit";
 import { prepareOwnedStatement } from "../../database/operations";
 

@@ -1,10 +1,8 @@
-import { webSessionCredentialAuthority } from "@fidy/server/web-session-operations";
-import * as D1Client from "@effect/sql-d1/D1Client";
-import { User } from "@fidy/server/identity-contract";
-import { UserId } from "@fidy/server/identity-reference";
-import { getCurrentUser } from "@fidy/server/identity-operations";
-import { Clock, Context, DateTime, Effect, Exit, Layer, Option, Schema } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import { webSessionCredentialAuthority } from "../../../src/shell/web-session/operations";
+import { User, UserId } from "../../../src/core/identity/contract";
+
+import { readCurrentUser } from "../../identity/operations";
+import { Clock, DateTime, Effect, Exit, Option, Schema } from "effect";
 import { webSessionIdleRenewalCandidate } from "../../../src/core/web-session/operations";
 import { sessionCookie, sessionDigest, sessionSetCookie } from "./credentials";
 import { attempt, json, noSession, unavailable, uuid } from "./support";
@@ -68,17 +66,7 @@ const projectCurrentUser = ({
   digest: Uint8Array;
 }): Effect.Effect<Response, void> =>
   Effect.gen(function* () {
-    const loaded = yield* Effect.exit(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const clients = yield* Layer.build(D1Client.layer({ db }));
-          return yield* getCurrentUser(subject).pipe(
-            Effect.withTracerEnabled(false),
-            Effect.provideService(SqlClient.SqlClient, Context.get(clients, SqlClient.SqlClient))
-          );
-        })
-      )
-    );
+    const loaded = yield* Effect.exit(readCurrentUser({ db, userId: subject }));
     if (Exit.isFailure(loaded)) return unavailable();
     const observedAt = yield* Clock.currentTimeMillis;
     const authority = webSessionCredentialAuthority({

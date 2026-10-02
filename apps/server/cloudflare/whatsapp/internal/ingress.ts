@@ -1,16 +1,16 @@
-import { Sha256Digest } from "@fidy/server/consent-contract";
-import { protectConsentStatement } from "@fidy/server/consent-operations";
+import { Sha256Digest } from "../../../src/shell/consent/contract";
+import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import {
   type WhatsAppInboundEvent,
   maxWhatsAppFutureTimestampMinutes,
   maxWhatsAppWebhookBytes,
-} from "@fidy/server/whatsapp-contract";
+} from "../../../src/shell/channels/whatsapp/contract";
 import {
   authenticateDisclosureStatus,
   authenticateHostedStatus,
   authenticateWhatsAppInbound,
-} from "@fidy/server/whatsapp-operations";
-import { makeVoiceUnavailableSender } from "@fidy/server/whatsapp-runtime";
+} from "../../../src/shell/channels/whatsapp/operations";
+import { makeVoiceUnavailableSender } from "../../../src/shell/channels/whatsapp/runtime";
 import {
   Context,
   Crypto,
@@ -25,11 +25,15 @@ import {
   Schema,
 } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
-import { type UserId } from "../../../src/core/identity/reference";
+import { type UserId } from "../../../src/core/identity/contract";
 import { approveBrowserPairing } from "../../browser-login/operations";
-import { receiveConsentText, recordConsentDelivery } from "../../consent/ingress/operations";
+import { recordConsentDelivery } from "../../consent/ingress/operations";
+import { makeConsentIngress } from "../../consent/ingress/runtime";
 import { findWhatsAppUser, prepareWhatsAppIdentity } from "../../identity/operations";
-import { cloudflareWorkerTelemetry, observeProviderFetch } from "../../runtime/telemetry";
+import {
+  cloudflareWorkerTelemetry,
+  observeProviderFetch,
+} from "../../runtime/telemetry/operations";
 import {
   type WhatsAppIngressEnvironment as Environment,
   type WhatsAppAuthenticatedInbound as WebhookInbound,
@@ -268,7 +272,8 @@ const routeTextInbound = (
     }
     const hosted = yield* routeHostedInbound(environment, input);
     if (Option.isSome(hosted)) return hosted.value;
-    return yield* receiveConsentText({ environment, input });
+    const httpClient = yield* HttpClient.HttpClient;
+    return yield* makeConsentIngress({ environment, httpClient })(input);
   });
 
 const handleInbound = (

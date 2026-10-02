@@ -1,8 +1,8 @@
 import { deepStrictEqual } from "node:assert";
 import { Effect, Exit, Option } from "effect";
 import { afterAll, expect, it } from "vitest";
-import { CategoryId } from "../../src/core/categories/reference";
-import { CategoryNotFound } from "../../src/core/categories/contract";
+import { CategoryId, CategoryNotFound } from "../../src/core/categories/contract";
+
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import {
   categorizeCaptures,

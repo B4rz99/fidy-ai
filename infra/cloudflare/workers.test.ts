@@ -1,6 +1,6 @@
 import { it } from "@effect/vitest";
-import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
-import type { TelemetryService, TelemetryWorkRecord } from "@fidy/server/telemetry";
+import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-contract";
+import type { TelemetryService, TelemetryWorkRecord } from "@fidy/server/telemetry-contract";
 import { type Cause, Clock, DateTime, Effect, Result, Schema } from "effect";
 import { describe, expect, vi } from "vitest";
 import { Miniflare } from "miniflare";
@@ -14,11 +14,11 @@ import {
   unavailableWorkflow,
 } from "./incomplete-platform-fixture";
 import publicWorker, { makePublicWorker } from "../../apps/server/cloudflare/public-worker";
-import { makeWorkerTelemetry } from "../../apps/server/cloudflare/runtime/telemetry";
+import { makeWorkerTelemetry } from "../../apps/server/cloudflare/runtime/telemetry/operations";
 import {
   localCanonicalReadBearer,
   productionTopology,
-} from "../../apps/server/cloudflare/runtime/topology";
+} from "../../apps/server/cloudflare/runtime/contract";
 
 const withIsolatedD1 = <A, E, R>(
   name: string,

@@ -1,4 +1,4 @@
-import type { PATSubject } from "@fidy/server/tokens-contract";
+import type { PATSubject } from "../../src/shell/tokens/contract";
 
 /** Closed PAT admission outcomes; actual work must recheck the returned proof at commit. */
 export type PATAuthorizationDecision =

@@ -19,7 +19,7 @@ const estimatedSeconds: Readonly<Record<string, number>> = {
   "subscription/billing-collection.test.ts": 4.8,
   "subscription/card-enrollment.test.ts": 4,
   "resource-admission/resource-admission.test.ts": 3.1,
-  "runtime/operational-alert-delivery.test.ts": 1.4,
+  "runtime/operational-health/alert-delivery.test.ts": 1.4,
   "subscription/subscription-queries.test.ts": 1.3,
 };
 

@@ -3,10 +3,14 @@ import {
   prepareProvedBrowserPairingApproval,
   provePendingBrowserPairing,
 } from "../../browser-login/operations";
-import { EmailAddress, EmailVerificationCode } from "@fidy/server/email-authentication-contract";
-import { BrowserLoginPairingId } from "../../../src/core/browser-login/reference";
+import {
+  EmailAddress,
+  EmailVerificationCode,
+} from "../../../src/core/email-authentication/contract";
+import { BrowserLoginPairingId } from "../../../src/core/browser-login/contract";
 import { Clock, Crypto, Effect, Option, PlatformError, Schema } from "effect";
-import { RequestBodyPolicy, readBoundedRequestBody } from "../../http/request-body";
+import { RequestBodyPolicy } from "../../http/contract";
+import { readBoundedRequestBody } from "../../http/operations";
 
 const Start = Schema.Struct({
   pairingId: BrowserLoginPairingId,

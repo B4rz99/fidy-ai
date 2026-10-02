@@ -9,14 +9,11 @@ import type {
   OnboardingEmailEnvironment,
 } from "./email-authentication/contract";
 import type { BillingCollectionEnvironment } from "./subscription/contract";
-import type { SmokeEnvironment } from "./runtime/contract";
-import type { TelemetryService } from "@fidy/server/telemetry";
+import type { SmokeEnvironment } from "./runtime/release-smoke/contract";
+import type { TelemetryService } from "../src/shell/observability/contract";
 import { Effect, Option } from "effect";
-import {
-  type WorkerTelemetryEnvironment,
-  cloudflareWorkerTelemetry,
-  observeWorkerExecution,
-} from "./runtime/telemetry";
+import { type WorkerTelemetryEnvironment } from "./runtime/telemetry/contract";
+import { cloudflareWorkerTelemetry, observeWorkerExecution } from "./runtime/telemetry/operations";
 
 export {
   BrowserPairingEmailWorkflowV1,
@@ -26,7 +23,7 @@ export {
 export { OperationalCanaryWorkflowV1 } from "./operational-canary-workflow";
 export { BillingCollectionWorkflowV1, runBillingCollectionWorkflow } from "./subscription/runtime";
 export { UserTransactionCoordinator } from "./transactions/runtime";
-export { ReleaseSmokeWorkflowV1 } from "./runtime/smoke-work";
+export { ReleaseSmokeWorkflowV1 } from "./runtime/release-smoke/runtime";
 export { StatementExtractionWorkflowV1 } from "./ingestion/runtime";
 
 type CoreEnvironment = WorkerTelemetryEnvironment &

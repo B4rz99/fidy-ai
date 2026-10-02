@@ -1,4 +1,4 @@
-import type { OwnedStatement } from "../../../src/shell/_shared/owned-statement";
+import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import type { RecoveryBrowserPairingApproval, RecoveryBrowserPairingQuery } from "../contract";
 
 export const pendingRecoveryPairingQuery = ({

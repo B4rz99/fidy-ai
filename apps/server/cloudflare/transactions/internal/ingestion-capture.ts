@@ -1,10 +1,8 @@
-import type { OwnedStatement } from "~/shell/_shared/owned-statement";
+import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { DateTime, Effect, Option, Schema } from "effect";
-import {
-  NotificationEmailSourceAttestation,
-  NotificationInterpretationEvidence,
-  encodeMoneyAmount,
-} from "../../../src/core/transactions/contract";
+import { NotificationEmailSourceAttestation } from "../../../src/core/source-attestation/contract";
+import { NotificationInterpretationEvidence } from "../../../src/core/transactions/contract";
+import { encodeMoneyAmount } from "../../../src/core/_shared/money";
 import { prepareConsentAction } from "../../consent/operations";
 import type { NotificationEmailCaptureInput, StatementCaptureInput } from "../contract";
 

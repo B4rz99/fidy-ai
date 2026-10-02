@@ -12,19 +12,19 @@ import {
   CategoryNotFound,
   CreateKeywordRuleInput,
   KeywordRuleId,
-  ListKeywordRulesResponse,
-  NotFound,
   UpdateKeywordRuleInput,
-  ValidationFailed,
   maximumKeywordRulesPerUser,
-  normalizeCategoryKeyword,
-} from "@fidy/server/categories";
-import { recordCanonicalPATWork } from "@fidy/server/audit";
-import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-operations";
+} from "../../../src/core/categories/contract";
+import { ListKeywordRulesResponse } from "../../../src/shell/categories/contract";
+import { NotFound, ValidationFailed } from "../../../src/shell/public-http/contract";
+import { normalizeSearchText as normalizeCategoryKeyword } from "../../../src/core/search/operations";
+import { recordCanonicalPATWork } from "../../../src/shell/audit/operations";
+import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { prepareOwnedStatement } from "../../database/operations";
-import { RequestBodyPolicy, readBoundedRequestBody } from "../../http/request-body";
-import { pathId } from "../../http/path";
+import { RequestBodyPolicy } from "../../http/contract";
+import { pathId, readBoundedRequestBody } from "../../http/operations";
+
 import {
   HTTP_BAD_REQUEST,
   HTTP_NOT_FOUND,

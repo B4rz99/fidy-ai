@@ -1,13 +1,19 @@
 import { Cause, Effect, Exit, Option, Stream } from "effect";
-import { Headers, HttpClient } from "effect/unstable/http";
-import type { HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
+import {
+  Headers,
+  HttpClient,
+  type HttpClientError,
+  type HttpClientRequest,
+  type HttpClientResponse,
+} from "effect/unstable/http";
+
 import type { TelemetryCode } from "~/shell/observability/contract";
 import {
   projectExternalHttpOutcome,
   projectExternalHttpRequest,
   projectExternalHttpResponse,
 } from "~/shell/observability/operations";
-import { collectBoundedBytes } from "~/shell/_shared/bounded-bytes";
+import { collectBoundedBytes } from "./bounded-bytes";
 import { OutboundHttpFailure, type OutboundHttpResponse } from "~/shell/outbound-http/contract";
 
 /** External provider selected by one closed transport policy. */

@@ -1,15 +1,15 @@
-import { emailPairingAllowsUser } from "@fidy/server/email-authentication-operations";
+import { emailPairingAllowsUser } from "../../src/shell/email-authentication/operations";
 import { afterAll, expect, it } from "vitest";
 import { Clock, Effect, Exit, Option, Schema } from "effect";
-import { UserId } from "@fidy/server/identity-reference";
+import { UserId } from "../../src/core/identity/contract";
 import {
   PendingConsentExchangeId,
   Sha256Digest,
   WhatsAppProviderMessageId,
-} from "@fidy/server/consent-contract";
+} from "../../src/shell/consent/contract";
 import { isolatedTestDatabases } from "../d1-test-fixture";
-import { freshSessionQuery } from "@fidy/server/web-session-operations";
-import { protectConsentStatement } from "@fidy/server/consent-operations";
+import { freshSessionQuery } from "../../src/shell/web-session/operations";
+import { protectConsentStatement } from "../../src/shell/consent/operations";
 import {
   findOnboardingEmailReplay,
   prepareEmailPendingWorkObservation,

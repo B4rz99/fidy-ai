@@ -13,27 +13,27 @@ import {
   RestoredTransactionPair,
   Transaction,
   TransactionPresentation,
-  encodeMoneyAmount,
-} from "@fidy/server/transactions-contract";
+} from "../../src/core/transactions/contract";
+import { encodeMoneyAmount } from "../../src/core/_shared/money";
 import { UserTransactionCoordinator } from "./runtime";
 import {
   type AtomicBatchCall,
   AtomicBatchCallId,
   AtomicBatchRejected,
-} from "~/shell/operations/contract";
-import { ErrorCode } from "~/shell/public-http/contract";
-import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
-import { DisclosureSnapshot } from "@fidy/server/consent-contract";
-import { CategoryId, CategoryKeyword, KeywordRuleId } from "@fidy/server/categories";
+} from "../../src/shell/operations/contract";
+import { ErrorCode } from "../../src/shell/public-http/contract";
+import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { DisclosureSnapshot } from "../../src/shell/consent/contract";
+import { CategoryId, CategoryKeyword, KeywordRuleId } from "../../src/core/categories/contract";
 import { keywordRuleGuardFailure } from "../categories/operations";
-import { currentDisclosureFor } from "@fidy/server/consent-operations";
+import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import { makeAgentRetention } from "../agent/runtime";
 import { newId } from "../secret-material/operations";
 import { transactionNow } from "../canonical-work/operations";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { browseTransactions, transactionInput, transactionSession } from "./operations";
-import { dailyAuditCount } from "@fidy/server/audit";
+import { dailyAuditCount } from "../../src/shell/audit/operations";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure") {}
 const fromTestPromise = <A>(promise: () => PromiseLike<A>): Effect.Effect<A> =>

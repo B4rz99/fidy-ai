@@ -1,7 +1,7 @@
 import { patIdentityQuery } from "~/shell/tokens/operations";
 import { Option } from "effect";
 import { authorizedCallStatement } from "./recording";
-import type { OwnedStatement } from "~/shell/_shared/owned-statement";
+import type { OwnedStatement } from "~/shell/owner-write/contract";
 import { protectConsentStatement } from "~/shell/consent/operations";
 import type { FreshSessionSubject } from "~/shell/web-session/contract";
 import {

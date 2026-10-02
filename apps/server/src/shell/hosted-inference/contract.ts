@@ -1,10 +1,17 @@
-import { Data, type DateTime, type Effect, type Option, Schema } from "effect";
-import type { Brand, Duration } from "effect";
+import {
+  type Brand,
+  Data,
+  type DateTime,
+  type Duration,
+  type Effect,
+  type JsonSchema,
+  type Option,
+  Schema,
+} from "effect";
 import type { Response } from "effect/unstable/ai";
 import type { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import type { User } from "~/core/identity/contract";
-import type { TranscriptEntry } from "~/core/agent/contract";
-import { maximumToolCallsPerTurn } from "~/shell/_shared/hosted-turn-bounds";
+import { type TranscriptEntry, maximumToolCallsPerTurn } from "~/core/agent/contract";
 
 /** Ordered semantic material projected by Agent without exposing provider prompt fragments. */
 export type HostedContextSection =
@@ -231,4 +238,103 @@ export type HostedInferenceStubBehavior = Readonly<{
   generateStructured: <Output, Encoded extends Readonly<Record<string, unknown>>>(
     outputSchema: Schema.Codec<Output, Encoded, never, never>
   ) => Effect.Effect<Output, HostedInferenceError>;
+}>;
+
+const approvedWorkersAiModelId = "@cf/google/gemma-4-26b-a4b-it" as const;
+
+/** The Workers AI model whose exact revision has passed Fidy's conformance suite. */
+export const ApprovedWorkersAiModel = Schema.Literal(approvedWorkersAiModelId).pipe(
+  Schema.brand("ApprovedWorkersAiModel")
+);
+export type ApprovedWorkersAiModel = typeof ApprovedWorkersAiModel.Type;
+
+/** Production model selection; changing this value requires passing conformance again. */
+export const approvedWorkersAiModel = ApprovedWorkersAiModel.make(approvedWorkersAiModelId);
+
+const ChatContent = Schema.NullOr(Schema.String);
+
+/** One Gemma Chat Completions function call, preserving its provider id for tool continuation. */
+type WorkersAiFunctionCall = Readonly<{
+  id: string;
+  type: "function";
+  function: Readonly<{ name: string; arguments: string }>;
+}>;
+
+/** Provider message accepted by the direct binding; callers must use projected content only. */
+type WorkersAiInputItem =
+  | Readonly<{ role: "system" | "user"; content: string }>
+  | (Readonly<{
+      role: "assistant";
+      content: typeof ChatContent.Type;
+    }> &
+      Partial<Readonly<{ tool_calls: ReadonlyArray<WorkersAiFunctionCall> }>>)
+  | Readonly<{ role: "tool"; tool_call_id: string; content: string }>;
+
+/** Strict function tool definition derived from one canonical operation schema. */
+type WorkersAiTool = Readonly<{
+  type: "function";
+  function: Readonly<{
+    name: string;
+    description: string;
+    parameters: JsonSchema.JsonSchema;
+    strict: true;
+  }>;
+}>;
+
+type WorkersAiRequestBase = Readonly<{
+  messages: ReadonlyArray<WorkersAiInputItem>;
+  max_tokens: number;
+  temperature: 0;
+  stream: false;
+  chat_template_kwargs: Readonly<{ enable_thinking: false }>;
+}>;
+
+/** Closed direct-binding request: canonical tools, structured output, or text only, never mixed. */
+export type WorkersAiRequest = WorkersAiRequestBase &
+  (
+    | (Readonly<{
+        tool_choice: "auto";
+        tools: ReadonlyArray<WorkersAiTool>;
+      }> &
+        Partial<Readonly<{ response_format: never }>>)
+    | (Readonly<{
+        response_format: Readonly<{
+          type: "json_schema";
+          json_schema: Readonly<{
+            name: string;
+            schema: JsonSchema.JsonSchema;
+            strict: true;
+          }>;
+        }>;
+      }> &
+        Partial<Readonly<{ tool_choice: never; tools: never }>>)
+    | Partial<Readonly<{ tool_choice: never; tools: never; response_format: never }>>
+  );
+
+/** The only Cloudflare capability the portable hosted-inference adapter accepts. */
+export type WorkersAiBindingRun = (
+  model: ApprovedWorkersAiModel,
+  request: WorkersAiRequest,
+  options: Readonly<{ returnRawResponse: true; signal: AbortSignal }>
+) => Promise<Response>;
+
+/** Optional native configuration decoded before hosted inference authority is constructed. */
+export type WorkersAiConfiguration = Readonly<{
+  model: Option.Option<string>;
+  run: Option.Option<WorkersAiBindingRun>;
+}>;
+
+/** Closed live approval checks, identifying a failing capability without exposing model content. */
+export type HostedConformanceCheck =
+  | "canonical_query"
+  | "canonical_mutation"
+  | "canonical_mutation_money"
+  | "canonical_mutation_time"
+  | "invalid_output_recovery"
+  | "structured_es_co";
+
+/** Only a closed check and failure category may leave the live conformance boundary. */
+export type HostedConformanceFailure = Readonly<{
+  check: HostedConformanceCheck;
+  category: HostedInferenceError["reason"]["_tag"];
 }>;

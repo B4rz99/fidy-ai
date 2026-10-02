@@ -1,5 +1,5 @@
 import { Effect, Option, Schema } from "effect";
-import { UserId } from "../../../src/core/identity/reference";
+import { UserId } from "../../../src/core/identity/contract";
 import {
   type IdentityStatement,
   IdentityUnavailable,

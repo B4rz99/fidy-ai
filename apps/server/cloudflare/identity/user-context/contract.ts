@@ -1,6 +1,6 @@
-import type { UserId } from "@fidy/server/identity-reference";
+import type { UserId } from "../../../src/core/identity/contract";
 import { Data, type Option } from "effect";
-import type { OwnedStatement } from "../../../src/shell/_shared/owned-statement";
+import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 
 /** Identity context could not be read or validated; no private row or provider details escape. */
 export class UserContextUnavailable extends Data.TaggedError("UserContextUnavailable")<{}> {}

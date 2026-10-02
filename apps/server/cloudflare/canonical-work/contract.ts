@@ -1,6 +1,6 @@
 import { Data } from "effect";
-import type { PATAuthority } from "@fidy/server/tokens-contract";
-import type { WebSessionAuthority } from "@fidy/server/web-session-contract";
+import type { PATAuthority } from "../../src/shell/tokens/contract";
+import type { WebSessionAuthority } from "../../src/shell/web-session/contract";
 import type { AuthorizedPAT } from "../tokens/contract";
 
 /**

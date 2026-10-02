@@ -1,9 +1,9 @@
-import { maxWhatsAppWebhookBytes } from "@fidy/server/consent-contract";
-import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
+import { maxWhatsAppWebhookBytes } from "../../src/shell/consent/contract";
+import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import { type Cause, Clock, DateTime, Effect, Equal, Exit, Option, Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { afterEach, expect, it, vi } from "vitest";
-import { recoverPendingDisclosures, sweepExpiredConsent } from "../consent/runtime";
+import { recoverPendingDisclosures, sweepExpiredConsent } from "../consent/ingress/runtime";
 import { applyTestMigration } from "../d1-test-fixture";
 import {
   dispatchOnboardingEmail,

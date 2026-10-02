@@ -2,12 +2,13 @@ import { BigDecimal, Data, DateTime, Schema, Struct } from "effect";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { type Currency, Money, type ReadonlyMoney } from "~/core/_shared/money";
 import { UtcTimestamp } from "~/core/_shared/time";
-import { CategoryId } from "~/core/categories/reference";
-import { BudgetId } from "./reference";
+import { CategoryId } from "~/core/categories/contract";
 
-export { BudgetId } from "./reference";
-export { IanaTimeZone } from "~/core/_shared/context";
-export { Money, encodeMoneyAmount } from "~/core/_shared/money";
+/** Stable identity of one User-owned monthly Budget. */
+export const BudgetId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("BudgetId"))
+  .annotate({ identifier: "BudgetId" });
+export type BudgetId = typeof BudgetId.Type;
 
 const zero = BigDecimal.make(0n, 0);
 const positiveBudgetCap = Schema.makeFilter<{

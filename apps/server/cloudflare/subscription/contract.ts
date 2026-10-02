@@ -1,6 +1,6 @@
-import type { BillingAttemptId } from "~/core/subscription/contract";
+import type { BillingAttemptId } from "../../src/core/subscription/contract";
 import { Data, type Option } from "effect";
-import { type TransactionCaller } from "../canonical-work/operations";
+import { type TransactionCaller } from "../canonical-work/contract";
 
 /** Canonical safe observation under the caller's live credential and User. */
 export type SubscriptionQueryInput = Readonly<{

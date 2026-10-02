@@ -1,4 +1,4 @@
-import { currentMillis } from "../../runtime/clock";
+import { currentMillis } from "../../runtime/operations";
 import {
   PAT,
   PATScopes,
@@ -6,17 +6,18 @@ import {
   TokenShortId,
   patBearerPrefix,
   patShortIdLength,
-} from "@fidy/server/tokens-domain";
+} from "../../../src/core/tokens/contract";
 import {
   issuanceWindowMilliseconds,
   maxActivePATs,
   maxIssuancesPerUserWindow,
   pairingMilliseconds,
-} from "@fidy/server/tokens-operations";
-import { patPairingUnavailableBody } from "@fidy/server/tokens-contract";
+} from "../../../src/shell/tokens/operations";
+import { patPairingUnavailableBody } from "../../../src/shell/tokens/contract";
 import { DateTime, Effect, Encoding, Option, Schema } from "effect";
-import { freshSessionExists } from "@fidy/server/web-session-operations";
-import { RequestBodyPolicy, readBoundedRequestBody } from "../../http/request-body";
+import { freshSessionExists } from "../../../src/shell/web-session/operations";
+import { RequestBodyPolicy } from "../../http/contract";
+import { readBoundedRequestBody } from "../../http/operations";
 import { browserSession } from "../../web-session/operations";
 
 const policy = Schema.decodeSync(RequestBodyPolicy)({

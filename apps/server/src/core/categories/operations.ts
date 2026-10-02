@@ -1,13 +1,16 @@
 import { Effect, Option } from "effect";
-import type {
-  Category,
-  CategoryFailure,
-  CategoryKeyword,
-  KeywordRule,
-  KeywordRuleId,
+import {
+  type Category,
+  type CategoryFailure,
+  type CategoryId,
+  type CategoryKeyword,
+  type KeywordRule,
+  KeywordRuleAlreadyExists,
+  type KeywordRuleId,
+  KeywordRuleLimitReached,
+  KeywordRuleNotFound,
+  maximumKeywordRulesPerUser,
 } from "./contract";
-import { KeywordRuleAlreadyExists, KeywordRuleLimitReached, KeywordRuleNotFound } from "./contract";
-import type { CategoryId } from "./reference";
 import {
   canCreateKeywordRule,
   fallbackCaptureCategory as chooseFallback,
@@ -16,17 +19,10 @@ import {
   hasKeywordRule,
 } from "~/core/categories/internal/rules";
 import { categoryRows } from "~/core/categories/internal/taxonomy";
-import { maximumKeywordRulesPerUser } from "./contract";
 
-/** Stable launch identities used for explicit default selections, never derived from labels or order. */
-export { categoryIds } from "./contract";
 /** The directional last resort when capture has no explicit or matching keyword Category. */
 export const fallbackCaptureCategory = (direction: "inflow" | "outflow"): CategoryId =>
   chooseFallback(direction);
-/** The storage comparison form for a validated Category keyword. */
-export { normalizeSearchText as normalizeCategoryKeyword } from "~/core/search/operations";
-/** The bounded capacity of one User's retained keyword instructions. */
-export { maximumKeywordRulesPerUser } from "./contract";
 
 /** The direct launch taxonomy, in presentation order, without seed or persistence attributes. */
 export const listLaunchCategories = (): ReadonlyArray<Category> =>

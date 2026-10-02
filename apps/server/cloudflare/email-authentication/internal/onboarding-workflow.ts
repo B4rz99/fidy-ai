@@ -1,12 +1,19 @@
 import { type OnboardingEmailEnvironment, OnboardingEmailWork as Work } from "../contract";
 
-import { EmailAddress, EmailVerificationCode } from "@fidy/server/email-authentication-contract";
-import type { EmailDeliveryPortService } from "@fidy/server/email-authentication-runtime";
 import {
+  EmailAddress,
+  EmailVerificationCode,
+} from "../../../src/core/email-authentication/contract";
+import {
+  type EmailDeliveryPortService,
   type EmailSendFailed,
   makeOnboardingEmailDelivery,
-} from "@fidy/server/email-authentication-runtime";
-import { cloudflareWorkerTelemetry, observeProviderFetch } from "../../runtime/telemetry";
+} from "../../../src/shell/email-authentication/runtime";
+
+import {
+  cloudflareWorkerTelemetry,
+  observeProviderFetch,
+} from "../../runtime/telemetry/operations";
 import type { WorkflowStepConfig } from "cloudflare:workers";
 import { Cause, Clock, Context, Effect, Exit, Layer, Option, Redacted, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";

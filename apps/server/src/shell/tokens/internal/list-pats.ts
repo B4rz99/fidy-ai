@@ -7,9 +7,9 @@ import {
   PATScopes,
   TokenShortId,
 } from "~/core/tokens/contract";
-import type { UserId } from "~/core/identity/reference";
+import type { UserId } from "~/core/identity/contract";
 import { Unavailable } from "~/shell/public-http/contract";
-import type { OwnedStatement } from "~/shell/_shared/owned-statement";
+import type { OwnedStatement } from "~/shell/owner-write/contract";
 import { protectConsentStatement } from "~/shell/consent/operations";
 import type { FreshSessionSubject } from "~/shell/web-session/contract";
 import { liveSessionConditions } from "~/shell/web-session/operations";

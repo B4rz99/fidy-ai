@@ -1,9 +1,9 @@
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type Cause, Effect } from "effect";
-import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
+import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import coreWorker from "../core-worker";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
-import { sweepExpiredConsent } from "../consent/runtime";
+import { sweepExpiredConsent } from "../consent/ingress/runtime";
 import {
   reconcileBrowserPairingEmail,
   reconcileEmailReplacement,

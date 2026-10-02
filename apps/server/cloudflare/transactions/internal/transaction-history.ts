@@ -4,23 +4,23 @@ import {
   prepareAuthorizedAuditCall,
   recordCanonicalPATWork,
   refusedByAuditBudget,
-} from "@fidy/server/audit";
-import { nextTransactionPage } from "@fidy/server/transaction-operations";
-import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
+} from "../../../src/shell/audit/operations";
+import { nextTransactionPage } from "../../../src/shell/transactions/operations";
+import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
 import {
   Counterparty,
-  Currency,
   Direction,
   Transaction,
   TransactionId,
   TransactionPresentation,
   TransactionQueryValues,
   TransactionSearchQuery,
-} from "@fidy/server/transactions-contract";
+} from "../../../src/core/transactions/contract";
+import { Currency } from "../../../src/core/_shared/money";
 import { effectiveTransactionRelation } from "./effective-transaction";
 import { DateTime, Option, Schema } from "effect";
 import type { AuthorizedPAT } from "../../tokens/contract";
-import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-operations";
+import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import { prepareOwnedStatement } from "../../database/operations";
 import {
   type TransactionAuthority,

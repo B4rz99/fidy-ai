@@ -1,5 +1,5 @@
-import type { UserId } from "@fidy/server/identity-reference";
-import type { OwnedStatement } from "../../../src/shell/_shared/owned-statement";
+import type { UserId } from "../../../src/core/identity/contract";
+import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 
 const turnMetadata = `SELECT id, user_id, hosted_session_id, status, started_at_ms, terminal_at_ms, failure_reason FROM hosted_turns`;
 

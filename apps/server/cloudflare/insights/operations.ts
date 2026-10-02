@@ -1,4 +1,4 @@
-import type { UserId } from "@fidy/server/identity-reference";
+import type { UserId } from "../../src/core/identity/contract";
 import {
   discoverDueInsights as discover,
   findInsight as find,

@@ -3,7 +3,7 @@ import { type WorkflowStepConfig } from "cloudflare:workers";
 import { afterEach, expect, it, vi } from "vitest";
 import { type Cause, Clock, Effect, Option, Schema } from "effect";
 import { makeCardEnrollmentD1 } from "./card-enrollment-d1.test-fixture";
-import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
+import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import {
   dispatchBillingCollection,
   receiveBillingCollection,

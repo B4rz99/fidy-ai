@@ -259,7 +259,7 @@ const findForbiddenServerImport = (
       const resolved = Bun.fileURLToPath(
         new URL(importPath, `file://${webRoot}/${sourceFile.replace(/[^/]+$/u, "")}`)
       );
-      return resolved.startsWith(`${workspaceRoot}/apps/server/src/`);
+      return resolved.startsWith(`${workspaceRoot}/apps/server/`);
     })
   );
 
@@ -284,7 +284,7 @@ const assertSourceBoundary = (
   );
   if (Option.isSome(forbiddenServerImport)) {
     throw new Error(
-      `${forbiddenServerImport.value.sourceFile} imports a server client outside transport: ${forbiddenServerImport.value.importPath}`
+      `${forbiddenServerImport.value.sourceFile} imports server code outside the canonical transport seam: ${forbiddenServerImport.value.importPath}`
     );
   }
   if (forbiddenSourceImport !== undefined) {

@@ -2,8 +2,8 @@
 
 import { type Cause, Effect, Option, type SchemaAST, type SchemaRepresentation } from "effect";
 import { OpenApi } from "effect/unstable/httpapi";
-import { FidyApi, operationCatalog } from "~/shell/api";
-import { PATPairingApi } from "~/shell/tokens/contract";
+import { FidyApi, operationCatalog } from "../../src/shell/api";
+import { PATPairingApi } from "../../src/shell/tokens/contract";
 import { publishOperationAccess } from "../../src/shell/canonical-policy/contract";
 import {
   type ContractArtifacts,

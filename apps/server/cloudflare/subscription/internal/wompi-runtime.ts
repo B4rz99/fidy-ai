@@ -1,9 +1,12 @@
-import { type WompiEnvironment } from "~/shell/secret-material/contract";
+import { type WompiEnvironment } from "../../../src/shell/secret-material/contract";
 
-import { makeWompiOutboundHttp } from "~/shell/outbound-http/operations";
+import { makeWompiOutboundHttp } from "../../../src/shell/outbound-http/operations";
 import { Context, Crypto, Effect, Layer, Redacted } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
-import { cloudflareWorkerTelemetry, observeProviderFetch } from "../../runtime/telemetry";
+import {
+  cloudflareWorkerTelemetry,
+  observeProviderFetch,
+} from "../../runtime/telemetry/operations";
 
 export const workerCrypto = Crypto.make({
   randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),

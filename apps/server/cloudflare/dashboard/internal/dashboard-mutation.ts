@@ -1,15 +1,18 @@
 import type { DashboardMutationOperation } from "../contract";
 import { listCategories } from "../../categories/operations";
 import { Data, DateTime, Effect, Option, Result, Schema } from "effect";
-import { prepareAuthorizedAuditCall, recordCanonicalPATWork } from "@fidy/server/audit";
-import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-operations";
+import {
+  prepareAuthorizedAuditCall,
+  recordCanonicalPATWork,
+} from "../../../src/shell/audit/operations";
+import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import { prepareOwnedStatement } from "../../database/operations";
 import {
   applyDashboardEdit,
   collectDashboardCategoryReferences,
   makeDefaultDashboard,
 } from "../../../src/core/dashboard/operations";
-import { categoryIds } from "../../../src/core/categories/operations";
+import { categoryIds } from "../../../src/core/categories/contract";
 import {
   DashboardDocument,
   type DashboardEdit,

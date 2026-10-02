@@ -1,5 +1,5 @@
 import { Effect, Encoding } from "effect";
-import { browserOrigins } from "../runtime/topology";
+import { browserOrigins } from "../runtime/contract";
 import type { AnonymousAdmissionRequest } from "./contract";
 
 const minimumAdmissionKeyLength = 32;

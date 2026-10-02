@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx/xlsx.mjs";
-import { statementParserLimits } from "@fidy/server/ingestion-contract";
+import { statementParserLimits } from "../../src/shell/ingestion/contract";
 import { it } from "@effect/vitest";
 import { Data, Effect } from "effect";
 import { describe, expect, vi } from "vitest";

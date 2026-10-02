@@ -1,17 +1,18 @@
-import type { OwnedStatement } from "../../src/shell/_shared/owned-statement";
+import type { MemoryRefusalOutcome } from "../../src/shell/memory/contract";
+import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import {
   Memory,
   type MemoryCapacityExceeded,
   MemoryId,
   type RememberInput,
   type ReviseInput,
-} from "@fidy/server/memory-contract";
-import { type MemoryOperationId } from "@fidy/server/memory-api";
+} from "../../src/core/memory/contract";
+import { type MemoryOperationId } from "../../src/shell/memory/contract";
 import {
   countAndAdmitMemory,
   countAndAdmitMemoryRevision,
   recordBrowserMemoryWork,
-} from "@fidy/server/memory-operations";
+} from "../../src/shell/memory/operations";
 import {
   deleteMemory,
   insertMemory,
@@ -21,14 +22,14 @@ import {
   readCurrentMemories,
   replaceMemory,
 } from "./internal/storage";
-import { dailyAuditExhausted, recordCanonicalPATWork } from "@fidy/server/audit";
-import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-operations";
+import { dailyAuditExhausted, recordCanonicalPATWork } from "../../src/shell/audit/operations";
+import { livePATAuthority, recordLivePATUse } from "../../src/shell/tokens/operations";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { type HostedInference } from "@fidy/server/hosted-inference";
+import { type HostedInference } from "../../src/shell/hosted-inference/operations";
 import type { AuthorizedPAT } from "../tokens/contract";
 import { prepareOwnedStatement } from "../database/operations";
 import { newId } from "../secret-material/operations";
-import { currentMillis } from "../runtime/clock";
+import { currentMillis } from "../runtime/operations";
 import {
   type TransactionBoundaryFailure,
   type TransactionCaller,
@@ -52,7 +53,6 @@ import {
 
 import {
   type MemoryOutcome,
-  type MemoryRefusalOutcome,
   memoryBudgetRefusal,
   memoryGuardRefusal,
   memoryOutcome,

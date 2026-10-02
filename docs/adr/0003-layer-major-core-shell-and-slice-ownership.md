@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-01
+- **Refined by:** [ADR 0031](0031-published-owner-interfaces-and-visible-internals.md), which replaces `reference.ts` with earned Published Trio interfaces
 
 ## Context
 

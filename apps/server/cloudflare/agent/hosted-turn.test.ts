@@ -7,27 +7,31 @@ import {
   ToolCallId,
   TranscriptText,
   TranscriptTurnId,
-} from "@fidy/server/agent-contract";
-import { DisclosureSnapshot } from "@fidy/server/consent-contract";
-import { UserId } from "@fidy/server/identity-reference";
-import { currentDisclosureFor } from "@fidy/server/consent-operations";
-import { type HostedInferenceService } from "@fidy/server/hosted-inference";
-import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
-import { authenticateWhatsAppInbound } from "@fidy/server/whatsapp-operations";
+} from "../../src/core/agent/contract";
+import { DisclosureSnapshot } from "../../src/shell/consent/contract";
+import {
+  UserId,
+  WhatsAppBusinessPortfolioId,
+  WhatsAppBusinessScopedUserId,
+} from "../../src/core/identity/contract";
+import { currentDisclosureFor } from "../../src/shell/consent/operations";
+import {
+  type HostedInferenceService,
+  approvedWorkersAiModel,
+} from "../../src/shell/hosted-inference/contract";
+
+import { authenticateWhatsAppInbound } from "../../src/shell/channels/whatsapp/operations";
 import { type Cause, Clock, DateTime, Effect, Exit, Option, Redacted, Schema } from "effect";
 import assert from "node:assert/strict";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
-import {
-  WhatsAppBusinessPortfolioId,
-  WhatsAppBusinessScopedUserId,
-} from "../../src/core/identity/reference";
+
 import {
   HostedDeliveryCorrelationToken,
   WhatsAppBusinessPhoneNumberId,
   type WhatsAppHostedLifecycleEvidence,
   WhatsAppProviderMessageId,
 } from "../../src/shell/channels/whatsapp/contract";
-import { makeCloudflareHostedInference } from "../ai/workers-ai";
+import { makeCloudflareHostedInference } from "../ai/runtime";
 import {
   applyTestMigration,
   hostedTurnTestMigrations,
@@ -35,7 +39,7 @@ import {
   isolatedTestDatabases,
 } from "../d1-test-fixture";
 import { findWhatsAppUser } from "../identity/operations";
-import { observeOperationalHealth } from "../runtime/operational-health";
+import { observeOperationalHealth } from "../runtime/operational-health/operations";
 import { newId } from "../secret-material/operations";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import {

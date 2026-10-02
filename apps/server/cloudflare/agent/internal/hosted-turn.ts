@@ -13,29 +13,28 @@ import {
   TranscriptEntryId,
   TranscriptText,
   TranscriptTurnId,
-} from "@fidy/server/agent-contract";
-import { UserId } from "@fidy/server/identity-reference";
+  maximumHostedTurnIterations,
+  maximumModelRoundMillis,
+  maximumToolCallsPerTurn,
+} from "../../../src/core/agent/contract";
+import { UserId } from "../../../src/core/identity/contract";
 import { assembleWorkingContext } from "./working-context";
 import {
   compactionEntryTrigger,
   defaultCompactionMaximumTokens,
   shouldCompactConversation,
-} from "~/core/agent/operations";
-import { atomicBatchOperation } from "~/shell/operations/contract";
-import { operationCatalog } from "~/shell/api";
+} from "../../../src/core/agent/operations";
+import { atomicBatchOperation } from "../../../src/shell/operations/contract";
+import { operationCatalog } from "../../../src/shell/api";
 import {
   HostedInferenceError,
   type HostedInferenceService,
   type HostedTextResult,
   HostedToolCallMaximum,
   type PreparedHostedText,
-} from "@fidy/server/hosted-inference";
+} from "../../../src/shell/hosted-inference/contract";
 import { Cause, DateTime, Duration, Effect, Exit, Option, Schema } from "effect";
-import {
-  maximumHostedTurnIterations,
-  maximumModelRoundMillis,
-  maximumToolCallsPerTurn,
-} from "../../../src/shell/_shared/hosted-turn-bounds";
+
 import { decideOperationAccess } from "../../../src/shell/canonical-policy/operations";
 import {
   type HostedDeliveryCorrelationToken,

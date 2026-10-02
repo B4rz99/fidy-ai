@@ -1,12 +1,15 @@
 import { deepStrictEqual } from "node:assert";
-import { TranscriptTurnId } from "@fidy/server/agent-contract";
-import { currentDisclosureFor } from "@fidy/server/consent-operations";
-import { HostedInferenceError, type WorkersAiBindingRun } from "@fidy/server/hosted-inference";
-import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
+import { TranscriptTurnId } from "../../src/core/agent/contract";
+import { currentDisclosureFor } from "../../src/shell/consent/operations";
+import {
+  HostedInferenceError,
+  type WorkersAiBindingRun,
+  approvedWorkersAiModel,
+} from "../../src/shell/hosted-inference/contract";
 import { Data, Effect, Exit, Option, Schema } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
-import { makeAdmittedWorkersAiRun } from "./workers-ai";
+import { makeAdmittedWorkersAiRun } from "./internal/admitted-run";
 
 class TestInvocationFailure extends Data.TaggedError("TestInvocationFailure") {}
 const encodeJson = (value: unknown): string =>

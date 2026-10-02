@@ -1,5 +1,5 @@
 import { pendingExecutionRecoveryMs } from "../contract";
-import { UserId } from "@fidy/server/identity-reference";
+import { UserId } from "../../../src/core/identity/contract";
 import { type Cause, Effect, type Schema } from "effect";
 import type { WhatsAppUnavailable } from "../../whatsapp/contract";
 import { whatsAppRecoveryPriority } from "../../whatsapp/operations";

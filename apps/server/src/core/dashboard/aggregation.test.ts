@@ -2,8 +2,7 @@ import { type ProjectedRange, Widget } from "./contract";
 import { expect, it } from "@effect/vitest";
 import { BigDecimal, Option, Schema } from "effect";
 import { Money } from "~/core/_shared/money";
-import { Category } from "~/core/categories/contract";
-import { CategoryId } from "~/core/categories/reference";
+import { Category, CategoryId } from "~/core/categories/contract";
 
 import {
   projectAggregateBudgetSpent,

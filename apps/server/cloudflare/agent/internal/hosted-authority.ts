@@ -1,7 +1,7 @@
-import { protectConsentStatement } from "@fidy/server/consent-operations";
-import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
-import { webSessionCredentialAuthority } from "@fidy/server/web-session-operations";
-import { type OwnedStatement } from "../../../src/shell/_shared/owned-statement";
+import { protectConsentStatement } from "../../../src/shell/consent/operations";
+import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
+import { webSessionCredentialAuthority } from "../../../src/shell/web-session/operations";
+import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { type TransactionSubject } from "../../canonical-work/operations";
 import { whatsAppIdentityQuery } from "../../identity/operations";
 import { type WhatsAppHostedSubject } from "../../whatsapp/contract";

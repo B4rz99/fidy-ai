@@ -1,12 +1,17 @@
-import { decodeCategoryRead, prepareCategoryRead } from "../../../src/shell/categories/operations";
+import {
+  categoryUnavailable,
+  decodeCategoryRead,
+  prepareCategoryRead,
+} from "../../../src/shell/categories/operations";
 import { recordBrowserCategoryWork } from "./canonical-work";
 import { readConsentStatus } from "../../consent/operations";
-import { ListCategoriesResponse, categoryUnavailable } from "@fidy/server/categories";
-import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
-import { recordCanonicalPATWork } from "@fidy/server/audit";
-import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-operations";
+import { ListCategoriesResponse } from "../../../src/shell/categories/contract";
+
+import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
+import { recordCanonicalPATWork } from "../../../src/shell/audit/operations";
+import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import { Effect, Option, Schema } from "effect";
-import { currentMillis } from "../../runtime/clock";
+import { currentMillis } from "../../runtime/operations";
 import { newId } from "../../secret-material/operations";
 import { commitPATUnit } from "../../tokens/operations";
 import { prepareOwnedStatement } from "../../database/operations";

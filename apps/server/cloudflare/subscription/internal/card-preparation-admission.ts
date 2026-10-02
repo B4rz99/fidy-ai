@@ -1,6 +1,6 @@
+import { admitResource } from "../../resource-admission/operations";
 import { type Cause, Effect } from "effect";
 import {
-  ResourceAdmissionAuthority,
   ResourceAdmissionCharges,
   ResourceAdmissionDurationMs,
   ResourceAdmissionEpochMs,
@@ -10,7 +10,7 @@ import {
   ResourceAdmissionPolicyKey,
   ResourceAdmissionScopeKey,
   ResourceAdmissionUnits,
-} from "../../resource-admission/authority";
+} from "../../resource-admission/contract";
 import { newId } from "../../secret-material/operations";
 
 const windowMilliseconds = 3_600_000;
@@ -40,29 +40,30 @@ export const admitCardPreparationAttempt = ({
   db,
   userId,
   now,
-}: Readonly<{ db: D1Database; userId: string; now: number }>): ReturnType<
-  ReturnType<typeof ResourceAdmissionAuthority.make>["admit"]
-> =>
-  ResourceAdmissionAuthority.make({
-    database: db,
-    nowEpochMs: () => ResourceAdmissionEpochMs.make(now),
-    policies: cardPreparationPolicies,
-  }).admit({
-    charges: ResourceAdmissionCharges.make([
-      {
-        policyKey: ResourceAdmissionPolicyKey.make("billing.card-preparation.attempt.user.v1"),
-        scopeKey: ResourceAdmissionScopeKey.make(userId),
-        units: oneUnit,
-      },
-      {
-        policyKey: ResourceAdmissionPolicyKey.make("billing.card-preparation.attempt.global.v1"),
-        scopeKey: ResourceAdmissionScopeKey.make("card-preparation"),
-        units: oneUnit,
-      },
-    ]),
-    grantId: ResourceAdmissionGrantId.make(`card-preparation-attempt-${newId()}`),
-    statements: [],
-  });
+}: Readonly<{ db: D1Database; userId: string; now: number }>): ReturnType<typeof admitResource> =>
+  admitResource(
+    {
+      database: db,
+      nowEpochMs: () => ResourceAdmissionEpochMs.make(now),
+      policies: cardPreparationPolicies,
+    },
+    {
+      charges: ResourceAdmissionCharges.make([
+        {
+          policyKey: ResourceAdmissionPolicyKey.make("billing.card-preparation.attempt.user.v1"),
+          scopeKey: ResourceAdmissionScopeKey.make(userId),
+          units: oneUnit,
+        },
+        {
+          policyKey: ResourceAdmissionPolicyKey.make("billing.card-preparation.attempt.global.v1"),
+          scopeKey: ResourceAdmissionScopeKey.make("card-preparation"),
+          units: oneUnit,
+        },
+      ]),
+      grantId: ResourceAdmissionGrantId.make(`card-preparation-attempt-${newId()}`),
+      statements: [],
+    }
+  );
 
 /** Sweep only expired, standalone attempt grants; work evidence belongs to CardEnrollment D1. */
 export const sweepExpiredCardPreparationAdmission = ({

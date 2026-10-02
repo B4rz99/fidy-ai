@@ -1,5 +1,5 @@
 import { Cause, Context, Effect, Exit, Layer, Option, Schema } from "effect";
-import { SmokeRequest } from "../../apps/server/cloudflare/runtime/smoke";
+import { SmokeRequest } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import {

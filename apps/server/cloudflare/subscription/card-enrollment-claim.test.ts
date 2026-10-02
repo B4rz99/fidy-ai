@@ -2,8 +2,12 @@ import { type Miniflare } from "miniflare";
 import { it } from "@effect/vitest";
 import { Data, Effect } from "effect";
 import { afterEach, expect } from "vitest";
-import { BillingEmail, CardEnrollmentId, PaymentRequestId } from "~/core/subscription/contract";
-import { UserId } from "@fidy/server/identity-reference";
+import {
+  BillingEmail,
+  CardEnrollmentId,
+  PaymentRequestId,
+} from "../../src/core/subscription/contract";
+import { UserId } from "../../src/core/identity/contract";
 import { claimPreparedCardEnrollment } from "./internal/card-enrollment-claim";
 import { makeCardEnrollmentD1 } from "./card-enrollment-d1.test-fixture";
 

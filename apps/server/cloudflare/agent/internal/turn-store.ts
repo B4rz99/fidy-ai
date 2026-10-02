@@ -16,12 +16,12 @@ import {
   TranscriptTurnId,
   TurnFailureReason,
   UserTranscriptEntry,
-} from "@fidy/server/agent-contract";
+} from "../../../src/core/agent/contract";
 import { type SessionTranscriptEntry } from "./working-context";
-import { UserId } from "@fidy/server/identity-reference";
-import { decideHostedAdmission, terminalPrefixCursor } from "~/core/agent/operations";
-import { type UserContext } from "@fidy/server/identity-contract";
-import { webSessionCredentialAuthority } from "@fidy/server/web-session-operations";
+import { type UserContext, UserId } from "../../../src/core/identity/contract";
+import { decideHostedAdmission, terminalPrefixCursor } from "../../../src/core/agent/operations";
+
+import { webSessionCredentialAuthority } from "../../../src/shell/web-session/operations";
 import { Cause, DateTime, Effect, Option, Schema } from "effect";
 import { type TransactionSubject, transactionNow } from "../../canonical-work/operations";
 import { readConsentStanding } from "../../consent/operations";

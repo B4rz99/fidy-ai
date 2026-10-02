@@ -2,9 +2,9 @@ import type {
   PendingConsentExchangeId,
   Sha256Digest,
   WhatsAppProviderMessageId,
-} from "@fidy/server/consent-contract";
-import type { EmailAddress } from "@fidy/server/email-authentication-contract";
-import type { UserId } from "@fidy/server/identity-reference";
+} from "../../src/shell/consent/contract";
+import type { EmailAddress } from "../../src/core/email-authentication/contract";
+import type { UserId } from "../../src/core/identity/contract";
 import type { WorkflowStepConfig } from "cloudflare:workers";
 import { type Option, Schema } from "effect";
 

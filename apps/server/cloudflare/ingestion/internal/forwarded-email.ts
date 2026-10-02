@@ -1,6 +1,6 @@
-import { UserContext } from "@fidy/server/identity-contract";
+import { UserContext, UserId } from "../../../src/core/identity/contract";
 import { prepareUserContext } from "../../identity/user-context/operations";
-import { protectConsentStatement } from "@fidy/server/consent-operations";
+import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import { prepareConsentWithdrawalProjection } from "../../consent/operations";
 import { Clock, Crypto, Data, Effect, Option, PlatformError, Result, Schema, Stream } from "effect";
 import PostalMime from "postal-mime";
@@ -10,7 +10,6 @@ import {
   maximumEmailSubjectCharacters,
   maximumEmailTextCharacters,
 } from "../../../src/core/ingestion/contract";
-import { UserId } from "../../../src/core/identity/reference";
 
 import type { ForwardedEmailEnvironment, ForwardedEmailMessage } from "../contract";
 

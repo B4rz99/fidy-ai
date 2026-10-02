@@ -1,6 +1,6 @@
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { decidePendingBrowserLoginProof } from "../../../src/core/browser-login/operations";
-import type { OwnedStatement } from "../../../src/shell/_shared/owned-statement";
+import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import type {
   BrowserPairingApprovalStatement,
   PendingBrowserPairingQuery,

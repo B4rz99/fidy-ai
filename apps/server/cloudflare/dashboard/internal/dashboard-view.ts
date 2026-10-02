@@ -1,7 +1,7 @@
-import { UserId } from "@fidy/server/identity-reference";
-import type { EffectiveTransactionAggregate } from "@fidy/server/transactions-contract";
+import { UserContext, UserId } from "../../../src/core/identity/contract";
+import type { EffectiveTransactionAggregate } from "../../../src/core/transactions/contract";
 import { type DateTime, Effect, Option, Schema } from "effect";
-import { UserContext } from "@fidy/server/identity-contract";
+
 import { prepareUserContext } from "../../identity/user-context/operations";
 import { listCategories } from "../../categories/operations";
 import { type DashboardDocument, type ProjectedRange } from "../../../src/core/dashboard/contract";

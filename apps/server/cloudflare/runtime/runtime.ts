@@ -5,9 +5,8 @@ import {
   PlatformMaintenanceUnavailable,
 } from "./contract";
 import { inspectScheduledHealth } from "./internal/scheduled-health";
-import { sendCanary } from "./operational-canary";
-import { sweepOperationalEventBuckets } from "./operational-event-metrics";
-import { expireSmokeProbes } from "./smoke-work";
+import { sendCanary, sweepOperationalEventBuckets } from "./operational-health/operations";
+import { expireSmokeProbes } from "./release-smoke/operations";
 
 const smokeConfigured = (input: PlatformMaintenanceInput): boolean =>
   Option.isSome(input.SMOKE_BUCKET) &&

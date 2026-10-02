@@ -1,21 +1,24 @@
-import { EmailAddress } from "@fidy/server/email-authentication-contract";
+import { EmailAddress } from "../../../src/core/email-authentication/contract";
 import { Clock, Effect, Option, Schema } from "effect";
 import type { PlatformMaintenanceInput } from "../contract";
-import { runOperationalAlerts } from "../operational-alert-delivery";
-import { type AlertSignal, decideOperationalAlerts } from "../operational-alerts";
-import { type CanaryHealth, readCanaryHealth } from "../operational-canary";
+import type {
+  AlertSignal,
+  CanaryHealth,
+  CapabilityProbe,
+  EventMetricSignal,
+  OperationalHealthEnvironment,
+  OperationalSignal,
+} from "../operational-health/contract";
 import {
-  type EventMetricSignal,
+  decideOperationalAlerts,
+  inspectOperationalCapabilities,
   observeOperationalEventMetrics,
-} from "../operational-event-metrics";
-import {
-  type OperationalHealthEnvironment,
-  type OperationalSignal,
   observeOperationalHealth,
-} from "../operational-health";
-import { recordOperationalHealth } from "../operational-health-view";
-import { type CapabilityProbe, inspectOperationalCapabilities } from "../operational-probes";
-import { sendOperatorEmail } from "../operator-email";
+  readCanaryHealth,
+  recordOperationalHealth,
+  runOperationalAlerts,
+} from "../operational-health/operations";
+import { sendOperatorEmail } from "../operational-health/runtime";
 
 const deliverOperationalSignals = (
   environment: PlatformMaintenanceInput,

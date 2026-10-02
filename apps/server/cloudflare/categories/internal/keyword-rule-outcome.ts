@@ -5,9 +5,9 @@ import {
   prepareAuthorizedAuditCall,
   recordCanonicalPATWork,
   refusedByAuditBudget,
-} from "@fidy/server/audit";
-import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
-import { livePATAuthority } from "@fidy/server/tokens-operations";
+} from "../../../src/shell/audit/operations";
+import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
+import { livePATAuthority } from "../../../src/shell/tokens/operations";
 import { newId } from "../../secret-material/operations";
 import { prepareOwnedStatement } from "../../database/operations";
 import {
@@ -17,13 +17,12 @@ import {
   KeywordRuleAlreadyExists,
   KeywordRuleId,
   KeywordRuleLimitReached,
-  NotFound,
-  type SuggestedOperationCaller,
-  ValidationFailed,
   maximumKeywordRulesPerUser,
-  normalizeCategoryKeyword,
-  toApiFailure,
-} from "@fidy/server/categories";
+} from "../../../src/core/categories/contract";
+import { NotFound, ValidationFailed } from "../../../src/shell/public-http/contract";
+import { type SuggestedOperationCaller } from "../../../src/shell/canonical-operations/operations";
+import { normalizeSearchText as normalizeCategoryKeyword } from "../../../src/core/search/operations";
+import { toApiFailure } from "../../../src/shell/categories/operations";
 import {
   HTTP_BAD_REQUEST,
   HTTP_NOT_FOUND,

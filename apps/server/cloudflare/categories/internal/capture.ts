@@ -1,5 +1,5 @@
 import { Effect, Option } from "effect";
-import type { CategoryId } from "../../../src/core/categories/reference";
+import type { CategoryId } from "../../../src/core/categories/contract";
 import { categorizeCapture } from "../../../src/core/categories/operations";
 import { type CaptureCategoryInput, CategoriesUnavailable } from "../contract";
 import { findOwnedKeywordRules } from "./keyword-rule-shared";

@@ -1,6 +1,6 @@
 import { Effect, Exit, Option, Schema } from "effect";
 import type { Prompt } from "effect/unstable/ai";
-import { freezeDeep } from "~/shell/_shared/deep-freeze";
+import { freezeDeep } from "./deep-freeze";
 import {
   HostedInferenceError,
   type HostedInferenceService,

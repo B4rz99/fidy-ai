@@ -1,6 +1,6 @@
 import { Option, Schema } from "effect";
 import { Category } from "~/core/categories/contract";
-import type { OwnedStatement } from "~/shell/_shared/owned-statement";
+import type { OwnedStatement } from "~/shell/owner-write/contract";
 import type { ListCategoriesResponse } from "~/shell/categories/contract";
 
 const maximumCategoryCount = 100;

@@ -3,7 +3,7 @@ import { Clock, DateTime, Effect, Encoding, Option, Schema } from "effect";
 import { calculateWebSessionDeadlines } from "../../../src/core/web-session/operations";
 import { sessionCookie, sessionDigest, sessionSetCookie } from "./credentials";
 import { attempt, invalid, json, uuid } from "./support";
-import { WebSessionBearer } from "../../../src/core/web-session/reference";
+import { WebSessionBearer } from "../../../src/core/web-session/contract";
 
 const HTTP_OK = 200;
 const digestBytes = 32;

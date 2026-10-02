@@ -1,10 +1,10 @@
 import { Schema } from "effect";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
-import { UserId } from "~/core/identity/reference";
-import { PATId } from "~/core/tokens/reference";
+import { UserId } from "~/core/identity/contract";
+import { PATId } from "~/core/tokens/contract";
 import { HostedAgentSessionId } from "~/core/agent/contract";
-import { WebSessionId } from "~/core/web-session/reference";
+import { WebSessionId } from "~/core/web-session/contract";
 
 /** A stable UUID naming one append-only AuditLogEntry. */
 export const AuditLogEntryId = Schema.String.check(Schema.isUUID())

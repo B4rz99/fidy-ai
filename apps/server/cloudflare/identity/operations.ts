@@ -1,9 +1,11 @@
+import { prepareCurrentUser } from "../../src/shell/identity/operations";
+import type { CurrentUserResponse } from "../../src/shell/identity/contract";
+import { IdentityUnavailable } from "./contract";
 import { bootstrapStatements } from "./internal/bootstrap";
-import type { Effect, Option } from "effect";
-import type { UserId } from "../../src/core/identity/reference";
+import { Effect, type Option } from "effect";
+import type { UserId } from "../../src/core/identity/contract";
 import type {
   IdentityStatement,
-  IdentityUnavailable,
   VerifiedIdentityInput,
   VerifiedIdentityStatements,
   WhatsAppAssociationSubject,
@@ -45,3 +47,28 @@ export const prepareWhatsAppIdentity = (
  */
 export const prepareVerifiedIdentity = (input: VerifiedIdentityInput): VerifiedIdentityStatements =>
   bootstrapStatements(input);
+
+/**
+ * Load one authenticated User's full canonical projection with their current Consent grant.
+ * This read grants no authority: the caller must recheck its exact live credential before release.
+ * Missing, invalid or inaccessible state fails closed without exposing persistence details.
+ */
+export const readCurrentUser = ({
+  db,
+  userId,
+}: Readonly<{ db: D1Database; userId: UserId }>): Effect.Effect<
+  CurrentUserResponse,
+  IdentityUnavailable
+> =>
+  Effect.gen(function* () {
+    const read = yield* prepareCurrentUser(userId);
+    const result = yield* Effect.tryPromise({
+      try: () =>
+        db
+          .prepare(read.statement.sql)
+          .bind(...read.statement.params)
+          .all(),
+      catch: () => new IdentityUnavailable(),
+    });
+    return yield* read.decode(result.results);
+  }).pipe(Effect.mapError(() => new IdentityUnavailable()));

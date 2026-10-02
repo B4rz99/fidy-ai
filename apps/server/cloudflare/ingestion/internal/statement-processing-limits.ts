@@ -1,4 +1,4 @@
-import { statementParserLimits } from "@fidy/server/ingestion-contract";
+import { statementParserLimits } from "../../../src/shell/ingestion/contract";
 
 /** One User-coordinated activity writes at most this many rows and rereads at most one staged file. */
 export const statementChunkSize = 32;

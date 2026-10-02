@@ -1,21 +1,22 @@
-import { freshSessionQuery } from "@fidy/server/web-session-operations";
-import { prepareEmailReplacementEvidence } from "@fidy/server/audit";
+import { freshSessionQuery } from "../../../src/shell/web-session/operations";
+import { prepareEmailReplacementEvidence } from "../../../src/shell/audit/operations";
 import {
   CompleteEmailReplacementPayload,
   RequestEmailReplacementPayload,
   emailReplacementFreshBody,
   emailReplacementInvalidBody,
-} from "@fidy/server/email-authentication-api";
+} from "../../../src/shell/email-authentication/contract";
 import {
   EmailReplacementMutation,
   type EmailReplacementMutationService,
   browserReplacementCaller,
   emailReplacementImplementations,
   permitsFreshBrowserReplacement,
-} from "@fidy/server/email-authentication-operations";
+} from "../../../src/shell/email-authentication/operations";
 import { Clock, Crypto, Data, Effect, Exit, Option, PlatformError, Schema } from "effect";
 import { freshBrowserSession } from "../../web-session/operations";
-import { RequestBodyPolicy, readBoundedRequestBody } from "../../http/request-body";
+import { RequestBodyPolicy } from "../../http/contract";
+import { readBoundedRequestBody } from "../../http/operations";
 
 const Proof = Schema.Struct({
   user_id: Schema.String.check(Schema.isUUID()),

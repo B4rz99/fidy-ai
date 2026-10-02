@@ -1,7 +1,7 @@
 import { Option } from "effect";
 import { operationCatalog } from "~/shell/api";
 import type { CatalogOperation } from "~/shell/canonical-catalog/contract";
-import { matchesRouteTemplate } from "~/shell/_shared/route-template";
+import { matchesRouteTemplate } from "~/shell/public-http/operations";
 
 const implemented = [
   "transactions.createTransaction",

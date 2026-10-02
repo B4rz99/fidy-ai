@@ -4,8 +4,7 @@ import { Effect, Exit, Ref, Schema } from "effect";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { CreateTransactionInput } from "~/core/transactions/contract";
 import { type HostedInferenceService, type HostedTextResult } from "./contract";
-import { verifyHostedInferenceConformanceChecks } from "./conformance";
-import { makeHostedInferenceStub } from "./operations";
+import { makeHostedInferenceStub, verifyHostedInferenceConformanceChecks } from "./operations";
 
 const representativeAmount = 42_000;
 

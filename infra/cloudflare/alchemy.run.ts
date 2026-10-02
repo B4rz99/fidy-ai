@@ -6,16 +6,13 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Layer from "effect/Layer";
 import * as Encoding from "effect/Encoding";
 import * as Redacted from "effect/Redacted";
-import { ApprovedWorkersAiModel } from "@fidy/server/hosted-inference-model";
+import { ApprovedWorkersAiModel } from "@fidy/server/hosted-inference-contract";
 import { EmailAddress } from "@fidy/server/email-authentication-contract";
 import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
 import { edgeSecurityPolicy } from "./edge-security";
 import { freeTierWorkerObservability } from "./worker-observability";
-import {
-  browserOrigins,
-  productionTopology,
-  resolveLocalCanonicalReadBearer,
-} from "../../apps/server/cloudflare/runtime/topology";
+import { browserOrigins, productionTopology } from "../../apps/server/cloudflare/runtime/contract";
+import { resolveLocalCanonicalReadBearer } from "../../apps/server/cloudflare/runtime/operations";
 
 const releaseGitRevision = Config.String("RELEASE_GIT_SHA").pipe(Config.withDefault(""));
 const contractDigest = Config.String("CONTRACT_DIGEST").pipe(Config.withDefault(""));

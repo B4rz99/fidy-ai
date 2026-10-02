@@ -3,7 +3,11 @@ import { Context, Effect, Exit, Fiber, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 import { describe, expect, it, vi } from "vitest";
-import { type RoutingObservation, diagnoseSmokeRouting } from "./diagnose-smoke-routing";
+import {
+  type RoutingObservation,
+  diagnoseSmokeRouting,
+  settledRoutingAccepted,
+} from "./diagnose-smoke-routing";
 import { SmokeRequest, smokeDiagnosticRevision } from "../../apps/server/cloudflare/runtime/smoke";
 
 const publicCandidate = "dc8dcd28-271b-4367-9840-6c244f84cb40";
@@ -60,6 +64,48 @@ const rejectedPostResponse = (
   });
 
 describe("read-only smoke routing diagnosis", () => {
+  it("requires complete repeated exact-pair observations rather than a lucky readiness response", () => {
+    const observations: ReadonlyArray<RoutingObservation> = Array.from(
+      { length: 48 },
+      (_, index) => {
+        const pairing = index % 8 < 4 ? "candidate" : "intermediate";
+        const method = index % 2 === 0 ? "GET" : "POST";
+        return {
+          round: Math.floor(index / 8) + 1,
+          pairing,
+          method,
+          call: "request",
+          observedCall: "request",
+          overrides: "paired",
+          replica: index % 4 < 2 ? 1 : 2,
+          window: "settled",
+          status: method === "GET" ? 200 : 503,
+          publicVersion: pairing === "candidate" ? publicCandidate : publicStable,
+          coreVersion: coreCandidate,
+          coreSource: method === "GET" ? "body" : "header",
+        };
+      }
+    );
+    expect(settledRoutingAccepted({ env: config, observations })).toBe(true);
+    for (const invalid of [
+      [],
+      observations.slice(1),
+      observations.map((value, index) => (index === 0 ? { ...value, replica: 2 as const } : value)),
+      observations.map((value) => ({ ...value, coreVersion: coreStable })),
+      observations.map((value) => ({ ...value, publicVersion: publicCandidate })),
+      observations.map((value) => ({ ...value, observedCall: "unavailable" as const })),
+      observations.map((value) => ({ ...value, coreSource: "unavailable" as const })),
+      observations.map((value) => ({ ...value, status: 200 })),
+      observations.map((value) => ({ ...value, round: value.round + 0.5 })),
+      observations.map((value) => ({ ...value, window: "early" as const })),
+    ]) {
+      expect(settledRoutingAccepted({ env: config, observations: invalid })).toBe(false);
+    }
+    expect(
+      settledRoutingAccepted({ env: { ...config, CORE_VERSION_ID: "invalid" }, observations })
+    ).toBe(false);
+  });
+
   effectIt.effect(
     "keeps settling read-only and issues no probes before the fixed observation window",
     () =>

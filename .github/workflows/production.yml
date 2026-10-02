@@ -146,17 +146,16 @@ jobs:
         working-directory: infra/cloudflare
         run: bun diagnose-smoke-routing.ts
 
-      - name: Prove both candidate and intermediate Worker pairings
-        id: candidate_smoke
-        working-directory: infra/cloudflare
-        run: bun verify-production-smoke.ts
-
-      - name: Observe settled routing before guarded promotion or cleanup
-        if: ${{ !cancelled() && (steps.candidate_smoke.outcome == 'success' || steps.candidate_smoke.outcome == 'failure') }}
+      - name: Require settled exact-pair routing before synthetic work
         working-directory: infra/cloudflare
         env:
           SMOKE_ROUTING_WINDOW: settled
         run: bun diagnose-smoke-routing.ts
+
+      - name: Prove both candidate and intermediate Worker pairings
+        id: candidate_smoke
+        working-directory: infra/cloudflare
+        run: bun verify-production-smoke.ts
 
       - name: Promote the exact smoke-tested Workers
         id: promote

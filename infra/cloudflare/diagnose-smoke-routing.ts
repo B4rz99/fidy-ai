@@ -59,6 +59,7 @@ type CoreObservation = Readonly<{
 class RoutingDiagnosticFailed extends Data.TaggedError("RoutingDiagnosticFailed")<{}> {}
 const origin = "https://api.fidyapp.com";
 const rounds = 6;
+const ordinarySamplesPerRound = 8;
 const responseLimit = 4096;
 const readyStatus = 200;
 const refusedStatus = 503;
@@ -219,6 +220,47 @@ const routingSamples = (
   return probes;
 };
 
+const matchesRoutingIdentity = (value: RoutingObservation, config: RoutingConfig): boolean =>
+  value.coreVersion === config.CORE_VERSION_ID &&
+  value.publicVersion ===
+    (value.pairing === "candidate" ? config.PUBLIC_VERSION_ID : config.STABLE_PUBLIC_VERSION_ID);
+
+const matchesReadOnlyProtocol = (value: RoutingObservation): boolean =>
+  value.observedCall === "request" &&
+  value.status === (value.method === "GET" ? readyStatus : refusedStatus) &&
+  value.coreSource === (value.method === "GET" ? "body" : "header");
+
+/** Exact, complete ordinary-call observations after settling; never a synthetic-work attestation. */
+export const settledRoutingAccepted = ({
+  env,
+  observations,
+}: Readonly<{
+  env: unknown;
+  observations: ReadonlyArray<RoutingObservation>;
+}>): boolean => {
+  const decoded = Schema.decodeUnknownOption(RoutingConfig)(env);
+  if (Option.isNone(decoded)) return false;
+  const required = observations.filter(
+    (value) =>
+      value.window === "settled" && value.call === "request" && value.overrides === "paired"
+  );
+  const identities = new Set(
+    required.map((value) => `${value.round}:${value.pairing}:${value.method}:${value.replica}`)
+  );
+  return (
+    required.length === rounds * ordinarySamplesPerRound &&
+    identities.size === rounds * ordinarySamplesPerRound &&
+    required.every(
+      (value) =>
+        value.round >= 1 &&
+        value.round <= rounds &&
+        Number.isInteger(value.round) &&
+        matchesRoutingIdentity(value, decoded.value) &&
+        matchesReadOnlyProtocol(value)
+    )
+  );
+};
+
 /** Bounded GET/POST observations only; never publishes work, writes an attestation, or changes traffic. */
 export const diagnoseSmokeRouting = Effect.fn(function* (env: unknown) {
   const decoded = Schema.decodeUnknownOption(RoutingConfig)(env);
@@ -263,6 +305,16 @@ if (import.meta.main) {
         .map((observation) => `Smoke routing observation: ${JSON.stringify(observation)}\n`)
         .join("")
     );
+    if (
+      result.value.some((value) => value.window === "settled") &&
+      !settledRoutingAccepted({ env: process.env, observations: result.value })
+    ) {
+      await Bun.write(
+        Bun.stderr,
+        "Settled smoke routing rejected; synthetic work and promotion must not start.\n"
+      );
+      process.exitCode = 1;
+    }
   } else {
     await Bun.write(
       Bun.stderr,

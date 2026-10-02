@@ -198,8 +198,13 @@ identity values and foreign text never enter the ordinary smoke verdict. This to
 routing race without proving that such a race caused every historical failure.
 
 For the recurring identity failure, the protected release runs `diagnose-smoke-routing.ts` after
-staging and again after pairing smoke completes, before guarded promotion or cleanup. The latter waits a fixed 60 seconds
-before sampling, distinguishing early selection from settled selection without changing retry bounds.
+staging and again before pairing smoke. The latter waits a fixed 60 seconds before sampling,
+distinguishing early selection from settled selection without changing retry bounds. It requires all
+48 ordinary Request/paired-override samples to report the exact candidate Core and the expected
+candidate or captured stable ingress, across six rounds, both methods and two replicas. Slots must be
+complete and unique; status, identity source and actual call form must match the read-only protocol.
+Missing or mismatched evidence blocks synthetic work and promotion; cleanup restores the stable pair.
+The other call/dictionary variants remain diagnostic controls, not promotion authority.
 Six rounds use the same readiness URL, with two replicas of each GET/POST control. Candidate requests
 compare the existing Request service-binding call with the documented URL/options form; method,
 headers, body, destination and cancellation signal remain the same. Proof-admitted ingress reports
@@ -215,8 +220,9 @@ redirects and automatic HTTP tracing are disabled. Output contains only method, 
 replica, requested/observed call form, override form, observation window, status, validated public/Core
 version IDs and identity source. New Core rejection headers carry a validated version ID; older Core
 can be identified by true equality against the captured stable version, marked `equality`, never
-assumed from a fallback. Missing/malformed identity remains `unavailable`. Observations are not smoke
-attestations and cannot authorize promotion; ordinary readiness and synthetic gates still run.
+assumed from a fallback. Missing/malformed identity remains `unavailable` and cannot satisfy the
+settled gate. Observations are not synthetic-work attestations and cannot authorize promotion;
+ordinary readiness and synthetic gates still run afterward.
 
 The [Cloudflare version-override contract](https://developers.cloudflare.com/workers/versions-and-deployments/version-overrides/)
 supports explicit overrides through service-binding `fetch` calls and warns that unapplied overrides
@@ -224,7 +230,12 @@ fall back to deployment percentages. Our ingress already forwards that header ex
 [Workers SDK report #15536](https://github.com/cloudflare/workers-sdk/issues/15536) describes a similar
 0%-version override failure, but has no confirmed platform cause. Matching symptoms are supporting
 context, not proof that Fidy has the same bug. Run 37048560756 confirmed per-request and time-varying
-selection; it did not establish that HTTP method caused the divergence.
+selection; it did not establish that HTTP method caused the divergence. Controlled run
+[37052790175](https://github.com/B4rz99/fidy-ai/actions/runs/37052790175) found early fallback in both
+GET and POST and both Request and URL/options call forms; removing the public dictionary entry did
+not eliminate it either. After a fixed minute, all candidate samples selected the correct pair.
+This supports a convergence race and motivates the settled gate, not a claim that a fixed wait alone
+makes overrides reliable. The gate continues to fail closed if routing has not converged.
 
 Never deploy a mutable tag, a later checkout, or provider-controlled source. Production has no
 persistent staging sibling. The stack rejects missing, malformed, and all-zero Production release

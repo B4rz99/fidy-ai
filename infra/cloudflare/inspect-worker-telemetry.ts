@@ -1,6 +1,6 @@
 import type { OutboundHttpService } from "@fidy/server/outbound-http";
 import { TelemetryRelease } from "@fidy/server/telemetry";
-import { Data, Effect, Option, Schema } from "effect";
+import { Data, DateTime, Effect, Option, Schema } from "effect";
 
 const halfWindowMilliseconds = 60_000;
 const maximumEvents = 100;
@@ -87,7 +87,7 @@ const workSummary = (
       );
       return message.pipe(
         Option.flatMap((text) =>
-          Schema.decodeUnknownOption(Schema.fromJsonString(WorkSummary))(text).pipe(
+          Schema.decodeOption(Schema.fromJsonString(WorkSummary))(text).pipe(
             Option.orElse(() => inspectTextSummary(text))
           )
         )
@@ -121,7 +121,7 @@ const projectQueryReport = (
         onNone: () => [],
         onSome: (work) => [
           {
-            timestamp: new Date(event.timestamp).toISOString(),
+            timestamp: DateTime.formatIso(DateTime.makeUnsafe(event.timestamp)),
             version: event.$workers?.scriptVersion?.id ?? "unavailable",
             release: work.release,
             method: Option.getOrElse(logMethod(event), () => "unavailable"),
@@ -153,16 +153,19 @@ export const inspectWorkerTelemetry = Effect.fn(function* (
     outbound: OutboundHttpService;
   }>
 ) {
-  const timestamp = yield* Schema.decodeUnknownEffect(Timestamp)(input.timestamp).pipe(
+  const timestamp = yield* Schema.decodeEffect(Timestamp)(input.timestamp).pipe(
     Effect.mapError(() => new TelemetryInspectionFailed({ reason: "invalid-time" }))
   );
-  const center = Date.parse(timestamp);
+  const parsedTime = DateTime.make(timestamp);
   if (
-    !Number.isFinite(center) ||
-    center < halfWindowMilliseconds ||
-    new Date(center).toISOString() !== timestamp.replace("Z", ".000Z")
+    Option.isNone(parsedTime) ||
+    DateTime.formatIso(parsedTime.value) !== timestamp.replace("Z", ".000Z")
   ) {
-    return yield* Effect.fail(new TelemetryInspectionFailed({ reason: "invalid-time" }));
+    return yield* new TelemetryInspectionFailed({ reason: "invalid-time" });
+  }
+  const center = DateTime.toEpochMillis(parsedTime.value);
+  if (center < halfWindowMilliseconds) {
+    return yield* new TelemetryInspectionFailed({ reason: "invalid-time" });
   }
   const from = center - halfWindowMilliseconds;
   const to = center + halfWindowMilliseconds;
@@ -175,16 +178,14 @@ export const inspectWorkerTelemetry = Effect.fn(function* (
     })
     .pipe(Effect.mapError(() => new TelemetryInspectionFailed({ reason: "query-failed" })));
   if (response.status !== successfulQueryStatus) {
-    return yield* Effect.fail(
-      new TelemetryInspectionFailed({
-        reason:
-          response.status === unauthenticatedStatus || response.status === forbiddenStatus
-            ? "query-denied"
-            : "query-failed",
-      })
-    );
+    return yield* new TelemetryInspectionFailed({
+      reason:
+        response.status === unauthenticatedStatus || response.status === forbiddenStatus
+          ? "query-denied"
+          : "query-failed",
+    });
   }
-  const decoded = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(QueryResponse))(
+  const decoded = yield* Schema.decodeEffect(Schema.fromJsonString(QueryResponse))(
     new TextDecoder().decode(response.body)
   ).pipe(Effect.mapError(() => new TelemetryInspectionFailed({ reason: "invalid-response" })));
   return projectQueryReport(decoded, { from, to, workerName: input.workerName });

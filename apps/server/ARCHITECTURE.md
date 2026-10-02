@@ -268,6 +268,30 @@ private `internal/` boundary. Existing credential, Consent, audit and User-coord
 their authoritative D1 units. This ownership refactor introduces no new external workflow or telemetry;
 the existing canonical spans and metadata-only evidence remain in force.
 
+### Budgets owner composition
+
+Budgets publishes positive exact-Money caps, monthly status, applied IANA periods, monotone latch
+states and closed failures through `core/budgets/contract.ts`; `operations.ts` owns the pure
+contribution, status and threshold decisions. Its shell contract contains browser-safe canonical
+declarations, while shell operations project owner failures and caller-scoped recovery suggestions.
+No portable Budget module constructs runtime authority.
+
+The native Budget owner publishes guarded cap mutations, canonical reads, complete cap projections,
+resumable exact monthly spending and bounded alert evaluation. Persistence rows, progress cursors,
+audit composition and owner-only calculations stay under `cloudflare/budgets/internal/`. Callers
+establish live authority and serialize one explicit User before composing these operations. Dashboard
+receives public cap facts rather than Budget persistence; Category existence is rechecked through
+Categories' published projection at commit. Spending consumes only Transactions' decoded effective
+contribution pages, never its stored rows or SQL relations.
+
+One User's fact revision guards retained progress across bounded reads. An incomplete, malformed or
+changed-revision projection is unavailable, never a partial total. Calendar bounds remain half-open
+UTC intervals derived from the explicit IANA zone; only matching Category/Currency outflows count.
+Durable pending work retains backdated periods, and the existing coordinator drains it before later
+corrections. Each monthly threshold remains monotone with a unique occurrence under concurrent work.
+This ownership refactor adds no external workflow, telemetry purpose, migration or runtime; existing
+canonical spans, metadata-only AuditLogEntries and atomic accountability remain in force.
+
 ### Consent owner composition
 
 Consent publishes its declarations and decisions through `core/consent/contract.ts` and

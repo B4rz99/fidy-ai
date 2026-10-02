@@ -4,7 +4,7 @@ import type { ToolCallId, TranscriptTurnId } from "@fidy/server/agent-runtime";
 import { prepareCanonicalAuditBudgetGuard, refusedByAuditBudget } from "@fidy/server/audit";
 import { KeywordRule, KeywordRuleId } from "@fidy/server/categories";
 import { Memory, MemoryId } from "@fidy/server/memory-runtime";
-import { Budget, BudgetId } from "@fidy/server/budgets-runtime";
+import { Budget, BudgetId } from "@fidy/server/budgets-contract";
 import { StatementSubmission } from "@fidy/server/statement-staging";
 import { EmailForwardingAddress } from "../../src/core/ingestion/model";
 import { readForwardingAddress } from "../ingestion/forwarding-address";

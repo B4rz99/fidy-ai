@@ -1,112 +1,90 @@
-import { Schema } from "effect";
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
 import {
-  Budget,
-  BudgetStatusQueryValues,
-  BudgetStatusReport,
-  CreateBudgetInput,
-  UpdateBudgetInput,
-} from "~/core/budgets/model";
-import { BudgetId } from "~/core/budgets/reference";
+  type BudgetAlreadyExists,
+  type BudgetCurrencyImmutable,
+  type BudgetFailure,
+  type BudgetNotFound,
+} from "~/core/budgets/contract";
+import { type CategoryNotFound } from "~/core/categories/contract";
+import { NotFound, type SuggestedOperation, ValidationFailed } from "~/shell/public-http/contract";
 import {
-  NotFound,
-  OperationResponse,
-  ValidationFailed,
-  createdStatus,
-} from "~/shell/public-http/contract";
-import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
+  type SuggestedOperationCaller,
+  checkpointSuggestedOperations,
+  suggestOperation,
+} from "~/shell/_shared/suggested-operations";
+import { toApiFailure as categoryToApiFailure } from "~/shell/categories/operations";
 
-const read = operationPolicy({
-  access: patScoped("read"),
-  requiredTier: "free",
-  agentConfirmation: "not-required",
-  kind: "query",
-});
-const additiveWrite = operationPolicy({
-  access: patScoped("write"),
-  requiredTier: "free",
-  agentConfirmation: "not-required",
-  kind: "mutation",
-});
-const destructiveWrite = operationPolicy({
-  access: patScoped("write"),
-  requiredTier: "free",
-  agentConfirmation: "required",
-  kind: "mutation",
-});
+const budgetRecovery = (caller: SuggestedOperationCaller): ReadonlyArray<SuggestedOperation> =>
+  checkpointSuggestedOperations({
+    candidates: [
+      suggestOperation({
+        tool: "budgets.listBudgets",
+        hint: "List Budgets to inspect their stable ids, Categories, caps, and Currencies.",
+      }),
+    ],
+    caller,
+  });
 
-const BudgetStatusQueryParameters = Schema.Struct({
-  categoryId: Schema.optionalKey(BudgetStatusQueryValues.fields.categoryId),
-  currency: Schema.optionalKey(BudgetStatusQueryValues.fields.currency),
-  timeZone: BudgetStatusQueryValues.fields.timeZone,
-});
+type FailureInput<Failure extends BudgetFailure> = Readonly<{
+  failure: Failure;
+  caller: SuggestedOperationCaller;
+}>;
 
-/** User-scoped monthly Budget management and one-call current-month status lookup. */
-export const BudgetsGroup = HttpApiGroup.make("budgets")
-  .add(
-    HttpApiEndpoint.post("createBudget", "/budgets", {
-      payload: CreateBudgetInput,
-      success: OperationResponse(Budget).pipe(HttpApiSchema.status(createdStatus)),
-      error: [NotFound, ValidationFailed],
-    })
-      .annotate(
-        OpenApi.Description,
-        "Create one positive monthly Money cap for a stable Category and Currency. Only one Budget may exist for the same Category and Currency."
-      )
-      .annotateMerge(additiveWrite)
-  )
-  .add(
-    HttpApiEndpoint.get("listBudgets", "/budgets", {
-      success: OperationResponse(Schema.Array(Budget)),
-    })
-      .annotate(
-        OpenApi.Description,
-        "List all of the caller's Budgets in deterministic Currency and Category order."
-      )
-      .annotateMerge(read)
-  )
-  .add(
-    HttpApiEndpoint.get("getBudget", "/budgets/:id", {
-      params: Schema.Struct({ id: BudgetId }),
-      success: OperationResponse(Budget),
-      error: NotFound,
-    })
-      .annotate(OpenApi.Description, "Fetch one caller-owned Budget by stable identity.")
-      .annotateMerge(read)
-  )
-  .add(
-    HttpApiEndpoint.put("updateBudget", "/budgets/:id", {
-      params: Schema.Struct({ id: BudgetId }),
-      payload: UpdateBudgetInput,
-      success: OperationResponse(Budget),
-      error: [NotFound, ValidationFailed],
-    })
-      .annotate(
-        OpenApi.Description,
-        "Replace a Budget's Category and positive cap. Its Currency is immutable; previously reached monthly alert marks remain latched."
-      )
-      .annotateMerge(destructiveWrite)
-  )
-  .add(
-    HttpApiEndpoint.delete("deleteBudget", "/budgets/:id", {
-      params: Schema.Struct({ id: BudgetId }),
-      success: OperationResponse(BudgetId),
-      error: NotFound,
-    })
-      .annotate(
-        OpenApi.Description,
-        "Permanently delete one Budget and its operational monthly alert marks."
-      )
-      .annotateMerge(destructiveWrite)
-  )
-  .add(
-    HttpApiEndpoint.get("getBudgetStatus", "/budget-status", {
-      query: BudgetStatusQueryParameters,
-      success: OperationResponse(BudgetStatusReport),
-    })
-      .annotate(
-        OpenApi.Description,
-        "Answer current monthly Budget status in one call. Supply the IANA time zone whose calendar boundaries apply; optional Category and Currency filters combine, and omitted Currency returns separate deterministically ordered results without conversion or aggregation."
-      )
-      .annotateMerge(read)
-  );
+/** Maps each closed Budget failure subtype to its precise public API failure. */
+export function toApiFailure(input: FailureInput<BudgetNotFound>): NotFound;
+export function toApiFailure(
+  input: FailureInput<BudgetAlreadyExists | BudgetCurrencyImmutable>
+): ValidationFailed;
+export function toApiFailure(input: FailureInput<BudgetFailure>): NotFound | ValidationFailed;
+export function toApiFailure({
+  failure,
+  caller,
+}: FailureInput<BudgetFailure>): NotFound | ValidationFailed {
+  switch (failure._tag) {
+    case "BudgetNotFound":
+      return NotFound.make({
+        error: {
+          code: "not_found",
+          message: "That Budget was not found. List Budgets to find one you can change.",
+        },
+        next: budgetRecovery(caller),
+      });
+    case "BudgetAlreadyExists":
+      return ValidationFailed.make({
+        error: {
+          code: "validation_failed",
+          message: "Only one Budget may exist for the same Category and Currency.",
+          fields: [
+            {
+              path: "categoryId",
+              message: `A ${failure.currency} Budget already exists for this Category. Update it instead.`,
+            },
+          ],
+        },
+        next: budgetRecovery(caller),
+      });
+    case "BudgetCurrencyImmutable":
+      return ValidationFailed.make({
+        error: {
+          code: "validation_failed",
+          message:
+            "A Budget Currency cannot be changed in place. Delete it and create another Budget.",
+          fields: [
+            {
+              path: "cap.currency",
+              message: `Expected ${failure.expected}, received ${failure.received}.`,
+            },
+          ],
+        },
+        next: budgetRecovery(caller),
+      });
+  }
+}
+
+/** Maps an unknown Category through the shared Category recovery vocabulary. */
+export const mapBudgetCategoryFailure = ({
+  failure,
+  caller,
+}: Readonly<{
+  failure: CategoryNotFound;
+  caller: SuggestedOperationCaller;
+}>): NotFound => categoryToApiFailure({ failure, caller });

@@ -83,7 +83,7 @@ import {
 import { ForwardedEmailWork } from "../ingestion/forwarded-email-delivery";
 import { coordinatorProbeName } from "../runtime/operational-probes";
 import { processForwardedEmail } from "../ingestion/forwarded-email-processing";
-import { reconcileBudgetLatches } from "../budgets/budget-latches";
+import { evaluateBudgetAlerts } from "../budgets/operations";
 import {
   type HostedCommitFence,
   executeSingleCanonicalMutation,
@@ -281,7 +281,7 @@ const executeWork = (input: WorkInput): Effect.Effect<Response, never, HostedInf
     // Drain committed work before a later correction can lower spending below a reached mark.
     if (
       budgetWork &&
-      !(yield* reconcileBudgetLatches({ db: input.db, userId: input.subject.userId }))
+      !(yield* evaluateBudgetAlerts({ db: input.db, userId: input.subject.userId }))
     ) {
       return transactionUnavailable();
     }
@@ -309,7 +309,7 @@ const executeWork = (input: WorkInput): Effect.Effect<Response, never, HostedInf
       : executeCall({ ...input, work });
     if (result.ok && budgetWork) {
       // Atomic D1 triggers retain versioned work even when this best-effort drain is interrupted.
-      yield* reconcileBudgetLatches({ db: input.db, userId: input.subject.userId });
+      yield* evaluateBudgetAlerts({ db: input.db, userId: input.subject.userId });
     }
     return result;
   });

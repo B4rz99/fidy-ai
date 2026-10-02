@@ -3,13 +3,13 @@ import { BigDecimal, DateTime, Effect, Equal, Result } from "effect";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { Currency, Money } from "~/core/_shared/money";
 import { BudgetId } from "./reference";
-import type { Budget } from "./model";
+import type { Budget } from "./contract";
 import {
   advanceBudgetLatch,
   calculateBudgetStatus,
   deriveCurrentBudgetMonth,
   sumBudgetContributions,
-} from "./rules";
+} from "./operations";
 import { CategoryId } from "~/core/categories/reference";
 
 const money = (amount: string, currency: Currency = Currency.make("COP")): Money =>

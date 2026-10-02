@@ -1,3 +1,4 @@
+import type { CanonicalMutationRefusal } from "../mutations/mutation-types";
 import {
   type CanonicalRefusalDisposition,
   type TransactionAuthority,
@@ -507,3 +508,11 @@ export {
 } from "./contract";
 
 export { dailyAuditMessage } from "./contract";
+
+/** An exhausted shared audit budget cannot write another refusal AuditLogEntry. */
+export const auditLimitRefusal = (): CanonicalMutationRefusal => ({
+  code: "rate_limited",
+  message: "Daily audit budget exhausted.",
+  record: () => Effect.succeed("rate_limited" as const),
+  respond: () => Effect.succeed(transactionUnavailable()),
+});

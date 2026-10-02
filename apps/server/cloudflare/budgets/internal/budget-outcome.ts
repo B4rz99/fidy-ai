@@ -1,18 +1,18 @@
-import { Budget, BudgetId } from "@fidy/server/budgets-runtime";
+import type { BudgetOutcome } from "../contract";
+import { Budget, BudgetId } from "@fidy/server/budgets-contract";
 import { Effect, Option, Schema } from "effect";
 import {
   type TransactionCaller,
+  auditLimitRefusal,
   transactionFailure,
-  transactionUnavailable,
-} from "../canonical-work/operations";
+} from "../../canonical-work/operations";
 import { recordBudgetCall } from "./budget-audit";
 import { budgetFromRow } from "./budget-row";
 import type {
-  BudgetOutcome,
   CanonicalMutationRefusal,
   CommittedMutationValue,
   OwnerOutcome,
-} from "../mutations/mutation-types";
+} from "../../mutations/mutation-types";
 
 /** One retained Budget by id and stable User; a foreign id resolves to absence. */
 export const findOwnedBudget = ({
@@ -65,14 +65,6 @@ export const budgetRefusal = ({
     ),
 });
 
-/** An exhausted shared audit budget cannot write another refusal AuditLogEntry. */
-export const budgetAuditLimitRefusal = (): CanonicalMutationRefusal => ({
-  code: "rate_limited",
-  message: "Daily audit budget exhausted.",
-  record: () => Effect.succeed("rate_limited" as const),
-  respond: () => Effect.succeed(transactionUnavailable()),
-});
-
 /** Read one Budget after its shared D1 unit committed; deletion returns only the removed id. */
 export const findBudgetValue = ({
   db,
@@ -108,8 +100,5 @@ export const budgetOutcome = (outcome: BudgetOutcome): OwnerOutcome => ({
   collisionKey: Option.none(),
   read: (db, userId) => findBudgetValue({ db, userId, outcome }),
   triggerRefusal: (_work, kind) =>
-    kind === "audit" ? Option.some(budgetAuditLimitRefusal()) : Option.none(),
+    kind === "audit" ? Option.some(auditLimitRefusal()) : Option.none(),
 });
-
-/** A Budget owner whose D1 authority cannot decide must fail closed. */
-export const unavailableBudget = transactionUnavailable;

@@ -154,6 +154,67 @@ const tokensToolPrivate = `tools/${PROBE_PREFIX}tokens-private`;
 
 const PROBES: readonly Probe[] = [
   {
+    name: "Budget peers consume caps, spending and alerts through owner operations",
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}budgets-public/probe.ts`,
+        source:
+          'import { readBudgetCaps, readBudgetSpending, evaluateBudgetAlerts } from "../budgets/operations";\nexport const reads = [readBudgetCaps, readBudgetSpending, evaluateBudgetAlerts];\n',
+      },
+    ],
+  },
+  {
+    name: "foreign native tests cannot import Budget persistence or calculations",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-budgets-internal: cloudflare/${PROBE_PREFIX}budgets-private/probe.test.ts → cloudflare/budgets/internal/budget-queries.ts`,
+        `error foreign-module-imports-cloudflare-budgets-internal: cloudflare/${PROBE_PREFIX}budgets-private/probe.test.ts → cloudflare/budgets/internal/budget-progress.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}budgets-private/probe.test.ts`,
+        source:
+          'import { currentBudgetReport } from "../budgets/internal/budget-queries";\nimport { findBudgetProgress } from "../budgets/internal/budget-progress";\nexport const privateReads = [currentBudgetReport, findBudgetProgress];\n',
+      },
+    ],
+  },
+  {
+    name: "tooling cannot import Budget persistence types",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-budgets-internal: tools/${PROBE_PREFIX}budgets-private/probe.ts → cloudflare/budgets/internal/budget-progress.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `tools/${PROBE_PREFIX}budgets-private/probe.ts`,
+        source:
+          'import type { BudgetProgress } from "../../cloudflare/budgets/internal/budget-progress";\nexport type LeakedProgress = BudgetProgress;\n',
+      },
+    ],
+  },
+  {
+    name: "portable callers cannot bypass the native Budget owner",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-budgets-internal: src/shell/${PROBE_PREFIX}budgets-private/probe.ts → cloudflare/budgets/internal/budget-latches.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `src/shell/${PROBE_PREFIX}budgets-private/probe.ts`,
+        source:
+          'import { reconcileBudgetLatches } from "../../../cloudflare/budgets/internal/budget-latches";\nexport const privateCalculation = reconcileBudgetLatches;\n',
+      },
+    ],
+  },
+
+  {
     expect: { kind: "allowed" },
     files: [
       {

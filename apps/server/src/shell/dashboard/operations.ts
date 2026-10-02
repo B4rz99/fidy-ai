@@ -1,13 +1,9 @@
-import { Schema, Struct } from "effect";
+import { hasExactBudgetProgress } from "~/core/budgets/operations";
+import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
-import { Currency, Money, MoneyGroups, type ReadonlyMoney } from "~/core/_shared/money";
+import { Currency, MoneyGroups } from "~/core/_shared/money";
 import { UtcTimestamp } from "~/core/_shared/time";
-import {
-  OverBudget,
-  ReachedBudget,
-  UnderBudget,
-  hasExactBudgetProgress,
-} from "~/core/budgets/model";
+import { BudgetProgress } from "~/core/budgets/contract";
 import { Category } from "~/core/categories/contract";
 import {
   AppliedDashboardPeriod,
@@ -46,22 +42,8 @@ const SpendingChartResult = Schema.Struct({
   ),
 }).annotate({ identifier: "SpendingChartResult" });
 
-const BudgetStatus = Schema.Union([
-  UnderBudget.mapFields(Struct.pick(["type", "remaining"])),
-  ReachedBudget.mapFields(Struct.pick(["type"])),
-  OverBudget.mapFields(Struct.pick(["type", "overBy"])),
-]);
-
 const validBudgetCurrencies = Schema.makeFilter<
-  Readonly<{
-    readonly currency: Currency;
-    readonly cap: ReadonlyMoney;
-    readonly spent: ReadonlyMoney;
-    readonly status:
-      | Readonly<{ readonly type: "under"; readonly remaining: ReadonlyMoney }>
-      | Readonly<{ readonly type: "reached" }>
-      | Readonly<{ readonly type: "over"; readonly overBy: ReadonlyMoney }>;
-  }>
+  typeof BudgetProgress.Type & Readonly<{ currency: Currency }>
 >((data) => {
   if (data.cap.currency !== data.currency) {
     return { path: ["cap", "currency"], issue: "Expected the Budget Currency" };
@@ -86,9 +68,7 @@ const AvailableBudgetResult = Schema.Struct({
   appliedPeriod: AppliedDashboardPeriod,
   category: Category,
   currency: Currency,
-  cap: Money,
-  spent: Money,
-  status: BudgetStatus,
+  ...BudgetProgress.fields,
 }).check(validBudgetCurrencies);
 
 const MissingBudgetResult = Schema.Struct({

@@ -1,11 +1,13 @@
-import { BigDecimal, DateTime, Schema, Struct } from "effect";
+import { BigDecimal, Data, DateTime, Schema, Struct } from "effect";
 import { IanaTimeZone } from "~/core/_shared/context";
-import { Money, type ReadonlyMoney } from "~/core/_shared/money";
+import { type Currency, Money, type ReadonlyMoney } from "~/core/_shared/money";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { CategoryId } from "~/core/categories/reference";
 import { BudgetId } from "./reference";
 
 export { BudgetId } from "./reference";
+export { IanaTimeZone } from "~/core/_shared/context";
+export { Money, encodeMoneyAmount } from "~/core/_shared/money";
 
 const zero = BigDecimal.make(0n, 0);
 const positiveBudgetCap = Schema.makeFilter<{
@@ -141,7 +143,14 @@ const hasExactOverProgress = (
   BigDecimal.equals(overBy.amount, BigDecimal.subtract(spent.amount, cap.amount));
 
 /** Whether projected progress exactly represents one positive Budget cap and its spending. */
-export const hasExactBudgetProgress = ({ cap, spent, status }: BudgetProgressFact): boolean => {
+const hasExactBudgetProgress = ({ cap, spent, status }: BudgetProgressFact): boolean => {
+  if (
+    spent.currency !== cap.currency ||
+    (status.type === "under" && status.remaining.currency !== cap.currency) ||
+    (status.type === "over" && status.overBy.currency !== cap.currency)
+  ) {
+    return false;
+  }
   if (BigDecimal.Order(cap.amount, zero) !== 1) return false;
   const checks = {
     under: (): boolean =>
@@ -152,6 +161,17 @@ export const hasExactBudgetProgress = ({ cap, spent, status }: BudgetProgressFac
   };
   return checks[status.type]();
 };
+
+/** Exact progress over decoded Money, shared by monthly status and Dashboard projections. */
+export const BudgetProgress = Schema.Struct({
+  cap: Money,
+  spent: Money,
+  status: Schema.Union([
+    UnderBudget.mapFields(Struct.pick(["type", "remaining"])),
+    ReachedBudget.mapFields(Struct.pick(["type"])),
+    OverBudget.mapFields(Struct.pick(["type", "overBy"])),
+  ]),
+}).check(Schema.makeFilter(hasExactBudgetProgress));
 
 const sameStatusCurrency = Schema.makeFilter<StatusCurrencyView>((status) => {
   const currency = status.budget.cap.currency;
@@ -212,6 +232,13 @@ export const BudgetStatusQueryValues = Schema.Struct({
   timeZone: IanaTimeZone,
 });
 
+/** Canonical URL filters; Category and Currency are optional and the IANA zone is explicit. */
+export const BudgetStatusQueryParameters = Schema.Struct({
+  categoryId: Schema.optionalKey(BudgetStatusQueryValues.fields.categoryId),
+  currency: Schema.optionalKey(BudgetStatusQueryValues.fields.currency),
+  timeZone: BudgetStatusQueryValues.fields.timeZone,
+});
+
 /** Optional status filters after canonical query decoding. */
 export const BudgetStatusQuery = Schema.Struct({
   categoryId: Schema.Option(BudgetStatusQueryValues.fields.categoryId),
@@ -244,3 +271,23 @@ export const BudgetMonthLatch = Schema.Union([
   }),
 ]).annotate({ identifier: "BudgetMonthLatch" });
 export type BudgetMonthLatch = typeof BudgetMonthLatch.Type;
+
+/** The requested Budget is absent or does not belong to the current User. */
+export class BudgetNotFound extends Data.TaggedError("BudgetNotFound")<{
+  readonly budgetId: BudgetId;
+}> {}
+
+/** Another Budget already owns this User/Category/Currency scope. */
+export class BudgetAlreadyExists extends Data.TaggedError("BudgetAlreadyExists")<{
+  readonly categoryId: CategoryId;
+  readonly currency: Currency;
+}> {}
+
+/** A Budget's denomination cannot be changed in place. */
+export class BudgetCurrencyImmutable extends Data.TaggedError("BudgetCurrencyImmutable")<{
+  readonly expected: Currency;
+  readonly received: Currency;
+}> {}
+
+/** Closed domain failure set produced while managing one User's Budgets. */
+export type BudgetFailure = BudgetNotFound | BudgetAlreadyExists | BudgetCurrencyImmutable;

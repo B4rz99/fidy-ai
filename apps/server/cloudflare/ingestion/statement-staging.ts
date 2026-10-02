@@ -53,7 +53,7 @@ import {
   type TransactionAuthority,
   acceptedPATAccountability,
   isPATAuthority,
-} from "../transactions/transaction-boundary";
+} from "../canonical-work/operations";
 
 /** Versioned prefix for every statement object written by staging. */
 const statementStagingObjectPrefix = "staging/statement/v1/";

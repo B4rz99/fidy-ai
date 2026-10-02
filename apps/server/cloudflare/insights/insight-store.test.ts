@@ -13,7 +13,7 @@ import {
   prepareInsightTransition,
 } from "./insight-store";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
-import { UserTransactionCoordinator } from "../transactions/transaction-coordinator";
+import { UserTransactionCoordinator } from "../transactions/runtime";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 

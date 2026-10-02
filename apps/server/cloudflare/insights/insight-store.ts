@@ -23,7 +23,7 @@ import {
   transactionId,
   transactionNow,
   transactionUnavailable,
-} from "../transactions/transaction-boundary";
+} from "../canonical-work/operations";
 import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import { budgetAuditLimitRefusal } from "../budgets/budget-outcome";

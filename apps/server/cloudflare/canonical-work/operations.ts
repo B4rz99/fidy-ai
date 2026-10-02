@@ -1,5 +1,17 @@
+import {
+  type CanonicalRefusalDisposition,
+  type TransactionAuthority,
+  TransactionBoundaryFailure,
+  type TransactionCaller,
+  type TransactionMutationOperation,
+  type TransactionRefusal,
+  type TransactionSubject,
+  invalidTransactionMessage,
+  missingTransactionMessage,
+  transactionNoStore,
+} from "./contract";
 import { readConsentStatus } from "../consent/operations";
-import { Clock, Data, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option } from "effect";
 import {
   prepareAuthorizedAuditCall,
   recordCanonicalPATWork,
@@ -10,7 +22,6 @@ import {
   type ErrorCode,
   atomicBatchOperation,
 } from "@fidy/server/canonical-runtime";
-import { type WebSessionAuthority } from "@fidy/server/web-session-contract";
 import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
 import {
   type AuditedPATMutation,
@@ -23,29 +34,10 @@ import type { AuthorizedPAT } from "../pats/pat-authorization";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import { newId } from "../pats/pat-shared";
 
-/**
- * How one decided refusal was durably handled. `"recorded"` means the refusal stands and the
- * response follows from it, whether or not the owner keeps a refusal AuditLogEntry; the other
- * values name the cause that denied the durable record instead. `recordTransactionRefusal`
- * returns it, and it is the only answer a refusal Audit row can give.
- */
-export type CanonicalRefusalDisposition =
-  | "recorded"
-  | "credential_refused"
-  | "rate_limited"
-  | "unavailable";
-
-/** A Transaction adapter dependency failure whose kind is classified and never exposed. */
-export class TransactionBoundaryFailure extends Data.TaggedError("TransactionBoundaryFailure")<{
-  readonly cause: unknown;
-}> {}
 /** Wrap one rejected dependency promise so the failure channel stays typed. */
 export const boundaryFailure = (cause: unknown): TransactionBoundaryFailure =>
   new TransactionBoundaryFailure({ cause });
-/** Shared, request-scoped identity and safe response vocabulary for the D1 Transaction adapters. */
-export type TransactionSubject = Readonly<{ id: string; userId: string; digest: Uint8Array }>;
-/** The two live caller subjects that may execute Transaction work. */
-export type TransactionCaller = TransactionSubject | AuthorizedPAT;
+
 /** True when the caller is an authorized PAT rather than a WebSession. */
 export const isPATCaller = (subject: TransactionCaller): subject is AuthorizedPAT =>
   "patId" in subject;
@@ -63,42 +55,6 @@ export const childCaller = ({
   isPATCaller(subject) && Option.isSome(requiredScope) ? { ...subject, requiredScope } : subject;
 export const transactionNow = (): number => Effect.runSync(Clock.currentTimeMillis);
 export const transactionId = (): string => newId();
-export const transactionNoStore = { "cache-control": "no-store" };
-/** One canonical Transaction input is bounded by this many bytes, for every adapter that reads one. */
-export const maximumTransactionInputBytes = 4096;
-/** The message `transactions.getTransaction` and corrections share for an absent or foreign id. */
-export const missingTransactionMessage = "Transaction unavailable.";
-/** The message every adapter shares for an input that fails its canonical schema. */
-export const invalidTransactionMessage = "Invalid Transaction input.";
-/** The message both pair entry points share when the pair cannot describe one purchase. */
-export const pairPolicyMessage =
-  "Only two different Transactions with equal Currency, exact amount, and the same direction can describe one purchase.";
-/** The message both pair entry points share when either member is already linked. */
-export const alreadyLinkedMessage =
-  "One of the Transactions is already linked to another Transaction.";
-/** The message both pair entry points share when the exact pair is not currently linked. */
-export const unlinkedPairMessage = "That exact Transaction pair is not currently linked.";
-/** The closed state of one Reconciliation decision row, exactly as the 0013 migration constrains it. */
-export const ReconciliationDecisionRow = Schema.Struct({
-  state: Schema.Literals(["linked", "keep-separate"]),
-});
-
-/** The canonical mutations this adapter executes, individually or as children of one batch. */
-export type TransactionMutationOperation =
-  | "transactions.createTransaction"
-  | "transactions.updateTransaction"
-  | "transactions.linkTransactions"
-  | "transactions.unlinkTransactions";
-
-/**
- * Why one canonical Transaction mutation was refused without changing domain state. The outcome is
- * the metadata-only rejection Audit either an individual call or a batch child reports; `message`
- * is addressed to the calling agent and never carries input bodies or database detail.
- */
-export type TransactionRefusal = Readonly<{
-  outcome: "not_found" | "validation_failed" | "resource_limit";
-  message: string;
-}>;
 
 /**
  * One accepted canonical PAT AuditLogEntry and the PAT use it accounts for, in the guard-chained
@@ -482,8 +438,6 @@ export const refusedCredentialResponse = ({
     Effect.orElseSucceed(transactionUnavailable)
   );
 
-/** One live-authority gate over a credential table: its table, predicate, and bindings. */
-export type TransactionAuthority = PATAuthority | WebSessionAuthority;
 /** Narrow a live authority to its PAT credential for statement accountability. */
 export const isPATAuthority = (authority: TransactionAuthority): authority is PATAuthority =>
   authority.table === "pats";
@@ -530,3 +484,24 @@ export const liveTransactionAuthority = ({
   subject: TransactionCaller;
   current: number;
 }>): Promise<boolean> => authorityExists(db, callerAuthority({ subject, current }));
+
+export type {
+  CanonicalRefusalDisposition,
+  TransactionSubject,
+  TransactionCaller,
+  TransactionMutationOperation,
+  TransactionRefusal,
+  TransactionAuthority,
+} from "./contract";
+export {
+  TransactionBoundaryFailure,
+  transactionNoStore,
+  maximumTransactionInputBytes,
+  missingTransactionMessage,
+  invalidTransactionMessage,
+  pairPolicyMessage,
+  alreadyLinkedMessage,
+  unlinkedPairMessage,
+} from "./contract";
+
+export { dailyAuditMessage } from "./contract";

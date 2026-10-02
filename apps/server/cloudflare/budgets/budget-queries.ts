@@ -7,16 +7,16 @@ import {
   deriveCurrentBudgetMonth,
   sumBudgetContributions,
 } from "@fidy/server/budgets-runtime";
-import { Currency, Money } from "@fidy/server/transactions-runtime";
+import { Money } from "@fidy/server/transactions-contract";
 import { BigDecimal, DateTime, Effect, Option, Ref, Schema } from "effect";
-import { effectiveTransactionRelation } from "../transactions/effective-transaction";
 import {
   type TransactionCaller,
   transactionFailure,
   transactionNoStore,
   transactionNow,
   transactionUnavailable,
-} from "../transactions/transaction-boundary";
+} from "../canonical-work/operations";
+import { readBudgetContributions } from "../transactions/operations";
 import { budgetFromRow } from "./budget-row";
 import { recordBudgetCall } from "./budget-audit";
 import {
@@ -28,16 +28,7 @@ import {
 } from "./budget-progress";
 
 const maximumBudgetCount = 128;
-const movementPageSize = 512;
 const maximumReportPages = 8;
-const MovementRow = Schema.Struct({
-  id: Schema.String,
-  amount: Schema.String,
-  currency: Currency,
-  category_id: Budget.fields.categoryId,
-  direction: Schema.Literals(["inflow", "outflow"]),
-  occurred_at: Schema.String,
-});
 const Query = Schema.Struct({
   categoryId: Schema.optionalKey(BudgetStatusQueryValues.fields.categoryId),
   currency: Schema.optionalKey(BudgetStatusQueryValues.fields.currency),
@@ -77,53 +68,6 @@ export const listOwnedBudgets = ({
       budgets.push(budget.value);
     }
     return Option.some(budgets);
-  }).pipe(Effect.orElseSucceed(() => Option.none()));
-
-const movementPage = ({
-  db,
-  userId,
-  budget,
-  period,
-  cursorAt,
-  cursorId,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  budget: Budget;
-  period: BudgetStatusReport["period"];
-  cursorAt: string;
-  cursorId: string;
-}>): Effect.Effect<Option.Option<ReadonlyArray<typeof MovementRow.Type>>> =>
-  Effect.gen(function* () {
-    const relation = effectiveTransactionRelation(userId);
-    const result = yield* Effect.tryPromise(() =>
-      db
-        .prepare(`WITH ${relation.sql}
-      SELECT id, amount, currency, category_id, direction, occurred_at FROM effective_transaction
-      WHERE user_id = ? AND occurred_at >= ? AND occurred_at < ?
-        AND category_id = ? AND currency = ? AND direction = 'outflow'
-        AND (occurred_at > ? OR (occurred_at = ? AND id > ?))
-      ORDER BY occurred_at, id LIMIT ${movementPageSize}`)
-        .bind(
-          ...relation.bindings,
-          userId,
-          DateTime.formatIso(period.from),
-          DateTime.formatIso(period.to),
-          budget.categoryId,
-          budget.cap.currency,
-          cursorAt,
-          cursorAt,
-          cursorId
-        )
-        .all()
-    );
-    const rows: Array<typeof MovementRow.Type> = [];
-    for (const raw of result.results) {
-      const decoded = Schema.decodeUnknownOption(MovementRow)(raw);
-      if (Option.isNone(decoded)) return Option.none<ReadonlyArray<typeof MovementRow.Type>>();
-      rows.push(decoded.value);
-    }
-    return Option.some(rows);
   }).pipe(Effect.orElseSucceed(() => Option.none()));
 
 const monthlySpent = ({
@@ -177,56 +121,34 @@ const advanceMonthlyPage = ({
   Option.Option<BudgetProgress>
 > =>
   Effect.gen(function* () {
-    const page = yield* movementPage({
-      ...key,
-      cursorAt: progress.cursorAt,
-      cursorId: progress.cursorId,
+    const page = yield* readBudgetContributions({
+      db: key.db,
+      userId: key.userId,
+      categoryId: key.budget.categoryId,
+      currency: key.budget.cap.currency,
+      period: key.period,
+      cursor: { occurredAt: progress.cursorAt, transactionId: progress.cursorId },
     });
     if (Option.isNone(page)) return Option.none<BudgetProgress>();
-    const movements = decodeMovements(page.value);
-    if (Option.isNone(movements)) return Option.none<BudgetProgress>();
     const pageSpent = sumBudgetContributions({
       budget: key.budget,
       period: key.period,
-      movements: movements.value,
+      movements: page.value.movements,
     });
-    const last = page.value.at(-1);
     const next = {
       revision: progress.revision,
-      cursorAt: last?.occurred_at ?? progress.cursorAt,
-      cursorId: last?.id ?? progress.cursorId,
+      cursorAt: page.value.cursor.occurredAt,
+      cursorId: page.value.cursor.transactionId,
       spent: Money.make({
         amount: BigDecimal.sum(progress.spent.amount, pageSpent.amount),
         currency: key.budget.cap.currency,
       }),
-      complete: page.value.length < movementPageSize,
+      complete: page.value.complete,
     };
     return (yield* advanceBudgetProgress({ key, previous: progress, next }))
       ? Option.some(next)
       : Option.none<BudgetProgress>();
   });
-
-type BudgetMovement = Parameters<typeof sumBudgetContributions>[0]["movements"][number];
-const decodeMovements = (
-  rows: ReadonlyArray<typeof MovementRow.Type>
-): Option.Option<ReadonlyArray<BudgetMovement>> => {
-  const movements: Array<BudgetMovement> = [];
-  for (const row of rows) {
-    const money = Schema.decodeOption(Schema.toCodecJson(Money))({
-      amount: row.amount,
-      currency: row.currency,
-    });
-    const occurredAt = DateTime.make(row.occurred_at);
-    if (Option.isNone(money) || Option.isNone(occurredAt)) return Option.none();
-    movements.push({
-      money: money.value,
-      occurredAt: occurredAt.value,
-      categoryId: row.category_id,
-      direction: row.direction,
-    });
-  }
-  return Option.some(movements);
-};
 
 /** The same exact effective-Transaction totals every caller and latch decision uses. */
 export const currentBudgetReport = ({

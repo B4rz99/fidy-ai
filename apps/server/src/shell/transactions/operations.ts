@@ -1,162 +1,149 @@
-import { Schema, Struct } from "effect";
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
+import { nextTransactionPage as nextPage } from "~/shell/transactions/internal/continuation";
+import { DateTime, Effect, Match, Option } from "effect";
 import {
-  CreateTransactionInput,
-  RestoredTransactionPair,
-  SourceAttestation,
-  Transaction,
-  TransactionId,
-  TransactionPairInput,
-  TransactionPresentation,
-  TransactionQueryValues,
-  TransactionSearchQuery,
-  UpdateTransactionInput,
-} from "~/core/transactions/model";
+  type IneligibleTransactionPair,
+  type InvalidTransactionPeriod,
+  type SameTransactionPair,
+  type TransactionFailure,
+  type TransactionNotFound,
+  type TransactionNotYetOccurred,
+} from "~/core/transactions/contract";
+import { NotFound, ValidationFailed } from "~/shell/public-http/contract";
 import {
-  NotFound,
-  OperationResponse,
-  ResourceLimited,
-  ValidationFailed,
-  createdStatus,
-} from "~/shell/public-http/contract";
-import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
+  type SuggestedOperationCaller,
+  checkpointSuggestedOperations,
+  suggestOperation,
+} from "~/shell/_shared/suggested-operations";
 
-const read = operationPolicy({
-  access: patScoped("read"),
-  requiredTier: "free",
-  agentConfirmation: "not-required",
-  kind: "query",
-});
-const additiveWrite = operationPolicy({
-  access: patScoped("write"),
-  requiredTier: "free",
-  agentConfirmation: "not-required",
-  kind: "mutation",
-});
-const destructiveWrite = operationPolicy({
-  access: patScoped("write"),
-  requiredTier: "free",
-  agentConfirmation: "required",
-  kind: "mutation",
-});
+/** What a `TransactionFailure` becomes once it has to leave the process. */
+export type TransactionApiFailure = NotFound | ValidationFailed;
 
-const TransactionQueryParameters = TransactionQueryValues.mapFields(Struct.map(Schema.optionalKey));
-const UpdateTransactionParams = Schema.Struct({ id: TransactionId });
+const reversedPeriodRejected = (failure: InvalidTransactionPeriod): ValidationFailed =>
+  ValidationFailed.make({
+    error: {
+      code: "validation_failed",
+      message: "A transaction period must start before it ends. Correct from or to and retry.",
+      fields: [
+        {
+          path: "from",
+          message: `Expected an instant before ${DateTime.formatIso(failure.to)}, got ${DateTime.formatIso(failure.from)}`,
+        },
+      ],
+    },
+    next: [],
+  });
 
-/** Successful create response shared by canonical consumers that present the stored Transaction. */
-export const CreateTransactionResponse = OperationResponse(Transaction);
+const unknownTransactionRejected = (
+  failure: TransactionNotFound,
+  caller: SuggestedOperationCaller
+): NotFound =>
+  NotFound.make({
+    error: {
+      code: "not_found",
+      message:
+        `No transaction ${failure.transactionId} is in your history. ` +
+        `List transactions to see the ids you can ask for.`,
+    },
+    next: checkpointSuggestedOperations({
+      candidates: [
+        suggestOperation({
+          tool: "transactions.listTransactions",
+          args: Option.none(),
+          hint: "List transactions to find the id you meant.",
+        }),
+      ],
+      caller,
+    }),
+  });
+
+const futureMovementRejected = (failure: TransactionNotYetOccurred): ValidationFailed =>
+  ValidationFailed.make({
+    error: {
+      code: "validation_failed",
+      message:
+        `A transaction records money that has already moved. ` +
+        `Send an occurredAt at or before ${DateTime.formatIso(failure.now)} and retry.`,
+      fields: [
+        {
+          path: "occurredAt",
+          message: `Expected an instant no later than ${DateTime.formatIso(failure.now)}`,
+        },
+      ],
+    },
+    next: [],
+  });
+
+const invalidPairRejected = (
+  failure: IneligibleTransactionPair | SameTransactionPair
+): ValidationFailed => {
+  const messages = {
+    IneligibleTransactionPair: "The Transactions cannot be linked in their current state.",
+    SameTransactionPair: "Linking requires two different Transaction ids.",
+  } as const;
+  return ValidationFailed.make({
+    error: {
+      code: "validation_failed",
+      message: `${messages[failure._tag]} Correct the pair or list Transactions and retry.`,
+      fields: [],
+    },
+    next: [],
+  });
+};
+
+type TransactionValidationFailure =
+  | IneligibleTransactionPair
+  | InvalidTransactionPeriod
+  | SameTransactionPair
+  | TransactionNotYetOccurred;
+
+type FailureMappingInput<Failure extends TransactionFailure> = {
+  readonly failure: Failure;
+  readonly caller: SuggestedOperationCaller;
+};
+
+function toApiFailure(input: FailureMappingInput<TransactionValidationFailure>): ValidationFailed;
+function toApiFailure(input: FailureMappingInput<TransactionFailure>): TransactionApiFailure;
+function toApiFailure({
+  failure,
+  caller,
+}: FailureMappingInput<TransactionFailure>): TransactionApiFailure {
+  return Match.typeTags<TransactionFailure, TransactionApiFailure>()({
+    IneligibleTransactionPair: invalidPairRejected,
+    InvalidTransactionPeriod: reversedPeriodRejected,
+    SameTransactionPair: invalidPairRejected,
+    TransactionNotFound: (notFound) => unknownTransactionRejected(notFound, caller),
+    // An API-shaped failure the input schema cannot express, because it depends on the clock.
+    TransactionNotYetOccurred: futureMovementRejected,
+  })(failure);
+}
 
 /**
- * Caller-owned Transaction capture, history, correction, deletion, and retained provenance.
- * Identity comes from authentication; unknown and foreign record ids are indistinguishable.
+ * Maps a declared Transaction failure to its stable caller-facing API error.
+ * Caller facts determine whether any recovery operation may be suggested; the
+ * original failure remains in the typed error channel as its corresponding API
+ * error.
  */
-export const TransactionsGroup = HttpApiGroup.make("transactions")
-  .add(
-    HttpApiEndpoint.post("createTransaction", "/transactions", {
-      payload: CreateTransactionInput,
-      success: CreateTransactionResponse.pipe(HttpApiSchema.status(createdStatus)),
-      error: [NotFound, ValidationFailed, ResourceLimited],
-    })
-      .annotate(
-        OpenApi.Description,
-        "Record one exact movement of Money for the caller. Include a Counterparty only when the captured material explicitly identifies the person or organization; omit it rather than inferring one from an item, purpose, or context. Supply a stable Category id when known; omit it only at capture so a user keyword rule or the categorization fallback can assign it before storage. The result includes the stored Category."
-      )
-      .annotateMerge(additiveWrite)
-  )
-  .add(
-    HttpApiEndpoint.get("listTransactions", "/transactions", {
-      query: TransactionQueryParameters,
-      success: OperationResponse(Schema.Array(Transaction)),
-      error: [ValidationFailed, ResourceLimited],
-    })
-      .annotate(
-        OpenApi.Description,
-        "List the caller's visible Transactions, newest occurrence first. Any combination of from (inclusive), to (exclusive), Category id, counterparty text, direction, and Currency narrows the history; omit every filter for all visible history."
-      )
-      .annotateMerge(read)
-  )
-  .add(
-    HttpApiEndpoint.get("searchTransactions", "/transactions/search", {
-      query: TransactionSearchQuery,
-      success: OperationResponse(Schema.Array(Transaction)),
-      error: [ValidationFailed, ResourceLimited],
-    })
-      .annotate(
-        OpenApi.Description,
-        "Search the caller's FinancialRecord by literal Counterparty or notes text. Supply 2–80 characters; results are bounded and ordered newest first. Follow the returned continuation to browse further matches."
-      )
-      .annotateMerge(read)
-  )
-  .add(
-    HttpApiEndpoint.get("getTransaction", "/transactions/:id", {
-      params: Schema.Struct({ id: TransactionId }),
-      success: OperationResponse(TransactionPresentation),
-      error: [NotFound, ResourceLimited],
-    })
-      .annotate(
-        OpenApi.Description,
-        "Fetch one owned Transaction by id. Independent records return directly; either member of a linked pair succeeds and explains the earliest-created visible Transaction. Unknown, deleted, and another user's ids all answer not_found."
-      )
-      .annotateMerge(read)
-  )
-  .add(
-    HttpApiEndpoint.post("linkTransactions", "/transactions/link", {
-      payload: TransactionPairInput,
-      success: OperationResponse(TransactionPresentation),
-      error: [NotFound, ValidationFailed, ResourceLimited],
-    })
-      .annotate(
-        OpenApi.Description,
-        "Link two exact owned Transactions that describe one purchase. Both originals and every SourceAttestation remain retained; ordinary history, Dashboard calculations, and Budget status use one effective Transaction under the earliest-created id."
-      )
-      .annotateMerge(additiveWrite)
-  )
-  .add(
-    HttpApiEndpoint.post("unlinkTransactions", "/transactions/unlink", {
-      payload: TransactionPairInput,
-      success: OperationResponse(RestoredTransactionPair),
-      error: [NotFound, ValidationFailed, ResourceLimited],
-    })
-      .annotate(
-        OpenApi.Description,
-        "Remove the exact reversible link, restore both original Transactions to ordinary reads, and remember that the pair stays separate. No Transaction or SourceAttestation is deleted or rewritten."
-      )
-      .annotateMerge(additiveWrite)
-  )
-  .add(
-    HttpApiEndpoint.put("updateTransaction", "/transactions/:id", {
-      params: UpdateTransactionParams,
-      payload: UpdateTransactionInput,
-      success: OperationResponse(Transaction),
-      error: [NotFound, ValidationFailed, ResourceLimited],
-    })
-      .annotate(
-        OpenApi.Description,
-        "Correct only the supplied normalized facts on the same Transaction. Supply its current revision (zero at capture); stale revisions fail. Null clears Counterparty or notes. Explicit User decisions remain authoritative over later provider metadata. Keyword rule edits do not change past Transactions. SourceAttestations remain unchanged."
-      )
-      .annotateMerge(destructiveWrite)
-  )
-  .add(
-    HttpApiEndpoint.delete("deleteTransaction", "/transactions/:id", {
-      params: Schema.Struct({ id: TransactionId }),
-      success: OperationResponse(TransactionId),
-      error: NotFound,
-    })
-      .annotate(
-        OpenApi.Description,
-        "Permanently remove one Transaction from the caller's visible product history. It cannot be restored; immutable SourceAttestations remain retained as provenance."
-      )
-      .annotateMerge(destructiveWrite)
-  )
-  .add(
-    HttpApiEndpoint.get("listSourceAttestations", "/transactions/:id/source-attestations", {
-      params: Schema.Struct({ id: TransactionId }),
-      success: OperationResponse(Schema.Array(SourceAttestation)),
-      error: NotFound,
-    })
-      .annotate(
-        OpenApi.Description,
-        "Explain which captured market, locale, IANA time zone, source details, and interpretation revision produced one owned Transaction, including after its user-facing deletion. SourceAttestations are immutable."
-      )
-      .annotateMerge(read)
-  );
+export const mapTransactionFailure = ({
+  caller,
+}: {
+  readonly caller: SuggestedOperationCaller;
+}): (<A, R>(
+  self: Effect.Effect<A, TransactionFailure, R>
+) => Effect.Effect<A, TransactionApiFailure, R>) =>
+  Effect.mapError((failure: TransactionFailure) => toApiFailure({ failure, caller }));
+
+/**
+ * Preserves a validation-only error channel for operations that cannot encounter
+ * missing Transactions, while delegating all translation to the exhaustive mapper.
+ */
+export const mapTransactionValidationFailure = ({
+  caller,
+}: {
+  readonly caller: SuggestedOperationCaller;
+}): (<A, R>(
+  self: Effect.Effect<A, TransactionValidationFailure, R>
+) => Effect.Effect<A, ValidationFailed, R>) =>
+  Effect.mapError((failure: TransactionValidationFailure) => toApiFailure({ failure, caller }));
+
+/** Advertise only the authorized bounded continuation for an existing Transaction query. */
+export const nextTransactionPage: typeof nextPage = (input) => nextPage(input);

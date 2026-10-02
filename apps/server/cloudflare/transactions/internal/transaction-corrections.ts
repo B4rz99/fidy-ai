@@ -3,10 +3,10 @@ import {
   TransactionId,
   UpdateTransactionInput,
   encodeMoneyAmount,
-} from "@fidy/server/transactions-runtime";
+} from "@fidy/server/transactions-contract";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { prepareOwnerAuditCall } from "@fidy/server/audit";
-import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
+import { RequestBodyPolicy, boundedJsonBody } from "../../http/request-body";
 import {
   type TransactionBoundaryFailure,
   type TransactionCaller,
@@ -21,18 +21,18 @@ import {
   maximumTransactionInputBytes,
   missingTransactionMessage,
   transactionId,
-} from "./transaction-boundary";
+} from "../../canonical-work/operations";
 import {
   type CanonicalMutationPreparation,
   type TransactionOutcome,
   credentialRefusedPreparation,
   failedPreparation,
-} from "../mutations/mutation-types";
+} from "../../mutations/mutation-types";
 import {
   refusedTransactionMutation,
   staleCorrectionMessage,
   transactionGuardRefusal,
-} from "../mutations/transaction-outcome";
+} from "./transaction-outcome";
 import { type StoredTransaction, TransactionOutput, findTransaction } from "./transaction-history";
 
 const Input = Schema.toCodecJson(UpdateTransactionInput);

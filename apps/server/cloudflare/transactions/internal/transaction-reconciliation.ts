@@ -2,19 +2,15 @@ import {
   Currency,
   Direction,
   Money,
+  type ReconciliationMember,
   TransactionId,
   TransactionPairInput,
-} from "@fidy/server/transactions-runtime";
-import {
-  type ReconciliationMember,
-  decideTransactionLink,
-  orderTransactionPair,
-} from "@fidy/server/transaction-reconciliation";
+} from "@fidy/server/transactions-contract";
+import { decideTransactionLink, orderTransactionPair } from "@fidy/server/transaction-decisions";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { prepareOwnerAuditCall } from "@fidy/server/audit";
-import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
+import { RequestBodyPolicy, boundedJsonBody } from "../../http/request-body";
 import {
-  ReconciliationDecisionRow,
   type TransactionAuthority,
   type TransactionBoundaryFailure,
   type TransactionCaller,
@@ -31,17 +27,15 @@ import {
   pairPolicyMessage,
   transactionId,
   unlinkedPairMessage,
-} from "./transaction-boundary";
+} from "../../canonical-work/operations";
+import { ReconciliationDecisionRow } from "./reconciliation-state";
 import {
   type CanonicalMutationPreparation,
   type TransactionOutcome,
   credentialRefusedPreparation,
   failedPreparation,
-} from "../mutations/mutation-types";
-import {
-  refusedTransactionMutation,
-  transactionGuardRefusal,
-} from "../mutations/transaction-outcome";
+} from "../../mutations/mutation-types";
+import { refusedTransactionMutation, transactionGuardRefusal } from "./transaction-outcome";
 
 const Input = Schema.toCodecJson(TransactionPairInput);
 const policy = Schema.decodeSync(RequestBodyPolicy)({

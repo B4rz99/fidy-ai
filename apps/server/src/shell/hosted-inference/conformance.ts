@@ -1,5 +1,5 @@
 import { BigDecimal, Brand, DateTime, Effect, Option, Predicate, Schema } from "effect";
-import { CreateTransactionInput } from "~/core/transactions/model";
+import { CreateTransactionInput } from "~/core/transactions/contract";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import {

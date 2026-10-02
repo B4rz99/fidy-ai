@@ -16,7 +16,7 @@ import { makeOperationsGroup } from "~/shell/operations/operations";
 import { SubscriptionGroup } from "~/shell/subscription/operations";
 import { PATsGroup } from "~/shell/tokens/operations";
 import { RecoveryGroup } from "~/shell/recovery/operations";
-import { TransactionsGroup } from "~/shell/transactions/operations";
+import { TransactionsGroup } from "~/shell/transactions/contract";
 
 const OrdinaryFidyApi = HttpApi.make("fidy")
   .add(BrowserLoginGroup)

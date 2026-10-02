@@ -23,7 +23,8 @@ import {
   mechanicalMappingFor,
   unmappedStatementRow,
 } from "../../src/core/ingestion/rules";
-import { TransactionExtraction, encodeMoneyAmount } from "../../src/core/transactions/model";
+import { TransactionExtraction } from "../../src/core/transactions/contract";
+import { prepareStatementCapture } from "../transactions/operations";
 import { currentMillis } from "../pats/pat-shared";
 import { StatementStaging, newIngestionId } from "./statement-staging";
 import { maximumRetainedReviewEvidence } from "./statement-review-retention";
@@ -176,8 +177,9 @@ type RowWork = Readonly<{
   context: SubmissionRow;
   categoryId: CategoryId;
 }>;
-const active = `EXISTS (SELECT 1 FROM statement_submissions WHERE id = ? AND user_id = ?
-    AND status = 'processing' AND retention_expires_at_ms > ?)`;
+const activeSource = `SELECT user_id FROM statement_submissions WHERE id = ? AND user_id = ?
+    AND status = 'processing' AND retention_expires_at_ms > ?`;
+const active = `EXISTS (${activeSource})`;
 
 const acceptedStatements = (
   {
@@ -195,48 +197,27 @@ const acceptedStatements = (
     }>,
   id: string,
   activeArgs: ReadonlyArray<string | number>
-): ReadonlyArray<D1PreparedStatement> => {
-  const extraction = result.extraction;
-  const when = iso();
-  return [
-    db
-      .prepare(`INSERT INTO transactions (id, user_id, amount, currency,
-      direction, counterparty, category_id, notes, occurred_at, created_at)
-      SELECT ?, ?, ?, ?, ?, ?, ?, NULL, ?, ? WHERE ${active}`)
-      .bind(
-        id,
-        userId,
-        encodeMoneyAmount(extraction.money.amount),
-        extraction.money.currency,
-        extraction.direction,
-        Option.getOrNull(extraction.counterparty),
-        categoryId,
-        DateTime.formatIso(extraction.occurredAt),
-        when,
-        ...activeArgs
-      ),
-    db
-      .prepare(`INSERT INTO source_attestations (id, user_id, transaction_id,
-      kind, service_market, locale, time_zone, interpretation_revision, created_at,
-      statement_submission_id, statement_record_number, statement_content_hash, source_format)
-      SELECT ?, ?, ?, 'statement-line', ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${active}`)
-      .bind(
-        newId(),
-        userId,
-        id,
-        context.service_market,
-        context.locale,
-        context.time_zone,
-        context.parser_revision,
-        when,
-        submissionId,
-        row.recordNumber,
-        context.sha256,
-        context.source_format,
-        ...activeArgs
-      ),
-  ];
-};
+): ReadonlyArray<D1PreparedStatement> =>
+  prepareStatementCapture({
+    db,
+    userId,
+    transactionId: id,
+    extraction: result.extraction,
+    categoryId,
+    attestation: {
+      id: newId(),
+      serviceMarket: context.service_market,
+      locale: context.locale,
+      timeZone: context.time_zone,
+      interpretationRevision: context.parser_revision,
+      createdAt: iso(),
+      statementSubmissionId: submissionId,
+      statementRecordNumber: row.recordNumber,
+      statementContentHash: context.sha256,
+      sourceFormat: context.source_format,
+    },
+    sourceGuard: { sql: activeSource, params: activeArgs },
+  });
 
 const reviewStatement = (
   {

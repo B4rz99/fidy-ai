@@ -8,7 +8,7 @@ import {
   SubmitForExtractionInput,
 } from "~/core/ingestion/model";
 import { NeedsReviewItemId, StatementSubmissionId } from "~/core/ingestion/reference";
-import { Transaction } from "~/core/transactions/model";
+import { Transaction } from "~/core/transactions/contract";
 import {
   NotFound,
   OperationResponse,

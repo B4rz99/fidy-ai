@@ -1,3 +1,4 @@
+import type { TransactionOutcome } from "../transactions/contract";
 import type { CanonicalCapability, ErrorCode } from "@fidy/server/canonical-runtime";
 import type {
   CategoryId,
@@ -13,26 +14,15 @@ import type {
   PreparedStatementPublication,
   StatementStagingConfig,
 } from "../ingestion/statement-staging";
-import type { TransactionPair } from "@fidy/server/transaction-reconciliation";
 import type {
   RestoredTransactionPair,
+  Transaction,
   TransactionPresentation,
-} from "@fidy/server/transactions-runtime";
+} from "@fidy/server/transactions-contract";
 import type { Effect, Option, Schema } from "effect";
-import type {
-  CanonicalRefusalDisposition,
-  TransactionCaller,
-  TransactionMutationOperation,
-} from "../transactions/transaction-boundary";
-import type { StoredTransaction } from "../transactions/transaction-history";
+import type { CanonicalRefusalDisposition, TransactionCaller } from "../canonical-work/operations";
 
-/** How one Transaction mutation presents the records its response reads back. */
-type TransactionReadback =
-  | Readonly<{ _tag: "Transaction" }>
-  /** The effective Transaction of one linked pair, presented as ordinary history returns it. */
-  | Readonly<{ _tag: "EffectiveTransaction"; pair: TransactionPair }>
-  /** The two independent originals one successful unlink restored, in canonical pair order. */
-  | Readonly<{ _tag: "RestoredPair"; pair: TransactionPair }>;
+export type { TransactionOutcome } from "../transactions/contract";
 
 /**
  * One keyword-rule change's retained facts. A create or update names the rule's full payload; a
@@ -69,19 +59,6 @@ export type MemoryOutcome =
       operation: "memory.forget";
       memoryId: MemoryId;
     }>;
-
-/**
- * One Transaction change's committed readback descriptor and the revision its guard observed, if it
- * observed one. It is the Transaction member of the shared outcome union.
- */
-export type TransactionOutcome = Readonly<{
-  _tag: "Transaction";
-  operation: TransactionMutationOperation;
-  transactionId: string;
-  readback: TransactionReadback;
-  /** The revision a correction observed and must still find, when it observed one. */
-  expectedRevision: Option.Option<number>;
-}>;
 
 /**
  * One owner's committed readback descriptor: what the owner must read after the unit commits and
@@ -180,7 +157,7 @@ export type CommittedMutationValue =
     }>
   | Readonly<{ _tag: "Budget"; budget: Budget }>
   | Readonly<{ _tag: "RemovedBudget"; id: BudgetId }>
-  | Readonly<{ _tag: "Transaction"; transaction: StoredTransaction }>
+  | Readonly<{ _tag: "Transaction"; transaction: Transaction }>
   | Readonly<{ _tag: "EffectiveTransaction"; transaction: TransactionPresentation }>
   | Readonly<{ _tag: "RestoredPair"; pair: RestoredTransactionPair }>
   | Readonly<{ _tag: "KeywordRule"; rule: KeywordRule }>

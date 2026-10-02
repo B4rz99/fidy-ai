@@ -22,7 +22,7 @@ import {
   TransactionListWidget,
   makeLayoutNodeSchema,
 } from "~/core/dashboard/model";
-import { Transaction } from "~/core/transactions/model";
+import { Transaction } from "~/core/transactions/contract";
 import { NotFound, OperationResponse, ValidationFailed } from "~/shell/public-http/contract";
 import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
 

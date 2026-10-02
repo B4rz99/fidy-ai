@@ -42,7 +42,7 @@ import {
   transactionNow as now,
   refusedTransactionWork,
   transactionId as uuid,
-} from "../../transactions/transaction-boundary";
+} from "../../canonical-work/operations";
 import {
   type CanonicalMutationPreparation,
   type KeywordRuleOutcome,

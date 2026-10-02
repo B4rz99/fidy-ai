@@ -5,7 +5,7 @@ import {
   recordCanonicalPATWork,
   refusedByAuditBudget,
 } from "@fidy/server/audit";
-import { nextTransactionPage } from "@fidy/server/transaction-continuation";
+import { nextTransactionPage } from "@fidy/server/transaction-operations";
 import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
 import {
   Counterparty,
@@ -16,12 +16,12 @@ import {
   TransactionPresentation,
   TransactionQueryValues,
   TransactionSearchQuery,
-} from "@fidy/server/transactions-runtime";
+} from "@fidy/server/transactions-contract";
 import { effectiveTransactionRelation } from "./effective-transaction";
 import { DateTime, Option, Schema } from "effect";
-import type { AuthorizedPAT } from "../pats/pat-authorization";
+import type { AuthorizedPAT } from "../../pats/pat-authorization";
 import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
-import { prepareOwnedStatement } from "../pats/pat-unit";
+import { prepareOwnedStatement } from "../../pats/pat-unit";
 import {
   type TransactionAuthority,
   type TransactionCaller,
@@ -34,7 +34,7 @@ import {
   transactionFailure,
   transactionUnavailable as unavailable,
   transactionId as uuid,
-} from "./transaction-boundary";
+} from "../../canonical-work/operations";
 
 /** The canonical stored-Transaction encoding every Transaction adapter returns. */
 export const TransactionOutput = Schema.toCodecJson(Transaction);

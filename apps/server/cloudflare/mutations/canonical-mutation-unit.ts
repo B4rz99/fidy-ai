@@ -10,8 +10,9 @@ import { EmailForwardingAddress } from "../../src/core/ingestion/model";
 import { readForwardingAddress } from "../ingestion/forwarding-address";
 import {
   RestoredTransactionPair,
+  Transaction,
   TransactionPresentation,
-} from "@fidy/server/transactions-runtime";
+} from "@fidy/server/transactions-contract";
 import { canonicalTriggerOf } from "./canonical-triggers";
 import {
   lostStatementReplay,
@@ -28,15 +29,14 @@ import {
   refusedCredentialResponse,
   transactionNoStore,
   transactionUnavailable,
-} from "../transactions/transaction-boundary";
-import { TransactionOutput } from "../transactions/transaction-history";
+} from "../canonical-work/operations";
 import { findMemoryValue, memoryBudgetRefusal } from "./memory-outcome";
 import {
   findTransactionValue,
   transactionBudgetRefusal,
   transactionMovementRefusal,
   transactionRefusal,
-} from "./transaction-outcome";
+} from "../transactions/operations";
 import type {
   CanonicalMutationPreparation,
   CanonicalMutationRefusal,
@@ -629,7 +629,7 @@ const encodeEntityValue = (
 ): Effect.Effect<unknown, Schema.SchemaError> => {
   switch (value._tag) {
     case "Transaction":
-      return Schema.encodeEffect(TransactionOutput)(value.transaction);
+      return Schema.encodeEffect(Schema.toCodecJson(Transaction))(value.transaction);
     case "EffectiveTransaction":
       return Schema.encodeEffect(Schema.toCodecJson(TransactionPresentation))(value.transaction);
     case "RestoredPair":

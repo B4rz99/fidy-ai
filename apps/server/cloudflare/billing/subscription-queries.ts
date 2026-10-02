@@ -13,7 +13,7 @@ import {
 import { Effect, Option, Schema } from "effect";
 import { prepareOwnedStatement } from "../pats/pat-unit";
 import { currentMillis, newId } from "../pats/pat-shared";
-import { type TransactionCaller, isPATCaller } from "../transactions/transaction-boundary";
+import { type TransactionCaller, isPATCaller } from "../canonical-work/operations";
 
 const headers = { "cache-control": "no-store", "content-type": "application/json; charset=utf-8" };
 const unavailable = (): Response =>

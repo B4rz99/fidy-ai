@@ -5,7 +5,7 @@ import { statementStagingPath } from "@fidy/server/statement-path";
 import {
   transactionMethods,
   ownsTransactionPath as transactionPath,
-} from "@fidy/server/transaction-routes";
+} from "@fidy/server/transaction-runtime";
 import { ownsMemoryPath as memoryPath } from "@fidy/server/memory-routes";
 import type { TelemetryService } from "@fidy/server/telemetry";
 import { Effect, Encoding, Option, Schema } from "effect";

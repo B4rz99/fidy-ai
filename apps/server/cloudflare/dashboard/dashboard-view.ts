@@ -1,5 +1,5 @@
 import { UserId } from "@fidy/server/identity-reference";
-import type { EffectiveTransactionAggregate } from "@fidy/server/transactions-runtime";
+import type { EffectiveTransactionAggregate } from "@fidy/server/transactions-contract";
 import { type DateTime, Effect, Option, Schema } from "effect";
 import { UserContext } from "@fidy/server/identity-contract";
 import { prepareUserContext } from "../identity/user-context/operations";
@@ -8,42 +8,11 @@ import { type DashboardDocument, collectLayoutWidgets } from "../../src/core/das
 import { dashboardProjectionRanges } from "../../src/core/dashboard/projection";
 import type { DashboardFacts } from "../../src/shell/dashboard/presentation";
 import { listOwnedBudgets } from "../budgets/budget-queries";
-import {
-  dashboardTransactionQueries,
-  decodeDashboardTransactions,
-} from "../transactions/dashboard-query";
-import { findDashboardAggregate, projectionReady } from "../transactions/dashboard-projection";
+import { findDashboardAggregate, readDashboardTransactions } from "../transactions/operations";
 
 type Context = UserContext;
 type LayoutWidgets = ReturnType<typeof collectLayoutWidgets>;
 type Groups = DashboardFacts["groups"];
-
-const prepareBaseQueries = (
-  db: D1Database,
-  userId: string,
-  lists: ReadonlyArray<Extract<LayoutWidgets[number], { type: "transaction-list" }>>
-): ReadonlyArray<D1PreparedStatement> => [
-  prepareUserContext({
-    db,
-    userId: UserId.make(userId),
-    statement: {
-      sql: "SELECT serviceMarket, locale, timeZone FROM identity_user_context",
-      params: [],
-    },
-  }),
-  db
-    .prepare("SELECT version, readiness FROM dashboard_projection_state WHERE user_id = ?")
-    .bind(userId),
-  ...dashboardTransactionQueries({
-    db,
-    userId,
-    lists: lists.map((widget) => ({
-      categories: widget.categories ?? [],
-      search: Option.fromUndefinedOr(widget.search),
-      limit: widget.limit,
-    })),
-  }),
-];
 
 const loadBase = (
   db: D1Database,
@@ -52,40 +21,45 @@ const loadBase = (
 ): Effect.Effect<Option.Option<Omit<DashboardFacts, "groups">>> =>
   Effect.gen(function* () {
     const lists = widgets.filter((widget) => widget.type === "transaction-list");
-    const [user, state, ...pages] = yield* Effect.tryPromise(() =>
-      db.batch([...prepareBaseQueries(db, userId, lists)])
-    );
-    if (pages.length !== lists.length) return Option.none();
-    const selected = Option.all({
-      user: Option.fromUndefinedOr(user),
-      state: Option.fromUndefinedOr(state),
-    });
-    if (Option.isNone(selected) || !projectionReady(selected.value.state.results[0])) {
-      return Option.none();
-    }
-    const context = Schema.decodeUnknownOption(UserContext)(selected.value.user.results[0]);
     const categories = yield* Effect.option(listCategories({ db }));
     if (Option.isNone(categories)) return Option.none();
+    const selected = yield* readDashboardTransactions({
+      db,
+      userId,
+      lists: lists.map((widget) => ({
+        categories: widget.categories ?? [],
+        search: Option.fromUndefinedOr(widget.search),
+        limit: widget.limit,
+      })),
+      categories: categories.value,
+      snapshot: {
+        statement: prepareUserContext({
+          db,
+          userId: UserId.make(userId),
+          statement: {
+            sql: "SELECT serviceMarket, locale, timeZone FROM identity_user_context",
+            params: [],
+          },
+        }),
+        decode: (rows) => Schema.decodeUnknownOption(UserContext)(rows[0]),
+      },
+    });
+    if (Option.isNone(selected)) return Option.none();
     const listFacts = Option.all(
       lists.map((widget, index) =>
         Option.map(
-          decodeDashboardTransactions({
-            rows: pages[index]?.results ?? [],
-            categories: categories.value,
-          }),
+          Option.fromUndefinedOr(selected.value.lists[index]),
           (rows) => [widget.id, rows] as const
         )
       )
     );
-    if (Option.isNone(context) || Option.isNone(categories) || Option.isNone(listFacts)) {
-      return Option.none();
-    }
+    if (Option.isNone(listFacts)) return Option.none();
     const budgets = yield* listOwnedBudgets({ db, userId });
     return Option.map(budgets, (owned) => ({
       lists: new Map(listFacts.value),
       budgets: owned,
       categories: new Map(categories.value.map((category) => [category.id, category])),
-      context: context.value,
+      context: selected.value.snapshot,
     }));
   }).pipe(Effect.orElseSucceed(() => Option.none()));
 

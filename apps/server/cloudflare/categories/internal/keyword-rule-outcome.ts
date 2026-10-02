@@ -38,8 +38,11 @@ import type {
   KeywordRuleOutcome,
   OwnerOutcome,
 } from "../../mutations/mutation-types";
-import { type TransactionCaller, isPATCaller } from "../../transactions/transaction-boundary";
-import { dailyAuditMessage } from "../../mutations/transaction-outcome";
+import {
+  type TransactionCaller,
+  dailyAuditMessage,
+  isPATCaller,
+} from "../../canonical-work/operations";
 
 const HTTP_UNAVAILABLE = 503;
 

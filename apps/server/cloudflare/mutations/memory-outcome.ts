@@ -26,7 +26,7 @@ import {
   refusedCredentialResponse,
   transactionFailure,
   transactionNoStore,
-} from "../transactions/transaction-boundary";
+} from "../canonical-work/operations";
 
 /**
  * The Memory audit outcomes one refusal can report: the owner's individual entry point and its

@@ -16,7 +16,7 @@ import {
   transactionId,
   transactionNoStore,
   transactionUnavailable,
-} from "../transactions/transaction-boundary";
+} from "../canonical-work/operations";
 import { type EmailForwardingAddress, EmailForwardingStatus } from "../../src/core/ingestion/model";
 import { freeForwardedEmailCap } from "../../src/core/ingestion/email-policy";
 import { emailAllowancePeriod } from "../../src/core/ingestion/rules";

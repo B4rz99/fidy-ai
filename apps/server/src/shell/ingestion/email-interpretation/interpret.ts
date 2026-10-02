@@ -1,17 +1,20 @@
 import { DateTime, Effect, Option, Schema } from "effect";
-import type { CapturedInterpretationContext } from "~/core/interpretation-evidence/contract";
-import { InterpretationRevision } from "~/core/interpretation-evidence/contract";
+import {
+  type CapturedInterpretationContext,
+  InterpretationRevision,
+} from "~/core/interpretation-evidence/contract";
 import {
   NotificationEmailInterpretationReviewReason,
   type ReceivedEmailContent,
 } from "~/core/ingestion/model";
-import { TransactionExtraction } from "~/core/transactions/model";
-import { NotificationInterpretationEvidence } from "~/core/transactions/account-hints";
+import {
+  NotificationInterpretationEvidence,
+  TransactionExtraction,
+} from "~/core/transactions/contract";
 import { generatedFormats } from "./catalog.generated";
 import { type EmailDocument, normalizeDocumentText, parseEmailDocument } from "./document";
 import type { NotificationEmailFormat } from "./format-definition";
 import { containsCompleteFinancialNumber } from "./format-support";
-
 /** Closed review outcomes; none contains hostile email or parser text. */
 export const EmailInterpretationReviewReason = NotificationEmailInterpretationReviewReason;
 export type EmailInterpretationReviewReason = NotificationEmailInterpretationReviewReason;

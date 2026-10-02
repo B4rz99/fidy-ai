@@ -16,7 +16,7 @@ import {
   transactionNoStore,
   transactionNow,
   transactionUnavailable,
-} from "../transactions/transaction-boundary";
+} from "../canonical-work/operations";
 import { executeSingleCanonicalMutation } from "../mutations/canonical-mutation-unit";
 import { dashboardCompletion, prepareDashboard, presentDashboard } from "./dashboard-mutation";
 

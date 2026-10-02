@@ -8,7 +8,7 @@ import type {
   AccountHints,
   NotificationCurrencyBasis,
   NotificationFormatId,
-} from "~/core/transactions/account-hints";
+} from "~/core/transactions/contract";
 import type { EmailDocument } from "./document";
 
 /** Financial facts a format must establish before the shared canonical decoder may trust them. */

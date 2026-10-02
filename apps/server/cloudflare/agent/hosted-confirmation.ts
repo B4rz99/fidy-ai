@@ -7,7 +7,7 @@ import {
 import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
 import { type Cause, Effect, Option, Schema } from "effect";
 import type { CatalogOperation } from "../../src/shell/_shared/operation-catalog";
-import type { TransactionSubject } from "../transactions/transaction-boundary";
+import type { TransactionSubject } from "../canonical-work/operations";
 import { newId } from "../pats/pat-shared";
 
 const lifetimeMs = 600_000;

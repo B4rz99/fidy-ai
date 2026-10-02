@@ -138,6 +138,81 @@ const cloudflareIdentityContextPrivate = `tools/${PROBE_PREFIX}identity-context-
 
 const PROBES: readonly Probe[] = [
   {
+    name: "native Transaction peers consume capture and bounded reads through owner operations",
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}transactions-public/probe.ts`,
+        source:
+          'import { prepareCapture, readBudgetContributions, readDashboardTransactions } from "../transactions/operations";\nexport const owners = [prepareCapture, readBudgetContributions, readDashboardTransactions];\n',
+      },
+    ],
+  },
+  {
+    name: "foreign native tests cannot import Transaction persistence or effective SQL",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-transactions-internal: cloudflare/${PROBE_PREFIX}transactions-private/probe.test.ts → cloudflare/transactions/internal/transaction-history.ts`,
+        `error foreign-module-imports-cloudflare-transactions-internal: cloudflare/${PROBE_PREFIX}transactions-private/probe.test.ts → cloudflare/transactions/internal/effective-transaction.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}transactions-private/probe.test.ts`,
+        source:
+          'import { findTransaction } from "../transactions/internal/transaction-history";\nimport { effectiveTransactionRelation } from "../transactions/internal/effective-transaction";\nexport const privateReads = [findTransaction, effectiveTransactionRelation];\n',
+      },
+    ],
+  },
+  {
+    name: "tooling cannot import Transaction storage types",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-transactions-internal: scripts/${PROBE_PREFIX}transactions-private/probe.ts → cloudflare/transactions/internal/transaction-history.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `scripts/${PROBE_PREFIX}transactions-private/probe.ts`,
+        source:
+          'import type { StoredTransaction } from "../../cloudflare/transactions/internal/transaction-history";\nexport type LeakedRow = StoredTransaction;\n',
+      },
+    ],
+  },
+  {
+    name: "native adapters cannot import portable Transaction internals",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error cloudflare-imports-portable-transactions-internal: cloudflare/transactions/${PROBE_PREFIX}portable-private/probe.ts → src/shell/transactions/internal/continuation.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/transactions/${PROBE_PREFIX}portable-private/probe.ts`,
+        source:
+          'import { nextTransactionPage } from "../../../src/shell/transactions/internal/continuation";\nexport const privateContinuation = nextTransactionPage;\n',
+      },
+    ],
+  },
+  {
+    name: "native Published Trio cannot launder internal behavior through alias chains",
+    expect: { kind: "rejected", mustContain: ["error published-interface-reexports-internal:"] },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}native-alias/internal/private.ts`,
+        source: "export const privateRead = (): boolean => true;\n",
+      },
+      {
+        path: `cloudflare/${PROBE_PREFIX}native-alias/operations.ts`,
+        source:
+          'import { privateRead } from "./internal/private";\nconst alias = privateRead;\nexport const publishedRead = alias;\n',
+      },
+    ],
+  },
+  {
     name: "Category callers use the published owner operations",
     expect: { kind: "allowed" },
     files: [

@@ -1,15 +1,15 @@
 import { UserId } from "@fidy/server/identity-reference";
-import { readUserContext } from "../identity/user-context/operations";
+import { readUserContext } from "../../identity/user-context/operations";
 import type { UserContext } from "@fidy/server/identity-contract";
-import { prepareConsentAction } from "../consent/operations";
+import { prepareConsentAction } from "../../consent/operations";
 import { protectConsentStatement } from "@fidy/server/consent-operations";
 import { prepareOwnerAuditCall } from "@fidy/server/audit";
-import { CreateTransactionInput, encodeMoneyAmount } from "@fidy/server/transactions-runtime";
+import { CreateTransactionInput, encodeMoneyAmount } from "@fidy/server/transactions-contract";
 import type { CategoryId } from "@fidy/server/categories";
-import { categorizeCaptures, requireCategory } from "../categories/operations";
+import { categorizeCaptures, requireCategory } from "../../categories/operations";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { sessionCookie, sha256 } from "../identity/browser-login";
-import { RequestBodyPolicy, boundedJsonBody } from "../http/request-body";
+import { sessionCookie, sha256 } from "../../identity/browser-login";
+import { RequestBodyPolicy, boundedJsonBody } from "../../http/request-body";
 import {
   type TransactionBoundaryFailure,
   type TransactionCaller,
@@ -25,18 +25,15 @@ import {
   transactionId,
   transactionUnavailable,
   unauthenticatedTransaction,
-} from "./transaction-boundary";
+} from "../../canonical-work/operations";
 import {
   type CanonicalMutationPreparation,
   type PreparedCanonicalMutation,
   type TransactionOutcome,
   failedPreparation,
   unavailablePreparation,
-} from "../mutations/mutation-types";
-import {
-  refusedTransactionMutation,
-  transactionGuardRefusal,
-} from "../mutations/transaction-outcome";
+} from "../../mutations/mutation-types";
+import { refusedTransactionMutation, transactionGuardRefusal } from "./transaction-outcome";
 
 const Input = Schema.toCodecJson(CreateTransactionInput);
 const Session = Schema.Struct({ id: Schema.String, user_id: Schema.String });

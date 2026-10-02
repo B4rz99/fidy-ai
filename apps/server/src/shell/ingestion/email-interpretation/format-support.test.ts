@@ -2,7 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { Option, Schema } from "effect";
 import { CapturedInterpretationContext } from "~/core/interpretation-evidence/contract";
 import { Currency } from "~/core/_shared/money";
-import { AccountHints } from "~/core/transactions/account-hints";
+import { AccountHints } from "~/core/transactions/contract";
 import { type EmailDocument, parseEmailDocument } from "./document";
 import {
   containsCompleteFinancialNumber,

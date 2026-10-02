@@ -986,7 +986,7 @@ export default {
       comment:
         "The canonical API landmark composes only published declaration contracts and its catalog. " +
         "It cannot acquire execution, registry, provider, storage or runtime authority. " +
-        "Implementations depend on the assembled API, never the reverse (#612)." ,
+        "Implementations depend on the assembled API, never the reverse (#612).",
       from: { path: "^src/shell/api\\.ts$" },
       to: {
         path: "^src/",

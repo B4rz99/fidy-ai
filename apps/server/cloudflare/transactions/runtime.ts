@@ -80,7 +80,6 @@ import {
   workerRelease,
 } from "../runtime/telemetry";
 
-import { evaluateBudgetAlerts } from "../budgets/operations";
 import {
   WhatsAppStatusAdmission as StatusAdmission,
   WhatsAppTurnAdmission as TurnAdmission,

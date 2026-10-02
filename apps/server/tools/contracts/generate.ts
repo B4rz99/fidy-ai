@@ -4,7 +4,7 @@ import { type Cause, Effect, Option, type SchemaAST, type SchemaRepresentation }
 import { OpenApi } from "effect/unstable/httpapi";
 import { FidyApi, operationCatalog } from "~/shell/api";
 import { PATPairingApi } from "~/shell/tokens/contract";
-import { publishOperationAccess } from "~/shell/_shared/operation-policy";
+import { publishOperationAccess } from "../../src/shell/canonical-policy/contract";
 import {
   type ContractArtifacts,
   type JsonValue,

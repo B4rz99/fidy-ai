@@ -1,3 +1,4 @@
+import type { TransactionOutcome } from "../contract";
 import {
   Transaction,
   TransactionId,
@@ -15,6 +16,8 @@ import {
   boundaryFailure,
   callerAuthority,
   callerScope,
+  credentialRefusedPreparation,
+  failedPreparation,
   invalidTransactionMessage,
   isPATCaller,
   liveTransactionAuthority,
@@ -22,12 +25,8 @@ import {
   missingTransactionMessage,
   transactionId,
 } from "../../canonical-work/operations";
-import {
-  type CanonicalMutationPreparation,
-  type TransactionOutcome,
-  credentialRefusedPreparation,
-  failedPreparation,
-} from "../../mutations/mutation-types";
+import { type CanonicalMutationPreparation } from "../../canonical-operations/contract";
+
 import {
   refusedTransactionMutation,
   staleCorrectionMessage,

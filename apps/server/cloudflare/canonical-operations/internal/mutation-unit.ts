@@ -1,18 +1,21 @@
 import { Effect, Exit, Option, Schema } from "effect";
-import { maximumAtomicBatchCalls } from "@fidy/server/canonical-runtime";
-import type { ToolCallId, TranscriptTurnId } from "@fidy/server/agent-runtime";
+import { maximumAtomicBatchCalls } from "~/shell/operations/contract";
+import type { HostedCommitFence } from "../../agent/contract";
+import { prepareHostedMutationCommit } from "../../agent/operations";
 import { prepareCanonicalAuditBudgetGuard, refusedByAuditBudget } from "@fidy/server/audit";
-import { KeywordRule, KeywordRuleId } from "@fidy/server/categories";
-import { Budget, BudgetId } from "@fidy/server/budgets-contract";
 import { StatementSubmission } from "@fidy/server/ingestion-contract";
-import { EmailForwardingAddress } from "../../src/core/ingestion/contract";
-import { readForwardingAddress, statementDailyBudgetRefusal } from "../ingestion/operations";
+import { EmailForwardingAddress } from "../../../src/core/ingestion/contract";
+import {
+  forwardingAuditLimitRefusal,
+  readForwardingAddress,
+  statementDailyBudgetRefusal,
+} from "../../ingestion/operations";
 import {
   RestoredTransactionPair,
   Transaction,
   TransactionPresentation,
 } from "@fidy/server/transactions-contract";
-import { canonicalTriggerOf } from "./canonical-triggers";
+import { canonicalTriggerOf } from "./triggers";
 
 import {
   type CanonicalRefusalDisposition,
@@ -23,20 +26,14 @@ import {
   refusedCredentialResponse,
   transactionNoStore,
   transactionUnavailable,
-} from "../canonical-work/operations";
-import {
-  findTransactionValue,
-  transactionBudgetRefusal,
-  transactionMovementRefusal,
-  transactionRefusal,
-} from "../transactions/operations";
+} from "../../canonical-work/operations";
+import { findTransactionValue, transactionTriggerRefusal } from "../../transactions/operations";
 import type {
   CanonicalMutationPreparation,
   CanonicalMutationRefusal,
   CommittedMutationValue,
   PreparedCanonicalMutation,
-  TransactionOutcome,
-} from "./mutation-types";
+} from "../contract";
 
 /** What one caller-owned D1 unit did with its ordered canonical mutations. */
 export type CanonicalMutationUnitExecution =
@@ -135,13 +132,6 @@ const rejectRecorded = ({
     })
   );
 
-const forwardingAuditLimitRefusal = (): CanonicalMutationRefusal => ({
-  code: "rate_limited",
-  message: "Daily canonical work budget exhausted.",
-  record: () => Effect.succeed("rate_limited" as const),
-  respond: () => Effect.succeed(transactionUnavailable()),
-});
-
 /**
  * The refusal one prepared child explains for a commit-time trigger, or None when the trigger
  * class does not belong to that child's owner. The refusal records its own evidence under the exact
@@ -179,34 +169,6 @@ const triggerRefusal = ({
     case "StatementSubmission":
       return auditOnly(statementDailyBudgetRefusal("trigger"));
   }
-};
-
-/** The refusal a Transaction child reports for a trigger that belongs to its own owner. */
-const transactionTriggerRefusal = ({
-  db,
-  subject,
-  current,
-  outcome,
-  kind,
-}: Readonly<{
-  db: D1Database;
-  subject: TransactionCaller;
-  current: number;
-  outcome: TransactionOutcome;
-  kind: TriggerKind;
-}>): Option.Option<CanonicalMutationRefusal> => {
-  if (kind === "movement") {
-    return Option.some(
-      transactionRefusal({
-        db,
-        subject,
-        operation: outcome.operation,
-        refusal: transactionMovementRefusal(),
-        current,
-      })
-    );
-  }
-  return Option.some(transactionBudgetRefusal());
 };
 
 /**
@@ -445,9 +407,6 @@ const childStatements = ({
   ];
 };
 
-/** A Turn-scoped commit token, never supplied by an external canonical caller. */
-export type HostedCommitFence = Readonly<{ turnId: TranscriptTurnId; toolCallId: ToolCallId }>;
-
 /**
  * Commit one ordered set of owner-prepared canonical mutations in a single D1 atomic unit and read
  * each committed value back. Each child has its own indexed Audit assertion and a completion assertion;
@@ -477,15 +436,13 @@ export const executeCanonicalMutationUnit = ({
         ...Option.match(hostedFence, {
           onNone: (): ReadonlyArray<D1PreparedStatement> => [],
           onSome: ({ turnId, toolCallId }): ReadonlyArray<D1PreparedStatement> => [
-            // A CHECK failure rolls back the entire D1 batch if recovery won the race.
-            // The unique key prevents a committed call from being repeated after a lost reply.
-            db
-              .prepare(`INSERT INTO hosted_mutation_commits
-              (turn_id, tool_call_id, user_id, committed_at_ms, valid)
-              VALUES (?, ?, ?, ?, CASE WHEN EXISTS (
-                SELECT 1 FROM hosted_turns WHERE id = ? AND user_id = ? AND status = 'pending'
-              ) THEN 1 ELSE 0 END)`)
-              .bind(turnId, toolCallId, subject.userId, current, turnId, subject.userId),
+            prepareHostedMutationCommit({
+              db,
+              userId: subject.userId,
+              turnId,
+              toolCallId,
+              current,
+            }),
           ],
         }),
         ...mutations.flatMap((mutation, index) =>
@@ -516,17 +473,12 @@ export const executeCanonicalMutationUnit = ({
     })
   );
 
-/** Select the published data from a retained Transaction, category, Memory, or statement value. */
+/** Select the published data from a retained Transaction or statement value. */
 const retainedMutationPayload = (
   value: Extract<
     CommittedMutationValue,
     {
-      _tag:
-        | "Transaction"
-        | "EffectiveTransaction"
-        | "RestoredPair"
-        | "KeywordRule"
-        | "StatementSubmission";
+      _tag: "Transaction" | "EffectiveTransaction" | "RestoredPair" | "StatementSubmission";
     }
   >
 ): unknown => {
@@ -536,8 +488,6 @@ const retainedMutationPayload = (
       return value.transaction;
     case "RestoredPair":
       return value.pair;
-    case "KeywordRule":
-      return value.rule;
     case "StatementSubmission":
       return value.submission;
   }
@@ -546,28 +496,17 @@ const retainedMutationPayload = (
 /** The JSON payload one committed canonical value carries as its operation's success data. */
 export const committedMutationPayload = (value: CommittedMutationValue): unknown => {
   if (value._tag === "ForwardingAddress") return value.address;
-  if (value._tag === "Budget") return value.budget;
   if (value._tag === "Owner") return value.payload;
-  if (value._tag === "RemovedKeywordRule" || value._tag === "RemovedBudget") {
-    return value.id;
-  }
   return retainedMutationPayload(value);
 };
 
 type ExistingCommittedValue = Exclude<CommittedMutationValue, { _tag: "ForwardingAddress" }>;
 
-const encodeRemovedValue = (
-  value: Extract<CommittedMutationValue, { _tag: "RemovedBudget" | "RemovedKeywordRule" }>
-): Effect.Effect<unknown, Schema.SchemaError> =>
-  value._tag === "RemovedKeywordRule"
-    ? Schema.encodeEffect(Schema.toCodecJson(KeywordRuleId))(value.id)
-    : Schema.encodeEffect(Schema.toCodecJson(BudgetId))(value.id);
-
 const encodeEntityValue = (
   value: Exclude<
     ExistingCommittedValue,
     {
-      _tag: "RemovedBudget" | "RemovedKeywordRule" | "Budget" | "StatementSubmission" | "Owner";
+      _tag: "StatementSubmission" | "Owner";
     }
   >
 ): Effect.Effect<unknown, Schema.SchemaError> => {
@@ -578,8 +517,6 @@ const encodeEntityValue = (
       return Schema.encodeEffect(Schema.toCodecJson(TransactionPresentation))(value.transaction);
     case "RestoredPair":
       return Schema.encodeEffect(Schema.toCodecJson(RestoredTransactionPair))(value.pair);
-    case "KeywordRule":
-      return Schema.encodeEffect(Schema.toCodecJson(KeywordRule))(value.rule);
   }
 };
 
@@ -587,8 +524,6 @@ const encodeExistingValue = (
   value: ExistingCommittedValue
 ): Effect.Effect<unknown, Schema.SchemaError> => {
   if (value._tag === "Owner") return value.encode();
-  if ("id" in value) return encodeRemovedValue(value);
-  if (value._tag === "Budget") return Schema.encodeEffect(Schema.toCodecJson(Budget))(value.budget);
   if (value._tag === "StatementSubmission") {
     return Schema.encodeEffect(Schema.toCodecJson(StatementSubmission))(value.submission);
   }

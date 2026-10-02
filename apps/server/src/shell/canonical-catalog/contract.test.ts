@@ -1,11 +1,11 @@
 import { expect, it } from "@effect/vitest";
 import { Option, Schema } from "effect";
 import { operationCatalog } from "~/shell/api";
-import { getAtomicBatchCallSchema } from "~/shell/operations/operations";
+import { getAtomicBatchCallSchema } from "~/shell/operations/contract";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
-import { makeOperationCatalog } from "./operation-catalog";
-import { getCanonicalOperationInput } from "./typed-operation-input";
-import { operationPolicy, patScoped } from "./operation-policy";
+import { makeOperationCatalog } from "./contract";
+import { getCanonicalOperationInput } from "~/shell/canonical-operations/operations";
+import { operationPolicy, patScoped } from "~/shell/canonical-policy/contract";
 
 const policy = operationPolicy({
   access: patScoped("read"),

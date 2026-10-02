@@ -21,18 +21,19 @@ import {
   boundaryFailure,
   callerAuthority,
   callerScope,
+  credentialRefusedPreparation,
+  failedPreparation,
   isPATCaller,
   liveTransactionAuthority,
+  refusedPreparation,
   transactionId,
 } from "../../canonical-work/operations";
 import {
   type CanonicalMutationPreparation,
   type CanonicalMutationRefusal,
   type GuardRefusalWork,
-  credentialRefusedPreparation,
-  failedPreparation,
-  refusedPreparation,
-} from "../../mutations/mutation-types";
+} from "../../canonical-operations/contract";
+
 import { budgetOutcome, budgetRefusal, findOwnedBudget } from "./budget-outcome";
 
 /** The owner cap enforced by budget_capacity in migration 0016. */

@@ -1,4 +1,5 @@
 import { type MemoryOperationId, memoryOperationIds } from "@fidy/server/memory-api";
+import { BatchInput, type CanonicalWork } from "./canonical-operations/contract";
 import { UserId } from "@fidy/server/agent-runtime";
 import { makeAuditRetention } from "@fidy/server/audit-runtime";
 import { EmailAddress } from "@fidy/server/client";
@@ -84,19 +85,14 @@ import { authorizeCanonicalPAT, listPATs, sweepExpiredPATPairings } from "./toke
 import { recallMemories, rejectMemoryMutation } from "./memory/operations";
 import { canonicalOperation, canonicalRoute } from "./routing/canonical-routes";
 import {
-  BatchInput,
-  type CanonicalWork,
   CanonicalWorkAdmission,
   type PATAuthority,
   type WebSessionAuthority,
 } from "./transactions/runtime";
-import {
-  CanonicalOperationId,
-  type CatalogOperation,
-  atomicBatchOperation,
-  maximumAtomicBatchCalls,
-  operationCatalog,
-} from "@fidy/server/canonical-runtime";
+import { CanonicalOperationId } from "~/core/canonical-operations/contract";
+import { type CatalogOperation } from "~/shell/canonical-catalog/contract";
+import { atomicBatchOperation, maximumAtomicBatchCalls } from "~/shell/operations/contract";
+import { operationCatalog } from "~/shell/api";
 import {
   executeProtectedCategories,
   keywordRuleIdFromPath,

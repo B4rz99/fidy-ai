@@ -1,8 +1,11 @@
 import * as Arr from "effect/Array";
 import { Option, Schema } from "effect";
 import { HttpApiMiddleware } from "effect/unstable/httpapi";
-import { type CatalogOperation, getBoundOperationCatalog } from "~/shell/_shared/operation-catalog";
-import { patScopeCapability } from "~/shell/_shared/operation-policy";
+import {
+  type CatalogOperation,
+  getBoundOperationCatalog,
+} from "~/shell/canonical-catalog/contract";
+import { patScopeCapability } from "~/shell/canonical-policy/contract";
 
 const englishSentenceSegmenter = new Intl.Segmenter("en", {
   granularity: "sentence",
@@ -433,3 +436,8 @@ export const isHttpOrigin = (url: URL): boolean =>
   url.pathname === "/" &&
   url.search.length === 0 &&
   url.hash.length === 0;
+
+/** Observes a canonical call without changing its success, failure, interruption, or requirements. */
+export class CanonicalTelemetry extends HttpApiMiddleware.Service<CanonicalTelemetry>()(
+  "@fidy/server/shell/public-http/contract/CanonicalTelemetry"
+) {}

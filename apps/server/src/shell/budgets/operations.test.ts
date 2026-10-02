@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { BudgetCurrencyImmutable, BudgetId, BudgetNotFound } from "~/core/budgets/contract";
-import { freePatCaller } from "~/shell/_shared/suggested-operations";
+import { freePatCaller } from "~/shell/canonical-operations/operations";
 import { toApiFailure } from "./operations";
 
 it("projects an unavailable Budget without exposing its identity or advertising unauthorized reads", () => {

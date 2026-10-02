@@ -1,4 +1,4 @@
-import type { KeywordRuleOperation } from "../contract";
+import type { KeywordRuleOperation, KeywordRuleOutcome } from "../contract";
 import {
   insertKeywordRule,
   keywordRulesFromRows,
@@ -37,20 +37,18 @@ import {
   type TransactionCaller,
   callerAuthority,
   callerScope,
+  credentialRefusedPreparation,
+  failedPreparation,
   isPATCaller,
   liveTransactionAuthority,
   transactionNow as now,
+  refusedPreparation,
   refusedTransactionWork,
+  unavailablePreparation,
   transactionId as uuid,
 } from "../../canonical-work/operations";
-import {
-  type CanonicalMutationPreparation,
-  type KeywordRuleOutcome,
-  credentialRefusedPreparation,
-  failedPreparation,
-  refusedPreparation,
-  unavailablePreparation,
-} from "../../mutations/mutation-types";
+import type { CanonicalMutationPreparation } from "../../canonical-operations/contract";
+
 import {
   keywordRuleGuardFor,
   keywordRuleOutcome,

@@ -7,7 +7,7 @@ import {
   InsightEventId,
 } from "~/core/insights/contract";
 import { NotFound, OperationResponse, ValidationFailed } from "~/shell/public-http/contract";
-import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
+import { operationPolicy, patScoped } from "~/shell/canonical-policy/contract";
 
 /** Canonical operations over the caller's shared InsightEvent stream. */
 const InsightParams = Schema.Struct({ id: InsightEventId });

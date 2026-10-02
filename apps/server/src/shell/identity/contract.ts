@@ -1,6 +1,6 @@
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
 import { User, UserPreferences } from "~/core/identity/contract";
-import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
+import { operationPolicy, patScoped } from "~/shell/canonical-policy/contract";
 import { OperationResponse, Unavailable } from "~/shell/public-http/contract";
 
 /**

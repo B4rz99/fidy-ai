@@ -23,8 +23,11 @@ import {
   type TransactionCaller,
   callerAuthority,
   callerScope,
+  credentialRefusedPreparation,
+  failedPreparation,
   isPATCaller,
   liveTransactionAuthority,
+  refusedPreparation,
   transactionFailure,
   transactionId,
   transactionNoStore,
@@ -35,10 +38,7 @@ import {
   type CanonicalMutationRefusal,
   type CommittedMutationValue,
   type OwnerOutcome,
-  credentialRefusedPreparation,
-  failedPreparation,
-  refusedPreparation,
-} from "../../mutations/mutation-types";
+} from "../../canonical-operations/contract";
 
 /** The persisted Dashboard is decoded before it is used to plan any mutation. */
 const DocumentJson = Schema.fromJsonString(Schema.toCodecJson(DashboardDocument));

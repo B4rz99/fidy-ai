@@ -15,7 +15,7 @@ import type {
   CommittedMutationValue,
   GuardRefusalWork,
   OwnerOutcome,
-} from "../../mutations/mutation-types";
+} from "../../canonical-operations/contract";
 import { newId } from "../../secret-material/operations";
 import { prepareOwnedStatement } from "../../database/operations";
 import {

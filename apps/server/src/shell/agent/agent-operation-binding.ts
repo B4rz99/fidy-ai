@@ -1,6 +1,6 @@
 import type { CanonicalOperationId } from "~/core/canonical-operations/contract";
-import type { HostedOperationWireName } from "~/shell/_shared/hosted-operation-bindings";
-import type { CatalogOperation } from "~/shell/_shared/operation-catalog";
+import type { HostedOperationWireName } from "~/shell/canonical-operations/operations";
+import type { CatalogOperation } from "~/shell/canonical-catalog/contract";
 
 /** Canonical operation declaration used by execution and confirmation boundaries. */
 export type AgentOperationBinding = {

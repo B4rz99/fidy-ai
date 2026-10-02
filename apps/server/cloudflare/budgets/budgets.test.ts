@@ -5,7 +5,7 @@ import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { Budget, BudgetStatusReport, IanaTimeZone } from "@fidy/server/budgets-contract";
 import { deriveCurrentBudgetMonth } from "@fidy/server/budget-decisions";
 import { Transaction, encodeMoneyAmount } from "@fidy/server/transactions-contract";
-import { AtomicBatchRejected } from "@fidy/server/canonical-runtime";
+import { AtomicBatchRejected } from "~/shell/operations/contract";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import coreWorker from "../core-worker";

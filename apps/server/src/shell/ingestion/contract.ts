@@ -28,7 +28,7 @@ import {
   ValidationFailed,
   acceptedStatus,
 } from "~/shell/public-http/contract";
-import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
+import { operationPolicy, patScoped } from "~/shell/canonical-policy/contract";
 /** Canonical Transaction facts supplied to resolve one pending statement row. */
 export const ResolveNeedsReviewItemInput = Schema.Struct({
   extraction: TransactionExtraction,

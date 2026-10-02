@@ -644,3 +644,53 @@ decode failures into the closed WhatsAppUnavailable outcome while preserving int
 published pre-User Consent operation represents typed text only; voice material cannot become a
 Consent or credential command. Two-User Queue substitution evidence proves that a mismatched
 User/Turn pair cannot invoke inference or delivery or change either User’s retained state.
+
+### Canonical declaration and policy publication
+
+`src/shell/api.ts` remains the explicit acyclic canonical API assembly landmark. It composes only
+owner declarations, universal HTTP/authorization declarations and the catalog-derived batch group.
+`canonical-catalog/contract.ts` reflects and binds that single declaration graph; `operations/contract.ts`
+derives the ordered batch child/result unions before the batch itself is assembled. Generated artifacts,
+typed clients, suggested calls and hosted tools continue to share those exact operation identities,
+input/output codecs and policy facts. Portable dispatch registries stay private under
+`canonical-operations/internal/` and fail closed where a native adapter is unavailable.
+
+Canonical policy declarations and annotation codecs live in `canonical-policy/contract.ts`, while
+execution/discovery decisions live in its substantive operations. `canonical-operations/contract.ts`
+publishes caller-correlated input, output and confirmation-evidence types; its operations validate
+suggested calls, derive hosted bindings and recover typed input codecs from the bound catalog.
+Authorization publishes caller/middleware declarations independently from caller projection and
+browser client Layer composition. Its runtime interface builds only client authorization Layers;
+it does not acquire production credentials, D1 or request authority. Universal telemetry remains a
+Public HTTP declaration. No operation has a parallel declaration or privately installed hosted tool.
+
+Anonymous source accounting is published through `cloudflare/anonymous-admission/operations.ts`.
+The public ingress supplies its Cloudflare request and Worker-owned configuration; client forwarding
+headers never select the accounting identity. Only the configured local-development topology may
+substitute its fixed local source. Missing source or unusable key stops forwarding before pairing
+work. Tokens retains the actual bounded admission state; a source digest cannot establish a User.
+The edge-policy manifest includes this extracted source boundary, and no process-proxy fallback remains.
+
+Agent publishes the existing exact pending-Turn mutation fence through its native contract and
+operations. Canonical mutation coordination composes that owner-prepared statement in the same
+uninterruptible D1 batch as all child writes and Audit evidence. A foreign or terminal Turn or an
+already committed tool call rolls back the entire batch. The extraction creates no second execution
+or recovery authority. These publications introduce no external workflow or telemetry purpose;
+existing bounded Worker observations and metadata-only accountability remain unchanged.
+
+Native `cloudflare/canonical-operations/operations.ts` owns complete catalog call and ordered-batch
+execution, including owner preparation, pre/post Budget reconciliation, statement replay and
+canonical response projection. It publishes installed declarations and catalog-bound query execution
+without exposing an adapter. Mutation registries, query dispatch, indexed D1 commit mechanics and
+trigger classification are private under `internal/`. The contract carries canonical work and the
+owner-preparation protocol; refusal constructors remain in the lower-level Canonical Work operations
+so owners never depend back on the execution coordinator. Memory retains its own SQL, capacity,
+collision, refusal and committed readback behavior through the published owner protocol.
+
+The existing per-User Durable Object constructs bindings and serializes work. It supplies the exact
+caller and optional constructed inference service; canonical execution refuses Memory work when that
+service is absent while unrelated owners remain available. No second runtime or reusable authority is
+introduced. Agent discovery receives the catalog's installed declarations and applies the existing
+access/confirmation policy; query dispatch obtains the declaration by identity and validates its input
+before invoking an owner. Foreign tests and tools cannot import canonical private dispatch, and the
+public execution tests retain cross-User, revoked-Consent and unavailable-operation refusal evidence.

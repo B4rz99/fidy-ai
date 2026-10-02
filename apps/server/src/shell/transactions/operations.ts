@@ -13,7 +13,7 @@ import {
   type SuggestedOperationCaller,
   checkpointSuggestedOperations,
   suggestOperation,
-} from "~/shell/_shared/suggested-operations";
+} from "~/shell/canonical-operations/operations";
 
 /** What a `TransactionFailure` becomes once it has to leave the process. */
 export type TransactionApiFailure = NotFound | ValidationFailed;

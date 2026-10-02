@@ -3,11 +3,8 @@ import { Option, Schema } from "effect";
 import {
   OperationAccess,
   type OperationAccessCaller,
-  completesHostedTurn,
-  decideOperationAccess,
   freshWebOrVerifiedWhatsAppHosted,
   freshWebSessionOnly,
-  isHostedVisible,
   isPATScoped,
   patScopeCapability,
   patScoped,
@@ -15,7 +12,8 @@ import {
   publishOperationAccess,
   verifiedWhatsAppHostedOnly,
   webOrHosted,
-} from "./operation-policy";
+} from "./contract";
+import { completesHostedTurn, decideOperationAccess, isHostedVisible } from "./operations";
 
 const pat = (
   capabilities: ReadonlyArray<"read" | "write" | "dashboard">

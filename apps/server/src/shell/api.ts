@@ -1,8 +1,8 @@
+import { CanonicalTelemetry, ValidationGate } from "~/shell/public-http/contract";
 import { HttpApi, type HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
-import { TokenAuthorization } from "~/shell/_shared/authz";
-import { CanonicalTelemetry } from "~/shell/_shared/canonical-telemetry";
-import { ValidationGate } from "~/shell/public-http/contract";
-import { bindOperationCatalog, makeOperationCatalog } from "~/shell/_shared/operation-catalog";
+import { TokenAuthorization } from "~/shell/authorization/contract";
+
+import { bindOperationCatalog, makeOperationCatalog } from "~/shell/canonical-catalog/contract";
 import { BrowserLoginGroup } from "~/shell/browser-login/contract";
 import { BudgetsGroup } from "~/shell/budgets/contract";
 import { CategoriesGroup } from "~/shell/categories/contract";
@@ -12,7 +12,7 @@ import { IdentityGroup } from "~/shell/identity/contract";
 import { InsightsGroup } from "~/shell/insights/contract";
 import { IngestionGroup } from "~/shell/ingestion/contract";
 import { MemoryGroup } from "~/shell/memory/contract";
-import { makeOperationsGroup } from "~/shell/operations/operations";
+import { makeOperationsGroup } from "~/shell/operations/contract";
 import { SubscriptionGroup } from "~/shell/subscription/contract";
 import { PATsGroup } from "~/shell/tokens/contract";
 import { RecoveryGroup } from "~/shell/recovery/contract";

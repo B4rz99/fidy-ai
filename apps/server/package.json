@@ -14,11 +14,6 @@
       "import": "./src/shell/audit/runtime.ts",
       "default": "./src/shell/audit/runtime.ts"
     },
-    "./canonical-runtime": {
-      "types": "./src/shell/canonical-runtime.ts",
-      "import": "./src/shell/canonical-runtime.ts",
-      "default": "./src/shell/canonical-runtime.ts"
-    },
     "./transaction-operations": {
       "types": "./src/shell/transactions/operations.ts",
       "import": "./src/shell/transactions/operations.ts",
@@ -233,6 +228,11 @@
       "types": "./src/shell/memory/operations.ts",
       "import": "./src/shell/memory/operations.ts",
       "default": "./src/shell/memory/operations.ts"
+    },
+    "./canonical-catalog": {
+      "types": "./src/shell/api.ts",
+      "import": "./src/shell/api.ts",
+      "default": "./src/shell/api.ts"
     }
   },
   "scripts": {

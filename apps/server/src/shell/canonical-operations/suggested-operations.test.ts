@@ -8,8 +8,8 @@ import {
   checkpointSuggestedOperations,
   freePatCaller,
   suggestOperation,
-} from "./suggested-operations";
-import { patScopeCapability, patScoped, webOrHosted } from "./operation-policy";
+} from "./operations";
+import { patScopeCapability, patScoped, webOrHosted } from "~/shell/canonical-policy/contract";
 import { SuggestedOperation } from "~/shell/public-http/contract";
 
 const allCapabilities = ["read", "write", "dashboard"] as const;

@@ -15,7 +15,7 @@ import {
   UpgradeDestination,
   maximumTransientCardTokenCharacters,
 } from "~/core/subscription/contract";
-import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
+import { operationPolicy, patScoped } from "~/shell/canonical-policy/contract";
 import { OperationResponse, Unavailable } from "~/shell/public-http/contract";
 import { PriceId } from "~/core/subscription/reference";
 

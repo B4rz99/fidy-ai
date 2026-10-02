@@ -7,7 +7,7 @@ import {
   HostedOperationWireName,
   hostedOperationBindings,
   hostedToolDescription,
-} from "~/shell/_shared/hosted-operation-bindings";
+} from "~/shell/canonical-operations/operations";
 import { maximumModelRoundMillis } from "~/shell/_shared/hosted-turn-bounds";
 import {
   HostedInferenceError,

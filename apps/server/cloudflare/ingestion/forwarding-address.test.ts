@@ -3,13 +3,8 @@ import { Miniflare } from "miniflare";
 import { applyTestMigration } from "../d1-test-fixture";
 import { afterEach, expect, it } from "vitest";
 import { forwardingAddressResponse } from "./operations";
-import {
-  forwardingAddressMutationAdapter,
-  prepareForwardingAddress,
-} from "./internal/forwarding-address-mutation";
-import { executeCanonicalMutationUnit } from "../mutations/canonical-mutation-unit";
-import { canonicalMutationAdapter } from "../mutations/canonical-mutation-registry";
-import { CanonicalOperationId } from "@fidy/server/canonical-runtime";
+import { executeCanonicalQuery, executeCanonicalWork } from "../canonical-operations/operations";
+import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 
 const userA = "10000000-0000-4000-8000-000000000101";
 const userB = "10000000-0000-4000-8000-000000000102";
@@ -107,33 +102,20 @@ it("issues unpredictable User-specific addresses at verified Consent and returns
     Effect.gen(function* () {
       const db = yield* setup();
       const subject = { id: sessionA, userId: userA, digest };
-      expect(
-        Option.isSome(
-          canonicalMutationAdapter(CanonicalOperationId.make("ingestion.enableEmailForwarding"))
-        )
-      ).toBe(true);
       const current = yield* Clock.currentTimeMillis;
-      const prepared = yield* prepareForwardingAddress({
+      const enabled = yield* executeCanonicalWork({
         db,
         subject,
         current,
         bucket: Option.none(),
-        input: {},
-      });
-      expect(prepared._tag).toBe("Prepared");
-      if (prepared._tag !== "Prepared") return;
-      const execution = yield* executeCanonicalMutationUnit({
-        db,
-        subject,
-        current,
-        mutations: [prepared.mutation],
         hostedFence: Option.none(),
+        inference: Option.none(),
+        work: {
+          _tag: "Call",
+          operation: CanonicalOperationId.make("ingestion.enableEmailForwarding"),
+          input: {},
+        },
       });
-      expect(execution._tag).toBe("Committed");
-      if (execution._tag !== "Committed") return;
-      const value = execution.values[0];
-      if (value === undefined) return;
-      const enabled = yield* forwardingAddressMutationAdapter.present(value);
       const body = yield* Schema.decodeUnknownEffect(
         Schema.Struct({
           data: Schema.Struct({ address: Schema.String }),
@@ -141,13 +123,17 @@ it("issues unpredictable User-specific addresses at verified Consent and returns
       )(yield* wait(() => enabled.json()));
       expect(enabled.status).toBe(200);
       expect(body.data.address).toMatch(/^[a-f0-9]{48}@fidyapp\.com$/u);
-      const read = yield* forwardingAddressResponse({
+      const query = yield* executeCanonicalQuery({
         db,
         subject,
-        operation: "ingestion.getEmailForwarding",
+        operation: CanonicalOperationId.make("ingestion.getEmailForwarding"),
+        input: {},
+        bucket: Option.none(),
       });
-      expect(read.status).toBe(200);
-      expect(yield* wait(() => read.json())).toMatchObject({
+      expect(Option.isSome(query)).toBe(true);
+      if (Option.isNone(query)) return;
+      expect(query.value.status).toBe(200);
+      expect(yield* wait(() => query.value.json())).toMatchObject({
         data: { address: { address: body.data.address }, remainingThisMonth: 50 },
       });
       expect(
@@ -174,6 +160,21 @@ it("refuses a cross-User session subject and revoked Consent without disclosing 
         operation: "ingestion.getEmailForwarding",
       });
       expect(wrong.status).not.toBe(200);
+      const current = yield* Clock.currentTimeMillis;
+      const wrongMutation = yield* executeCanonicalWork({
+        db,
+        subject: { id: sessionA, userId: userB, digest },
+        current,
+        bucket: Option.none(),
+        hostedFence: Option.none(),
+        inference: Option.none(),
+        work: {
+          _tag: "Call",
+          operation: CanonicalOperationId.make("ingestion.enableEmailForwarding"),
+          input: {},
+        },
+      });
+      expect(wrongMutation.status).not.toBe(200);
       yield* wait(() =>
         db.prepare("INSERT INTO consent_user_revocations VALUES (?)").bind(userA).run()
       );
@@ -183,6 +184,41 @@ it("refuses a cross-User session subject and revoked Consent without disclosing 
         operation: "ingestion.getEmailForwarding",
       });
       expect(revoked.status).not.toBe(200);
+      const revokedMutation = yield* executeCanonicalWork({
+        db,
+        subject: { id: sessionA, userId: userA, digest },
+        current,
+        bucket: Option.none(),
+        hostedFence: Option.none(),
+        inference: Option.none(),
+        work: {
+          _tag: "Call",
+          operation: CanonicalOperationId.make("ingestion.enableEmailForwarding"),
+          input: {},
+        },
+      });
+      expect(revokedMutation.status).not.toBe(200);
+      expect(
+        (yield* wait(() => db.prepare("SELECT id FROM statement_submission_audit").all())).results
+      ).toHaveLength(0);
+    })
+  ));
+
+it("canonical query dispatch refuses a mutation identity and an unavailable operation before owner work", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const subject = { id: sessionA, userId: userA, digest };
+      for (const operation of ["ingestion.enableEmailForwarding", "memory.unavailableOperation"]) {
+        const response = yield* executeCanonicalQuery({
+          db,
+          subject,
+          operation: CanonicalOperationId.make(operation),
+          input: {},
+          bucket: Option.none(),
+        });
+        expect(Option.isNone(response)).toBe(true);
+      }
       expect(
         (yield* wait(() => db.prepare("SELECT id FROM statement_submission_audit").all())).results
       ).toHaveLength(0);

@@ -6,8 +6,8 @@ import {
   AtomicBatchEligible,
   type OperationPolicyValue,
   getOperationPolicy,
-} from "./operation-policy";
-import { makePartialInputSchema } from "./partial-input";
+} from "~/shell/canonical-policy/contract";
+import { makePartialInputSchema } from "~/shell/_shared/partial-input";
 
 type OperationSchema = Schema.Codec<unknown, Schema.Json, never, never>;
 type PartialInputSchema = Schema.Codec<unknown, unknown>;

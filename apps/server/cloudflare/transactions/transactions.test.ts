@@ -15,8 +15,8 @@ import {
   type AtomicBatchCall,
   AtomicBatchCallId,
   AtomicBatchRejected,
-  ErrorCode,
-} from "@fidy/server/canonical-runtime";
+} from "~/shell/operations/contract";
+import { ErrorCode } from "~/shell/public-http/contract";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { DisclosureSnapshot } from "@fidy/server/agent-runtime";
 import { CategoryId, CategoryKeyword, KeywordRuleId } from "@fidy/server/categories";

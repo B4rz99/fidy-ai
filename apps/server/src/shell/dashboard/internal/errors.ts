@@ -9,7 +9,7 @@ import {
   type SuggestedOperationCaller,
   checkpointSuggestedOperations,
   suggestOperation,
-} from "~/shell/_shared/suggested-operations";
+} from "~/shell/canonical-operations/operations";
 
 const dashboardRecovery = (caller: SuggestedOperationCaller): ReadonlyArray<SuggestedOperation> =>
   checkpointSuggestedOperations({

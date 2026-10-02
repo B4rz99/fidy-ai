@@ -1,49 +1,26 @@
-import { Cause, Effect, Exit, Option, Schema } from "effect";
-import type { CatalogOperation } from "../../src/shell/_shared/operation-catalog";
-import type { TransactionSubject } from "../canonical-work/operations";
-import { executeProtectedCategories, listOwnKeywordRules } from "../categories/operations";
-import { executeProtectedSubscriptionQuery } from "../subscription/operations";
-import { browseBudgets, evaluateBudgetAlerts } from "../budgets/operations";
-import { browseTransactions } from "../transactions/operations";
-import { browseDashboard } from "../dashboard/operations";
-import { recallMemories } from "../memory/operations";
-import { listPendingInsights } from "../insights/operations";
+import { operationCatalog } from "~/shell/api";
+import { type Cause, Effect, Option } from "effect";
+import type { TransactionSubject } from "../../canonical-work/operations";
+import { executeProtectedCategories, listOwnKeywordRules } from "../../categories/operations";
+import { executeProtectedSubscriptionQuery } from "../../subscription/operations";
+import { browseBudgets, evaluateBudgetAlerts } from "../../budgets/operations";
+import { browseTransactions } from "../../transactions/operations";
+import { browseDashboard } from "../../dashboard/operations";
+import { recallMemories } from "../../memory/operations";
+import { listPendingInsights } from "../../insights/operations";
 import {
   forwardingAddressResponse,
   listNeedsReviewItems,
   readStatementSubmission,
-} from "../ingestion/operations";
+} from "../../ingestion/operations";
 
-const requestParts = Schema.Struct({
-  params: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
-  query: Schema.optionalKey(
-    Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Finite, Schema.Boolean]))
-  ),
-});
-
-/** Build only a catalog-owned route from validated canonical arguments, never an arbitrary destination. */
-const requestFor = (operation: CatalogOperation, input: Schema.Json): Option.Option<Request> => {
-  const parts = Schema.decodeUnknownOption(requestParts)(input);
-  if (Option.isNone(parts)) return Option.none();
-  let route = operation.route;
-  for (const [key, value] of Object.entries(parts.value.params ?? {})) {
-    route = route.replace(`:${key}`, encodeURIComponent(value));
-  }
-  if (route.includes(":")) return Option.none();
-  const url = new URL(route, "https://canonical.internal");
-  for (const [key, value] of Object.entries(parts.value.query ?? {})) {
-    url.searchParams.set(key, String(value));
-  }
-  return Option.some(new Request(url, { method: operation.method }));
-};
-
-type QueryWork = Readonly<{
+export type QueryWork = Readonly<{
   db: D1Database;
   subject: TransactionSubject;
   request: Request;
   bucket: Option.Option<R2Bucket>;
 }>;
-type QueryOwner = (work: QueryWork) => Effect.Effect<Response, Cause.UnknownError>;
+export type QueryOwner = (work: QueryWork) => Effect.Effect<Response, Cause.UnknownError>;
 
 const budgetOwner =
   (
@@ -175,43 +152,18 @@ const queryOwners = new Map<string, QueryOwner>([
   ],
 ]);
 
-/** Whether the catalog query has a real installed owner for this runtime. */
-export const isInstalledHostedQuery = (id: string): boolean => queryOwners.has(id);
+/** Look up an installed query adapter only inside canonical dispatch. */
+export const canonicalQueryOwner = (id: string): Option.Option<QueryOwner> =>
+  Option.fromUndefinedOr(queryOwners.get(id));
 
-/** Call a canonical owner with a live User subject and catalog-owned route; its domain/Audit
- * effects are the owner's effects. Returns None for an uninstalled owner, invalid route arguments,
- * or an owner defect. A canonical refusal remains Some(response), so the caller can retain it.
- */
-export const executeHostedQuery = ({
-  db,
-  subject,
-  operation,
-  input,
-  bucket,
-}: Readonly<{
-  db: D1Database;
-  subject: TransactionSubject;
-  operation: CatalogOperation;
-  input: Schema.Json;
-  bucket: Option.Option<R2Bucket>;
-}>): Effect.Effect<Option.Option<Response>, Cause.UnknownError> =>
-  Effect.gen(function* () {
-    const owner = queryOwners.get(operation.id);
-    const request = requestFor(operation, input);
-    if (owner === undefined || Option.isNone(request)) return Option.none();
-    const result = yield* Effect.exit(
-      Effect.suspend(() =>
-        owner({
-          db,
-          subject,
-          request: request.value,
-          bucket,
-        })
-      )
-    );
-    // The caller's deadline must not be swallowed as a canonical owner defect.
-    if (Exit.isFailure(result) && Cause.hasInterrupts(result.cause)) {
-      return yield* Effect.failCause(result.cause);
+/** An installed query adapter may implement only an existing canonical query declaration. */
+const assertCanonicalQueryOwners = (): void => {
+  for (const id of queryOwners.keys()) {
+    const declaration = operationCatalog.operations.find((operation) => operation.id === id);
+    if (declaration?.policy.kind !== "query") {
+      throw new Error(`Canonical query adapter is not a declared query: ${id}`);
     }
-    return Exit.isSuccess(result) ? Option.some(result.value) : Option.none();
-  });
+  }
+};
+
+assertCanonicalQueryOwners();

@@ -1,7 +1,7 @@
 import { applyTestMigration, isolatedTestDatabases } from "../d1-test-fixture";
 import { afterAll, expect, it, vi } from "vitest";
 import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
-import { ErrorCode } from "@fidy/server/canonical-runtime";
+import { ErrorCode } from "~/shell/public-http/contract";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { Memory, MemoryId, maximumAggregateMemoryTokens } from "@fidy/server/memory-contract";
 import coreWorker from "../core-worker";

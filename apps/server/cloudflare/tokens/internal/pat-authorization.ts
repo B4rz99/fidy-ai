@@ -1,10 +1,8 @@
 import { patBearerPrefix } from "@fidy/server/tokens-domain";
 import { readConsentStatus } from "../../consent/operations";
-import {
-  type CatalogOperation,
-  decideOperationAccess,
-  patScopeCapability,
-} from "@fidy/server/canonical-runtime";
+import { type CatalogOperation } from "~/shell/canonical-catalog/contract";
+import { decideOperationAccess } from "~/shell/canonical-policy/operations";
+import { patScopeCapability } from "~/shell/canonical-policy/contract";
 import { type Cause, Effect, Option, Schema } from "effect";
 import { PATRow, digest, equalsDigest, scopesFrom, shortLength, validBearer } from "./pat-shared";
 import { currentMillis } from "../../runtime/clock";

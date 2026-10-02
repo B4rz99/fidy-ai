@@ -12,7 +12,7 @@ import type {
   CanonicalMutationRefusal,
   CommittedMutationValue,
   OwnerOutcome,
-} from "../../mutations/mutation-types";
+} from "../../canonical-operations/contract";
 
 /** One retained Budget by id and stable User; a foreign id resolves to absence. */
 export const findOwnedBudget = ({

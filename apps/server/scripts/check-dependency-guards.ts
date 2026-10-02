@@ -152,112 +152,15 @@ const tokensPrivate = `cloudflare/${PROBE_PREFIX}tokens-private`;
 const tokensPortablePrivate = `cloudflare/tokens/${PROBE_PREFIX}portable-private`;
 const tokensToolPrivate = `tools/${PROBE_PREFIX}tokens-private`;
 
+const canonicalPublication = `cloudflare/canonical-operations/${PROBE_PREFIX}publication`;
+const canonicalContractDirection = `cloudflare/canonical-operations/${PROBE_PREFIX}contract-direction`;
+const canonicalInternalDirection = `cloudflare/canonical-operations/${PROBE_PREFIX}internal-direction`;
+const canonicalOperationsDirection = `cloudflare/canonical-operations/${PROBE_PREFIX}operations-direction`;
+const canonicalReexport = `cloudflare/canonical-operations/${PROBE_PREFIX}reexport`;
+const canonicalAlias = `cloudflare/canonical-operations/${PROBE_PREFIX}alias`;
+const canonicalTypeAlias = `cloudflare/canonical-operations/${PROBE_PREFIX}type-alias`;
+
 const PROBES: readonly Probe[] = [
-  {
-    name: "channel peers cannot acquire private Turn or Transcript projections",
-    expect: {
-      kind: "rejected",
-      mustContain: [
-        `error foreign-module-imports-cloudflare-agent-internal: cloudflare/whatsapp/${PROBE_PREFIX}turn-private/probe.ts → cloudflare/agent/internal/channel-evidence.ts`,
-      ],
-    },
-    files: [
-      {
-        path: `cloudflare/whatsapp/${PROBE_PREFIX}turn-private/probe.ts`,
-        source:
-          'import { channelContinuationQuery } from "../../agent/internal/channel-evidence";\nexport const bypass = channelContinuationQuery;\n',
-      },
-    ],
-  },
-  {
-    name: "native callers cannot bypass authenticated WhatsApp transport",
-    expect: {
-      kind: "rejected",
-      mustContain: [
-        `error cloudflare-imports-portable-whatsapp-internal: cloudflare/${PROBE_PREFIX}whatsapp-private/probe.ts → src/shell/channels/whatsapp/internal/kapso-client.ts`,
-      ],
-    },
-    files: [
-      {
-        path: `cloudflare/${PROBE_PREFIX}whatsapp-private/probe.ts`,
-        source:
-          'import { makeWhatsAppDelivery } from "~/shell/channels/whatsapp/internal/kapso-client";\nexport const bypass = makeWhatsAppDelivery;\n',
-      },
-    ],
-  },
-  {
-    name: "tooling cannot acquire WhatsApp replay or delivery persistence",
-    expect: {
-      kind: "rejected",
-      mustContain: [
-        `error foreign-module-imports-cloudflare-whatsapp-internal: tools/${PROBE_PREFIX}whatsapp-private/probe.ts → cloudflare/whatsapp/internal/whatsapp-delivery.ts`,
-      ],
-    },
-    files: [
-      {
-        path: `tools/${PROBE_PREFIX}whatsapp-private/probe.ts`,
-        source:
-          'import { recordWhatsAppStatus } from "../../cloudflare/whatsapp/internal/whatsapp-delivery";\nexport const bypass = recordWhatsAppStatus;\n',
-      },
-    ],
-  },
-  {
-    name: "published WhatsApp operations remain available without implementation access",
-    expect: { kind: "allowed" },
-    files: [
-      {
-        path: `cloudflare/${PROBE_PREFIX}whatsapp-published/probe.ts`,
-        source:
-          'import { classifyWhatsAppAdmission, recordWhatsAppStatus } from "../whatsapp/operations";\nimport { WhatsAppTurnAdmission } from "../whatsapp/contract";\nexport const published = [classifyWhatsAppAdmission, recordWhatsAppStatus, WhatsAppTurnAdmission];\n',
-      },
-    ],
-  },
-  {
-    expect: { kind: "allowed" },
-    files: [
-      {
-        path: `cloudflare/${PROBE_PREFIX}memory-published/probe.ts`,
-        source:
-          'import { prepareRemember, prepareRevise, prepareForget, recallMemories, readMemoryContext } from "../memory/operations";\nexport const published = [prepareRemember, prepareRevise, prepareForget, recallMemories, readMemoryContext];\n',
-      },
-    ],
-    name: "callers compose the four durable Memory operations and purpose-bound current context",
-  },
-  {
-    expect: {
-      kind: "rejected",
-      mustContain: [
-        `error foreign-module-imports-cloudflare-memory-internal: cloudflare/${PROBE_PREFIX}memory-private/probe.test.ts → cloudflare/memory/internal/storage.ts`,
-      ],
-    },
-    files: [
-      {
-        path: `cloudflare/${PROBE_PREFIX}memory-private/probe.test.ts`,
-        source:
-          'import { memoryRowsQuery } from "../memory/internal/storage";\nexport const bypass = memoryRowsQuery;\n',
-      },
-    ],
-    name: "foreign tests cannot obtain private Memory row projections",
-  },
-  {
-    expect: {
-      kind: "rejected",
-      mustContain: [
-        `error foreign-module-imports-cloudflare-memory-internal: tools/${PROBE_PREFIX}memory-private/probe.ts → cloudflare/memory/internal/${PROBE_PREFIX}storage/private.ts`,
-      ],
-    },
-    files: [
-      {
-        path: `cloudflare/memory/internal/${PROBE_PREFIX}storage/private.ts`,
-        source: "export const privateMemoryStorage = 1;\n",
-      },
-      {
-        path: `tools/${PROBE_PREFIX}memory-private/probe.ts`,
-        source: `import { privateMemoryStorage } from "../../cloudflare/memory/internal/${PROBE_PREFIX}storage/private";\nexport const bypass = privateMemoryStorage;\n`,
-      },
-    ],
-    name: "tooling cannot acquire private Memory storage or free-text projections",
-  },
   {
     name: "callers consume Onboarding through its data-free operation",
     expect: { kind: "allowed" },
@@ -317,7 +220,6 @@ const PROBES: readonly Probe[] = [
       },
     ],
   },
-
   {
     name: "foreign scripts cannot acquire private Web Authentication dispatch",
     expect: {
@@ -366,6 +268,383 @@ const PROBES: readonly Probe[] = [
       },
     ],
   },
+  {
+    name: "channel peers cannot acquire private Turn or Transcript projections",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-agent-internal: cloudflare/whatsapp/${PROBE_PREFIX}turn-private/probe.ts → cloudflare/agent/internal/channel-evidence.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/whatsapp/${PROBE_PREFIX}turn-private/probe.ts`,
+        source:
+          'import { channelContinuationQuery } from "../../agent/internal/channel-evidence";\nexport const bypass = channelContinuationQuery;\n',
+      },
+    ],
+  },
+
+  {
+    name: "native callers cannot bypass authenticated WhatsApp transport",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error cloudflare-imports-portable-whatsapp-internal: cloudflare/${PROBE_PREFIX}whatsapp-private/probe.ts → src/shell/channels/whatsapp/internal/kapso-client.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}whatsapp-private/probe.ts`,
+        source:
+          'import { makeWhatsAppDelivery } from "~/shell/channels/whatsapp/internal/kapso-client";\nexport const bypass = makeWhatsAppDelivery;\n',
+      },
+    ],
+  },
+  {
+    name: "tooling cannot acquire WhatsApp replay or delivery persistence",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-whatsapp-internal: tools/${PROBE_PREFIX}whatsapp-private/probe.ts → cloudflare/whatsapp/internal/whatsapp-delivery.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `tools/${PROBE_PREFIX}whatsapp-private/probe.ts`,
+        source:
+          'import { recordWhatsAppStatus } from "../../cloudflare/whatsapp/internal/whatsapp-delivery";\nexport const bypass = recordWhatsAppStatus;\n',
+      },
+    ],
+  },
+  {
+    name: "published WhatsApp operations remain available without implementation access",
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}whatsapp-published/probe.ts`,
+        source:
+          'import { classifyWhatsAppAdmission, recordWhatsAppStatus } from "../whatsapp/operations";\nimport { WhatsAppTurnAdmission } from "../whatsapp/contract";\nexport const published = [classifyWhatsAppAdmission, recordWhatsAppStatus, WhatsAppTurnAdmission];\n',
+      },
+    ],
+  },
+
+  {
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}memory-published/probe.ts`,
+        source:
+          'import { prepareRemember, prepareRevise, prepareForget, recallMemories, readMemoryContext } from "../memory/operations";\nexport const published = [prepareRemember, prepareRevise, prepareForget, recallMemories, readMemoryContext];\n',
+      },
+    ],
+    name: "callers compose the four durable Memory operations and purpose-bound current context",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-memory-internal: cloudflare/${PROBE_PREFIX}memory-private/probe.test.ts → cloudflare/memory/internal/storage.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}memory-private/probe.test.ts`,
+        source:
+          'import { memoryRowsQuery } from "../memory/internal/storage";\nexport const bypass = memoryRowsQuery;\n',
+      },
+    ],
+    name: "foreign tests cannot obtain private Memory row projections",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-memory-internal: tools/${PROBE_PREFIX}memory-private/probe.ts → cloudflare/memory/internal/${PROBE_PREFIX}storage/private.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/memory/internal/${PROBE_PREFIX}storage/private.ts`,
+        source: "export const privateMemoryStorage = 1;\n",
+      },
+      {
+        path: `tools/${PROBE_PREFIX}memory-private/probe.ts`,
+        source: `import { privateMemoryStorage } from "../../cloudflare/memory/internal/${PROBE_PREFIX}storage/private";\nexport const bypass = privateMemoryStorage;\n`,
+      },
+    ],
+    name: "tooling cannot acquire private Memory storage or free-text projections",
+  },
+  {
+    name: "native callers cannot acquire private canonical dispatch",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error cloudflare-imports-portable-canonical-internal: cloudflare/${PROBE_PREFIX}canonical-private/probe.ts → src/shell/canonical-operations/internal/operation-registry.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}canonical-private/probe.ts`,
+        source:
+          'import { findCanonicalOperationImplementation } from "~/shell/canonical-operations/internal/operation-registry";\nexport const bypass = findCanonicalOperationImplementation;\n',
+      },
+    ],
+  },
+  {
+    name: "native callers consume published catalog and canonical policy",
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}canonical-public/probe.ts`,
+        source:
+          'import { getCanonicalOperationInput } from "~/shell/canonical-operations/operations";\nimport { decideOperationAccess } from "~/shell/canonical-policy/operations";\nimport type { CatalogOperation } from "~/shell/canonical-catalog/contract";\nexport type Operation = CatalogOperation;\nexport const published = [getCanonicalOperationInput, decideOperationAccess];\n',
+      },
+    ],
+  },
+  {
+    name: "native peers compose canonical execution and installed discovery through published operations",
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}canonical-execution-public/probe.ts`,
+        source:
+          'import { executeCanonicalWork, executeCanonicalQuery, installedCanonicalOperations } from "../canonical-operations/operations";\nimport type { CanonicalWork } from "../canonical-operations/contract";\nexport type Work = CanonicalWork;\nexport const published = [executeCanonicalWork, executeCanonicalQuery, installedCanonicalOperations];\n',
+      },
+    ],
+  },
+  {
+    name: "tool tests consume canonical declarations and installed discovery",
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `tools/${PROBE_PREFIX}canonical-execution-public/probe.test.ts`,
+        source:
+          'import { installedCanonicalOperations } from "../../cloudflare/canonical-operations/operations";\nimport type { CanonicalMutationPreparation } from "../../cloudflare/canonical-operations/contract";\nexport type Preparation = CanonicalMutationPreparation;\nexport const discover = installedCanonicalOperations;\n',
+      },
+    ],
+  },
+  {
+    name: "canonical owner tests may exercise private query and mutation assembly",
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `cloudflare/canonical-operations/internal/${PROBE_PREFIX}owner-test/probe.test.ts`,
+        source:
+          'import { canonicalQueryOwner } from "../query-registry";\nimport { canonicalMutationAdapter } from "../mutation-registry";\nexport const ownerAssembly = [canonicalQueryOwner, canonicalMutationAdapter];\n',
+      },
+    ],
+  },
+  {
+    name: "canonical publication composes declarations and private behavior in the inward direction",
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `${canonicalPublication}/contract.ts`,
+        source: "export type Input = boolean;\n",
+      },
+      {
+        path: `${canonicalPublication}/internal/execute.ts`,
+        source:
+          'import type { Input } from "../contract";\nexport const execute = (input: Input): boolean => !input;\n',
+      },
+      {
+        path: `${canonicalPublication}/operations.ts`,
+        source:
+          'import type { Input } from "./contract";\nimport { execute } from "./internal/execute";\nexport const run = (input: Input): boolean => execute(input);\n',
+      },
+      {
+        path: `${canonicalPublication}/runtime.ts`,
+        source:
+          'import { run } from "./operations";\nexport const makeRunner = () => () => run(true);\n',
+      },
+    ],
+  },
+  {
+    name: "foreign native tests cannot acquire canonical query or mutation registries",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-canonical-internal: cloudflare/${PROBE_PREFIX}canonical-registry-private/probe.test.ts → cloudflare/canonical-operations/internal/query-registry.ts`,
+        `error foreign-module-imports-cloudflare-canonical-internal: cloudflare/${PROBE_PREFIX}canonical-registry-private/probe.test.ts → cloudflare/canonical-operations/internal/mutation-registry.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}canonical-registry-private/probe.test.ts`,
+        source:
+          'import { canonicalQueryOwner } from "../canonical-operations/internal/query-registry";\nimport { canonicalMutationAdapter } from "../canonical-operations/internal/mutation-registry";\nexport const bypass = [canonicalQueryOwner, canonicalMutationAdapter];\n',
+      },
+    ],
+  },
+  {
+    name: "tooling cannot acquire canonical query dispatch or private mutation-unit types",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-canonical-internal: tools/${PROBE_PREFIX}canonical-unit-private/probe.ts → cloudflare/canonical-operations/internal/query-registry.ts`,
+        `error foreign-module-imports-cloudflare-canonical-internal: tools/${PROBE_PREFIX}canonical-unit-private/probe.ts → cloudflare/canonical-operations/internal/mutation-unit.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `tools/${PROBE_PREFIX}canonical-unit-private/probe.ts`,
+        source:
+          'import { canonicalQueryOwner } from "../../cloudflare/canonical-operations/internal/query-registry";\nimport type { CanonicalMutationUnitExecution } from "../../cloudflare/canonical-operations/internal/mutation-unit";\nexport type Unit = CanonicalMutationUnitExecution;\nexport const bypass = canonicalQueryOwner;\n',
+      },
+    ],
+  },
+  {
+    name: "scripts cannot acquire private canonical batch or trigger interpretation",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-canonical-internal: scripts/${PROBE_PREFIX}canonical-batch-private/probe.ts → cloudflare/canonical-operations/internal/batch.ts`,
+        `error foreign-module-imports-cloudflare-canonical-internal: scripts/${PROBE_PREFIX}canonical-batch-private/probe.ts → cloudflare/canonical-operations/internal/triggers.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `scripts/${PROBE_PREFIX}canonical-batch-private/probe.ts`,
+        source:
+          'import { executeCanonicalBatch } from "../../cloudflare/canonical-operations/internal/batch";\nimport { canonicalTriggerOf } from "../../cloudflare/canonical-operations/internal/triggers";\nexport const bypass = [executeCanonicalBatch, canonicalTriggerOf];\n',
+      },
+    ],
+  },
+  {
+    name: "canonical declarations cannot import private implementation or outward behavior",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error canonical-contract-imports-implementation: ${canonicalContractDirection}/contract.ts → ${canonicalContractDirection}/internal/value.ts`,
+        `error canonical-contract-imports-implementation: ${canonicalContractDirection}/contract.ts → ${canonicalContractDirection}/operations.ts`,
+        `error canonical-contract-imports-implementation: ${canonicalContractDirection}/contract.ts → ${canonicalContractDirection}/runtime.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${canonicalContractDirection}/internal/value.ts`,
+        source: "export type PrivateValue = boolean;\n",
+      },
+      {
+        path: `${canonicalContractDirection}/operations.ts`,
+        source: "export const operation = true;\n",
+      },
+      {
+        path: `${canonicalContractDirection}/runtime.ts`,
+        source: "export const runtime = true;\n",
+      },
+      {
+        path: `${canonicalContractDirection}/contract.ts`,
+        source:
+          'import type { PrivateValue } from "./internal/value";\nimport { operation } from "./operations";\nimport { runtime } from "./runtime";\nexport type Value = PrivateValue;\nexport const outward = [operation, runtime];\n',
+      },
+    ],
+  },
+  {
+    name: "canonical internals cannot depend backwards on published operations or runtime",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error canonical-internal-imports-outward-interface: ${canonicalInternalDirection}/internal/value.ts → ${canonicalInternalDirection}/operations.ts`,
+        `error canonical-internal-imports-outward-interface: ${canonicalInternalDirection}/internal/value.ts → ${canonicalInternalDirection}/runtime.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${canonicalInternalDirection}/operations.ts`,
+        source: "export const operation = true;\n",
+      },
+      {
+        path: `${canonicalInternalDirection}/runtime.ts`,
+        source: "export const runtime = true;\n",
+      },
+      {
+        path: `${canonicalInternalDirection}/internal/value.ts`,
+        source:
+          'import { operation } from "../operations";\nimport { runtime } from "../runtime";\nexport const outward = [operation, runtime];\n',
+      },
+    ],
+  },
+  {
+    name: "canonical operations cannot acquire runtime construction authority",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error canonical-operations-imports-runtime: ${canonicalOperationsDirection}/operations.ts → ${canonicalOperationsDirection}/runtime.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${canonicalOperationsDirection}/runtime.ts`,
+        source: "export const runtime = true;\n",
+      },
+      {
+        path: `${canonicalOperationsDirection}/operations.ts`,
+        source: 'import { runtime } from "./runtime";\nexport const operation = runtime;\n',
+      },
+    ],
+  },
+  {
+    name: "canonical interfaces cannot re-export private dispatch",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error canonical-interface-reexports-internal: ${canonicalReexport}/operations.ts → ${canonicalReexport}/internal/dispatch.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${canonicalReexport}/internal/dispatch.ts`,
+        source: "export const dispatch = (): boolean => true;\n",
+      },
+      {
+        path: `${canonicalReexport}/operations.ts`,
+        source: 'export { dispatch } from "./internal/dispatch";\n',
+      },
+    ],
+  },
+  {
+    name: "canonical interfaces cannot launder private dispatch through local aliases",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error published-interface-reexports-internal: ${canonicalAlias}/operations.ts → ./internal/dispatch`,
+      ],
+    },
+    files: [
+      {
+        path: `${canonicalAlias}/internal/dispatch.ts`,
+        source: "export const dispatch = (): boolean => true;\n",
+      },
+      {
+        path: `${canonicalAlias}/operations.ts`,
+        source:
+          'import { dispatch } from "./internal/dispatch";\nconst alias = dispatch;\nexport const publishedDispatch = alias;\n',
+      },
+    ],
+  },
+  {
+    name: "canonical interfaces cannot launder private unit types through aliases",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error published-interface-reexports-internal: ${canonicalTypeAlias}/operations.ts → ./internal/unit`,
+      ],
+    },
+    files: [
+      {
+        path: `${canonicalTypeAlias}/internal/unit.ts`,
+        source: "export type PrivateUnit = { readonly committed: boolean };\n",
+      },
+      {
+        path: `${canonicalTypeAlias}/operations.ts`,
+        source:
+          'import type { PrivateUnit } from "./internal/unit";\nexport type PublishedUnit = PrivateUnit;\n',
+      },
+    ],
+  },
+
   {
     name: "native callers use the published data-less AccessTier coordinator",
     expect: { kind: "allowed" },
@@ -453,7 +732,6 @@ const PROBES: readonly Probe[] = [
       },
     ],
   },
-
   {
     name: "Dashboard callers use validated owner operations",
     expect: { kind: "allowed" },
@@ -514,7 +792,6 @@ const PROBES: readonly Probe[] = [
       },
     ],
   },
-
   {
     name: "Budget peers consume caps, spending and alerts through owner operations",
     expect: { kind: "allowed" },
@@ -575,7 +852,6 @@ const PROBES: readonly Probe[] = [
       },
     ],
   },
-
   {
     expect: {
       kind: "rejected",
@@ -803,7 +1079,6 @@ const PROBES: readonly Probe[] = [
     ],
     name: "native Email Authentication cannot bypass portable provider ownership",
   },
-
   {
     expect: { kind: "allowed" },
     files: [
@@ -886,7 +1161,6 @@ const PROBES: readonly Probe[] = [
     ],
     name: "native Published Trio cannot launder internal bindings through an alias",
   },
-
   {
     name: "native Transaction peers consume capture and bounded reads through owner operations",
     expect: { kind: "allowed" },
@@ -1005,7 +1279,6 @@ const PROBES: readonly Probe[] = [
       },
     ],
   },
-
   {
     expect: { kind: "allowed" },
     files: [
@@ -1068,7 +1341,6 @@ const PROBES: readonly Probe[] = [
     ],
     name: "tooling cannot import private Identity context projections",
   },
-
   {
     expect: { kind: "allowed" },
     files: [
@@ -1130,7 +1402,6 @@ const PROBES: readonly Probe[] = [
     ],
     name: "tools cannot bypass the browser verifier owner",
   },
-
   {
     expect: { kind: "allowed" },
     files: [
@@ -1198,7 +1469,6 @@ const PROBES: readonly Probe[] = [
     ],
     name: "the Cloudflare Consent owner cannot import portable core Consent internals",
   },
-
   {
     expect: { kind: "allowed" },
     files: [

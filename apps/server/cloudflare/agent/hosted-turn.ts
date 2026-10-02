@@ -1,4 +1,8 @@
 import {
+  executeCanonicalQuery,
+  installedCanonicalOperations,
+} from "../canonical-operations/operations";
+import {
   CanonicalToolCallEntry,
   CanonicalToolEvidence,
   type CanonicalToolOutcome,
@@ -14,7 +18,8 @@ import {
   defaultCompactionMaximumTokens,
   shouldCompactConversation,
 } from "@fidy/server/agent-runtime";
-import { atomicBatchOperation, operationCatalog } from "@fidy/server/canonical-runtime";
+import { atomicBatchOperation } from "~/shell/operations/contract";
+import { operationCatalog } from "~/shell/api";
 import {
   HostedInferenceError,
   type HostedInferenceService,
@@ -28,7 +33,7 @@ import {
   maximumModelRoundMillis,
   maximumToolCallsPerTurn,
 } from "../../src/shell/_shared/hosted-turn-bounds";
-import { decideOperationAccess } from "../../src/shell/_shared/operation-policy";
+import { decideOperationAccess } from "../../src/shell/canonical-policy/operations";
 import {
   HostedTurnProgressRequest,
   HostedTurnReceipt,
@@ -39,8 +44,8 @@ import {
   type WhatsAppProviderMessageId,
 } from "../../src/shell/channels/whatsapp/contract";
 import { type TransactionSubject, transactionNow } from "../canonical-work/operations";
-import { canonicalMutationAdapter } from "../mutations/canonical-mutation-registry";
-import { type HostedCommitFence } from "../mutations/canonical-mutation-unit";
+
+import type { HostedCommitFence } from "./contract";
 import { newId } from "../secret-material/operations";
 import type { WhatsAppUnavailable } from "../whatsapp/contract";
 import { type WhatsAppHostedSubject, type WhatsAppInboundEvidence } from "../whatsapp/contract";
@@ -53,7 +58,7 @@ import {
   startWhatsAppSend,
 } from "../whatsapp/operations";
 import { type HostedSubject, isWhatsAppHosted } from "./hosted-authority";
-import { executeHostedQuery, isInstalledHostedQuery } from "./hosted-canonical-query";
+
 import {
   type ConfirmationRow,
   consumeHostedConfirmation,
@@ -81,11 +86,8 @@ import {
   stageHostedDelivery,
 } from "./turn-store";
 // Only installed owners whose caller policy permits this authority enter the toolkit.
-const hostedExecutableOperations = operationCatalog.operations.filter(
-  ({ id, policy }) =>
-    ((policy.kind === "query" && isInstalledHostedQuery(id)) ||
-      (policy.kind === "mutation" &&
-        (id === atomicBatchOperation || Option.isSome(canonicalMutationAdapter(id))))) &&
+const hostedExecutableOperations = installedCanonicalOperations().filter(
+  ({ policy }) =>
     decideOperationAccess(policy.access, {
       _tag: "HostedAgentSession",
       authorityRoot: "no-verified-whatsapp-authority",
@@ -1244,11 +1246,11 @@ const executeHostedTool = ({
           : Option.none();
       } else {
         executed = Option.getOrElse(
-          yield* executeHostedQuery({
+          yield* executeCanonicalQuery({
             db,
             subject,
             bucket,
-            operation,
+            operation: operation.id,
             input: evidence.value,
           }).pipe(
             Effect.timeoutOption(Duration.millis(Math.max(0, deadlineMs - transactionNow())))

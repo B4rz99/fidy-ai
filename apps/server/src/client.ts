@@ -6,7 +6,7 @@
 export {
   makeTokenAuthorizationClientLive,
   TokenAuthorizationClientAnonymousLive,
-} from "~/shell/_shared/authz";
+} from "~/shell/authorization/runtime";
 export { FidyApi, type FidyApiGroups, type OperationId } from "~/shell/api";
 export {
   HostedTurnApi,
@@ -53,8 +53,8 @@ export {
 } from "~/core/tokens/contract";
 export { buildPATDisclosure, patScopeCopy } from "~/core/tokens/operations";
 export { StagedStatementReference, SubmitForExtractionInput } from "~/core/ingestion/contract";
-export type { CanonicalInput } from "~/shell/_shared/canonical-input";
-export type { CanonicalSuccess } from "~/shell/_shared/canonical-success";
+export type { CanonicalInput } from "~/shell/canonical-operations/contract";
+export type { CanonicalSuccess } from "~/shell/canonical-operations/contract";
 export {
   DashboardCatalogEntry,
   DashboardDocument,

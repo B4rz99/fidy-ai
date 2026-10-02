@@ -1,3 +1,4 @@
+import type { CategoryKeyword, KeywordRuleId } from "@fidy/server/categories";
 import type { CategoryId } from "../../src/core/categories/reference";
 import { Data, type Option } from "effect";
 
@@ -24,3 +25,21 @@ export type CaptureCategoryInput = Readonly<{
   counterparty: Option.Option<string>;
   direction: "inflow" | "outflow";
 }>;
+
+/**
+ * One keyword-rule change's retained facts. A create or update names the rule's full payload; a
+ * delete names only the rule it removes, so the correlation is a union instead of optional fields.
+ */
+export type KeywordRuleOutcome =
+  | Readonly<{
+      _tag: "KeywordRule";
+      operation: "categories.createKeywordRule" | "categories.updateKeywordRule";
+      ruleId: KeywordRuleId;
+      keyword: CategoryKeyword;
+      categoryId: CategoryId;
+    }>
+  | Readonly<{
+      _tag: "KeywordRule";
+      operation: "categories.deleteKeywordRule";
+      ruleId: KeywordRuleId;
+    }>;

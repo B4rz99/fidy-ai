@@ -15,7 +15,7 @@ import {
   ValidationFailed,
   createdStatus,
 } from "~/shell/public-http/contract";
-import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
+import { operationPolicy, patScoped } from "~/shell/canonical-policy/contract";
 
 /** Canonical public path for Category discovery. */
 export const listCategoriesPath = "/categories";

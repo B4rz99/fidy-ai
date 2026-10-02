@@ -11,8 +11,8 @@ const workspaceRoot = Bun.fileURLToPath(new URL("../../../", import.meta.url))
 const entrypoint = "src/client.ts";
 
 /**
- * The browser seam is intentionally an allowlist of source and dependency modules. Slice operation
- * definitions and the dedicated enrollment or hosted Turn declaration may grow without editing this check; every
+ * The browser seam is intentionally an allowlist of source and dependency modules. Published slice
+ * declarations and the dedicated enrollment or hosted Turn declaration are admitted explicitly; every
  * other input must be admitted deliberately so a server implementation cannot enter the client
  * graph under a new filename or package.
  */
@@ -23,10 +23,11 @@ const safeSource = [
   /^src\/shell\/agent\/hosted-turn-api\.ts$/u,
   /^src\/core\//u,
   /^src\/shell\/api\.ts$/u,
-  /^src\/shell\/[^/]+\/operations\.ts$/u,
+  /^src\/shell\/(?:canonical-catalog|canonical-policy|authorization|operations)\/contract\.ts$/u,
   /^src\/shell\/email-authentication\/(?:contract|path)\.ts$/u,
-  /^src\/shell\/_shared\/(?:authz|canonical-telemetry|operation-catalog|operation-policy|partial-input)\.ts$/u,
-  /^src\/shell\/_shared\/canonical-input\.ts$/u,
+  /^src\/shell\/_shared\/partial-input\.ts$/u,
+  /^src\/shell\/authorization\/runtime\.ts$/u,
+  /^src\/shell\/canonical-operations\/contract\.ts$/u,
 ] as const;
 
 const safeDependency = [

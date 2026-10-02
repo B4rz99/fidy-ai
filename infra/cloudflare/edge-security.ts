@@ -1,4 +1,4 @@
-import { operationCatalog } from "@fidy/server/canonical-runtime";
+import { operationCatalog } from "@fidy/server/canonical-catalog";
 import {
   emailReplacementCompletionPath,
   emailReplacementPath,

@@ -1,5 +1,4 @@
-import { Context, type Crypto, type DateTime, type Effect, type Layer } from "effect";
-import { HttpClientRequest } from "effect/unstable/http";
+import { Context, type Crypto, type DateTime, type Effect } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { HttpApiMiddleware, HttpApiSecurity, OpenApi } from "effect/unstable/httpapi";
 import type { AuditCaller, AuditOutcome } from "~/core/audit/contract";
@@ -8,14 +7,14 @@ import type {
   CanonicalOperationId,
 } from "~/core/canonical-operations/contract";
 import type { UserId } from "~/core/identity/reference";
-import { type TokenBearer, TokenBearerFormat } from "~/core/tokens/contract";
+import { TokenBearerFormat } from "~/core/tokens/contract";
 import {
   ConsentRequired,
   ScopeMissing,
   Unauthenticated,
   UserActionRequired,
 } from "~/shell/public-http/contract";
-import type { CanonicalAuthorityRoot, OperationAccessCaller } from "./operation-policy";
+import type { CanonicalAuthorityRoot } from "~/shell/canonical-policy/contract";
 
 /** Host-only cookie name published as part of the declaration-only browser authorization scheme. */
 export const webSessionCookieName = "__Host-fidy_session";
@@ -43,20 +42,9 @@ export type CanonicalCaller = Readonly<{
 }> &
   CanonicalAuthority;
 
-/** Projects attributable authority into the identity-free facts consumed by access policy. */
-export const toAccessCaller = (caller: CanonicalCaller): OperationAccessCaller => {
-  if (caller.auditCaller._tag === "PAT") {
-    return { _tag: "PAT", capabilities: caller.capabilities };
-  }
-  if ("fresh" in caller) {
-    return { _tag: "WebSession", fresh: caller.fresh };
-  }
-  return { _tag: "HostedAgentSession", authorityRoot: caller.authorityRoot };
-};
-
 /** Request- or Turn-scoped canonical caller; repositories still receive explicit UserId. */
 export class ResolvedCaller extends Context.Service<ResolvedCaller, CanonicalCaller>()(
-  "@fidy/server/shell/_shared/authz/ResolvedCaller"
+  "@fidy/server/shell/authorization/contract/ResolvedCaller"
 ) {}
 
 type ChildAuditEvidence = Readonly<{
@@ -78,7 +66,7 @@ export type ChildOperationAuditService = Readonly<{
 export class ChildOperationAudit extends Context.Service<
   ChildOperationAudit,
   ChildOperationAuditService
->()("@fidy/server/shell/_shared/authz/ChildOperationAudit") {}
+>()("@fidy/server/shell/authorization/contract/ChildOperationAudit") {}
 
 /** Extracts the host-only WebSession cookie for canonical first-party authorization. */
 export const webSessionSecurity = HttpApiSecurity.apiKey({
@@ -105,7 +93,7 @@ export class TokenAuthorization extends HttpApiMiddleware.Service<
     provides: ResolvedCaller | ChildOperationAudit;
     requires: Crypto.Crypto | SqlClient.SqlClient;
   }
->()("@fidy/server/shell/_shared/authz/TokenAuthorization", {
+>()("@fidy/server/shell/authorization/contract/TokenAuthorization", {
   requiredForClient: true,
   security: {
     agentBearer: agentBearerSecurity,
@@ -113,16 +101,3 @@ export class TokenAuthorization extends HttpApiMiddleware.Service<
   },
   error: [Unauthenticated, ConsentRequired, UserActionRequired, ScopeMissing],
 }) {}
-
-/** Lets an unauthenticated derived client call the API and receive its declared 401 response. */
-export const TokenAuthorizationClientAnonymousLive: Layer.Layer<
-  HttpApiMiddleware.ForClient<TokenAuthorization>
-> = HttpApiMiddleware.layerClient(TokenAuthorization, ({ next, request }) => next(request));
-
-/** Adds one opaque TokenBearer to every request made through the derived client. */
-export const makeTokenAuthorizationClientLive = (
-  bearer: TokenBearer
-): Layer.Layer<HttpApiMiddleware.ForClient<TokenAuthorization>> =>
-  HttpApiMiddleware.layerClient(TokenAuthorization, ({ next, request }) =>
-    next(HttpClientRequest.bearerToken(request, bearer))
-  );

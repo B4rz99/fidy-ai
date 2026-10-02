@@ -11,7 +11,7 @@ import {
   type SuggestedOperationCandidate,
   checkpointSuggestedOperations,
   suggestOperation,
-} from "~/shell/_shared/suggested-operations";
+} from "~/shell/canonical-operations/operations";
 
 import type { InsightApiFailure } from "./contract";
 

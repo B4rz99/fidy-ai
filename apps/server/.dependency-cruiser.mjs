@@ -138,6 +138,66 @@ export default {
     },
 
     {
+      name: "cloudflare-imports-portable-canonical-internal",
+      severity: "error",
+      comment:
+        "Native execution consumes published canonical declarations and behavior, never private portable dispatch or registry assembly (#612).",
+      from: { path: "^cloudflare/" },
+      to: {
+        path: "^src/shell/(canonical-operations|canonical-catalog|canonical-policy|authorization)/internal/",
+      },
+    },
+    {
+      name: "foreign-module-imports-cloudflare-canonical-internal",
+      severity: "error",
+      comment:
+        "Canonical execution owns mutation units, batch dispatch, query registries and commit-trigger interpretation. Peers, tests and tools use its declarations or substantive published operations (#612).",
+      from: {
+        path: "^(src|cloudflare|scripts|tools)/",
+        pathNot: "^cloudflare/canonical-operations/",
+      },
+      to: { path: "^cloudflare/canonical-operations/internal/" },
+    },
+    {
+      name: "canonical-interface-reexports-internal",
+      severity: "error",
+      comment:
+        "Canonical execution publishes complete behavior instead of laundering private registry or mutation-unit authority (#612).",
+      from: {
+        path: "^cloudflare/(canonical-operations|canonical-operations/.+)/(contract|operations|runtime)\\.ts$",
+      },
+      to: { path: "^cloudflare/$1/internal/", dependencyTypes: ["export"] },
+    },
+    {
+      name: "canonical-contract-imports-implementation",
+      severity: "error",
+      comment:
+        "Canonical execution declarations remain independent of dispatch implementation and runtime construction (#612).",
+      from: {
+        path: "^cloudflare/(canonical-operations|canonical-operations/.+)/contract\\.ts$",
+      },
+      to: { path: "^cloudflare/$1/(internal/|operations\\.ts$|runtime\\.ts$)" },
+    },
+    {
+      name: "canonical-internal-imports-outward-interface",
+      severity: "error",
+      comment:
+        "Canonical execution internals depend on declarations and sibling implementation, never backwards on their published operations or runtime (#612).",
+      from: { path: "^cloudflare/(canonical-operations|canonical-operations/.+)/internal/" },
+      to: { path: "^cloudflare/$1/(operations|runtime)\\.ts$" },
+    },
+    {
+      name: "canonical-operations-imports-runtime",
+      severity: "error",
+      comment:
+        "Canonical execution operations do not acquire runtime construction authority (#612).",
+      from: {
+        path: "^cloudflare/(canonical-operations|canonical-operations/.+)/operations\\.ts$",
+      },
+      to: { path: "^cloudflare/$1/runtime\\.ts$" },
+    },
+
+    {
       name: "foreign-module-imports-cloudflare-ingestion-internal",
       severity: "error",
       comment:
@@ -921,29 +981,18 @@ export default {
       to: { path: "^src/(core|shell)/[^/]+/runtime\\.ts$" },
     },
     {
-      // Three things under src/ are in reach of the assembly, and nothing else
-      // is: a slice's operations.ts, which is what it composes; shell/_shared,
-      // which still holds canonical declaration assembly; and Public HTTP's
-      // contract, which declares the ValidationGate fixed across every group.
-      // Core is out with the rest, so an import of `src/core/**` from here trips this too.
       name: "api-assembly-imports-beyond-operations",
       severity: "error",
       comment:
-        "src/shell/api.ts imported something other than a slice's operations.ts, " +
-        "shell/_shared, or the owner/Public HTTP declaration contracts. The assembly composes operation definitions " +
-        "and their universal validation declaration and nothing else. A slice's " +
-        "handlers.ts *must* import api.ts, because HttpApiBuilder.group takes the assembled " +
-        "HttpApi as its first argument, so the acyclic direction is the one this rule holds: " +
-        "api.ts imports operation definitions, implementations import api.ts, and the layer assembly that " +
-        "composes them lives in http.ts one file over (ARCHITECTURE.md §1).",
+        "The canonical API landmark composes only published declaration contracts and its catalog. " +
+        "It cannot acquire execution, registry, provider, storage or runtime authority. " +
+        "Implementations depend on the assembled API, never the reverse (#612).",
       from: { path: "^src/shell/api\\.ts$" },
       to: {
         path: "^src/",
         pathNot: [
-          "^src/shell/_shared/",
           "^src/shell/public-http/contract\\.ts$",
-          "^src/shell/(identity|categories|transactions|subscription|email-authentication|tokens|budgets|browser-login|recovery|ingestion|dashboard|insights|memory)/contract\\.ts$",
-          "^src/shell/[^/]+/operations\\.ts$",
+          "^src/shell/(identity|categories|transactions|subscription|budgets|dashboard|insights|email-authentication|tokens|browser-login|recovery|ingestion|memory|canonical-catalog|authorization|operations)/contract\\.ts$",
         ],
       },
     },
@@ -990,9 +1039,8 @@ export default {
         pathNot: [
           "^src/shell/api\\.ts$",
           "^src/shell/agent/hosted-turn-api\\.ts$",
-          "^src/shell/_shared/authz\\.ts$",
-          "^src/shell/_shared/canonical-input\\.ts$",
-          "^src/shell/_shared/canonical-success\\.ts$",
+          "^src/shell/authorization/runtime\\.ts$",
+          "^src/shell/canonical-operations/contract\\.ts$",
           "^src/shell/(public-http|schema-codecs|tokens|subscription|web-auth)/contract\\.ts$",
           "^src/shell/email-authentication/(contract|path)\\.ts$",
         ],

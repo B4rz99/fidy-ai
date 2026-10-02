@@ -1,0 +1,55 @@
+infra/cloudflare/diagnose-smoke-routing.ts
+  s_b2d711e54dc456::t_c85dce840c423e 81,84-85,101-110,120
+  s_b2d711e54dc456::t_2eec892a7694f1 111-118
+  s_b2d711e54dc456::t_a26fd7d29850d2 12-20,34,43-45,47,52-54,60-67,71-77,82-83,86-97,99,119,121-122,124-167,174-182,186-187,191-205,207-212,214-217
+  s_b2d711e54dc456::t_741d5d8f0bf32f 1-4,11,21-33,35-42,48-51,55-59,68-70,78-80,100,123,168-173,183-185,188-190,206,213,218-220
+  s_b2d711e54dc456::t_3a50aed6b20bf1 5-10,46,98
+infra/cloudflare/verify-edge-policy.test.ts
+  s_b2d711e54dc456::t_f1be5df8e2e4f8 7
+apps/server/cloudflare/public-worker.ts
+  s_b2d711e54dc456::t_eae14109201967 21,24,504-508
+  s_b2d711e54dc456::t_db43a731487bd8 509
+.github/workflows/production.yml
+  s_b2d711e54dc456::t_d6f7a7b110eb21 140,145-148,150,154-157
+  s_b2d711e54dc456::t_7c6b064bfab192 158
+infra/cloudflare/diagnose-smoke-routing.test.ts
+  s_b2d711e54dc456::t_2eec892a7694f1 40-58
+  s_b2d711e54dc456::t_77f592b61eb179 59,80
+  s_b2d711e54dc456::t_8d1ebc1a5a856c 2-3,5-12,20-21,38-39,60,66,68-69,74-76,78-79,81,102-103,105,120-121,125,138,142-143,147-148,154,160-161,173-174,195
+  s_b2d711e54dc456::t_00164b79030e56 1,4,13-19,22-24,29-35,61-65,67,70-73,82-88,90-93,95-101,104,106-119,122-124,126-137,139-141,144-146,149-153,155-159,162-169,171-172,175-194
+  s_b2d711e54dc456::t_784034984853b3 25-28
+  s_b2d711e54dc456::t_8cb1ac93e9e03d 36-37,77,89,94,170
+docs/operations/production-releases.md
+  s_b2d711e54dc456::t_bcd51b15735092 200-212
+apps/server/cloudflare/runtime/smoke-work.ts
+  s_b2d711e54dc456::t_217104830a4da2 173-184
+  s_b2d711e54dc456::t_679299fd5073f2 11-12
+  s_b2d711e54dc456::t_e87f672411ca2b 185-191,199-200
+infra/cloudflare/smoke-work.test.ts
+  s_b2d711e54dc456::t_e179d222caa6cc 104-106,108-112,115-124
+  s_b2d711e54dc456::t_45043dc1d73362 2,107
+  s_b2d711e54dc456::t_e4cd5eff9b0084 84,113-114,125-127
+apps/server/cloudflare/runtime/smoke.ts
+  s_b2d711e54dc456::t_b5d8deeb317fa4 11
+  s_b2d711e54dc456::t_b0355b979d0159 9-10
+infra/cloudflare/verify-edge-policy.ts
+  s_b2d711e54dc456::t_20c1ced66f64bb 5
+infra/cloudflare/smoke.test.ts
+  s_b2d711e54dc456::t_918fa39e5cc06a 94,128-133,151,164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7ccb56df84cfd7e25df3b7419f974d88ddcf01e4",
+  "prompts": {},
+  "sessions": {
+    "s_b2d711e54dc456": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0fd6b-d5b4-71a3-9a6f-12874fd048cb",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -74,11 +74,6 @@
       "import": "./src/client.ts",
       "default": "./src/client.ts"
     },
-    "./outbound-http": {
-      "types": "./src/shell/outbound-http/operations.ts",
-      "import": "./src/shell/outbound-http/operations.ts",
-      "default": "./src/shell/outbound-http/operations.ts"
-    },
     "./telemetry": {
       "types": "./src/shell/observability/runtime.ts",
       "import": "./src/shell/observability/runtime.ts",
@@ -272,7 +267,7 @@
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260925.1",
+    "@cloudflare/workers-types": "5.20260925.2",
     "@effect/platform-bun": "4.0.0-rc.115",
     "@effect/platform-node": "4.0.0-rc.115",
     "@effect/vitest": "4.0.0-rc.115",

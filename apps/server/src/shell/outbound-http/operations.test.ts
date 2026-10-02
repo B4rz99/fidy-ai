@@ -27,8 +27,8 @@ import assert from "node:assert/strict";
 import { WhatsAppBusinessPhoneNumberId } from "~/shell/channels/whatsapp/contract";
 import { makeCloudflareAccessOutboundHttp } from "~/shell/outbound-http/internal/outbound-http";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
-import { expectNotInspected } from "~/shell/testing/credential-failure";
-import { TestCrypto } from "~/shell/testing/crypto";
+import { expectNotInspected } from "~/shell/testing/credential-evidence-harness";
+import { TestCrypto } from "~/shell/testing/crypto-harness";
 import { OutboundHttpFailure, type OutboundHttpRequest } from "./contract";
 import { OutboundHttp, type OutboundHttpService } from "./operations";
 

@@ -238,7 +238,7 @@
         "apps/server/cloudflare/documents/protected-document-worker.ts",
         "apps/server/cloudflare/public-worker.ts",
         "apps/server/cloudflare/resource-admission/resource-admission-worker.fixture.ts",
-        "apps/server/cloudflare/transactions/transaction-platform-fixture.ts",
+        "apps/server/cloudflare/coordinator-test-harness.ts",
         "apps/server/cloudflare/ai/workers-ai-conformance-worker.ts",
         "infra/cloudflare/vitest.config.ts",
         "apps/server/cloudflare/vitest.config.ts"

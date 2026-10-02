@@ -1,4 +1,4 @@
-import { TestCrypto } from "~/shell/testing/crypto";
+import { TestCrypto } from "~/shell/testing/crypto-harness";
 import { expect, it, layer } from "@effect/vitest";
 import {
   Cause,
@@ -16,7 +16,7 @@ import { OutboundHttp } from "~/shell/outbound-http/operations";
 import { testOutboundTransportLayer } from "~/shell/outbound-http/testing";
 import { BillingEmail } from "~/core/subscription/contract";
 import { WompiSourceId } from "./wompi-model";
-import { exitFailure, renderedFailure } from "~/shell/testing/credential-failure";
+import { exitFailure, renderedFailure } from "~/shell/testing/credential-evidence-harness";
 import {
   WompiEnrollmentClient,
   WompiSourceCreationFailed,

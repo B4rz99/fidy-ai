@@ -1,4 +1,8 @@
-import { applyTestMigration, isolatedTestDatabases } from "../d1-test-fixture";
+import {
+  applyTestMigration,
+  hostedTurnTestMigrations,
+  isolatedTestDatabases,
+} from "../d1-test-fixture";
 import { afterAll, expect, it, vi } from "vitest";
 import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
 import { ErrorCode } from "~/shell/public-http/contract";
@@ -7,7 +11,6 @@ import { Memory, MemoryId, maximumAggregateMemoryTokens } from "@fidy/server/mem
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { UserTransactionCoordinator } from "../transactions/runtime";
-import { hostedTurnTestMigrations } from "../test-fixtures/hosted-turn";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure")<{ cause: unknown }> {}
 const fromTestPromise = <A>(promise: () => PromiseLike<A>): Effect.Effect<A> =>

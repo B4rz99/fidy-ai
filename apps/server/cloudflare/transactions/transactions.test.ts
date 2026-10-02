@@ -1,7 +1,11 @@
 import { hostedDeliveryReceipt, pendingExecutionRecoveryMs } from "../agent/contract";
 import { Miniflare } from "miniflare";
 import { afterAll, afterEach, expect, it } from "vitest";
-import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import {
+  hostedTurnTestMigrations,
+  installTestSchema,
+  isolatedTestDatabases,
+} from "../d1-test-fixture";
 import { it as effectIt } from "@effect/vitest";
 import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
 import {
@@ -23,7 +27,6 @@ import { DisclosureSnapshot } from "@fidy/server/consent-contract";
 import { CategoryId, CategoryKeyword, KeywordRuleId } from "@fidy/server/categories";
 import { keywordRuleGuardFailure } from "../categories/operations";
 import { currentDisclosureFor } from "@fidy/server/consent-operations";
-import { hostedTurnTestMigrations } from "../test-fixtures/hosted-turn";
 import { makeAgentRetention } from "../agent/runtime";
 import { newId } from "../secret-material/operations";
 import { transactionNow } from "../canonical-work/operations";
@@ -108,7 +111,7 @@ const buildPlatformModule = (): Promise<string> =>
     Effect.gen(function* () {
       const built = yield* fromTestPromise(() =>
         Bun.build({
-          entrypoints: [new URL("./transaction-platform-fixture.ts", import.meta.url).pathname],
+          entrypoints: [new URL("../coordinator-test-harness.ts", import.meta.url).pathname],
           target: "browser",
         })
       );

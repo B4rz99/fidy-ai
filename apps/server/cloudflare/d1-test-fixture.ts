@@ -143,3 +143,13 @@ export const isolatedTestStorage = (): Readonly<{
     dispose: pool.dispose,
   };
 };
+
+/** Ordered schema additions shared by isolated D1 integration harnesses across owners. */
+export const hostedTurnTestMigrations = [
+  "0021_hosted_confirmation",
+  "0022_hosted_mutation_fence",
+  "0023_hosted_delivery_refresh",
+  "0024_hosted_whatsapp",
+  "0025_voice_refusal",
+  "0026_whatsapp_recovery",
+] as const;

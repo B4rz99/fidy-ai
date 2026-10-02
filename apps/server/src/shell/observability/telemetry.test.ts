@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Cause, Context, Effect, Exit, Layer, Option } from "effect";
-import { makeSpanDescriptor } from "~/shell/testing/telemetry-fixtures";
+import { makeSpanDescriptor } from "./telemetry.test-fixture";
 import {
   Telemetry,
   type TelemetryAdapter,

@@ -26,6 +26,57 @@
 export default {
   forbidden: [
     {
+      name: "test-support-landmark-private",
+      severity: "error",
+      comment:
+        "Scripts and broad application harnesses compose published owner interfaces; they cannot turn private fixtures into shared test APIs (#616).",
+      from: { path: "^(scripts/|tools/|cloudflare/[^/]+\\.ts$)" },
+      to: { path: "^(src|cloudflare)/.+/(?:test-fixtures\\.ts|[^/]+\\.test-fixture\\.ts)$" },
+    },
+    {
+      name: "production-imports-test-support",
+      severity: "error",
+      comment:
+        "Test bindings, synthetic fixtures and raw provider substitutes never become production authority or Published Trio exports (#616).",
+      from: {
+        path: "^(src|cloudflare)/",
+        pathNot: [
+          "\\.test\\.ts$",
+          "\\.test-fixture\\.ts$",
+          "^src/shell/testing/(credential-evidence-harness|crypto-harness)\\.ts$",
+          "^src/shell/outbound-http/testing\\.ts$",
+          "^cloudflare/(d1-test-fixture|d1-migration-test-worker\\.fixture|coordinator-test-harness|workflow-test-runtime|browser-acceptance-[^/]+)\\.[cm]?ts$",
+        ],
+      },
+      to: {
+        path: [
+          "\\.test-fixture\\.ts$",
+          "^src/shell/testing/",
+          "^src/shell/outbound-http/testing\\.ts$",
+          "^cloudflare/(d1-test-fixture|d1-migration-test-worker\\.fixture|coordinator-test-harness|workflow-test-runtime|browser-acceptance-[^/]+)\\.[cm]?ts$",
+        ],
+      },
+    },
+    {
+      name: "native-test-composition-imports-portable-internal",
+      severity: "error",
+      comment:
+        "Native implementations and test compositions consume portable owner publications; a test or harness filename never grants foreign internal access (#616).",
+      from: { path: "^cloudflare/" },
+      to: { path: "^src/(core|shell)/.+/internal/" },
+    },
+    {
+      name: "test-support-owner-private",
+      severity: "error",
+      comment:
+        "Owner fixtures stay beside their owner; foreign tests use published contracts and operations, never private fixture exports (#616).",
+      from: { path: "^(src/(?:core|shell)/(?:channels/)?[^/]+/|cloudflare/[^/]+/)" },
+      to: {
+        path: "^(src|cloudflare)/.+/(?:test-fixtures\\.ts|[^/]+\\.test-fixture\\.ts)$",
+        pathNot: "^$1",
+      },
+    },
+    {
       name: "composition-runtime-outside-root",
       severity: "error",
       comment:
@@ -1202,7 +1253,7 @@ export default {
         "and justified scripts or tools; use contract.ts or operations.ts for ordinary calls.",
       from: {
         path: "^src/(core|shell)/([^/]+)/",
-        pathNot: ["/runtime\\.ts$", "^src/shell/testing/.*(?:harness|runtime)\\.ts$"],
+        pathNot: ["/runtime\\.ts$"],
       },
       to: {
         path: "^src/(core|shell)/[^/]+/runtime\\.ts$",

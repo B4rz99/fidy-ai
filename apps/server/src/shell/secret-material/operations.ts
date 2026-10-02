@@ -1,6 +1,6 @@
 import type { WompiEnvironment } from "./contract";
 import { type Config, Crypto, Effect, Encoding, type Redacted, Schema } from "effect";
-import type { TokenBearer } from "~/core/tokens/model";
+import type { TokenBearer } from "~/core/tokens/contract";
 import { configuredSecret } from "~/shell/secret-material/internal/configured-secret";
 
 /** A lowercase SHA-256 digest used only for PAT persistence and lookup. */

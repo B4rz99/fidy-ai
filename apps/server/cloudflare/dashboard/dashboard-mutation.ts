@@ -1,8 +1,8 @@
 import { listCategories } from "../categories/operations";
 import { Data, DateTime, Effect, Option, Result, Schema } from "effect";
 import { prepareAuthorizedAuditCall, recordCanonicalPATWork } from "@fidy/server/audit";
-import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
-import { prepareOwnedStatement } from "../pats/pat-unit";
+import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-operations";
+import { prepareOwnedStatement } from "../database/operations";
 import { makeDefaultDashboard } from "../../src/core/dashboard/catalog";
 import { categoryIds } from "../../src/core/categories/operations";
 import {

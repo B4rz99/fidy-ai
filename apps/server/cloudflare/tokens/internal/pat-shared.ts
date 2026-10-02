@@ -1,19 +1,23 @@
+import { currentMillis } from "../../runtime/clock";
 import {
   PAT,
   PATScopes,
   TokenBearer,
   TokenShortId,
+  patBearerPrefix,
+  patShortIdLength,
+} from "@fidy/server/tokens-domain";
+import {
   issuanceWindowMilliseconds,
   maxActivePATs,
   maxIssuancesPerUserWindow,
   pairingMilliseconds,
-  patPairingUnavailableBody,
-  patShortIdLength,
-} from "@fidy/server/tokens-runtime";
-import { Clock, Crypto, DateTime, Effect, Encoding, Option, PlatformError, Schema } from "effect";
+} from "@fidy/server/tokens-operations";
+import { patPairingUnavailableBody } from "@fidy/server/tokens-contract";
+import { DateTime, Effect, Encoding, Option, Schema } from "effect";
 import { freshSessionExists } from "@fidy/server/web-session-operations";
-import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
-import { browserSession } from "../web-session/operations";
+import { RequestBodyPolicy, readBoundedRequestBody } from "../../http/request-body";
+import { browserSession } from "../../web-session/operations";
 
 const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 1024,
@@ -58,26 +62,6 @@ export const PATRow = Schema.Struct({
 });
 export type PATRow = typeof PATRow.Type;
 
-/** Server-observed time, never a caller-supplied deadline. */
-export const currentMillis = (): number => Effect.runSync(Clock.currentTimeMillis);
-const workerCrypto = Crypto.make({
-  randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),
-  digest: (algorithm, data) =>
-    Effect.tryPromise({
-      try: () =>
-        crypto.subtle
-          .digest(algorithm, Uint8Array.from(data))
-          .then((bytes) => new Uint8Array(bytes)),
-      catch: (cause) =>
-        PlatformError.systemError({
-          _tag: "Unknown",
-          module: "WorkerCrypto",
-          method: "digest",
-          cause,
-        }),
-    }),
-});
-export const newId = (): string => Effect.runSync(workerCrypto.randomUUIDv4.pipe(Effect.orDie));
 export const iso = (milliseconds: number): string =>
   DateTime.formatIso(DateTime.makeUnsafe(milliseconds));
 /** Fast SHA-256 is safe here only because inputs are 256-bit randomly generated bearers. */
@@ -112,7 +96,7 @@ export const newShortId = (): string => {
   }
   return shortId;
 };
-export const newBearer = (shortId: string): string => `fin_${shortId}_${newProof()}`;
+export const newBearer = (shortId: string): string => `${patBearerPrefix}${shortId}_${newProof()}`;
 export const validBearer = (value: string): boolean => Schema.is(TokenBearer)(value);
 
 /** Decode JSON bodies before any proof lookup or mutation; malformed bodies are never retained. */

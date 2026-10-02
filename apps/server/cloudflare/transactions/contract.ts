@@ -1,7 +1,7 @@
 import type { TransactionPair } from "@fidy/server/transactions-contract";
 import type { TransactionMutationOperation } from "../canonical-work/contract";
 import type { DateTime, Option } from "effect";
-import type { OwnedStatement } from "@fidy/server/tokens-runtime";
+import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 import type { Category } from "../../src/core/categories/contract";
 import type { CategoryId } from "../../src/core/categories/reference";
 import type {

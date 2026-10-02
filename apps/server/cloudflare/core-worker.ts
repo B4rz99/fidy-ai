@@ -85,8 +85,13 @@ import {
   sweepExpiredCardPreparationAdmission,
 } from "./subscription/runtime";
 
-import { handlePATRequest, patRoute } from "./pats/pat-routes";
-import { listPATs } from "./pats/pat-management";
+import {
+  authorizeCanonicalPAT,
+  handlePATRequest,
+  listPATs,
+  patRoute,
+  sweepExpiredPATPairings,
+} from "./tokens/operations";
 import { recallMemories, rejectMemoryMutation } from "./memory/memory";
 import { canonicalOperation, canonicalRoute } from "./routing/canonical-routes";
 import {
@@ -103,8 +108,6 @@ import {
   maximumAtomicBatchCalls,
   operationCatalog,
 } from "@fidy/server/canonical-runtime";
-import { sweepExpiredPATPairings } from "./pats/pat-pairing";
-import { authorizeCanonicalPAT } from "./pats/pat-authorization";
 import {
   executeProtectedCategories,
   keywordRuleIdFromPath,

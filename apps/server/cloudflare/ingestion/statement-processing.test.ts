@@ -3,7 +3,7 @@ import { Effect, Option } from "effect";
 import { installTestSchema, isolatedTestStorage } from "../d1-test-fixture";
 import { afterAll, expect } from "vitest";
 import { it as effectIt } from "@effect/vitest";
-import { currentMillis } from "../pats/pat-shared";
+import { currentMillis } from "../runtime/clock";
 import { failStatementSubmission, processStatementSubmission } from "./statement-processing";
 import { expireStatementReviewEvidence } from "./statement-review-retention";
 import { StatementStaging, submissionProjection } from "./statement-staging";

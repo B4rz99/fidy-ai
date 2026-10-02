@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime, Effect } from "effect";
-import { PATRecipientLabel } from "./model";
-import { buildPATDisclosure, computePATExpiration } from "./rules";
+import { PATRecipientLabel } from "./contract";
+import { buildPATDisclosure, computePATExpiration } from "./operations";
 
 it("includes the named recipient and every granted scope in Spanish disclosure", () => {
   const disclosure = buildPATDisclosure({

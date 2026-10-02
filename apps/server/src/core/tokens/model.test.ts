@@ -12,9 +12,9 @@ import {
   TokenGrant,
   TokenSecret,
   TokenShortId,
-  getTokenShortId,
-  makeTokenBearer,
-} from "./model";
+} from "./contract";
+
+import { getTokenShortId, makeTokenBearer } from "./operations";
 
 const decodeBearer = Schema.decodeUnknownResult(TokenBearer);
 

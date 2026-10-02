@@ -1,20 +1,14 @@
-import { readConsentStatus } from "../consent/operations";
+import { patBearerPrefix } from "@fidy/server/tokens-domain";
+import { readConsentStatus } from "../../consent/operations";
 import {
   type CatalogOperation,
   decideOperationAccess,
   patScopeCapability,
 } from "@fidy/server/canonical-runtime";
-import type { CanonicalCapability } from "@fidy/server/canonical-runtime";
 import { type Cause, Effect, Option, Schema } from "effect";
-import {
-  PATRow,
-  currentMillis,
-  digest,
-  equalsDigest,
-  scopesFrom,
-  shortLength,
-  validBearer,
-} from "./pat-shared";
+import { PATRow, digest, equalsDigest, scopesFrom, shortLength, validBearer } from "./pat-shared";
+import { currentMillis } from "../../runtime/clock";
+import { type AuthorizedPAT, type PATAuthorizationDecision } from "../contract";
 
 const StoredPAT = Schema.Struct({ ...PATRow.fields, bearer_digest: Schema.Array(Schema.Int) });
 const authenticate = (
@@ -26,7 +20,7 @@ const authenticate = (
     if (!authorization.startsWith("Bearer ")) return Option.none();
     const bearer = authorization.slice("Bearer ".length);
     if (!validBearer(bearer)) return Option.none();
-    const shortId = bearer.slice("fin_".length, "fin_".length + shortLength);
+    const shortId = bearer.slice(patBearerPrefix.length, patBearerPrefix.length + shortLength);
     const raw = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT id,user_id,short_id,recipient_label,scopes_json,lifetime_days,
@@ -42,21 +36,10 @@ const authenticate = (
     const candidate = yield* Effect.tryPromise(() => digest(bearer));
     return equalsDigest({ stored: pat.value.bearer_digest, candidate }) ? pat : Option.none();
   });
-type CategoryAuthorization =
-  | "accepted"
-  | "unauthenticated"
-  | "scope_missing"
-  | "user_action_required";
-export type AuthorizedPAT = Readonly<{
-  patId: string;
-  userId: string;
-  digest: Uint8Array;
-  requiredScope: Option.Option<CanonicalCapability>;
-}>;
 const scopeDecision = (
   scopes: ReturnType<typeof scopesFrom>,
   operation: CatalogOperation
-): CategoryAuthorization => {
+): PATAuthorizationDecision => {
   if (Option.isNone(scopes)) return "unauthenticated";
   const access = decideOperationAccess(operation.policy.access, {
     _tag: "PAT",
@@ -71,7 +54,7 @@ export const authorizeCanonicalPAT = ({
   db,
   operation,
 }: Readonly<{ request: Request; db: D1Database; operation: CatalogOperation }>): Promise<
-  AuthorizedPAT | Exclude<CategoryAuthorization, "accepted">
+  AuthorizedPAT | Exclude<PATAuthorizationDecision, "accepted">
 > =>
   Effect.runPromise(
     Effect.gen(function* () {

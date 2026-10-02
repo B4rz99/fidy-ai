@@ -62,7 +62,7 @@ import type {
   HostedDeliveryCorrelationToken,
   WhatsAppProviderMessageId,
 } from "../../src/shell/channels/whatsapp/model";
-import { newId } from "../pats/pat-shared";
+import { newId } from "../secret-material/operations";
 import {
   type HostedAdmissionChannel,
   type HostedTurnOutcome,

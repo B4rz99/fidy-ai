@@ -1,4 +1,4 @@
-import type { OwnedStatement } from "@fidy/server/tokens-runtime";
+import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 import { DateTime, Effect, Option, Schema } from "effect";
 import {
   NotificationEmailSourceAttestation,

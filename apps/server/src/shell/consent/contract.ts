@@ -1,3 +1,4 @@
+import type { PATGrantSelection, PairingGrantSelection } from "~/shell/tokens/contract";
 import { type Option, Schema } from "effect";
 import { DisclosureSnapshot } from "~/core/consent/contract";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
@@ -48,16 +49,18 @@ export type EmailStatus =
 export type RevokeOnePATConsentInput = Readonly<{
   session: FreshSessionSubject;
   input: Readonly<{ id: string; shortId: string; current: number }>;
+  candidates: PATGrantSelection;
 }>;
 
 /** Fresh authenticated User whose active PAT or unclaimed pairing grants must be revoked. */
 export type RevokeAllPATConsentsInput = Readonly<{
+  candidates: PATGrantSelection;
   session: FreshSessionSubject;
   current: number;
 }>;
 
 /** Bounded expiry selection; current is the decision instant in Unix milliseconds. */
-export type ExpirePATConsentsInput = Readonly<{ current: number; limit: number }>;
+export type ExpirePATConsentsInput = Readonly<{ current: number; candidates: PATGrantSelection }>;
 
 /** The exact reviewed manual grant, identified by its issuance request and new evidence id. */
 export type ManualPATConsentInput = Readonly<{
@@ -114,3 +117,16 @@ export type PATRevocationProtection =
   | Readonly<{ _tag: "UserPairing"; sessionId: string }>
   | Readonly<{ _tag: "ExpiredPAT" }>
   | Readonly<{ _tag: "ExpiredPairing" }>;
+
+/** A fresh User decision over Tokens-owned approved unclaimed grant references. */
+export type RevokeAllPairingConsentsInput = Readonly<{
+  session: FreshSessionSubject;
+  current: number;
+  candidates: PairingGrantSelection;
+}>;
+
+/** Bounded Tokens-owned approval selection at the server-observed expiration instant. */
+export type ExpirePairingConsentsInput = Readonly<{
+  current: number;
+  candidates: PairingGrantSelection;
+}>;

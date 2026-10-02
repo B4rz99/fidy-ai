@@ -88,6 +88,53 @@ export default {
       },
     },
     {
+      name: "foreign-module-imports-cloudflare-tokens-internal",
+      severity: "error",
+      comment:
+        "Tokens PAT rows, pairing proofs, persistence and bearer verification remain owner-private (#602). Call its published contract, operations or runtime composition.",
+      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/tokens/" },
+      to: { path: "^cloudflare/tokens/internal/" },
+    },
+    {
+      name: "cloudflare-imports-portable-tokens-internal",
+      severity: "error",
+      comment:
+        "Native Tokens adapters consume published portable operations, never raw query or row internals (#602).",
+      from: { path: "^cloudflare/" },
+      to: { path: "^src/(core|shell)/tokens/internal/" },
+    },
+    {
+      name: "tokens-interface-reexports-internal",
+      severity: "error",
+      comment:
+        "Native Tokens publication declares behavior rather than laundering private proof or persistence implementation (#602).",
+      from: { path: "^cloudflare/tokens/(contract|operations|runtime)\\.ts$" },
+      to: { path: "^cloudflare/tokens/internal/", dependencyTypes: ["export"] },
+    },
+    {
+      name: "tokens-contract-imports-implementation",
+      severity: "error",
+      comment:
+        "Tokens's native contract is independently readable and never acquires proof, persistence or lifecycle implementation (#602).",
+      from: { path: "^cloudflare/tokens/contract\\.ts$" },
+      to: { path: "^cloudflare/tokens/(internal/|operations\\.ts$|runtime\\.ts$)" },
+    },
+    {
+      name: "tokens-internal-imports-outward-interface",
+      severity: "error",
+      comment:
+        "Tokens internals depend inward on declarations, never on the outward operations or runtime interface (#602).",
+      from: { path: "^cloudflare/tokens/internal/" },
+      to: { path: "^cloudflare/tokens/(operations|runtime)\\.ts$" },
+    },
+    {
+      name: "tokens-operations-imports-runtime",
+      severity: "error",
+      comment: "Tokens operations do not acquire runtime construction authority (#602).",
+      from: { path: "^cloudflare/tokens/operations\\.ts$" },
+      to: { path: "^cloudflare/tokens/runtime\\.ts$" },
+    },
+    {
       name: "foreign-module-imports-cloudflare-email-authentication-internal",
       severity: "error",
       comment:
@@ -461,7 +508,7 @@ export default {
         pathNot: [
           "^src/shell/_shared/",
           "^src/shell/public-http/contract\\.ts$",
-          "^src/shell/(identity|categories|transactions|subscription|email-authentication)/contract\\.ts$",
+          "^src/shell/(identity|categories|transactions|subscription|email-authentication|tokens)/contract\\.ts$",
           "^src/shell/[^/]+/operations\\.ts$",
         ],
       },

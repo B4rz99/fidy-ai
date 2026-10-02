@@ -522,6 +522,50 @@ it("sweeps expired anonymous pairing metadata but preserves approved grant evide
         toFake: ["Date"],
       });
       vi.setSystemTime(clock() + 600_001);
+      yield* awaitPromise(
+        db
+          .prepare(`CREATE TRIGGER refuse_pairing_expiry_evidence BEFORE INSERT ON pat_revocation_consents
+          WHEN NEW.pairing_id IS NOT NULL
+          BEGIN SELECT RAISE(ABORT,'consent_unavailable'); END`)
+          .run()
+      );
+      yield* awaitPromise(expect(scheduled()).rejects.toThrow());
+      expect(
+        (yield* awaitPromise(
+          db.prepare("SELECT state FROM pat_pairings WHERE id = ?").bind(approved.pairingId).first()
+        ))?.state
+      ).toBe("approved_awaiting_claim");
+      expect(
+        (yield* awaitPromise(
+          db
+            .prepare("SELECT count(*) AS total FROM pat_revocation_consents WHERE pairing_id = ?")
+            .bind(approved.pairingId)
+            .first()
+        ))?.total
+      ).toBe(0);
+      yield* awaitPromise(db.prepare("DROP TRIGGER refuse_pairing_expiry_evidence").run());
+      yield* awaitPromise(
+        db
+          .prepare(`CREATE TRIGGER ignore_pairing_expiry_transition BEFORE UPDATE OF state ON pat_pairings
+          WHEN OLD.state = 'approved_awaiting_claim' AND NEW.state = 'revoked_unclaimed'
+          BEGIN SELECT RAISE(IGNORE); END`)
+          .run()
+      );
+      yield* awaitPromise(expect(scheduled()).rejects.toThrow());
+      expect(
+        (yield* awaitPromise(
+          db.prepare("SELECT state FROM pat_pairings WHERE id = ?").bind(approved.pairingId).first()
+        ))?.state
+      ).toBe("approved_awaiting_claim");
+      expect(
+        (yield* awaitPromise(
+          db
+            .prepare("SELECT count(*) AS total FROM pat_revocation_consents WHERE pairing_id = ?")
+            .bind(approved.pairingId)
+            .first()
+        ))?.total
+      ).toBe(0);
+      yield* awaitPromise(db.prepare("DROP TRIGGER ignore_pairing_expiry_transition").run());
       yield* awaitPromise(scheduled());
       expect(
         yield* awaitPromise(

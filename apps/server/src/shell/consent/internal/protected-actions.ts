@@ -64,17 +64,8 @@ export const revocationEvidence = (evidence: PATRevocationProtection): OwnedStat
   }
 };
 
-export const fixedExpiryCompletionSql = `INSERT INTO pat_atomic_assertion (id, accepted)
-    SELECT 1, CASE WHEN NOT EXISTS (
-      SELECT 1 FROM pat_revocation_consents r JOIN pats p ON p.id = r.pat_id
-      WHERE r.policy_reason = 'pat-fixed-lifetime-expiry' AND r.occurred_at_ms = ? AND p.revoked_at_ms IS NULL
-    ) THEN 1 ELSE 0 END
-    ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`;
+export const fixedExpiryEvidenceSql = `SELECT pat_id AS id FROM pat_revocation_consents
+  WHERE policy_reason = 'pat-fixed-lifetime-expiry' AND occurred_at_ms = ?`;
 
-export const pairingExpiryCompletionSql = `INSERT INTO pat_atomic_assertion (id, accepted)
-    SELECT 1, CASE WHEN NOT EXISTS (
-      SELECT 1 FROM pat_revocation_consents r JOIN pat_pairings p ON p.id = r.pairing_id
-      WHERE r.policy_reason = 'pat-approved-unclaimed-expiry' AND r.occurred_at_ms = ?
-      AND p.state = 'approved_awaiting_claim'
-    ) THEN 1 ELSE 0 END
-    ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`;
+export const pairingExpiryEvidenceSql = `SELECT pairing_id AS id FROM pat_revocation_consents
+  WHERE policy_reason = 'pat-approved-unclaimed-expiry' AND occurred_at_ms = ?`;

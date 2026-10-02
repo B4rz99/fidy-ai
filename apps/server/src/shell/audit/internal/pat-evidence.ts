@@ -1,3 +1,4 @@
+import { patIdentityQuery } from "~/shell/tokens/operations";
 import { Option } from "effect";
 import { authorizedCallStatement } from "./recording";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
@@ -8,7 +9,7 @@ import {
   freshSessionParams,
   liveSessionConditions,
 } from "~/shell/web-session/operations";
-import type { AuditedPATOperation, PATAuthority } from "~/shell/tokens/operations";
+import type { AuditedPATOperation, PATAuthority } from "~/shell/tokens/contract";
 
 type AuditTime = Readonly<{ id: string; current: number }>;
 
@@ -81,12 +82,14 @@ type RevokeAuditInput = AuditTime & Readonly<{ shortId: string }>;
 export const recordOnePATRevocation = ({
   session,
   input,
-}: Readonly<{ session: FreshSessionSubject; input: RevokeAuditInput }>): OwnedStatement => ({
-  sql: `INSERT INTO pat_audit (id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms)
-    SELECT ?,?,?,id,'pats.revokePAT','accepted',? FROM pats
-    WHERE user_id = ? AND short_id = ? AND changes() = 1`,
-  params: [input.id, session.user_id, session.id, input.current, session.user_id, input.shortId],
-});
+}: Readonly<{ session: FreshSessionSubject; input: RevokeAuditInput }>): OwnedStatement => {
+  const selected = patIdentityQuery({ userId: session.user_id, shortId: input.shortId });
+  return {
+    sql: `INSERT INTO pat_audit (id,user_id,session_id,pat_id,operation,outcome,occurred_at_ms)
+      SELECT ?,?,?,id,'pats.revokePAT','accepted',? FROM (${selected.sql}) WHERE changes() = 1`,
+    params: [input.id, session.user_id, session.id, input.current, ...selected.params],
+  };
+};
 
 /** The revoke-all audit is guarded by the same fresh User decision as its PAT transition. */
 export const recordAllPATRevocations = ({

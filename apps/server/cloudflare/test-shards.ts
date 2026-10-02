@@ -6,7 +6,7 @@ const estimatedSeconds: Readonly<Record<string, number>> = {
   "ingestion/statement-ingestion.test.ts": 41.9,
   "agent/hosted-turn.test.ts": 35.8,
   "dashboard/dashboard.test.ts": 10.9,
-  "pats/pats.test.ts": 15.4,
+  "tokens/pats.test.ts": 15.4,
   "ingestion/statement-processing.test.ts": 6.2,
   "budgets/budgets.test.ts": 13.7,
   "insights/insight-store.test.ts": 10.2,

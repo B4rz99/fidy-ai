@@ -6,7 +6,7 @@ import {
   StatementNeedsReviewItem,
   StatementRowEvidence,
 } from "../../src/core/ingestion/model";
-import { currentMillis } from "../pats/pat-shared";
+import { currentMillis } from "../runtime/clock";
 import type { TransactionCaller } from "../canonical-work/operations";
 import { commitReadAudit, unavailableStatement, validationFailed } from "./statement-ingestion";
 

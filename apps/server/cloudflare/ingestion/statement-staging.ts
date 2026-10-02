@@ -48,7 +48,7 @@ import {
   type BoundedBodyReadFailed,
   collectBoundedRequestBody,
 } from "../http/bounded-request-body";
-import { prepareOwnedStatement } from "../pats/pat-unit";
+import { prepareOwnedStatement } from "../database/operations";
 import {
   type TransactionAuthority,
   acceptedPATAccountability,

@@ -1,4 +1,4 @@
-import { getCanonicalOperationInput } from "@fidy/server/canonical-runtime";
+import { getCanonicalOperationInput } from "~/shell/canonical-operations/operations";
 import { StatementSubmission } from "@fidy/server/ingestion-contract";
 import { Effect, Exit, Option, Schema } from "effect";
 import { dailyAuditExhausted } from "@fidy/server/audit";
@@ -22,18 +22,19 @@ import {
 import {
   callerAuthority,
   callerScope,
+  failedPreparation,
+  refusedPreparation,
   transactionNoStore,
   transactionUnavailable,
+  unavailablePreparation,
 } from "../../canonical-work/operations";
 import {
   type CanonicalMutationPreparation,
   type CanonicalMutationRefusal,
+  type CanonicalPreparationWork,
+  type CommittedMutationValue,
   type GuardRefusalWork,
-  failedPreparation,
-  refusedPreparation,
-  unavailablePreparation,
-} from "../../mutations/mutation-types";
-import type { CanonicalMutationAdapter } from "../../mutations/canonical-mutation-registry";
+} from "../../canonical-operations/contract";
 
 const StatementInput = Schema.toType(getCanonicalOperationInput("ingestion.submitForExtraction"));
 /** One statement-owned budget policy; a trigger abort cannot promise an individual HTTP refusal. */
@@ -121,8 +122,8 @@ const committedSubmission =
     });
 
 /** One staged reference prepared for the shared canonical mutation unit, never a nested commit. */
-export const statementMutationAdapter: CanonicalMutationAdapter = {
-  prepare: (work) =>
+export const statementMutationAdapter = {
+  prepare: (work: CanonicalPreparationWork): Effect.Effect<CanonicalMutationPreparation> =>
     Effect.gen(function* () {
       if (Option.isNone(work.bucket)) return unavailablePreparation();
       const config: StatementStagingConfig = {
@@ -178,7 +179,7 @@ export const statementMutationAdapter: CanonicalMutationAdapter = {
         },
       } as const satisfies CanonicalMutationPreparation;
     }),
-  present: (value) =>
+  present: (value: CommittedMutationValue): Effect.Effect<Response> =>
     value._tag === "StatementSubmission"
       ? Schema.encodeEffect(Schema.toCodecJson(StatementSubmission))(value.submission).pipe(
           Effect.map((data) =>
@@ -187,7 +188,7 @@ export const statementMutationAdapter: CanonicalMutationAdapter = {
           Effect.orElseSucceed(transactionUnavailable)
         )
       : Effect.succeed(transactionUnavailable()),
-  invalidRefusal: (work) => {
+  invalidRefusal: (work: CanonicalPreparationWork): CanonicalMutationRefusal => {
     if (Option.isNone(work.bucket)) {
       return {
         code: "unavailable",

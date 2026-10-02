@@ -13,7 +13,7 @@ import {
   NextOperations,
   OperationResponse,
 } from "~/shell/public-http/contract";
-import { operationPolicy, verifiedWhatsAppHostedOnly } from "~/shell/_shared/operation-policy";
+import { operationPolicy, verifiedWhatsAppHostedOnly } from "~/shell/canonical-policy/contract";
 
 /** Stable canonical identity of hosted browser-pairing approval. */
 export const browserLoginApprovalOperation = CanonicalOperationId.make(

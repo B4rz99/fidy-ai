@@ -1,56 +1,20 @@
+import type { CanonicalInput, CanonicalSuccess } from "~/shell/canonical-operations/contract";
 import { Effect } from "effect";
 import type { OperationId } from "~/shell/api";
 import {
   completeEmailReplacement,
   requestEmailReplacement,
 } from "~/shell/email-authentication/operations";
-import type { OperationCatalog } from "./operation-catalog";
+import type { OperationCatalog } from "~/shell/canonical-catalog/contract";
 import type {
   CanonicalFailure,
   CanonicalImplementationCaller,
   CanonicalImplementationRequirements,
   CanonicalOperationImplementations,
-} from "./canonical-implementation";
-import type { CanonicalInput } from "./canonical-input";
-import type { CanonicalSuccess } from "./canonical-success";
+} from "./implementation";
 
 /** Caller facts supplied to every canonical mutation adapter. */
 export type CanonicalMutationCaller = CanonicalImplementationCaller;
-
-type MutationId =
-  | "browserLogin.approvePairing"
-  | "identity.updateUserPreferences"
-  | "categories.createKeywordRule"
-  | "categories.updateKeywordRule"
-  | "categories.deleteKeywordRule"
-  | "budgets.createBudget"
-  | "budgets.updateBudget"
-  | "budgets.deleteBudget"
-  | "dashboard.getDashboard"
-  | "dashboard.getDashboardView"
-  | "dashboard.applyDashboardEdit"
-  | "emailAuthentication.requestEmailReplacement"
-  | "emailAuthentication.completeEmailReplacement"
-  | "transactions.createTransaction"
-  | "transactions.linkTransactions"
-  | "transactions.unlinkTransactions"
-  | "transactions.updateTransaction"
-  | "transactions.deleteTransaction"
-  | "memory.remember"
-  | "memory.revise"
-  | "memory.forget"
-  | "ingestion.enableEmailForwarding"
-  | "ingestion.submitForExtraction"
-  | "ingestion.resolveNeedsReviewItem"
-  | "insights.markInsightDelivered"
-  | "insights.markInsightRead"
-  | "insights.dismissInsight"
-  | "pats.inspectPATPairing"
-  | "pats.revokePAT"
-  | "pats.revokeAllPATs"
-  | "pats.createManualPAT"
-  | "pats.approvePATPairing"
-  | "recovery.rotateBackupRecoveryCode";
 
 /**
  * Cloudflare Worker/D1/DO adapters are not assembled in this application package. Every removed
@@ -122,5 +86,3 @@ export const assertCanonicalMutationRegistry = (catalog: OperationCatalog): void
     );
   }
 };
-
-export type { MutationId };

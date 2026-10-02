@@ -1,4 +1,7 @@
-import type { CanonicalMutationRefusal } from "../mutations/mutation-types";
+import type {
+  CanonicalMutationPreparation,
+  CanonicalMutationRefusal,
+} from "../canonical-operations/contract";
 import {
   type CanonicalRefusalDisposition,
   type TransactionAuthority,
@@ -19,11 +22,9 @@ import {
   recordedPATCallProof,
   refusedByAuditBudget,
 } from "@fidy/server/audit";
-import {
-  type CanonicalCapability,
-  type ErrorCode,
-  atomicBatchOperation,
-} from "@fidy/server/canonical-runtime";
+import { type CanonicalCapability } from "~/core/canonical-operations/contract";
+import { type ErrorCode } from "~/shell/public-http/contract";
+import { atomicBatchOperation } from "~/shell/operations/contract";
 
 import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
 import { type AuditedPATMutation, type PATAuthority } from "@fidy/server/tokens-contract";
@@ -515,4 +516,25 @@ export const auditLimitRefusal = (): CanonicalMutationRefusal => ({
   message: "Daily audit budget exhausted.",
   record: () => Effect.succeed("rate_limited" as const),
   respond: () => Effect.succeed(transactionUnavailable()),
+});
+
+/** Build one owner refusal as the preparation every executor maps to its canonical response. */
+export const refusedPreparation = (
+  refusal: CanonicalMutationRefusal
+): CanonicalMutationPreparation => ({
+  _tag: "Refused",
+  refusal,
+});
+
+/** Build the closed preparation failure for a dependency defect the executor classifies. */
+export const failedPreparation = (): CanonicalMutationPreparation => ({ _tag: "Failed" });
+
+/** Build the decided refusal for a credential the owner proved dead or scopeless. */
+export const credentialRefusedPreparation = (): CanonicalMutationPreparation => ({
+  _tag: "CredentialRefused",
+});
+
+/** Build the decided answer for an owner read that cannot decide this mutation. */
+export const unavailablePreparation = (): CanonicalMutationPreparation => ({
+  _tag: "Unavailable",
 });

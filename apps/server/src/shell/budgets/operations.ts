@@ -10,7 +10,7 @@ import {
   type SuggestedOperationCaller,
   checkpointSuggestedOperations,
   suggestOperation,
-} from "~/shell/_shared/suggested-operations";
+} from "~/shell/canonical-operations/operations";
 import { toApiFailure as categoryToApiFailure } from "~/shell/categories/operations";
 
 const budgetRecovery = (caller: SuggestedOperationCaller): ReadonlyArray<SuggestedOperation> =>

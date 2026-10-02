@@ -1,5 +1,6 @@
+import { deriveAnonymousSource } from "./anonymous-admission/operations";
 import { keywordRulePath, listCategoriesPath } from "@fidy/server/categories-path";
-import { atomicBatchOperation } from "@fidy/server/canonical-runtime";
+import { atomicBatchOperation } from "~/shell/operations/contract";
 import { emailReplacementOperations } from "@fidy/server/email-authentication-operations";
 import { statementStagingPath } from "@fidy/server/ingestion-contract";
 import {
@@ -8,7 +9,7 @@ import {
 } from "@fidy/server/transaction-runtime";
 import { ownsMemoryPath as memoryPath } from "@fidy/server/memory-runtime";
 import type { TelemetryService } from "@fidy/server/telemetry";
-import { Effect, Encoding, Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import {
   type WorkerTelemetryEnvironment,
   cloudflareWorkerTelemetry,
@@ -28,7 +29,6 @@ import {
 import { patBrowserRoute, patDirectRoute, patMethods, patRoute } from "./tokens/operations";
 import { canonicalMethods, canonicalOperation, canonicalRoute } from "./routing/canonical-routes";
 
-const minimumAdmissionKeyLength = 32;
 type PublicEnvironment = WorkerTelemetryEnvironment & {
   readonly BROWSER_ORIGIN: string;
   readonly CORE: Pick<Fetcher, "fetch">;
@@ -360,34 +360,6 @@ const forwardedHeaders = (request: Request, path: string): Headers => {
   if (browserForwardPath(path)) return browserForwardHeaders(request, path);
   return fallbackHeaders(request, path);
 };
-const pairingSource = (
-  request: Request,
-  environment: PublicEnvironment
-): Effect.Effect<string, void> =>
-  Effect.gen(function* () {
-    const visitor =
-      request.headers.get("cf-connecting-ip") ??
-      (environment.BROWSER_ORIGIN === browserOrigins.local ? "local-development" : "");
-    if (visitor.length === 0 || environment.PAT_ADMISSION_KEY.length < minimumAdmissionKeyLength) {
-      throw new Error("PAT admission unavailable");
-    }
-    const key = yield* Effect.tryPromise({
-      try: () =>
-        crypto.subtle.importKey(
-          "raw",
-          new TextEncoder().encode(environment.PAT_ADMISSION_KEY),
-          { name: "HMAC", hash: "SHA-256" },
-          false,
-          ["sign"]
-        ),
-      catch: () => undefined,
-    });
-    const signature = yield* Effect.tryPromise({
-      try: () => crypto.subtle.sign("HMAC", key, new TextEncoder().encode(visitor)),
-      catch: () => undefined,
-    });
-    return Encoding.encodeHex(new Uint8Array(signature));
-  });
 const coreRequest = (
   request: Request,
   environment: PublicEnvironment
@@ -396,7 +368,14 @@ const coreRequest = (
     const path = new URL(request.url).pathname;
     const headers = forwardedHeaders(request, path);
     if (path === "/pat-pairings") {
-      headers.set("x-pat-source", yield* pairingSource(request, environment));
+      headers.set(
+        "x-pat-source",
+        yield* deriveAnonymousSource({
+          request,
+          browserOrigin: environment.BROWSER_ORIGIN,
+          admissionKey: environment.PAT_ADMISSION_KEY,
+        })
+      );
     }
     // Clone the streamed request before replacing its URL and admitted headers.
     // Rebuilding a Request from the raw body requires runtime-specific duplex options.

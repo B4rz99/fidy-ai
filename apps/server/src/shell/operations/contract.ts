@@ -8,8 +8,8 @@ import {
   NextOperations,
   OperationResponse,
 } from "~/shell/public-http/contract";
-import type { CatalogOperation, OperationCatalog } from "~/shell/_shared/operation-catalog";
-import { isPATScoped, operationPolicy, patScopedChildren } from "~/shell/_shared/operation-policy";
+import type { CatalogOperation, OperationCatalog } from "~/shell/canonical-catalog/contract";
+import { isPATScoped, operationPolicy, patScopedChildren } from "~/shell/canonical-policy/contract";
 
 const operationsGroupName = "operations";
 const atomicBatchEndpointName = "executeAtomicBatch";

@@ -35,7 +35,7 @@ import {
   freshWebSessionOnly,
   operationPolicy,
   webOrHosted,
-} from "~/shell/_shared/operation-policy";
+} from "~/shell/canonical-policy/contract";
 import { type AuditCredentialOperation } from "~/shell/audit/contract";
 
 export const issuanceConsumedMessage =

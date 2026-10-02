@@ -1,19 +1,22 @@
+import type {
+  CanonicalImplementationCaller,
+  CanonicalInput,
+  CanonicalSuccess,
+} from "~/shell/canonical-operations/contract";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 import type { EmailPairingSubject } from "./contract";
 import { emailPairingAllowsUser as compatibleSubject } from "~/shell/email-authentication/internal/pairing-subject";
 import { Context, Effect, Option } from "effect";
 import { UserId } from "~/core/identity/reference";
 import { WebSessionId } from "~/core/web-session/reference";
-import { decideOperationAccess, getOperationPolicy } from "~/shell/_shared/operation-policy";
+import { decideOperationAccess } from "~/shell/canonical-policy/operations";
+import { getOperationPolicy } from "~/shell/canonical-policy/contract";
 import {
   EmailAuthenticationGroup,
   EmailReplacementInvalidApi,
   type EmailReplacementMutationService,
   emailReplacementInvalidBody,
 } from "./contract";
-import type { CanonicalImplementationCaller } from "~/shell/_shared/canonical-implementation-caller";
-import type { CanonicalInput } from "~/shell/_shared/canonical-input";
-import type { CanonicalSuccess } from "~/shell/_shared/canonical-success";
 
 export type { EmailReplacementMutationService } from "./contract";
 

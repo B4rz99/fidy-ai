@@ -1,3 +1,9 @@
+import { BatchCalls, CanonicalWork } from "../canonical-operations/contract";
+import {
+  canonicalWorkRequiresInference,
+  executeCanonicalWork,
+} from "../canonical-operations/operations";
+import type { HostedCommitFence } from "../agent/contract";
 import {
   type CanonicalToolEvidence,
   type TranscriptText,
@@ -6,12 +12,9 @@ import {
 } from "@fidy/server/agent-runtime";
 import {
   CanonicalCapability,
-  CanonicalOperationId,
-  atomicBatchOperation,
-  maximumAtomicBatchCalls,
-  operationCatalog,
-} from "@fidy/server/canonical-runtime";
-import { memoryOperationIds } from "@fidy/server/memory-api";
+  type CanonicalOperationId,
+} from "~/core/canonical-operations/contract";
+import { atomicBatchOperation } from "~/shell/operations/contract";
 import { HostedInference, type HostedInferenceService } from "@fidy/server/hosted-inference";
 import { makeHostedSender } from "@fidy/server/whatsapp-runtime";
 import {
@@ -66,22 +69,8 @@ import {
   failStatementSubmission,
   processForwardedEmail,
   processStatementSubmission,
-  unavailableStatement,
 } from "../ingestion/operations";
-import {
-  executeCanonicalBatch,
-  executeHostedCanonicalBatch,
-  rawOperation,
-} from "../mutations/canonical-mutation-batch";
-import {
-  type CanonicalMutationAdapter,
-  canonicalMutationAdapter,
-} from "../mutations/canonical-mutation-registry";
-import {
-  type HostedCommitFence,
-  executeSingleCanonicalMutation,
-} from "../mutations/canonical-mutation-unit";
-import { type CanonicalMutationPreparation, refusedPreparation } from "../mutations/mutation-types";
+
 import { coordinatorProbeName } from "../runtime/operational-probes";
 import {
   cloudflareWorkerTelemetry,
@@ -120,42 +109,6 @@ const PAT = {
   patId: Schema.String.check(Schema.isUUID()),
   requiredScope: Schema.NullOr(CanonicalCapability),
 } as const;
-/**
- * The bounded raw child list a Batch work payload carries. Each entry stays `Unknown` here because the
- * batch adapter decodes it against the published catalog call union, where a malformed child can
- * still be attributed and audited as the child it named.
- */
-export const BatchCalls = Schema.NonEmptyArray(Schema.Unknown).check(
-  Schema.isMaxLength(maximumAtomicBatchCalls)
-);
-export type BatchCalls = typeof BatchCalls.Type;
-const Batch = { calls: BatchCalls } as const;
-/**
- * One canonical call an individual work payload carries: the operation id the catalog publishes and the
- * raw canonical input its owner adapter decodes. The operation id alone selects the owner adapter,
- * so a new composable mutation joins this dispatcher without editing it.
- */
-const Call = {
-  operation: CanonicalOperationId,
-  input: Schema.Unknown,
-} as const;
-
-/**
- * Every piece of composable canonical work one User coordinator executes. A Call carries one
- * catalog mutation's canonical input; a Batch carries the bounded raw child list the batch adapter
- * decodes per child. Each owner adapter rechecks live authority and domain state before the shared
- * D1 unit commits anything.
- */
-export const CanonicalWork = Schema.Union([
-  Schema.TaggedStruct("Call", Call),
-  Schema.TaggedStruct("Batch", Batch),
-]);
-export type CanonicalWork = typeof CanonicalWork.Type;
-
-/** The atomic batch request envelope: the bounded raw child list the adapter decodes per child. */
-export const BatchInput = Schema.Struct(Batch);
-export type BatchInput = typeof BatchInput.Type;
-
 /**
  * One work admission: the live subject authority plus the exact work it admits. It is not
  * itself a canonical mutation — the mutation travels inside `work` — so it is named for what it
@@ -199,140 +152,6 @@ const admissionSubject = (admission: CanonicalWorkAdmission): TransactionCaller 
         digest: new Uint8Array(admission.digest),
       };
 
-type WorkInput = Readonly<{
-  db: D1Database;
-  bucket: Option.Option<R2Bucket>;
-  work: CanonicalWork;
-  subject: TransactionCaller;
-  current: number;
-  hostedFence: Option.Option<HostedCommitFence>;
-}>;
-
-/** Reprepare only the statement whose identical material won a concurrent publication race. */
-const retryStatementPreparation = (
-  adapter: CanonicalMutationAdapter,
-  input: Parameters<CanonicalMutationAdapter["prepare"]>[0]
-): Effect.Effect<CanonicalMutationPreparation> =>
-  adapter.prepare(input).pipe(Effect.provideService(HostedInference, unreachableHostedInference));
-
-/** Execute one catalog call through its owner adapter and the shared mutation unit. */
-const executeCall = ({
-  db,
-  work,
-  subject,
-  current,
-  bucket,
-  hostedFence,
-}: WorkInput & Readonly<{ work: Extract<CanonicalWork, { _tag: "Call" }> }>): Effect.Effect<
-  Response,
-  never,
-  HostedInference
-> =>
-  Effect.gen(function* () {
-    const adapter = canonicalMutationAdapter(work.operation);
-    if (Option.isNone(adapter)) return transactionUnavailable();
-    const catalogOperation = operationCatalog.byId.get(work.operation);
-    if (catalogOperation === undefined) return transactionUnavailable();
-    const input = Schema.decodeUnknownOption(catalogOperation.input)(work.input);
-    if (Option.isNone(input)) {
-      // The call cannot be decoded against the operation it names, so the owner adapter answers for
-      // it under its own input classification and no write is attempted.
-      return yield* executeSingleCanonicalMutation({
-        db,
-        subject,
-        current,
-        preparation: refusedPreparation(
-          adapter.value.invalidRefusal({ db, subject, current, input: work.input, bucket })
-        ),
-        present: adapter.value.present,
-        retryStatement: Option.none(),
-        hostedFence,
-      });
-    }
-    const ownerWork = { db, subject, current, input: input.value, bucket };
-    const preparation = yield* adapter.value.prepare(ownerWork);
-    const retryStatement = (): Effect.Effect<CanonicalMutationPreparation> =>
-      retryStatementPreparation(adapter.value, ownerWork);
-    const response = yield* executeSingleCanonicalMutation({
-      db,
-      subject,
-      current,
-      preparation,
-      present: adapter.value.present,
-      retryStatement:
-        work.operation === "ingestion.submitForExtraction"
-          ? Option.some(retryStatement)
-          : Option.none(),
-      hostedFence,
-    });
-    return work.operation === "ingestion.submitForExtraction" &&
-      response.status === httpServiceUnavailable
-      ? unavailableStatement()
-      : response;
-  });
-
-/** Dispatch a bounded batch or an individual catalog call within one User coordination turn. */
-const affectsBudget = (operation: CanonicalOperationId): boolean =>
-  operation.startsWith("budgets.") || operation.startsWith("transactions.");
-
-const executeWork = (input: WorkInput): Effect.Effect<Response, never, HostedInference> =>
-  Effect.gen(function* () {
-    const budgetWork =
-      input.work._tag === "Call"
-        ? affectsBudget(input.work.operation)
-        : input.work.calls.some((child) => Option.exists(rawOperation(child), affectsBudget));
-    // Drain committed work before a later correction can lower spending below a reached mark.
-    if (
-      budgetWork &&
-      !(yield* evaluateBudgetAlerts({ db: input.db, userId: input.subject.userId }))
-    ) {
-      return transactionUnavailable();
-    }
-    const work = input.work;
-    const result = yield* work._tag === "Batch"
-      ? Option.match(input.hostedFence, {
-          onNone: () =>
-            executeCanonicalBatch({
-              db: input.db,
-              subject: input.subject,
-              calls: work.calls,
-              current: input.current,
-              bucket: input.bucket,
-            }),
-          onSome: (hostedFence) =>
-            executeHostedCanonicalBatch({
-              db: input.db,
-              subject: input.subject,
-              calls: work.calls,
-              current: input.current,
-              bucket: input.bucket,
-              hostedFence,
-            }),
-        })
-      : executeCall({ ...input, work });
-    if (result.ok && budgetWork) {
-      // Atomic D1 triggers retain versioned work even when this best-effort drain is interrupted.
-      yield* evaluateBudgetAlerts({ db: input.db, userId: input.subject.userId });
-    }
-    return result;
-  });
-
-/** True for an operation id the Memory group declares, so a new one needs no second derivation. */
-const isMemoryOperation = (operation: CanonicalOperationId): boolean =>
-  memoryOperationIds.some((declared) => declared === operation);
-
-/**
- * True when the work can reach the Memory capacity policy, the only consumer of hosted
- * inference. Every other owner decides without it, so a missing AI binding must not deny
- * their work.
- */
-const requiresHostedInference = (work: CanonicalWork): boolean => {
-  if (work._tag === "Batch") {
-    return work.calls.some((call) => Option.exists(rawOperation(call), isMemoryOperation));
-  }
-  return isMemoryOperation(work.operation);
-};
-
 /**
  * The coordination authority's dependencies: the D1 database it commits through, plus the hosted
  * inference bindings the Memory owner's capacity policy needs. Only Memory work reads them, so an
@@ -372,19 +191,6 @@ const hostedInferenceFor = (
       ? Option.none()
       : Option.some(Context.get(built.value, HostedInference));
   });
-
-/**
- * The hosted-inference service non-Memory work runs under: every method dies. Only the Memory
- * capacity policy consumes hosted inference, and it provisions the real service itself, so a
- * consumer appearing anywhere else fails closed instead of deciding without inference.
- */
-const unreachableHostedInference = HostedInference.of({
-  countText: () => Effect.die("Hosted inference reached without Memory work"),
-  countTranscript: () => Effect.die("Hosted inference reached without Memory work"),
-  prepareText: () => Effect.die("Hosted inference reached without Memory work"),
-  validateText: () => Effect.die("Hosted inference reached without Memory work"),
-  prepareStructured: () => Effect.die("Hosted inference reached without Memory work"),
-});
 
 const executeStatementActivity = (
   activity: typeof StatementCoordinatorActivity.Type,
@@ -435,27 +241,22 @@ const executeCanonicalAdmission = (
   hostedFence: Option.Option<HostedCommitFence>
 ): Effect.Effect<Response, never, Scope.Scope> =>
   Effect.gen(function* () {
-    const work = admission.work;
-    const execution = executeWork({
+    const inference = canonicalWorkRequiresInference(admission.work)
+      ? yield* hostedInferenceFor(
+          environment,
+          admission.userId,
+          Option.map(hostedFence, ({ turnId }) => turnId)
+        )
+      : Option.none();
+    return yield* executeCanonicalWork({
       db: environment.DB,
-      work,
+      work: admission.work,
       subject: admissionSubject(admission),
       current: transactionNow(),
       bucket: Option.fromUndefinedOr(environment.STATEMENT_STAGING_BUCKET),
       hostedFence,
+      inference,
     });
-    if (!requiresHostedInference(work)) {
-      return yield* execution.pipe(
-        Effect.provideService(HostedInference, unreachableHostedInference)
-      );
-    }
-    const inference = yield* hostedInferenceFor(
-      environment,
-      admission.userId,
-      Option.map(hostedFence, ({ turnId }) => turnId)
-    );
-    if (Option.isNone(inference)) return transactionUnavailable();
-    return yield* execution.pipe(Effect.provideService(HostedInference, inference.value));
   });
 
 const executeForwardedEmailActivity = (

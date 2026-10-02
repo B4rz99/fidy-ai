@@ -1,4 +1,4 @@
-import { type CatalogOperation } from "@fidy/server/canonical-runtime";
+import { type CatalogOperation } from "~/shell/canonical-catalog/contract";
 import { type AuthorizedPAT, type PATAuthorizationDecision, type PATRequest } from "./contract";
 import { authorizeCanonicalPAT as authorize } from "./internal/pat-authorization";
 import {

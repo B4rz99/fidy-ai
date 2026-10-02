@@ -1,4 +1,5 @@
-import { type CatalogOperation, operationCatalog } from "@fidy/server/canonical-runtime";
+import { type CatalogOperation } from "~/shell/canonical-catalog/contract";
+import { operationCatalog } from "~/shell/api";
 import { Option } from "effect";
 import { matchesRoute } from "./route-match";
 

@@ -1,8 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { Schema } from "effect";
-import { assertCanonicalMutationRegistry } from "~/shell/_shared/canonical-mutation-registry";
 import { operationCatalog } from "~/shell/api";
-import { getAtomicBatchCallSchema } from "./operations";
+import { getAtomicBatchCallSchema } from "./contract";
 
 it("keeps mailbox-proof replacement out of atomic batches", () => {
   expect(
@@ -58,24 +57,4 @@ it("keeps statement submission inside the derived atomic-batch child union", () 
       },
     })._tag
   ).toBe("Some");
-});
-
-it("guards reusable dispatch completeness against the reflected ordinary mutation set", () => {
-  const ordinary = {
-    operations: operationCatalog.operations.filter(
-      ({ id }) => id !== "operations.executeAtomicBatch"
-    ),
-    byId: new Map(
-      operationCatalog.operations
-        .filter(({ id }) => id !== "operations.executeAtomicBatch")
-        .map((operation) => [operation.id, operation])
-    ),
-  };
-  expect(() => assertCanonicalMutationRegistry(ordinary)).not.toThrow();
-  expect(() =>
-    assertCanonicalMutationRegistry({
-      operations: ordinary.operations.filter(({ id }) => id !== "identity.updateUserPreferences"),
-      byId: ordinary.byId,
-    })
-  ).toThrow("Canonical mutation registry drift");
 });

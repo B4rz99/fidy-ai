@@ -8,7 +8,7 @@ import type {
   KeywordRuleLimitReached,
   KeywordRuleNotFound,
 } from "~/core/categories/contract";
-import type { SuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
+import type { SuggestedOperationCaller } from "~/shell/canonical-operations/operations";
 import type { NotFound, Unavailable, ValidationFailed } from "~/shell/public-http/contract";
 import { toApiFailure as projectFailure } from "~/shell/categories/internal/errors";
 import {

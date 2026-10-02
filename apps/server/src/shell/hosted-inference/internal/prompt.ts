@@ -16,7 +16,7 @@ import type {
   HostedTextContext,
 } from "~/shell/hosted-inference/contract";
 import type { HostedPromptProjection } from "./adapter";
-import { encodeHostedOperationWireName } from "~/shell/_shared/hosted-operation-bindings";
+import { encodeHostedOperationWireName } from "~/shell/canonical-operations/operations";
 
 /** Builds the provider system framing: assistant identity, explicit User context, and categories. @internal */
 export const systemPromptInternal = ({

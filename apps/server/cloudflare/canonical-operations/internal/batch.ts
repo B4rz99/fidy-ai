@@ -1,17 +1,18 @@
+import type { HostedCommitFence } from "../../agent/contract";
 import {
   type AtomicBatchCall,
   AtomicBatchRejected,
-  CanonicalOperationId,
-  type CatalogOperation,
-  type ErrorCode,
   decodeAtomicBatchResult,
   getAtomicBatchCallSchema,
-  grantsRequiredTier,
-  operationCatalog,
-  patScopeCapability,
-} from "@fidy/server/canonical-runtime";
+} from "~/shell/operations/contract";
+import { CanonicalOperationId } from "~/core/canonical-operations/contract";
+import { type CatalogOperation } from "~/shell/canonical-catalog/contract";
+import { type ErrorCode } from "~/shell/public-http/contract";
+import { grantsRequiredTier } from "~/shell/canonical-operations/operations";
+import { operationCatalog } from "~/shell/api";
+import { patScopeCapability } from "~/shell/canonical-policy/contract";
 import { Effect, Option, Schema } from "effect";
-import { maximumSubmissionInputBytes } from "../ingestion/contract";
+import { maximumSubmissionInputBytes } from "../../ingestion/contract";
 
 import type { HostedInference } from "@fidy/server/hosted-inference";
 import {
@@ -28,22 +29,18 @@ import {
   rejectInvalidBatchInput,
   transactionNoStore,
   transactionUnavailable,
-} from "../canonical-work/operations";
+} from "../../canonical-work/operations";
 import {
   type CanonicalMutationUnitExecution,
-  type HostedCommitFence,
   committedMutationPayload,
   executeCanonicalMutationUnit,
-} from "./canonical-mutation-unit";
-import {
-  type CanonicalMutationAdapter,
-  canonicalMutationAdapter,
-} from "./canonical-mutation-registry";
+} from "./mutation-unit";
+import { type CanonicalMutationAdapter, canonicalMutationAdapter } from "./mutation-registry";
 import type {
   CanonicalMutationPreparation,
   CanonicalMutationRefusal,
   PreparedCanonicalMutation,
-} from "./mutation-types";
+} from "../contract";
 /** One raw child as the published batch mutation carries it; the catalog call schema decodes it. */
 type CanonicalBatchCall = unknown;
 

@@ -4,7 +4,7 @@ import {
   checkpointSuggestedOperations,
   freePatCaller,
   suggestOperation,
-} from "~/shell/_shared/suggested-operations";
+} from "~/shell/canonical-operations/operations";
 
 /** An authorized, typed canonical continuation for the next bounded Transaction history page. */
 export const nextTransactionPage = ({

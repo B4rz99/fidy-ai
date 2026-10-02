@@ -1,3 +1,4 @@
+import type { TransactionOutcome } from "../contract";
 import { dailyAuditMessage } from "../../canonical-work/contract";
 import { Effect, Option, Schema } from "effect";
 import type { TransactionPair, TransactionPresentation } from "@fidy/server/transactions-contract";
@@ -6,9 +7,7 @@ import {
   type CanonicalMutationRefusal,
   type CommittedMutationValue,
   type GuardRefusalWork,
-  type TransactionOutcome,
-  refusedPreparation,
-} from "../../mutations/mutation-types";
+} from "../../canonical-operations/contract";
 import {
   type TransactionCaller,
   type TransactionMutationOperation,
@@ -20,10 +19,12 @@ import {
   recordTransactionRefusal,
   refusalFailureCode,
   refusedCredentialResponse,
+  refusedPreparation,
   refusedTransactionResponse,
   transactionUnavailable,
   unlinkedPairMessage,
 } from "../../canonical-work/operations";
+
 import { ReconciliationDecisionRow } from "./reconciliation-state";
 import {
   type StoredTransaction,
@@ -149,6 +150,34 @@ export const transactionBudgetRefusal = (): CanonicalMutationRefusal => ({
   record: () => Effect.succeed("rate_limited" as const),
   respond: () => Effect.succeed(rateLimitedTransactionResponse()),
 });
+
+/** The refusal a Transaction child reports for a trigger that belongs to its own owner. */
+export const transactionTriggerRefusal = ({
+  db,
+  subject,
+  current,
+  outcome,
+  kind,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  current: number;
+  outcome: TransactionOutcome;
+  kind: "movement" | "audit";
+}>): Option.Option<CanonicalMutationRefusal> => {
+  if (kind === "movement") {
+    return Option.some(
+      transactionRefusal({
+        db,
+        subject,
+        operation: outcome.operation,
+        refusal: transactionMovementRefusal(),
+        current,
+      })
+    );
+  }
+  return Option.some(transactionBudgetRefusal());
+};
 
 /**
  * Read the records one committed Transaction child presents, or None when the unit read back an

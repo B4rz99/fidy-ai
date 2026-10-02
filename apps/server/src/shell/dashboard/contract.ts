@@ -26,7 +26,7 @@ import { Category } from "~/core/categories/contract";
 
 import { Transaction } from "~/core/transactions/contract";
 import { NotFound, OperationResponse, ValidationFailed } from "~/shell/public-http/contract";
-import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
+import { operationPolicy, patScoped } from "~/shell/canonical-policy/contract";
 
 const SpendingChartResult = Schema.Struct({
   appliedPeriod: AppliedDashboardPeriod,

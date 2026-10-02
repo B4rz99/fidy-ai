@@ -9,7 +9,7 @@ import {
   Unavailable,
   createdStatus,
 } from "~/shell/public-http/contract";
-import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
+import { operationPolicy, patScoped } from "~/shell/canonical-policy/contract";
 /** Declared content-free failure when a Memory write would exceed aggregate capacity. */
 export class MemoryCapacityExceededApi extends Schema.Error<MemoryCapacityExceededApi>(
   "MemoryCapacityExceededApi"

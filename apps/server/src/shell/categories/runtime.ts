@@ -14,8 +14,9 @@ export {
   prepareCategoryRead,
   decodeCategoryRead,
 } from "./operations";
-export { decideOperationAccess, getOperationPolicy } from "~/shell/_shared/operation-policy";
-export type { SuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
+export { decideOperationAccess } from "~/shell/canonical-policy/operations";
+export { getOperationPolicy } from "~/shell/canonical-policy/contract";
+export type { SuggestedOperationCaller } from "~/shell/canonical-operations/operations";
 export {
   NotFound,
   ScopeMissing,

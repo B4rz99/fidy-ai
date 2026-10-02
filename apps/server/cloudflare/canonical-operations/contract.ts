@@ -1,13 +1,10 @@
+import { CanonicalOperationId } from "~/core/canonical-operations/contract";
+import { maximumAtomicBatchCalls } from "~/shell/operations/contract";
 import type { BudgetOutcome } from "../budgets/contract";
 import type { TransactionOutcome } from "../transactions/contract";
-import type { CanonicalCapability, ErrorCode } from "@fidy/server/canonical-runtime";
-import type {
-  CategoryId,
-  CategoryKeyword,
-  KeywordRule,
-  KeywordRuleId,
-} from "@fidy/server/categories";
-import type { Budget, BudgetId } from "@fidy/server/budgets-contract";
+import type { KeywordRuleOutcome } from "../categories/contract";
+import type { CanonicalCapability } from "~/core/canonical-operations/contract";
+import type { ErrorCode } from "~/shell/public-http/contract";
 import type { StatementSubmission } from "@fidy/server/ingestion-contract";
 import type { EmailForwardingAddress } from "../../src/core/ingestion/contract";
 import type { StatementPublicationOutcome } from "../ingestion/contract";
@@ -16,29 +13,8 @@ import type {
   Transaction,
   TransactionPresentation,
 } from "@fidy/server/transactions-contract";
-import type { Effect, Option, Schema } from "effect";
-import type { CanonicalRefusalDisposition, TransactionCaller } from "../canonical-work/operations";
-
-export type { BudgetOutcome } from "../budgets/contract";
-export type { TransactionOutcome } from "../transactions/contract";
-
-/**
- * One keyword-rule change's retained facts. A create or update names the rule's full payload; a
- * delete names only the rule it removes, so the correlation is a union instead of optional fields.
- */
-export type KeywordRuleOutcome =
-  | Readonly<{
-      _tag: "KeywordRule";
-      operation: "categories.createKeywordRule" | "categories.updateKeywordRule";
-      ruleId: KeywordRuleId;
-      keyword: CategoryKeyword;
-      categoryId: CategoryId;
-    }>
-  | Readonly<{
-      _tag: "KeywordRule";
-      operation: "categories.deleteKeywordRule";
-      ruleId: KeywordRuleId;
-    }>;
+import { type Effect, type Option, Schema } from "effect";
+import type { CanonicalRefusalDisposition, TransactionCaller } from "../canonical-work/contract";
 
 export type MutationTriggerKind = "movement" | "capacity" | "audit";
 
@@ -126,13 +102,9 @@ export type CommittedMutationValue =
       payload: unknown;
       encode: () => Effect.Effect<unknown, Schema.SchemaError>;
     }>
-  | Readonly<{ _tag: "Budget"; budget: Budget }>
-  | Readonly<{ _tag: "RemovedBudget"; id: BudgetId }>
   | Readonly<{ _tag: "Transaction"; transaction: Transaction }>
   | Readonly<{ _tag: "EffectiveTransaction"; transaction: TransactionPresentation }>
   | Readonly<{ _tag: "RestoredPair"; pair: RestoredTransactionPair }>
-  | Readonly<{ _tag: "KeywordRule"; rule: KeywordRule }>
-  | Readonly<{ _tag: "RemovedKeywordRule"; id: KeywordRuleId }>
   | Readonly<{ _tag: "StatementSubmission"; submission: StatementSubmission }>
   | Readonly<{ _tag: "ForwardingAddress"; address: EmailForwardingAddress }>;
 
@@ -161,23 +133,47 @@ export type CanonicalMutationPreparation =
   | Readonly<{ _tag: "Unavailable" }>
   | Readonly<{ _tag: "Failed" }>;
 
-/** Build one owner refusal as the preparation every executor maps to its canonical response. */
-export const refusedPreparation = (
-  refusal: CanonicalMutationRefusal
-): CanonicalMutationPreparation => ({
-  _tag: "Refused",
-  refusal,
-});
+/**
+ * The bounded raw child list a Batch work payload carries. Each entry stays `Unknown` here because the
+ * batch adapter decodes it against the published catalog call union, where a malformed child can
+ * still be attributed and audited as the child it named.
+ */
+export const BatchCalls = Schema.NonEmptyArray(Schema.Unknown).check(
+  Schema.isMaxLength(maximumAtomicBatchCalls)
+);
+export type BatchCalls = typeof BatchCalls.Type;
+const Batch = { calls: BatchCalls } as const;
+/**
+ * One canonical call an individual work payload carries: the operation id the catalog publishes and the
+ * raw canonical input its owner adapter decodes. The operation id alone selects the owner adapter,
+ * so a new composable mutation joins this dispatcher without editing it.
+ */
+const Call = {
+  operation: CanonicalOperationId,
+  input: Schema.Unknown,
+} as const;
 
-/** Build the closed preparation failure for a dependency defect the executor classifies. */
-export const failedPreparation = (): CanonicalMutationPreparation => ({ _tag: "Failed" });
+/**
+ * Every piece of composable canonical work one User coordinator executes. A Call carries one
+ * catalog mutation's canonical input; a Batch carries the bounded raw child list the batch adapter
+ * decodes per child. Each owner adapter rechecks live authority and domain state before the shared
+ * D1 unit commits anything.
+ */
+export const CanonicalWork = Schema.Union([
+  Schema.TaggedStruct("Call", Call),
+  Schema.TaggedStruct("Batch", Batch),
+]);
+export type CanonicalWork = typeof CanonicalWork.Type;
 
-/** Build the decided refusal for a credential the owner proved dead or scopeless. */
-export const credentialRefusedPreparation = (): CanonicalMutationPreparation => ({
-  _tag: "CredentialRefused",
-});
+/** The atomic batch request envelope: the bounded raw child list the adapter decodes per child. */
+export const BatchInput = Schema.Struct(Batch);
+export type BatchInput = typeof BatchInput.Type;
 
-/** Build the decided answer for an owner read that cannot decide this mutation. */
-export const unavailablePreparation = (): CanonicalMutationPreparation => ({
-  _tag: "Unavailable",
-});
+/** One owner preparation receives decoded catalog input and the caller's exact live authority. */
+export type CanonicalPreparationWork = Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  current: number;
+  bucket: Option.Option<R2Bucket>;
+  input: unknown;
+}>;

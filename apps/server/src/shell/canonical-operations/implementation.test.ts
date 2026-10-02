@@ -4,7 +4,7 @@ import { expectTypeOf } from "vitest";
 import type {
   CanonicalImplementationRequirements,
   CanonicalOperationImplementations,
-} from "./canonical-implementation";
+} from "~/shell/canonical-operations/internal/implementation";
 
 type DeclaredImplementation = CanonicalOperationImplementations["transactions.getTransaction"];
 type UndeclaredSuccess = Readonly<{ readonly undeclared: true }>;

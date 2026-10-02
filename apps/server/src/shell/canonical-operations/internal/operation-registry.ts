@@ -1,12 +1,12 @@
+import type { CanonicalInput, CanonicalSuccess } from "~/shell/canonical-operations/contract";
 import { Effect, Option } from "effect";
 import type { OperationId } from "~/shell/api";
 import type {
   CanonicalImplementationCaller,
   CanonicalImplementationRequirements,
   CanonicalOperationImplementations,
-} from "./canonical-implementation";
-import type { CanonicalInput } from "./canonical-input";
-import type { CanonicalSuccess } from "./canonical-success";
+} from "./implementation";
+
 import {
   getSubscriptionStatus,
   listSubscriptionOffersResponse,
@@ -14,7 +14,7 @@ import {
 import { listCategoriesResponse } from "~/shell/categories/operations";
 import { getCurrentUser } from "~/shell/identity/operations";
 import { listPATsResponse } from "~/shell/tokens/operations";
-import { canonicalMutationImplementations } from "./canonical-mutation-registry";
+import { canonicalMutationImplementations } from "./mutation-registry";
 
 /**
  * The Cloudflare Worker owns canonical execution. This package retains the reflected operation
@@ -53,7 +53,7 @@ export const canonicalOperationImplementations = {
   "operations.executeAtomicBatch": unavailableOperation,
 } as const satisfies CanonicalOperationImplementations;
 
-export type { CanonicalImplementationCaller } from "./canonical-implementation";
+export type { CanonicalImplementationCaller } from "./implementation";
 
 type ErasedCanonicalImplementation = (
   input: never,

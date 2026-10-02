@@ -1,16 +1,25 @@
+import {
+  type CatalogOperation,
+  type OperationCatalog,
+  getBoundOperationCatalog,
+} from "~/shell/canonical-catalog/contract";
 import { Effect, Function, type Option, Schema } from "effect";
-import type { CanonicalCapability } from "~/core/canonical-operations/contract";
+import type {
+  CanonicalCapability,
+  CanonicalOperationId,
+} from "~/core/canonical-operations/contract";
 import type { AccessTier } from "~/core/access-tier/contract";
 import { type OperationId, operationCatalog } from "~/shell/api";
-import { type CanonicalCaller, type ResolvedCaller, toAccessCaller } from "./authz";
+import { type CanonicalCaller, type ResolvedCaller } from "~/shell/authorization/contract";
+import { toAccessCaller } from "~/shell/authorization/operations";
 import type { UserId } from "~/core/identity/reference";
-import type { CanonicalInput } from "./canonical-input";
+import type { CanonicalInput } from "./contract";
 import {
   type OperationAccessCaller,
   type OperationPolicyValue,
-  decideOperationAccess,
-} from "./operation-policy";
-import { type PartialInput } from "./partial-input";
+} from "~/shell/canonical-policy/contract";
+import { decideOperationAccess, isHostedVisible } from "~/shell/canonical-policy/operations";
+import { type PartialInput } from "~/shell/_shared/partial-input";
 import {
   NextOperations,
   SuggestedOperation,
@@ -123,3 +132,59 @@ export const checkpointSuggestedOperations = ({
   Schema.encodeUnknownSync(NextOperations, validationOptions)(available);
   return available;
 };
+
+/**
+ * Return the catalog-derived JSON input codec for one named canonical operation. The id selects
+ * its decoded input type from the assembled API; absence means the catalog was assembled wrongly.
+ * Generic consumers continue to use the erased `CatalogOperation.input` view.
+ */
+export const getCanonicalOperationInput = <Id extends OperationId>(
+  id: Id
+): Schema.Codec<CanonicalInput<Id>, Schema.Json> => {
+  const operation = getBoundOperationCatalog().byId.get(id);
+  if (operation === undefined) throw new Error(`Unknown canonical operation: ${id}`);
+  return Schema.make<Schema.Codec<CanonicalInput<Id>, Schema.Json>>(operation.input.ast);
+};
+
+const maximumHostedOperationWireNameLength = 64;
+
+/** A provider-safe toolkit wire name mechanically derived from one canonical operation id. */
+export const HostedOperationWireName = Schema.String.check(
+  Schema.isPattern(/^[A-Za-z0-9_-]+$/),
+  Schema.isMaxLength(maximumHostedOperationWireNameLength)
+).pipe(Schema.brand("HostedOperationWireName"));
+export type HostedOperationWireName = typeof HostedOperationWireName.Type;
+
+/** One canonical operation admitted to a hosted provider toolkit under verified WhatsApp authority. */
+export type HostedOperationBinding = Readonly<{
+  readonly operation: CatalogOperation;
+  readonly wireName: HostedOperationWireName;
+}>;
+
+/** Encodes a canonical operation id as one provider-safe toolkit wire name. */
+export const encodeHostedOperationWireName = (
+  operation: CanonicalOperationId
+): HostedOperationWireName => HostedOperationWireName.make(operation.replaceAll(".", "__"));
+
+/** Provider-facing guidance for the confirmation behavior one operation policy requires. */
+export const hostedConfirmationGuidance = (
+  confirmation: CatalogOperation["policy"]["agentConfirmation"]
+): string =>
+  confirmation === "not-required"
+    ? " This operation does not require User confirmation; call it directly without asking the User to confirm."
+    : " The host manages exact confirmation for this operation; call the tool rather than asking the User for informal confirmation.";
+
+/** Complete provider-facing description including the required confirmation behavior. */
+export const hostedToolDescription = (operation: CatalogOperation): string =>
+  operation.description + hostedConfirmationGuidance(operation.policy.agentConfirmation);
+
+/** Every hosted-visible operation binding, derived once from one assembled canonical catalog. */
+export const hostedOperationBindings = (
+  catalog: OperationCatalog
+): ReadonlyArray<HostedOperationBinding> =>
+  catalog.operations
+    .filter((operation) => isHostedVisible(operation.policy.access, "verified-whatsapp"))
+    .map((operation) => ({
+      operation,
+      wireName: encodeHostedOperationWireName(operation.id),
+    }));

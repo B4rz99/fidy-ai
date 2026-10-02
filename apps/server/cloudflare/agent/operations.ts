@@ -1,3 +1,4 @@
+import type { HostedCommitFence } from "./contract";
 import type { UserId } from "@fidy/server/agent-runtime";
 import type { OwnedStatement } from "../../src/shell/_shared/owned-statement";
 import {
@@ -21,3 +22,31 @@ export const hostedChannelTurnObservation = (): string => channelTurnObservation
 /** Compose this User's lifecycle as channel_turns inside the caller's existing atomic statement; preparation grants no Turn authority. */
 export const prepareHostedChannelTurn: typeof prepareChannelTurn = (input) =>
   prepareChannelTurn(input);
+
+/**
+ * Bind one canonical mutation commit to the exact pending Turn and tool call of its stable User.
+ * The caller must include this statement and every mutation in the same uninterruptible D1 batch.
+ * Recovery winning first, a foreign Turn, or a repeated call aborts that entire batch; a successful
+ * commit leaves the owner's durable evidence used to recover a reply lost after mutation.
+ */
+export const prepareHostedMutationCommit = ({
+  db,
+  userId,
+  turnId,
+  toolCallId,
+  current,
+}: HostedCommitFence &
+  Readonly<{
+    db: D1Database;
+    /** The established stable User carried by the caller's resolved authority. */
+    userId: string;
+    /** One Worker-owned decision instant, in UTC epoch milliseconds. */
+    current: number;
+  }>): D1PreparedStatement =>
+  db
+    .prepare(`INSERT INTO hosted_mutation_commits
+              (turn_id, tool_call_id, user_id, committed_at_ms, valid)
+              VALUES (?, ?, ?, ?, CASE WHEN EXISTS (
+                SELECT 1 FROM hosted_turns WHERE id = ? AND user_id = ? AND status = 'pending'
+              ) THEN 1 ELSE 0 END)`)
+    .bind(turnId, toolCallId, userId, current, turnId, userId);

@@ -1,3 +1,4 @@
+import type { TransactionOutcome } from "../contract";
 import {
   Currency,
   Direction,
@@ -20,6 +21,8 @@ import {
   boundaryFailure,
   callerAuthority,
   callerScope,
+  credentialRefusedPreparation,
+  failedPreparation,
   isPATCaller,
   liveTransactionAuthority,
   maximumTransactionInputBytes,
@@ -29,12 +32,8 @@ import {
   unlinkedPairMessage,
 } from "../../canonical-work/operations";
 import { ReconciliationDecisionRow } from "./reconciliation-state";
-import {
-  type CanonicalMutationPreparation,
-  type TransactionOutcome,
-  credentialRefusedPreparation,
-  failedPreparation,
-} from "../../mutations/mutation-types";
+import { type CanonicalMutationPreparation } from "../../canonical-operations/contract";
+
 import { refusedTransactionMutation, transactionGuardRefusal } from "./transaction-outcome";
 
 const Input = Schema.toCodecJson(TransactionPairInput);

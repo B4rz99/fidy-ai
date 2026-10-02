@@ -21,7 +21,8 @@ import {
   knownUnsupportedStatementBytes,
   statementSourceFormat,
 } from "@fidy/server/ingestion-operations";
-import { CanonicalOperationId, type ErrorCode } from "@fidy/server/canonical-runtime";
+import { CanonicalOperationId } from "~/core/canonical-operations/contract";
+import { type ErrorCode } from "~/shell/public-http/contract";
 import {
   prepareAuditQueryCall,
   prepareAuthorizedAuditCall,

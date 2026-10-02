@@ -1,7 +1,9 @@
+import { prepareHostedMutationCommit } from "./operations";
 import {
   CanonicalToolOutcome,
   DisclosureSnapshot,
   HostedAgentSessionId,
+  ToolCallId,
   TranscriptText,
   TranscriptTurnId,
   UserId,
@@ -340,6 +342,76 @@ const setup = (seedLegacyTurn = false): Promise<D1Database> =>
       return db;
     })
   );
+
+it("binds the prepared mutation commit to one pending User Turn and rolls back foreign or replayed work", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const caller = yield* Effect.tryPromise(() => subject(0));
+      const current = now();
+      const snapshot = yield* readHostedSnapshot({ db, subject: caller, now: current });
+      if (Option.isNone(snapshot)) return yield* Effect.die("missing fixture authority");
+      const turnId = TranscriptTurnId.make(newId());
+      const admitted = yield* admitHostedTurn({
+        db,
+        channel: { _tag: "Browser", subject: caller },
+        selection: selectHostedSession({
+          snapshot: snapshot.value,
+          userId: UserId.make(users[0]),
+          now: current,
+        }),
+        text: TranscriptText.make("Una operación confirmada"),
+        now: current,
+        id: turnId,
+      });
+      expect(admitted).toEqual(Option.some(turnId));
+      yield* Effect.tryPromise(() =>
+        db.prepare("CREATE TABLE prepared_commit_probe (id TEXT PRIMARY KEY)").run()
+      );
+      const commit = (
+        userId: string,
+        call: string,
+        marker: string
+      ): Effect.Effect<void, Cause.UnknownError> =>
+        Effect.tryPromise(() =>
+          db.batch([
+            db.prepare("INSERT INTO prepared_commit_probe (id) VALUES (?)").bind(marker),
+            prepareHostedMutationCommit({
+              db,
+              userId,
+              turnId,
+              toolCallId: ToolCallId.make(call),
+              current,
+            }),
+          ])
+        ).pipe(Effect.asVoid);
+      expect((yield* Effect.exit(commit(users[1], "call-1", "foreign")))._tag).toBe("Failure");
+      yield* commit(users[0], "call-1", "accepted");
+      expect((yield* Effect.exit(commit(users[0], "call-1", "replayed")))._tag).toBe("Failure");
+      const active = yield* readHostedSnapshot({ db, subject: caller, now: current });
+      if (Option.isNone(active) || Option.isNone(active.value.pending)) {
+        return yield* Effect.die("missing admitted Turn");
+      }
+      yield* recoverHostedTurn({
+        db,
+        userId: UserId.make(users[0]),
+        turn: active.value.pending.value,
+        now: current + 135_001,
+      });
+      expect((yield* Effect.exit(commit(users[0], "call-2", "terminal")))._tag).toBe("Failure");
+      const writes = yield* Effect.tryPromise(() =>
+        db.prepare("SELECT id FROM prepared_commit_probe").all()
+      );
+      expect(writes.results).toEqual([{ id: "accepted" }]);
+      const commits = yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT user_id, tool_call_id FROM hosted_mutation_commits WHERE turn_id = ?")
+          .bind(turnId)
+          .all()
+      );
+      expect(commits.results).toEqual([{ user_id: users[0], tool_call_id: "call-1" }]);
+    })
+  ));
 
 it("migrates existing hosted evidence and can persist DeliveryUnconfirmed", () =>
   Effect.runPromise(

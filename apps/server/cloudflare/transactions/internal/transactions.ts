@@ -1,3 +1,4 @@
+import type { TransactionOutcome } from "../contract";
 import { UserId } from "@fidy/server/identity-reference";
 import { readUserContext } from "../../identity/user-context/operations";
 import type { UserContext } from "@fidy/server/identity-contract";
@@ -18,20 +19,20 @@ import {
   boundaryFailure,
   callerAuthority,
   callerScope,
+  failedPreparation,
   isPATCaller,
   maximumTransactionInputBytes,
   transactionNow as now,
   transactionId,
   transactionUnavailable,
   unauthenticatedTransaction,
+  unavailablePreparation,
 } from "../../canonical-work/operations";
 import {
   type CanonicalMutationPreparation,
   type PreparedCanonicalMutation,
-  type TransactionOutcome,
-  failedPreparation,
-  unavailablePreparation,
-} from "../../mutations/mutation-types";
+} from "../../canonical-operations/contract";
+
 import { refusedTransactionMutation, transactionGuardRefusal } from "./transaction-outcome";
 
 const Input = Schema.toCodecJson(CreateTransactionInput);

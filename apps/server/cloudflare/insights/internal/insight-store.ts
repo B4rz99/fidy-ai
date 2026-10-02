@@ -21,7 +21,9 @@ import {
   auditLimitRefusal,
   callerAuthority,
   callerScope,
+  failedPreparation,
   isPATCaller,
+  refusedPreparation,
   transactionFailure,
   transactionId,
   transactionNow,
@@ -35,9 +37,7 @@ import {
   type CommittedMutationValue,
   type GuardRefusalWork,
   type OwnerOutcome,
-  failedPreparation,
-  refusedPreparation,
-} from "../../mutations/mutation-types";
+} from "../../canonical-operations/contract";
 
 const maximumPendingInsights = 64;
 const HTTP_NOT_FOUND = 404;

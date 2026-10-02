@@ -1,4 +1,5 @@
 import { type MemoryOperationId, memoryOperationIds } from "@fidy/server/memory-api";
+import { BatchInput, type CanonicalWork } from "./canonical-operations/contract";
 import { UserId } from "@fidy/server/agent-runtime";
 import { makeAuditRetention } from "@fidy/server/audit-runtime";
 import { EmailAddress } from "@fidy/server/client";

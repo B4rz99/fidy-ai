@@ -25,6 +25,7 @@ import {
   transactionBudgetRefusal as ownerTransactionBudgetRefusal,
   transactionMovementRefusal as ownerTransactionMovementRefusal,
   transactionRefusal as ownerTransactionRefusal,
+  transactionTriggerRefusal as ownerTransactionTriggerRefusal,
 } from "./internal/transaction-outcome";
 import {
   prepareNotificationEmailCapture as ownerPrepareNotificationEmailCapture,
@@ -100,6 +101,10 @@ export const findTransactionValue: typeof ownerFindTransactionValue = (...args) 
  */
 export const transactionBudgetRefusal: typeof ownerTransactionBudgetRefusal = (...args) =>
   ownerTransactionBudgetRefusal(...args);
+
+/** Decide a proved Transaction trigger refusal under the prepared child's exact caller authority. */
+export const transactionTriggerRefusal: typeof ownerTransactionTriggerRefusal = (input) =>
+  ownerTransactionTriggerRefusal(input);
 
 /** The refusal a capture child reports when the daily manual-movement budget aborts its unit. */
 export const transactionMovementRefusal: typeof ownerTransactionMovementRefusal = (...args) =>

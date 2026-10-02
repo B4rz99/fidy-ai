@@ -1,3 +1,4 @@
+import type { KeywordRuleOutcome } from "../contract";
 import { keywordRuleFromRows, keywordRuleQuery } from "./keyword-rules";
 import { Effect, Option, Schema } from "effect";
 import {
@@ -35,9 +36,8 @@ import type {
   CanonicalMutationRefusal,
   CommittedMutationValue,
   GuardRefusalWork,
-  KeywordRuleOutcome,
   OwnerOutcome,
-} from "../../mutations/mutation-types";
+} from "../../canonical-operations/contract";
 import {
   type TransactionCaller,
   dailyAuditMessage,

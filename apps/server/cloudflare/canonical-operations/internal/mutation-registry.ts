@@ -1,17 +1,25 @@
+import type { CanonicalPreparationWork } from "../contract";
 import { Effect, Option, Schema } from "effect";
 import {
   ApplyDashboardEditCanonicalInput,
-  CanonicalOperationId,
   GetDashboardCanonicalInput,
   GetDashboardViewCanonicalInput,
-  getAtomicBatchChildIds,
-  getCanonicalOperationInput,
-} from "@fidy/server/canonical-runtime";
+} from "~/shell/dashboard/contract";
+import { CanonicalOperationId } from "~/core/canonical-operations/contract";
+import { getAtomicBatchChildIds } from "~/shell/operations/contract";
+import { getCanonicalOperationInput } from "~/shell/canonical-operations/operations";
 import { TransactionId } from "@fidy/server/transactions-contract";
 import type { MemoryOperationId } from "@fidy/server/memory-api";
 import type { HostedInference } from "@fidy/server/hosted-inference";
 import { DeliveryEvidenceInput, InsightEventId } from "@fidy/server/insights-contract";
-import { insightRefusal, prepareInsightTransition } from "../insights/operations";
+import { insightRefusal, prepareInsightTransition } from "../../insights/operations";
+import { dashboardRefusal, prepareDashboard, presentDashboard } from "../../dashboard/operations";
+import {
+  budgetRefusal,
+  prepareCreateBudget,
+  prepareDeleteBudget,
+  prepareUpdateBudget,
+} from "../../budgets/operations";
 import {
   invalidForwardingAddress,
   invalidStatementSubmission,
@@ -19,61 +27,38 @@ import {
   prepareStatementSubmission,
   presentForwardingAddress,
   presentStatementSubmission,
-} from "../ingestion/operations";
-import { dashboardRefusal, prepareDashboard, presentDashboard } from "../dashboard/operations";
-import {
-  budgetRefusal,
-  prepareCreateBudget,
-  prepareDeleteBudget,
-  prepareUpdateBudget,
-} from "../budgets/operations";
+} from "../../ingestion/operations";
 import {
   prepareCapture,
   prepareCorrection,
   prepareLink,
   prepareUnlink,
   transactionRefusal,
-} from "../transactions/operations";
+} from "../../transactions/operations";
 import {
-  type TransactionCaller,
   type TransactionMutationOperation,
+  failedPreparation,
   missingTransactionMessage,
   transactionUnavailable,
-} from "../canonical-work/operations";
+} from "../../canonical-work/operations";
 import {
   keywordRuleInvalidInput,
   prepareCreateKeywordRule,
   prepareDeleteKeywordRule,
   prepareUpdateKeywordRule,
-} from "../categories/operations";
+} from "../../categories/operations";
 import {
   invalidMemoryInput,
   prepareForget,
   prepareRemember,
   prepareRevise,
-} from "../memory/operations";
-import { committedJsonResponse } from "./canonical-mutation-unit";
+} from "../../memory/operations";
+import { committedJsonResponse } from "./mutation-unit";
 import {
   type CanonicalMutationPreparation,
   type CanonicalMutationRefusal,
   type CommittedMutationValue,
-  failedPreparation,
-} from "./mutation-types";
-/** One canonical child as the batch carries it, plus the caller the owner prepares it under. */
-type CanonicalMutationWork = Readonly<{
-  db: D1Database;
-  subject: TransactionCaller;
-  current: number;
-  bucket: Option.Option<R2Bucket>;
-  /**
-   * The attempted input the catalog call schema already validated, which `prepare` decodes once
-   * more through the owner's own codec only to recover that codec's typed payload: a failure
-   * there is schema drift and answers `failedPreparation()`, never a caller validation failure.
-   * `invalidRefusal` receives the raw attempted input instead, so an owner that classifies
-   * undecoded input answers as its individual entry point does.
-   */
-  input: unknown;
-}>;
+} from "../contract";
 
 /**
  * One owner's canonical mutation adapter: it decides a child without committing, presents a
@@ -82,10 +67,10 @@ type CanonicalMutationWork = Readonly<{
  */
 export type CanonicalMutationAdapter = Readonly<{
   prepare: (
-    work: CanonicalMutationWork
+    work: CanonicalPreparationWork
   ) => Effect.Effect<CanonicalMutationPreparation, never, HostedInference>;
   present: (value: CommittedMutationValue) => Effect.Effect<Response>;
-  invalidRefusal: (work: CanonicalMutationWork) => CanonicalMutationRefusal;
+  invalidRefusal: (work: CanonicalPreparationWork) => CanonicalMutationRefusal;
 }>;
 
 const HTTP_OK = 200;
@@ -100,7 +85,7 @@ const present =
 /** The owner's validation refusal for a child whose published call schema did not decode. */
 const transactionInvalidRefusal =
   (operation: TransactionMutationOperation) =>
-  (work: CanonicalMutationWork): CanonicalMutationRefusal =>
+  (work: CanonicalPreparationWork): CanonicalMutationRefusal =>
     transactionRefusal({
       db: work.db,
       subject: work.subject,
@@ -114,7 +99,7 @@ const transactionInvalidRefusal =
  * exactly as its own prepare seam does. A caller-supplied input that carries no textual id at all
  * stays the ordinary validation refusal.
  */
-const correctionInvalidRefusal = (work: CanonicalMutationWork): CanonicalMutationRefusal => {
+const correctionInvalidRefusal = (work: CanonicalPreparationWork): CanonicalMutationRefusal => {
   const unstable = Option.flatMap(
     Schema.decodeUnknownOption(Schema.Struct({ params: Schema.Struct({ id: Schema.String }) }))(
       work.input
@@ -136,7 +121,7 @@ const correctionInvalidRefusal = (work: CanonicalMutationWork): CanonicalMutatio
 };
 
 /** The keyword-rule owner records no refusal Audit and renders the declared validation failure. */
-const keywordRuleInvalidRefusal = (_work: CanonicalMutationWork): CanonicalMutationRefusal => ({
+const keywordRuleInvalidRefusal = (_work: CanonicalPreparationWork): CanonicalMutationRefusal => ({
   code: "validation_failed",
   message: invalidChildMessage,
   record: () => Effect.succeed("recorded" as const),
@@ -146,7 +131,7 @@ const keywordRuleInvalidRefusal = (_work: CanonicalMutationWork): CanonicalMutat
 /** The Memory owner records its own validation refusal, like the individual entry point. */
 const memoryInvalidRefusal =
   (operation: MemoryOperationId) =>
-  (work: CanonicalMutationWork): CanonicalMutationRefusal =>
+  (work: CanonicalPreparationWork): CanonicalMutationRefusal =>
     invalidMemoryInput({
       db: work.db,
       subject: work.subject,
@@ -160,7 +145,7 @@ const decodeAndPrepare =
     schema: Schema.Codec<Decoded, unknown, never, never>,
     decide: (
       decoded: Decoded,
-      work: CanonicalMutationWork
+      work: CanonicalPreparationWork
     ) => Effect.Effect<CanonicalMutationPreparation, never, HostedInference>
   ): CanonicalMutationAdapter["prepare"] =>
   (work) =>
@@ -234,7 +219,7 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
             value._tag === "Owner"
               ? presentDashboard(value)
               : Effect.succeed(transactionUnavailable()),
-          invalidRefusal: (work: CanonicalMutationWork) =>
+          invalidRefusal: (work: CanonicalPreparationWork) =>
             dashboardRefusal({ work, operation, code: "validation_failed" }),
         },
       ] as const

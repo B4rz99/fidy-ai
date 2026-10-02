@@ -16,7 +16,7 @@ import {
   AtomicBatchEligible,
   freshWebSessionOnly,
   operationPolicy,
-} from "~/shell/_shared/operation-policy";
+} from "~/shell/canonical-policy/contract";
 import { OperationResponse } from "~/shell/public-http/contract";
 
 /** Canonical replacement paths shared by the declared operations and the edge policy. */

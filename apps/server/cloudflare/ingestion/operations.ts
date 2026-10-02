@@ -25,7 +25,10 @@ import {
   statementDailyBudgetRefusal as budgetRefusal,
   statementMutationAdapter,
 } from "./internal/statement-mutation";
-import { forwardingAddressMutationAdapter } from "./internal/forwarding-address-mutation";
+import {
+  forwardingAddressMutationAdapter,
+  forwardingAuditLimitRefusal as forwardingAuditRefusal,
+} from "./internal/forwarding-address-mutation";
 
 /** Stage bounded bytes under a live User session; the result grants no extraction authority. */
 export const uploadStagedStatement: typeof uploadStatement = (input) => uploadStatement(input);
@@ -65,6 +68,9 @@ export const invalidStatementSubmission: typeof statementMutationAdapter.invalid
   statementMutationAdapter.invalidRefusal(work);
 /** Classify only the shared budget refusal; no storage evidence leaves the owner. */
 export const statementDailyBudgetRefusal: typeof budgetRefusal = (phase) => budgetRefusal(phase);
+/** Decide the forwarding response when its commit is refused by the shared Audit budget. */
+export const forwardingAuditLimitRefusal: typeof forwardingAuditRefusal = () =>
+  forwardingAuditRefusal();
 /** Prepare idempotent forwarding-address access and its Audit for the caller's D1 unit. */
 export const prepareForwardingAddress: typeof forwardingAddressMutationAdapter.prepare = (work) =>
   forwardingAddressMutationAdapter.prepare(work);

@@ -18,7 +18,6 @@ import {
   defectiveBatchDb,
   seedTransaction,
 } from "./statement-batch.test-fixture";
-import { oversizedChildMessage } from "../mutations/canonical-mutation-batch";
 import { hostedTurnTestMigrations } from "../agent/hosted-turn-test-migrations";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import { statementConflictMessage } from "./internal/statement-staging";
@@ -3196,7 +3195,8 @@ it(
         expect(rejection.error).toMatchObject({
           code: "validation_failed",
           failedCallIndex: 0,
-          message: oversizedChildMessage,
+          message:
+            "This child's input exceeds the size an individual call of this operation accepts.",
           operation: "transactions.createTransaction",
         });
         yield* expectCanonicalState(runtime.db, {

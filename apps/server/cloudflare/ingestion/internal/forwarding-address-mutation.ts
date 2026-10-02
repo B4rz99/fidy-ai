@@ -5,17 +5,26 @@ import { dailyAuditExhausted, refusedByAuditBudget } from "@fidy/server/audit";
 import { forwardingAddressAudit, forwardingAddressGuardAudit } from "./forwarding-address";
 import {
   callerScope,
+  failedPreparation,
+  refusedPreparation,
   transactionFailure,
   transactionNoStore,
   transactionUnavailable,
 } from "../../canonical-work/operations";
-import type { CanonicalMutationAdapter } from "../../mutations/canonical-mutation-registry";
 import {
   type CanonicalMutationRefusal,
+  type CanonicalPreparationWork,
+  type CommittedMutationValue,
   type GuardRefusalWork,
-  failedPreparation,
-  refusedPreparation,
-} from "../../mutations/mutation-types";
+} from "../../canonical-operations/contract";
+
+/** Keep a commit-time forwarding Audit refusal on its existing unavailable response path. */
+export const forwardingAuditLimitRefusal = (): CanonicalMutationRefusal => ({
+  code: "rate_limited",
+  message: "Daily canonical work budget exhausted.",
+  record: () => Effect.succeed("rate_limited" as const),
+  respond: () => Effect.succeed(transactionUnavailable()),
+});
 
 const limited = (): CanonicalMutationRefusal => ({
   code: "rate_limited",
@@ -63,9 +72,7 @@ const forwardingAddressGuardRefusal = ({
   });
 
 /** Prepare the issued address without a nested D1 unit, for individual calls and atomic batches. */
-export const prepareForwardingAddress = Effect.fn(function* (
-  work: Parameters<CanonicalMutationAdapter["prepare"]>[0]
-) {
+export const prepareForwardingAddress = Effect.fn(function* (work: CanonicalPreparationWork) {
   const existing = yield* Effect.tryPromise(() =>
     prepareConsentAction({
       db: work.db,
@@ -110,16 +117,16 @@ export const prepareForwardingAddress = Effect.fn(function* (
 });
 
 /** The issued address is immutable; enabling it is an audited, composable idempotent mutation. */
-export const forwardingAddressMutationAdapter: CanonicalMutationAdapter = {
+export const forwardingAddressMutationAdapter = {
   prepare: prepareForwardingAddress,
-  present: (value) =>
+  present: (value: CommittedMutationValue): Effect.Effect<Response> =>
     value._tag === "ForwardingAddress"
       ? Schema.encodeEffect(Schema.toCodecJson(EmailForwardingAddress))(value.address).pipe(
           Effect.map((data) => Response.json({ data, next: [] }, { headers: transactionNoStore })),
           Effect.orElseSucceed(transactionUnavailable)
         )
       : Effect.succeed(transactionUnavailable()),
-  invalidRefusal: () => ({
+  invalidRefusal: (_work: CanonicalPreparationWork): CanonicalMutationRefusal => ({
     code: "validation_failed",
     message: "Invalid forwarding address call.",
     record: () => Effect.succeed("recorded" as const),

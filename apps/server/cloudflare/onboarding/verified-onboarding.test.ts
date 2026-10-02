@@ -1,3 +1,4 @@
+import { completeOnboarding } from "./operations";
 import {
   dispatchBrowserPairingEmail,
   dispatchEmailReplacement,
@@ -321,6 +322,82 @@ it("creates one complete stable identity on first valid mailbox proof and refuse
       ).toBe(1);
     })
   ));
+
+it.each(["backup_recovery_credentials", "completed_email_enrollments"])(
+  "rolls back every onboarding owner when %s refuses and permits a complete retry",
+  (table) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db } = yield* Effect.tryPromise(() => setup());
+        const complete = (): Promise<Response> =>
+          completeOnboarding({
+            db,
+            request: new Request("https://api.fidyapp.com/web/onboarding/email/verify", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: encodeJson({ combinedCode: code }),
+            }),
+          });
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(`CREATE TRIGGER refuse_initial_recovery BEFORE INSERT ON ${table}
+          BEGIN SELECT RAISE(ABORT, 'test_refusal'); END`)
+            .run()
+        );
+        const refused = yield* Effect.tryPromise(complete);
+        expect(refused.status).toBe(400);
+        expect(yield* Effect.tryPromise(() => refused.json())).toEqual({
+          error: {
+            code: "verification_invalid",
+            message: "El código no es válido. Revisa el correo o solicita uno nuevo.",
+          },
+        });
+        const stableState = (): Promise<unknown> =>
+          db
+            .prepare(`SELECT
+          (SELECT count(*) FROM users) AS users,
+          (SELECT count(*) FROM whatsapp_identities) AS identities,
+          (SELECT count(*) FROM verified_email_credentials) AS emails,
+          (SELECT count(*) FROM onboarding_consent_records) AS consents,
+          (SELECT count(*) FROM trial_periods) AS trials,
+          (SELECT count(*) FROM backup_recovery_credentials) AS recovery,
+          (SELECT count(*) FROM completed_email_enrollments) AS completions,
+          (SELECT count(*) FROM web_sessions) AS sessions`)
+            .first();
+        expect(yield* Effect.tryPromise(stableState)).toEqual({
+          users: 0,
+          identities: 0,
+          emails: 0,
+          consents: 0,
+          trials: 0,
+          recovery: 0,
+          completions: 0,
+          sessions: 0,
+        });
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT state, public_code FROM pending_email_enrollments").first()
+          )
+        ).toEqual({ state: "awaiting_proof", public_code: "ABCD-EFGH" });
+        yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER refuse_initial_recovery").run());
+        const completed = yield* Effect.tryPromise(complete);
+        expect(completed.status).toBe(200);
+        expect(completed.headers.get("cache-control")).toBe("no-store");
+        expect(completed.headers.get("set-cookie")).toBeNull();
+        expect(yield* Effect.tryPromise(stableState)).toEqual({
+          users: 1,
+          identities: 1,
+          emails: 1,
+          consents: 1,
+          trials: 1,
+          recovery: 1,
+          completions: 1,
+          sessions: 0,
+        });
+        expect((yield* Effect.tryPromise(complete)).status).toBe(400);
+      })
+    )
+);
 
 it("reads the created User through an independently approved browser WebSession", () =>
   Effect.runPromise(

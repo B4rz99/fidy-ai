@@ -6,6 +6,7 @@ import type {
   OnboardingEmailEnrollmentInput,
   OnboardingEmailReplayInput,
   OnboardingEmailStatusInput,
+  OnboardingEmailVerification,
   VerifiedEmailQueryInput,
 } from "./contract";
 import type { Crypto, Effect, Option } from "effect";
@@ -23,7 +24,7 @@ import {
   prepareEmailRejectedWorkObservation as rejectedWork,
 } from "./internal/operational-observation";
 
-import { verifyOnboarding as verify } from "./internal/verified-onboarding";
+import { verifyOnboardingEmail as verify } from "./internal/verified-onboarding";
 import {
   completeBrowserPairingEmail as completePairing,
   startBrowserPairingEmail as startPairing,
@@ -33,8 +34,13 @@ import {
   requestEmailReplacement as requestReplacement,
 } from "./internal/email-replacement";
 
-/** Consume one current onboarding proof; stable identity, mandatory mailbox and evidence commit together. */
-export const verifyOnboarding = (input: EmailProofRequest): Promise<Response> => verify(input);
+/**
+ * Verify the current bounded mailbox proof and lend its one-use atomic completion to Onboarding.
+ * Credential storage, proof consumption, replay limits and safe refusals remain Email-owned;
+ * the caller supplies the other owners' statements and releases success only after commit.
+ */
+export const verifyOnboardingEmail = (input: OnboardingEmailVerification): Promise<Response> =>
+  verify(input);
 /** Request a bounded mailbox proof only after the browser proves its pending pairing; responses do not enumerate Users. */
 export const startBrowserPairingEmail = (input: EmailProofStart): Promise<Response> =>
   startPairing(input);

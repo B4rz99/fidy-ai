@@ -1,20 +1,17 @@
-import { issueInitialBackupRecoveryCode } from "../../recovery/operations";
-import { UserId } from "@fidy/server/identity-reference";
-import { prepareVerifiedIdentity } from "../../identity/operations";
-import { recordOnboardingConsent } from "../../consent/operations";
 import { EmailAddress, EmailVerificationCode } from "@fidy/server/client";
 import {
   canRedeemOnboardingProof,
   maximumOnboardingProofFailures,
 } from "@fidy/server/email-authentication-decisions";
 import { Clock, Data, Effect, Option, Schema } from "effect";
-import { newId } from "../../secret-material/operations";
+import { PendingConsentExchangeId } from "@fidy/server/consent-contract";
+import type { OnboardingEmailVerification } from "../contract";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../../http/request-body";
 
 const Payload = Schema.Struct({ combinedCode: EmailVerificationCode });
 const ProofRow = Schema.Struct({
   id: Schema.String.check(Schema.isUUID()),
-  exchange_id: Schema.String.check(Schema.isUUID()),
+  exchange_id: PendingConsentExchangeId,
   email_address: EmailAddress,
   proof_digest: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))),
   expires_at_ms: Schema.Finite,
@@ -85,42 +82,39 @@ const readCode = (request: Request): Promise<Option.Option<string>> => {
     .catch(() => Option.none());
 };
 
-const createUser = (db: D1Database, row: Enrollment, now: number): Promise<Response> => {
-  const userId = UserId.make(newId());
-  const identity = prepareVerifiedIdentity({
-    db,
-    userId,
+const completeEnrollment = ({
+  db,
+  row,
+  now,
+  complete,
+}: Readonly<{
+  db: D1Database;
+  row: Enrollment;
+  now: number;
+  complete: OnboardingEmailVerification["complete"];
+}>): Promise<Response> => {
+  let submitted = false;
+  return complete({
     exchangeId: row.exchange_id,
-    createdAtMs: now,
-  });
-  return issueInitialBackupRecoveryCode({
-    db,
-    userId,
-    createdAtMs: now,
-    commit: (credential) =>
-      db
+    verifiedAtMs: now,
+    commit: ({ userId, statements }) => {
+      if (submitted) return Promise.reject(new Error("Onboarding proof already submitted"));
+      submitted = true;
+      return db
         .batch([
-          identity.createUser,
-          identity.associateCaller,
+          ...statements,
           db
             .prepare(`INSERT INTO verified_email_credentials (user_id, email_address, verified_at_ms)
-      VALUES (?, ?, ?)`)
+          VALUES (?, ?, ?)`)
             .bind(userId, row.email_address, now),
-          recordOnboardingConsent({ db, userId, exchangeId: row.exchange_id }),
-          identity.startTrial,
-          credential,
           db
             .prepare(`INSERT INTO completed_email_enrollments (enrollment_id, user_id, completed_at_ms)
-      VALUES (?, ?, ?)`)
+          VALUES (?, ?, ?)`)
             .bind(row.id, userId, now),
         ])
-        .then(() => undefined),
-  }).then((recoveryCode) =>
-    Response.json(
-      { status: "created", backupRecoveryCode: recoveryCode },
-      { headers: { "cache-control": "no-store" } }
-    )
-  );
+        .then(() => undefined);
+    },
+  });
 };
 
 class OnboardingBoundaryFailure extends Data.TaggedError("OnboardingBoundaryFailure")<{
@@ -130,13 +124,11 @@ const waitFor = <A>(run: () => Promise<A>): Effect.Effect<A, OnboardingBoundaryF
   Effect.tryPromise({ try: run, catch: (cause) => new OnboardingBoundaryFailure({ cause }) });
 
 /** Redeem a mailbox proof once; all stable identity and evidence commits or none do. */
-export const verifyOnboarding = ({
+export const verifyOnboardingEmail = ({
   request,
   db,
-}: {
-  request: Request;
-  db: D1Database;
-}): Promise<Response> =>
+  complete,
+}: OnboardingEmailVerification): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const code = yield* waitFor(() => readCode(request));
@@ -186,6 +178,6 @@ export const verifyOnboarding = ({
         );
         return invalid();
       }
-      return yield* waitFor(() => createUser(db, row.value, now));
+      return yield* waitFor(() => completeEnrollment({ db, row: row.value, now, complete }));
     })
   ).catch(() => invalid()); // D1 constraints and final proof trigger reject races and replay.

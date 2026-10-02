@@ -154,6 +154,66 @@ const tokensToolPrivate = `tools/${PROBE_PREFIX}tokens-private`;
 
 const PROBES: readonly Probe[] = [
   {
+    name: "callers consume Onboarding through its data-free operation",
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}onboarding-published/probe.ts`,
+        source:
+          'import { completeOnboarding } from "../onboarding/operations";\nexport const published = [completeOnboarding];\n',
+      },
+    ],
+  },
+  {
+    name: "foreign scripts cannot acquire private Onboarding composition",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-onboarding-internal: scripts/${PROBE_PREFIX}onboarding-private/probe.ts → cloudflare/onboarding/internal/completion.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `scripts/${PROBE_PREFIX}onboarding-private/probe.ts`,
+        source:
+          'import { complete } from "../../cloudflare/onboarding/internal/completion";\nexport const bypass = complete;\n',
+      },
+    ],
+  },
+  {
+    name: "Onboarding cannot acquire delivery runtime authority",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error onboarding-imports-unpublished-native-authority: cloudflare/onboarding/${PROBE_PREFIX}foreign-runtime/probe.ts → cloudflare/email-authentication/runtime.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/onboarding/${PROBE_PREFIX}foreign-runtime/probe.ts`,
+        source:
+          'import { dispatchBrowserPairingEmail } from "../../email-authentication/runtime";\nexport const bypass = dispatchBrowserPairingEmail;\n',
+      },
+    ],
+  },
+  {
+    name: "Onboarding cannot import private mailbox proof handling",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error onboarding-imports-unpublished-native-authority: cloudflare/onboarding/${PROBE_PREFIX}foreign-proof/probe.ts → cloudflare/email-authentication/internal/verified-onboarding.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/onboarding/${PROBE_PREFIX}foreign-proof/probe.ts`,
+        source:
+          'import { verifyOnboardingEmail } from "../../email-authentication/internal/verified-onboarding";\nexport const bypass = verifyOnboardingEmail;\n',
+      },
+    ],
+  },
+
+  {
     name: "foreign scripts cannot acquire private Web Authentication dispatch",
     expect: {
       kind: "rejected",

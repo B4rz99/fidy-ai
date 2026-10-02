@@ -1,3 +1,4 @@
+import { completeOnboarding } from "../../onboarding/operations";
 import { webAuthenticationEndpoints } from "@fidy/server/web-authentication-contract";
 import { Cause, Effect, Option } from "effect";
 import { redeemBrowserPairing, startBrowserPairing } from "../../browser-login/operations";
@@ -6,7 +7,6 @@ import {
   completeEmailReplacement,
   requestEmailReplacement,
   startBrowserPairingEmail,
-  verifyOnboarding,
 } from "../../email-authentication/operations";
 import { supportRecoveryPath } from "../../recovery/contract";
 import { handleSupportRecovery, rotateBackupRecoveryCode } from "../../recovery/operations";
@@ -19,7 +19,7 @@ const handlers = {
   startPairing: ({ db }): Promise<Response> => startBrowserPairing(db),
   redeemPairing: redeemBrowserPairing,
   logout: logoutWebSession,
-  verifyEmail: verifyOnboarding,
+  verifyEmail: completeOnboarding,
   startEmail: ({ request, db, publish }): Promise<Response> =>
     startBrowserPairingEmail({ request, db, onAccepted: (id) => publish("browserPairing", id) }),
   completeEmail: completeBrowserPairingEmail,

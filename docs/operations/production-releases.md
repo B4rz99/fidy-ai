@@ -164,13 +164,23 @@ and [PR #1901](https://github.com/alchemy-run/alchemy/pull/1901). Remove the pat
 when a locked upstream release passes these regression tests. Onboarding enablement
 remains paused and requires the separate launch proof.
 
-Before either candidate smoke or the normal post-promotion smoke, the runner polls
-proof-admitted `GET /internal/release-smoke?readiness=1` for exact public/Core identities.
+Before candidate smoke, the runner polls both new-public/new-Core and old-public/new-Core
+readiness concurrently and waits for both before starting either synthetic probe. Before the
+normal post-promotion smoke, it polls the promoted pair. These checks use proof-admitted
+`GET /internal/release-smoke?readiness=1` for exact public/Core identities.
 This response is identity-only (`pending`), not a passing synthetic attestation. It performs
 no D1 read/admission, R2/DO check, Queue send, or Workflow creation. A bounded readiness
 failure blocks the release before any synthetic work. Candidate readiness uses both version
-overrides; post-promotion readiness uses normal traffic with no overrides. Only after this
-read-only convergence does the existing synthetic protocol run with its unchanged gates.
+overrides (with the captured stable public version for intermediate readiness); post-promotion
+readiness uses normal traffic with no overrides. Only after this read-only convergence does the
+existing synthetic protocol run with its unchanged gates. Readiness exhaustion identifies the
+pairing and last closed diagnostic; decoded identity mismatches report only per-field equality
+booleans, never response bodies or foreign text. Synthetic failures also identify their pairing.
+Runs 37019952565, 37020598487, 37021188674, and 37022270459 passed candidate-only readiness but
+failed synthetic smoke with `stage=identity`. Those logs establish a Core identity mismatch,
+not which pairing or identity field failed. The two-pair readiness barrier closes the untested
+intermediate-routing gap; a live release is still required to determine whether that gap explains
+the incident or whether routing remains persistently incorrect.
 [Cloudflare documents](https://developers.cloudflare.com/workers/configuration/versions-and-deployments/version-overrides/)
 that a recent deployment can briefly fall back to normal traffic even when an override is sent.
 This addresses the observed wrong-public-version attempt; it does not establish that every

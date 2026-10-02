@@ -3,6 +3,7 @@ import { SmokeRequest } from "../../apps/server/cloudflare/runtime/smoke";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import {
+  verifyCandidateSmoke,
   verifyProductionSmoke,
   verifyPromotedSmoke,
   verifyReadOnlySmokeRouting,
@@ -49,8 +50,160 @@ const gatedResponse = (
   input: Parameters<typeof recordingResponse>[0]
 ): Promise<Response> => ready.then(() => recordingResponse(input));
 
-const routingModes: ReadonlyArray<"candidate" | "promoted"> = ["candidate", "promoted"];
+const intermediateRequest = (request: Request): boolean =>
+  (request.headers.get("cloudflare-workers-version-overrides") ?? "").includes(
+    `fidy-public="${publicStable}"`
+  );
+
+const pairingResponse = (input: {
+  oldPublic: boolean;
+  coreRevision: string;
+  readiness: boolean;
+}): Response => {
+  const publicVersion = input.oldPublic ? publicStable : publicCandidate;
+  return Response.json(
+    {
+      status: input.readiness ? "pending" : "passed",
+      public: {
+        gitRevision: input.oldPublic ? previousRevision : revision,
+        contractDigest: digest,
+        workerVersionId: publicVersion,
+      },
+      core: {
+        gitRevision: input.coreRevision,
+        contractDigest: digest,
+        workerVersionId: coreCandidate,
+      },
+      manifest: { protocolVersion: 1, asyncWorkVersion: 1 },
+    },
+    { headers: { ...securityHeaders, "x-fidy-smoke-worker-version": publicVersion } }
+  );
+};
+const edgeResponse = (path: string): Response =>
+  new Response(null, {
+    status:
+      new Map([
+        ["/health", 200],
+        ["/categories", 401],
+        ["/providers/kapso/callback", 401],
+        ["/providers/wompi/billing-events", 400],
+        ["/web/hosted-turns", 403],
+      ]).get(path) ?? 404,
+    headers: { ...securityHeaders, "x-fidy-smoke-worker-version": publicCandidate },
+  });
+
+const routingModes = ["candidate", "intermediate", "promoted"] as const;
 describe("read-only routing readiness", () => {
+  it("starts neither synthetic pairing until old ingress also reaches the exact candidate Core", () =>
+    Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          let intermediateReady = false;
+          let intermediateReads = 0;
+          const probes: string[] = [];
+          const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+            const request = new Request(input, init);
+            const url = new URL(request.url);
+            const oldPublic = intermediateRequest(request);
+            if (url.pathname !== "/internal/release-smoke") {
+              return Promise.resolve(edgeResponse(url.pathname));
+            }
+            const readiness = url.searchParams.get("readiness") === "1";
+            if (readiness && oldPublic) {
+              intermediateReads++;
+              intermediateReady = intermediateReads > 1;
+            }
+            if (!readiness) {
+              expect(intermediateReady).toBe(true);
+              expect(request.method).toBe("POST");
+              probes.push(oldPublic ? "intermediate" : "candidate");
+            }
+            return Promise.resolve(
+              pairingResponse({
+                oldPublic,
+                readiness,
+                coreRevision: oldPublic && !intermediateReady ? previousRevision : revision,
+              })
+            );
+          });
+          try {
+            const services = yield* Layer.build(FetchHttpClient.layer);
+            yield* verifyCandidateSmoke(config).pipe(
+              Effect.provideService(
+                HttpClient.HttpClient,
+                Context.get(services, HttpClient.HttpClient)
+              ),
+              Effect.provideService(FetchHttpClient.Fetch, mockedFetch)
+            );
+            expect(intermediateReads).toBe(2);
+            expect(probes.sort()).toEqual(["candidate", "intermediate"]);
+          } finally {
+            mockedFetch.mockRestore();
+          }
+        })
+      )
+    ));
+  it("blocks both synthetic pairings when intermediate readiness authority is refused", () =>
+    Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+            const request = new Request(input, init);
+            expect(request.method).toBe("GET");
+            expect(new URL(request.url).searchParams.get("readiness")).toBe("1");
+            const intermediate = intermediateRequest(request);
+            return Promise.resolve(
+              intermediate
+                ? new Response(null, { status: 403, headers: securityHeaders })
+                : Response.json(
+                    {
+                      status: "pending",
+                      public: {
+                        gitRevision: revision,
+                        contractDigest: digest,
+                        workerVersionId: publicCandidate,
+                      },
+                      core: {
+                        gitRevision: revision,
+                        contractDigest: digest,
+                        workerVersionId: coreCandidate,
+                      },
+                      manifest: { protocolVersion: 1, asyncWorkVersion: 1 },
+                    },
+                    {
+                      headers: {
+                        ...securityHeaders,
+                        "x-fidy-smoke-worker-version": publicCandidate,
+                      },
+                    }
+                  )
+            );
+          });
+          try {
+            const services = yield* Layer.build(FetchHttpClient.layer);
+            const exit = yield* Effect.exit(
+              verifyCandidateSmoke(config).pipe(
+                Effect.provideService(
+                  HttpClient.HttpClient,
+                  Context.get(services, HttpClient.HttpClient)
+                ),
+                Effect.provideService(FetchHttpClient.Fetch, mockedFetch)
+              )
+            );
+            expect(Exit.isFailure(exit)).toBe(true);
+            if (Exit.isFailure(exit)) {
+              const error = Cause.findErrorOption(exit.cause);
+              expect(Option.isSome(error) && "reason" in error.value && error.value.reason).toBe(
+                "Read-only intermediate Worker routing did not converge; no synthetic work started: Read-only routing authority refused"
+              );
+            }
+            expect(mockedFetch).toHaveBeenCalledTimes(2);
+          } finally {
+            mockedFetch.mockRestore();
+          }
+        })
+      )
+    ));
   it("refuses readiness authority without starting synthetic work", () =>
     Effect.runPromise(
       Effect.scoped(
@@ -88,8 +241,14 @@ describe("read-only routing readiness", () => {
             expect(request.method).toBe("GET");
             expect(new URL(request.url).searchParams.get("readiness")).toBe("1");
             expect(request.headers.has("cloudflare-workers-version-overrides")).toBe(
-              mode === "candidate"
+              mode !== "promoted"
             );
+            const expectedVersion = mode === "intermediate" ? publicStable : publicCandidate;
+            if (mode !== "promoted") {
+              expect(request.headers.get("cloudflare-workers-version-overrides")).toBe(
+                `fidy-public="${expectedVersion}", fidy-core="${coreCandidate}"`
+              );
+            }
             attempts++;
             if (attempts === 1) {
               return Promise.resolve(new Response(null, { status: 503, headers: securityHeaders }));
@@ -99,9 +258,9 @@ describe("read-only routing readiness", () => {
                 {
                   status: "pending",
                   public: {
-                    gitRevision: revision,
+                    gitRevision: mode === "intermediate" ? previousRevision : revision,
                     contractDigest: digest,
-                    workerVersionId: publicCandidate,
+                    workerVersionId: expectedVersion,
                   },
                   core: {
                     gitRevision: attempts === 2 ? previousRevision : revision,
@@ -110,7 +269,7 @@ describe("read-only routing readiness", () => {
                   },
                   manifest: { protocolVersion: 1, asyncWorkVersion: 1 },
                 },
-                { headers: { ...securityHeaders, "x-fidy-smoke-worker-version": publicCandidate } }
+                { headers: { ...securityHeaders, "x-fidy-smoke-worker-version": expectedVersion } }
               )
             );
           });

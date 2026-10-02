@@ -1,3 +1,4 @@
+import { WompiEnvironment } from "~/shell/secret-material/contract";
 import { UnknownJsonString, jsonStringSchema } from "~/shell/schema-codecs/contract";
 import {
   Config,
@@ -18,9 +19,12 @@ import {
   EndUserPolicyEvidence,
   PersonalDataAuthorizationEvidence,
   type WompiContractEvidenceSet,
-  WompiSourceId,
-} from "~/core/subscription/enrollment-model";
-import type { OutboundHttpFailure, OutboundHttpResponse } from "~/shell/outbound-http/contract";
+} from "~/core/subscription/contract";
+import { WompiSourceId } from "./wompi-model";
+import {
+  type OutboundHttpFailure,
+  type OutboundHttpResponse,
+} from "~/shell/outbound-http/contract";
 import { OutboundHttp, type OutboundHttpService } from "~/shell/outbound-http/operations";
 import { wompiCredentialPrefixes } from "~/shell/secret-material/operations";
 
@@ -29,7 +33,6 @@ const successfulStatusMaximumExclusive = 300;
 const providerServerErrorStatusMinimum = 500;
 const maximumAcceptanceTokenCharacters = 4096;
 
-const WompiEnvironment = Schema.Literals(["sandbox", "production"]);
 const PublicKey = Schema.String.check(Schema.isPattern(/^pub_(?:test|prod)_[A-Za-z0-9_-]{8,}$/u));
 const AcceptanceToken = Schema.String.check(
   Schema.isNonEmpty(),
@@ -353,7 +356,7 @@ export const makeWompiEnrollmentClient = (
 export class WompiEnrollmentClient extends Context.Service<
   WompiEnrollmentClient,
   WompiEnrollmentClientService
->()("@fidy/server/shell/subscription/wompi-client/WompiEnrollmentClient") {
+>()("@fidy/server/cloudflare/subscription/internal/wompi-client/WompiEnrollmentClient") {
   static readonly layer = Layer.effect(
     WompiEnrollmentClient,
     Effect.gen(function* () {

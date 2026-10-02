@@ -1,34 +1,25 @@
+import { WompiEnvironment } from "~/shell/secret-material/contract";
+import { BillingAttemptId, BillingEmail } from "~/core/subscription/contract";
+import { IanaTimeZone } from "~/core/_shared/context";
+import { Money } from "~/core/_shared/money";
 import {
-  BillingAttemptId,
-  BillingEmail,
-  IanaTimeZone,
-  Money,
   type WompiBillingClientService,
-  WompiEnvironment,
-  WompiSourceId,
   type WompiTransaction,
-  WompiTransactionId,
-  WompiTransactionReference,
-  amountInCentsForBilling,
   makeWompiBillingClient,
-  paidPeriodFor,
-} from "@fidy/server/subscription-runtime";
-import {
-  WorkflowEntrypoint,
-  type WorkflowEvent,
-  type WorkflowStep,
-  type WorkflowStepConfig,
-} from "cloudflare:workers";
-import {
-  cloudflareWorkerTelemetry,
-  observeWorkerPromise,
-  workerRelease,
-} from "../runtime/telemetry";
+} from "./wompi-billing-client";
+import { WompiSourceId, WompiTransactionId, WompiTransactionReference } from "./wompi-model";
+import { amountInCentsForBilling } from "./billing-rules";
+import { paidPeriodFor } from "~/core/subscription/operations";
 import { type VerifiedOutcome, recordVerifiedBillingEvidence } from "./billing-settlement";
-import { captureWorkflowFailure } from "../runtime/operational-workflow-failure";
 import { verifiedWompiEventHint } from "./wompi-event";
-import { Clock, Data, DateTime, Effect, Encoding, Exit, Option, Schema } from "effect";
-import { wompiOutboundHttp } from "../wompi/wompi-runtime";
+import { type WorkflowStepConfig } from "cloudflare:workers";
+import { Clock, DateTime, Effect, Encoding, Exit, Option, Schema } from "effect";
+import { wompiOutboundHttp } from "./wompi-runtime";
+import {
+  type BillingCollectionEnvironment,
+  BillingCollectionFailure,
+  type BillingRuntime,
+} from "../contract";
 
 const CollectionMessage = Schema.Struct({
   version: Schema.Literal(1),
@@ -94,9 +85,6 @@ const candidateCooldownMs = 60_000;
 const maximumCandidateLookupAttempts = 8;
 const eventCandidateLifetimeMs = 86_400_000;
 
-class BillingCollectionFailure extends Data.TaggedError("BillingCollectionFailure")<{
-  readonly cause: Option.Option<unknown>;
-}> {}
 const failure = (cause: Option.Option<unknown> = Option.none()): BillingCollectionFailure =>
   new BillingCollectionFailure({ cause });
 const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, BillingCollectionFailure> =>
@@ -108,22 +96,6 @@ const decode = <A, E>(
   Schema.decodeUnknownEffect(schema)(value).pipe(
     Effect.mapError((cause) => failure(Option.some(cause)))
   );
-
-export type BillingCollectionEnvironment = Readonly<{
-  DB: D1Database;
-  BILLING_COLLECTION_QUEUE: Queue;
-  BILLING_COLLECTION_WORKFLOW: Workflow;
-  WOMPI_ENVIRONMENT: string;
-  WOMPI_PUBLIC_KEY: string;
-  WOMPI_PRIVATE_KEY: string;
-  WOMPI_INTEGRITY_SECRET: string;
-  WOMPI_EVENT_SECRET: string;
-}>;
-
-type BillingRuntime = Pick<
-  BillingCollectionEnvironment,
-  "DB" | "WOMPI_ENVIRONMENT" | "WOMPI_PUBLIC_KEY" | "WOMPI_PRIVATE_KEY" | "WOMPI_INTEGRITY_SECRET"
->;
 
 const billingClient = (
   environment: BillingRuntime
@@ -533,27 +505,6 @@ export const runBillingCollectionWorkflow = (
     Effect.runPromise(collect(input.environment, attemptId))
   );
 };
-
-export class BillingCollectionWorkflowV1 extends WorkflowEntrypoint<BillingRuntime, unknown> {
-  run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return captureWorkflowFailure({
-      work: observeWorkerPromise(
-        () =>
-          runBillingCollectionWorkflow({
-            environment: this.env,
-            payload: event.payload,
-            activity: (name, options, activity) => step.do(name, options, activity),
-          }),
-        {
-          environment: workerRelease(this.env),
-          telemetry: cloudflareWorkerTelemetry,
-          operation: "workflow.billingCollection",
-        }
-      ),
-      db: this.env.DB,
-    });
-  }
-}
 
 const offerBillingLookup = (
   input: Readonly<{

@@ -1,9 +1,6 @@
-import {
-  type BillingAttemptId,
-  type WompiBillingStatus,
-  type WompiTransactionId,
-  wompiRetryOpportunity,
-} from "@fidy/server/subscription-runtime";
+import { type BillingAttemptId } from "~/core/subscription/contract";
+import { type WompiBillingStatus, type WompiTransactionId } from "./wompi-model";
+import { wompiRetryOpportunity } from "./billing-rules";
 import { Duration, Option } from "effect";
 
 type PaidPeriod = Readonly<{

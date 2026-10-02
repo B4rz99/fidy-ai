@@ -336,3 +336,26 @@ native SQL fragments are composable authority, not cached authorization. Other o
 browser credentials nor reproduce WebSession lifecycle predicates or import session storage.
 The existing bounded Core/public-worker telemetry covers these workflows; the refactor creates no
 additional provider call, persisted credential copy or telemetry payload.
+
+### Subscription owner composition
+
+Subscription publishes safe Price, enrollment, BillingAttempt and standing declarations in
+`core/subscription/contract.ts`, and calendar-period and enrollment decisions in `operations.ts`.
+Its shell contract owns both the canonical read group and the separate browser-only enrollment API;
+the browser client consumes those declarations without provider or persistence implementation.
+Enrollment remains unavailable to canonical agents and PAT callers.
+
+The shell operations own paid-access predicates and bounded prepared standing reads. A prepared read
+carries its row decoder with its statements, so native callers never know Subscription storage
+shapes. They commit its live credential guard, credential use and Audit evidence in one D1 unit
+before releasing safe JSON. AccessTier still derives from Identity's original TrialPeriod and the
+settled paid interval at the decision instant; no independent tier authority is persisted.
+
+`cloudflare/subscription/operations.ts` publishes protected observation and fresh-session enrollment.
+Its `runtime.ts` composes the existing Queue, scheduled reconciliation and versioned Workflow.
+Wompi models and clients, payment-source identity, webhook verification, settlement SQL and
+ambiguity handling are private to its `internal/` implementation. Verified settlement retains the
+same immutable Price snapshot, atomic paid-period write and monotonic terminal behavior. Private
+operational health observes only bounded pending-work metadata through the owner. Existing bounded
+Core, provider and Workflow telemetry is retained; this extraction introduces no new external
+workflow, provider call or telemetry purpose.

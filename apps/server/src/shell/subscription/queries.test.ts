@@ -1,6 +1,9 @@
 import { expect, it } from "vitest";
 import { Option } from "effect";
-import { projectSubscriptionOffers, projectSubscriptionStatus } from "./queries";
+import {
+  projectSubscriptionOffers,
+  projectSubscriptionStatus,
+} from "~/shell/subscription/internal/queries";
 
 const trial = {
   started_at_ms: Date.parse("2026-09-01T12:00:00Z"),

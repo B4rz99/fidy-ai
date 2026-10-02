@@ -1,8 +1,8 @@
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { deriveAccessTier } from "~/core/access-tier/operations";
-import type { UserId } from "~/core/identity/reference";
-import { Price, SubscriptionOffers, SubscriptionStatus } from "~/core/subscription/model";
+import { type UserId } from "~/core/identity/reference";
+import { Price, SubscriptionOffers, SubscriptionStatus } from "~/core/subscription/contract";
 import { Unavailable } from "~/shell/public-http/contract";
 import {
   subscriptionAttemptsQuery,
@@ -93,7 +93,7 @@ export const listSubscriptionOffersResponse = Effect.flatMap(SqlClient.SqlClient
 );
 
 /** Read one User's trial, paid period, and bounded attempts at the same decision instant. */
-export const getSubscriptionStatus = (
+export const readSubscriptionStatus = (
   userId: UserId
 ): Effect.Effect<
   { readonly data: SubscriptionStatus; readonly next: ReadonlyArray<never> },

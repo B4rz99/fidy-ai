@@ -141,7 +141,96 @@ const cloudflareSessionPrivate = `cloudflare/${PROBE_PREFIX}session-private`;
 const cloudflareSessionShellPrivate = `cloudflare/web-session/${PROBE_PREFIX}shell-private`;
 const cloudflarePairingPrivate = `tools/${PROBE_PREFIX}pairing-private`;
 
+const subscriptionPublished = `cloudflare/${PROBE_PREFIX}subscription-published`;
+const subscriptionPrivate = `cloudflare/${PROBE_PREFIX}subscription-private`;
+const subscriptionPortablePrivate = `cloudflare/subscription/${PROBE_PREFIX}portable-private`;
+const subscriptionToolPrivate = `tools/${PROBE_PREFIX}subscription-private`;
+const subscriptionLaundering = `cloudflare/${PROBE_PREFIX}subscription-laundering`;
+
 const PROBES: readonly Probe[] = [
+  {
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `${subscriptionPublished}/probe.ts`,
+        source:
+          'import { handleCardEnrollment, executeProtectedSubscriptionQuery } from "../subscription/operations";\n' +
+          'import { activePaidSubscriptionCondition } from "~/shell/subscription/operations";\n' +
+          'import { SubscriptionEnrollmentApi } from "~/shell/subscription/contract";\n' +
+          "export const published = [handleCardEnrollment, executeProtectedSubscriptionQuery, activePaidSubscriptionCondition, SubscriptionEnrollmentApi];\n",
+      },
+    ],
+    name: "Subscription callers consume published enrollment, standing and paid-access operations",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-subscription-internal: ${subscriptionPrivate}/probe.test.ts → cloudflare/subscription/internal/billing-settlement.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${subscriptionPrivate}/probe.test.ts`,
+        source:
+          'import { recordVerifiedBillingEvidence } from "../subscription/internal/billing-settlement";\nexport const settlement = recordVerifiedBillingEvidence;\n',
+      },
+    ],
+    name: "foreign tests cannot acquire Subscription settlement authority",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error cloudflare-imports-portable-subscription-internal: ${subscriptionPortablePrivate}/probe.ts → src/shell/subscription/internal/query-sql.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${subscriptionPortablePrivate}/probe.ts`,
+        source:
+          'import { subscriptionStandingQuery } from "~/shell/subscription/internal/query-sql";\nexport const rowQuery = subscriptionStandingQuery;\n',
+      },
+    ],
+    name: "native Subscription cannot bypass portable query ownership",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-subscription-internal: ${subscriptionToolPrivate}/probe.ts → cloudflare/subscription/internal/wompi-model.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${subscriptionToolPrivate}/probe.ts`,
+        source:
+          'import type { WompiTransactionId } from "../../cloudflare/subscription/internal/wompi-model";\nexport type ProviderId = WompiTransactionId;\n',
+      },
+    ],
+    name: "tooling cannot import private Wompi identities even as types",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error published-interface-reexports-internal: ${subscriptionLaundering}/operations.ts → ./internal/provider`,
+      ],
+    },
+    files: [
+      {
+        path: `${subscriptionLaundering}/internal/provider.ts`,
+        source: 'export const providerSecret = "probe";\n',
+      },
+      {
+        path: `${subscriptionLaundering}/operations.ts`,
+        source:
+          'import { providerSecret } from "./internal/provider";\nconst alias = providerSecret;\nexport { alias };\n',
+      },
+    ],
+    name: "native Published Trio cannot launder internal bindings through an alias",
+  },
+
   {
     name: "native Transaction peers consume capture and bounded reads through owner operations",
     expect: { kind: "allowed" },

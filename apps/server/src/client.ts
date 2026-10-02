@@ -83,8 +83,8 @@ export {
   emailReplacementPath,
   emailReplacementCompletionPath,
 } from "~/shell/email-authentication/path";
-export { BillingAttemptId, PaymentRequestId } from "~/core/subscription/model";
-export type { SubscriptionStatus } from "~/core/subscription/model";
+export { BillingAttemptId, PaymentRequestId } from "~/core/subscription/contract";
+export type { SubscriptionStatus } from "~/core/subscription/contract";
 export { PriceId } from "~/core/subscription/reference";
 export { IanaTimeZone } from "~/core/_shared/context";
 export { BackupRecoveryCode, RotatedBackupRecoveryCode } from "~/core/recovery/model";
@@ -94,17 +94,17 @@ export {
   CardEnrollmentDecisions,
   CardPaymentSubmission,
   CardEnrollmentId,
-} from "~/core/subscription/enrollment-model";
+} from "~/core/subscription/contract";
 export type {
   CardEnrollment as CardEnrollmentType,
   CardPaymentSubmission as CardPaymentSubmissionType,
-} from "~/core/subscription/enrollment-model";
+} from "~/core/subscription/contract";
 export {
   CardEnrollmentInvalidApi,
   CardEnrollmentUnavailableApi,
   SubscriptionEnrollmentApi,
   type SubscriptionEnrollmentApiGroups,
-} from "./subscription-enrollment-api";
+} from "~/shell/subscription/contract";
 export {
   BrowserLoginPairingInvalidApi,
   BrowserLoginPollingRateLimitedApi,

@@ -16,7 +16,7 @@ const worker = (
 const base = {
   stable: worker("v1", { DB: { type: "d1" } }),
   candidate: worker("v1", { DB: { type: "d1" } }),
-  workflowPaths: ["apps/server/cloudflare/billing/billing-collection.ts"],
+  workflowPaths: ["apps/server/cloudflare/subscription/runtime.ts"],
 };
 describe("rollback compatibility evidence", () => {
   it("accepts a code-only release with identical runtime resources", () => {
@@ -33,6 +33,21 @@ describe("rollback compatibility evidence", () => {
     );
     expect(rollbackCompatible({ ...base, changedPaths: base.workflowPaths })).toBe(false);
   });
+  it("refuses automatic rollback when Subscription's private billing Workflow implementation changes", () =>
+    Bun.file(new URL("../../apps/server/cloudflare/subscription/runtime.ts", import.meta.url))
+      .text()
+      .then((runtime) => {
+        const implementation = /from "(\.\/internal\/billing-[^"]+)"/u.exec(runtime)?.[1];
+        if (implementation === undefined) {
+          throw new Error("Subscription billing Workflow implementation is missing");
+        }
+        expect(
+          rollbackCompatible({
+            ...base,
+            changedPaths: [`apps/server/cloudflare/subscription/${implementation.slice(2)}.ts`],
+          })
+        ).toBe(false);
+      }));
   it("refuses Durable Object lifecycle and binding changes", () => {
     expect(
       rollbackCompatible({

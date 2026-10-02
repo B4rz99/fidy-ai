@@ -1,12 +1,13 @@
-import type { Miniflare } from "miniflare";
+import { type Miniflare } from "miniflare";
 import { afterEach, expect } from "vitest";
 import { it as effectIt } from "@effect/vitest";
 import { Clock, Effect, Option, Schema } from "effect";
-import { SubscriptionOffers, SubscriptionStatus } from "@fidy/server/subscription-runtime";
+import { SubscriptionOffers, SubscriptionStatus } from "~/core/subscription/contract";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
+import { makeCardEnrollmentD1 } from "./card-enrollment-d1.test-fixture";
+import { executeProtectedSubscriptionQuery } from "./operations";
+
 import coreWorker from "../core-worker";
-import { makeCardEnrollmentD1 } from "../card-enrollment/card-enrollment-d1.test-fixture";
-import { executeProtectedSubscriptionQuery } from "./subscription-queries";
 
 const fromTestPromise = <A>(run: () => PromiseLike<A>): Effect.Effect<A> =>
   Effect.tryPromise(() => Promise.resolve(run())).pipe(Effect.orDie);

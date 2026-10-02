@@ -24,11 +24,6 @@
       "import": "./src/shell/tokens/runtime.ts",
       "default": "./src/shell/tokens/runtime.ts"
     },
-    "./subscription-runtime": {
-      "types": "./src/shell/subscription/runtime.ts",
-      "import": "./src/shell/subscription/runtime.ts",
-      "default": "./src/shell/subscription/runtime.ts"
-    },
     "./transaction-operations": {
       "types": "./src/shell/transactions/operations.ts",
       "import": "./src/shell/transactions/operations.ts",

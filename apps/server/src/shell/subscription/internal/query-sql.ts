@@ -1,13 +1,9 @@
 import { UserId } from "~/core/identity/reference";
 import { Option, Schema } from "effect";
 import { userTrialPeriodQuery } from "~/shell/identity/operations";
-import type { OwnedStatement } from "~/shell/_shared/owned-statement";
+import { type OwnedStatement } from "~/shell/_shared/owned-statement";
+import { type SubscriptionReadAuthority as Authority } from "~/shell/subscription/contract";
 
-type Authority = Readonly<{
-  table: "pats" | "web_sessions";
-  predicate: string;
-  bindings: ReadonlyArray<string | number | Uint8Array>;
-}>;
 const guard = (authority: Option.Option<Authority>): string =>
   Option.match(authority, {
     onNone: () => "",

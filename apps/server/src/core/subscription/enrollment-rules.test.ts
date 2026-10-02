@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime, Schema } from "effect";
-import { BillingEmail } from "./enrollment-model";
-import { decideEnrollmentPreparation, decideEnrollmentSubmission } from "./enrollment-rules";
+import { BillingEmail } from "./contract";
+import { decideEnrollmentPreparation, decideEnrollmentSubmission } from "./operations";
 import { PriceId } from "./reference";
 
 const weekly = PriceId.make("22700000-0000-4000-8000-000000000001");

@@ -1,3 +1,4 @@
+import { prepareBillingWorkObservation } from "../subscription/operations";
 import { prepareConsentOperationalMetadata } from "../consent/operations";
 import { Clock, Effect, Exit, Option, Schema } from "effect";
 
@@ -129,11 +130,10 @@ const emptySignal = (operation: WorkKind): PendingSignal => ({
   unavailableWorkflows: 0,
 });
 
-const pendingQueries: Record<WorkKind, string> = {
+const pendingQueries: Record<Exclude<WorkKind, "billing">, string> = {
   onboarding: `SELECT id, created_at_ms AS created, expires_at_ms AS deadline FROM pending_email_enrollments WHERE state IN ('awaiting_delivery', 'sending', 'ambiguous') ORDER BY created_at_ms LIMIT ?`,
   browserPairing: `SELECT work_id AS id, last_requested_at_ms AS created, expires_at_ms AS deadline FROM browser_pairing_email_proofs WHERE state IN ('awaiting_delivery', 'sending', 'ambiguous') ORDER BY last_requested_at_ms LIMIT ?`,
   emailReplacement: `SELECT work_id AS id, created_at_ms AS created, expires_at_ms AS deadline FROM email_replacements WHERE state IN ('awaiting_delivery', 'sending', 'ambiguous') ORDER BY created_at_ms LIMIT ?`,
-  billing: `SELECT id, created_at_ms AS created, NULL AS deadline FROM billing_attempts WHERE status = 'pending' ORDER BY created_at_ms LIMIT ?`,
   statement: `SELECT id, submitted_at_ms AS created, retention_expires_at_ms AS deadline FROM statement_submissions WHERE status IN ('queued', 'processing') ORDER BY submitted_at_ms LIMIT ?`,
   forwardedEmail: `SELECT r.id, r.received_at_ms AS created, r.expires_at_ms AS deadline
     FROM forwarded_email_receipts AS r WHERE r.state IN ('storing', 'queued')
@@ -372,7 +372,10 @@ const inspectPending = (
   Effect.gen(function* () {
     const fetched = yield* Effect.exit(
       Effect.tryPromise(() =>
-        environment.DB.prepare(pendingQueries[operation]).bind(sampleLimit).all()
+        (operation === "billing"
+          ? prepareBillingWorkObservation({ db: environment.DB, limit: sampleLimit })
+          : environment.DB.prepare(pendingQueries[operation]).bind(sampleLimit)
+        ).all()
       ).pipe(
         Effect.flatMap((rows) => Schema.decodeUnknownEffect(Schema.Array(Pending))(rows.results))
       )

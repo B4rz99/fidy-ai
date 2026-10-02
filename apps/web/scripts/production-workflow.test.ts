@@ -154,7 +154,11 @@ describe("Production release workflow policy", () => {
     expect(capture).toBeGreaterThan(0);
     expect(capture).toBeLessThan(upload);
     expect(upload).toBeLessThan(stage);
-    expect(stage).toBeLessThan(smoke);
+    const earlyRouting = workflow.indexOf("bun diagnose-smoke-routing.ts");
+    const settledRouting = workflow.indexOf("SMOKE_ROUTING_WINDOW: settled");
+    expect(stage).toBeLessThan(earlyRouting);
+    expect(earlyRouting).toBeLessThan(settledRouting);
+    expect(settledRouting).toBeLessThan(smoke);
     expect(smoke).toBeLessThan(promotion);
     expect(workflow).toContain("bun production-release.ts cleanup");
     expect(workflow).toContain("bun infra/cloudflare/production-release.ts report");

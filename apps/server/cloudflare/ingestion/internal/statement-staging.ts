@@ -43,7 +43,7 @@ import {
   PlatformError,
   Schema,
 } from "effect";
-import { activeProUserCondition } from "../../access-tier";
+import { activeProUserCondition } from "~/shell/access-tier/operations";
 import {
   type BoundedBodyReadFailed,
   collectBoundedRequestBody,

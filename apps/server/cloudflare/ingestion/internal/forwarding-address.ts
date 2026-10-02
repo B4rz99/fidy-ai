@@ -7,7 +7,7 @@ import {
 import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
 import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-operations";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
-import { activeProUserCondition } from "../../access-tier";
+import { activeProUserCondition } from "~/shell/access-tier/operations";
 import { prepareOwnedStatement } from "../../database/operations";
 import {
   type TransactionCaller,

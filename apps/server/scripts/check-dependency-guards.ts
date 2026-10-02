@@ -154,6 +154,67 @@ const tokensToolPrivate = `tools/${PROBE_PREFIX}tokens-private`;
 
 const PROBES: readonly Probe[] = [
   {
+    name: "Dashboard callers use validated owner operations",
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}dashboard-public/probe.ts`,
+        source:
+          'import { browseDashboard, prepareDashboard } from "../dashboard/operations";\nexport const operations = [browseDashboard, prepareDashboard];\n',
+      },
+    ],
+  },
+  {
+    name: "foreign tests cannot access Dashboard documents or projection mechanics",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-dashboard-internal: cloudflare/${PROBE_PREFIX}dashboard-private/probe.test.ts → cloudflare/dashboard/internal/dashboard-mutation.ts`,
+        `error foreign-module-imports-cloudflare-dashboard-internal: cloudflare/${PROBE_PREFIX}dashboard-private/probe.test.ts → cloudflare/dashboard/internal/dashboard-view.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}dashboard-private/probe.test.ts`,
+        source:
+          'import { findDashboardDocument } from "../dashboard/internal/dashboard-mutation";\nimport { loadDashboardFacts } from "../dashboard/internal/dashboard-view";\nexport const leaks = [findDashboardDocument, loadDashboardFacts];\n',
+      },
+    ],
+  },
+  {
+    name: "native Dashboard cannot reach portable presentation internals",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error cloudflare-imports-portable-dashboard-internal: cloudflare/dashboard/${PROBE_PREFIX}portable-private/probe.ts → src/shell/dashboard/internal/presentation.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/dashboard/${PROBE_PREFIX}portable-private/probe.ts`,
+        source:
+          'import { renderDashboardView } from "../../../src/shell/dashboard/internal/presentation";\nexport const leak = renderDashboardView;\n',
+      },
+    ],
+  },
+  {
+    name: "tooling cannot bypass the Dashboard storage owner",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-dashboard-internal: tools/${PROBE_PREFIX}dashboard-private/probe.ts → cloudflare/dashboard/internal/dashboard-mutation.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `tools/${PROBE_PREFIX}dashboard-private/probe.ts`,
+        source:
+          'import { findDashboardDocument } from "../../cloudflare/dashboard/internal/dashboard-mutation";\nexport const leak = findDashboardDocument;\n',
+      },
+    ],
+  },
+
+  {
     name: "Budget peers consume caps, spending and alerts through owner operations",
     expect: { kind: "allowed" },
     files: [

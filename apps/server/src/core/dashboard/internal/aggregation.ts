@@ -1,28 +1,18 @@
 import { BigDecimal, Function, Option } from "effect";
-import type { Money, MoneyGroups, ReadonlyMoney } from "~/core/_shared/money";
-import type { CategoryId } from "~/core/categories/reference";
-import type { EffectiveTransactionAggregate } from "~/core/transactions/contract";
+import type { Money, MoneyGroups } from "~/core/_shared/money";
+import type { Category } from "~/core/categories/contract";
 import {
-  type DashboardMetricFact,
   dashboardBudgetSpent,
   dashboardMoneyGroupsFromMetrics,
   dashboardMoneyGroupsFromSums,
 } from "./calculation";
-import type { Widget } from "./model";
-import type { DashboardBucket } from "./projection";
-
-/** Read-only interpretation of a Transaction-owner aggregate. */
-type ProjectedContribution = Readonly<
-  Omit<EffectiveTransactionAggregate, "sum" | "maximum"> & {
-    sum: ReadonlyMoney;
-    maximum: ReadonlyMoney;
-  }
->;
-/** One chart bucket or whole-period interval of exact Transaction-owner contributions. */
-export type ProjectedRange = Readonly<{
-  key: string;
-  contributions: ReadonlyArray<ProjectedContribution>;
-}>;
+import {
+  type DashboardChartBucket,
+  type DashboardMetricFact,
+  type ProjectedContribution,
+  type ProjectedRange,
+  type Widget,
+} from "~/core/dashboard/contract";
 
 type DeepReadonly<Value> =
   Value extends ReadonlyArray<infer Item>
@@ -34,11 +24,6 @@ type AggregateWidget = DeepReadonly<Exclude<Widget, { type: "transaction-list" }
 type ChartWidget = DeepReadonly<Extract<Widget, { type: "spending-chart" }>>;
 type MetricWidget = DeepReadonly<Extract<Widget, { type: "custom-metric" }>>;
 type BudgetWidget = DeepReadonly<Extract<Widget, { type: "budget-bar" }>>;
-type CategoryFact = Readonly<{ id: CategoryId; label: string }>;
-type ChartGroup<Category extends CategoryFact> = Readonly<{
-  key: DashboardBucket<Category>;
-  moneyGroups: MoneyGroups;
-}>;
 
 const selectedContributions = (
   widget: AggregateWidget,
@@ -55,11 +40,11 @@ const sums = (contributions: ReadonlyArray<ProjectedContribution>): MoneyGroups 
     contributions.map((fact) => ({ direction: fact.direction, money: fact.sum }))
   );
 
-const categoryGroups = <Category extends CategoryFact>(
+const categoryGroups = (
   widget: ChartWidget,
   ranges: ReadonlyArray<ProjectedRange>,
   lookupCategory: (id: string) => Option.Option<Category>
-): Option.Option<ReadonlyArray<ChartGroup<Category>>> => {
+): Option.Option<ReadonlyArray<DashboardChartBucket>> => {
   const grouped = new Map<string, Array<ProjectedContribution>>();
   for (const range of ranges) {
     for (const fact of selectedContributions(widget, range.contributions)) {
@@ -68,7 +53,7 @@ const categoryGroups = <Category extends CategoryFact>(
       grouped.set(fact.categoryId, existing);
     }
   }
-  const results: Array<ChartGroup<Category>> = [];
+  const results: Array<DashboardChartBucket> = [];
   for (const id of [...grouped.keys()].sort()) {
     const category = lookupCategory(id);
     const contributions = grouped.get(id);
@@ -82,7 +67,7 @@ const categoryGroups = <Category extends CategoryFact>(
 };
 
 /** Group exact projected contributions by the selected Chart dimension and Currency. */
-export const projectAggregateChart = <Category extends CategoryFact>({
+export const projectAggregateChart = ({
   widget,
   ranges,
   lookupCategory,
@@ -90,9 +75,9 @@ export const projectAggregateChart = <Category extends CategoryFact>({
   widget: ChartWidget;
   ranges: ReadonlyArray<ProjectedRange>;
   lookupCategory: (id: string) => Option.Option<Category>;
-}>): Option.Option<ReadonlyArray<ChartGroup<Category>>> => {
+}>): Option.Option<ReadonlyArray<DashboardChartBucket>> => {
   if (widget.groupBy === "category") return categoryGroups(widget, ranges, lookupCategory);
-  const buckets: Array<ChartGroup<Category>> = [];
+  const buckets: Array<DashboardChartBucket> = [];
   for (const { key, contributions } of ranges) {
     const moneyGroups = sums(selectedContributions(widget, contributions));
     if (moneyGroups.length > 0) {

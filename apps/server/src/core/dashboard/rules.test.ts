@@ -1,14 +1,15 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Option, Result, Schema } from "effect";
-import { RegionNotFound, RootRegionResize } from "./errors";
 import {
   DashboardDocument,
   DashboardEdit,
   LayoutRegionSelector,
+  RegionNotFound,
+  RootRegionResize,
   type Widget,
-  collectLayoutWidgets,
-} from "./model";
-import { applyDashboardEdit } from "./rules";
+} from "./contract";
+
+import { applyDashboardEdit, collectLayoutWidgets } from "./operations";
 
 const document = Schema.decodeSync(DashboardDocument)({
   title: "Mi tablero",

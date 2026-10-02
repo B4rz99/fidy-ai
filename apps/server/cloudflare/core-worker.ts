@@ -53,7 +53,7 @@ import { BudgetId, CreateBudgetInput, UpdateBudgetInput } from "@fidy/server/bud
 import { DeliveryEvidenceInput, InsightEventId } from "@fidy/server/insights-runtime";
 import { browseBudgets, budgetRefusal, evaluateBudgetAlerts } from "./budgets/operations";
 import { listPendingInsights } from "./insights/insight-store";
-import { browseDashboard } from "./dashboard/dashboard";
+import { browseDashboard } from "./dashboard/operations";
 import { ownsTransactionPath as transactionPath } from "@fidy/server/transaction-runtime";
 import {
   receiveConsentWebhook,
@@ -1651,14 +1651,24 @@ const dashboardResponse = (
     subject: TransactionCaller;
   }>
 ): Option.Option<Effect.Effect<Response>> =>
-  Option.map(Schema.decodeUnknownOption(DashboardOperation)(input.operation.id), (operation) =>
-    browseDashboard({
-      db: input.environment.DB,
-      subject: input.subject,
-      operation,
-      request: input.request,
-    })
-  );
+  Option.map(Schema.decodeUnknownOption(DashboardOperation)(input.operation.id), (operation) => {
+    const request = { db: input.environment.DB, subject: input.subject, request: input.request };
+    return operation === "dashboard.listDashboardCatalog"
+      ? browseDashboard({ ...request, operation })
+      : browseDashboard({
+          ...request,
+          operation,
+          runMutation: (call) =>
+            sendToCoordinator({
+              environment: input.environment,
+              subject: input.subject,
+              work: ownerCall(
+                CanonicalOperationId.make(call.operation),
+                Option.getOrNull(call.input)
+              ),
+            }).pipe(Effect.orElseSucceed(unavailable)),
+        });
+  });
 
 /** Once admitted, every credential executes through the same canonical operation dispatch. */
 const executeCanonicalWork = (

@@ -23,4 +23,4 @@ export {
   GetDashboardCanonicalInput,
   GetDashboardViewCanonicalInput,
   ApplyDashboardEditCanonicalInput,
-} from "~/shell/dashboard/operations";
+} from "~/shell/dashboard/contract";

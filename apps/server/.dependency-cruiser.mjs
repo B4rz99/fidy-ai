@@ -328,6 +328,46 @@ export default {
       to: { path: "^cloudflare/subscription/runtime\\.ts$" },
     },
     {
+      name: "foreign-module-imports-cloudflare-dashboard-internal",
+      severity: "error",
+      comment:
+        "Dashboard owns documents, layout and validated financial projections. Peers use published operations, never private SQL or rows (#604).",
+      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/dashboard/" },
+      to: { path: "^cloudflare/dashboard/internal/" },
+    },
+    {
+      name: "cloudflare-imports-portable-dashboard-internal",
+      severity: "error",
+      comment:
+        "Native Dashboard consumes portable contracts and operations; core and shell internals remain private across the platform boundary (#604).",
+      from: { path: "^cloudflare/" },
+      to: { path: "^src/(core|shell)/dashboard/internal/" },
+    },
+    {
+      name: "dashboard-interface-reexports-internal",
+      severity: "error",
+      comment:
+        "Dashboard publishes substantive behavior and declarations, never re-exported private rows, SQL or projection mechanics (#604).",
+      from: { path: "^cloudflare/dashboard/(contract|operations|runtime)\\.ts$" },
+      to: { path: "^cloudflare/dashboard/internal/", dependencyTypes: ["export"] },
+    },
+    {
+      name: "dashboard-contract-imports-implementation",
+      severity: "error",
+      comment:
+        "The native Dashboard contract declares semantic inputs and projections independently of implementation or runtime authority (#604).",
+      from: { path: "^cloudflare/dashboard/contract\\.ts$" },
+      to: { path: "^cloudflare/dashboard/(internal/|operations\\.ts$|runtime\\.ts$)" },
+    },
+    {
+      name: "dashboard-internal-imports-outward-interface",
+      severity: "error",
+      comment:
+        "Native Dashboard implementation depends on its contract and sibling internals, never backwards on its own outward behavior or runtime (#604).",
+      from: { path: "^cloudflare/dashboard/internal/" },
+      to: { path: "^cloudflare/dashboard/(operations|runtime)\\.ts$" },
+    },
+    {
       name: "foreign-module-imports-cloudflare-budgets-internal",
       severity: "error",
       comment:
@@ -631,7 +671,7 @@ export default {
       severity: "error",
       comment:
         "src/shell/api.ts imported something other than a slice's operations.ts, " +
-        "shell/_shared, or the Identity/Categories/Transactions/Subscription/Budgets/Ingestion/Public HTTP declaration contracts. The assembly composes operation definitions " +
+        "shell/_shared, or the owner/Public HTTP declaration contracts. The assembly composes operation definitions " +
         "and their universal validation declaration and nothing else. A slice's " +
         "handlers.ts *must* import api.ts, because HttpApiBuilder.group takes the assembled " +
         "HttpApi as its first argument, so the acyclic direction is the one this rule holds: " +
@@ -643,7 +683,7 @@ export default {
         pathNot: [
           "^src/shell/_shared/",
           "^src/shell/public-http/contract\\.ts$",
-          "^src/shell/(identity|categories|transactions|subscription|email-authentication|tokens|budgets|browser-login|recovery|ingestion)/contract\\.ts$",
+          "^src/shell/(identity|categories|transactions|subscription|email-authentication|tokens|budgets|browser-login|recovery|ingestion|dashboard)/contract\\.ts$",
           "^src/shell/[^/]+/operations\\.ts$",
         ],
       },

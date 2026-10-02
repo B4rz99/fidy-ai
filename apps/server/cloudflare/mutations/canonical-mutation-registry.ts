@@ -20,11 +20,7 @@ import {
   presentForwardingAddress,
   presentStatementSubmission,
 } from "../ingestion/operations";
-import {
-  dashboardRefusal,
-  prepareDashboard,
-  presentDashboard,
-} from "../dashboard/dashboard-mutation";
+import { dashboardRefusal, prepareDashboard, presentDashboard } from "../dashboard/operations";
 import {
   budgetRefusal,
   prepareCreateBudget,

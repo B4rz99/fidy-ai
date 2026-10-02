@@ -6,7 +6,7 @@ import {
   dashboardMoneyGroupsFromMetrics,
   dashboardMoneyGroupsFromSums,
   resolveDashboardPeriod,
-} from "./calculation";
+} from "./operations";
 
 const bogota = Schema.decodeSync(IanaTimeZone)("America/Bogota");
 const newYork = Schema.decodeSync(IanaTimeZone)("America/New_York");

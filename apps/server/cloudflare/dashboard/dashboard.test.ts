@@ -1,12 +1,12 @@
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { afterAll, expect, it } from "vitest";
-import { BigDecimal, type Cause, DateTime, Effect, Schema } from "effect";
+import { BigDecimal, type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { repairDashboardProjection } from "../transactions/operations";
-import { DashboardDocument } from "../../src/core/dashboard/model";
+import { DashboardDocument } from "../../src/core/dashboard/contract";
 import { Transaction } from "../../src/core/transactions/contract";
 import { IanaTimeZone } from "../../src/core/_shared/context";
-import { resolveDashboardPeriod } from "../../src/core/dashboard/calculation";
-import { DashboardView } from "../../src/shell/dashboard/operations";
+import { resolveDashboardPeriod } from "../../src/core/dashboard/operations";
+import { DashboardView } from "../../src/shell/dashboard/contract";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import coreWorker from "../core-worker";
 import { UserTransactionCoordinator } from "../transactions/runtime";
@@ -141,6 +141,7 @@ const seedPAT = (
   });
 
 const coordinatorByDatabase = new WeakMap<D1Database, Map<string, UserTransactionCoordinator>>();
+const coordinatorObservers = new WeakMap<D1Database, (operation: string) => void>();
 const send = (
   db: D1Database,
   credential: number | string,
@@ -200,7 +201,23 @@ const send = (
                     );
                     coordinators.set(name, coordinator);
                   }
-                  return coordinator.fetch(new Request(command));
+                  const request = new Request(command);
+                  const observer = Option.fromUndefinedOr(coordinatorObservers.get(db));
+                  return Option.match(observer, {
+                    onNone: () => coordinator.fetch(request),
+                    onSome: (observe) =>
+                      request
+                        .clone()
+                        .json()
+                        .then((body) => {
+                          const observed = Schema.decodeUnknownSync(
+                            Schema.Struct({ work: Schema.Struct({ operation: Schema.String }) })
+                          )(body);
+                          const pending = coordinator.fetch(request);
+                          observe(observed.work.operation);
+                          return pending;
+                        }),
+                  });
                 },
               }),
             },
@@ -1417,6 +1434,160 @@ it(
           ["COP", "3.03"],
           ["USD", "5.5"],
         ]);
+      })
+    ),
+  30_000
+);
+
+it(
+  "keeps one exact day chart when a concurrent Correction moves a Transaction between buckets",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const zone = IanaTimeZone.make("America/Bogota");
+        const period = resolveDashboardPeriod({
+          now: DateTime.nowUnsafe(),
+          period: "last-7-days",
+          timeZone: zone,
+        });
+        const first = DateTime.add(period.from, { hours: 1 });
+        const second = DateTime.add(first, { days: 1 });
+        const localDate = (date: DateTime.Utc): string =>
+          DateTime.formatIsoDate(DateTime.setZone(date, DateTime.zoneMakeNamedUnsafe(zone)));
+        const document = yield* Schema.decodeEffect(DashboardDocument)({
+          title: "Tablero",
+          layout: {
+            kind: "leaf",
+            widget: {
+              id: "30000000-0000-4000-8000-000000000099",
+              type: "spending-chart",
+              groupBy: "day",
+              period: "last-7-days",
+            },
+          },
+        });
+        const encodedDocument = yield* Schema.encodeEffect(
+          Schema.fromJsonString(Schema.toCodecJson(DashboardDocument))
+        )(document);
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "INSERT INTO dashboard_documents (user_id, document_json, revision) VALUES (?, ?, 1)"
+            )
+            .bind(users[0], encodedDocument)
+            .run()
+        );
+        const captured = yield* Effect.tryPromise(() =>
+          send(db, 0, {
+            path: "/transactions",
+            method: "POST",
+            body: {
+              money: { amount: "10", currency: "COP" },
+              categoryId: "10000000-0000-4000-8000-000000000001",
+              direction: "outflow",
+              occurredAt: DateTime.formatIso(first),
+            },
+          })
+        );
+        expect(captured.status).toBe(201);
+        const { data: transaction } = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ data: Schema.Struct({ id: Transaction.fields.id }) })
+        )(yield* Effect.tryPromise(() => captured.json()));
+
+        const firstBucketRead = Promise.withResolvers<void>();
+        const releaseView = Promise.withResolvers<void>();
+        const correctionQueued = Promise.withResolvers<void>();
+        let paused = false;
+        const coordinatedOperations = new Set<string>();
+        const aggregateStatements = new WeakSet<D1PreparedStatement>();
+        const markAggregate = (statement: D1PreparedStatement): D1PreparedStatement =>
+          new Proxy(statement, {
+            get(target, property, receiver): unknown {
+              if (property === "bind") {
+                return (...values: ReadonlyArray<unknown>): D1PreparedStatement => {
+                  const bound = target.bind(...values);
+                  aggregateStatements.add(bound);
+                  return bound;
+                };
+              }
+              return Reflect.get(target, property, receiver);
+            },
+          });
+        // Pause the external D1 response after one real aggregate batch has read its old contribution.
+        const delayed: D1Database = {
+          prepare: (sql) =>
+            sql.includes("FROM dashboard_projection_bucket")
+              ? markAggregate(db.prepare(sql))
+              : db.prepare(sql),
+          batch: <Row = unknown>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> =>
+            db.batch<Row>(statements).then((results) => {
+              if (!paused && statements.some((statement) => aggregateStatements.has(statement))) {
+                paused = true;
+                firstBucketRead.resolve();
+                return releaseView.promise.then(() => results);
+              }
+              return results;
+            }),
+          exec: (sql) => db.exec(sql),
+          withSession: (constraint) => db.withSession(constraint),
+          dump: () => db.dump(),
+        };
+        const observe = (operation: string): void => {
+          coordinatedOperations.add(operation);
+          if (operation === "transactions.updateTransaction") correctionQueued.resolve();
+        };
+        coordinatorObservers.set(delayed, observe);
+        const pendingView = send(delayed, 0, "/dashboard/view");
+        yield* Effect.tryPromise(() => firstBucketRead.promise);
+        const correction = send(delayed, 0, {
+          path: `/transactions/${transaction.id}`,
+          method: "PUT",
+          body: { expectedRevision: 0, changes: { occurredAt: DateTime.formatIso(second) } },
+        });
+        try {
+          // A coordinated Correction waits behind the view; an uncoordinated view permits its commit.
+          // Both schedules attempt the same public Correction before the next calendar bucket is read.
+          if (coordinatedOperations.has("dashboard.getDashboardView")) {
+            yield* Effect.tryPromise(() => correctionQueued.promise);
+          } else {
+            expect((yield* Effect.tryPromise(() => correction)).status).toBe(200);
+          }
+        } finally {
+          releaseView.resolve();
+        }
+        const chart = (
+          reply: Response
+        ): Effect.Effect<
+          ReadonlyArray<Readonly<{ date: string; amount: string }>>,
+          Schema.SchemaError | Cause.UnknownError
+        > =>
+          Effect.gen(function* () {
+            expect(reply.status).toBe(200);
+            const { data: view } = yield* Schema.decodeUnknownEffect(
+              Schema.Struct({ data: Schema.toCodecJson(DashboardView) })
+            )(yield* Effect.tryPromise(() => reply.json()));
+            if (view.layout.kind !== "leaf" || !("buckets" in view.layout.widget.result)) {
+              throw new Error("Expected day chart");
+            }
+            return view.layout.widget.result.buckets.map((bucket) => {
+              if (bucket.key.kind !== "day") throw new Error("Expected local day");
+              return {
+                date: bucket.key.date,
+                amount: BigDecimal.format(
+                  bucket.moneyGroups[0]?.outflow.amount ?? BigDecimal.make(0n, 0)
+                ),
+              };
+            });
+          });
+        expect(yield* chart(yield* Effect.tryPromise(() => pendingView))).toEqual([
+          { date: localDate(first), amount: "10" },
+        ]);
+        expect((yield* Effect.tryPromise(() => correction)).status).toBe(200);
+        coordinatorObservers.delete(delayed);
+        expect(
+          yield* chart(yield* Effect.tryPromise(() => send(delayed, 0, "/dashboard/view")))
+        ).toEqual([{ date: localDate(second), amount: "10" }]);
       })
     ),
   30_000

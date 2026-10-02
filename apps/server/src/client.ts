@@ -63,7 +63,7 @@ export {
   minimumSplitWeight,
   SplitWeight,
   WidgetId,
-} from "~/core/dashboard/model";
+} from "~/core/dashboard/contract";
 export {
   ApprovedBrowserPairingEmailAuthentication,
   AuthenticatedBrowserLoginPairing,

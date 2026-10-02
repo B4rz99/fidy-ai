@@ -1,14 +1,15 @@
+import { type ProjectedRange, Widget } from "./contract";
 import { expect, it } from "@effect/vitest";
 import { BigDecimal, Option, Schema } from "effect";
 import { Money } from "~/core/_shared/money";
+import { Category } from "~/core/categories/contract";
 import { CategoryId } from "~/core/categories/reference";
-import { Widget } from "./model";
+
 import {
-  type ProjectedRange,
   projectAggregateBudgetSpent,
   projectAggregateChart,
   projectAggregateMetric,
-} from "./aggregation";
+} from "./operations";
 
 const categoryId = CategoryId.make("10000000-0000-4000-8000-000000000001");
 const otherId = CategoryId.make("10000000-0000-4000-8000-000000000002");
@@ -42,7 +43,9 @@ it("groups maintained bucket amounts and maxima by Category without mixing Curre
     widget,
     ranges,
     lookupCategory: (id) =>
-      id === categoryId ? Option.some({ id: categoryId, label: "Restaurants" }) : Option.none(),
+      id === categoryId
+        ? Option.some(Schema.decodeSync(Category)({ id: categoryId, label: "Restaurantes" }))
+        : Option.none(),
   });
   expect(Option.isSome(result)).toBe(true);
   if (Option.isNone(result)) throw new Error("Expected chart buckets");

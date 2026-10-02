@@ -6,7 +6,7 @@ import { bindOperationCatalog, makeOperationCatalog } from "~/shell/_shared/oper
 import { BrowserLoginGroup } from "~/shell/browser-login/contract";
 import { BudgetsGroup } from "~/shell/budgets/contract";
 import { CategoriesGroup } from "~/shell/categories/contract";
-import { DashboardGroup } from "~/shell/dashboard/operations";
+import { DashboardGroup } from "~/shell/dashboard/contract";
 import { EmailAuthenticationGroup } from "~/shell/email-authentication/contract";
 import { IdentityGroup } from "~/shell/identity/contract";
 import { InsightsGroup } from "~/shell/insights/operations";

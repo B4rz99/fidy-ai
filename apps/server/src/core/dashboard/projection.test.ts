@@ -1,8 +1,8 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime, Schema } from "effect";
 import { IanaTimeZone } from "~/core/_shared/context";
-import { Widget } from "./model";
-import { dashboardProjectionRanges } from "./projection";
+import { Widget } from "./contract";
+import { dashboardProjectionRanges } from "./operations";
 
 const zone = Schema.decodeSync(IanaTimeZone)("America/New_York");
 const dayWidget = Schema.decodeSync(Widget)({

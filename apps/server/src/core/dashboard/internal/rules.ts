@@ -1,33 +1,31 @@
+import { collectLayoutWidgets } from "./layout";
 import { Effect, BigInt as EffectBigInt, Option, Schema, SchemaIssue } from "effect";
-import {
-  type DashboardFailure,
-  type DashboardIssue,
-  DuplicateWidgetId,
-  InvalidDashboardResult,
-  LastWidgetRemoval,
-  RegionNotFound,
-  RootRegionResize,
-  SelfPlacement,
-  WidgetNotFound,
-} from "./errors";
 import {
   type Axis,
   type BesidePlacement,
   DashboardDocument,
   type DashboardEdit,
+  type DashboardFailure,
+  type DashboardIssue,
+  DuplicateWidgetId,
+  InvalidDashboardResult,
+  LastWidgetRemoval,
   type LayoutNode,
   type LayoutRegionRatio,
   type LayoutRegionSelector,
   type Placement,
+  RegionNotFound,
+  RootRegionResize,
+  SelfPlacement,
   type SplitNode,
   SplitWeight,
   type Widget,
   type WidgetId,
-  collectLayoutWidgets,
+  WidgetNotFound,
   isBesidePlacement,
   maximumSplitWeight,
   minimumSplitWeight,
-} from "./model";
+} from "~/core/dashboard/contract";
 
 const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1();
 
@@ -414,12 +412,14 @@ const regionMatches = (
   );
 };
 
-const ratioParts: Readonly<Record<LayoutRegionRatio, readonly [number, number]>> = {
-  "one-quarter": [1, 4],
-  "one-third": [1, 3],
-  "one-half": [1, 2],
-  "two-thirds": [2, 3],
-  "three-quarters": [3, 4],
+const ratioParts: Readonly<
+  Record<LayoutRegionRatio, Readonly<{ numerator: number; denominator: number }>>
+> = {
+  "one-quarter": { numerator: 1, denominator: 4 },
+  "one-third": { numerator: 1, denominator: 3 },
+  "one-half": { numerator: 1, denominator: 2 },
+  "two-thirds": { numerator: 2, denominator: 3 },
+  "three-quarters": { numerator: 3, denominator: 4 },
 };
 
 const resizeChildren = (
@@ -449,7 +449,7 @@ const resizeChildren = (
       return index === adjacentIndex ? { ...child, weight: adjacentWeight } : child;
     });
   }
-  const [numerator, denominator] = ratioParts[size.ratio];
+  const { numerator, denominator } = ratioParts[size.ratio];
   const siblingCount = children.length - 1;
   const targetWeight = Schema.decodeSync(SplitWeight)(numerator * siblingCount);
   const siblingWeight = Schema.decodeSync(SplitWeight)(denominator - numerator);

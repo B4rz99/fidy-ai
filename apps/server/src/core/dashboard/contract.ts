@@ -1,7 +1,10 @@
-import { DateTime, Option, Schema, Struct } from "effect";
+import { UserContext } from "~/core/identity/contract";
+import { Category } from "~/core/categories/contract";
+import { Data, DateTime, Option, Schema, Struct } from "effect";
 import { CategoryId } from "~/core/categories/reference";
-import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
-import { Currency } from "~/core/_shared/money";
+import { IanaTimeZone } from "~/core/_shared/context";
+import type { Direction, EffectiveTransactionAggregate } from "~/core/transactions/contract";
+import { Currency, MoneyGroups, type ReadonlyMoney } from "~/core/_shared/money";
 import { UtcTimestamp } from "~/core/_shared/time";
 
 const maximumDashboardLabelLength = 80;
@@ -57,30 +60,26 @@ export const MoneyAggregation = Schema.Literals(["sum", "average", "maximum"]);
 export type MoneyAggregation = typeof MoneyAggregation.Type;
 
 /** Presentation and jurisdiction applied when ephemeral widget data was calculated. */
-export const DashboardQueryContext = Schema.Struct({
-  serviceMarket: ServiceMarket,
-  locale: Locale,
-  timeZone: IanaTimeZone,
-}).annotate({ identifier: "DashboardQueryContext" });
+export const DashboardQueryContext = UserContext.annotate({ identifier: "DashboardQueryContext" });
 export type DashboardQueryContext = typeof DashboardQueryContext.Type;
 
-const validAppliedPeriod = Schema.makeFilter<
-  Readonly<{ readonly from: DateTime.Utc; readonly toExclusive: DateTime.Utc }>
->((period) =>
+const AppliedDashboardPeriodShape = Schema.Struct({
+  requested: DashboardPeriod,
+  from: UtcTimestamp,
+  toExclusive: UtcTimestamp,
+  timeZone: IanaTimeZone,
+});
+
+const validAppliedPeriod = Schema.makeFilter<typeof AppliedDashboardPeriodShape.Type>((period) =>
   DateTime.Order(period.from, period.toExclusive) < 0
     ? undefined
     : { path: ["toExclusive"], issue: "Expected an instant after from" }
 );
 
 /** Half-open UTC interval resolved from a relative period in the applied time zone. */
-export const AppliedDashboardPeriod = Schema.Struct({
-  requested: DashboardPeriod,
-  from: UtcTimestamp,
-  toExclusive: UtcTimestamp,
-  timeZone: IanaTimeZone,
-})
-  .check(validAppliedPeriod)
-  .annotate({ identifier: "AppliedDashboardPeriod" });
+export const AppliedDashboardPeriod = AppliedDashboardPeriodShape.check(
+  validAppliedPeriod
+).annotate({ identifier: "AppliedDashboardPeriod" });
 export type AppliedDashboardPeriod = typeof AppliedDashboardPeriod.Type;
 
 const TransactionSearch = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
@@ -490,12 +489,6 @@ export const DashboardEdit = Schema.Union([
   .pipe(Schema.toTaggedUnion("op"));
 export type DashboardEdit = typeof DashboardEdit.Type;
 
-/** Collects Widgets once in the in-order traversal that also defines mobile order. */
-export const collectLayoutWidgets = (node: Readonly<LayoutNode>): ReadonlyArray<Widget> =>
-  node.kind === "leaf"
-    ? [node.widget]
-    : node.children.flatMap((child) => collectLayoutWidgets(child.node));
-
 /** One Category reference and its field relative to the Widget that carries it. */
 export type DashboardCategoryReference = Readonly<{
   readonly categoryId: CategoryId;
@@ -503,31 +496,115 @@ export type DashboardCategoryReference = Readonly<{
   readonly field: "categoryId" | `categories.${number}`;
 }>;
 
-/** The Widgets whose Category filter is optional; absence is not an empty filter. */
-type FilteredWidget = SpendingChartWidget | TransactionListWidget | CustomMetricWidget;
+/** One actionable invariant violation found by the complete-document validation gate. */
+export type DashboardIssue = Readonly<{
+  /** `None` when the violation is about the document as a whole. */
+  readonly path: Option.Option<string>;
+  readonly message: string;
+}>;
 
-const collectFilteredWidgetReferences = (
-  widget: Readonly<FilteredWidget>
-): ReadonlyArray<DashboardCategoryReference> =>
-  widget.categories === undefined
-    ? []
-    : widget.categories.map((categoryId, index) => ({
-        categoryId,
-        widgetId: widget.id,
-        field: `categories.${index}` satisfies `categories.${number}`,
-      }));
+/** The transformed aggregate failed its complete second validation gate. */
+export class InvalidDashboardResult extends Data.TaggedError("InvalidDashboardResult")<{
+  readonly issues: readonly [DashboardIssue, ...Array<DashboardIssue>];
+}> {}
 
-/** Collects Category references without exposing recursive traversal to the shell. */
-export const collectDashboardCategoryReferences = (
-  document: Readonly<DashboardDocument>
-): ReadonlyArray<DashboardCategoryReference> =>
-  collectLayoutWidgets(document.layout).flatMap(
-    Widget.match({
-      "budget-bar": (widget) => [
-        { categoryId: widget.categoryId, widgetId: widget.id, field: "categoryId" as const },
-      ],
-      "spending-chart": collectFilteredWidgetReferences,
-      "transaction-list": collectFilteredWidgetReferences,
-      "custom-metric": collectFilteredWidgetReferences,
-    })
-  );
+/** The edit or its placement references no Widget in the latest document. */
+export class WidgetNotFound extends Data.TaggedError("WidgetNotFound")<{
+  readonly widgetId: WidgetId;
+  readonly role: "edit-target" | "placement-target";
+}> {}
+
+/** The root layout has no sibling-relative region whose weight can change. */
+export class RootRegionResize extends Data.TaggedError("RootRegionResize")<{
+  readonly widgetIds: LayoutRegionSelector;
+}> {}
+
+/** No current leaf or compound layout region has exactly the supplied Widget contents. */
+export class RegionNotFound extends Data.TaggedError("RegionNotFound")<{
+  readonly widgetIds: LayoutRegionSelector;
+}> {}
+
+/** A move cannot use its own Widget as the sibling destination. */
+export class SelfPlacement extends Data.TaggedError("SelfPlacement")<{
+  readonly widgetId: WidgetId;
+}> {}
+
+/** Removing the only remaining Widget would make the dashboard empty. */
+export class LastWidgetRemoval extends Data.TaggedError("LastWidgetRemoval")<{
+  readonly widgetId: WidgetId;
+}> {}
+
+/** An added Widget must introduce an identity absent from the latest document. */
+export class DuplicateWidgetId extends Data.TaggedError("DuplicateWidgetId")<{
+  readonly widgetId: WidgetId;
+}> {}
+
+/** Closed set of pure failures returned by one atomic Dashboard edit. */
+export type DashboardFailure =
+  | InvalidDashboardResult
+  | WidgetNotFound
+  | RootRegionResize
+  | RegionNotFound
+  | SelfPlacement
+  | LastWidgetRemoval
+  | DuplicateWidgetId;
+
+/** Minimal exact aggregate published to Dashboard core decisions by Transaction ownership. */
+export type DashboardDirectionalAmountFact = Readonly<{
+  direction: Direction;
+  money: ReadonlyMoney;
+}>;
+
+/** Minimal exact aggregate required to finalize one configured custom metric. */
+export type DashboardMetricFact =
+  | Readonly<{
+      aggregation: Exclude<MoneyAggregation, "average">;
+      direction: Direction;
+      money: ReadonlyMoney;
+    }>
+  | Readonly<{
+      aggregation: "average";
+      direction: Direction;
+      sum: ReadonlyMoney;
+      count: bigint;
+    }>;
+
+/** One UTC range whose aggregated facts form one local Dashboard chart bucket. */
+export type DashboardProjectionRange = Readonly<{
+  key: string;
+  from: number;
+  toExclusive: number;
+}>;
+
+const LocalCalendarDate = Schema.String.check(
+  Schema.isPattern(/^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/u)
+);
+const LocalCalendarMonth = Schema.String.check(Schema.isPattern(/^\d{4}-(?:0[1-9]|1[0-2])$/u));
+/** One validated Category or local-calendar key for a Dashboard spending bucket. */
+export const DashboardBucket = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("category"), category: Category }),
+  Schema.Struct({ kind: Schema.Literal("day"), date: LocalCalendarDate }),
+  Schema.Struct({ kind: Schema.Literal("month"), month: LocalCalendarMonth }),
+]);
+
+export type DashboardBucket = typeof DashboardBucket.Type;
+
+/** A validated spending bucket containing exact Currency-separated directional Money. */
+export const DashboardChartBucket = Schema.Struct({
+  key: DashboardBucket,
+  moneyGroups: MoneyGroups,
+});
+export type DashboardChartBucket = typeof DashboardChartBucket.Type;
+
+/** Read-only interpretation of a Transaction-owner aggregate. */
+export type ProjectedContribution = Readonly<
+  Omit<EffectiveTransactionAggregate, "sum" | "maximum"> & {
+    sum: ReadonlyMoney;
+    maximum: ReadonlyMoney;
+  }
+>;
+/** One chart bucket or whole-period interval of exact Transaction-owner contributions. */
+export type ProjectedRange = Readonly<{
+  key: string;
+  contributions: ReadonlyArray<ProjectedContribution>;
+}>;

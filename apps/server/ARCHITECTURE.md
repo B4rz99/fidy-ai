@@ -292,6 +292,29 @@ corrections. Each monthly threshold remains monotone with a unique occurrence un
 This ownership refactor adds no external workflow, telemetry purpose, migration or runtime; existing
 canonical spans, metadata-only AuditLogEntries and atomic accountability remain in force.
 
+### Dashboard owner composition
+
+Dashboard publishes validated documents, closed Widget/layout variants, projection facts and edit
+failures through `core/dashboard/contract.ts`; `operations.ts` owns layout edits, presets and exact
+calendar/Money interpretation. Its shell contract owns canonical declarations and enriched views;
+shell operations publish complete validated projections and caller-scoped failure recovery. Private
+layout normalization, calculation and presentation mechanics stay under each owner's `internal/`.
+
+The native Dashboard owner publishes canonical execution and mutation preparation through
+`cloudflare/dashboard/operations.ts`. Document rows, revision checks, D1 statements, committed
+readback and projection assembly remain private. Categories supplies public metadata, Budgets
+supplies complete cap facts, and Transactions supplies complete exact aggregates and bounded lists.
+No Dashboard caller reads another owner's persistence or replicates the effective relation.
+
+First use, edits and view preparation retain the existing one-User canonical commit, live credential
+and scope policy, Audit evidence and batch collision/refusal behavior. Views use the explicit current
+IANA zone, keep Currencies and directions separate, and fail closed on incomplete or invalid facts.
+Individual document calls use the same User coordinator as batch and hosted mutations. Its turn
+covers the commit and complete projection readback, preventing a concurrent Correction from moving
+one contribution between calendar buckets during a view. The projection cache remains request-local.
+This publication adds no migration, runtime, external workflow or telemetry purpose;
+existing canonical spans and metadata-only accountability remain in force.
+
 ### Consent owner composition
 
 Consent publishes its declarations and decisions through `core/consent/contract.ts` and

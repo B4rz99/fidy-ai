@@ -1,0 +1,99 @@
+apps/server/cloudflare/identity/email-replacement.ts
+  s_a260c2c348024c::t_94ac0c2f585082 1,17,426-429,440,453
+apps/server/cloudflare/transactions/internal/transaction-history.ts
+  s_a260c2c348024c::t_94ac0c2f585082 477-478
+apps/server/cloudflare/web-session/internal/credentials.ts
+  s_a260c2c348024c::t_94ac0c2f585082 1-23
+apps/server/ARCHITECTURE.md
+  s_a260c2c348024c::t_94ac0c2f585082 321-338
+apps/server/cloudflare/web-session/internal/current-user.ts
+  s_a260c2c348024c::t_94ac0c2f585082 1-108
+apps/server/cloudflare/consent/internal/ingress.ts
+  s_a260c2c348024c::t_94ac0c2f585082 36
+apps/server/cloudflare/identity/internal/recovery.ts
+  s_a260c2c348024c::t_94ac0c2f585082 1-120
+apps/server/cloudflare/web-session/operations.test.ts
+  s_a260c2c348024c::t_94ac0c2f585082 1-267
+apps/server/cloudflare/browser-login/internal/pairing.ts
+  s_a260c2c348024c::t_94ac0c2f585082 1-397
+apps/server/cloudflare/web-session/internal/lifecycle.ts
+  s_a260c2c348024c::t_94ac0c2f585082 1-78
+apps/server/src/shell/audit/internal/pat-evidence.ts
+  s_a260c2c348024c::t_94ac0c2f585082 6-10,66-68,71-72,77
+apps/server/cloudflare/canonical-work/operations.ts
+  s_a260c2c348024c::t_8098e0335aa261 25
+apps/server/.dependency-cruiser.mjs
+  s_a260c2c348024c::t_94ac0c2f585082 154-185
+apps/server/cloudflare/transactions/internal/transactions.ts
+  s_a260c2c348024c::t_94ac0c2f585082 52,56-57
+  s_a260c2c348024c::t_37f95df854769d 10
+apps/server/cloudflare/web-session/internal/authentication.ts
+  s_a260c2c348024c::t_94ac0c2f585082 1-43
+apps/server/cloudflare/pats/pat-shared.ts
+  s_a260c2c348024c::t_94ac0c2f585082 16
+apps/server/cloudflare/web-session/contract.ts
+  s_a260c2c348024c::t_94ac0c2f585082 1-19
+apps/server/src/core/web-session/operations.test.ts
+  s_a260c2c348024c::t_94ac0c2f585082 1-45
+apps/server/src/shell/audit/internal/recording.ts
+  s_a260c2c348024c::t_94ac0c2f585082 3,41-47,50-53
+apps/server/src/shell/tokens/list-pats.ts
+  s_a260c2c348024c::t_94ac0c2f585082 9,48-50,53,57
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_a260c2c348024c::t_94ac0c2f585082 3076-3080
+  s_a260c2c348024c::t_90394ddafe7ba5 3095
+apps/server/src/shell/web-session/internal/authority.ts
+  s_a260c2c348024c::t_94ac0c2f585082 1-68
+apps/server/cloudflare/web-session/operations.ts
+  s_a260c2c348024c::t_94ac0c2f585082 1-65
+apps/server/src/shell/web-session/operations.ts
+  s_a260c2c348024c::t_94ac0c2f585082 1,3-11,14,16-22,25-49,51-53,55-84
+apps/server/src/core/web-session/contract.ts
+  s_a260c2c348024c::t_94ac0c2f585082 1-8
+apps/server/cloudflare/browser-login/contract.ts
+  s_a260c2c348024c::t_94ac0c2f585082 1-31
+apps/server/cloudflare/onboarding/verified-onboarding.test.ts
+  s_a260c2c348024c::t_94ac0c2f585082 5,1818-1928
+apps/server/scripts/check-dependency-guards.ts
+  s_a260c2c348024c::t_94ac0c2f585082 327-387
+  s_a260c2c348024c::t_9a575bdce358f6 139-143
+  s_a260c2c348024c::t_e69001e0536686 388
+apps/server/src/core/web-session/operations.ts
+  s_a260c2c348024c::t_94ac0c2f585082 1-28
+apps/server/cloudflare/agent/turn-store.ts
+  s_a260c2c348024c::t_94ac0c2f585082 1,926,932-933,1167-1172,1180-1182
+apps/server/cloudflare/agent/hosted-confirmation.ts
+  s_a260c2c348024c::t_94ac0c2f585082 149
+apps/server/cloudflare/web-session/internal/support.ts
+  s_a260c2c348024c::t_94ac0c2f585082 1-51
+apps/server/cloudflare/browser-login/internal/claim.ts
+  s_a260c2c348024c::t_94ac0c2f585082 1-20
+apps/server/cloudflare/identity/operations.ts
+  s_a260c2c348024c::t_94ac0c2f585082 1,49-53
+apps/server/cloudflare/browser-login/operations.ts
+  s_a260c2c348024c::t_94ac0c2f585082 1-27
+apps/server/cloudflare/core-worker.ts
+  s_a260c2c348024c::t_94ac0c2f585082 108-112
+apps/server/cloudflare/card-enrollment/card-enrollment.test.ts
+  s_a260c2c348024c::t_94ac0c2f585082 74,109-117
+apps/server/cloudflare/identity/email-replacement-delivery.ts
+  s_a260c2c348024c::t_94ac0c2f585082 1,151-156,163-164,170,198-204,212,219
+apps/server/cloudflare/card-enrollment/card-enrollment.ts
+  s_a260c2c348024c::t_94ac0c2f585082 1-2,198-221,223-224
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b859b3a508673b733c03522e7c160f3116f45a4f",
+  "prompts": {},
+  "sessions": {
+    "s_a260c2c348024c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0faca-1b69-73d2-b162-83bc0795cdca",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

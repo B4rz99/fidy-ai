@@ -1,7 +1,12 @@
 import { it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { describe, expect } from "vitest";
-import { verifySmokeIdentity } from "../../apps/server/cloudflare/runtime/smoke";
+import {
+  SmokeRequest,
+  smokeDiagnosticRevision,
+  smokeRoutingHeader,
+  verifySmokeIdentity,
+} from "../../apps/server/cloudflare/runtime/smoke";
 import { handleSmoke } from "../../apps/server/cloudflare/runtime/smoke-work";
 import publicWorker from "../../apps/server/cloudflare/public-worker";
 import {
@@ -166,6 +171,87 @@ describe("production smoke ingress", () => {
             "secret-provider-body"
           );
         }
+      })
+  );
+
+  it.effect(
+    "compares diagnostic call forms without changing the forwarded protocol or admitting work",
+    () =>
+      Effect.gen(function* () {
+        const overrides = `fidy-public="${version}", fidy-core="${version}"`;
+        const calls: string[] = [];
+        const coreEnvironment = smokeEnvironment();
+        const environment = {
+          BROWSER_ORIGIN: "https://app.fidyapp.com",
+          CORE: {
+            fetch: (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+              calls.push(typeof input === "string" ? "url" : "request");
+              const forwarded = new Request(input, init);
+              expect(forwarded.url).toBe(
+                "https://core.internal/internal/release-smoke?readiness=1"
+              );
+              expect(forwarded.headers.get("cloudflare-workers-version-overrides")).toBe(overrides);
+              expect(forwarded.headers.get("x-fidy-smoke-proof")).toBe("a".repeat(64));
+              expect(forwarded.headers.get(smokeRoutingHeader)).toBeNull();
+              expect(init?.signal).toBeInstanceOf(AbortSignal);
+              return handleSmoke({ request: forwarded, environment: coreEnvironment });
+            },
+          },
+          LOCAL_CANONICAL_READ_BEARER: "",
+          PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
+          RELEASE_GIT_SHA: revision,
+          CONTRACT_DIGEST: digest,
+          SMOKE_PROOF: "a".repeat(64),
+          CF_VERSION_METADATA: { id: version },
+        };
+        const body = yield* Schema.encodeEffect(Schema.fromJsonString(SmokeRequest))({
+          protocolVersion: 1,
+          probeId: "0".repeat(32),
+          expectedPublicVersionId: version,
+          expectedCoreVersionId: version,
+          expectedGitRevision: smokeDiagnosticRevision,
+          expectedContractDigest: digest,
+        });
+        for (const call of ["request", "url"]) {
+          for (const method of ["GET", "POST"]) {
+            const response = yield* Effect.tryPromise(() =>
+              publicWorker.fetch(
+                new Request("https://api.fidyapp.com/internal/release-smoke?readiness=1", {
+                  method,
+                  headers: {
+                    "x-fidy-smoke-proof": "a".repeat(64),
+                    "cloudflare-workers-version-overrides": overrides,
+                    [smokeRoutingHeader]: call,
+                  },
+                  ...(method === "POST" ? { body } : {}),
+                }),
+                environment
+              )
+            );
+            expect(response.headers.get(smokeRoutingHeader)).toBe(call);
+            expect(response.status).toBe(method === "GET" ? 200 : 503);
+            if (method === "POST") {
+              expect(response.headers.get("x-fidy-smoke-failure")).toBe("identity");
+            }
+          }
+        }
+        expect(calls).toEqual(["request", "request", "url", "url"]);
+        for (const [proof, call, status] of [
+          ["invalid", "url", 404],
+          ["a".repeat(64), "foreign-text", 503],
+        ] as const) {
+          const rejected = yield* Effect.tryPromise(() =>
+            publicWorker.fetch(
+              new Request("https://api.fidyapp.com/internal/release-smoke?readiness=1", {
+                headers: { "x-fidy-smoke-proof": proof, [smokeRoutingHeader]: call },
+              }),
+              environment
+            )
+          );
+          expect(rejected.status).toBe(status);
+          expect(rejected.headers.get(smokeRoutingHeader)).toBeNull();
+        }
+        expect(calls).toHaveLength(4);
       })
   );
 

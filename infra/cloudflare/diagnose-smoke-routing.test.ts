@@ -1,4 +1,6 @@
-import { Context, Effect, Exit, Layer, Schema } from "effect";
+import { it as effectIt } from "@effect/vitest";
+import { Context, Effect, Exit, Fiber, Layer, Schema } from "effect";
+import { TestClock } from "effect/testing";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 import { describe, expect, it, vi } from "vitest";
 import { type RoutingObservation, diagnoseSmokeRouting } from "./diagnose-smoke-routing";
@@ -58,6 +60,34 @@ const rejectedPostResponse = (
   });
 
 describe("read-only smoke routing diagnosis", () => {
+  effectIt.effect(
+    "keeps settling read-only and issues no probes before the fixed observation window",
+    () =>
+      Effect.gen(function* () {
+        let requests = 0;
+        const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation(() => {
+          requests++;
+          return Promise.resolve(new Response(null, { status: 503 }));
+        });
+        try {
+          const fiber = yield* Effect.forkChild(
+            runDiagnostic({ ...config, SMOKE_ROUTING_WINDOW: "settled" }, mockedFetch)
+          );
+          yield* TestClock.adjust("59 seconds");
+          expect(requests).toBe(0);
+          yield* TestClock.adjust("10 seconds");
+          const observations = yield* Fiber.join(fiber);
+          expect(requests).toBe(96);
+          expect(
+            observations.every(
+              (value) => value.window === "settled" && value.coreVersion === "unavailable"
+            )
+          ).toBe(true);
+        } finally {
+          mockedFetch.mockRestore();
+        }
+      })
+  );
   it(
     "distinguishes candidate GET from stable POST with matched URLs and overrides and only refused diagnostic bodies",
     () =>
@@ -70,11 +100,13 @@ describe("read-only smoke routing diagnosis", () => {
             const intermediate =
               request.headers
                 .get("cloudflare-workers-version-overrides")
-                ?.includes(publicStable) === true;
+                ?.includes(publicCandidate) !== true;
             const publicVersion = intermediate ? publicStable : publicCandidate;
             const headers = {
               "cache-control": "no-store",
               "x-fidy-smoke-worker-version": publicVersion,
+              "x-fidy-smoke-routing-call":
+                request.headers.get("x-fidy-smoke-routing-call") ?? "request",
             };
             if (request.method === "POST") {
               return rejectedPostResponse(request, headers);
@@ -102,7 +134,13 @@ describe("read-only smoke routing diagnosis", () => {
           });
           try {
             const observations = yield* runDiagnostic(config, mockedFetch);
-            expect(observations).toHaveLength(24);
+            expect(observations).toHaveLength(96);
+            expect(observations.every((value) => value.observedCall === value.call)).toBe(true);
+            for (const call of ["request", "url"]) {
+              expect(
+                observations.filter((value) => value.pairing === "candidate" && value.call === call)
+              ).toHaveLength(24);
+            }
             expect(
               observations
                 .filter((value) => value.method === "GET")
@@ -117,11 +155,26 @@ describe("read-only smoke routing diagnosis", () => {
                   (value) => value.coreVersion === coreStable && value.coreSource === "equality"
                 )
             ).toBe(true);
-            for (let index = 0; index < requests.length; index += 2) {
-              expect(requests[index]?.url).toBe(requests[index + 1]?.url);
-              expect(requests[index]?.headers.get("cloudflare-workers-version-overrides")).toBe(
-                requests[index + 1]?.headers.get("cloudflare-workers-version-overrides")
+            for (const request of requests) {
+              expect(request.url).toBe(
+                "https://api.fidyapp.com/internal/release-smoke?readiness=1"
               );
+              const override = request.headers.get("cloudflare-workers-version-overrides");
+              expect([
+                `fidy-public="${publicCandidate}", fidy-core="${coreCandidate}"`,
+                `fidy-public="${publicStable}", fidy-core="${coreCandidate}"`,
+                `fidy-core="${coreCandidate}"`,
+              ]).toContain(override);
+              expect(
+                requests.some(
+                  (other) =>
+                    other.method !== request.method &&
+                    other.url === request.url &&
+                    other.headers.get("cloudflare-workers-version-overrides") === override &&
+                    other.headers.get("x-fidy-smoke-routing-call") ===
+                      request.headers.get("x-fidy-smoke-routing-call")
+                )
+              ).toBe(true);
             }
             const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
               observations
@@ -165,6 +218,7 @@ describe("read-only smoke routing diagnosis", () => {
                 : new Response(null, {
                     status: 503,
                     headers: {
+                      "x-fidy-smoke-routing-call": "secret-foreign-text",
                       "x-fidy-smoke-failure": "identity",
                       "x-fidy-smoke-core-version": coreCandidate,
                     },
@@ -173,6 +227,7 @@ describe("read-only smoke routing diagnosis", () => {
           });
           try {
             const observations = yield* runDiagnostic(config, mockedFetch);
+            expect(observations.every((value) => value.observedCall === "unavailable")).toBe(true);
             expect(
               observations
                 .filter((value) => value.method === "GET")

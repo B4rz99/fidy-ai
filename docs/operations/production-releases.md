@@ -194,21 +194,37 @@ existing seven-attempt, 1.5-second-spacing bound with public-version fallback re
 mismatch still fails; normal-traffic probes, transport/authority errors, and failures after admission
 are never retried by this rule. Proof-admitted identity failures carry only three equality bits
 (Core version/revision/digest), decoded by ingress and printed as booleans by the runner. Observed
-identity values and foreign text never enter the diagnostic. This tolerates a transient pre-admission
+identity values and foreign text never enter the ordinary smoke verdict. This tolerates a transient pre-admission
 routing race without proving that such a race caused every historical failure.
 
 For the recurring identity failure, the protected release runs `diagnose-smoke-routing.ts` after
-staging and again after a failed pairing smoke, before cleanup. Six rounds compare candidate and
-intermediate GET/POST requests concurrently, using the same readiness URL and version overrides.
+staging and again after pairing smoke completes, before guarded promotion or cleanup. The latter waits a fixed 60 seconds
+before sampling, distinguishing early selection from settled selection without changing retry bounds.
+Six rounds use the same readiness URL, with two replicas of each GET/POST control. Candidate requests
+compare the existing Request service-binding call with the documented URL/options form; method,
+headers, body, destination and cancellation signal remain the same. Proof-admitted ingress reports
+which call it actually used; an older ingress reports `unavailable`, never an assumed call form.
+Intermediate requests compare paired overrides with a Core-only override. Core-only requests rely
+on the still-100%-stable public deployment; their observed public identity must be checked against the
+captured stable version. Each round has 16 concurrent requests (96 per sampling window).
 GET observes identity only. POST supplies the reserved all-zero Git revision and is rejected before
 admission, binding checks or publication—even in local zero-revision configuration. Older Production
 Core code also rejects it because its configured revision is nonzero. The runner caps each request
-at eight seconds, the run at 65 seconds and streamed GET responses at 4 KiB; redirects and automatic
-HTTP tracing are disabled. Output contains only method, pairing, round, status, validated public/Core
+at eight seconds, the run at 125 seconds (including settling) and streamed GET responses at 4 KiB;
+redirects and automatic HTTP tracing are disabled. Output contains only method, pairing, round,
+replica, requested/observed call form, override form, observation window, status, validated public/Core
 version IDs and identity source. New Core rejection headers carry a validated version ID; older Core
 can be identified by true equality against the captured stable version, marked `equality`, never
 assumed from a fallback. Missing/malformed identity remains `unavailable`. Observations are not smoke
 attestations and cannot authorize promotion; ordinary readiness and synthetic gates still run.
+
+The [Cloudflare version-override contract](https://developers.cloudflare.com/workers/versions-and-deployments/version-overrides/)
+supports explicit overrides through service-binding `fetch` calls and warns that unapplied overrides
+fall back to deployment percentages. Our ingress already forwards that header explicitly. The open
+[Workers SDK report #15536](https://github.com/cloudflare/workers-sdk/issues/15536) describes a similar
+0%-version override failure, but has no confirmed platform cause. Matching symptoms are supporting
+context, not proof that Fidy has the same bug. Run 37048560756 confirmed per-request and time-varying
+selection; it did not establish that HTTP method caused the divergence.
 
 Never deploy a mutable tag, a later checkout, or provider-controlled source. Production has no
 persistent staging sibling. The stack rejects missing, malformed, and all-zero Production release

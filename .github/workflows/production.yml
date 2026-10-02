@@ -151,9 +151,11 @@ jobs:
         working-directory: infra/cloudflare
         run: bun verify-production-smoke.ts
 
-      - name: Observe routing again before cleaning up a failed smoke
-        if: ${{ failure() && steps.candidate_smoke.outcome == 'failure' }}
+      - name: Observe settled routing before guarded promotion or cleanup
+        if: ${{ !cancelled() && (steps.candidate_smoke.outcome == 'success' || steps.candidate_smoke.outcome == 'failure') }}
         working-directory: infra/cloudflare
+        env:
+          SMOKE_ROUTING_WINDOW: settled
         run: bun diagnose-smoke-routing.ts
 
       - name: Promote the exact smoke-tested Workers

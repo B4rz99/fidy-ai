@@ -18,7 +18,7 @@ import {
   defectiveBatchDb,
   seedTransaction,
 } from "./statement-batch.test-fixture";
-import { hostedTurnTestMigrations } from "../agent/hosted-turn-test-migrations";
+import { hostedTurnTestMigrations } from "../test-fixtures/hosted-turn";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import { statementConflictMessage } from "./internal/statement-staging";
 import {

@@ -1,17 +1,18 @@
 import { type MemoryOperationId, memoryOperationIds } from "@fidy/server/memory-api";
 import { BatchInput, type CanonicalWork } from "./canonical-operations/contract";
-import { UserId } from "@fidy/server/agent-runtime";
+import { UserId } from "@fidy/server/identity-reference";
 import { makeAuditRetention } from "@fidy/server/audit-runtime";
 import { EmailAddress } from "@fidy/server/client";
-import { HostedTurnProgressRequest } from "../src/shell/agent/hosted-turn-api";
+import { HostedTurnProgressRequest } from "../src/shell/agent/contract";
 import {
   HostedDeliveryAdmission,
   HostedProgressAdmission,
   HostedTurnAdmission,
   hostedDeliveryReceipt,
   hostedTurnInput,
-} from "./agent/hosted-turn";
-import { sweepHostedTurns } from "./agent/hosted-turn-sweep";
+} from "./agent/contract";
+import { makeAgentRetention } from "./agent/runtime";
+import type { WorkersAiEnvironment } from "./ai/contract";
 import {
   type BrowserPairingEmailEnvironment,
   type EmailReplacementEnvironment,
@@ -117,7 +118,7 @@ import {
   observeWorkerPromise,
   observeWorkerRequest,
 } from "./runtime/telemetry";
-import { type WorkersAiEnvironment, sweepExpiredWorkersAiAdmission } from "./ai/workers-ai";
+import { sweepExpiredWorkersAiAdmission } from "./ai/workers-ai";
 import { statementStagingPath } from "@fidy/server/ingestion-contract";
 import {
   expireStatementReviewEvidence,
@@ -2167,9 +2168,9 @@ const scheduledActivities = (
       db: environment.DB,
       now: current,
     }).pipe(Effect.mapError(() => undefined)),
-    "hostedTurn.sweep": sweepHostedTurns({ db: environment.DB, now: current }).pipe(
-      Effect.mapError(() => undefined)
-    ),
+    "hostedTurn.sweep": makeAgentRetention({ db: environment.DB })
+      .sweep(current)
+      .pipe(Effect.mapError(() => undefined)),
     "patPairing.sweep": Effect.tryPromise({
       try: () => sweepExpiredPATPairings(environment.DB),
       catch: () => undefined,

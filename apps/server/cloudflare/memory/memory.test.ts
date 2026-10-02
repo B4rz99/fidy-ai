@@ -7,7 +7,7 @@ import { Memory, MemoryId, maximumAggregateMemoryTokens } from "@fidy/server/mem
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { UserTransactionCoordinator } from "../transactions/runtime";
-import { hostedTurnTestMigrations } from "../agent/hosted-turn-test-migrations";
+import { hostedTurnTestMigrations } from "../test-fixtures/hosted-turn";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure")<{ cause: unknown }> {}
 const fromTestPromise = <A>(promise: () => PromiseLike<A>): Effect.Effect<A> =>

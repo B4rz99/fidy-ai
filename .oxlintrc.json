@@ -141,7 +141,7 @@
   "overrides": [
     // Compaction is one ordered preflight with failure checks at each provider stage.
     {
-      "files": ["apps/server/cloudflare/agent/hosted-turn.ts"],
+      "files": ["apps/server/cloudflare/agent/internal/hosted-turn.ts"],
       "rules": {
         "complexity": "off",
         "max-lines-per-function": "off"
@@ -149,7 +149,7 @@
     },
     // D1 continuity reads and the guarded atomic replacement are cohesive storage boundaries.
     {
-      "files": ["apps/server/cloudflare/agent/turn-store.ts"],
+      "files": ["apps/server/cloudflare/agent/internal/turn-store.ts"],
       "rules": {
         "max-lines-per-function": "off"
       }

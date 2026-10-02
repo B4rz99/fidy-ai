@@ -1,10 +1,10 @@
 import { protectConsentStatement } from "@fidy/server/consent-operations";
 import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
 import { webSessionCredentialAuthority } from "@fidy/server/web-session-operations";
-import { type OwnedStatement } from "../../src/shell/_shared/owned-statement";
-import { type TransactionSubject } from "../canonical-work/operations";
-import { whatsAppIdentityQuery } from "../identity/operations";
-import { type WhatsAppHostedSubject } from "../whatsapp/contract";
+import { type OwnedStatement } from "../../../src/shell/_shared/owned-statement";
+import { type TransactionSubject } from "../../canonical-work/operations";
+import { whatsAppIdentityQuery } from "../../identity/operations";
+import { type WhatsAppHostedSubject } from "../../whatsapp/contract";
 
 export type HostedSubject = TransactionSubject | WhatsAppHostedSubject;
 export const isWhatsAppHosted = (subject: HostedSubject): subject is WhatsAppHostedSubject =>

@@ -3,7 +3,7 @@ import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Option, Schema } from "
 import { TestClock } from "effect/testing";
 import assert from "node:assert/strict";
 import { E164PhoneNumber, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
-import { TranscriptText } from "~/core/transcript/model";
+import { TranscriptText } from "~/core/agent/contract";
 import { TelemetryHttpStatus } from "~/shell/observability/contract";
 import {
   OutboundHttpFailure,

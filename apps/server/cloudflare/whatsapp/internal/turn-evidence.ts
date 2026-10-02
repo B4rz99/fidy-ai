@@ -1,4 +1,5 @@
-import { TranscriptText, type TranscriptTurnId, type UserId } from "@fidy/server/agent-runtime";
+import { TranscriptText, type TranscriptTurnId } from "@fidy/server/agent-contract";
+import { type UserId } from "@fidy/server/identity-reference";
 import { type Cause, Effect, Option, Schema } from "effect";
 import {
   WhatsAppBusinessPortfolioId,
@@ -8,9 +9,7 @@ import { type OwnedStatement } from "../../../src/shell/_shared/owned-statement"
 import { hostedTranscriptRetentionMs } from "../../agent/contract";
 import { prepareHostedChannelTurn } from "../../agent/operations";
 import { prepareWhatsAppIdentity } from "../../identity/operations";
-import type { WhatsAppUnavailable } from "../contract";
 import {
-  type CompleteWhatsAppTurn,
   type WhatsAppHostedSubject,
   type WhatsAppInboundEvidence,
   type WhatsAppTurnCompletion,
@@ -60,7 +59,6 @@ export const recoverWhatsAppDelivery = ({
   userId,
   turnId,
   startedAtMs,
-  completeTurn,
   now,
 }: Readonly<{
   db: D1Database;
@@ -68,10 +66,9 @@ export const recoverWhatsAppDelivery = ({
   turnId: TranscriptTurnId;
   startedAtMs: number;
   now: number;
-  completeTurn: CompleteWhatsAppTurn;
 }>): Effect.Effect<
-  Option.Option<boolean>,
-  Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable
+  Option.Option<WhatsAppTurnCompletion>,
+  Cause.UnknownError | Schema.SchemaError
 > =>
   Effect.gen(function* () {
     const raw = yield* Effect.tryPromise(() =>
@@ -101,16 +98,14 @@ export const recoverWhatsAppDelivery = ({
           .run()
       );
     }
-    return Option.some(
-      yield* completeTurn({
-        userId,
-        turnId,
-        startedAtMs,
-        result: recoveredDeliveryOutcome(delivery),
-        subject: recoveredDeliverySubject(delivery, userId),
-        now,
-      })
-    );
+    return Option.some({
+      userId,
+      turnId,
+      startedAtMs,
+      result: recoveredDeliveryOutcome(delivery),
+      subject: recoveredDeliverySubject(delivery, userId),
+      now,
+    });
   });
 
 export const prepareWhatsAppInbound = ({

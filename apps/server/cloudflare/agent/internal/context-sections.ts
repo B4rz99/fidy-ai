@@ -1,7 +1,7 @@
 import { Option } from "effect";
 import type { DateTime } from "effect";
 import type { User } from "~/core/identity/contract";
-import type { TranscriptEntry } from "~/core/transcript/model";
+import type { TranscriptEntry } from "~/core/agent/contract";
 import type { HostedContextSection } from "~/shell/hosted-inference/contract";
 
 /** The semantic values one hosted context orders into its canonical section list. */
@@ -14,8 +14,7 @@ export type HostedContextSectionInput = Readonly<{
 }>;
 
 /**
- * The one canonical order of semantic hosted-context sections, so the live Turn WorkingContext
- * builds and HostedInference's synthetic maximum startup context can never drift apart.
+ * The Agent-owned ordering of purpose-bound semantic material within one WorkingContext.
  */
 export const hostedContextSections = (
   input: HostedContextSectionInput

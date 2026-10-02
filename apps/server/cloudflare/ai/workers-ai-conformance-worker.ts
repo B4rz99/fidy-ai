@@ -1,6 +1,7 @@
 import { verifyHostedInferenceConformanceChecks } from "@fidy/server/hosted-inference";
 import { Cause, Effect, Exit, Option } from "effect";
-import { type WorkersAiEnvironment, makeCloudflareHostedInference } from "./workers-ai";
+import { makeCloudflareHostedInference } from "./workers-ai";
+import type { WorkersAiEnvironment } from "./contract";
 
 const jsonHeaders = {
   "cache-control": "no-store",

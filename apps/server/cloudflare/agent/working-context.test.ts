@@ -1,10 +1,9 @@
+import { HostedAgentSessionId, TranscriptEntry, TranscriptTurnId } from "~/core/agent/contract";
 import { expect, it } from "@effect/vitest";
 import { DateTime, Option, Schema } from "effect";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { UserId } from "~/core/identity/reference";
-import { TranscriptEntry, TranscriptTurnId } from "~/core/transcript/model";
-import { HostedAgentSessionId } from "~/core/transcript/reference";
-import { type SessionTranscriptEntry, assembleWorkingContext } from "./working-context";
+import { type SessionTranscriptEntry, assembleWorkingContext } from "./internal/working-context";
 
 const userA = UserId.make("f1d1a000-0000-4000-8000-000000000281");
 const userB = UserId.make("f1d1a000-0000-4000-8000-000000000282");

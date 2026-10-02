@@ -102,14 +102,14 @@ export const recordWhatsAppStatus = (
   Effect.Success<ReturnType<typeof recordWhatsAppStatusOwned>>,
   WhatsAppUnavailable
 > => recordWhatsAppStatusOwned(input).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
-/** Reconcile authenticated status under the same User coordinator; only delivered evidence can complete its Turn. */
+/** Record authenticated status and return inert terminal evidence; only Agent may commit its Turn with live delivery guards. */
 export const reconcileWhatsAppStatus = (
   input: Parameters<typeof reconcileWhatsAppStatusOwned>[0]
 ): Effect.Effect<
   Effect.Success<ReturnType<typeof reconcileWhatsAppStatusOwned>>,
   WhatsAppUnavailable
 > => reconcileWhatsAppStatusOwned(input).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
-/** Recover abandoned delivery without resending; preserve a truthful unconfirmed outcome after any possible send. */
+/** Recover abandoned delivery without resending and return inert completion evidence for Agent; preserve unconfirmed outcomes after any possible send. */
 export const recoverWhatsAppDelivery = (
   input: Parameters<typeof recoverWhatsAppDeliveryOwned>[0]
 ): Effect.Effect<

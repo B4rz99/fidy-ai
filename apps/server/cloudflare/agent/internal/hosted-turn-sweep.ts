@@ -1,12 +1,9 @@
-import { UserId } from "@fidy/server/agent-runtime";
+import { pendingExecutionRecoveryMs } from "../contract";
+import { UserId } from "@fidy/server/identity-reference";
 import { type Cause, Effect, type Schema } from "effect";
-import type { WhatsAppUnavailable } from "../whatsapp/contract";
-import { whatsAppRecoveryPriority } from "../whatsapp/operations";
-import {
-  expireHostedPending,
-  hostedTranscriptRetentionMs,
-  pendingExecutionRecoveryMs,
-} from "./turn-store";
+import type { WhatsAppUnavailable } from "../../whatsapp/contract";
+import { whatsAppRecoveryPriority } from "../../whatsapp/operations";
+import { expireHostedPending, hostedTranscriptRetentionMs } from "./turn-store";
 
 const maximumUsersPerSweep = 100;
 

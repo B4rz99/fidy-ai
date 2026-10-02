@@ -1,3 +1,4 @@
+import type { WorkersAiEnvironment } from "./contract";
 import {
   HostedInference,
   HostedInferenceError,
@@ -5,8 +6,8 @@ import {
   type WorkersAiBindingRun,
   makeWorkersAiHostedInference,
 } from "@fidy/server/hosted-inference";
-import { type Cause, Data, Effect, type Layer, Option } from "effect";
-import type { TranscriptTurnId } from "@fidy/server/agent-runtime";
+import { type Cause, Context, Data, Effect, Exit, Layer, Option, type Scope } from "effect";
+import type { TranscriptTurnId } from "@fidy/server/agent-contract";
 import { withConsentEgress } from "../consent/operations";
 import { cloudflareWorkerTelemetry, observeModelRun } from "../runtime/telemetry";
 import { newId } from "../secret-material/operations";
@@ -194,12 +195,6 @@ export const sweepExpiredWorkersAiAdmission = ({
     ])
   ).pipe(Effect.asVoid);
 
-/** Core bindings required to construct hosted inference without any external-model route. */
-export type WorkersAiEnvironment = Readonly<{
-  AI: Readonly<{ run: WorkersAiBindingRun }>;
-  HOSTED_AI_MODEL: string;
-}>;
-
 /**
  * Builds hosted inference from the direct native binding. Missing binding or model configuration
  * fails before authority is returned; the wrapper always requests a bounded raw response and passes
@@ -267,3 +262,17 @@ export const cloudflareHostedInferenceLive = ({
   HostedInference.layer(
     makeUserCloudflareHostedInference({ environment, db, userId, admittedTurnId })
   );
+
+/**
+ * Construct only the inference consumed by this workload. Missing or unusable binding yields None,
+ * allowing unrelated canonical owners to remain available; User egress and spend checks remain live.
+ */
+export const optionalHostedInference = (
+  input: Parameters<typeof cloudflareHostedInferenceLive>[0]
+): Effect.Effect<Option.Option<HostedInferenceService>, never, Scope.Scope> =>
+  Effect.gen(function* () {
+    const built = yield* Effect.exit(Layer.build(cloudflareHostedInferenceLive(input)));
+    return Exit.isFailure(built)
+      ? Option.none()
+      : Option.some(Context.get(built.value, HostedInference));
+  });

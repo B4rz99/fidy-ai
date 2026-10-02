@@ -269,6 +269,156 @@ const PROBES: readonly Probe[] = [
     ],
   },
   {
+    name: "native Agent cannot bypass HostedInference through a raw model or tokenizer",
+    expect: { kind: "rejected", mustContain: ["error native-agent-imports-model-implementation"] },
+    files: [
+      {
+        path: `cloudflare/agent/${PROBE_PREFIX}raw-model/probe.ts`,
+        source:
+          'import { LanguageModel, Tokenizer } from "effect/unstable/ai";\nexport const bypass = [LanguageModel, Tokenizer];\n',
+      },
+    ],
+  },
+  {
+    name: "native Agent ownership remains acyclic",
+    expect: { kind: "rejected", mustContain: ["error native-agent-cycle"] },
+    files: [
+      {
+        path: `cloudflare/agent/${PROBE_PREFIX}cycle/a.ts`,
+        source: 'import type { B } from "./b";\nexport type A = { readonly b: B };\n',
+      },
+      {
+        path: `cloudflare/agent/${PROBE_PREFIX}cycle/b.ts`,
+        source: 'import type { A } from "./a";\nexport type B = { readonly a: A };\n',
+      },
+    ],
+  },
+
+  {
+    name: "native Agent cannot import portable private context selection",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error cloudflare-imports-portable-agent-internal: cloudflare/agent/${PROBE_PREFIX}portable-private/probe.ts → src/core/agent/internal/rules.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/agent/${PROBE_PREFIX}portable-private/probe.ts`,
+        source:
+          'import { isTranscriptWindowEntry } from "~/core/agent/internal/rules";\nexport const bypass = isTranscriptWindowEntry;\n',
+      },
+    ],
+  },
+  {
+    name: "foreign tests cannot acquire native Turn or compaction persistence",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-agent-internal: cloudflare/${PROBE_PREFIX}agent-private/probe.test.ts → cloudflare/agent/internal/turn-store.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}agent-private/probe.test.ts`,
+        source:
+          'import { readHostedContinuity, commitHostedCompaction } from "../agent/internal/turn-store";\nexport const bypass = [readHostedContinuity, commitHostedCompaction];\n',
+      },
+    ],
+  },
+  {
+    name: "tools cannot acquire Agent context construction",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-agent-internal: tools/${PROBE_PREFIX}agent-private/probe.ts → cloudflare/agent/internal/working-context.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `tools/${PROBE_PREFIX}agent-private/probe.ts`,
+        source:
+          'import { assembleWorkingContext } from "../../cloudflare/agent/internal/working-context";\nexport const bypass = assembleWorkingContext;\n',
+      },
+    ],
+  },
+  {
+    name: "Agent declarations cannot acquire execution",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error agent-contract-imports-implementation: cloudflare/agent/${PROBE_PREFIX}contract-direction/contract.ts → cloudflare/agent/internal/hosted-turn.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/agent/${PROBE_PREFIX}contract-direction/contract.ts`,
+        source:
+          'import { completeHostedTurn } from "../internal/hosted-turn";\nexport const bypass = completeHostedTurn;\n',
+      },
+    ],
+  },
+  {
+    name: "Agent private workflow cannot import outward lifecycle interfaces",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error agent-internal-imports-outward-interface: cloudflare/agent/internal/${PROBE_PREFIX}outward/probe.ts → cloudflare/agent/runtime.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/agent/internal/${PROBE_PREFIX}outward/probe.ts`,
+        source:
+          'import { makeAgentService } from "../../runtime";\nexport const bypass = makeAgentService;\n',
+      },
+    ],
+  },
+  {
+    name: "Agent atomic operations cannot acquire runtime",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error agent-operations-imports-runtime: cloudflare/agent/${PROBE_PREFIX}operation-direction/operations.ts → cloudflare/agent/runtime.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/agent/${PROBE_PREFIX}operation-direction/operations.ts`,
+        source:
+          'import { makeAgentService } from "../runtime";\nexport const bypass = makeAgentService;\n',
+      },
+    ],
+  },
+  {
+    name: "Agent runtime cannot reexport lifecycle internals",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error agent-interface-reexports-internal: cloudflare/agent/${PROBE_PREFIX}launder/runtime.ts → cloudflare/agent/internal/turn-store.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/agent/${PROBE_PREFIX}launder/runtime.ts`,
+        source: 'export { finishHostedTurn } from "../internal/turn-store";\n',
+      },
+    ],
+  },
+  {
+    name: "callers can construct complete Agent and bounded retention runtimes",
+    expect: {
+      kind: "allowed",
+    },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}agent-published/runtime.ts`,
+        source:
+          'import { makeAgentService, makeAgentRetention } from "../agent/runtime";\nimport { prepareHostedMutationCommit } from "../agent/operations";\nimport { HostedTurnAdmission } from "../agent/contract";\nexport const published = [makeAgentService, makeAgentRetention, prepareHostedMutationCommit, HostedTurnAdmission];\n',
+      },
+    ],
+  },
+  {
     name: "channel peers cannot acquire private Turn or Transcript projections",
     expect: {
       kind: "rejected",

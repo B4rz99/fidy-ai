@@ -1,5 +1,9 @@
-import type { HostedCommitFence } from "./contract";
-import type { UserId } from "@fidy/server/agent-runtime";
+import type { Effect, Option } from "effect";
+import type { OnboardingConsentBasis } from "@fidy/server/consent-contract";
+import type { TranscriptTurnId } from "@fidy/server/agent-contract";
+import { readAdmittedBasis } from "./internal/admitted-consent";
+import type { AgentUnavailable, HostedCommitFence } from "./contract";
+import type { UserId } from "@fidy/server/identity-reference";
 import type { OwnedStatement } from "../../src/shell/_shared/owned-statement";
 import {
   channelContinuationQuery,
@@ -50,3 +54,13 @@ export const prepareHostedMutationCommit = ({
                 SELECT 1 FROM hosted_turns WHERE id = ? AND user_id = ? AND status = 'pending'
               ) THEN 1 ELSE 0 END)`)
     .bind(turnId, toolCallId, userId, current, turnId, userId);
+
+/**
+ * Read the captured Consent basis only for the exact explicit User and still-Pending Turn.
+ * Absence is None; malformed or unavailable persistence fails closed. This grants no egress or
+ * lifecycle authority: Consent retains its current-standing comparison immediately before egress.
+ */
+export const readAdmittedHostedConsent = (
+  input: Readonly<{ db: D1Database; userId: UserId; turnId: TranscriptTurnId }>
+): Effect.Effect<Option.Option<OnboardingConsentBasis>, AgentUnavailable> =>
+  readAdmittedBasis(input);

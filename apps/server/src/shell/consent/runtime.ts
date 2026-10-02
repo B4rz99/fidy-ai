@@ -1,7 +1,7 @@
 import { Option, type Redacted } from "effect";
 import { type HttpClient } from "effect/unstable/http";
 import { type DisclosureSnapshot } from "~/core/consent/contract";
-import { TranscriptText } from "~/core/transcript/model";
+import { TranscriptText } from "~/core/agent/contract";
 import {
   type DisclosureDeliveryCorrelationToken,
   type WhatsAppBusinessPhoneNumberId,

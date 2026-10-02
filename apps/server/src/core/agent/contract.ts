@@ -1,4 +1,6 @@
-import { Schema } from "effect";
+import { OnboardingConsentBasis } from "~/core/consent/contract";
+import { UserId } from "~/core/identity/reference";
+import { type Option, Schema, Struct } from "effect";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
 
@@ -248,3 +250,74 @@ export const ConversationTurn = Schema.Union([
   InterruptedConversationTurn,
 ]).annotate({ identifier: "ConversationTurn" });
 export type ConversationTurn = typeof ConversationTurn.Type;
+
+/** Stable lowercase UUID identity for one Fidy-owned hosted conversational session. */
+export const HostedAgentSessionId = Schema.String.check(
+  Schema.isUUID(),
+  Schema.makeFilter<string>((value) =>
+    value === value.toLowerCase() ? undefined : "Expected canonical lowercase UUID spelling"
+  )
+)
+  .pipe(Schema.brand("HostedAgentSessionId"))
+  .annotate({ identifier: "HostedAgentSessionId" });
+export type HostedAgentSessionId = typeof HostedAgentSessionId.Type;
+
+/** Exact onboarding Consent basis captured when a Hosted Agent Session begins. */
+export const HostedAgentSessionConsentBasis = OnboardingConsentBasis;
+export type HostedAgentSessionConsentBasis = typeof HostedAgentSessionConsentBasis.Type;
+
+/** Durable lifecycle of one Fidy-owned hosted conversational session. */
+export const HostedAgentSession = Schema.Struct({
+  id: HostedAgentSessionId,
+  subjectUserId: UserId,
+  consentBasis: HostedAgentSessionConsentBasis,
+  startedAt: UtcTimestamp,
+  lastTerminalTurnAt: Schema.Option(UtcTimestamp),
+  status: Schema.Literals(["active", "idle-ended", "revoked"]),
+});
+export type HostedAgentSession = typeof HostedAgentSession.Type;
+
+const CompactedConversationText = CompactedConversation.mapFields(Struct.pick(["text"]));
+
+/** Strict hosted output derived from the canonical replacement text before token validation. */
+export const CompactedConversationOutput = Schema.Struct({
+  compactedConversation: CompactedConversationText.fields.text,
+});
+export type CompactedConversationOutput = typeof CompactedConversationOutput.Type;
+
+/** The latest durable session and Turn facts read while holding one User's coordination lock. */
+export type HostedAdmissionState = Readonly<{
+  session: Option.Option<
+    Readonly<{
+      id: HostedAgentSessionId;
+      userId: UserId;
+      consentBasis: HostedAgentSessionConsentBasis;
+      startedAtMs: number;
+      lastActivityAtMs: Option.Option<number>;
+      status: "active" | "idle-ended" | "revoked";
+    }>
+  >;
+  pendingStartedAtMs: Option.Option<number>;
+}>;
+
+/** A current onboarding grant is required for every admission, even in an existing session. */
+export type HostedAdmissionRequest = Readonly<{
+  userId: UserId;
+  nowMs: number;
+  currentConsent: Option.Option<HostedAgentSessionConsentBasis>;
+  revoked: boolean;
+  state: HostedAdmissionState;
+}>;
+
+/** A pending Turn must be recovered as Interrupted before a new Turn can be admitted. */
+export type HostedAdmissionDecision =
+  | Readonly<{ _tag: "Refused"; reason: "ConsentRequired" | "InvalidState" }>
+  | Readonly<{ _tag: "RecoverPending" }>
+  | Readonly<{ _tag: "ContinueSession"; sessionId: HostedAgentSessionId }>
+  | Readonly<{ _tag: "BeginSession"; consentBasis: HostedAgentSessionConsentBasis }>;
+
+/** Provider-token trigger and bounded replacement output, both expressed as positive token counts. */
+export const ConversationCompactionTokenCount = Schema.Int.check(Schema.isGreaterThan(0)).pipe(
+  Schema.brand("ConversationCompactionTokenCount")
+);
+export type ConversationCompactionTokenCount = typeof ConversationCompactionTokenCount.Type;

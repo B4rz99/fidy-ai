@@ -3,7 +3,7 @@ import type { Brand, Duration } from "effect";
 import type { Response } from "effect/unstable/ai";
 import type { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import type { User } from "~/core/identity/contract";
-import type { TranscriptEntry } from "~/core/transcript/model";
+import type { TranscriptEntry } from "~/core/agent/contract";
 import { maximumToolCallsPerTurn } from "~/shell/_shared/hosted-turn-bounds";
 
 /** Ordered semantic material projected by Agent without exposing provider prompt fragments. */

@@ -16,7 +16,7 @@ export {
   HostedTurnProcessing,
   HostedTurnProgressRequest,
   type HostedTurnApiGroups,
-} from "~/shell/agent/hosted-turn-api";
+} from "~/shell/agent/contract";
 export { isHttpOrigin } from "~/shell/public-http/contract";
 export {
   ActivePATList,

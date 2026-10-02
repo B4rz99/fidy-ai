@@ -9,7 +9,7 @@ import {
   TranscriptText,
   TranscriptTurnId,
   UserTranscriptEntry,
-} from "~/core/transcript/model";
+} from "~/core/agent/contract";
 import type {
   HostedContextSection,
   HostedStructuredContext,

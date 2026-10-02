@@ -2,8 +2,8 @@ import {
   type HostedAgentSessionId,
   TranscriptText,
   TranscriptTurnId,
-  UserId,
-} from "@fidy/server/agent-runtime";
+} from "@fidy/server/agent-contract";
+import { UserId } from "@fidy/server/identity-reference";
 import { type Sha256Digest } from "@fidy/server/consent-contract";
 import {
   HostedDeliveryCorrelationToken,
@@ -12,7 +12,7 @@ import {
   type WhatsAppInboundEvent,
   WhatsAppProviderMessageId,
 } from "@fidy/server/whatsapp-contract";
-import { Data, type Effect, type Option, Schema } from "effect";
+import { Data, type Option, Schema } from "effect";
 import {
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
@@ -90,10 +90,11 @@ export type WhatsAppTurnCompletion = Readonly<{
     | Readonly<{ _tag: "Completed"; text: TranscriptText }>
     | Readonly<{ _tag: "Failed"; reason: "DeliveryFailed" | "DeliveryUnconfirmed" }>;
 }>;
-/** Complete only the same channel Turn inside the caller's serialized User coordinator. */
-export type CompleteWhatsAppTurn = (
-  completion: WhatsAppTurnCompletion
-) => Effect.Effect<boolean, WhatsAppUnavailable>;
+/** Channel evidence only: the Agent owner alone commits any resulting terminal transition. */
+export type WhatsAppStatusReconciliation =
+  | Readonly<{ _tag: "Refused" }>
+  | Readonly<{ _tag: "Recorded" }>
+  | Readonly<{ _tag: "TerminalEvidence"; completion: WhatsAppTurnCompletion }>;
 
 export type WhatsAppAuthenticatedInbound = Readonly<{
   readonly event: WhatsAppInboundEvent;

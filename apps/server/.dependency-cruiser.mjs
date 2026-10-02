@@ -73,10 +73,69 @@ export default {
       to: { path: "^cloudflare/memory/runtime\\.ts$" },
     },
     {
+      name: "native-agent-imports-model-implementation",
+      severity: "error",
+      comment:
+        "Hosted Agent calls its separate HostedInference boundary; provider model and tokenizer execution cannot bypass its budgets or egress policy (#613).",
+      from: { path: "^cloudflare/agent/" },
+      to: {
+        path: "(^|.*/)node_modules/effect/.*/unstable/ai/(index|LanguageModel|Tokenizer)",
+        dependencyTypesNot: ["type-only"],
+      },
+    },
+    {
+      name: "native-agent-cycle",
+      severity: "error",
+      comment:
+        "Agent runtime, canonical execution and low-level Turn commit operations retain an acyclic ownership graph (#613).",
+      from: { path: "^cloudflare/agent/" },
+      to: { circular: true },
+    },
+    {
+      name: "cloudflare-imports-portable-agent-internal",
+      severity: "error",
+      comment:
+        "Native Agent consumes inert declarations and substantive pure policy; portable private implementation never crosses layers (#613).",
+      from: { path: "^cloudflare/" },
+      to: { path: "^src/(core|shell)/agent/internal/" },
+    },
+    {
+      name: "agent-interface-reexports-internal",
+      severity: "error",
+      comment:
+        "Agent publication never launders Transcript, context, tool or lifecycle implementation (#613).",
+      from: { path: "^cloudflare/(agent|agent/.+)/(contract|operations|runtime)\\.ts$" },
+      to: { path: "^cloudflare/agent/internal/", dependencyTypes: ["export"] },
+    },
+    {
+      name: "agent-contract-imports-implementation",
+      severity: "error",
+      comment:
+        "Agent declarations expose inert work and observations, never executable lifecycle implementation (#613).",
+      from: { path: "^cloudflare/(agent|agent/.+)/contract\\.ts$" },
+      to: { path: "^cloudflare/agent/(internal/|operations\\.ts$|runtime\\.ts$)" },
+    },
+    {
+      name: "agent-internal-imports-outward-interface",
+      severity: "error",
+      comment:
+        "Agent internals depend on declarations and siblings, never backwards on their own public runtime or operations (#613).",
+      from: { path: "^cloudflare/agent/internal/" },
+      to: { path: "^cloudflare/agent/(operations|runtime)\\.ts$" },
+    },
+    {
+      name: "agent-operations-imports-runtime",
+      severity: "error",
+      comment:
+        "Low-level Agent atomic composition stays independent of hosted runtime and canonical execution (#613).",
+      from: { path: "^cloudflare/(agent|agent/.+)/operations\\.ts$" },
+      to: { path: "^cloudflare/agent/runtime\\.ts$" },
+    },
+    {
       name: "foreign-module-imports-cloudflare-agent-internal",
       severity: "error",
       comment:
-        "The Turn owner keeps exact Transcript and lifecycle projection implementation private; channel peers consume published operations (#608).",
+        "Agent owns Transcript, context, tools, Compaction, delivery and lifecycle implementation; peers consume only published operations or runtime construction (#613).",
       from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/agent/" },
       to: { path: "^cloudflare/agent/internal/" },
     },
@@ -1038,7 +1097,7 @@ export default {
         path: "^src/shell/",
         pathNot: [
           "^src/shell/api\\.ts$",
-          "^src/shell/agent/hosted-turn-api\\.ts$",
+          "^src/shell/agent/contract\\.ts$",
           "^src/shell/authorization/runtime\\.ts$",
           "^src/shell/canonical-operations/contract\\.ts$",
           "^src/shell/(public-http|schema-codecs|tokens|subscription|web-auth)/contract\\.ts$",
@@ -1065,7 +1124,7 @@ export default {
         "provider-specific code. Provider models, clients, tokenizers, capacity, wire requests, " +
         "and raw responses belong only in HostedInference internals (ADR 0014).",
       from: {
-        path: "^src/shell/(agent/(agent-service\\.ts|working-context\\.ts|__probe-.*hosted-(provider|model|tokenizer|js-tokenizer)/probe\\.ts)|memory/(operations\\.ts|__probe-.*hosted-(provider|model|tokenizer|js-tokenizer)/probe\\.ts)|hosted-inference/(contract|operations)\\.ts)$",
+        path: "^src/shell/(agent/(contract\\.ts|__probe-.*hosted-(provider|model|tokenizer|js-tokenizer)/probe\\.ts)|memory/(operations\\.ts|__probe-.*hosted-(provider|model|tokenizer|js-tokenizer)/probe\\.ts)|hosted-inference/(contract|operations)\\.ts)$",
       },
       to: {
         path: "(^|.*/)node_modules/effect/.*/unstable/ai/(index|LanguageModel|Tokenizer)",

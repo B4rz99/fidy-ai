@@ -694,3 +694,38 @@ introduced. Agent discovery receives the catalog's installed declarations and ap
 access/confirmation policy; query dispatch obtains the declaration by identity and validates its input
 before invoking an owner. Foreign tests and tools cannot import canonical private dispatch, and the
 public execution tests retain cross-User, revoked-Consent and unavailable-operation refusal evidence.
+
+### Agent owner composition
+
+Agent publishes inert semantic evidence, bounded text and stable identities through
+`core/agent/contract.ts`; pure admission and Compaction decisions live in its operations. HostedInference
+consumes the provider-neutral evidence data without receiving persistence or lifecycle authority.
+The browser-only conversation API remains declaration-only in `shell/agent/contract.ts`. The former
+portable runtime barrel and unused process-era helpers, including the SQL confirmation permit, are
+removed rather than retained as alternate execution paths.
+
+The native `cloudflare/agent/runtime.ts` constructs one deep AgentService inside the existing User
+coordinator. Agent privately owns request and Session admission, WorkingContext, canonical executor
+closures, confirmation, bounded inference and channel composition, delivery, terminalization,
+interruption and recovery. The Durable Object retains shared User serialization and platform alarms;
+it observes already-running response and settlement promises rather than receiving executable Turn
+handles. A soft HTTP deadline never releases the User queue before owner settlement or durable
+recovery. Progress does not start a second Turn and remains outside the blocked execution queue.
+
+Canonical execution, Identity, Consent, Memory and WhatsApp are reached through their published
+interfaces. Low-level Agent operations retain the exact pending-Turn mutation fence and the existing
+channel projections independently of the hosted runtime, preserving the acyclic commit composition.
+The exact Pending-Turn Consent basis lookup and decoding stay Agent-owned; Consent receives only
+the same-User basis and retains its current-standing comparison before model egress. Native inference
+binding declarations are separate from construction, so this low-level composition stays acyclic.
+Transcript storage, Compaction replacement, delivery receipts, confirmation records and lifecycle
+writers remain private. WhatsApp returns inert status/recovery evidence; it never receives an Agent
+terminalization callback. Agent alone commits that evidence through its live guarded Transcript unit. AgentRetention constructs only the fixed-policy bounded sweep: it exposes
+completion or AgentUnavailable, never rows, deletion controls, model authority or content. Existing
+thirty-day retention, independent cron recovery and next-alarm behavior remain unchanged.
+
+The owner refactor adds no external workflow or telemetry purpose; existing bounded hosted Work and
+metadata-only provider observations remain sufficient. Native tests preserve User isolation, exact
+confirmation and delivery evidence, Consent timing, canonical rollback, Compaction continuity and
+interruption. Published runtime tests additionally reject a complete foreign User proof before
+inference or retention and close persistence failures without exposing stored or diagnostic data.

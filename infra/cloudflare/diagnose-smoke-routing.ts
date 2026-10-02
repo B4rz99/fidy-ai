@@ -13,11 +13,13 @@ import {
   SmokeIdentityEquality,
   SmokeRequest,
   SmokeResponse,
+  SmokeRoutingCall,
   smokeCoreVersionHeader,
   smokeDiagnosticRevision,
   smokeFailureHeader,
   smokeIdentityHeader,
   smokePath,
+  smokeRoutingHeader,
 } from "../../apps/server/cloudflare/runtime/smoke";
 
 const RoutingConfig = Schema.Struct({
@@ -29,18 +31,27 @@ const RoutingConfig = Schema.Struct({
   PUBLIC_WORKER_NAME: Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_-]{1,80}$/u)),
   CORE_WORKER_NAME: Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_-]{1,80}$/u)),
   SMOKE_PROOF: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
+  SMOKE_ROUTING_WINDOW: Schema.optionalKey(Schema.Literals(["early", "settled"])),
 });
 type RoutingConfig = typeof RoutingConfig.Type;
 export type RoutingObservation = Readonly<{
   round: number;
   pairing: "candidate" | "intermediate";
   method: "GET" | "POST";
+  call: typeof SmokeRoutingCall.Type;
+  observedCall: typeof SmokeRoutingCall.Type | "unavailable";
+  overrides: "paired" | "core-only";
+  replica: 1 | 2;
+  window: "early" | "settled";
   status: number;
   publicVersion: string;
   coreVersion: string;
   coreSource: "body" | "header" | "equality" | "unavailable";
 }>;
-type RoutingSample = Pick<RoutingObservation, "round" | "pairing" | "method">;
+type RoutingSample = Pick<
+  RoutingObservation,
+  "round" | "pairing" | "method" | "call" | "overrides" | "replica" | "window"
+>;
 type CoreObservation = Readonly<{
   version: Option.Option<string>;
   source: RoutingObservation["coreSource"];
@@ -124,9 +135,14 @@ const observeCore = Effect.fn(function* (
 const routingRequest = Effect.fn(function* (config: RoutingConfig, sample: RoutingSample) {
   const publicVersion =
     sample.pairing === "candidate" ? config.PUBLIC_VERSION_ID : config.STABLE_PUBLIC_VERSION_ID;
+  const coreOverride = `${config.CORE_WORKER_NAME}="${config.CORE_VERSION_ID}"`;
   const headers = {
-    "cloudflare-workers-version-overrides": `${config.PUBLIC_WORKER_NAME}="${publicVersion}", ${config.CORE_WORKER_NAME}="${config.CORE_VERSION_ID}"`,
+    "cloudflare-workers-version-overrides":
+      sample.overrides === "paired"
+        ? `${config.PUBLIC_WORKER_NAME}="${publicVersion}", ${coreOverride}`
+        : coreOverride,
     "x-fidy-smoke-proof": config.SMOKE_PROOF,
+    [smokeRoutingHeader]: sample.call,
   };
   // Both methods use the same URL and override. The reserved revision stops POST effects,
   // even on older Core code, whose Production revision cannot be all-zero.
@@ -154,6 +170,10 @@ const observeRouting = Effect.fn(
     const core = yield* observeCore(response, sample, config);
     return {
       ...sample,
+      observedCall: Option.getOrElse(
+        Schema.decodeUnknownOption(SmokeRoutingCall)(response.headers[smokeRoutingHeader]),
+        () => "unavailable" as const
+      ),
       status: response.status,
       publicVersion: Option.getOrElse(observedPublic, () => "unavailable"),
       coreVersion: Option.getOrElse(core.version, () => "unavailable"),
@@ -165,27 +185,60 @@ const observeRouting = Effect.fn(
   Effect.mapError(() => new RoutingDiagnosticFailed())
 );
 
+const routingSamples = (
+  round: number,
+  window: RoutingSample["window"]
+): ReadonlyArray<RoutingSample> => {
+  const probes: RoutingSample[] = [];
+  for (const replica of [1, 2] as const) {
+    for (const method of ["GET", "POST"] as const) {
+      for (const call of ["request", "url"] as const) {
+        probes.push({
+          round,
+          pairing: "candidate",
+          method,
+          call,
+          overrides: "paired",
+          replica,
+          window,
+        });
+      }
+      for (const overrides of ["paired", "core-only"] as const) {
+        probes.push({
+          round,
+          pairing: "intermediate",
+          method,
+          call: "request",
+          overrides,
+          replica,
+          window,
+        });
+      }
+    }
+  }
+  return probes;
+};
+
 /** Bounded GET/POST observations only; never publishes work, writes an attestation, or changes traffic. */
 export const diagnoseSmokeRouting = Effect.fn(function* (env: unknown) {
   const decoded = Schema.decodeUnknownOption(RoutingConfig)(env);
   if (Option.isNone(decoded)) return yield* new RoutingDiagnosticFailed();
+  const window = decoded.value.SMOKE_ROUTING_WINDOW ?? "early";
+  // Fixed settling is an experiment, not a retry or a substitute for exact-pair smoke.
+  if (window === "settled") yield* Effect.sleep("60 seconds");
   const observations: RoutingObservation[] = [];
   for (let round = 1; round <= rounds; round++) {
-    const samples = yield* Effect.all(
-      [
-        observeRouting(decoded.value, { round, pairing: "candidate", method: "GET" }),
-        observeRouting(decoded.value, { round, pairing: "candidate", method: "POST" }),
-        observeRouting(decoded.value, { round, pairing: "intermediate", method: "GET" }),
-        observeRouting(decoded.value, { round, pairing: "intermediate", method: "POST" }),
-      ],
-      { concurrency: 4 }
+    const samples = yield* Effect.forEach(
+      routingSamples(round, window),
+      (sample) => observeRouting(decoded.value, sample),
+      { concurrency: 16 }
     );
     observations.push(...samples);
     if (round < rounds) yield* Effect.sleep("1500 millis");
   }
   const result: ReadonlyArray<RoutingObservation> = observations;
   return result;
-}, Effect.timeout("65 seconds"));
+}, Effect.timeout("125 seconds"));
 
 if (import.meta.main) {
   const result = await Effect.runPromiseExit(

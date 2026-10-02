@@ -21,6 +21,7 @@ import {
   SmokeIdentity,
   SmokeIdentityEquality,
   SmokeResponse,
+  SmokeRoutingCall,
   smokeCoreVersionHeader,
   smokeFailureHeader,
   smokeIdentityHeader,
@@ -28,6 +29,7 @@ import {
   smokePath,
   smokeProofAccepted,
   smokeProofHeader,
+  smokeRoutingHeader,
   smokeVersionHeader,
 } from "./runtime/smoke";
 import { patBrowserRoute, patDirectRoute, patMethods, patRoute } from "./tokens/operations";
@@ -510,6 +512,24 @@ const coreSmokeFailure = (
   return unavailableResponse;
 };
 
+const fetchCore = (
+  forwarded: Request,
+  environment: PublicEnvironment,
+  call: typeof SmokeRoutingCall.Type
+): Effect.Effect<Response, void> =>
+  Effect.tryPromise({
+    try: (signal) =>
+      call === "url"
+        ? environment.CORE.fetch(forwarded.url, {
+            method: forwarded.method,
+            headers: forwarded.headers,
+            body: forwarded.body,
+            signal,
+          })
+        : environment.CORE.fetch(forwarded, { signal }),
+    catch: () => undefined,
+  });
+
 const routeOwnedRequest = (
   request: Request,
   environment: PublicEnvironment,
@@ -519,12 +539,15 @@ const routeOwnedRequest = (
   if (Option.isSome(rejection)) {
     return Promise.resolve(rejection.value);
   }
+  const url = new URL(request.url);
+  const diagnostic = url.pathname === smokePath && url.searchParams.get("readiness") === "1";
+  const call = Schema.decodeUnknownOption(SmokeRoutingCall)(
+    diagnostic ? (request.headers.get(smokeRoutingHeader) ?? "request") : "request"
+  );
   return Effect.gen(function* () {
+    const admittedCall = yield* Effect.fromOption(call).pipe(Effect.mapError(() => undefined));
     const forwarded = yield* coreRequest(request, environment);
-    const response = yield* Effect.tryPromise({
-      try: (signal) => environment.CORE.fetch(forwarded, { signal }),
-      catch: () => undefined,
-    });
+    const response = yield* fetchCore(forwarded, environment, admittedCall);
     if (new URL(request.url).pathname !== smokePath) return response;
     if (response.status === serviceUnavailableStatus) {
       return coreSmokeFailure(request, environment, response);
@@ -558,7 +581,10 @@ const routeOwnedRequest = (
       onFailure: () => smokeUnavailable(request, environment, "public_forwarding"),
       onSuccess: (response) => response,
     }),
-    Effect.map((response) => applyApiPolicy(response, environment.BROWSER_ORIGIN, origin)),
+    Effect.map((response) => {
+      if (diagnostic && Option.isSome(call)) response.headers.set(smokeRoutingHeader, call.value);
+      return applyApiPolicy(response, environment.BROWSER_ORIGIN, origin);
+    }),
     Effect.runPromise
   );
 };

@@ -1,4 +1,4 @@
-import { EmailAddress, EmailVerificationCode } from "@fidy/server/client";
+import { EmailAddress, EmailVerificationCode } from "@fidy/server/email-authentication-contract";
 import {
   canRedeemOnboardingProof,
   maximumOnboardingProofFailures,

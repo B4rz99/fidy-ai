@@ -1,5 +1,5 @@
 /**
- * Browser-safe view of the server-owned canonical surface. The future `@fidy/server/client`
+ * Browser-safe view of the server-owned canonical surface. The `@fidy/server/client`
  * package export points here; callers derive their own client adapter, such as AtomHttpApi.Service,
  * from this one `FidyApi` value and provide the returned client authorization layer.
  */
@@ -74,10 +74,10 @@ export {
   StartBrowserPairingEmailAuthenticationPayload,
   WebAuthApi,
   type WebAuthApiGroups,
-} from "./web-auth-api";
+} from "~/shell/web-authentication/contract";
 export { StartedBrowserLoginPairing } from "~/core/browser-login/contract";
 export { EmailAddress, EmailVerificationCode } from "~/core/email-authentication/contract";
-export { CompleteEmailReplacementPayload } from "./web-auth-api";
+export { CompleteEmailReplacementPayload } from "~/shell/web-authentication/contract";
 export { RequestEmailReplacementPayload } from "~/shell/email-authentication/contract";
 export {
   emailReplacementPath,
@@ -113,4 +113,4 @@ export {
   EmailReplacementInvalidApi,
   emailReplacementFreshBody,
   emailReplacementInvalidBody,
-} from "./web-auth-api";
+} from "~/shell/web-authentication/contract";

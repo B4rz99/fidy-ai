@@ -1,4 +1,4 @@
-import { EmailAddress } from "@fidy/server/client";
+import { EmailAddress } from "@fidy/server/email-authentication-contract";
 import {
   ConsentIngressExchange,
   type ConsentIngressMessage,

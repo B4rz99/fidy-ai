@@ -26,6 +26,119 @@
 export default {
   forbidden: [
     {
+      name: "composition-runtime-outside-root",
+      severity: "error",
+      comment:
+        "HTTP and Queue runtime construction belongs to the Core root or an explicit broad harness, not ordinary owner implementation (#615).",
+      from: {
+        path: "^(src|cloudflare|scripts|tools)/",
+        pathNot: ["^cloudflare/core-worker\\.ts$", "\\.test\\.ts$", "(?:runtime|harness)\\.ts$"],
+      },
+      to: { path: "^cloudflare/(core-http|queue)/runtime\\.ts$" },
+    },
+    {
+      name: "native-composition-root-backedge",
+      severity: "error",
+      comment:
+        "Owner implementations never import native application roots; roots compose their published interfaces (#615).",
+      from: {
+        path: "^(src|cloudflare)/",
+        pathNot: [
+          "\\.test\\.ts$",
+          "^cloudflare/(core-worker|public-worker|operational-canary-workflow|browser-acceptance-preview)\\.ts$",
+          "^cloudflare/ingestion/email-worker\\.ts$",
+          "\\.d\\.mts$",
+        ],
+      },
+      to: {
+        path: "^cloudflare/((core-worker|public-worker|operational-canary-workflow)\\.ts|ingestion/email-worker\\.ts)$",
+      },
+    },
+    {
+      name: "native-root-imports-internal",
+      severity: "error",
+      comment:
+        "Native roots compose published owner interfaces, never foreign private implementations (#615).",
+      from: {
+        path: "^cloudflare/((core-worker|public-worker|operational-canary-workflow)\\.ts|ingestion/email-worker\\.ts)$",
+      },
+      to: { path: "^(src|cloudflare)/.*/internal/" },
+    },
+    {
+      name: "composition-internal-private",
+      severity: "error",
+      comment:
+        "HTTP and Queue dispatch stay private to their named platform composition; consumers construct the published runtime (#615).",
+      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/(core-http|queue)/" },
+      to: { path: "^cloudflare/(core-http|queue)/internal/" },
+    },
+    {
+      name: "composition-peer-internal-private",
+      severity: "error",
+      comment:
+        "HTTP and Queue are distinct composition owners and cannot import each other's internals (#615).",
+      from: { path: "^cloudflare/(core-http|queue)/" },
+      to: { path: "^cloudflare/(core-http|queue)/internal/", pathNot: "^cloudflare/$1/internal/" },
+    },
+    {
+      name: "composition-contract-imports-implementation",
+      severity: "error",
+      comment: "Composition contracts publish only inert binding and handler declarations (#615).",
+      from: { path: "^cloudflare/(core-http|queue)/contract\\.ts$" },
+      to: { path: "^cloudflare/.*/(internal/|operations\\.ts$|runtime\\.ts$)" },
+    },
+    {
+      name: "composition-internal-imports-runtime",
+      severity: "error",
+      comment: "Private dispatch cannot reacquire its outward construction authority (#615).",
+      from: { path: "^cloudflare/(core-http|queue)/internal/" },
+      to: { path: "^cloudflare/$1/runtime\\.ts$" },
+    },
+    {
+      name: "composition-interface-reexports-internal",
+      severity: "error",
+      comment:
+        "Composition runtimes construct their interface rather than laundering private dispatch exports (#615).",
+      from: { path: "^cloudflare/(core-http|queue)/(contract|runtime)\\.ts$" },
+      to: { path: "^cloudflare/$1/internal/", dependencyTypes: ["export"] },
+    },
+    {
+      name: "native-composition-cycle",
+      severity: "error",
+      comment: "Native HTTP, Queue and Worker compositions remain acyclic (#615).",
+      from: {
+        path: "^cloudflare/(core-http/|queue/|core-worker\\.ts$|public-worker\\.ts$|ingestion/email-worker\\.ts$)",
+      },
+      to: { circular: true },
+    },
+    {
+      name: "browser-publication-target",
+      severity: "error",
+      comment:
+        "The single browser publication re-publishes only final owner declarations and explicit browser-safe operations (#615).",
+      from: { path: "^src/client\\.ts$" },
+      to: {
+        path: "^src/",
+        pathNot: [
+          "^src/core/(browser-login|dashboard|email-authentication|ingestion|recovery|subscription|tokens)/contract\\.ts$",
+          "^src/core/(subscription|tokens)/reference\\.ts$",
+          "^src/core/tokens/operations\\.ts$",
+          "^src/core/_shared/context\\.ts$",
+          "^src/shell/api\\.ts$",
+          "^src/shell/authorization/runtime\\.ts$",
+          "^src/shell/(agent|canonical-operations|email-authentication|public-http|subscription|web-authentication)/contract\\.ts$",
+        ],
+      },
+    },
+    {
+      name: "server-imports-browser-publication",
+      severity: "error",
+      comment:
+        "Server implementation consumes final owner interfaces, never the outward browser publication root (#615).",
+      from: { path: "^(src/(core|shell)/|cloudflare/)" },
+      to: { path: "^src/client\\.ts$" },
+    },
+    {
       name: "maintenance-imports-owner-implementation",
       severity: "error",
       comment:
@@ -1127,30 +1240,19 @@ export default {
     },
     {
       // The package-level facade is the only browser-facing source allowed to reach shell modules
-      // from outside the server tree. A future web package can depend on `src/client.ts`; it must
+      // from outside the server tree. The web package depends on `src/client.ts`; it must
       // not know whether the canonical declaration currently lives under shell/.
       name: "browser-client-seam-bypass",
       severity: "error",
       comment:
         "Code outside src/shell imported a server-internal shell module directly. The browser " +
-        "depends on the package-level client facade (`src/client.ts` / future `@fidy/server/client`), " +
+        "depends on the package-level client facade (`src/client.ts` / `@fidy/server/client`), " +
         "which preserves one canonical API without making shell paths public.",
       from: {
         path: "^src/",
-        pathNot: ["^src/shell/", "^src/main\\.ts$", "^src/client\\.ts$", "^src/web-auth-api\\.ts$"],
+        pathNot: ["^src/shell/", "^src/client\\.ts$"],
       },
       to: { path: "^src/shell/" },
-    },
-    {
-      name: "web-auth-api-imports-server-code",
-      severity: "error",
-      comment:
-        "The browser authentication facade publishes the Web Authentication contract, never owner implementation.",
-      from: { path: "^src/web-auth-api\\.ts$" },
-      to: {
-        path: "^src/shell/",
-        pathNot: "^src/shell/web-authentication/contract\\.ts$",
-      },
     },
     {
       // Keep the facade narrow even while the dependency graph is being assembled: the transitive
@@ -1170,7 +1272,7 @@ export default {
           "^src/shell/agent/contract\\.ts$",
           "^src/shell/authorization/runtime\\.ts$",
           "^src/shell/canonical-operations/contract\\.ts$",
-          "^src/shell/(public-http|schema-codecs|tokens|subscription|web-auth)/contract\\.ts$",
+          "^src/shell/(public-http|schema-codecs|tokens|subscription|web-authentication)/contract\\.ts$",
           "^src/shell/email-authentication/(contract|path)\\.ts$",
         ],
       },

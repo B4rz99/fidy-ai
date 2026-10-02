@@ -40,6 +40,21 @@ if (retainedFile !== undefined) {
   throw new Error(`Retired Outbound HTTP implementation still exists: ${retainedFile.path}`);
 }
 
+const sourceLandmarks = Array.from(
+  new Bun.Glob("*.{ts,tsx}").scanSync({ cwd: `${serverRoot}/src` })
+);
+const unexpectedSourceLandmarks = sourceLandmarks.filter(
+  (path) => path !== "client.ts" && !path.endsWith(".d.ts")
+);
+const shellLandmarks = Array.from(
+  new Bun.Glob("*.{ts,tsx}").scanSync({ cwd: `${serverRoot}/src/shell` })
+);
+if (unexpectedSourceLandmarks.length > 0 || shellLandmarks.some((path) => path !== "api.ts")) {
+  throw new Error(
+    "Source landmarks are restricted to browser publication, ambient declarations, and the canonical API assembly; native HTTP composition belongs under cloudflare/core-http (#615)."
+  );
+}
+
 const PROBE_PARENT = "src/core/audit";
 const PROBE_PREFIX = `__probe-${process.pid}-`;
 
@@ -161,6 +176,115 @@ const canonicalAlias = `cloudflare/canonical-operations/${PROBE_PREFIX}alias`;
 const canonicalTypeAlias = `cloudflare/canonical-operations/${PROBE_PREFIX}type-alias`;
 
 const PROBES: readonly Probe[] = [
+  {
+    name: "ordinary owners cannot construct the application Queue runtime",
+    expect: { kind: "rejected", mustContain: ["error composition-runtime-outside-root"] },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}queue-runtime/probe.ts`,
+        source:
+          'import { makeCoreQueue } from "../queue/runtime";\nexport const bypass = makeCoreQueue;\n',
+      },
+    ],
+  },
+  {
+    name: "native composition can consume final owner declarations",
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}owner-declarations/probe.ts`,
+        source:
+          'import { CanonicalWorkAdmission } from "../canonical-operations/contract";\nimport { EmailAddress } from "@fidy/server/email-authentication-contract";\nexport const declarations = { CanonicalWorkAdmission, EmailAddress };\n',
+      },
+    ],
+  },
+  {
+    name: "native owners cannot type-import the Core root",
+    expect: { kind: "rejected", mustContain: ["error native-composition-root-backedge"] },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}root-backedge/probe.ts`,
+        source:
+          'import type { makeCoreWorker } from "../core-worker";\nexport type Bypass = typeof makeCoreWorker;\n',
+      },
+    ],
+  },
+  {
+    name: "foreign native modules cannot acquire HTTP dispatch internals",
+    expect: { kind: "rejected", mustContain: ["error composition-internal-private"] },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}http-private/probe.ts`,
+        source:
+          'import { executeCoreHttp } from "../core-http/internal/http";\nexport const bypass = executeCoreHttp;\n',
+      },
+    ],
+  },
+  {
+    name: "tools cannot launder Queue dispatch internals",
+    expect: { kind: "rejected", mustContain: ["error composition-internal-private"] },
+    files: [
+      {
+        path: `tools/${PROBE_PREFIX}queue-private/probe.ts`,
+        source: 'export { dispatchCoreQueue } from "../../cloudflare/queue/internal/dispatch";\n',
+      },
+    ],
+  },
+  {
+    name: "HTTP cannot import Queue private dispatch",
+    expect: { kind: "rejected", mustContain: ["error composition-peer-internal-private"] },
+    files: [
+      {
+        path: `cloudflare/core-http/${PROBE_PREFIX}queue-private/probe.ts`,
+        source:
+          'import { dispatchCoreQueue } from "../../queue/internal/dispatch";\nexport const bypass = dispatchCoreQueue;\n',
+      },
+    ],
+  },
+  {
+    name: "private HTTP dispatch cannot import its outward runtime",
+    expect: { kind: "rejected", mustContain: ["error composition-internal-imports-runtime"] },
+    files: [
+      {
+        path: `cloudflare/core-http/internal/${PROBE_PREFIX}outward/probe.ts`,
+        source:
+          'import { makeCoreHttp } from "../../runtime";\nexport const bypass = makeCoreHttp;\n',
+      },
+    ],
+  },
+  {
+    name: "native owners cannot import the browser publication root",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error server-imports-browser-publication: cloudflare/${PROBE_PREFIX}browser-inward/probe.ts → src/client.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}browser-inward/probe.ts`,
+        source:
+          'import { EmailAddress } from "@fidy/server/client";\nexport const bypass = EmailAddress;\n',
+      },
+    ],
+  },
+  {
+    name: "portable owners cannot type-import the browser publication root",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error server-imports-browser-publication: src/shell/${PROBE_PREFIX}browser-inward/probe.ts → src/client.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `src/shell/${PROBE_PREFIX}browser-inward/probe.ts`,
+        source:
+          'import type { CanonicalInput } from "~/client";\nexport type Bypass = CanonicalInput;\n',
+      },
+    ],
+  },
+
   {
     name: "Maintenance runtime composes published owner runtimes and contracts",
     expect: { kind: "allowed" },

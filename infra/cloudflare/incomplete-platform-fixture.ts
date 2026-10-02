@@ -1,4 +1,4 @@
-import type { SmokeEnvironment } from "../../apps/server/cloudflare/runtime/smoke-work";
+import type { SmokeEnvironment } from "../../apps/server/cloudflare/runtime/contract";
 
 const proofLength = 64;
 const unavailable = (): never => {

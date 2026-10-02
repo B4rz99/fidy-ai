@@ -3,7 +3,7 @@ import {
   prepareProvedBrowserPairingApproval,
   provePendingBrowserPairing,
 } from "../../browser-login/operations";
-import { EmailAddress, EmailVerificationCode } from "@fidy/server/client";
+import { EmailAddress, EmailVerificationCode } from "@fidy/server/email-authentication-contract";
 import { BrowserLoginPairingId } from "../../../src/core/browser-login/reference";
 import { Clock, Crypto, Effect, Option, PlatformError, Schema } from "effect";
 import { RequestBodyPolicy, readBoundedRequestBody } from "../../http/request-body";

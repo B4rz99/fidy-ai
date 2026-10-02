@@ -1,6 +1,6 @@
 import { type OnboardingEmailEnvironment, OnboardingEmailWork as Work } from "../contract";
 
-import { EmailAddress, EmailVerificationCode } from "@fidy/server/client";
+import { EmailAddress, EmailVerificationCode } from "@fidy/server/email-authentication-contract";
 import type { EmailDeliveryPortService } from "@fidy/server/email-authentication-runtime";
 import {
   type EmailSendFailed,

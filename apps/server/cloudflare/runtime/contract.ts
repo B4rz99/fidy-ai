@@ -58,3 +58,39 @@ export type PlatformMaintenance = Readonly<{
   publishCanary: (nowEpochMs: number) => Effect.Effect<void, PlatformMaintenanceUnavailable>;
   expireSmokeProbes: (nowEpochMs: number) => Effect.Effect<void, PlatformMaintenanceUnavailable>;
 }>;
+
+/** Native synthetic release proof bindings; these never grant User authority. */
+export type SmokeEnvironment = Readonly<{
+  DB: D1Database;
+  SMOKE_BUCKET: R2Bucket;
+  SMOKE_QUEUE: Queue;
+  SMOKE_WORKFLOW: Workflow;
+  SMOKE_QUEUE_NAME: string;
+  USER_TRANSACTION_COORDINATOR: { getByName: (name: string) => Pick<Fetcher, "fetch"> };
+  SMOKE_PROOF: string;
+  CF_VERSION_METADATA: { id: string };
+  RELEASE_GIT_SHA: string;
+  CONTRACT_DIGEST: string;
+  KAPSO_API_KEY: string;
+  KAPSO_WEBHOOK_SECRET: string;
+  WOMPI_PRIVATE_KEY: string;
+  WOMPI_INTEGRITY_SECRET: string;
+}> &
+  Partial<Readonly<{ RESEND_API_KEY: string; WOMPI_EVENT_SECRET: string }>>;
+
+/** The native bindings the existing readiness gate requires before any synthetic smoke path. */
+export type SmokeBindings = Pick<
+  SmokeEnvironment,
+  | "SMOKE_BUCKET"
+  | "SMOKE_QUEUE"
+  | "SMOKE_WORKFLOW"
+  | "SMOKE_QUEUE_NAME"
+  | "SMOKE_PROOF"
+  | "CF_VERSION_METADATA"
+>;
+
+/** Synthetic Queue handoff has no provider, model, or User-data authority. */
+export type SmokeQueueEnvironment = Pick<
+  SmokeEnvironment,
+  "DB" | "RELEASE_GIT_SHA" | "SMOKE_QUEUE_NAME" | "SMOKE_WORKFLOW"
+>;

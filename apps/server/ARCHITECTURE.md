@@ -311,3 +311,25 @@ same immutable Price snapshot, atomic paid-period write and monotonic terminal b
 operational health observes only bounded pending-work metadata through the owner. Existing bounded
 Core, provider and Workflow telemetry is retained; this extraction introduces no new external
 workflow, provider call or telemetry purpose.
+
+### Email Authentication owner composition
+
+Email Authentication publishes bounded mailbox and proof declarations in `core/email-authentication/contract.ts`
+and pure lifetime and retry decisions in `operations.ts`. Its shell contract owns the browser-safe
+verification and replacement declarations; canonical replacement behavior and native binding policy
+live in shell operations. Resend request projection, response decoding and failure certainty remain
+private, constructed only through the owner's runtime interface.
+
+The native `email-authentication/operations.ts` owns verified onboarding, ordinary mailbox pairing
+approval and credential replacement. Consent submits only its already-accepted exchange to the
+bounded enrollment operation. Subscription composes the exact User's mailbox projection with its
+fresh-session and Consent statement; recovery composes the live same-User pairing predicate. Neither
+caller knows the credential or proof storage shape. BrowserLogin separately verifies the browser-held
+secret and owns its pending projection and approval transition; email proof cannot create a WebSession.
+
+Native runtime composition publishes the existing identity-only Queues and versioned Workflows.
+Proof generation, provider execution, ambiguous outcomes, replay evidence and bounded retention remain
+in visible private internals. A candidate mailbox replaces the prior credential only in its fresh,
+subject-bound atomic proof-consumption unit. Workflow activities never persist mailbox or raw proof
+material, and a lost provider response cannot trigger an automatic resend. Existing bounded telemetry
+and operational samples retain their purposes; no new provider call or diagnostic content is added.

@@ -88,6 +88,57 @@ export default {
       },
     },
     {
+      name: "foreign-module-imports-cloudflare-email-authentication-internal",
+      severity: "error",
+      comment:
+        "Email Authentication proof rows, enrollment, Resend and Workflows remain owner-private (#600). Call its published contract, operations or runtime composition.",
+      from: {
+        path: "^(src|cloudflare|scripts|tools)/",
+        pathNot: "^cloudflare/email-authentication/",
+      },
+      to: { path: "^cloudflare/email-authentication/internal/" },
+    },
+    {
+      name: "cloudflare-imports-portable-email-authentication-internal",
+      severity: "error",
+      comment:
+        "Native Email Authentication adapters consume published portable operations, never raw query or row internals (#600).",
+      from: { path: "^cloudflare/" },
+      to: { path: "^src/(core|shell)/email-authentication/internal/" },
+    },
+    {
+      name: "email-authentication-interface-reexports-internal",
+      severity: "error",
+      comment:
+        "Native Email Authentication publication declares behavior rather than laundering private provider or persistence implementation (#600).",
+      from: { path: "^cloudflare/email-authentication/(contract|operations|runtime)\\.ts$" },
+      to: { path: "^cloudflare/email-authentication/internal/", dependencyTypes: ["export"] },
+    },
+    {
+      name: "email-authentication-contract-imports-implementation",
+      severity: "error",
+      comment:
+        "Email Authentication's native contract is independently readable and never acquires provider, persistence or Workflow implementation (#600).",
+      from: { path: "^cloudflare/email-authentication/contract\\.ts$" },
+      to: { path: "^cloudflare/email-authentication/(internal/|operations\\.ts$|runtime\\.ts$)" },
+    },
+    {
+      name: "email-authentication-internal-imports-outward-interface",
+      severity: "error",
+      comment:
+        "Email Authentication internals depend inward on declarations, never on the outward operations or runtime interface (#600).",
+      from: { path: "^cloudflare/email-authentication/internal/" },
+      to: { path: "^cloudflare/email-authentication/(operations|runtime)\\.ts$" },
+    },
+    {
+      name: "email-authentication-operations-imports-runtime",
+      severity: "error",
+      comment:
+        "Email Authentication operations do not acquire Workflow construction authority (#600).",
+      from: { path: "^cloudflare/email-authentication/operations\\.ts$" },
+      to: { path: "^cloudflare/email-authentication/runtime\\.ts$" },
+    },
+    {
       name: "foreign-module-imports-cloudflare-subscription-internal",
       severity: "error",
       comment:
@@ -346,7 +397,7 @@ export default {
         pathNot: [
           "^src/shell/_shared/",
           "^src/shell/public-http/contract\\.ts$",
-          "^src/shell/(identity|subscription)/contract\\.ts$",
+          "^src/shell/(identity|subscription|email-authentication)/contract\\.ts$",
           "^src/shell/[^/]+/operations\\.ts$",
         ],
       },
@@ -363,9 +414,17 @@ export default {
         "which preserves one canonical API without making shell paths public.",
       from: {
         path: "^src/",
-        pathNot: ["^src/shell/", "^src/main\\.ts$", "^src/client\\.ts$"],
+        pathNot: ["^src/shell/", "^src/main\\.ts$", "^src/client\\.ts$", "^src/web-auth-api\\.ts$"],
       },
       to: { path: "^src/shell/" },
+    },
+    {
+      name: "web-auth-api-imports-server-code",
+      severity: "error",
+      comment:
+        "The browser authentication facade may compose only Email Authentication declarations, never owner implementation.",
+      from: { path: "^src/web-auth-api\\.ts$" },
+      to: { path: "^src/shell/", pathNot: "^src/shell/email-authentication/contract\\.ts$" },
     },
     {
       // Keep the facade narrow even while the dependency graph is being assembled: the transitive

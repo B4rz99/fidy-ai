@@ -1,3 +1,8 @@
+import {
+  prepareEmailPendingWorkObservation,
+  prepareEmailRejectedWorkObservation,
+} from "../email-authentication/operations";
+import type { EmailWorkOperation } from "../email-authentication/contract";
 import { prepareBillingWorkObservation } from "../subscription/operations";
 import { prepareConsentOperationalMetadata } from "../consent/operations";
 import { Clock, Effect, Exit, Option, Schema } from "effect";
@@ -130,10 +135,7 @@ const emptySignal = (operation: WorkKind): PendingSignal => ({
   unavailableWorkflows: 0,
 });
 
-const pendingQueries: Record<Exclude<WorkKind, "billing">, string> = {
-  onboarding: `SELECT id, created_at_ms AS created, expires_at_ms AS deadline FROM pending_email_enrollments WHERE state IN ('awaiting_delivery', 'sending', 'ambiguous') ORDER BY created_at_ms LIMIT ?`,
-  browserPairing: `SELECT work_id AS id, last_requested_at_ms AS created, expires_at_ms AS deadline FROM browser_pairing_email_proofs WHERE state IN ('awaiting_delivery', 'sending', 'ambiguous') ORDER BY last_requested_at_ms LIMIT ?`,
-  emailReplacement: `SELECT work_id AS id, created_at_ms AS created, expires_at_ms AS deadline FROM email_replacements WHERE state IN ('awaiting_delivery', 'sending', 'ambiguous') ORDER BY created_at_ms LIMIT ?`,
+const pendingQueries: Record<"statement" | "forwardedEmail", string> = {
   statement: `SELECT id, submitted_at_ms AS created, retention_expires_at_ms AS deadline FROM statement_submissions WHERE status IN ('queued', 'processing') ORDER BY submitted_at_ms LIMIT ?`,
   forwardedEmail: `SELECT r.id, r.received_at_ms AS created, r.expires_at_ms AS deadline
     FROM forwarded_email_receipts AS r WHERE r.state IN ('storing', 'queued')
@@ -141,14 +143,8 @@ const pendingQueries: Record<Exclude<WorkKind, "billing">, string> = {
     ORDER BY r.received_at_ms LIMIT ?`,
 };
 
-const rejectedQueries: Partial<Record<WorkKind, string>> = {
-  onboarding:
-    "SELECT COUNT(*) AS count FROM (SELECT 1 FROM pending_email_enrollments WHERE state = 'rejected' AND created_at_ms >= ? LIMIT ?)",
-  browserPairing:
-    "SELECT COUNT(*) AS count FROM (SELECT 1 FROM browser_pairing_email_proofs WHERE state = 'rejected' AND last_requested_at_ms >= ? LIMIT ?)",
-  emailReplacement:
-    "SELECT COUNT(*) AS count FROM (SELECT 1 FROM email_replacements WHERE state = 'rejected' AND created_at_ms >= ? LIMIT ?)",
-};
+const isEmailWork = (operation: WorkKind): operation is EmailWorkOperation =>
+  operation === "onboarding" || operation === "browserPairing" || operation === "emailReplacement";
 const RejectionCount = Schema.Struct({
   count: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: sampleLimit })),
 });
@@ -159,12 +155,14 @@ const rejectedEmailWork = (
   operation: WorkKind,
   current: number
 ): Effect.Effect<number, void> => {
-  const query = Option.fromUndefinedOr(rejectedQueries[operation]);
-  if (Option.isNone(query)) return Effect.succeed(0);
+  if (!isEmailWork(operation)) return Effect.succeed(0);
   return Effect.tryPromise(() =>
-    environment.DB.prepare(query.value)
-      .bind(current - rejectedWindowMilliseconds, sampleLimit)
-      .first()
+    prepareEmailRejectedWorkObservation({
+      db: environment.DB,
+      operation,
+      sinceMs: current - rejectedWindowMilliseconds,
+      limit: sampleLimit,
+    }).first()
   ).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(RejectionCount)),
     Effect.map((row) => row.count),
@@ -364,6 +362,14 @@ const inspectPendingWorkflow = ({
     return { failed, unavailable };
   });
 
+const pendingWorkStatement = (db: D1Database, operation: WorkKind): D1PreparedStatement => {
+  if (operation === "billing") return prepareBillingWorkObservation({ db, limit: sampleLimit });
+  if (isEmailWork(operation)) {
+    return prepareEmailPendingWorkObservation({ db, operation, limit: sampleLimit });
+  }
+  return db.prepare(pendingQueries[operation]).bind(sampleLimit);
+};
+
 const inspectPending = (
   environment: OperationalHealthEnvironment,
   operation: WorkKind,
@@ -371,12 +377,7 @@ const inspectPending = (
 ): Effect.Effect<OperationalSignal> =>
   Effect.gen(function* () {
     const fetched = yield* Effect.exit(
-      Effect.tryPromise(() =>
-        (operation === "billing"
-          ? prepareBillingWorkObservation({ db: environment.DB, limit: sampleLimit })
-          : environment.DB.prepare(pendingQueries[operation]).bind(sampleLimit)
-        ).all()
-      ).pipe(
+      Effect.tryPromise(() => pendingWorkStatement(environment.DB, operation).all()).pipe(
         Effect.flatMap((rows) => Schema.decodeUnknownEffect(Schema.Array(Pending))(rows.results))
       )
     );

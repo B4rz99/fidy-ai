@@ -12,10 +12,10 @@ import {
   browserReplacementCaller,
   emailReplacementImplementations,
   permitsFreshBrowserReplacement,
-} from "@fidy/server/email-replacement";
+} from "@fidy/server/email-authentication-operations";
 import { Clock, Crypto, Data, Effect, Exit, Option, PlatformError, Schema } from "effect";
-import { freshBrowserSession } from "../web-session/operations";
-import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
+import { freshBrowserSession } from "../../web-session/operations";
+import { RequestBodyPolicy, readBoundedRequestBody } from "../../http/request-body";
 
 const Proof = Schema.Struct({
   user_id: Schema.String.check(Schema.isUUID()),
@@ -112,7 +112,10 @@ export const requestEmailReplacement = ({
         if (Option.isNone(session)) return fresh();
         if (!permitsFreshBrowserReplacement("request")) return unavailable();
         const result = yield* emailReplacementImplementations
-          .request({ payload: input.value }, browserReplacementCaller(session.value))
+          .request({
+            input: { payload: input.value },
+            caller: browserReplacementCaller(session.value),
+          })
           .pipe(
             Effect.provideService(
               EmailReplacementMutation,
@@ -244,7 +247,10 @@ export const completeEmailReplacement = ({
         if (Option.isNone(session)) return fresh();
         if (!permitsFreshBrowserReplacement("complete")) return unavailable();
         return yield* emailReplacementImplementations
-          .complete({ payload: input.value }, browserReplacementCaller(session.value))
+          .complete({
+            input: { payload: input.value },
+            caller: browserReplacementCaller(session.value),
+          })
           .pipe(
             Effect.provideService(
               EmailReplacementMutation,

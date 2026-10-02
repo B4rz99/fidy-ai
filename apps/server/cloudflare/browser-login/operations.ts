@@ -1,5 +1,21 @@
+import type {
+  BrowserPairingApproval,
+  BrowserPairingApprovalStatement,
+  BrowserPairingClaim,
+  BrowserPairingProof,
+  PendingBrowserPairingQuery,
+  PendingBrowserPairingRequest,
+} from "./contract";
+import type { Option } from "effect";
+import type { OwnedStatement } from "../../src/shell/_shared/owned-statement";
+
+import {
+  pendingPairingQuery,
+  prepareProvedApproval,
+  provePendingPairing,
+} from "./internal/email-approval";
 import { prepareClaim } from "./internal/claim";
-import type { BrowserPairingApproval, BrowserPairingClaim, BrowserPairingProof } from "./contract";
+
 import {
   approveBrowserPairing as approve,
   redeemBrowserPairing as redeem,
@@ -25,3 +41,15 @@ export const redeemBrowserPairing = (
  */
 export const prepareBrowserPairingClaim = (input: BrowserPairingProof): BrowserPairingClaim =>
   prepareClaim(input);
+
+/** Check the browser-private verifier against the pending pairing and apply the bounded wrong-proof policy. */
+export const provePendingBrowserPairing = (
+  input: PendingBrowserPairingRequest
+): Promise<Option.Option<number>> => provePendingPairing(input);
+/** Project pairingId/expiresAt only for a currently pending, unexpired and unexhausted exact pairing subject. */
+export const pendingBrowserPairingQuery = (input: PendingBrowserPairingQuery): OwnedStatement =>
+  pendingPairingQuery(input);
+/** Bind one pairing to its proving owner's current User projection; commit together with one-time proof consumption. */
+export const prepareProvedBrowserPairingApproval = (
+  input: BrowserPairingApprovalStatement
+): D1PreparedStatement => prepareProvedApproval(input);

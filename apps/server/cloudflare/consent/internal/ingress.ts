@@ -1,3 +1,8 @@
+import {
+  findOnboardingEmailReplay,
+  readOnboardingEmailStatus,
+  startOnboardingEmailEnrollment,
+} from "../../email-authentication/operations";
 import { findWhatsAppUser, prepareWhatsAppIdentity } from "../../identity/operations";
 import type { ConsentIngressEnvironment as Environment } from "../contract";
 import {
@@ -16,7 +21,6 @@ import {
   ConsentIngressExchange,
   type ConsentIngressMessage,
   DisclosureDeliveryCorrelationToken,
-  type EmailStatus,
   type KapsoSendFailed,
   type KapsoSentMessage,
   PendingConsentExchangeId,
@@ -174,10 +178,6 @@ const DecisionRow = Schema.Struct({
   decision_message_id: WhatsAppProviderMessageId,
   body_sha256: Sha256Digest,
   decision: Schema.Literals(["accepted", "declined"]),
-});
-const EnrollmentReplayRow = Schema.Struct({
-  submission_message_id: WhatsAppProviderMessageId,
-  submission_body_sha256: Sha256Digest,
 });
 const DeliveryRow = Schema.Struct({
   message_id: WhatsAppProviderMessageId,
@@ -429,23 +429,14 @@ const findMailboxReplay = (
   input: Inbound,
   exchangeId: PendingConsentExchangeId
 ): Effect.Effect<Option.Option<Response>, void> =>
-  Effect.gen(function* () {
-    const stored = yield* attempt(() =>
-      db
-        .prepare(`SELECT submission_message_id, submission_body_sha256 FROM pending_email_enrollments
-        WHERE exchange_id = ?`)
-        .bind(exchangeId)
-        .first()
-    );
-    if (stored === null) return Option.none();
-    const row = yield* Schema.decodeUnknownEffect(EnrollmentReplayRow)(stored).pipe(
-      Effect.mapError(() => undefined)
-    );
-    const matches =
-      row.submission_message_id === input.event.messageEvidence.providerMessageId &&
-      row.submission_body_sha256 === input.digest;
-    return Option.some(answer(matches ? HTTP_OK : HTTP_CONFLICT));
-  });
+  findOnboardingEmailReplay({
+    db,
+    exchangeId,
+    submissionMessageId: input.event.messageEvidence.providerMessageId,
+    submissionBodySha256: input.digest,
+  }).pipe(
+    Effect.map(Option.map((replay) => answer(replay === "matching" ? HTTP_OK : HTTP_CONFLICT)))
+  );
 
 const insertMailbox = (
   environment: Environment,
@@ -457,29 +448,19 @@ const insertMailbox = (
 ): Effect.Effect<Response, void, Crypto.Crypto> =>
   Effect.gen(function* () {
     const db = environment.DB;
-    const cryptoService = yield* Crypto.Crypto;
-    const id = yield* cryptoService.randomUUIDv4.pipe(Effect.orDie);
-    const inserted = yield* Effect.exit(
-      attempt(() =>
-        db
-          .prepare(`INSERT INTO pending_email_enrollments
-        (id, exchange_id, email_address, submission_message_id, submission_body_sha256,
-         created_at_ms, expires_at_ms, state)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'awaiting_delivery')`)
-          .bind(
-            id,
-            pending.id,
-            email,
-            input.event.messageEvidence.providerMessageId,
-            input.digest,
-            input.receivedAtMs,
-            pending.expires_at_ms
-          )
-          .run()
-      )
+    const inserted = yield* Effect.result(
+      startOnboardingEmailEnrollment({
+        db,
+        exchangeId: pending.id,
+        email,
+        submissionMessageId: input.event.messageEvidence.providerMessageId,
+        submissionBodySha256: input.digest,
+        createdAtMs: input.receivedAtMs,
+        expiresAtMs: pending.expires_at_ms,
+      })
     );
-    if (Exit.isSuccess(inserted)) {
-      environment.onAccepted(id);
+    if (Result.isSuccess(inserted)) {
+      environment.onAccepted(inserted.success);
       return answer(HTTP_OK);
     }
     const replay = yield* findMailboxReplay(db, input, pending.id);
@@ -520,16 +501,6 @@ const recordMailbox = (
     return yield* insertMailbox(environment, { input, pending, email: email.value });
   });
 
-const EmailState = Schema.Struct({
-  state: Schema.Literals([
-    "awaiting_delivery",
-    "sending",
-    "awaiting_proof",
-    "rejected",
-    "ambiguous",
-  ]),
-});
-
 const reportEmailStatus = (
   environment: Environment,
   input: Inbound,
@@ -552,17 +523,7 @@ const reportEmailStatus = (
     ) {
       return answer(HTTP_CONFLICT);
     }
-    const stored = yield* attempt(() =>
-      environment.DB.prepare("SELECT state FROM pending_email_enrollments WHERE exchange_id = ?")
-        .bind(pending.id)
-        .first()
-    );
-    const state: EmailStatus =
-      stored === null
-        ? "awaiting_email"
-        : (yield* Schema.decodeUnknownEffect(EmailState)(stored).pipe(
-            Effect.mapError(() => undefined)
-          )).state;
+    const state = yield* readOnboardingEmailStatus({ db: environment.DB, exchangeId: pending.id });
     if (environment.KAPSO_API_KEY.length === 0) return answer(HTTP_UNAVAILABLE);
     // The claim bounds pre-User provider spend; uncertainty may lose a status reply, never repeat email.
     const claimed = yield* attempt(() =>

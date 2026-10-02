@@ -29,3 +29,19 @@ export type BrowserPairingClaim = Readonly<{
   subject: OwnedStatement;
   current: number;
 }>;
+
+/** Exact browser-held private verifier required before starting or completing mailbox approval. */
+export type PendingBrowserPairingRequest = Readonly<{
+  db: D1Database;
+  pairingId: string;
+  privateVerifier: string;
+}>;
+/** Trusted subject SQL projects exactly one pairingId; the owner enforces its current pending lifetime. */
+export type PendingBrowserPairingQuery = Readonly<{ subject: OwnedStatement; current: number }>;
+/** Owner-verified channel evidence projects userId; approval and proof consumption share the caller's D1 batch. */
+export type BrowserPairingApprovalStatement = Readonly<{
+  db: D1Database;
+  pairingId: string;
+  subject: OwnedStatement;
+  current: number;
+}>;

@@ -1,25 +1,16 @@
+import { type OnboardingEmailEnvironment, OnboardingEmailWork as Work } from "../contract";
+
 import { EmailAddress, EmailVerificationCode } from "@fidy/server/client";
-import type { EmailDeliveryPortService } from "@fidy/server/onboarding-email-delivery";
+import type { EmailDeliveryPortService } from "@fidy/server/email-authentication-runtime";
 import {
   type EmailSendFailed,
   makeOnboardingEmailDelivery,
-} from "@fidy/server/onboarding-email-delivery";
-import { WorkflowEntrypoint } from "cloudflare:workers";
-import {
-  cloudflareWorkerTelemetry,
-  observeProviderFetch,
-  observeWorkerPromise,
-  workerRelease,
-} from "../runtime/telemetry";
-import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
-import { captureWorkflowFailure } from "../runtime/operational-workflow-failure";
+} from "@fidy/server/email-authentication-runtime";
+import { cloudflareWorkerTelemetry, observeProviderFetch } from "../../runtime/telemetry";
+import type { WorkflowStepConfig } from "cloudflare:workers";
 import { Cause, Clock, Context, Effect, Exit, Layer, Option, Redacted, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 
-const Work = Schema.Struct({
-  version: Schema.Literal(1),
-  id: Schema.String.check(Schema.isUUID()),
-});
 const Pending = Schema.Struct({
   email_address: EmailAddress,
   expires_at_ms: Schema.Finite,
@@ -52,13 +43,6 @@ const randomSymbols = (length: number): string =>
 const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, void> =>
   Effect.tryPromise({ try: run, catch: () => undefined });
 
-export type OnboardingEmailEnvironment = Readonly<{
-  DB: D1Database;
-  ONBOARDING_EMAIL_QUEUE: Queue;
-  ONBOARDING_EMAIL_WORKFLOW: Workflow;
-  RESEND_API_KEY: string;
-}>;
-
 const pendingOutbox = (
   db: D1Database,
   now: number,
@@ -86,7 +70,7 @@ const pendingOutbox = (
 export const dispatchOnboardingEmail = (
   environment: Readonly<{
     DB: D1Database;
-    ONBOARDING_EMAIL_QUEUE: { send: (work: typeof Work.Type) => Promise<unknown> };
+    ONBOARDING_EMAIL_QUEUE: { send: (work: Work) => Promise<unknown> };
   }> & { readonly identity: Option.Option<string> }
 ): Effect.Effect<void, void> =>
   Effect.gen(function* () {
@@ -141,7 +125,7 @@ export const receiveOnboardingEmail =
     environment: Readonly<{
       DB: D1Database;
       ONBOARDING_EMAIL_WORKFLOW: {
-        create: (options: { id: string; params: typeof Work.Type }) => Promise<unknown>;
+        create: (options: { id: string; params: Work }) => Promise<unknown>;
         get: (id: string) => Promise<unknown>;
       };
     }>
@@ -210,31 +194,11 @@ export const runOnboardingEmailWorkflow = ({
   );
 };
 
-/** Version 1 stores only a work identity; the named Activity never returns proof material. */
-export class OnboardingEmailWorkflowV1 extends WorkflowEntrypoint<
-  Pick<OnboardingEmailEnvironment, "DB" | "RESEND_API_KEY">,
-  unknown
-> {
-  run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
-    return captureWorkflowFailure({
-      work: observeWorkerPromise(
-        () =>
-          runOnboardingEmailWorkflow({
-            environment: this.env,
-            payload: event.payload,
-            activity: (name, options, activity) => step.do(name, options, activity),
-          }),
-        {
-          environment: workerRelease(this.env),
-          telemetry: cloudflareWorkerTelemetry,
-          operation: "workflow.onboardingEmail",
-        }
-      ),
-      db: this.env.DB,
-    });
-  }
-}
-
+/**
+ * Send one claimed mailbox proof using its retained idempotency identity. The caller must keep
+ * mailbox and proof out of Workflow history and settle the returned certainty into owner state;
+ * an ambiguous outcome never authorizes another send with a fresh proof.
+ */
 export const sendThroughResend = (
   input: Readonly<{
     purpose: Parameters<EmailDeliveryPortService["send"]>[0]["purpose"];

@@ -1,3 +1,29 @@
+import {
+  type BrowserPairingEmailEnvironment,
+  type EmailReplacementEnvironment,
+  type OnboardingEmailEnvironment,
+} from "./email-authentication/contract";
+
+import {
+  dispatchBrowserPairingEmail,
+  dispatchEmailReplacement,
+  dispatchOnboardingEmail,
+  isBrowserPairingEmailWork,
+  isEmailReplacementWork,
+  receiveBrowserPairingEmail,
+  receiveEmailReplacement,
+  receiveOnboardingEmail,
+  reconcileBrowserPairingEmail,
+  reconcileEmailReplacement,
+  reconcileOnboardingEmail,
+} from "./email-authentication/runtime";
+import {
+  completeBrowserPairingEmail,
+  completeEmailReplacement,
+  requestEmailReplacement,
+  startBrowserPairingEmail,
+  verifyOnboarding,
+} from "./email-authentication/operations";
 import { type BillingCollectionEnvironment } from "./subscription/contract";
 import {
   ScopeMissing,
@@ -12,7 +38,7 @@ import {
   ReviseInput,
   memoryOperationIds,
 } from "@fidy/server/memory-runtime";
-import { emailReplacementOperations } from "@fidy/server/email-replacement";
+import { emailReplacementOperations } from "@fidy/server/email-authentication-operations";
 import { type TelemetryService } from "@fidy/server/telemetry";
 import { Cause, Clock, Data, Effect, Exit, Option, Schema } from "effect";
 import { correctionInput } from "./transactions/transaction-corrections";
@@ -46,17 +72,7 @@ import {
 } from "./transactions/transaction-boundary";
 import { RequestBodyPolicy, boundedJsonBody } from "./http/request-body";
 import { pathId, rawPathId } from "./http/path";
-import {
-  completeBrowserPairingEmail,
-  startBrowserPairingEmail,
-} from "./identity/browser-pairing-email";
-import {
-  type BrowserPairingEmailEnvironment,
-  dispatchBrowserPairingEmail,
-  isBrowserPairingEmailWork,
-  receiveBrowserPairingEmail,
-  reconcileBrowserPairingEmail,
-} from "./identity/browser-pairing-email-delivery";
+
 import { handleSupportRecovery } from "./identity/support-recovery";
 import { executeProtectedSubscriptionQuery, handleCardEnrollment } from "./subscription/operations";
 import {
@@ -67,14 +83,7 @@ import {
   reconcileBillingCandidates,
   sweepExpiredCardPreparationAdmission,
 } from "./subscription/runtime";
-import { completeEmailReplacement, requestEmailReplacement } from "./identity/email-replacement";
-import {
-  type EmailReplacementEnvironment,
-  dispatchEmailReplacement,
-  isEmailReplacementWork,
-  receiveEmailReplacement,
-  reconcileEmailReplacement,
-} from "./identity/email-replacement-delivery";
+
 import { handlePATRequest, patRoute } from "./pats/pat-routes";
 import { listPATs } from "./pats/pat-management";
 import { recallMemories, rejectMemoryMutation } from "./memory/memory";
@@ -110,12 +119,7 @@ import {
 } from "./web-session/operations";
 import { redeemBrowserPairing, startBrowserPairing } from "./browser-login/operations";
 import { rotateBackupRecoveryCode } from "./identity/operations";
-import {
-  type OnboardingEmailEnvironment,
-  dispatchOnboardingEmail,
-  receiveOnboardingEmail,
-  reconcileOnboardingEmail,
-} from "./onboarding/onboarding-email";
+
 import { contractDigestPattern, gitRevisionPattern } from "./runtime/release-identity";
 import { smokeFailureHeader, smokePath, smokeProofAccepted } from "./runtime/smoke";
 import {
@@ -124,7 +128,7 @@ import {
   handleSmoke,
   receiveSmoke,
 } from "./runtime/smoke-work";
-import { verifyOnboarding } from "./onboarding/verified-onboarding";
+
 import {
   type WorkerTelemetryEnvironment,
   cloudflareWorkerTelemetry,
@@ -197,10 +201,10 @@ import {
 } from "./agent/whatsapp-turn";
 
 export { UserTransactionCoordinator } from "./transactions/transaction-coordinator";
-export { OnboardingEmailWorkflowV1 } from "./onboarding/onboarding-email";
+export { OnboardingEmailWorkflowV1 } from "./email-authentication/runtime";
 export { BillingCollectionWorkflowV1, runBillingCollectionWorkflow } from "./subscription/runtime";
-export { BrowserPairingEmailWorkflowV1 } from "./identity/browser-pairing-email-delivery";
-export { EmailReplacementWorkflowV1 } from "./identity/email-replacement-delivery";
+export { BrowserPairingEmailWorkflowV1 } from "./email-authentication/runtime";
+export { EmailReplacementWorkflowV1 } from "./email-authentication/runtime";
 export { StatementExtractionWorkflowV1, ReleaseSmokeWorkflowV1 };
 export { OperationalCanaryWorkflowV1 } from "./operational-canary-workflow";
 

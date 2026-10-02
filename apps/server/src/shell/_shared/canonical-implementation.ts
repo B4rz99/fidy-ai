@@ -2,7 +2,7 @@ import type { Crypto, Effect } from "effect";
 import type { HttpApiEndpoint } from "effect/unstable/httpapi";
 import type { SqlClient } from "effect/unstable/sql";
 import type { HostedInference } from "~/shell/hosted-inference/operations";
-import type { EmailReplacementMutation } from "~/shell/email-authentication/mutation";
+import type { EmailReplacementMutation } from "~/shell/email-authentication/operations";
 import type { OperationId } from "~/shell/api";
 import type { Telemetry } from "~/shell/observability/operations";
 import type { ChildOperationAudit } from "./authz";

@@ -1,3 +1,4 @@
+import { emailPairingAllowsUser } from "../email-authentication/operations";
 import { BackupRecoveryCode } from "@fidy/server/client";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { JWTVerifyGetKey } from "jose";
@@ -138,18 +139,26 @@ const matchingRecoveryCandidate = (
   input: { codeDigest: Uint8Array; publicCode: string; now: number }
 ): Promise<boolean> => {
   const { codeDigest, publicCode, now } = input;
+  const allowed = emailPairingAllowsUser({
+    subject: { sql: "SELECT p.id AS pairingId, b.user_id AS userId", params: [] },
+  });
   return db
     .prepare(`SELECT p.id FROM browser_login_pairings AS p
     JOIN backup_recovery_credentials AS b ON b.code_digest = ? AND b.consumed_at_ms IS NULL
     WHERE p.public_code = ? AND p.state = 'pending_approval' AND p.expires_at_ms > ?
-      AND NOT EXISTS (SELECT 1 FROM browser_pairing_email_proofs AS e
-        WHERE e.pairing_id = p.id AND e.user_id <> b.user_id)
+      AND EXISTS (${allowed.sql})
       AND NOT EXISTS (SELECT 1 FROM support_recovery_cases WHERE pairing_id = p.id)`)
-    .bind(codeDigest, publicCode, now)
+    .bind(codeDigest, publicCode, now, ...allowed.params)
     .first()
     .then((candidate) => candidate !== null);
 };
 
+const supportPairingAllowed = emailPairingAllowsUser({
+  subject: {
+    sql: "SELECT browser_login_pairings.id AS pairingId, b.user_id AS userId",
+    params: [],
+  },
+});
 const supportPairingUpdate = `UPDATE browser_login_pairings SET state = 'ready', user_id = (
   SELECT b.user_id FROM backup_recovery_credentials AS b
   WHERE b.code_digest = ? AND b.consumed_at_ms IS NULL)
@@ -157,8 +166,7 @@ const supportPairingUpdate = `UPDATE browser_login_pairings SET state = 'ready',
     AND NOT EXISTS (SELECT 1 FROM support_recovery_cases WHERE pairing_id = browser_login_pairings.id)
     AND EXISTS (SELECT 1 FROM backup_recovery_credentials AS b
       WHERE b.code_digest = ? AND b.consumed_at_ms IS NULL
-        AND NOT EXISTS (SELECT 1 FROM browser_pairing_email_proofs AS e
-          WHERE e.pairing_id = browser_login_pairings.id AND e.user_id <> b.user_id))`;
+        AND EXISTS (${supportPairingAllowed.sql}))`;
 const recoveryCredentialConsume = `UPDATE backup_recovery_credentials SET code_digest = ?,
   consumed_at_ms = ? WHERE code_digest = ? AND consumed_at_ms IS NULL
   AND EXISTS (SELECT 1 FROM browser_login_pairings AS p
@@ -194,7 +202,9 @@ const approveCase = (db: D1Database, input: CaseDecision): Promise<boolean> => {
   const { operator, codeDigest, publicCode, now } = input;
   return db
     .batch([
-      db.prepare(supportPairingUpdate).bind(codeDigest, publicCode, now, codeDigest),
+      db
+        .prepare(supportPairingUpdate)
+        .bind(codeDigest, publicCode, now, codeDigest, ...supportPairingAllowed.params),
       db
         .prepare(recoveryCredentialConsume)
         .bind(

@@ -1,17 +1,18 @@
+import {
+  dispatchBrowserPairingEmail,
+  dispatchEmailReplacement,
+  runBrowserPairingEmailWorkflow,
+  runEmailReplacementWorkflow,
+} from "../email-authentication/runtime";
+import { EmailAddress, EmailVerificationCode } from "@fidy/server/client";
 import { observeOperationalHealth } from "../runtime/operational-health";
 import { Miniflare } from "miniflare";
 import { applyTestMigration } from "../d1-test-fixture";
 import { afterEach, expect, it, vi } from "vitest";
 import { startBrowserPairing } from "../browser-login/operations";
-import {
-  deliverBrowserPairingEmail,
-  dispatchBrowserPairingEmail,
-} from "../identity/browser-pairing-email-delivery";
+
 import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
-import {
-  deliverEmailReplacement,
-  dispatchEmailReplacement,
-} from "../identity/email-replacement-delivery";
+
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import coreWorker, { makeCoreWorker } from "../core-worker";
 import { DisabledTelemetryResource, makeTelemetryService } from "@fidy/server/telemetry";
@@ -1926,3 +1927,57 @@ it("redeems one approved pairing under concurrent replay without accepting a fix
       expect(replay.headers.get("set-cookie")).toBeNull();
     })
   ));
+
+// Exercise the published Workflow with only the external Resend transport substituted.
+const runProofDelivery =
+  (
+    kind: "browser-pairing-email" | "email-replacement",
+    input: {
+      db: D1Database;
+      send: (
+        to: EmailAddress,
+        code: EmailVerificationCode,
+        id: string
+      ) => Promise<"succeeded" | "rejected" | "ambiguous">;
+    }
+  ) =>
+  (id: string): Promise<void> => {
+    const provider = vi.spyOn(globalThis, "fetch").mockImplementation((request, init) =>
+      new Request(request, init)
+        .json()
+        .then((body) => {
+          const email = Schema.decodeUnknownSync(
+            Schema.Struct({ to: Schema.Array(EmailAddress), text: Schema.String })
+          )(body);
+          const code = Schema.decodeUnknownSync(EmailVerificationCode)(
+            /[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}(?:-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}){5}/u.exec(
+              email.text
+            )?.[0]
+          );
+          return input.send(EmailAddress.make(email.to[0] ?? "missing@example.test"), code, id);
+        })
+        .then((result) =>
+          result === "succeeded"
+            ? Response.json({ id: "synthetic-message" })
+            : Response.json(
+                { error: "synthetic-refusal" },
+                { status: result === "rejected" ? 400 : 503 }
+              )
+        )
+    );
+    const run =
+      kind === "browser-pairing-email"
+        ? runBrowserPairingEmailWorkflow
+        : runEmailReplacementWorkflow;
+    return run({
+      environment: { DB: input.db, RESEND_API_KEY: "synthetic-test-provider-key" },
+      payload: { kind, version: 1, id },
+      activity: (_name, _options, activity) => activity(),
+    }).finally(() => provider.mockRestore());
+  };
+const deliverBrowserPairingEmail = (
+  input: Parameters<typeof runProofDelivery>[1]
+): ((id: string) => Promise<void>) => runProofDelivery("browser-pairing-email", input);
+const deliverEmailReplacement = (
+  input: Parameters<typeof runProofDelivery>[1]
+): ((id: string) => Promise<void>) => runProofDelivery("email-replacement", input);

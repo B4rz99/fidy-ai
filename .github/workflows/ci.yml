@@ -6,6 +6,10 @@ on:
   pull_request:
     branches:
       - trunk
+      - refactor/595-identity-owner-operations
+      - refactor/596-websession-owner-operations
+      - feat/publish-categories
+      - "stack/580/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

@@ -1,25 +1,4 @@
-import { CategoryId } from "./reference";
-import { CategoryLabel } from "./model";
-
-/** Stable identities for the Colombian Categories. */
-export const categoryIds = {
-  restaurantes: CategoryId.make("10000000-0000-4000-8000-000000000001"),
-  domicilios: CategoryId.make("10000000-0000-4000-8000-000000000002"),
-  mercado: CategoryId.make("10000000-0000-4000-8000-000000000003"),
-  transporte: CategoryId.make("10000000-0000-4000-8000-000000000004"),
-  vivienda: CategoryId.make("10000000-0000-4000-8000-000000000005"),
-  servicios: CategoryId.make("10000000-0000-4000-8000-000000000006"),
-  salud: CategoryId.make("10000000-0000-4000-8000-000000000007"),
-  educacion: CategoryId.make("10000000-0000-4000-8000-000000000008"),
-  compras: CategoryId.make("10000000-0000-4000-8000-000000000009"),
-  entretenimiento: CategoryId.make("10000000-0000-4000-8000-000000000010"),
-  viajes: CategoryId.make("10000000-0000-4000-8000-000000000011"),
-  impuestos: CategoryId.make("10000000-0000-4000-8000-000000000012"),
-  transferencias: CategoryId.make("10000000-0000-4000-8000-000000000013"),
-  retirosDeEfectivo: CategoryId.make("10000000-0000-4000-8000-000000000014"),
-  ingresos: CategoryId.make("10000000-0000-4000-8000-000000000015"),
-  otros: CategoryId.make("10000000-0000-4000-8000-000000000016"),
-} as const;
+import { CategoryLabel, categoryIds } from "~/core/categories/contract";
 
 /** Seed-ready Colombian Categories in presentation order. */
 export const categoryRows = [

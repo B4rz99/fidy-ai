@@ -1,23 +1,11 @@
 import { Option, Schema } from "effect";
 import { recordAuthorizedCall } from "~/shell/audit/operations";
-import { KeywordRule } from "~/core/categories/model";
-import { maximumKeywordRulesPerUser } from "~/core/categories/rules";
+import { KeywordRule } from "~/core/categories/contract";
+import { maximumKeywordRulesPerUser } from "~/core/categories/operations";
 import { liveWebSessionAuthority } from "~/shell/identity/operations";
 import type { OwnedStatement } from "~/shell/_shared/owned-statement";
 
-/** Every Category operation an accepted browser call may be attributable to. */
-export type CategoryAuditOperation =
-  | "categories.listCategories"
-  | "categories.listKeywordRules"
-  | "categories.createKeywordRule"
-  | "categories.updateKeywordRule"
-  | "categories.deleteKeywordRule";
-
-/** The canonical mutation ids that retain one User's keyword-rule evidence. */
-export type KeywordRuleOperation = Extract<
-  CategoryAuditOperation,
-  "categories.createKeywordRule" | "categories.updateKeywordRule" | "categories.deleteKeywordRule"
->;
+import type { CategoryAuditOperation } from "../contract";
 
 /** A live credential re-evaluated inside the same D1 unit as the rule write. */
 type Authority = Readonly<{

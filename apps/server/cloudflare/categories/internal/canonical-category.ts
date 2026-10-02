@@ -1,18 +1,14 @@
-import { readConsentStatus } from "../consent/operations";
-import {
-  ListCategoriesResponse,
-  categoryResponseFromRows,
-  categoryRowsQuery,
-  categoryUnavailable,
-  recordBrowserCategoryWork,
-} from "@fidy/server/categories";
+import { decodeCategoryRead, prepareCategoryRead } from "../../../src/shell/categories/operations";
+import { recordBrowserCategoryWork } from "./canonical-work";
+import { readConsentStatus } from "../../consent/operations";
+import { ListCategoriesResponse, categoryUnavailable } from "@fidy/server/categories";
 import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
 import { recordCanonicalPATWork } from "@fidy/server/audit";
 import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { Effect, Option, Schema } from "effect";
-import { currentMillis, newId } from "../pats/pat-shared";
-import { commitPATUnit, prepareOwnedStatement } from "../pats/pat-unit";
-import { type TransactionCaller, isPATCaller } from "../transactions/transaction-boundary";
+import { currentMillis, newId } from "../../pats/pat-shared";
+import { commitPATUnit, prepareOwnedStatement } from "../../pats/pat-unit";
+import { type TransactionCaller, isPATCaller } from "../../transactions/transaction-boundary";
 
 const headers = { "cache-control": "no-store", "content-type": "application/json; charset=utf-8" };
 const unavailable = (): Response => Response.json(categoryUnavailable(), { status: 503, headers });
@@ -44,10 +40,7 @@ const categoryStatements = (
   if (isPATCaller(subject)) {
     return [
       prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) }),
-      prepareOwnedStatement({
-        db,
-        statement: categoryRowsQuery(livePATAuthority({ subject, current })),
-      }),
+      prepareCategoryRead({ db, authority: Option.some(livePATAuthority({ subject, current })) }),
       prepareOwnedStatement({
         db,
         statement: recordCanonicalPATWork({
@@ -64,9 +57,9 @@ const categoryStatements = (
     ];
   }
   return [
-    prepareOwnedStatement({
+    prepareCategoryRead({
       db,
-      statement: categoryRowsQuery(liveWebSessionAuthority({ subject, current })),
+      authority: Option.some(liveWebSessionAuthority({ subject, current })),
     }),
     prepareOwnedStatement({
       db,
@@ -104,7 +97,7 @@ const presentCategoryWork = (
       return yield* refusedCategoryWork(db, subject);
     }
     const rows = results[pat ? 1 : 0]?.results;
-    const response = categoryResponseFromRows(rows);
+    const response = decodeCategoryRead(rows);
     if (Option.isNone(response)) return unavailable();
     const body = yield* Schema.encodeEffect(Schema.fromJsonString(ListCategoriesResponse))(
       response.value

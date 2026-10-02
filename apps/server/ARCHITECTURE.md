@@ -220,6 +220,29 @@ creates no new session, reassociation, preference mutation or runtime authority.
 Durable Objects and closed unavailable paths retain their behavior. No new external workflow or
 telemetry purpose is introduced.
 
+### Categories owner composition
+
+Categories publishes its stable identities, public metadata, keyword inputs and closed failures through
+`core/categories/contract.ts` and its pure capture/keyword decisions through `operations.ts`.
+The launch taxonomy's seed attributes and keyword matching implementation remain private. Shell
+Categories publishes canonical HTTP declarations in `contract.ts` and complete canonical reads and
+failure projection in `operations.ts`; its portable SQL adapter is private.
+
+The native Categories owner exposes required lookup, a complete ordered projection capped at 100
+Categories, bounded categorization of up to 100 captures for one explicit User, and prepared canonical
+keyword-rule operations. A malformed or oversized retained projection is unavailable, never a partial
+answer. No caller reads keyword persistence or interprets the User's matching rules. Statement chunks
+load one User's rule snapshot and retain input ordering; changes to rules still affect future capture
+only. Required Category lookup distinguishes missing identity from unavailable or malformed storage.
+
+Budgets compose the exact `category_reference(id)` projection into their existing atomic writes, so a
+prepared write rechecks existence at commit. Dashboard reads public Category metadata and joins it with
+bounded Transaction pages in memory; Transactions and ingestion ask Categories to categorize captures.
+The native owner's persistence, canonical adapters and aborted-write classification live under its
+private `internal/` boundary. Existing credential, Consent, audit and User-coordination checks retain
+their authoritative D1 units. This ownership refactor introduces no new external workflow or telemetry;
+the existing canonical spans and metadata-only evidence remain in force.
+
 ### Consent owner composition
 
 Consent publishes its declarations and decisions through `core/consent/contract.ts` and

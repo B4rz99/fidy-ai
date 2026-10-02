@@ -3,7 +3,7 @@ import type { EffectiveTransactionAggregate } from "@fidy/server/transactions-ru
 import { type DateTime, Effect, Option, Schema } from "effect";
 import { UserContext } from "@fidy/server/identity-contract";
 import { prepareUserContext } from "../identity/user-context/operations";
-import { Category } from "../../src/core/categories/model";
+import { listCategories } from "../categories/operations";
 import { type DashboardDocument, collectLayoutWidgets } from "../../src/core/dashboard/model";
 import { dashboardProjectionRanges } from "../../src/core/dashboard/projection";
 import type { DashboardFacts } from "../../src/shell/dashboard/presentation";
@@ -31,7 +31,6 @@ const prepareBaseQueries = (
       params: [],
     },
   }),
-  db.prepare("SELECT id, label FROM categories ORDER BY display_order LIMIT 32"),
   db
     .prepare("SELECT version, readiness FROM dashboard_projection_state WHERE user_id = ?")
     .bind(userId),
@@ -53,26 +52,27 @@ const loadBase = (
 ): Effect.Effect<Option.Option<Omit<DashboardFacts, "groups">>> =>
   Effect.gen(function* () {
     const lists = widgets.filter((widget) => widget.type === "transaction-list");
-    const [user, categoryRows, state, ...pages] = yield* Effect.tryPromise(() =>
+    const [user, state, ...pages] = yield* Effect.tryPromise(() =>
       db.batch([...prepareBaseQueries(db, userId, lists)])
     );
     if (pages.length !== lists.length) return Option.none();
     const selected = Option.all({
       user: Option.fromUndefinedOr(user),
-      categories: Option.fromUndefinedOr(categoryRows),
       state: Option.fromUndefinedOr(state),
     });
     if (Option.isNone(selected) || !projectionReady(selected.value.state.results[0])) {
       return Option.none();
     }
     const context = Schema.decodeUnknownOption(UserContext)(selected.value.user.results[0]);
-    const categories = Option.all(
-      selected.value.categories.results.map((row) => Schema.decodeUnknownOption(Category)(row))
-    );
+    const categories = yield* Effect.option(listCategories({ db }));
+    if (Option.isNone(categories)) return Option.none();
     const listFacts = Option.all(
       lists.map((widget, index) =>
         Option.map(
-          decodeDashboardTransactions(pages[index]?.results ?? []),
+          decodeDashboardTransactions({
+            rows: pages[index]?.results ?? [],
+            categories: categories.value,
+          }),
           (rows) => [widget.id, rows] as const
         )
       )

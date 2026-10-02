@@ -105,9 +105,9 @@
       "default": "./src/shell/channels/whatsapp/hosted-sender.ts"
     },
     "./categories-path": {
-      "types": "./src/shell/categories/path.ts",
-      "import": "./src/shell/categories/path.ts",
-      "default": "./src/shell/categories/path.ts"
+      "types": "./src/shell/categories/contract.ts",
+      "import": "./src/shell/categories/contract.ts",
+      "default": "./src/shell/categories/contract.ts"
     },
     "./client": {
       "types": "./src/client.ts",

@@ -1,12 +1,13 @@
 import { Effect, Option } from "effect";
-import { type CategoryKeyword, type KeywordRuleId, normalizeCategoryKeyword } from "./model";
-import type { CategoryId } from "./reference";
-import { categoryIds } from "./taxonomy";
+import {
+  type CategoryKeyword,
+  type KeywordRuleId,
+  categoryIds,
+  maximumKeywordRulesPerUser,
+} from "~/core/categories/contract";
+import type { CategoryId } from "~/core/categories/reference";
 
-export { normalizeCategoryKeyword } from "./model";
-
-/** Bounds the rules scanned during each Transaction capture for one User. */
-export const maximumKeywordRulesPerUser = 100;
+import { normalizeSearchText as normalizeCategoryKeyword } from "~/core/search/operations";
 
 /** The last-resort capture Category when no explicit choice or User rule applies. */
 export const fallbackCaptureCategory = (direction: "inflow" | "outflow"): CategoryId =>

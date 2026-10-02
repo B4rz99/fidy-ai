@@ -1,28 +1,30 @@
+import type { KeywordRuleOperation } from "../contract";
 import {
-  CategoryNotFound,
-  CreateKeywordRuleInput,
-  KeywordRuleId,
-  type KeywordRuleOperation,
-  ListKeywordRulesResponse,
-  NotFound,
-  UpdateKeywordRuleInput,
-  ValidationFailed,
   insertKeywordRule,
   keywordRulesFromRows,
-  maximumKeywordRulesPerUser,
-  normalizeCategoryKeyword,
   protectedKeywordRulesQuery,
   recordBrowserKeywordRuleRead,
   recordBrowserKeywordRuleWork,
   removeKeywordRule,
   replaceKeywordRule,
+} from "./keyword-rules";
+import {
+  CategoryNotFound,
+  CreateKeywordRuleInput,
+  KeywordRuleId,
+  ListKeywordRulesResponse,
+  NotFound,
+  UpdateKeywordRuleInput,
+  ValidationFailed,
+  maximumKeywordRulesPerUser,
+  normalizeCategoryKeyword,
 } from "@fidy/server/categories";
 import { recordCanonicalPATWork } from "@fidy/server/audit";
 import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-runtime";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
-import { prepareOwnedStatement } from "../pats/pat-unit";
-import { RequestBodyPolicy, readBoundedRequestBody } from "../http/request-body";
-import { pathId } from "../http/path";
+import { prepareOwnedStatement } from "../../pats/pat-unit";
+import { RequestBodyPolicy, readBoundedRequestBody } from "../../http/request-body";
+import { pathId } from "../../http/path";
 import {
   HTTP_BAD_REQUEST,
   HTTP_NOT_FOUND,
@@ -40,7 +42,7 @@ import {
   transactionNow as now,
   refusedTransactionWork,
   transactionId as uuid,
-} from "../transactions/transaction-boundary";
+} from "../../transactions/transaction-boundary";
 import {
   type CanonicalMutationPreparation,
   type KeywordRuleOutcome,
@@ -48,13 +50,13 @@ import {
   failedPreparation,
   refusedPreparation,
   unavailablePreparation,
-} from "../mutations/mutation-types";
+} from "../../mutations/mutation-types";
 import {
   keywordRuleGuardFor,
   keywordRuleOutcome,
   keywordRuleRefusal,
   keywordRuleUnavailable,
-} from "../mutations/keyword-rule-outcome";
+} from "./keyword-rule-outcome";
 
 const HTTP_OK = 200;
 // The audit closes the list unit, so the rule rows sit one before it.

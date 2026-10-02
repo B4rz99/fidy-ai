@@ -138,6 +138,50 @@ const cloudflareIdentityContextPrivate = `tools/${PROBE_PREFIX}identity-context-
 
 const PROBES: readonly Probe[] = [
   {
+    name: "Category callers use the published owner operations",
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}categories-public/probe.ts`,
+        source:
+          'import { requireCategory, categorizeCaptures } from "../categories/operations";\nexport const reads = [requireCategory, categorizeCaptures];\n',
+      },
+    ],
+  },
+  {
+    name: "foreign tests cannot read Category persistence",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-categories-internal: cloudflare/${PROBE_PREFIX}categories-private/probe.test.ts → cloudflare/categories/internal/keyword-rule-shared.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}categories-private/probe.test.ts`,
+        source:
+          'import { findOwnedKeywordRules } from "../categories/internal/keyword-rule-shared";\nexport const privateRead = findOwnedKeywordRules;\n',
+      },
+    ],
+  },
+  {
+    name: "native Category adapters cannot reach portable private policy",
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error cloudflare-imports-portable-categories-internal: cloudflare/categories/${PROBE_PREFIX}portable-private/probe.ts → src/core/categories/internal/rules.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/categories/${PROBE_PREFIX}portable-private/probe.ts`,
+        source:
+          'import { findKeywordCategory } from "../../../src/core/categories/internal/rules";\nexport const privatePolicy = findKeywordCategory;\n',
+      },
+    ],
+  },
+
+  {
     expect: { kind: "allowed" },
     files: [
       {
@@ -700,22 +744,18 @@ const PROBES: readonly Probe[] = [
     expect: {
       kind: "rejected",
       mustContain: [
-        `error core-slice-reaches-sibling-slice: ${SIBLING_IMPLEMENTATION}/probe.ts → src/core/categories/model.ts`,
-        `error core-slice-reaches-sibling-slice: ${SIBLING_IMPLEMENTATION}/probe.ts → src/core/categories/rules.ts`,
-        `error core-slice-reaches-sibling-slice: ${SIBLING_IMPLEMENTATION}/probe.ts → src/core/categories/errors.ts`,
-        `error core-slice-reaches-sibling-slice: ${SIBLING_IMPLEMENTATION}/probe.ts → src/core/categories/taxonomy.ts`,
+        `error core-slice-reaches-sibling-slice: ${SIBLING_IMPLEMENTATION}/probe.ts → src/core/categories/internal/rules.ts`,
+        `error core-slice-reaches-sibling-slice: ${SIBLING_IMPLEMENTATION}/probe.ts → src/core/categories/internal/taxonomy.ts`,
       ],
     },
     files: [
       {
         path: `${SIBLING_IMPLEMENTATION}/probe.ts`,
         source:
-          'import { Category } from "~/core/categories/model";\n' +
-          'import { CategoryNotFound } from "~/core/categories/errors";\n' +
-          'import { findKnownCaptureCategory } from "~/core/categories/rules";\n' +
-          'import { categoryIds } from "~/core/categories/taxonomy";\n\n' +
+          'import { findKnownCaptureCategory } from "~/core/categories/internal/rules";\n' +
+          'import { categoryRows } from "~/core/categories/internal/taxonomy";\n\n' +
           "export const siblingImplementationProbe = [\n" +
-          "  Category,\n  CategoryNotFound,\n  findKnownCaptureCategory,\n  categoryIds,\n];\n",
+          "  findKnownCaptureCategory,\n  categoryRows,\n];\n",
       },
     ],
     name: "core-slice-reaches-sibling-slice rejects a sibling's implementation",
@@ -724,15 +764,15 @@ const PROBES: readonly Probe[] = [
     expect: {
       kind: "rejected",
       mustContain: [
-        `error core-slice-reaches-sibling-slice: ${TYPE_ONLY}/probe.ts → src/core/categories/model.ts`,
+        `error core-slice-reaches-sibling-slice: ${TYPE_ONLY}/probe.ts → src/core/categories/internal/taxonomy.ts`,
       ],
     },
     files: [
       {
         path: `${TYPE_ONLY}/probe.ts`,
         source:
-          'import type { Category } from "~/core/categories/model";\n\n' +
-          "export type TypeOnlyProbe = Category;\n",
+          'import type { categoryRows } from "~/core/categories/internal/taxonomy";\n\n' +
+          "export type TypeOnlyProbe = typeof categoryRows;\n",
       },
     ],
     name: "an `import type` is an edge the graph can see (tsPreCompilationDeps)",

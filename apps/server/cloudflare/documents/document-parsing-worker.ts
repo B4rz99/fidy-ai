@@ -1,8 +1,5 @@
-import {
-  type StatementParseFailed,
-  parseStatementFile,
-  statementParserLimits,
-} from "@fidy/server/statement-parser";
+import { type StatementParseFailed, statementParserLimits } from "@fidy/server/ingestion-contract";
+import { parseStatementFile } from "@fidy/server/ingestion-operations";
 import { Effect } from "effect";
 import { BoundedBodyReadFailed, collectBoundedRequestBody } from "../http/bounded-request-body";
 

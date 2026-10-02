@@ -2,11 +2,11 @@ import { Clock, Data, Effect, Option, Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { applyTestMigration } from "../d1-test-fixture";
 import { afterEach, expect, it } from "vitest";
-import { forwardingAddressResponse } from "./forwarding-address";
+import { forwardingAddressResponse } from "./operations";
 import {
   forwardingAddressMutationAdapter,
   prepareForwardingAddress,
-} from "../mutations/forwarding-address-mutation";
+} from "./internal/forwarding-address-mutation";
 import { executeCanonicalMutationUnit } from "../mutations/canonical-mutation-unit";
 import { canonicalMutationAdapter } from "../mutations/canonical-mutation-registry";
 import { CanonicalOperationId } from "@fidy/server/canonical-runtime";

@@ -215,6 +215,49 @@ const PROBES: readonly Probe[] = [
   },
 
   {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error foreign-module-imports-cloudflare-ingestion-internal: tools/${PROBE_PREFIX}ingestion-private/probe.ts → cloudflare/ingestion/internal/statement-staging.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `tools/${PROBE_PREFIX}ingestion-private/probe.ts`,
+        source:
+          'import { StatementStaging } from "../../cloudflare/ingestion/internal/statement-staging";\nexport const bypass = StatementStaging;\n',
+      },
+    ],
+    name: "tooling cannot acquire Ingestion R2 or storage authority",
+  },
+  {
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error cloudflare-imports-portable-ingestion-internal: cloudflare/ingestion/${PROBE_PREFIX}raw-material/probe.ts → src/shell/ingestion/internal/material.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `cloudflare/ingestion/${PROBE_PREFIX}raw-material/probe.ts`,
+        source:
+          'import { ReceivedEmailContent } from "~/shell/ingestion/internal/material";\nexport const bypass = ReceivedEmailContent;\n',
+      },
+    ],
+    name: "native Ingestion cannot acquire portable raw material or parser internals",
+  },
+  {
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `cloudflare/${PROBE_PREFIX}ingestion-published/probe.ts`,
+        source:
+          'import { prepareStatementSubmission, processForwardedEmail } from "../ingestion/operations";\nimport { StatementWork } from "../ingestion/contract";\nexport const published = [prepareStatementSubmission, processForwardedEmail, StatementWork];\n',
+      },
+    ],
+    name: "callers compose published Ingestion admission and finalization",
+  },
+  {
     expect: { kind: "allowed" },
     files: [
       {

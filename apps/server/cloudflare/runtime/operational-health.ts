@@ -1,4 +1,8 @@
 import {
+  prepareIngestionPendingWorkObservation,
+  prepareIngestionRetentionObservation,
+} from "../ingestion/operations";
+import {
   prepareEmailPendingWorkObservation,
   prepareEmailRejectedWorkObservation,
 } from "../email-authentication/operations";
@@ -135,14 +139,6 @@ const emptySignal = (operation: WorkKind): PendingSignal => ({
   unavailableWorkflows: 0,
 });
 
-const pendingQueries: Record<"statement" | "forwardedEmail", string> = {
-  statement: `SELECT id, submitted_at_ms AS created, retention_expires_at_ms AS deadline FROM statement_submissions WHERE status IN ('queued', 'processing') ORDER BY submitted_at_ms LIMIT ?`,
-  forwardedEmail: `SELECT r.id, r.received_at_ms AS created, r.expires_at_ms AS deadline
-    FROM forwarded_email_receipts AS r WHERE r.state IN ('storing', 'queued')
-    AND NOT EXISTS (SELECT 1 FROM forwarded_email_outcomes AS o WHERE o.receipt_id = r.id)
-    ORDER BY r.received_at_ms LIMIT ?`,
-};
-
 const isEmailWork = (operation: WorkKind): operation is EmailWorkOperation =>
   operation === "onboarding" || operation === "browserPairing" || operation === "emailReplacement";
 const RejectionCount = Schema.Struct({
@@ -278,21 +274,7 @@ const inspectRetention = (db: D1Database, now: number): Effect.Effect<Operationa
   Effect.gen(function* () {
     const result = yield* Effect.exit(
       Effect.tryPromise(() =>
-        db
-          .prepare(`SELECT expires FROM (
-          SELECT expires_at_ms AS expires FROM statement_staging_objects
-          WHERE status IN ('pending', 'available', 'deleting') AND object_deleted_at_ms IS NULL AND expires_at_ms <= ?
-          UNION ALL SELECT s.retention_expires_at_ms AS expires FROM statement_staging_objects AS o
-          JOIN statement_submissions AS s ON s.staging_id = o.id
-          WHERE o.status = 'published' AND o.object_deleted_at_ms IS NULL AND s.retention_expires_at_ms <= ?
-          UNION ALL SELECT expires_at_ms AS expires FROM forwarded_email_receipts
-          WHERE state IN ('storing', 'queued') AND expires_at_ms <= ?
-          UNION ALL SELECT evidence_expires_at_ms AS expires FROM statement_needs_review
-          WHERE status = 'pending' AND evidence_expires_at_ms <= ?
-            AND (original_evidence IS NOT NULL OR known_money IS NOT NULL)
-        ) ORDER BY expires LIMIT ?`)
-          .bind(now, now, now, now, sampleLimit)
-          .all()
+        prepareIngestionRetentionObservation({ db, now, limit: sampleLimit }).all()
       ).pipe(
         Effect.timeout("2 seconds"),
         Effect.flatMap((rows) => Schema.decodeUnknownEffect(Schema.Array(Retained))(rows.results))
@@ -367,7 +349,7 @@ const pendingWorkStatement = (db: D1Database, operation: WorkKind): D1PreparedSt
   if (isEmailWork(operation)) {
     return prepareEmailPendingWorkObservation({ db, operation, limit: sampleLimit });
   }
-  return db.prepare(pendingQueries[operation]).bind(sampleLimit);
+  return prepareIngestionPendingWorkObservation({ db, operation, limit: sampleLimit });
 };
 
 const inspectPending = (

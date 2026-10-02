@@ -7,7 +7,7 @@ import {
   type StatementAccounting,
   StatementColumnMapping,
   type XlsxCellEvidence,
-} from "./model";
+} from "./contract";
 import {
   decideDeferredForwardedEmailActivation,
   decideForwardedEmailAdmission,
@@ -16,7 +16,7 @@ import {
   forwardedEmailAllowanceRemaining,
   interpretStatementRows,
   redactEmailCandidate,
-} from "./rules";
+} from "./operations";
 
 const TestExtraction = Schema.Struct({
   money: Money,

@@ -26,6 +26,54 @@
 export default {
   forbidden: [
     {
+      name: "foreign-module-imports-cloudflare-ingestion-internal",
+      severity: "error",
+      comment:
+        "Ingestion owns R2 material, outbox, parser finalization and retained rows. Peers use published admission and finalization operations (#605).",
+      from: { path: "^(src|cloudflare|scripts|tools)/", pathNot: "^cloudflare/ingestion/" },
+      to: { path: "^cloudflare/ingestion/internal/" },
+    },
+    {
+      name: "cloudflare-imports-portable-ingestion-internal",
+      severity: "error",
+      comment:
+        "Native Ingestion consumes bounded portable operations; raw sample schemas, parser/provider implementation and format catalogs remain private (#605).",
+      from: { path: "^cloudflare/" },
+      to: { path: "^src/(core|shell)/ingestion/internal/" },
+    },
+    {
+      name: "ingestion-interface-reexports-internal",
+      severity: "error",
+      comment:
+        "Ingestion declares owner behavior without laundering private storage, parser or Workflow exports (#605).",
+      from: { path: "^cloudflare/ingestion/(contract|operations|runtime)\\.ts$" },
+      to: { path: "^cloudflare/ingestion/internal/", dependencyTypes: ["export"] },
+    },
+    {
+      name: "ingestion-contract-imports-implementation",
+      severity: "error",
+      comment:
+        "Ingestion declarations carry bounded inputs and outcomes, never private implementation or runtime authority (#605).",
+      from: { path: "^cloudflare/ingestion/contract\\.ts$" },
+      to: { path: "^cloudflare/ingestion/(internal/|operations\\.ts$|runtime\\.ts$)" },
+    },
+    {
+      name: "ingestion-internal-imports-outward-interface",
+      severity: "error",
+      comment:
+        "Ingestion internals depend on declarations and sibling internals, never outward on their own published operations or runtime (#605).",
+      from: { path: "^cloudflare/ingestion/internal/" },
+      to: { path: "^cloudflare/ingestion/(operations|runtime)\\.ts$" },
+    },
+    {
+      name: "ingestion-operations-imports-runtime",
+      severity: "error",
+      comment:
+        "Ingestion admission and finalization operations do not acquire Worker/Workflow construction authority (#605).",
+      from: { path: "^cloudflare/ingestion/operations\\.ts$" },
+      to: { path: "^cloudflare/ingestion/runtime\\.ts$" },
+    },
+    {
       name: "core-imports-shell",
       severity: "error",
       comment:
@@ -583,7 +631,7 @@ export default {
       severity: "error",
       comment:
         "src/shell/api.ts imported something other than a slice's operations.ts, " +
-        "shell/_shared, or the Identity/Categories/Transactions/Subscription/Budgets/Public HTTP declaration contracts. The assembly composes operation definitions " +
+        "shell/_shared, or the Identity/Categories/Transactions/Subscription/Budgets/Ingestion/Public HTTP declaration contracts. The assembly composes operation definitions " +
         "and their universal validation declaration and nothing else. A slice's " +
         "handlers.ts *must* import api.ts, because HttpApiBuilder.group takes the assembled " +
         "HttpApi as its first argument, so the acyclic direction is the one this rule holds: " +
@@ -595,7 +643,7 @@ export default {
         pathNot: [
           "^src/shell/_shared/",
           "^src/shell/public-http/contract\\.ts$",
-          "^src/shell/(identity|categories|transactions|subscription|email-authentication|tokens|budgets|browser-login|recovery)/contract\\.ts$",
+          "^src/shell/(identity|categories|transactions|subscription|email-authentication|tokens|budgets|browser-login|recovery|ingestion)/contract\\.ts$",
           "^src/shell/[^/]+/operations\\.ts$",
         ],
       },

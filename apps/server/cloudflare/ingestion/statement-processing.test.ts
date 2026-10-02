@@ -1,12 +1,12 @@
-import { statementParserLimits } from "@fidy/server/statement-parser";
+import { statementParserLimits } from "@fidy/server/ingestion-contract";
 import { Effect, Option } from "effect";
 import { installTestSchema, isolatedTestStorage } from "../d1-test-fixture";
 import { afterAll, expect } from "vitest";
 import { it as effectIt } from "@effect/vitest";
 import { currentMillis } from "../runtime/clock";
-import { failStatementSubmission, processStatementSubmission } from "./statement-processing";
-import { expireStatementReviewEvidence } from "./statement-review-retention";
-import { StatementStaging, submissionProjection } from "./statement-staging";
+import { failStatementSubmission, processStatementSubmission } from "./operations";
+import { expireStatementReviewEvidence } from "./internal/statement-review-retention";
+import { StatementStaging, submissionProjection } from "./internal/statement-staging";
 
 const fromTestPromise = <A>(run: () => PromiseLike<A>): Effect.Effect<A> =>
   Effect.tryPromise(() => Promise.resolve(run())).pipe(Effect.orDie);

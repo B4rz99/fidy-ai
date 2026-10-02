@@ -11,8 +11,8 @@ import {
   patScopeCapability,
 } from "@fidy/server/canonical-runtime";
 import { Effect, Option, Schema } from "effect";
-import { submissionInputBytes } from "../ingestion/statement-ingestion";
-import { lostStatementReplay, submitForExtraction } from "../ingestion/statement-staging";
+import { maximumSubmissionInputBytes } from "../ingestion/contract";
+
 import type { HostedInference } from "@fidy/server/hosted-inference";
 import {
   type CanonicalRefusalDisposition,
@@ -88,7 +88,7 @@ const repeatedTargetMessage =
 const repeatedStatementMessage = "An atomic batch can publish at most one statement.";
 export const oversizedChildMessage =
   "This child's input exceeds the size an individual call of this operation accepts.";
-const maximumChildInputBytes = Math.min(maximumTransactionInputBytes, submissionInputBytes);
+const maximumChildInputBytes = Math.min(maximumTransactionInputBytes, maximumSubmissionInputBytes);
 const childInputBytes = (call: unknown): number => {
   const decoded = Schema.decodeUnknownOption(Schema.Struct({ input: Schema.Unknown }))(call);
   return new TextEncoder().encode(
@@ -527,7 +527,12 @@ const duplicateCallIndex = (calls: ReadonlyArray<CanonicalBatchCall>): Option.Op
 const secondStatementIndex = (calls: ReadonlyArray<CanonicalBatchCall>): Option.Option<number> => {
   let seen = false;
   for (const [index, call] of calls.entries()) {
-    if (!Option.exists(rawOperation(call), (operation) => operation === submitForExtraction)) {
+    if (
+      !Option.exists(
+        rawOperation(call),
+        (operation) => operation === CanonicalOperationId.make("ingestion.submitForExtraction")
+      )
+    ) {
       continue;
     }
     if (seen) return Option.some(index);
@@ -558,7 +563,7 @@ const batchShapeRefusal = (calls: ReadonlyArray<CanonicalBatchCall>): Option.Opt
       code: "validation_failed",
       message: repeatedStatementMessage,
       index,
-      operation: submitForExtraction,
+      operation: CanonicalOperationId.make("ingestion.submitForExtraction"),
     })
   );
 };
@@ -743,10 +748,7 @@ const executeBatch = ({
       );
       if (
         statement?.mutation.outcome._tag === "StatementSubmission" &&
-        (yield* lostStatementReplay(
-          statement.mutation.outcome.config,
-          statement.mutation.outcome.publication
-        ))
+        (yield* statement.mutation.outcome.publication.lostReplay)
       ) {
         const replay = yield* prepareBatch({ db, subject, calls, current, bucket });
         if (replay._tag === "Response") return replay.response;

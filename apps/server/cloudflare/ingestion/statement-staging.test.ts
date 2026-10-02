@@ -2,7 +2,7 @@ import {
   type StagedStatementBytes,
   type StatementStagingFailureReason,
   StatementStagingId,
-} from "@fidy/server/statement-staging";
+} from "@fidy/server/ingestion-contract";
 import { Data, Effect, Encoding, Fiber, Option, Result } from "effect";
 import { Miniflare } from "miniflare";
 import { applyTestMigration } from "../d1-test-fixture";
@@ -13,7 +13,7 @@ import {
   type StatementStagingService,
   type StatementStagingSweep,
   StatementStagingUnavailable,
-} from "./statement-staging";
+} from "./internal/statement-staging";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure") {}
 const fromTestPromise = <A>(promise: () => PromiseLike<A>): Effect.Effect<A> =>

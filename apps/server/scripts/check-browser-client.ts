@@ -18,14 +18,13 @@ const entrypoint = "src/client.ts";
  */
 const safeSource = [
   /^src\/client\.ts$/u,
-  /^src\/shell\/(?:identity|categories|transactions|subscription|tokens|budgets|public-http|schema-codecs|browser-login|recovery)\/contract\.ts$/u,
+  /^src\/shell\/(?:identity|categories|transactions|subscription|tokens|budgets|public-http|schema-codecs|browser-login|recovery|ingestion)\/contract\.ts$/u,
   /^src\/web-auth-api\.ts$/u,
   /^src\/shell\/agent\/hosted-turn-api\.ts$/u,
   /^src\/core\//u,
   /^src\/shell\/api\.ts$/u,
   /^src\/shell\/[^/]+\/operations\.ts$/u,
   /^src\/shell\/email-authentication\/(?:contract|path)\.ts$/u,
-  /^src\/shell\/ingestion\/input\.ts$/u,
   /^src\/shell\/memory\/errors\.ts$/u,
   /^src\/shell\/_shared\/(?:authz|canonical-telemetry|operation-catalog|operation-policy|partial-input)\.ts$/u,
   /^src\/shell\/_shared\/canonical-input\.ts$/u,

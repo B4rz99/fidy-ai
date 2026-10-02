@@ -6,11 +6,11 @@ import { Clock, Data, Effect, Option } from "effect";
 import { Miniflare } from "miniflare";
 import { applyTestMigration } from "../d1-test-fixture";
 import { afterEach, expect } from "vitest";
-import emailWorker, { makeEmailWorker } from "./email-worker";
-import { processForwardedEmail } from "./forwarded-email-processing";
-import { receiveForwardedEmailWork } from "./forwarded-email-delivery";
+import emailWorker from "./email-worker";
+import { makeEmailWorker, receiveForwardedEmailWork } from "./runtime";
+import { listNeedsReviewItems, processForwardedEmail } from "./operations";
+
 import { UserTransactionCoordinator } from "../transactions/runtime";
-import { listNeedsReviewItems } from "./statement-review";
 
 const userA = "10000000-0000-4000-8000-000000000101";
 const userB = "10000000-0000-4000-8000-000000000102";
@@ -278,14 +278,11 @@ it("settles a bounded known email into one Transaction and one immutable attesta
   Effect.runPromise(
     Effect.gen(function* () {
       const { env, db, bucket, jobs } = yield* setup();
-      const html = yield* wait(() =>
-        Bun.file(
-          new URL(
-            "../../src/shell/ingestion/email-interpretation/formats/davibank-card/fixtures/positive.synthetic.html",
-            import.meta.url
-          )
-        ).text()
-      );
+      const html = `<!doctype html><html><body>
+        <p>DAVIbank te notifica que realizaste con tu tarjeta Visa Oro la siguiente transacción o compra recurrente:</p>
+        <table><tr><td>Comercio</td><td>COMERCIO FICTICIO</td></tr>
+        <tr><td>Monto</td><td>12,500</td></tr><tr><td>Fecha</td><td>2026/01/15</td></tr>
+        <tr><td>Hora</td><td>10:15:30</td></tr></table></body></html>`;
       yield* wait(() =>
         db.prepare("UPDATE users SET time_zone = 'America/Lima' WHERE id = ?").bind(userA).run()
       );

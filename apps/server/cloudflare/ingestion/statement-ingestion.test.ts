@@ -3,7 +3,7 @@ import {
   StatementSourceFormat,
   StatementStagingId,
   StatementSubmissionId,
-} from "@fidy/server/statement-staging";
+} from "@fidy/server/ingestion-contract";
 import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
 import { Clock, Data, Effect, Option, Schema } from "effect";
 import { Miniflare } from "miniflare";
@@ -21,15 +21,15 @@ import {
 import { oversizedChildMessage } from "../mutations/canonical-mutation-batch";
 import { hostedTurnTestMigrations } from "../agent/hosted-turn-test-migrations";
 import { UserTransactionCoordinator } from "../transactions/runtime";
-import { statementConflictMessage } from "./statement-staging";
+import { statementConflictMessage } from "./internal/statement-staging";
 import {
   dispatchStatementExtraction,
+  executeStatementExtraction,
   receiveStatementExtraction,
   reconcileStatementExtraction,
-  runStatementExtractionWorkflow,
-} from "./statement-delivery";
+} from "./runtime";
 import coreWorker from "../core-worker";
-import { sweepExpiredUploadAdmission } from "./statement-ingestion";
+import { sweepExpiredUploadAdmission } from "./operations";
 import { observeOperationalHealth } from "../runtime/operational-health";
 import publicWorker from "../public-worker";
 
@@ -1366,7 +1366,7 @@ it("carries only an identity through Workflow history and delegates to the User 
       };
       const names: Array<string> = [];
       yield* fromTestPromise(() =>
-        runStatementExtractionWorkflow({
+        executeStatementExtraction({
           coordinator,
           payload: {
             version: 1,
@@ -1535,7 +1535,7 @@ it("continues a bounded statement across distinct durable Workflow steps", () =>
       const steps: Array<string> = [];
       let progress = 0;
       yield* fromTestPromise(() =>
-        runStatementExtractionWorkflow({
+        executeStatementExtraction({
           coordinator: {
             getByName: (_name: string): Pick<Fetcher, "fetch"> => ({
               fetch: (): Promise<Response> => {
@@ -1564,7 +1564,7 @@ it("continues a supported 97-row statement through four durable Workflow activit
     Effect.gen(function* () {
       const steps: Array<string> = [];
       yield* fromTestPromise(() =>
-        runStatementExtractionWorkflow({
+        executeStatementExtraction({
           coordinator: {
             getByName: (_name: string): Pick<Fetcher, "fetch"> => ({
               fetch: (): Promise<Response> =>
@@ -1597,7 +1597,7 @@ it("reports exhausted statement work to the same User coordinator without copyin
     Effect.gen(function* () {
       const requests: Array<unknown> = [];
       yield* fromTestPromise(() =>
-        runStatementExtractionWorkflow({
+        executeStatementExtraction({
           coordinator: {
             getByName: (_name: string): Pick<Fetcher, "fetch"> => ({
               fetch: (request: Request): Promise<Response> =>

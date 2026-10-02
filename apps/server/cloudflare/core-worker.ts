@@ -137,14 +137,17 @@ import {
   observeWorkerRequest,
 } from "./runtime/telemetry";
 import { type WorkersAiEnvironment, sweepExpiredWorkersAiAdmission } from "./ai/workers-ai";
-import { statementStagingPath } from "@fidy/server/statement-path";
+import { statementStagingPath } from "@fidy/server/ingestion-contract";
 import {
+  expireStatementReviewEvidence,
+  forwardingAddressResponse,
+  listNeedsReviewItems,
   readStatementSubmission,
   submitForExtractionInput,
   sweepExpiredUploadAdmission,
   uploadStagedStatement,
   validationFailed,
-} from "./ingestion/statement-ingestion";
+} from "./ingestion/operations";
 import { EmailAddress } from "@fidy/server/client";
 import {
   type OperationalHealthEnvironment,
@@ -167,22 +170,19 @@ import { type CapabilityProbe, inspectOperationalCapabilities } from "./runtime/
 import { recordOperationalHealth } from "./runtime/operational-health-view";
 import { runOperationalAlerts } from "./runtime/operational-alert-delivery";
 import { sendOperatorEmail } from "./runtime/operator-email";
-import { StatementStaging } from "./ingestion/statement-staging";
-import { forwardingAddressResponse } from "./ingestion/forwarding-address";
-import {
-  isForwardedEmailWork,
-  receiveForwardedEmailWork,
-} from "./ingestion/forwarded-email-delivery";
-import { expireStatementReviewEvidence } from "./ingestion/statement-review-retention";
-import { makeAuditRetention } from "@fidy/server/audit-runtime";
-import { listNeedsReviewItems } from "./ingestion/statement-review";
 import {
   StatementExtractionWorkflowV1,
   dispatchStatementExtraction,
+  isForwardedEmailWork,
   isStatementExtractionWork,
+  receiveForwardedEmailWork,
   receiveStatementExtraction,
   reconcileStatementExtraction,
-} from "./ingestion/statement-delivery";
+  statementRetention,
+} from "./ingestion/runtime";
+
+import { makeAuditRetention } from "@fidy/server/audit-runtime";
+
 import {
   HostedDeliveryAdmission,
   HostedProgressAdmission,
@@ -2293,7 +2293,7 @@ const scheduledActivities = (
   const staging =
     environment.STATEMENT_STAGING_BUCKET === undefined
       ? undefined
-      : StatementStaging.make({
+      : statementRetention({
           bucket: environment.STATEMENT_STAGING_BUCKET,
           database: environment.DB,
           nowEpochMs: () => current,
@@ -2339,9 +2339,9 @@ const scheduledActivities = (
       Effect.mapError(() => undefined)
     ),
     "ingestion.submissionRetention":
-      staging?.expireStatementSubmissions.pipe(Effect.mapError(() => undefined)) ?? Effect.void,
+      staging?.expireSubmissions.pipe(Effect.mapError(() => undefined)) ?? Effect.void,
     "ingestion.stagingSweep":
-      staging?.sweepExpiredStatementStaging.pipe(Effect.mapError(() => undefined)) ?? Effect.void,
+      staging?.sweepStaging.pipe(Effect.mapError(() => undefined)) ?? Effect.void,
     ...admissionActivities(environment.DB, current, smokeReady(environment)),
     ...statementActivities(environment),
   };

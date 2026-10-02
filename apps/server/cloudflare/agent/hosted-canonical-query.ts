@@ -8,9 +8,11 @@ import { browseTransactions } from "../transactions/operations";
 import { browseDashboard } from "../dashboard/dashboard";
 import { recallMemories } from "../memory/memory";
 import { listPendingInsights } from "../insights/insight-store";
-import { forwardingAddressResponse } from "../ingestion/forwarding-address";
-import { readStatementSubmission } from "../ingestion/statement-ingestion";
-import { listNeedsReviewItems } from "../ingestion/statement-review";
+import {
+  forwardingAddressResponse,
+  listNeedsReviewItems,
+  readStatementSubmission,
+} from "../ingestion/operations";
 
 const requestParts = Schema.Struct({
   params: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),

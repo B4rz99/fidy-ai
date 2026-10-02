@@ -9,12 +9,9 @@ import type {
 } from "@fidy/server/categories";
 import type { Memory, MemoryId } from "@fidy/server/memory-runtime";
 import type { Budget, BudgetId } from "@fidy/server/budgets-contract";
-import type { StatementSubmission } from "@fidy/server/statement-staging";
-import type { EmailForwardingAddress } from "../../src/core/ingestion/model";
-import type {
-  PreparedStatementPublication,
-  StatementStagingConfig,
-} from "../ingestion/statement-staging";
+import type { StatementSubmission } from "@fidy/server/ingestion-contract";
+import type { EmailForwardingAddress } from "../../src/core/ingestion/contract";
+import type { StatementPublicationOutcome } from "../ingestion/contract";
 import type {
   RestoredTransactionPair,
   Transaction,
@@ -97,8 +94,7 @@ export type CanonicalMutationOutcome =
   | Readonly<{
       _tag: "StatementSubmission";
       operation: "ingestion.submitForExtraction";
-      publication: PreparedStatementPublication;
-      config: StatementStagingConfig;
+      publication: StatementPublicationOutcome;
     }>;
 
 /** Facts an owner needs to classify its own indexed guard refusal after rollback. */

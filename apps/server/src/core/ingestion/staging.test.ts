@@ -5,7 +5,7 @@ import {
   StagedStatementReference,
   StatementStagingId,
   maximumStatementBytes,
-} from "./staging";
+} from "./contract";
 
 const stagingId = "f1d1a000-0000-4000-8000-000000000501";
 const sha256 = "a".repeat(64);

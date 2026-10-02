@@ -454,3 +454,27 @@ cycle between verified enrollment and recovery. The guarded pairing transition, 
 consumption and tracked case events commit or roll back together. All proof paths retain expiry,
 replay, independent browser-verifier and cross-User safeguards. Existing Core request telemetry covers
 the unchanged bounded workflows; no new provider call, runtime substrate or diagnostic data is added.
+
+### Ingestion owner composition
+
+Ingestion publishes statement, forwarding-address and visible NeedsReviewItem declarations through
+its core and shell contracts. Pure allowance and statement-interpretation decisions remain in core
+operations. Shell operations own the bounded byte parser and runtime-decoded email interpretation;
+raw IngestSample schemas, mapping samples, format catalogs, parsers and owner fixtures stay private.
+The catalog's tool runtime only rebuilds or checks its private generated artifact.
+
+Native operations publish staging admission, canonical publication, bounded review reads and
+Transaction-or-review finalization. The canonical mutation unit receives prepared guarded statements,
+public committed-state reads and exact same-material replay evidence; it cannot inspect stored
+submission rows, R2 locators or admission premises. The submission, staging promotion, Free-backfill
+reservation, credential accountability, Audit and outbox identity retain their single D1 unit.
+Transactions and Categories are requested through their published owner operations, preserving
+source eligibility, historical interpretation context and explicit User/Consent checks.
+
+The native runtime composes the unchanged Email Worker, identity-only Queues, versioned statement
+Workflow and bounded retention activities. Private internals retain R2 reads, outbox and repository
+queries, raw material, interpretation finalization and retries. Operational health observes only
+bounded owner metadata. Existing two-User, hostile-input, atomic rollback, duplicate, interrupted
+execution and retention evidence remains at the public or explicit platform-adapter seams. No new
+provider call, workflow version, telemetry purpose, institution authority or inbound routing is added;
+the existing unavailable institution Connection and sender-proof prerequisites remain closed.

@@ -82,13 +82,11 @@ Upstream must still be rechecked and the acceptance removed when an eligible rem
 
 Independent Standards/Security/Spec review must cover the entire migration, not just #980/#981.
 After synchronizing trunk, `git diff fe37ea1b8a...HEAD` includes every migration slice while excluding
-#977's already-landed design. User confirmation of that fixed point has been requested; no combined
-review worker has been dispatched and no clean combined review is claimed. CI, including exact
-Linux browser and SAST/SCA checks, remains a
-merge requirement. A pending check, missing review or finding prevents declaring #981 complete.
+#977's already-landed design. The User confirmed this fixed point. Combined review and exact Linux
+browser and SAST/SCA CI checks remain merge requirements; a pending check, missing review or finding
+prevents declaring #981 complete. Final review and CI evidence will be linked from the squash PR.
 
-**Merge is held until release authorization is clarified:** the existing trunk-push workflow
-starts Production deployment automatically, and its environment has branch restriction but no
-required reviewer approval. The User requested merge; the tickets exclude release authorization.
-No trigger or release policy was disabled to evade that boundary, and no migration deployment,
-onboarding or launch was performed. Even an authorized release is not real-user launch approval.
+**Automatic Production release is explicitly authorized:** after being told the existing trunk-push
+workflow deploys automatically and has no environment reviewer gate, the User confirmed that the
+requested merge authorizes that release. No trigger or release policy was disabled. Authorization
+is conditional on clean combined review and CI, and does not enable onboarding or real-user launch.

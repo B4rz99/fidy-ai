@@ -1,11 +1,11 @@
 /// <reference types="bun-types" />
 
 import { type Cause, Context, Data, Effect, Layer, Option } from "effect";
-import type * as HttpClientError from "effect/unstable/http/HttpClientError";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpBody from "effect/unstable/http/HttpBody";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import type * as HttpClientError from "effect/http/HttpClientError";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpBody from "effect/http/HttpBody";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { productionTopology } from "../../apps/server/cloudflare/runtime/contract";
 
 const apiOrigin = `https://${productionTopology.ingress.hostname}`;

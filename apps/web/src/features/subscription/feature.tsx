@@ -7,7 +7,7 @@ import {
 } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Data, Effect, Array as EffectArray, Option, Predicate, Redacted } from "effect";
-import { Atom } from "effect/unstable/reactivity";
+import { Atom } from "effect/reactivity";
 import { DaviplataEnrollmentForm } from "./daviplata-form";
 import { DaviplataAuthorizationLock } from "./daviplata-activity";
 import { BillingEmailField, EnrollmentConsent } from "./enrollment-controls";

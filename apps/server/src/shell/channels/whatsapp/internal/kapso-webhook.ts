@@ -1,14 +1,6 @@
-import {
-  DateTime,
-  Effect,
-  Array as EffectArray,
-  Encoding,
-  Option,
-  Redacted,
-  Result,
-  Schema,
-} from "effect";
-import { Model } from "effect/unstable/schema";
+import { DateTime, Effect, Array as EffectArray, Option, Redacted, Result, Schema } from "effect";
+import { Hex } from "effect/encoding";
+import { Model } from "effect/schema";
 import {
   E164PhoneNumber,
   WhatsAppBusinessPortfolioId,
@@ -144,7 +136,7 @@ const RawIdentityChangeMessage = Schema.Struct({
  * compares it to the expected digest with the platform constant-time equality primitive.
  */
 const authenticatesDigest = (signature: string, expected: Uint8Array): boolean => {
-  const decoded = Encoding.decodeHex(signature);
+  const decoded = Hex.decode(signature);
   if (Result.isFailure(decoded)) return false;
   const provided = decoded.success;
   let difference = provided.byteLength ^ expected.byteLength;

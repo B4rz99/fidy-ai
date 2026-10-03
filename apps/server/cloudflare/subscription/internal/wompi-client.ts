@@ -7,13 +7,13 @@ import {
   Data,
   type DateTime,
   Effect,
-  Encoding,
   Layer,
   Option,
   Redacted,
   Result,
   Schema,
 } from "effect";
+import { Base64Url, Hex } from "effect/encoding";
 import {
   BillingEmail,
   EndUserPolicyEvidence,
@@ -133,7 +133,7 @@ const responseJson = Effect.fn(function* (response: OutboundHttpResponse) {
 const digestText = Effect.fn(function* (text: string) {
   const crypto = yield* Crypto.Crypto;
   const digest = yield* crypto.digest("SHA-256", new TextEncoder().encode(text)).pipe(Effect.orDie);
-  return Encoding.encodeHex(digest);
+  return Hex.encode(digest);
 });
 
 const acceptanceProviderContentHash = Effect.fn(function* (
@@ -142,7 +142,7 @@ const acceptanceProviderContentHash = Effect.fn(function* (
 ) {
   const encodedClaims = acceptanceToken.split(".")[1];
   if (encodedClaims === undefined) return yield* Effect.fail("acceptance-claims" as const);
-  const claimsText = Encoding.decodeBase64UrlString(encodedClaims);
+  const claimsText = Base64Url.decodeString(encodedClaims);
   if (Result.isFailure(claimsText)) return yield* Effect.fail("acceptance-claims" as const);
   const claims = decodeAcceptanceClaims(claimsText.success);
   if (Result.isFailure(claims) || claims.success.permalink.href !== permalink.href) {
@@ -422,7 +422,7 @@ export class WompiEnrollmentClient extends Context.Service<
       const environment = yield* Config.schema(WompiEnvironment, "WOMPI_ENVIRONMENT");
       const prefixes = wompiCredentialPrefixes(environment);
       const publicKey = yield* Config.schema(
-        PublicKey.check(Schema.isStartsWith(prefixes.publicKey)),
+        PublicKey.check(Schema.isStartingWith(prefixes.publicKey)),
         "WOMPI_PUBLIC_KEY"
       );
       return WompiEnrollmentClient.of({

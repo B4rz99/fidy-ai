@@ -31,7 +31,7 @@ const FORBIDDEN_CONTENT = [
   "WOMPI_INTEGRITY_SECRET",
   "CLOUDFLARE_ACCESS_",
   "/apps/server/src/",
-  "node_modules/effect/dist/unstable/sql",
+  "node_modules/effect/dist/sql",
 ];
 
 export type ProductionArtifactRequest = {

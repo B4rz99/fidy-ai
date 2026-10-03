@@ -1,5 +1,5 @@
 import { Cause, Effect, Exit, Option } from "effect";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientResponse } from "effect/http";
 import { it } from "@effect/vitest";
 import { describe, expect } from "vitest";
 import {

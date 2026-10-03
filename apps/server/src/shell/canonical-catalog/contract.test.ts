@@ -1,8 +1,8 @@
 import { expect, it } from "@effect/vitest";
 import { Option, Schema } from "effect";
-import { operationCatalog } from "~/shell/api";
+import { FidyApi, operationCatalog } from "~/shell/api";
 import { getAtomicBatchCallSchema } from "~/shell/operations/contract";
-import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import { makeOperationCatalog } from "./contract";
 import { getCanonicalOperationInput } from "~/shell/canonical-operations/operations";
 import { operationPolicy, patScoped } from "~/shell/canonical-policy/contract";
@@ -37,6 +37,31 @@ it("reads inherited descriptive metadata through reflected annotations", () => {
     type: "pat-scoped",
     scope: { evaluation: "operation", capability: "read" },
   });
+});
+
+it("publishes the same decimal, credential and operation-id constraints that wire decoding enforces", () => {
+  expect(OpenApi.fromApi(FidyApi)).toMatchObject({
+    components: {
+      schemas: {
+        CanonicalOperationId: { pattern: "^[a-z][A-Za-z0-9]*\\.[a-z][A-Za-z0-9]*$" },
+        Money: { properties: { amount: { pattern: "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$" } } },
+        TokenBearer: { pattern: "^fin_[a-z0-9]{8}_[A-Za-z0-9_-]{32,}$" },
+        TokenShortId: { pattern: "^[a-z0-9]{8}$" },
+      },
+    },
+  });
+});
+
+it("keeps optional review paging and the existing UTF-16 search bounds", () => {
+  const review = Schema.decodeSync(getCanonicalOperationInput("ingestion.listNeedsReviewItems"))({
+    query: {},
+  });
+  expect(review.query).toEqual({ offset: Option.none(), limit: Option.none() });
+
+  const search = Schema.decodeOption(getCanonicalOperationInput("transactions.searchTransactions"));
+  expect(Option.isNone(search({ query: { q: "a" } }))).toBe(true);
+  expect(Option.isSome(search({ query: { q: "😀" } }))).toBe(true);
+  expect(Option.isNone(search({ query: { q: "a".repeat(81) } }))).toBe(true);
 });
 
 it("returns the same canonical input accepted by the published batch child schema", () => {

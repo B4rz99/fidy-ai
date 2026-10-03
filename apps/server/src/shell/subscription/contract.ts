@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { type OwnedStatement } from "~/shell/owner-write/contract";
-import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import {
   BillingAttempt,
   BillingAttemptId,

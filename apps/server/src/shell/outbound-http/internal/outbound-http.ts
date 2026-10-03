@@ -1,12 +1,8 @@
 import { DaviplataOtpPolicy } from "~/core/subscription/contract";
 import { type WompiEnvironment } from "~/shell/secret-material/contract";
-import { type Crypto, Effect, Encoding, Match, Option, Redacted, Schema } from "effect";
-import {
-  FetchHttpClient,
-  HttpBody,
-  type HttpClient,
-  HttpClientRequest,
-} from "effect/unstable/http";
+import { type Crypto, Effect, Match, Option, Redacted, Schema } from "effect";
+import { Hex } from "effect/encoding";
+import { FetchHttpClient, HttpBody, type HttpClient, HttpClientRequest } from "effect/http";
 import { makeProviderTransport } from "./transport";
 import {
   OutboundHttpFailure,
@@ -118,7 +114,7 @@ const transactionSignature = (
         `${body.reference}${body.amountInCents}${body.currency}${Redacted.value(integritySecret)}`
       )
     )
-    .pipe(Effect.map(Encoding.encodeHex), Effect.mapError(unavailableTransport));
+    .pipe(Effect.map(Hex.encode), Effect.mapError(unavailableTransport));
 
 const walletApprovalRequest = (
   config: WompiTransportConfig,

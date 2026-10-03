@@ -1,5 +1,5 @@
 import { Context, Option, Schema, SchemaTransformation } from "effect";
-import { OpenApi } from "effect/unstable/httpapi";
+import { OpenApi } from "effect/http-api";
 import { CanonicalCapability } from "~/core/canonical-operations/contract";
 import type { AccessTier } from "~/core/access-tier/contract";
 

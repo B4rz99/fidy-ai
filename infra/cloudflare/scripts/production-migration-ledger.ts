@@ -63,7 +63,7 @@ export const readProductionDatabaseName = (): string => {
 
   const output = runMigrationHistoryCommand([
     "bun",
-    "../../node_modules/alchemy/bin/alchemy.ts",
+    "../../node_modules/alchemy/bin/alchemy.js",
     "state",
     "read",
     statePath,

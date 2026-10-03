@@ -133,7 +133,7 @@ export const bearerSecretBytes = 32;
  * one.
  */
 export const TokenShortId = Schema.String.check(
-  Schema.isPattern(new RegExp(`^${patShortIdPattern}$`))
+  Schema.isPattern(new RegExp(`^${patShortIdPattern}$`, "u"))
 )
   .pipe(Schema.brand("TokenShortId"))
   .annotate({ identifier: "TokenShortId" });
@@ -141,7 +141,7 @@ export type TokenShortId = typeof TokenShortId.Type;
 
 /** URL-safe high-entropy secret segment used only to construct an opaque bearer. */
 export const TokenSecret = Schema.String.check(
-  Schema.isPattern(new RegExp(`^${bearerSecretPattern}$`))
+  Schema.isPattern(new RegExp(`^${bearerSecretPattern}$`, "u"))
 )
   .pipe(Schema.brand("TokenSecret"))
   .annotate({ identifier: "TokenSecret" });
@@ -154,7 +154,9 @@ export type TokenSecret = typeof TokenSecret.Type;
  * never persisted; storage retains only its hash and safe naming id.
  */
 export const TokenBearer = Schema.String.check(
-  Schema.isPattern(new RegExp(`^${patBearerPrefix}${patShortIdPattern}_${bearerSecretPattern}$`))
+  Schema.isPattern(
+    new RegExp(`^${patBearerPrefix}${patShortIdPattern}_${bearerSecretPattern}$`, "u")
+  )
 )
   .pipe(Schema.brand("TokenBearer"))
   .annotate({ identifier: "TokenBearer" });

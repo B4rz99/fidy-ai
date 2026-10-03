@@ -4,7 +4,7 @@ set -euo pipefail
 log_file="$(mktemp)"
 trap 'rm -f "$log_file"' EXIT
 
-if NO_COLOR=1 bun ../../node_modules/alchemy/bin/alchemy.ts \
+if NO_COLOR=1 bun ../../node_modules/alchemy/bin/alchemy.js \
   drift --config alchemy-drift.run.ts --stage production --no-input >"$log_file" 2>&1; then
   drift_exit=0
 else

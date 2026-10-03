@@ -1,5 +1,5 @@
 import type { Redacted } from "effect";
-import type { HttpClient } from "effect/unstable/http";
+import type { HttpClient } from "effect/http";
 import { type OutboundHttpService, makeResendOutboundHttp } from "~/shell/outbound-http/operations";
 import type { EmailDeliveryPortService } from "./contract";
 import { deliverySender } from "~/shell/email-authentication/internal/delivery";

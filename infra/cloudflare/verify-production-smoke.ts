@@ -1,24 +1,14 @@
 /// <reference types="bun-types" />
 
-import {
-  Cause,
-  Context,
-  Data,
-  Effect,
-  Encoding,
-  Exit,
-  Layer,
-  Option,
-  Schedule,
-  Schema,
-} from "effect";
+import { Cause, Context, Data, Effect, Exit, Layer, Option, Schedule, Schema } from "effect";
+import { Hex } from "effect/encoding";
 import {
   FetchHttpClient,
   HttpBody,
   HttpClient,
   HttpClientRequest,
   type HttpClientResponse,
-} from "effect/unstable/http";
+} from "effect/http";
 import {
   SmokeFailureStage,
   SmokeIdentity,
@@ -177,7 +167,7 @@ const awaitSyntheticWork = Effect.fn(function* (
   headers: Readonly<Record<string, string>>,
   expectedPublic: SmokeIdentity
 ) {
-  const probeId = Encoding.encodeHex(crypto.getRandomValues(new Uint8Array(probeEntropyBytes)));
+  const probeId = Hex.encode(crypto.getRandomValues(new Uint8Array(probeEntropyBytes)));
   const request = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
     protocolVersion: 1,
     probeId,

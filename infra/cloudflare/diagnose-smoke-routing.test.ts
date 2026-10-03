@@ -1,7 +1,7 @@
 import { it as effectIt } from "@effect/vitest";
 import { Context, Effect, Exit, Fiber, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
-import { FetchHttpClient, HttpClient } from "effect/unstable/http";
+import { FetchHttpClient, HttpClient } from "effect/http";
 import { describe, expect, it, vi } from "vitest";
 import {
   type RoutingObservation,

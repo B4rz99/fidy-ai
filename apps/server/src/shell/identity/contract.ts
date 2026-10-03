@@ -1,6 +1,6 @@
 import type { Effect } from "effect";
 import type { OwnedStatement } from "~/shell/owner-write/contract";
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
+import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import { User, UserPreferences } from "~/core/identity/contract";
 import { operationPolicy, patScoped } from "~/shell/canonical-policy/contract";
 import { OperationResponse, Unavailable } from "~/shell/public-http/contract";

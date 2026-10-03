@@ -1,7 +1,7 @@
 import { useAtomSet } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Effect, Option, Schema } from "effect";
-import type { Atom } from "effect/unstable/reactivity";
+import type { Atom } from "effect/reactivity";
 import { useState } from "react";
 import type { JSX } from "react";
 import { Button } from "@/ui/components/button";

@@ -1,7 +1,7 @@
 import { type DaviplataOtpPolicy } from "~/core/subscription/contract";
 import { WompiEnvironment } from "~/shell/secret-material/contract";
 import { Config, Context, Crypto, Effect, Layer, Option, type Redacted, Schema } from "effect";
-import { HttpClient } from "effect/unstable/http";
+import { HttpClient } from "effect/http";
 import {
   loadResendEmailDeliveryApiKey,
   loadWompiIntegritySecret,
@@ -92,7 +92,7 @@ export class OutboundHttp extends Context.Service<OutboundHttp, OutboundHttpServ
       const wompiEnvironment = yield* Config.schema(WompiEnvironment, "WOMPI_ENVIRONMENT");
       const environmentPrefix = wompiEnvironment === "sandbox" ? "test" : "prod";
       const wompiPublicKey = yield* Config.schema(
-        WompiPublicKey.check(Schema.isStartsWith(`pub_${environmentPrefix}_`)),
+        WompiPublicKey.check(Schema.isStartingWith(`pub_${environmentPrefix}_`)),
         "WOMPI_PUBLIC_KEY"
       );
       const wompiPrivateKey = yield* loadWompiPrivateKey(wompiEnvironment);

@@ -8,7 +8,7 @@ import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as Effect from "effect/Effect";
 import * as Data from "effect/Data";
 import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { workerDriftReport } from "./worker-drift";
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 

@@ -1,7 +1,7 @@
 import { useAtomSet } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Effect, Option, Redacted } from "effect";
-import type { Atom } from "effect/unstable/reactivity";
+import type { Atom } from "effect/reactivity";
 import { type JSX, useState } from "react";
 import { type SensitiveClipboard, sensitiveClipboardLifetime } from "@/browser/sensitive-clipboard";
 import { SensitiveClipboardBoundary } from "@/browser/use-sensitive-clipboard";

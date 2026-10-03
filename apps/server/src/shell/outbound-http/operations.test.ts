@@ -23,7 +23,7 @@ import {
   HttpClientError,
   type HttpClientRequest,
   HttpClientResponse,
-} from "effect/unstable/http";
+} from "effect/http";
 import assert from "node:assert/strict";
 import { DaviplataOtpPolicy } from "~/core/subscription/contract";
 import { WhatsAppBusinessPhoneNumberId } from "~/shell/channels/whatsapp/contract";

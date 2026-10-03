@@ -3,7 +3,7 @@ import { type WompiEnvironment } from "../../../src/shell/secret-material/contra
 
 import { makeWompiOutboundHttp } from "../../../src/shell/outbound-http/operations";
 import { Context, Crypto, Effect, Layer, Option, Redacted, Schema } from "effect";
-import { FetchHttpClient, HttpClient } from "effect/unstable/http";
+import { FetchHttpClient, HttpClient } from "effect/http";
 import {
   cloudflareWorkerTelemetry,
   observeProviderFetch,

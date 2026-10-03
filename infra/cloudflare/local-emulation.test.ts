@@ -1,11 +1,11 @@
 import { BunServices } from "@effect/platform-bun";
 import { layer } from "@effect/vitest";
 import { Data, Effect, Layer, Schedule } from "effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import type * as HttpClientError from "effect/unstable/http/HttpClientError";
-import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
-import { ChildProcess } from "effect/unstable/process";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import type * as HttpClientError from "effect/http/HttpClientError";
+import type * as HttpClientResponse from "effect/http/HttpClientResponse";
+import { ChildProcess } from "effect/process";
 import { expect } from "vitest";
 import { localCanonicalReadBearer } from "../../apps/server/cloudflare/runtime/contract";
 

@@ -1,5 +1,5 @@
 import { BigDecimal, Clock, DateTime, Effect, Layer, Redacted, Schema } from "effect";
-import { HttpClient, type HttpClientError, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, type HttpClientError, HttpClientResponse } from "effect/http";
 import { afterEach, expect, it, vi } from "vitest";
 import {
   BillingEmail,

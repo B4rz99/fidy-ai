@@ -1,5 +1,5 @@
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import { SqlClient } from "effect/sql";
 import { deriveAccessTier } from "~/core/access-tier/operations";
 import { type UserId } from "~/core/identity/contract";
 import { Price, SubscriptionOffers, SubscriptionStatus } from "~/core/subscription/contract";

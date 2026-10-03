@@ -2,7 +2,7 @@ import { makeResendOutboundHttp } from "../../../../src/shell/outbound-http/oper
 import { cloudflareWorkerTelemetry, observeProviderFetch } from "../../telemetry/operations";
 import type { OperationalAlert } from "../contract";
 import { Context, Effect, Layer, Redacted, Schema, type Scope } from "effect";
-import { FetchHttpClient, HttpClient } from "effect/unstable/http";
+import { FetchHttpClient, HttpClient } from "effect/http";
 
 const maximumResendIdLength = 128;
 export const successStatus = 200;

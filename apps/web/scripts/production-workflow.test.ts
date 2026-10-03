@@ -132,7 +132,7 @@ describe("Production release workflow policy", () => {
     expect(migrationDriftGate).toBeLessThan(bootstrap);
     expect(bootstrap).toBeLessThan(providerDriftGate);
     expect(preflight).toContain(
-      "../../node_modules/alchemy/bin/alchemy.ts provider cloudflare bootstrap"
+      "../../node_modules/alchemy/bin/alchemy.js provider cloudflare bootstrap"
     );
     expect(workflow).toContain("alchemy deploy --stage production --yes --no-input");
   });

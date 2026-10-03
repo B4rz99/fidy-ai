@@ -1,5 +1,5 @@
 import { Cause, Option } from "effect";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult } from "effect/reactivity";
 
 /** Safe presentation classification for a canonical query failure. */
 export type CanonicalQueryFailure<E> =

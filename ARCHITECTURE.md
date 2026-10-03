@@ -85,6 +85,23 @@ receipt after visible rendering. A Durable Object alarm interrupts abandoned pro
 independent private Core cron sweep for missing alarms and bounded retention. This channel never
 bypasses canonical operation policy for tools.
 
+## Hosted MCP design (not installed)
+
+[ADR 0033](docs/adr/0033-hosted-mcp-and-oauth-agent-grants.md) supersedes only ADR 0016's
+remote-MCP/OAuth exclusion. The planned `https://api.fidyapp.com/mcp` Streamable HTTP surface uses
+Effect stable's protocol implementation and a distinct OAuth User-owned-agent caller, projecting
+canonical declarations and invoking the same private Core owners and User coordinator. Ingress
+retains no D1 binding. Browser authorization/token transports are not tools or atomic-batch children.
+OAuthConnection grants have fixed absolute expiration, audience-bound short credentials and atomic
+refresh rotation; they never become PATs, WebSessions or Hosted Agent Sessions. Connection management
+and exact sensitive-operation confirmation belong to fresh first-party browser authority.
+
+The [compatibility report](docs/research/hosted-mcp-interoperability-977.md) records passing synthetic
+exchange/discovery/refresh evidence for exact Claude Code, Codex and Pi versions, their registration
+selection and explicit unsupported sensitive interactions. No production route, grant authority, client setup promise or
+launch enablement follows from accepting the design. Exact-host interoperability, real Core/D1
+security evidence, #35's shared User allowance and operator approval remain separate gates.
+
 ## Production boundary
 
 [`infra/cloudflare/alchemy.run.ts`](infra/cloudflare/alchemy.run.ts) is the sole Production topology

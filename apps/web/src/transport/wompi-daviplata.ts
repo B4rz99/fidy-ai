@@ -1,4 +1,5 @@
-import { Clock, Data, Effect, Encoding, Option, Redacted, Schema } from "effect";
+import { Clock, Data, Effect, Option, Redacted, Schema } from "effect";
+import { Hex } from "effect/encoding";
 import { type DaviplataOtpPolicy } from "./client";
 import { UnknownJsonString, jsonStringSchema } from "@/schema-compatibility";
 import {
@@ -257,7 +258,7 @@ const bearerDigest = (
       catch: failure,
     }).pipe(
       Effect.raceFirst(awaitAbort(signal)),
-      Effect.map((digest) => Encoding.encodeHex(new Uint8Array(digest))),
+      Effect.map((digest) => Hex.encode(new Uint8Array(digest))),
       Effect.ensuring(
         Effect.sync(() => {
           bytes.fill(0);

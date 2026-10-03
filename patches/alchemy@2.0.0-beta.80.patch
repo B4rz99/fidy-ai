@@ -1,8 +1,8 @@
 diff --git a/lib/Cloudflare/Workers/WorkerProvider.js b/lib/Cloudflare/Workers/WorkerProvider.js
-index f862a041293f6b2fb21ce46653ed3f0fac58849a..370705106daab2879f7d1977b1ba7440767e5057 100644
+index 622b336b29..75ab507bb1 100644
 --- a/lib/Cloudflare/Workers/WorkerProvider.js
 +++ b/lib/Cloudflare/Workers/WorkerProvider.js
-@@ -4040,6 +4040,12 @@ export const LiveWorkerProvider = () => Provider.effect(Worker, Effect.gen(funct
+@@ -4133,6 +4133,12 @@ export const LiveWorkerProvider = () => Provider.effect(Worker, Effect.gen(funct
              // with this Worker — see readWorkerRoutes. Empty-array props
              // (`domain: []`, `routes: []`, `crons: []`) still observe so we
              // can detect drift and converge deletions.
@@ -15,7 +15,7 @@ index f862a041293f6b2fb21ce46653ed3f0fac58849a..370705106daab2879f7d1977b1ba7440
              const observeDomains = shouldObserveWorkerDomains(olds, output);
              const observeRoutes = shouldObserveWorkerRoutes(olds, output);
              const observeCrons = shouldObserveWorkerCrons(olds, output);
-@@ -4141,6 +4147,7 @@ export const LiveWorkerProvider = () => Provider.effect(Worker, Effect.gen(funct
+@@ -4234,6 +4240,7 @@ export const LiveWorkerProvider = () => Provider.effect(Worker, Effect.gen(funct
                  // (a getPhas call per known zone on every read); carry the
                  // cleanup list forward like any other stable cache.
                  affinityZoneIds: output?.affinityZoneIds,
@@ -24,10 +24,10 @@ index f862a041293f6b2fb21ce46653ed3f0fac58849a..370705106daab2879f7d1977b1ba7440
              // Centralized ownership decision: the engine routes `read`'s
              // return value based on `AdoptPolicy`. We hand it the attrs
 diff --git a/src/Cloudflare/Workers/WorkerProvider.ts b/src/Cloudflare/Workers/WorkerProvider.ts
-index 555f5897a3a1e6e742daf1520e9dc5d34665d43e..1b835678e0ef860984561c7c75d89c81dc34fc03 100644
+index 798e8499d1..4a6c2efe3f 100644
 --- a/src/Cloudflare/Workers/WorkerProvider.ts
 +++ b/src/Cloudflare/Workers/WorkerProvider.ts
-@@ -5439,6 +5439,19 @@ export const LiveWorkerProvider = () =>
+@@ -5587,6 +5587,19 @@ export const LiveWorkerProvider = () =>
              // with this Worker — see readWorkerRoutes. Empty-array props
              // (`domain: []`, `routes: []`, `crons: []`) still observe so we
              // can detect drift and converge deletions.
@@ -47,7 +47,7 @@ index 555f5897a3a1e6e742daf1520e9dc5d34665d43e..1b835678e0ef860984561c7c75d89c81
              const observeDomains = shouldObserveWorkerDomains(olds, output);
              const observeRoutes = shouldObserveWorkerRoutes(olds, output);
              const observeCrons = shouldObserveWorkerCrons(olds, output);
-@@ -5556,6 +5569,7 @@ export const LiveWorkerProvider = () =>
+@@ -5704,6 +5717,7 @@ export const LiveWorkerProvider = () =>
                // (a getPhas call per known zone on every read); carry the
                // cleanup list forward like any other stable cache.
                affinityZoneIds: output?.affinityZoneIds,

@@ -1,13 +1,14 @@
 /// <reference types="bun-types" />
 
-import { Cause, Context, Data, Effect, Encoding, Layer, Option, Schema, Stream } from "effect";
+import { Cause, Context, Data, Effect, Layer, Option, Schema, Stream } from "effect";
+import { Hex } from "effect/encoding";
 import {
   FetchHttpClient,
   HttpBody,
   HttpClient,
   HttpClientRequest,
   type HttpClientResponse,
-} from "effect/unstable/http";
+} from "effect/http";
 import {
   SmokeIdentity,
   SmokeRequest,
@@ -351,7 +352,7 @@ const workersFromState = Effect.fn(function* (mode: "capture" | "completed" = "c
   // contains other resources' binding metadata.
   const rawState = yield* shell([
     "bun",
-    "../../node_modules/alchemy/bin/alchemy.ts",
+    "../../node_modules/alchemy/bin/alchemy.js",
     "state",
     "read",
     "--backend",
@@ -387,7 +388,7 @@ const stableIdentity = Effect.fn(function* (input: {
   );
   const request = yield* Schema.decodeEffect(SmokeRequest)({
     protocolVersion: 1,
-    probeId: Encoding.encodeHex(crypto.getRandomValues(new Uint8Array(probeEntropyBytes))),
+    probeId: Hex.encode(crypto.getRandomValues(new Uint8Array(probeEntropyBytes))),
     expectedPublicVersionId: input.publicVersionId,
     expectedCoreVersionId: input.coreVersionId,
     expectedGitRevision: health.gitRevision,

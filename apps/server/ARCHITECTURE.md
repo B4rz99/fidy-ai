@@ -367,6 +367,24 @@ protected action at the actual provider boundary: ordinary work requires current
 exact retained Pending Turn uses its admitted basis. Revocation prevents the next Turn without
 interrupting the bounded admitted Turn, and PAT work keeps its per-call current-Consent guard.
 
+### Hosted MCP and OAuth design boundary
+
+ADR 0033 defines future `oauth-agents`, `mcp` and `oauth-confirmation` owners; none is installed by
+#977. OAuth grants are independent of Tokens' PAT/PATPairing lifecycle. An explicit OAuth
+User-owned-agent caller must enter canonical access policy without inheriting account-security,
+WebSession or Hosted Agent Session privileges. Authentication admission supplies only same-User
+live-recheck premises; protected owner work rechecks grant, credential, Consent and capability with
+Audit in its existing D1 unit under the original User coordinator.
+
+Effect stable owns protocol/HTTP execution. The MCP projection derives schemas and deterministic
+private discovery from the canonical catalog, including nested batch/SuggestedOperation filtering,
+and preserves canonical structured success/failure envelopes. It cannot add another operation
+registry or mutation path. Sensitive confirmation consumption is transaction-composable and
+OAuth-specific; hosted confirmation evidence is not reusable. The ADR owns fixed lifetimes,
+refresh replay/concurrency, registration/metadata-fetch bounds and browser handoff/resume policy.
+The disposable research fixture is neither an adapter nor production authority. Future external
+work needs bounded metadata-only Work observation and real public/Core/D1 negative evidence.
+
 ## 6. Testing seams
 
 Use the smallest seam that proves the behavior:

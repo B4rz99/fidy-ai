@@ -2,7 +2,12 @@
 
 Read the pattern for the area you are changing, then use its cited source in the matching checkout to verify API behavior and idiomatic usage. Add an entry when researching an area not yet covered.
 
-Full upstream checkouts: Effect → `.repos/effect`; Alchemy → `.repos/alchemy`; React 19.2.8 → `.repos/react`. For React application code, treat the installed public API and official React documentation as the application-facing contract.
+For Effect/Alchemy, first read [the selected stable source map](effect-4-stable.md). Current
+API authority is the integrity-locked published TypeScript source in the installed 4.0.0 / beta.80
+packages. `.repos/effect` and `.repos/alchemy`, and RC line citations in the older topic notes,
+are historical snapshots; verify named symbols against the selected release rather than copying
+obsolete paths. React 19.2.8 → `.repos/react`; for React application code, treat the installed
+public API and official React documentation as the application-facing contract.
 
 | Area                                                              | Pattern                                    |
 | ----------------------------------------------------------------- | ------------------------------------------ |

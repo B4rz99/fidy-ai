@@ -5,7 +5,7 @@ import {
   type HttpClientError,
   type HttpClientRequest,
   type HttpClientResponse,
-} from "effect/unstable/http";
+} from "effect/http";
 
 import type { TelemetryCode } from "~/shell/observability/contract";
 import {

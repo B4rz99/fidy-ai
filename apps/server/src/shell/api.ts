@@ -1,5 +1,5 @@
 import { CanonicalTelemetry, ValidationGate } from "~/shell/public-http/contract";
-import { HttpApi, type HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
+import { HttpApi, type HttpApiGroup, OpenApi } from "effect/http-api";
 import { TokenAuthorization } from "~/shell/authorization/contract";
 
 import { bindOperationCatalog, makeOperationCatalog } from "~/shell/canonical-catalog/contract";

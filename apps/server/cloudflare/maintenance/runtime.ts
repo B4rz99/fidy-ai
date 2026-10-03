@@ -37,6 +37,7 @@ import {
   sweepForwardedEmail,
 } from "../ingestion/runtime";
 import { sweepExpiredPATPairings } from "../tokens/runtime";
+import { advanceRecurringWork } from "../recurring/runtime";
 import { repairDashboardProjections } from "../transactions/runtime";
 import { dispatchWhatsAppWork, sweepExpiredWhatsAppWindows } from "../whatsapp/runtime";
 
@@ -242,6 +243,7 @@ export const runCoreMaintenance = (
       ...channelActivities(environment, nowEpochMs),
       activity("patPairing.sweep", sweepExpiredPATPairings(environment.DB)),
       activity("dashboard.projectionRepair", repairDashboardProjections(environment.DB)),
+      activity("recurring.evaluate", advanceRecurringWork(environment)),
       ...stagingActivities(environment, nowEpochMs),
       ...admissionActivities(environment, nowEpochMs, platform),
       ...statementActivities(environment),

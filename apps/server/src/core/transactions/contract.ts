@@ -195,6 +195,18 @@ export const Transaction = Schema.Struct({
   .annotate({ identifier: "Transaction" });
 export type Transaction = typeof Transaction.Type;
 
+/** Minimal effective outflow facts for recurring detection; capture lag, not source kind, classifies backfill. */
+export const RecurringTransactionFact = Schema.Struct({
+  id: TransactionId,
+  money: Transaction.fields.money,
+  counterparty: Transaction.fields.counterparty,
+  occurredAt: Transaction.fields.occurredAt,
+  backfill: Schema.Boolean,
+}).check(positiveTransactionMoney);
+/** Exact immutable Money and explicit absence consumed by recurring detection. */
+export type RecurringTransactionFact = Omit<typeof RecurringTransactionFact.Type, "money"> &
+  Readonly<{ money: ReadonlyMoney }>;
+
 /** An exact pair supplied to reversible Transaction linking; ownership is resolved from the caller. */
 export const TransactionPairInput = Schema.Struct({
   firstTransactionId: TransactionId,

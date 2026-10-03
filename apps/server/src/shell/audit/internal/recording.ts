@@ -19,6 +19,7 @@ const sessionDestinations = new Map([
   ["dashboard", "dashboard_audit"],
   ["insights", "insight_audit"],
   ["subscription", "pat_audit"],
+  ["recurring", "pat_audit"],
 ]);
 const sessionDestination = (operation: AuditCredentialOperation): string => {
   const owner = operation.split(".")[0];

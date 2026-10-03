@@ -30,6 +30,7 @@ const compositionRoots = new Set([
   "cloudflare/ingestion/forwarded-email.test.ts",
   "cloudflare/ingestion/statement-ingestion.test.ts",
   "cloudflare/insights/insight-store.test.ts",
+  "cloudflare/recurring/recurring.test-fixture.ts",
   "cloudflare/memory/memory.test.ts",
   "cloudflare/onboarding/consent-ingress.test.ts",
   "cloudflare/onboarding/verified-onboarding.test.ts",

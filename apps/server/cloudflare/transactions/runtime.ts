@@ -1,3 +1,5 @@
+import { RecurringWork } from "../recurring/contract";
+import { evaluateRecurringSeries } from "../recurring/operations";
 import { makeAgentService } from "../agent/runtime";
 import { repairDashboardProjections as ownerRepairDashboardProjections } from "./internal/dashboard-repair";
 import { CanonicalWorkAdmission } from "../canonical-operations/contract";
@@ -165,6 +167,31 @@ const executeForwardedEmailActivity = (
       : new Response(null, { status: HTTP_OK });
   });
 
+const privateRecurringActivity = ({
+  request,
+  candidate,
+  environment,
+  userId,
+}: Readonly<{
+  request: Request;
+  candidate: unknown;
+  environment: CoordinatorEnvironment;
+  userId: string;
+}>): Option.Option<Effect.Effect<Response>> => {
+  if (request.method !== "POST" || new URL(request.url).pathname !== "/recurring-work") {
+    return Option.none();
+  }
+  const work = Schema.decodeUnknownOption(RecurringWork)(candidate);
+  if (Option.isNone(work) || work.value.userId !== userId) {
+    return Option.some(Effect.succeed(transactionUnavailable()));
+  }
+  return Option.some(
+    evaluateRecurringSeries({ db: environment.DB, userId: work.value.userId }).pipe(
+      Effect.map(() => new Response(null, { status: HTTP_OK })),
+      Effect.orElseSucceed(transactionUnavailable)
+    )
+  );
+};
 const privateIngestionActivity = ({
   request,
   candidate,
@@ -295,6 +322,13 @@ export class UserTransactionCoordinator {
         Effect.gen(function* () {
           const candidate = yield* Effect.option(Effect.tryPromise(() => request.json()));
           if (Option.isNone(candidate)) return transactionUnavailable();
+          const recurring = privateRecurringActivity({
+            request,
+            candidate: candidate.value,
+            environment,
+            userId,
+          });
+          if (Option.isSome(recurring)) return yield* recurring.value;
           const ingestion = privateIngestionActivity({
             request,
             candidate: candidate.value,

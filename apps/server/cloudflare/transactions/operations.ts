@@ -1,3 +1,18 @@
+import {
+  findSnapshot,
+  readFacts,
+  revisionGuard,
+  revisionProjection,
+} from "./internal/recurring-query";
+import type { UserId } from "../../src/core/identity/contract";
+import type { OwnedStatement } from "../../src/shell/owner-write/contract";
+import type { Effect, Option } from "effect";
+import type {
+  BudgetContributionCursor,
+  RecurringFactPage,
+  RecurringFactSnapshot,
+  RecurringFactsUnavailable,
+} from "./contract";
 import { readBudgetContributions as ownerReadBudgetContributions } from "./internal/budget-query";
 import { readDashboardTransactions as ownerReadDashboardTransactions } from "./internal/dashboard-read";
 import { findDashboardAggregate as ownerFindDashboardAggregate } from "./internal/dashboard-projection";
@@ -30,6 +45,29 @@ import {
 } from "./internal/ingestion-capture";
 
 export * from "./contract";
+
+/** Read one User's effective-fact revision under current processing Consent; absence is no authorized history. */
+export const findRecurringSnapshot = (
+  input: Readonly<{ db: D1Database; userId: UserId }>
+): Effect.Effect<Option.Option<RecurringFactSnapshot>, RecurringFactsUnavailable> =>
+  findSnapshot(input);
+/** Read at most 128 decoded effective outflows; None means the expected revision or authority changed. */
+export const readRecurringFacts = (
+  input: Readonly<{
+    db: D1Database;
+    userId: UserId;
+    revision: number;
+    cursor: BudgetContributionCursor;
+  }>
+): Effect.Effect<Option.Option<RecurringFactPage>, RecurringFactsUnavailable> => readFacts(input);
+/** Assert current processing Consent and the evaluated revision in the caller's atomic commit; refusal rolls it back. */
+export const prepareRecurringFactGuard = (
+  input: Readonly<{ db: D1Database; userId: UserId; revision: number }>
+): D1PreparedStatement => revisionGuard(input);
+/** Compose minimal fact-revision identities with a peer-owned bounded discovery; identities grant no access. */
+export const prepareFactRevisionProjection = (
+  input: Readonly<{ db: D1Database; statement: OwnedStatement }>
+): D1PreparedStatement => revisionProjection(input);
 
 /** Browse the same bounded canonical Transaction projection under live WebSession or PAT authority. */
 export const browseTransactions: typeof ownerBrowseTransactions = (...args) =>

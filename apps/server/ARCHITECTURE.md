@@ -578,6 +578,28 @@ unchanged; this checkpoint neither enables production nor grants a public media 
 The existing ingress telemetry is sufficient for this refusal-only path; no new external workflow
 or provider egress is introduced.
 
+### Recurring owner composition
+
+Recurring owns historical monthly charge patterns, private supporting evidence, immutable first
+confirmations and permanent announcement eligibility. It does not own Subscription billing or
+Insight scheduling/delivery. Core owns deterministic decisions; the Free canonical query uses the
+same native owner for public HTTP and hosted execution.
+
+Transactions owns effective financial facts and their invalidation. Recurring consumes its published
+facts and commit guards rather than reading Transaction persistence or reproducing
+Effective Transaction policy.
+
+Evaluation is durable asynchronous work through the existing User coordinator, not a history scan
+on capture requests. Publication is atomic and guarded by current processing Consent and financial
+revision. Resource admission fails closed, and incomplete evaluation remains visible to callers.
+Corrections repair evidence; gaps never imply cancellation.
+
+Confirmation consumers receive immutable occurrences bound to an explicit User and historical
+UserContext under current processing Consent. Suppressed confirmations never become delayed
+announcements; Insight delivery remains separate. See
+[ADR 0032](../../docs/adr/0032-deterministic-recurring-charge-detection.md) for detector, suppression,
+calendar and resource policies.
+
 ### Insights owner composition
 
 Insights publishes immutable scheduled occurrences, exact Currency-separated Money groups, lifecycle

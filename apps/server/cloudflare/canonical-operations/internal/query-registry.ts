@@ -7,6 +7,7 @@ import { browseBudgets, evaluateBudgetAlerts } from "../../budgets/operations";
 import { browseTransactions } from "../../transactions/operations";
 import { browseDashboard } from "../../dashboard/operations";
 import { recallMemories } from "../../memory/operations";
+import { listRecurringSeries } from "../../recurring/operations";
 import { listPendingInsights } from "../../insights/operations";
 import {
   forwardingAddressResponse,
@@ -111,6 +112,11 @@ const queryOwners = new Map<string, QueryOwner>([
     "memory.recall",
     ({ db, subject }): Effect.Effect<Response, Cause.UnknownError> =>
       recallMemories({ db, subject }),
+  ],
+  [
+    "recurring.listRecurringSeries",
+    ({ db, subject, request }): Effect.Effect<Response, Cause.UnknownError> =>
+      listRecurringSeries({ db, subject, request }),
   ],
   [
     "insights.listPendingInsights",

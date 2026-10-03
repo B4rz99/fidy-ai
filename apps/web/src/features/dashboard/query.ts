@@ -1,4 +1,5 @@
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
+import { HttpClientError } from "effect/http";
 import { type AsyncResult, Atom } from "effect/reactivity";
 import type { CanonicalSuccess, FidyClient } from "@/transport/client";
 
@@ -29,6 +30,11 @@ const loadDashboard = Effect.fnUntraced(function* (
         setPhase("reading-initialized");
         return yield* client.dashboard.getDashboardView();
       })
+    ),
+    // Preserve AtomHttpApi's boundary-defect classification for this composed query.
+    Effect.catchIf(
+      (error) => Schema.isSchemaError(error) || HttpClientError.isHttpClientError(error),
+      Effect.die
     )
   );
 });

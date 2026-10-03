@@ -37,6 +37,12 @@ else
 fi
 cp "$temporary_directory/$archive/$executable" "$install_directory/$executable"
 chmod +x "$install_directory/$executable"
+# Bun dispatches its package runner by executable name; publish it with the same pinned bytes.
+if [[ "$executable" == bun.exe ]]; then
+  cp "$install_directory/$executable" "$install_directory/bunx.exe"
+else
+  ln -sf bun "$install_directory/bunx"
+fi
 if [[ "$("$install_directory/$executable" --revision)" != '1.4.3-canary.1+bb35d1b81' ]]; then
   printf 'Pinned Bun revision mismatch; refusing installation.\n' >&2
   exit 1

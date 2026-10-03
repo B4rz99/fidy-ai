@@ -89,6 +89,7 @@ const migrationNames = [
   "0017_hosted_compaction",
   "0017_forwarded_email",
   "0017_statement_dispatch",
+  "0032_statement_capture_entitlement",
   "0018_batch_envelope_audit",
   "0018_dashboard",
   "0018_forwarded_email_processing",

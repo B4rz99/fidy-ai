@@ -129,14 +129,9 @@ const markFailed = ({
         ),
       db
         .prepare(`UPDATE statement_backfill_entitlements
-      SET consumed_at_ms = CASE WHEN EXISTS (
-        SELECT 1 FROM statement_record_outcomes WHERE submission_id = ? AND user_id = ?)
-        THEN coalesce(consumed_at_ms, ?) ELSE consumed_at_ms END,
-        submission_id = CASE WHEN EXISTS (
-        SELECT 1 FROM statement_record_outcomes WHERE submission_id = ? AND user_id = ?)
-        THEN submission_id ELSE NULL END
+      SET submission_id = CASE WHEN consumed_at_ms IS NULL THEN NULL ELSE submission_id END
       WHERE user_id = ? AND submission_id = ? AND changes() = 1`)
-        .bind(submissionId, userId, nowMs(), submissionId, userId, userId, submissionId),
+        .bind(userId, submissionId),
     ])
   ).pipe(Effect.asVoid);
 
@@ -554,15 +549,8 @@ const completeSubmission = (
           rows
         ),
         DB.prepare(`UPDATE statement_backfill_entitlements
-      SET consumed_at_ms = CASE WHEN ? > 0 THEN ? ELSE NULL END,
-          submission_id = CASE WHEN ? > 0 THEN submission_id ELSE NULL END
-      WHERE user_id = ? AND submission_id = ? AND changes() = 1`).bind(
-          rows,
-          nowMs(),
-          rows,
-          userId,
-          submissionId
-        ),
+      SET submission_id = CASE WHEN consumed_at_ms IS NULL THEN NULL ELSE submission_id END
+      WHERE user_id = ? AND submission_id = ? AND changes() = 1`).bind(userId, submissionId),
       ])
     );
     if (finished[0]?.meta.changes !== 1) {

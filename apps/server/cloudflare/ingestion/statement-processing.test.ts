@@ -37,6 +37,7 @@ const migrations = [
   "0016_statement_processing",
   "0017_statement_dispatch",
   "0035_billing_corrections",
+  "0032_statement_capture_entitlement",
 ];
 const storage = isolatedTestStorage();
 
@@ -239,6 +240,151 @@ effectIt.effect(
         needs_review_rows: 0,
         attestations: 1,
       });
+    })
+);
+
+effectIt.effect(
+  "releases the Free reservation when completed extraction produces only review items",
+  () =>
+    Effect.gen(function* () {
+      const { db, bucket } = yield* fromTestPromise(() =>
+        setup("fecha,valor,descripcion\n2026-08-01,-45000,Cafe\n")
+      );
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO statement_backfill_entitlements (user_id,submission_id) VALUES (?,?)"
+          )
+          .bind(userA, submissionId)
+          .run()
+      );
+      yield* fromTestPromise(() =>
+        processStatementSubmission({
+          DB: db,
+          STATEMENT_STAGING_BUCKET: bucket,
+          userId: userA,
+          submissionId,
+        })
+      );
+      const grant = yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "SELECT consumed_at_ms,submission_id FROM statement_backfill_entitlements WHERE user_id = ?"
+          )
+          .bind(userA)
+          .first<{ consumed_at_ms: unknown; submission_id: unknown }>()
+      );
+      expect(grant).toMatchObject({ consumed_at_ms: null, submission_id: null });
+    })
+);
+
+effectIt.effect(
+  "consumes the Free grant on first capture before extraction completes and preserves it after failure",
+  () =>
+    Effect.gen(function* () {
+      const csv =
+        "fecha,valor,moneda,contraparte\n" +
+        Array.from({ length: 33 }, () => "2026-08-01,-45000,COP,Cafe").join("\n") +
+        "\n";
+      const { db, bucket } = yield* fromTestPromise(() => setup(csv));
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO statement_backfill_entitlements (user_id,submission_id) VALUES (?,?)"
+          )
+          .bind(userA, submissionId)
+          .run()
+      );
+      expect(
+        yield* fromTestPromise(() =>
+          processStatementSubmission({
+            DB: db,
+            STATEMENT_STAGING_BUCKET: bucket,
+            userId: userA,
+            submissionId,
+          })
+        )
+      ).toBe("continue");
+      const readGrant = (): Promise<{
+        consumed_at_ms: unknown;
+        submission_id: unknown;
+      }> =>
+        db
+          .prepare(
+            "SELECT consumed_at_ms,submission_id FROM statement_backfill_entitlements WHERE user_id = ?"
+          )
+          .bind(userA)
+          .first<{ consumed_at_ms: unknown; submission_id: unknown }>()
+          .then((row) => Option.getOrThrow(Option.fromNullishOr(row)));
+      const captured = yield* fromTestPromise(readGrant);
+      expect(captured.consumed_at_ms).toEqual(expect.any(Number));
+      expect(captured.submission_id).toBe(submissionId);
+      yield* fromTestPromise(() =>
+        failStatementSubmission({
+          DB: db,
+          userId: userA,
+          submissionId,
+          reason: "resource-limit",
+        })
+      );
+      expect(yield* fromTestPromise(readGrant)).toEqual(captured);
+    })
+);
+
+effectIt.effect(
+  "a rolled-back capture leaves the Free grant reserved and creates no financial effects",
+  () =>
+    Effect.gen(function* () {
+      const { db, bucket } = yield* fromTestPromise(() =>
+        setup("fecha,valor,moneda,contraparte\n2026-08-01,-45000,COP,Cafe\n")
+      );
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO statement_backfill_entitlements (user_id,submission_id) VALUES (?,?)"
+          )
+          .bind(userA, submissionId)
+          .run()
+      );
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`CREATE TRIGGER reject_capture_commit
+        BEFORE INSERT ON statement_submission_assertion
+        BEGIN SELECT RAISE(ABORT, 'capture unavailable'); END`)
+          .run()
+      );
+      yield* fromTestPromise(() =>
+        expect(
+          processStatementSubmission({
+            DB: db,
+            STATEMENT_STAGING_BUCKET: bucket,
+            userId: userA,
+            submissionId,
+          })
+        ).rejects.toThrow()
+      );
+      const grant = yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "SELECT consumed_at_ms,submission_id FROM statement_backfill_entitlements WHERE user_id = ?"
+          )
+          .bind(userA)
+          .first<{ consumed_at_ms: unknown; submission_id: unknown }>()
+      );
+      expect(grant).toMatchObject({ consumed_at_ms: null, submission_id: submissionId });
+      const counts = yield* fromTestPromise(() =>
+        db
+          .prepare(`SELECT
+        (SELECT count(*) FROM transactions) AS transactions,
+        (SELECT count(*) FROM source_attestations) AS attestations,
+        (SELECT count(*) FROM statement_record_outcomes) AS outcomes`)
+          .first<{
+            transactions: number;
+            attestations: number;
+            outcomes: number;
+          }>()
+      );
+      expect(counts).toEqual({ transactions: 0, attestations: 0, outcomes: 0 });
     })
 );
 
@@ -553,7 +699,7 @@ effectIt.effect(
             projected.value.accounting
         ).toMatchObject({ inputRows: 32, acceptedRows: 0, needsReviewRows: 32 });
       }
-      expect(entitlement?.consumed_at_ms).not.toBeNull();
+      expect(entitlement?.consumed_at_ms).toBeNull();
     })
 );
 
@@ -656,7 +802,7 @@ effectIt.effect("fails above the parser row ceiling without creating partial eff
 );
 
 effectIt.effect(
-  "retention failure preserves visible partial accounting and does not refund useful Free work",
+  "retention failure preserves partial review accounting without consuming the Free grant",
   () =>
     Effect.gen(function* () {
       const csv =
@@ -703,6 +849,6 @@ effectIt.effect(
           .first<{ consumed_at_ms: unknown }>()
       );
       expect(state).toMatchObject({ status: "failed", input_rows: 32, needs_review_rows: 32 });
-      expect(entitlement?.consumed_at_ms).not.toBeNull();
+      expect(entitlement?.consumed_at_ms).toBeNull();
     })
 );

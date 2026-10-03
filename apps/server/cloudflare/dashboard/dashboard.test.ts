@@ -479,6 +479,159 @@ it(
   30_000
 );
 
+type QueryFault = "revoked" | "withdrawn" | "audit-failed";
+const queryFault = ({
+  db,
+  fault,
+  pat,
+  patId,
+}: Readonly<{
+  db: D1Database;
+  fault: QueryFault;
+  pat: boolean;
+  patId: string;
+}>): Promise<unknown> => {
+  if (fault === "revoked") {
+    return pat
+      ? db
+          .prepare("UPDATE pats SET revoked_at_ms = ? WHERE id = ?")
+          .bind(DateTime.nowUnsafe().epochMilliseconds, patId)
+          .run()
+      : db
+          .prepare("UPDATE web_sessions SET hard_expires_at_ms = 0 WHERE id = ?")
+          .bind(sessions[0])
+          .run();
+  }
+  if (fault === "audit-failed") {
+    return db
+      .prepare(
+        `CREATE TRIGGER refuse_query_audit BEFORE INSERT ON ${pat ? "pat_audit" : "dashboard_audit"} BEGIN SELECT RAISE(ABORT, 'test_unavailable'); END`
+      )
+      .run();
+  }
+  const current = DateTime.nowUnsafe().epochMilliseconds;
+  const grant = "50000000-0000-4000-8000-000000000003";
+  return db.batch([
+    db
+      .prepare(
+        `INSERT INTO onboarding_consent_records (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES (?,?,'{}','disclosure','decision',?,?)`
+      )
+      .bind(grant, users[0], current, current),
+    db
+      .prepare(
+        `INSERT INTO consent_user_revocations (id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES (?,?,?,?,?)`
+      )
+      .bind("50000000-0000-4000-8000-000000000004", users[0], grant, sessions[0], current),
+  ]);
+};
+
+const queryReleaseFailure = Effect.fnUntraced(function* ({
+  fault,
+  pat,
+  http,
+  operation,
+}: Readonly<{
+  fault: QueryFault;
+  pat: boolean;
+  http: boolean;
+  operation: "dashboard.getDashboard" | "dashboard.getDashboardView";
+}>) {
+  const db = yield* initializedSetup();
+  expect((yield* Effect.tryPromise(() => initialize(db, 1))).status).toBe(200);
+  const token = `fin_${"r".repeat(8)}_${"j".repeat(43)}`;
+  const patId = "40000000-0000-4000-8000-000000000097";
+  yield* seedPAT(db, { token, scope: "read", id: patId });
+  const beforeDocuments = yield* Effect.tryPromise(() =>
+    db.prepare("SELECT * FROM dashboard_documents ORDER BY user_id").all()
+  );
+  const beforeAudit = yield* Effect.tryPromise(() => count(db, "dashboard_audit"));
+  let accountingPrepared = false;
+  let injected = false;
+  const guarded: D1Database = {
+    prepare: (sql) => {
+      if (sql.includes("INSERT INTO pat_audit") || sql.includes("INSERT INTO dashboard_audit")) {
+        accountingPrepared = true;
+      }
+      return db.prepare(sql);
+    },
+    batch: <Row = unknown>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> => {
+      if (accountingPrepared && !injected) {
+        injected = true;
+        return queryFault({ db, fault, pat, patId }).then(() => db.batch<Row>(statements));
+      }
+      return db.batch<Row>(statements);
+    },
+    exec: (sql) => db.exec(sql),
+    withSession: (constraint) => db.withSession(constraint),
+    dump: () => db.dump(),
+  };
+  const subject = pat
+    ? {
+        patId,
+        userId: users[0] ?? "",
+        digest: yield* Effect.tryPromise(() => digest(token)),
+        requiredScope: Option.some("read" as const),
+      }
+    : {
+        id: sessions[0] ?? "",
+        userId: users[0] ?? "",
+        digest: yield* Effect.tryPromise(() => digest(bearer(0))),
+      };
+  const reply = http
+    ? yield* Effect.tryPromise(() =>
+        send(
+          guarded,
+          pat ? token : 0,
+          operation === "dashboard.getDashboard" ? "/dashboard" : "/dashboard/view"
+        )
+      )
+    : Option.getOrThrow(
+        yield* executeCanonicalQuery({
+          db: guarded,
+          subject,
+          operation: CanonicalOperationId.make(operation),
+          input: {},
+          bucket: Option.none(),
+        })
+      );
+  expect(injected).toBe(true);
+  expect(reply.status).toBe(503);
+  expect(yield* Effect.tryPromise(() => reply.json())).toEqual({ status: "unavailable" });
+  expect(
+    (yield* Effect.tryPromise(() =>
+      db.prepare("SELECT * FROM dashboard_documents ORDER BY user_id").all()
+    )).results
+  ).toEqual(beforeDocuments.results);
+  expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(beforeAudit);
+  expect(
+    yield* Effect.tryPromise(() =>
+      db.prepare("SELECT COUNT(*) AS count FROM pat_audit WHERE pat_id = ?").bind(patId).first()
+    )
+  ).toEqual({ count: 0 });
+  expect(
+    yield* Effect.tryPromise(() =>
+      db.prepare("SELECT last_used_at_ms FROM pats WHERE id = ?").bind(patId).first()
+    )
+  ).toEqual({ last_used_at_ms: null });
+});
+
+for (const fault of ["revoked", "withdrawn", "audit-failed"] as const) {
+  for (const caller of [
+    { pat: false, http: false },
+    { pat: false, http: true },
+    { pat: true, http: false },
+    { pat: true, http: true },
+  ]) {
+    for (const operation of ["dashboard.getDashboard", "dashboard.getDashboardView"] as const) {
+      it(
+        `withholds ${operation} and all accounting when ${caller.pat ? "PAT" : "WebSession"} ${fault} occurs at the ${caller.http ? "HTTP" : "published query seam"} release commit`,
+        () => Effect.runPromise(queryReleaseFailure({ fault, ...caller, operation })),
+        30_000
+      );
+    }
+  }
+}
+
 it(
   "explicit initialization creates one valid document and preserves edits and revision on concurrent retries",
   () =>
@@ -644,7 +797,10 @@ it(
           )).status
         ).toBe(200);
         const snapshot = (): Promise<unknown> =>
-          db.prepare("SELECT * FROM dashboard_documents ORDER BY user_id").all();
+          db
+            .prepare("SELECT * FROM dashboard_documents ORDER BY user_id")
+            .all()
+            .then((rows) => rows.results);
         const before = yield* Effect.tryPromise(snapshot);
         const foreignDigest = yield* Effect.tryPromise(() => digest(bearer(1)));
         const ownerDigest = yield* Effect.tryPromise(() => digest(bearer(0)));

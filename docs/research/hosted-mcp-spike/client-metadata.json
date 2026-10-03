@@ -1,0 +1,14 @@
+{
+  "retrievedAt": "2026-10-03",
+  "purpose": "Operator-reviewed public redirect projection for the disposable fixture; not production metadata-fetch authority",
+  "redirects": {
+    "https://chatgpt.com/oauth/codex/client.json": [
+      "http://127.0.0.1/callback",
+      "http://localhost/callback"
+    ],
+    "https://claude.ai/oauth/claude-code-client-metadata": [
+      "http://localhost/callback",
+      "http://127.0.0.1/callback"
+    ]
+  }
+}

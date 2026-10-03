@@ -1,0 +1,106 @@
+infra/cloudflare/verify-production-smoke.test.ts
+  s_8e3ccc4039a137::t_d9a3235d72dad7 3
+infra/cloudflare/scripts/migration-history.ts
+  s_8e3ccc4039a137::t_22b966a8971bb4 3,85
+infra/cloudflare/diagnose-smoke-routing.test.ts
+  s_8e3ccc4039a137::t_9752c7da406f56 4
+infra/cloudflare/d1-migrations.test.ts
+  s_8e3ccc4039a137::t_74aca4a12d279f 11-12
+apps/server/cloudflare/tokens/internal/pat-pairing.ts
+  s_8e3ccc4039a137::t_875025f6229b05 27-28,207
+infra/cloudflare/worker-receipt.test.ts
+  s_8e3ccc4039a137::t_b0dee115306821 11-12
+apps/server/cloudflare/anonymous-admission/operations.ts
+  s_8e3ccc4039a137::t_663fe846100142 1-2,41
+apps/server/cloudflare/whatsapp/internal/ingress.ts
+  s_8e3ccc4039a137::t_18dd782e97b101 26-27,305
+apps/server/cloudflare/subscription/internal/payment-enrollment.ts
+  s_8e3ccc4039a137::t_66a0e4aad4216e 43,787
+infra/cloudflare/production-release.ts
+  s_8e3ccc4039a137::t_e0af5491d15ef2 355
+  s_8e3ccc4039a137::t_2fefd43c659f6f 3-4,11,391
+infra/cloudflare/scripts/subprocess-test-fixture.ts
+  s_8e3ccc4039a137::t_54a383b12a0f44 31
+apps/server/cloudflare/agent/internal/service.ts
+  s_8e3ccc4039a137::t_3a2190eaa29e48 41
+apps/server/cloudflare/tokens/pats.test.ts
+  s_8e3ccc4039a137::t_cb4559a42e6410 9
+apps/server/cloudflare/subscription/internal/billing-workflow.ts
+  s_8e3ccc4039a137::t_afe96b2ca0912e 20-21,528
+apps/server/cloudflare/ingestion/internal/statement-staging.ts
+  s_8e3ccc4039a137::t_ad28528fc2d513 46,266,471,534,570
+infra/cloudflare/scripts/production-migration-ledger.ts
+  s_8e3ccc4039a137::t_d2a68bca218d34 66
+apps/server/cloudflare/subscription/internal/wompi-client.ts
+  s_8e3ccc4039a137::t_8ad62428229ece 16,133,142,407
+infra/cloudflare/package.json
+  s_8e3ccc4039a137::t_6d2079a93458b0 7-8
+apps/server/cloudflare/ingestion/statement-staging.test.ts
+  s_8e3ccc4039a137::t_926897ff954232 6-7,291
+infra/cloudflare/scripts/production-preflight.sh
+  s_8e3ccc4039a137::t_f96fbf2c557edc 30
+apps/server/cloudflare/ingestion/internal/forwarded-email-processing.ts
+  s_8e3ccc4039a137::t_bc948aa69f9c09 20
+infra/cloudflare/alchemy.run.ts
+  s_8e3ccc4039a137::t_31a43e0e81d902 65
+  s_8e3ccc4039a137::t_364f56d3803af3 7
+infra/cloudflare/diagnose-smoke-routing.ts
+  s_8e3ccc4039a137::t_313674df1e6395 10
+infra/cloudflare/verify-edge-policy.ts
+  s_8e3ccc4039a137::t_4bbec97206b3a6 5
+apps/server/cloudflare/subscription/internal/wompi-runtime.ts
+  s_8e3ccc4039a137::t_d6276cfcb41977 5
+apps/server/cloudflare/web-session/internal/lifecycle.ts
+  s_8e3ccc4039a137::t_6a0818e12656a3 2-3,18
+apps/server/cloudflare/browser-login/internal/pairing.ts
+  s_8e3ccc4039a137::t_0b0087b87a25f6 17-18
+  s_8e3ccc4039a137::t_31a43e0e81d902 126
+infra/cloudflare/scripts/check-topology-drift.sh
+  s_8e3ccc4039a137::t_d21802625e43d2 7
+infra/cloudflare/verify-edge-smoke.ts
+  s_8e3ccc4039a137::t_33d7971a3eb859 4-8
+apps/server/cloudflare/email-authentication/internal/onboarding-workflow.ts
+  s_8e3ccc4039a137::t_20349223a7e328 19
+infra/cloudflare/verify-edge-policy.test.ts
+  s_8e3ccc4039a137::t_acf64917a9cbd4 7
+infra/cloudflare/local-emulation.test.ts
+  s_8e3ccc4039a137::t_992009f1dbc855 4-8
+apps/server/cloudflare/tokens/internal/pat-shared.ts
+  s_8e3ccc4039a137::t_4ca2de8bdea99a 17-18,88
+apps/web/scripts/production-workflow.test.ts
+  s_8e3ccc4039a137::t_3ba1aa847b5a83 135
+.github/workflows/production.yml
+  s_8e3ccc4039a137::t_519145d7b0b212 87,125
+apps/server/cloudflare/runtime/operational-health/internal/operator-email.ts
+  s_8e3ccc4039a137::t_aa4e6b9bdb144f 5
+infra/cloudflare/verify-production-smoke.ts
+  s_8e3ccc4039a137::t_31a43e0e81d902 3
+  s_8e3ccc4039a137::t_b2067b77467551 4,11,170
+infra/cloudflare/inspect-worker-drift.ts
+  s_8e3ccc4039a137::t_9b8ee27603b0ca 11
+apps/server/cloudflare/consent/ingress/internal/ingress.ts
+  s_8e3ccc4039a137::t_d696d1887ed430 29,663
+  s_8e3ccc4039a137::t_31a43e0e81d902 28
+infra/cloudflare/production-release.test.ts
+  s_8e3ccc4039a137::t_796136deaeb7b9 2
+apps/server/cloudflare/consent/ingress/runtime.ts
+  s_8e3ccc4039a137::t_244577bd7469c0 2
+apps/server/cloudflare/tokens/internal/pat-routes.ts
+  s_8e3ccc4039a137::t_b55604e5bbb23e 2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c7812a50524106791e965a73853e1e0dca7195fe",
+  "prompts": {},
+  "sessions": {
+    "s_8e3ccc4039a137": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10233-8d17-76b0-b672-dd62d4a0b125",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

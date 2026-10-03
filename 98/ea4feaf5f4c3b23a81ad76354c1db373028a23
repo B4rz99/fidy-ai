@@ -1,0 +1,25 @@
+apps/web/e2e/real-core-fixture.ts
+  s_e1f14927429007::t_343ec063dec1e1 49-53
+  s_e1f14927429007::t_7c216108ef6889 48,90-92,94
+  s_e1f14927429007::t_804f6446c32447 54-89
+  s_e1f14927429007::t_4d524afc5181e3 93
+apps/web/e2e/real-core-journeys.spec.ts
+  s_e1f14927429007::t_b6bc823deb25fb 7,9,624,636,661
+  s_e1f14927429007::t_15872d13ba5242 272
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "98ea4feaf5f4c3b23a81ad76354c1db373028a23",
+  "prompts": {},
+  "sessions": {
+    "s_e1f14927429007": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a1022e-f2c8-72ff-ba65-df310295d152",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -141,6 +141,12 @@ const nequiSandboxTokenRequest = (
         )
       );
 
+const paymentMethodFields = {
+  card: { payment_method: { installments: 1 } },
+  nequi: {},
+  daviplata: {},
+} as const satisfies Readonly<Record<WompiTransactionBody["method"], object>>;
+
 const signedTransactionBody = (
   body: Extract<OutboundHttpRequest, { _tag: "WompiCreateTransaction" }>["body"],
   signature: string
@@ -149,7 +155,7 @@ const signedTransactionBody = (
     amount_in_cents: body.amountInCents,
     currency: body.currency,
     customer_email: body.billingEmail,
-    ...(body.method === "nequi" ? {} : { payment_method: { installments: 1 } }),
+    ...paymentMethodFields[body.method],
     payment_source_id: body.sourceId,
     reference: body.reference,
     signature,

@@ -10,6 +10,8 @@ import {
   BillingAttempt,
   BillingAttemptId,
   BillingEmail,
+  DaviplataOtpPolicy,
+  EnrollmentAvailability,
   EnrollmentMethod,
   PaymentEnrollment,
   PaymentEnrollmentId,
@@ -127,6 +129,25 @@ const AttemptRow = Schema.Struct({
   ends_at_ms: Schema.NullOr(Schema.Finite),
   renewal_anchor_ms: Schema.NullOr(Schema.Finite),
 });
+const enrollmentDisclosureRevisions = {
+  card: "wompi-card-enrollment-v1",
+  nequi: "wompi-nequi-enrollment-v1",
+  daviplata: "wompi-daviplata-enrollment-v1",
+} as const satisfies Readonly<Record<EnrollmentMethod, RecurringDisclosure["revision"]>>;
+
+const submittedToken = (
+  input: Extract<SubmitPaymentEnrollmentPayload, { paymentSourceMode: "create" }>
+): Redacted.Redacted<string> => {
+  switch (input.method) {
+    case "card":
+      return input.cardToken;
+    case "nequi":
+      return input.nequiToken;
+    case "daviplata":
+      return input.daviplataToken;
+  }
+};
+
 const preparationWindowMs = 3_600_000;
 const verificationCooldownMs = 3_000;
 const maximumVerificationAttempts = 8;
@@ -188,9 +209,29 @@ const parse = <A, E>(schema: Schema.Codec<A, E>, text: string): Option.Option<A>
 const decodeRow = <A, E>(schema: Schema.Codec<A, E>, row: unknown): Option.Option<A> =>
   Schema.decodeUnknownOption(schema)(row);
 
-type ConfiguredEnrollmentEnvironment = typeof WompiConfiguration.Type & {
-  readonly DB: D1Database;
-  readonly onAccepted: (id: string) => void;
+type ConfiguredEnrollmentEnvironment = typeof WompiConfiguration.Type & EnrollmentEnvironment;
+
+const daviplataPolicy = (
+  environment: EnrollmentEnvironment & { readonly WOMPI_ENVIRONMENT: string }
+): Option.Option<DaviplataOtpPolicy> => {
+  if (
+    environment.WOMPI_ENVIRONMENT === "production" &&
+    environment.WOMPI_DAVIPLATA_ACTIVATED !== "enabled"
+  ) {
+    return Option.none();
+  }
+  const policy = Schema.decodeUnknownOption(DaviplataOtpPolicy)({
+    sendUrl: environment.WOMPI_DAVIPLATA_OTP_SEND_URL,
+    confirmUrl: environment.WOMPI_DAVIPLATA_OTP_CONFIRM_URL,
+  });
+  const origin =
+    environment.WOMPI_ENVIRONMENT === "sandbox"
+      ? "https://sandbox.wompi.co/"
+      : "https://production.wompi.co/";
+  return Option.filter(
+    policy,
+    (value) => value.sendUrl.startsWith(origin) && value.confirmUrl.startsWith(origin)
+  );
 };
 
 const makeWompi = (
@@ -288,7 +329,7 @@ const enrollment = (
 const project = (
   row: typeof EnrollmentRow.Type,
   selectedPrice: Price,
-  publicKey: string
+  environment: ConfiguredEnrollmentEnvironment
 ): PaymentEnrollment => {
   switch (row.status) {
     case "prepared": {
@@ -297,18 +338,21 @@ const project = (
       if (Option.isNone(contracts) || Option.isNone(disclosure)) {
         throw new Error("invalid enrollment evidence");
       }
-      return {
-        status: "prepared",
+      const prepared = {
+        status: "prepared" as const,
         enrollmentId: row.id,
-        method: row.method,
         price: selectedPrice,
         billingEmail: row.billing_email,
         contracts: contracts.value,
         recurringDisclosure: disclosure.value,
-        wompiPublicKey: publicKey,
+        wompiPublicKey: environment.WOMPI_PUBLIC_KEY,
         paymentSourceMode: row.payment_source_mode,
         expiresAt: DateTime.makeUnsafe(row.expires_at_ms),
       };
+      if (row.method !== "daviplata") return { ...prepared, method: row.method };
+      const policy = daviplataPolicy(environment);
+      if (Option.isNone(policy)) throw new Error("DaviPlata authorization unavailable");
+      return { ...prepared, method: "daviplata", daviplataOtpPolicy: policy.value };
     }
     case "preparing":
       throw new Error("preparation is not ready");
@@ -365,6 +409,9 @@ const prepare = ({
     Effect.gen(function* () {
       const body = yield* waitFor(() => readBody(request, PreparePaymentEnrollmentPayload));
       if (Option.isNone(body)) return invalid();
+      if (body.value.method === "daviplata" && Option.isNone(daviplataPolicy(environment))) {
+        return unavailable();
+      }
       const selected = yield* waitFor(() => price(environment.DB, body.value.priceId));
       if (Option.isNone(selected)) return invalid();
       const incompatibleSource = yield* waitFor(() =>
@@ -405,7 +452,7 @@ const prepare = ({
           existing.value.expires_at_ms > now
         ) {
           const presented = yield* Schema.encodeEffect(Schema.toCodecJson(PaymentEnrollment))(
-            project(existing.value, selected.value, environment.WOMPI_PUBLIC_KEY)
+            project(existing.value, selected.value, environment)
           );
           return json(presented);
         }
@@ -424,7 +471,7 @@ const prepare = ({
           const activePrice = yield* waitFor(() => price(environment.DB, existing.value.price_id));
           if (Option.isNone(activePrice)) return unavailable();
           const presented = yield* Schema.encodeEffect(Schema.toCodecJson(PaymentEnrollment))(
-            project(existing.value, activePrice.value, environment.WOMPI_PUBLIC_KEY)
+            project(existing.value, activePrice.value, environment)
           );
           return json(presented);
         }
@@ -494,8 +541,7 @@ const prepare = ({
       }
       const statement = "Autorizo los cobros recurrentes de mi suscripción.";
       const disclosure = RecurringDisclosure.make({
-        revision:
-          body.value.method === "card" ? "wompi-card-enrollment-v1" : "wompi-nequi-enrollment-v1",
+        revision: enrollmentDisclosureRevisions[body.value.method],
         displayedText: statement,
         contentSha256: Array.from(yield* waitFor(() => digest(statement)), (byte) =>
           byte.toString(hexBase).padStart(2, "0")
@@ -531,7 +577,7 @@ const prepare = ({
       );
       if (Option.isNone(retained)) return unavailable();
       const presented = yield* Schema.encodeEffect(Schema.toCodecJson(PaymentEnrollment))(
-        project(retained.value, selected.value, environment.WOMPI_PUBLIC_KEY)
+        project(retained.value, selected.value, environment)
       );
       return json(presented);
     })
@@ -765,6 +811,13 @@ const verifyEnrollmentAuthorization = (
 ): Effect.Effect<Result.Result<Option.Option<string>, Response>, EnrollmentBoundaryFailure> =>
   Effect.gen(function* () {
     const { environment, input, userId, now } = context;
+    if (
+      input.paymentSourceMode === "create" &&
+      input.method === "daviplata" &&
+      Option.isNone(daviplataPolicy(environment))
+    ) {
+      return Result.fail(unavailable());
+    }
     if (input.paymentSourceMode !== "create" || input.method !== "nequi") {
       return Result.succeed(Option.none());
     }
@@ -1021,7 +1074,7 @@ const submit = ({
       }
       const source = yield* Effect.exit(
         wompi.createPaymentSource({
-          token: input.method === "card" ? input.cardToken : input.nequiToken,
+          token: submittedToken(input),
           method: input.method,
           billingEmail: input.billingEmail,
           contracts: fresh.value,
@@ -1096,6 +1149,19 @@ export const handlePaymentEnrollment = ({
       const session = yield* waitFor(() => authority(request, environment.DB, now));
       if (Option.isNone(session)) return invalid(unauthorizedStatus);
       const path = new URL(request.url).pathname;
+      if (
+        path === "/web/subscription/payment-enrollments/availability" &&
+        request.method === "GET"
+      ) {
+        const availability = EnrollmentAvailability.make({
+          enabledMethods: Option.isSome(daviplataPolicy(configured))
+            ? ["card", "nequi", "daviplata"]
+            : ["card", "nequi"],
+        });
+        return json(
+          yield* Schema.encodeEffect(Schema.toCodecJson(EnrollmentAvailability))(availability)
+        );
+      }
       if (path === "/web/subscription/payment-enrollments/prepare" && request.method === "POST") {
         return yield* waitFor(() =>
           prepare({ request, session: session.value, environment: configured, now })
@@ -1125,7 +1191,7 @@ export const handlePaymentEnrollment = ({
         const selected = yield* waitFor(() => price(environment.DB, row.value.price_id));
         if (Option.isNone(selected)) return unavailable();
         const presented = yield* Schema.encodeEffect(Schema.toCodecJson(PaymentEnrollment))(
-          project(row.value, selected.value, configured.WOMPI_PUBLIC_KEY)
+          project(row.value, selected.value, configured)
         );
         return json(presented);
       }

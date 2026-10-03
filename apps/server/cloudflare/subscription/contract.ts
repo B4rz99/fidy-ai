@@ -21,6 +21,9 @@ export type EnrollmentEnvironment = Readonly<{
       WOMPI_PUBLIC_KEY: string;
       WOMPI_PRIVATE_KEY: string;
       WOMPI_INTEGRITY_SECRET: string;
+      WOMPI_DAVIPLATA_ACTIVATED: string;
+      WOMPI_DAVIPLATA_OTP_SEND_URL: string;
+      WOMPI_DAVIPLATA_OTP_CONFIRM_URL: string;
     }>
   >;
 

@@ -5,6 +5,7 @@ import {
   BillingAttempt,
   BillingAttemptId,
   BillingEmail,
+  EnrollmentAvailability,
   EnrollmentDecisions,
   EnrollmentMethod,
   PaymentEnrollment,
@@ -182,6 +183,14 @@ export const SubmitPaymentEnrollmentPayload = Schema.Union([
       TokenText.check(Schema.isPattern(/^nequi_(?:test|prod)_[A-Za-z0-9_-]+$/u))
     ),
   }),
+  Schema.Struct({
+    method: Schema.Literal("daviplata"),
+    paymentSourceMode: Schema.Literal("create"),
+    ...SubmitBase,
+    daviplataToken: Schema.RedactedFromValue(
+      TokenText.check(Schema.isPattern(/^daviplata_(?:devtest|devint|prod)_[A-Za-z0-9_-]+$/u))
+    ),
+  }),
   Schema.Struct({ paymentSourceMode: Schema.Literal("reuse"), ...SubmitBase }),
 ]);
 export type SubmitPaymentEnrollmentPayload = typeof SubmitPaymentEnrollmentPayload.Type;
@@ -198,6 +207,12 @@ const directErrors = [
 
 /** Dedicated first-party browser operations; none join canonical agent or PAT surfaces. */
 export const SubscriptionEnrollmentGroup = HttpApiGroup.make("subscriptionEnrollment")
+  .add(
+    HttpApiEndpoint.get("availability", "/web/subscription/payment-enrollments/availability", {
+      success: EnrollmentAvailability,
+      error: directErrors,
+    })
+  )
   .add(
     HttpApiEndpoint.post("prepare", "/web/subscription/payment-enrollments/prepare", {
       payload: PreparePaymentEnrollmentPayload,

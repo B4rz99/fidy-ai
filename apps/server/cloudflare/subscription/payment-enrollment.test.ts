@@ -164,6 +164,48 @@ const setup = (): Promise<{
     })
   );
 
+it("hides and refuses production DaviPlata until activation and reviewed OTP destinations are configured", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, environment, request } = yield* fromTestPromise(setup);
+      const provider = vi.fn(() => Promise.resolve(new Response(merchant)));
+      vi.stubGlobal("fetch", provider);
+      const production = {
+        ...environment,
+        WOMPI_ENVIRONMENT: "production",
+        WOMPI_PUBLIC_KEY: publicKey.replace("pub_test_", "pub_prod_"),
+        WOMPI_PRIVATE_KEY: secret.replace("prv_test_", "prv_prod_"),
+        WOMPI_INTEGRITY_SECRET: "prod_integrity_fixture_key",
+      };
+      const availability = yield* fromTestPromise(() =>
+        handlePaymentEnrollment({
+          request: request("/web/subscription/payment-enrollments/availability"),
+          environment: production,
+        })
+      );
+      expect(availability.status).toBe(200);
+      expect(yield* fromTestPromise(() => availability.json())).toEqual({
+        enabledMethods: ["card", "nequi"],
+      });
+      const refused = yield* fromTestPromise(() =>
+        handlePaymentEnrollment({
+          request: request("/web/subscription/payment-enrollments/prepare", "POST", {
+            priceId,
+            method: "daviplata",
+          }),
+          environment: production,
+        })
+      );
+      expect(refused.status).toBe(503);
+      expect(provider).not.toHaveBeenCalled();
+      expect(
+        yield* fromTestPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM card_enrollments").first()
+        )
+      ).toEqual({ count: 0 });
+    })
+  ));
+
 it("requires Nequi approval before creating a reusable source and collecting one first payment", () =>
   Effect.runPromise(
     Effect.gen(function* () {

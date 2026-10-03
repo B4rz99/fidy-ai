@@ -65,6 +65,32 @@ const clientLayer = (
     )
   );
 const TestLayer = clientLayer(successResponse);
+const walletRequests: Array<TestOutboundTransportRequest> = [];
+layer(
+  clientLayer(successResponse, config, (request) => walletRequests.push(request)),
+  {
+    excludeTestServices: true,
+  }
+)("DaviPlata source collection", (it) => {
+  it.effect("collects a reusable DaviPlata source without card installment fields", () =>
+    Effect.gen(function* () {
+      walletRequests.length = 0;
+      const wompi = yield* WompiBillingClient;
+      const transaction = yield* wompi.createTransaction({
+        ...creationInput,
+        method: "daviplata",
+      });
+      expect(transaction.status).toBe("PENDING");
+      const request = walletRequests.find((value) => value.method === "POST");
+      if (request?.body._tag !== "Uint8Array") return yield* Effect.die("missing source charge");
+      const body = yield* Schema.decodeEffect(UnknownJsonString)(
+        new TextDecoder().decode(request.body.body)
+      );
+      expect(body).toMatchObject({ payment_source_id: 3891, amount_in_cents: 2_890_000 });
+      expect(body).not.toHaveProperty("payment_method");
+    })
+  );
+});
 const creationInput = {
   method: "card" as const,
   reference: WompiTransactionReference.make("fidy-22900000-0000-4000-8000-000000000001"),

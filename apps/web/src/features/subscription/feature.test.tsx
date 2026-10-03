@@ -487,7 +487,18 @@ it("clears Nequi authorization input, locks method changes, and cancels approval
       const gateway = {
         ...enrollmentGateway,
         prepare: (_id: PriceId, method: EnrollmentMethod = "card"): Promise<PreparedEnrollment> =>
-          Promise.resolve({ ...preparedEnrollment, method }),
+          Promise.resolve(
+            method === "daviplata"
+              ? {
+                  ...preparedEnrollment,
+                  method,
+                  daviplataOtpPolicy: {
+                    sendUrl: "https://sandbox.wompi.co/daviplata/send",
+                    confirmUrl: "https://sandbox.wompi.co/daviplata/confirm",
+                  },
+                }
+              : { ...preparedEnrollment, method }
+          ),
         submit: (
           _enrollment: PreparedEnrollment,
           _email: string,

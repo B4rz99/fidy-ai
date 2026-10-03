@@ -9,7 +9,7 @@ import {
   PaymentSubmission,
 } from "../../src/core/subscription/contract";
 import { UserId } from "../../src/core/identity/contract";
-import { Clock, Config, Data, DateTime, Effect, Option, Schema } from "effect";
+import { Cause, Clock, Config, Data, DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { billingAttemptIdFor } from "./internal/payment-enrollment";
 import {
   handlePaymentEnrollment,
@@ -25,6 +25,16 @@ import { executeProtectedSubscriptionQuery } from "./operations";
 import { makeCoreHttp } from "../core-http/runtime";
 import { applyTestMigration } from "../d1-test-fixture";
 import { type TransactionSubject } from "../canonical-work/contract";
+import {
+  loadWompiIntegritySecret,
+  loadWompiPrivateKey,
+} from "../../src/shell/secret-material/operations";
+import {
+  DaviplataSandboxProofFailure,
+  authorizeDaviplataSandbox,
+  requireDaviplataSandboxEnrollment,
+  requireDaviplataSandboxPolicy,
+} from "./daviplata-sandbox.test-fixture";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure") {}
 const fromTestPromise = <A>(promise: () => PromiseLike<A>): Effect.Effect<A> =>
@@ -1539,6 +1549,121 @@ it
           outcome: scenario.outcome,
         });
       })
+    ),
+  600_000
+);
+
+// Opt-in real provider proof. Neither provider bodies nor failed live projections enter assertions.
+it
+  .runIf(
+    Effect.runSync(Config.String("FIDY_DAVIPLATA_SANDBOX").pipe(Config.withDefault("0"))) === "1"
+  )
+  .each(sandboxCases)(
+  "proves Sandbox DaviPlata $period first payment with $outcome outcome",
+  (scenario) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const provider = yield* Effect.all({
+          environment: Config.String("WOMPI_ENVIRONMENT"),
+          publicKey: Config.schema(
+            Schema.String.check(Schema.isPattern(/^pub_test_[A-Za-z0-9_-]{8,}$/u)),
+            "WOMPI_PUBLIC_KEY"
+          ),
+          privateKey: loadWompiPrivateKey("sandbox"),
+          integritySecret: loadWompiIntegritySecret("sandbox"),
+          sendUrl: Config.String("WOMPI_DAVIPLATA_OTP_SEND_URL").pipe(Config.option),
+          confirmUrl: Config.String("WOMPI_DAVIPLATA_OTP_CONFIRM_URL").pipe(Config.option),
+        }).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure()));
+        const policy = yield* requireDaviplataSandboxPolicy(provider);
+        const fixture = yield* fromTestPromise(setup);
+        const environment = {
+          ...fixture.environment,
+          WOMPI_ENVIRONMENT: "sandbox" as const,
+          WOMPI_PUBLIC_KEY: provider.publicKey,
+          WOMPI_PRIVATE_KEY: Redacted.value(provider.privateKey),
+          WOMPI_INTEGRITY_SECRET: Redacted.value(provider.integritySecret),
+          WOMPI_DAVIPLATA_OTP_SEND_URL: policy.sendUrl,
+          WOMPI_DAVIPLATA_OTP_CONFIRM_URL: policy.confirmUrl,
+        };
+        const outbound = yield* wompiOutboundHttp(environment);
+        const authorization = yield* authorizeDaviplataSandbox({
+          outbound,
+          policy,
+          outcome: scenario.outcome,
+        });
+        const prepared = yield* fromTestPromise(() =>
+          handlePaymentEnrollment({
+            environment,
+            request: fixture.request("/web/subscription/payment-enrollments/prepare", "POST", {
+              priceId: scenario.priceId,
+              method: "daviplata",
+            }),
+          })
+        );
+        if (prepared.status !== 200) return yield* new DaviplataSandboxProofFailure();
+        const enrollment = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentEnrollment))(
+          yield* fromTestPromise(() => prepared.json())
+        ).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure()));
+        yield* requireDaviplataSandboxEnrollment({ enrollment, policy });
+        const paymentRequestId = newId();
+        const decisions = {
+          acceptedEndUserPolicy: true,
+          acceptedPersonalDataAuthorization: true,
+          authorizedRecurringCharges: true,
+        };
+        const response = yield* fromTestPromise(() =>
+          handlePaymentEnrollment({
+            environment,
+            request: fixture.request("/web/subscription/payment-enrollments/submit", "POST", {
+              enrollmentId: enrollment.enrollmentId,
+              method: "daviplata",
+              paymentSourceMode: "create",
+              daviplataToken: Redacted.value(authorization),
+              paymentRequestId,
+              billingEmail: "payer@example.com",
+              decisions,
+            }),
+          })
+        );
+        if (response.status !== 200) return yield* new DaviplataSandboxProofFailure();
+        let submitted = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentSubmission))(
+          yield* fromTestPromise(() => response.json())
+        ).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure()));
+        // This continuation observes the existing source; it cannot replay tokenization or source POST.
+        for (let poll = 0; poll < 7 && submitted.status === "source-verifying"; poll++) {
+          yield* Effect.sleep("4 seconds");
+          const observed = yield* fromTestPromise(() =>
+            handlePaymentEnrollment({
+              environment,
+              request: fixture.request("/web/subscription/payment-enrollments/submit", "POST", {
+                enrollmentId: enrollment.enrollmentId,
+                paymentSourceMode: "reuse",
+                paymentRequestId,
+                billingEmail: "payer@example.com",
+                decisions,
+              }),
+            })
+          );
+          if (observed.status !== 200) return yield* new DaviplataSandboxProofFailure();
+          submitted = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentSubmission))(
+            yield* fromTestPromise(() => observed.json())
+          ).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure()));
+        }
+        if (submitted.status !== "payment-pending") {
+          return yield* new DaviplataSandboxProofFailure();
+        }
+        yield* proveSandboxSettlement({
+          environment,
+          request: fixture.request,
+          attemptId: submitted.billingAttempt.id,
+          outcome: scenario.outcome,
+        });
+      }).pipe(
+        Effect.catchCauseIf(
+          (cause) => !Cause.hasInterrupts(cause),
+          () => Effect.fail(new DaviplataSandboxProofFailure())
+        )
+      )
     ),
   600_000
 );

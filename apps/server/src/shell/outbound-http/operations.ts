@@ -1,3 +1,4 @@
+import { type DaviplataOtpPolicy } from "~/core/subscription/contract";
 import { WompiEnvironment } from "~/shell/secret-material/contract";
 import { Config, Context, Crypto, Effect, Layer, Option, type Redacted, Schema } from "effect";
 import { HttpClient } from "effect/unstable/http";
@@ -54,7 +55,9 @@ export const makeResendOutboundHttp = (
     crypto: Option.none(),
   });
 
-/** Restricts one Worker-owned Wompi credential set to the published bounded provider transport. */
+/** Restricts Worker-owned Wompi credentials to bounded provider transport. The optional reviewed
+ * OTP policy authorizes only synthetic Sandbox proof requests; Production always refuses them.
+ */
 export const makeWompiOutboundHttp = (
   input: Readonly<{
     environment: WompiEnvironment;
@@ -63,12 +66,16 @@ export const makeWompiOutboundHttp = (
     integritySecret: Redacted.Redacted<string>;
     httpClient: HttpClient.HttpClient;
     crypto: Crypto.Crypto;
-  }>
+  }> &
+    Partial<Readonly<{ daviplataSandboxPolicy: Option.Option<DaviplataOtpPolicy> }>>
 ): OutboundHttpService =>
   makeOutboundHttp({
     kapsoApiKey: Option.none(),
     resendEmailDeliveryApiKey: Option.none(),
-    wompi: Option.some(input),
+    wompi: Option.some({
+      ...input,
+      daviplataSandboxPolicy: input.daviplataSandboxPolicy ?? Option.none(),
+    }),
     httpClient: input.httpClient,
     crypto: Option.some(input.crypto),
   });
@@ -100,6 +107,7 @@ export class OutboundHttp extends Context.Service<OutboundHttp, OutboundHttpServ
           publicKey: wompiPublicKey,
           privateKey: wompiPrivateKey,
           integritySecret: wompiIntegritySecret,
+          daviplataSandboxPolicy: Option.none(),
         }),
         httpClient,
         crypto: Option.some(crypto),

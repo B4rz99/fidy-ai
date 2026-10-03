@@ -1,0 +1,24 @@
+apps/server/src/core/recurring/operations.test.ts
+  s_e9f458b7eafa38::t_337f4439cd854d 137-138,159-161,176
+  s_e9f458b7eafa38::t_e5ec6bb87a4bea 139-158,162-175
+apps/server/src/core/recurring/internal/detector.ts
+  s_e9f458b7eafa38::t_853f053b0d29f9 79-85,88-92
+  s_e9f458b7eafa38::t_788e4fd9096c4b 86-87
+  s_e9f458b7eafa38::t_a950e8149dd80f 93-94,221,224,230
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "edc07ed2d72b3441394b30d569f39534f8563c60",
+  "prompts": {},
+  "sessions": {
+    "s_e9f458b7eafa38": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0ff5b-e7bd-776c-8c8c-ca885bbcbd91",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

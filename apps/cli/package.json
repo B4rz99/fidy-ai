@@ -1,0 +1,25 @@
+{
+  "name": "@fidy/cli",
+  "version": "0.0.0",
+  "private": true,
+  "bin": {
+    "fidy": "src/main.ts"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "bun build src/main.ts --target=bun --outdir=dist",
+    "typecheck": "tsc --noEmit",
+    "test": "bun --bun vitest run",
+    "test:native": "bun test/native-store.ts",
+    "lint:deps": "bun ../../tools/depcruise/run.mjs . src test"
+  },
+  "dependencies": {
+    "@effect/platform-bun": "4.0.0",
+    "@fidy/server": "workspace:0.0.0",
+    "effect": "4.0.0"
+  },
+  "devDependencies": {
+    "@effect/vitest": "4.0.0",
+    "vitest": "5.0.2"
+  }
+}

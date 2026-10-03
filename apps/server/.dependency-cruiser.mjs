@@ -177,7 +177,7 @@ export default {
           "^src/core/_shared/context\\.ts$",
           "^src/shell/api\\.ts$",
           "^src/shell/authorization/runtime\\.ts$",
-          "^src/shell/(agent|canonical-operations|email-authentication|public-http|subscription|web-authentication)/contract\\.ts$",
+          "^src/shell/(agent|canonical-operations|email-authentication|public-http|subscription|tokens|web-authentication)/contract\\.ts$",
         ],
       },
     },

@@ -1,5 +1,5 @@
 import type { APIRequestContext, Page } from "@playwright/test";
-import { Clock, Effect } from "effect";
+import { Clock, Effect, Schema } from "effect";
 import { playwright } from "./playwright-runtime";
 
 const { expect } = playwright;
@@ -8,6 +8,10 @@ const successStatus = 200;
 const noContentStatus = 204;
 const pairingTimeoutMilliseconds = 15_000;
 const firstPollMilliseconds = 5_000;
+const acceptanceMode = Schema.decodeUnknownSync(Schema.Literals(["shared", "cli"]))(
+  Bun.env.CLI_ACCEPTANCE_MODE ?? "shared"
+);
+const operatorOrigin = acceptanceMode === "cli" ? "http://127.0.0.1:4185" : "http://127.0.0.1:4175";
 
 /** The browser obtains a WebSession only from real Core redemption, never from a route mock. */
 export const visiblePairingCode = (page: Page): Promise<string> =>
@@ -27,9 +31,7 @@ const signInWithIdentity = ({ page, request }: SignInFixture, firstCard: boolean
     .then(() => page.goto("/auth/pair"))
     .then(() => page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click())
     .then(() => visiblePairingCode(page))
-    .then((code) =>
-      request.post(`http://127.0.0.1:4175/approve?code=${code}&firstCard=${firstCard}`)
-    )
+    .then((code) => request.post(`${operatorOrigin}/approve?code=${code}&firstCard=${firstCard}`))
     .then((approval) => {
       expect(approval.status()).toBe(noContentStatus);
       // Advance only the browser's first-poll delay after approval. Core's clock, proof

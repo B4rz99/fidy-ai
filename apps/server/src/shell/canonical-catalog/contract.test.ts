@@ -5,7 +5,7 @@ import { getAtomicBatchCallSchema } from "~/shell/operations/contract";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import { makeOperationCatalog } from "./contract";
 import { getCanonicalOperationInput } from "~/shell/canonical-operations/operations";
-import { operationPolicy, patScoped } from "~/shell/canonical-policy/contract";
+import { operationPolicy, patScopeCapability, patScoped } from "~/shell/canonical-policy/contract";
 
 const policy = operationPolicy({
   access: patScoped("read"),
@@ -94,6 +94,26 @@ it("decodes a batch child with the same normalization as its typed catalog input
   if (Option.isSome(direct) && Option.isSome(batch)) {
     expect(batch.value.input).toEqual(direct.value);
     expect(direct.value.payload.text).toBe("Rent is due Friday.");
+  }
+});
+
+it("a read-only capability exposes only queries and cannot name any mutation batch child", () => {
+  const children = getAtomicBatchCallSchema();
+  for (const operation of operationCatalog.operations) {
+    if (!Option.exists(patScopeCapability(operation.policy.access), (scope) => scope === "read")) {
+      continue;
+    }
+    expect(operation.policy.kind, operation.id).toBe("query");
+    expect(
+      Option.isNone(
+        Schema.decodeOption(children)({
+          callId: "00000000-0000-4000-8000-000000000001",
+          operation: operation.id,
+          input: {},
+        })
+      ),
+      operation.id
+    ).toBe(true);
   }
 });
 

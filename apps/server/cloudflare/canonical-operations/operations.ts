@@ -5,6 +5,7 @@ import { type CanonicalOperationId } from "../../src/core/canonical-operations/c
 import type { CatalogOperation } from "../../src/shell/canonical-catalog/contract";
 import { atomicBatchOperation } from "../../src/shell/operations/contract";
 import { operationCatalog } from "../../src/shell/api";
+import { patScopeCapability } from "../../src/shell/canonical-policy/contract";
 import { memoryOperationIds } from "../../src/shell/memory/contract";
 import type { HostedCommitFence } from "../agent/contract";
 import type { CanonicalMutationPreparation, CanonicalWork } from "./contract";
@@ -19,7 +20,7 @@ import { evaluateBudgetAlerts } from "../budgets/operations";
 import { unavailableStatement } from "../ingestion/operations";
 import {
   type TransactionCaller,
-  type TransactionSubject,
+  childCaller,
   refusedPreparation,
   transactionUnavailable,
 } from "../canonical-work/operations";
@@ -67,8 +68,11 @@ const executeCall = ({
   Response,
   never,
   HostedInference
-> =>
-  Effect.gen(function* () {
+> => {
+  if (operationCatalog.byId.get(work.operation)?.policy.kind === "query") {
+    return executeQueryCall({ db, work, subject, current, bucket, hostedFence }, work);
+  }
+  return Effect.gen(function* () {
     const adapter = canonicalMutationAdapter(work.operation);
     if (Option.isNone(adapter)) return transactionUnavailable();
     const catalogOperation = operationCatalog.byId.get(work.operation);
@@ -110,10 +114,29 @@ const executeCall = ({
       ? unavailableStatement()
       : response;
   });
+};
 
 /** Dispatch a bounded batch or an individual catalog call within one User coordination turn. */
 const affectsBudget = (operation: CanonicalOperationId): boolean =>
   operation.startsWith("budgets.") || operation.startsWith("transactions.");
+
+const executeQueryCall = (
+  input: WorkInput,
+  work: Extract<CanonicalWork, { _tag: "Call" }>
+): Effect.Effect<Response> => {
+  const decoded = Schema.decodeUnknownOption(Schema.Json)(work.input);
+  if (Option.isNone(decoded)) return Effect.succeed(transactionUnavailable());
+  return executeCanonicalQuery({
+    db: input.db,
+    subject: input.subject,
+    operation: work.operation,
+    input: decoded.value,
+    bucket: input.bucket,
+  }).pipe(
+    Effect.map((response) => Option.getOrElse(response, transactionUnavailable)),
+    Effect.orElseSucceed(transactionUnavailable)
+  );
+};
 
 const executeWork = (input: WorkInput): Effect.Effect<Response, never, HostedInference> =>
   Effect.gen(function* () {
@@ -246,7 +269,7 @@ export const executeCanonicalQuery = ({
   bucket,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionSubject;
+  subject: TransactionCaller;
   operation: CanonicalOperationId;
   input: Schema.Json;
   bucket: Option.Option<R2Bucket>;
@@ -261,7 +284,10 @@ export const executeCanonicalQuery = ({
       Effect.suspend(() =>
         owner.value({
           db,
-          subject,
+          subject: childCaller({
+            subject,
+            requiredScope: patScopeCapability(operation.value.policy.access),
+          }),
           request: request.value,
           bucket,
         })

@@ -139,6 +139,13 @@ and disclosed only through its intended one-time channel. Verification does not 
 recoverable bearer material when a digest suffices. Use, expiry, revocation, and replay are decided
 at the authoritative boundary and take effect across every client surface.
 
+The Bun CLI's local native credential store is a narrow recoverable-bearer exception for
+subsequent authenticated calls by the same OS User. The server remains digest-only. This exception
+requires a fixed production origin, redacted application values, the native OS provider only, and
+Windows local-machine persistence verified against the pinned runtime; file/environment fallbacks,
+URLs, browser state, arguments and diagnostics are not bearer-storage channels. Local logout removes
+saved access without asserting server revocation.
+
 One VerifiedEmailCredential is mandatory before stable User creation and is globally unique after
 trim-and-lowercase normalization; provider-specific dot or plus-address folding is not proof of
 equivalence. The credential may approve BrowserLoginPairing for ordinary email login or recovery to
@@ -159,7 +166,7 @@ proof ends recovery.
 rotation/revocation, and destruction; test reuse, expiry, revocation, wrong purpose, wrong scope,
 wrong browser verifier, concurrency, and cross-User substitution.
 
-**Violation examples:** a raw PAT is stored or pasted into chat; a private PATPairing device code
+**Violation examples:** a raw PAT is stored outside the approved local native credential store or pasted into chat; a private PATPairing device code
 crosses Kapso; a recovery proof appears in a URL or Transcript; changing a phone number creates a
 new owner for old data; support approves ownership from a bank statement.
 

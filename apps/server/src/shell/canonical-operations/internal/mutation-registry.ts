@@ -37,8 +37,7 @@ export const canonicalMutationImplementations = {
   "budgets.createBudget": unavailableMutation,
   "budgets.updateBudget": unavailableMutation,
   "budgets.deleteBudget": unavailableMutation,
-  "dashboard.getDashboard": unavailableMutation,
-  "dashboard.getDashboardView": unavailableMutation,
+  "dashboard.initializeDashboard": unavailableMutation,
   "dashboard.applyDashboardEdit": unavailableMutation,
   "emailAuthentication.requestEmailReplacement": (
     input: CanonicalInput<"emailAuthentication.requestEmailReplacement">,

@@ -155,6 +155,7 @@ export const ErrorCode = Schema.Literals([
   "rate_limited",
   "quota_exhausted",
   "not_found",
+  "dashboard_uninitialized",
   "unavailable",
 ]);
 export type ErrorCode = typeof ErrorCode.Type;

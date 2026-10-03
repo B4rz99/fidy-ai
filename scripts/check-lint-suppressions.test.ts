@@ -105,6 +105,7 @@ it("keeps platform diagnostic opt-outs on their reviewed file boundaries", () =>
       );
       expect(exceptions.toSorted()).toEqual(
         [
+          "nodeBuiltinImport:./apps/cli/src/credential/internal/local-path.ts",
           "nodeBuiltinImport:./apps/web/cloudflare/production-policy/artifact.ts",
           "nodeBuiltinImport:./apps/web/scripts/build-production.test.ts",
           "nodeBuiltinImport:./apps/web/scripts/check-browser-bundle.test.ts",
@@ -116,6 +117,10 @@ it("keeps platform diagnostic opt-outs on their reviewed file boundaries", () =>
           // contains all failures and Schema-decodes the read-only plan before reporting.
           "anyUnknownInErrorContext:./infra/cloudflare/inspect-worker-drift.ts",
           "anyUnknownInErrorContext:./infra/cloudflare/worker-receipt.test.ts",
+          // CLI process roots and the broad browser composition construct the reviewed runtime.
+          "strictEffectProvide:./apps/cli/src/main.ts",
+          "strictEffectProvide:./apps/cli/test/journey-entry.ts",
+          "strictEffectProvide:./apps/web/e2e/cli-login.spec.ts",
           "strictEffectProvide:./infra/cloudflare/inspect-worker-drift.ts",
         ].toSorted()
       );

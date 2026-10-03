@@ -37,12 +37,10 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: "1.4.1"
+        uses: ./.github/actions/bun-runtime
 
       - name: Install locked workspace
-        run: bun install --frozen-lockfile --ignore-scripts
+        run: bash scripts/install-workspace.sh --ignore-scripts
 
       - name: Verify source release and retrieve its captured receipt
         env:

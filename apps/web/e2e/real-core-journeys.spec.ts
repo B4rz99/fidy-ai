@@ -89,6 +89,51 @@ const assertUnderScopedBrowser = (
       );
     })
   );
+test("fresh and concurrent Dashboard first use explicitly initializes through authoritative Core queries", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      expect(
+        (yield* fromPlaywright(request.post("http://127.0.0.1:4175/dashboard/reset"))).status()
+      ).toBe(noContent);
+      yield* fromPlaywright(signInFirstCardThroughCore({ page, request }));
+      for (const path of ["/dashboard", "/dashboard/view"]) {
+        const absent = yield* fromPlaywright(page.evaluate(fetchWithSession, `${api}${path}`));
+        expect(absent.status).toBe(notFound);
+        expect(absent.body).toContain("dashboard_uninitialized");
+      }
+      const other = yield* fromPlaywright(page.context().newPage());
+      const initializeCalls: Array<string> = [];
+      page.context().on("request", (call) => {
+        if (call.url() === `${api}/dashboard/initialize`) initializeCalls.push(call.method());
+      });
+      yield* fromPlaywright(
+        Promise.all([page.goto("/app/dashboard"), other.goto("/app/dashboard")])
+      );
+      yield* fromPlaywright(
+        expect(page.getByRole("heading", { name: "Tablero", exact: true })).toBeVisible()
+      );
+      yield* fromPlaywright(
+        expect(other.getByRole("heading", { name: "Tablero", exact: true })).toBeVisible()
+      );
+      expect(initializeCalls.length).toBeGreaterThan(0);
+      expect(initializeCalls.every((method) => method === "POST")).toBe(true);
+      const before = yield* fromPlaywright(page.evaluate(fetchWithSession, `${api}/dashboard`));
+      expect(before.status).toBe(ok);
+      const countBefore = initializeCalls.length;
+      yield* fromPlaywright(page.reload());
+      yield* fromPlaywright(
+        expect(page.getByRole("heading", { name: "Tablero", exact: true })).toBeVisible()
+      );
+      const after = yield* fromPlaywright(page.evaluate(fetchWithSession, `${api}/dashboard`));
+      expect(after).toEqual(before);
+      expect(initializeCalls).toHaveLength(countBefore);
+      yield* fromPlaywright(other.close());
+    })
+  ));
+
 const startPatPairing = Effect.fnUntraced(function* (page: Page, request: APIRequestContext) {
   yield* fromPlaywright(
     signInThroughCore({

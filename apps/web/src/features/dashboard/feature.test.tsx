@@ -356,7 +356,12 @@ const dashboardFeature = (
   onRefresh: () => void,
   result: AsyncResult.AsyncResult<Readonly<{ data: DashboardView }>, unknown>
 ): JSX.Element => (
-  <DashboardFeatureContent apiClient={apiClient} onRefresh={onRefresh} result={result} />
+  <DashboardFeatureContent
+    apiClient={apiClient}
+    onRefresh={onRefresh}
+    result={result}
+    phase="reading"
+  />
 );
 
 afterEach(cleanup);

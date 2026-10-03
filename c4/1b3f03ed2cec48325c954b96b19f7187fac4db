@@ -1,0 +1,19 @@
+apps/server/ARCHITECTURE.md
+  s_e9f458b7eafa38::t_924b6f4e0bf519 574-588
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c41b3f03ed2cec48325c954b96b19f7187fac4db",
+  "prompts": {},
+  "sessions": {
+    "s_e9f458b7eafa38": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0ff5b-e7bd-776c-8c8c-ca885bbcbd91",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

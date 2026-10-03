@@ -1,0 +1,80 @@
+scripts/check-dependency-updates.ts
+  s_8e3ccc4039a137::t_13f0084aca2216 51
+apps/web/src/features/pats/feature.tsx
+  s_8e3ccc4039a137::t_ef638ad461d5ea 4
+apps/web/src/application.test.tsx
+  s_8e3ccc4039a137::t_f47f606a37b75f 3-4
+apps/web/scripts/build-production.test.ts
+  s_8e3ccc4039a137::t_664dc8c631b14b 134-137,142-148
+  s_8e3ccc4039a137::t_f34ec841f72048 138-141
+apps/web/src/features/subscription/enrollment-gateway.ts
+  s_8e3ccc4039a137::t_c411941c645772 1-2,43
+scripts/document-parsing/local-workerd-http.ts
+  s_8e3ccc4039a137::t_83acf9ae8c203e 2
+apps/web/src/session/session.test.tsx
+  s_8e3ccc4039a137::t_35fde60a5561f7 2
+apps/web/src/transport/canonical-query.ts
+  s_8e3ccc4039a137::t_6a63547d52bc63 2
+docs/research/effect-4-stable-migration.md
+  s_8e3ccc4039a137::t_e3fdf059aff943 3-5,173,199-201
+apps/web/src/features/email-replacement/controller.ts
+  s_8e3ccc4039a137::t_ed72cf1861113f 4
+apps/web/src/transport/client.test.ts
+  s_8e3ccc4039a137::t_9a3dfd2442c74d 26-27
+apps/web/src/features/dashboard/editor-model.ts
+  s_8e3ccc4039a137::t_45aa20058af67c 1-2,33
+apps/web/src/features/subscription/feature.tsx
+  s_8e3ccc4039a137::t_370ac6197db19b 10
+apps/web/src/features/dashboard/view.tsx
+  s_8e3ccc4039a137::t_f6b9ecdd309b7f 4
+apps/web/src/features/agent/feature.tsx
+  s_8e3ccc4039a137::t_cf703914328ba5 4
+apps/web/src/features/transactions/manual-capture.tsx
+  s_8e3ccc4039a137::t_46947d90523343 3
+apps/web/cloudflare/production-policy/artifact.ts
+  s_8e3ccc4039a137::t_58885564981d93 34
+apps/web/src/transport/canonical-query.test.ts
+  s_8e3ccc4039a137::t_def6edcd813e3f 2
+apps/web/src/transport/browser-http-policy.ts
+  s_8e3ccc4039a137::t_cb46b967c32079 9
+apps/web/src/features/email-onboarding/controller.ts
+  s_8e3ccc4039a137::t_0889d8fb8cbabe 4
+apps/web/src/features/browser-login/pairing-controller.ts
+  s_8e3ccc4039a137::t_441f171c9c3af1 4
+apps/web/src/features/transactions/feature.test.tsx
+  s_8e3ccc4039a137::t_e148ebe5a405aa 3
+apps/web/src/transport/client.ts
+  s_8e3ccc4039a137::t_bc7be230d2c98b 18-20
+.patterns/effect-4-stable.md
+  s_8e3ccc4039a137::t_73ff47e4e9fdec 1-64
+.patterns/INDEX.md
+  s_8e3ccc4039a137::t_773368ca4f28e1 5-10
+apps/web/src/features/dashboard/feature-controller.test.tsx
+  s_8e3ccc4039a137::t_67851999d69147 4
+apps/web/src/features/recovery/feature.tsx
+  s_8e3ccc4039a137::t_10b10100483487 4
+docs/research/effect-4-stable-integration.md
+  s_8e3ccc4039a137::t_dbed0cc4681879 1-89
+docs/research/effect-4-stable-portable.md
+  s_8e3ccc4039a137::t_c0fe5241639516 3-5,13
+apps/web/src/features/dashboard/feature.test.tsx
+  s_8e3ccc4039a137::t_0201c05ea955bd 4
+apps/web/src/features/dashboard/feature.tsx
+  s_8e3ccc4039a137::t_02daf7f3bd74c1 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "6f797c689d7ed285c70210f6c75954ba2b9b194b",
+  "prompts": {},
+  "sessions": {
+    "s_8e3ccc4039a137": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10233-8d17-76b0-b672-dd62d4a0b125",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

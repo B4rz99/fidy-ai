@@ -43,5 +43,12 @@
       "until": "2026-12-20T00:00:00Z"
     }
   ],
-  "acceptedVulnerabilities": []
+  "acceptedVulnerabilities": [
+    {
+      "cve": "CVE-2026-93687",
+      "path": "bun.lock",
+      "reason": "Temporarily retain the required shadcn 4.21.0 development CLI, whose fast-glob and ts-morph dependencies bring in braces 3.0.3. GHSA-vfj7-8cjw-p6xm reports stack exhaustion from deeply nested brace patterns; no patched npm release exists as of 2026-10-03. This is risk acceptance, not remediation: the vulnerable package remains installed. Limit CLI use to reviewed component names, local paths and trusted registry inputs during this window. Recheck upstream before expiry; replace or upgrade the affected chain only after every new release meets the unchanged seven-day minimumReleaseAge, rerun CLI and application verification plus SCA, and remove both this record and the matching scanner exclusion once the finding is resolved.",
+      "until": "2026-10-10T00:00:00Z"
+    }
+  ]
 }

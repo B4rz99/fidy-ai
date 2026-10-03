@@ -1,0 +1,255 @@
+apps/web/e2e/product-journeys.spec.ts
+  s_a71cc4d896fb30::t_683d97f7aa2216 104,138
+  s_a71cc4d896fb30::t_891a211d9a64f2 137,147
+infra/cloudflare/workers.test.ts
+  s_a71cc4d896fb30::t_817e6999a051d4 442-443,448
+apps/server/cloudflare/subscription/payment-enrollment-claim.test.ts
+  s_a71cc4d896fb30::t_08417e5c326b59 7,11-12,16,35,54,65-70,82-93,99-104,123-124,205-206
+  s_a71cc4d896fb30::t_b37c7c95021501 46-47
+  s_a71cc4d896fb30::t_af3088174edf38 172,195
+  s_a71cc4d896fb30::t_e6fb20980ea7e5 153-155,197-199
+  s_a71cc4d896fb30::t_a3f3de537887c7 176-179,182-193
+  s_a71cc4d896fb30::t_7424cc9a4cca0f 156-171,173-175,194,196
+  s_a71cc4d896fb30::t_9f8ccf87c05d29 180-181
+apps/server/ARCHITECTURE.md
+  s_a71cc4d896fb30::t_89ff8857e28af0 456-464
+apps/server/src/client.ts
+  s_a71cc4d896fb30::t_891a211d9a64f2 93-96,104-105
+  s_a71cc4d896fb30::t_c06fb63d0f7665 99-101
+  s_a71cc4d896fb30::t_e223ddb4c70501 108
+apps/web/src/transport/client.ts
+  s_a71cc4d896fb30::t_11322caeda5b9a 241,243
+  s_a71cc4d896fb30::t_891a211d9a64f2 26-27,66-69
+  s_a71cc4d896fb30::t_d762118dba81e7 30
+  s_a71cc4d896fb30::t_b8352b2b7e8af1 29
+  s_a71cc4d896fb30::t_a333fb8d261b7d 211-214
+apps/server/cloudflare/subscription/internal/payment-enrollment.ts
+  s_a71cc4d896fb30::t_e3adf5e41298d5 373-375
+  s_a71cc4d896fb30::t_2be41ffc7f3fe6 777-779
+  s_a71cc4d896fb30::t_af3088174edf38 965
+  s_a71cc4d896fb30::t_cb153dced41983 936
+  s_a71cc4d896fb30::t_8db776c2c3be76 796-798,801-806,809-816,1017-1018,1020
+  s_a71cc4d896fb30::t_2b7ae1af09a5bb 1019,1021
+  s_a71cc4d896fb30::t_1eecadc2fbfd78 830
+  s_a71cc4d896fb30::t_08417e5c326b59 4,13-15,17,22,24-28,31-43,45-46,71,90,94,147,150-151,158,160,162,227,240-250,252-254,292,303,319,327-332,366,370-371,377,385-387,394,402-403,407,426,433,465,468-469,475-476,497-498,508,533,623-624,626-627,639,666-673,675,679,726-728,750,758-761,763-767,769,771-772,774-775,781-795,844,851,867,876,920-930,932,934,943-945,947,962,964,966-967,1024-1025,1069,1099,1104,1127
+  s_a71cc4d896fb30::t_33d66d08cb1e6f 95
+  s_a71cc4d896fb30::t_674b3331e081f5 950,956
+  s_a71cc4d896fb30::t_6861b58ba24742 233,251
+  s_a71cc4d896fb30::t_b498bcc8f2dd9d 372,376,632-633,640
+  s_a71cc4d896fb30::t_7424cc9a4cca0f 820-829,951-955
+  s_a71cc4d896fb30::t_4626a0ce436005 799-800,807-808,817-819
+  s_a71cc4d896fb30::t_09eaa20fe578ce 773
+  s_a71cc4d896fb30::t_1d92c09e6c7927 762,768,770,850,852
+  s_a71cc4d896fb30::t_a3f3de537887c7 378-384,505-507
+  s_a71cc4d896fb30::t_745800dda72f65 776,780
+apps/server/cloudflare/subscription/internal/wompi-billing-client.test.ts
+  s_a71cc4d896fb30::t_b52dceb8f8c438 69
+apps/server/cloudflare/subscription/payment-enrollment-migration.test.ts
+  s_a71cc4d896fb30::t_af3088174edf38 98
+  s_a71cc4d896fb30::t_bfac83567c14d3 1-14,31-33,44-46
+  s_a71cc4d896fb30::t_6be3955e763319 65,82
+  s_a71cc4d896fb30::t_d4624aad27e995 36,100
+  s_a71cc4d896fb30::t_a3f3de537887c7 89-93,102-104
+  s_a71cc4d896fb30::t_7424cc9a4cca0f 15-30,34-35,37-43,47-64,66-81,83-88,94-97,99,101,105-107
+apps/server/cloudflare/subscription/runtime.ts
+  s_a71cc4d896fb30::t_891a211d9a64f2 101
+  s_a71cc4d896fb30::t_08417e5c326b59 1,31,62
+apps/server/cloudflare/browser-acceptance-wompi.ts
+  s_a71cc4d896fb30::t_7424cc9a4cca0f 129-134,142-147
+apps/server/cloudflare/browser-acceptance-seed.ts
+  s_a71cc4d896fb30::t_ac989df153a51f 146-147
+  s_a71cc4d896fb30::t_922c5426e7bb81 175
+apps/web/src/transport/wompi-nequi.ts
+  s_a71cc4d896fb30::t_6c0860112a9242 71-77,82,96-97,105,109
+  s_a71cc4d896fb30::t_bccc1feaeda4d7 1
+  s_a71cc4d896fb30::t_7424cc9a4cca0f 78-81,83-95
+  s_a71cc4d896fb30::t_2ee4197b09427d 2,22,57
+  s_a71cc4d896fb30::t_a333fb8d261b7d 3,5-7,12-20,27-37,40-54,59,104,106,118-123
+  s_a71cc4d896fb30::t_08417e5c326b59 4,58,60
+  s_a71cc4d896fb30::t_cef03bf8afec3d 8-11,21,23-26,38-39,55-56,61-70,98-103,107-108,110-117,124-127
+apps/server/cloudflare/subscription/internal/wompi-client.ts
+  s_a71cc4d896fb30::t_fd3cf7da4854a5 301,389,412
+  s_a71cc4d896fb30::t_08417e5c326b59 20
+  s_a71cc4d896fb30::t_677e0c588f4f1b 70,112-113,118-119,172,304,318,350-351
+  s_a71cc4d896fb30::t_a333fb8d261b7d 107-109,271-300
+docs/operations/nequi-sandbox-proof.md
+  s_a71cc4d896fb30::t_a3eb23b874ac37 1-48
+apps/server/cloudflare/public-worker.ts
+  s_a71cc4d896fb30::t_5fa578044b567b 198-199,201
+apps/server/src/shell/outbound-http/internal/outbound-http.ts
+  s_a71cc4d896fb30::t_5eff5d24386b89 157
+  s_a71cc4d896fb30::t_ba8729aea5f896 129,175
+  s_a71cc4d896fb30::t_2c140e00d180cf 174,296
+  s_a71cc4d896fb30::t_be5881a5e0ec98 172,297
+  s_a71cc4d896fb30::t_566cbc0292465f 143,173
+  s_a71cc4d896fb30::t_8c286b863a3f96 144-156,163-165,195
+  s_a71cc4d896fb30::t_08417e5c326b59 121-128
+  s_a71cc4d896fb30::t_5fb7a642e0266b 130-142
+apps/server/cloudflare/subscription/billing-collection.test.ts
+  s_a71cc4d896fb30::t_08417e5c326b59 5
+  s_a71cc4d896fb30::t_891a211d9a64f2 40
+  s_a71cc4d896fb30::t_50a2e0819153f7 817-818
+  s_a71cc4d896fb30::t_d72f399c4234de 960-961
+  s_a71cc4d896fb30::t_5fb7a642e0266b 160-163,166-167,174,176-197
+  s_a71cc4d896fb30::t_3e96b0c0458b73 159,198
+  s_a71cc4d896fb30::t_7301f58c9b6b01 51-52
+  s_a71cc4d896fb30::t_5afaec152737fb 56-57
+  s_a71cc4d896fb30::t_8ace5c61e2e445 164-165,168-173,175
+  s_a71cc4d896fb30::t_549726a3beb36b 252,288,364,387,498,560,589,626,659,742,806,908,947,1010
+  s_a71cc4d896fb30::t_5c3b4d139cc318 37,53,58
+apps/web/e2e/real-core-journeys.spec.ts
+  s_a71cc4d896fb30::t_891a211d9a64f2 373,394,531
+apps/web/src/transport/wompi-tokenization.ts
+  s_a71cc4d896fb30::t_2e5bfb71ac7f15 51,107,133,153
+  s_a71cc4d896fb30::t_a333fb8d261b7d 52-54,108-110
+apps/server/cloudflare/subscription/internal/wompi-model.ts
+  s_a71cc4d896fb30::t_891a211d9a64f2 39-42
+apps/server/src/shell/outbound-http/contract.ts
+  s_a71cc4d896fb30::t_52580068df09e6 2,38
+  s_a71cc4d896fb30::t_f548f91c12b3c5 60
+  s_a71cc4d896fb30::t_e91886f63c08db 1,61
+apps/server/cloudflare/subscription/internal/wompi-billing-client.ts
+  s_a71cc4d896fb30::t_7b356517710263 19,80
+  s_a71cc4d896fb30::t_c17c8f0d56cf80 118
+apps/web/e2e/real-core-fixture.ts
+  s_a71cc4d896fb30::t_6117e3fb961b00 48
+apps/server/scripts/check-dependency-guards.ts
+  s_a71cc4d896fb30::t_817e6999a051d4 1836,1840
+apps/web/src/features/subscription/feature.tsx
+  s_a71cc4d896fb30::t_110bbbf8b867d1 311,315-316,344-345,370,372,374-375,382-388,396-397,426-428,432,457,471
+  s_a71cc4d896fb30::t_2e1dcb0c930c69 38,314,670,685,699,719,740,961
+  s_a71cc4d896fb30::t_2fbe980c1a565f 371,373,490,497,510,576,1027,1061
+  s_a71cc4d896fb30::t_0062e549a10046 1042
+  s_a71cc4d896fb30::t_a333fb8d261b7d 20-24,317-343,376-381,389-395,398-399,409-425,453-455,472-476,570-574,765-766,954-958
+  s_a71cc4d896fb30::t_e86ff35cff0bd2 976,1005-1006,1018,1028-1029
+  s_a71cc4d896fb30::t_8678a9f246b98a 728,742,744,748
+  s_a71cc4d896fb30::t_ff6601fd72eb9d 9,1033
+  s_a71cc4d896fb30::t_e0fc7fb4ba77b5 369
+  s_a71cc4d896fb30::t_08417e5c326b59 346-368,400-408,967-975,977-1004,1007-1017,1040-1041,1043-1053,1067-1071
+  s_a71cc4d896fb30::t_ad4a8b3c888dc4 312-313
+  s_a71cc4d896fb30::t_094aaad7e549dd 477
+apps/web/src/features/subscription/enrollment-gateway.ts
+  s_a71cc4d896fb30::t_96fb9c5a42417f 10,138-139,166-167,187-188
+  s_a71cc4d896fb30::t_a333fb8d261b7d 5,8,50-55
+  s_a71cc4d896fb30::t_08417e5c326b59 126-137,141,143-151,162-165,168-186,218,223
+  s_a71cc4d896fb30::t_798e27ed4ac079 56,63,194
+  s_a71cc4d896fb30::t_0f108bb40a90e1 140,142,217,219
+  s_a71cc4d896fb30::t_5fb7a642e0266b 152-161
+  s_a71cc4d896fb30::t_2d3a1a5b0aa646 14,57,59,292,294
+  s_a71cc4d896fb30::t_891a211d9a64f2 4,6,17-18,200,244
+apps/server/cloudflare/core-http/internal/http.ts
+  s_a71cc4d896fb30::t_b2b8e99071eeda 1565
+  s_a71cc4d896fb30::t_41a2c865a0bc6e 286-288
+  s_a71cc4d896fb30::t_891a211d9a64f2 57,1560
+apps/web/src/transport/wompi-nequi.test.ts
+  s_a71cc4d896fb30::t_2be41ffc7f3fe6 7-9
+  s_a71cc4d896fb30::t_0e0f2da870d617 1-6,10-11,17,26-28
+  s_a71cc4d896fb30::t_a333fb8d261b7d 12-16,18-25,29-48
+apps/server/cloudflare/subscription/internal/payment-enrollment-claim.ts
+  s_a71cc4d896fb30::t_af3088174edf38 2,6,12,16,20,27,31-37,41,43,47,52-53
+apps/server/cloudflare/subscription/payment-enrollment.test.ts
+  s_a71cc4d896fb30::t_2c8a4fc21aaa96 641,684
+  s_a71cc4d896fb30::t_49b13e6f748720 309,429,682,685
+  s_a71cc4d896fb30::t_3afa451a23fe94 276,302-303,423-424,821-822
+  s_a71cc4d896fb30::t_0b43da615d59b4 2,633,689-695
+  s_a71cc4d896fb30::t_1738a3a209f03f 1,727,751
+  s_a71cc4d896fb30::t_2be41ffc7f3fe6 634-640,642-681,683,812-817
+  s_a71cc4d896fb30::t_91f35eb29abbe2 511-515,566
+  s_a71cc4d896fb30::t_7424cc9a4cca0f 6-10,784-792,796-805,808-809
+  s_a71cc4d896fb30::t_f2e80e25728695 783,793-795,806-807,810-811
+  s_a71cc4d896fb30::t_917a5ac15202a2 189-196
+  s_a71cc4d896fb30::t_189dc81d2fb217 199-201,204
+  s_a71cc4d896fb30::t_5fb7a642e0266b 14-19,277-301,304-308,310,313,316-422,425-428,430,433,438-449,452-496,498-501,686-688,696,698-703,708,712-726,728-750,752-782,818-820
+  s_a71cc4d896fb30::t_8c286b863a3f96 311-312,314-315,431-432,434-437,450-451,697,704-707,709-711
+  s_a71cc4d896fb30::t_a3f3de537887c7 504-510,516-534,538,541-557,565,568-618,621-632
+  s_a71cc4d896fb30::t_08417e5c326b59 3,13,23,82,150-161,167-188,197-198,202-203,205-267,269-275,832-834,885-886,893-894,909,938-939,965-966,977,994-995,999-1000,1054-1055,1062,1067-1068,1080-1081,1122-1123,1136-1137,1169-1170,1219,1221,1231,1233,1259-1260,1264,1269-1270,1317,1351-1352,1356,1373-1374,1397-1398
+  s_a71cc4d896fb30::t_582110c731ae85 539-540,558-561,564,567,619-620
+  s_a71cc4d896fb30::t_8db776c2c3be76 562-563
+  s_a71cc4d896fb30::t_d6e53138c1cf78 86,502-503,535-537
+  s_a71cc4d896fb30::t_9600a6a6787503 12
+  s_a71cc4d896fb30::t_af3088174edf38 268,497
+.github/workflows/nequi-sandbox.yml
+  s_a71cc4d896fb30::t_7424cc9a4cca0f 27,31
+  s_a71cc4d896fb30::t_7c8f5dab8f7a59 22,24-26
+  s_a71cc4d896fb30::t_38613efff9cc15 1-21,23,28-30,32-46
+apps/server/src/shell/subscription/contract.ts
+  s_a71cc4d896fb30::t_a333fb8d261b7d 10-11,13,153-156,181-183
+  s_a71cc4d896fb30::t_891a211d9a64f2 8,102-103,107-108,112-113,117-118,122-123,127-128,140-141,163,166,170,187,190-196,203-204,210-211,217-218,242,244,246
+  s_a71cc4d896fb30::t_08417e5c326b59 18,160
+  s_a71cc4d896fb30::t_d709a09e027c8c 9,172,177-180,184,202,209,216
+apps/server/cloudflare/subscription/internal/enrollment-admission.ts
+  s_a71cc4d896fb30::t_08417e5c326b59 39,68-69
+apps/server/cloudflare/subscription/internal/billing-workflow.ts
+  s_a71cc4d896fb30::t_a333fb8d261b7d 2-6
+  s_a71cc4d896fb30::t_4bafba921babab 73,125,460
+apps/server/cloudflare/migrations/0030_payment_enrollment.sql
+  s_a71cc4d896fb30::t_9b776e08648a91 1-3,5,7-11,13,15-16,19-22,27-28,31,33-34,36-40
+  s_a71cc4d896fb30::t_7d412ddac3713b 4,6,12,14,17-18,23,26,35
+  s_a71cc4d896fb30::t_5fab1bc81365a2 30
+  s_a71cc4d896fb30::t_bbad369e24fd3b 24-25,29,32
+apps/server/cloudflare/subscription/internal/wompi-client.test.ts
+  s_a71cc4d896fb30::t_52f7c014ea726f 183,191
+  s_a71cc4d896fb30::t_9c9511af80d3d4 157-160,173,181-182,187-190
+  s_a71cc4d896fb30::t_23508c5f2b32a6 194,201-202
+  s_a71cc4d896fb30::t_a333fb8d261b7d 161-172,174-180,184-186,220-225
+  s_a71cc4d896fb30::t_744f052dbf53ef 126-130
+  s_a71cc4d896fb30::t_ac98630f03fee4 150-151
+  s_a71cc4d896fb30::t_8c286b863a3f96 131-149
+docs/operations/admission-coverage.md
+  s_a71cc4d896fb30::t_7424cc9a4cca0f 18
+  s_a71cc4d896fb30::t_817e6999a051d4 23
+apps/server/cloudflare/maintenance/runtime.ts
+  s_a71cc4d896fb30::t_08417e5c326b59 28,180
+infra/cloudflare/edge-security.ts
+  s_a71cc4d896fb30::t_817e6999a051d4 108-109,130
+.oxlintrc.json
+  s_a71cc4d896fb30::t_f63dae1314d553 259
+  s_a71cc4d896fb30::t_4506402e5d2b17 262
+GLOSSARY.md
+  s_a71cc4d896fb30::t_da43af2c5b5ad1 381-395
+apps/server/cloudflare/subscription/subscription-queries.test.ts
+  s_a71cc4d896fb30::t_891a211d9a64f2 39
+  s_a71cc4d896fb30::t_08417e5c326b59 7
+apps/server/cloudflare/test-shards.ts
+  s_a71cc4d896fb30::t_e0462b66f7f795 20-21
+apps/web/src/features/subscription/feature.test.tsx
+  s_a71cc4d896fb30::t_c0bae4fcc14bde 18,482
+  s_a71cc4d896fb30::t_891a211d9a64f2 20-21,77,645,657,667,835
+  s_a71cc4d896fb30::t_a333fb8d261b7d 367-372
+  s_a71cc4d896fb30::t_940d0aa772f089 76
+  s_a71cc4d896fb30::t_40959f5d09802e 496,498
+  s_a71cc4d896fb30::t_9460db587575ab 362,422-424,876,1071
+  s_a71cc4d896fb30::t_7424cc9a4cca0f 11-14,483-495,497,499-526
+  s_a71cc4d896fb30::t_c2a947c6ca6307 10
+  s_a71cc4d896fb30::t_59866b9c6e9d09 527
+apps/server/src/core/subscription/contract.ts
+  s_a71cc4d896fb30::t_a333fb8d261b7d 198-200
+  s_a71cc4d896fb30::t_08417e5c326b59 206
+  s_a71cc4d896fb30::t_e32d326528a350 197,201-203,214-218,266,273,277-278,281,283-284,292,294,296-297,300,302-303,306,308-309,313,315-316,319,321-322,327-335,338,341,344,347,350-351
+apps/web/src/features/subscription/payment-status.ts
+  s_a71cc4d896fb30::t_891a211d9a64f2 1
+docs/research/anti-slop-effect-rules-assessment.md
+  s_a71cc4d896fb30::t_7424cc9a4cca0f 16
+apps/web/ARCHITECTURE.md
+  s_a71cc4d896fb30::t_90c9cc5387726b 36-41,66
+scripts/check-lint-suppressions.test.ts
+  s_a71cc4d896fb30::t_286d1cafe02d97 177
+apps/server/cloudflare/subscription/payment-enrollment-d1.test-fixture.ts
+  s_a71cc4d896fb30::t_702d419a944c92 9-10,42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "593ac62d73361c4407e01b0be3388bb439ae46eb",
+  "prompts": {},
+  "sessions": {
+    "s_a71cc4d896fb30": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0ff1c-4f98-75dc-b66e-204339d036e3",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

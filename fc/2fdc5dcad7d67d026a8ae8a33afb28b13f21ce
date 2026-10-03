@@ -1,0 +1,21 @@
+tools/depcruise/publication.mjs
+  s_fc768a11c2de27::t_af53a306ba44aa 37-38
+tools/depcruise/publication.test.mjs
+  s_fc768a11c2de27::t_08d84de7c43f23 52-69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "fc2fdc5dcad7d67d026a8ae8a33afb28b13f21ce",
+  "prompts": {},
+  "sessions": {
+    "s_fc768a11c2de27": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a1020d-bbdc-74ae-ba1b-046fd82fa605",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

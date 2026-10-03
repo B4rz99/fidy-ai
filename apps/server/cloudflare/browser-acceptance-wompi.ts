@@ -1,5 +1,5 @@
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
-import { db, firstCardSourceId, firstCardUserId, sourceId } from "./browser-acceptance-seed";
+import { db, firstCardSourceId, firstDaviplataSourceId, sourceId } from "./browser-acceptance-seed";
 
 export const providerPublicKey = `pub_test_${"f1d7c0de".repeat(3)}`;
 export const providerPrivateKey = `prv_test_${"f1d7c0de".repeat(3)}`;
@@ -49,12 +49,21 @@ const WompiCharge = Schema.Struct({
 });
 const monthlyChargeCents = 2_890_000;
 const transactionPrefix = "acceptance-transaction-";
+const expectedSourceIds = {
+  "usuario@example.com": sourceId,
+  "tarjeta@example.com": firstCardSourceId,
+  "daviplata@example.com": firstDaviplataSourceId,
+};
 const ProviderAttempt = Schema.Struct({
   id: Schema.String,
   wompi_reference: Schema.String,
   amount: Schema.String,
   wompi_source_id: Schema.Finite,
-  billing_email: Schema.String,
+  billing_email: Schema.Literals([
+    "usuario@example.com",
+    "tarjeta@example.com",
+    "daviplata@example.com",
+  ]),
   method: Schema.Literals(["card", "nequi", "daviplata"]),
 });
 type ProviderAttempt = typeof ProviderAttempt.Type;
@@ -63,8 +72,8 @@ const matchesMethod = (charge: typeof WompiCharge.Type, attempt: ProviderAttempt
 const matchesCharge = (charge: typeof WompiCharge.Type, attempt: ProviderAttempt): boolean =>
   charge.amount_in_cents === monthlyChargeCents &&
   charge.currency === "COP" &&
-  charge.payment_source_id ===
-    (attempt.billing_email === "tarjeta@example.com" ? firstCardSourceId : sourceId) &&
+  charge.payment_source_id === expectedSourceIds[attempt.billing_email] &&
+  charge.payment_source_id === attempt.wompi_source_id &&
   charge.customer_email === attempt.billing_email &&
   attempt.amount === "28900";
 const decodeCharge = (request: Request): Promise<Option.Option<typeof WompiCharge.Type>> =>
@@ -124,44 +133,44 @@ const SourceCreation = Schema.Struct({
   acceptance_token: Schema.String,
   accept_personal_auth: Schema.String,
 });
+const firstSources = {
+  CARD: { id: firstCardSourceId, token: "tok_acceptance_first_card", email: "tarjeta@example.com" },
+  DAVIPLATA: {
+    id: firstDaviplataSourceId,
+    token: syntheticDaviplataToken,
+    email: "daviplata@example.com",
+  },
+} as const;
 const createSourceResponse = (request: Request): Promise<Response> => {
   if (request.method !== "POST") return Promise.resolve(new Response(null, { status: 405 }));
   return request.json().then((body: unknown) => {
     const source = Schema.decodeUnknownOption(SourceCreation)(body);
     if (Option.isNone(source)) return new Response(null, { status: 400 });
     const expected = merchantBody.data;
-    const expectedToken =
-      source.value.type === "DAVIPLATA" ? syntheticDaviplataToken : "tok_acceptance_first_card";
+    const fixture = firstSources[source.value.type];
     if (
-      source.value.token !== expectedToken ||
-      source.value.customer_email !== "tarjeta@example.com" ||
+      source.value.token !== fixture.token ||
+      source.value.customer_email !== fixture.email ||
       source.value.acceptance_token !== expected.presigned_acceptance.acceptance_token ||
       source.value.accept_personal_auth !== expected.presigned_personal_data_auth.acceptance_token
     ) {
       return new Response(null, { status: 400 });
     }
-    return Response.json({ data: { id: firstCardSourceId, status: "PENDING" } }, { status: 201 });
+    return Response.json({ data: { id: fixture.id, status: "PENDING" } }, { status: 201 });
   });
 };
-const DaviplataCandidate = Schema.Struct({ method: Schema.Literal("daviplata") });
-const candidateSourceResponse = (): Promise<Response> =>
-  db
-    .prepare(`SELECT method FROM card_enrollments WHERE user_id = ? AND wompi_candidate_source_id = ?
-    AND status IN ('creating', 'verifying', 'available')`)
-    .bind(firstCardUserId, firstCardSourceId)
-    .first()
-    .then((row) =>
-      Response.json({
-        data: {
-          id: firstCardSourceId,
-          type: Option.isSome(Schema.decodeUnknownOption(DaviplataCandidate)(row))
-            ? "DAVIPLATA"
-            : "CARD",
-          status: "AVAILABLE",
-          customer_email: "tarjeta@example.com",
-        },
-      })
-    );
+const availableSources = [
+  { id: sourceId, type: "CARD", customer_email: "usuario@example.com" },
+  { id: firstCardSourceId, type: "CARD", customer_email: "tarjeta@example.com" },
+  { id: firstDaviplataSourceId, type: "DAVIPLATA", customer_email: "daviplata@example.com" },
+] as const;
+const availableSourceResponse = (pathname: string): Option.Option<Response> =>
+  Option.map(
+    Option.fromNullishOr(
+      availableSources.find((source) => pathname === `/v1/payment_sources/${source.id}`)
+    ),
+    (source) => Response.json({ data: { ...source, status: "AVAILABLE" } })
+  );
 export const providerResponse = (request: Request): Promise<Response> => {
   const requestUrl = request.url;
   if (requestUrl.includes("/v1/transactions")) return transactionResponse(request);
@@ -169,21 +178,8 @@ export const providerResponse = (request: Request): Promise<Response> => {
   if (new URL(requestUrl).pathname.startsWith("/v1/tokens/daviplata/")) {
     return Promise.resolve(daviplataApprovalResponse(request));
   }
-  if (requestUrl.includes(`/v1/payment_sources/${firstCardSourceId}`)) {
-    return candidateSourceResponse();
-  }
   if (requestUrl.endsWith("/v1/payment_sources")) return createSourceResponse(request);
-  if (requestUrl.includes(`/v1/payment_sources/${sourceId}`)) {
-    return Promise.resolve(
-      Response.json({
-        data: {
-          id: sourceId,
-          type: "CARD",
-          status: "AVAILABLE",
-          customer_email: "usuario@example.com",
-        },
-      })
-    );
-  }
+  const source = availableSourceResponse(new URL(requestUrl).pathname);
+  if (Option.isSome(source)) return Promise.resolve(source.value);
   return Promise.resolve(Response.json({ data: { id: sourceId, status: "PENDING" } }));
 };

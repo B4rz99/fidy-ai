@@ -52,6 +52,7 @@ await migrations.reduce<Promise<void>>(
 // WhatsApp approval; the browser still obtains its cookie only by redeeming with the real Core.
 export const fixtureUserId = "24000000-0000-4000-8000-000000000241";
 export const firstCardUserId = "24000000-0000-4000-8000-000000000281";
+export const firstDaviplataUserId = "24000000-0000-4000-8000-000000000291";
 const otherUserId = "24000000-0000-4000-8000-000000000261";
 const otherTransactionId = "24000000-0000-4000-8000-000000000262";
 const backupRecoveryCode = "ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2";
@@ -139,6 +140,7 @@ await db
 const sourceEnrollmentId = "24000000-0000-4000-8000-000000000271";
 export const sourceId = 3891;
 export const firstCardSourceId = 3892;
+export const firstDaviplataSourceId = 8276;
 const enrollmentLifetimeMs = 900_000;
 await db
   .prepare(`INSERT INTO card_enrollments
@@ -179,6 +181,14 @@ await seedIdentity({
   bsuid: "CO.FirstCard",
   email: "tarjeta@example.com",
   consentId: "24000000-0000-4000-8000-000000000282",
+});
+
+// The browser suite retains history in one D1. DaviPlata must not inherit the first CARD source.
+await seedIdentity({
+  userId: firstDaviplataUserId,
+  bsuid: "CO.FirstDaviplata",
+  email: "daviplata@example.com",
+  consentId: "24000000-0000-4000-8000-000000000292",
 });
 
 const recoveryDigest = new Uint8Array(

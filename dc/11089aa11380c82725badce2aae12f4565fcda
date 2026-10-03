@@ -1,0 +1,38 @@
+infra/cloudflare/verify-edge-policy.test.ts
+  s_a71cc4d896fb30::t_7f621505ca5449 7
+apps/web/src/transport/wompi-nequi.ts
+  s_a71cc4d896fb30::t_b70532f83aa459 31,41,74,89,121
+apps/web/src/features/subscription/enrollment-gateway.ts
+  s_a71cc4d896fb30::t_0f91765051ae2b 148
+package.json
+  s_a71cc4d896fb30::t_6e143ff96d862b 53
+apps/web/src/features/subscription/feature.tsx
+  s_a71cc4d896fb30::t_e04b2d0bfcfd26 370-371,377
+apps/web/src/transport/wompi-nequi.test.ts
+  s_a71cc4d896fb30::t_b7cd83077481d3 22,40
+apps/web/src/transport/wompi-nequi-lifecycle.test.ts
+  s_a71cc4d896fb30::t_075f15b7c8d76e 7-10,31
+  s_a71cc4d896fb30::t_434a850868e932 1-6,11-14,32-33,73,92-98,137,150
+  s_a71cc4d896fb30::t_b0c52e7cbfdab9 16-30,37-72,74-91,99-136,138-147,149,151-154,156-184
+  s_a71cc4d896fb30::t_ce615f94ad62d7 15,34-36,148,155
+infra/cloudflare/verify-edge-policy.ts
+  s_a71cc4d896fb30::t_e423b2118a8ea8 5
+bun.lock
+  s_a71cc4d896fb30::t_c4aa9721c701d1 11,335,337,339,341,343,345,347,349
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "dc11089aa11380c82725badce2aae12f4565fcda",
+  "prompts": {},
+  "sessions": {
+    "s_a71cc4d896fb30": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0ff1c-4f98-75dc-b66e-204339d036e3",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

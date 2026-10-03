@@ -17,12 +17,12 @@ import {
   type CanonicalToolEvidence,
   type TranscriptText,
   type TranscriptTurnId,
-} from "@fidy/server/agent-contract";
-import { UserId } from "@fidy/server/identity-reference";
-import { type CanonicalOperationId } from "~/core/canonical-operations/contract";
-import { atomicBatchOperation } from "~/shell/operations/contract";
-import type { HostedInferenceService } from "@fidy/server/hosted-inference";
-import { makeHostedSender } from "@fidy/server/whatsapp-runtime";
+} from "../../../src/core/agent/contract";
+import { UserId } from "../../../src/core/identity/contract";
+import { type CanonicalOperationId } from "../../../src/core/canonical-operations/contract";
+import { atomicBatchOperation } from "../../../src/shell/operations/contract";
+import type { HostedInferenceService } from "../../../src/shell/hosted-inference/contract";
+import { makeHostedSender } from "../../../src/shell/channels/whatsapp/runtime";
 import {
   Cause,
   Context,
@@ -52,9 +52,12 @@ import {
   resumeWhatsAppTurn,
 } from "./hosted-turn";
 import { expireHostedPending, finishHostedTurn } from "./turn-store";
-import { makeUserCloudflareHostedInference, optionalHostedInference } from "../../ai/workers-ai";
+import { makeUserCloudflareHostedInference, optionalHostedInference } from "../../ai/runtime";
 import { transactionNow, transactionUnavailable } from "../../canonical-work/operations";
-import { cloudflareWorkerTelemetry, observeProviderFetch } from "../../runtime/telemetry";
+import {
+  cloudflareWorkerTelemetry,
+  observeProviderFetch,
+} from "../../runtime/telemetry/operations";
 import {
   WhatsAppStatusAdmission as StatusAdmission,
   WhatsAppTurnAdmission as TurnAdmission,

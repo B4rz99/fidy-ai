@@ -10,7 +10,37 @@ import type {
   PendingConsentInput,
 } from "./contract";
 import { acceptedReplies, declinedReplies, normalizeReply } from "~/core/consent/internal/replies";
-import { disclosures } from "~/core/consent/internal/pat-disclosures";
+
+const patRevocationRevision = "pat-revocation-2026-09";
+const patRevocationDisclosures = {
+  "user-revoke-one": {
+    _tag: "AuthenticatedWeb",
+    revision: patRevocationRevision,
+    text: "User revoked this PAT.",
+  },
+  "user-revoke-all": {
+    _tag: "AuthenticatedWeb",
+    revision: patRevocationRevision,
+    text: "User revoked all active PATs.",
+  },
+  "user-revoke-unclaimed": {
+    _tag: "AuthenticatedWeb",
+    revision: patRevocationRevision,
+    text: "User revoked all unclaimed PAT approvals.",
+  },
+  "approved-unclaimed-expiry": {
+    _tag: "AutomaticPolicy",
+    revision: patRevocationRevision,
+    text: "Unclaimed PAT approval expired under the fixed claim deadline.",
+    policyReason: "pat-approved-unclaimed-expiry",
+  },
+  "fixed-lifetime-expiry": {
+    _tag: "AutomaticPolicy",
+    revision: patRevocationRevision,
+    text: "PAT expired at the fixed lifetime deadline.",
+    policyReason: "pat-fixed-lifetime-expiry",
+  },
+} as const satisfies Record<PATRevocationOrigin, PATRevocationDisclosure>;
 
 /**
  * Classifies one decoded reply using a closed explicit grammar. A bare “sí” is
@@ -94,4 +124,4 @@ export const isConsentIngressDecisionPhase = (exchange: ConsentIngressExchange):
 /** Derives the fixed disclosure and honest origin for one terminal PAT grant transition. */
 export const decidePATRevocation = <Origin extends PATRevocationOrigin>(
   origin: Origin
-): PATRevocationDisclosure<Origin> => disclosures[origin];
+): PATRevocationDisclosure<Origin> => patRevocationDisclosures[origin];

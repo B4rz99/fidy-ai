@@ -1,5 +1,6 @@
 import { logoutWebSessionEndpoint } from "~/shell/web-session/contract";
 import {
+  BrowserLoginPairingId,
   StartedBrowserLoginPairing,
   browserLoginPollingIntervalSeconds,
 } from "~/core/browser-login/contract";
@@ -7,7 +8,7 @@ import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
-import { BrowserLoginPairingId } from "~/core/browser-login/reference";
+
 import {
   type CanonicalRejectedFailure,
   NextOperations,

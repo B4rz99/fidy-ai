@@ -12,14 +12,14 @@ import type { AccessTier } from "~/core/access-tier/contract";
 import { type OperationId, operationCatalog } from "~/shell/api";
 import { type CanonicalCaller, type ResolvedCaller } from "~/shell/authorization/contract";
 import { toAccessCaller } from "~/shell/authorization/operations";
-import type { UserId } from "~/core/identity/reference";
+import type { UserId } from "~/core/identity/contract";
 import type { CanonicalInput } from "./contract";
 import {
   type OperationAccessCaller,
   type OperationPolicyValue,
 } from "~/shell/canonical-policy/contract";
 import { decideOperationAccess, isHostedVisible } from "~/shell/canonical-policy/operations";
-import { type PartialInput } from "~/shell/_shared/partial-input";
+import { type PartialInput } from "~/shell/partial-input/contract";
 import {
   NextOperations,
   SuggestedOperation,

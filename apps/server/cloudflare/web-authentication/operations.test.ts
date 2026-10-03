@@ -1,6 +1,10 @@
 import { Clock, Effect, Option } from "effect";
 import { afterAll, expect, it } from "vitest";
-import { DisabledTelemetryResource, makeTelemetryService } from "@fidy/server/telemetry";
+import {
+  DisabledTelemetryResource,
+  makeTelemetryService,
+} from "../../src/shell/observability/operations";
+
 import { isolatedTestDatabases } from "../d1-test-fixture";
 import { authenticateWebSession } from "../web-session/operations";
 import { handleWebAuthentication } from "./operations";

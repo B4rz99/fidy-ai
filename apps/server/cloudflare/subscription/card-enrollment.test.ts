@@ -1,14 +1,13 @@
 import { type Miniflare } from "miniflare";
 import { afterEach, expect, it, vi } from "vitest";
-import { CardEnrollment, PaymentRequestId } from "~/core/subscription/contract";
-import { UserId } from "@fidy/server/identity-reference";
+import { CardEnrollment, PaymentRequestId } from "../../src/core/subscription/contract";
+import { UserId } from "../../src/core/identity/contract";
 import { Clock, Data, Effect, Schema } from "effect";
 import { billingAttemptIdFor } from "./internal/card-enrollment";
-import { handleCardEnrollment } from "./operations";
-import { sweepExpiredCardPreparationAdmission } from "./runtime";
-import { browserOrigins, localCanonicalReadBearer } from "../runtime/topology";
+import { handleCardEnrollment, sweepExpiredCardPreparationAdmission } from "./runtime";
+import { browserOrigins, localCanonicalReadBearer } from "../runtime/contract";
 import { makePublicWorker } from "../public-worker";
-import { cloudflareWorkerTelemetry } from "../runtime/telemetry";
+import { cloudflareWorkerTelemetry } from "../runtime/telemetry/operations";
 import { makeCardEnrollmentD1 } from "./card-enrollment-d1.test-fixture";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure") {}

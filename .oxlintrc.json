@@ -316,17 +316,11 @@
         "import/extensions": "off"
       }
     },
-    // Only the runner needs the `.mjs` exception turned back off. That
-    // exception keys off the *resolved* file, so it also demands an extension
-    // on a package subpath that happens to resolve to one — which an
-    // exports-map key cannot carry. The runner imports the cruiser's subpaths
-    // and no relative .mjs at all, so the exception is all cost and no use to
-    // it. The typed plugin's helper import already uses Node ESM's `.js` extension.
+    // Node ESM requires local extensions while dependency-cruiser's exports require extensionless
+    // package subpaths. This resolver cannot express both; all tool imports are exercised by Node.
     {
       "files": ["tools/depcruise/*.mjs"],
-      "rules": {
-        "import/extensions": ["error", "never"]
-      }
+      "rules": { "import/extensions": "off" }
     },
     // The functional-core fences (ARCHITECTURE.md §3). `no-restricted-imports`
     // is an undescribed passthrough in oxlint's schema, so a typo in these

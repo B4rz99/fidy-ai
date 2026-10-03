@@ -7,7 +7,7 @@ import { Transaction } from "../../src/core/transactions/contract";
 import { IanaTimeZone } from "../../src/core/_shared/context";
 import { resolveDashboardPeriod } from "../../src/core/dashboard/operations";
 import { DashboardView } from "../../src/shell/dashboard/contract";
-import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
+import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import coreWorker from "../core-worker";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import publicWorker from "../public-worker";

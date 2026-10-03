@@ -12,9 +12,9 @@ import {
 } from "~/shell/subscription/internal/queries";
 import { Effect, Option, Schema } from "effect";
 import { type SqlClient } from "effect/unstable/sql";
-import { type UserId } from "~/core/identity/reference";
+import { type UserId } from "~/core/identity/contract";
 import { SubscriptionOffers, SubscriptionStatus } from "~/core/subscription/contract";
-import { type OwnedStatement } from "~/shell/_shared/owned-statement";
+import { type OwnedStatement } from "~/shell/owner-write/contract";
 import { type Unavailable } from "~/shell/public-http/contract";
 
 /** Read the complete immutable published offer set, or fail closed if it is unavailable. */

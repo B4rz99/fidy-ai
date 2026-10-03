@@ -3,11 +3,12 @@ import {
   Transaction,
   TransactionId,
   UpdateTransactionInput,
-  encodeMoneyAmount,
-} from "@fidy/server/transactions-contract";
+} from "../../../src/core/transactions/contract";
+import { encodeMoneyAmount } from "../../../src/core/_shared/money";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { prepareOwnerAuditCall } from "@fidy/server/audit";
-import { RequestBodyPolicy, boundedJsonBody } from "../../http/request-body";
+import { prepareOwnerAuditCall } from "../../../src/shell/audit/operations";
+import { RequestBodyPolicy } from "../../http/contract";
+import { boundedJsonBody } from "../../http/operations";
 import {
   type TransactionBoundaryFailure,
   type TransactionCaller,

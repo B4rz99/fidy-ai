@@ -3,8 +3,8 @@ import {
   StatementSourceFormat,
   StatementStagingId,
   StatementSubmissionId,
-} from "@fidy/server/ingestion-contract";
-import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
+} from "../../src/shell/ingestion/contract";
+import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import { Clock, Data, Effect, Option, Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { afterAll, afterEach, expect, it } from "vitest";
@@ -32,7 +32,7 @@ import {
   sweepExpiredUploadAdmission,
 } from "./runtime";
 import coreWorker from "../core-worker";
-import { observeOperationalHealth } from "../runtime/operational-health";
+import { observeOperationalHealth } from "../runtime/operational-health/operations";
 import publicWorker from "../public-worker";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure")<{

@@ -2,8 +2,8 @@ import { type Miniflare } from "miniflare";
 import { afterEach, expect } from "vitest";
 import { it as effectIt } from "@effect/vitest";
 import { Clock, Effect, Option, Schema } from "effect";
-import { SubscriptionOffers, SubscriptionStatus } from "~/core/subscription/contract";
-import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
+import { SubscriptionOffers, SubscriptionStatus } from "../../src/core/subscription/contract";
+import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import { makeCardEnrollmentD1 } from "./card-enrollment-d1.test-fixture";
 import { executeProtectedSubscriptionQuery } from "./operations";
 

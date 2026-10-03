@@ -2,7 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import assert from "node:assert/strict";
-import { E164PhoneNumber, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
+import { E164PhoneNumber, WhatsAppBusinessScopedUserId } from "~/core/identity/contract";
 import { TranscriptText } from "~/core/agent/contract";
 import { TelemetryHttpStatus } from "~/shell/observability/contract";
 import {

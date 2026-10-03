@@ -1,4 +1,4 @@
-import type { OwnedStatement } from "../../src/shell/_shared/owned-statement";
+import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 
 /** Origin-qualified WhatsApp decision, authenticated by the channel before pairing approval. */
 export type BrowserPairingApproval = Readonly<{

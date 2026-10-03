@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import type { TelemetryWorkRecord } from "@fidy/server/telemetry";
+import type { TelemetryWorkRecord } from "../../src/shell/observability/contract";
 import { Effect, Exit } from "effect";
 import { expect } from "vitest";
 import {
@@ -10,7 +10,7 @@ import {
   observeWorkerPromise,
   observeWorkerResponse,
   workerRelease,
-} from "./telemetry";
+} from "./telemetry/operations";
 
 it.effect("reports a durable attempt without replacing its rejection or exporting its cause", () =>
   Effect.gen(function* () {

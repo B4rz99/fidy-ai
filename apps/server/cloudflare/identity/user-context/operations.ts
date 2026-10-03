@@ -1,4 +1,4 @@
-import type { UserContext } from "@fidy/server/identity-contract";
+import type { UserContext } from "../../../src/core/identity/contract";
 import type { Effect, Option } from "effect";
 import type { UserContextRead, UserContextStatement, UserContextUnavailable } from "./contract";
 import { loadContext, prepareContext } from "./internal/context";

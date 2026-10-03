@@ -1,16 +1,16 @@
-import type { OwnedStatement } from "~/shell/_shared/owned-statement";
+import type { OwnedStatement } from "~/shell/owner-write/contract";
 import { Data, type Effect, Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
 import { BrowserLoginPairingInvalidApi } from "~/shell/browser-login/contract";
-import { BrowserLoginPrivateVerifier } from "~/core/browser-login/contract";
-import { BrowserLoginPairingId } from "~/core/browser-login/reference";
+import { BrowserLoginPairingId, BrowserLoginPrivateVerifier } from "~/core/browser-login/contract";
+
 import {
   EmailAddress,
   type EmailProofPurpose,
   EmailVerificationCode,
   browserPairingEmailRetryAfterSeconds,
 } from "~/core/email-authentication/contract";
-import type { UserId } from "~/core/identity/reference";
+import type { UserId } from "~/core/identity/contract";
 import { BackupRecoveryCode } from "~/core/recovery/contract";
 import {
   AtomicBatchEligible,

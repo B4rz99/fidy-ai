@@ -3,11 +3,11 @@ import {
   prepareAuthorizedAuditCall,
   recordCanonicalPATWork,
   refusedByAuditBudget,
-} from "@fidy/server/audit";
-import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
-import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-operations";
+} from "../../../src/shell/audit/operations";
+import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
+import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
-import { activeProUserCondition } from "~/shell/access-tier/operations";
+import { activeProUserCondition } from "../../../src/shell/access-tier/operations";
 import { prepareOwnedStatement } from "../../database/operations";
 import {
   type TransactionCaller,
@@ -19,15 +19,13 @@ import {
 } from "../../canonical-work/operations";
 import {
   type EmailForwardingAddress,
+  EmailForwardingAddressId,
+  EmailForwardingLocalPart,
   EmailForwardingStatus,
   freeForwardedEmailCap,
 } from "../../../src/core/ingestion/contract";
 
 import { emailAllowancePeriod } from "../../../src/core/ingestion/operations";
-import {
-  EmailForwardingAddressId,
-  EmailForwardingLocalPart,
-} from "../../../src/core/ingestion/reference";
 
 const AddressRow = Schema.Struct({
   id: EmailForwardingAddressId,

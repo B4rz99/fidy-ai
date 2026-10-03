@@ -1,6 +1,10 @@
 import { Schema } from "effect";
-import { UserId } from "@fidy/server/identity-reference";
-import { BillingEmail, CardEnrollmentId, PaymentRequestId } from "~/core/subscription/contract";
+import { UserId } from "../../../src/core/identity/contract";
+import {
+  BillingEmail,
+  CardEnrollmentId,
+  PaymentRequestId,
+} from "../../../src/core/subscription/contract";
 
 const Claim = Schema.Struct({
   userId: UserId,

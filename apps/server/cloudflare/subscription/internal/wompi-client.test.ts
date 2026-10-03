@@ -1,4 +1,4 @@
-import { TestCrypto } from "~/shell/testing/crypto-harness";
+import { TestCrypto } from "../../../src/shell/testing/crypto-harness";
 import { expect, it, layer } from "@effect/vitest";
 import {
   Cause,
@@ -12,11 +12,14 @@ import {
   Option,
   Redacted,
 } from "effect";
-import { OutboundHttp } from "~/shell/outbound-http/operations";
-import { testOutboundTransportLayer } from "~/shell/outbound-http/testing";
-import { BillingEmail } from "~/core/subscription/contract";
+import { OutboundHttp } from "../../../src/shell/outbound-http/operations";
+import { testOutboundTransportLayer } from "../../../src/shell/outbound-http/testing";
+import { BillingEmail } from "../../../src/core/subscription/contract";
 import { WompiSourceId } from "./wompi-model";
-import { exitFailure, renderedFailure } from "~/shell/testing/credential-evidence-harness";
+import {
+  exitFailure,
+  renderedFailure,
+} from "../../../src/shell/testing/credential-evidence-harness";
 import {
   WompiEnrollmentClient,
   WompiSourceCreationFailed,

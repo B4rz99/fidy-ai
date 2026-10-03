@@ -7,7 +7,7 @@ import {
   type OperationPolicyValue,
   getOperationPolicy,
 } from "~/shell/canonical-policy/contract";
-import { makePartialInputSchema } from "~/shell/_shared/partial-input";
+import { makePartialInputSchema } from "~/shell/partial-input/contract";
 
 type OperationSchema = Schema.Codec<unknown, Schema.Json, never, never>;
 type PartialInputSchema = Schema.Codec<unknown, unknown>;

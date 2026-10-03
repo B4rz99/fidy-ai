@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
 import { afterAll, expect, it } from "vitest";
-import { currentDisclosureFor } from "@fidy/server/consent-operations";
-import { DisclosureSnapshot } from "@fidy/server/consent-contract";
+import { currentDisclosureFor } from "../../src/shell/consent/operations";
+import { DisclosureSnapshot } from "../../src/shell/consent/contract";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import {
   prepareConsentAction,

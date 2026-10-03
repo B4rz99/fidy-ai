@@ -1,7 +1,7 @@
 import { it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { afterAll, expect } from "vitest";
-import { CategoryId } from "../../src/core/categories/reference";
+import { CategoryId } from "../../src/core/categories/contract";
 import {
   NotificationInterpretationEvidence,
   TransactionExtraction,

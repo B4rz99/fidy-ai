@@ -1,4 +1,4 @@
-import { operationCatalog } from "~/shell/api";
+import { operationCatalog } from "../../../src/shell/api";
 import { type Cause, Effect, Option } from "effect";
 import type { TransactionSubject } from "../../canonical-work/operations";
 import { executeProtectedCategories, listOwnKeywordRules } from "../../categories/operations";

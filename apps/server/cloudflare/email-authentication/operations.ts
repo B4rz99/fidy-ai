@@ -10,8 +10,8 @@ import type {
   VerifiedEmailQueryInput,
 } from "./contract";
 import type { Crypto, Effect, Option } from "effect";
-import type { EmailStatus } from "@fidy/server/consent-contract";
-import type { OwnedStatement } from "../../src/shell/_shared/owned-statement";
+import type { EmailStatus } from "../../src/shell/consent/contract";
+import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 
 import {
   findOnboardingEmailReplay as findReplay,

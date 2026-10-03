@@ -1,7 +1,7 @@
 import { prepareConsentAction } from "../../consent/operations";
 import { EmailForwardingAddress } from "../../../src/core/ingestion/contract";
 import { Effect, Option, Schema } from "effect";
-import { dailyAuditExhausted, refusedByAuditBudget } from "@fidy/server/audit";
+import { dailyAuditExhausted, refusedByAuditBudget } from "../../../src/shell/audit/operations";
 import { forwardingAddressAudit, forwardingAddressGuardAudit } from "./forwarding-address";
 import {
   callerScope,

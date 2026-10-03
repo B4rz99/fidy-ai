@@ -6,21 +6,21 @@ import {
   revokeEveryPAT,
   revokeEveryPairing,
   revokeOnePAT,
-} from "@fidy/server/tokens-operations";
+} from "../../../src/shell/tokens/operations";
 import {
   recordAllPATRevocations,
   recordOnePATRevocation,
   recordPATList,
   refusedByAuditBudget,
-} from "@fidy/server/audit";
-import { ActivePATList } from "@fidy/server/tokens-domain";
+} from "../../../src/shell/audit/operations";
+import { ActivePATList } from "../../../src/core/tokens/contract";
 import { type Cause, Effect, Option, Schema } from "effect";
-import { freshSessionParams } from "@fidy/server/web-session-operations";
+import { freshSessionParams } from "../../../src/shell/web-session/operations";
 import {
   revokeAllPATConsents,
   revokeAllPairingConsents,
   revokeOnePATConsent,
-} from "@fidy/server/consent-operations";
+} from "../../../src/shell/consent/operations";
 import {
   type SessionRow,
   canonical,
@@ -34,7 +34,7 @@ import {
   webSession,
 } from "./pat-shared";
 import { newId } from "../../secret-material/operations";
-import { currentMillis } from "../../runtime/clock";
+import { currentMillis } from "../../runtime/operations";
 import { commitPATUnit } from "./pat-unit";
 import { prepareOwnedStatement } from "../../database/operations";
 

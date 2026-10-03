@@ -1,7 +1,11 @@
-import { type StatementParseFailed, statementParserLimits } from "@fidy/server/ingestion-contract";
-import { parseStatementFile } from "@fidy/server/ingestion-operations";
+import {
+  type StatementParseFailed,
+  statementParserLimits,
+} from "../../src/shell/ingestion/contract";
+import { parseStatementFile } from "../../src/shell/ingestion/operations";
 import { Effect } from "effect";
-import { BoundedBodyReadFailed, collectBoundedRequestBody } from "../http/bounded-request-body";
+import { BoundedBodyReadFailed } from "../http/contract";
+import { collectBoundedRequestBody } from "../http/operations";
 
 type RejectionReason =
   | BoundedBodyReadFailed["reason"]

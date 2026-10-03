@@ -2,7 +2,7 @@ import {
   type StagedStatementBytes,
   type StatementStagingFailureReason,
   StatementStagingId,
-} from "@fidy/server/ingestion-contract";
+} from "../../src/shell/ingestion/contract";
 import { Data, Effect, Encoding, Fiber, Option, Result } from "effect";
 import { Miniflare } from "miniflare";
 import { applyTestMigration } from "../d1-test-fixture";

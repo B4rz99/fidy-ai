@@ -1,4 +1,4 @@
-import { type UserId } from "~/core/identity/reference";
+import { type UserId } from "~/core/identity/contract";
 import { type Effect, Option } from "effect";
 import { type SqlClient } from "effect/unstable/sql";
 import { type ActivePATList, type CreateManualPATPayload } from "~/core/tokens/contract";
@@ -8,7 +8,7 @@ import {
   patMetadataResponseFromRows,
   listPATsResponse as readPATs,
 } from "~/shell/tokens/internal/list-pats";
-import { type OwnedStatement } from "~/shell/_shared/owned-statement";
+import { type OwnedStatement } from "~/shell/owner-write/contract";
 import {
   expiredPATConsentIdentities,
   expiredPairingConsentIdentities,

@@ -1,21 +1,18 @@
 import { deriveAnonymousSource } from "./anonymous-admission/operations";
-import { keywordRulePath, listCategoriesPath } from "@fidy/server/categories-path";
-import { atomicBatchOperation } from "~/shell/operations/contract";
-import { emailReplacementOperations } from "@fidy/server/email-authentication-operations";
-import { statementStagingPath } from "@fidy/server/ingestion-contract";
+import { keywordRulePath, listCategoriesPath } from "../src/shell/categories/contract";
+import { atomicBatchOperation } from "../src/shell/operations/contract";
+import { emailReplacementOperations } from "../src/shell/email-authentication/operations";
+import { statementStagingPath } from "../src/shell/ingestion/contract";
 import {
   transactionMethods,
   ownsTransactionPath as transactionPath,
-} from "@fidy/server/transaction-runtime";
-import { ownsMemoryPath as memoryPath } from "@fidy/server/memory-runtime";
-import type { TelemetryService } from "@fidy/server/telemetry";
+} from "../src/shell/transactions/runtime";
+import { ownsMemoryPath as memoryPath } from "../src/shell/memory/runtime";
+import type { TelemetryService } from "../src/shell/observability/contract";
 import { Effect, Option, Schema } from "effect";
-import {
-  type WorkerTelemetryEnvironment,
-  cloudflareWorkerTelemetry,
-  observeWorkerRequest,
-} from "./runtime/telemetry";
-import { browserOrigins } from "./runtime/topology";
+import { type WorkerTelemetryEnvironment } from "./runtime/telemetry/contract";
+import { cloudflareWorkerTelemetry, observeWorkerRequest } from "./runtime/telemetry/operations";
+import { browserOrigins } from "./runtime/contract";
 import {
   SmokeFailureStage,
   SmokeIdentity,
@@ -26,12 +23,12 @@ import {
   smokeIdentityHeader,
   smokeManifest,
   smokePath,
-  smokeProofAccepted,
   smokeProofHeader,
   smokeVersionHeader,
-} from "./runtime/smoke";
+} from "./runtime/release-smoke/contract";
+import { smokeProofAccepted } from "./runtime/release-smoke/operations";
 import { patBrowserRoute, patDirectRoute, patMethods, patRoute } from "./tokens/operations";
-import { canonicalMethods, canonicalOperation, canonicalRoute } from "./routing/canonical-routes";
+import { canonicalMethods, canonicalOperation, canonicalRoute } from "./routing/operations";
 
 type PublicEnvironment = WorkerTelemetryEnvironment & {
   readonly BROWSER_ORIGIN: string;

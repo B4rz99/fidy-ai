@@ -1,4 +1,4 @@
-import { UserId } from "@fidy/server/identity-reference";
+import { UserId } from "../../../src/core/identity/contract";
 import { prepareVerifiedIdentity } from "../../identity/operations";
 import { recordOnboardingConsent } from "../../consent/operations";
 import { verifyOnboardingEmail } from "../../email-authentication/operations";

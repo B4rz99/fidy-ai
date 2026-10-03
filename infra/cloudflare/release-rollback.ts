@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/smoke";
+import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 import { type ReleasePort, type StagedRelease, releaseSchemas } from "./release-controller";
 
 export const RollbackReceipt = Schema.Struct({

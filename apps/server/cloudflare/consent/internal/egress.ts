@@ -1,8 +1,8 @@
-import { UserId } from "@fidy/server/identity-reference";
+import { UserId } from "../../../src/core/identity/contract";
 import { readAdmittedHostedConsent } from "../../agent/operations";
 import { Effect, Option, Schema } from "effect";
-import type { OnboardingConsentBasis } from "@fidy/server/consent-contract";
-import type { TranscriptTurnId } from "@fidy/server/agent-contract";
+import type { OnboardingConsentBasis } from "../../../src/shell/consent/contract";
+import type { TranscriptTurnId } from "../../../src/core/agent/contract";
 import { type ConsentEgressAction, ConsentEgressRefused, ConsentUnavailable } from "../contract";
 import { loadStanding } from "./standing";
 

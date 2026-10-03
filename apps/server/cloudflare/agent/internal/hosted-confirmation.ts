@@ -2,9 +2,9 @@ import {
   CanonicalToolEvidence,
   TranscriptText,
   type TranscriptTurnId,
-} from "@fidy/server/agent-contract";
-import { type UserId } from "@fidy/server/identity-reference";
-import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
+} from "../../../src/core/agent/contract";
+import { type UserId } from "../../../src/core/identity/contract";
+import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
 import { type Cause, Effect, Option, Schema } from "effect";
 import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
 import type { TransactionSubject } from "../../canonical-work/operations";

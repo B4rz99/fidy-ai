@@ -1,4 +1,4 @@
-import { patAtomicAssertion } from "@fidy/server/tokens-operations";
+import { patAtomicAssertion } from "../../../src/shell/tokens/operations";
 
 /** Commit a PAT transition only when its final guarded evidence/audit write succeeded.
  * The last statement is a constraint, not a post-commit check: a zero-row guard rolls back

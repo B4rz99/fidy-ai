@@ -173,7 +173,7 @@ const checks: Array<Check> = [
     "src/shell/operations",
     "src/shell/public-http",
     "src/shell/observability/registry.test.ts",
-    "src/shell/_shared/partial-input.test.ts",
+    "src/shell/partial-input/contract.test.ts",
     "src/shell/agent/tool-confirmation-model.test.ts",
     "--coverage.enabled=false",
   ]),

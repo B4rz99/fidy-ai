@@ -1,14 +1,14 @@
-import { recordClaimedPAT } from "@fidy/server/audit";
-import { ClaimPATPairingPayload } from "@fidy/server/tokens-contract";
-import { PAT, PATPairingDeviceCode, PATPairingId } from "@fidy/server/tokens-domain";
+import { recordClaimedPAT } from "../../../src/shell/audit/operations";
+import { ClaimPATPairingPayload } from "../../../src/shell/tokens/contract";
+import { PAT, PATPairingDeviceCode, PATPairingId } from "../../../src/core/tokens/contract";
 import {
   claimPairingGrant,
   insertClaimedPAT,
   recordPendingPoll,
   recordWrongPairingProof,
   slowPairingPoll,
-} from "@fidy/server/tokens-operations";
-import { decidePATPairingClaim } from "@fidy/server/tokens-decisions";
+} from "../../../src/shell/tokens/operations";
+import { decidePATPairingClaim } from "../../../src/core/tokens/operations";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { PairingRow } from "./pat-pairing";
 import {
@@ -25,7 +25,7 @@ import {
   unavailable,
 } from "./pat-shared";
 import { newId } from "../../secret-material/operations";
-import { currentMillis } from "../../runtime/clock";
+import { currentMillis } from "../../runtime/operations";
 import { commitPATUnit } from "./pat-unit";
 import { prepareOwnedStatement } from "../../database/operations";
 

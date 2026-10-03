@@ -1,5 +1,5 @@
-import { TranscriptText, TranscriptTurnId } from "@fidy/server/agent-contract";
-import { UserId } from "@fidy/server/identity-reference";
+import { TranscriptText, TranscriptTurnId } from "../../../src/core/agent/contract";
+import { UserId } from "../../../src/core/identity/contract";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import {
   HostedDeliveryCorrelationToken,

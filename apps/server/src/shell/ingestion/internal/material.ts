@@ -10,8 +10,6 @@ import {
   IngestSampleId,
   ReceivedEmailId,
   StatementSourceFormat,
-} from "~/core/ingestion/reference";
-import {
   maximumEmailAddressCharacters,
   maximumEmailEvidenceIdCharacters,
   maximumEmailHtmlCharacters,

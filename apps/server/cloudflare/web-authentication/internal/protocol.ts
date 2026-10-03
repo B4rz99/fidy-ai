@@ -1,5 +1,5 @@
 import { completeOnboarding } from "../../onboarding/operations";
-import { webAuthenticationEndpoints } from "@fidy/server/web-authentication-contract";
+import { webAuthenticationEndpoints } from "../../../src/shell/web-authentication/contract";
 import { Cause, Effect, Option } from "effect";
 import { redeemBrowserPairing, startBrowserPairing } from "../../browser-login/operations";
 import {

@@ -1,6 +1,6 @@
+import { admitResource } from "./operations";
 import { Effect } from "effect";
 import {
-  ResourceAdmissionAuthority,
   ResourceAdmissionCharges,
   ResourceAdmissionDurationMs,
   ResourceAdmissionEpochMs,
@@ -11,7 +11,7 @@ import {
   ResourceAdmissionRefused,
   ResourceAdmissionScopeKey,
   ResourceAdmissionUnits,
-} from "./authority";
+} from "./contract";
 
 type Environment = Readonly<{ DB: D1Database }>;
 
@@ -32,15 +32,15 @@ const policy = {
 export default {
   // This Miniflare fixture exposes the Promise-native Worker fetch boundary.
   fetch(request: Request, environment: Environment): Promise<Response> {
-    const authority = ResourceAdmissionAuthority.make({
+    const authority = {
       database: environment.DB,
-      nowEpochMs: () => fixedNowEpochMs,
+      nowEpochMs: (): ResourceAdmissionEpochMs => fixedNowEpochMs,
       policies: ResourceAdmissionPolicies.make([policy]),
-    });
+    };
     const id = new URL(request.url).searchParams.get("id") ?? "";
     return Effect.runPromise(
       Effect.result(
-        authority.admit({
+        admitResource(authority, {
           charges: ResourceAdmissionCharges.make([
             {
               policyKey: policy.key,

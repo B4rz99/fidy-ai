@@ -1,13 +1,14 @@
-import { Effect, Option } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
-import type { User } from "~/core/identity/contract";
-import type { UserId } from "~/core/identity/reference";
-import type { OwnedStatement } from "~/shell/_shared/owned-statement";
+import { Effect, Schema } from "effect";
+import { SqlClient } from "effect/unstable/sql";
+import { UserId } from "~/core/identity/contract";
+
+import type { OwnedStatement } from "~/shell/owner-write/contract";
 import { Unavailable } from "~/shell/public-http/contract";
 import { protectConsentAuthority } from "~/shell/consent/operations";
 import type { WebSessionAuthority, WebSessionSubject } from "~/shell/web-session/contract";
 import { webSessionCredentialAuthority } from "~/shell/web-session/operations";
-import { findUser } from "~/shell/identity/internal/user-query";
+import { currentUserQuery, decodeUser } from "~/shell/identity/internal/user-query";
+import type { CurrentUserResponse, PreparedCurrentUserRead } from "./contract";
 
 const userUnavailable = (): Unavailable =>
   Unavailable.make({
@@ -16,25 +17,41 @@ const userUnavailable = (): Unavailable =>
   });
 
 /**
+ * Prepare the complete canonical projection for one authenticated User. The statement observes
+ * that User's current Consent grant at execution; preparation confers no credential authority.
+ */
+export const prepareCurrentUser = (
+  userId: UserId
+): Effect.Effect<PreparedCurrentUserRead, Unavailable> =>
+  Schema.decodeEffect(UserId)(userId).pipe(
+    Effect.map((subject) => ({
+      statement: currentUserQuery(subject),
+      decode: (rows: ReadonlyArray<unknown>) =>
+        decodeUser(rows[0]).pipe(
+          Effect.flatMap((data) =>
+            data.id === subject
+              ? Effect.succeed({ data, next: [] as const })
+              : Effect.fail(userUnavailable())
+          ),
+          Effect.mapError(userUnavailable)
+        ),
+    })),
+    Effect.mapError(userUnavailable)
+  );
+
+/**
  * Load the resolved stable User while rechecking Consent in the authoritative read.
  * Missing, inaccessible, or invalid state returns the same safe unavailable response.
  */
 export const getCurrentUser = (
   userId: UserId
-): Effect.Effect<
-  { readonly data: User; readonly next: ReadonlyArray<never> },
-  Unavailable,
-  SqlClient.SqlClient
-> =>
-  findUser(userId).pipe(
-    Effect.flatMap((user) =>
-      Option.match(user, {
-        onNone: () => Effect.fail(userUnavailable()),
-        onSome: (data) => Effect.succeed({ data, next: [] as const }),
-      })
-    ),
-    Effect.mapError(userUnavailable)
-  );
+): Effect.Effect<CurrentUserResponse, Unavailable, SqlClient.SqlClient> =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const read = yield* prepareCurrentUser(userId);
+    const rows = yield* sql.unsafe(read.statement.sql, read.statement.params);
+    return yield* read.decode(rows);
+  }).pipe(Effect.mapError(userUnavailable));
 
 /** D1 predicate that is re-evaluated with a protected browser canonical read. */
 export const liveWebSessionAuthority = (

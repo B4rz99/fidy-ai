@@ -4,7 +4,7 @@ import { applyTestMigration } from "../d1-test-fixture";
 import { afterEach, expect, it } from "vitest";
 import { forwardingAddressResponse } from "./operations";
 import { executeCanonicalQuery, executeCanonicalWork } from "../canonical-operations/operations";
-import { CanonicalOperationId } from "~/core/canonical-operations/contract";
+import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 
 const userA = "10000000-0000-4000-8000-000000000101";
 const userB = "10000000-0000-4000-8000-000000000102";

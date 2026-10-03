@@ -124,3 +124,9 @@ export type BrowserMemorySubject = Readonly<{ id: string; userId: string; digest
 export type MemoryAuditOperation = MemoryOperationId;
 /** Closed outcome vocabulary for one audited Memory call. */
 export type MemoryAuditOutcome = "success" | "not_found" | "validation_failed" | "resource_limit";
+
+/**
+ * The Memory audit outcomes one refusal can report: the owner's individual entry point and its
+ * canonical refusal descriptor share this vocabulary.
+ */
+export type MemoryRefusalOutcome = Exclude<MemoryAuditOutcome, "success">;

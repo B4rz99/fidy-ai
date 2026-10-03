@@ -1,5 +1,8 @@
 import { type Effect, type Option, Schema } from "effect";
-import { type StatementSubmission, StatementSubmissionId } from "@fidy/server/ingestion-contract";
+import {
+  type StatementSubmission,
+  StatementSubmissionId,
+} from "../../src/shell/ingestion/contract";
 
 /** Only a Cloudflare Email Routing event may supply this envelope; no HTTP path accepts it. */
 export type ForwardedEmailMessage = Pick<

@@ -2,12 +2,13 @@ import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
 import {
   Budget,
+  BudgetId,
   BudgetStatusQueryParameters,
   BudgetStatusReport,
   CreateBudgetInput,
   UpdateBudgetInput,
 } from "~/core/budgets/contract";
-import { BudgetId } from "~/core/budgets/reference";
+
 import {
   NotFound,
   OperationResponse,

@@ -1,11 +1,11 @@
 import { Effect, Option } from "effect";
 import {
+  type CategoryId,
   type CategoryKeyword,
   type KeywordRuleId,
   categoryIds,
   maximumKeywordRulesPerUser,
 } from "~/core/categories/contract";
-import type { CategoryId } from "~/core/categories/reference";
 
 import { normalizeSearchText as normalizeCategoryKeyword } from "~/core/search/operations";
 

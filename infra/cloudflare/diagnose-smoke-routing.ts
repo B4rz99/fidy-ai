@@ -18,7 +18,7 @@ import {
   smokeFailureHeader,
   smokeIdentityHeader,
   smokePath,
-} from "../../apps/server/cloudflare/runtime/smoke";
+} from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 
 const RoutingConfig = Schema.Struct({
   PUBLIC_VERSION_ID: SmokeIdentity.fields.workerVersionId,

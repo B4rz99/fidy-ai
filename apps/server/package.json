@@ -44,11 +44,6 @@
       "import": "./src/core/insights/contract.ts",
       "default": "./src/core/insights/contract.ts"
     },
-    "./categories": {
-      "types": "./src/shell/categories/runtime.ts",
-      "import": "./src/shell/categories/runtime.ts",
-      "default": "./src/shell/categories/runtime.ts"
-    },
     "./whatsapp-contract": {
       "types": "./src/shell/channels/whatsapp/contract.ts",
       "import": "./src/shell/channels/whatsapp/contract.ts",
@@ -74,11 +69,6 @@
       "import": "./src/client.ts",
       "default": "./src/client.ts"
     },
-    "./telemetry": {
-      "types": "./src/shell/observability/runtime.ts",
-      "import": "./src/shell/observability/runtime.ts",
-      "default": "./src/shell/observability/runtime.ts"
-    },
     "./agent-contract": {
       "types": "./src/core/agent/contract.ts",
       "import": "./src/core/agent/contract.ts",
@@ -88,11 +78,6 @@
       "types": "./src/shell/hosted-inference/runtime.ts",
       "import": "./src/shell/hosted-inference/runtime.ts",
       "default": "./src/shell/hosted-inference/runtime.ts"
-    },
-    "./hosted-inference-model": {
-      "types": "./src/shell/hosted-inference/model.ts",
-      "import": "./src/shell/hosted-inference/model.ts",
-      "default": "./src/shell/hosted-inference/model.ts"
     },
     "./consent-contract": {
       "types": "./src/shell/consent/contract.ts",
@@ -113,11 +98,6 @@
       "types": "./src/core/identity/contract.ts",
       "import": "./src/core/identity/contract.ts",
       "default": "./src/core/identity/contract.ts"
-    },
-    "./identity-reference": {
-      "types": "./src/core/identity/reference.ts",
-      "import": "./src/core/identity/reference.ts",
-      "default": "./src/core/identity/reference.ts"
     },
     "./identity-decisions": {
       "types": "./src/core/identity/operations.ts",
@@ -233,6 +213,56 @@
       "types": "./src/shell/api.ts",
       "import": "./src/shell/api.ts",
       "default": "./src/shell/api.ts"
+    },
+    "./categories-contract": {
+      "types": "./src/core/categories/contract.ts",
+      "import": "./src/core/categories/contract.ts",
+      "default": "./src/core/categories/contract.ts"
+    },
+    "./category-decisions": {
+      "types": "./src/core/categories/operations.ts",
+      "import": "./src/core/categories/operations.ts",
+      "default": "./src/core/categories/operations.ts"
+    },
+    "./category-operations": {
+      "types": "./src/shell/categories/operations.ts",
+      "import": "./src/shell/categories/operations.ts",
+      "default": "./src/shell/categories/operations.ts"
+    },
+    "./telemetry-contract": {
+      "types": "./src/shell/observability/contract.ts",
+      "import": "./src/shell/observability/contract.ts",
+      "default": "./src/shell/observability/contract.ts"
+    },
+    "./telemetry-operations": {
+      "types": "./src/shell/observability/operations.ts",
+      "import": "./src/shell/observability/operations.ts",
+      "default": "./src/shell/observability/operations.ts"
+    },
+    "./hosted-inference-contract": {
+      "types": "./src/shell/hosted-inference/contract.ts",
+      "import": "./src/shell/hosted-inference/contract.ts",
+      "default": "./src/shell/hosted-inference/contract.ts"
+    },
+    "./hosted-inference-operations": {
+      "types": "./src/shell/hosted-inference/operations.ts",
+      "import": "./src/shell/hosted-inference/operations.ts",
+      "default": "./src/shell/hosted-inference/operations.ts"
+    },
+    "./source-attestation-contract": {
+      "types": "./src/core/source-attestation/contract.ts",
+      "import": "./src/core/source-attestation/contract.ts",
+      "default": "./src/core/source-attestation/contract.ts"
+    },
+    "./money": {
+      "types": "./src/core/_shared/money.ts",
+      "import": "./src/core/_shared/money.ts",
+      "default": "./src/core/_shared/money.ts"
+    },
+    "./product-context": {
+      "types": "./src/core/_shared/context.ts",
+      "import": "./src/core/_shared/context.ts",
+      "default": "./src/core/_shared/context.ts"
     }
   },
   "scripts": {

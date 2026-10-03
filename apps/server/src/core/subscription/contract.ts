@@ -3,11 +3,14 @@ import { BigDecimal, Schema, SchemaTransformation } from "effect";
 import { IanaTimeZone, ServiceMarket } from "~/core/_shared/context";
 import { Money } from "~/core/_shared/money";
 import { UtcTimestamp } from "~/core/_shared/time";
-import { PriceId } from "./reference";
 import { TrialPeriod } from "~/core/identity/contract";
 import { AccessTier } from "~/core/access-tier/contract";
 
-export { PriceId } from "./reference";
+/** Stable identity of one immutable set of Subscription price terms. */
+export const PriceId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("PriceId"))
+  .annotate({ identifier: "PriceId" });
+export type PriceId = typeof PriceId.Type;
 
 /** The canonical public web destination where a User can start a Pro Subscription. */
 export const UpgradeDestination = Schema.Struct({

@@ -12,7 +12,7 @@
     "lint:type-aware": "oxlint --deny-warnings --config .oxlintrc.json --type-aware . && bun run --cwd apps/server check:lint-guards && node scripts/oxlint/lint-rules.test.js",
     "lint:suppressions": "bun scripts/check-lint-suppressions.ts",
     "lint:deps": "bun run --cwd apps/server lint:deps && bun run --cwd apps/web lint:deps && bun run lint:deps:probes",
-    "lint:deps:probes": "bun run --cwd apps/server lint:deps:probes && bun run --cwd apps/web lint:deps:probes",
+    "lint:deps:probes": "bun run --cwd apps/server lint:deps:probes && bun run --cwd apps/web lint:deps:probes && node --test tools/depcruise/*.test.mjs",
     "lint:dependencies": "bun scripts/check-dependency-updates.ts",
     "check:effect-family": "bun scripts/check-effect-family.ts",
     "dev": "bun run --cwd infra/cloudflare dev",

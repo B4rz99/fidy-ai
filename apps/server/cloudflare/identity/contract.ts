@@ -2,8 +2,8 @@ import type {
   UserId,
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
-} from "@fidy/server/identity-reference";
-import type { OwnedStatement } from "../../src/shell/_shared/owned-statement";
+} from "../../src/core/identity/contract";
+import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import { Data } from "effect";
 
 /** An established caller lookup supplies coordination context, never reusable authority. */

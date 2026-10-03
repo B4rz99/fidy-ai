@@ -1,12 +1,12 @@
-import type { NotificationEmailOutcome } from "@fidy/server/ingestion-contract";
+import type { NotificationEmailOutcome } from "../../../src/shell/ingestion/contract";
 import { prepareConsentAction } from "../../consent/operations";
-import { fallbackCaptureCategory } from "@fidy/server/categories";
+import { fallbackCaptureCategory } from "../../../src/core/categories/operations";
 import { Clock, Data, DateTime, Effect, Option, type PlatformError, Schema } from "effect";
 import PostalMime from "postal-mime";
-import { ReceivedEmailId } from "../../../src/core/ingestion/reference";
+import { ReceivedEmailId } from "../../../src/core/ingestion/contract";
 import { CapturedInterpretationContext } from "../../../src/core/interpretation-evidence/contract";
 import { prepareNotificationEmailCapture } from "../../transactions/operations";
-import { interpretNotificationEmail } from "@fidy/server/ingestion-operations";
+import { interpretNotificationEmail } from "../../../src/shell/ingestion/operations";
 import { emailCrypto } from "./forwarded-email";
 
 const maximumTimeZoneCharacters = 128;

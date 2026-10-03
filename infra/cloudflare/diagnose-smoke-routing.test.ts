@@ -8,7 +8,10 @@ import {
   diagnoseSmokeRouting,
   settledRoutingAccepted,
 } from "./diagnose-smoke-routing";
-import { SmokeRequest, smokeDiagnosticRevision } from "../../apps/server/cloudflare/runtime/smoke";
+import {
+  SmokeRequest,
+  smokeDiagnosticRevision,
+} from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 
 const publicCandidate = "dc8dcd28-271b-4367-9840-6c244f84cb40";
 const publicStable = "db7cd8d3-4425-4fe7-8c81-01bf963b6067";

@@ -1,5 +1,5 @@
-import { UserId } from "~/core/identity/reference";
-import type { OwnedStatement } from "~/shell/_shared/owned-statement";
+import { UserId } from "~/core/identity/contract";
+import type { OwnedStatement } from "~/shell/owner-write/contract";
 import { Option, Schema } from "effect";
 import { activePaidSubscriptionCondition } from "~/shell/subscription/operations";
 import { activeTrialPeriodCondition } from "~/shell/identity/operations";

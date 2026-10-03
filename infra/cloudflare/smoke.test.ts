@@ -2,11 +2,13 @@ import { it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { describe, expect } from "vitest";
 import {
+  handleSmoke,
+  verifySmokeIdentity,
+} from "../../apps/server/cloudflare/runtime/release-smoke/operations";
+import {
   SmokeRequest,
   smokeDiagnosticRevision,
-  verifySmokeIdentity,
-} from "../../apps/server/cloudflare/runtime/smoke";
-import { handleSmoke } from "../../apps/server/cloudflare/runtime/smoke-work";
+} from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 import publicWorker from "../../apps/server/cloudflare/public-worker";
 import {
   SyntheticBindings,

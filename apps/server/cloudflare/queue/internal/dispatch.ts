@@ -7,8 +7,8 @@ import {
   receiveEmailReplacement,
   receiveOnboardingEmail,
 } from "../../email-authentication/runtime";
-import { receiveCanary } from "../../runtime/operational-canary";
-import { receiveSmoke, smokeReady } from "../../runtime/smoke-work";
+import { receiveCanary } from "../../runtime/operational-health/operations";
+import { receiveSmoke, smokeReady } from "../../runtime/release-smoke/operations";
 import {
   isForwardedEmailWork,
   isStatementExtractionWork,

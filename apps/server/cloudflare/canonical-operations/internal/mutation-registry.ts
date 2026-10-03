@@ -1,17 +1,22 @@
-import type { CanonicalPreparationWork } from "../contract";
+import {
+  type CanonicalMutationPreparation,
+  type CanonicalMutationRefusal,
+  type CanonicalPreparationWork,
+  type CommittedMutationValue,
+} from "../contract";
 import { Effect, Option, Schema } from "effect";
 import {
   ApplyDashboardEditCanonicalInput,
   GetDashboardCanonicalInput,
   GetDashboardViewCanonicalInput,
-} from "~/shell/dashboard/contract";
-import { CanonicalOperationId } from "~/core/canonical-operations/contract";
-import { getAtomicBatchChildIds } from "~/shell/operations/contract";
-import { getCanonicalOperationInput } from "~/shell/canonical-operations/operations";
-import { TransactionId } from "@fidy/server/transactions-contract";
-import type { MemoryOperationId } from "@fidy/server/memory-api";
-import type { HostedInference } from "@fidy/server/hosted-inference";
-import { DeliveryEvidenceInput, InsightEventId } from "@fidy/server/insights-contract";
+} from "../../../src/shell/dashboard/contract";
+import { CanonicalOperationId } from "../../../src/core/canonical-operations/contract";
+import { getAtomicBatchChildIds } from "../../../src/shell/operations/contract";
+import { getCanonicalOperationInput } from "../../../src/shell/canonical-operations/operations";
+import { TransactionId } from "../../../src/core/transactions/contract";
+import type { MemoryOperationId } from "../../../src/shell/memory/contract";
+import type { HostedInference } from "../../../src/shell/hosted-inference/operations";
+import { DeliveryEvidenceInput, InsightEventId } from "../../../src/core/insights/contract";
 import { insightRefusal, prepareInsightTransition } from "../../insights/operations";
 import { dashboardRefusal, prepareDashboard, presentDashboard } from "../../dashboard/operations";
 import {
@@ -54,11 +59,6 @@ import {
   prepareRevise,
 } from "../../memory/operations";
 import { committedJsonResponse } from "./mutation-unit";
-import {
-  type CanonicalMutationPreparation,
-  type CanonicalMutationRefusal,
-  type CommittedMutationValue,
-} from "../contract";
 
 /**
  * One owner's canonical mutation adapter: it decides a child without committing, presents a

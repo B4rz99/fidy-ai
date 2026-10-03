@@ -1,4 +1,4 @@
-import type { SmokeEnvironment } from "../runtime/contract";
+import type { SmokeEnvironment } from "../runtime/release-smoke/contract";
 
 /** Private HTTP binding boundary; no model execution or scheduled maintenance authority. */
 export type CoreHttpEnvironment = Readonly<{

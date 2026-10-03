@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { InsightUnavailable } from "./contract";
-import { UserId } from "@fidy/server/identity-reference";
+import { UserId } from "../../src/core/identity/contract";
 import { applyTestMigration, isolatedTestDatabases } from "../d1-test-fixture";
 import { afterAll, expect } from "vitest";
 import { it as effectIt } from "@effect/vitest";
 import { DateTime, Effect, Exit, Option, Schema } from "effect";
-import { InsightEventId, InsightGenerationInput } from "@fidy/server/insights-contract";
+import { InsightEventId, InsightGenerationInput } from "../../src/core/insights/contract";
 import { DeliveredInsight } from "../../src/shell/insights/contract";
 import {
   discoverDueInsights,
@@ -15,7 +15,7 @@ import {
   listPendingInsights,
   prepareInsightTransition,
 } from "./operations";
-import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
+import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";

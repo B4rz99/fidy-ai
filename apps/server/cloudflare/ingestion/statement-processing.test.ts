@@ -1,9 +1,9 @@
-import { statementParserLimits } from "@fidy/server/ingestion-contract";
+import { statementParserLimits } from "../../src/shell/ingestion/contract";
 import { Effect, Option } from "effect";
 import { installTestSchema, isolatedTestStorage } from "../d1-test-fixture";
 import { afterAll, expect } from "vitest";
 import { it as effectIt } from "@effect/vitest";
-import { currentMillis } from "../runtime/clock";
+import { currentMillis } from "../runtime/operations";
 import { failStatementSubmission, processStatementSubmission } from "./operations";
 import { expireStatementReviewEvidence } from "./runtime";
 import { StatementStaging, submissionProjection } from "./internal/statement-staging";

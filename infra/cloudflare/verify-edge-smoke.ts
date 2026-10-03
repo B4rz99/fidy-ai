@@ -6,7 +6,7 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { productionTopology } from "../../apps/server/cloudflare/runtime/topology";
+import { productionTopology } from "../../apps/server/cloudflare/runtime/contract";
 
 const apiOrigin = `https://${productionTopology.ingress.hostname}`;
 const healthyStatus = 200;

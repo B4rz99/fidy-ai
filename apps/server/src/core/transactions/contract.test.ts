@@ -1,10 +1,10 @@
+import { SourceAttestation } from "~/core/source-attestation/contract";
 import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
 import { CapturedInterpretationContext } from "~/core/interpretation-evidence/contract";
 import {
   CreateTransactionInput,
   Direction,
-  SourceAttestation,
   Transaction,
   TransactionExtraction,
   TransactionQueryValues,

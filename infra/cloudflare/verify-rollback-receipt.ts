@@ -1,7 +1,7 @@
 /// <reference types="bun-types" />
 
 import { Effect, Option, Schema } from "effect";
-import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/smoke";
+import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 import { RollbackReceipt } from "./release-rollback";
 
 const SourceRun = Schema.Struct({

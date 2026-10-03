@@ -10,16 +10,53 @@
 // failure this repo already had once, so `assertCruisedSomething` below turns
 // it into an error.
 
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { cruise } from "dependency-cruiser";
 import extractDepcruiseConfig from "dependency-cruiser/config-utl/extract-depcruise-config";
 import extractTSConfig from "dependency-cruiser/config-utl/extract-ts-config";
-import ts from "typescript";
+import { publicationViolations } from "./publication.mjs";
+import { launderingViolations } from "./laundering.mjs";
 
 const packageRoot = resolve(process.argv[2] ?? process.cwd());
 const graphRoots = process.argv.slice(3);
 const sourceRoots = graphRoots.length > 0 ? graphRoots : ["src"];
+const repositoryConsumers =
+  packageRoot.endsWith("/apps/server") &&
+  sourceRoots.includes("src") &&
+  sourceRoots.includes("cloudflare");
+/** @param {string} directory - Repository source directory; dependencies are not graph roots. @returns {string[]} */
+const sourceFiles = (directory) =>
+  readdirSync(resolve(packageRoot, directory), { withFileTypes: true }).flatMap((entry) => {
+    const path = `${directory}/${entry.name}`;
+    if (entry.isDirectory()) {
+      return entry.name === "node_modules" || entry.name.startsWith(".") ? [] : sourceFiles(path);
+    }
+    return /\.[cm]?[jt]sx?$/u.test(entry.name) ? [path] : [];
+  });
+if (repositoryConsumers) {
+  // Git includes every application and repository source file, including root configurations and
+  // untracked probes. The checked-in upstream reference checkouts are not product source; ignored
+  // generated output and installed dependencies also never become independent graph roots.
+  const repositorySources = execFileSync(
+    "git",
+    [
+      "ls-files",
+      "-z",
+      "--cached",
+      "--others",
+      "--exclude-standard",
+      "--",
+      "../..",
+      ":(top,exclude).repos/**",
+    ],
+    { cwd: packageRoot, encoding: "utf8" }
+  )
+    .split("\0")
+    .filter((path) => /\.[cm]?[jt]sx?$/u.test(path) && existsSync(resolve(packageRoot, path)));
+  sourceRoots.push(...repositorySources);
+}
 
 // The cruiser resolves every path against the cwd, and the reported module
 // names are what the rule patterns match, so both must be package-root-relative.
@@ -81,160 +118,6 @@ const ruleReason = (ruleName) => {
 /** @param {string} path - Package-relative module path. */
 const displayPath = (path) => path.replace(/^(?:\.\.\/)+node_modules\//u, "node_modules/");
 
-// Dependency-cruiser marks direct `export ... from` edges, but a local `export { imported }`
-// loses that provenance. Inspect only Published Trio interfaces to close that laundering form.
-/** @param {string} specifier - Relative import path to inspect. */
-const isInternalSpecifier = (specifier) =>
-  [
-    specifier.startsWith("./internal/"),
-    specifier.startsWith("../internal/"),
-    specifier.includes("/internal/"),
-  ].includes(true);
-
-/** @param {import("typescript").ImportClause} clause - Imported bindings. */
-const importNames = (clause) => {
-  const names = clause.name === undefined ? [] : [clause.name.text];
-  const named = clause.namedBindings;
-  if (named === undefined) return names;
-  if (ts.isNamespaceImport(named)) return [...names, named.name.text];
-  return [...names, ...named.elements.map((element) => element.name.text)];
-};
-
-/**
- * @param {import("typescript").Statement} statement - Candidate import.
- * @returns {Array<readonly [string, string]>} Local binding and internal specifier pairs.
- */
-const internalImport = (statement) => {
-  if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
-    return [];
-  }
-  const specifier = statement.moduleSpecifier.text;
-  if (!isInternalSpecifier(specifier) || statement.importClause === undefined) return [];
-  return importNames(statement.importClause).map((name) => [name, specifier]);
-};
-
-/**
- * @param {import("typescript").Statement} statement - Candidate alias declaration.
- * @returns {Array<readonly [string, string]>} Local alias and source binding pairs.
- */
-const localAliases = (statement) => {
-  if (!ts.isVariableStatement(statement)) return [];
-  return statement.declarationList.declarations.flatMap((declaration) =>
-    ts.isIdentifier(declaration.name) &&
-    declaration.initializer !== undefined &&
-    ts.isIdentifier(declaration.initializer)
-      ? [[declaration.name.text, declaration.initializer.text]]
-      : []
-  );
-};
-
-/** @param {import("typescript").SourceFile} sourceFile - Published interface module. */
-const internalBindings = (sourceFile) => {
-  const bindings = new Map(sourceFile.statements.flatMap(internalImport));
-  const aliases = sourceFile.statements.flatMap(localAliases);
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const [alias, source] of aliases) {
-      const specifier = bindings.get(source);
-      if (specifier === undefined || bindings.has(alias)) continue;
-      bindings.set(alias, specifier);
-      changed = true;
-    }
-  }
-  return bindings;
-};
-
-/** @param {import("typescript").Statement} statement - Candidate local export. */
-const localExportNames = (statement) => {
-  if (
-    ts.isExportDeclaration(statement) &&
-    statement.moduleSpecifier === undefined &&
-    statement.exportClause !== undefined &&
-    ts.isNamedExports(statement.exportClause)
-  ) {
-    return statement.exportClause.elements.map(
-      (element) => (element.propertyName ?? element.name).text
-    );
-  }
-  if (ts.isExportAssignment(statement) && ts.isIdentifier(statement.expression)) {
-    return [statement.expression.text];
-  }
-  return [];
-};
-
-/** @param {import("typescript").Statement} statement - Candidate exported declaration. */
-const isExported = (statement) =>
-  ts.canHaveModifiers(statement) &&
-  ts.getModifiers(statement)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) ===
-    true;
-
-/** @param {import("typescript").Statement} statement - Candidate exported alias. */
-const exportedVariableAliases = (statement) => {
-  if (!ts.isVariableStatement(statement) || !isExported(statement)) return [];
-  return statement.declarationList.declarations.flatMap((declaration) =>
-    declaration.initializer !== undefined && ts.isIdentifier(declaration.initializer)
-      ? [declaration.initializer.text]
-      : []
-  );
-};
-
-/** @param {import("typescript").Statement} statement - Candidate exported type. */
-const exportedTypeReferences = (statement) => {
-  if (!(ts.isTypeAliasDeclaration(statement) || ts.isInterfaceDeclaration(statement))) return [];
-  if (!isExported(statement)) return [];
-  /** @type {string[]} */
-  const names = [];
-  /** @param {import("typescript").Node} node - Identifier-bearing type syntax. */
-  const visit = (node) => {
-    if (ts.isIdentifier(node)) names.push(node.text);
-    ts.forEachChild(node, visit);
-  };
-  ts.forEachChild(statement, visit);
-  return names;
-};
-
-/** @param {import("typescript").SourceFile} sourceFile - Published interface module. */
-const locallyExportedBindings = (sourceFile) =>
-  new Set(
-    sourceFile.statements.flatMap((statement) => [
-      ...localExportNames(statement),
-      ...exportedVariableAliases(statement),
-      ...exportedTypeReferences(statement),
-    ])
-  );
-
-/** @param {import("dependency-cruiser").ICruiseResult} report - Cruised module graph. */
-const reportLaunderedInternals = (report) => {
-  let violations = 0;
-  for (const module of report.modules) {
-    if (
-      !/^(?:src\/(?:core|shell)|cloudflare)\/.+\/(contract|operations|runtime)\.ts$/u.test(
-        module.source
-      )
-    ) {
-      continue;
-    }
-    const sourceFile = ts.createSourceFile(
-      module.source,
-      readFileSync(module.source, "utf8"),
-      ts.ScriptTarget.Latest,
-      true
-    );
-    const imports = internalBindings(sourceFile);
-    for (const binding of locallyExportedBindings(sourceFile)) {
-      const specifier = imports.get(binding);
-      if (specifier === undefined) continue;
-      violations += 1;
-      console.error(
-        `error published-interface-reexports-internal: ${module.source} → ${specifier}`
-      );
-      console.error(`  ${ruleReason("published-interface-reexports-internal")}\n`);
-    }
-  }
-  return violations;
-};
-
 /** @param {string} target - Resolved module path to inspect. */
 const nestedInternalOwner = (target) => {
   const match = /^src\/(core|shell)\/(.+)\/internal\//u.exec(target);
@@ -283,17 +166,62 @@ const reportViolations = (report) => {
     );
     process.exit(1);
   }
-  console.log(
-    `module graph clean: ${report.summary.totalCruised} modules, ` +
-      `${report.summary.totalDependenciesCruised} dependencies.`
-  );
 };
+
+/** @param {import("dependency-cruiser").ICruiseResult} graph - Complete graph, not just a nonempty sample. */
+const assertCompleteGraph = (graph) => {
+  const sources = new Set(graph.modules.map(({ source }) => resolve(packageRoot, source)));
+  const requested = sourceRoots.flatMap((root) =>
+    statSync(resolve(packageRoot, root)).isDirectory() ? sourceFiles(root) : [root]
+  );
+  const missing = requested.filter((path) => !sources.has(resolve(packageRoot, path)));
+  if (missing.length > 0) {
+    throw new Error(`dependency-cruiser omitted source inputs: ${missing.join(", ")}`);
+  }
+};
+
+/** @param {import("dependency-cruiser").ICruiseResult} graph - Resolved imports. */
+const unresolvedDependencies = (graph) =>
+  graph.modules.flatMap((module) =>
+    module.dependencies
+      .filter(
+        (dependency) =>
+          dependency.couldNotResolve &&
+          dependency.module !== "cloudflare:workers" &&
+          !(
+            module.source === "cloudflare/browser-acceptance-core-module.ts" &&
+            dependency.module === "./browser-acceptance-core-bundle.mjs"
+          )
+      )
+      .map((dependency) => ({ from: module.source, to: dependency.module }))
+  );
 
 const report = await cruiseReport({ validate: true });
 assertCruisedSomething(report);
-const launderedInternals = reportLaunderedInternals(report);
+assertCompleteGraph(report);
+const unresolved = unresolvedDependencies(report);
+for (const { from, to } of unresolved) {
+  console.error(`error unresolved-dependency: ${from} → ${to}`);
+}
+const laundered = launderingViolations(report, packageRoot);
+for (const violation of laundered) {
+  console.error(`error ${violation.name}: ${violation.from} → ${violation.to}`);
+  console.error(`  ${violation.reason}\n`);
+}
 const nestedForeignInternals = reportNestedForeignInternals(report);
+const publications = packageRoot.endsWith("/apps/server")
+  ? publicationViolations(report, packageRoot)
+  : [];
+for (const violation of publications) {
+  console.error(`error ${violation.name}: ${violation.from} → ${violation.to}`);
+  console.error(`  ${violation.reason}\n`);
+}
 reportViolations(report);
-if (launderedInternals + nestedForeignInternals > 0) {
+if (laundered.length + nestedForeignInternals + publications.length + unresolved.length > 0) {
   process.exit(1);
 }
+
+console.log(
+  `module graph clean: ${report.summary.totalCruised} modules, ` +
+    `${report.summary.totalDependenciesCruised} dependencies.`
+);

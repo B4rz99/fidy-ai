@@ -1,8 +1,8 @@
-import type { OwnedStatement } from "../../../src/shell/_shared/owned-statement";
+import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { decodeCategoryRead, prepareCategoryRead } from "../../../src/shell/categories/operations";
 import { Effect, Option, Schema } from "effect";
-import { Category, CategoryNotFound } from "../../../src/core/categories/contract";
-import type { CategoryId } from "../../../src/core/categories/reference";
+import { Category, type CategoryId, CategoryNotFound } from "../../../src/core/categories/contract";
+
 import { CategoriesUnavailable } from "../contract";
 
 /** Load one required current projection; absence remains distinct from invalid or unreadable storage. */

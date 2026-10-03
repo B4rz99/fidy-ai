@@ -1,4 +1,4 @@
-import type { UserId } from "@fidy/server/identity-reference";
+import type { UserId } from "../../src/core/identity/contract";
 
 /** Incoming fresh-session request; the owner decodes and rechecks authority before rotation. */
 export type RecoveryRequest = Readonly<{ request: Request; db: D1Database }>;

@@ -1,13 +1,13 @@
-import { WorkflowEntrypoint } from "cloudflare:workers";
+import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { Clock, Effect } from "effect";
-import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
-import { completeCanary } from "./runtime/operational-canary";
-import { captureWorkflowFailure } from "./runtime/operational-workflow-failure";
+
+import { captureWorkflowFailure, completeCanary } from "./runtime/operational-health/operations";
+
 import {
   cloudflareWorkerTelemetry,
   observeWorkerPromise,
   workerRelease,
-} from "./runtime/telemetry";
+} from "./runtime/telemetry/operations";
 
 /** Private identity-free platform probe; a completed D1 step, not instance creation, proves execution. */
 export class OperationalCanaryWorkflowV1 extends WorkflowEntrypoint<

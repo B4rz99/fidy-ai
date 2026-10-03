@@ -1,7 +1,7 @@
-import { UserId } from "~/core/identity/reference";
+import { UserId } from "~/core/identity/contract";
 import { Option, Schema } from "effect";
 import { userTrialPeriodQuery } from "~/shell/identity/operations";
-import { type OwnedStatement } from "~/shell/_shared/owned-statement";
+import { type OwnedStatement } from "~/shell/owner-write/contract";
 import { type SubscriptionReadAuthority as Authority } from "~/shell/subscription/contract";
 
 const guard = (authority: Option.Option<Authority>): string =>

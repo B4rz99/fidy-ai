@@ -27,8 +27,8 @@ import {
   smokeFailureHeader,
   smokeIdentityHeader,
   smokePath,
-  verifySmokeIdentity,
-} from "../../apps/server/cloudflare/runtime/smoke";
+} from "../../apps/server/cloudflare/runtime/release-smoke/contract";
+import { verifySmokeIdentity } from "../../apps/server/cloudflare/runtime/release-smoke/operations";
 import { verifyEdgeSmoke } from "./verify-edge-smoke";
 
 const RunnerConfig = Schema.Struct({

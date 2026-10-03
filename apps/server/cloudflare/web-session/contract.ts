@@ -1,5 +1,5 @@
 import type { BrowserPairingClaim } from "../browser-login/contract";
-import type { WebSessionSubject } from "@fidy/server/web-session-contract";
+import type { WebSessionSubject } from "../../src/shell/web-session/contract";
 
 /** Browser credentials are resolved at use; a returned subject is never a cached authorization. */
 export type WebSessionAuthentication = Readonly<{

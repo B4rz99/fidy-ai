@@ -1,15 +1,17 @@
 import type { TransactionOutcome } from "../contract";
-import { UserId } from "@fidy/server/identity-reference";
+import { type UserContext, UserId } from "../../../src/core/identity/contract";
 import { readUserContext } from "../../identity/user-context/operations";
-import type { UserContext } from "@fidy/server/identity-contract";
-import { protectConsentStatement } from "@fidy/server/consent-operations";
-import { prepareOwnerAuditCall } from "@fidy/server/audit";
-import { CreateTransactionInput, encodeMoneyAmount } from "@fidy/server/transactions-contract";
-import type { CategoryId } from "@fidy/server/categories";
+
+import { protectConsentStatement } from "../../../src/shell/consent/operations";
+import { prepareOwnerAuditCall } from "../../../src/shell/audit/operations";
+import { CreateTransactionInput } from "../../../src/core/transactions/contract";
+import { encodeMoneyAmount } from "../../../src/core/_shared/money";
+import type { CategoryId } from "../../../src/core/categories/contract";
 import { categorizeCaptures, requireCategory } from "../../categories/operations";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { authenticateCanonicalWebSession } from "../../web-session/operations";
-import { RequestBodyPolicy, boundedJsonBody } from "../../http/request-body";
+import { RequestBodyPolicy } from "../../http/contract";
+import { boundedJsonBody } from "../../http/operations";
 import {
   type TransactionBoundaryFailure,
   type TransactionCaller,

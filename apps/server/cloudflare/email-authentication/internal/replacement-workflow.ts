@@ -5,8 +5,11 @@ import {
   EmailReplacementWork as Work,
 } from "../contract";
 
-import { freshSessionQuery } from "@fidy/server/web-session-operations";
-import { EmailAddress, EmailVerificationCode } from "@fidy/server/email-authentication-contract";
+import { freshSessionQuery } from "../../../src/shell/web-session/operations";
+import {
+  EmailAddress,
+  EmailVerificationCode,
+} from "../../../src/core/email-authentication/contract";
 import { Clock, Effect, Exit, Option, Schema } from "effect";
 import { deliveryState, sendThroughResend } from "./onboarding-workflow";
 

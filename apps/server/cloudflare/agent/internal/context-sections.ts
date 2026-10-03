@@ -1,8 +1,8 @@
-import { Option } from "effect";
-import type { DateTime } from "effect";
-import type { User } from "~/core/identity/contract";
-import type { TranscriptEntry } from "~/core/agent/contract";
-import type { HostedContextSection } from "~/shell/hosted-inference/contract";
+import { type DateTime, Option } from "effect";
+
+import type { User } from "../../../src/core/identity/contract";
+import type { TranscriptEntry } from "../../../src/core/agent/contract";
+import type { HostedContextSection } from "../../../src/shell/hosted-inference/contract";
 
 /** The semantic values one hosted context orders into its canonical section list. */
 export type HostedContextSectionInput = Readonly<{

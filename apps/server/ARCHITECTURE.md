@@ -42,6 +42,37 @@ must never silently fall back to local state. The direct proof-bearing PATPairin
 User or canonical operation policy; its generated OpenAPI is checked for freshness independently of
 the stable-User contract pair. No prelaunch compatibility gate compares either API with older revisions.
 
+### Published interfaces and final enforcement
+
+An owner or named module exposes only the parts of the Published Trio that it earns:
+`contract.ts` for declarations and pure schema construction, `operations.ts` for substantive
+behavior, and `runtime.ts` for construction or fixed-policy runtime authority. All other implementation
+is owner-private. Cross-module imports, including type-only imports, target these publications.
+Contracts never depend on executable operations or runtime; private implementation never imports its
+own outward operations/runtime. The native graph is acyclic, and portable code cannot import native
+implementations.
+
+The resolver derives ownership for every present and future module. Native platform HTTP, routing,
+resource admission, inference, operational health, release smoke and telemetry have the same boundary
+as domain owners. SourceAttestation owns captured-source declarations without introducing a second
+Transaction or Ingestion authority. The exact pure Shared Kernel remains `core/_shared/money.ts`,
+`context.ts` and `time.ts`; shell helpers have named owners rather than a generic shared bucket.
+
+Runtime construction is confined to runtime interfaces and their exclusively runtime-owned private
+implementation, explicit Worker/browser roots, the notification-catalog generation runtime, and
+named broad native integration suites that construct actual D1/DO/Workflow bindings. Ordinary
+foreign tests call contracts and operations; a new test or harness filename never grants runtime
+access. The graph's composition-role registry is an enduring architectural decision, not a list of
+permitted private edges. None of these roles can import foreign private implementation.
+
+`tools/depcruise` resolves the server graph together with repository scripts, tools and infrastructure
+consumers. Exact-edge negative probes cover new owners, flat private files, type-only dependencies,
+re-export aliases, runtime roles and graph completeness. Bounded interface provenance checks reject supported private
+re-export patterns; semantic leakage remains a code-review obligation under root
+`ARCHITECTURE.md`. Browser bundle checks independently bound the outward declaration graph.
+Compatibility references, runtime barrels and generic shell helper paths are removed, without
+waiving owner privacy or changing behavior. See [ADR 0031](../../docs/adr/0031-published-owner-interfaces-and-visible-internals.md).
+
 ## 3. Security and subject boundaries
 
 `UserId` is explicit wherever a decision needs a subject. No ambient process-local current-user
@@ -204,7 +235,10 @@ when both policies can be enforced before retention and automatic Transaction fi
 Identity publishes stable User, WhatsAppIdentity, current UserContext and TrialPeriod declarations
 through `core/identity/contract.ts`, and pure User creation through `operations.ts`. Its shell
 contract contains browser-safe canonical declarations; shell operations own authoritative User and
-TrialPeriod reads. Storage projections stay under `internal/`. WebSession publishes its own fresh
+TrialPeriod reads. Storage projections stay under `internal/`. The canonical User read carries an owner-held statement
+and decoder; native Identity executes it on the supplied D1 binding without constructing a SQL
+Layer inside WebSession. The decoder remains bound to the prepared User, and WebSession rechecks
+its exact live credential before accounting for and releasing that projection. WebSession publishes its own fresh
 session and credential primitives; Identity composes current Consent with browser authority.
 
 The Cloudflare Identity operations resolve only an established Business Portfolio/BSUID pair and
@@ -222,9 +256,10 @@ telemetry purpose is introduced.
 
 ### Transactions owner composition
 
-Transactions publishes exact normalized facts, captured SourceAttestation evidence and closed domain
-failures through `core/transactions/contract.ts`; `operations.ts` owns pure occurrence, User-decision
-and Reconciliation policy. Its shell contract is the browser-safe canonical declaration; portable
+Transactions publishes exact normalized facts and closed domain failures through
+`core/transactions/contract.ts`; captured-source declarations belong to
+`core/source-attestation/contract.ts`. Transactions `operations.ts` owns pure occurrence,
+User-decision and Reconciliation policy. Its shell contract is the browser-safe canonical declaration; portable
 failure/continuation behavior and derived route composition have separate operations and runtime
 interfaces. No peer imports a Transaction model, stored row, effective SQL relation or repository.
 
@@ -337,7 +372,7 @@ interrupting the bounded admitted Turn, and PAT work keeps its per-call current-
 Use the smallest seam that proves the behavior:
 
 - core tests call pure decisions and schemas directly;
-- contract tests validate canonical ids, reflected policy, OpenAPI, and compatibility artifacts;
+- contract tests validate canonical ids, reflected policy, OpenAPI, and generated artifacts;
 - security tests cover proof handling, redaction, bounded input, provider authentication, and
   subject isolation;
 - provider-boundary tests use the published outbound transport seam;
@@ -426,8 +461,9 @@ shapes. They commit its live credential guard, credential use and Audit evidence
 before releasing safe JSON. AccessTier still derives from Identity's original TrialPeriod and the
 settled paid interval at the decision instant; no independent tier authority is persisted.
 
-`cloudflare/subscription/operations.ts` publishes protected observation and fresh-session enrollment.
-Its `runtime.ts` composes the existing Queue, scheduled reconciliation and versioned Workflow.
+`cloudflare/subscription/operations.ts` publishes protected observation. Its `runtime.ts` owns
+fresh-session browser enrollment with provider construction, as well as the existing Queue,
+scheduled reconciliation and versioned Workflow.
 Wompi models and clients, payment-source identity, webhook verification, settlement SQL and
 ambiguity handling are private to its `internal/` implementation. Verified settlement retains the
 same immutable Price snapshot, atomic paid-period write and monotonic terminal behavior. Private
@@ -770,7 +806,8 @@ Worker Work record retain their existing telemetry purposes, with no owner failu
 Audit, Email Authentication, Consent, Subscription, Tokens, WhatsApp, Agent and Ingestion retain their
 own eligibility, expiry, replay and retention decisions. Transactions retains effective-projection
 repair, and native AI retains admission-spend cleanup. Platform runtime owns operational health,
-event-bucket retention, canary publication and release-smoke expiry. Maintenance contains no SQL,
+event-bucket retention, canary publication and release-smoke expiry. Operational Health publishes
+policy and metadata operations separately from the runtime-owned, bounded operator email sender. Maintenance contains no SQL,
 aggregate data, retention cutoff, provider execution or reusable authorization. Best-effort cleanup
 cannot extend an expired proof or authorize retained material. Request-time identity-targeted Queue
 publication remains the owner's bounded acceleration, distinct from cron recovery.

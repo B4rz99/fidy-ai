@@ -116,6 +116,27 @@ Judge a `Record` by its actual keyspace and value contract.
 
 ---
 
+## Publication and ownership
+
+Choose the owner before adding an exported name. Declarations and pure schema construction belong
+in `contract.ts`; executable behavior belongs in `operations.ts`; construction and fixed-policy
+runtime authority belong in `runtime.ts`. Publish only the interface the module earns. A runtime
+barrel or a wrapper that merely renames foreign implementation is not a module boundary.
+Published Trio files declare their earned names directly, without TypeScript namespace or module
+blocks. Ordinary ES-module namespace imports remain available for invoking same-owner private implementation.
+
+Call foreign publications directly. Do not add compatibility re-exports, copy another owner's
+schema, expose storage/provider shapes, or move owner behavior into a shared bucket to satisfy the
+graph. A real declaration cycle calls for an ownership decision, not an exception. Keep native
+platform implementation behind its named module and preserve the core/shell purity direction.
+
+Tests exercise owner behavior or a published integration seam. An explicitly named broad composition
+may construct published runtimes; it still cannot reach foreign internals. Pure schema helpers do
+not gain I/O authority. The graph and its negative probes enforce import direction; review decides
+whether the published behavior is substantive and whether the owner is honest.
+
+---
+
 ## Services vs plain functions
 
 > **A `Context.Service` exists where there is something to construct, or something to substitute.

@@ -1,8 +1,13 @@
 import { type DateTime, Duration, Effect, type Option, Schema, SchemaTransformation } from "effect";
-import { PATId } from "./reference";
-import { UserId } from "~/core/identity/reference";
+import { UserId } from "~/core/identity/contract";
 import { CanonicalCapability } from "~/core/canonical-operations/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
+
+/** Stable identity of one User-authorized Personal Access Token grant. */
+export const PATId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("PATId"))
+  .annotate({ identifier: "PATId" });
+export type PATId = typeof PATId.Type;
 
 /**
  * One access capability a User may grant to a PAT, named in the public token vocabulary. Scopes are

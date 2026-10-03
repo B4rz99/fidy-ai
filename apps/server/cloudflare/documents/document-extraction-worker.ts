@@ -1,9 +1,6 @@
 import { Data, Effect } from "effect";
-import {
-  type BoundedBodyReadFailed,
-  awaitRequestAbort,
-  collectBoundedRequestBody,
-} from "../http/bounded-request-body";
+import { type BoundedBodyReadFailed } from "../http/contract";
+import { awaitRequestAbort, collectBoundedRequestBody } from "../http/operations";
 
 const maximumInputBytes = Number("5242880");
 const maximumOutputBytes = Number("1048576");

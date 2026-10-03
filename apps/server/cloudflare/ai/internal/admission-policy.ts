@@ -9,7 +9,7 @@ import {
   ResourceAdmissionPolicyKey,
   ResourceAdmissionScopeKey,
   ResourceAdmissionUnits,
-} from "../../resource-admission/authority";
+} from "../../resource-admission/contract";
 
 export const workersAiAdmissionWindowMs = 86_400_000;
 const oneDay = ResourceAdmissionDurationMs.make(workersAiAdmissionWindowMs);

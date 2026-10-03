@@ -6,7 +6,7 @@ import {
   StatementNeedsReviewItem,
   StatementRowEvidence,
 } from "../../../src/core/ingestion/contract";
-import { currentMillis } from "../../runtime/clock";
+import { currentMillis } from "../../runtime/operations";
 import type { TransactionCaller } from "../../canonical-work/operations";
 import { commitReadAudit, unavailableStatement, validationFailed } from "./statement-ingestion";
 

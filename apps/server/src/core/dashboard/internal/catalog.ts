@@ -1,4 +1,4 @@
-import { type CategoryId } from "~/core/categories/reference";
+import { type CategoryId } from "~/core/categories/contract";
 import {
   type DashboardCatalog,
   DashboardCatalogEntry,

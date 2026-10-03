@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/smoke";
+import { SmokeIdentity } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 import {
   type Deployment,
   type ReleasePort,

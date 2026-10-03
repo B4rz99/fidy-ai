@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { BigDecimal, DateTime, Option, Result, Schema } from "effect";
 import { OpenApi } from "effect/unstable/httpapi";
-import { categoryIds } from "~/core/categories/operations";
+import { categoryIds } from "~/core/categories/contract";
 import { FidyApi, operationCatalog } from "~/shell/api";
 import {
   canCallOperation,

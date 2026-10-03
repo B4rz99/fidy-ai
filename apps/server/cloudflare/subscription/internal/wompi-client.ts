@@ -1,5 +1,5 @@
-import { WompiEnvironment } from "~/shell/secret-material/contract";
-import { UnknownJsonString, jsonStringSchema } from "~/shell/schema-codecs/contract";
+import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
+import { UnknownJsonString, jsonStringSchema } from "../../../src/shell/schema-codecs/contract";
 import {
   Config,
   Context,
@@ -19,14 +19,17 @@ import {
   EndUserPolicyEvidence,
   PersonalDataAuthorizationEvidence,
   type WompiContractEvidenceSet,
-} from "~/core/subscription/contract";
+} from "../../../src/core/subscription/contract";
 import { WompiSourceId } from "./wompi-model";
 import {
   type OutboundHttpFailure,
   type OutboundHttpResponse,
-} from "~/shell/outbound-http/contract";
-import { OutboundHttp, type OutboundHttpService } from "~/shell/outbound-http/operations";
-import { wompiCredentialPrefixes } from "~/shell/secret-material/operations";
+} from "../../../src/shell/outbound-http/contract";
+import {
+  OutboundHttp,
+  type OutboundHttpService,
+} from "../../../src/shell/outbound-http/operations";
+import { wompiCredentialPrefixes } from "../../../src/shell/secret-material/operations";
 
 const successfulStatusMinimum = 200;
 const successfulStatusMaximumExclusive = 300;

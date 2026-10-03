@@ -1,7 +1,7 @@
 import {
   HostedDeliveryCorrelationToken,
   WhatsAppBusinessPhoneNumberId,
-} from "@fidy/server/whatsapp-contract";
+} from "../../src/shell/channels/whatsapp/contract";
 import { Effect, Exit, Option } from "effect";
 import assert from "node:assert/strict";
 import { afterAll, it } from "vitest";

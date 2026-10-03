@@ -1,6 +1,5 @@
 import * as Arr from "effect/Array";
-import { Cause, Effect, type Exit, Option, Predicate, Schema } from "effect";
-import { dual } from "effect/Function";
+import { type Effect, type Exit, Option, Schema } from "effect";
 import { ErrorCode } from "~/shell/public-http/contract";
 import { operationCatalog } from "~/shell/api";
 
@@ -759,128 +758,13 @@ export type ProjectedErrorEvent = typeof ProjectedErrorEvent.Type;
 /** Fail-closed decoding shared by every untrusted Observability projection. */
 export const TelemetryStrictDecoding = { onExcessProperty: "error" } as const;
 
-const stackSourceFilePattern = /^src\/[A-Za-z0-9_./-]{1,220}\.(?:ts|tsx|js|mjs)$/u;
-const stackLinePattern = /^\s*at\s+(?:([^\s(]+)\s+\()?(.+):(\d+):(\d+)\)?\s*$/u;
-
-const normalizeSourceFile = (value: string): Option.Option<string> => {
-  if (/^[A-Za-z][A-Za-z0-9+.-]*:\/\//u.test(value)) return Option.none();
-  const sourceMarker = value.lastIndexOf("/src/");
-  const relative = sourceMarker >= 0 ? value.slice(sourceMarker + 1) : value;
-  if (relative.split("/").some((segment) => segment === "." || segment === "..")) {
-    return Option.none();
-  }
-  return stackSourceFilePattern.test(relative) ? Option.some(relative) : Option.none();
-};
-
-const projectStackLine = (line: string): Option.Option<ProjectedStackFrame> => {
-  const match = stackLinePattern.exec(line);
-  if (match === null) return Option.none();
-  return Option.flatMap(Option.fromUndefinedOr(match[2]), (sourceFile) =>
-    Option.flatMap(normalizeSourceFile(sourceFile), (filename) =>
-      Schema.decodeOption(
-        ProjectedStackFrame,
-        TelemetryStrictDecoding
-      )({
-        module: filename.slice(0, filename.lastIndexOf(".")),
-        filename,
-        function: match[1] ?? "anonymous",
-        lineno: Number(match[3]),
-        colno: Number(match[4]),
-      })
-    )
-  );
-};
-
-const stackText = (cause: unknown): Option.Option<string> => {
-  if (!Predicate.isObject(cause)) return Option.none();
-  try {
-    if (!Predicate.hasProperty(cause, "stack")) return Option.none();
-    return Predicate.isString(cause.stack) ? Option.some(cause.stack) : Option.none();
-  } catch {
-    return Option.none();
-  }
-};
-
-const projectReasonStack = (reason: Cause.Reason<unknown>): ReadonlyArray<ProjectedStackFrame> => {
-  if (Cause.isFailReason(reason)) return projectStack(reason.error);
-  if (Cause.isDieReason(reason)) return projectStack(reason.defect);
-  return [];
-};
-
-/** Extracts only scrubbed application coordinates from stack-bearing data. */
-export const projectStack = (cause: unknown): ReadonlyArray<ProjectedStackFrame> => {
-  if (Cause.isCause(cause)) {
-    const direct = cause.reasons.flatMap(projectReasonStack);
-    return direct.length > 0 ? direct : Cause.prettyErrors(cause).flatMap(projectStack);
-  }
-  return Option.match(stackText(cause), {
-    onNone: () => [],
-    onSome: (stack) => stack.split("\n").flatMap((line) => Option.toArray(projectStackLine(line))),
-  });
-};
-
-type ExternalHttpRequestAttributes = Readonly<{
+export type ExternalHttpRequestAttributes = Readonly<{
   "fidy.provider": TelemetryCode<"provider">;
   "http.request.method": TelemetryExternalHttpMethod;
 }>;
-type ExternalHttpResponseAttributes = Readonly<
+export type ExternalHttpResponseAttributes = Readonly<
   Partial<{ "http.response.status_class": TelemetryHttpStatusClass }>
 >;
-type ExternalHttpOutcomeAttributes = Readonly<{
+export type ExternalHttpOutcomeAttributes = Readonly<{
   "fidy.transport_outcome": TelemetryTransportOutcome;
 }>;
-
-const firstSuccessStatus = 200;
-const firstRedirectStatus = 300;
-const firstClientErrorStatus = 400;
-const firstServerErrorStatus = 500;
-
-/** Projects an allowed HTTP status into its bounded status-class coordinate. */
-export const projectHttpStatusClass = (status: TelemetryHttpStatus): TelemetryHttpStatusClass => {
-  if (status < firstSuccessStatus) return "1xx";
-  if (status < firstRedirectStatus) return "2xx";
-  if (status < firstClientErrorStatus) return "3xx";
-  if (status < firstServerErrorStatus) return "4xx";
-  return "5xx";
-};
-
-/** Projects a provider request into its closed method and provider coordinates. */
-export const projectExternalHttpRequest: {
-  (
-    provider: TelemetryCode<"provider">
-  ): (method: TelemetryExternalHttpMethod) => ExternalHttpRequestAttributes;
-  (
-    method: TelemetryExternalHttpMethod,
-    provider: TelemetryCode<"provider">
-  ): ExternalHttpRequestAttributes;
-} = dual(2, (method: TelemetryExternalHttpMethod, provider: TelemetryCode<"provider">) => ({
-  "fidy.provider": provider,
-  "http.request.method": method,
-}));
-
-/** Projects a response status into its low-cardinality status class. */
-export const projectExternalHttpResponse = (status: number): ExternalHttpResponseAttributes =>
-  Option.match(Schema.decodeOption(TelemetryHttpStatus, TelemetryStrictDecoding)(status), {
-    onNone: () => ({}),
-    onSome: (value) => ({ "http.response.status_class": projectHttpStatusClass(value) }),
-  });
-
-/** Projects transport completion into its closed outcome coordinate. */
-export const projectExternalHttpOutcome = (
-  outcome: TelemetryTransportOutcome
-): ExternalHttpOutcomeAttributes => ({ "fidy.transport_outcome": outcome });
-
-/** No-op adapter resource for tests and disabled runtime configuration. */
-export const DisabledTelemetryResource: TelemetryResource = {
-  adapter: {
-    startSpan: () => Effect.succeedNone,
-    finishSpan: () => Effect.void,
-    recordOutcome: () => Effect.void,
-    recordResponseStatus: () => Effect.void,
-    captureFailure: () => Effect.void,
-    addBreadcrumb: () => Effect.void,
-    recordModelUsage: () => Effect.void,
-    exportWork: () => undefined,
-  },
-  close: Effect.void,
-};

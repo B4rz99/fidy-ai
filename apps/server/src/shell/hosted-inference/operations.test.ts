@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { expect, it } from "@effect/vitest";
 import { Deferred, Effect, Exit, Fiber, Option, Ref, Schema } from "effect";
-import { maximumToolCallsPerTurn } from "~/shell/_shared/hosted-turn-bounds";
+import { maximumToolCallsPerTurn } from "~/core/agent/contract";
 import {
   type HostedContinuationEvent,
   type HostedInferenceError,

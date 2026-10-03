@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import { UserId } from "~/core/identity/reference";
+import { UserId } from "~/core/identity/contract";
 import { AuditUnavailable, utcDayMilliseconds } from "~/shell/audit/contract";
 
 const retentionDays = 365;

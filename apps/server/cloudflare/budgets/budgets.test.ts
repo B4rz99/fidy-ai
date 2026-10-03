@@ -2,11 +2,13 @@ import { evaluateBudgetAlerts, readBudgetCaps, readBudgetSpending } from "./oper
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { afterAll, expect, it } from "vitest";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
-import { Budget, BudgetStatusReport, IanaTimeZone } from "@fidy/server/budgets-contract";
-import { deriveCurrentBudgetMonth } from "@fidy/server/budget-decisions";
-import { Transaction, encodeMoneyAmount } from "@fidy/server/transactions-contract";
-import { AtomicBatchRejected } from "~/shell/operations/contract";
-import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
+import { Budget, BudgetStatusReport } from "../../src/core/budgets/contract";
+import { IanaTimeZone } from "../../src/core/_shared/context";
+import { deriveCurrentBudgetMonth } from "../../src/core/budgets/operations";
+import { Transaction } from "../../src/core/transactions/contract";
+import { encodeMoneyAmount } from "../../src/core/_shared/money";
+import { AtomicBatchRejected } from "../../src/shell/operations/contract";
+import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";

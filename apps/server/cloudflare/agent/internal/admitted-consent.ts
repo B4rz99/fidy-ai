@@ -1,7 +1,7 @@
 import { Effect, Option, Schema } from "effect";
-import { OnboardingConsentBasis } from "@fidy/server/consent-contract";
-import type { UserId } from "@fidy/server/identity-reference";
-import type { TranscriptTurnId } from "@fidy/server/agent-contract";
+import { OnboardingConsentBasis } from "../../../src/shell/consent/contract";
+import type { UserId } from "../../../src/core/identity/contract";
+import type { TranscriptTurnId } from "../../../src/core/agent/contract";
 import { AgentUnavailable } from "../contract";
 
 const AdmittedRow = Schema.Struct({ consent_basis_json: Schema.String });

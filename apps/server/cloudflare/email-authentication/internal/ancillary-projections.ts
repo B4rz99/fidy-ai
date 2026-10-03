@@ -1,4 +1,4 @@
-import type { OwnedStatement } from "../../../src/shell/_shared/owned-statement";
+import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import type { VerifiedEmailQueryInput } from "../contract";
 
 export const verifiedEmailQuery = ({ userId }: VerifiedEmailQueryInput): OwnedStatement => ({

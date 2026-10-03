@@ -1,5 +1,5 @@
-import { type ConsentProtectedStatement } from "@fidy/server/consent-contract";
-import { protectConsentStatement } from "@fidy/server/consent-operations";
+import { type ConsentProtectedStatement } from "../../src/shell/consent/contract";
+import { protectConsentStatement } from "../../src/shell/consent/operations";
 import { type Effect } from "effect";
 import {
   type ConsentEgressAction,

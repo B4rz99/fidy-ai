@@ -1,9 +1,11 @@
-import type { OwnedStatement } from "~/shell/_shared/owned-statement";
-import type {
-  AuditQueryCall,
-  AuthorizedAuditCall,
-  EmailReplacementEvidence,
-  OwnerAuditCall,
+import type { OwnedStatement } from "~/shell/owner-write/contract";
+import {
+  type AuditQueryCall,
+  AuditUnavailable,
+  type AuthorizedAuditCall,
+  type EmailReplacementEvidence,
+  type OwnerAuditCall,
+  dailyAuditBudget,
 } from "./contract";
 import { emailReplacementEvidence } from "~/shell/audit/internal/email-evidence";
 import {
@@ -17,9 +19,7 @@ import {
   browserBudgetGuard,
   dailyAuditCount as countDailyCalls,
 } from "~/shell/audit/internal/daily-budget";
-import { dailyAuditBudget } from "./contract";
 
-import { AuditUnavailable } from "./contract";
 import * as patEvidence from "~/shell/audit/internal/pat-evidence";
 
 export { dailyAuditBudget, utcDayMilliseconds } from "./contract";
@@ -76,22 +76,30 @@ export const prepareEmailReplacementEvidence = ({
  * Proof for a PAT-owner activity transition correlated to its subject row. The exact successful
  * call must exist under that PAT and User; compose this SELECT with the credential owner's guard.
  */
-export const recordedPATCallProof = patEvidence.recordedPATCallProof;
+export const recordedPATCallProof: typeof patEvidence.recordedPATCallProof = (input) =>
+  patEvidence.recordedPATCallProof(input);
 
 /** Attribute a successful PAT issuance/approval only after the credential owner's preceding write. */
-export const recordSessionPATTransition = patEvidence.recordSessionPATTransition;
+export const recordSessionPATTransition: typeof patEvidence.recordSessionPATTransition = (input) =>
+  patEvidence.recordSessionPATTransition(input);
 /** Attribute a pairing claim only after the consumed proof and minted PAT commit in the same unit. */
-export const recordClaimedPAT = patEvidence.recordClaimedPAT;
+export const recordClaimedPAT: typeof patEvidence.recordClaimedPAT = (input) =>
+  patEvidence.recordClaimedPAT(input);
 /** Account for PAT-list access under the exact live User-owned session. */
-export const recordPATList = patEvidence.recordPATList;
+export const recordPATList: typeof patEvidence.recordPATList = (input) =>
+  patEvidence.recordPATList(input);
 /** Append revocation evidence naming the exact User-owned PAT just revoked. */
-export const recordOnePATRevocation = patEvidence.recordOnePATRevocation;
+export const recordOnePATRevocation: typeof patEvidence.recordOnePATRevocation = (input) =>
+  patEvidence.recordOnePATRevocation(input);
 /** Append revoke-all evidence under the same fresh User decision as its credential transition. */
-export const recordAllPATRevocations = patEvidence.recordAllPATRevocations;
+export const recordAllPATRevocations: typeof patEvidence.recordAllPATRevocations = (input) =>
+  patEvidence.recordAllPATRevocations(input);
 /** Append canonical-call evidence under the exact live authority supplied by the PAT owner. */
-export const recordCanonicalPATWork = patEvidence.recordCanonicalPATWork;
+export const recordCanonicalPATWork: typeof patEvidence.recordCanonicalPATWork = (input) =>
+  patEvidence.recordCanonicalPATWork(input);
 /** Append a refused canonical call under the live authority that attempted it. */
-export const recordRejectedPATWork = patEvidence.recordRejectedPATWork;
+export const recordRejectedPATWork: typeof patEvidence.recordRejectedPATWork = (input) =>
+  patEvidence.recordRejectedPATWork(input);
 
 /** Classify commit-time Audit budget refusal without returning a raw D1 error or its contents. */
 export const refusedByAuditBudget = (cause: unknown): boolean =>

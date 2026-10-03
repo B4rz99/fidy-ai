@@ -7,7 +7,7 @@ import type {
   RecoveryBrowserPairingQuery,
 } from "./contract";
 import type { Option } from "effect";
-import type { OwnedStatement } from "../../src/shell/_shared/owned-statement";
+import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 
 import {
   pendingPairingQuery,

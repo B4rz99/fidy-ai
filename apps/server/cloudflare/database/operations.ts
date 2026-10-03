@@ -1,4 +1,4 @@
-import type { OwnedStatement } from "~/shell/_shared/owned-statement";
+import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 
 /** Bind a statement published by its owner without reconstructing its table or decision. */
 export const prepareOwnedStatement = ({

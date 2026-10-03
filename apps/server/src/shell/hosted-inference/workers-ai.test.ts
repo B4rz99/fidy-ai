@@ -10,14 +10,12 @@ import {
   type HostedInferenceService,
   type HostedInitialTextContext,
   HostedToolCallMaximum,
-} from "./contract";
-import { approvedWorkersAiModel } from "./model";
-import { hostedInitialTextContext } from "./context.test-fixture";
-import {
   type WorkersAiBindingRun,
   type WorkersAiRequest,
-  makeWorkersAiHostedInference,
-} from "./workers-ai";
+  approvedWorkersAiModel,
+} from "./contract";
+import { hostedInitialTextContext } from "./context.test-fixture";
+import { makeWorkersAiHostedInference } from "./runtime";
 
 const hostedFailure = (
   reason: HostedInferenceFailureReason,

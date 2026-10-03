@@ -4,11 +4,11 @@ import {
   isolatedTestDatabases,
 } from "../d1-test-fixture";
 import * as D1Client from "@effect/sql-d1/D1Client";
-import { listCategoriesResponse } from "@fidy/server/categories";
+import { listCategoriesResponse } from "../../src/shell/categories/operations";
 import { Clock, Context, Data, DateTime, Effect, Layer, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
-import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
+import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { UserTransactionCoordinator } from "../transactions/runtime";

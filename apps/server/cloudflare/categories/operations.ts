@@ -1,5 +1,19 @@
 import { captureCategories } from "./internal/capture";
 import { executeProtectedCategories as readProtectedCategories } from "./internal/canonical-category";
+import { keywordRuleGuardFailure as classifyRuleGuardFailure } from "./internal/keyword-rule-outcome";
+import type { Effect } from "effect";
+import {
+  type Category,
+  type CategoryId,
+  type CategoryNotFound,
+} from "../../src/core/categories/contract";
+import type { CategoriesUnavailable } from "./contract";
+import {
+  categoryList,
+  categoryReferenceStatement,
+  requiredCategory,
+  verifyStorage,
+} from "./internal/projection";
 import {
   prepareCreateKeywordRule as createRule,
   keywordRuleIdFromPath as decodeRuleId,
@@ -10,12 +24,6 @@ import {
   keywordRuleUnknownId as unknownRuleId,
   prepareUpdateKeywordRule as updateRule,
 } from "./internal/canonical-keyword-rules";
-import { keywordRuleGuardFailure as classifyRuleGuardFailure } from "./internal/keyword-rule-outcome";
-import type { Effect } from "effect";
-import type { Category, CategoryNotFound } from "../../src/core/categories/contract";
-import type { CategoryId } from "../../src/core/categories/reference";
-import type { CategoriesUnavailable } from "./contract";
-import { categoryList, categoryReferenceStatement, requiredCategory } from "./internal/projection";
 
 /** Require the current public metadata for a stable id; absence is a typed CategoryNotFound. */
 export const requireCategory = (
@@ -63,3 +71,8 @@ export const keywordRuleGuardFailure: typeof classifyRuleGuardFailure = (input) 
  */
 export const prepareCategoryReference: typeof categoryReferenceStatement = (input) =>
   categoryReferenceStatement(input);
+
+/** Verify Category storage is installed for release smoke without loading any retained content. */
+export const verifyCategoryStorage = (
+  input: Readonly<{ db: D1Database }>
+): Effect.Effect<void, CategoriesUnavailable> => verifyStorage(input);

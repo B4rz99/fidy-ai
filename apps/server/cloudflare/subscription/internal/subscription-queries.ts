@@ -1,15 +1,18 @@
-import { prepareAuthorizedAuditCall, recordCanonicalPATWork } from "@fidy/server/audit";
-import { liveWebSessionAuthority } from "@fidy/server/identity-operations";
-import { livePATAuthority, recordLivePATUse } from "@fidy/server/tokens-operations";
+import {
+  prepareAuthorizedAuditCall,
+  recordCanonicalPATWork,
+} from "../../../src/shell/audit/operations";
+import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
+import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import {
   prepareSubscriptionOffers,
   prepareSubscriptionStatus,
-} from "~/shell/subscription/operations";
-import { type PreparedSubscriptionRead } from "~/shell/subscription/contract";
-import { UserId } from "~/core/identity/reference";
+} from "../../../src/shell/subscription/operations";
+import { type PreparedSubscriptionRead } from "../../../src/shell/subscription/contract";
+import { UserId } from "../../../src/core/identity/contract";
 import { Effect } from "effect";
 import { prepareOwnedStatement } from "../../database/operations";
-import { currentMillis } from "../../runtime/clock";
+import { currentMillis } from "../../runtime/operations";
 import { newId } from "../../secret-material/operations";
 import { isPATCaller } from "../../canonical-work/operations";
 import { type SubscriptionQueryInput as QueryInput } from "../contract";

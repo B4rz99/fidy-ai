@@ -1,7 +1,7 @@
-import { getCanonicalOperationInput } from "~/shell/canonical-operations/operations";
-import { StatementSubmission } from "@fidy/server/ingestion-contract";
+import { getCanonicalOperationInput } from "../../../src/shell/canonical-operations/operations";
+import { StatementSubmission } from "../../../src/shell/ingestion/contract";
 import { Effect, Exit, Option, Schema } from "effect";
-import { dailyAuditExhausted } from "@fidy/server/audit";
+import { dailyAuditExhausted } from "../../../src/shell/audit/operations";
 import {
   type PreparedStatementPublication,
   type StatementPublicationRefusal,

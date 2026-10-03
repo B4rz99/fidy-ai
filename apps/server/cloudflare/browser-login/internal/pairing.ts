@@ -1,18 +1,22 @@
-import { BrowserLoginPublicCodeSymbols } from "../../../src/core/browser-login/contract";
+import {
+  BrowserLoginPairingId,
+  BrowserLoginPublicCodeSymbols,
+} from "../../../src/core/browser-login/contract";
 import { prepareClaim } from "./claim";
-import { retainedSessionPairingsQuery } from "@fidy/server/web-session-operations";
+import { retainedSessionPairingsQuery } from "../../../src/shell/web-session/operations";
 import { establishWebSession } from "../../web-session/operations";
 import { findWhatsAppUser, prepareWhatsAppIdentity } from "../../identity/operations";
-import { protectConsentStatement } from "@fidy/server/consent-operations";
-import { BrowserLoginPairingId } from "../../../src/core/browser-login/reference";
+import { protectConsentStatement } from "../../../src/shell/consent/operations";
+
 import {
   decideBrowserLoginRedemption,
   formatPublicCode,
   selectPublicCodeSymbols,
 } from "../../../src/core/browser-login/operations";
-import { WhatsAppCallerReference } from "@fidy/server/identity-reference";
+import { WhatsAppCallerReference } from "../../../src/core/identity/contract";
 import { Clock, Crypto, DateTime, Effect, Encoding, Option, PlatformError, Schema } from "effect";
-import { RequestBodyPolicy, readBoundedRequestBody } from "../../http/request-body";
+import { RequestBodyPolicy } from "../../http/contract";
+import { readBoundedRequestBody } from "../../http/operations";
 
 const PairingProof = Schema.Struct({
   pairingId: BrowserLoginPairingId,

@@ -1,4 +1,4 @@
-import { type BillingAttemptId } from "~/core/subscription/contract";
+import { type BillingAttemptId } from "../../../src/core/subscription/contract";
 import { type WompiBillingStatus, type WompiTransactionId } from "./wompi-model";
 import { wompiRetryOpportunity } from "./billing-rules";
 import { Duration, Option } from "effect";

@@ -2,7 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { CapturedInterpretationContext } from "~/core/interpretation-evidence/contract";
 import { encodeMoneyAmount } from "~/core/_shared/money";
-import { ReceivedEmailId } from "~/core/ingestion/reference";
+import { ReceivedEmailId } from "~/core/ingestion/contract";
 import { interpretNotificationEmail } from "./operations";
 
 const context = Schema.decodeSync(CapturedInterpretationContext)({

@@ -1,17 +1,20 @@
-import { CanonicalCapability, CanonicalOperationId } from "~/core/canonical-operations/contract";
-import { maximumAtomicBatchCalls } from "~/shell/operations/contract";
+import {
+  CanonicalCapability,
+  CanonicalOperationId,
+} from "../../src/core/canonical-operations/contract";
+import { maximumAtomicBatchCalls } from "../../src/shell/operations/contract";
 import type { BudgetOutcome } from "../budgets/contract";
 import type { TransactionOutcome } from "../transactions/contract";
 import type { KeywordRuleOutcome } from "../categories/contract";
-import type { ErrorCode } from "~/shell/public-http/contract";
-import type { StatementSubmission } from "@fidy/server/ingestion-contract";
+import type { ErrorCode } from "../../src/shell/public-http/contract";
+import type { StatementSubmission } from "../../src/shell/ingestion/contract";
 import type { EmailForwardingAddress } from "../../src/core/ingestion/contract";
 import type { StatementPublicationOutcome } from "../ingestion/contract";
 import type {
   RestoredTransactionPair,
   Transaction,
   TransactionPresentation,
-} from "@fidy/server/transactions-contract";
+} from "../../src/core/transactions/contract";
 import { type Effect, type Option, Schema } from "effect";
 import type { CanonicalRefusalDisposition, TransactionCaller } from "../canonical-work/contract";
 

@@ -5,9 +5,9 @@ import {
 } from "../d1-test-fixture";
 import { afterAll, expect, it, vi } from "vitest";
 import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
-import { ErrorCode } from "~/shell/public-http/contract";
-import { approvedWorkersAiModel } from "@fidy/server/hosted-inference-model";
-import { Memory, MemoryId, maximumAggregateMemoryTokens } from "@fidy/server/memory-contract";
+import { ErrorCode } from "../../src/shell/public-http/contract";
+import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
+import { Memory, MemoryId, maximumAggregateMemoryTokens } from "../../src/core/memory/contract";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { UserTransactionCoordinator } from "../transactions/runtime";

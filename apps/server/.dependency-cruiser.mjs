@@ -5,7 +5,7 @@
 // oxlint holds the per-file rules; the rules here are the ones that are about
 // the graph rather than about a file. The dividing line is whether the target
 // can be written in terms of the source: "a core slice may import a sibling only
-// through reference.ts" needs one relational rule with a back-reference, where oxlint's
+// through published contracts" needs one relational rule with a back-reference, where oxlint's
 // deny-pattern-only `no-restricted-imports` would need an override block per
 // slice enumerating every other slice, rotting on the next slice added.
 //
@@ -172,7 +172,7 @@ export default {
         path: "^src/",
         pathNot: [
           "^src/core/(browser-login|dashboard|email-authentication|ingestion|recovery|subscription|tokens)/contract\\.ts$",
-          "^src/core/(subscription|tokens)/reference\\.ts$",
+
           "^src/core/tokens/operations\\.ts$",
           "^src/core/_shared/context\\.ts$",
           "^src/shell/api\\.ts$",
@@ -199,7 +199,7 @@ export default {
         path: ["^cloudflare/", "^src/(core|shell)/"],
         pathNot: [
           "^cloudflare/maintenance/",
-          "^cloudflare/[^/]+/(contract|runtime)\\.ts$",
+          "^cloudflare/.+/(contract|runtime)\\.ts$",
           "^src/(core|shell)/[^/]+/(contract|runtime)\\.ts$",
         ],
       },
@@ -678,7 +678,7 @@ export default {
       comment:
         "A core slice imported a sibling's implementation instead of a published interface. " +
         "A core slice may import ownerless shared values from core/_shared or a sibling's direct " +
-        "reference.ts, contract.ts, or operations.ts, but sibling models, rules, errors, and other " +
+        "contract.ts or operations.ts, but sibling models, rules, errors, and other " +
         "implementation details remain private. Core decides, it does not gather " +
         "(ARCHITECTURE.md §2).",
 
@@ -688,7 +688,7 @@ export default {
         pathNot: [
           "^src/core/_shared/",
           "^src/core/$1/",
-          "^src/core/[^/]+/(reference|contract|operations)\\.ts$",
+          "^src/core/[^/]+/(contract|operations)\\.ts$",
         ],
       },
     },
@@ -1361,7 +1361,7 @@ export default {
         "These modules import each other, directly or through a chain. The graph is acyclic " +
         "(ARCHITECTURE.md §1) — a cycle means two files are one module that has not admitted " +
         "it yet, and under ESM it also means one of them observes the other half-initialised.",
-      from: { path: "^(src|scripts|tools)/" },
+      from: { path: "^(src|cloudflare|scripts|tools)/" },
       to: { circular: true },
     },
     // The next two rules are exact complements, and both hang off the same
@@ -1419,7 +1419,7 @@ export default {
   ],
   options: {
     doNotFollow: { path: "node_modules" },
-    tsConfig: { fileName: "tsconfig.json" },
+    tsConfig: { fileName: "tsconfig.dependencies.json" },
     // Type-only imports are still edges: `import type { TransactionFailure }`
     // is core knowledge reaching shell, and erasing at compile time does not
     // make it less of an architectural arrow.
@@ -1427,7 +1427,7 @@ export default {
     enhancedResolveOptions: {
       exportsFields: ["exports"],
       conditionNames: ["import", "require", "node", "default", "types"],
-      extensions: [".ts", ".mts", ".cts", ".js", ".mjs", ".cjs"],
+      extensions: [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"],
       mainFields: ["module", "main", "types", "typings"],
     },
   },

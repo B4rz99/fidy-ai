@@ -1,6 +1,11 @@
 import { type DateTime, type Option, Schema, SchemaTransformation } from "effect";
 import { UtcTimestamp } from "~/core/_shared/time";
-import { BrowserLoginPairingId } from "./reference";
+
+/** Stable, non-secret identity of one BrowserLoginPairing. */
+export const BrowserLoginPairingId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("BrowserLoginPairingId"))
+  .annotate({ identifier: "BrowserLoginPairingId" });
+export type BrowserLoginPairingId = typeof BrowserLoginPairingId.Type;
 
 /** Minimum cadence advertised to browsers polling a pairing challenge. */
 export const browserLoginPollingIntervalSeconds = 5;

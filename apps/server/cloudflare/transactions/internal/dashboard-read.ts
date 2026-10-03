@@ -4,7 +4,7 @@ import type {
   DashboardTransactionRead,
   DashboardTransactionSnapshot,
 } from "../contract";
-import { CategoryId } from "../../../src/core/categories/reference";
+import { CategoryId } from "../../../src/core/categories/contract";
 import { dashboardTransactionQueries, decodeDashboardTransactions } from "./dashboard-query";
 import { projectionReady } from "./dashboard-projection";
 

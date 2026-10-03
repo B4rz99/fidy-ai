@@ -1,7 +1,10 @@
 import type { TransactionOutcome } from "../contract";
 import { dailyAuditMessage } from "../../canonical-work/contract";
 import { Effect, Option, Schema } from "effect";
-import type { TransactionPair, TransactionPresentation } from "@fidy/server/transactions-contract";
+import type {
+  TransactionPair,
+  TransactionPresentation,
+} from "../../../src/core/transactions/contract";
 import {
   type CanonicalMutationPreparation,
   type CanonicalMutationRefusal,

@@ -1,6 +1,6 @@
-import { type MemoryOperationId, memoryOperationIds } from "@fidy/server/memory-api";
+import { type MemoryOperationId, memoryOperationIds } from "../../../src/shell/memory/contract";
 
-import { UserId } from "@fidy/server/identity-reference";
+import { UserId } from "../../../src/core/identity/contract";
 import { HostedTurnProgressRequest } from "../../../src/shell/agent/contract";
 import {
   HostedDeliveryAdmission,
@@ -16,14 +16,11 @@ import {
   dispatchOnboardingEmail,
 } from "../../email-authentication/runtime";
 
-import {
-  ScopeMissing,
-  UserActionRequired,
-  categoryUnavailable,
-  listCategoriesPath,
-} from "@fidy/server/categories";
-import { MemoryId, RememberInput, ReviseInput } from "@fidy/server/memory-contract";
-import { type TelemetryService } from "@fidy/server/telemetry";
+import { ScopeMissing, UserActionRequired } from "../../../src/shell/public-http/contract";
+import { categoryUnavailable } from "../../../src/shell/categories/operations";
+import { listCategoriesPath } from "../../../src/shell/categories/contract";
+import { MemoryId, RememberInput, ReviseInput } from "../../../src/core/memory/contract";
+import { type TelemetryService } from "../../../src/shell/observability/contract";
 import { type Cause, Effect, Exit, Option, Schema } from "effect";
 import {
   browseTransactions,
@@ -32,12 +29,12 @@ import {
   transactionPairInput,
   transactionSession,
 } from "../../transactions/operations";
-import { BudgetId, CreateBudgetInput, UpdateBudgetInput } from "@fidy/server/budgets-contract";
-import { DeliveryEvidenceInput, InsightEventId } from "@fidy/server/insights-contract";
+import { BudgetId, CreateBudgetInput, UpdateBudgetInput } from "../../../src/core/budgets/contract";
+import { DeliveryEvidenceInput, InsightEventId } from "../../../src/core/insights/contract";
 import { browseBudgets, budgetRefusal, evaluateBudgetAlerts } from "../../budgets/operations";
 import { listPendingInsights } from "../../insights/operations";
 import { browseDashboard } from "../../dashboard/operations";
-import { ownsTransactionPath as transactionPath } from "@fidy/server/transaction-runtime";
+import { ownsTransactionPath as transactionPath } from "../../../src/shell/transactions/runtime";
 import {
   type TransactionCaller,
   isPATCaller,
@@ -47,22 +44,23 @@ import {
   transactionNow,
   unauthenticatedTransaction,
 } from "../../canonical-work/operations";
-import { RequestBodyPolicy, boundedJsonBody } from "../../http/request-body";
-import { pathId, rawPathId } from "../../http/path";
+import { RequestBodyPolicy } from "../../http/contract";
+import { boundedJsonBody, pathId, rawPathId } from "../../http/operations";
 
 import {
   handleWebAuthentication,
   ownsWebAuthenticationPath,
 } from "../../web-authentication/operations";
+import { executeProtectedSubscriptionQuery } from "../../subscription/operations";
 import {
-  executeProtectedSubscriptionQuery,
+  dispatchBillingCollection,
   handleCardEnrollment,
-} from "../../subscription/operations";
-import { dispatchBillingCollection, receiveWompiBillingEvent } from "../../subscription/runtime";
+  receiveWompiBillingEvent,
+} from "../../subscription/runtime";
 
 import { authorizeCanonicalPAT, listPATs } from "../../tokens/operations";
 import { recallMemories, rejectMemoryMutation } from "../../memory/operations";
-import { canonicalOperation, canonicalRoute } from "../../routing/canonical-routes";
+import { canonicalOperation, canonicalRoute } from "../../routing/operations";
 import {
   BatchInput,
   type CanonicalWork,
@@ -70,10 +68,13 @@ import {
   type PATAuthority,
   type WebSessionAuthority,
 } from "../../canonical-operations/contract";
-import { CanonicalOperationId } from "~/core/canonical-operations/contract";
-import { type CatalogOperation } from "~/shell/canonical-catalog/contract";
-import { atomicBatchOperation, maximumAtomicBatchCalls } from "~/shell/operations/contract";
-import { operationCatalog } from "~/shell/api";
+import { CanonicalOperationId } from "../../../src/core/canonical-operations/contract";
+import { type CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
+import {
+  atomicBatchOperation,
+  maximumAtomicBatchCalls,
+} from "../../../src/shell/operations/contract";
+import { operationCatalog } from "../../../src/shell/api";
 import {
   executeProtectedCategories,
   keywordRuleIdFromPath,
@@ -82,11 +83,15 @@ import {
   keywordRuleUnknownId,
   listOwnKeywordRules,
 } from "../../categories/operations";
-import { contractDigestPattern, gitRevisionPattern } from "../../runtime/release-identity";
-import { smokeFailureHeader, smokePath, smokeProofAccepted } from "../../runtime/smoke";
-import { handleSmoke, smokeReady } from "../../runtime/smoke-work";
+import { contractDigestPattern, gitRevisionPattern } from "../../runtime/contract";
+import { smokeFailureHeader, smokePath } from "../../runtime/release-smoke/contract";
+import {
+  handleSmoke,
+  smokeProofAccepted,
+  smokeReady,
+} from "../../runtime/release-smoke/operations";
 
-import { statementStagingPath } from "@fidy/server/ingestion-contract";
+import { statementStagingPath } from "../../../src/shell/ingestion/contract";
 import {
   forwardingAddressResponse,
   listNeedsReviewItems,

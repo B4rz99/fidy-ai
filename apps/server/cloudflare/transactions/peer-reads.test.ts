@@ -1,9 +1,9 @@
 import { afterAll, expect, it } from "vitest";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
-import { UserContext } from "@fidy/server/identity-contract";
-import { UserId } from "@fidy/server/identity-reference";
-import { Currency, encodeMoneyAmount } from "@fidy/server/transactions-contract";
-import { CategoryId } from "../../src/core/categories/reference";
+import { UserContext, UserId } from "../../src/core/identity/contract";
+
+import { Currency, encodeMoneyAmount } from "../../src/core/_shared/money";
+import { CategoryId } from "../../src/core/categories/contract";
 import { prepareUserContext } from "../identity/user-context/operations";
 import { listCategories } from "../categories/operations";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";

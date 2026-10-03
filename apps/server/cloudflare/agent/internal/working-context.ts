@@ -2,11 +2,11 @@ import {
   type HostedAgentSessionId,
   type TranscriptEntry,
   type TranscriptTurnId,
-} from "~/core/agent/contract";
+} from "../../../src/core/agent/contract";
 import { Brand, type DateTime, Option } from "effect";
-import type { User } from "~/core/identity/contract";
-import type { UserId } from "~/core/identity/reference";
-import type { HostedInitialTextContext } from "~/shell/hosted-inference/contract";
+import { type User, type UserId } from "../../../src/core/identity/contract";
+
+import type { HostedInitialTextContext } from "../../../src/shell/hosted-inference/contract";
 import { hostedContextSections } from "./context-sections";
 
 const makeInitialContext = Brand.nominal<HostedInitialTextContext>();

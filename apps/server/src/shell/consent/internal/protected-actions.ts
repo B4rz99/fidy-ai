@@ -1,5 +1,5 @@
 import { Option } from "effect";
-import type { OwnedStatement } from "~/shell/_shared/owned-statement";
+import type { OwnedStatement } from "~/shell/owner-write/contract";
 import type {
   ConsentStandingRequirement,
   ConsentSubject,
@@ -64,8 +64,14 @@ export const revocationEvidence = (evidence: PATRevocationProtection): OwnedStat
   }
 };
 
-export const fixedExpiryEvidenceSql = `SELECT pat_id AS id FROM pat_revocation_consents
-  WHERE policy_reason = 'pat-fixed-lifetime-expiry' AND occurred_at_ms = ?`;
+export const fixedExpiryEvidenceStatement = (current: number): OwnedStatement => ({
+  sql: `SELECT pat_id AS id FROM pat_revocation_consents
+  WHERE policy_reason = 'pat-fixed-lifetime-expiry' AND occurred_at_ms = ?`,
+  params: [current],
+});
 
-export const pairingExpiryEvidenceSql = `SELECT pairing_id AS id FROM pat_revocation_consents
-  WHERE policy_reason = 'pat-approved-unclaimed-expiry' AND occurred_at_ms = ?`;
+export const pairingExpiryEvidenceStatement = (current: number): OwnedStatement => ({
+  sql: `SELECT pairing_id AS id FROM pat_revocation_consents
+  WHERE policy_reason = 'pat-approved-unclaimed-expiry' AND occurred_at_ms = ?`,
+  params: [current],
+});

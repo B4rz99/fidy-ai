@@ -4,17 +4,17 @@ import {
   AtomicBatchRejected,
   decodeAtomicBatchResult,
   getAtomicBatchCallSchema,
-} from "~/shell/operations/contract";
-import { CanonicalOperationId } from "~/core/canonical-operations/contract";
-import { type CatalogOperation } from "~/shell/canonical-catalog/contract";
-import { type ErrorCode } from "~/shell/public-http/contract";
-import { grantsRequiredTier } from "~/shell/canonical-operations/operations";
-import { operationCatalog } from "~/shell/api";
-import { patScopeCapability } from "~/shell/canonical-policy/contract";
+} from "../../../src/shell/operations/contract";
+import { CanonicalOperationId } from "../../../src/core/canonical-operations/contract";
+import { type CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
+import { type ErrorCode } from "../../../src/shell/public-http/contract";
+import { grantsRequiredTier } from "../../../src/shell/canonical-operations/operations";
+import { operationCatalog } from "../../../src/shell/api";
+import { patScopeCapability } from "../../../src/shell/canonical-policy/contract";
 import { Effect, Option, Schema } from "effect";
 import { maximumSubmissionInputBytes } from "../../ingestion/contract";
 
-import type { HostedInference } from "@fidy/server/hosted-inference";
+import type { HostedInference } from "../../../src/shell/hosted-inference/operations";
 import {
   type CanonicalRefusalDisposition,
   type TransactionCaller,

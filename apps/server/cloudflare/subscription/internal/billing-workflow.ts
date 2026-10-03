@@ -1,7 +1,7 @@
-import { WompiEnvironment } from "~/shell/secret-material/contract";
-import { BillingAttemptId, BillingEmail } from "~/core/subscription/contract";
-import { IanaTimeZone } from "~/core/_shared/context";
-import { Money } from "~/core/_shared/money";
+import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
+import { BillingAttemptId, BillingEmail } from "../../../src/core/subscription/contract";
+import { IanaTimeZone } from "../../../src/core/_shared/context";
+import { Money } from "../../../src/core/_shared/money";
 import {
   type WompiBillingClientService,
   type WompiTransaction,
@@ -9,7 +9,7 @@ import {
 } from "./wompi-billing-client";
 import { WompiSourceId, WompiTransactionId, WompiTransactionReference } from "./wompi-model";
 import { amountInCentsForBilling } from "./billing-rules";
-import { paidPeriodFor } from "~/core/subscription/operations";
+import { paidPeriodFor } from "../../../src/core/subscription/operations";
 import { type VerifiedOutcome, recordVerifiedBillingEvidence } from "./billing-settlement";
 import { verifiedWompiEventHint } from "./wompi-event";
 import { type WorkflowStepConfig } from "cloudflare:workers";

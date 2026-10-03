@@ -2,7 +2,7 @@ import type { PATGrantSelection, PairingGrantSelection } from "~/shell/tokens/co
 import type { PATRevocationDisclosure } from "~/core/consent/contract";
 import type { FreshSessionSubject } from "~/shell/web-session/contract";
 import { freshSessionExists, freshSessionParams } from "~/shell/web-session/operations";
-import type { OwnedStatement } from "~/shell/_shared/owned-statement";
+import type { OwnedStatement } from "~/shell/owner-write/contract";
 
 // One fresh evidence id per row, including multi-grant revocation; no bearer enters a statement.
 const randomConsentId = `lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4'

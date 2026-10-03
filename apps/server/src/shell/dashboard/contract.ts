@@ -1,4 +1,4 @@
-import type { CategoryId } from "~/core/categories/reference";
+import { Category, type CategoryId } from "~/core/categories/contract";
 import {
   AppliedDashboardPeriod,
   BudgetBarWidget,
@@ -21,8 +21,6 @@ import { Data, Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
 import { Currency, MoneyGroups } from "~/core/_shared/money";
 import { UtcTimestamp } from "~/core/_shared/time";
-
-import { Category } from "~/core/categories/contract";
 
 import { Transaction } from "~/core/transactions/contract";
 import { NotFound, OperationResponse, ValidationFailed } from "~/shell/public-http/contract";

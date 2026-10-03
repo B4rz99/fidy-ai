@@ -1,5 +1,5 @@
 import { liveWebSessionAuthority } from "~/shell/identity/operations";
-import type { OwnedStatement } from "~/shell/_shared/owned-statement";
+import type { OwnedStatement } from "~/shell/owner-write/contract";
 import { recordAuthorizedCall } from "~/shell/audit/operations";
 import { jsonStringSchema } from "~/shell/schema-codecs/contract";
 import { DateTime, Effect, Schema, Struct } from "effect";

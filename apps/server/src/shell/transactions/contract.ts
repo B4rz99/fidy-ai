@@ -3,7 +3,6 @@ import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/un
 import {
   CreateTransactionInput,
   RestoredTransactionPair,
-  SourceAttestation,
   Transaction,
   TransactionId,
   TransactionPairInput,
@@ -12,6 +11,7 @@ import {
   TransactionSearchQuery,
   UpdateTransactionInput,
 } from "~/core/transactions/contract";
+import { SourceAttestation } from "~/core/source-attestation/contract";
 import {
   NotFound,
   OperationResponse,

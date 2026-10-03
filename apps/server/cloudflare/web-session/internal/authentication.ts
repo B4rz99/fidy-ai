@@ -1,7 +1,7 @@
-import { protectConsentStatement } from "@fidy/server/consent-operations";
+import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import { Option, Schema } from "effect";
-import { UserId } from "@fidy/server/identity-reference";
-import { WebSessionId } from "../../../src/core/web-session/reference";
+import { UserId } from "../../../src/core/identity/contract";
+import { WebSessionId } from "../../../src/core/web-session/contract";
 import type { AuthenticatedWebSession, WebSessionAuthentication } from "../contract";
 import { sessionCookie, sessionDigest } from "./credentials";
 

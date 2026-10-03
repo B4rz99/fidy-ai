@@ -6,11 +6,11 @@ import {
   executeCanonicalWork,
 } from "../canonical-operations/operations";
 import type { HostedCommitFence } from "../agent/contract";
-import { UserId } from "@fidy/server/identity-reference";
+import { UserId } from "../../src/core/identity/contract";
 
 import { Data, Effect, Exit, Option, Schema, type Scope } from "effect";
 
-import { optionalHostedInference } from "../ai/workers-ai";
+import { optionalHostedInference } from "../ai/runtime";
 import type { WorkersAiEnvironment } from "../ai/contract";
 import {
   type TransactionCaller,
@@ -24,13 +24,13 @@ import {
   processStatementSubmission,
 } from "../ingestion/operations";
 
-import { coordinatorProbeName } from "../runtime/operational-probes";
+import { coordinatorProbeName } from "../runtime/operational-health/contract";
 import {
   cloudflareWorkerTelemetry,
   observeWorkerPromise,
   observeWorkerResponse,
   workerRelease,
-} from "../runtime/telemetry";
+} from "../runtime/telemetry/operations";
 
 const digestBytes = 32;
 const HTTP_OK = 200;

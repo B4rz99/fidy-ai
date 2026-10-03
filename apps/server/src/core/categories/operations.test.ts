@@ -1,8 +1,9 @@
+import { normalizeSearchText as normalizeCategoryKeyword } from "~/core/search/operations";
 import { deepStrictEqual } from "node:assert";
 import { expect, it } from "@effect/vitest";
 import { Effect, Exit, Option, Result, Schema } from "effect";
-import { CategoryId } from "./reference";
 import {
+  CategoryId,
   CategoryKeyword,
   KeywordRule,
   KeywordRuleAlreadyExists,
@@ -10,11 +11,7 @@ import {
   KeywordRuleLimitReached,
   KeywordRuleNotFound,
 } from "./contract";
-import {
-  categorizeCapture,
-  normalizeCategoryKeyword,
-  validateKeywordRuleChange,
-} from "./operations";
+import { categorizeCapture, validateKeywordRuleChange } from "./operations";
 
 const domicilios = CategoryId.make("10000000-0000-4000-8000-000000000002");
 const mercado = CategoryId.make("10000000-0000-4000-8000-000000000003");

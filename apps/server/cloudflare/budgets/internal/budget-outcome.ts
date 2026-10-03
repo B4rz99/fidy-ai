@@ -1,5 +1,5 @@
 import type { BudgetOutcome } from "../contract";
-import { Budget, BudgetId } from "@fidy/server/budgets-contract";
+import { Budget, BudgetId } from "../../../src/core/budgets/contract";
 import { Effect, Option, Schema } from "effect";
 import {
   type TransactionCaller,

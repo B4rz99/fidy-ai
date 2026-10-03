@@ -1,5 +1,5 @@
 import { Config, Context, Data, DateTime, Effect, Layer, Option, Schema } from "effect";
-import { type WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
+import { type WhatsAppBusinessScopedUserId } from "~/core/identity/contract";
 import { type TranscriptText } from "~/core/agent/contract";
 import {
   type DisclosureDeliveryCorrelationToken,

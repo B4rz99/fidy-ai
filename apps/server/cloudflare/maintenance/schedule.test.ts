@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber, Logger, Schema } from "effect";
 import { expect } from "vitest";
-import type { TelemetryWorkRecord } from "@fidy/server/telemetry";
+import type { TelemetryWorkRecord } from "../../src/shell/observability/contract";
 import { ScheduledWorkFailed } from "./contract";
 import { executeSchedule } from "./operations";
-import { makeWorkerTelemetry, observeWorkerExecution } from "../runtime/telemetry";
+import { makeWorkerTelemetry, observeWorkerExecution } from "../runtime/telemetry/operations";
 
 it.effect("attempts independent retention after a failed activity before reporting failure", () =>
   Effect.gen(function* () {

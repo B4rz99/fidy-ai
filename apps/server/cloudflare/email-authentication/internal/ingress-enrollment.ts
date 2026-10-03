@@ -2,7 +2,7 @@ import {
   type EmailStatus,
   Sha256Digest,
   WhatsAppProviderMessageId,
-} from "@fidy/server/consent-contract";
+} from "../../../src/shell/consent/contract";
 import { Crypto, Effect, Option, Schema } from "effect";
 import type {
   OnboardingEmailEnrollmentInput,

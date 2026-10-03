@@ -14,7 +14,7 @@ import {
   WhatsAppCallerReference,
   WhatsAppParentBusinessScopedUserId,
   WhatsAppUsername,
-} from "~/core/identity/reference";
+} from "~/core/identity/contract";
 import {
   type DisclosureDeliveryCorrelationToken,
   ProviderMessageEvidence,

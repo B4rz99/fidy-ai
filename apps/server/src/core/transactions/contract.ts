@@ -8,23 +8,14 @@ import {
   SchemaTransformation,
   Struct,
 } from "effect";
-import { CategoryId } from "~/core/categories/reference";
-import {
-  CapturedInterpretationContext,
-  InterpretationRevision,
-} from "~/core/interpretation-evidence/contract";
-import { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
+import { CategoryId } from "~/core/categories/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
-import {
-  EmailSourceFormat,
-  ReceivedEmailId,
-  StatementSourceFormat,
-  StatementSubmissionId,
-} from "~/core/ingestion/reference";
-import { TransactionId } from "./reference";
 
-export { TransactionId } from "./reference";
-export { Currency, Money, encodeMoneyAmount } from "~/core/_shared/money";
+/** Assigned once at capture and stable independently of later Reconciliation. */
+export const TransactionId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("TransactionId"))
+  .annotate({ identifier: "TransactionId" });
+export type TransactionId = typeof TransactionId.Type;
 
 const maxHintTextCodePoints = 64;
 
@@ -99,7 +90,6 @@ export type NotificationInterpretationEvidence = typeof NotificationInterpretati
 const zero = BigDecimal.make(0n, 0);
 const maximumTransactionNotesLength = 500;
 const maximumCounterpartyLength = 120;
-const maximumAttestationNameLength = 80;
 
 // Money itself permits zero. A Transaction is specifically a movement, so the
 // owning model adds positivity while retaining Money's exact-decimal and
@@ -339,65 +329,6 @@ export const TransactionQuery = Schema.Struct({
   cursor: Schema.Option(TransactionQueryValues.fields.cursor),
 }).annotate({ identifier: "TransactionQuery" });
 export type TransactionQuery = typeof TransactionQuery.Type;
-
-/** Stable identity of one immutable provenance statement attached to a Transaction. */
-export const SourceAttestationId = Schema.String.check(Schema.isUUID())
-  .pipe(Schema.brand("SourceAttestationId"))
-  .annotate({ identifier: "SourceAttestationId" });
-export type SourceAttestationId = typeof SourceAttestationId.Type;
-
-const SourceName = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
-  Schema.isMaxLength(maximumAttestationNameLength)
-);
-
-/** Fields shared by every immutable provenance statement. */
-export const SourceAttestationCommon = Schema.Struct({
-  id: SourceAttestationId,
-  transactionId: TransactionId,
-  ...CapturedInterpretationContext.fields,
-  sourceChannel: Schema.OptionFromOptionalKey(SourceName),
-  sourceProvider: Schema.OptionFromOptionalKey(SourceName),
-  interpretationRevision: InterpretationRevision,
-  createdAt: UtcTimestamp,
-});
-
-const ManualSourceAttestation = Schema.Struct({
-  ...SourceAttestationCommon.fields,
-  kind: Schema.Literal("manual"),
-});
-
-/** Immutable provenance linking a captured Transaction to one parsed statement record. */
-export const StatementLineSourceAttestation = Schema.Struct({
-  ...SourceAttestationCommon.fields,
-  kind: Schema.Literal("statement-line"),
-  statementSubmissionId: StatementSubmissionId,
-  statementRecordNumber: Schema.Int.check(Schema.isGreaterThan(0)),
-  statementContentHash: Schema.NonEmptyString,
-  sourceFormat: StatementSourceFormat,
-  extractorRevision: InterpretationRevision,
-});
-export type StatementLineSourceAttestation = typeof StatementLineSourceAttestation.Type;
-
-/** Immutable provenance linking one captured Transaction to one authenticated forwarded-email email. */
-export const NotificationEmailSourceAttestation = Schema.Struct({
-  ...SourceAttestationCommon.fields,
-  kind: Schema.Literal("notification-email"),
-  receivedEmailId: ReceivedEmailId,
-  messageEvidence: ProviderMessageEvidence,
-  messageContentSha256: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
-  sourceFormat: EmailSourceFormat,
-  extractorRevision: InterpretationRevision,
-  deterministicInterpretation: Schema.OptionFromOptionalKey(NotificationInterpretationEvidence),
-});
-export type NotificationEmailSourceAttestation = typeof NotificationEmailSourceAttestation.Type;
-
-/** Immutable evidence of the context and mechanism that interpreted one Transaction. */
-export const SourceAttestation = Schema.Union([
-  ManualSourceAttestation,
-  StatementLineSourceAttestation,
-  NotificationEmailSourceAttestation,
-]).annotate({ identifier: "SourceAttestation" });
-export type SourceAttestation = typeof SourceAttestation.Type;
 
 /**
  * The asked-for transaction is not in this user's history.

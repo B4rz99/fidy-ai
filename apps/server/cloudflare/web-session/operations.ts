@@ -1,5 +1,5 @@
 import { Effect, Option } from "effect";
-import type { FreshSessionSubject } from "@fidy/server/web-session-contract";
+import type { FreshSessionSubject } from "../../src/shell/web-session/contract";
 import { completePairing, logout } from "./internal/lifecycle";
 import { currentUser } from "./internal/current-user";
 import type {

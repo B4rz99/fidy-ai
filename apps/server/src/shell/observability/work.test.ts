@@ -2,15 +2,14 @@ import { it } from "@effect/vitest";
 import { Cause, Effect, Exit, Fiber, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { expect } from "vitest";
+import { DisabledTelemetryResource, makeTelemetryService } from "./operations";
 import {
-  DisabledTelemetryResource,
   TelemetryAttempt,
   TelemetryGitRevision,
   TelemetryWorkDescriptor,
   type TelemetryWorkRecord,
   type TelemetryWorkSuccess,
 } from "./contract";
-import { makeTelemetryService } from "./operations";
 
 const release = TelemetryGitRevision.make("0123456789abcdef0123456789abcdef01234567");
 

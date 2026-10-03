@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import type { OwnedStatement } from "~/shell/_shared/owned-statement";
+import type { OwnedStatement } from "~/shell/owner-write/contract";
 
 import { dailyAuditBudget, utcDayMilliseconds } from "~/shell/audit/contract";
 

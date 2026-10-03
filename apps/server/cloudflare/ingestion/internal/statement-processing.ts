@@ -6,10 +6,10 @@ import {
   StatementStagingId,
   maximumStatementBytes,
   statementParserLimits,
-} from "@fidy/server/ingestion-contract";
-import { parseStatementFile } from "@fidy/server/ingestion-operations";
+} from "../../../src/shell/ingestion/contract";
+import { parseStatementFile } from "../../../src/shell/ingestion/operations";
 
-import type { CategoryId } from "@fidy/server/categories";
+import type { CategoryId } from "../../../src/core/categories/contract";
 import { categorizeCaptures } from "../../categories/operations";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import {
@@ -24,7 +24,7 @@ import {
 } from "../../../src/core/ingestion/operations";
 import { TransactionExtraction } from "../../../src/core/transactions/contract";
 import { prepareStatementCapture } from "../../transactions/operations";
-import { currentMillis } from "../../runtime/clock";
+import { currentMillis } from "../../runtime/operations";
 import { StatementStaging, newIngestionId } from "./statement-staging";
 import { maximumRetainedReviewEvidence } from "./statement-review-retention";
 import { statementChunkSize } from "./statement-processing-limits";

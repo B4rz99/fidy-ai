@@ -23,8 +23,8 @@ const safeSource = [
   /^src\/core\//u,
   /^src\/shell\/api\.ts$/u,
   /^src\/shell\/(?:canonical-catalog|canonical-policy|authorization|operations)\/contract\.ts$/u,
-  /^src\/shell\/email-authentication\/(?:contract|path)\.ts$/u,
-  /^src\/shell\/_shared\/partial-input\.ts$/u,
+  /^src\/shell\/email-authentication\/contract\.ts$/u,
+  /^src\/shell\/partial-input\/contract\.ts$/u,
   /^src\/shell\/authorization\/runtime\.ts$/u,
   /^src\/shell\/canonical-operations\/contract\.ts$/u,
 ] as const;

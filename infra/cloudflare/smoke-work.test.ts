@@ -9,7 +9,10 @@ import {
   unavailableQueue,
   unavailableWorkflow,
 } from "./incomplete-platform-fixture";
-import { handleSmoke, receiveSmoke } from "../../apps/server/cloudflare/runtime/smoke-work";
+import {
+  handleSmoke,
+  receiveSmoke,
+} from "../../apps/server/cloudflare/runtime/release-smoke/operations";
 
 const withMethods = SyntheticBindings.withMethods;
 const revision = "0123456789abcdef0123456789abcdef01234567";

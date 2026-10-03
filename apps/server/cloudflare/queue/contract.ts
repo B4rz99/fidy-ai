@@ -1,4 +1,4 @@
-import type { SmokeBindings } from "../runtime/contract";
+import type { SmokeBindings } from "../runtime/release-smoke/contract";
 
 /** Queue composition receives only native handoff bindings and the existing smoke readiness inputs. */
 export type CoreQueueEnvironment = Readonly<{

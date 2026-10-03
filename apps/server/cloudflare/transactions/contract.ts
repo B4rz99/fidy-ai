@@ -1,17 +1,19 @@
-import type { TransactionPair } from "@fidy/server/transactions-contract";
+import {
+  type NotificationInterpretationEvidence,
+  type Transaction,
+  type TransactionExtraction,
+  type TransactionPair,
+} from "../../src/core/transactions/contract";
 import type { TransactionMutationOperation } from "../canonical-work/contract";
 import type { DateTime, Option } from "effect";
-import type { OwnedStatement } from "~/shell/_shared/owned-statement";
-import type { Category } from "../../src/core/categories/contract";
-import type { CategoryId } from "../../src/core/categories/reference";
+import type { OwnedStatement } from "../../src/shell/owner-write/contract";
+import { type Category, type CategoryId } from "../../src/core/categories/contract";
+
+import type { Money } from "../../src/core/_shared/money";
 import type {
-  Money,
   NotificationEmailSourceAttestation,
-  NotificationInterpretationEvidence,
   StatementLineSourceAttestation,
-  Transaction,
-  TransactionExtraction,
-} from "../../src/core/transactions/contract";
+} from "../../src/core/source-attestation/contract";
 
 type CaptureFacts = Readonly<{
   db: D1Database;

@@ -1,5 +1,9 @@
-import type { CategoryKeyword, KeywordRuleId } from "@fidy/server/categories";
-import type { CategoryId } from "../../src/core/categories/reference";
+import {
+  type CategoryId,
+  type CategoryKeyword,
+  type KeywordRuleId,
+} from "../../src/core/categories/contract";
+
 import { Data, type Option } from "effect";
 
 /** The Category owner cannot decide without authoritative, valid storage; no row or SQL escapes. */

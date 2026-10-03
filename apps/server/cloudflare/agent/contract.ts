@@ -9,8 +9,8 @@ import {
   type ToolCallId,
   TranscriptText,
   type TranscriptTurnId,
-} from "@fidy/server/agent-contract";
-import { UserId } from "@fidy/server/identity-reference";
+} from "../../src/core/agent/contract";
+import { UserId } from "../../src/core/identity/contract";
 /** Maximum time from a hosted reply proposal to authenticated visible delivery, in milliseconds. */
 export const deliveryAcknowledgmentWindowMs = 120_000;
 

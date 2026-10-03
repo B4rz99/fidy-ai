@@ -1,7 +1,7 @@
-import { UserId } from "@fidy/server/identity-reference";
+import { UserId } from "../../src/core/identity/contract";
 import { Effect } from "effect";
 import { afterAll, expect, it } from "vitest";
-import { userTrialPeriodQuery } from "@fidy/server/identity-operations";
+import { userTrialPeriodQuery } from "../../src/shell/identity/operations";
 import { isolatedTestDatabases } from "../d1-test-fixture";
 
 const databases = isolatedTestDatabases();

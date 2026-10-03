@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import type { TelemetryService } from "@fidy/server/telemetry";
+import type { TelemetryService } from "../../src/shell/observability/contract";
 import type { ForwardedEmailEnvironment, ForwardedEmailMessage } from "./contract";
 import { receiveForwardedEmail } from "./runtime";
 import { runEmailMaintenance } from "../maintenance/runtime";
@@ -7,7 +7,7 @@ import {
   cloudflareWorkerTelemetry,
   observeWorkerExecution,
   workerRelease,
-} from "../runtime/telemetry";
+} from "../runtime/telemetry/operations";
 
 type EmailWorker = Readonly<{
   email: (message: ForwardedEmailMessage, environment: ForwardedEmailEnvironment) => Promise<void>;

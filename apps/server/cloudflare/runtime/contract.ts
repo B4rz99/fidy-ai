@@ -59,38 +59,39 @@ export type PlatformMaintenance = Readonly<{
   expireSmokeProbes: (nowEpochMs: number) => Effect.Effect<void, PlatformMaintenanceUnavailable>;
 }>;
 
-/** Native synthetic release proof bindings; these never grant User authority. */
-export type SmokeEnvironment = Readonly<{
-  DB: D1Database;
-  SMOKE_BUCKET: R2Bucket;
-  SMOKE_QUEUE: Queue;
-  SMOKE_WORKFLOW: Workflow;
-  SMOKE_QUEUE_NAME: string;
-  USER_TRANSACTION_COORDINATOR: { getByName: (name: string) => Pick<Fetcher, "fetch"> };
-  SMOKE_PROOF: string;
-  CF_VERSION_METADATA: { id: string };
-  RELEASE_GIT_SHA: string;
-  CONTRACT_DIGEST: string;
-  KAPSO_API_KEY: string;
-  KAPSO_WEBHOOK_SECRET: string;
-  WOMPI_PRIVATE_KEY: string;
-  WOMPI_INTEGRITY_SECRET: string;
-}> &
-  Partial<Readonly<{ RESEND_API_KEY: string; WOMPI_EVENT_SECRET: string }>>;
+/** Non-secret PAT fixture accepted only by the local canonical-operation harness. */
+export const localCanonicalReadBearer = "fin_localdev_local-emulation-category-read-token";
 
-/** The native bindings the existing readiness gate requires before any synthetic smoke path. */
-export type SmokeBindings = Pick<
-  SmokeEnvironment,
-  | "SMOKE_BUCKET"
-  | "SMOKE_QUEUE"
-  | "SMOKE_WORKFLOW"
-  | "SMOKE_QUEUE_NAME"
-  | "SMOKE_PROOF"
-  | "CF_VERSION_METADATA"
->;
+/** Stable production network surface consumed by the Alchemy stack and topology tests. */
+export const productionTopology = {
+  core: {
+    d1Binding: "DB",
+    localPort: 8788,
+    workersDev: false,
+  },
+  ingress: {
+    coreBinding: "CORE",
+    hostname: "api.fidyapp.com",
+    localPort: 8787,
+    workersDev: false,
+  },
+  web: {
+    adoptExistingWorker: true,
+    hostname: "app.fidyapp.com",
+    localPort: 5173,
+    redirects: ["fidyapp.com"],
+    workerName: "fidy-web",
+    workersDev: false,
+  },
+} as const;
 
-/** Synthetic Queue handoff has no provider, model, or User-data authority. */
-export type SmokeQueueEnvironment = Pick<
-  SmokeEnvironment,
-  "DB" | "RELEASE_GIT_SHA" | "SMOKE_QUEUE_NAME" | "SMOKE_WORKFLOW"
->;
+/** Closed browser origins accepted by the public Worker in each complete topology mode. */
+export const browserOrigins = {
+  local: `http://127.0.0.1:${productionTopology.web.localPort}`,
+  acceptance: "https://127.0.0.1:4173",
+  production: `https://${productionTopology.web.hostname}`,
+} as const;
+
+/** Canonical lowercase release-identity formats shared by deployment and Worker boundaries. */
+export const gitRevisionPattern = /^[0-9a-f]{40}$/u;
+export const contractDigestPattern = /^[0-9a-f]{64}$/u;

@@ -12,24 +12,24 @@ import {
   sweepPairingAdmission,
   sweepPairingReviews,
   sweepUnapprovedPairings,
-} from "@fidy/server/tokens-operations";
-import { recordSessionPATTransition } from "@fidy/server/audit";
+} from "../../../src/shell/tokens/operations";
+import { recordSessionPATTransition } from "../../../src/shell/audit/operations";
 import {
   ApprovePATPairingPayload,
   PATPairingPublicCodeInput,
   PATPairingReview,
   StartPATPairingPayload,
-} from "@fidy/server/tokens-domain";
+} from "../../../src/core/tokens/contract";
 import {
   buildPairedPATDisclosure,
   selectPATPairingPublicCodeSymbols,
-} from "@fidy/server/tokens-decisions";
+} from "../../../src/core/tokens/operations";
 import { type Cause, DateTime, Effect, Encoding, Option, Result, Schema } from "effect";
 import {
   expirePATConsents,
   expirePairingConsents,
   grantPairedPATConsent,
-} from "@fidy/server/consent-operations";
+} from "../../../src/shell/consent/operations";
 import {
   type SessionRow,
   canonical,
@@ -49,7 +49,7 @@ import {
   webSession,
 } from "./pat-shared";
 import { newId } from "../../secret-material/operations";
-import { currentMillis } from "../../runtime/clock";
+import { currentMillis } from "../../runtime/operations";
 import { commitPATUnit } from "./pat-unit";
 import { prepareOwnedStatement } from "../../database/operations";
 

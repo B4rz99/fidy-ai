@@ -1,5 +1,5 @@
-import type { FreshSessionSubject } from "@fidy/server/web-session-contract";
-import { freshSessionExists, freshSessionParams } from "@fidy/server/web-session-operations";
+import type { FreshSessionSubject } from "../../../src/shell/web-session/contract";
+import { freshSessionExists, freshSessionParams } from "../../../src/shell/web-session/operations";
 import { Clock, DateTime, Effect, Option } from "effect";
 import { newId } from "../../secret-material/operations";
 import { recoveryCodeDigest, sampleRecoveryCode } from "./material";

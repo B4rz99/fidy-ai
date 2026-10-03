@@ -2,15 +2,14 @@ import { expect, it } from "@effect/vitest";
 import { BigDecimal, DateTime, Effect, Equal, Result } from "effect";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { Currency, Money } from "~/core/_shared/money";
-import { BudgetId } from "./reference";
-import type { Budget } from "./contract";
+import { type Budget, BudgetId } from "./contract";
 import {
   advanceBudgetLatch,
   calculateBudgetStatus,
   deriveCurrentBudgetMonth,
   sumBudgetContributions,
 } from "./operations";
-import { CategoryId } from "~/core/categories/reference";
+import { CategoryId } from "~/core/categories/contract";
 
 const money = (amount: string, currency: Currency = Currency.make("COP")): Money =>
   Money.make({ amount: BigDecimal.fromStringUnsafe(amount), currency });

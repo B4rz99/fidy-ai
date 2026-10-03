@@ -1,0 +1,53 @@
+apps/cli/src/command/processes.test.ts
+  s_e6b2b6f3fdd65c::t_7efdfc45e5a433 1-11,13-16,19-25
+  s_e6b2b6f3fdd65c::t_9f22bd8049ca78 18
+  s_e6b2b6f3fdd65c::t_cb7778eadfc628 17
+  s_e6b2b6f3fdd65c::t_3add28191e1200 12
+apps/cli/src/command/operations.ts
+  s_e6b2b6f3fdd65c::t_881293eacccf36 56
+apps/cli/src/command/operations.test.ts
+  s_e6b2b6f3fdd65c::t_e380ac49bb44db 77
+  s_e6b2b6f3fdd65c::t_c263d31870e38f 3-5,68-76,79-83
+  s_e6b2b6f3fdd65c::t_4ca6a576fa87fe 78
+  s_e6b2b6f3fdd65c::t_09014f66bdde99 84
+apps/cli/src/command/contract.ts
+  s_e6b2b6f3fdd65c::t_54911b4c9078ec 13
+  s_e6b2b6f3fdd65c::t_92994bceaf8f85 15-20
+apps/cli/src/login/contract.ts
+  s_e6b2b6f3fdd65c::t_1c30e86bf85667 29
+  s_e6b2b6f3fdd65c::t_5b6ed64a866819 3
+apps/web/tsconfig.app.json
+  s_e6b2b6f3fdd65c::t_5c145451330077 19
+apps/cli/ARCHITECTURE.md
+  s_e6b2b6f3fdd65c::t_2ba4a40566d82c 107-109
+apps/cli/test/process.test-fixture.ts
+  s_e6b2b6f3fdd65c::t_8687790aa362d5 10-14,23,34,43
+  s_e6b2b6f3fdd65c::t_74e8cd8176fce9 1-9,15-22,24-31,33,35-42,44-47,49-52
+  s_e6b2b6f3fdd65c::t_b74f7a49ab67a9 32,48
+apps/web/e2e/cli-login.spec.ts
+  s_e6b2b6f3fdd65c::t_05028a5329de8a 3
+  s_e6b2b6f3fdd65c::t_5f98c2de27f3af 5-7,9,23,29-31,40,78-83
+  s_e6b2b6f3fdd65c::t_130d6bcffdb28d 51-65
+  s_e6b2b6f3fdd65c::t_45903681b714b1 66,75
+  s_e6b2b6f3fdd65c::t_08bd4e6a2e7695 4,17-18,21-22,26-28,32,34,36-39,44,46,76-77,84-91,93-99,101-114
+  s_e6b2b6f3fdd65c::t_929603caaec736 8,100
+apps/cli/test/native-store.ts
+  s_e6b2b6f3fdd65c::t_a3803f89fbe329 4,14-19
+  s_e6b2b6f3fdd65c::t_ee590456a887d1 20-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "1d8f2a8ccba54bee507272f4fae06776341d9389",
+  "prompts": {},
+  "sessions": {
+    "s_e6b2b6f3fdd65c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a101dc-2692-7340-81d5-dc492f3b3df0",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

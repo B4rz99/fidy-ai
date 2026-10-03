@@ -1,0 +1,22 @@
+apps/server/cloudflare/subscription/payment-enrollment.test.ts
+  s_fc768a11c2de27::t_4d5f81716235bc 1603-1607
+apps/server/cloudflare/subscription/daviplata-sandbox.test-fixture.ts
+  s_fc768a11c2de27::t_29feb7fc57eb7c 122,128-130,134,140,143
+  s_fc768a11c2de27::t_3fae528c042cdc 53-54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "eff0fa4001c5c9590c8afdce581adaaf843a526a",
+  "prompts": {},
+  "sessions": {
+    "s_fc768a11c2de27": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a1020d-bbdc-74ae-ba1b-046fd82fa605",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

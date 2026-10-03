@@ -30,7 +30,7 @@ export const TaxTreatment = Schema.Literal("not-taxable").annotate({
 });
 export type TaxTreatment = typeof TaxTreatment.Type;
 
-/** The only payment-method families presented for MVP enrollment. */
+/** Families represented by immutable Price terms, not a promise of current executable availability. */
 export const LaunchPaymentMethods = Schema.Tuple([
   Schema.Literal("card"),
   Schema.Literal("nequi"),
@@ -195,10 +195,27 @@ export const SubscriptionStatus = Schema.Struct({
 export type SubscriptionStatus = typeof SubscriptionStatus.Type;
 
 /** Payment authorization mechanism, independent of the card issuer. */
-export const EnrollmentMethod = Schema.Literals(["card", "nequi"]).annotate({
+export const EnrollmentMethod = Schema.Literals(["card", "nequi", "daviplata"]).annotate({
   identifier: "EnrollmentMethod",
 });
 export type EnrollmentMethod = typeof EnrollmentMethod.Type;
+
+/** Current executable methods, independent of the methods represented by immutable Price terms. */
+export const EnrollmentAvailability = Schema.Struct({
+  enabledMethods: Schema.UniqueArray(EnrollmentMethod).check(Schema.isMaxLength(3)),
+}).annotate({ identifier: "EnrollmentAvailability" });
+export type EnrollmentAvailability = typeof EnrollmentAvailability.Type;
+
+const DaviplataOtpEndpoint = Schema.String.check(
+  Schema.isPattern(/^https:\/\/(?:sandbox|production)\.wompi\.co\/[A-Za-z0-9/_-]{1,200}$/u)
+);
+
+/** Exact reviewed provider destinations. Returned OTP service URLs must equal these, never extend them. */
+export const DaviplataOtpPolicy = Schema.Struct({
+  sendUrl: DaviplataOtpEndpoint,
+  confirmUrl: DaviplataOtpEndpoint,
+}).annotate({ identifier: "DaviplataOtpPolicy" });
+export type DaviplataOtpPolicy = typeof DaviplataOtpPolicy.Type;
 
 /** Maximum safe displayed-term snapshot retained with one payment enrollment. */
 export const maximumEnrollmentEvidenceCharacters = 4096;
@@ -263,7 +280,11 @@ export type WompiContractEvidenceSet = typeof WompiContractEvidenceSet.Type;
 
 /** Fidy-owned recurring-charge disclosure bound to one immutable Price. */
 export const RecurringDisclosure = Schema.Struct({
-  revision: Schema.Literals(["wompi-card-enrollment-v1", "wompi-nequi-enrollment-v1"]),
+  revision: Schema.Literals([
+    "wompi-card-enrollment-v1",
+    "wompi-nequi-enrollment-v1",
+    "wompi-daviplata-enrollment-v1",
+  ]),
   displayedText: boundedEvidenceText,
   contentSha256: sha256Hex,
 }).annotate({ identifier: "RecurringDisclosure" });
@@ -277,11 +298,9 @@ export const EnrollmentDecisions = Schema.Struct({
 }).annotate({ identifier: "EnrollmentDecisions" });
 export type EnrollmentDecisions = typeof EnrollmentDecisions.Type;
 
-/** Browser-safe prepared state containing every term required before card entry. */
-export const PreparedPaymentEnrollment = Schema.Struct({
+const PreparedEnrollmentFields = {
   status: Schema.Literal("prepared"),
   enrollmentId: PaymentEnrollmentId,
-  method: EnrollmentMethod,
   price: Price,
   billingEmail: BillingEmail,
   contracts: WompiContractEvidenceSet,
@@ -289,7 +308,17 @@ export const PreparedPaymentEnrollment = Schema.Struct({
   wompiPublicKey: Schema.String.check(Schema.isPattern(/^pub_(?:test|prod)_[A-Za-z0-9_-]+$/u)),
   paymentSourceMode: Schema.Literals(["create", "reuse"]),
   expiresAt: UtcTimestamp,
-}).annotate({ identifier: "PreparedPaymentEnrollment" });
+} as const;
+
+/** Every displayed term before method entry, with exact OTP destinations required for DaviPlata. */
+export const PreparedPaymentEnrollment = Schema.Union([
+  Schema.Struct({ ...PreparedEnrollmentFields, method: Schema.Literals(["card", "nequi"]) }),
+  Schema.Struct({
+    ...PreparedEnrollmentFields,
+    method: Schema.Literal("daviplata"),
+    daviplataOtpPolicy: DaviplataOtpPolicy,
+  }),
+]).annotate({ identifier: "PreparedPaymentEnrollment" });
 
 const CreatingPaymentEnrollment = Schema.Struct({
   status: Schema.Literal("creating"),

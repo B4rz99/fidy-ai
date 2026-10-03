@@ -1,7 +1,8 @@
+import { DaviplataOtpPolicy } from "../../../src/core/subscription/contract";
 import { type WompiEnvironment } from "../../../src/shell/secret-material/contract";
 
 import { makeWompiOutboundHttp } from "../../../src/shell/outbound-http/operations";
-import { Context, Crypto, Effect, Layer, Redacted } from "effect";
+import { Context, Crypto, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import {
   cloudflareWorkerTelemetry,
@@ -25,7 +26,13 @@ type WompiBindings = Readonly<{
   WOMPI_PUBLIC_KEY: string;
   WOMPI_PRIVATE_KEY: string;
   WOMPI_INTEGRITY_SECRET: string;
-}>;
+}> &
+  Partial<
+    Readonly<{
+      WOMPI_DAVIPLATA_OTP_SEND_URL: string;
+      WOMPI_DAVIPLATA_OTP_CONFIRM_URL: string;
+    }>
+  >;
 
 /** Construct the policy-bearing provider HTTP adapter from validated Worker bindings. */
 export const wompiOutboundHttp = (
@@ -49,6 +56,13 @@ export const wompiOutboundHttp = (
           integritySecret: Redacted.make(environment.WOMPI_INTEGRITY_SECRET),
           httpClient: Context.get(clients, HttpClient.HttpClient),
           crypto: workerCrypto,
+          daviplataSandboxPolicy:
+            environment.WOMPI_ENVIRONMENT === "sandbox"
+              ? Schema.decodeUnknownOption(DaviplataOtpPolicy)({
+                  sendUrl: environment.WOMPI_DAVIPLATA_OTP_SEND_URL,
+                  confirmUrl: environment.WOMPI_DAVIPLATA_OTP_CONFIRM_URL,
+                })
+              : Option.none(),
         })
       )
     )

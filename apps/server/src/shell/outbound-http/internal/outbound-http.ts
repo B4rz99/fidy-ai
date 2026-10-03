@@ -1,5 +1,6 @@
+import { DaviplataOtpPolicy } from "~/core/subscription/contract";
 import { type WompiEnvironment } from "~/shell/secret-material/contract";
-import { type Crypto, Effect, Match, Option, Redacted } from "effect";
+import { type Crypto, Effect, Match, Option, Redacted, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import { FetchHttpClient, HttpBody, type HttpClient, HttpClientRequest } from "effect/http";
 import { makeProviderTransport } from "./transport";
@@ -37,6 +38,7 @@ type WompiTransportConfig = Readonly<{
   publicKey: string;
   privateKey: Redacted.Redacted<string>;
   integritySecret: Redacted.Redacted<string>;
+  daviplataSandboxPolicy: Option.Option<DaviplataOtpPolicy>;
 }>;
 
 type PrivateOutboundHttpService = Readonly<{
@@ -114,14 +116,21 @@ const transactionSignature = (
     )
     .pipe(Effect.map(Hex.encode), Effect.mapError(unavailableTransport));
 
-const nequiApprovalRequest = (
-  origin: string,
+const walletApprovalRequest = (
+  config: WompiTransportConfig,
   token: Redacted.Redacted<string>,
-  publicKey: string
-): HttpClientRequest.HttpClientRequest =>
-  HttpClientRequest.get(`${origin}/v1/tokens/nequi/${encodeURIComponent(Redacted.value(token))}`, {
-    headers: { authorization: `Bearer ${publicKey}` },
-  });
+  method: "nequi" | "daviplata"
+): HttpClientRequest.HttpClientRequest => {
+  const origin = { sandbox: wompiSandboxOrigin, production: wompiProductionOrigin }[
+    config.environment
+  ];
+  return HttpClientRequest.get(
+    `${origin}/v1/tokens/${method}/${encodeURIComponent(Redacted.value(token))}`,
+    {
+      headers: { authorization: `Bearer ${config.publicKey}` },
+    }
+  );
+};
 
 const nequiSandboxTokenRequest = (
   config: WompiTransportConfig,
@@ -137,6 +146,56 @@ const nequiSandboxTokenRequest = (
         )
       );
 
+const sandboxOtpPolicy = (config: WompiTransportConfig): Option.Option<DaviplataOtpPolicy> =>
+  config.environment !== "sandbox"
+    ? Option.none()
+    : config.daviplataSandboxPolicy.pipe(
+        Option.flatMap(Schema.decodeUnknownOption(DaviplataOtpPolicy)),
+        Option.filter(
+          (policy) =>
+            policy.sendUrl.startsWith(`${wompiSandboxOrigin}/`) &&
+            policy.confirmUrl.startsWith(`${wompiSandboxOrigin}/`)
+        )
+      );
+
+const daviplataSandboxRequest = (
+  config: WompiTransportConfig,
+  request: Extract<
+    WompiRequest,
+    { _tag: "WompiDaviplataSandboxToken" | "WompiDaviplataSandboxOtp" }
+  >
+): Effect.Effect<HttpClientRequest.HttpClientRequest, OutboundHttpFailure> =>
+  Option.match(sandboxOtpPolicy(config), {
+    onNone: rejectRequest,
+    onSome: (policy) => {
+      if (request._tag === "WompiDaviplataSandboxToken") {
+        return Effect.succeed(
+          jsonRequest(
+            `${wompiSandboxOrigin}/v1/tokens/daviplata`,
+            JSON.stringify({
+              type_document: "CC",
+              number_document: "1122233",
+              product_number: request.outcome === "approved" ? "3991111111" : "3992222222",
+            }),
+            { authorization: `Bearer ${config.publicKey}` }
+          )
+        );
+      }
+      const headers = { authorization: `Bearer ${Redacted.value(request.token)}` };
+      return Effect.succeed(
+        request.step === "send"
+          ? HttpClientRequest.post(policy.sendUrl, { headers })
+          : jsonRequest(policy.confirmUrl, JSON.stringify({ code: "574829" }), headers)
+      );
+    },
+  });
+
+const paymentMethodFields = {
+  card: { payment_method: { installments: 1 } },
+  nequi: {},
+  daviplata: {},
+} as const satisfies Readonly<Record<WompiTransactionBody["method"], object>>;
+
 const signedTransactionBody = (
   body: Extract<OutboundHttpRequest, { _tag: "WompiCreateTransaction" }>["body"],
   signature: string
@@ -145,7 +204,7 @@ const signedTransactionBody = (
     amount_in_cents: body.amountInCents,
     currency: body.currency,
     customer_email: body.billingEmail,
-    ...(body.method === "nequi" ? {} : { payment_method: { installments: 1 } }),
+    ...paymentMethodFields[body.method],
     payment_source_id: body.sourceId,
     reference: body.reference,
     signature,
@@ -160,46 +219,55 @@ const makeWompiRequest = (
     config.environment
   ];
   const authorization = `Bearer ${Redacted.value(config.privateKey)}`;
-  switch (request._tag) {
-    case "WompiMerchant":
-      return Effect.succeed(
-        HttpClientRequest.get(`${origin}/v1/merchants/${encodeURIComponent(config.publicKey)}`)
-      );
-    case "WompiNequiSandboxToken":
-      return nequiSandboxTokenRequest(config, request.outcome);
-    case "WompiNequiApproval":
-      return Effect.succeed(nequiApprovalRequest(origin, request.token, config.publicKey));
-    case "WompiCreatePaymentSource":
-      return Effect.succeed(
-        HttpClientRequest.post(`${origin}/v1/payment_sources`, {
-          headers: { authorization, "content-type": "application/json" },
-          body: HttpBody.text(request.body, "application/json"),
-        })
-      );
-    case "WompiVerifyPaymentSource":
-      return Effect.succeed(
-        HttpClientRequest.get(
-          `${origin}/v1/payment_sources/${encodeURIComponent(request.sourceId)}`,
-          { headers: { authorization } }
-        )
-      );
-    case "WompiCreateTransaction":
-      return transactionSignature(crypto, config.integritySecret, request.body).pipe(
-        Effect.map((signature) =>
-          HttpClientRequest.post(`${origin}/v1/transactions`, {
+  return Match.value(request).pipe(
+    Match.tagsExhaustive({
+      WompiMerchant: () =>
+        Effect.succeed(
+          HttpClientRequest.get(`${origin}/v1/merchants/${encodeURIComponent(config.publicKey)}`)
+        ),
+      WompiNequiSandboxToken: (value) => nequiSandboxTokenRequest(config, value.outcome),
+      WompiDaviplataSandboxToken: (value) => daviplataSandboxRequest(config, value),
+      WompiDaviplataSandboxOtp: (value) => daviplataSandboxRequest(config, value),
+      WompiNequiApproval: (value) =>
+        Effect.succeed(walletApprovalRequest(config, value.token, "nequi")),
+      WompiDaviplataApproval: (value) =>
+        Effect.succeed(walletApprovalRequest(config, value.token, "daviplata")),
+      WompiCreatePaymentSource: (value) =>
+        Effect.succeed(
+          HttpClientRequest.post(`${origin}/v1/payment_sources`, {
             headers: { authorization, "content-type": "application/json" },
-            body: HttpBody.text(signedTransactionBody(request.body, signature), "application/json"),
+            body: HttpBody.text(value.body, "application/json"),
           })
-        )
-      );
-    case "WompiFindTransaction":
-      return Effect.succeed(
-        HttpClientRequest.get(
-          `${origin}/v1/transactions/${encodeURIComponent(request.transactionId)}`,
-          { headers: { authorization } }
-        )
-      );
-  }
+        ),
+      WompiVerifyPaymentSource: (value) =>
+        Effect.succeed(
+          HttpClientRequest.get(
+            `${origin}/v1/payment_sources/${encodeURIComponent(value.sourceId)}`,
+            {
+              headers: { authorization },
+            }
+          )
+        ),
+      WompiCreateTransaction: (value) =>
+        transactionSignature(crypto, config.integritySecret, value.body).pipe(
+          Effect.map((signature) =>
+            HttpClientRequest.post(`${origin}/v1/transactions`, {
+              headers: { authorization, "content-type": "application/json" },
+              body: HttpBody.text(signedTransactionBody(value.body, signature), "application/json"),
+            })
+          )
+        ),
+      WompiFindTransaction: (value) =>
+        Effect.succeed(
+          HttpClientRequest.get(
+            `${origin}/v1/transactions/${encodeURIComponent(value.transactionId)}`,
+            {
+              headers: { authorization },
+            }
+          )
+        ),
+    })
+  );
 };
 
 const makeCloudflareAccessRequest = (
@@ -290,7 +358,10 @@ const prepareRequest = (
       ResendEmailDelivery: (value) => prepareResend(value, context),
       WompiMerchant: (value) => prepareWompi(value, context),
       WompiNequiApproval: (value) => prepareWompi(value, context),
+      WompiDaviplataApproval: (value) => prepareWompi(value, context),
       WompiNequiSandboxToken: (value) => prepareWompi(value, context),
+      WompiDaviplataSandboxToken: (value) => prepareWompi(value, context),
+      WompiDaviplataSandboxOtp: (value) => prepareWompi(value, context),
       WompiCreatePaymentSource: (value) => prepareWompi(value, context),
       WompiVerifyPaymentSource: (value) => prepareWompi(value, context),
       WompiCreateTransaction: (value) => prepareWompi(value, context),

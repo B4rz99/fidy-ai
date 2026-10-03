@@ -99,6 +99,8 @@ export { IanaTimeZone } from "~/core/_shared/context";
 export { BackupRecoveryCode, RotatedBackupRecoveryCode } from "~/core/recovery/contract";
 export {
   BillingEmail,
+  EnrollmentAvailability,
+  DaviplataOtpPolicy,
   PaymentEnrollment,
   EnrollmentDecisions,
   PaymentSubmission,

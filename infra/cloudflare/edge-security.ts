@@ -105,6 +105,7 @@ const reservedRateLimitPaths = [
   "/web/session/logout",
   "/web/hosted-turns",
   "/web/hosted-turns/delivery",
+  "/web/subscription/payment-enrollments/availability",
   "/web/subscription/payment-enrollments/prepare",
   "/web/subscription/payment-enrollments/submit",
   "/web/email/authentication/start",

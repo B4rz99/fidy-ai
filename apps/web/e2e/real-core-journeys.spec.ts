@@ -1,16 +1,19 @@
+import { PaymentEnrollmentId } from "@fidy/server/client";
 import type { APIRequestContext, Page, Route } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
 import type { Cause } from "effect";
 import { playwright } from "./playwright-runtime";
 import {
   signInFirstCardThroughCore,
+  signInFirstDaviplataThroughCore,
   signInThroughCore,
-  visiblePairingCode,
+  signInWithVerifiedEmailThroughCore,
 } from "./real-core-fixture";
 
 const { expect, test } = playwright;
 
 const api = "https://127.0.0.1:4174";
+const appOrigin = "https://127.0.0.1:4173";
 const ok = 200;
 const created = 201;
 const forbidden = 403;
@@ -313,53 +316,7 @@ test("renders loading until the real Core answers Transactions", ({ page, reques
 test("approves a browser pairing through the real verified-email public route", ({
   page,
   request,
-}) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* fromPlaywright(page.goto("/auth/pair"));
-      yield* fromPlaywright(
-        page
-          .getByRole("button", {
-            name: "Iniciar sesión en el navegador",
-          })
-          .click()
-      );
-      const code = yield* fromPlaywright(visiblePairingCode(page));
-      yield* fromPlaywright(
-        page.getByLabel("O accede con tu correo verificado").fill("usuario@example.com")
-      );
-      yield* fromPlaywright(
-        page
-          .getByRole("button", {
-            name: "Enviar código por correo",
-          })
-          .click()
-      );
-      yield* fromPlaywright(expect(page.getByLabel("Código recibido por correo")).toBeVisible());
-      const delivered = yield* fromPlaywright(
-        request.post(`http://127.0.0.1:4175/email/login/deliver?code=${code}`)
-      );
-      expect(delivered.status()).toBe(noContent);
-      const proof = "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ";
-      yield* fromPlaywright(page.getByLabel("Código recibido por correo").fill(proof));
-      yield* fromPlaywright(
-        page
-          .getByRole("button", {
-            name: "Aprobar este navegador",
-          })
-          .click()
-      );
-      yield* fromPlaywright(
-        expect(page).toHaveURL(/\/app\/transactions$/u, {
-          timeout: 15_000,
-        })
-      );
-      expect(page.url()).not.toContain(proof);
-      expect(
-        yield* fromPlaywright(page.evaluate(() => localStorage.length + sessionStorage.length))
-      ).toBe(0);
-    })
-  ));
+}) => signInWithVerifiedEmailThroughCore({ page, request, email: "usuario@example.com" }));
 test("replaces a verified EmailCredential through public operations after fixture delivery", ({
   page,
   request,
@@ -601,6 +558,219 @@ test("tokenizes a first card outside Fidy and enrolls through real public and Co
       ).toBe(true);
     })
   ));
+type DaviplataFixtureStep = "tokenize" | "send" | "confirm";
+const daviplataFixtureUrls: Readonly<Record<DaviplataFixtureStep, string>> = {
+  tokenize: "https://sandbox.wompi.co/v1/tokens/daviplata",
+  send: "https://sandbox.wompi.co/fidy-synthetic-daviplata/send",
+  confirm: "https://sandbox.wompi.co/fidy-synthetic-daviplata/confirm",
+};
+const daviplataAuthorization = "daviplata_devtest_acceptance";
+const daviplataServiceBearers = {
+  initial: "synthetic-daviplata-initial",
+  sent: "synthetic-daviplata-code",
+  approved: "synthetic-daviplata-approved",
+};
+const daviplataOtpFixture = (approved: boolean): unknown => ({
+  data: {
+    subscription: { PK: daviplataAuthorization, status: approved ? "APPROVED" : "PENDING" },
+    authorization: {
+      access_token: approved ? daviplataServiceBearers.approved : daviplataServiceBearers.sent,
+    },
+    attempts: {
+      currentSendCode: 1,
+      limitSendCode: 2,
+      currentValidateCode: approved ? 1 : 0,
+      limitValidateCode: 2,
+    },
+  },
+});
+const daviplataProviderReply = (step: DaviplataFixtureStep): unknown =>
+  step === "tokenize"
+    ? {
+        data: {
+          id: daviplataAuthorization,
+          status: "PENDING",
+          url_services: {
+            token: daviplataServiceBearers.initial,
+            code_otp_send: daviplataFixtureUrls.send,
+            code_otp_validate: daviplataFixtureUrls.confirm,
+          },
+        },
+      }
+    : daviplataOtpFixture(step === "confirm");
+const assertDaviplataProviderRequest = (route: Route, step: DaviplataFixtureStep): void => {
+  expect(route.request().method()).toBe("POST");
+  const bearers = {
+    tokenize: `pub_test_${"f1d7c0de".repeat(3)}`,
+    send: daviplataServiceBearers.initial,
+    confirm: daviplataServiceBearers.sent,
+  };
+  expect(route.request().headers().authorization).toBe(`Bearer ${bearers[step]}`);
+  if (step === "send") {
+    expect(route.request().postData()).toBeNull();
+    return;
+  }
+  expect(route.request().postDataJSON()).toEqual(
+    step === "tokenize"
+      ? { type_document: "CC", number_document: "1122233", product_number: "3991111111" }
+      : { code: "574829" }
+  );
+};
+// Intercepted synthetic replies do not prove real Wompi merchant activation or browser CORS.
+const installDaviplataProviderRoutes = (
+  page: Page,
+  calls: Array<DaviplataFixtureStep>
+): Promise<unknown> =>
+  Promise.all(
+    (["tokenize", "send", "confirm"] as const).map((step) =>
+      page.route(daviplataFixtureUrls[step], (route) => {
+        if (route.request().method() === "OPTIONS") {
+          return route.fulfill({
+            status: noContent,
+            headers: {
+              "access-control-allow-origin": "*",
+              "access-control-allow-headers": "authorization, content-type",
+              "access-control-allow-methods": "POST",
+            },
+          });
+        }
+        assertDaviplataProviderRequest(route, step);
+        calls.push(step);
+        return route.fulfill({
+          status: ok,
+          headers: { "access-control-allow-origin": "*" },
+          contentType: "application/json",
+          body: JSON.stringify(daviplataProviderReply(step)),
+        });
+      })
+    )
+  );
+type ObservedFidyBody = Readonly<{ url: string; body: string }>;
+const captureDaviplataFidyBodies = (page: Page, bodies: Array<ObservedFidyBody>): void => {
+  page.on("request", (outbound) => {
+    const body = outbound.postData();
+    if (outbound.url().startsWith(api) && body !== null) bodies.push({ url: outbound.url(), body });
+  });
+};
+const assertDaviplataSecrecy = (bodies: ReadonlyArray<ObservedFidyBody>): void => {
+  const secrets = [
+    "1122233",
+    "3991111111",
+    "574829",
+    ...Object.values(daviplataServiceBearers),
+    "number_document",
+    "product_number",
+    '"code"',
+    "access_token",
+  ];
+  expect(bodies.every(({ body }) => secrets.every((secret) => !body.includes(secret)))).toBe(true);
+  const approved = bodies.filter(({ body }) => body.includes(daviplataAuthorization));
+  expect(approved).toHaveLength(1);
+  expect(approved[0]?.url).toBe(`${api}/web/subscription/payment-enrollments/submit`);
+  expect(approved[0]?.body).toContain('"method":"daviplata"');
+  expect(approved[0]?.body).toContain('"billingEmail":"daviplata@example.com"');
+};
+const submitFirstDaviplata = Effect.fnUntraced(function* (page: Page) {
+  yield* fromPlaywright(page.goto("/upgrade"));
+  yield* fromPlaywright(page.getByRole("button", { name: "DaviPlata" }).click());
+  yield* fromPlaywright(page.getByRole("button", { name: "Elegir mensual" }).click());
+  yield* fromPlaywright(
+    expect(page.getByText("Cédula de ciudadanía (CC). Por ahora solo admitimos CC.")).toBeVisible()
+  );
+  yield* fromPlaywright(page.getByLabel("Número de cédula").fill("1122233"));
+  yield* fromPlaywright(page.getByLabel("Número de DaviPlata").fill("3991111111"));
+  yield* fromPlaywright(
+    expect(page.getByLabel("Correo de facturación")).toHaveValue("daviplata@example.com")
+  );
+  yield* fromPlaywright(page.getByLabel(/Acepto el reglamento/iu).check());
+  yield* fromPlaywright(page.getByLabel(/Autorizo el tratamiento/iu).check());
+  yield* fromPlaywright(page.getByRole("button", { name: "Autorizar con DaviPlata" }).click());
+  yield* fromPlaywright(expect(page.getByLabel("Número de cédula")).toHaveCount(0));
+  yield* fromPlaywright(page.getByLabel("Código de verificación").fill("574829"));
+  const submission = page.waitForResponse(
+    (response) => response.url() === `${api}/web/subscription/payment-enrollments/submit`
+  );
+  yield* fromPlaywright(page.getByRole("button", { name: "Confirmar código" }).click());
+  const submitted = yield* fromPlaywright(submission);
+  expect(submitted.status()).toBe(ok);
+  const { enrollmentId } = yield* Schema.decodeUnknownEffect(
+    Schema.fromJsonString(Schema.Struct({ enrollmentId: PaymentEnrollmentId }))
+  )(submitted.request().postData());
+  // Navigation can release the browser response body; this authenticated read owns its response.
+  const enrollment = yield* fromPlaywright(
+    page.request.get(`${api}/web/subscription/payment-enrollments/${enrollmentId}`, {
+      headers: { origin: appOrigin },
+    })
+  );
+  expect(enrollment.status()).toBe(ok);
+  expect(yield* fromPlaywright(enrollment.json())).toMatchObject({
+    status: "available",
+    enrollmentId,
+    method: "daviplata",
+    priceId: "22700000-0000-4000-8000-000000000002",
+  });
+});
+
+test("authorizes DaviPlata directly in the built browser and grants paid Pro only after real Core collection", ({
+  page,
+  request,
+}) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* fromPlaywright(signInFirstDaviplataThroughCore({ page, request }));
+      const providerCalls: Array<DaviplataFixtureStep> = [];
+      const fidyBodies: Array<ObservedFidyBody> = [];
+      captureDaviplataFidyBodies(page, fidyBodies);
+      yield* fromPlaywright(installDaviplataProviderRoutes(page, providerCalls));
+      yield* submitFirstDaviplata(page);
+      const beforeCollection = yield* fromPlaywright(
+        page.request.get(`${api}/subscription/status`, { headers: { origin: appOrigin } })
+      );
+      expect(beforeCollection.status()).toBe(ok);
+      expect(yield* fromPlaywright(beforeCollection.json())).toMatchObject({
+        data: {
+          accessTier: "free",
+          paidSubscription: null,
+          recentAttempts: [
+            {
+              status: "pending",
+              billingPeriod: "monthly",
+              priceId: "22700000-0000-4000-8000-000000000002",
+            },
+          ],
+        },
+      });
+      expect(
+        (yield* fromPlaywright(request.post("http://127.0.0.1:4175/billing/collect"))).status()
+      ).toBe(noContent);
+      yield* fromPlaywright(
+        expect(page.getByText("Tu pago fue realizado y tu suscripción está activa.")).toBeVisible({
+          timeout: 20_000,
+        })
+      );
+      const afterCollection = yield* fromPlaywright(
+        page.request.get(`${api}/subscription/status`, {
+          headers: { origin: "https://127.0.0.1:4173" },
+        })
+      );
+      expect(afterCollection.status()).toBe(ok);
+      expect(yield* fromPlaywright(afterCollection.json())).toMatchObject({
+        data: {
+          accessTier: "pro",
+          paidSubscription: {
+            billingPeriod: "monthly",
+            priceId: "22700000-0000-4000-8000-000000000002",
+          },
+        },
+      });
+      expect(providerCalls).toEqual(["tokenize", "send", "confirm"]);
+      assertDaviplataSecrecy(fidyBodies);
+      expect(yield* fromPlaywright(page.locator("body").textContent())).not.toContain(
+        daviplataAuthorization
+      );
+    })
+  ));
+
 const issueReadOnlyPat = Effect.fnUntraced(function* (page: Page, request: APIRequestContext) {
   yield* fromPlaywright(signInThroughCore({ page, request }));
   yield* fromPlaywright(page.goto("/settings/pats"));

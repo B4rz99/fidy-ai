@@ -407,18 +407,18 @@ _Avoid_: Current price, price config, rate.
 
 **PaymentEnrollment**:
 One short-lived, User-owned authorization intent for a selected Price and reusable PaymentSource.
-Its EnrollmentMethod is `card` or `nequi`: direct Nequi app authorization is `nequi`, while a
-Nequi-issued card uses `card`. It retains the accepted billing email, provider environment and safe
+Its EnrollmentMethod is `card`, `nequi`, or `daviplata`: direct wallet authorization is distinct from
+an issuer's card, which uses `card`. It retains the accepted billing email, provider environment and safe
 displayed terms through `prepared`, `creating`, `available`, `refused`, `expired`, or `verifying`;
-only an atomic live-authority claim of `prepared` may create a provider source. Card details, Nequi
-numbers and transient provider tokens are never PaymentEnrollment state.
+only an atomic live-authority claim of `prepared` may create a provider source. Card details, wallet
+numbers, identity document values, OTPs and transient provider tokens are never PaymentEnrollment state.
 _Avoid_: Checkout, payment attempt, card session, CardEnrollment, nequi-account.
 
 **PaymentSource**:
-The private reusable provider authority created by an available PaymentEnrollment. Its provider
-identity and environment remain server-only. Changing Price terms requires a new PaymentEnrollment
+The one private reusable provider authority per User created by an available PaymentEnrollment.
+Its provider identity and environment remain server-only; switching EnrollmentMethod is not offered. Changing Price terms requires a new PaymentEnrollment
 but can reuse a matching-method source without collecting payment details again. Source availability
-or Nequi token approval alone never grants paid Pro; verified BillingAttempt settlement does.
+or wallet token approval alone never grants paid Pro; verified BillingAttempt settlement does.
 _Avoid_: Saved card (Fidy does not store a card), payment method token, CardPaymentSource.
 
 **BillingAttempt**:

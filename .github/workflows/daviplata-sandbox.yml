@@ -1,0 +1,49 @@
+name: DaviPlata Sandbox protocol proof
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daviplata-sandbox-protocol
+  cancel-in-progress: false
+
+jobs:
+  protocol:
+    # The existing protected environment holds Sandbox Wompi secrets. No Cloudflare
+    # credentials are supplied, nothing deploys, and Production Wompi is rejected.
+    if: github.ref == 'refs/heads/trunk'
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.4.1"
+      - run: bun install --frozen-lockfile
+      - name: Verify exact OTP protocol and matching first-payment settlement
+        env:
+          FIDY_DAVIPLATA_SANDBOX: "1"
+          WOMPI_ENVIRONMENT: ${{ secrets.WOMPI_ENVIRONMENT }}
+          WOMPI_PUBLIC_KEY: ${{ secrets.WOMPI_PUBLIC_KEY }}
+          WOMPI_PRIVATE_KEY: ${{ secrets.WOMPI_PRIVATE_KEY }}
+          WOMPI_INTEGRITY_SECRET: ${{ secrets.WOMPI_INTEGRITY_SECRET }}
+          WOMPI_DAVIPLATA_OTP_SEND_URL: ${{ vars.WOMPI_DAVIPLATA_OTP_SEND_URL }}
+          WOMPI_DAVIPLATA_OTP_CONFIRM_URL: ${{ vars.WOMPI_DAVIPLATA_OTP_CONFIRM_URL }}
+        run: bun run --cwd apps/server test:cloudflare subscription/payment-enrollment.test.ts -t 'proves Sandbox DaviPlata'
+      - name: Record minimized proof scope
+        if: success()
+        run: |
+          printf '%s\n' '## DaviPlata Sandbox protocol proof' \
+            'Revision: `${{ github.sha }}`' \
+            '- Returned OTP service destinations exactly matched reviewed Sandbox configuration.' \
+            '- Synthetic tokenization, OTP send/confirm and authenticated reusable DAVIPLATA source verification completed.' \
+            '- Weekly, monthly and yearly first payments reached matching verified success.' \
+            '- Declined weekly first payment reached the existing bounded failure decision.' \
+            '- No tokens, provider identities, service URLs, document/product values or response bodies are retained.' \
+            '- Local D1/activity harness plus real Sandbox provider; not browser CORS, recovery, Production or native-platform launch approval.' >> "$GITHUB_STEP_SUMMARY"

@@ -26,6 +26,15 @@ const wompiPublicKey = Config.String("WOMPI_PUBLIC_KEY");
 const wompiPrivateKey = Config.Redacted("WOMPI_PRIVATE_KEY");
 const wompiIntegritySecret = Config.Redacted("WOMPI_INTEGRITY_SECRET");
 const wompiEventSecret = Config.Redacted("WOMPI_EVENT_SECRET");
+const daviplataActivated = Config.String("WOMPI_DAVIPLATA_ACTIVATED").pipe(
+  Config.withDefault("disabled")
+);
+const daviplataOtpSendUrl = Config.String("WOMPI_DAVIPLATA_OTP_SEND_URL").pipe(
+  Config.withDefault("")
+);
+const daviplataOtpConfirmUrl = Config.String("WOMPI_DAVIPLATA_OTP_CONFIRM_URL").pipe(
+  Config.withDefault("")
+);
 const patAdmissionKey = Config.Redacted("PAT_ADMISSION_KEY");
 const smokeProof = Config.Redacted("SMOKE_PROOF");
 const accessIssuer = Config.String("CLOUDFLARE_ACCESS_ISSUER");
@@ -279,6 +288,9 @@ export default Alchemy.Stack(
         WOMPI_INTEGRITY_SECRET: yield* development
           ? wompiIntegritySecret.pipe(Config.withDefault(Redacted.make("")))
           : wompiIntegritySecret,
+        WOMPI_DAVIPLATA_ACTIVATED: yield* daviplataActivated,
+        WOMPI_DAVIPLATA_OTP_SEND_URL: yield* daviplataOtpSendUrl,
+        WOMPI_DAVIPLATA_OTP_CONFIRM_URL: yield* daviplataOtpConfirmUrl,
         WOMPI_EVENT_SECRET: yield* development
           ? wompiEventSecret.pipe(Config.withDefault(Redacted.make("")))
           : wompiEventSecret,

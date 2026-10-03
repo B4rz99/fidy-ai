@@ -9,7 +9,7 @@ import {
   PaymentSubmission,
 } from "../../src/core/subscription/contract";
 import { UserId } from "../../src/core/identity/contract";
-import { Clock, Config, Data, Effect, Schema } from "effect";
+import { Cause, Clock, Config, Data, DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { billingAttemptIdFor } from "./internal/payment-enrollment";
 import {
   handlePaymentEnrollment,
@@ -21,6 +21,20 @@ import { browserOrigins, localCanonicalReadBearer } from "../runtime/contract";
 import { makePublicWorker } from "../public-worker";
 import { cloudflareWorkerTelemetry } from "../runtime/telemetry/operations";
 import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
+import { executeProtectedSubscriptionQuery } from "./operations";
+import { makeCoreHttp } from "../core-http/runtime";
+import { applyTestMigration } from "../d1-test-fixture";
+import { type TransactionSubject } from "../canonical-work/contract";
+import {
+  loadWompiIntegritySecret,
+  loadWompiPrivateKey,
+} from "../../src/shell/secret-material/operations";
+import {
+  DaviplataSandboxProofFailure,
+  authorizeDaviplataSandbox,
+  requireDaviplataSandboxEnrollment,
+  requireDaviplataSandboxPolicy,
+} from "./daviplata-sandbox.test-fixture";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure") {}
 const fromTestPromise = <A>(promise: () => PromiseLike<A>): Effect.Effect<A> =>
@@ -65,6 +79,7 @@ afterEach(() =>
 
 const setup = (): Promise<{
   db: D1Database;
+  subject: TransactionSubject;
   environment: {
     onAccepted: (id: string) => void;
     DB: D1Database;
@@ -84,11 +99,20 @@ const setup = (): Promise<{
         "CREATE TABLE verified_email_credentials (user_id TEXT PRIMARY KEY, email_address TEXT NOT NULL) STRICT",
         "CREATE TABLE onboarding_consent_records (user_id TEXT PRIMARY KEY) STRICT",
         "CREATE TABLE consent_user_revocations (user_id TEXT PRIMARY KEY) STRICT",
+        "CREATE TABLE trial_periods (user_id TEXT PRIMARY KEY, started_at_ms INTEGER NOT NULL, ends_at_ms INTEGER NOT NULL) STRICT",
+        "CREATE TABLE pat_audit (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, session_id TEXT, pat_id TEXT, operation TEXT NOT NULL, outcome TEXT NOT NULL, occurred_at_ms INTEGER NOT NULL) STRICT",
+        "CREATE TABLE pat_atomic_assertion (id INTEGER PRIMARY KEY CHECK (id = 1), accepted INTEGER NOT NULL CHECK (accepted = 1)) STRICT",
         `CREATE TABLE web_sessions (id TEXT NOT NULL, user_id TEXT NOT NULL, token_digest BLOB NOT NULL,
       revoked_at_ms INTEGER, fresh_until_ms INTEGER NOT NULL, idle_expires_at_ms INTEGER NOT NULL,
       hard_expires_at_ms INTEGER NOT NULL) STRICT`,
       ]);
       instances.push(instance);
+      yield* fromTestPromise(() =>
+        applyTestMigration({
+          db,
+          source: new URL("../migrations/0016_subscription_standing.sql", import.meta.url),
+        })
+      );
       yield* fromTestPromise(() =>
         db
           .prepare(
@@ -117,6 +141,12 @@ const setup = (): Promise<{
         )
       );
       const now = yield* Clock.currentTimeMillis;
+      yield* fromTestPromise(() =>
+        db
+          .prepare("INSERT INTO trial_periods VALUES (?, ?, ?), (?, ?, ?)")
+          .bind(userA, now - 604_800_000, now, userB, now - 604_800_000, now)
+          .run()
+      );
       yield* fromTestPromise(() =>
         db
           .prepare("INSERT INTO web_sessions VALUES (?, ?, ?, NULL, ?, ?, ?)")
@@ -160,9 +190,137 @@ const setup = (): Promise<{
                 }),
               }),
         });
-      return { db, environment, request };
+      return {
+        db,
+        environment,
+        request,
+        subject: { id: "20000000-0000-4000-8000-000000000001", userId: userA, digest },
+      };
     })
   );
+
+it.each([
+  {
+    label: "production not activated",
+    market: "production",
+    activated: "disabled",
+    send: "https://production.wompi.co/otp/send",
+    confirm: "https://production.wompi.co/otp/confirm",
+  },
+  {
+    label: "production wrong activation flag",
+    market: "production",
+    activated: "true",
+    send: "https://production.wompi.co/otp/send",
+    confirm: "https://production.wompi.co/otp/confirm",
+  },
+  {
+    label: "production missing policy",
+    market: "production",
+    activated: "enabled",
+    send: "",
+    confirm: "",
+  },
+  {
+    label: "production with Sandbox destinations",
+    market: "production",
+    activated: "enabled",
+    send: "https://sandbox.wompi.co/otp/send",
+    confirm: "https://sandbox.wompi.co/otp/confirm",
+  },
+  {
+    label: "Sandbox missing policy",
+    market: "sandbox",
+    activated: "enabled",
+    send: "",
+    confirm: "",
+  },
+  {
+    label: "Sandbox different service origin",
+    market: "sandbox",
+    activated: "enabled",
+    send: "https://unreviewed.example/otp/send",
+    confirm: "https://sandbox.wompi.co/otp/confirm",
+  },
+  {
+    label: "Sandbox credential-bearing URL",
+    market: "sandbox",
+    activated: "enabled",
+    send: "https://dummy@sandbox.wompi.co/otp/send",
+    confirm: "https://sandbox.wompi.co/otp/confirm",
+  },
+  {
+    label: "Sandbox custom port",
+    market: "sandbox",
+    activated: "enabled",
+    send: "https://sandbox.wompi.co:443/otp/send",
+    confirm: "https://sandbox.wompi.co/otp/confirm",
+  },
+  {
+    label: "Sandbox query-bearing URL",
+    market: "sandbox",
+    activated: "enabled",
+    send: "https://sandbox.wompi.co/otp/send?dummy=1",
+    confirm: "https://sandbox.wompi.co/otp/confirm",
+  },
+  {
+    label: "Sandbox production confirm destination",
+    market: "sandbox",
+    activated: "enabled",
+    send: "https://sandbox.wompi.co/otp/send",
+    confirm: "https://production.wompi.co/otp/confirm",
+  },
+])("hides and refuses DaviPlata with $label before provider effects", (scenario) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, environment, request } = yield* fromTestPromise(setup);
+      const provider = vi.fn(() => Promise.resolve(new Response(merchant)));
+      vi.stubGlobal("fetch", provider);
+      const production = {
+        ...environment,
+        WOMPI_ENVIRONMENT: scenario.market,
+        WOMPI_PUBLIC_KEY: publicKey.replace(
+          "pub_test_",
+          `pub_${scenario.market === "sandbox" ? "test" : "prod"}_`
+        ),
+        WOMPI_PRIVATE_KEY: secret.replace(
+          "prv_test_",
+          `prv_${scenario.market === "sandbox" ? "test" : "prod"}_`
+        ),
+        WOMPI_INTEGRITY_SECRET: `${scenario.market === "sandbox" ? "test" : "prod"}_integrity_fixture_key`,
+        WOMPI_DAVIPLATA_ACTIVATED: scenario.activated,
+        WOMPI_DAVIPLATA_OTP_SEND_URL: scenario.send,
+        WOMPI_DAVIPLATA_OTP_CONFIRM_URL: scenario.confirm,
+      };
+      const availability = yield* fromTestPromise(() =>
+        handlePaymentEnrollment({
+          request: request("/web/subscription/payment-enrollments/availability"),
+          environment: production,
+        })
+      );
+      expect(availability.status).toBe(200);
+      expect(yield* fromTestPromise(() => availability.json())).toEqual({
+        enabledMethods: ["card", "nequi"],
+      });
+      const refused = yield* fromTestPromise(() =>
+        handlePaymentEnrollment({
+          request: request("/web/subscription/payment-enrollments/prepare", "POST", {
+            priceId,
+            method: "daviplata",
+          }),
+          environment: production,
+        })
+      );
+      expect(refused.status).toBe(503);
+      expect(provider).not.toHaveBeenCalled();
+      expect(
+        yield* fromTestPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM card_enrollments").first()
+        )
+      ).toEqual({ count: 0 });
+    })
+  )
+);
 
 it("requires Nequi approval before creating a reusable source and collecting one first payment", () =>
   Effect.runPromise(
@@ -273,6 +431,571 @@ it("requires Nequi approval before creating a reusable source and collecting one
     })
   ));
 
+it.each(["sandbox", "production"] as const)(
+  "forwards authenticated %s availability through real public and Core routes",
+  (market) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = yield* fromTestPromise(setup);
+        const provider = vi.fn(() => Promise.resolve(new Response(merchant)));
+        vi.stubGlobal("fetch", provider);
+        const environment = {
+          ...fixture.environment,
+          WOMPI_ENVIRONMENT: market,
+          WOMPI_PUBLIC_KEY: publicKey.replace(
+            "pub_test_",
+            market === "sandbox" ? "pub_test_" : "pub_prod_"
+          ),
+          WOMPI_PRIVATE_KEY: secret.replace(
+            "prv_test_",
+            market === "sandbox" ? "prv_test_" : "prv_prod_"
+          ),
+          WOMPI_INTEGRITY_SECRET: `${market === "sandbox" ? "test" : "prod"}_integrity_fixture_key`,
+          WOMPI_DAVIPLATA_ACTIVATED: "enabled",
+          WOMPI_DAVIPLATA_OTP_SEND_URL: `https://${market}.wompi.co/otp/send`,
+          WOMPI_DAVIPLATA_OTP_CONFIRM_URL: `https://${market}.wompi.co/otp/confirm`,
+          RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
+          CONTRACT_DIGEST: "0".repeat(64),
+          USER_TRANSACTION_COORDINATOR: {
+            getByName: (): Pick<Fetcher, "fetch"> => ({
+              fetch: () => Promise.resolve(new Response(null, { status: 503 })),
+            }),
+          },
+          KAPSO_API_KEY: "fixture-unused",
+          KAPSO_WEBHOOK_SECRET: "fixture-unused",
+          WHATSAPP_BUSINESS_PORTFOLIO_ID: "fixture-unused",
+          CLOUDFLARE_ACCESS_ISSUER: "https://fixture-unused.example",
+          CLOUDFLARE_ACCESS_AUDIENCE: "fixture-unused",
+        };
+        const core = makeCoreHttp(cloudflareWorkerTelemetry);
+        const ingress = makePublicWorker(cloudflareWorkerTelemetry);
+        const response = yield* fromTestPromise(() =>
+          ingress.fetch(
+            new Request(
+              "https://api.fidyapp.com/web/subscription/payment-enrollments/availability",
+              {
+                headers: fixture.request("/web/subscription/payment-enrollments/availability")
+                  .headers,
+              }
+            ),
+            {
+              BROWSER_ORIGIN: browserOrigins.local,
+              CORE: {
+                fetch: (input: RequestInfo | URL, init?: RequestInit): Promise<Response> =>
+                  core(new Request(input, init), environment),
+              },
+              LOCAL_CANONICAL_READ_BEARER: localCanonicalReadBearer,
+              PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
+              RELEASE_GIT_SHA: environment.RELEASE_GIT_SHA,
+            }
+          )
+        );
+        expect(response.status).toBe(200);
+        expect(response.headers.get("cache-control")).toBe("no-store");
+        expect(response.headers.get("access-control-allow-origin")).toBe(browserOrigins.local);
+        expect(yield* fromTestPromise(() => response.json())).toEqual({
+          enabledMethods: ["card", "nequi", "daviplata"],
+        });
+        expect(provider).not.toHaveBeenCalled();
+      })
+    )
+);
+
+const removeBrowserProof = (request: Request, failure: string): void => {
+  if (failure === "missing-origin") {
+    request.headers.delete("origin");
+  }
+  if (failure === "foreign-origin") {
+    request.headers.set("origin", "https://foreign.example");
+  }
+  if (failure === "missing-session" || failure === "PAT-only") {
+    request.headers.delete("cookie");
+  }
+  if (failure === "PAT-only") {
+    request.headers.set("authorization", "Bearer pat_fixture_no_browser_authority");
+  }
+};
+
+it.each([
+  "missing-origin",
+  "foreign-origin",
+  "missing-session",
+  "PAT-only",
+  "revoked-session",
+  "expired-session",
+  "withdrawn-consent",
+] as const)(
+  "refuses availability and DaviPlata preparation with %s before financial effects",
+  (failure) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = yield* fromTestPromise(setup);
+        const environment = { ...fixture.environment, ...daviplataFixturePolicy };
+        const provider = vi.fn(() => Promise.resolve(new Response(merchant)));
+        vi.stubGlobal("fetch", provider);
+        if (failure === "revoked-session") {
+          yield* fromTestPromise(() =>
+            fixture.db
+              .prepare("UPDATE web_sessions SET revoked_at_ms = 1 WHERE user_id = ?")
+              .bind(userA)
+              .run()
+          );
+        }
+        if (failure === "expired-session") {
+          yield* fromTestPromise(() =>
+            fixture.db
+              .prepare("UPDATE web_sessions SET fresh_until_ms = 1 WHERE user_id = ?")
+              .bind(userA)
+              .run()
+          );
+        }
+        if (failure === "withdrawn-consent") {
+          yield* fromTestPromise(() =>
+            fixture.db.prepare("INSERT INTO consent_user_revocations VALUES (?)").bind(userA).run()
+          );
+        }
+        for (const operation of ["availability", "prepare"]) {
+          const request = fixture.request(
+            `/web/subscription/payment-enrollments/${operation}`,
+            operation === "availability" ? "GET" : "POST",
+            operation === "availability" ? undefined : { priceId, method: "daviplata" }
+          );
+          removeBrowserProof(request, failure);
+          const response = yield* fromTestPromise(() =>
+            handlePaymentEnrollment({ request, environment })
+          );
+          expect(response.status).toBe(failure.endsWith("origin") ? 403 : 401);
+        }
+        expect(provider).not.toHaveBeenCalled();
+        expect(
+          yield* fromTestPromise(() =>
+            fixture.db.prepare("SELECT count(*) AS count FROM card_enrollments").first()
+          )
+        ).toEqual({ count: 0 });
+      })
+    )
+);
+
+const daviplataFixturePolicy = {
+  WOMPI_DAVIPLATA_OTP_SEND_URL: "https://sandbox.wompi.co/daviplata/send",
+  WOMPI_DAVIPLATA_OTP_CONFIRM_URL: "https://sandbox.wompi.co/daviplata/confirm",
+} as const;
+
+it.each([
+  {
+    label: "different method",
+    type: "NEQUI",
+    email: "payer@example.com",
+    status: "source-verifying",
+  },
+  {
+    label: "different billing email",
+    type: "DAVIPLATA",
+    email: "other@example.com",
+    status: "refused",
+  },
+])("does not adopt or bill a DaviPlata source with $label or repeat its creation", (scenario) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* fromTestPromise(setup);
+      const environment = { ...fixture.environment, ...daviplataFixturePolicy };
+      let matching = false;
+      let creations = 0;
+      vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        const url = new URL(input instanceof Request ? input.url : String(input));
+        if (url.pathname.startsWith("/v1/merchants/")) {
+          return Promise.resolve(new Response(merchant));
+        }
+        if (url.pathname.startsWith("/v1/tokens/daviplata/")) {
+          return Promise.resolve(
+            Response.json({ data: { id: "daviplata_devtest_verified", status: "APPROVED" } })
+          );
+        }
+        if (init?.method === "POST") {
+          creations++;
+        }
+        return Promise.resolve(
+          Response.json({
+            data: {
+              id: 8276,
+              status: "AVAILABLE",
+              type: matching ? "DAVIPLATA" : scenario.type,
+              customer_email: matching ? "payer@example.com" : scenario.email,
+            },
+          })
+        );
+      });
+      const preparedResponse = yield* fromTestPromise(() =>
+        handlePaymentEnrollment({
+          environment,
+          request: fixture.request("/web/subscription/payment-enrollments/prepare", "POST", {
+            priceId,
+            method: "daviplata",
+          }),
+        })
+      );
+      expect(preparedResponse.status).toBe(200);
+      const prepared = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentEnrollment))(
+        yield* fromTestPromise(() => preparedResponse.json())
+      );
+      const send = (): Promise<Response> =>
+        handlePaymentEnrollment({
+          environment,
+          request: fixture.request("/web/subscription/payment-enrollments/submit", "POST", {
+            enrollmentId: prepared.enrollmentId,
+            method: "daviplata",
+            paymentSourceMode: "create",
+            daviplataToken: "daviplata_devtest_verified",
+            paymentRequestId: "40000000-0000-4000-8000-000000000093",
+            billingEmail: "payer@example.com",
+            decisions: {
+              acceptedEndUserPolicy: true,
+              acceptedPersonalDataAuthorization: true,
+              authorizedRecurringCharges: true,
+            },
+          }),
+        });
+      const unadopted = yield* fromTestPromise(send);
+      expect(yield* fromTestPromise(() => unadopted.json())).toMatchObject({
+        status: scenario.status,
+        enrollmentId: prepared.enrollmentId,
+      });
+      expect(
+        yield* fromTestPromise(() =>
+          fixture.db.prepare("SELECT count(*) AS count FROM card_payment_sources").first()
+        )
+      ).toEqual({ count: 0 });
+      expect(
+        yield* fromTestPromise(() =>
+          fixture.db.prepare("SELECT count(*) AS count FROM billing_attempts").first()
+        )
+      ).toEqual({ count: 0 });
+      if (scenario.status === "source-verifying") {
+        matching = true;
+        yield* Effect.sleep("4 seconds");
+        const adopted = yield* fromTestPromise(send);
+        expect(yield* fromTestPromise(() => adopted.json())).toMatchObject({
+          status: "payment-pending",
+          billingAttempt: { status: "pending" },
+        });
+      } else {
+        matching = true;
+        const refused = yield* fromTestPromise(send);
+        expect(yield* fromTestPromise(() => refused.json())).toMatchObject({
+          status: "refused",
+          reason: "provider-error",
+        });
+      }
+      expect(creations).toBe(1);
+    })
+  )
+);
+
+const forbiddenDaviplataSubmissions = {
+  "document-values": { documentNumber: "document-only-wompi" },
+  "product-values": { productNumber: "product-only-wompi" },
+  "OTP-values": { otp: "otp-only-wompi" },
+  "other-environment": { daviplataToken: "daviplata_prod_disallowed" },
+  "disabled-policy": {},
+} as const;
+
+it.each(Object.entries(forbiddenDaviplataSubmissions))(
+  "refuses DaviPlata submission with %s without claiming authorization or creating a source",
+  (failure, fields) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = yield* fromTestPromise(setup);
+        const preparedEnvironment = { ...fixture.environment, ...daviplataFixturePolicy };
+        const provider = vi.fn(() => Promise.resolve(new Response(merchant)));
+        vi.stubGlobal("fetch", provider);
+        const preparedResponse = yield* fromTestPromise(() =>
+          handlePaymentEnrollment({
+            environment: preparedEnvironment,
+            request: fixture.request("/web/subscription/payment-enrollments/prepare", "POST", {
+              priceId,
+              method: "daviplata",
+            }),
+          })
+        );
+        expect(preparedResponse.status).toBe(200);
+        const prepared = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentEnrollment))(
+          yield* fromTestPromise(() => preparedResponse.json())
+        );
+        const originalRequests = provider.mock.calls.length;
+        const environment =
+          failure === "disabled-policy"
+            ? { ...preparedEnvironment, WOMPI_DAVIPLATA_OTP_CONFIRM_URL: "" }
+            : preparedEnvironment;
+        const response = yield* fromTestPromise(() =>
+          handlePaymentEnrollment({
+            environment,
+            request: fixture.request("/web/subscription/payment-enrollments/submit", "POST", {
+              enrollmentId: prepared.enrollmentId,
+              method: "daviplata",
+              paymentSourceMode: "create",
+              daviplataToken: "daviplata_devtest_once",
+              paymentRequestId: "40000000-0000-4000-8000-000000000091",
+              billingEmail: "payer@example.com",
+              decisions: {
+                acceptedEndUserPolicy: true,
+                acceptedPersonalDataAuthorization: true,
+                authorizedRecurringCharges: true,
+              },
+              ...fields,
+            }),
+          })
+        );
+        expect(response.status).toBe(failure === "disabled-policy" ? 503 : 400);
+        expect(provider.mock.calls).toHaveLength(originalRequests);
+        expect(
+          yield* fromTestPromise(() =>
+            fixture.db
+              .prepare(
+                "SELECT status, authorization_digest, payment_request_id FROM card_enrollments"
+              )
+              .first()
+          )
+        ).toEqual({ status: "prepared", authorization_digest: null, payment_request_id: null });
+        expect(
+          yield* fromTestPromise(() =>
+            fixture.db.prepare("SELECT count(*) AS count FROM card_payment_sources").first()
+          )
+        ).toEqual({ count: 0 });
+        expect(
+          yield* fromTestPromise(() =>
+            fixture.db.prepare("SELECT count(*) AS count FROM billing_attempts").first()
+          )
+        ).toEqual({ count: 0 });
+      })
+    )
+);
+
+it.each([
+  { period: "weekly", price: "22700000-0000-4000-8000-000000000001", cents: 990_000 },
+  { period: "monthly", price: "22700000-0000-4000-8000-000000000002", cents: 2_890_000 },
+  { period: "yearly", price: "22700000-0000-4000-8000-000000000003", cents: 28_990_000 },
+])(
+  "activates $period Pro only after verified DaviPlata collection, never authorization alone",
+  (scenario) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = yield* fromTestPromise(setup);
+        const environment = { ...fixture.environment, ...daviplataFixturePolicy };
+        let approved = false;
+        let sourceCreations = 0;
+        let chargeCreations = 0;
+        const chargeFacts = Schema.Struct({
+          reference: Schema.String,
+          amount_in_cents: Schema.Int,
+          currency: Schema.String,
+          payment_source_id: Schema.Int,
+        });
+        let charge = Option.none<typeof chargeFacts.Type>();
+        const finalizedAt = DateTime.formatIso(DateTime.makeUnsafe(yield* Clock.currentTimeMillis));
+        const available = (): Response =>
+          Response.json({
+            data: {
+              id: 8276,
+              type: "DAVIPLATA",
+              status: "AVAILABLE",
+              customer_email: "payer@example.com",
+              token: "daviplata_devtest_once",
+              public_data: { number_document: "document-canary", phone_number: "product-canary" },
+            },
+          });
+        const respondTransaction = (
+          input: RequestInfo | URL,
+          init?: RequestInit
+        ): Promise<Response> => {
+          if (init?.method === "POST") {
+            chargeCreations++;
+            return new Request(input, init).json().then((body: unknown) => {
+              expect(body).not.toHaveProperty("payment_method");
+              const decoded = Schema.decodeUnknownSync(chargeFacts)(body);
+              charge = Option.some(decoded);
+              expect(decoded.amount_in_cents).toBe(scenario.cents);
+              return Response.json({
+                data: {
+                  id: "daviplata-transaction",
+                  ...decoded,
+                  status: "PENDING",
+                  finalized_at: null,
+                },
+              });
+            });
+          }
+          if (Option.isNone(charge)) return Promise.reject(new TestPromiseFailure());
+          return Promise.resolve(
+            Response.json({
+              data: {
+                id: "daviplata-transaction",
+                ...charge.value,
+                status: "APPROVED",
+                finalized_at: finalizedAt,
+              },
+            })
+          );
+        };
+        vi.stubGlobal(
+          "fetch",
+          (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+            const url = new URL(input instanceof Request ? input.url : String(input));
+            if (url.pathname.startsWith("/v1/merchants/")) {
+              return Promise.resolve(new Response(merchant));
+            }
+            if (url.pathname.startsWith("/v1/tokens/daviplata/")) {
+              return Promise.resolve(
+                Response.json({
+                  data: {
+                    id: "daviplata_devtest_once",
+                    status: approved ? "APPROVED" : "PENDING",
+                    client_info: {
+                      number_document: "document-canary",
+                      phone_number: "product-canary",
+                    },
+                  },
+                })
+              );
+            }
+            if (url.pathname === "/v1/payment_sources") {
+              sourceCreations++;
+              return new Request(input, init).json().then((body: unknown) => {
+                expect(body).toMatchObject({ type: "DAVIPLATA", token: "daviplata_devtest_once" });
+                return available();
+              });
+            }
+            if (url.pathname.startsWith("/v1/payment_sources/")) {
+              return Promise.resolve(available());
+            }
+            return respondTransaction(input, init);
+          }
+        );
+        const preparedResponse = yield* fromTestPromise(() =>
+          handlePaymentEnrollment({
+            environment,
+            request: fixture.request("/web/subscription/payment-enrollments/prepare", "POST", {
+              priceId: scenario.price,
+              method: "daviplata",
+            }),
+          })
+        );
+        expect(preparedResponse.status).toBe(200);
+        const prepared = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentEnrollment))(
+          yield* fromTestPromise(() => preparedResponse.json())
+        );
+        expect(prepared).toMatchObject({
+          method: "daviplata",
+          status: "prepared",
+          daviplataOtpPolicy: {
+            sendUrl: daviplataFixturePolicy.WOMPI_DAVIPLATA_OTP_SEND_URL,
+            confirmUrl: daviplataFixturePolicy.WOMPI_DAVIPLATA_OTP_CONFIRM_URL,
+          },
+        });
+        const payload = {
+          enrollmentId: prepared.enrollmentId,
+          method: "daviplata",
+          paymentSourceMode: "create",
+          daviplataToken: "daviplata_devtest_once",
+          paymentRequestId: "40000000-0000-4000-8000-000000000032",
+          billingEmail: "payer@example.com",
+          decisions: {
+            acceptedEndUserPolicy: true,
+            acceptedPersonalDataAuthorization: true,
+            authorizedRecurringCharges: true,
+          },
+        };
+        const send = (): Promise<Response> =>
+          handlePaymentEnrollment({
+            environment,
+            request: fixture.request(
+              "/web/subscription/payment-enrollments/submit",
+              "POST",
+              payload
+            ),
+          });
+        expect((yield* fromTestPromise(send)).status).toBe(400);
+        expect(sourceCreations).toBe(0);
+        approved = true;
+        const response = yield* fromTestPromise(send);
+        expect(response.status).toBe(200);
+        const submission = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentSubmission))(
+          yield* fromTestPromise(() => response.json())
+        );
+        if (submission.status !== "payment-pending") {
+          return yield* Effect.die("missing pending collection");
+        }
+        expect(submission.billingAttempt.status).toBe("pending");
+        expect(
+          yield* fromTestPromise(() =>
+            environment.DB.prepare("SELECT count(*) AS count FROM billing_paid_periods").first()
+          )
+        ).toEqual({ count: 0 });
+        expect((yield* fromTestPromise(send)).status).toBe(200);
+        expect(sourceCreations).toBe(1);
+        const beforeSettlement = yield* fromTestPromise(() =>
+          executeProtectedSubscriptionQuery({
+            db: environment.DB,
+            subject: fixture.subject,
+            operation: "subscription.getSubscriptionStatus",
+          })
+        );
+        expect(yield* fromTestPromise(() => beforeSettlement.json())).toMatchObject({
+          data: { accessTier: "free", paidSubscription: null },
+        });
+        yield* fromTestPromise(() =>
+          runBillingCollectionWorkflow({
+            environment,
+            payload: { version: 1, attemptId: submission.billingAttempt.id },
+            activity: (_name, _options, run) => run(),
+          })
+        );
+        const settled = yield* fromTestPromise(() =>
+          handlePaymentEnrollment({
+            environment,
+            request: fixture.request(
+              `/web/subscription/billing-attempts/${submission.billingAttempt.id}`
+            ),
+          })
+        );
+        expect(yield* fromTestPromise(() => settled.json())).toMatchObject({
+          status: "succeeded",
+          billingPeriod: scenario.period,
+        });
+        expect(chargeCreations).toBe(1);
+        const afterSettlement = yield* fromTestPromise(() =>
+          executeProtectedSubscriptionQuery({
+            db: environment.DB,
+            subject: fixture.subject,
+            operation: "subscription.getSubscriptionStatus",
+          })
+        );
+        expect(yield* fromTestPromise(() => afterSettlement.json())).toMatchObject({
+          data: { accessTier: "pro", paidSubscription: { billingPeriod: scenario.period } },
+        });
+        const otherUser = yield* fromTestPromise(() =>
+          executeProtectedSubscriptionQuery({
+            db: environment.DB,
+            subject: { ...fixture.subject, userId: userB },
+            operation: "subscription.getSubscriptionStatus",
+          })
+        );
+        expect(otherUser.status).toBe(401);
+        const retained = yield* fromTestPromise(() =>
+          environment.DB.batch([
+            environment.DB.prepare("SELECT * FROM card_enrollments"),
+            environment.DB.prepare("SELECT * FROM card_payment_sources"),
+            environment.DB.prepare("SELECT * FROM billing_attempts"),
+            environment.DB.prepare("SELECT * FROM pat_audit"),
+          ])
+        );
+        const retainedText = yield* Schema.encodeEffect(UnknownJsonString)(retained);
+        for (const secretValue of ["daviplata_devtest_once", "document-canary", "product-canary"]) {
+          expect(retainedText).not.toContain(secretValue);
+        }
+      })
+    )
+);
+
 const secondUserRequest = (db: D1Database, request: Request): Promise<Request> =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -300,126 +1023,136 @@ const secondUserRequest = (db: D1Database, request: Request): Promise<Request> =
     })
   );
 
-it("isolates Nequi intents and rejects reuse of one approved authorization by a second User", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, environment, request } = yield* fromTestPromise(setup);
-      let posts = 0;
-      vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = input instanceof Request ? input.url : input.toString();
-        if (url.includes("/merchants/")) return Promise.resolve(new Response(merchant));
-        if (url.includes("/tokens/nequi/")) {
+it.each(["nequi", "daviplata"] as const)(
+  "isolates %s intents and rejects reuse of one approved authorization by a second User",
+  (method) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db, environment: baseEnvironment, request } = yield* fromTestPromise(setup);
+        const environment = { ...baseEnvironment, ...daviplataFixturePolicy };
+        const authorizationToken =
+          method === "nequi" ? "nequi_test_once" : "daviplata_devtest_once";
+        const tokenPayload =
+          method === "nequi"
+            ? { nequiToken: authorizationToken }
+            : { daviplataToken: authorizationToken };
+        let posts = 0;
+        vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = input instanceof Request ? input.url : input.toString();
+          if (url.includes("/merchants/")) return Promise.resolve(new Response(merchant));
+          if (url.includes(`/tokens/${method}/`)) {
+            return Promise.resolve(
+              Response.json({ data: { id: authorizationToken, status: "APPROVED" } })
+            );
+          }
+          if (init?.method === "POST") posts++;
           return Promise.resolve(
-            Response.json({ data: { id: "nequi_test_once", status: "APPROVED" } })
+            Response.json({
+              data: {
+                id: 3891,
+                type: method === "nequi" ? "NEQUI" : "DAVIPLATA",
+                status: "AVAILABLE",
+                customer_email: "payer@example.com",
+              },
+            })
           );
-        }
-        if (init?.method === "POST") posts++;
-        return Promise.resolve(
-          Response.json({
-            data: {
-              id: 3891,
-              type: "NEQUI",
-              status: "AVAILABLE",
-              customer_email: "payer@example.com",
-            },
-          })
-        );
-      });
-      const prepared = yield* fromTestPromise(() =>
-        handlePaymentEnrollment({
-          request: request("/web/subscription/payment-enrollments/prepare", "POST", {
-            priceId,
-            method: "nequi",
-          }),
-          environment,
-        })
-      );
-      const ownerEnrollment = yield* Schema.decodeUnknownEffect(
-        Schema.toCodecJson(PaymentEnrollment)
-      )(yield* fromTestPromise(() => prepared.json()));
-      const payload = {
-        enrollmentId: ownerEnrollment.enrollmentId,
-        method: "nequi",
-        paymentSourceMode: "create",
-        nequiToken: "nequi_test_once",
-        billingEmail: "payer@example.com",
-        paymentRequestId: "40000000-0000-4000-8000-000000000011",
-        decisions: {
-          acceptedEndUserPolicy: true,
-          acceptedPersonalDataAuthorization: true,
-          authorizedRecurringCharges: true,
-        },
-      };
-      const foreign = yield* fromTestPromise(() =>
-        secondUserRequest(
-          db,
-          request(`/web/subscription/payment-enrollments/${ownerEnrollment.enrollmentId}`)
-        )
-      );
-      expect(
-        (yield* fromTestPromise(() => handlePaymentEnrollment({ request: foreign, environment })))
-          .status
-      ).toBe(400);
-      const foreignSubmit = yield* fromTestPromise(() =>
-        secondUserRequest(
-          db,
-          request("/web/subscription/payment-enrollments/submit", "POST", payload)
-        )
-      );
-      expect(
-        (yield* fromTestPromise(() =>
-          handlePaymentEnrollment({ request: foreignSubmit, environment })
-        )).status
-      ).toBe(400);
-      expect(posts).toBe(0);
-      expect(
-        (yield* fromTestPromise(() =>
+        });
+        const prepared = yield* fromTestPromise(() =>
           handlePaymentEnrollment({
-            request: request("/web/subscription/payment-enrollments/submit", "POST", payload),
+            request: request("/web/subscription/payment-enrollments/prepare", "POST", {
+              priceId,
+              method,
+            }),
             environment,
           })
-        )).status
-      ).toBe(200);
-      const prepareB = yield* fromTestPromise(() =>
-        secondUserRequest(
-          db,
-          request("/web/subscription/payment-enrollments/prepare", "POST", {
-            priceId,
-            method: "nequi",
-          })
-        )
-      );
-      const bResponse = yield* fromTestPromise(() =>
-        handlePaymentEnrollment({ request: prepareB, environment })
-      );
-      const foreignEnrollment = yield* Schema.decodeUnknownEffect(
-        Schema.toCodecJson(PaymentEnrollment)
-      )(yield* fromTestPromise(() => bResponse.json()));
-      const replay = yield* fromTestPromise(() =>
-        secondUserRequest(
-          db,
-          request("/web/subscription/payment-enrollments/submit", "POST", {
-            ...payload,
-            enrollmentId: foreignEnrollment.enrollmentId,
-            billingEmail: "other@example.com",
-          })
-        )
-      );
-      expect(
-        (yield* fromTestPromise(() => handlePaymentEnrollment({ request: replay, environment })))
-          .status
-      ).toBe(503);
-      expect(posts).toBe(1);
-      expect(
-        yield* fromTestPromise(() =>
-          db
-            .prepare("SELECT count(*) AS count FROM billing_attempts WHERE user_id = ?")
-            .bind(userB)
-            .first()
-        )
-      ).toEqual({ count: 0 });
-    })
-  ));
+        );
+        const ownerEnrollment = yield* Schema.decodeUnknownEffect(
+          Schema.toCodecJson(PaymentEnrollment)
+        )(yield* fromTestPromise(() => prepared.json()));
+        const payload = {
+          enrollmentId: ownerEnrollment.enrollmentId,
+          method,
+          paymentSourceMode: "create",
+          ...tokenPayload,
+          billingEmail: "payer@example.com",
+          paymentRequestId: "40000000-0000-4000-8000-000000000011",
+          decisions: {
+            acceptedEndUserPolicy: true,
+            acceptedPersonalDataAuthorization: true,
+            authorizedRecurringCharges: true,
+          },
+        };
+        const foreign = yield* fromTestPromise(() =>
+          secondUserRequest(
+            db,
+            request(`/web/subscription/payment-enrollments/${ownerEnrollment.enrollmentId}`)
+          )
+        );
+        expect(
+          (yield* fromTestPromise(() => handlePaymentEnrollment({ request: foreign, environment })))
+            .status
+        ).toBe(400);
+        const foreignSubmit = yield* fromTestPromise(() =>
+          secondUserRequest(
+            db,
+            request("/web/subscription/payment-enrollments/submit", "POST", payload)
+          )
+        );
+        expect(
+          (yield* fromTestPromise(() =>
+            handlePaymentEnrollment({ request: foreignSubmit, environment })
+          )).status
+        ).toBe(400);
+        expect(posts).toBe(0);
+        expect(
+          (yield* fromTestPromise(() =>
+            handlePaymentEnrollment({
+              request: request("/web/subscription/payment-enrollments/submit", "POST", payload),
+              environment,
+            })
+          )).status
+        ).toBe(200);
+        const prepareB = yield* fromTestPromise(() =>
+          secondUserRequest(
+            db,
+            request("/web/subscription/payment-enrollments/prepare", "POST", {
+              priceId,
+              method,
+            })
+          )
+        );
+        const bResponse = yield* fromTestPromise(() =>
+          handlePaymentEnrollment({ request: prepareB, environment })
+        );
+        const foreignEnrollment = yield* Schema.decodeUnknownEffect(
+          Schema.toCodecJson(PaymentEnrollment)
+        )(yield* fromTestPromise(() => bResponse.json()));
+        const replay = yield* fromTestPromise(() =>
+          secondUserRequest(
+            db,
+            request("/web/subscription/payment-enrollments/submit", "POST", {
+              ...payload,
+              enrollmentId: foreignEnrollment.enrollmentId,
+              billingEmail: "other@example.com",
+            })
+          )
+        );
+        expect(
+          (yield* fromTestPromise(() => handlePaymentEnrollment({ request: replay, environment })))
+            .status
+        ).toBe(503);
+        expect(posts).toBe(1);
+        expect(
+          yield* fromTestPromise(() =>
+            db
+              .prepare("SELECT count(*) AS count FROM billing_attempts WHERE user_id = ?")
+              .bind(userB)
+              .first()
+          )
+        ).toEqual({ count: 0 });
+      })
+    )
+);
 
 it("does not schedule a Nequi charge when the fresh session is revoked during source verification", () =>
   Effect.runPromise(
@@ -816,6 +1549,121 @@ it
           outcome: scenario.outcome,
         });
       })
+    ),
+  600_000
+);
+
+// Opt-in real provider proof. Neither provider bodies nor failed live projections enter assertions.
+it
+  .runIf(
+    Effect.runSync(Config.String("FIDY_DAVIPLATA_SANDBOX").pipe(Config.withDefault("0"))) === "1"
+  )
+  .each(sandboxCases)(
+  "proves Sandbox DaviPlata $period first payment with $outcome outcome",
+  (scenario) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const provider = yield* Effect.all({
+          environment: Config.String("WOMPI_ENVIRONMENT"),
+          publicKey: Config.schema(
+            Schema.String.check(Schema.isPattern(/^pub_test_[A-Za-z0-9_-]{8,}$/u)),
+            "WOMPI_PUBLIC_KEY"
+          ),
+          privateKey: loadWompiPrivateKey("sandbox"),
+          integritySecret: loadWompiIntegritySecret("sandbox"),
+          sendUrl: Config.String("WOMPI_DAVIPLATA_OTP_SEND_URL").pipe(Config.option),
+          confirmUrl: Config.String("WOMPI_DAVIPLATA_OTP_CONFIRM_URL").pipe(Config.option),
+        }).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure()));
+        const policy = yield* requireDaviplataSandboxPolicy(provider);
+        const fixture = yield* fromTestPromise(setup);
+        const environment = {
+          ...fixture.environment,
+          WOMPI_ENVIRONMENT: "sandbox" as const,
+          WOMPI_PUBLIC_KEY: provider.publicKey,
+          WOMPI_PRIVATE_KEY: Redacted.value(provider.privateKey),
+          WOMPI_INTEGRITY_SECRET: Redacted.value(provider.integritySecret),
+          WOMPI_DAVIPLATA_OTP_SEND_URL: policy.sendUrl,
+          WOMPI_DAVIPLATA_OTP_CONFIRM_URL: policy.confirmUrl,
+        };
+        const outbound = yield* wompiOutboundHttp(environment);
+        const prepared = yield* fromTestPromise(() =>
+          handlePaymentEnrollment({
+            environment,
+            request: fixture.request("/web/subscription/payment-enrollments/prepare", "POST", {
+              priceId: scenario.priceId,
+              method: "daviplata",
+            }),
+          })
+        );
+        if (prepared.status !== 200) return yield* new DaviplataSandboxProofFailure();
+        const enrollment = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentEnrollment))(
+          yield* fromTestPromise(() => prepared.json())
+        ).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure()));
+        yield* requireDaviplataSandboxEnrollment({ enrollment, policy });
+        const authorization = yield* authorizeDaviplataSandbox({
+          outbound,
+          policy,
+          outcome: scenario.outcome,
+        });
+        const paymentRequestId = newId();
+        const decisions = {
+          acceptedEndUserPolicy: true,
+          acceptedPersonalDataAuthorization: true,
+          authorizedRecurringCharges: true,
+        };
+        const response = yield* fromTestPromise(() =>
+          handlePaymentEnrollment({
+            environment,
+            request: fixture.request("/web/subscription/payment-enrollments/submit", "POST", {
+              enrollmentId: enrollment.enrollmentId,
+              method: "daviplata",
+              paymentSourceMode: "create",
+              daviplataToken: Redacted.value(authorization),
+              paymentRequestId,
+              billingEmail: "payer@example.com",
+              decisions,
+            }),
+          })
+        );
+        if (response.status !== 200) return yield* new DaviplataSandboxProofFailure();
+        let submitted = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentSubmission))(
+          yield* fromTestPromise(() => response.json())
+        ).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure()));
+        // This continuation observes the existing source; it cannot replay tokenization or source POST.
+        for (let poll = 0; poll < 7 && submitted.status === "source-verifying"; poll++) {
+          yield* Effect.sleep("4 seconds");
+          const observed = yield* fromTestPromise(() =>
+            handlePaymentEnrollment({
+              environment,
+              request: fixture.request("/web/subscription/payment-enrollments/submit", "POST", {
+                enrollmentId: enrollment.enrollmentId,
+                paymentSourceMode: "reuse",
+                paymentRequestId,
+                billingEmail: "payer@example.com",
+                decisions,
+              }),
+            })
+          );
+          if (observed.status !== 200) return yield* new DaviplataSandboxProofFailure();
+          submitted = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentSubmission))(
+            yield* fromTestPromise(() => observed.json())
+          ).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure()));
+        }
+        if (submitted.status !== "payment-pending") {
+          return yield* new DaviplataSandboxProofFailure();
+        }
+        yield* proveSandboxSettlement({
+          environment,
+          request: fixture.request,
+          attemptId: submitted.billingAttempt.id,
+          outcome: scenario.outcome,
+        });
+      }).pipe(
+        Effect.catchCauseIf(
+          (cause) => !Cause.hasInterrupts(cause),
+          () => Effect.fail(new DaviplataSandboxProofFailure())
+        )
+      )
     ),
   600_000
 );

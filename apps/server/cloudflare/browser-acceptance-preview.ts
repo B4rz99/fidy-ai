@@ -11,7 +11,14 @@ import {
   providerPrivateKey,
   providerPublicKey,
   providerResponse,
+  syntheticDaviplataConfirmUrl,
+  syntheticDaviplataSendUrl,
 } from "./browser-acceptance-wompi";
+
+const syntheticDaviplataBindings = {
+  WOMPI_DAVIPLATA_OTP_SEND_URL: syntheticDaviplataSendUrl,
+  WOMPI_DAVIPLATA_OTP_CONFIRM_URL: syntheticDaviplataConfirmUrl,
+};
 
 const { makePublicWorker } = await import("./public-worker");
 const { makeWorkerTelemetry } = await import("./runtime/telemetry/operations");
@@ -149,6 +156,7 @@ const collectBilling = (): Promise<Response> =>
               WOMPI_PUBLIC_KEY: providerPublicKey,
               WOMPI_PRIVATE_KEY: providerPrivateKey,
               WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+              ...syntheticDaviplataBindings,
             },
             payload: { version: 1, attemptId: attempt.id },
             activity: (_name, _options, run) => run(),
@@ -269,6 +277,7 @@ const server = Bun.serve({
               WOMPI_PUBLIC_KEY: providerPublicKey,
               WOMPI_PRIVATE_KEY: providerPrivateKey,
               WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+              ...syntheticDaviplataBindings,
               USER_TRANSACTION_COORDINATOR: {
                 getByName: (name): Pick<Fetcher, "fetch"> => ({
                   fetch: (command) =>

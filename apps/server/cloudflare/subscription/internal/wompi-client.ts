@@ -67,7 +67,7 @@ const SourceLookupResponse = Schema.Struct({
   data: Schema.Struct({
     id: WompiSourceId,
     status: Schema.Literal("AVAILABLE"),
-    type: Schema.Literals(["CARD", "NEQUI"]),
+    type: Schema.Literals(["CARD", "NEQUI", "DAVIPLATA"]),
     customer_email: BillingEmail,
   }),
 });
@@ -105,6 +105,9 @@ export type WompiSourceResult =
 export type WompiEnrollmentClientService = Readonly<{
   publicKey: string;
   verifyNequiApproval: (
+    token: Redacted.Redacted<string>
+  ) => Effect.Effect<boolean, WompiSourceLookupFailed>;
+  verifyDaviplataApproval: (
     token: Redacted.Redacted<string>
   ) => Effect.Effect<boolean, WompiSourceLookupFailed>;
   contracts: (observedAt: DateTime.Utc) => Effect.Effect<WompiContracts, WompiContractsUnavailable>;
@@ -168,8 +171,14 @@ const contractEvidenceFields = Effect.fn(function* (
   };
 });
 
+const providerSourceTypes = {
+  card: "CARD",
+  nequi: "NEQUI",
+  daviplata: "DAVIPLATA",
+} as const satisfies Readonly<Record<EnrollmentMethod, "CARD" | "NEQUI" | "DAVIPLATA">>;
+
 const SourceRequest = Schema.Struct({
-  type: Schema.Literals(["CARD", "NEQUI"]),
+  type: Schema.Literals(["CARD", "NEQUI", "DAVIPLATA"]),
   token: Schema.String,
   customer_email: Schema.String,
   acceptance_token: Schema.String,
@@ -268,7 +277,7 @@ const makeContracts =
       Effect.withSpan("Wompi.contracts", { attributes: { provider: "wompi" } })
     );
 
-const NequiApprovalResponse = Schema.Struct({
+const WalletApprovalResponse = Schema.Struct({
   data: Schema.Struct({
     id: Schema.String.check(
       Schema.isNonEmpty(),
@@ -277,27 +286,35 @@ const NequiApprovalResponse = Schema.Struct({
     status: Schema.Literals(["PENDING", "APPROVED", "DECLINED", "ERROR"]),
   }),
 });
-const makeVerifyNequiApproval =
-  (outboundHttp: OutboundHttpService): WompiEnrollmentClientService["verifyNequiApproval"] =>
+const makeVerifyWalletApproval =
+  (
+    outboundHttp: OutboundHttpService,
+    method: "nequi" | "daviplata"
+  ): WompiEnrollmentClientService["verifyNequiApproval"] =>
   (token) =>
-    outboundHttp.execute({ _tag: "WompiNequiApproval", token }).pipe(
-      Effect.timeout("10 seconds"),
-      Effect.filterOrFail(
-        (response) =>
-          response.status >= successfulStatusMinimum &&
-          response.status < successfulStatusMaximumExclusive,
-        () => "provider-status" as const
-      ),
-      Effect.flatMap(responseJson),
-      Effect.flatMap(Schema.decodeUnknownEffect(NequiApprovalResponse)),
-      Effect.filterOrFail(
-        (response) => response.data.id === Redacted.value(token),
-        () => "token-mismatch" as const
-      ),
-      Effect.map((response) => response.data.status === "APPROVED"),
-      Effect.mapError(() => new WompiSourceLookupFailed()),
-      Effect.withSpan("Wompi.nequiApproval", { attributes: { provider: "wompi" } })
-    );
+    outboundHttp
+      .execute({
+        _tag: method === "nequi" ? "WompiNequiApproval" : "WompiDaviplataApproval",
+        token,
+      })
+      .pipe(
+        Effect.timeout("10 seconds"),
+        Effect.filterOrFail(
+          (response) =>
+            response.status >= successfulStatusMinimum &&
+            response.status < successfulStatusMaximumExclusive,
+          () => "provider-status" as const
+        ),
+        Effect.flatMap(responseJson),
+        Effect.flatMap(Schema.decodeUnknownEffect(WalletApprovalResponse)),
+        Effect.filterOrFail(
+          (response) => response.data.id === Redacted.value(token),
+          () => "token-mismatch" as const
+        ),
+        Effect.map((response) => response.data.status === "APPROVED"),
+        Effect.mapError(() => new WompiSourceLookupFailed()),
+        Effect.withSpan("Wompi.walletApproval", { attributes: { provider: "wompi", method } })
+      );
 
 const makeVerifyPaymentSource =
   (outboundHttp: OutboundHttpService): WompiEnrollmentClientService["verifyPaymentSource"] =>
@@ -315,7 +332,7 @@ const makeVerifyPaymentSource =
         Result.match(decodeSourceLookup(body), {
           onFailure: () => Effect.fail("provider-schema" as const),
           onSuccess: ({ data }) =>
-            data.id === sourceId && data.type === (method === "card" ? "CARD" : "NEQUI")
+            data.id === sourceId && data.type === providerSourceTypes[method]
               ? Effect.succeed({ sourceId, billingEmail: data.customer_email })
               : Effect.fail("provider-source-mismatch" as const),
         })
@@ -347,7 +364,7 @@ const makeCreatePaymentSource =
       .execute({
         _tag: "WompiCreatePaymentSource",
         body: encodeSourceRequest({
-          type: input.method === "card" ? "CARD" : "NEQUI",
+          type: providerSourceTypes[input.method],
           token: Redacted.value(input.token),
           customer_email: input.billingEmail,
           acceptance_token: Redacted.value(input.contracts.endUserAcceptance),
@@ -386,7 +403,8 @@ export const makeWompiEnrollmentClient = (
   }>
 ): WompiEnrollmentClientService => ({
   publicKey: input.publicKey,
-  verifyNequiApproval: makeVerifyNequiApproval(input.outboundHttp),
+  verifyNequiApproval: makeVerifyWalletApproval(input.outboundHttp, "nequi"),
+  verifyDaviplataApproval: makeVerifyWalletApproval(input.outboundHttp, "daviplata"),
   contracts: makeContracts(input),
   createPaymentSource: makeCreatePaymentSource(input.outboundHttp),
   verifyPaymentSource: makeVerifyPaymentSource(input.outboundHttp),
@@ -409,7 +427,8 @@ export class WompiEnrollmentClient extends Context.Service<
       );
       return WompiEnrollmentClient.of({
         publicKey,
-        verifyNequiApproval: makeVerifyNequiApproval(outboundHttp),
+        verifyNequiApproval: makeVerifyWalletApproval(outboundHttp, "nequi"),
+        verifyDaviplataApproval: makeVerifyWalletApproval(outboundHttp, "daviplata"),
         contracts: makeContracts({ outboundHttp, crypto, publicKey }),
         createPaymentSource: makeCreatePaymentSource(outboundHttp),
         verifyPaymentSource: makeVerifyPaymentSource(outboundHttp),

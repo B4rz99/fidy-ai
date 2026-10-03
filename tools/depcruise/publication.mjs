@@ -34,6 +34,8 @@ const compositionRoots = new Set([
   "cloudflare/memory/memory.test.ts",
   "cloudflare/onboarding/consent-ingress.test.ts",
   "cloudflare/onboarding/verified-onboarding.test.ts",
+  // Real public/Core proof routing and protected standing share the enrollment D1/Workflow.
+  "cloudflare/subscription/payment-enrollment.test.ts",
   "cloudflare/tokens/pats.test.ts",
   "cloudflare/transactions/transactions.test.ts",
   "cloudflare/audit/internal/audit.test.ts",

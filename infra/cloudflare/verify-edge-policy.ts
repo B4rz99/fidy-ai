@@ -2,8 +2,8 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-// #969 integration adds only /dashboard/initialize to the catalog-derived ingress rate limit.
-const expectedEdgePolicyDigest = "1e82e4f5ca58474e348b215232af1f1be0ad8d7ec8f7648ea856f2ec3bcf95b5";
+// Includes #969 Dashboard initialization and #232's gated enrollment availability.
+const expectedEdgePolicyDigest = "fa914a976ee8731f22e81330c770fc19c6c7d8e71aea0de0d2c641806802f960";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),

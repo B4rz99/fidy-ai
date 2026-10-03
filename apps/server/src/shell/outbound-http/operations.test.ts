@@ -4,6 +4,7 @@ import {
   type Config,
   ConfigProvider,
   Context,
+  Crypto,
   Deferred,
   Effect,
   Exit,
@@ -24,13 +25,162 @@ import {
   HttpClientResponse,
 } from "effect/http";
 import assert from "node:assert/strict";
+import { DaviplataOtpPolicy } from "~/core/subscription/contract";
 import { WhatsAppBusinessPhoneNumberId } from "~/shell/channels/whatsapp/contract";
 import { makeCloudflareAccessOutboundHttp } from "~/shell/outbound-http/internal/outbound-http";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { expectNotInspected } from "~/shell/testing/credential-evidence-harness";
 import { TestCrypto } from "~/shell/testing/crypto-harness";
 import { OutboundHttpFailure, type OutboundHttpRequest } from "./contract";
-import { OutboundHttp, type OutboundHttpService } from "./operations";
+import { OutboundHttp, type OutboundHttpService, makeWompiOutboundHttp } from "./operations";
+
+it.effect(
+  "refuses synthetic DaviPlata tokenization and OTP before HTTP without Sandbox policy authority",
+  () =>
+    Effect.gen(function* () {
+      let calls = 0;
+      const httpClient = HttpClient.make((request) => {
+        calls += 1;
+        return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}")));
+      });
+      const crypto = Context.get(yield* Layer.build(TestCrypto), Crypto.Crypto);
+      for (const scenario of [
+        { environment: "production", policy: Option.none<DaviplataOtpPolicy>() },
+        { environment: "sandbox", policy: Option.none<DaviplataOtpPolicy>() },
+        { environment: "production", policy: Option.some(sandboxOtpPolicy) },
+        {
+          environment: "sandbox",
+          policy: Option.some({
+            ...sandboxOtpPolicy,
+            sendUrl: "https://production.wompi.co/synthetic-test/send",
+          }),
+        },
+        {
+          environment: "sandbox",
+          policy: Option.some({
+            ...sandboxOtpPolicy,
+            confirmUrl: "https://unreviewed.example/confirm",
+          }),
+        },
+        {
+          environment: "sandbox",
+          policy: Option.some({
+            ...sandboxOtpPolicy,
+            sendUrl: `${sandboxOtpPolicy.sendUrl}?redirect=unsafe`,
+          }),
+        },
+      ] as const) {
+        const outbound = makeWompiOutboundHttp({
+          environment: scenario.environment,
+          daviplataSandboxPolicy: scenario.policy,
+          publicKey: "pub_test_synthetic_only",
+          privateKey: Redacted.make("synthetic-private-key"),
+          integritySecret: Redacted.make("synthetic-integrity-secret"),
+          httpClient,
+          crypto,
+        });
+        for (const request of [
+          { _tag: "WompiDaviplataSandboxToken", outcome: "approved" },
+          {
+            _tag: "WompiDaviplataSandboxOtp",
+            step: "send",
+            token: Redacted.make("synthetic-service-token"),
+          },
+          {
+            _tag: "WompiDaviplataSandboxOtp",
+            step: "confirm",
+            token: Redacted.make("synthetic-confirm-token"),
+          },
+        ] as const) {
+          assert.deepStrictEqual(
+            yield* Effect.exit(outbound.execute(request)),
+            Exit.fail(
+              new OutboundHttpFailure({
+                reason: "transport-failed",
+                responseStatus: Option.none(),
+                responseHeaders: {},
+              })
+            )
+          );
+        }
+      }
+      expect(calls).toBe(0);
+    })
+);
+
+const sandboxOtpPolicy = DaviplataOtpPolicy.make({
+  sendUrl: "https://sandbox.wompi.co/synthetic-test/send",
+  confirmUrl: "https://sandbox.wompi.co/synthetic-test/confirm",
+});
+
+it.effect(
+  "sends only documented synthetic DaviPlata values and one-use bearer to exact configured Sandbox destinations",
+  () =>
+    Effect.gen(function* () {
+      const observed: Array<
+        Readonly<{ url: string; method: string; authorization: string; body: string }>
+      > = [];
+      const httpClient = HttpClient.make((request) => {
+        observed.push({
+          url: request.url,
+          method: request.method,
+          authorization: new Headers(request.headers).get("authorization") ?? "",
+          body:
+            request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "",
+        });
+        return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}")));
+      });
+      const crypto = Context.get(yield* Layer.build(TestCrypto), Crypto.Crypto);
+      const outbound = makeWompiOutboundHttp({
+        environment: "sandbox",
+        publicKey: "pub_test_synthetic_only",
+        privateKey: Redacted.make("synthetic-private-key"),
+        integritySecret: Redacted.make("synthetic-integrity-secret"),
+        httpClient,
+        crypto,
+        daviplataSandboxPolicy: Option.some(sandboxOtpPolicy),
+      });
+      for (const outcome of ["approved", "declined"] as const) {
+        yield* outbound.execute({ _tag: "WompiDaviplataSandboxToken", outcome });
+      }
+      yield* outbound.execute({
+        _tag: "WompiDaviplataSandboxOtp",
+        step: "send",
+        token: Redacted.make("synthetic-send-bearer"),
+      });
+      yield* outbound.execute({
+        _tag: "WompiDaviplataSandboxOtp",
+        step: "confirm",
+        token: Redacted.make("synthetic-confirm-bearer"),
+      });
+      expect(observed).toEqual([
+        {
+          url: "https://sandbox.wompi.co/v1/tokens/daviplata",
+          method: "POST",
+          authorization: "Bearer pub_test_synthetic_only",
+          body: '{"type_document":"CC","number_document":"1122233","product_number":"3991111111"}',
+        },
+        {
+          url: "https://sandbox.wompi.co/v1/tokens/daviplata",
+          method: "POST",
+          authorization: "Bearer pub_test_synthetic_only",
+          body: '{"type_document":"CC","number_document":"1122233","product_number":"3992222222"}',
+        },
+        {
+          url: "https://sandbox.wompi.co/synthetic-test/send",
+          method: "POST",
+          authorization: "Bearer synthetic-send-bearer",
+          body: "",
+        },
+        {
+          url: "https://sandbox.wompi.co/synthetic-test/confirm",
+          method: "POST",
+          authorization: "Bearer synthetic-confirm-bearer",
+          body: '{"code":"574829"}',
+        },
+      ]);
+    })
+);
 
 const kapsoRequest = {
   _tag: "KapsoMessages" as const,

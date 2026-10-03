@@ -1,8 +1,20 @@
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
-import { db, firstCardSourceId, sourceId } from "./browser-acceptance-seed";
+import { db, firstCardSourceId, firstDaviplataSourceId, sourceId } from "./browser-acceptance-seed";
 
 export const providerPublicKey = `pub_test_${"f1d7c0de".repeat(3)}`;
 export const providerPrivateKey = `prv_test_${"f1d7c0de".repeat(3)}`;
+// Reviewed synthetic fixture coordinates only; never real provider configuration or CORS evidence.
+export const syntheticDaviplataSendUrl = "https://sandbox.wompi.co/fidy-synthetic-daviplata/send";
+export const syntheticDaviplataConfirmUrl =
+  "https://sandbox.wompi.co/fidy-synthetic-daviplata/confirm";
+const syntheticDaviplataToken = "daviplata_devtest_acceptance";
+const daviplataApprovalResponse = (request: Request): Response => {
+  if (request.method !== "GET") return new Response(null, { status: 405 });
+  if (new URL(request.url).pathname !== `/v1/tokens/daviplata/${syntheticDaviplataToken}`) {
+    return new Response(null, { status: 404 });
+  }
+  return Response.json({ data: { id: syntheticDaviplataToken, status: "APPROVED" } });
+};
 const signedAcceptance = (permalink: string, hash: string): string =>
   `header.${btoa(JSON.stringify({ permalink, file_hash: hash }))
     .replaceAll("+", "-")
@@ -33,21 +45,35 @@ const WompiCharge = Schema.Struct({
   payment_source_id: Schema.Finite,
   currency: Schema.String,
   customer_email: Schema.String,
+  payment_method: Schema.optionalKey(Schema.Struct({ installments: Schema.Literal(1) })),
 });
 const monthlyChargeCents = 2_890_000;
 const transactionPrefix = "acceptance-transaction-";
-type ProviderAttempt = Readonly<{
-  id: string;
-  wompi_reference: string;
-  amount: string;
-  wompi_source_id: number;
-  billing_email: string;
-}>;
+const expectedSourceIds = {
+  "usuario@example.com": sourceId,
+  "tarjeta@example.com": firstCardSourceId,
+  "daviplata@example.com": firstDaviplataSourceId,
+};
+const ProviderAttempt = Schema.Struct({
+  id: Schema.String,
+  wompi_reference: Schema.String,
+  amount: Schema.String,
+  wompi_source_id: Schema.Finite,
+  billing_email: Schema.Literals([
+    "usuario@example.com",
+    "tarjeta@example.com",
+    "daviplata@example.com",
+  ]),
+  method: Schema.Literals(["card", "nequi", "daviplata"]),
+});
+type ProviderAttempt = typeof ProviderAttempt.Type;
+const matchesMethod = (charge: typeof WompiCharge.Type, attempt: ProviderAttempt): boolean =>
+  attempt.method !== "daviplata" || charge.payment_method === undefined;
 const matchesCharge = (charge: typeof WompiCharge.Type, attempt: ProviderAttempt): boolean =>
   charge.amount_in_cents === monthlyChargeCents &&
   charge.currency === "COP" &&
-  charge.payment_source_id ===
-    (attempt.billing_email === "tarjeta@example.com" ? firstCardSourceId : sourceId) &&
+  charge.payment_source_id === expectedSourceIds[attempt.billing_email] &&
+  charge.payment_source_id === attempt.wompi_source_id &&
   charge.customer_email === attempt.billing_email &&
   attempt.amount === "28900";
 const decodeCharge = (request: Request): Promise<Option.Option<typeof WompiCharge.Type>> =>
@@ -71,14 +97,19 @@ const transactionResponse = (request: Request): Promise<Response> =>
     const column = isCreate ? "a.wompi_reference" : "a.id";
     return db
       .prepare(`SELECT a.id, a.wompi_reference, a.amount, s.wompi_source_id,
-    s.billing_email FROM billing_attempts AS a JOIN card_payment_sources AS s ON s.user_id = a.user_id
+    s.billing_email, s.method FROM billing_attempts AS a JOIN card_payment_sources AS s ON s.user_id = a.user_id
     WHERE ${column} = ?`)
       .bind(key.value)
-      .first<ProviderAttempt>()
-      .then((attempt) => {
-        if (attempt === null) return new Response(null, { status: 404 });
-        if (isCreate && !matchesCharge(Option.getOrThrow(charge), attempt)) {
-          return new Response(null, { status: 400 });
+      .first()
+      .then((row) => {
+        const decoded = Schema.decodeUnknownOption(ProviderAttempt)(row);
+        if (Option.isNone(decoded)) return new Response(null, { status: 404 });
+        const attempt = decoded.value;
+        if (isCreate) {
+          const creation = Option.getOrThrow(charge);
+          if (!matchesCharge(creation, attempt) || !matchesMethod(creation, attempt)) {
+            return new Response(null, { status: 400 });
+          }
         }
         return Response.json({
           data: {
@@ -96,57 +127,59 @@ const transactionResponse = (request: Request): Promise<Response> =>
       });
   });
 const SourceCreation = Schema.Struct({
-  type: Schema.Literal("CARD"),
+  type: Schema.Literals(["CARD", "DAVIPLATA"]),
   token: Schema.String,
   customer_email: Schema.String,
   acceptance_token: Schema.String,
   accept_personal_auth: Schema.String,
 });
+const firstSources = {
+  CARD: { id: firstCardSourceId, token: "tok_acceptance_first_card", email: "tarjeta@example.com" },
+  DAVIPLATA: {
+    id: firstDaviplataSourceId,
+    token: syntheticDaviplataToken,
+    email: "daviplata@example.com",
+  },
+} as const;
 const createSourceResponse = (request: Request): Promise<Response> => {
   if (request.method !== "POST") return Promise.resolve(new Response(null, { status: 405 }));
   return request.json().then((body: unknown) => {
     const source = Schema.decodeUnknownOption(SourceCreation)(body);
     if (Option.isNone(source)) return new Response(null, { status: 400 });
     const expected = merchantBody.data;
+    const fixture = firstSources[source.value.type];
     if (
-      source.value.token !== "tok_acceptance_first_card" ||
-      source.value.customer_email !== "tarjeta@example.com" ||
+      source.value.token !== fixture.token ||
+      source.value.customer_email !== fixture.email ||
       source.value.acceptance_token !== expected.presigned_acceptance.acceptance_token ||
       source.value.accept_personal_auth !== expected.presigned_personal_data_auth.acceptance_token
     ) {
       return new Response(null, { status: 400 });
     }
-    return Response.json({ data: { id: firstCardSourceId, status: "PENDING" } }, { status: 201 });
+    return Response.json({ data: { id: fixture.id, status: "PENDING" } }, { status: 201 });
   });
 };
+const availableSources = [
+  { id: sourceId, type: "CARD", customer_email: "usuario@example.com" },
+  { id: firstCardSourceId, type: "CARD", customer_email: "tarjeta@example.com" },
+  { id: firstDaviplataSourceId, type: "DAVIPLATA", customer_email: "daviplata@example.com" },
+] as const;
+const availableSourceResponse = (pathname: string): Option.Option<Response> =>
+  Option.map(
+    Option.fromNullishOr(
+      availableSources.find((source) => pathname === `/v1/payment_sources/${source.id}`)
+    ),
+    (source) => Response.json({ data: { ...source, status: "AVAILABLE" } })
+  );
 export const providerResponse = (request: Request): Promise<Response> => {
   const requestUrl = request.url;
   if (requestUrl.includes("/v1/transactions")) return transactionResponse(request);
   if (requestUrl.includes("/v1/merchants/")) return Promise.resolve(Response.json(merchantBody));
-  if (requestUrl.includes(`/v1/payment_sources/${firstCardSourceId}`)) {
-    return Promise.resolve(
-      Response.json({
-        data: {
-          id: firstCardSourceId,
-          type: "CARD",
-          status: "AVAILABLE",
-          customer_email: "tarjeta@example.com",
-        },
-      })
-    );
+  if (new URL(requestUrl).pathname.startsWith("/v1/tokens/daviplata/")) {
+    return Promise.resolve(daviplataApprovalResponse(request));
   }
   if (requestUrl.endsWith("/v1/payment_sources")) return createSourceResponse(request);
-  if (requestUrl.includes(`/v1/payment_sources/${sourceId}`)) {
-    return Promise.resolve(
-      Response.json({
-        data: {
-          id: sourceId,
-          type: "CARD",
-          status: "AVAILABLE",
-          customer_email: "usuario@example.com",
-        },
-      })
-    );
-  }
+  const source = availableSourceResponse(new URL(requestUrl).pathname);
+  if (Option.isSome(source)) return Promise.resolve(source.value);
   return Promise.resolve(Response.json({ data: { id: sourceId, status: "PENDING" } }));
 };

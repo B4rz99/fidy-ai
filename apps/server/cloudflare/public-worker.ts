@@ -195,11 +195,13 @@ const pairingPaths = ["/web/pairings", "/web/pairings/redeem", "/web/session/log
 const userPath = "/user";
 const hostedTurnPath = "/web/hosted-turns";
 const hostedReceiptPath = "/web/hosted-turns/delivery";
+const enrollmentAvailabilityPath = "/web/subscription/payment-enrollments/availability";
 const enrollmentPreparePath = "/web/subscription/payment-enrollments/prepare";
 const enrollmentSubmitPath = "/web/subscription/payment-enrollments/submit";
 const enrollmentStatusPath =
   /^\/web\/subscription\/(?:payment-enrollments|billing-attempts)\/[0-9a-f-]{36}$/u;
 const enrollmentPath = (path: string): boolean =>
+  path === enrollmentAvailabilityPath ||
   path === enrollmentPreparePath ||
   path === enrollmentSubmitPath ||
   enrollmentStatusPath.test(path);
@@ -245,7 +247,13 @@ const preflightPaths = new Set<string>([
   userPath,
   ...browserMutationPaths,
 ]);
-const ownedPaths = new Set<string>(["/health", listCategoriesPath, userPath, ...postPaths]);
+const ownedPaths = new Set<string>([
+  "/health",
+  listCategoriesPath,
+  userPath,
+  enrollmentAvailabilityPath,
+  ...postPaths,
+]);
 const ownedPath = (path: string): boolean =>
   ownedPaths.has(path) ||
   enrollmentPath(path) ||

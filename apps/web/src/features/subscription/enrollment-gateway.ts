@@ -2,6 +2,7 @@ import { Data, Effect, Option, Redacted, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import {
   BillingEmail,
+  type EnrollmentAvailability,
   EnrollmentDecisions,
   type EnrollmentMethod,
   type PaymentEnrollmentType,
@@ -13,6 +14,8 @@ import {
 } from "@/transport/client";
 import { type CardFields, tokenizeCardWithWompi } from "@/transport/wompi-tokenization";
 import { authorizeNequiWithWompi } from "@/transport/wompi-nequi";
+import { type DaviplataFields, startDaviplataWithWompi } from "@/transport/wompi-daviplata";
+import { type DaviplataChallenge, makeDaviplataChallenge } from "./daviplata-challenge";
 import { paymentSubmissionIsTerminal } from "./payment-status";
 
 export type Enrollment = PaymentEnrollmentType;
@@ -57,6 +60,12 @@ export type NequiFields = Readonly<{
 export type PaymentFields = CardFields | NequiFields;
 
 export type EnrollmentGateway = Readonly<{
+  availability: () => Promise<EnrollmentAvailability>;
+  startDaviplata: (
+    enrollment: PreparedEnrollment,
+    billingEmail: string,
+    fields: DaviplataFields & Readonly<{ signal: AbortSignal }>
+  ) => Promise<DaviplataChallenge>;
   prepare: (priceId: PriceId, method?: EnrollmentMethod) => Promise<Enrollment>;
   submit: (
     enrollment: PreparedEnrollment,
@@ -128,6 +137,20 @@ type SubmissionFacts = Pick<
   SubmitPaymentEnrollmentPayload,
   "enrollmentId" | "paymentRequestId" | "billingEmail" | "decisions"
 >;
+const submissionFacts = (
+  paymentRequests: PaymentRequestStore,
+  enrollment: EnrollmentIdentity,
+  billingEmail: string
+): SubmissionFacts => ({
+  enrollmentId: enrollment.enrollmentId,
+  paymentRequestId: paymentRequestFor(paymentRequests, enrollment),
+  billingEmail: BillingEmail.make(billingEmail),
+  decisions: EnrollmentDecisions.make({
+    acceptedEndUserPolicy: true,
+    acceptedPersonalDataAuthorization: true,
+    authorizedRecurringCharges: true,
+  }),
+});
 const submitNewSource = (
   input: Readonly<{
     client: SubscriptionEnrollmentClient;
@@ -165,7 +188,9 @@ const submitNewSource = (
       { signal: fields.signal }
     );
   }
-  if ("method" in fields) return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
+  if (enrollment.method !== "card" || "method" in fields) {
+    return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
+  }
   return client.execute((transport) =>
     tokenizeCardWithWompi(
       enrollment.wompiPublicKey,
@@ -194,16 +219,7 @@ const makeSubmit =
   ): EnrollmentGateway["submit"] =>
   (enrollment, billingEmail, fields) => {
     globalThis.sessionStorage.setItem(billingEmailStorageKey(enrollment), billingEmail);
-    const common = {
-      enrollmentId: enrollment.enrollmentId,
-      paymentRequestId: paymentRequestFor(paymentRequests, enrollment),
-      billingEmail: BillingEmail.make(billingEmail),
-      decisions: EnrollmentDecisions.make({
-        acceptedEndUserPolicy: true,
-        acceptedPersonalDataAuthorization: true,
-        authorizedRecurringCharges: true,
-      }),
-    };
+    const common = submissionFacts(paymentRequests, enrollment, billingEmail);
     if (enrollment.paymentSourceMode === "reuse") {
       return completed(
         paymentRequests,
@@ -253,12 +269,76 @@ const makeContinue =
     );
   };
 
+const makeStartDaviplata = (
+  client: SubscriptionEnrollmentClient,
+  paymentRequests: PaymentRequestStore
+): EnrollmentGateway["startDaviplata"] => {
+  const started = new Set<string>();
+  return (enrollment, billingEmail, fields) =>
+    client
+      .execute(
+        () =>
+          Effect.gen(function* () {
+            if (
+              enrollment.method !== "daviplata" ||
+              enrollment.paymentSourceMode !== "create" ||
+              started.has(enrollment.enrollmentId)
+            ) {
+              Redacted.wipeUnsafe(fields.documentNumber);
+              Redacted.wipeUnsafe(fields.productNumber);
+              return yield* new EnrollmentSubmissionFailed();
+            }
+            started.add(enrollment.enrollmentId);
+            const facts = submissionFacts(paymentRequests, enrollment, billingEmail);
+            const signal = AbortSignal.any([fields.signal, client.signal]);
+            const provider = yield* startDaviplataWithWompi({
+              publicKey: enrollment.wompiPublicKey,
+              policy: enrollment.daviplataOtpPolicy,
+              fields,
+              fetchImplementation: globalThis.fetch.bind(globalThis),
+              signal,
+              expiresAt: enrollment.expiresAt.epochMilliseconds,
+            });
+            globalThis.sessionStorage.setItem(billingEmailStorageKey(enrollment), billingEmail);
+            return makeDaviplataChallenge({
+              provider,
+              client,
+              submitApproved: (daviplataToken) =>
+                completed(
+                  paymentRequests,
+                  enrollment,
+                  client.execute(
+                    (transport) =>
+                      transport.subscriptionEnrollment.submit({
+                        payload: {
+                          ...facts,
+                          paymentSourceMode: "create",
+                          method: "daviplata",
+                          daviplataToken,
+                        },
+                      }),
+                    { signal }
+                  )
+                ),
+            });
+          }),
+        { signal: fields.signal }
+      )
+      .finally(() => {
+        Redacted.wipeUnsafe(fields.documentNumber);
+        Redacted.wipeUnsafe(fields.productNumber);
+      });
+};
+
 /** Adapts the credentialed browser client and direct Wompi tokenizer into one UI workflow. */
 export const makeEnrollmentGateway = (
   clientService: SubscriptionEnrollmentClient
 ): EnrollmentGateway => {
   const paymentRequests: PaymentRequestStore = new Map();
   return {
+    availability: () =>
+      clientService.execute((client) => client.subscriptionEnrollment.availability({})),
+    startDaviplata: makeStartDaviplata(clientService, paymentRequests),
     continue: makeContinue(clientService, paymentRequests),
     resume: (enrollmentId) => {
       const enrollment = { enrollmentId };

@@ -1,6 +1,7 @@
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { BigDecimal, Data, DateTime, Effect, Option, Schema } from "effect";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { BigDecimal, Data, DateTime, Effect, Option, Redacted, Schema } from "effect";
 import { afterEach, expect, it, vi } from "vitest";
+import { type DaviplataChallenge, type DaviplataConfirmation } from "./daviplata-challenge";
 import { SubscriptionOffersView, SubscriptionStandingView } from "./feature";
 import {
   isAwaitingPaymentStatus,
@@ -8,6 +9,7 @@ import {
   paymentSubmissionIsTerminal,
 } from "./payment-status";
 import {
+  type EnrollmentGateway,
   type PaymentFields,
   type PreparedEnrollment,
   makeEnrollmentGateway,
@@ -15,6 +17,7 @@ import {
 import {
   BillingAttemptId,
   BillingEmail,
+  type EnrollmentAvailability,
   type EnrollmentMethod,
   IanaTimeZone,
   PaymentEnrollmentId,
@@ -104,7 +107,12 @@ const preparedEnrollment = {
   paymentSourceMode: "create" as const,
   expiresAt: DateTime.makeUnsafe("2026-03-01T00:15:00Z"),
 };
+const settlePending = <A,>(pending: Promise<A>): Promise<void> => pending.then(() => undefined);
+const mountedSignal = (): AbortSignal => new AbortController().signal;
 const enrollmentGateway = {
+  availability: (): Promise<EnrollmentAvailability> =>
+    Promise.resolve({ enabledMethods: ["card", "nequi"] as const }),
+  startDaviplata: (): Promise<never> => Promise.reject(new Error("DaviPlata unavailable")),
   continue: (): Promise<
     Readonly<{
       status: "source-verifying";
@@ -134,6 +142,245 @@ const enrollmentGateway = {
     }),
   status: (): Promise<typeof preparedEnrollment> => Promise.resolve(preparedEnrollment),
 };
+
+const daviplataEnrollment: PreparedEnrollment = {
+  ...preparedEnrollment,
+  method: "daviplata",
+  daviplataOtpPolicy: {
+    sendUrl: "https://sandbox.wompi.co/synthetic/send",
+    confirmUrl: "https://sandbox.wompi.co/synthetic/confirm",
+  },
+};
+const daviplataGateway = (start: EnrollmentGateway["startDaviplata"]): EnrollmentGateway => ({
+  ...enrollmentGateway,
+  availability: () => Promise.resolve({ enabledMethods: ["card", "nequi", "daviplata"] }),
+  prepare: () => Promise.resolve(daviplataEnrollment),
+  startDaviplata: start,
+});
+const mountDaviplata = (
+  gateway: EnrollmentGateway
+): Effect.Effect<ReturnType<typeof render>, TestPromiseFailure> =>
+  Effect.gen(function* () {
+    const mounted = render(
+      <SubscriptionOffersView gateway={Option.some(gateway)} state={{ _tag: "Ready", offers }} />
+    );
+    fireEvent.click(yield* fromPromise(screen.findByRole("button", { name: "DaviPlata" })));
+    fireEvent.click(screen.getByRole("button", { name: "Elegir mensual" }));
+    fireEvent.change(yield* fromPromise(screen.findByLabelText("Número de cédula")), {
+      target: { value: "1122233" },
+    });
+    fireEvent.change(screen.getByLabelText("Número de DaviPlata"), {
+      target: { value: "3991111111" },
+    });
+    for (const checkbox of screen.getAllByRole("checkbox")) fireEvent.click(checkbox);
+    fireEvent.click(screen.getByRole("button", { name: "Autorizar con DaviPlata" }));
+    return mounted;
+  });
+
+it("advertises DaviPlata only from server availability and keeps document/product and OTP in the mounted workflow", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const confirm = vi.fn((_otp: Redacted.Redacted<string>) =>
+        Promise.resolve({
+          status: "submitted" as const,
+          submission: {
+            status: "source-verifying" as const,
+            enrollmentId: preparedEnrollment.enrollmentId,
+          },
+        })
+      );
+      const dispose = vi.fn();
+      const startDaviplata = vi.fn(() =>
+        Promise.resolve({
+          confirm,
+          dispose,
+          retrySubmission: (): Promise<never> =>
+            Promise.reject(new Error("No approved authorization")),
+          resend: () => Promise.resolve({ status: "retry-allowed" as const }),
+        })
+      );
+      const gateway = daviplataGateway(startDaviplata);
+      render(
+        <SubscriptionOffersView gateway={Option.some(gateway)} state={{ _tag: "Ready", offers }} />
+      );
+      fireEvent.click(yield* fromPromise(screen.findByRole("button", { name: "DaviPlata" })));
+      fireEvent.click(screen.getByRole("button", { name: "Elegir mensual" }));
+      const document = yield* fromPromise(screen.findByLabelText("Número de cédula"));
+      fireEvent.change(document, { target: { value: "1122233" } });
+      fireEvent.change(screen.getByLabelText("Número de DaviPlata"), {
+        target: { value: "3991111111" },
+      });
+      for (const checkbox of screen.getAllByRole("checkbox")) fireEvent.click(checkbox);
+      fireEvent.click(screen.getByRole("button", { name: "Autorizar con DaviPlata" }));
+      const otp = yield* fromPromise(screen.findByLabelText("Código de verificación"));
+      expect(screen.queryByLabelText("Número de cédula")).not.toBeInTheDocument();
+      fireEvent.change(otp, { target: { value: "574829" } });
+      fireEvent.click(screen.getByRole("button", { name: "Confirmar código" }));
+      yield* fromPromise(screen.findByText("Estamos verificando tu fuente de pago."));
+      expect(confirm).toHaveBeenCalledTimes(1);
+      const submittedOtp = confirm.mock.calls[0]?.[0];
+      expect(submittedOtp).toBeDefined();
+      expect(dispose).toHaveBeenCalled();
+    })
+  ));
+
+const submittedDaviplata: DaviplataConfirmation = {
+  status: "submitted",
+  submission: { status: "source-verifying", enrollmentId: preparedEnrollment.enrollmentId },
+};
+const challengeFixture = (confirm: DaviplataChallenge["confirm"]): DaviplataChallenge => ({
+  confirm,
+  dispose: vi.fn(),
+  resend: () => Promise.resolve({ status: "retry-allowed" }),
+  retrySubmission: () => Promise.resolve({ status: "refused" }),
+});
+const consumeOtp = (
+  otp: Redacted.Redacted<string>,
+  outcome: DaviplataConfirmation
+): Promise<DaviplataConfirmation> => {
+  Redacted.wipeUnsafe(otp);
+  return Promise.resolve(outcome);
+};
+
+it("retries an uncertain approved submission explicitly, without confirming or restarting authorization", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const codes: Array<string> = [];
+      const confirm = vi.fn((otp: Redacted.Redacted<string>): Promise<DaviplataConfirmation> => {
+        codes.push(Redacted.value(otp));
+        return consumeOtp(
+          otp,
+          codes.length === 1
+            ? { status: "retry-allowed" }
+            : { status: "uncertain", retrySubmission: true }
+        );
+      });
+      const retrySubmission = vi.fn(() => Promise.resolve(submittedDaviplata));
+      const challenge = { ...challengeFixture(confirm), retrySubmission };
+      const start = vi.fn(() => Promise.resolve(challenge));
+      yield* mountDaviplata(daviplataGateway(start));
+      const code = yield* fromPromise(screen.findByLabelText("Código de verificación"));
+      expect(screen.getByRole("button", { name: "Nequi" })).toBeDisabled();
+      fireEvent.change(code, { target: { value: "111111" } });
+      fireEvent.click(screen.getByRole("button", { name: "Confirmar código" }));
+      yield* fromPromise(
+        waitFor(() =>
+          expect(screen.getByRole("button", { name: "Confirmar código" })).not.toBeDisabled()
+        )
+      );
+      fireEvent.change(screen.getByLabelText("Código de verificación"), {
+        target: { value: "222222" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Confirmar código" }));
+      const retry = yield* fromPromise(
+        screen.findByRole("button", { name: "Reintentar envío de la autorización aprobada" })
+      );
+      expect(screen.queryByLabelText("Código de verificación")).not.toBeInTheDocument();
+      fireEvent.click(retry);
+      yield* fromPromise(screen.findByText("Estamos verificando tu fuente de pago."));
+      expect(codes).toEqual(["111111", "222222"]);
+      expect(confirm).toHaveBeenCalledTimes(2);
+      expect(retrySubmission).toHaveBeenCalledTimes(1);
+      expect(start).toHaveBeenCalledTimes(1);
+    })
+  ));
+
+it("does not offer submission recovery after uncertain OTP authorization", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const confirm = vi.fn((otp: Redacted.Redacted<string>): Promise<DaviplataConfirmation> =>
+        consumeOtp(otp, { status: "uncertain", retrySubmission: false })
+      );
+      const challenge = challengeFixture(confirm);
+      const mounted = yield* mountDaviplata(daviplataGateway(() => Promise.resolve(challenge)));
+      fireEvent.change(yield* fromPromise(screen.findByLabelText("Código de verificación")), {
+        target: { value: "574829" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Confirmar código" }));
+      yield* fromPromise(
+        screen.findByText(
+          "No pudimos confirmar el resultado. No vuelvas a iniciar la autorización."
+        )
+      );
+      expect(screen.queryByRole("button", { name: /Reintentar envío/u })).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Código de verificación")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Tarjeta" })).toBeDisabled();
+      mounted.unmount();
+      expect(challenge.dispose).toHaveBeenCalledTimes(1);
+    })
+  ));
+
+it("aborts a pending start on unmount and disposes a late challenge instead of installing it", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const pending = Promise.withResolvers<DaviplataChallenge>();
+      const start = vi.fn<EnrollmentGateway["startDaviplata"]>(() => pending.promise);
+      const confirm = vi.fn((otp: Redacted.Redacted<string>): Promise<DaviplataConfirmation> =>
+        consumeOtp(otp, submittedDaviplata)
+      );
+      const challenge = challengeFixture(confirm);
+      const mounted = yield* mountDaviplata(daviplataGateway(start));
+      const signal = start.mock.calls[0]?.[2].signal;
+      mounted.unmount();
+      expect(signal?.aborted).toBe(true);
+      pending.resolve(challenge);
+      yield* fromPromise(act(() => settlePending(pending.promise)));
+      expect(challenge.dispose).toHaveBeenCalledTimes(1);
+      expect(confirm).not.toHaveBeenCalled();
+    })
+  ));
+
+it("cancels a pending confirmation, clears the code and ignores a late success", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const pending = Promise.withResolvers<DaviplataConfirmation>();
+      const confirm = vi.fn((otp: Redacted.Redacted<string>): Promise<DaviplataConfirmation> => {
+        Redacted.wipeUnsafe(otp);
+        return pending.promise;
+      });
+      const challenge = challengeFixture(confirm);
+      const start = vi.fn<EnrollmentGateway["startDaviplata"]>(() => Promise.resolve(challenge));
+      yield* mountDaviplata(daviplataGateway(start));
+      fireEvent.change(yield* fromPromise(screen.findByLabelText("Código de verificación")), {
+        target: { value: "574829" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Confirmar código" }));
+      fireEvent.click(screen.getByRole("button", { name: "Cancelar autorización" }));
+      expect(start.mock.calls[0]?.[2].signal.aborted).toBe(true);
+      expect(challenge.dispose).toHaveBeenCalledTimes(1);
+      expect(screen.queryByLabelText("Código de verificación")).not.toBeInTheDocument();
+      pending.resolve(submittedDaviplata);
+      yield* fromPromise(act(() => settlePending(pending.promise)));
+      expect(screen.queryByText("Estamos verificando tu fuente de pago.")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Tarjeta" })).not.toBeDisabled();
+    })
+  ));
+
+it.each(["disabled", "failed"])(
+  "keeps DaviPlata unavailable when server availability is %s",
+  (kind) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const pending = Promise.withResolvers<EnrollmentAvailability>();
+        const availability = vi.fn(() => pending.promise);
+        render(
+          <SubscriptionOffersView
+            gateway={Option.some({ ...enrollmentGateway, availability })}
+            state={{ _tag: "Ready", offers }}
+          />
+        );
+        yield* fromPromise(waitFor(() => expect(availability).toHaveBeenCalledTimes(1)));
+        yield* fromPromise(
+          act(() => {
+            if (kind === "failed") pending.reject(new Error("Synthetic availability failure"));
+            else pending.resolve({ enabledMethods: ["card", "nequi"] });
+            return Promise.resolve();
+          })
+        );
+        expect(screen.queryByRole("button", { name: "DaviPlata" })).not.toBeInTheDocument();
+      })
+    )
+);
 
 it("uses adaptive payment-status refresh intervals", () => {
   const firstBackoffRefresh = 3;
@@ -487,7 +734,18 @@ it("clears Nequi authorization input, locks method changes, and cancels approval
       const gateway = {
         ...enrollmentGateway,
         prepare: (_id: PriceId, method: EnrollmentMethod = "card"): Promise<PreparedEnrollment> =>
-          Promise.resolve({ ...preparedEnrollment, method }),
+          Promise.resolve(
+            method === "daviplata"
+              ? {
+                  ...preparedEnrollment,
+                  method,
+                  daviplataOtpPolicy: {
+                    sendUrl: "https://sandbox.wompi.co/daviplata/send",
+                    confirmUrl: "https://sandbox.wompi.co/daviplata/confirm",
+                  },
+                }
+              : { ...preparedEnrollment, method }
+          ),
         submit: (
           _enrollment: PreparedEnrollment,
           _email: string,
@@ -1007,14 +1265,14 @@ it("derives enrollment operations from the browser enrollment client", () =>
     Effect.gen(function* () {
       const transportFailure = new Error("transport unavailable");
       const service: SubscriptionEnrollmentClient = {
+        signal: mountedSignal(),
         dispose: () => Promise.resolve(),
         execute: () => Promise.reject(transportFailure),
       };
       const gateway = makeEnrollmentGateway(service);
       const reuseEnrollment = { ...preparedEnrollment, paymentSourceMode: "reuse" as const };
-      expect(Option.isNone(yield* fromPromise(gateway.resume(reuseEnrollment.enrollmentId)))).toBe(
-        true
-      );
+      const missingRecovery = yield* fromPromise(gateway.resume(reuseEnrollment.enrollmentId));
+      expect(Option.isNone(missingRecovery)).toBe(true);
 
       yield* fromPromise(expect(gateway.prepare(offers[1].id)).rejects.toBe(transportFailure));
       yield* fromPromise(

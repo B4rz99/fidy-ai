@@ -11,6 +11,15 @@ const installRoute = (
   url: string,
   handler: (route: Route) => Promise<void>
 ): Effect.Effect<unknown, Cause.UnknownError> => Effect.tryPromise(() => page.route(url, handler));
+const installEnrollmentAvailability = (page: Page): Effect.Effect<unknown, Cause.UnknownError> =>
+  installRoute(page, `${apiOrigin}/web/subscription/payment-enrollments/availability`, (route) => {
+    expect(route.request().method()).toBe("GET");
+    return route.fulfill({
+      status: ok,
+      contentType: "application/json",
+      body: JSON.stringify({ enabledMethods: ["card", "nequi"] }),
+    });
+  });
 const waitForEdit = (readEdit: () => unknown): Promise<void> => expect.poll(readEdit).toBeDefined();
 const offerIds = [
   "24000000-0000-4000-8000-000000000250",
@@ -44,6 +53,7 @@ test("shows expired TrialPeriod standing and the authoritative three Subscriptio
   Effect.runPromise(
     Effect.gen(function* () {
       const calls: Array<string> = [];
+      yield* installEnrollmentAvailability(page);
       yield* installRoute(page, `${apiOrigin}/subscription/status`, (route) => {
         calls.push(route.request().url());
         return route.fulfill({
@@ -122,6 +132,7 @@ const prepared = {
 const installReusedEnrollment = (page: Page): Promise<() => unknown> =>
   Effect.runPromise(
     Effect.gen(function* () {
+      yield* installEnrollmentAvailability(page);
       yield* Effect.tryPromise(() =>
         page.route(`${apiOrigin}/subscription/status`, (route) =>
           route.fulfill({ status: ok, contentType: "application/json", body: response(standing) })

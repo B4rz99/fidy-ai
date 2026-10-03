@@ -149,6 +149,44 @@ layer(
   );
 });
 
+let daviplataApproved = false;
+const daviplataTransport = testOutboundTransportLayer((request) => {
+  expect(request.url).toBe(
+    "https://sandbox.wompi.co/v1/tokens/daviplata/daviplata_devtest_authorization"
+  );
+  expect(request.headers.authorization).toBe(`Bearer ${sandboxPublicKey}`);
+  return Effect.succeed(
+    Response.json({
+      data: {
+        id: "daviplata_devtest_authorization",
+        status: daviplataApproved ? "APPROVED" : "PENDING",
+        client_info: {
+          number_document: "do-not-retain-document",
+          phone_number: "do-not-retain-product",
+        },
+      },
+    })
+  );
+});
+layer(
+  WompiEnrollmentClient.layer.pipe(
+    Layer.provide(OutboundHttp.layer),
+    Layer.provide(Layer.mergeAll(daviplataTransport, config, TestCrypto))
+  ),
+  { excludeTestServices: true }
+)("DaviPlata authorization verification", (it) => {
+  it.effect("requires independent approval without retaining document or product information", () =>
+    Effect.gen(function* () {
+      const wompi = yield* WompiEnrollmentClient;
+      const token = Redacted.make("daviplata_devtest_authorization");
+      daviplataApproved = false;
+      expect(yield* wompi.verifyDaviplataApproval(token)).toBe(false);
+      daviplataApproved = true;
+      expect(yield* wompi.verifyDaviplataApproval(token)).toBe(true);
+    })
+  );
+});
+
 const loadContracts = Effect.gen(function* () {
   const wompi = yield* WompiEnrollmentClient;
   return yield* wompi.contracts(DateTime.makeUnsafe("2026-04-01T00:00:00.000Z"));

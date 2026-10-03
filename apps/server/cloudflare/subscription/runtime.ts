@@ -97,7 +97,7 @@ export const runBillingCollectionWorkflow = (
   }>
 ): Promise<void> => runWorkflow(input);
 
-/** Fresh-session browser enrollment; provider references and transient card material remain private. */
+/** Fresh-session browser enrollment; provider references and transient authorization stay private. */
 export const handlePaymentEnrollment = (
   input: Readonly<{ request: Request; environment: EnrollmentEnvironment }>
 ): Promise<Response> => enroll(input);

@@ -1,0 +1,19 @@
+apps/server/cloudflare/browser-acceptance-seed.ts
+  s_14fc2fdca317fd::t_ee329619a14a33 61,69,78,87,92,97,100,111-112,195-196
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ef289bb90a18ad426b165e895bf8dc2315c8641d",
+  "prompts": {},
+  "sessions": {
+    "s_14fc2fdca317fd": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10231-5233-72f9-a088-44e37d61dc4d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,23 @@
+apps/server/src/core/insights/weekly-policy.test.ts
+  s_74e559bd8b2eb1::t_5b20deae8e7a21 8,97-111
+  s_74e559bd8b2eb1::t_cbcfe10d47e5de 112-113
+apps/server/src/core/insights/operations.ts
+  s_74e559bd8b2eb1::t_53e4a702ce1d7e 53-56,58-61
+  s_74e559bd8b2eb1::t_c4055feb962b22 46-52,57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "8ca270e1a03e6959f7ffca46f06a726aa05568c7",
+  "prompts": {},
+  "sessions": {
+    "s_74e559bd8b2eb1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a103fa-be97-74ea-98ef-1bbb67d7ba62",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

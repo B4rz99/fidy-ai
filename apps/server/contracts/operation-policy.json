@@ -202,7 +202,7 @@
           "type": "pat-scoped"
         },
         "agentConfirmation": "not-required",
-        "kind": "mutation",
+        "kind": "query",
         "requiredTier": "free"
       }
     },
@@ -217,7 +217,7 @@
           "type": "pat-scoped"
         },
         "agentConfirmation": "not-required",
-        "kind": "mutation",
+        "kind": "query",
         "requiredTier": "free"
       }
     },

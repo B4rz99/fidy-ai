@@ -1,5 +1,5 @@
 import { applyTestMigration, installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
-import { executeCanonicalWork } from "../canonical-operations/operations";
+import { executeCanonicalQuery, executeCanonicalWork } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import { afterAll, expect, it } from "vitest";
 import { BigDecimal, type Cause, DateTime, Effect, Option, Schema } from "effect";
@@ -258,6 +258,14 @@ const batchCall = (operation: string, input: object, index: number): object => (
 });
 const batch = (db: D1Database, calls: ReadonlyArray<object>): Promise<Response> =>
   send(db, 0, { path: "/operations/atomic-batch", method: "POST", body: { calls } });
+const initialize = (db: D1Database, user = 0): Promise<Response> =>
+  send(db, user, { path: "/dashboard/initialize", method: "POST", body: {} });
+const initializedSetup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const db = yield* setup();
+    expect((yield* Effect.tryPromise(() => initialize(db))).status).toBe(200);
+    return db;
+  });
 const count = (db: D1Database, table: "dashboard_documents" | "dashboard_audit"): Promise<number> =>
   db
     .prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE user_id = ?`)
@@ -303,6 +311,173 @@ const listIds = (
     }
     return list.widget.result.transactions.map((transaction) => transaction.id);
   });
+
+it(
+  "uninitialized queries observe absence for each User without creating domain state",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        for (const user of [0, 1]) {
+          for (const path of ["/dashboard", "/dashboard/view"]) {
+            const response = yield* Effect.tryPromise(() => send(db, user, path));
+            expect(response.status).toBe(404);
+            expect(yield* Effect.tryPromise(() => response.json())).toEqual({
+              error: {
+                code: "dashboard_uninitialized",
+                message: "Initialize your Dashboard explicitly, then read it again.",
+              },
+              next: [],
+            });
+          }
+        }
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT COUNT(*) AS count FROM dashboard_documents").first()
+          )
+        ).toEqual({ count: 0 });
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(2);
+      })
+    ),
+  30_000
+);
+
+it(
+  "unreadable Dashboard storage is unavailable, not an invitation to initialize",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        yield* Effect.tryPromise(() => db.prepare("DROP TABLE dashboard_documents").run());
+        for (const path of ["/dashboard", "/dashboard/view"]) {
+          const reply = yield* Effect.tryPromise(() => send(db, 0, path));
+          expect(reply.status).toBe(503);
+          expect(yield* Effect.tryPromise(() => reply.json())).toEqual({ status: "unavailable" });
+        }
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(0);
+      })
+    ),
+  30_000
+);
+
+it(
+  "read-only PAT queries preserve retained state and cannot create through mutation batches",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const token = `fin_${"q".repeat(8)}_${"q".repeat(43)}`;
+        const id = "40000000-0000-4000-8000-000000000095";
+        yield* seedPAT(db, { token, scope: "read", id });
+        expect((yield* Effect.tryPromise(() => send(db, token, "/dashboard"))).status).toBe(404);
+        expect((yield* Effect.tryPromise(() => send(db, token, "/dashboard/view"))).status).toBe(
+          404
+        );
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
+        expect((yield* Effect.tryPromise(() => initialize(db))).status).toBe(200);
+        const retained = (): Promise<unknown> =>
+          db
+            .prepare("SELECT * FROM dashboard_documents ORDER BY user_id")
+            .all()
+            .then((rows) => rows.results);
+        const before = yield* Effect.tryPromise(retained);
+        for (const path of ["/dashboard", "/dashboard/view"]) {
+          expect((yield* Effect.tryPromise(() => send(db, token, path))).status).toBe(200);
+        }
+        const subject = {
+          id: sessions[0] ?? "",
+          userId: users[0] ?? "",
+          digest: yield* Effect.tryPromise(() => digest(bearer(0))),
+        };
+        for (const operation of ["dashboard.getDashboard", "dashboard.getDashboardView"] as const) {
+          const hosted = yield* executeCanonicalQuery({
+            db,
+            subject,
+            operation: CanonicalOperationId.make(operation),
+            input: {},
+            bucket: Option.none(),
+          });
+          expect(Option.getOrThrow(hosted).status).toBe(200);
+          const absent = yield* executeCanonicalQuery({
+            db,
+            subject: {
+              id: sessions[1] ?? "",
+              userId: users[1] ?? "",
+              digest: yield* Effect.tryPromise(() => digest(bearer(1))),
+            },
+            operation: CanonicalOperationId.make(operation),
+            input: {},
+            bucket: Option.none(),
+          });
+          expect(Option.getOrThrow(absent).status).toBe(404);
+          const rejected = yield* Effect.tryPromise(() =>
+            send(db, token, {
+              path: "/operations/atomic-batch",
+              method: "POST",
+              body: { calls: [batchCall(operation, {}, 1)] },
+            })
+          );
+          expect(rejected.status).toBe(400);
+        }
+        for (const call of [
+          { path: "/dashboard/initialize", body: {} },
+          { path: "/dashboard/edits", body: { op: "set-title", title: "Not allowed" } },
+          {
+            path: "/transactions",
+            body: { money: { amount: "1", currency: "COP" }, direction: "outflow" },
+          },
+        ]) {
+          expect(
+            (yield* Effect.tryPromise(() => send(db, token, { ...call, method: "POST" }))).status
+          ).toBe(403);
+        }
+        const foreign = yield* executeCanonicalQuery({
+          db,
+          subject: { ...subject, userId: Option.getOrThrow(Option.fromUndefinedOr(users[1])) },
+          operation: CanonicalOperationId.make("dashboard.getDashboard"),
+          input: {},
+          bucket: Option.none(),
+        });
+        expect(Option.getOrThrow(foreign).status).toBe(401);
+        const writeToken = `fin_${"w".repeat(8)}_${"u".repeat(43)}`;
+        const writeId = "40000000-0000-4000-8000-000000000096";
+        yield* seedPAT(db, { token: writeToken, scope: "write", id: writeId });
+        const underScoped = yield* executeCanonicalQuery({
+          db,
+          subject: {
+            patId: writeId,
+            userId: subject.userId,
+            digest: yield* Effect.tryPromise(() => digest(writeToken)),
+            requiredScope: Option.none(),
+          },
+          operation: CanonicalOperationId.make("dashboard.getDashboardView"),
+          input: {},
+          bucket: Option.none(),
+        });
+        expect(Option.getOrThrow(underScoped).status).toBe(401);
+        expect(yield* Effect.tryPromise(retained)).toEqual(before);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT COUNT(*) AS count FROM transactions").first()
+          )
+        ).toEqual({ count: 0 });
+        const evidence = yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT operation, outcome FROM pat_audit WHERE pat_id = ? ORDER BY rowid")
+            .bind(id)
+            .all()
+        );
+        expect(evidence.results.filter((row) => row.outcome === "accepted")).toEqual([
+          { operation: "dashboard.getDashboard", outcome: "accepted" },
+          { operation: "dashboard.getDashboardView", outcome: "accepted" },
+          { operation: "dashboard.getDashboard", outcome: "accepted" },
+          { operation: "dashboard.getDashboardView", outcome: "accepted" },
+        ]);
+      })
+    ),
+  30_000
+);
 
 it(
   "explicit initialization creates one valid document and preserves edits and revision on concurrent retries",
@@ -394,10 +569,7 @@ it(
             path: "/operations/atomic-batch",
             method: "POST",
             body: {
-              calls: [
-                batchCall("dashboard.getDashboard", {}, 1),
-                batchCall("dashboard.initializeDashboard", {}, 2),
-              ],
+              calls: [batchCall("dashboard.initializeDashboard", {}, 2)],
             },
           })
         );
@@ -406,7 +578,7 @@ it(
           (yield* Schema.decodeUnknownEffect(BatchFailure)(
             yield* Effect.tryPromise(() => denied.json())
           )).error
-        ).toMatchObject({ code: "scope_missing", failedCallIndex: 1 });
+        ).toMatchObject({ code: "scope_missing", failedCallIndex: 0 });
         expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
         expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(0);
         const accepted = yield* Effect.tryPromise(() =>
@@ -541,7 +713,11 @@ it(
         const collision = yield* Effect.tryPromise(() =>
           batch(db, [
             batchCall("dashboard.initializeDashboard", {}, 1),
-            batchCall("dashboard.getDashboard", {}, 2),
+            batchCall(
+              "dashboard.applyDashboardEdit",
+              { payload: { op: "set-title", title: "Collision" } },
+              2
+            ),
           ])
         );
         expect(collision.status).toBe(400);
@@ -709,7 +885,7 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* setup(false);
-        expect((yield* Effect.tryPromise(() => send(db, 0, "/dashboard"))).status).toBe(200);
+        expect((yield* Effect.tryPromise(() => send(db, 0, "/dashboard"))).status).toBe(404);
         const evidence = (): Promise<unknown> =>
           db
             .prepare("SELECT * FROM dashboard_audit ORDER BY id")
@@ -757,6 +933,10 @@ it(
             send(db, 0, { path: "/dashboard/initialize", method: "POST", body: {} })
           )).status
         ).toBe(429);
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(256);
+        for (const path of ["/dashboard", "/dashboard/view"]) {
+          expect((yield* Effect.tryPromise(() => send(db, 0, path))).status).toBe(429);
+        }
         expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(256);
         // A permit for B cannot delete A's evidence, and cutoff equality is retained.
         const maximum = yield* Effect.tryPromise(() =>
@@ -857,7 +1037,7 @@ it(
         const db = yield* setup();
         const rejected = yield* Effect.tryPromise(() =>
           batch(db, [
-            batchCall("dashboard.getDashboard", {}, 1),
+            batchCall("dashboard.initializeDashboard", {}, 1),
             batchCall(
               "dashboard.applyDashboardEdit",
               {
@@ -883,7 +1063,7 @@ it(
         expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
         expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(1);
         const accepted = yield* Effect.tryPromise(() =>
-          batch(db, [batchCall("dashboard.getDashboardView", {}, 3)])
+          batch(db, [batchCall("dashboard.initializeDashboard", {}, 3)])
         );
         expect(accepted.status).toBe(200);
         expect(
@@ -894,8 +1074,12 @@ it(
         expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(1);
         const repeated = yield* Effect.tryPromise(() =>
           batch(db, [
-            batchCall("dashboard.getDashboard", {}, 4),
-            batchCall("dashboard.getDashboardView", {}, 5),
+            batchCall("dashboard.initializeDashboard", {}, 4),
+            batchCall(
+              "dashboard.applyDashboardEdit",
+              { payload: { op: "set-title", title: "Collision" } },
+              5
+            ),
           ])
         );
         expect(repeated.status).toBe(400);
@@ -953,8 +1137,8 @@ it(
             },
           })
         );
-        expect(allowed.status).toBe(200);
-        expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(1);
+        expect(allowed.status).toBe(400);
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
       })
     ),
   30_000
@@ -966,7 +1150,7 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* setup();
-        const created = yield* Effect.tryPromise(() => send(db, 0, "/dashboard"));
+        const created = yield* Effect.tryPromise(() => initialize(db));
         expect(created.status).toBe(200);
         yield* Effect.tryPromise(() =>
           db
@@ -1011,7 +1195,7 @@ it(
         );
         const reply = yield* Effect.tryPromise(() =>
           batch(db, [
-            batchCall("dashboard.getDashboard", {}, 8),
+            batchCall("dashboard.initializeDashboard", {}, 8),
             batchCall(
               "budgets.createBudget",
               {
@@ -1040,7 +1224,7 @@ it(
 );
 
 it(
-  "rolls back first-use Dashboard persistence when its success Audit cannot commit",
+  "rolls back explicit Dashboard initialization when its success Audit cannot commit",
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -1052,7 +1236,7 @@ it(
             .run()
         );
         const reply = yield* Effect.tryPromise(() =>
-          batch(db, [batchCall("dashboard.getDashboard", {}, 6)])
+          batch(db, [batchCall("dashboard.initializeDashboard", {}, 6)])
         );
         expect(reply.status).toBe(503);
         expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
@@ -1122,7 +1306,7 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* setup();
-        const first = yield* Effect.tryPromise(() => send(db, 0, "/dashboard"));
+        const first = yield* Effect.tryPromise(() => initialize(db));
         expect(first.status).toBe(200);
         const body = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
@@ -1140,7 +1324,8 @@ it(
           })
         );
         expect(edited.status).toBe(200);
-        const other = yield* Effect.tryPromise(() => send(db, 1, "/dashboard"));
+        expect((yield* Effect.tryPromise(() => send(db, 1, "/dashboard"))).status).toBe(404);
+        const other = yield* Effect.tryPromise(() => initialize(db, 1));
         expect(other.status).toBe(200);
         const otherBody = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
@@ -1162,7 +1347,7 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* setup();
-        const before = (yield* Effect.tryPromise(() => send(db, 0, "/dashboard"))).status;
+        const before = (yield* Effect.tryPromise(() => initialize(db))).status;
         expect(before).toBe(200);
         const invalid = yield* Effect.tryPromise(() =>
           send(db, 0, {
@@ -1196,7 +1381,7 @@ it(
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const db = yield* setup();
+        const db = yield* initializedSetup();
         expect((yield* Effect.tryPromise(() => send(db, 0, "/dashboard"))).status).toBe(200);
         const before = yield* Effect.tryPromise(() => count(db, "dashboard_audit"));
         yield* Effect.tryPromise(() =>
@@ -1214,6 +1399,7 @@ it(
         );
         expect(edit.status).toBe(503);
         expect((yield* Effect.tryPromise(() => send(db, 0, "/dashboard"))).status).toBe(503);
+        expect((yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"))).status).toBe(503);
         expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(before);
         expect(
           yield* Effect.tryPromise(() =>
@@ -1234,7 +1420,7 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* setup();
-        const documentResponse8 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard"));
+        const documentResponse8 = yield* Effect.tryPromise(() => initialize(db));
         const owned = (yield* Schema.decodeUnknownEffect(
           Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
         )(yield* Effect.tryPromise(() => documentResponse8.json()))).data;
@@ -1270,7 +1456,7 @@ it(
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const db = yield* setup();
+        const db = yield* initializedSetup();
         const result = yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"));
         expect(result.status).toBe(200);
         const body = yield* Schema.decodeUnknownEffect(
@@ -1293,7 +1479,7 @@ it(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* setup();
-        const documentResponse10 = yield* Effect.tryPromise(() => send(db, 0, "/dashboard"));
+        const documentResponse10 = yield* Effect.tryPromise(() => initialize(db));
         const document = (yield* Schema.decodeUnknownEffect(
           Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
         )(yield* Effect.tryPromise(() => documentResponse10.json()))).data;
@@ -1403,7 +1589,7 @@ it(
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const db = yield* setup();
+        const db = yield* initializedSetup();
         const budget = yield* Effect.tryPromise(() =>
           send(db, 0, {
             path: "/budgets",
@@ -1458,7 +1644,7 @@ it(
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const db = yield* setup();
+        const db = yield* initializedSetup();
         const readToken = `fin_${"r".repeat(8)}_${"a".repeat(43)}`;
         const writeToken = `fin_${"w".repeat(8)}_${"b".repeat(43)}`;
         const readId = "40000000-0000-4000-8000-000000000091";
@@ -1489,7 +1675,7 @@ it(
             .bind(users[0])
             .first<{ count: number }>()
         );
-        expect(before?.count).toBe(0);
+        expect(before?.count).toBe(1);
         expect(
           (yield* Effect.tryPromise(() => send(db, readToken, "/dashboard/view"))).status
         ).toBe(200);
@@ -1517,7 +1703,7 @@ it(
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const db = yield* setup();
+        const db = yield* initializedSetup();
         const created = yield* Effect.tryPromise(() =>
           send(db, 0, {
             path: "/transactions",
@@ -1571,7 +1757,7 @@ it(
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const db = yield* setup();
+        const db = yield* initializedSetup();
         const now = DateTime.nowUnsafe();
         const zones = (yield* Effect.forEach(["Pacific/Kiritimati", "America/Bogota"], (name) =>
           Effect.map(Schema.decodeEffect(IanaTimeZone)(name), (timeZone) => ({
@@ -1625,7 +1811,7 @@ it(
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const db = yield* setup();
+        const db = yield* initializedSetup();
         const responses = yield* Effect.tryPromise(() =>
           Promise.all(
             [0, 1].map(() =>
@@ -1698,7 +1884,7 @@ it(
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const db = yield* setup();
+        const db = yield* initializedSetup();
         const time = DateTime.formatIso(DateTime.nowUnsafe());
         yield* Effect.tryPromise(() =>
           db
@@ -1730,7 +1916,7 @@ it(
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const db = yield* setup();
+        const db = yield* initializedSetup();
         // Spread retained records over days to respect the canonical 100-writes-per-day limit.
         yield* Effect.tryPromise(() =>
           db
@@ -1775,7 +1961,7 @@ it(
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const db = yield* setup();
+        const db = yield* initializedSetup();
         expect((yield* Effect.tryPromise(() => send(db, 0, "/dashboard/view"))).status).toBe(200);
         // Bypass only the fixture's daily capture quota to exercise the read work budget.
         yield* Effect.tryPromise(() =>
@@ -1896,7 +2082,7 @@ it(
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const db = yield* setup();
+        const db = yield* initializedSetup();
         const occurredAt = DateTime.formatIso(DateTime.nowUnsafe());
         const capture = (index: number, amount: string, currency: string): Promise<Response> =>
           send(db, index, {

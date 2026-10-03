@@ -23,7 +23,12 @@ import { Currency, MoneyGroups } from "~/core/_shared/money";
 import { UtcTimestamp } from "~/core/_shared/time";
 
 import { Transaction } from "~/core/transactions/contract";
-import { NotFound, OperationResponse, ValidationFailed } from "~/shell/public-http/contract";
+import {
+  NextOperations,
+  NotFound,
+  OperationResponse,
+  ValidationFailed,
+} from "~/shell/public-http/contract";
 import { operationPolicy, patScoped } from "~/shell/canonical-policy/contract";
 
 const SpendingChartResult = Schema.Struct({
@@ -121,9 +126,24 @@ const DashboardEditFailures = [NotFound, ValidationFailed] as const;
 /** Canonical call shape for explicit, idempotent Dashboard initialization. */
 export const InitializeDashboardCanonicalInput = Schema.Struct({});
 
-/** Canonical call shape for first-use Dashboard persistence. */
+/** A missing document is an observed state, never permission to create or repair it. */
+export class DashboardUninitialized extends Schema.Error<DashboardUninitialized>(
+  "DashboardUninitialized"
+)(
+  {
+    _tag: Schema.tagDefaultOmit("DashboardUninitialized"),
+    error: Schema.Struct({
+      code: Schema.Literal("dashboard_uninitialized"),
+      message: Schema.NonEmptyString,
+    }),
+    next: NextOperations,
+  },
+  { httpApiStatus: 404 }
+) {}
+
+/** Canonical call shape for observing an existing Dashboard. */
 export const GetDashboardCanonicalInput = Schema.Struct({});
-/** Canonical call shape for first-use Dashboard view persistence. */
+/** Canonical call shape for observing a complete existing Dashboard view. */
 export const GetDashboardViewCanonicalInput = Schema.Struct({});
 /** Canonical call shape for a Dashboard edit, shared by individual and batch execution. */
 export const ApplyDashboardEditCanonicalInput = Schema.Struct({ payload: DashboardEdit });
@@ -151,36 +171,38 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
   .add(
     HttpApiEndpoint.get("getDashboard", "/dashboard", {
       success: OperationResponse(DashboardDocument),
+      error: DashboardUninitialized,
     })
       .annotate(
         OpenApi.Description,
-        "Get the caller's complete DashboardDocument. Reach for this before editing; first use " +
-          "creates and retains one valid four-Widget Dashboard, and later calls return the same document."
+        "Observe your complete DashboardDocument without changing it. If uninitialized, explicitly " +
+          "invoke dashboard.initializeDashboard with Dashboard authority, then read again."
       )
       .annotateMerge(
         operationPolicy({
           access: patScoped("read"),
           requiredTier: "free",
           agentConfirmation: "not-required",
-          kind: "mutation",
+          kind: "query",
         })
       )
   )
   .add(
     HttpApiEndpoint.get("getDashboardView", "/dashboard/view", {
       success: OperationResponse(DashboardView),
+      error: DashboardUninitialized,
     })
       .annotate(
         OpenApi.Description,
-        "Render one complete enriched projection of the caller's decoded DashboardDocument using " +
-          "current User context and purpose-specific exact facts. First use creates the same document."
+        "Observe one complete enriched projection using current User context and exact facts " +
+          "without changing domain state. If uninitialized, explicitly initialize your Dashboard, then read again."
       )
       .annotateMerge(
         operationPolicy({
           access: patScoped("read"),
           requiredTier: "free",
           agentConfirmation: "not-required",
-          kind: "mutation",
+          kind: "query",
         })
       )
   )
@@ -246,4 +268,4 @@ export class DashboardCategoryNotFound extends Data.TaggedError("DashboardCatego
 }> {}
 
 /** Declared canonical failures returned by dashboard operations. */
-export type DashboardApiFailure = NotFound | ValidationFailed;
+export type DashboardApiFailure = NotFound | ValidationFailed | DashboardUninitialized;

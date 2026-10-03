@@ -8,11 +8,30 @@ import { type CanonicalQueryState, presentCanonicalQuery } from "@/transport/can
 import type { DashboardEdit, FidyClient } from "@/transport/client";
 import { type DashboardGesture, compileDashboardGesture } from "./editor-model";
 import type { DashboardView } from "./presentation";
+import { type DashboardLoadPhase, dashboardQuery } from "./query";
 import {
   type DashboardEditorError,
   DashboardRouteContent as DashboardRoutePresentation,
   DashboardViewComponent,
 } from "./view";
+
+/** Own the complete read/initialize/read resource within the authenticated Atom registry. */
+export const DashboardFeature = ({
+  apiClient,
+}: Readonly<{ apiClient: FidyClient }>): JSX.Element => {
+  const [dashboard] = useState(() => dashboardQuery(apiClient));
+  const result = useAtomValue(dashboard.result);
+  const phase = useAtomValue(dashboard.phase);
+  const refresh = useAtomRefresh(dashboard.result);
+  return (
+    <DashboardRouteContent
+      apiClient={apiClient}
+      result={result}
+      phase={phase}
+      onRefresh={refresh}
+    />
+  );
+};
 
 const settledEditQueue = Promise.resolve();
 
@@ -188,15 +207,41 @@ const DashboardQueryNotices = <CatalogError, DashboardError>({
   </>
 );
 
+const DashboardLoadNotice = ({
+  phase,
+  waiting,
+}: Readonly<{ phase: DashboardLoadPhase; waiting: boolean }>): JSX.Element => {
+  switch (phase) {
+    case "reading":
+      return <></>;
+    case "initializing":
+      return (
+        <p aria-live="polite">
+          {waiting ? "Inicializando tablero…" : "No pudimos inicializar el tablero."}
+        </p>
+      );
+    case "reading-initialized":
+      return (
+        <p aria-live="polite">
+          {waiting
+            ? "Leyendo el tablero inicializado…"
+            : "El tablero se inicializó, pero no pudimos leerlo."}
+        </p>
+      );
+  }
+};
+
 /** Coordinates canonical Dashboard queries and edits while preserving the last successful canvas. */
 export const DashboardRouteContent = ({
   apiClient,
   onRefresh,
   result,
+  phase,
 }: Readonly<{
   apiClient: FidyClient;
   onRefresh: () => void;
   result: AsyncResult.AsyncResult<Readonly<{ data: DashboardView }>, unknown>;
+  phase: DashboardLoadPhase;
 }>): JSX.Element => {
   const [catalogAtom] = useState(() => apiClient.query("dashboard", "listDashboardCatalog", {}));
   const catalogResult = useAtomValue(catalogAtom);
@@ -204,7 +249,12 @@ export const DashboardRouteContent = ({
   const { editError, onGesture, submitting } = useQueuedDashboardEdits(apiClient);
   const dashboardState = presentCanonicalQuery(result);
   if (dashboardState._tag !== "Ready") {
-    return <DashboardRoutePresentation onRefresh={onRefresh} result={result} />;
+    return (
+      <>
+        <DashboardLoadNotice phase={phase} waiting={dashboardState.waiting} />
+        <DashboardRoutePresentation onRefresh={onRefresh} result={result} />
+      </>
+    );
   }
 
   const catalogState = presentCanonicalQuery(catalogResult);

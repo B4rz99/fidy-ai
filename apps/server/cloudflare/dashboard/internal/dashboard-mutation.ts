@@ -1,4 +1,4 @@
-import type { DashboardMutationOperation } from "../contract";
+import type { DashboardMutationOperation, DashboardOperation } from "../contract";
 import { listCategories } from "../../categories/operations";
 import { Data, DateTime, Effect, Option, Result, Schema } from "effect";
 import {
@@ -322,7 +322,7 @@ const dashboardAccess = ({
     })
   );
 
-/** Prepare initialization, one first-use read or a guarded edit, without opening a D1 unit. */
+/** Prepare explicit initialization or a guarded edit, without opening a D1 unit. */
 export const prepareDashboard = ({
   work,
   operation,
@@ -390,7 +390,7 @@ export const findDashboardValue = ({
 }: Readonly<{
   db: D1Database;
   userId: string;
-  operation: DashboardMutationOperation;
+  operation: DashboardOperation;
 }>): Effect.Effect<Option.Option<CommittedMutationValue>> =>
   Effect.gen(function* () {
     const found = yield* findDashboardDocument({ db, userId });

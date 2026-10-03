@@ -244,13 +244,13 @@
       },
       "Arrays_3": {
         "items": {
-          "$ref": "#/components/schemas/Objects_24"
+          "$ref": "#/components/schemas/Objects_22"
         },
         "type": "array"
       },
       "Arrays_4": {
         "items": {
-          "$ref": "#/components/schemas/Objects_24"
+          "$ref": "#/components/schemas/Objects_22"
         },
         "type": "array"
       },
@@ -284,6 +284,7 @@
                   "rate_limited",
                   "quota_exhausted",
                   "not_found",
+                  "dashboard_uninitialized",
                   "unavailable"
                 ],
                 "type": "string"
@@ -1082,7 +1083,7 @@
             "additionalProperties": false,
             "properties": {
               "code": {
-                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`, `unavailable`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
+                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`, `dashboard_uninitialized`, `unavailable`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
                 "enum": [
                   "consent_required"
                 ],
@@ -2020,6 +2021,45 @@
         ],
         "type": "object"
       },
+      "DashboardUninitializedEncoded": {
+        "additionalProperties": false,
+        "properties": {
+          "_tag": {
+            "enum": [
+              "DashboardUninitialized"
+            ],
+            "type": "string"
+          },
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "dashboard_uninitialized"
+                ],
+                "type": "string"
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "error",
+          "next"
+        ],
+        "type": "object"
+      },
       "DashboardView": {
         "additionalProperties": false,
         "properties": {
@@ -2096,16 +2136,16 @@
               },
               "children": {
                 "items": {
-                  "$ref": "#/components/schemas/Objects_12"
+                  "$ref": "#/components/schemas/Objects_10"
                 },
                 "maxItems": 24,
                 "minItems": 2,
                 "prefixItems": [
                   {
-                    "$ref": "#/components/schemas/Objects_12"
+                    "$ref": "#/components/schemas/Objects_10"
                   },
                   {
-                    "$ref": "#/components/schemas/Objects_12"
+                    "$ref": "#/components/schemas/Objects_10"
                   }
                 ],
                 "type": "array"
@@ -2644,7 +2684,7 @@
         "additionalProperties": false,
         "properties": {
           "error": {
-            "$ref": "#/components/schemas/Objects_14"
+            "$ref": "#/components/schemas/Objects_12"
           }
         },
         "required": [
@@ -2656,7 +2696,7 @@
         "additionalProperties": false,
         "properties": {
           "error": {
-            "$ref": "#/components/schemas/Objects_14"
+            "$ref": "#/components/schemas/Objects_12"
           }
         },
         "required": [
@@ -2668,7 +2708,7 @@
         "additionalProperties": false,
         "properties": {
           "error": {
-            "$ref": "#/components/schemas/Objects_14"
+            "$ref": "#/components/schemas/Objects_12"
           }
         },
         "required": [
@@ -2695,7 +2735,7 @@
         "additionalProperties": false,
         "properties": {
           "error": {
-            "$ref": "#/components/schemas/Objects_14"
+            "$ref": "#/components/schemas/Objects_12"
           }
         },
         "required": [
@@ -3459,7 +3499,7 @@
             "additionalProperties": false,
             "properties": {
               "code": {
-                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`, `unavailable`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
+                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`, `dashboard_uninitialized`, `unavailable`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
                 "enum": [
                   "not_found"
                 ],
@@ -3545,38 +3585,6 @@
       "Objects_10": {
         "additionalProperties": false,
         "properties": {
-          "data": {
-            "$ref": "#/components/schemas/DashboardDocument"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Objects_11": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/DashboardView"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Objects_12": {
-        "additionalProperties": false,
-        "properties": {
           "node": {
             "$ref": "#/components/schemas/DashboardViewLayout"
           },
@@ -3590,7 +3598,7 @@
         ],
         "type": "object"
       },
-      "Objects_13": {
+      "Objects_11": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -3606,7 +3614,7 @@
         ],
         "type": "object"
       },
-      "Objects_14": {
+      "Objects_12": {
         "additionalProperties": false,
         "properties": {
           "code": {
@@ -3628,7 +3636,7 @@
         ],
         "type": "object"
       },
-      "Objects_15": {
+      "Objects_13": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -3644,7 +3652,7 @@
         ],
         "type": "object"
       },
-      "Objects_16": {
+      "Objects_14": {
         "additionalProperties": false,
         "properties": {
           "kind": {
@@ -3659,7 +3667,7 @@
         ],
         "type": "object"
       },
-      "Objects_17": {
+      "Objects_15": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -3675,7 +3683,7 @@
         ],
         "type": "object"
       },
-      "Objects_18": {
+      "Objects_16": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -3691,7 +3699,7 @@
         ],
         "type": "object"
       },
-      "Objects_19": {
+      "Objects_17": {
         "additionalProperties": false,
         "properties": {
           "categoryId": {
@@ -3726,7 +3734,7 @@
             "$ref": "#/components/schemas/TransactionOccurredAt"
           },
           "presentation": {
-            "$ref": "#/components/schemas/Objects_16"
+            "$ref": "#/components/schemas/Objects_14"
           },
           "revision": {
             "minimum": 0,
@@ -3742,6 +3750,38 @@
           "createdAt",
           "revision",
           "presentation"
+        ],
+        "type": "object"
+      },
+      "Objects_18": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Transaction"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_19": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/TransactionId"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
         ],
         "type": "object"
       },
@@ -3765,7 +3805,7 @@
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/Transaction"
+            "$ref": "#/components/schemas/EmailForwardingAddress"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -3781,38 +3821,6 @@
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/TransactionId"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Objects_22": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/EmailForwardingAddress"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Objects_23": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
             "$ref": "#/components/schemas/StatementSubmission"
           },
           "next": {
@@ -3825,7 +3833,7 @@
         ],
         "type": "object"
       },
-      "Objects_24": {
+      "Objects_22": {
         "additionalProperties": false,
         "properties": {
           "message": {
@@ -3841,7 +3849,7 @@
         ],
         "type": "object"
       },
-      "Objects_25": {
+      "Objects_23": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -3857,7 +3865,7 @@
         ],
         "type": "object"
       },
-      "Objects_26": {
+      "Objects_24": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -3886,11 +3894,43 @@
         ],
         "type": "object"
       },
-      "Objects_27": {
+      "Objects_25": {
         "additionalProperties": false,
         "properties": {
           "data": {
             "$ref": "#/components/schemas/InsightEvent"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_26": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/InsightEvent"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_27": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Memory"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -3906,7 +3946,7 @@
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/InsightEvent"
+            "$ref": "#/components/schemas/Memory"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -3922,7 +3962,7 @@
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/Memory"
+            "$ref": "#/components/schemas/MemoryId"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -3954,7 +3994,7 @@
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/Memory"
+            "$ref": "#/components/schemas/IssuedManualPATResponse"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -3969,38 +4009,6 @@
       "Objects_31": {
         "additionalProperties": false,
         "properties": {
-          "data": {
-            "$ref": "#/components/schemas/MemoryId"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Objects_32": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/IssuedManualPATResponse"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Objects_33": {
-        "additionalProperties": false,
-        "properties": {
           "publicCode": {
             "type": "string"
           }
@@ -4010,7 +4018,7 @@
         ],
         "type": "object"
       },
-      "Objects_34": {
+      "Objects_32": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4026,7 +4034,7 @@
         ],
         "type": "object"
       },
-      "Objects_35": {
+      "Objects_33": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4042,7 +4050,7 @@
         ],
         "type": "object"
       },
-      "Objects_36": {
+      "Objects_34": {
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -4355,7 +4363,7 @@
             "additionalProperties": false,
             "properties": {
               "code": {
-                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`, `unavailable`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
+                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`, `dashboard_uninitialized`, `unavailable`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
                 "enum": [
                   "paywall_required"
                 ],
@@ -4722,7 +4730,7 @@
             "additionalProperties": false,
             "properties": {
               "code": {
-                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`, `unavailable`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
+                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`, `dashboard_uninitialized`, `unavailable`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
                 "enum": [
                   "rate_limited"
                 ],
@@ -4755,10 +4763,10 @@
         "additionalProperties": false,
         "properties": {
           "firstTransaction": {
-            "$ref": "#/components/schemas/Objects_19"
+            "$ref": "#/components/schemas/Objects_17"
           },
           "secondTransaction": {
-            "$ref": "#/components/schemas/Objects_19"
+            "$ref": "#/components/schemas/Objects_17"
           }
         },
         "required": [
@@ -4858,7 +4866,7 @@
             "additionalProperties": false,
             "properties": {
               "code": {
-                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`, `unavailable`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
+                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`, `dashboard_uninitialized`, `unavailable`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
                 "enum": [
                   "scope_missing"
                 ],
@@ -7921,7 +7929,7 @@
           "presentation": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Objects_16"
+                "$ref": "#/components/schemas/Objects_14"
               },
               {
                 "anyOf": [
@@ -8009,7 +8017,7 @@
             "additionalProperties": false,
             "properties": {
               "code": {
-                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`, `unavailable`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
+                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`, `dashboard_uninitialized`, `unavailable`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
                 "enum": [
                   "unauthenticated"
                 ],
@@ -8051,7 +8059,7 @@
             "additionalProperties": false,
             "properties": {
               "code": {
-                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`, `unavailable`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
+                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`, `dashboard_uninitialized`, `unavailable`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
                 "enum": [
                   "unavailable"
                 ],
@@ -8415,54 +8423,6 @@
               },
               "input": {
                 "additionalProperties": false,
-                "type": "object"
-              },
-              "operation": {
-                "enum": [
-                  "dashboard.getDashboard"
-                ],
-                "type": "string"
-              }
-            },
-            "required": [
-              "callId",
-              "operation",
-              "input"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "callId": {
-                "$ref": "#/components/schemas/AtomicBatchCallId"
-              },
-              "input": {
-                "additionalProperties": false,
-                "type": "object"
-              },
-              "operation": {
-                "enum": [
-                  "dashboard.getDashboardView"
-                ],
-                "type": "string"
-              }
-            },
-            "required": [
-              "callId",
-              "operation",
-              "input"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "callId": {
-                "$ref": "#/components/schemas/AtomicBatchCallId"
-              },
-              "input": {
-                "additionalProperties": false,
                 "properties": {
                   "payload": {
                     "$ref": "#/components/schemas/DashboardEdit"
@@ -8780,7 +8740,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_36"
+                    "$ref": "#/components/schemas/Objects_34"
                   },
                   "payload": {
                     "$ref": "#/components/schemas/DeliveryEvidenceInput"
@@ -8816,7 +8776,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_36"
+                    "$ref": "#/components/schemas/Objects_34"
                   }
                 },
                 "required": [
@@ -8848,7 +8808,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_36"
+                    "$ref": "#/components/schemas/Objects_34"
                   }
                 },
                 "required": [
@@ -9030,7 +8990,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "payload": {
-                    "$ref": "#/components/schemas/Objects_33"
+                    "$ref": "#/components/schemas/Objects_31"
                   }
                 },
                 "required": [
@@ -9280,30 +9240,7 @@
               },
               "operation": {
                 "enum": [
-                  "dashboard.getDashboard"
-                ],
-                "type": "string"
-              },
-              "output": {
-                "$ref": "#/components/schemas/Objects_10"
-              }
-            },
-            "required": [
-              "callId",
-              "operation",
-              "output"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "callId": {
-                "$ref": "#/components/schemas/AtomicBatchCallId"
-              },
-              "operation": {
-                "enum": [
-                  "dashboard.getDashboardView"
+                  "dashboard.applyDashboardEdit"
                 ],
                 "type": "string"
               },
@@ -9326,7 +9263,7 @@
               },
               "operation": {
                 "enum": [
-                  "dashboard.applyDashboardEdit"
+                  "transactions.createTransaction"
                 ],
                 "type": "string"
               },
@@ -9349,7 +9286,7 @@
               },
               "operation": {
                 "enum": [
-                  "transactions.createTransaction"
+                  "transactions.linkTransactions"
                 ],
                 "type": "string"
               },
@@ -9372,35 +9309,12 @@
               },
               "operation": {
                 "enum": [
-                  "transactions.linkTransactions"
-                ],
-                "type": "string"
-              },
-              "output": {
-                "$ref": "#/components/schemas/Objects_17"
-              }
-            },
-            "required": [
-              "callId",
-              "operation",
-              "output"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "callId": {
-                "$ref": "#/components/schemas/AtomicBatchCallId"
-              },
-              "operation": {
-                "enum": [
                   "transactions.unlinkTransactions"
                 ],
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_18"
+                "$ref": "#/components/schemas/Objects_16"
               }
             },
             "required": [
@@ -9423,7 +9337,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_20"
+                "$ref": "#/components/schemas/Objects_18"
               }
             },
             "required": [
@@ -9446,7 +9360,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_21"
+                "$ref": "#/components/schemas/Objects_19"
               }
             },
             "required": [
@@ -9469,7 +9383,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_22"
+                "$ref": "#/components/schemas/Objects_20"
               }
             },
             "required": [
@@ -9492,7 +9406,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_23"
+                "$ref": "#/components/schemas/Objects_21"
               }
             },
             "required": [
@@ -9515,7 +9429,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_25"
+                "$ref": "#/components/schemas/Objects_23"
               }
             },
             "required": [
@@ -9538,7 +9452,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_26"
+                "$ref": "#/components/schemas/Objects_24"
               }
             },
             "required": [
@@ -9561,7 +9475,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_27"
+                "$ref": "#/components/schemas/Objects_25"
               }
             },
             "required": [
@@ -9584,7 +9498,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_28"
+                "$ref": "#/components/schemas/Objects_26"
               }
             },
             "required": [
@@ -9607,7 +9521,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_29"
+                "$ref": "#/components/schemas/Objects_27"
               }
             },
             "required": [
@@ -9630,7 +9544,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_30"
+                "$ref": "#/components/schemas/Objects_28"
               }
             },
             "required": [
@@ -9653,7 +9567,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_31"
+                "$ref": "#/components/schemas/Objects_29"
               }
             },
             "required": [
@@ -9676,7 +9590,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_32"
+                "$ref": "#/components/schemas/Objects_30"
               }
             },
             "required": [
@@ -9699,7 +9613,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_34"
+                "$ref": "#/components/schemas/Objects_32"
               }
             },
             "required": [
@@ -9722,7 +9636,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_35"
+                "$ref": "#/components/schemas/Objects_33"
               }
             },
             "required": [
@@ -10073,7 +9987,7 @@
             "additionalProperties": false,
             "properties": {
               "code": {
-                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`, `unavailable`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
+                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`, `dashboard_uninitialized`, `unavailable`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
                 "enum": [
                   "user_action_required"
                 ],
@@ -10153,7 +10067,7 @@
             "additionalProperties": false,
             "properties": {
               "code": {
-                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`, `unavailable`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
+                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`, `dashboard_uninitialized`, `unavailable`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
                 "enum": [
                   "validation_failed"
                 ],
@@ -11515,7 +11429,7 @@
     },
     "/dashboard": {
       "get": {
-        "description": "Get the caller's complete DashboardDocument. Reach for this before editing; first use creates and retains one valid four-Widget Dashboard, and later calls return the same document.",
+        "description": "Observe your complete DashboardDocument without changing it. If uninitialized, explicitly invoke dashboard.initializeDashboard with Dashboard authority, then read again.",
         "operationId": "dashboard.getDashboard",
         "parameters": [],
         "responses": {
@@ -11523,7 +11437,20 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_10"
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/DashboardDocument"
+                    },
+                    "next": {
+                      "$ref": "#/components/schemas/Arrays_"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
                 }
               }
             },
@@ -11568,6 +11495,16 @@
               }
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardUninitializedEncoded"
+                }
+              }
+            },
+            "description": "DashboardUninitialized"
           }
         },
         "security": [
@@ -11589,7 +11526,7 @@
           "type": "pat-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-operation-kind": "mutation",
+        "x-fidy-operation-kind": "query",
         "x-fidy-required-tier": "free"
       }
     },
@@ -11722,7 +11659,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_13"
+                  "$ref": "#/components/schemas/Objects_11"
                 }
               }
             },
@@ -11884,7 +11821,7 @@
     },
     "/dashboard/view": {
       "get": {
-        "description": "Render one complete enriched projection of the caller's decoded DashboardDocument using current User context and purpose-specific exact facts. First use creates the same document.",
+        "description": "Observe one complete enriched projection using current User context and exact facts without changing domain state. If uninitialized, explicitly initialize your Dashboard, then read again.",
         "operationId": "dashboard.getDashboardView",
         "parameters": [],
         "responses": {
@@ -11892,7 +11829,20 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_11"
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/DashboardView"
+                    },
+                    "next": {
+                      "$ref": "#/components/schemas/Arrays_"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
                 }
               }
             },
@@ -11937,6 +11887,16 @@
               }
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardUninitializedEncoded"
+                }
+              }
+            },
+            "description": "DashboardUninitialized"
           }
         },
         "security": [
@@ -11958,7 +11918,7 @@
           "type": "pat-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-operation-kind": "mutation",
+        "x-fidy-operation-kind": "query",
         "x-fidy-required-tier": "free"
       }
     },
@@ -12162,7 +12122,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_22"
+                  "$ref": "#/components/schemas/Objects_20"
                 }
               }
             },
@@ -12376,7 +12336,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_25"
+                  "$ref": "#/components/schemas/Objects_23"
                 }
               }
             },
@@ -12476,7 +12436,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_23"
+                  "$ref": "#/components/schemas/Objects_21"
                 }
               }
             },
@@ -12697,7 +12657,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_26"
+                  "$ref": "#/components/schemas/Objects_24"
                 }
               }
             },
@@ -12796,7 +12756,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_28"
+                  "$ref": "#/components/schemas/Objects_26"
                 }
               }
             },
@@ -12895,7 +12855,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_27"
+                  "$ref": "#/components/schemas/Objects_25"
                 }
               }
             },
@@ -13218,7 +13178,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_29"
+                  "$ref": "#/components/schemas/Objects_27"
                 }
               }
             },
@@ -13337,7 +13297,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_31"
+                  "$ref": "#/components/schemas/Objects_29"
                 }
               }
             },
@@ -13464,7 +13424,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_30"
+                  "$ref": "#/components/schemas/Objects_28"
                 }
               }
             },
@@ -13925,7 +13885,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_32"
+                  "$ref": "#/components/schemas/Objects_30"
                 }
               }
             },
@@ -14149,7 +14109,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_35"
+                  "$ref": "#/components/schemas/Objects_33"
                 }
               }
             },
@@ -14241,7 +14201,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Objects_33"
+                "$ref": "#/components/schemas/Objects_31"
               }
             }
           },
@@ -14252,7 +14212,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_34"
+                  "$ref": "#/components/schemas/Objects_32"
                 }
               }
             },
@@ -14908,7 +14868,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_15"
+                  "$ref": "#/components/schemas/Objects_13"
                 }
               }
             },
@@ -15017,7 +14977,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_21"
+                  "$ref": "#/components/schemas/Objects_19"
                 }
               }
             },
@@ -15244,7 +15204,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_20"
+                  "$ref": "#/components/schemas/Objects_18"
                 }
               }
             },
@@ -15469,7 +15429,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_17"
+                  "$ref": "#/components/schemas/Objects_15"
                 }
               }
             },
@@ -15705,7 +15665,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_18"
+                  "$ref": "#/components/schemas/Objects_16"
                 }
               }
             },

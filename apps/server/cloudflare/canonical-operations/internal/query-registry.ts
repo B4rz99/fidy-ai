@@ -1,6 +1,6 @@
 import { operationCatalog } from "../../../src/shell/api";
 import { type Cause, Effect, Option } from "effect";
-import type { TransactionSubject } from "../../canonical-work/operations";
+import type { TransactionCaller } from "../../canonical-work/operations";
 import { executeProtectedCategories, listOwnKeywordRules } from "../../categories/operations";
 import { executeProtectedSubscriptionQuery } from "../../subscription/operations";
 import { browseBudgets, evaluateBudgetAlerts } from "../../budgets/operations";
@@ -16,7 +16,7 @@ import {
 
 export type QueryWork = Readonly<{
   db: D1Database;
-  subject: TransactionSubject;
+  subject: TransactionCaller;
   request: Request;
   bucket: Option.Option<R2Bucket>;
 }>;
@@ -102,6 +102,14 @@ const queryOwners = new Map<string, QueryOwner>([
   ["transactions.listTransactions", historyOwner("transactions.listTransactions")],
   ["transactions.searchTransactions", historyOwner("transactions.searchTransactions")],
   ["transactions.getTransaction", historyOwner("transactions.getTransaction")],
+  ...(["dashboard.getDashboard", "dashboard.getDashboardView"] as const).map(
+    (operation): readonly [string, QueryOwner] =>
+      [
+        operation,
+        ({ db, subject, request }: QueryWork) =>
+          browseDashboard({ db, subject, request, operation }),
+      ] as const
+  ),
   [
     "dashboard.listDashboardCatalog",
     ({ db, subject, request }): Effect.Effect<Response, Cause.UnknownError> =>

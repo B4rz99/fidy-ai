@@ -165,6 +165,21 @@ const operatorCode = (request: Request, path: string): Option.Option<string> =>
   operatorRoute(request, path, "POST")
     ? Option.fromNullishOr(new URL(request.url).searchParams.get("code"))
     : Option.none();
+const operatorSetup = (request: Request): Option.Option<Promise<Response>> => {
+  // Loopback-only test setup for a fresh journey; never part of public ingress.
+  if (operatorRoute(request, "/dashboard/reset", "POST")) {
+    return Option.some(
+      db
+        .prepare("DELETE FROM dashboard_documents WHERE user_id = ?")
+        .bind(firstCardUserId)
+        .run()
+        .then(() => new Response(null, { status: noContent }))
+    );
+  }
+  return operatorRoute(request, "/billing/collect", "POST")
+    ? Option.some(collectBilling())
+    : Option.none();
+};
 const operator = Bun.serve({
   hostname: "127.0.0.1",
   port: 4175,
@@ -178,9 +193,8 @@ const operator = Bun.serve({
     if (operatorRoute(request, "/email/replacement/deliver", "POST")) {
       return deliverReplacementProof();
     }
-    if (operatorRoute(request, "/billing/collect", "POST")) {
-      return collectBilling();
-    }
+    const setup = operatorSetup(request);
+    if (Option.isSome(setup)) return setup.value;
     const loginCode = operatorCode(request, "/email/login/deliver");
     if (Option.isSome(loginCode)) return deliverEmailLoginProof(loginCode.value);
     const approvalCode = operatorCode(request, "/approve");

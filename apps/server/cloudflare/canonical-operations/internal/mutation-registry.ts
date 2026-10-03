@@ -7,8 +7,6 @@ import {
 import { Effect, Option, Schema } from "effect";
 import {
   ApplyDashboardEditCanonicalInput,
-  GetDashboardCanonicalInput,
-  GetDashboardViewCanonicalInput,
   InitializeDashboardCanonicalInput,
 } from "../../../src/shell/dashboard/contract";
 import { CanonicalOperationId } from "../../../src/core/canonical-operations/contract";
@@ -195,18 +193,6 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
             operation: "dashboard.initializeDashboard",
             edit: Option.none(),
           })
-        ),
-      ],
-      [
-        "dashboard.getDashboard",
-        decodeAndPrepare(GetDashboardCanonicalInput, (_input, work) =>
-          prepareDashboard({ work, operation: "dashboard.getDashboard", edit: Option.none() })
-        ),
-      ],
-      [
-        "dashboard.getDashboardView",
-        decodeAndPrepare(GetDashboardViewCanonicalInput, (_input, work) =>
-          prepareDashboard({ work, operation: "dashboard.getDashboardView", edit: Option.none() })
         ),
       ],
       [

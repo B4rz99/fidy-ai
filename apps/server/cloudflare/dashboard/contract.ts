@@ -2,23 +2,20 @@ import type { Effect, Option } from "effect";
 import type {
   ApplyDashboardEditCanonicalInput,
   DashboardGroup,
-  GetDashboardCanonicalInput,
-  GetDashboardViewCanonicalInput,
   InitializeDashboardCanonicalInput,
 } from "../../src/shell/dashboard/contract";
 import type { TransactionCaller } from "../canonical-work/contract";
 
 /** Canonical operation names derived from Dashboard's one published declaration. */
 export type DashboardOperation = `dashboard.${keyof typeof DashboardGroup.endpoints}`;
-export type DashboardMutationOperation = Exclude<
+export type DashboardMutationOperation = Extract<
   DashboardOperation,
-  "dashboard.listDashboardCatalog"
+  "dashboard.initializeDashboard" | "dashboard.applyDashboardEdit"
 >;
+export type DashboardQueryOperation = Exclude<DashboardOperation, DashboardMutationOperation>;
 
 type DashboardInputs = {
   "dashboard.initializeDashboard": typeof InitializeDashboardCanonicalInput.Type;
-  "dashboard.getDashboard": typeof GetDashboardCanonicalInput.Type;
-  "dashboard.getDashboardView": typeof GetDashboardViewCanonicalInput.Type;
   "dashboard.applyDashboardEdit": typeof ApplyDashboardEditCanonicalInput.Type;
 };
 
@@ -40,7 +37,7 @@ export type DashboardRequest = Readonly<{
   request: Request;
 }> &
   (
-    | Readonly<{ operation: "dashboard.listDashboardCatalog" }>
+    | Readonly<{ operation: DashboardQueryOperation }>
     | Readonly<{
         operation: DashboardMutationOperation;
         runMutation: (call: DashboardMutationCall) => Effect.Effect<Response>;

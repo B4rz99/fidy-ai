@@ -164,10 +164,10 @@ retention while their staging row records their eventual removal. See
 [ADR 0028](../../docs/adr/0028-statement-bytes-are-staged-outside-atomic-batches.md) for the
 staging and publication protocol.
 
-Dashboard first-use document creation, edits, and view preparation use the same canonical mutation
-unit for individual and atomic-batch calls. Batch preparation does not read earlier children's
-writes; a batch refuses a second Dashboard document child rather than claiming an intermediate
-view. Invalid first edits leave no document or accepted AuditLogEntry.
+Explicit Dashboard initialization and edits use the same canonical mutation unit for individual
+and atomic-batch calls. Batch preparation does not read earlier children's writes; a batch refuses
+a second Dashboard document child. Dashboard reads are canonical queries, excluded from mutation
+batch children by the catalog. Invalid first edits leave no document or accepted AuditLogEntry.
 
 Dashboard Money views require a write-maintained projection of **effective** Transactions,
 updated atomically with each effective transition and its Audit. The Transaction owner provides
@@ -342,15 +342,19 @@ supplies complete cap facts, and Transactions supplies complete exact aggregates
 No Dashboard caller reads another owner's persistence or replicates the effective relation.
 
 Explicit `dashboard.initializeDashboard` requires the `dashboard` PAT scope and uses the same
-one-User canonical commit as first use, edits and view preparation. An existing document is returned
-without changing its content or revision; initialization shares the document-child batch collision
-policy. Implicit creation on existing reads remains until the separate read/web migration (#968).
+one-User canonical commit as edits. An existing document is returned without changing its content
+or revision; initialization shares the document-child batch collision policy. Both document and view
+reads use one reusable canonical query implementation for HTTP and hosted execution. Only a genuinely
+absent document returns the declared `DashboardUninitialized` failure (`dashboard_uninitialized`,
+HTTP 404); malformed or unavailable state and incomplete projections remain unavailable. Queries
+never create, edit or repair domain state. Query credential/Audit accounting remains metadata-only.
+See [ADR 0032](../../docs/adr/0032-explicit-dashboard-creation-and-canonical-queries.md).
 Live credential and Consent checks, scope policy, Audit evidence and batch collision/refusal behavior
 remain authoritative. Existing metadata-only canonical request observation is sufficient: initialization
 adds no provider call, background work, runtime authority or content telemetry. Views use the explicit current
 IANA zone, keep Currencies and directions separate, and fail closed on incomplete or invalid facts.
-Individual document calls use the same User coordinator as batch and hosted mutations. Its turn
-covers the commit and complete projection readback, preventing a concurrent Correction from moving
+Individual document queries and mutations use the same User coordinator as batch and hosted work.
+Its turn covers authority/accounting and complete projection readback, preventing a concurrent Correction from moving
 one contribution between calendar buckets during a view. The projection cache remains request-local.
 This publication adds no migration, runtime, external workflow or telemetry purpose;
 existing canonical spans and metadata-only accountability remain in force.

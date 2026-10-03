@@ -32,7 +32,7 @@ import {
   findOwnedKeywordRules,
   keywordRuleJsonHeaders,
 } from "./keyword-rule-shared";
-import { decideKeywordRuleConflict } from "./keyword-rule-conflict";
+import { validateKeywordRuleChange } from "../../../src/core/categories/operations";
 import {
   type TransactionCaller,
   callerAuthority,
@@ -251,9 +251,9 @@ const prepareRuleWrite = (
       catch: () => new KeywordRuleBoundaryFailure(),
     });
     if (Option.isNone(stored)) return yield* new KeywordRuleBoundaryFailure();
-    const conflict = yield* decideKeywordRuleConflict({
+    const conflict = yield* validateKeywordRuleChange({
       rules: stored.value,
-      outcome: write.outcome,
+      change: write.outcome,
     });
     if (Option.isSome(conflict)) {
       return refusedPreparation(

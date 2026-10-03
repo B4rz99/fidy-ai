@@ -708,8 +708,8 @@ external workflow, provider call, persistent authority or diagnostic data.
 ### Onboarding coordinator
 
 Onboarding publishes its native request and completion operation in `cloudflare/onboarding`.
-It owns no tables, stored aggregate, provider, Queue or Workflow. Its visible private composition
-calls only published owner operations. Web Authentication dispatches the existing proof-bearing
+It owns no tables, stored aggregate, provider, Queue or Workflow. Its completion operation
+composes only published owner operations. Web Authentication dispatches the existing proof-bearing
 browser route to this coordinator after ingress and origin policy.
 
 Email Authentication verifies the bounded mailbox proof and lends a one-use completion that commits

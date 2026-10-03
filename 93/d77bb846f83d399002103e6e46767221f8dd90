@@ -1,0 +1,355 @@
+apps/web/src/features/subscription/enrollment-gateway.test.ts
+  s_fc768a11c2de27::t_a0f22feeee24e9 2
+apps/server/src/shell/outbound-http/internal/outbound-http.ts
+  s_fc768a11c2de27::t_7cb56c4bc5dda9 3
+  s_fc768a11c2de27::t_2376150fe36e4b 4-5
+  s_fc768a11c2de27::t_5d524ad5dcb93d 117
+apps/web/src/features/subscription/feature.tsx
+  s_fc768a11c2de27::t_18af8328ab79e0 10
+apps/web/src/transport/wompi-daviplata.ts
+  s_fc768a11c2de27::t_cda9ee86a5f330 1-2,261
+apps/web/src/features/subscription/daviplata-activity.ts
+  s_fc768a11c2de27::t_60ee6a28785718 2
+.github/workflows/production.yml
+  s_fc768a11c2de27::t_f1aad93e43824c 87,125
+.patterns/INDEX.md
+  s_fc768a11c2de27::t_1631103be37549 5-10
+.patterns/effect-4-stable.md
+  s_fc768a11c2de27::t_ef22e6f0596afc 1-64
+ARCHITECTURE.md
+  s_fc768a11c2de27::t_427b8cb5282531 87-103
+GLOSSARY.md
+  s_fc768a11c2de27::t_53a503e0ee3f57 231-251
+SECURITY_STANDARDS.md
+  s_fc768a11c2de27::t_d93e3e85e96bd9 166-196
+apps/server/.dependency-cruiser.mjs
+  s_fc768a11c2de27::t_56b6fd1f9033da 316,1184,1353
+apps/server/ARCHITECTURE.md
+  s_fc768a11c2de27::t_e5379712c3dc71 370-387
+apps/server/cloudflare/agent/internal/service.ts
+  s_fc768a11c2de27::t_7e1df894f2701f 41
+apps/server/cloudflare/anonymous-admission/operations.ts
+  s_fc768a11c2de27::t_31a680058fff69 1-2,41
+apps/server/cloudflare/browser-login/internal/pairing.ts
+  s_fc768a11c2de27::t_d43a13e1211aaa 17-18,126
+apps/server/cloudflare/consent/ingress/internal/ingress.ts
+  s_fc768a11c2de27::t_29f60d4e9a488d 28-29,663
+apps/server/cloudflare/consent/ingress/runtime.ts
+  s_fc768a11c2de27::t_d01997c23c8552 2
+apps/server/cloudflare/email-authentication/internal/onboarding-workflow.ts
+  s_fc768a11c2de27::t_d51173d0714b58 19
+apps/server/cloudflare/ingestion/internal/forwarded-email-processing.ts
+  s_fc768a11c2de27::t_c719d53f7bc8b2 20
+apps/server/cloudflare/ingestion/internal/statement-staging.ts
+  s_fc768a11c2de27::t_53b9a184a24710 46,266,471,534,570
+apps/server/cloudflare/ingestion/statement-staging.test.ts
+  s_fc768a11c2de27::t_6db33a5d546df9 6-7,291
+apps/server/cloudflare/runtime/operational-health/internal/operator-email.ts
+  s_fc768a11c2de27::t_df222efdba85ba 5
+apps/server/cloudflare/subscription/internal/billing-workflow.ts
+  s_fc768a11c2de27::t_9c6c12119a28c3 20-21,528
+apps/server/cloudflare/subscription/internal/wompi-client.ts
+  s_fc768a11c2de27::t_2cdb63a91ec280 16,136,145,425
+apps/server/cloudflare/tokens/internal/pat-pairing.ts
+  s_fc768a11c2de27::t_5f992b4fcad5ef 27-28,207
+apps/server/cloudflare/tokens/internal/pat-routes.ts
+  s_fc768a11c2de27::t_521cdfca30e99b 2
+apps/server/cloudflare/tokens/internal/pat-shared.ts
+  s_fc768a11c2de27::t_a5a38f002c25e2 17-18,88
+apps/server/cloudflare/tokens/pats.test.ts
+  s_fc768a11c2de27::t_f4842519f85c30 9
+apps/server/cloudflare/web-session/internal/lifecycle.ts
+  s_fc768a11c2de27::t_3bb9b0e8dcebbd 2-3,18
+apps/server/cloudflare/whatsapp/internal/ingress.ts
+  s_fc768a11c2de27::t_afa33e240115a7 26-27,305
+apps/server/contracts/openapi.json
+  s_fc768a11c2de27::t_de890044203c31 247,253,2099,2105,2108,2647,2659,2671,2698,3021,3027,3030,3546-3605,3621,3637,3653,3675,3691,3706-3722,3738,3754,3789,3808-3820,3836,3839-3840,3844,3848,3864,3880,3896,3912-3936,3952-3964,3993,4009,4025,4041-4053,4069-4081,4097,4113,4129,4141,4157,4173,4177,4185,4201,4217,4220,4225,4229,4233,5035,5038,6998,8218,8486,8522,8586,8622,8830,8866,8954,8990,9026,9058,9122,9158,9222,9339,9362,9385,9408,9431,9454,9477,9500,9523,9546,9569,9592,9615,9638,9661,9684,9707,9730,9753,9776,9799,9822,9845,9868,9891,10780,10879,11096,11495,11602,11692,11891,11981,12251,12329,12338,12465,12565,12786,12885,12984,13307,13426,13553,14014,14238,14330,14341,15100,15209,15436,15661,15762,15897
+apps/server/package.json
+  s_fc768a11c2de27::t_a7428859c4b6ab 289,291,301-303
+apps/server/scripts/check-browser-client.ts
+  s_fc768a11c2de27::t_b4f1ba1ff96df7 39
+apps/server/scripts/check-dependency-guards.ts
+  s_fc768a11c2de27::t_bfe2530fdf3c27 876,2346,2353,2838,2855
+apps/server/src/core/_shared/money.test.ts
+  s_fc768a11c2de27::t_24a2c42607289a 3,106-113
+apps/server/src/core/_shared/money.ts
+  s_fc768a11c2de27::t_11e7c3377250c0 239
+apps/server/src/core/canonical-operations/contract.ts
+  s_fc768a11c2de27::t_758d72a4935d64 5
+apps/server/src/core/tokens/contract.ts
+  s_fc768a11c2de27::t_82f06669095c9e 136,144,157-159
+apps/server/src/shell/agent/contract.ts
+  s_fc768a11c2de27::t_04bfb3f9c48b15 2
+apps/server/src/shell/api.ts
+  s_fc768a11c2de27::t_9c07c4d35833e1 2
+apps/server/src/shell/authorization/contract.ts
+  s_fc768a11c2de27::t_d2a44bcb20d902 2-3
+apps/server/src/shell/authorization/runtime.ts
+  s_fc768a11c2de27::t_fe29326f17b6a3 2-3
+apps/server/src/shell/browser-login/contract.ts
+  s_fc768a11c2de27::t_f1c59879a52856 8
+apps/server/src/shell/budgets/contract.ts
+  s_fc768a11c2de27::t_1ffc403882e57e 2
+apps/server/src/shell/canonical-catalog/contract.test.ts
+  s_fc768a11c2de27::t_eae8e536a09639 3,5,42-66
+apps/server/src/shell/canonical-catalog/contract.ts
+  s_fc768a11c2de27::t_d929fcfc41abde 3
+apps/server/src/shell/canonical-operations/contract.ts
+  s_fc768a11c2de27::t_f144e4c8f7a650 2
+apps/server/src/shell/canonical-operations/internal/implementation.ts
+  s_fc768a11c2de27::t_2b9b1c91605398 8-9
+apps/server/src/shell/canonical-operations/suggested-operations.test.ts
+  s_fc768a11c2de27::t_c62870b3f88716 3
+apps/server/src/shell/canonical-policy/contract.ts
+  s_fc768a11c2de27::t_b443314f4ffbb5 2
+apps/server/src/shell/categories/contract.ts
+  s_fc768a11c2de27::t_d8409dad958d9d 3
+apps/server/src/shell/categories/internal/list-categories.ts
+  s_fc768a11c2de27::t_91260f4f308671 2
+apps/server/src/shell/categories/operations.ts
+  s_fc768a11c2de27::t_803e0e4dcf7e65 3
+apps/server/src/shell/channels/whatsapp/internal/kapso-webhook.ts
+  s_fc768a11c2de27::t_1d9b9279f0d45c 1-3,139
+apps/server/src/shell/channels/whatsapp/runtime.ts
+  s_fc768a11c2de27::t_e5ac496ef1d584 2
+apps/server/src/shell/consent/runtime.ts
+  s_fc768a11c2de27::t_0efb697ed32361 2
+apps/server/src/shell/dashboard/contract.ts
+  s_fc768a11c2de27::t_cdb65ddb6a1bf4 21
+apps/server/src/shell/email-authentication/contract.ts
+  s_fc768a11c2de27::t_ca54f4e669ae8c 3
+apps/server/src/shell/email-authentication/runtime.ts
+  s_fc768a11c2de27::t_33828a3abfea95 2
+apps/server/src/shell/hosted-inference/contract.ts
+  s_fc768a11c2de27::t_335988ba5f384b 11
+apps/server/src/shell/hosted-inference/internal/adapter.ts
+  s_fc768a11c2de27::t_dbc07f930e3ef4 2
+apps/server/src/shell/hosted-inference/internal/inference.ts
+  s_fc768a11c2de27::t_292321f653f6c7 2
+apps/server/src/shell/hosted-inference/internal/prompt.ts
+  s_fc768a11c2de27::t_eee5e5c06686af 2
+apps/server/src/shell/hosted-inference/internal/workers-ai.ts
+  s_fc768a11c2de27::t_462445236d9306 2
+apps/server/src/shell/identity/contract.ts
+  s_fc768a11c2de27::t_7743ec5fc1c893 3
+apps/server/src/shell/identity/operations.ts
+  s_fc768a11c2de27::t_cc9be83664d0e7 2
+apps/server/src/shell/ingestion/contract.ts
+  s_fc768a11c2de27::t_84f572350f28dd 3
+apps/server/src/shell/ingestion/internal/column-mapper.test.ts
+  s_fc768a11c2de27::t_5e5a8b2d221f55 2
+apps/server/src/shell/ingestion/internal/column-mapper.ts
+  s_fc768a11c2de27::t_78303ed67137b7 3
+apps/server/src/shell/insights/contract.ts
+  s_fc768a11c2de27::t_d69ab1db54c93f 2
+apps/server/src/shell/memory/contract.ts
+  s_fc768a11c2de27::t_21f475374cbd56 2
+apps/server/src/shell/memory/operations.test.ts
+  s_fc768a11c2de27::t_bd86853d442c49 2
+apps/server/src/shell/observability/registry.test.ts
+  s_fc768a11c2de27::t_4c53a04ac9ef75 3
+apps/server/src/shell/operations/contract.ts
+  s_fc768a11c2de27::t_425b430aded733 3
+apps/server/src/shell/outbound-http/internal/transport.ts
+  s_fc768a11c2de27::t_69f399a7fd036c 8
+apps/server/src/shell/outbound-http/operations.test.ts
+  s_fc768a11c2de27::t_5c043bf7998bc6 26
+apps/server/src/shell/outbound-http/operations.ts
+  s_fc768a11c2de27::t_ca839f280a09de 4,95
+apps/server/src/shell/outbound-http/testing.ts
+  s_fc768a11c2de27::t_c3467f225f89c0 8
+apps/server/src/shell/partial-input/contract.test.ts
+  s_fc768a11c2de27::t_a5c4d9bbf93ece 3
+apps/server/src/shell/public-http/contract.ts
+  s_fc768a11c2de27::t_503ba7c7faeb0d 3
+apps/server/src/shell/recovery/contract.ts
+  s_fc768a11c2de27::t_9cce69027791f4 1
+apps/server/src/shell/recurring/contract.ts
+  s_fc768a11c2de27::t_2b6871a804071e 2
+apps/server/src/shell/secret-material/operations.ts
+  s_fc768a11c2de27::t_781bd23ca8d331 2-3,60,72,84
+apps/server/src/shell/subscription/contract.ts
+  s_fc768a11c2de27::t_1362004339ed0d 3
+apps/server/src/shell/subscription/internal/queries.ts
+  s_fc768a11c2de27::t_de89b8357ff46c 2
+apps/server/src/shell/subscription/operations.ts
+  s_fc768a11c2de27::t_cc44a8def982c9 14
+apps/server/src/shell/tokens/contract.ts
+  s_fc768a11c2de27::t_5389e0f8269605 7
+apps/server/src/shell/tokens/internal/list-pats.ts
+  s_fc768a11c2de27::t_7e85e85d068009 2
+apps/server/src/shell/tokens/operations.ts
+  s_fc768a11c2de27::t_0f725852f1c464 3
+apps/server/src/shell/tokens/pairing-contract.test.ts
+  s_fc768a11c2de27::t_0790bde1f1674d 3-4
+apps/server/src/shell/transactions/contract.ts
+  s_fc768a11c2de27::t_b014f9e1e4b52f 2
+apps/server/src/shell/web-authentication/contract.ts
+  s_fc768a11c2de27::t_67c8940cda2652 1
+apps/server/src/shell/web-session/contract.ts
+  s_fc768a11c2de27::t_1a69484d588319 1
+apps/server/tools/contracts/generate.ts
+  s_fc768a11c2de27::t_4d8bc3d80acce9 4
+apps/web/ARCHITECTURE.md
+  s_fc768a11c2de27::t_3b7c7c4c5dae2b 78-93
+apps/web/cloudflare/production-policy/artifact.ts
+  s_fc768a11c2de27::t_e491ba05894098 34
+apps/web/package.json
+  s_fc768a11c2de27::t_17dcadc96f420a 25,33
+apps/web/scripts/build-production.test.ts
+  s_fc768a11c2de27::t_392120aa6e0699 134-148
+apps/web/scripts/production-workflow.test.ts
+  s_fc768a11c2de27::t_a0ab4b5c13a234 135
+apps/web/src/application.test.tsx
+  s_fc768a11c2de27::t_ddd924844c1b26 3-4
+apps/web/src/features/agent/feature.tsx
+  s_fc768a11c2de27::t_db4e2d44521a8b 4
+apps/web/src/features/browser-login/pairing-controller.ts
+  s_fc768a11c2de27::t_eb507e0597239d 4
+apps/web/src/features/dashboard/editor-model.ts
+  s_fc768a11c2de27::t_00dfe990da4e92 1-2,33
+apps/web/src/features/dashboard/feature-controller.test.tsx
+  s_fc768a11c2de27::t_8dd492e94cb3fe 4
+apps/web/src/features/dashboard/feature.test.tsx
+  s_fc768a11c2de27::t_debb767792630f 4
+apps/web/src/features/dashboard/feature.tsx
+  s_fc768a11c2de27::t_aa39ca12c88336 3
+apps/web/src/features/dashboard/view.tsx
+  s_fc768a11c2de27::t_8f44d806bd6711 4
+apps/web/src/features/email-onboarding/controller.ts
+  s_fc768a11c2de27::t_039bf4eec2add8 4
+apps/web/src/features/email-replacement/controller.ts
+  s_fc768a11c2de27::t_f32ad62aef220e 4
+apps/web/src/features/pats/feature.tsx
+  s_fc768a11c2de27::t_e0809c0d1ecd36 4
+apps/web/src/features/recovery/feature.tsx
+  s_fc768a11c2de27::t_f1ab8292bd16af 4
+apps/web/src/features/subscription/enrollment-gateway.ts
+  s_fc768a11c2de27::t_bc104c90971f49 1-2,46
+apps/web/src/features/transactions/feature.test.tsx
+  s_fc768a11c2de27::t_0f227d26838138 3
+apps/web/src/features/transactions/manual-capture.tsx
+  s_fc768a11c2de27::t_b0ed166c53ea98 3
+apps/web/src/session/session.test.tsx
+  s_fc768a11c2de27::t_c89e833c130652 2
+apps/web/src/transport/browser-http-policy.ts
+  s_fc768a11c2de27::t_e8479ebf8babaf 9
+apps/web/src/transport/canonical-query.test.ts
+  s_fc768a11c2de27::t_789524738d9b16 2
+apps/web/src/transport/canonical-query.ts
+  s_fc768a11c2de27::t_b047ea2db2245d 2
+apps/web/src/transport/client.test.ts
+  s_fc768a11c2de27::t_88b04f6b27c7bf 26-27
+apps/web/src/transport/client.ts
+  s_fc768a11c2de27::t_1e560f2ec3b459 18-20
+bun.lock
+  s_fc768a11c2de27::t_f6ec8f04cb5fa2 14,27,29,39-41,59,67,100,104-106,114,117-118,136,138,140,142,252-258,260,262,264,266,268,270,272,274,276,278-282,300,302,304,306,308,310,328,512,874,1046,1636,1728,1800,1802,1804,1878-1879,1898-1899,1918,1920,1922,1924,1926,2226-2227
+docs/adr/0033-hosted-mcp-and-oauth-agent-grants.md
+  s_fc768a11c2de27::t_d4f124f14ccdb1 1-220
+docs/research/effect-4-stable-integration.md
+  s_fc768a11c2de27::t_ffc63ea8466a3d 1-92
+docs/research/effect-4-stable-migration.md
+  s_fc768a11c2de27::t_27d2aeb4f0f5ff 1-293
+docs/research/effect-4-stable-portable.md
+  s_fc768a11c2de27::t_f96a2777ba1d6d 1-199
+docs/research/hosted-mcp-interoperability-977.md
+  s_fc768a11c2de27::t_cc015f9150d213 1-258
+docs/research/hosted-mcp-spike/client-metadata.json
+  s_fc768a11c2de27::t_ccbd79b1eaf892 1-14
+docs/research/hosted-mcp-spike/evidence-legacy.json
+  s_fc768a11c2de27::t_9b088838f4fd93 1-55
+docs/research/hosted-mcp-spike/evidence-resolved.json
+  s_fc768a11c2de27::t_e370e298c85382 1-123
+docs/research/hosted-mcp-spike/evidence-stateless.json
+  s_fc768a11c2de27::t_020a9df9539639 1-64
+docs/research/hosted-mcp-spike/evidence-strict.json
+  s_fc768a11c2de27::t_0ef23dfa9f8024 1-42
+docs/research/hosted-mcp-spike/evidence-wrong-issuer.json
+  s_fc768a11c2de27::t_60174fe6fab2c6 1-48
+docs/research/hosted-mcp-spike/host-outcomes.json
+  s_fc768a11c2de27::t_274769b31e55e9 1-334
+docs/research/hosted-mcp-spike/host-probes.md
+  s_fc768a11c2de27::t_10bd704578ebd9 1-73
+docs/research/hosted-mcp-spike/oauth.md
+  s_fc768a11c2de27::t_17361c653a8b1c 1-218
+docs/research/hosted-mcp-spike/oauth.test.md
+  s_fc768a11c2de27::t_d8714ea378b9bc 1-68
+docs/research/hosted-mcp-spike/package.json
+  s_fc768a11c2de27::t_6324d8d1456a59 1-15
+docs/research/hosted-mcp-spike/server.md
+  s_fc768a11c2de27::t_9159b31aa9fb80 1-38
+docs/research/hosted-mcp-spike/server.test.md
+  s_fc768a11c2de27::t_2c3ff8f62b6066 1-42
+infra/cloudflare/alchemy.run.ts
+  s_fc768a11c2de27::t_e1aa1d9eece90a 7,74
+infra/cloudflare/d1-migrations.test.ts
+  s_fc768a11c2de27::t_b84b6d02a171db 11-12
+infra/cloudflare/diagnose-smoke-routing.test.ts
+  s_fc768a11c2de27::t_0876e8e2376e6e 4
+infra/cloudflare/diagnose-smoke-routing.ts
+  s_fc768a11c2de27::t_cfc92a40c8f576 10
+infra/cloudflare/inspect-worker-drift.ts
+  s_fc768a11c2de27::t_aa949b948cd1f4 11
+infra/cloudflare/local-emulation.test.ts
+  s_fc768a11c2de27::t_c236e657ce657d 4-8
+infra/cloudflare/package.json
+  s_fc768a11c2de27::t_75b8af4826887c 7-8,17,21-23
+infra/cloudflare/production-release.test.ts
+  s_fc768a11c2de27::t_d997294943277d 2
+infra/cloudflare/production-release.ts
+  s_fc768a11c2de27::t_bf1cef47c670e4 3-4,11,355,391
+infra/cloudflare/scripts/check-topology-drift.sh
+  s_fc768a11c2de27::t_cadf6f1ad8263d 7
+infra/cloudflare/scripts/migration-history.ts
+  s_fc768a11c2de27::t_675dbf294b7601 3,85
+infra/cloudflare/scripts/production-migration-ledger.ts
+  s_fc768a11c2de27::t_699cc2a3ebb5a9 66
+infra/cloudflare/scripts/production-preflight.sh
+  s_fc768a11c2de27::t_28624237208521 30
+infra/cloudflare/scripts/subprocess-test-fixture.ts
+  s_fc768a11c2de27::t_37357df12d7231 31
+infra/cloudflare/verify-edge-policy.test.ts
+  s_fc768a11c2de27::t_15f36a08e964ff 7
+infra/cloudflare/verify-edge-policy.ts
+  s_fc768a11c2de27::t_b463147ad84c39 5
+infra/cloudflare/verify-edge-smoke.ts
+  s_fc768a11c2de27::t_041165a6fc88d0 4-8
+infra/cloudflare/verify-production-smoke.test.ts
+  s_fc768a11c2de27::t_b236dae08c89bb 3
+infra/cloudflare/verify-production-smoke.ts
+  s_fc768a11c2de27::t_503195222aea3a 3-4,11,170
+infra/cloudflare/worker-receipt.test.ts
+  s_fc768a11c2de27::t_b841616e9d6e43 11-12
+package.json
+  s_fc768a11c2de27::t_884517550fa831 56,65-66,81
+patches/alchemy@2.0.0-beta.80.patch
+  s_fc768a11c2de27::t_c0e7b87ed03751 2,5,18,27,30,50
+scripts/check-dependency-updates.ts
+  s_fc768a11c2de27::t_7546c5407d2609 51
+scripts/check-effect-family.test.ts
+  s_fc768a11c2de27::t_06d285d966c9da 36-38,91-94,102-105,109,163-170,178-196,250-303
+scripts/check-effect-family.ts
+  s_fc768a11c2de27::t_c87fc11471207a 3,5,12-21,135-154,164,181-186
+scripts/document-parsing/local-workerd-http.ts
+  s_fc768a11c2de27::t_9e466480090908 2
+apps/server/cloudflare/subscription/internal/payment-enrollment.ts
+  s_fc768a11c2de27::t_b08d9b4bb31044 45,847
+apps/server/cloudflare/subscription/internal/wompi-runtime.ts
+  s_fc768a11c2de27::t_c73e431adec417 6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "93d77bb846f83d399002103e6e46767221f8dd90",
+  "prompts": {},
+  "sessions": {
+    "s_fc768a11c2de27": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a1020d-bbdc-74ae-ba1b-046fd82fa605",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

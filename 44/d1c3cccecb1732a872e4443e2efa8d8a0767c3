@@ -1,0 +1,23 @@
+apps/web/src/features/subscription/enrollment-gateway.test.ts
+  s_46b00d3d545d02::t_623c54b1cafe19 96-139,144-182
+apps/web/src/features/subscription/daviplata-challenge.test.ts
+  s_46b00d3d545d02::t_51987056359ceb 1,14-16,20,127,129,167
+  s_46b00d3d545d02::t_623c54b1cafe19 18-19,21-22,51-65,68-80,83-96,99-119,122-126,128,130-154,158-166,168-177,182-196
+  s_46b00d3d545d02::t_95b7eafaf2b0e2 50,67,82,98,121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "44d1c3cccecb1732a872e4443e2efa8d8a0767c3",
+  "prompts": {},
+  "sessions": {
+    "s_46b00d3d545d02": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a102f4-5b8e-7348-ac66-bb31bc1e2f9e",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

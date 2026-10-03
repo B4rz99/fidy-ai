@@ -1,0 +1,21 @@
+docs/research/effect-4-stable-migration.md
+  s_8e3ccc4039a137::t_6b7e7cbca62bb3 3,9-39,44,88-89,133,168-240,254-263
+docs/research/effect-4-stable-candidate.patch
+  s_8e3ccc4039a137::t_c4fdbc0e67c288 1-597
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e5635f5f6a528f4154ee433e4e583828ed2d56f3",
+  "prompts": {},
+  "sessions": {
+    "s_8e3ccc4039a137": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10233-8d17-76b0-b672-dd62d4a0b125",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

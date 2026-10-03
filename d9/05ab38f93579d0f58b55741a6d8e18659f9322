@@ -1,0 +1,48 @@
+ARCHITECTURE.md
+  s_bbf99ab292937e::t_07efdfd9939b51 85-99
+  s_bbf99ab292937e::t_633bdd92629ffe 84
+SECURITY_STANDARDS.md
+  s_bbf99ab292937e::t_bec20126965329 166-196
+docs/research/hosted-mcp-spike/oauth.md
+  s_bbf99ab292937e::t_891eed33354cbd 1-8,11-19,150,158
+  s_bbf99ab292937e::t_85248fecb6573e 9-10,20-149,151-157
+docs/research/hosted-mcp-spike/server.test.md
+  s_bbf99ab292937e::t_ddbc302138e111 1-11,34-42
+  s_bbf99ab292937e::t_85248fecb6573e 12-33
+docs/research/hosted-mcp-spike/evidence-stateless.json
+  s_bbf99ab292937e::t_85248fecb6573e 1-64
+apps/server/ARCHITECTURE.md
+  s_bbf99ab292937e::t_c5f4469065ab24 370-387
+docs/adr/0033-hosted-mcp-and-oauth-agent-grants.md
+  s_bbf99ab292937e::t_ab219eb547bfc2 1-215
+docs/research/hosted-mcp-spike/evidence-legacy.json
+  s_bbf99ab292937e::t_85248fecb6573e 1-55
+docs/research/hosted-mcp-spike/package.json
+  s_bbf99ab292937e::t_559d7957e99f5e 1-12
+docs/research/hosted-mcp-interoperability-977.md
+  s_bbf99ab292937e::t_85248fecb6573e 21-28,77-90,102,135,152
+  s_bbf99ab292937e::t_6a4feef81e2885 1-20,29-76,91-101,103-134,136-151,153-209
+GLOSSARY.md
+  s_bbf99ab292937e::t_5626ac9b4dc28c 231-251
+docs/research/hosted-mcp-spike/server.md
+  s_bbf99ab292937e::t_ddbc302138e111 1-11,24-30,36-38
+  s_bbf99ab292937e::t_85248fecb6573e 12-23,31-35
+apps/web/ARCHITECTURE.md
+  s_bbf99ab292937e::t_e13bc9981e8a79 59-74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d905ab38f93579d0f58b55741a6d8e18659f9322",
+  "prompts": {},
+  "sessions": {
+    "s_bbf99ab292937e": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10233-4f79-71b7-ba5d-33b67465abb8",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

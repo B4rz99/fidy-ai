@@ -1,4 +1,5 @@
-import { Data, Effect, Encoding, Option, Redacted, Schema } from "effect";
+import { Data, Effect, Option, Redacted, Schema } from "effect";
+import { Hex } from "effect/encoding";
 import {
   BillingEmail,
   EnrollmentDecisions,
@@ -39,7 +40,7 @@ const makePaymentRequestId = (): ReturnType<typeof PaymentRequestId.make> => {
     ((bytes[uuidVersionByteIndex] ?? 0) & uuidVersionMask) | uuidVersionBits;
   bytes[uuidVariantByteIndex] =
     ((bytes[uuidVariantByteIndex] ?? 0) & uuidVariantMask) | uuidVariantBits;
-  const hex = Encoding.encodeHex(bytes);
+  const hex = Hex.encode(bytes);
   return PaymentRequestId.make(
     `${hex.slice(0, firstUuidSectionEnd)}-${hex.slice(firstUuidSectionEnd, secondUuidSectionEnd)}-${hex.slice(secondUuidSectionEnd, thirdUuidSectionEnd)}-${hex.slice(thirdUuidSectionEnd, fourthUuidSectionEnd)}-${hex.slice(fourthUuidSectionEnd)}`
   );

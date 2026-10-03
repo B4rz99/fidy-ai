@@ -1,7 +1,7 @@
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import { Data, Effect, Layer, Option } from "effect";
-import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
-import type * as HttpClientError from "effect/unstable/http/HttpClientError";
+import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/http";
+import type * as HttpClientError from "effect/http/HttpClientError";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createWebRouter } from "@/app/routes";

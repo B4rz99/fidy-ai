@@ -1,5 +1,8 @@
 # Coordinated stable Effect migration baseline (#978)
 
+This records preparation, not the final applied source. See [the integration report](effect-4-stable-integration.md)
+for subsequent implementation, cleanup and verification.
+
 ## Decision and explicit admission exception
 
 Recorded 2026-10-03 against Fidy `00f50e621c353d01d30781d2a00c77314394ace2`,
@@ -167,7 +170,7 @@ frozen install, ownership and browser publication remain independent required ga
 
 ## Admitted candidate qualification and replay
 
-The generated [`effect-4-stable-candidate.patch`](effect-4-stable-candidate.patch) freezes the
+The generated [`effect-4-stable-candidate.patch`](https://github.com/B4rz99/fidy-ai/blob/e5635f5f6a528f4154ee433e4e583828ed2d56f3/docs/research/effect-4-stable-candidate.patch) freezes the
 four manifest changes, complete lockfile delta, and rebased beta.80 patch against preparation
 commit `2a3b0e7ce267e008f2d2ab30ed6c6a357c98029b`. It is evidence and an integration input,
 not an applied runtime upgrade in this preparation branch. Apply it only in the shared migration
@@ -193,8 +196,9 @@ Provider inventory does not authorize using additional providers.
 Replay in an isolated checkout at that preparation revision (or its unchanged-manifest descendants):
 
 ```sh
-git apply --check docs/research/effect-4-stable-candidate.patch
-git apply docs/research/effect-4-stable-candidate.patch
+git show e5635f5f6a528f4154ee433e4e583828ed2d56f3:docs/research/effect-4-stable-candidate.patch > /tmp/effect-4-stable-candidate.patch
+git apply --check /tmp/effect-4-stable-candidate.patch
+git apply /tmp/effect-4-stable-candidate.patch
 bun install --frozen-lockfile --minimum-release-age=0 --ignore-scripts
 bun run postinstall
 bun run check:effect-family

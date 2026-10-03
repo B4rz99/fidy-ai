@@ -6,7 +6,7 @@ import {
   HttpClientError,
   HttpClientRequest,
   HttpClientResponse,
-} from "effect/unstable/http";
+} from "effect/http";
 
 /** Browser API boundary whose transport budget follows the sensitivity and response shape it owns. */
 export type BrowserHttpBoundary = "canonical" | "enrollment" | "web-auth" | "hosted-turn";

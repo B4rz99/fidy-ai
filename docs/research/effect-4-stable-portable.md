@@ -1,5 +1,8 @@
 # Portable stable Effect migration (#979)
 
+This records the intermediate portable batch. See [the integration report](effect-4-stable-integration.md)
+for subsequent cleanup, final gates and review status.
+
 ## Scope and integration state
 
 Implemented against preparation tip `e5635f5f6a528f4154ee433e4e583828ed2d56f3`, on the
@@ -7,7 +10,7 @@ current task branch `978`, for publication to `integration/effect-4-stable`. The
 scope is #979 and the live body/comments of parent #33. This batch adds no MCP/OAuth authority,
 product feature, Production deployment, onboarding or launch enablement.
 
-The admitted [candidate snapshot](effect-4-stable-candidate.patch) is now **applied**: all
+The admitted [candidate snapshot](https://github.com/B4rz99/fidy-ai/blob/e5635f5f6a528f4154ee433e4e583828ed2d56f3/docs/research/effect-4-stable-candidate.patch) is now **applied**: all
 11 direct pins and eight locked coordinated packages use exactly 4.0.0, with Alchemy beta.80
 and Distilled rc.13. Do not apply that preparation snapshot again to this revision. Its lock
 SHA-256 remains `21e35b52db3930feea44ee9e4f921a81e88a28153a23042faecdab711ce199e1`.

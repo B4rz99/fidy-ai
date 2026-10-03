@@ -1,3 +1,4 @@
+import { PaymentEnrollmentId } from "@fidy/server/client";
 import type { APIRequestContext, Page, Route } from "@playwright/test";
 import { DateTime, Effect, Schema } from "effect";
 import type { Cause } from "effect";
@@ -12,6 +13,7 @@ import {
 const { expect, test } = playwright;
 
 const api = "https://127.0.0.1:4174";
+const appOrigin = "https://127.0.0.1:4173";
 const ok = 200;
 const created = 201;
 const forbidden = 403;
@@ -646,9 +648,21 @@ const submitFirstDaviplata = Effect.fnUntraced(function* (page: Page) {
   yield* fromPlaywright(page.getByRole("button", { name: "Confirmar código" }).click());
   const submitted = yield* fromPlaywright(submission);
   expect(submitted.status()).toBe(ok);
-  expect(yield* fromPlaywright(submitted.json())).toMatchObject({
-    status: "payment-pending",
-    billingAttempt: { status: "pending" },
+  const { enrollmentId } = yield* Schema.decodeUnknownEffect(
+    Schema.fromJsonString(Schema.Struct({ enrollmentId: PaymentEnrollmentId }))
+  )(submitted.request().postData());
+  // Navigation can release the browser response body; this authenticated read owns its response.
+  const enrollment = yield* fromPlaywright(
+    page.request.get(`${api}/web/subscription/payment-enrollments/${enrollmentId}`, {
+      headers: { origin: appOrigin },
+    })
+  );
+  expect(enrollment.status()).toBe(ok);
+  expect(yield* fromPlaywright(enrollment.json())).toMatchObject({
+    status: "available",
+    enrollmentId,
+    method: "daviplata",
+    priceId: "22700000-0000-4000-8000-000000000002",
   });
 });
 
@@ -665,13 +679,21 @@ test("authorizes DaviPlata directly in the built browser and grants paid Pro onl
       yield* fromPlaywright(installDaviplataProviderRoutes(page, providerCalls));
       yield* submitFirstDaviplata(page);
       const beforeCollection = yield* fromPlaywright(
-        page.request.get(`${api}/subscription/status`, {
-          headers: { origin: "https://127.0.0.1:4173" },
-        })
+        page.request.get(`${api}/subscription/status`, { headers: { origin: appOrigin } })
       );
       expect(beforeCollection.status()).toBe(ok);
       expect(yield* fromPlaywright(beforeCollection.json())).toMatchObject({
-        data: { accessTier: "free", paidSubscription: null },
+        data: {
+          accessTier: "free",
+          paidSubscription: null,
+          recentAttempts: [
+            {
+              status: "pending",
+              billingPeriod: "monthly",
+              priceId: "22700000-0000-4000-8000-000000000002",
+            },
+          ],
+        },
       });
       expect(
         (yield* fromPlaywright(request.post("http://127.0.0.1:4175/billing/collect"))).status()

@@ -49,6 +49,24 @@ await test("the registered catalog generation composition can use owner runtime 
   );
 });
 
+await test("enrollment acceptance earns only named test-composition authority", () => {
+  const enrollment = "cloudflare/subscription/payment-enrollment.test.ts";
+  const runtime = "cloudflare/core-http/runtime.ts";
+  assert.deepEqual(inspect(enrollment, runtime), []);
+  assert.equal(
+    inspect("cloudflare/subscription/ordinary.test.ts", runtime).some(
+      (violation) => violation.name === "runtime-outside-composition"
+    ),
+    true
+  );
+  assert.equal(
+    inspect("cloudflare/core-worker.ts", enrollment).some(
+      (violation) => violation.name === "production-imports-test-code"
+    ),
+    true
+  );
+});
+
 await test("a private runtime filename does not make its importer a composition root", () => {
   assert.equal(
     inspect("cloudflare/source/internal/runtime.ts", "cloudflare/target/runtime.ts").some(

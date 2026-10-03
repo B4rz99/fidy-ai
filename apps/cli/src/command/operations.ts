@@ -44,7 +44,6 @@ const showStatus = Effect.fn(function* (dependencies: CommandDependencies) {
     return yield* dependencies.emit({
       _tag: "LocalStatus",
       availability: "absent",
-      grant: Option.none(),
     });
   }
   const availability =
@@ -54,7 +53,7 @@ const showStatus = Effect.fn(function* (dependencies: CommandDependencies) {
   yield* dependencies.emit({
     _tag: "LocalStatus",
     availability,
-    grant: Option.map(local, (credential) => credential.grant),
+    grant: local.value.grant,
   });
 });
 

@@ -1,6 +1,7 @@
 import { Effect, Exit, Option, Redacted } from "effect";
 import { bunSecrets, supportedBunRevision } from "../src/credential/runtime";
 import { CliFailure } from "../src/credential/contract";
+import { scopedProcess } from "./process.test-fixture";
 
 const probe = Redacted.make("fidy-native-cross-process-probe");
 const failed = (): CliFailure => new CliFailure({ reason: "StorageUnavailable" });
@@ -10,12 +11,16 @@ const readProbe = Effect.fn(function* (name: string) {
     return yield* failed();
   }
 });
-const child = (command: ReadonlyArray<string>): Effect.Effect<void, CliFailure> =>
-  Effect.tryPromise({
-    try: () =>
-      Bun.spawn([...command], { stdin: "ignore", stdout: "ignore", stderr: "ignore" }).exited,
-    catch: failed,
-  }).pipe(Effect.flatMap((code) => (code === 0 ? Effect.void : Effect.fail(failed()))));
+const child = Effect.fn(
+  function* (command: ReadonlyArray<string>) {
+    const owned = yield* scopedProcess(command);
+    if ((yield* owned.exited) !== 0) {
+      return yield* failed();
+    }
+  },
+  Effect.scoped,
+  Effect.mapError(failed)
+);
 const program = Effect.gen(function* () {
   if (Bun.revision !== supportedBunRevision) return yield* failed();
   const name = Bun.argv[3];

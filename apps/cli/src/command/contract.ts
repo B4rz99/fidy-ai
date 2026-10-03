@@ -10,9 +10,14 @@ export const PublicOutput = Schema.Union([
   }),
   Schema.TaggedStruct("PollingDelayed", { retryAfterSeconds: Schema.Int }),
   Schema.TaggedStruct("LoggedIn", { grant: SavedGrant }),
+  Schema.TaggedStruct("LocalStatus", { availability: Schema.Literal("absent") }),
   Schema.TaggedStruct("LocalStatus", {
-    availability: Schema.Literals(["absent", "available", "expired"]),
-    grant: Schema.OptionFromNullOr(SavedGrant),
+    availability: Schema.Literal("available"),
+    grant: SavedGrant,
+  }),
+  Schema.TaggedStruct("LocalStatus", {
+    availability: Schema.Literal("expired"),
+    grant: SavedGrant,
   }),
   Schema.TaggedStruct("LoggedOut", {}),
 ]);

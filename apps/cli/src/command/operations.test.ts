@@ -1,8 +1,8 @@
 import { IssuedPAT } from "@fidy/server/client";
 import { expect, it } from "@effect/vitest";
-import { Effect, Option, Schema } from "effect";
-import { type Credential, apiOrigin } from "../credential/contract";
-import { type CommandDependencies, type PublicOutput } from "./contract";
+import { Effect, Exit, Option, Schema } from "effect";
+import { type Credential, SavedGrant, apiOrigin } from "../credential/contract";
+import { type CommandDependencies, PublicOutput } from "./contract";
 import { formatFailure, formatOutput, runCommand } from "./operations";
 
 const secretLength = 43;
@@ -63,6 +63,23 @@ it.effect(
       const logout = yield* formatOutput({ _tag: "LoggedOut" }, false);
       expect(logout).toContain("NO fue revocado");
     })
+);
+
+it.effect("rejects impossible local status representations at the published output seam", () =>
+  Effect.gen(function* () {
+    const grant = yield* Schema.encodeEffect(Schema.toCodecJson(SavedGrant))(saved.grant);
+    const invalid = [
+      { _tag: "LocalStatus", availability: "absent", grant },
+      { _tag: "LocalStatus", availability: "available", grant: null },
+      { _tag: "LocalStatus", availability: "expired", grant: null },
+    ];
+    for (const input of invalid) {
+      const result = yield* Schema.decodeEffect(Schema.toCodecJson(PublicOutput), {
+        onExcessProperty: "error",
+      })(input).pipe(Effect.exit);
+      expect(Exit.isFailure(result)).toBe(true);
+    }
+  })
 );
 
 it("gives non-redisclosure recovery for an ambiguous claim without echoing arbitrary causes", () => {

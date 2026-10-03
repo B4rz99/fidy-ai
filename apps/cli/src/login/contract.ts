@@ -1,5 +1,6 @@
 import {
   type ClaimedPATPairing,
+  type PendingPATPairingClaim,
   StartPATPairingPayload,
   type StartedPATPairing,
 } from "@fidy/server/client";
@@ -25,7 +26,7 @@ export type PairingClient = Readonly<{
     pairing: StartedPATPairing
   ) => Effect.Effect<
     | typeof ClaimedPATPairing.Type
-    | Readonly<{ status: "pending_approval"; pollingIntervalSeconds: number }>,
+    | Readonly<Pick<PendingPATPairingClaim, "status" | "pollingIntervalSeconds">>,
     CliFailure | PollingDelayed
   >;
 }>;

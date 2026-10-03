@@ -16,7 +16,7 @@
       "@fidy/server/client": ["../server/src/client.ts"]
     }
   },
-  "references": [{ "path": "../server" }],
+  "references": [{ "path": "../server" }, { "path": "../cli" }],
   "include": [
     "cloudflare/**/*.ts",
     "scripts/**/*.ts",

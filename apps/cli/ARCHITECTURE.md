@@ -104,7 +104,9 @@ revocation. PAT callers still have no PAT-management authority.
 Focused tests exercise public login orchestration with TestClock, native/file store construction,
 derived-client transport, and command output. Real-filesystem adapter tests cover metadata mismatch,
 origin substitution and partial persistence. Cancellation/overflow tests assert owned reader cleanup,
-not only fiber termination. `bun run --cwd apps/cli test:native` checks actual cross-process native
+not only fiber termination. Test-only process ownership in `test/process.test-fixture.ts` also
+settles each real child and closes its reader on interruption; native conformance and browser
+acceptance share this seam rather than starting detached processes. `bun run --cwd apps/cli test:native` checks actual cross-process native
 persistence. Linux browser CI runs inside an unlocked DBus/Secret Service session; separate macOS
 and Windows native jobs are required whenever unit verification is selected. Windows additionally
 reads the native credential's persistence enum (never its blob) and requires local-machine storage.

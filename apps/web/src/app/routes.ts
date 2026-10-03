@@ -1,6 +1,5 @@
 import { Option } from "effect";
-import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
-import { type JSX, Suspense, createElement, lazy, useState } from "react";
+import { type JSX, Suspense, createElement, lazy } from "react";
 import {
   type RouterHistory,
   createRootRouteWithContext,
@@ -33,25 +32,16 @@ type WebRouterOptions = WebRouterContext &
 
 const DashboardRouteContent = lazy(() =>
   import("@/features/dashboard/feature").then((module) => ({
-    default: module.DashboardRouteContent,
+    default: module.DashboardFeature,
   }))
 );
 const DashboardRoute = (): JSX.Element => {
   const router = useRouter();
-  const [dashboard] = useState(() =>
-    router.options.context.apiClient.query("dashboard", "getDashboardView", {
-      reactivityKeys: ["dashboard"],
-    })
-  );
-  const result = useAtomValue(dashboard);
-  const refresh = useAtomRefresh(dashboard);
   return createElement(
     Suspense,
     { fallback: createElement("p", { "aria-live": "polite" }, "Cargando tablero…") },
     createElement(DashboardRouteContent, {
       apiClient: router.options.context.apiClient,
-      onRefresh: refresh,
-      result,
     })
   );
 };

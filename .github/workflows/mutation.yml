@@ -27,6 +27,6 @@ jobs:
       # compiler API, isolated under tools/mutation from Effect tsgo.
       - name: Install mutation runner
         working-directory: tools/mutation
-        run: bun install --frozen-lockfile
+        run: bash scripts/install-workspace.sh
       - name: Mutation score
         run: bun run test:mutation

@@ -91,7 +91,12 @@ describe("Dashboard route resources", () => {
   it("distinguishes catalog failure from a stale Dashboard refresh", () => {
     setCatalogResult(AsyncResult.failure(Cause.fail("catalog")));
     const { unmount } = render(
-      <DashboardRouteContent apiClient={apiClient} onRefresh={vi.fn()} result={successResult} />
+      <DashboardRouteContent
+        apiClient={apiClient}
+        onRefresh={vi.fn()}
+        result={successResult}
+        phase="reading"
+      />
     );
     expect(Option.getOrThrow(currentError()).title).toBe("No pudimos cargar el catálogo");
     unmount();
@@ -101,7 +106,12 @@ describe("Dashboard route resources", () => {
       previousSuccess: Option.some(successResult),
     });
     render(
-      <DashboardRouteContent apiClient={apiClient} onRefresh={vi.fn()} result={staleResult} />
+      <DashboardRouteContent
+        apiClient={apiClient}
+        onRefresh={vi.fn()}
+        result={staleResult}
+        phase="reading"
+      />
     );
     expect(Option.getOrThrow(currentError()).title).toContain("se guardó");
   });
@@ -113,7 +123,12 @@ describe("Dashboard route edits", () => {
       const deferredEdit = Promise.withResolvers<Exit.Exit<unknown, unknown>>();
       atomHarness.applyEdit.mockReturnValueOnce(deferredEdit.promise);
       render(
-        <DashboardRouteContent apiClient={apiClient} onRefresh={vi.fn()} result={successResult} />
+        <DashboardRouteContent
+          apiClient={apiClient}
+          onRefresh={vi.fn()}
+          result={successResult}
+          phase="reading"
+        />
       );
 
       triggerGesture({ kind: "remove-widget", widgetId });
@@ -128,7 +143,12 @@ describe("Dashboard route edits", () => {
   effectIt.effect("reports schema rejection, canonical failure, and promise rejection safely", () =>
     Effect.gen(function* () {
       render(
-        <DashboardRouteContent apiClient={apiClient} onRefresh={vi.fn()} result={successResult} />
+        <DashboardRouteContent
+          apiClient={apiClient}
+          onRefresh={vi.fn()}
+          result={successResult}
+          phase="reading"
+        />
       );
       triggerGesture({
         kind: "resize-region",

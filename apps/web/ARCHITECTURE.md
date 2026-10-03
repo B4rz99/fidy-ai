@@ -42,6 +42,16 @@ The web submits through the server-owned payment boundary and observes only brow
 `BillingAttempt` state through a canonical query;
 provider references are not part of web application state.
 
+### Dashboard first use
+
+The authenticated Dashboard's Effect Atom owner explicitly reads the canonical view, initializes
+only on the owner-declared `DashboardUninitialized` failure, then reads again. It exposes workflow
+phase feedback without copying server state into React. Initialization and second-read failures are
+presented truthfully; unavailability never triggers creation, and a load makes at most one
+initialization attempt. Concurrent tabs rely on canonical initialization idempotence. Successful
+edits invalidate the same Dashboard resource; queries themselves never create or repair domain state.
+See [ADR 0032](../../docs/adr/0032-explicit-dashboard-creation-and-canonical-queries.md).
+
 ## 3. Browser authentication
 
 Browser login begins at `/auth/pair`. The browser retains the private verifier while WhatsApp

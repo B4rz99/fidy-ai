@@ -25,6 +25,7 @@ const ownedPaths: ReadonlyArray<{
   readonly jobs: ReadonlyArray<ConditionalJob>;
 }> = [
   { prefix: "apps/server/", jobs: runtimeJobs },
+  { prefix: "apps/cli/", jobs: runtimeJobs },
   { prefix: "infra/cloudflare/", jobs: runtimeJobs },
   { prefix: "apps/web/", jobs: ["builds", "unit", "cloudflare-infra", "browser", "security-sast"] },
 ];

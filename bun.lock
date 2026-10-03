@@ -20,6 +20,22 @@
         "typescript": "7.0.2",
       },
     },
+    "apps/cli": {
+      "name": "@fidy/cli",
+      "version": "0.0.0",
+      "bin": {
+        "fidy": "src/main.ts",
+      },
+      "dependencies": {
+        "@effect/platform-bun": "4.0.0",
+        "@fidy/server": "workspace:0.0.0",
+        "effect": "4.0.0",
+      },
+      "devDependencies": {
+        "@effect/vitest": "4.0.0",
+        "vitest": "5.0.2",
+      },
+    },
     "apps/server": {
       "name": "@fidy/server",
       "version": "0.0.0",
@@ -390,6 +406,8 @@
     "@exodus/bytes": ["@exodus/bytes@1.15.1", "", { "peerDependencies": { "@noble/hashes": "^1.8.0 || ^2.0.0" }, "optionalPeers": ["@noble/hashes"] }, "sha512-S6mL0yNB/Abt9Ei4tq8gDhcczc4S3+vQ4ra7vxnAf+YHC02srtqxKKZghx2Dq6p0e66THKwR6r8N6P95wEty7Q=="],
 
     "@fidy/cloudflare-infra": ["@fidy/cloudflare-infra@workspace:infra/cloudflare"],
+
+    "@fidy/cli": ["@fidy/cli@workspace:apps/cli"],
 
     "@fidy/server": ["@fidy/server@workspace:apps/server"],
 

@@ -1,4 +1,4 @@
-import { Clock, Effect, Option } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import {
   UserTransactionCoordinator,
@@ -23,6 +23,30 @@ const key = Bun.env.PLAYWRIGHT_TLS_KEY;
 if (certificate === undefined || key === undefined) {
   throw new Error("Browser acceptance requires TLS certificate and key");
 }
+
+const acceptanceMode = Schema.decodeUnknownSync(Schema.Literals(["shared", "cli"]))(
+  Bun.env.CLI_ACCEPTANCE_MODE ?? "shared"
+);
+const isolatedPublicPort = 4184;
+const sharedPublicPort = 4174;
+const isolatedOperatorPort = 4185;
+const sharedOperatorPort = 4175;
+const publicPort = acceptanceMode === "cli" ? isolatedPublicPort : sharedPublicPort;
+const operatorPort = acceptanceMode === "cli" ? isolatedOperatorPort : sharedOperatorPort;
+const browserOrigin = browserOrigins.acceptance;
+const isolatedBrowserOrigin = "https://127.0.0.1:4183";
+// Bridge only the isolated fixture's port identity; production origin policy stays unchanged.
+const bridgeBrowserOrigin = (response: Response): Response => {
+  if (
+    acceptanceMode !== "cli" ||
+    response.headers.get("access-control-allow-origin") !== browserOrigin
+  ) {
+    return response;
+  }
+  const headers = new Headers(response.headers);
+  headers.set("access-control-allow-origin", isolatedBrowserOrigin);
+  return new Response(response.body, { status: response.status, headers });
+};
 
 const accessIssuer = "https://acceptance.cloudflareaccess.com";
 const accessAudience = "browser-acceptance-support";
@@ -165,9 +189,24 @@ const operatorCode = (request: Request, path: string): Option.Option<string> =>
   operatorRoute(request, path, "POST")
     ? Option.fromNullishOr(new URL(request.url).searchParams.get("code"))
     : Option.none();
+const operatorSetup = (request: Request): Option.Option<Promise<Response>> => {
+  // Loopback-only test setup for a fresh journey; never part of public ingress.
+  if (operatorRoute(request, "/dashboard/reset", "POST")) {
+    return Option.some(
+      db
+        .prepare("DELETE FROM dashboard_documents WHERE user_id = ?")
+        .bind(firstCardUserId)
+        .run()
+        .then(() => new Response(null, { status: noContent }))
+    );
+  }
+  return operatorRoute(request, "/billing/collect", "POST")
+    ? Option.some(collectBilling())
+    : Option.none();
+};
 const operator = Bun.serve({
   hostname: "127.0.0.1",
-  port: 4175,
+  port: operatorPort,
   fetch: (request) => {
     if (request.headers.has("origin")) return new Response(null, { status: 403 });
     if (operatorRoute(request, "/assertion", "GET")) {
@@ -178,9 +217,8 @@ const operator = Bun.serve({
     if (operatorRoute(request, "/email/replacement/deliver", "POST")) {
       return deliverReplacementProof();
     }
-    if (operatorRoute(request, "/billing/collect", "POST")) {
-      return collectBilling();
-    }
+    const setup = operatorSetup(request);
+    if (Option.isSome(setup)) return setup.value;
     const loginCode = operatorCode(request, "/email/login/deliver");
     if (Option.isSome(loginCode)) return deliverEmailLoginProof(loginCode.value);
     const approvalCode = operatorCode(request, "/approve");
@@ -203,51 +241,59 @@ const admissionKeyLength = 32;
 const digestHexLength = 64;
 const server = Bun.serve({
   hostname: "127.0.0.1",
-  port: 4174,
+  port: publicPort,
   tls: { cert: Bun.file(certificate), key: Bun.file(key) },
   fetch: (request) => {
     // Cloudflare supplies this header at the edge; never accept a client-provided value.
     const ingress = new Request(request);
     ingress.headers.set("cf-connecting-ip", "127.0.0.1");
-    return worker.fetch(ingress, {
-      RELEASE_GIT_SHA: "browser-acceptance",
-      BROWSER_ORIGIN: browserOrigins.acceptance,
-      LOCAL_CANONICAL_READ_BEARER: "",
-      PAT_ADMISSION_KEY: "a".repeat(admissionKeyLength),
-      CORE: {
-        fetch: (forwarded) =>
-          core.fetch(new Request(forwarded), {
-            DB: db,
-            AI: { run: () => Promise.reject(new Error("unused")) },
-            CONTRACT_DIGEST: "a".repeat(digestHexLength),
-            RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
-            HOSTED_AI_MODEL: approvedWorkersAiModel,
-            BROWSER_ORIGIN: browserOrigins.acceptance,
-            WOMPI_ENVIRONMENT: "sandbox",
-            WOMPI_PUBLIC_KEY: providerPublicKey,
-            WOMPI_PRIVATE_KEY: providerPrivateKey,
-            WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
-            USER_TRANSACTION_COORDINATOR: {
-              getByName: (name): Pick<Fetcher, "fetch"> => ({
-                fetch: (command) =>
-                  new UserTransactionCoordinator(
-                    { id: { name }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
-                    {
-                      DB: db,
-                      AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
-                      HOSTED_AI_MODEL: approvedWorkersAiModel,
-                    }
-                  ).fetch(new Request(command)),
-              }),
-            },
-            KAPSO_API_KEY: "",
-            KAPSO_WEBHOOK_SECRET: "",
-            CLOUDFLARE_ACCESS_ISSUER: accessIssuer,
-            CLOUDFLARE_ACCESS_AUDIENCE: accessAudience,
-            WHATSAPP_BUSINESS_PORTFOLIO_ID: "",
-          }),
-      },
-    });
+    if (acceptanceMode === "cli" && ingress.headers.get("origin") === isolatedBrowserOrigin) {
+      ingress.headers.set("origin", browserOrigin);
+    }
+    return worker
+      .fetch(ingress, {
+        RELEASE_GIT_SHA: "browser-acceptance",
+        BROWSER_ORIGIN: browserOrigin,
+        LOCAL_CANONICAL_READ_BEARER: "",
+        PAT_ADMISSION_KEY: "a".repeat(admissionKeyLength),
+        CORE: {
+          fetch: (forwarded) =>
+            core.fetch(new Request(forwarded), {
+              DB: db,
+              AI: { run: () => Promise.reject(new Error("unused")) },
+              CONTRACT_DIGEST: "a".repeat(digestHexLength),
+              RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
+              HOSTED_AI_MODEL: approvedWorkersAiModel,
+              BROWSER_ORIGIN: browserOrigin,
+              WOMPI_ENVIRONMENT: "sandbox",
+              WOMPI_PUBLIC_KEY: providerPublicKey,
+              WOMPI_PRIVATE_KEY: providerPrivateKey,
+              WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+              USER_TRANSACTION_COORDINATOR: {
+                getByName: (name): Pick<Fetcher, "fetch"> => ({
+                  fetch: (command) =>
+                    new UserTransactionCoordinator(
+                      {
+                        id: { name },
+                        storage: { setAlarm: (): Promise<void> => Promise.resolve() },
+                      },
+                      {
+                        DB: db,
+                        AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+                        HOSTED_AI_MODEL: approvedWorkersAiModel,
+                      }
+                    ).fetch(new Request(command)),
+                }),
+              },
+              KAPSO_API_KEY: "",
+              KAPSO_WEBHOOK_SECRET: "",
+              CLOUDFLARE_ACCESS_ISSUER: accessIssuer,
+              CLOUDFLARE_ACCESS_AUDIENCE: accessAudience,
+              WHATSAPP_BUSINESS_PORTFOLIO_ID: "",
+            }),
+        },
+      })
+      .then(bridgeBrowserOrigin);
   },
 });
 

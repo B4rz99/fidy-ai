@@ -7,6 +7,9 @@ separate responsibilities:
 
 - [`@fidy/server`](apps/server/ARCHITECTURE.md) owns the domain model, canonical operations and
   schemas, provider-neutral contracts, and Cloudflare Worker adapters.
+- [`@fidy/cli`](apps/cli/ARCHITECTURE.md) owns the Bun executable, local credential storage,
+  PATPairing presentation and server-derived direct client. Its native store is the deliberate
+  recoverable-bearer exception; server persistence remains digest-only.
 - [`@fidy/web`](apps/web/ARCHITECTURE.md) owns the React/Vite browser application and static artifact.
 - [`@fidy/cloudflare-infra`](infra/cloudflare/) owns the Alchemy stack, resource wiring, and edge
   policy, but no domain model or Worker implementation.
@@ -62,7 +65,7 @@ The server declares canonical operations once for HTTP, typed clients, MCP, and 
 The web derives its typed client from the browser-safe server declaration, without importing server
 implementations or copying the contract. The server generates OpenAPI and operation-policy artifacts
 as review evidence, not competing declarations. The project-reference build orders server before
-web; the root gate checks generated artifact freshness, not compatibility with older revisions.
+CLI and web; the root gate checks generated artifact freshness, not compatibility with older revisions.
 See [Server contract artifacts](docs/server-contract-artifacts.md).
 
 Three transports sit outside the stable-User canonical operation surface: proof-bearing credential

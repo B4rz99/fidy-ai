@@ -1342,6 +1342,7 @@ const insightResponse = (
 };
 
 const DashboardOperation = Schema.Literals([
+  "dashboard.initializeDashboard",
   "dashboard.getDashboard",
   "dashboard.getDashboardView",
   "dashboard.listDashboardCatalog",
@@ -1359,6 +1360,14 @@ const dashboardResponse = (
 ): Option.Option<Effect.Effect<Response>> =>
   Option.map(Schema.decodeUnknownOption(DashboardOperation)(input.operation.id), (operation) => {
     const request = { db: input.environment.DB, subject: input.subject, request: input.request };
+    if (operation === "dashboard.getDashboard" || operation === "dashboard.getDashboardView") {
+      if (input.request.url.includes("?")) return browseDashboard({ ...request, operation });
+      return sendToCoordinator({
+        environment: input.environment,
+        subject: input.subject,
+        work: ownerCall(CanonicalOperationId.make(operation), {}),
+      }).pipe(Effect.orElseSucceed(unavailable));
+    }
     return operation === "dashboard.listDashboardCatalog"
       ? browseDashboard({ ...request, operation })
       : browseDashboard({

@@ -202,7 +202,7 @@
           "type": "pat-scoped"
         },
         "agentConfirmation": "not-required",
-        "kind": "mutation",
+        "kind": "query",
         "requiredTier": "free"
       }
     },
@@ -212,6 +212,21 @@
         "access": {
           "scope": {
             "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredTier": "free"
+      }
+    },
+    {
+      "id": "dashboard.initializeDashboard",
+      "policy": {
+        "access": {
+          "scope": {
+            "capability": "dashboard",
             "evaluation": "operation"
           },
           "type": "pat-scoped"

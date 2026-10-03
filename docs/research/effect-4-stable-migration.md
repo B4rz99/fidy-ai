@@ -1,40 +1,47 @@
 # Coordinated stable Effect migration baseline (#978)
 
-## Decision and blocking admission window
+## Decision and explicit admission exception
 
 Recorded 2026-10-03 against Fidy `00f50e621c353d01d30781d2a00c77314394ace2`,
 Bun 1.4.1, Node 26.5.0, macOS arm64. Parent #33's live body supersedes its old local-stdio
 planning comment. This preparation introduces no MCP/OAuth authority or product behavior.
 
-**There is no eligible coherent stable v4 graph today.** The candidate is exactly **4.0.0** for
-all eight installed coordinated packages below, not stable v3/0.x alternatives. npm's `latest`
-tag is 4.0.0 for each. Root `bunfig.toml` requires 604,800 seconds without exclusions.
-The runtime is the latest publication in this family, so its earliest joint admission is
-**2026-10-08T03:11:28.537Z**. Do not install the candidate before then, even in a migration
-worktree. Reading registry metadata and integrity-verified source tarballs is not an install:
-no candidate code or lifecycle script was executed for this assessment.
+**Selected graph: Effect 4.0.0, Alchemy 2.0.0-beta.80 and Distilled 1.0.0-rc.13.**
+All eight coordinated packages use exactly 4.0.0, not stable v3/0.x alternatives. npm's `latest`
+tag is 4.0.0 for each. The User explicitly authorized bypassing the seven-day cooldown in this
+session; the exception is recorded in [#978's admission comment](https://github.com/B4rz99/fidy-ai/issues/978#issuecomment-5970385461).
+This is a one-time admission exception for this recorded candidate, **not normal policy eligibility**.
+Root `bunfig.toml` still requires 604,800 seconds without exclusions. No age-policy checker,
+CI configuration, ownership check or browser-publication gate is weakened. A subsequent candidate
+or unrelated upgrade does not inherit this authorization. Full stable verification, trunk merge,
+deployment and launch remain separate gates.
 
-There is a second blocker: the currently pinned Alchemy 2.0.0-beta.79 and Distilled 1.0.0-rc.12
-accept stable v4 in peer ranges but their published JS still imports `effect/unstable/*`.
-Stable Effect has no compatibility exports for those paths. Keeping those pins unchanged is
-not a viable migration. Alchemy **2.0.0-beta.80**, its same-version runtime/Floci/node-utils,
-and Distilled **1.0.0-rc.13** are the pending infrastructure candidates; beta.80 declares
-`effect: ^4.0.0` and stable-family platform/SQL/testing ranges. beta.80 was published
-2026-10-02T12:20:38.000Z, so it cannot be installed before **2026-10-09T12:20:38.000Z**.
-That is a lower bound, not proof that all its changed transitives are eligible or executable.
-#980 must qualify the entire new graph, review/rebase the existing Alchemy patch and justify this
-required provider upgrade without changing deployed resource identities. No alias, maintained
-RC/stable fork, or admission bypass is an alternative.
+Without the exception, the family is admitted no earlier than **2026-10-08T03:11:28.537Z**;
+Alchemy beta.80 no earlier than **2026-10-09T12:20:38.000Z**. The earlier assessment only read
+registry metadata and integrity-verified tarballs. The executable qualification below ran later,
+in an isolated detached worktree, with explicit `--minimum-release-age=0 --ignore-scripts`;
+the only lifecycle command then run explicitly was the repository's TypeScript compiler patch.
+The normal preparation checkout remains on rc.115.
 
-**#978 remains blocked on eligible candidate selection/qualification.** These dates do not
-close the ticket automatically. Re-fetch metadata at admission: a newer eligible release or
-changed consumer graph requires renewed assessment. Preparation checks can run on the unchanged
-RC graph; only #981 promises a completely green stable revision.
+The currently pinned Alchemy beta.79 and Distilled rc.12 accept stable peers but import removed
+`effect/unstable/*` paths. Their selected replacements use stable namespaces. beta.80 declares
+`effect: ^4.0.0` and stable-family platform/SQL/testing ranges; its same-version runtime, Floci
+and node-utils and every resolved Distilled consumer are included in the frozen candidate.
+The old Alchemy patch **cannot be reused unchanged**: Bun accepts its old offsets but creates
+invalid TypeScript. The candidate snapshot includes an equivalent patch rebased onto beta.80;
+a clean frozen replay and upstream import probe pass. #980 must still prove provider behavior
+and preservation of deployed resource identities. No aliases or RC/stable implementation fork
+are introduced.
+
+**The admission and dependency-load blockers are removed for this candidate.** #978 now has an
+exact replayable selection, but the untouched application is intentionally not stable-compatible:
+#979–#981 own those API migrations and only #981 promises a completely green stable revision.
+An existing SCA finding is recorded below, not waived by the cooldown exception.
 
 ## Direct pins, locked packages and consumers
 
 All current coordinated versions are 4.0.0-rc.115. The family check reports 11 direct pins and
-8 locked packages. The pending selection for every row is 4.0.0.
+8 locked packages. The selected version for every row is 4.0.0.
 
 | Package                        | Direct owners / locked consumer                                        | Stable publication (UTC) |
 | ------------------------------ | ---------------------------------------------------------------------- | ------------------------ |
@@ -78,8 +85,8 @@ analysis and compiler compatibility must nevertheless rerun after import changes
   from `^8.21.3` to `^8.22.0`. The existing `undici@^7` override does not cover that Node chain.
   Recheck publish age, engines, peer warnings and SCA for the actual resolved versions; do not
   reuse the current transitive lock blindly. Node 26.5.0 exceeds the declared Node >=18 minimum.
-- Alchemy beta.80 introduces additional dependency families. A compatible peer manifest is
-  evidence for a candidate only, not proof that its implementation, patch or transitives work.
+- Alchemy beta.80 introduces additional dependency families. The frozen resolution and module-load
+  probes below establish installation/import compatibility, not live provider or resource parity.
 
 ## Source-backed breaking changes
 
@@ -123,7 +130,7 @@ Source references:
 
 All successful behavioral/build checks below ran with unchanged rc.115 dependencies and
 unchanged application sources. They are a focused baseline, **not a full verification claim**.
-No stable tests or runtime probe ran before admission.
+No stable tests or runtime probe ran before the explicit admission exception.
 
 | Command                                                                                                   | Result                                                                              |
 | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
@@ -158,6 +165,79 @@ and previously missed stale workspace declarations and direct/qualified/locked o
 This is a coordination check, not an age or API compatibility checker; dependency policy,
 frozen install, ownership and browser publication remain independent required gates.
 
+## Admitted candidate qualification and replay
+
+The generated [`effect-4-stable-candidate.patch`](effect-4-stable-candidate.patch) freezes the
+four manifest changes, complete lockfile delta, and rebased beta.80 patch against preparation
+commit `2a3b0e7ce267e008f2d2ab30ed6c6a357c98029b`. It is evidence and an integration input,
+not an applied runtime upgrade in this preparation branch. Apply it only in the shared migration
+sequence. The resulting `bun.lock` SHA-256 is
+`21e35b52db3930feea44ee9e4f921a81e88a28153a23042faecdab711ce199e1`.
+
+The actual delta has **38 new resolved package identities**. Registry version records and
+`dist.integrity` match each new lock entry; Bun's normal integrity verification was retained.
+All declared Node engine minima are satisfied by Node 26.5.0. This is not a cryptographic
+provenance-attestation verification claim. Source scans found no removed `effect/unstable` or
+`effect/Encoding` JS imports in the installed Alchemy/Distilled packages; no incorrect-peer
+warning appeared. The family checker confirms one exact family. Nested Atom scheduler 0.27.0
+is retained; Node resolves Undici 8.11.2 and node-shared resolves ws 8.22.0.
+
+The additional consumers are `@alchemy.run/node-utils@2.0.0-beta.80`,
+`@alchemy.run/sigil@0.1.0-alpha.1`, `@neon/functions@0.11.0`, and Distilled
+`{acme,doppler,gcp,infisical,zerossl}@1.0.0-rc.13`. All previously inventoried Distilled
+packages move to rc.13. Alchemy runtime resolves workerd and its five platform binaries to
+1.20260918.1; the other new identities are the eight coordinated packages, four beta.80
+Alchemy packages, Undici and ws. No independent TypeScript, tsgo, Vitest or React pin changes.
+Provider inventory does not authorize using additional providers.
+
+Replay in an isolated checkout at that preparation revision (or its unchanged-manifest descendants):
+
+```sh
+git apply --check docs/research/effect-4-stable-candidate.patch
+git apply docs/research/effect-4-stable-candidate.patch
+bun install --frozen-lockfile --minimum-release-age=0 --ignore-scripts
+bun run postinstall
+bun run check:effect-family
+bun -e 'await import("alchemy"); await import("alchemy/Cloudflare"); await import("@effect/sql-d1"); await import("@effect/platform-node/NodeHttpClient"); await import("@effect/platform-bun/BunRuntime"); console.log("stable upstream module imports passed")'
+```
+
+Use the explicit age flag only under the recorded exception, and omit it once the entire graph
+is normally eligible. Do not turn it into a committed install script or CI setting. Applying the
+patch intentionally makes untouched application sources red; it is not a deployable revision.
+At the original preparation commit, obtain the evidence patch from this document's follow-up
+commit before replaying. The exact patch leaves the old beta.79 patch file unused; #980 removes
+that obsolete file when adopting the beta.80 patch into the real integration manifests.
+
+| Candidate command / probe                                                                                 | Result                                                                                                       |
+| --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `git apply --check` and actual application after resetting the probe to its base                          | passed; nested patch context blank lines produce a harmless Git whitespace warning                           |
+| clean `bun install --frozen-lockfile --minimum-release-age=0 --ignore-scripts` plus `bun run postinstall` | passed; lock checksum unchanged, compiler patch applied                                                      |
+| `bun run check:effect-family`                                                                             | passed: 11 direct / 8 locked 4.0.0 packages                                                                  |
+| upstream import command above, after that clean replay                                                    | passed, including Alchemy's Cloudflare Worker provider and selected D1/Bun/Node platform modules             |
+| `bun run --cwd infra/cloudflare test -- production-preflight.test.ts`                                     | 8 passed after rebased frozen replay                                                                         |
+| `bun run typecheck`                                                                                       | fails: 750 diagnostics on unchanged application/fixture imports and API changes; this is migration work      |
+| focused Money command from the RC baseline                                                                | fails before collecting tests: removed `effect/unstable/arbitrary/Arbitrary` import; not a passing Money run |
+| `bun audit`, on both RC and selected stable locks                                                         | both fail on the same existing high `braces@3.0.3` advisory via web/shadcn/fast-glob/micromatch              |
+
+The SCA finding is [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm).
+It is pre-existing and not caused by this graph delta, but must be addressed before the final
+merge gate; this exception does not waive SCA. Full stable owner/native/browser suites,
+Linux verification, provider read/rollout behavior and provenance-attestation checks are still
+unverified. The TypeScript and Money failures are migration regressions relative to the green
+RC baseline, not pre-existing failures. No semantic contract regeneration was accepted here.
+
+Registry/source references for the selected graph:
+[Alchemy beta.80](https://unpkg.com/alchemy@2.0.0-beta.80/package.json),
+[unpatched Worker provider](https://unpkg.com/alchemy@2.0.0-beta.80/src/Cloudflare/Workers/WorkerProvider.ts)
+(read observation at 5587–5710; compiled counterpart at 4133–4240),
+[Distilled core rc.13](https://unpkg.com/@distilled.cloud/core@1.0.0-rc.13/package.json),
+[Alchemy runtime](https://unpkg.com/@alchemy.run/cloudflare-runtime@2.0.0-beta.80/package.json),
+[Alchemy node-utils](https://unpkg.com/@alchemy.run/node-utils@2.0.0-beta.80/package.json),
+[Sigil](https://unpkg.com/@alchemy.run/sigil@0.1.0-alpha.1/package.json),
+[Neon Functions](https://unpkg.com/@neon/functions@0.11.0/package.json).
+The candidate patch records every exact package identity, integrity, dependency and peer edge;
+registry packuments cited above own the publish times.
+
 ## Repeatable integration procedure and handoff
 
 The shared branch is **`integration/effect-4-stable`**, rooted at this preparation. The task
@@ -171,14 +251,16 @@ authorized here. Existing trunk-only PR CI does not validate intermediate integr
 1. **Re-establish baseline.** Use an isolated task worktree at the integration tip, install root
    and dependency-cruiser with frozen locks, record revision/OS/Bun/Node, and rerun the matrix
    above. Investigate new failures against this baseline before attributing them to migration.
-2. **Admission and coordinated resolution.** After all required candidates meet 604,800 seconds,
-   re-fetch packuments; confirm latest/age, integrity, provenance, engines and peer ranges for
-   every newly resolved dependency. Never add an exclusion or early-install flag. Update all
-   eleven direct family pins together plus node-shared and SQLite DO exact overrides. Resolve
-   Alchemy's necessary stable-compatible graph in this same integration sequence. Run normal
-   `bun install`, inspect the entire lock diff, then reproduce with a clean frozen install.
-   Reject peer warnings and any duplicate/mixed Effect family. Keep the independently versioned
-   toolchain pins unless newly demonstrated incompatibility requires an eligible upgrade.
+2. **Admission and coordinated resolution.** Replay the recorded candidate above under the
+   explicit admission exception, or use normal age-enforcing installation after every package
+   qualifies. Keep the exact snapshot rather than freshly resolving ranges under the exception.
+   Any changed candidate requires renewed admission assessment. Confirm integrity, provenance,
+   engines and peer ranges for every newly resolved dependency; retain all eleven direct family
+   pins together plus node-shared and SQLite DO exact overrides. Alchemy's required replacement
+   graph and rebased patch belong in this same integration sequence. Inspect the entire lock diff
+   and reproduce with a clean frozen install. Reject peer warnings and any duplicate/mixed Effect
+   family. Keep independently versioned toolchain pins unless demonstrated incompatibility
+   requires an admitted upgrade. Do not add reusable age exclusions or weaken CI/install policy.
 3. **#979 portable batch.** Migrate core/shell imports, Schema and canonical/browser-safe
    declarations at their owners. Run Money, changed owner, canonical catalog/policy, provider
    and contract test files with focused coverage disabled. Run typecheck regularly and lint

@@ -567,6 +567,17 @@ execution and retention evidence remains at the public or explicit platform-adap
 provider call, workflow version, telemetry purpose, institution authority or inbound routing is added;
 the existing unavailable institution Connection and sender-proof prerequisites remain closed.
 
+Receipt/screenshot work (#21) has authenticated WhatsApp image projection and pure capture policy:
+one completed movement, COP only when Currency is absent, captured submission-instant fallback,
+explicit local-date interpretation in the captured time zone, and the two-unit Bogotá monthly media
+allowance decision. These decisions are not execution or acceptance authority. Durable media
+publication, provider retrieval, vision inference, finalization, review and outcome delivery are not
+installed. Image ingress therefore returns unavailable without retaining material, admitting a hosted
+Turn or treating its caption as a Consent/credential command. Existing text/voice behavior remains
+unchanged; this checkpoint neither enables production nor grants a public media upload surface.
+The existing ingress telemetry is sufficient for this refusal-only path; no new external workflow
+or provider egress is introduced.
+
 ### Insights owner composition
 
 Insights publishes immutable scheduled occurrences, exact Currency-separated Money groups, lifecycle

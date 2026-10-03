@@ -69,8 +69,16 @@ const RawVoiceMessage = Schema.Struct({
   audio: Schema.Struct({ id: WhatsAppMediaId }),
   kapso: Schema.optional(Schema.Unknown),
 });
+const RawImageMessage = Schema.Struct({
+  ...rawMessageFields,
+  type: Schema.Literal("image"),
+  image: Schema.Struct({
+    id: WhatsAppMediaId,
+    caption: Model.optionalOption(TranscriptText),
+  }),
+});
 const RawKapsoEvent = Schema.Struct({
-  message: Schema.Union([RawTextMessage, RawVoiceMessage]),
+  message: Schema.Union([RawTextMessage, RawVoiceMessage, RawImageMessage]),
   conversation: Schema.Struct({
     phone_number: Model.optionalOption(Schema.String),
     business_scoped_user_id: Model.optionalOption(WhatsAppBusinessScopedUserId),
@@ -212,6 +220,9 @@ const projectInboundContent = (
   message: typeof RawKapsoEvent.Type.message
 ): WhatsAppInboundContent => {
   if (message.type === "text") return { _tag: "Text", text: message.text.body };
+  if (message.type === "image") {
+    return { _tag: "Image", mediaId: message.image.id, caption: message.image.caption };
+  }
   const kapso = Schema.decodeUnknownOption(Schema.Struct({ transcript: Schema.Unknown }))(
     message.kapso
   );

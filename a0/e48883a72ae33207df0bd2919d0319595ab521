@@ -1,0 +1,23 @@
+infra/cloudflare/verify-edge-policy.test.ts
+  s_fc768a11c2de27::t_ea5bf5737fce29 7
+apps/web/src/features/subscription/daviplata-form.tsx
+  s_fc768a11c2de27::t_0672398c7c208b 36,148-149
+infra/cloudflare/verify-edge-policy.ts
+  s_fc768a11c2de27::t_396e42cbdb9e8d 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a0e48883a72ae33207df0bd2919d0319595ab521",
+  "prompts": {},
+  "sessions": {
+    "s_fc768a11c2de27": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a1020d-bbdc-74ae-ba1b-046fd82fa605",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

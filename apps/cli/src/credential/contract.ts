@@ -29,7 +29,8 @@ export class CliFailure extends Data.TaggedError("CliFailure")<{
     | "ClaimStorageFailed"
     | "Expired"
     | "LoginRequired"
-    | "QueryUnavailable"
+    | "OperationUnavailable"
+    | "MutationAmbiguous"
     | "InputTooLarge";
 }> {}
 

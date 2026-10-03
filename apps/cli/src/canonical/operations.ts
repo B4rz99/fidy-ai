@@ -1,39 +1,64 @@
-import { type PATScope, decideOperationAccess, operationCatalog } from "@fidy/server/client";
+import {
+  type PATScope,
+  atomicBatchChildOperations,
+  atomicBatchOperation,
+  decideOperationAccess,
+  getAtomicBatchInputSchema,
+  operationCatalog,
+  projectAtomicBatchSchemas,
+} from "@fidy/server/client";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { CliFailure, type Credential } from "../credential/contract";
-import type { QueryDependencies, QueryResult } from "./contract";
+import { formatFailure } from "../command/operations";
+import type { CanonicalDependencies, OperationResult } from "./contract";
 
-const eligibleQuery = (id: string, scopes: ReadonlyArray<PATScope>): boolean => {
+const eligibleOperation = (id: string, scopes: ReadonlyArray<PATScope>): boolean => {
   const operation = operationCatalog.byId.get(id);
   if (operation === undefined) return false;
   return (
-    operation.policy.kind === "query" &&
+    (operation.id !== atomicBatchOperation ||
+      atomicBatchChildOperations(operationCatalog).some((child) =>
+        eligibleOperation(child.id, scopes)
+      )) &&
     decideOperationAccess(operation.policy.access, { _tag: "PAT", capabilities: scopes })._tag ===
       "Allowed"
   );
 };
 
-type QueryDescription = Readonly<{
+type OperationDescription = Readonly<{
   id: string;
   description: string;
+  policy: (typeof operationCatalog.operations)[number]["policy"];
   requiresInput: boolean;
   input: ReturnType<typeof Schema.toJsonSchemaDocument>;
   output: ReturnType<typeof Schema.toJsonSchemaDocument>;
 }>;
 
 /** Saved capabilities select presentation only; each invocation still requires live server authority. */
-export const discoverQueries = (scopes: ReadonlyArray<PATScope>): ReadonlyArray<QueryDescription> =>
+export const discoverOperations = (
+  scopes: ReadonlyArray<PATScope>
+): ReadonlyArray<OperationDescription> =>
   operationCatalog.operations
-    .filter((operation) => eligibleQuery(operation.id, scopes))
-    .map((operation) => ({
-      id: operation.id,
-      description: operation.description,
-      requiresInput: Option.isSome(operation.partialInput),
-      input: Schema.toJsonSchemaDocument(operation.input),
-      output: Schema.toJsonSchemaDocument(operation.success),
-    }));
+    .filter((operation) => eligibleOperation(operation.id, scopes))
+    .map((operation) => {
+      const schemas =
+        operation.id === atomicBatchOperation
+          ? projectAtomicBatchSchemas({
+              catalog: operationCatalog,
+              includeChild: (child) => eligibleOperation(child.id, scopes),
+            })
+          : { input: operation.input, output: operation.success };
+      return {
+        id: operation.id,
+        description: operation.description,
+        policy: operation.policy,
+        requiresInput: Option.isSome(operation.partialInput),
+        input: Schema.toJsonSchemaDocument(schemas.input),
+        output: Schema.toJsonSchemaDocument(schemas.output),
+      };
+    });
 
-const loadCredential = Effect.fn(function* (dependencies: QueryDependencies) {
+const loadCredential = Effect.fn(function* (dependencies: CanonicalDependencies) {
   const saved = yield* dependencies.store.load;
   if (Option.isNone(saved)) return yield* new CliFailure({ reason: "LoginRequired" });
   const now = yield* DateTime.now;
@@ -43,25 +68,48 @@ const loadCredential = Effect.fn(function* (dependencies: QueryDependencies) {
   return saved.value;
 });
 
-/** Invokes one eligible query without retries, returning only canonical encoded data and safe metadata. */
-export const invokeQuery = Effect.fn(function* (
-  options: Readonly<{
-    id: string;
-    input: unknown;
-    credential: Credential;
-    httpClient: QueryDependencies["httpClient"];
-    clientFactory: QueryDependencies["clientFactory"];
-  }>
+const decodeInput = Effect.fn(function* (
+  operation: (typeof operationCatalog.operations)[number],
+  input: unknown,
+  scopes: ReadonlyArray<PATScope>
 ) {
-  const { id, input, credential } = options;
-  const operation = operationCatalog.byId.get(id);
-  if (operation === undefined || !eligibleQuery(id, credential.grant.pat.scopes)) {
-    return yield* new CliFailure({ reason: "QueryUnavailable" });
-  }
   const decoded = yield* Schema.decodeUnknownEffect(operation.input, {
     errors: "all",
     onExcessProperty: "error",
   })(input).pipe(Effect.mapError(() => new CliFailure({ reason: "InvalidInput" })));
+  if (operation.id === atomicBatchOperation) {
+    // Reuse the owning ordered child union, not a CLI-owned subset or alternate batch contract.
+    const batch = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ payload: getAtomicBatchInputSchema() }),
+      { errors: "all", onExcessProperty: "error" }
+    )(input).pipe(Effect.mapError(() => new CliFailure({ reason: "InvalidInput" })));
+    for (const child of batch.payload.calls) {
+      if (!eligibleOperation(child.operation, scopes)) {
+        return yield* new CliFailure({ reason: "OperationUnavailable" });
+      }
+    }
+  }
+  return decoded;
+});
+
+/** Invokes one eligible operation without retries, returning only canonical encoded data and safe metadata. */
+export const invokeOperation = Effect.fn(function* (
+  options: Readonly<{
+    id: string;
+    input: unknown;
+    credential: Credential;
+    httpClient: CanonicalDependencies["httpClient"];
+    clientFactory: CanonicalDependencies["clientFactory"];
+    stderr: CanonicalDependencies["stderr"];
+    json: boolean;
+  }>
+) {
+  const { id, input, credential } = options;
+  const operation = operationCatalog.byId.get(id);
+  if (operation === undefined || !eligibleOperation(id, credential.grant.pat.scopes)) {
+    return yield* new CliFailure({ reason: "OperationUnavailable" });
+  }
+  const decoded = yield* decodeInput(operation, input, credential.grant.pat.scopes);
   let retryAfterSeconds = Option.none<number>();
   const client = yield* options.clientFactory({
     httpClient: options.httpClient,
@@ -74,15 +122,25 @@ export const invokeQuery = Effect.fn(function* (
   const group = id.slice(0, separator);
   const name = id.slice(separator + 1);
   const call = client[group]?.[name];
-  if (call === undefined) return yield* new CliFailure({ reason: "QueryUnavailable" });
-  const result = yield* Effect.result(call(decoded));
+  if (call === undefined) return yield* new CliFailure({ reason: "OperationUnavailable" });
+  const uncertainReason =
+    operation.policy.kind === "mutation" ? "MutationAmbiguous" : "TransportUnavailable";
+  const result = yield* call(decoded).pipe(
+    Effect.catchDefect(() => Effect.fail(new CliFailure({ reason: uncertainReason }))),
+    Effect.onInterrupt(() =>
+      operation.policy.kind === "mutation"
+        ? options.stderr(formatFailure({ reason: "MutationAmbiguous", json: options.json }))
+        : Effect.void
+    ),
+    Effect.result
+  );
   const failed = result._tag === "Failure";
   const envelope = yield* Schema.encodeUnknownEffect(
     failed ? operation.failure : operation.success
   )(failed ? result.failure : result.success).pipe(
-    Effect.mapError(() => new CliFailure({ reason: "TransportUnavailable" }))
+    Effect.mapError(() => new CliFailure({ reason: uncertainReason }))
   );
-  const output: QueryResult = { envelope, failed, retryAfterSeconds };
+  const output: OperationResult = { envelope, failed, retryAfterSeconds };
   return output;
 });
 
@@ -96,23 +154,38 @@ const encodeJson = (value: unknown): string =>
   Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Json))(value);
 
 /** Canonical JSON remains parseable while JSON escaping neutralizes terminal and bidi controls. */
-export const formatQueryResult = ({
+export const formatOperationResult = ({
   result,
   json,
-}: Readonly<{ result: QueryResult; json: boolean }>): string => {
+}: Readonly<{ result: OperationResult; json: boolean }>): string => {
   const encoded = terminalSafe(encodeJson(result.envelope));
   return json
     ? `${encoded}\n`
-    : `${result.failed ? "La consulta fue rechazada." : "Resultado de la consulta:"}\n${encoded}\n`;
+    : `${result.failed ? "La operación devolvió un fallo:" : "Resultado de la operación:"}\n${encoded}\n`;
 };
 
 const failureGuidance = Schema.Struct({ error: Schema.Struct({ code: Schema.String }) });
+const batchRejectionGuidance = Schema.Struct({
+  error: Schema.Struct({ failedCallIndex: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)) }),
+});
+const showBatchRejection = (
+  id: string,
+  result: OperationResult,
+  dependencies: CanonicalDependencies
+): Effect.Effect<void> =>
+  id === atomicBatchOperation &&
+  result.failed &&
+  Option.isSome(Schema.decodeUnknownOption(batchRejectionGuidance)(result.envelope))
+    ? dependencies.stderr(
+        "El lote fue rechazado; sus cambios de dominio no se confirmaron. La evidencia de rechazo del servidor puede conservarse. Revisa el hijo indicado y sus permisos antes de enviar un lote corregido.\n"
+      )
+    : Effect.void;
 const suggestedGuidance = Schema.Struct({
   next: Schema.Array(Schema.Struct({ tool: Schema.String, hint: Schema.String })),
 });
 const showFailureGuidance = Effect.fn(function* (
-  result: QueryResult,
-  dependencies: QueryDependencies
+  result: OperationResult,
+  dependencies: CanonicalDependencies
 ) {
   if (Option.isSome(result.retryAfterSeconds)) {
     yield* dependencies.stderr(
@@ -134,18 +207,18 @@ const showFailureGuidance = Effect.fn(function* (
   }
 });
 const showSuggestions = Effect.fn(function* (
-  result: QueryResult,
+  result: OperationResult,
   credential: Credential,
-  dependencies: QueryDependencies
+  dependencies: CanonicalDependencies
 ) {
   const suggestions = Schema.decodeUnknownOption(suggestedGuidance)(result.envelope);
   if (Option.isNone(suggestions)) return;
   for (const suggestion of suggestions.value.next) {
-    if (!eligibleQuery(suggestion.tool, credential.grant.pat.scopes)) continue;
+    if (!eligibleOperation(suggestion.tool, credential.grant.pat.scopes)) continue;
     yield* dependencies.stderr(
       terminalSafe(
         encodeJson(
-          `Posible siguiente consulta: fidy ${suggestion.tool.replace(".", " ")}. ${suggestion.hint} Los argumentos sugeridos son parciales; revisa --help. No se ejecuta automáticamente.`
+          `Posible siguiente operación: fidy ${suggestion.tool.replace(".", " ")}. ${suggestion.hint} Los argumentos sugeridos son parciales; revisa --help. No se ejecuta automáticamente.`
         )
       ) + "\n"
     );
@@ -154,8 +227,8 @@ const showSuggestions = Effect.fn(function* (
 
 const readInput = Effect.fn(function* (
   args: ReadonlyArray<string>,
-  command: QueryDescription,
-  dependencies: QueryDependencies
+  command: OperationDescription,
+  dependencies: CanonicalDependencies
 ) {
   if (args.length === 2 && !command.requiresInput) return {};
   const path = args[3];
@@ -177,20 +250,20 @@ const Arguments = Schema.Array(
 ).check(Schema.isMaxLength(maximumArguments));
 
 /** Generic group/operation parser, input decoding, derived execution and channel-separated presentation. */
-export const runQueryCommand = Effect.fn(function* (
+export const runOperationCommand = Effect.fn(function* (
   inputArgs: unknown,
-  dependencies: QueryDependencies
+  dependencies: CanonicalDependencies
 ) {
   const args = yield* Schema.decodeUnknownEffect(Arguments)(inputArgs).pipe(
     Effect.mapError(() => new CliFailure({ reason: "InvalidInput" }))
   );
   const credential = yield* loadCredential(dependencies);
-  const catalog = discoverQueries(credential.grant.pat.scopes);
+  const catalog = discoverOperations(credential.grant.pat.scopes);
   if (args.length === 1 && (args[0] === "commands" || args[0] === "--help")) {
     yield* dependencies.stdout(
       dependencies.json
         ? terminalSafe(encodeJson({ commands: catalog })) + "\n"
-        : "Consultas disponibles (permisos guardados; el servidor verifica cada llamada):\n" +
+        : "Operaciones disponibles (permisos guardados; el servidor verifica cada llamada):\n" +
             catalog
               .map((command) => `${command.id.replace(".", " ")} — ${command.description}`)
               .join("\n") +
@@ -200,20 +273,23 @@ export const runQueryCommand = Effect.fn(function* (
   }
   const id = `${args[0]}.${args[1]}`;
   const command = catalog.find((candidate) => candidate.id === id);
-  if (command === undefined) return yield* new CliFailure({ reason: "QueryUnavailable" });
+  if (command === undefined) return yield* new CliFailure({ reason: "OperationUnavailable" });
   if (args.length === 3 && args[2] === "--help") {
     yield* dependencies.stdout(terminalSafe(encodeJson(command)) + "\n");
     return false;
   }
   const input = yield* readInput(args, command, dependencies);
-  const result = yield* invokeQuery({
+  const result = yield* invokeOperation({
     id,
     input,
     credential,
     httpClient: dependencies.httpClient,
     clientFactory: dependencies.clientFactory,
+    stderr: dependencies.stderr,
+    json: dependencies.json,
   });
-  yield* dependencies.stdout(formatQueryResult({ result, json: dependencies.json }));
+  yield* dependencies.stdout(formatOperationResult({ result, json: dependencies.json }));
+  yield* showBatchRejection(id, result, dependencies);
   yield* showFailureGuidance(result, dependencies);
   yield* showSuggestions(result, credential, dependencies);
   return result.failed;

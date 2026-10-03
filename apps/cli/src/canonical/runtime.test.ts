@@ -2,7 +2,7 @@ import { BunFileSystem } from "@effect/platform-bun";
 import { expect, layer } from "@effect/vitest";
 import { Effect, Fiber, FileSystem } from "effect";
 import { TestClock } from "effect/testing";
-import { makeInputReader, readQueryInput } from "./runtime";
+import { makeInputReader, readOperationInput as readQueryInput } from "./runtime";
 
 layer(BunFileSystem.layer)((it) => {
   it.effect(

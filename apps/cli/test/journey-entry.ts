@@ -6,8 +6,8 @@ import { formatOutput, runCommand } from "../src/command/operations";
 import { CliFailure, type NativeSecrets, apiOrigin } from "../src/credential/contract";
 import { makeCredentialStore } from "../src/credential/runtime";
 import { makePairingClient } from "../src/direct-client/runtime";
-import { runQueryCommand } from "../src/query/operations";
-import { makeQueryClient, readQueryInput } from "../src/query/runtime";
+import { runOperationCommand } from "../src/canonical/operations";
+import { makeCanonicalClient, readOperationInput } from "../src/canonical/runtime";
 
 const metadata = Schema.decodeUnknownSync(Schema.NonEmptyString)(Bun.env.CLI_JOURNEY_DIRECTORY);
 const nativeService = Schema.decodeUnknownSync(
@@ -64,11 +64,11 @@ const program = Effect.gen(function* () {
   const credentials = yield* makeCredentialStore(metadata, native);
   const pairing = yield* makePairingClient(http);
   const execute = !["login", "status", "logout"].includes(command[0] ?? "")
-    ? runQueryCommand(command, {
+    ? runOperationCommand(command, {
         store: credentials.store,
         httpClient: http,
-        clientFactory: makeQueryClient,
-        readInput: readQueryInput,
+        clientFactory: makeCanonicalClient,
+        readInput: readOperationInput,
         stdout: (text) =>
           Effect.sync(() => {
             process.stdout.write(text);

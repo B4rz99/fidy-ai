@@ -13,7 +13,7 @@ export const messages: Readonly<Record<PublicOutput["_tag"], string>> = {
 const recovery =
   "Comprueba el acceso local con fidy status. Si no hay acceso local utilizable, revisa y revoca el permiso en https://fidyapp.com/settings/pats; después usa fidy logout e inicia una nueva vinculación. No se repite una consulta privada consumida.";
 export const failures: Readonly<Record<CliFailure["reason"], string>> = {
-  Cancelled: "Proceso interrumpido. Si aprobaste un permiso, " + recovery,
+  Cancelled: "Proceso interrumpido localmente. Si aprobaste un permiso, " + recovery,
   UnsupportedRuntime:
     "Este CLI requiere el Bun verificado bb35d1b81. Ejecuta bash scripts/install-bun.sh y usa ese ejecutable.",
   InvalidInput:
@@ -34,8 +34,10 @@ export const failures: Readonly<Record<CliFailure["reason"], string>> = {
   TransportUnavailable:
     "No se pudo completar la solicitud de forma segura. Comprueba la conexión e inténtalo más tarde.",
   LoginRequired: "No hay acceso guardado. Ejecuta fidy login antes de consultar datos.",
-  QueryUnavailable:
-    "Esta consulta no está disponible con tus permisos. Usa fidy commands para ver las consultas disponibles.",
+  OperationUnavailable:
+    "Esta operación o un hijo del lote no está disponible con tus permisos. Usa fidy commands para ver las operaciones disponibles.",
+  MutationAmbiguous:
+    "No se puede confirmar el resultado de la mutación: el servidor puede haber confirmado cambios. No repitas la solicitud a ciegas. Inspecciona el estado actual o sigue únicamente el protocolo de reintento seguro explícito de la operación. No se reintenta automáticamente.",
   InputTooLarge: "El archivo o stdin supera el límite de 64 KiB. Reduce la solicitud.",
   ClaimAmbiguous: "No se puede confirmar si el servidor entregó el permiso. " + recovery,
   ClaimStorageFailed:

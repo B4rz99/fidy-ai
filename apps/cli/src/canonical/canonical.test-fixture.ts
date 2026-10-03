@@ -1,21 +1,27 @@
-import { TokenBearer } from "@fidy/server/client";
+import { type PATScope, TokenBearer } from "@fidy/server/client";
 import { Effect, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { SavedGrant, apiOrigin } from "../credential/contract";
-import type { QueryClientFactory, QueryDependencies } from "./contract";
+import type { CanonicalClientFactory, CanonicalDependencies } from "./contract";
 
 const secretCharacters = 43;
 export const bearer = `fin_abcd1234_${"s".repeat(secretCharacters)}`;
 type QueryFixture = Readonly<{
-  dependencies: QueryDependencies;
+  dependencies: CanonicalDependencies;
   stdout: Array<string>;
   stderr: Array<string>;
   requests: Array<string>;
 }>;
-type FixtureFactory = (response?: Readonly<{ body: string; status: number }>) => QueryFixture;
-export const makeQueryFixture =
-  (clientFactory: QueryClientFactory): FixtureFactory =>
-  ({ body, status } = { body: '{"data":[],"next":[]}', status: 200 }): QueryFixture => {
+type FixtureFactory = (
+  response?: Readonly<{ body: string; status: number }>,
+  scopes?: ReadonlyArray<PATScope>
+) => QueryFixture;
+export const makeCanonicalFixture =
+  (clientFactory: CanonicalClientFactory): FixtureFactory =>
+  (
+    { body, status } = { body: '{"data":[],"next":[]}', status: 200 },
+    scopes = ["read"]
+  ): QueryFixture => {
     const stdout: Array<string> = [];
     const stderr: Array<string> = [];
     const requests: Array<string> = [];
@@ -26,7 +32,7 @@ export const makeQueryFixture =
         id: "01900000-0000-4000-8000-000000000001",
         shortId: "abcd1234",
         recipientLabel: "Mi agente",
-        scopes: ["read"],
+        scopes,
         lifetimeDays: 7,
         lastUsedAt: null,
         revokedAt: null,
@@ -34,7 +40,7 @@ export const makeQueryFixture =
         expiresAt: "2099-01-08T00:00:00.000Z",
       },
     });
-    const dependencies: QueryDependencies = {
+    const dependencies: CanonicalDependencies = {
       clientFactory,
       store: {
         load: Effect.succeedSome({ grant, bearer: Redacted.make(TokenBearer.make(bearer)) }),

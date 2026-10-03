@@ -10,6 +10,12 @@ export {
 export { FidyApi, operationCatalog, type FidyApiGroups, type OperationId } from "~/shell/api";
 export { decideOperationAccess } from "~/shell/canonical-policy/operations";
 export {
+  atomicBatchChildOperations,
+  atomicBatchOperation,
+  getAtomicBatchInputSchema,
+  projectAtomicBatchSchemas,
+} from "~/shell/operations/contract";
+export {
   HostedTurnApi,
   HostedTurnRequest,
   HostedTurnReceipt,

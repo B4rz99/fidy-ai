@@ -3,9 +3,9 @@ import { Effect, Layer, Redacted, Stream } from "effect";
 import { HttpApiClient } from "effect/http-api";
 import { makeProtectedClient } from "../direct-client/runtime";
 import { CliFailure, apiOrigin } from "../credential/contract";
-import type { QueryClient, QueryClientFactory } from "./contract";
+import type { CanonicalClient, CanonicalClientFactory } from "./contract";
 /** Per-invocation derived client: bearer authority never enters an ambient shared transport. */
-export const makeQueryClient: QueryClientFactory = Effect.fn(function* (options) {
+export const makeCanonicalClient: CanonicalClientFactory = Effect.fn(function* (options) {
   const authorization = yield* Layer.build(
     makeTokenAuthorizationClientLive(Redacted.value(options.credential.bearer))
   );
@@ -14,14 +14,15 @@ export const makeQueryClient: QueryClientFactory = Effect.fn(function* (options)
       client: options.httpClient,
       allowQuery: true,
       maximumResponseBytes: 1_048_576,
+      maximumRequestBytes: maximumInputBytes,
       captureRetry: options.captureRetry,
     }),
     baseUrl: apiOrigin,
   }).pipe(Effect.provideContext(authorization));
   // The static union cannot express selection by runtime id. This single bridge is safe only
-  // after invokeQuery selects the same catalog id and decodes that operation's complete input.
+  // after invokeOperation selects the same catalog id and decodes that operation's complete input.
   // Every result/failure crosses the selected codec again before it can leave the invocation.
-  return client as unknown as QueryClient;
+  return client as unknown as CanonicalClient;
 });
 
 const maximumInputBytes = 65_536;
@@ -71,6 +72,6 @@ export const makeInputReader = (
   });
 
 /** Production has no implicit stdin: only an explicit '-' selects the process input stream. */
-export const readQueryInput = makeInputReader((path) =>
+export const readOperationInput = makeInputReader((path) =>
   path === "-" ? Bun.stdin.stream() : Bun.file(path).stream()
 );

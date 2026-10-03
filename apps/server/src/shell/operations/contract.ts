@@ -174,6 +174,46 @@ type AtomicBatchEndpoint = HttpApiEndpoint.HttpApiEndpoint<
 >;
 type OperationsGroup = HttpApiGroup.HttpApiGroup<"operations", AtomicBatchEndpoint>;
 
+const makeAtomicBatchSchemas = (
+  mutations: ReadonlyArray<CatalogOperation>
+): {
+  readonly call: AtomicBatchCallSchema;
+  readonly result: AtomicBatchResultSchema;
+  readonly input: AtomicBatchInputSchema;
+  readonly output: AtomicBatchOutputSchema;
+} => {
+  const call = Schema.make<Schema.Codec<AtomicBatchCall, Schema.Json>>(
+    catalogUnion(mutations, mutationCallMember).ast
+  );
+  const result = Schema.make<Schema.Codec<AtomicBatchResult, Schema.Json>>(
+    catalogUnion(mutations, mutationResultMember).ast
+  );
+  const input = Schema.Struct({
+    calls: Schema.NonEmptyArray(call).check(Schema.isMaxLength(maximumAtomicBatchCalls)),
+  });
+  const output = Schema.Struct({
+    results: Schema.NonEmptyArray(result).check(Schema.isMaxLength(maximumAtomicBatchCalls)),
+  });
+
+  return { call, result, input, output };
+};
+
+/**
+ * A caller-eligible presentation of the canonical child unions and limits. This does not rebind
+ * decoding or execution authority: the broad server declaration remains the input/output codec.
+ */
+export const projectAtomicBatchSchemas = (
+  options: Readonly<{
+    catalog: OperationCatalog;
+    includeChild: (operation: CatalogOperation) => boolean;
+  }>
+): { readonly input: Schema.Top; readonly output: Schema.Top } => {
+  const { input, output } = makeAtomicBatchSchemas(
+    atomicBatchChildOperations(options.catalog).filter(options.includeChild)
+  );
+  return { input: Schema.Struct({ payload: input }), output: OperationResponse(output) };
+};
+
 /**
  * Derives the visible batch operation from the ordinary catalog. Because that catalog is assembled
  * before this group exists, canonical queries and the batch operation itself cannot enter either
@@ -181,23 +221,11 @@ type OperationsGroup = HttpApiGroup.HttpApiGroup<"operations", AtomicBatchEndpoi
  */
 export const makeOperationsGroup = (ordinaryCatalog: OperationCatalog): OperationsGroup => {
   const mutations = mutationOperations(ordinaryCatalog);
-  const call = Schema.make<Schema.Codec<AtomicBatchCall, Schema.Json>>(
-    catalogUnion(mutations, mutationCallMember).ast
-  );
-  const result = Schema.make<Schema.Codec<AtomicBatchResult, Schema.Json>>(
-    catalogUnion(mutations, mutationResultMember).ast
-  );
+  const { call, result, input, output } = makeAtomicBatchSchemas(mutations);
   boundAtomicBatchCall = Option.some(call);
   boundAtomicBatchResult = Option.some(result);
   boundAtomicBatchChildren = Option.some(mutations.map((operation) => operation.id));
-  const input = Schema.Struct({
-    calls: Schema.NonEmptyArray(call).check(Schema.isMaxLength(maximumAtomicBatchCalls)),
-  });
   boundAtomicBatchInput = Option.some(input);
-  const output = Schema.Struct({
-    results: Schema.NonEmptyArray(result).check(Schema.isMaxLength(maximumAtomicBatchCalls)),
-  });
-
   return HttpApiGroup.make(operationsGroupName).add(
     HttpApiEndpoint.post(atomicBatchEndpointName, "/operations/atomic-batch", {
       payload: input,

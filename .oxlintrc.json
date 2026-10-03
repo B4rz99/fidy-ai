@@ -142,7 +142,7 @@
     // #970 confines dynamic generated-client dispatch to one bridge. The selected catalog input
     // is decoded before invocation and the corresponding success/failure codec encodes output.
     {
-      "files": ["apps/cli/src/query/runtime.ts"],
+      "files": ["apps/cli/src/canonical/runtime.ts"],
       "rules": { "typescript/consistent-type-assertions": "off" }
     },
     {

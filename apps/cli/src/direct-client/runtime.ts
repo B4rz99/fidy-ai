@@ -95,13 +95,15 @@ export const makeProtectedClient = (
     client: HttpClient.HttpClient;
     allowQuery: boolean;
     maximumResponseBytes: number;
+    maximumRequestBytes: number;
     captureRetry: (seconds: number) => void;
   }>
 ): HttpClient.HttpClient.With<CliFailure | HttpClientError.HttpClientError> =>
   HttpClient.transform(options.client, (execute, request) => {
     if (
       request.body._tag !== "Empty" &&
-      (request.body._tag !== "Uint8Array" || request.body.body.byteLength > maximumRequestBytes)
+      (request.body._tag !== "Uint8Array" ||
+        request.body.body.byteLength > options.maximumRequestBytes)
     ) {
       return Effect.fail(new CliFailure({ reason: "TransportUnavailable" }));
     }
@@ -142,7 +144,13 @@ export const makeProtectedClient = (
 export const protectClient = (
   client: HttpClient.HttpClient
 ): HttpClient.HttpClient.With<CliFailure | HttpClientError.HttpClientError> =>
-  makeProtectedClient({ client, allowQuery: false, maximumResponseBytes, captureRetry: () => {} });
+  makeProtectedClient({
+    client,
+    allowQuery: false,
+    maximumResponseBytes,
+    maximumRequestBytes,
+    captureRetry: () => {},
+  });
 
 const safeStartFailure = (failure: unknown): CliFailure => {
   if (Schema.is(PATPairingInvalidApi)(failure)) return new CliFailure({ reason: "PairingInvalid" });

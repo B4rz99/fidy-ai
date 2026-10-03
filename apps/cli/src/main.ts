@@ -6,8 +6,8 @@ import { formatFailure, formatOutput, runCommand } from "./command/operations";
 import { CliFailure } from "./credential/contract";
 import { makeCredentialStore, supportedBunRevision } from "./credential/runtime";
 import { makePairingClient } from "./direct-client/runtime";
-import { runQueryCommand } from "./query/operations";
-import { makeQueryClient, readQueryInput } from "./query/runtime";
+import { runOperationCommand } from "./canonical/operations";
+import { makeCanonicalClient, readOperationInput } from "./canonical/runtime";
 
 const args = Bun.argv.slice(2);
 const json = args.includes("--json");
@@ -30,11 +30,11 @@ const program = Effect.gen(function* () {
   const credential = yield* makeCredentialStore(path.join(home, ".fidy", "cli"));
   const httpClient = yield* HttpClient.HttpClient;
   if (!["login", "status", "logout"].includes(commandArgs[0] ?? "")) {
-    const failed = yield* runQueryCommand(commandArgs, {
+    const failed = yield* runOperationCommand(commandArgs, {
       store: credential.store,
       httpClient,
-      clientFactory: makeQueryClient,
-      readInput: readQueryInput,
+      clientFactory: makeCanonicalClient,
+      readInput: readOperationInput,
       stdout: (text) =>
         Effect.sync(() => {
           process.stdout.write(text);

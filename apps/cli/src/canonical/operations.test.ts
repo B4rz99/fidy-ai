@@ -3,13 +3,16 @@ import { DateTime, Effect, Exit, Fiber, Option, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { TestClock } from "effect/testing";
 import { makeProtectedClient } from "../direct-client/runtime";
-import { discoverQueries, runQueryCommand } from "./operations";
-import { makeQueryFixture as constructQueryFixture } from "./query.test-fixture";
-import { makeQueryClient } from "./runtime";
+import {
+  discoverOperations as discoverQueries,
+  runOperationCommand as runQueryCommand,
+} from "./operations";
+import { makeCanonicalFixture as constructQueryFixture } from "./canonical.test-fixture";
+import { makeCanonicalClient } from "./runtime";
 
-const makeQueryFixture = constructQueryFixture(makeQueryClient);
+const makeQueryFixture = constructQueryFixture(makeCanonicalClient);
 
-const encodeFixture = Schema.encodeSync(Schema.fromJsonString(Schema.Json));
+const encodeFixture = Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Json));
 const decodeOutput = Schema.decodeSync(Schema.fromJsonString(Schema.Json));
 
 it("offers read queries but never mutations or account-security work", () => {
@@ -21,6 +24,82 @@ it("offers read queries but never mutations or account-security work", () => {
   expect(commands.map((command) => command.id)).not.toContain("operations.executeAtomicBatch");
   expect(discoverQueries([])).toEqual([]);
 });
+
+it("derives mutations and batches from independent write and dashboard grants", () => {
+  const write = discoverQueries(["write"]).map((command) => command.id);
+  const dashboard = discoverQueries(["dashboard"]).map((command) => command.id);
+  expect(write).toContain("transactions.createTransaction");
+  expect(write).toContain("operations.executeAtomicBatch");
+  expect(write).not.toContain("dashboard.initializeDashboard");
+  expect(dashboard).toContain("dashboard.initializeDashboard");
+  expect(dashboard).toContain("operations.executeAtomicBatch");
+  expect(dashboard).not.toContain("transactions.createTransaction");
+});
+
+it("describes only the caller's eligible batch children without publishing an independent contract", () => {
+  for (const scopes of [["write"], ["dashboard"], ["write", "dashboard"]] as const) {
+    const batch = discoverQueries(scopes).find(
+      (operation) => operation.id === "operations.executeAtomicBatch"
+    );
+    expect(batch).toBeDefined();
+    const input = encodeFixture(batch?.input);
+    expect(input.includes("transactions.createTransaction")).toBe(
+      scopes.some((scope) => scope === "write")
+    );
+    expect(input.includes("dashboard.initializeDashboard")).toBe(
+      scopes.some((scope) => scope === "dashboard")
+    );
+    expect(input).not.toContain("pats.inspectPATPairing");
+    expect(input).not.toContain("operations.executeAtomicBatch");
+    expect(input).not.toContain("transactions.listTransactions");
+  }
+});
+
+it.effect("rejects a batch child outside the saved grant even when the envelope is eligible", () =>
+  Effect.gen(function* () {
+    for (const child of [
+      { operation: "dashboard.initializeDashboard", input: {} },
+      { operation: "pats.inspectPATPairing", input: { payload: { publicCode: "ABCD-1234" } } },
+    ]) {
+      const fixture = makeQueryFixture(undefined, ["write"]);
+      expect(
+        yield* Effect.result(
+          runQueryCommand(["operations", "executeAtomicBatch", "--input", "-"], {
+            ...fixture.dependencies,
+            readInput: () =>
+              Effect.succeed(
+                encodeFixture({
+                  payload: {
+                    calls: [{ callId: "01900000-0000-4000-8000-000000000001", ...child }],
+                  },
+                })
+              ),
+          })
+        )
+      ).toMatchObject({ failure: { reason: "OperationUnavailable" } });
+      expect(fixture.requests).toEqual([]);
+    }
+  })
+);
+
+it.effect("contains uncertain mutation outcomes without replay or a no-effect claim", () =>
+  Effect.gen(function* () {
+    for (const response of [
+      { body: "not json", status: 200 },
+      { body: "{}", status: 503 },
+      { body: "{}", status: 302 },
+    ]) {
+      const fixture = makeQueryFixture(response, ["dashboard"]);
+      expect(
+        yield* Effect.result(
+          runQueryCommand(["dashboard", "initializeDashboard"], fixture.dependencies)
+        )
+      ).toMatchObject({ failure: { reason: "MutationAmbiguous" } });
+      expect(fixture.requests).toHaveLength(1);
+      expect(fixture.stdout).toEqual([]);
+    }
+  })
+);
 
 it.effect("executes an input-free query and emits only its canonical envelope on stdout", () =>
   Effect.gen(function* () {
@@ -196,6 +275,7 @@ it.effect(
         client: fixture.dependencies.httpClient,
         allowQuery: true,
         maximumResponseBytes: 1024,
+        maximumRequestBytes: 1024,
         captureRetry: () => {},
       });
       for (const destination of [

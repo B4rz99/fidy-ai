@@ -1,0 +1,27 @@
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_e9f458b7eafa38::t_90881681cfc4d0 98-99
+apps/server/scripts/check-browser-client.ts
+  s_e9f458b7eafa38::t_8790e566271d65 21
+infra/cloudflare/verify-edge-policy.ts
+  s_e9f458b7eafa38::t_c3b640e40b9998 5
+apps/server/cloudflare/tokens/pats.test.ts
+  s_e9f458b7eafa38::t_6c9e9439e18807 121-122
+infra/cloudflare/verify-edge-policy.test.ts
+  s_e9f458b7eafa38::t_c7fe9c9e6a727f 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3309cca0c93c7220278b7225623b9d54359211f7",
+  "prompts": {},
+  "sessions": {
+    "s_e9f458b7eafa38": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0ff5b-e7bd-776c-8c8c-ca885bbcbd91",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

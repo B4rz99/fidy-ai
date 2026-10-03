@@ -57,16 +57,19 @@ changing diagnostics, strictness, lint rules, dependency policy or coverage thre
 
 The default local browser group could not start its HTTPS servers: ports 4173/4174 are occupied
 by stale processes in the unrelated `720` worktree. Those processes were neither stopped nor reused
-as migration evidence. A port-isolated disposable replay is being checked separately; the exact
-configured browser group and Linux verification still require the fresh CI runners. No local
-browser or Linux pass is claimed merely from a Vite build or mocked HTTP test.
+as migration evidence. A disposable worktree was inspected for port isolation and removed without
+running an altered acceptance-origin graph. The exact configured browser group and Linux
+verification still require fresh CI runners. No local browser or Linux pass is claimed merely
+from a Vite build or mocked HTTP test.
 
 ## Supply-chain and release boundaries
 
 The frozen lock SHA-256 remains `21e35b52db3930feea44ee9e4f921a81e88a28153a23042faecdab711ce199e1`.
 The recorded one-time age exception admits only this snapshot; `minimumReleaseAge = 604800` and
-its no-exclusions policy are unchanged. Frozen installation and CI must still satisfy the ordinary
-repository gates; changed candidates require renewed admission rather than reusing the exception.
+its no-exclusions policy are unchanged. A final `bun install --frozen-lockfile --ignore-scripts`
+and explicit `bun run postinstall` both passed with the ordinary cooldown configuration, without
+an age override or lock change. CI must still satisfy the ordinary repository gates; changed
+candidates require renewed admission rather than reusing the exception.
 
 `bun audit` still reports the **pre-existing** high braces advisory, not a newly resolved clean audit.
 The official [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) record has no
@@ -79,7 +82,9 @@ Upstream must still be rechecked and the acceptance removed when an eligible rem
 
 Independent Standards/Security/Spec review must cover the entire migration, not just #980/#981.
 After synchronizing trunk, `git diff fe37ea1b8a...HEAD` includes every migration slice while excluding
-#977's already-landed design. CI, including exact Linux browser and SAST/SCA checks, remains a
+#977's already-landed design. User confirmation of that fixed point has been requested; no combined
+review worker has been dispatched and no clean combined review is claimed. CI, including exact
+Linux browser and SAST/SCA checks, remains a
 merge requirement. A pending check, missing review or finding prevents declaring #981 complete.
 
 **Merge is held until release authorization is clarified:** the existing trunk-push workflow

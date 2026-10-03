@@ -24,10 +24,10 @@ const initialResponse = (sendUrl = policy.sendUrl): Response =>
       },
     },
   });
-const otpResponse = (status: "PENDING" | "APPROVED", bearer: string): Response =>
+const otpResponse = (status: "PENDING" | "APPROVED", bearer: string, pk = tokenId): Response =>
   Response.json({
     data: {
-      subscription: { PK: tokenId, status },
+      subscription: { PK: pk, status },
       authorization: { access_token: bearer },
       attempts: {
         currentSendCode: 1,
@@ -145,6 +145,56 @@ it("does not accept authorization approval from an OTP-send response", () =>
       expect(provider).toHaveBeenCalledTimes(2);
     })
   ));
+
+it.each([
+  ["SEND", "PENDING"],
+  ["SEND", "APPROVED"],
+  ["CONFIRM", "PENDING"],
+  ["CONFIRM", "APPROVED"],
+] as const)(
+  "revokes authority on %s when a %s response substitutes another same-environment PK",
+  (stage, status) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const foreignBearer = "synthetic-foreign-bearer";
+        const foreignPk = "daviplata_devtest_other_synthetic";
+        const provider = vi
+          .fn((_url: RequestInfo | URL, _init?: RequestInit): Promise<Response> =>
+            Promise.resolve(otpResponse("APPROVED", "synthetic-later-approval"))
+          )
+          .mockResolvedValueOnce(initialResponse());
+        if (stage === "CONFIRM") {
+          provider.mockResolvedValueOnce(otpResponse("PENDING", "synthetic-send-bearer"));
+        }
+        provider.mockResolvedValueOnce(otpResponse(status, foreignBearer, foreignPk));
+        const started = yield* Effect.exit(start(provider));
+        if (stage === "SEND") {
+          // No challenge/approval capability is returned from a refused initial send.
+          expect(Exit.isFailure(started)).toBe(true);
+        } else {
+          if (!Exit.isSuccess(started)) {
+            throw new Error("Expected the legitimate initial send to succeed");
+          }
+          const challenge = started.value;
+          const otp = Redacted.make("574829");
+          expect(yield* challenge.confirm(otp)).toEqual({ status: "uncertain" });
+          expect(() => Redacted.value(otp)).toThrow();
+          const subsequentOtp = Redacted.make("111111");
+          expect(yield* challenge.confirm(subsequentOtp)).toEqual({ status: "refused" });
+          expect(yield* challenge.resend()).toEqual({ status: "refused" });
+          expect(yield* challenge.retrySubmission()).toEqual({ status: "refused" });
+          expect(() => Redacted.value(subsequentOtp)).toThrow();
+        }
+        yield* Effect.yieldNow;
+        expect(provider).toHaveBeenCalledTimes(stage === "SEND" ? 2 : 3);
+        for (const [, init] of provider.mock.calls) expect(init?.signal?.aborted).toBe(true);
+        expect(provider.mock.calls.map(([, init]) => init?.headers)).not.toContainEqual(
+          expect.objectContaining({ authorization: `Bearer ${foreignBearer}` })
+        );
+        // This transport owns no Fidy submission function: no approved outcome may leave this seam.
+      })
+    )
+);
 
 it("fingerprints one-use authority with SHA-256, clears borrowed digest buffers, and exposes only redacted approval", () =>
   Effect.runPromise(

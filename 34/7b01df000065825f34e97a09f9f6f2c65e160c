@@ -1,0 +1,215 @@
+apps/server/cloudflare/transactions/operations.ts
+  s_e9f458b7eafa38::t_1a9377454a1aba 1-6,10,12,14-15,50-53,55-62,64-66,68-70
+  s_e9f458b7eafa38::t_4f9ad631845844 7-9,49,54,63,67
+  s_e9f458b7eafa38::t_94210e10a6f6d8 11,13
+  s_e9f458b7eafa38::t_3b68ec658cc0fc 71
+apps/server/cloudflare/migrations/0027_recurring.sql
+  s_e9f458b7eafa38::t_c6bf9970db9bda 9-14,16
+  s_e9f458b7eafa38::t_42d4408e7050f2 102-104
+  s_e9f458b7eafa38::t_ee33845525869b 43-46
+  s_e9f458b7eafa38::t_2dc581a50497d8 56
+  s_e9f458b7eafa38::t_76b7b72ca75a54 1-8,15,17-25,31-42,47-55,57-101
+  s_e9f458b7eafa38::t_46ba412ed0fc13 26-30
+apps/server/cloudflare/maintenance/runtime.ts
+  s_e9f458b7eafa38::t_bfa3a7b89d809d 40,246
+apps/server/cloudflare/transactions/internal/recurring-query.ts
+  s_e9f458b7eafa38::t_f8c79de5cb83e5 3-5,8,15-19,24,32
+  s_e9f458b7eafa38::t_a0cced18d00f51 7,163
+  s_e9f458b7eafa38::t_1a9377454a1aba 9-14,20-23,25-31,33-52,62-77,98-114,116-140,144-162,164-168,170-175
+  s_e9f458b7eafa38::t_82a8d3c5b4f52d 141-143
+  s_e9f458b7eafa38::t_ec31af403627be 53-61,78-84,89-96
+  s_e9f458b7eafa38::t_283a0ce653d127 1,85-88,97,115,169
+  s_e9f458b7eafa38::t_94210e10a6f6d8 6
+  s_e9f458b7eafa38::t_8b55aeb228c50a 2
+apps/server/ARCHITECTURE.md
+  s_e9f458b7eafa38::t_2946d9f6370af9 570-597
+apps/server/contracts/openapi.json
+  s_e9f458b7eafa38::t_eb2b4c6d4dc857 4447-4631,7496-7535,14486-14588,16328-16329
+  s_e9f458b7eafa38::t_cde99c6a4dcf96 16330
+apps/server/cloudflare/recurring/internal/models.ts
+  s_e9f458b7eafa38::t_5daae7c56d35e6 5
+  s_e9f458b7eafa38::t_9536ea9602ae6f 25,30
+  s_e9f458b7eafa38::t_0dd8dda6741bd1 1-4,6,17,39-42
+  s_e9f458b7eafa38::t_1a9377454a1aba 7-16,18-24,26-29,31-38
+apps/server/.dependency-cruiser.mjs
+  s_e9f458b7eafa38::t_6188401999dbd6 1288
+apps/server/src/shell/audit/contract.ts
+  s_e9f458b7eafa38::t_103b4d5c602d31 30,63
+apps/server/cloudflare/migrations/0028_recurring_audit_budget.sql
+  s_e9f458b7eafa38::t_57a41047a87165 5,10
+  s_e9f458b7eafa38::t_28eb8c3c020c27 1-4,6-9,11-45
+apps/server/contracts/operation-policy.json
+  s_e9f458b7eafa38::t_eb2b4c6d4dc857 593-606
+  s_e9f458b7eafa38::t_6a055ba15c2f38 592
+apps/server/cloudflare/recurring/recurring.test.ts
+  s_e9f458b7eafa38::t_cdc849191c96d9 1-2,6
+  s_e9f458b7eafa38::t_a263243c0ea9de 169,171
+  s_e9f458b7eafa38::t_487f0ebe9a5364 448,453,565,571,576,580
+  s_e9f458b7eafa38::t_b0d7d7d7bde818 175
+  s_e9f458b7eafa38::t_a4ec14a1b6e278 5,7,17,56-61,131-132,150,257
+  s_e9f458b7eafa38::t_98332271ba2f20 124,139,144
+  s_e9f458b7eafa38::t_318783151db3c2 15-16,181,225
+  s_e9f458b7eafa38::t_ec31af403627be 68-74,177-179,433-435
+  s_e9f458b7eafa38::t_e22e752919128e 21,151-154,159-165,438-446,449-452,455-494,496-505,507-553
+  s_e9f458b7eafa38::t_898dde570c0260 64
+  s_e9f458b7eafa38::t_a2a71d24157a05 601-622,626-637
+  s_e9f458b7eafa38::t_85768b4b6c3100 9-13,23-24,26-41,43-53,173-174,182-224,226-256,258-275,277-309,311-331,333-359,361-416
+  s_e9f458b7eafa38::t_71bf2422e8e45e 447,454,554-564,566-570,572-575,577-579,581-600,623-625,638-641
+  s_e9f458b7eafa38::t_94210e10a6f6d8 3,8
+  s_e9f458b7eafa38::t_8d7e030e6e150c 4
+  s_e9f458b7eafa38::t_1a9377454a1aba 54-55,62-63,65-67,75-123,125-130,133-138,140-143,145-149,155-158,166-168,170,172,176,180,418-432,436-437,495,506,642
+  s_e9f458b7eafa38::t_a51f4c1d98d373 276,310,332,360,417
+  s_e9f458b7eafa38::t_973223f45bcebf 14,18-20,22,25,42
+apps/server/src/core/recurring/internal/detector.ts
+  s_e9f458b7eafa38::t_d07296be73bc6f 123-125,208-213
+  s_e9f458b7eafa38::t_1e5c67d464cb6e 1-3,5-9,30,38-39,53,60-62,67-69,77-78,94,100,102-103,115,122,128-129,141,194,203-206,217,221
+  s_e9f458b7eafa38::t_0d2f16df3bf9c1 79-89,104-111,113-114,118-120
+  s_e9f458b7eafa38::t_26b3387eb7c46e 175,177
+  s_e9f458b7eafa38::t_ec31af403627be 142-146,148-152,154-164,166-170,172-174,176,178-184,218-220
+  s_e9f458b7eafa38::t_ff5c6dba49e831 101,138,147,153,165,171,185
+  s_e9f458b7eafa38::t_2953fa527469ca 112
+  s_e9f458b7eafa38::t_bb15c8b9d76de3 11-16,18-29,31-37,40-52,54-59,63-65,70-76,90-93,95-99,116-117,131-137,139,187-193,195-198,202
+  s_e9f458b7eafa38::t_0fa672ada6c434 10,17,66,121,126-127,130,140,186,199-201,207,214-216
+  s_e9f458b7eafa38::t_82c2de1f33de46 4
+apps/server/src/core/recurring/operations.ts
+  s_e9f458b7eafa38::t_022f621ff4a947 1,3,5-6,8,13-15,18
+  s_e9f458b7eafa38::t_7255103cdce59d 30-31,35
+  s_e9f458b7eafa38::t_b7990a152f9d8d 2,7,9,16-17,22-25
+  s_e9f458b7eafa38::t_bb15c8b9d76de3 10-12,19-21,26-29
+  s_e9f458b7eafa38::t_409625ecfa3188 32,34
+  s_e9f458b7eafa38::t_0d2f16df3bf9c1 33,36
+  s_e9f458b7eafa38::t_fd584a50e48c0b 4
+apps/server/cloudflare/transactions/contract.ts
+  s_e9f458b7eafa38::t_26b3387eb7c46e 4
+  s_e9f458b7eafa38::t_41644d3d7811aa 10,20-21
+  s_e9f458b7eafa38::t_7f7ce555a60a01 1,27,31
+  s_e9f458b7eafa38::t_984b6fd7d51c61 23-26,28-30,32-35
+  s_e9f458b7eafa38::t_d061bb2f037139 22
+apps/server/src/core/recurring/operations.test.ts
+  s_e9f458b7eafa38::t_1b83859cfaffa0 127-133
+  s_e9f458b7eafa38::t_92499ed5cd5daa 16-21,25-27,122-123
+  s_e9f458b7eafa38::t_686d5cbf30224d 1-2,7-8,28,108,120-121,124-126,134-136
+  s_e9f458b7eafa38::t_d08d13fc0e8679 6,29-32,45,47-50,60,64-67,71-73,84,90-97,107
+  s_e9f458b7eafa38::t_26b3387eb7c46e 33-44,51-59,61-63,68-70,74-83,85-89,98-106
+  s_e9f458b7eafa38::t_2a87833028ab40 109,114,118-119
+  s_e9f458b7eafa38::t_a682a028542855 3-5,46
+  s_e9f458b7eafa38::t_ec31af403627be 110-113,115-117
+  s_e9f458b7eafa38::t_04909f1a66a1c1 9-15,22-24
+apps/server/src/shell/canonical-operations/internal/operation-registry.ts
+  s_e9f458b7eafa38::t_ad29de560bf105 47
+docs/adr/0032-deterministic-recurring-charge-detection.md
+  s_e9f458b7eafa38::t_f84fa148cbbaf6 1-49
+apps/server/cloudflare/recurring/contract.ts
+  s_e9f458b7eafa38::t_d8b53a757b0151 3
+  s_e9f458b7eafa38::t_eb7b46aae08f57 1,4-6,20-21
+  s_e9f458b7eafa38::t_9deb83e8fcf5c2 2,7,13-14,19
+  s_e9f458b7eafa38::t_26b3387eb7c46e 8-12,15-18
+GLOSSARY.md
+  s_e9f458b7eafa38::t_9a4762f92ed8f9 110-117
+apps/server/cloudflare/transactions/peer-reads.test.ts
+  s_e9f458b7eafa38::t_8ea75a97713ad0 125
+  s_e9f458b7eafa38::t_b3f6618f87468f 55
+  s_e9f458b7eafa38::t_1a9377454a1aba 11,14-17,69-79,84-124
+  s_e9f458b7eafa38::t_94210e10a6f6d8 12-13
+apps/server/src/shell/recurring/contract.ts
+  s_e9f458b7eafa38::t_1a9377454a1aba 11-13,16-28
+  s_e9f458b7eafa38::t_9ae46f69e28482 1-10,14-15,29
+apps/server/src/shell/audit/internal/recording.ts
+  s_e9f458b7eafa38::t_359d2295f5493f 22
+apps/server/cloudflare/canonical-operations/internal/query-registry.ts
+  s_e9f458b7eafa38::t_1a9377454a1aba 116-117,120
+  s_e9f458b7eafa38::t_e4def80bf98192 10
+  s_e9f458b7eafa38::t_ec31af403627be 118-119
+apps/server/cloudflare/core-http/internal/http.ts
+  s_e9f458b7eafa38::t_c5e77db70f212a 1391-1392,1421
+  s_e9f458b7eafa38::t_e22e752919128e 1382,1390
+  s_e9f458b7eafa38::t_85768b4b6c3100 1379-1381,1383-1389
+  s_e9f458b7eafa38::t_b7d185e9d81c9e 35
+apps/server/cloudflare/recurring/runtime.ts
+  s_e9f458b7eafa38::t_f3a19ef389138c 3,5,33
+  s_e9f458b7eafa38::t_26b3387eb7c46e 7-17,24-31,34-47,51
+  s_e9f458b7eafa38::t_85768b4b6c3100 18-23,48-50
+  s_e9f458b7eafa38::t_49299973681702 2,6,32
+  s_e9f458b7eafa38::t_e6d2a5cfed6de0 1,4
+apps/server/cloudflare/recurring/internal/confirmations.ts
+  s_e9f458b7eafa38::t_08e39d1da63056 24,35,90
+  s_e9f458b7eafa38::t_e6da5dda1d1df2 1-2,7,13-14
+  s_e9f458b7eafa38::t_85768b4b6c3100 8-12,25-34,36-55,81-87,91-93
+  s_e9f458b7eafa38::t_e22e752919128e 66
+  s_e9f458b7eafa38::t_26b3387eb7c46e 3-6,15-23,56-65,67-80,88-89,94-105
+apps/server/cloudflare/transactions/runtime.ts
+  s_e9f458b7eafa38::t_b417f7f9e1582d 1-2
+  s_e9f458b7eafa38::t_26b3387eb7c46e 181,183,185,187
+  s_e9f458b7eafa38::t_b8c29737b71662 184,194,331
+  s_e9f458b7eafa38::t_ec31af403627be 170-180,182,186,188-193,325-330
+tools/depcruise/publication.mjs
+  s_e9f458b7eafa38::t_834c1be6801f17 33
+apps/server/cloudflare/recurring/internal/evaluation.ts
+  s_e9f458b7eafa38::t_b3259061eb0f7a 359
+  s_e9f458b7eafa38::t_2e9bd5a5d1e5f5 371
+  s_e9f458b7eafa38::t_cf52c4c960bb97 404,411
+  s_e9f458b7eafa38::t_94210e10a6f6d8 5-6,19,22-23,29
+  s_e9f458b7eafa38::t_1a9377454a1aba 4,7-16,18,20-21,24,28,30-36,42,45,47-68,70-131,133-170,172-204,266-276,279-281,283-298,300-306,310-311,313-347,351-358,360-366,368-370,372-379,383-393,395-403,405-410,417-418
+  s_e9f458b7eafa38::t_85768b4b6c3100 412-413,415-416
+  s_e9f458b7eafa38::t_ba216801213ce1 1,3,17,25-27,37-38,69,132,171,312,367,394
+  s_e9f458b7eafa38::t_dcae030c39d82b 2,43-44,46,277-278,299
+  s_e9f458b7eafa38::t_26b3387eb7c46e 307,309,414
+  s_e9f458b7eafa38::t_ec31af403627be 39-41,205-265,308,348-350,380-382
+  s_e9f458b7eafa38::t_d3103dc2294b4a 282
+apps/server/cloudflare/recurring/internal/query.ts
+  s_e9f458b7eafa38::t_39a439c5d55d3b 2,135,212,231
+  s_e9f458b7eafa38::t_94210e10a6f6d8 21,26-27
+  s_e9f458b7eafa38::t_85768b4b6c3100 10-11,13-14,170-173,176-193,195-204,213-216,218-221,223,227-230,232-240
+  s_e9f458b7eafa38::t_1a9377454a1aba 4-9,15-17,20,22-25,28-29,34-41,43-63,67-69,71-97,100-113,117-119,123-126,205-210,248-262
+  s_e9f458b7eafa38::t_14ced672246eb0 3,18-19,31-33,64-66,70,98-99,127,247,263-268
+  s_e9f458b7eafa38::t_20c1f639c075ec 30
+  s_e9f458b7eafa38::t_469c0124c5ac32 1,128
+  s_e9f458b7eafa38::t_75c48a5c5914ff 42,129,217
+  s_e9f458b7eafa38::t_ec31af403627be 114-116,120-122,130-134,136-169,243-246
+  s_e9f458b7eafa38::t_7464f6e63f42c9 174-175,194,225-226,241-242
+  s_e9f458b7eafa38::t_b3f4beceff5f1a 211
+  s_e9f458b7eafa38::t_e22e752919128e 12,222,224
+apps/server/src/core/transactions/contract.ts
+  s_e9f458b7eafa38::t_d612874004883c 198-206,209
+  s_e9f458b7eafa38::t_1a9377454a1aba 207-208
+apps/server/cloudflare/recurring/recurring.test-fixture.ts
+  s_e9f458b7eafa38::t_91e0cc7a58f0d7 1-4,15,32
+  s_e9f458b7eafa38::t_85768b4b6c3100 5-6,8-14,16-31,34-47
+  s_e9f458b7eafa38::t_bd741334f0b697 7,33
+apps/server/src/core/recurring/contract.ts
+  s_e9f458b7eafa38::t_1a9377454a1aba 4-6,8
+  s_e9f458b7eafa38::t_4da26a1720bcd2 58-59
+  s_e9f458b7eafa38::t_b54c84d5dc4386 1,3,9-10,14,19-21,23-24,29-30,36-57,60-62,65-67,69-70,72-76,79-81,85
+  s_e9f458b7eafa38::t_f0b49ef11ea45d 68
+  s_e9f458b7eafa38::t_bb15c8b9d76de3 32-34,82-84
+  s_e9f458b7eafa38::t_6bb912f2a086dc 2,15,22,63-64,71,77-78
+  s_e9f458b7eafa38::t_94210e10a6f6d8 7
+  s_e9f458b7eafa38::t_1b83859cfaffa0 11-13,16-18,25-28,31,35
+apps/server/cloudflare/recurring/operations.ts
+  s_e9f458b7eafa38::t_1a9377454a1aba 10-12,14-16,22-24
+  s_e9f458b7eafa38::t_75282b27bfc888 1,4-5,17
+  s_e9f458b7eafa38::t_d48d4e418d51b3 2-3,6-9,13,21
+  s_e9f458b7eafa38::t_26b3387eb7c46e 18-20
+apps/server/cloudflare/maintenance/contract.ts
+  s_e9f458b7eafa38::t_9e3e4d04561cc5 26
+apps/server/src/shell/audit/internal/daily-budget.ts
+  s_e9f458b7eafa38::t_8c329e75e145f1 18
+apps/server/src/shell/api.ts
+  s_e9f458b7eafa38::t_99785d8cbdb78f 12,32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "347b01df000065825f34e97a09f9f6f2c65e160c",
+  "prompts": {},
+  "sessions": {
+    "s_e9f458b7eafa38": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0ff5b-e7bd-776c-8c8c-ca885bbcbd91",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

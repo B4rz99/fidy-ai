@@ -17,7 +17,8 @@ import { paidPeriodFor } from "../../../src/core/subscription/operations";
 import { type VerifiedOutcome, recordVerifiedBillingEvidence } from "./billing-settlement";
 import { verifiedWompiEventHint } from "./wompi-event";
 import { type WorkflowStepConfig } from "cloudflare:workers";
-import { Clock, DateTime, Effect, Encoding, Exit, Option, Schema } from "effect";
+import { Clock, DateTime, Effect, Exit, Option, Schema } from "effect";
+import { Hex } from "effect/encoding";
 import { wompiOutboundHttp } from "./wompi-runtime";
 import {
   type BillingCollectionEnvironment,
@@ -524,7 +525,7 @@ const offerBillingLookup = (
 ): Effect.Effect<boolean, BillingCollectionFailure> =>
   Effect.gen(function* () {
     const { db, workflow, transactionId, signedAt, signedStatus, now } = input;
-    const fingerprint = Encoding.encodeHex(
+    const fingerprint = Hex.encode(
       new Uint8Array(
         yield* attempt(() =>
           crypto.subtle.digest(

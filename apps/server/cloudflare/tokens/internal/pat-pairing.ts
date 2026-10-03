@@ -24,7 +24,8 @@ import {
   buildPairedPATDisclosure,
   selectPATPairingPublicCodeSymbols,
 } from "../../../src/core/tokens/operations";
-import { type Cause, DateTime, Effect, Encoding, Option, Result, Schema } from "effect";
+import { type Cause, DateTime, Effect, Option, Result, Schema } from "effect";
+import { Hex } from "effect/encoding";
 import {
   expirePATConsents,
   expirePairingConsents,
@@ -203,7 +204,7 @@ export const startPATPairing = ({
       if (Option.isNone(payload)) return invalid();
       const source = Schema.decodeUnknownOption(sourceDigest)(request.headers.get("x-pat-source"));
       if (Option.isNone(source)) return unavailable();
-      const bytes = Encoding.decodeHex(source.value);
+      const bytes = Hex.decode(source.value);
       if (Result.isFailure(bytes)) return unavailable();
       const current = currentMillis();
       const code = publicCode();

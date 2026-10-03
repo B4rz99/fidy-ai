@@ -4,7 +4,7 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Layer from "effect/Layer";
-import * as Encoding from "effect/Encoding";
+import { Hex } from "effect/encoding";
 import * as Redacted from "effect/Redacted";
 import { ApprovedWorkersAiModel } from "@fidy/server/hosted-inference-contract";
 import { EmailAddress } from "@fidy/server/email-authentication-contract";
@@ -62,9 +62,7 @@ const resolvePatAdmissionKey = (development: boolean): typeof patAdmissionKey =>
   development
     ? patAdmissionKey.pipe(
         Config.withDefault(
-          Redacted.make(
-            Encoding.encodeHex(crypto.getRandomValues(new Uint8Array(admissionKeyBytes)))
-          )
+          Redacted.make(Hex.encode(crypto.getRandomValues(new Uint8Array(admissionKeyBytes))))
         )
       )
     : patAdmissionKey;

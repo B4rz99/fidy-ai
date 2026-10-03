@@ -25,18 +25,8 @@ import {
   decideConsentReply,
   isConsentIngressDecisionPhase,
 } from "../../../../src/shell/consent/operations";
-import {
-  Clock,
-  Crypto,
-  DateTime,
-  Duration,
-  Effect,
-  Encoding,
-  Exit,
-  Option,
-  Result,
-  Schema,
-} from "effect";
+import { Clock, Crypto, DateTime, Duration, Effect, Exit, Option, Result, Schema } from "effect";
+import { Hex } from "effect/encoding";
 import {
   findOnboardingEmailReplay,
   readOnboardingEmailStatus,
@@ -670,7 +660,7 @@ const admitExchange = (
     const bsuid = input.event.caller.businessScopedUserId;
     const caller = `${portfolio.length}:${portfolio}${bsuid.length}:${bsuid}`;
     const cryptoService = yield* Crypto.Crypto;
-    const sourceHash = Encoding.encodeHex(
+    const sourceHash = Hex.encode(
       yield* cryptoService.digest("SHA-256", new TextEncoder().encode(caller))
     );
     const claim = yield* Effect.result(

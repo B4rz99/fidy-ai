@@ -84,7 +84,7 @@ jobs:
           CLOUDFLARE_ACCESS_AUDIENCE: ${{ secrets.CLOUDFLARE_ACCESS_AUDIENCE }}
         run: |
           bash scripts/check-production-runtime-config.sh
-          alchemy() { bun ../../node_modules/alchemy/bin/alchemy.ts "$@"; }
+          alchemy() { bun ../../node_modules/alchemy/bin/alchemy.js "$@"; }
           alchemy plan --stage production --no-input
 
       - name: Recheck trunk immediately before deployment
@@ -122,7 +122,7 @@ jobs:
           CLOUDFLARE_ACCESS_AUDIENCE: ${{ secrets.CLOUDFLARE_ACCESS_AUDIENCE }}
         run: |
           bash scripts/check-production-runtime-config.sh
-          alchemy() { bun ../../node_modules/alchemy/bin/alchemy.ts "$@"; }
+          alchemy() { bun ../../node_modules/alchemy/bin/alchemy.js "$@"; }
           alchemy deploy --stage production --yes --no-input
 
       - name: Install zero-traffic candidate routing

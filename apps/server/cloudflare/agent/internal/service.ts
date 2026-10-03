@@ -38,7 +38,7 @@ import {
   Schema,
   type Scope,
 } from "effect";
-import { FetchHttpClient, HttpClient } from "effect/unstable/http";
+import { FetchHttpClient, HttpClient } from "effect/http";
 import {
   type HostedDeliveryCorrelationToken,
   type WhatsAppProviderMessageId,

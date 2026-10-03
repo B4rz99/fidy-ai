@@ -17,7 +17,7 @@ const Receipt = Schema.Struct({
   byte_length: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1_048_576 })),
   received_at_ms: Schema.Int,
   expires_at_ms: Schema.Int,
-  time_zone: Schema.String.check(Schema.isLengthBetween(1, maximumTimeZoneCharacters)),
+  time_zone: Schema.String.check(Schema.isBetweenLength(1, maximumTimeZoneCharacters)),
 });
 type Receipt = typeof Receipt.Type;
 type Input = Readonly<{

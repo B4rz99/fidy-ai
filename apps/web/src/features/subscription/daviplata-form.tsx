@@ -33,6 +33,7 @@ type FormProps = Readonly<{
 }>;
 type DocumentFields = Readonly<{ documentNumber: string; productNumber: string }>;
 const emptyFields: DocumentFields = { documentNumber: "", productNumber: "" };
+const absentAuthorization = Option.none<never>();
 const digitsOnly = (value: string): string => value.replace(/\D/gu, "");
 
 const DocumentForm = ({
@@ -144,8 +145,8 @@ type ChallengeLifetime = Readonly<{
   active: () => boolean;
 }>;
 const useChallengeLifetime = (unlock: () => void): ChallengeLifetime => {
-  const challenge = useRef(Option.none<DaviplataChallenge>());
-  const controller = useRef(Option.none<AbortController>());
+  const challenge = useRef<Option.Option<DaviplataChallenge>>(absentAuthorization);
+  const controller = useRef<Option.Option<AbortController>>(absentAuthorization);
   const started = useRef(false);
   const running = useRef(false);
   const mounted = useRef(false);

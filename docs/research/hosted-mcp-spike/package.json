@@ -1,0 +1,12 @@
+{
+  "name": "fidy-hosted-mcp-compatibility-spike",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test server.test.mjs",
+    "start": "bun server.mjs"
+  },
+  "dependencies": {
+    "effect": "4.0.0"
+  }
+}

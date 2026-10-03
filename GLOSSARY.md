@@ -228,6 +228,27 @@ immediate caller and never persisted. A User-owned agent never manages Consent; 
 while explicit Consent revocation prevents later work with `user_action_required`.
 _Avoid_: API key, credential, Agent Session.
 
+**OAuthConnection**:
+A separately identifiable User authorization for one external agent client to invoke Fidy's hosted
+MCP resource with a non-empty approved subset of `read`, `write`, and `dashboard`. Its absolute
+7/30/90/365-day expiration is fixed at browser approval (90 days by default); short-lived access
+and rotating refresh credentials cannot extend it. Client names are unverified display claims.
+Revocation stops subsequent work and refresh, independently of browser logout and PAT revocation.
+This is the accepted design in ADR 0033, not an installed or launch-enabled authority.
+_Avoid_: Institution Connection, PAT, WebSession, Hosted Agent Session, OAuth session.
+
+**OAuth User-owned-agent caller**:
+An external agent acting for one stable User through a live OAuthConnection and audience-bound
+credential. It obeys the same canonical capability, current Consent and accountability policy as
+other User-owned agents, without becoming a PAT or inheriting WebSession or hosted authority.
+_Avoid_: Hosted agent, web caller, PAT caller (for OAuth authority).
+
+**OAuthOperationConfirmation**:
+Single-use first-party User evidence bound to one OAuthConnection, exact canonical operation and
+inputs, applicable revisions and a short expiry. It is consumed with the protected mutation in its
+atomic unit. A public handoff reference, model claim or host annotation is not confirmation authority.
+_Avoid_: Hosted confirmation, approval link (as a credential), model confirmation.
+
 **PATPairing**:
 A short-lived bootstrap in which a User-owned client retains a private device code and presents a
 public user code for approval in the authenticated web app. Approval binds one exact recipient and

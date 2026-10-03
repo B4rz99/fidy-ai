@@ -1,0 +1,55 @@
+[
+  { "event": "refresh", "accepted": false, "resourceBound": true },
+  { "event": "authorization", "pkce": "S256", "resourceBound": true, "scope": "read" },
+  { "event": "protected-resource-discovery" },
+  { "event": "issuer-discovery" },
+  {
+    "event": "registration",
+    "name": "pi",
+    "redirects": ["http://127.0.0.1:61100/callback"],
+    "grantTypes": ["authorization_code", "refresh_token"]
+  },
+  {
+    "event": "authorization",
+    "pkce": "S256",
+    "resourceBound": true,
+    "redirectValid": true,
+    "scope": "read"
+  },
+  { "event": "code-exchange", "pkceValid": true, "resourceBound": true },
+  { "event": "refresh", "accepted": true, "resourceBound": true },
+  { "event": "mcp", "method": "initialize", "version": null },
+  { "event": "refresh", "accepted": true, "resourceBound": true },
+  { "event": "mcp", "method": "notifications/initialized", "version": "2025-11-25" },
+  { "event": "refresh", "accepted": true, "resourceBound": true },
+  { "event": "refresh", "accepted": true, "resourceBound": true },
+  { "event": "mcp", "version": "2025-11-25" },
+  { "event": "refresh", "accepted": true, "resourceBound": true },
+  { "event": "mcp", "method": "initialize", "version": null },
+  { "event": "refresh", "accepted": true, "resourceBound": true },
+  { "event": "mcp", "method": "notifications/initialized", "version": "2025-11-25" },
+  { "event": "refresh", "accepted": true, "resourceBound": true },
+  { "event": "refresh", "accepted": true, "resourceBound": true },
+  { "event": "mcp", "version": "2025-11-25" },
+  { "event": "protected-resource-discovery" },
+  { "event": "issuer-discovery" },
+  { "event": "protected-resource-discovery" },
+  { "event": "issuer-discovery" },
+  {
+    "event": "registration",
+    "name": "Claude Code (spike)",
+    "redirects": ["http://localhost:56676/callback"],
+    "grantTypes": ["authorization_code", "refresh_token"]
+  },
+  {
+    "event": "authorization",
+    "pkce": "S256",
+    "resourceBound": true,
+    "redirectValid": true,
+    "scope": "read"
+  },
+  { "event": "code-exchange", "pkceValid": true, "resourceBound": true },
+  { "event": "refresh", "accepted": true, "resourceBound": true },
+  { "event": "issuer-discovery" },
+  { "event": "protected-resource-discovery" }
+]

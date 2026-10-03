@@ -145,7 +145,7 @@ const submitNewSource = (
         authorizeNequiWithWompi({
           publicKey: enrollment.wompiPublicKey,
           phoneNumber: fields.phoneNumber,
-          fetch: globalThis.fetch.bind(globalThis),
+          fetchImplementation: globalThis.fetch.bind(globalThis),
           onAwaiting: fields.onAwaiting,
         }).pipe(
           Effect.flatMap((nequiToken) =>

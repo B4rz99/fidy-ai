@@ -367,12 +367,14 @@ const NequiNumberField = (
   </label>
 );
 
+const noPendingAuthorization: Option.Option<AbortController> = Option.none();
+
 const NequiEnrollmentForm = ({ enrollment, busy, submit }: EnrollmentFormProps): JSX.Element => {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [billingEmail, setBillingEmail] = useState<string>(enrollment.billingEmail);
   const [awaitingApproval, setAwaitingApproval] = useState(false);
   const [decisions, setDecisions] = useState<EnrollmentDecisions>(emptyDecisions);
-  const authorization = useRef<Option.Option<AbortController>>(Option.none());
+  const authorization = useRef(noPendingAuthorization);
   const abort = (): void => {
     Option.map(authorization.current, (controller) => controller.abort());
   };

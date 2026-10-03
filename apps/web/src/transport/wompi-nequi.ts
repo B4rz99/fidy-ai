@@ -28,7 +28,7 @@ const requestToken = (
   input: Readonly<{
     url: string;
     publicKey: string;
-    fetch: WompiFetch;
+    fetchImplementation: WompiFetch;
     body: Option.Option<string>;
   }>
 ): Effect.Effect<
@@ -38,7 +38,7 @@ const requestToken = (
   Effect.gen(function* () {
     const response = yield* Effect.tryPromise({
       try: (signal) =>
-        input.fetch(input.url, {
+        input.fetchImplementation(input.url, {
           method: Option.isNone(input.body) ? "GET" : "POST",
           headers: {
             authorization: `Bearer ${input.publicKey}`,
@@ -71,7 +71,7 @@ const requestToken = (
 type NequiAuthorizationInput = Readonly<{
   publicKey: string;
   phoneNumber: Redacted.Redacted<string>;
-  fetch: WompiFetch;
+  fetchImplementation: WompiFetch;
   onAwaiting: () => void;
 }>;
 
@@ -86,7 +86,7 @@ const initiateAuthorization = (
     return yield* requestToken({
       url: `${origin}/v1/tokens/nequi`,
       publicKey: input.publicKey,
-      fetch: input.fetch,
+      fetchImplementation: input.fetchImplementation,
       body: Option.some(
         yield* Schema.encodeEffect(NequiRequest)({ phone_number: phone }).pipe(
           Effect.mapError(failure)
@@ -118,7 +118,7 @@ export const authorizeNequiWithWompi = (
       current = yield* requestToken({
         url: `${origin}/v1/tokens/nequi/${encodeURIComponent(Redacted.value(token))}`,
         publicKey: input.publicKey,
-        fetch: input.fetch,
+        fetchImplementation: input.fetchImplementation,
         body: Option.none(),
       });
       if (Redacted.value(current.token) !== Redacted.value(token)) return yield* failure();

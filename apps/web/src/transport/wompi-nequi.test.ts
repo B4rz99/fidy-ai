@@ -19,7 +19,7 @@ it("waits for Nequi approval and returns only the token without retaining accoun
     authorizeNequiWithWompi({
       publicKey: "pub_test_example",
       phoneNumber: Redacted.make("3991111111"),
-      fetch: provider,
+      fetchImplementation: provider,
       onAwaiting: () => undefined,
     }).pipe(Effect.map((token) => expect(Redacted.value(token)).toBe("nequi_test_example")))
   );
@@ -37,7 +37,7 @@ it("rejects mismatched, malformed and overflowing provider responses without ref
           authorizeNequiWithWompi({
             publicKey: "pub_test_example",
             phoneNumber: Redacted.make("3991111111"),
-            fetch: () => Promise.resolve(response),
+            fetchImplementation: () => Promise.resolve(response),
             onAwaiting: () => undefined,
           })
         );

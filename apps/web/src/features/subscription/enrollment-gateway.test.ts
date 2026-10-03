@@ -93,71 +93,93 @@ afterEach(() => {
 
 it.each(["wrong-method", "reused-source"] as const)(
   "refuses DaviPlata authorization for %s and wipes drafts before any external effect",
-  async (reason) => {
-    const enrollment: PreparedEnrollment = {
-      ...prepared(Date.now()),
-      ...(reason === "wrong-method" ? { method: "card" } : { paymentSourceMode: "reuse" }),
-    };
-    const payloads: Array<unknown> = [];
-    const client = makeSubscriptionEnrollmentClient({
-      apiOrigin: "https://api.test.fidyapp.com",
-      httpClient: Layer.succeed(HttpClient.HttpClient, submissionBoundary(enrollment, payloads)),
-    });
-    const provider = providerFixture();
-    vi.stubGlobal("fetch", provider);
-    const documentNumber = Redacted.make("1122233");
-    const productNumber = Redacted.make("3991111111");
-    try {
-      await expect(
-        makeEnrollmentGateway(client).startDaviplata(enrollment, "synthetic@example.invalid", {
-          documentNumber,
-          productNumber,
-          signal: mountedSignal(),
-        })
-      ).rejects.toThrow();
-      expect(() => Redacted.value(documentNumber)).toThrow();
-      expect(() => Redacted.value(productNumber)).toThrow();
-      expect(provider).not.toHaveBeenCalled();
-      expect(payloads).toEqual([]);
-      expect(sessionStorage.length).toBe(0);
-    } finally {
-      await client.dispose();
-    }
-  }
+  (reason) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const enrollment: PreparedEnrollment = {
+          ...prepared(yield* Clock.currentTimeMillis),
+          ...(reason === "wrong-method" ? { method: "card" } : { paymentSourceMode: "reuse" }),
+        };
+        const payloads: Array<unknown> = [];
+        const client = makeSubscriptionEnrollmentClient({
+          apiOrigin: "https://api.test.fidyapp.com",
+          httpClient: Layer.succeed(
+            HttpClient.HttpClient,
+            submissionBoundary(enrollment, payloads)
+          ),
+        });
+        const provider = providerFixture();
+        vi.stubGlobal("fetch", provider);
+        const documentNumber = Redacted.make("1122233");
+        const productNumber = Redacted.make("3991111111");
+        try {
+          const result = yield* Effect.exit(
+            Effect.tryPromise(() =>
+              makeEnrollmentGateway(client).startDaviplata(
+                enrollment,
+                "synthetic@example.invalid",
+                {
+                  documentNumber,
+                  productNumber,
+                  signal: mountedSignal(),
+                }
+              )
+            )
+          );
+          expect(result._tag).toBe("Failure");
+          expect(() => Redacted.value(documentNumber)).toThrow();
+          expect(() => Redacted.value(productNumber)).toThrow();
+          expect(provider).not.toHaveBeenCalled();
+          expect(payloads).toEqual([]);
+          expect(sessionStorage.length).toBe(0);
+        } finally {
+          yield* Effect.tryPromise(() => client.dispose());
+        }
+      })
+    )
 );
 
 it.each(["missing-fields", "nequi-fields"] as const)(
   "refuses direct DaviPlata submission with %s without approved challenge authority",
-  async (fieldsKind) => {
-    const enrollment = prepared(Date.now());
-    const payloads: Array<unknown> = [];
-    const client = makeSubscriptionEnrollmentClient({
-      apiOrigin: "https://api.test.fidyapp.com",
-      httpClient: Layer.succeed(HttpClient.HttpClient, submissionBoundary(enrollment, payloads)),
-    });
-    const provider = providerFixture();
-    vi.stubGlobal("fetch", provider);
-    try {
-      await expect(
-        makeEnrollmentGateway(client).submit(
-          enrollment,
-          "synthetic@example.invalid",
-          fieldsKind === "missing-fields"
-            ? undefined
-            : {
-                method: "nequi",
-                phoneNumber: Redacted.make("3991111111"),
-                signal: mountedSignal(),
-                onAwaiting: (): void => {},
-              }
-        )
-      ).rejects.toThrow();
-      expect(payloads).toEqual([]);
-      expect(provider).not.toHaveBeenCalled();
-    } finally {
-      await client.dispose();
-    }
-  }
+  (fieldsKind) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const enrollment = prepared(yield* Clock.currentTimeMillis);
+        const payloads: Array<unknown> = [];
+        const client = makeSubscriptionEnrollmentClient({
+          apiOrigin: "https://api.test.fidyapp.com",
+          httpClient: Layer.succeed(
+            HttpClient.HttpClient,
+            submissionBoundary(enrollment, payloads)
+          ),
+        });
+        const provider = providerFixture();
+        vi.stubGlobal("fetch", provider);
+        try {
+          const result = yield* Effect.exit(
+            Effect.tryPromise(() =>
+              makeEnrollmentGateway(client).submit(
+                enrollment,
+                "synthetic@example.invalid",
+                fieldsKind === "missing-fields"
+                  ? undefined
+                  : {
+                      method: "nequi",
+                      phoneNumber: Redacted.make("3991111111"),
+                      signal: mountedSignal(),
+                      onAwaiting: (): void => {},
+                    }
+              )
+            )
+          );
+          expect(result._tag).toBe("Failure");
+          expect(payloads).toEqual([]);
+          expect(provider).not.toHaveBeenCalled();
+        } finally {
+          yield* Effect.tryPromise(() => client.dispose());
+        }
+      })
+    )
 );
 
 const submissionBoundary = (

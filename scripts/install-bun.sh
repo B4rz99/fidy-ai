@@ -15,7 +15,12 @@ esac
 install_directory="${1:-$HOME/.fidy/bun-bb35d1b81}"
 temporary_directory="$(mktemp -d)"
 trap 'rm -rf "$temporary_directory"' EXIT
+authorization=()
+if [[ -n "${GH_TOKEN:-}" ]]; then
+  authorization=(-H "Authorization: Bearer $GH_TOKEN")
+fi
 curl --fail --silent --show-error --location --max-time 120 \
+  "${authorization[@]}" \
   -H 'Accept: application/octet-stream' \
   "https://api.github.com/repos/oven-sh/bun/releases/assets/$asset" \
   -o "$temporary_directory/bun.zip"

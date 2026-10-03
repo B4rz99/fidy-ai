@@ -33,11 +33,30 @@ The reply and one-use receipt stay in mounted component state, not browser stora
 channel is not a tool-callable canonical operation and uses the same origin-locked, no-store,
 redirect-rejecting, bounded browser HTTP policy as the derived clients. The
 web does not maintain copied canonical schemas, operation maps, or access policy. The Pro payment flow
-is browser-mediated: method-specific card and Nequi authorization goes directly to Wompi and shares
-Price, Consent and payment status views. Authorization is transient and bound to the mounted form
-and authentication lifetime; sensitive payment details and authorization material are not persisted
-or exposed through unrelated application state. The enrollment client is revoked when its
-authentication lifetime ends.
+is browser-mediated: method-specific card, Nequi and DaviPlata authorization goes directly to Wompi
+and shares Price, Consent and payment status views. A separate server-declared availability GET,
+owned by the session's Effect Atom registry, advertises DaviPlata only when operator activation and
+reviewed exact OTP destinations allow it. Availability is not a canonical operation, a browser
+activation switch, or a chatbot activation path; preparation still enforces the server's one-source
+restriction. Missing or failing availability does not advertise DaviPlata.
+
+The DaviPlata form visibly supports only cédula de ciudadanía (CC). Document/product drafts and
+OTPs remain React-local and travel directly to Wompi, never in Fidy payloads, browser storage, URLs,
+or shared atoms. The form retains its opaque challenge in a mounted ref; the gateway and transport
+closures enclose rotating, one-use bearer authority and the approved token. Only safe interaction
+state and selection locks can enter shared view state. The transport independently verifies the
+exact operator-reviewed destinations against the prepared merchant environment, bounds requests,
+responses, attempts and the absolute authorization lifetime, and serializes actions. Unmount,
+explicit cancellation or authentication-lifetime revocation abort pending requests/readers and
+clear retained secrets and authority; authorization expiry also revokes the provider closure.
+
+An uncertain authorization stops rather than blindly replaying an OTP mutation. Only an explicitly
+eligible uncertain Fidy submission can use `retrySubmission`, while its approved token remains in
+mounted memory. This reuses the stable `PaymentRequestId` without replaying tokenization, OTP
+validation or a provider source POST. `confirm` is exclusively an OTP action. Reload cannot recover
+the challenge, OTP or approved token, and the UI does not claim otherwise. Authorization is transient
+and bound to the mounted form and authentication lifetime; the enrollment client is synchronously
+revoked when that lifetime ends.
 The web submits through the server-owned payment boundary and observes only browser-safe
 `BillingAttempt` state through a canonical query;
 provider references are not part of web application state.
@@ -61,7 +80,10 @@ storage, or application-wide state.
 Alchemy deploys the validated output as an assets-only Worker at `app.fidyapp.com`, with
 `fidyapp.com` permanently redirected to that canonical host. There is no application Worker
 entrypoint. The browser Content Security Policy permits connections only to the stable API origin and
-Wompi's fixed sandbox/production tokenization origins; card fields and Nequi numbers never pass through Fidy. Cloudflare applies
+Wompi's fixed sandbox/production tokenization origins. Card fields, Nequi numbers, and DaviPlata
+CC document/product and OTP material never pass through Fidy. An OTP policy must match those
+already permitted origins exactly; it does not widen CSP to arbitrary provider-supplied hosts.
+Cloudflare applies
 the same security headers to every SPA fallback, keeps shells and release metadata revalidating with
 `no-cache`, and removes that inherited value before assigning one-year immutable caching to
 content-hashed assets.
@@ -82,8 +104,12 @@ The repository's cross-application browser acceptance remains owned by root arch
 the built production web mode and real public/Core Worker ingress on separate loopback HTTPS origins,
 backed by isolated Miniflare D1. Loopback operator and provider fixtures supply external approvals,
 proof delivery, and Wompi responses; focused `page.route` fixtures remain for browser presentation
-and failure states. The server contract gate owns generated OpenAPI freshness, while browser checks
-prove that neither host publishes that artifact.
+and failure states. DaviPlata's focused browser tests use synthetic protocol fixtures, not recorded
+provider responses or live Sandbox evidence. They check exact-destination refusal, one-use bearer
+rotation, action/byte/time bounds, lifetime disposal and explicit same-request submission recovery.
+Successful fixture tests do not prove merchant activation, provider destinations, browser CORS or
+Production readiness; those remain separate operator-evidence gates. The server contract gate owns
+generated OpenAPI freshness, while browser checks prove that neither host publishes that artifact.
 
 Browser journey sign-in fixtures advance only the browser's initial polling timer after operator
 approval; real Core proof verification, rate limits, and session creation are unchanged. Dedicated

@@ -71,6 +71,7 @@ const trackedClient = (): Readonly<{
         apiOrigin: "https://api.test.fidyapp.com",
       });
       return {
+        signal: client.signal,
         execute: client.execute,
         dispose: () => {
           disposed += 1;

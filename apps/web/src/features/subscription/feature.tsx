@@ -8,6 +8,14 @@ import {
 import { useRouter } from "@tanstack/react-router";
 import { Data, Effect, Array as EffectArray, Option, Predicate, Redacted } from "effect";
 import { Atom } from "effect/unstable/reactivity";
+import { DaviplataEnrollmentForm } from "./daviplata-form";
+import { DaviplataAuthorizationLock } from "./daviplata-activity";
+import { BillingEmailField, EnrollmentConsent } from "./enrollment-controls";
+import {
+  type EnrollmentDecisions,
+  allDecisionsAccepted,
+  emptyDecisions,
+} from "./enrollment-decisions";
 import { type FormEvent, type JSX, type RefCallback, useRef, useState } from "react";
 import { useSession } from "@/session/session-context";
 import { useSubscriptionEnrollmentClient } from "@/session/subscription-enrollment-context";
@@ -232,66 +240,6 @@ const CardFieldsForm = ({ disabled, fields, setFields }: CardFieldsControlProps)
   </fieldset>
 );
 
-type EnrollmentDecisions = Readonly<{
-  endUserPolicy: boolean;
-  personalData: boolean;
-}>;
-
-const EnrollmentConsent = ({
-  enrollment,
-  decisions,
-  disabled,
-  setDecisions,
-}: Readonly<{
-  enrollment: PreparedEnrollment;
-  decisions: EnrollmentDecisions;
-  disabled: boolean;
-  setDecisions: (decisions: EnrollmentDecisions) => void;
-}>): JSX.Element => (
-  <div className="flex flex-col gap-2">
-    <label className="flex items-start gap-2">
-      <input
-        checked={decisions.endUserPolicy}
-        disabled={disabled}
-        onChange={(event) => setDecisions({ ...decisions, endUserPolicy: event.target.checked })}
-        type="checkbox"
-      />
-      <span>
-        Acepto el{" "}
-        <a
-          className="underline underline-offset-2"
-          href={enrollment.contracts.endUserPolicy.permalink.href}
-          rel="noreferrer"
-          target="_blank"
-        >
-          reglamento
-        </a>{" "}
-        de Wompi.
-      </span>
-    </label>
-    <label className="flex items-start gap-2">
-      <input
-        checked={decisions.personalData}
-        disabled={disabled}
-        onChange={(event) => setDecisions({ ...decisions, personalData: event.target.checked })}
-        type="checkbox"
-      />
-      <span>
-        Autorizo el{" "}
-        <a
-          className="underline underline-offset-2"
-          href={enrollment.contracts.personalDataAuthorization.permalink.href}
-          rel="noreferrer"
-          target="_blank"
-        >
-          tratamiento de datos personales
-        </a>{" "}
-        de Wompi.
-      </span>
-    </label>
-  </div>
-);
-
 const emptyCardFields: CardFields = {
   number: "",
   cvc: "",
@@ -299,49 +247,18 @@ const emptyCardFields: CardFields = {
   expirationYear: "",
   cardholderName: "",
 };
-const emptyDecisions: EnrollmentDecisions = {
-  endUserPolicy: false,
-  personalData: false,
-};
-const allDecisionsAccepted = (decisions: EnrollmentDecisions): boolean =>
-  decisions.endUserPolicy && decisions.personalData;
-
 const enrollmentSubmitLabel = (busy: boolean): string => (busy ? "Activando Pro…" : "Activar Pro");
 
-type EnrollmentFormProps = Readonly<{
-  enrollment: PreparedEnrollment;
-  busy: boolean;
-  submit: (billingEmail: string, fields?: PaymentFields) => void;
+type DaviplataFormActions = Readonly<{
+  gateway: Option.Option<EnrollmentGateway>;
+  onDaviplataSubmitted: (email: string, submission: PaymentSubmission) => void;
 }>;
-
-const BillingEmailField = ({
-  email,
-  disabled,
-  setEmail,
-}: Readonly<{
-  email: string;
-  disabled: boolean;
-  setEmail: (email: string) => void;
-}>): JSX.Element => (
-  <>
-    <label className="flex flex-col gap-1" htmlFor="billing-email">
-      Correo de facturación
-      <Input
-        id="billing-email"
-        autoComplete="email"
-        disabled={disabled}
-        required
-        type="email"
-        value={email}
-        onChange={(event) => setEmail(event.target.value)}
-      />
-    </label>
-    <p className="text-sm text-muted-foreground">
-      Fidy conservará este correo y lo compartirá con Wompi para los cobros automáticos posteriores
-      de tu fuente de pago reutilizable.
-    </p>
-  </>
-);
+type EnrollmentFormProps = DaviplataFormActions &
+  Readonly<{
+    enrollment: PreparedEnrollment;
+    busy: boolean;
+    submit: (billingEmail: string, fields?: PaymentFields) => void;
+  }>;
 
 const NequiNumberField = (
   props: Readonly<{
@@ -470,12 +387,26 @@ const PreparedCardEnrollmentForm = ({
   );
 };
 
-const PreparedEnrollmentForm = (props: EnrollmentFormProps): JSX.Element =>
-  props.enrollment.method === "nequi" && props.enrollment.paymentSourceMode === "create" ? (
+const PreparedEnrollmentForm = (props: EnrollmentFormProps): JSX.Element => {
+  if (props.enrollment.method === "daviplata" && props.enrollment.paymentSourceMode === "create") {
+    return Option.match(props.gateway, {
+      onNone: () => <p>DaviPlata no está disponible.</p>,
+      onSome: (gateway) => (
+        <DaviplataEnrollmentForm
+          key={props.enrollment.enrollmentId}
+          enrollment={props.enrollment}
+          start={gateway.startDaviplata}
+          onSubmitted={props.onDaviplataSubmitted}
+        />
+      ),
+    });
+  }
+  return props.enrollment.method === "nequi" && props.enrollment.paymentSourceMode === "create" ? (
     <NequiEnrollmentForm key={props.enrollment.enrollmentId} {...props} />
   ) : (
     <PreparedCardEnrollmentForm key={props.enrollment.enrollmentId} {...props} />
   );
+};
 
 const EnrollmentStatusAction = ({
   current,
@@ -665,13 +596,15 @@ const PaymentFlow = makeScopedAtom(() =>
   Atom.make<Option.Option<ScopedPaymentFlow>>(Option.none())
 );
 
-const renderPaymentEnrollment = (input: {
-  current: PaymentFlowState;
-  busy: boolean;
-  prepare: () => void;
-  submit: (prepared: PreparedEnrollment, email: string, fields?: PaymentFields) => void;
-  refresh: (enrollmentId: PreparedEnrollment["enrollmentId"]) => void;
-}): JSX.Element => {
+const renderPaymentEnrollment = (
+  input: DaviplataFormActions & {
+    current: PaymentFlowState;
+    busy: boolean;
+    prepare: () => void;
+    submit: (prepared: PreparedEnrollment, email: string, fields?: PaymentFields) => void;
+    refresh: (enrollmentId: PreparedEnrollment["enrollmentId"]) => void;
+  }
+): JSX.Element => {
   const { current, busy, prepare, submit, refresh } = input;
   if (current._tag === "PaymentSubmission") {
     if (!isAwaitingPaymentStatus(current.value)) {
@@ -680,8 +613,10 @@ const renderPaymentEnrollment = (input: {
     const prepared = current.prepared;
     return (
       <div className="flex flex-col gap-5">
-        {Option.isSome(prepared) && (
+        {Option.isSome(prepared) && prepared.value.method !== "daviplata" && (
           <PreparedEnrollmentForm
+            gateway={input.gateway}
+            onDaviplataSubmitted={input.onDaviplataSubmitted}
             busy
             enrollment={prepared.value}
             submit={(email, fields) => submit(prepared.value, email, fields)}
@@ -696,6 +631,8 @@ const renderPaymentEnrollment = (input: {
     return (
       <div className="flex flex-col gap-5">
         <PreparedEnrollmentForm
+          gateway={input.gateway}
+          onDaviplataSubmitted={input.onDaviplataSubmitted}
           busy={busy}
           enrollment={enrollment}
           submit={(email, fields) => submit(enrollment, email, fields)}
@@ -709,6 +646,8 @@ const renderPaymentEnrollment = (input: {
 };
 
 const EnrollmentContent = ({
+  gateway,
+  onDaviplataSubmitted,
   enrollment,
   busy,
   prepare,
@@ -720,13 +659,36 @@ const EnrollmentContent = ({
   prepare: () => void;
   submit: (prepared: PreparedEnrollment, email: string, fields?: PaymentFields) => void;
   refresh: (enrollmentId: PreparedEnrollment["enrollmentId"]) => void;
-}>): JSX.Element =>
+}> &
+  DaviplataFormActions): JSX.Element =>
   Option.match(enrollment, {
     onNone: () => (busy ? <p aria-live="polite">Cargando formulario…</p> : <></>),
-    onSome: (current) => renderPaymentEnrollment({ current, busy, prepare, submit, refresh }),
+    onSome: (current) =>
+      renderPaymentEnrollment({
+        current,
+        busy,
+        prepare,
+        submit,
+        refresh,
+        gateway,
+        onDaviplataSubmitted,
+      }),
   });
 
+const paymentMethodCopy: Readonly<
+  Record<EnrollmentMethod, Readonly<{ label: string; title: string; privateFields: string }>>
+> = {
+  card: { label: "Tarjeta", title: "Pago con tarjeta", privateFields: "Los datos de tu tarjeta" },
+  nequi: { label: "Nequi", title: "Pago con Nequi", privateFields: "Tu número de Nequi" },
+  daviplata: {
+    label: "DaviPlata",
+    title: "Pago con DaviPlata",
+    privateFields: "Tu documento, número de DaviPlata y código",
+  },
+};
 const PaymentDetails = ({
+  gateway,
+  onDaviplataSubmitted,
   method,
   enrollment,
   busy,
@@ -742,12 +704,13 @@ const PaymentDetails = ({
   submit: (prepared: PreparedEnrollment, email: string, fields?: PaymentFields) => void;
   refresh: (enrollmentId: PreparedEnrollment["enrollmentId"]) => void;
   method: EnrollmentMethod;
-}>): JSX.Element => (
-  <section aria-label={method === "card" ? "Pago con tarjeta" : "Pago con Nequi"}>
+}> &
+  DaviplataFormActions): JSX.Element => (
+  <section aria-label={paymentMethodCopy[method].title}>
     <Card>
       <CardHeader>
         <CardTitle>
-          <h2>{method === "card" ? "Pago con tarjeta" : "Pago con Nequi"}</h2>
+          <h2>{paymentMethodCopy[method].title}</h2>
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
@@ -755,6 +718,8 @@ const PaymentDetails = ({
           <p role="alert">No pudimos continuar. Revisa los datos o intenta más tarde.</p>
         ) : null}
         <EnrollmentContent
+          gateway={gateway}
+          onDaviplataSubmitted={onDaviplataSubmitted}
           busy={busy}
           enrollment={enrollment}
           prepare={prepare}
@@ -764,8 +729,8 @@ const PaymentDetails = ({
       </CardContent>
       <CardFooter>
         <p className="text-sm text-muted-foreground">
-          {method === "card" ? "Los datos de tu tarjeta" : "Tu número de Nequi"} viajan directamente
-          desde este navegador a Wompi. Fidy no los recibe ni los conserva.
+          {paymentMethodCopy[method].privateFields} viajan directamente desde este navegador a
+          Wompi. Fidy no los recibe ni los conserva.
         </p>
       </CardFooter>
     </Card>
@@ -967,16 +932,18 @@ const submitPaymentFlow = (
   );
 
 const PaymentMethodSelection = ({
+  enabledMethods,
   selected,
   disabled,
   select,
 }: Readonly<{
+  enabledMethods: ReadonlyArray<EnrollmentMethod>;
   selected: EnrollmentMethod;
   disabled: boolean;
   select: (method: EnrollmentMethod) => void;
 }>): JSX.Element => (
   <section aria-label="Método de pago" className="flex gap-2">
-    {(["card", "nequi"] as const).map((method) => (
+    {enabledMethods.map((method) => (
       <Button
         key={method}
         type="button"
@@ -984,22 +951,28 @@ const PaymentMethodSelection = ({
         disabled={disabled}
         onClick={() => select(method)}
       >
-        {method === "card" ? "Tarjeta" : "Nequi"}
+        {paymentMethodCopy[method].label}
       </Button>
     ))}
   </section>
 );
 
 const PaymentFlowDetails = ({
+  gateway,
   offer,
   method,
   interaction,
 }: Readonly<{
+  gateway: Option.Option<EnrollmentGateway>;
   offer: SubscriptionOfferPresentation;
   method: EnrollmentMethod;
   interaction: EnrollmentInteraction;
 }>): JSX.Element => (
   <PaymentDetails
+    gateway={gateway}
+    onDaviplataSubmitted={(email, submission) =>
+      interaction.start(() => Effect.succeed(submissionFlow(submission, email, Option.none())))
+    }
     method={method}
     busy={interaction.busy}
     enrollment={interaction.enrollment}
@@ -1018,6 +991,48 @@ const PaymentFlowDetails = ({
   />
 );
 
+const enrollmentAvailability = Atom.family((gateway: Option.Option<EnrollmentGateway>) =>
+  Atom.make(
+    Option.match(gateway, {
+      onNone: () => Effect.fail(new EnrollmentInteractionFailed()),
+      onSome: (available) =>
+        Effect.tryPromise({
+          try: () => available.availability(),
+          catch: () => new EnrollmentInteractionFailed(),
+        }),
+    })
+  )
+);
+const useEnrollmentMethods = (
+  gateway: Option.Option<EnrollmentGateway>
+): ReadonlyArray<EnrollmentMethod> => {
+  const availabilityAtom = enrollmentAvailability(gateway);
+  const availability = useAtomValue(availabilityAtom);
+  return availability._tag === "Success" ? availability.value.enabledMethods : ["card", "nequi"];
+};
+const makeOfferSelectionActions = (
+  input: Readonly<{
+    interaction: EnrollmentInteraction;
+    method: EnrollmentMethod;
+    selectedId: Option.Option<PriceId>;
+    setMethod: (method: EnrollmentMethod) => void;
+    setSelectedId: (id: Option.Option<PriceId>) => void;
+  }>
+): Readonly<{ method: (choice: EnrollmentMethod) => void; price: (id: PriceId) => void }> => ({
+  method: (choice) => {
+    if (input.method === choice) return;
+    input.setMethod(choice);
+    input.interaction.reset();
+    Option.map(input.selectedId, (id) =>
+      input.interaction.start((gateway) => preparePaymentFlow(gateway, id, choice))
+    );
+  },
+  price: (id) => {
+    input.setSelectedId(Option.some(id));
+    input.interaction.reset();
+    input.interaction.start((gateway) => preparePaymentFlow(gateway, id, input.method));
+  },
+});
 const ReadyOffersContent = ({
   offers,
   gateway,
@@ -1027,12 +1042,22 @@ const ReadyOffersContent = ({
 }>): JSX.Element => {
   const [selectedId, setSelectedId] = useState<Option.Option<PriceId>>(Option.none);
   const [method, setMethod] = useState<EnrollmentMethod>("card");
+  const enabledMethods = useEnrollmentMethods(gateway);
+  const authorizationLocked = useAtomValue(DaviplataAuthorizationLock.use());
   const interaction = useEnrollmentInteraction(gateway);
-  const { enrollment, busy, interrupt, start, reset } = interaction;
+  const { enrollment, busy, interrupt } = interaction;
+  const select = makeOfferSelectionActions({
+    interaction,
+    method,
+    selectedId,
+    setMethod,
+    setSelectedId,
+  });
   const refreshLifetimeRef = usePaymentRefreshLifetimeRef(interrupt);
   const presented = offers.map(presentSubscriptionOffer);
   const sharedTerms = presentSubscriptionOffer(offers[0]);
-  const selectionDisabled = Option.exists(enrollment, Predicate.isTagged("PaymentSubmission"));
+  const selectionDisabled =
+    authorizationLocked || Option.exists(enrollment, Predicate.isTagged("PaymentSubmission"));
   const selectedOffer = Option.flatMap(selectedId, (id) =>
     EffectArray.findFirst(presented, (offer) => offer.id === id)
   );
@@ -1040,34 +1065,23 @@ const ReadyOffersContent = ({
     <div ref={refreshLifetimeRef} className="flex flex-col gap-6">
       <SubscriptionTerms offer={sharedTerms} />
       <PaymentMethodSelection
+        enabledMethods={enabledMethods}
         selected={method}
         disabled={busy || selectionDisabled}
-        select={(choice) => {
-          if (method === choice) return;
-          setMethod(choice);
-          reset();
-          Option.match(selectedId, {
-            onNone: () => undefined,
-            onSome: (id) =>
-              start((availableGateway) => preparePaymentFlow(availableGateway, id, choice)),
-          });
-        }}
+        select={select.method}
       />
       <OfferSelection
         disabled={busy || selectionDisabled}
         presented={presented}
         selectedId={selectedId}
-        select={(id) => {
-          setSelectedId(Option.some(id));
-          reset();
-          start((availableGateway) => preparePaymentFlow(availableGateway, id, method));
-        }}
+        select={select.price}
       />
       {Option.match(selectedOffer, {
         onNone: () => null,
         onSome: (offer) => (
           <PaymentFlowDetails
             key={`${method}:${offer.id}`}
+            gateway={gateway}
             offer={offer}
             method={method}
             interaction={interaction}
@@ -1087,7 +1101,9 @@ const ReadyOffers = ({
 }>): JSX.Element => (
   <PaymentFlow.Provider>
     <PaymentStatusRefresh.Provider>
-      <ReadyOffersContent gateway={gateway} offers={offers} />
+      <DaviplataAuthorizationLock.Provider>
+        <ReadyOffersContent gateway={gateway} offers={offers} />
+      </DaviplataAuthorizationLock.Provider>
     </PaymentStatusRefresh.Provider>
   </PaymentFlow.Provider>
 );

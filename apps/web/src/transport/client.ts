@@ -27,6 +27,8 @@ export type {
   PaymentSubmissionType,
   SubscriptionStatus,
   EnrollmentMethod,
+  EnrollmentAvailability,
+  DaviplataOtpPolicy,
   SubmitPaymentEnrollmentPayload,
 } from "@fidy/server/client";
 export {
@@ -208,6 +210,8 @@ class EnrollmentClientDisposed extends Data.TaggedError("EnrollmentClientDispose
  * call repeatedly. The client stays outside canonical operations and PATs.
  */
 export type SubscriptionEnrollmentClient = Readonly<{
+  /** Aborted synchronously on disposal, including while a mounted provider challenge is idle. */
+  signal: AbortSignal;
   execute: <A, E>(
     use: (client: EnrollmentApiClient) => Effect.Effect<A, E>,
     options?: Readonly<{ signal: AbortSignal }>
@@ -235,9 +239,11 @@ export const makeSubscriptionEnrollmentClient = (
     )
   );
   const runtime = ManagedRuntime.make(live);
+  const lifetime = new AbortController();
   let available = true;
   let disposal = Option.none<Promise<void>>();
   return {
+    signal: lifetime.signal,
     execute: (use, execution) =>
       available
         ? runtime.runPromise(Effect.flatMap(EnrollmentClientService, use), execution)
@@ -246,6 +252,7 @@ export const makeSubscriptionEnrollmentClient = (
       Option.match(disposal, {
         onNone: () => {
           available = false;
+          lifetime.abort();
           const current = runtime.dispose();
           disposal = Option.some(current);
           return current;

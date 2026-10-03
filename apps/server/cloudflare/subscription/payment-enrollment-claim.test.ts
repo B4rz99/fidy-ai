@@ -63,10 +63,10 @@ it.effect("only the owning User can claim a prepared PaymentEnrollment, once", (
     expect(
       yield* fromPromise(() =>
         claimPreparedPaymentEnrollment({
-          guard: { sql: "SELECT 1", params: [] },
+          authorityGuard: { sql: "SELECT 1", params: [] },
           db,
           input: { ...request, userId: userB },
-          nowMs,
+          claimedAtMs: nowMs,
         })
       )
     ).toBe(false);
@@ -80,16 +80,16 @@ it.effect("only the owning User can claim a prepared PaymentEnrollment, once", (
     const outcomes = yield* fromPromise(() =>
       Promise.all([
         claimPreparedPaymentEnrollment({
-          guard: { sql: "SELECT 1", params: [] },
+          authorityGuard: { sql: "SELECT 1", params: [] },
           db,
           input: { ...request, userId: userA },
-          nowMs,
+          claimedAtMs: nowMs,
         }),
         claimPreparedPaymentEnrollment({
-          guard: { sql: "SELECT 1", params: [] },
+          authorityGuard: { sql: "SELECT 1", params: [] },
           db,
           input: { ...request, userId: userA },
-          nowMs,
+          claimedAtMs: nowMs,
         }),
       ])
     );
@@ -97,10 +97,10 @@ it.effect("only the owning User can claim a prepared PaymentEnrollment, once", (
     expect(
       yield* fromPromise(() =>
         claimPreparedPaymentEnrollment({
-          guard: { sql: "SELECT 1", params: [] },
+          authorityGuard: { sql: "SELECT 1", params: [] },
           db,
           input: { ...request, userId: userA },
-          nowMs,
+          claimedAtMs: nowMs,
         })
       )
     ).toBe(false);
@@ -121,7 +121,7 @@ it.effect("an expired preparation cannot authorize a provider source", () =>
     expect(
       yield* fromPromise(() =>
         claimPreparedPaymentEnrollment({
-          guard: { sql: "SELECT 1", params: [] },
+          authorityGuard: { sql: "SELECT 1", params: [] },
           db,
           input: {
             userId: userA,
@@ -130,7 +130,7 @@ it.effect("an expired preparation cannot authorize a provider source", () =>
             billingEmail,
             paymentSourceMode: "create",
           },
-          nowMs: nowMs + 900_000,
+          claimedAtMs: nowMs + 900_000,
         })
       )
     ).toBe(false);
@@ -156,7 +156,7 @@ it.effect("rejects a source with another authorization method or provider enviro
     yield* fromPromise(() =>
       claimPreparedPaymentEnrollment({
         db,
-        guard: { sql: "SELECT 1", params: [] },
+        authorityGuard: { sql: "SELECT 1", params: [] },
         input: {
           userId: userA,
           enrollmentId,
@@ -164,7 +164,7 @@ it.effect("rejects a source with another authorization method or provider enviro
           billingEmail,
           paymentSourceMode: "create",
         },
-        nowMs,
+        claimedAtMs: nowMs,
       })
     );
     yield* fromPromise(() =>
@@ -203,7 +203,7 @@ it.effect("rejects a pending BillingAttempt whose snapshot differs from the sele
     expect(
       yield* fromPromise(() =>
         claimPreparedPaymentEnrollment({
-          guard: { sql: "SELECT 1", params: [] },
+          authorityGuard: { sql: "SELECT 1", params: [] },
           db,
           input: {
             userId: userA,
@@ -212,7 +212,7 @@ it.effect("rejects a pending BillingAttempt whose snapshot differs from the sele
             billingEmail,
             paymentSourceMode: "create",
           },
-          nowMs,
+          claimedAtMs: nowMs,
         })
       )
     ).toBe(true);

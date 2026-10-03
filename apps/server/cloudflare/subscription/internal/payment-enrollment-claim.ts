@@ -27,30 +27,32 @@ const Claim = Schema.Struct({
 export const claimPreparedPaymentEnrollment = ({
   db,
   input,
-  nowMs,
-  guard,
+  claimedAtMs,
+  authorityGuard,
 }: Readonly<{
   db: D1Database;
   input: typeof Claim.Type;
-  nowMs: number;
-  guard: OwnedStatement;
+  /** Unix milliseconds used for both acceptance and expiry at this claim. */
+  claimedAtMs: number;
+  /** Requires the exact live, fresh WebSession and active Consent when the claim commits. */
+  authorityGuard: OwnedStatement;
 }>): Promise<boolean> => {
   const claim = Schema.decodeSync(Claim)(input);
   return db
     .prepare(`UPDATE card_enrollments SET status = 'creating',
       payment_request_id = ?, accepted_at_ms = ?, authorization_digest = ?
     WHERE id = ? AND user_id = ? AND status = 'prepared' AND expires_at_ms > ?
-      AND payment_source_mode = ? AND billing_email = ? AND EXISTS (${guard.sql})`)
+      AND payment_source_mode = ? AND billing_email = ? AND EXISTS (${authorityGuard.sql})`)
     .bind(
       claim.paymentRequestId,
-      nowMs,
+      claimedAtMs,
       claim.authorizationDigest ?? null,
       claim.enrollmentId,
       claim.userId,
-      nowMs,
+      claimedAtMs,
       claim.paymentSourceMode,
       claim.billingEmail,
-      ...guard.params
+      ...authorityGuard.params
     )
     .run()
     .then((result) => result.meta.changes === 1);

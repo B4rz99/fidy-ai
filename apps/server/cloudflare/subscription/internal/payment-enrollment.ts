@@ -933,7 +933,7 @@ const submit = ({
       const claimed = yield* waitFor(() =>
         claimPreparedPaymentEnrollment({
           db: environment.DB,
-          guard: enrollmentAuthority(session, claimedAt),
+          authorityGuard: enrollmentAuthority(session, claimedAt),
           input: {
             userId,
             enrollmentId: input.enrollmentId,
@@ -944,7 +944,7 @@ const submit = ({
               ? {}
               : { authorizationDigest: authorizationDigest.value }),
           },
-          nowMs: claimedAt,
+          claimedAtMs: claimedAt,
         })
       );
       if (!claimed) {

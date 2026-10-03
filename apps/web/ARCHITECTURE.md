@@ -33,13 +33,11 @@ The reply and one-use receipt stay in mounted component state, not browser stora
 channel is not a tool-callable canonical operation and uses the same origin-locked, no-store,
 redirect-rejecting, bounded browser HTTP policy as the derived clients. The
 web does not maintain copied canonical schemas, operation maps, or access policy. The Pro payment flow
-is browser-mediated: the browser creates a `PaymentRequestId` and tokenizes card fields or a Nequi
-number directly with Wompi. Tarjeta and Nequi share Price, Consent and payment status views but have
-separate authorization forms. Nequi approval polling is bounded to five minutes and cancelled with
-the mounted form or authentication lifetime. Numbers are cleared after tokenization, and tokens
-are cleared after submission; neither enters storage, shared atoms, navigation URLs or diagnostics.
-Reloading restarts unsubmitted authorization rather than retaining its transient token. The direct enrollment client belongs to one authentication lifetime: replacing or unmounting
-that lifetime revokes and disposes the client immediately, without waiting for Atom registry cleanup.
+is browser-mediated: method-specific card and Nequi authorization goes directly to Wompi and shares
+Price, Consent and payment status views. Authorization is transient and bound to the mounted form
+and authentication lifetime; sensitive payment details and authorization material are not persisted
+or exposed through unrelated application state. The enrollment client is revoked when its
+authentication lifetime ends.
 The web submits through the server-owned payment boundary and observes only browser-safe
 `BillingAttempt` state through a canonical query;
 provider references are not part of web application state.

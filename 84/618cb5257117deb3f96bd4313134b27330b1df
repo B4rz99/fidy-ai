@@ -1,0 +1,45 @@
+docs/research/hosted-mcp-spike/oauth.test.md
+  s_bbf99ab292937e::t_765135d7176b41 1-15,25,35-37,51,62-63,67-68
+  s_bbf99ab292937e::t_8bc973486d6b44 16-24,26-34,38-50,52-61,64-66
+docs/research/hosted-mcp-spike/host-outcomes.json
+  s_bbf99ab292937e::t_8bc973486d6b44 1-334
+docs/research/hosted-mcp-spike/package.json
+  s_bbf99ab292937e::t_5e63ed225977e0 6-7,10,12
+  s_bbf99ab292937e::t_8bc973486d6b44 11
+docs/research/hosted-mcp-spike/client-metadata.json
+  s_bbf99ab292937e::t_5c21666d5cdb92 1-14
+docs/research/hosted-mcp-spike/evidence-wrong-issuer.json
+  s_bbf99ab292937e::t_8bc973486d6b44 1-48
+docs/research/hosted-mcp-interoperability-977.md
+  s_bbf99ab292937e::t_099241b0249821 5-28,37-38,40-41,43,45-48,50-83,97-186,191,196-200,203,205-207,210,213-218,220-229,232-258
+  s_bbf99ab292937e::t_8bc973486d6b44 29-36,84-96
+docs/adr/0033-hosted-mcp-and-oauth-agent-grants.md
+  s_bbf99ab292937e::t_2b3a5285c3b23d 16-20,77-80,83-84,209-210
+docs/research/hosted-mcp-spike/evidence-resolved.json
+  s_bbf99ab292937e::t_8bc973486d6b44 1-123
+docs/research/hosted-mcp-spike/oauth.md
+  s_bbf99ab292937e::t_8bc973486d6b44 9-15,23-24,27-62,64-68,70-88,90-93,95-96,98-106,108,110-112,115-197,200-210,213-216
+  s_bbf99ab292937e::t_765135d7176b41 3,6,16-22,25-26,198-199,212,217
+docs/research/hosted-mcp-spike/evidence-strict.json
+  s_bbf99ab292937e::t_8bc973486d6b44 1-42
+docs/research/hosted-mcp-spike/host-probes.md
+  s_bbf99ab292937e::t_8bc973486d6b44 1-73
+ARCHITECTURE.md
+  s_bbf99ab292937e::t_70077b799c58a7 96-98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "84618cb5257117deb3f96bd4313134b27330b1df",
+  "prompts": {},
+  "sessions": {
+    "s_bbf99ab292937e": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10233-4f79-71b7-ba5d-33b67465abb8",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

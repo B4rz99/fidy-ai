@@ -118,6 +118,8 @@ const setup = (
         "0019_canonical_child_guards",
         "0020_dashboard_projection",
         ...hostedTurnTestMigrations,
+        "0027_recurring",
+        "0028_recurring_audit_budget",
         "0029_audit_owner_retention",
       ];
       yield* awaitPromise(

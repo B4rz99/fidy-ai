@@ -1,0 +1,29 @@
+apps/web/src/features/subscription/daviplata-challenge.test.ts
+  s_46b00d3d545d02::t_11cd4abd884fdf 2
+  s_46b00d3d545d02::t_29bc90b5264906 1,26-31,80-81,89
+  s_46b00d3d545d02::t_2fdfdeb01a2f11 99-101,104-107,126-129,134-135
+  s_46b00d3d545d02::t_c8c2328ed2bc81 3-25,32-79,82-88,90-98,102-103,108-125,130-133,136-157
+apps/web/src/features/subscription/enrollment-gateway.test.ts
+  s_46b00d3d545d02::t_96736914ec1249 151
+  s_46b00d3d545d02::t_f13ee77bd0463b 162
+  s_46b00d3d545d02::t_0acf6738a76a70 94-110,118-128
+  s_46b00d3d545d02::t_dbc33201ef26f3 129-131,160-161
+  s_46b00d3d545d02::t_2fdfdeb01a2f11 111-117
+  s_46b00d3d545d02::t_13b4a123265aec 132-150,152-159
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "fd3b3d25818e40432dbc063d07f0eaca330caec8",
+  "prompts": {},
+  "sessions": {
+    "s_46b00d3d545d02": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a102f4-5b8e-7348-ac66-bb31bc1e2f9e",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -46,6 +46,9 @@ type CoreEnvironment = WorkerTelemetryEnvironment &
     readonly WOMPI_INTEGRITY_SECRET: string;
   } & Partial<
     Readonly<{
+      WOMPI_DAVIPLATA_ACTIVATED: string;
+      WOMPI_DAVIPLATA_OTP_SEND_URL: string;
+      WOMPI_DAVIPLATA_OTP_CONFIRM_URL: string;
       ASYNC_HEALTH_ENABLED: "enabled";
       ASYNC_DEAD_LETTERS: Pick<Queue, "metrics">;
       FORWARDED_EMAIL_QUEUE: Pick<Queue, "metrics">;

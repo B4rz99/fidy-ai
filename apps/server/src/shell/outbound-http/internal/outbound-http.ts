@@ -118,14 +118,21 @@ const transactionSignature = (
     )
     .pipe(Effect.map(Encoding.encodeHex), Effect.mapError(unavailableTransport));
 
-const nequiApprovalRequest = (
-  origin: string,
+const walletApprovalRequest = (
+  config: WompiTransportConfig,
   token: Redacted.Redacted<string>,
-  publicKey: string
-): HttpClientRequest.HttpClientRequest =>
-  HttpClientRequest.get(`${origin}/v1/tokens/nequi/${encodeURIComponent(Redacted.value(token))}`, {
-    headers: { authorization: `Bearer ${publicKey}` },
-  });
+  method: "nequi" | "daviplata"
+): HttpClientRequest.HttpClientRequest => {
+  const origin = { sandbox: wompiSandboxOrigin, production: wompiProductionOrigin }[
+    config.environment
+  ];
+  return HttpClientRequest.get(
+    `${origin}/v1/tokens/${method}/${encodeURIComponent(Redacted.value(token))}`,
+    {
+      headers: { authorization: `Bearer ${config.publicKey}` },
+    }
+  );
+};
 
 const nequiSandboxTokenRequest = (
   config: WompiTransportConfig,
@@ -170,46 +177,53 @@ const makeWompiRequest = (
     config.environment
   ];
   const authorization = `Bearer ${Redacted.value(config.privateKey)}`;
-  switch (request._tag) {
-    case "WompiMerchant":
-      return Effect.succeed(
-        HttpClientRequest.get(`${origin}/v1/merchants/${encodeURIComponent(config.publicKey)}`)
-      );
-    case "WompiNequiSandboxToken":
-      return nequiSandboxTokenRequest(config, request.outcome);
-    case "WompiNequiApproval":
-      return Effect.succeed(nequiApprovalRequest(origin, request.token, config.publicKey));
-    case "WompiCreatePaymentSource":
-      return Effect.succeed(
-        HttpClientRequest.post(`${origin}/v1/payment_sources`, {
-          headers: { authorization, "content-type": "application/json" },
-          body: HttpBody.text(request.body, "application/json"),
-        })
-      );
-    case "WompiVerifyPaymentSource":
-      return Effect.succeed(
-        HttpClientRequest.get(
-          `${origin}/v1/payment_sources/${encodeURIComponent(request.sourceId)}`,
-          { headers: { authorization } }
-        )
-      );
-    case "WompiCreateTransaction":
-      return transactionSignature(crypto, config.integritySecret, request.body).pipe(
-        Effect.map((signature) =>
-          HttpClientRequest.post(`${origin}/v1/transactions`, {
+  return Match.value(request).pipe(
+    Match.tagsExhaustive({
+      WompiMerchant: () =>
+        Effect.succeed(
+          HttpClientRequest.get(`${origin}/v1/merchants/${encodeURIComponent(config.publicKey)}`)
+        ),
+      WompiNequiSandboxToken: (value) => nequiSandboxTokenRequest(config, value.outcome),
+      WompiNequiApproval: (value) =>
+        Effect.succeed(walletApprovalRequest(config, value.token, "nequi")),
+      WompiDaviplataApproval: (value) =>
+        Effect.succeed(walletApprovalRequest(config, value.token, "daviplata")),
+      WompiCreatePaymentSource: (value) =>
+        Effect.succeed(
+          HttpClientRequest.post(`${origin}/v1/payment_sources`, {
             headers: { authorization, "content-type": "application/json" },
-            body: HttpBody.text(signedTransactionBody(request.body, signature), "application/json"),
+            body: HttpBody.text(value.body, "application/json"),
           })
-        )
-      );
-    case "WompiFindTransaction":
-      return Effect.succeed(
-        HttpClientRequest.get(
-          `${origin}/v1/transactions/${encodeURIComponent(request.transactionId)}`,
-          { headers: { authorization } }
-        )
-      );
-  }
+        ),
+      WompiVerifyPaymentSource: (value) =>
+        Effect.succeed(
+          HttpClientRequest.get(
+            `${origin}/v1/payment_sources/${encodeURIComponent(value.sourceId)}`,
+            {
+              headers: { authorization },
+            }
+          )
+        ),
+      WompiCreateTransaction: (value) =>
+        transactionSignature(crypto, config.integritySecret, value.body).pipe(
+          Effect.map((signature) =>
+            HttpClientRequest.post(`${origin}/v1/transactions`, {
+              headers: { authorization, "content-type": "application/json" },
+              body: HttpBody.text(signedTransactionBody(value.body, signature), "application/json"),
+            })
+          )
+        ),
+      WompiFindTransaction: (value) =>
+        Effect.succeed(
+          HttpClientRequest.get(
+            `${origin}/v1/transactions/${encodeURIComponent(value.transactionId)}`,
+            {
+              headers: { authorization },
+            }
+          )
+        ),
+    })
+  );
 };
 
 const makeCloudflareAccessRequest = (
@@ -300,6 +314,7 @@ const prepareRequest = (
       ResendEmailDelivery: (value) => prepareResend(value, context),
       WompiMerchant: (value) => prepareWompi(value, context),
       WompiNequiApproval: (value) => prepareWompi(value, context),
+      WompiDaviplataApproval: (value) => prepareWompi(value, context),
       WompiNequiSandboxToken: (value) => prepareWompi(value, context),
       WompiCreatePaymentSource: (value) => prepareWompi(value, context),
       WompiVerifyPaymentSource: (value) => prepareWompi(value, context),

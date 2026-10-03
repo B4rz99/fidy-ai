@@ -59,6 +59,7 @@ export type OutboundHttpRequest =
   | Readonly<{ readonly _tag: "WompiMerchant" }>
   | Readonly<{ readonly _tag: "WompiNequiSandboxToken"; readonly outcome: "approved" | "declined" }>
   | Readonly<{ readonly _tag: "WompiNequiApproval"; readonly token: Redacted.Redacted<string> }>
+  | Readonly<{ readonly _tag: "WompiDaviplataApproval"; readonly token: Redacted.Redacted<string> }>
   | Readonly<{ readonly _tag: "WompiCreatePaymentSource"; readonly body: string }>
   | Readonly<{ readonly _tag: "WompiVerifyPaymentSource"; readonly sourceId: number }>
   | Readonly<{ readonly _tag: "WompiCreateTransaction"; readonly body: WompiTransactionBody }>

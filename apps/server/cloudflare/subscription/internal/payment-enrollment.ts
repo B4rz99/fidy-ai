@@ -148,6 +148,11 @@ const submittedToken = (
   }
 };
 
+const walletTokenPatterns = {
+  sandbox: { nequi: /^nequi_test_/u, daviplata: /^daviplata_(?:devtest|devint)_/u },
+  production: { nequi: /^nequi_prod_/u, daviplata: /^daviplata_prod_/u },
+} as const;
+
 const preparationWindowMs = 3_600_000;
 const verificationCooldownMs = 3_000;
 const maximumVerificationAttempts = 8;
@@ -806,23 +811,21 @@ const verifyEnrollmentAuthorization = (
     environment: ConfiguredEnrollmentEnvironment;
     userId: string;
     input: SubmitPaymentEnrollmentPayload;
+    method: EnrollmentMethod;
     now: number;
   }>
 ): Effect.Effect<Result.Result<Option.Option<string>, Response>, EnrollmentBoundaryFailure> =>
   Effect.gen(function* () {
     const { environment, input, userId, now } = context;
-    if (
-      input.paymentSourceMode === "create" &&
-      input.method === "daviplata" &&
-      Option.isNone(daviplataPolicy(environment))
-    ) {
+    if (context.method === "daviplata" && Option.isNone(daviplataPolicy(environment))) {
       return Result.fail(unavailable());
     }
-    if (input.paymentSourceMode !== "create" || input.method !== "nequi") {
+    if (input.paymentSourceMode !== "create" || input.method === "card") {
       return Result.succeed(Option.none());
     }
-    const prefix = environment.WOMPI_ENVIRONMENT === "sandbox" ? "nequi_test_" : "nequi_prod_";
-    if (!Redacted.value(input.nequiToken).startsWith(prefix)) return Result.fail(invalid());
+    const token = submittedToken(input);
+    const tokenPattern = walletTokenPatterns[environment.WOMPI_ENVIRONMENT][input.method];
+    if (!tokenPattern.test(Redacted.value(token))) return Result.fail(invalid());
     const admission = yield* Effect.result(
       admitEnrollmentAttempt({ db: environment.DB, userId, now })
     );
@@ -832,15 +835,17 @@ const verifyEnrollmentAuthorization = (
       );
     }
     const wompi = yield* waitFor(() => makeWompi(environment));
-    const approved = yield* Effect.exit(wompi.verifyNequiApproval(input.nequiToken));
+    const approved = yield* Effect.exit(
+      input.method === "nequi"
+        ? wompi.verifyNequiApproval(token)
+        : wompi.verifyDaviplataApproval(token)
+    );
     if (Exit.isFailure(approved)) return Result.fail(unavailable());
     if (!approved.value) return Result.fail(invalid());
     return Result.succeed(
       Option.some(
         Encoding.encodeHex(
-          yield* waitFor(() =>
-            digest(`${environment.WOMPI_ENVIRONMENT}:${Redacted.value(input.nequiToken)}`)
-          )
+          yield* waitFor(() => digest(`${environment.WOMPI_ENVIRONMENT}:${Redacted.value(token)}`))
         )
       )
     );
@@ -977,6 +982,7 @@ const submit = ({
         environment,
         userId: session.user_id,
         input,
+        method: row.value.method,
         now,
       });
       if (Result.isFailure(authorization)) return authorization.failure;

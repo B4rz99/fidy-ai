@@ -284,6 +284,7 @@ const providerCallbackEffect = (
 };
 
 const enrollmentCorePath = (path: string): boolean =>
+  path === "/web/subscription/payment-enrollments/availability" ||
   path === "/web/subscription/payment-enrollments/prepare" ||
   path === "/web/subscription/payment-enrollments/submit" ||
   /^\/web\/subscription\/(?:payment-enrollments|billing-attempts)\/[0-9a-f-]{36}$/u.test(path);

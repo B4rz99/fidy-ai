@@ -200,6 +200,7 @@ const enrollmentSubmitPath = "/web/subscription/payment-enrollments/submit";
 const enrollmentStatusPath =
   /^\/web\/subscription\/(?:payment-enrollments|billing-attempts)\/[0-9a-f-]{36}$/u;
 const enrollmentPath = (path: string): boolean =>
+  path === "/web/subscription/payment-enrollments/availability" ||
   path === enrollmentPreparePath ||
   path === enrollmentSubmitPath ||
   enrollmentStatusPath.test(path);

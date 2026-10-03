@@ -1,0 +1,8 @@
+name: Pinned Bun runtime
+description: Install the exact reviewed Bun build with local-only Windows Secrets persistence.
+runs:
+  using: composite
+  steps:
+    - name: Install checksum-verified Bun
+      shell: bash
+      run: bash scripts/install-bun.sh "$RUNNER_TEMP/fidy-bun-bb35d1b81"

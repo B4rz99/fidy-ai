@@ -14,7 +14,9 @@ production listener.
 - `contracts/` contains generated OpenAPI and operation-policy evidence owned by the canonical API.
 - `cloudflare/` contains the Worker entrypoints, platform adapters, D1 migrations, and their tests;
   it implements the server-owned contracts without changing the portable core or shell.
-- `src/client.ts` is the browser-safe declaration seam. It exports no server implementation.
+- `src/client.ts` is the browser/CLI-safe declaration seam. It deliberately publishes the direct
+  `PATPairingApi`, claim payload and declared failures for the CLI-derived client, with no native
+  Token implementation. It exports no server implementation.
 
 The deleted process entrypoint, SQL persistence, in-process queue/lock/workflow machinery, and
 provider-specific hosted inference implementations are not compatibility surfaces. Railway,

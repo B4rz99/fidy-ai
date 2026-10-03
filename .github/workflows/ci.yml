@@ -24,6 +24,7 @@ jobs:
     outputs:
       builds: ${{ steps.plan.outputs.builds }}
       unit: ${{ steps.plan.outputs.unit }}
+      cli-native: ${{ steps.plan.outputs.unit }}
       cloudflare-adapters: ${{ steps.plan.outputs.cloudflare-adapters }}
       cloudflare-infra: ${{ steps.plan.outputs.cloudflare-infra }}
       browser: ${{ steps.plan.outputs.browser }}
@@ -34,9 +35,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: "1.4.1"
+      - uses: ./.github/actions/bun-runtime
       - name: Plan checks from the complete PR diff
         id: plan
         env:
@@ -183,7 +182,14 @@ jobs:
       - name: Static-shell browser validation
         env:
           VERIFY_TIMING_REPORT: apps/web/test-results/verify-browser.json
-        run: bun run verify -- --group browser
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dbus-x11 gnome-keyring libsecret-1-0
+          dbus-run-session -- bash -euc '
+            printf "%s" fidy-test-keyring | gnome-keyring-daemon --unlock --components=secrets
+            bun run --cwd apps/cli test:native
+            bun run verify -- --group browser
+          '
       - name: Preserve browser timing evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -247,6 +253,22 @@ jobs:
       - name: Fluid Attacks SCA
         run: docker run --rm --pull=always -v "$PWD:/src" docker.io/fluidattacks/sca:latest sca --strict scan /src/.fluidattacks/sca.yaml
 
+  cli-native:
+    needs: changes
+    if: ${{ needs.changes.outputs.cli-native == 'true' }}
+    name: CLI native store (${{ matrix.os }})
+    timeout-minutes: 5
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/bun-install
+      - name: Native cross-process and Windows local-persistence conformance
+        run: bun run --cwd apps/cli test:native
+
   required-checks:
     name: Required Checks
     runs-on: ubuntu-latest
@@ -255,6 +277,7 @@ jobs:
       - static
       - builds
       - unit
+      - cli-native
       - cloudflare-adapters
       - cloudflare-infra
       - browser

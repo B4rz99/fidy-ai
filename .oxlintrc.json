@@ -140,6 +140,10 @@
   },
   "overrides": [
     {
+      "files": ["apps/cli/vitest.config.ts"],
+      "rules": { "import/no-default-export": "off" }
+    },
+    {
       "files": ["infra/**/*.ts"],
       "rules": {
         "no-restricted-imports": [
@@ -219,7 +223,7 @@
     },
     // Vite and Vitest require default-exported configuration objects.
     {
-      "files": ["apps/web/{playwright,vite,vitest}.config.ts"],
+      "files": ["apps/web/{playwright,playwright.cli,vite,vitest}.config.ts"],
       "rules": {
         "import/no-default-export": "off"
       }
@@ -475,6 +479,7 @@
         "apps/server/vitest.whatsapp.config.ts",
         "apps/server/stryker.config.mjs",
         "apps/web/.dependency-cruiser.mjs",
+        "apps/cli/.dependency-cruiser.mjs",
         "apps/server/.dependency-cruiser.mjs",
         "scripts/oxlint/*.js"
       ],

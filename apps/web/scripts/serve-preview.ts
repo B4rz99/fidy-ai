@@ -1,4 +1,4 @@
-import { Option } from "effect";
+import { Option, Schema } from "effect";
 
 const root = Bun.env.PREVIEW_ROOT ?? "playwright-dist";
 const port = Number.parseInt(Bun.env.PREVIEW_PORT ?? "4173", 10);
@@ -43,7 +43,10 @@ const filePath = (pathname: string): Option.Option<string> => {
 // The acceptance host applies the Production _headers policy, changing only its API origin to
 // the separate loopback TLS fixture. Missing or unexpected policy fails before serving anything.
 const policy = await Bun.file(new URL("../cloudflare/production/_headers", import.meta.url)).text();
-const apiOrigin = "https://127.0.0.1:4174";
+const acceptanceMode = Schema.decodeUnknownSync(Schema.Literals(["shared", "cli"]))(
+  Bun.env.CLI_ACCEPTANCE_MODE ?? "shared"
+);
+const apiOrigin = acceptanceMode === "cli" ? "https://127.0.0.1:4184" : "https://127.0.0.1:4174";
 const productionOrigin = "https://api.fidyapp.com";
 if (policy.split(productionOrigin).length !== 2 || !policy.includes("/assets/*")) {
   throw new Error("Production security policy is missing or ambiguous");

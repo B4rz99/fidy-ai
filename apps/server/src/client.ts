@@ -29,6 +29,7 @@ export {
   ManualPATGrantInput,
   PATLifetimeDays,
   patLifetimeDayOptions,
+  patPairingLifetime,
   PATRecipientLabel,
   PATScope,
   PATScopes,
@@ -51,7 +52,15 @@ export {
   StartedPATPairing,
   StartPATPairingPayload,
 } from "~/core/tokens/contract";
-export { buildPATDisclosure, patScopeCopy } from "~/core/tokens/operations";
+export {
+  PATPairingApi,
+  ClaimPATPairingPayload,
+  PATPairingInvalidApi,
+  PATPairingPollingRateLimitedApi,
+  PATPairingRateLimitedApi,
+  PATPairingUnavailableApi,
+} from "~/shell/tokens/contract";
+export { buildPATDisclosure, getTokenShortId, patScopeCopy } from "~/core/tokens/operations";
 export { StagedStatementReference, SubmitForExtractionInput } from "~/core/ingestion/contract";
 export type { CanonicalInput } from "~/shell/canonical-operations/contract";
 export type { CanonicalSuccess } from "~/shell/canonical-operations/contract";

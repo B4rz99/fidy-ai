@@ -6,6 +6,7 @@
   "exclude": ["**/node_modules/**", "**/dist/**", "**/build/**"],
   "references": [
     { "path": "./apps/server" },
+    { "path": "./apps/cli" },
     { "path": "./apps/web/tsconfig.app.json" },
     { "path": "./infra/cloudflare" }
   ]

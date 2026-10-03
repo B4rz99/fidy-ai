@@ -1,5 +1,6 @@
 import type { WompiEnvironment } from "./contract";
-import { type Config, Crypto, Effect, Encoding, type Redacted, Schema } from "effect";
+import { type Config, Crypto, Effect, type Redacted, Schema } from "effect";
+import { Hex } from "effect/encoding";
 import type { TokenBearer } from "~/core/tokens/contract";
 import { configuredSecret } from "~/shell/secret-material/internal/configured-secret";
 
@@ -56,7 +57,7 @@ export const loadWompiPrivateKey = (
   configuredSecret({
     name: "WOMPI_PRIVATE_KEY",
     schema: WompiPrivateKey.check(
-      Schema.isStartsWith(wompiCredentialPrefixes(environment).privateKey)
+      Schema.isStartingWith(wompiCredentialPrefixes(environment).privateKey)
     ),
     requirement: `must be a ${environment} Wompi private key`,
   });
@@ -68,7 +69,7 @@ export const loadWompiIntegritySecret = (
   configuredSecret({
     name: "WOMPI_INTEGRITY_SECRET",
     schema: WompiIntegritySecret.check(
-      Schema.isStartsWith(wompiCredentialPrefixes(environment).integritySecret)
+      Schema.isStartingWith(wompiCredentialPrefixes(environment).integritySecret)
     ),
     requirement: `must be a ${environment} Wompi integrity secret`,
   });
@@ -80,6 +81,6 @@ export const derivePATBearerDigest = (
   Effect.flatMap(Crypto.Crypto, (crypto) =>
     crypto.digest("SHA-256", new TextEncoder().encode(bearer))
   ).pipe(
-    Effect.map((digest) => PATBearerDigest.make(Encoding.encodeHex(digest))),
+    Effect.map((digest) => PATBearerDigest.make(Hex.encode(digest))),
     Effect.orDie
   );

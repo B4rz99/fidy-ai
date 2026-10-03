@@ -378,6 +378,24 @@ protected action at the actual provider boundary: ordinary work requires current
 exact retained Pending Turn uses its admitted basis. Revocation prevents the next Turn without
 interrupting the bounded admitted Turn, and PAT work keeps its per-call current-Consent guard.
 
+### Hosted MCP and OAuth design boundary
+
+ADR 0033 defines future `oauth-agents`, `mcp` and `oauth-confirmation` owners; none is installed by
+#977. OAuth grants are independent of Tokens' PAT/PATPairing lifecycle. An explicit OAuth
+User-owned-agent caller must enter canonical access policy without inheriting account-security,
+WebSession or Hosted Agent Session privileges. Authentication admission supplies only same-User
+live-recheck premises; protected owner work rechecks grant, credential, Consent and capability with
+Audit in its existing D1 unit under the original User coordinator.
+
+Effect stable owns protocol/HTTP execution. The MCP projection derives schemas and deterministic
+private discovery from the canonical catalog, including nested batch/SuggestedOperation filtering,
+and preserves canonical structured success/failure envelopes. It cannot add another operation
+registry or mutation path. Sensitive confirmation consumption is transaction-composable and
+OAuth-specific; hosted confirmation evidence is not reusable. The ADR owns fixed lifetimes,
+refresh replay/concurrency, registration/metadata-fetch bounds and browser handoff/resume policy.
+The disposable research fixture is neither an adapter nor production authority. Future external
+work needs bounded metadata-only Work observation and real public/Core/D1 negative evidence.
+
 ## 6. Testing seams
 
 Use the smallest seam that proves the behavior:
@@ -464,7 +482,11 @@ Subscription publishes safe Price, enrollment, BillingAttempt and standing decla
 `core/subscription/contract.ts`, and calendar-period and enrollment decisions in `operations.ts`.
 Its shell contract owns both the canonical read group and the separate browser-only enrollment API;
 the browser client consumes those declarations without provider or persistence implementation.
-Enrollment remains unavailable to canonical agents and PAT callers.
+Enrollment remains unavailable to canonical agents and PAT callers. Card and direct-app Nequi
+authorization share the Subscription-owned PaymentEnrollment and billing lifecycle. Enrollment
+requires a fresh WebSession and active Consent; sensitive payment details and transient provider
+authorization material are not retained. Authorization or PaymentSource availability alone never
+grants paid Pro: activation requires independently verified matching BillingAttempt settlement.
 
 The shell operations own paid-access predicates and bounded prepared standing reads. A prepared read
 carries its row decoder with its statements, so native callers never know Subscription storage
@@ -577,6 +599,39 @@ bounded owner metadata. Existing two-User, hostile-input, atomic rollback, dupli
 execution and retention evidence remains at the public or explicit platform-adapter seams. No new
 provider call, workflow version, telemetry purpose, institution authority or inbound routing is added;
 the existing unavailable institution Connection and sender-proof prerequisites remain closed.
+
+Receipt/screenshot work (#21) has authenticated WhatsApp image projection and pure capture policy:
+one completed movement, COP only when Currency is absent, captured submission-instant fallback,
+explicit local-date interpretation in the captured time zone, and the two-unit Bogotá monthly media
+allowance decision. These decisions are not execution or acceptance authority. Durable media
+publication, provider retrieval, vision inference, finalization, review and outcome delivery are not
+installed. Image ingress therefore returns unavailable without retaining material, admitting a hosted
+Turn or treating its caption as a Consent/credential command. Existing text/voice behavior remains
+unchanged; this checkpoint neither enables production nor grants a public media upload surface.
+The existing ingress telemetry is sufficient for this refusal-only path; no new external workflow
+or provider egress is introduced.
+
+### Recurring owner composition
+
+Recurring owns historical monthly charge patterns, private supporting evidence, immutable first
+confirmations and permanent announcement eligibility. It does not own Subscription billing or
+Insight scheduling/delivery. Core owns deterministic decisions; the Free canonical query uses the
+same native owner for public HTTP and hosted execution.
+
+Transactions owns effective financial facts and their invalidation. Recurring consumes its published
+facts and commit guards rather than reading Transaction persistence or reproducing
+Effective Transaction policy.
+
+Evaluation is durable asynchronous work through the existing User coordinator, not a history scan
+on capture requests. Publication is atomic and guarded by current processing Consent and financial
+revision. Resource admission fails closed, and incomplete evaluation remains visible to callers.
+Corrections repair evidence; gaps never imply cancellation.
+
+Confirmation consumers receive immutable occurrences bound to an explicit User and historical
+UserContext under current processing Consent. Suppressed confirmations never become delayed
+announcements; Insight delivery remains separate. See
+[ADR 0032](../../docs/adr/0032-deterministic-recurring-charge-detection.md) for detector, suppression,
+calendar and resource policies.
 
 ### Insights owner composition
 

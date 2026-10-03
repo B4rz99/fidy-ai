@@ -7,13 +7,18 @@ import {
   paymentStatusRefreshDelay,
   paymentSubmissionIsTerminal,
 } from "./payment-status";
-import { type PaymentSubmission, makeEnrollmentGateway } from "./enrollment-gateway";
+import {
+  type PaymentFields,
+  type PreparedEnrollment,
+  makeEnrollmentGateway,
+} from "./enrollment-gateway";
 import {
   BillingAttemptId,
   BillingEmail,
-  CardEnrollmentId,
-  CardPaymentSubmission,
+  type EnrollmentMethod,
   IanaTimeZone,
+  PaymentEnrollmentId,
+  PaymentSubmission,
   PriceId,
   type SubscriptionEnrollmentClient,
   type SubscriptionStatus,
@@ -68,7 +73,8 @@ const offers: SubscriptionOffers = [
 const sha256HexCharacters = 64;
 const preparedEnrollment = {
   status: "prepared" as const,
-  enrollmentId: CardEnrollmentId.make("22700000-0000-4000-8000-000000000090"),
+  method: "card" as const,
+  enrollmentId: PaymentEnrollmentId.make("22700000-0000-4000-8000-000000000090"),
   price: offers[1],
   billingEmail: BillingEmail.make("verified@example.com"),
   contracts: {
@@ -353,11 +359,17 @@ it.each(enrollmentStatuses)("renders the %s enrollment status action", (status) 
         status === "refused"
           ? {
               status,
+              method: "card" as const,
               enrollmentId: preparedEnrollment.enrollmentId,
               priceId: offers[1].id,
               reason: "provider-declined" as const,
             }
-          : { status, enrollmentId: preparedEnrollment.enrollmentId, priceId: offers[1].id };
+          : {
+              status,
+              method: "card" as const,
+              enrollmentId: preparedEnrollment.enrollmentId,
+              priceId: offers[1].id,
+            };
       const gateway = {
         ...enrollmentGateway,
         prepare: vi.fn(() => Promise.resolve(enrollment)),
@@ -407,7 +419,9 @@ it("shows shared renewal terms once without ambiguous payment-method pills", () 
   fireEvent.click(screen.getByRole("button", { name: "Elegir mensual" }));
 
   expect(screen.getByRole("button", { name: "Oferta mensual seleccionada" })).toBeVisible();
-  expect(screen.queryByText(/Tarjeta|Nequi|DaviPlata/u)).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Tarjeta" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "Nequi" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "DaviPlata" })).not.toBeInTheDocument();
 });
 
 it("shows the card form with only Wompi's required checks and constrained fields", () =>
@@ -462,6 +476,52 @@ it("shows the card form with only Wompi's required checks and constrained fields
       for (const checkbox of screen.getAllByRole("checkbox")) fireEvent.click(checkbox);
       expect(save).toBeEnabled();
       expect(screen.getByText(/Fidy conservará este correo.*cobros automáticos/iu)).toBeVisible();
+    })
+  ));
+
+it("clears Nequi authorization input, locks method changes, and cancels approval on unmount", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const pending = Promise.withResolvers<PaymentSubmission>();
+      let approvalSignal = Option.none<AbortSignal>();
+      const gateway = {
+        ...enrollmentGateway,
+        prepare: (_id: PriceId, method: EnrollmentMethod = "card"): Promise<PreparedEnrollment> =>
+          Promise.resolve({ ...preparedEnrollment, method }),
+        submit: (
+          _enrollment: PreparedEnrollment,
+          _email: string,
+          fields?: PaymentFields
+        ): Promise<PaymentSubmission> => {
+          if (fields === undefined || !("method" in fields)) {
+            throw new Error("Expected Nequi fields");
+          }
+          approvalSignal = Option.some(fields.signal);
+          fields.onAwaiting();
+          return pending.promise;
+        },
+      };
+      const view = render(
+        <SubscriptionOffersView gateway={Option.some(gateway)} state={{ _tag: "Ready", offers }} />
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Elegir mensual" }));
+      yield* fromPromise(screen.findByLabelText("Número de tarjeta"));
+      fireEvent.click(screen.getByRole("button", { name: "Nequi" }));
+      const number = yield* fromPromise(screen.findByLabelText("Número de Nequi"));
+      expect(screen.queryByLabelText("Número de tarjeta")).not.toBeInTheDocument();
+      fireEvent.change(number, { target: { value: "3991111111" } });
+      for (const checkbox of screen.getAllByRole("checkbox")) fireEvent.click(checkbox);
+      fireEvent.click(screen.getByRole("button", { name: "Autorizar con Nequi" }));
+      yield* fromPromise(screen.findByText(/Aprueba la suscripción en Nequi/));
+      expect(number).toHaveValue("");
+      expect(screen.getByRole("button", { name: "Tarjeta" })).toBeDisabled();
+      expect(Option.map(approvalSignal, (signal) => signal.aborted)).toEqual(Option.some(false));
+      view.unmount();
+      expect(Option.map(approvalSignal, (signal) => signal.aborted)).toEqual(Option.some(true));
+      pending.resolve({
+        status: "source-verifying",
+        enrollmentId: preparedEnrollment.enrollmentId,
+      });
     })
   ));
 
@@ -582,7 +642,7 @@ const paymentSubmissionFixture = (
   };
   let submission: PaymentSubmission;
   if (fixture.status === "succeeded") {
-    submission = Schema.decodeSync(CardPaymentSubmission)({
+    submission = Schema.decodeSync(PaymentSubmission)({
       status: "payment-pending",
       enrollmentId: preparedEnrollment.enrollmentId,
       billingAttempt: {
@@ -594,7 +654,7 @@ const paymentSubmissionFixture = (
       },
     });
   } else if (fixture.status === "failed") {
-    submission = Schema.decodeSync(CardPaymentSubmission)({
+    submission = Schema.decodeSync(PaymentSubmission)({
       status: "payment-pending",
       enrollmentId: preparedEnrollment.enrollmentId,
       billingAttempt: {
@@ -604,7 +664,7 @@ const paymentSubmissionFixture = (
       },
     });
   } else {
-    submission = Schema.decodeSync(CardPaymentSubmission)({
+    submission = Schema.decodeSync(PaymentSubmission)({
       status: "payment-pending",
       enrollmentId: preparedEnrollment.enrollmentId,
       billingAttempt: { ...commonBillingAttempt, status: "pending" },
@@ -772,7 +832,7 @@ it("keeps a late refresh from replacing a newly selected payment flow", () =>
       const reuseEnrollment = { ...preparedEnrollment, paymentSourceMode: "reuse" as const };
       const replacementEnrollment = {
         ...reuseEnrollment,
-        enrollmentId: CardEnrollmentId.make("22700000-0000-4000-8000-000000000092"),
+        enrollmentId: PaymentEnrollmentId.make("22700000-0000-4000-8000-000000000092"),
         price: offers[0],
       };
       const pendingSubmission = paymentSubmissionFixture();
@@ -813,7 +873,7 @@ it("keeps a late refresh from replacing a newly selected payment flow", () =>
       expect(
         yield* fromPromise(screen.findByRole("button", { name: "Oferta semanal seleccionada" }))
       ).toBeVisible();
-      expect(prepare).toHaveBeenLastCalledWith(offers[0].id);
+      expect(prepare).toHaveBeenLastCalledWith(offers[0].id, "card");
 
       yield* fromPromise(
         resolveInAct(lateRefresh, paymentSubmissionFixture({ status: "succeeded" }))
@@ -1008,6 +1068,7 @@ it("resumes a verifying enrollment after choosing its offer without tokenizing t
     Effect.gen(function* () {
       const verifying = {
         status: "verifying" as const,
+        method: "card" as const,
         enrollmentId: preparedEnrollment.enrollmentId,
         priceId: preparedEnrollment.price.id,
       };

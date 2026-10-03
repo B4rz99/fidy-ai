@@ -1,6 +1,6 @@
 import { jsonStringSchema } from "~/shell/schema-codecs/contract";
 import { Context, Data, Effect, Layer, Schema } from "effect";
-import { LanguageModel } from "effect/unstable/ai";
+import { LanguageModel } from "effect/ai";
 import { StatementColumnMapping } from "~/core/ingestion/contract";
 import type { StatementMappingSample } from "./material";
 

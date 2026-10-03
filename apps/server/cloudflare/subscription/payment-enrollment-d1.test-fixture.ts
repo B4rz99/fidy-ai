@@ -6,8 +6,8 @@ class FixtureFailure extends Data.TaggedError("FixtureFailure") {}
 const fromPromise = <A>(tryPromise: () => Promise<A>): Effect.Effect<A> =>
   Effect.tryPromise({ try: tryPromise, catch: () => new FixtureFailure() }).pipe(Effect.orDie);
 
-/** Isolated D1 fixture with the production CardEnrollment migration and caller-owned auth tables. */
-export const makeCardEnrollmentD1 = Effect.fnUntraced(function* (
+/** Isolated D1 fixture with the production PaymentEnrollment migration and caller-owned auth tables. */
+export const makePaymentEnrollmentD1 = Effect.fnUntraced(function* (
   name: string,
   authSchema: ReadonlyArray<string>
 ) {
@@ -39,6 +39,7 @@ export const makeCardEnrollmentD1 = Effect.fnUntraced(function* (
     "0002_resource_admission.sql",
     "0009_card_enrollment.sql",
     "0012_billing_collection.sql",
+    "0030_payment_enrollment.sql",
   ]) {
     yield* fromPromise(() =>
       applyTestMigration({ db, source: new URL(`../migrations/${file}`, import.meta.url) })

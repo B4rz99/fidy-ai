@@ -1,5 +1,6 @@
 import type { WebSessionEstablishment } from "../contract";
-import { Clock, DateTime, Effect, Encoding, Option, Schema } from "effect";
+import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
 import { calculateWebSessionDeadlines } from "../../../src/core/web-session/operations";
 import { sessionCookie, sessionDigest, sessionSetCookie } from "./credentials";
 import { attempt, invalid, json, uuid } from "./support";
@@ -14,7 +15,7 @@ export const completePairing = ({
 }: WebSessionEstablishment): Effect.Effect<Response, void> =>
   Effect.gen(function* () {
     const current = claim.current;
-    const token = Encoding.encodeBase64Url(crypto.getRandomValues(new Uint8Array(digestBytes)));
+    const token = Base64Url.encode(crypto.getRandomValues(new Uint8Array(digestBytes)));
     const deadlines = calculateWebSessionDeadlines(DateTime.makeUnsafe(current));
     const tokenDigest = yield* attempt(() =>
       sessionDigest(Schema.decodeSync(WebSessionBearer)(token))

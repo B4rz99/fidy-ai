@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi";
+import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { TranscriptText, TranscriptTurnId } from "~/core/agent/contract";
 
 /** The browser-only, cookie-authenticated hosted Turn channel is not a canonical tool operation. */

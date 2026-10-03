@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { type Option, Result, Schema } from "effect";
-import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import { expectTypeOf } from "vitest";
 import { type PartialInput, makePartialInputSchema } from "./contract";
 

@@ -1,5 +1,5 @@
 import { Cause, Option } from "effect";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult } from "effect/reactivity";
 import { describe, expect, it } from "vitest";
 import { presentCanonicalQuery } from "./canonical-query";
 

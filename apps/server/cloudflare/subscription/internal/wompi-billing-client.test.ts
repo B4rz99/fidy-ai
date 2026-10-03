@@ -66,6 +66,7 @@ const clientLayer = (
   );
 const TestLayer = clientLayer(successResponse);
 const creationInput = {
+  method: "card" as const,
   reference: WompiTransactionReference.make("fidy-22900000-0000-4000-8000-000000000001"),
   amountInCents: 2_890_000,
   currency: "COP" as const,

@@ -107,9 +107,14 @@ Currency contribute. Alerts latch once each at 80% and 100% per month.
 _Avoid_: Limit, goal, target.
 
 **RecurringSeries**:
-A repeating charge detected from comparable Transaction Money in one Currency — rent or another
-recurring transaction.
-_Avoid_: Subscription (that word means the user's own paid plan).
+A historical repeating-charge pattern detected from comparable Transaction Money in one Currency
+and an explicit Counterparty. It does not establish that the charge is still active or cancelled.
+_Avoid_: Subscription (that word means the user's own paid plan), active subscription.
+
+**RecurringSeriesConfirmed**:
+An immutable occurrence recording the first detection of a RecurringSeries and its announcement
+eligibility. It means detector confirmation, not a decision or approval by the User.
+_Avoid_: User confirmation, recurring alert (delivery is separate).
 
 ### Ingestion
 
@@ -223,6 +228,27 @@ immediate caller and never persisted by the server. The User-facing CLI may reta
 bearer only in the OS native credential store, an explicit recoverable-bearer exception. A User-owned agent never manages Consent; terms updates neither revoke nor block its PAT,
 while explicit Consent revocation prevents later work with `user_action_required`.
 _Avoid_: API key, credential, Agent Session.
+
+**OAuthConnection**:
+A separately identifiable User authorization for one external agent client to invoke Fidy's hosted
+MCP resource with a non-empty approved subset of `read`, `write`, and `dashboard`. Its absolute
+7/30/90/365-day expiration is fixed at browser approval (90 days by default); short-lived access
+and rotating refresh credentials cannot extend it. Client names are unverified display claims.
+Revocation stops subsequent work and refresh, independently of browser logout and PAT revocation.
+This is the accepted design in ADR 0033, not an installed or launch-enabled authority.
+_Avoid_: Institution Connection, PAT, WebSession, Hosted Agent Session, OAuth session.
+
+**OAuth User-owned-agent caller**:
+An external agent acting for one stable User through a live OAuthConnection and audience-bound
+credential. It obeys the same canonical capability, current Consent and accountability policy as
+other User-owned agents, without becoming a PAT or inheriting WebSession or hosted authority.
+_Avoid_: Hosted agent, web caller, PAT caller (for OAuth authority).
+
+**OAuthOperationConfirmation**:
+Single-use first-party User evidence bound to one OAuthConnection, exact canonical operation and
+inputs, applicable revisions and a short expiry. It is consumed with the protected mutation in its
+atomic unit. A public handoff reference, model claim or host annotation is not confirmation authority.
+_Avoid_: Hosted confirmation, approval link (as a credential), model confirmation.
 
 **PATPairing**:
 A short-lived bootstrap in which a User-owned client retains a private device code and presents a
@@ -379,18 +405,21 @@ the ServiceMarket in which the terms were offered. A later price change never re
 billing period.
 _Avoid_: Current price, price config, rate.
 
-**CardEnrollment**:
-One short-lived, User-owned authorization intent for a selected Price and reusable card source. It
-retains the accepted billing email and safe displayed terms through `prepared`, `creating`,
-`available`, `refused`, `expired`, or `verifying`; only an atomic claim of `prepared` may create a
-provider source. Card details and transient provider tokens are never CardEnrollment state.
-_Avoid_: Checkout, payment attempt, card session.
+**PaymentEnrollment**:
+One short-lived, User-owned authorization intent for a selected Price and reusable PaymentSource.
+Its EnrollmentMethod is `card` or `nequi`: direct Nequi app authorization is `nequi`, while a
+Nequi-issued card uses `card`. It retains the accepted billing email, provider environment and safe
+displayed terms through `prepared`, `creating`, `available`, `refused`, `expired`, or `verifying`;
+only an atomic live-authority claim of `prepared` may create a provider source. Card details, Nequi
+numbers and transient provider tokens are never PaymentEnrollment state.
+_Avoid_: Checkout, payment attempt, card session, CardEnrollment, nequi-account.
 
-**CardPaymentSource**:
-The private reusable provider authority created by an available CardEnrollment. Its provider
-identity remains server-only; changing Price terms requires a new CardEnrollment but can reuse this
-source without collecting card details again.
-_Avoid_: Saved card (Fidy does not store a card), payment method token.
+**PaymentSource**:
+The private reusable provider authority created by an available PaymentEnrollment. Its provider
+identity and environment remain server-only. Changing Price terms requires a new PaymentEnrollment
+but can reuse a matching-method source without collecting payment details again. Source availability
+or Nequi token approval alone never grants paid Pro; verified BillingAttempt settlement does.
+_Avoid_: Saved card (Fidy does not store a card), payment method token, CardPaymentSource.
 
 **BillingAttempt**:
 One asynchronous attempt to collect a Subscription charge, retaining its Money, Price,

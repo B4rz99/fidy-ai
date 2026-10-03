@@ -5,8 +5,8 @@ import type {
   CanonicalSuccess,
 } from "~/shell/canonical-operations/contract";
 import type { Crypto, Effect } from "effect";
-import type { HttpApiEndpoint } from "effect/unstable/httpapi";
-import type { SqlClient } from "effect/unstable/sql";
+import type { HttpApiEndpoint } from "effect/http-api";
+import type { SqlClient } from "effect/sql";
 import type { HostedInference } from "~/shell/hosted-inference/operations";
 import type { EmailReplacementMutation } from "~/shell/email-authentication/operations";
 import type { OperationId } from "~/shell/api";

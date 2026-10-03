@@ -313,7 +313,7 @@ export default {
         "Hosted Agent calls its separate HostedInference boundary; provider model and tokenizer execution cannot bypass its budgets or egress policy (#613).",
       from: { path: "^cloudflare/agent/" },
       to: {
-        path: "(^|.*/)node_modules/effect/.*/unstable/ai/(index|LanguageModel|Tokenizer)",
+        path: "(^|.*/)node_modules/effect/.*/ai/(index|LanguageModel|Tokenizer)",
         dependencyTypesNot: ["type-only"],
       },
     },
@@ -1181,7 +1181,7 @@ export default {
           "subscription/wompi-(billing-)?client\\.test\\.ts)$|^cloudflare/subscription/internal/wompi-(billing-)?client\\.test\\.ts$",
       },
       to: {
-        path: "^(?:\\.\\./)*node_modules/effect/dist/unstable/http/index\\.js$",
+        path: "^(?:\\.\\./)*node_modules/effect/dist/http/index\\.js$",
       },
     },
     {
@@ -1285,7 +1285,7 @@ export default {
         path: "^src/",
         pathNot: [
           "^src/shell/public-http/contract\\.ts$",
-          "^src/shell/(identity|categories|transactions|subscription|budgets|dashboard|insights|email-authentication|tokens|browser-login|recovery|ingestion|memory|canonical-catalog|authorization|operations)/contract\\.ts$",
+          "^src/shell/(identity|categories|transactions|subscription|budgets|dashboard|insights|recurring|email-authentication|tokens|browser-login|recovery|ingestion|memory|canonical-catalog|authorization|operations)/contract\\.ts$",
         ],
       },
     },
@@ -1350,7 +1350,7 @@ export default {
         path: "^src/shell/(agent/(contract\\.ts|__probe-.*hosted-(provider|model|tokenizer|js-tokenizer)/probe\\.ts)|memory/(operations\\.ts|__probe-.*hosted-(provider|model|tokenizer|js-tokenizer)/probe\\.ts)|hosted-inference/(contract|operations)\\.ts)$",
       },
       to: {
-        path: "(^|.*/)node_modules/effect/.*/unstable/ai/(index|LanguageModel|Tokenizer)",
+        path: "(^|.*/)node_modules/effect/.*/ai/(index|LanguageModel|Tokenizer)",
         dependencyTypesNot: ["type-only"],
       },
     },

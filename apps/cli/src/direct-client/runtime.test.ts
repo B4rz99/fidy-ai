@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { PATRecipientLabel } from "@fidy/server/client";
 import { Effect, Exit } from "effect";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientResponse } from "effect/http";
 import { makePairingClient, protectClient } from "./runtime";
 
 const clientFor = (body: string, status = 200): HttpClient.HttpClient =>

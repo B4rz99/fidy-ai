@@ -33,9 +33,11 @@ The reply and one-use receipt stay in mounted component state, not browser stora
 channel is not a tool-callable canonical operation and uses the same origin-locked, no-store,
 redirect-rejecting, bounded browser HTTP policy as the derived clients. The
 web does not maintain copied canonical schemas, operation maps, or access policy. The Pro payment flow
-is browser-mediated: the browser creates a `PaymentRequestId` and tokenizes card fields directly with
-Wompi. The direct enrollment client belongs to one authentication lifetime: replacing or unmounting
-that lifetime revokes and disposes the client immediately, without waiting for Atom registry cleanup.
+is browser-mediated: method-specific card and Nequi authorization goes directly to Wompi and shares
+Price, Consent and payment status views. Authorization is transient and bound to the mounted form
+and authentication lifetime; sensitive payment details and authorization material are not persisted
+or exposed through unrelated application state. The enrollment client is revoked when its
+authentication lifetime ends.
 The web submits through the server-owned payment boundary and observes only browser-safe
 `BillingAttempt` state through a canonical query;
 provider references are not part of web application state.
@@ -64,12 +66,28 @@ Security-sensitive browser actions use the server-established fresh-session requ
 completion use the canonical typed client with no-store requests. Neither value enters a URL, browser
 storage, or application-wide state.
 
+### Planned OAuth connection UX
+
+ADR 0033 defines a future independent `oauth-connections` feature; #977 adds no browser route or
+credential handling. After established fresh sign-in, one concise Spanish screen shows the claimed
+client name, only requested permissions, a narrower non-empty approval subset, compact
+7/30/90/365-day duration (90 default), expiration and Conectar / Cancelar. Omitted scope defaults to
+read only, with no implicit write or unrequested capability. Escalation needs a new explicit review.
+
+Settings distinguish individual/all OAuth connection revocation from PAT controls and browser
+logout. Sensitive-operation handoff shows a server-owned exact operation/input/revision projection,
+requires same-User fresh authority and origin/CSRF-protected approval, and carries no credential in
+URLs, browser state or model content. A public reference conveys no permission. The server owns
+single-use consumption and resume policy; unsupported host interaction fails closed. Browser-safe
+contracts must derive from the server declaration seam, not a copied OAuth/domain model. The
+compatibility report's synthetic approval is not evidence that this UI or authority exists.
+
 ## 4. Static production artifact
 
 Alchemy deploys the validated output as an assets-only Worker at `app.fidyapp.com`, with
 `fidyapp.com` permanently redirected to that canonical host. There is no application Worker
 entrypoint. The browser Content Security Policy permits connections only to the stable API origin and
-Wompi's fixed sandbox/production tokenization origins; card fields never pass through Fidy. Cloudflare applies
+Wompi's fixed sandbox/production tokenization origins; card fields and Nequi numbers never pass through Fidy. Cloudflare applies
 the same security headers to every SPA fallback, keeps shells and release metadata revalidating with
 `no-cache`, and removes that inherited value before assigning one-year immutable caching to
 content-hashed assets.

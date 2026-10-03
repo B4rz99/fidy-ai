@@ -25,7 +25,7 @@ import {
 import {
   dispatchBillingCollection,
   reconcileBillingCandidates,
-  sweepExpiredCardPreparationAdmission,
+  sweepExpiredEnrollmentAdmission,
 } from "../subscription/runtime";
 import {
   dispatchForwardedEmail,
@@ -37,6 +37,7 @@ import {
   sweepForwardedEmail,
 } from "../ingestion/runtime";
 import { sweepExpiredPATPairings } from "../tokens/runtime";
+import { advanceRecurringWork } from "../recurring/runtime";
 import { repairDashboardProjections } from "../transactions/runtime";
 import { dispatchWhatsAppWork, sweepExpiredWhatsAppWindows } from "../whatsapp/runtime";
 
@@ -177,7 +178,7 @@ const admissionActivities = (
   ),
   activity(
     "billing.cardPreparationAdmissionSweep",
-    sweepExpiredCardPreparationAdmission({ db: environment.DB, now: nowEpochMs })
+    sweepExpiredEnrollmentAdmission({ db: environment.DB, now: nowEpochMs })
   ),
   activity("release.smoke.expiry", platform.expireSmokeProbes(nowEpochMs)),
 ];
@@ -242,6 +243,7 @@ export const runCoreMaintenance = (
       ...channelActivities(environment, nowEpochMs),
       activity("patPairing.sweep", sweepExpiredPATPairings(environment.DB)),
       activity("dashboard.projectionRepair", repairDashboardProjections(environment.DB)),
+      activity("recurring.evaluate", advanceRecurringWork(environment)),
       ...stagingActivities(environment, nowEpochMs),
       ...admissionActivities(environment, nowEpochMs, platform),
       ...statementActivities(environment),

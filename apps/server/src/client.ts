@@ -99,20 +99,22 @@ export { IanaTimeZone } from "~/core/_shared/context";
 export { BackupRecoveryCode, RotatedBackupRecoveryCode } from "~/core/recovery/contract";
 export {
   BillingEmail,
-  CardEnrollment,
-  CardEnrollmentDecisions,
-  CardPaymentSubmission,
-  CardEnrollmentId,
+  PaymentEnrollment,
+  EnrollmentDecisions,
+  PaymentSubmission,
+  PaymentEnrollmentId,
 } from "~/core/subscription/contract";
 export type {
-  CardEnrollment as CardEnrollmentType,
-  CardPaymentSubmission as CardPaymentSubmissionType,
+  PaymentEnrollment as PaymentEnrollmentType,
+  PaymentSubmission as PaymentSubmissionType,
+  EnrollmentMethod,
 } from "~/core/subscription/contract";
 export {
-  CardEnrollmentInvalidApi,
-  CardEnrollmentUnavailableApi,
+  PaymentEnrollmentInvalidApi,
+  PaymentEnrollmentUnavailableApi,
   SubscriptionEnrollmentApi,
   type SubscriptionEnrollmentApiGroups,
+  type SubmitPaymentEnrollmentPayload,
 } from "~/shell/subscription/contract";
 export {
   BrowserLoginPairingInvalidApi,

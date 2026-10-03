@@ -1,4 +1,5 @@
-import { Data, type Option } from "effect";
+import { Data, type Option, type Redacted } from "effect";
+import { type EnrollmentMethod } from "~/core/subscription/contract";
 import { type WhatsAppBusinessPhoneNumberId } from "~/shell/channels/whatsapp/contract";
 
 /** Closed coordinate-free reason reported by the Outbound HTTP interface. */
@@ -34,6 +35,7 @@ export type WompiTransactionBody = Readonly<{
   readonly billingEmail: string;
   readonly sourceId: number;
   readonly reference: string;
+  readonly method: EnrollmentMethod;
 }>;
 
 /**
@@ -55,6 +57,8 @@ export type OutboundHttpRequest =
       readonly body: string;
     }>
   | Readonly<{ readonly _tag: "WompiMerchant" }>
+  | Readonly<{ readonly _tag: "WompiNequiSandboxToken"; readonly outcome: "approved" | "declined" }>
+  | Readonly<{ readonly _tag: "WompiNequiApproval"; readonly token: Redacted.Redacted<string> }>
   | Readonly<{ readonly _tag: "WompiCreatePaymentSource"; readonly body: string }>
   | Readonly<{ readonly _tag: "WompiVerifyPaymentSource"; readonly sourceId: number }>
   | Readonly<{ readonly _tag: "WompiCreateTransaction"; readonly body: WompiTransactionBody }>

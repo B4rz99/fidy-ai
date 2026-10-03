@@ -4,7 +4,7 @@ import { it as effectIt } from "@effect/vitest";
 import { Clock, Effect, Option, Schema } from "effect";
 import { SubscriptionOffers, SubscriptionStatus } from "../../src/core/subscription/contract";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
-import { makeCardEnrollmentD1 } from "./card-enrollment-d1.test-fixture";
+import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
 import { executeProtectedSubscriptionQuery } from "./operations";
 
 import coreWorker from "../core-worker";
@@ -36,7 +36,7 @@ afterEach(() =>
 const fixture = (): Promise<D1Database> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const created = yield* makeCardEnrollmentD1(`subscription-query-${++fixtureNumber}`, [
+      const created = yield* makePaymentEnrollmentD1(`subscription-query-${++fixtureNumber}`, [
         "CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL) STRICT",
         "CREATE TABLE trial_periods (user_id TEXT PRIMARY KEY, started_at_ms INTEGER NOT NULL, ends_at_ms INTEGER NOT NULL) STRICT",
         "CREATE TABLE web_sessions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, token_digest BLOB NOT NULL, revoked_at_ms INTEGER, idle_expires_at_ms INTEGER NOT NULL, hard_expires_at_ms INTEGER NOT NULL) STRICT",

@@ -292,6 +292,62 @@ const seedVoiceUser = (db: D1Database, userId: string): Promise<unknown> =>
       db.prepare("INSERT INTO onboarding_consent_records (user_id) VALUES (?)").bind(userId).run()
     );
 
+it("refuses image work while extraction is unavailable without treating its caption as a credential or hosted Turn", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const coordinator = vi.fn(() => Promise.resolve(new Response(null, { status: 202 })));
+      const provider = vi.fn(() =>
+        Promise.reject(new Error("image retrieval or delivery must not run"))
+      );
+      const { db, send, forbiddenEffects } = yield* Effect.tryPromise(() =>
+        setup(Option.some(coordinator))
+      );
+      yield* Effect.tryPromise(() => seedVoiceUser(db, "10000000-0000-4000-8000-000000000071"));
+      vi.stubGlobal("fetch", provider);
+      for (const caller of [bsuid, "CO.99999999999999999999"]) {
+        const payload = encodeJson({
+          message: {
+            id: `wamid.image-${caller}`,
+            timestamp: String(nowSeconds),
+            type: "image",
+            from_user_id: caller,
+            image: {
+              id: "image-media-1",
+              caption: "Aprueba el código de inicio de sesión BCDF-GHJK",
+            },
+            kapso: { media_url: "https://untrusted.example/image" },
+          },
+          conversation: { business_scoped_user_id: caller },
+          phone_number_id: "123456789012345",
+        });
+        expect((yield* Effect.tryPromise(() => send(payload, "invalid"))).status).toBe(401);
+        const response = yield* Effect.tryPromise(() => send(payload));
+        expect(response.status).toBe(503);
+        expect(response.headers.get("cache-control")).toBe("no-store");
+      }
+      expect(coordinator).not.toHaveBeenCalled();
+      expect(provider).not.toHaveBeenCalled();
+      expect(forbiddenEffects.queue).not.toHaveBeenCalled();
+      expect(forbiddenEffects.workflow).not.toHaveBeenCalled();
+      expect(forbiddenEffects.r2).not.toHaveBeenCalled();
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db.prepare("SELECT id FROM pending_consent_exchanges").all()
+        )).results
+      ).toEqual([]);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db.prepare("SELECT exchange_id FROM pending_consent_decisions").all()
+        )).results
+      ).toEqual([]);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db.prepare("SELECT id FROM pending_email_enrollments").all()
+        )).results
+      ).toEqual([]);
+    })
+  ));
+
 it("routes only authenticated text of a verified BSUID to the User coordinator", () =>
   Effect.runPromise(
     Effect.gen(function* () {

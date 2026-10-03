@@ -123,21 +123,83 @@ const clientLayer = (
 ): Layer.Layer<WompiEnrollmentClient, Config.ConfigError> =>
   clientLayerWithConfig(sourceResponse, new Response(merchantBody, { status: 200 }), config);
 
+let sandboxProductionCalls = 0;
+const sandboxProductionTransport = testOutboundTransportLayer(() => {
+  sandboxProductionCalls++;
+  return Effect.succeed(new Response("{}"));
+});
+layer(
+  OutboundHttp.layer.pipe(
+    Layer.provide(Layer.mergeAll(sandboxProductionTransport, productionConfig, TestCrypto))
+  ),
+  { excludeTestServices: true }
+)("Sandbox-only protocol proof", (it) => {
+  it.effect("rejects synthetic Nequi tokenization in Production before HTTP", () =>
+    Effect.gen(function* () {
+      const outbound = yield* OutboundHttp;
+      expect(
+        Exit.isFailure(
+          yield* Effect.exit(
+            outbound.execute({ _tag: "WompiNequiSandboxToken", outcome: "approved" })
+          )
+        )
+      ).toBe(true);
+      expect(sandboxProductionCalls).toBe(0);
+    })
+  );
+});
+
 const loadContracts = Effect.gen(function* () {
   const wompi = yield* WompiEnrollmentClient;
   return yield* wompi.contracts(DateTime.makeUnsafe("2026-04-01T00:00:00.000Z"));
 });
 
+for (const status of ["PENDING", "APPROVED"] as const) {
+  const transport = testOutboundTransportLayer((request) => {
+    expect(request.url).toBe("https://sandbox.wompi.co/v1/tokens/nequi/nequi_test_authorization");
+    expect(request.headers.authorization).toBe(`Bearer ${sandboxPublicKey}`);
+    return Effect.succeed(
+      new Response(
+        JSON.stringify({
+          data: {
+            id: "nequi_test_authorization",
+            status,
+            phone_number: "3991111111",
+            name: "Not retained",
+          },
+        })
+      )
+    );
+  });
+  layer(
+    WompiEnrollmentClient.layer.pipe(
+      Layer.provide(OutboundHttp.layer),
+      Layer.provide(Layer.mergeAll(transport, config, TestCrypto))
+    ),
+    { excludeTestServices: true }
+  )(`Nequi ${status} authorization`, (it) => {
+    it.effect("requires provider approval without releasing account details", () =>
+      Effect.gen(function* () {
+        const client = yield* WompiEnrollmentClient;
+        expect(yield* client.verifyNequiApproval(Redacted.make("nequi_test_authorization"))).toBe(
+          status === "APPROVED"
+        );
+      })
+    );
+  });
+}
+
 const verifyPaymentSource = Effect.gen(function* () {
   const wompi = yield* WompiEnrollmentClient;
-  return yield* wompi.verifyPaymentSource(WompiSourceId.make(3891));
+  return yield* wompi.verifyPaymentSource(WompiSourceId.make(3891), "card");
 });
 
 const createPaymentSource = Effect.gen(function* () {
   const wompi = yield* WompiEnrollmentClient;
   const contracts = yield* wompi.contracts(DateTime.makeUnsafe("2026-04-01T00:00:00.000Z"));
   return yield* wompi.createPaymentSource({
-    cardToken: Redacted.make(transientCardToken),
+    token: Redacted.make(transientCardToken),
+    method: "card",
     billingEmail: BillingEmail.make("payer@example.com"),
     contracts,
   });
@@ -155,9 +217,12 @@ layer(clientLayer(new Response('{"data":{"id":3891,"status":"AVAILABLE"}}', { st
 
 layer(
   clientLayer(
-    new Response('{"data":{"id":3891,"status":"AVAILABLE","customer_email":"payer@example.com"}}', {
-      status: 200,
-    })
+    new Response(
+      '{"data":{"id":3891,"type":"CARD","status":"AVAILABLE","customer_email":"payer@example.com"}}',
+      {
+        status: 200,
+      }
+    )
   ),
   { excludeTestServices: true }
 )("Wompi source verification adapter", (it) => {

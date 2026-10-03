@@ -6,7 +6,7 @@ import {
 import * as D1Client from "@effect/sql-d1/D1Client";
 import { listCategoriesResponse } from "../../src/shell/categories/operations";
 import { Clock, Context, Data, DateTime, Effect, Layer, Schema } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import { SqlClient } from "effect/sql";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import coreWorker from "../core-worker";
@@ -118,6 +118,8 @@ const setup = (
         "0019_canonical_child_guards",
         "0020_dashboard_projection",
         ...hostedTurnTestMigrations,
+        "0027_recurring",
+        "0028_recurring_audit_budget",
         "0029_audit_owner_retention",
       ];
       yield* awaitPromise(

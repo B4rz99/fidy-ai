@@ -2,8 +2,8 @@
 import { BunServices } from "@effect/platform-bun";
 import { FidyApi, makeTokenAuthorizationClientLive } from "@fidy/server/client";
 import { Cause, Effect, Exit, Layer, Option, Redacted, Schema } from "effect";
-import { FetchHttpClient, HttpClient } from "effect/unstable/http";
-import { HttpApiClient } from "effect/unstable/httpapi";
+import { FetchHttpClient, HttpClient } from "effect/http";
+import { HttpApiClient } from "effect/http-api";
 import { formatOutput, runCommand } from "../src/command/operations";
 import { CliFailure, type NativeSecrets, apiOrigin } from "../src/credential/contract";
 import { makeCredentialStore } from "../src/credential/runtime";

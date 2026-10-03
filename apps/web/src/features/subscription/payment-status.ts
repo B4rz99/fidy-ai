@@ -1,4 +1,4 @@
-import type { CardPaymentSubmissionType as PaymentSubmission } from "@/transport/client";
+import type { PaymentSubmissionType as PaymentSubmission } from "@/transport/client";
 
 const initialPaymentStatusRefreshes = 3;
 const frequentPaymentStatusRefreshes = 9;

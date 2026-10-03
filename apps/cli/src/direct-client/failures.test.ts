@@ -1,7 +1,7 @@
 import { PATRecipientLabel, StartedPATPairing } from "@fidy/server/client";
 import { expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { HttpClient, HttpClientResponse } from "effect/http";
 import { makePairingClient } from "./runtime";
 
 const secretCharacters = 43;

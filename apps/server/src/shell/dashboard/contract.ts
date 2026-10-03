@@ -18,7 +18,7 @@ import { type Budget, BudgetProgress } from "~/core/budgets/contract";
 import type { UserContext } from "~/core/identity/contract";
 
 import { Data, Schema } from "effect";
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
+import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import { Currency, MoneyGroups } from "~/core/_shared/money";
 import { UtcTimestamp } from "~/core/_shared/time";
 

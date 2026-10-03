@@ -1,4 +1,5 @@
-import { Encoding, type Result, Schema } from "effect";
+import { type Result, Schema } from "effect";
+import { Hex } from "effect/encoding";
 import { DashboardEdit, WidgetId as WidgetIdSchema } from "@/transport/client";
 import type { CanonicalSuccess } from "@/transport/client";
 import type { DashboardDropTarget } from "./drag-data";
@@ -29,7 +30,7 @@ export const freshWidgetId = (): WidgetId => {
   const variantOctet = Schema.decodeUnknownSync(Schema.Int)(bytes[uuidVariantOctet]);
   bytes[uuidVersionOctet] = (versionOctet & lowNibbleMask) | uuidVersionFourBits;
   bytes[uuidVariantOctet] = (variantOctet & lowSixBitsMask) | uuidRfcVariantBits;
-  const hex = Encoding.encodeHex(bytes);
+  const hex = Hex.encode(bytes);
   return Schema.decodeSync(WidgetIdSchema)(
     `${hex.slice(0, firstGroupEnd)}-${hex.slice(firstGroupEnd, secondGroupEnd)}-${hex.slice(secondGroupEnd, thirdGroupEnd)}-${hex.slice(thirdGroupEnd, fourthGroupEnd)}-${hex.slice(fourthGroupEnd)}`
   );

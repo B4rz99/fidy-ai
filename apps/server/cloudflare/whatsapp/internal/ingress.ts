@@ -17,14 +17,14 @@ import {
   DateTime,
   Duration,
   Effect,
-  Encoding,
   Exit,
   Layer,
   Option,
   Redacted,
   Schema,
 } from "effect";
-import { FetchHttpClient, HttpClient } from "effect/unstable/http";
+import { Hex } from "effect/encoding";
+import { FetchHttpClient, HttpClient } from "effect/http";
 import { type UserId } from "../../../src/core/identity/contract";
 import { approveBrowserPairing } from "../../browser-login/operations";
 import { recordConsentDelivery } from "../../consent/ingress/operations";
@@ -219,6 +219,8 @@ const routeHostedInbound = (
   input: WebhookInbound
 ): Effect.Effect<Option.Option<Response>, void, HttpClient.HttpClient> =>
   Effect.gen(function* () {
+    // Image extraction is not installed yet. A caption must never become a hosted text Turn.
+    if (input.event.content._tag === "Image") return Option.some(answer(HTTP_UNAVAILABLE));
     const known = yield* findWhatsAppUser({
       db: environment.DB,
       portfolioId: input.event.caller.businessPortfolioId,
@@ -300,7 +302,7 @@ const handleInbound = (
     }
     const cryptoService = yield* Crypto.Crypto;
     const digest = Sha256Digest.make(
-      Encoding.encodeHex(yield* cryptoService.digest("SHA-256", base.rawBody).pipe(Effect.orDie))
+      Hex.encode(yield* cryptoService.digest("SHA-256", base.rawBody).pipe(Effect.orDie))
     );
     const input = {
       event: decoded.value.events[0],

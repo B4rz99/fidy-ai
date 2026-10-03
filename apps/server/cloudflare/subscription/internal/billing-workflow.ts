@@ -1,5 +1,9 @@
 import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
-import { BillingAttemptId, BillingEmail } from "../../../src/core/subscription/contract";
+import {
+  BillingAttemptId,
+  BillingEmail,
+  EnrollmentMethod,
+} from "../../../src/core/subscription/contract";
 import { IanaTimeZone } from "../../../src/core/_shared/context";
 import { Money } from "../../../src/core/_shared/money";
 import {
@@ -13,7 +17,8 @@ import { paidPeriodFor } from "../../../src/core/subscription/operations";
 import { type VerifiedOutcome, recordVerifiedBillingEvidence } from "./billing-settlement";
 import { verifiedWompiEventHint } from "./wompi-event";
 import { type WorkflowStepConfig } from "cloudflare:workers";
-import { Clock, DateTime, Effect, Encoding, Exit, Option, Schema } from "effect";
+import { Clock, DateTime, Effect, Exit, Option, Schema } from "effect";
+import { Hex } from "effect/encoding";
 import { wompiOutboundHttp } from "./wompi-runtime";
 import {
   type BillingCollectionEnvironment,
@@ -66,6 +71,7 @@ const Snapshot = Schema.Struct({
   wompi_reference: WompiTransactionReference,
   billing_email: BillingEmail,
   wompi_source_id: WompiSourceId,
+  method: EnrollmentMethod,
 });
 const Candidate = Schema.Struct({
   transaction_id: WompiTransactionId,
@@ -117,7 +123,7 @@ const snapshot = (
     const row = yield* attempt(() =>
       db
         .prepare(`SELECT a.id, a.user_id, a.amount, a.currency, a.billing_period, a.time_zone,
-          a.wompi_environment, a.wompi_reference, s.billing_email, s.wompi_source_id
+          a.wompi_environment, a.wompi_reference, s.billing_email, s.wompi_source_id, s.method
         FROM billing_attempts AS a JOIN card_payment_sources AS s ON s.id = a.payment_source_id
         WHERE a.id = ? AND a.user_id = s.user_id`)
         .bind(id)
@@ -452,6 +458,7 @@ const collect = (
         currency: captured.currency,
         billingEmail: captured.billing_email,
         sourceId: captured.wompi_source_id,
+        method: captured.method,
       })
     );
     // Wompi documents charge lookup by provider id, not by reference. Without a response id,
@@ -518,7 +525,7 @@ const offerBillingLookup = (
 ): Effect.Effect<boolean, BillingCollectionFailure> =>
   Effect.gen(function* () {
     const { db, workflow, transactionId, signedAt, signedStatus, now } = input;
-    const fingerprint = Encoding.encodeHex(
+    const fingerprint = Hex.encode(
       new Uint8Array(
         yield* attempt(() =>
           crypto.subtle.digest(

@@ -1,7 +1,7 @@
 import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { Cause, Effect, Array as EffectArray, Exit, Option, Schema } from "effect";
 import { it as effectIt } from "@effect/vitest";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult } from "effect/reactivity";
 import type { JSX } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FidyClient } from "@/transport/client";

@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Exit, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import { HttpBody, HttpClient, HttpClientResponse } from "effect/unstable/http";
+import { HttpBody, HttpClient, HttpClientResponse } from "effect/http";
 import { protectClient } from "./runtime";
 
 it.effect("cancels a dishonest oversized response before decoding it", () =>

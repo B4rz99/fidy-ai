@@ -1,4 +1,5 @@
-import { Effect, Encoding } from "effect";
+import { Effect } from "effect";
+import { Hex } from "effect/encoding";
 import { browserOrigins } from "../runtime/contract";
 import type { AnonymousAdmissionRequest } from "./contract";
 
@@ -37,5 +38,5 @@ export const deriveAnonymousSource = ({
       try: () => crypto.subtle.sign("HMAC", key, new TextEncoder().encode(visitor)),
       catch: () => undefined,
     });
-    return Encoding.encodeHex(new Uint8Array(signature));
+    return Hex.encode(new Uint8Array(signature));
   });

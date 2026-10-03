@@ -1,4 +1,4 @@
-import { Option, Schema } from "effect";
+import { Option, Schema, Struct } from "effect";
 import {
   CapturedInterpretationContext,
   InterpretationRevision,
@@ -6,7 +6,85 @@ import {
 import { Money } from "~/core/_shared/money";
 import { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
-import { TransactionId } from "~/core/transactions/contract";
+import { TransactionExtraction, TransactionId } from "~/core/transactions/contract";
+
+/**
+ * An explicit source instant or normalized local date, interpreted in captured context. An absent
+ * local time means the start of that source date; invalid calendar dates and ambiguous local times
+ * still require policy review. The containing proposal models absence of the entire occurrence.
+ */
+export const CaptureOccurrence = Schema.Union([
+  Schema.TaggedStruct("Instant", { value: UtcTimestamp }),
+  Schema.TaggedStruct("LocalDate", {
+    date: Schema.String.check(
+      Schema.isPattern(/^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])$/u)
+    ),
+    time: Schema.OptionFromOptionalKey(
+      Schema.String.check(Schema.isPattern(/^(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/u))
+    ),
+  }),
+]).annotate({ identifier: "CaptureOccurrence" });
+export type CaptureOccurrence = typeof CaptureOccurrence.Type;
+
+/**
+ * Facts proposed by bounded image/text inference, not yet eligible for Transaction capture. Money
+ * may omit Currency, and its proposed shape does not imply canonical precision or positivity;
+ * interpretation must apply defaults and revalidate the complete TransactionExtraction.
+ */
+export const CaptureProposal = Schema.Union([
+  Schema.TaggedStruct("SingleMovement", {
+    completion: Schema.Literals(["completed", "pending", "rejected", "cancelled", "unclear"]),
+    money: Schema.OptionFromOptionalKey(
+      Money.mapFields(
+        Struct.evolve({ currency: () => Schema.OptionFromOptionalKey(Money.fields.currency) })
+      )
+    ),
+    direction: Schema.OptionFromOptionalKey(TransactionExtraction.fields.direction),
+    counterparty: TransactionExtraction.fields.counterparty,
+    occurrence: Schema.OptionFromOptionalKey(CaptureOccurrence),
+  }),
+  Schema.TaggedStruct("MultipleMovements", {}),
+  Schema.TaggedStruct("Unparseable", {}),
+]).annotate({ identifier: "CaptureProposal" });
+export type CaptureProposal = typeof CaptureProposal.Type;
+
+/** Captured policy basis distinguishes source facts from applied defaults after raw material expires. */
+export const CaptureInterpretationEvidence = Schema.Struct({
+  currencyBasis: Schema.Literals(["explicit", "default"]),
+  dateBasis: Schema.Literals(["explicit", "submission-date-default"]),
+  revision: InterpretationRevision,
+}).annotate({ identifier: "CaptureInterpretationEvidence" });
+export type CaptureInterpretationEvidence = typeof CaptureInterpretationEvidence.Type;
+
+/** One image proposes at most one completed Transaction; uncertain material is always reviewable. */
+export const CaptureInterpretation = Schema.Union([
+  Schema.TaggedStruct("Extracted", {
+    extraction: TransactionExtraction,
+    evidence: CaptureInterpretationEvidence,
+  }),
+  Schema.TaggedStruct("NeedsReview", {
+    reason: Schema.Literals([
+      "unparseable-material",
+      "multiple-movements",
+      "movement-not-completed",
+      "missing-required-fact",
+      "canonical-validation-failed",
+      "invalid-occurrence",
+    ]),
+  }),
+]).annotate({ identifier: "CaptureInterpretation" });
+export type CaptureInterpretation = typeof CaptureInterpretation.Type;
+
+/** Already-decoded material and immutable context; now is the authoritative finalization instant. */
+export type CaptureInterpretationInput = Readonly<{
+  proposal: CaptureProposal;
+  context: CapturedInterpretationContext;
+  submittedAt: UtcTimestamp;
+  now: UtcTimestamp;
+}>;
+
+/** Default interpretation policy is immutable in historical capture evidence. */
+export const captureInterpretationRevision = InterpretationRevision.make("capture-v1");
 
 /** Content and provider message identifiers are bounded metadata, never open-ended evidence. */
 export const maximumEmailEvidenceIdCharacters = 256;
@@ -69,6 +147,9 @@ export type ForwardedEmailDeliveryId = typeof ForwardedEmailDeliveryId.Type;
 
 // Product and evidence bounds shared by the notification-email model and forwarded-email policy.
 // Transport-only limits remain at their owning shell boundary.
+
+/** Free receipt and screenshot extraction share two unique submissions per Bogotá calendar month. */
+export const freeMediaSubmissionCap = 2;
 
 /** Issue #22 grants each Free User fifty unique notification emails per Bogotá calendar month. */
 export const freeForwardedEmailCap = 50;

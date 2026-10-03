@@ -32,6 +32,7 @@ import {
 import { BudgetId, CreateBudgetInput, UpdateBudgetInput } from "../../../src/core/budgets/contract";
 import { DeliveryEvidenceInput, InsightEventId } from "../../../src/core/insights/contract";
 import { browseBudgets, budgetRefusal, evaluateBudgetAlerts } from "../../budgets/operations";
+import { listRecurringSeries } from "../../recurring/operations";
 import { listPendingInsights } from "../../insights/operations";
 import { browseDashboard } from "../../dashboard/operations";
 import { ownsTransactionPath as transactionPath } from "../../../src/shell/transactions/runtime";
@@ -54,7 +55,7 @@ import {
 import { executeProtectedSubscriptionQuery } from "../../subscription/operations";
 import {
   dispatchBillingCollection,
-  handleCardEnrollment,
+  handlePaymentEnrollment,
   receiveWompiBillingEvent,
 } from "../../subscription/runtime";
 
@@ -283,9 +284,9 @@ const providerCallbackEffect = (
 };
 
 const enrollmentCorePath = (path: string): boolean =>
-  path === "/web/subscription/card-enrollments/prepare" ||
-  path === "/web/subscription/card-enrollments/submit" ||
-  /^\/web\/subscription\/(?:card-enrollments|billing-attempts)\/[0-9a-f-]{36}$/u.test(path);
+  path === "/web/subscription/payment-enrollments/prepare" ||
+  path === "/web/subscription/payment-enrollments/submit" ||
+  /^\/web\/subscription\/(?:payment-enrollments|billing-attempts)\/[0-9a-f-]{36}$/u.test(path);
 
 /** The PAT admission variant for one piece of canonical work. */
 const patAdmission = (authority: PATAuthority, work: CanonicalWork): CanonicalWorkAdmission => ({
@@ -1384,6 +1385,20 @@ const dashboardResponse = (
         });
   });
 
+const primaryCanonicalOwner = (
+  input: Parameters<typeof insightResponse>[0]
+): Option.Option<Effect.Effect<Response>> => {
+  if (input.operation.id === "recurring.listRecurringSeries") {
+    return Option.some(
+      listRecurringSeries({
+        db: input.environment.DB,
+        subject: input.subject,
+        request: input.request,
+      }).pipe(Effect.withSpan(input.operation.id))
+    );
+  }
+  return Option.orElse(insightResponse(input), () => dashboardResponse(input));
+};
 /** Once admitted, every credential executes through the same canonical operation dispatch. */
 const executeCanonicalWork = (
   input: Readonly<{
@@ -1412,7 +1427,7 @@ const executeCanonicalWork = (
       catch: () => undefined,
     }).pipe(Effect.orElseSucceed(unavailable));
   }
-  const primaryOwner = Option.orElse(insightResponse(input), () => dashboardResponse(input));
+  const primaryOwner = primaryCanonicalOwner(input);
   const otherOwner = Option.orElse(budgetResponse(input), () =>
     Option.orElse(keywordRuleResponse(input), () => memoryResponse(input))
   );
@@ -1566,12 +1581,12 @@ export const executeCoreHttp = ({
   if (enrollmentCorePath(url.pathname)) {
     return Effect.tryPromise({
       try: () =>
-        handleCardEnrollment({
+        handlePaymentEnrollment({
           request,
           environment: { ...environment, onAccepted: (id) => publish("billing", id) },
         }),
       catch: () => undefined,
-    }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("subscription.card-enrollment"));
+    }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("subscription.payment-enrollment"));
   }
   const directPath = directPathResponse(request, environment);
   if (Option.isSome(directPath)) return directPath.value;

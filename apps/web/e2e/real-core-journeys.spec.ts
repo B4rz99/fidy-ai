@@ -415,7 +415,7 @@ const submitReusedCard = Effect.fnUntraced(function* (page: Page, request: APIRe
   );
   yield* fromPlaywright(page.goto("/upgrade"));
   const preparing = page.waitForResponse(
-    (response) => response.url() === `${api}/web/subscription/card-enrollments/prepare`
+    (response) => response.url() === `${api}/web/subscription/payment-enrollments/prepare`
   );
   yield* fromPlaywright(
     page
@@ -436,7 +436,7 @@ const submitReusedCard = Effect.fnUntraced(function* (page: Page, request: APIRe
   yield* fromPlaywright(page.getByLabel(/Acepto el reglamento/iu).check());
   yield* fromPlaywright(page.getByLabel(/Autorizo el tratamiento/iu).check());
   const submission = page.waitForResponse(
-    (response) => response.url() === `${api}/web/subscription/card-enrollments/submit`
+    (response) => response.url() === `${api}/web/subscription/payment-enrollments/submit`
   );
   yield* fromPlaywright(
     page
@@ -573,7 +573,7 @@ test("tokenizes a first card outside Fidy and enrolls through real public and Co
       yield* fromPlaywright(page.getByLabel(/Acepto el reglamento/iu).check());
       yield* fromPlaywright(page.getByLabel(/Autorizo el tratamiento/iu).check());
       const submitResponse = page.waitForResponse(
-        (response) => response.url() === `${api}/web/subscription/card-enrollments/submit`
+        (response) => response.url() === `${api}/web/subscription/payment-enrollments/submit`
       );
       yield* fromPlaywright(
         page

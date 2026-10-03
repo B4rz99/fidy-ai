@@ -1,6 +1,6 @@
 import { type UserId } from "~/core/identity/contract";
 import { type Effect, Option } from "effect";
-import { type SqlClient } from "effect/unstable/sql";
+import { type SqlClient } from "effect/sql";
 import { type ActivePATList, type CreateManualPATPayload } from "~/core/tokens/contract";
 import { type Unavailable } from "~/shell/public-http/contract";
 import {

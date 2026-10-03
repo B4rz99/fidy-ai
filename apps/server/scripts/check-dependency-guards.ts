@@ -873,7 +873,7 @@ const PROBES: readonly Probe[] = [
       {
         path: `cloudflare/agent/${PROBE_PREFIX}raw-model/probe.ts`,
         source:
-          'import { LanguageModel, Tokenizer } from "effect/unstable/ai";\nexport const bypass = [LanguageModel, Tokenizer];\n',
+          'import { LanguageModel, Tokenizer } from "effect/ai";\nexport const bypass = [LanguageModel, Tokenizer];\n',
       },
     ],
   },
@@ -1833,11 +1833,11 @@ const PROBES: readonly Probe[] = [
       {
         path: `${subscriptionPublished}/runtime.ts`,
         source:
-          'import { handleCardEnrollment } from "../subscription/runtime";\n' +
+          'import { handlePaymentEnrollment } from "../subscription/runtime";\n' +
           'import { executeProtectedSubscriptionQuery } from "../subscription/operations";\n' +
           'import { activePaidSubscriptionCondition } from "~/shell/subscription/operations";\n' +
           'import { SubscriptionEnrollmentApi } from "~/shell/subscription/contract";\n' +
-          "export const published = [handleCardEnrollment, executeProtectedSubscriptionQuery, activePaidSubscriptionCondition, SubscriptionEnrollmentApi];\n",
+          "export const published = [handlePaymentEnrollment, executeProtectedSubscriptionQuery, activePaidSubscriptionCondition, SubscriptionEnrollmentApi];\n",
       },
     ],
     name: "Subscription runtime composes enrollment while peers observe standing and paid access",
@@ -2343,14 +2343,14 @@ const PROBES: readonly Probe[] = [
     expect: {
       kind: "rejected",
       mustContain: [
-        `error provider-callers-import-raw-http: ${providerRawHttpSource} → node_modules/effect/dist/unstable/http/index.js`,
+        `error provider-callers-import-raw-http: ${providerRawHttpSource} → node_modules/effect/dist/http/index.js`,
       ],
     },
     files: [
       {
         path: providerRawHttpSource,
         source:
-          'import { HttpClient } from "effect/unstable/http";\n\n' +
+          'import { HttpClient } from "effect/http";\n\n' +
           "export const rawProviderClient = HttpClient;\n",
       },
     ],
@@ -2835,7 +2835,7 @@ const PROBES: readonly Probe[] = [
       {
         path: `${HOSTED_TOKENIZER}/probe.ts`,
         source:
-          'import { Tokenizer } from "effect/unstable/ai";\n\n' +
+          'import { Tokenizer } from "effect/ai";\n\n' +
           "export const hostedTokenizerProbe = Tokenizer;\n",
       },
     ],
@@ -2852,7 +2852,7 @@ const PROBES: readonly Probe[] = [
       {
         path: `${HOSTED_MODEL}/probe.ts`,
         source:
-          'import { LanguageModel } from "effect/unstable/ai";\n\n' +
+          'import { LanguageModel } from "effect/ai";\n\n' +
           "export const hostedModelProbe = LanguageModel;\n",
       },
     ],

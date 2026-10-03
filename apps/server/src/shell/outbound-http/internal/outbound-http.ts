@@ -1,11 +1,7 @@
 import { type WompiEnvironment } from "~/shell/secret-material/contract";
-import { type Crypto, Effect, Encoding, Match, Option, Redacted } from "effect";
-import {
-  FetchHttpClient,
-  HttpBody,
-  type HttpClient,
-  HttpClientRequest,
-} from "effect/unstable/http";
+import { type Crypto, Effect, Match, Option, Redacted } from "effect";
+import { Hex } from "effect/encoding";
+import { FetchHttpClient, HttpBody, type HttpClient, HttpClientRequest } from "effect/http";
 import { makeProviderTransport } from "./transport";
 import {
   OutboundHttpFailure,
@@ -116,20 +112,63 @@ const transactionSignature = (
         `${body.reference}${body.amountInCents}${body.currency}${Redacted.value(integritySecret)}`
       )
     )
-    .pipe(Effect.map(Encoding.encodeHex), Effect.mapError(unavailableTransport));
+    .pipe(Effect.map(Hex.encode), Effect.mapError(unavailableTransport));
+
+const nequiApprovalRequest = (
+  origin: string,
+  token: Redacted.Redacted<string>,
+  publicKey: string
+): HttpClientRequest.HttpClientRequest =>
+  HttpClientRequest.get(`${origin}/v1/tokens/nequi/${encodeURIComponent(Redacted.value(token))}`, {
+    headers: { authorization: `Bearer ${publicKey}` },
+  });
+
+const nequiSandboxTokenRequest = (
+  config: WompiTransportConfig,
+  outcome: "approved" | "declined"
+): Effect.Effect<HttpClientRequest.HttpClientRequest, OutboundHttpFailure> =>
+  config.environment !== "sandbox"
+    ? rejectRequest()
+    : Effect.succeed(
+        jsonRequest(
+          `${wompiSandboxOrigin}/v1/tokens/nequi`,
+          JSON.stringify({ phone_number: outcome === "approved" ? "3991111111" : "3992222222" }),
+          { authorization: `Bearer ${config.publicKey}` }
+        )
+      );
+
+const signedTransactionBody = (
+  body: Extract<OutboundHttpRequest, { _tag: "WompiCreateTransaction" }>["body"],
+  signature: string
+): string =>
+  JSON.stringify({
+    amount_in_cents: body.amountInCents,
+    currency: body.currency,
+    customer_email: body.billingEmail,
+    ...(body.method === "nequi" ? {} : { payment_method: { installments: 1 } }),
+    payment_source_id: body.sourceId,
+    reference: body.reference,
+    signature,
+  });
 
 const makeWompiRequest = (
   request: WompiRequest,
   config: WompiTransportConfig,
   crypto: Crypto.Crypto
 ): Effect.Effect<HttpClientRequest.HttpClientRequest, OutboundHttpFailure> => {
-  const origin = config.environment === "sandbox" ? wompiSandboxOrigin : wompiProductionOrigin;
+  const origin = { sandbox: wompiSandboxOrigin, production: wompiProductionOrigin }[
+    config.environment
+  ];
   const authorization = `Bearer ${Redacted.value(config.privateKey)}`;
   switch (request._tag) {
     case "WompiMerchant":
       return Effect.succeed(
         HttpClientRequest.get(`${origin}/v1/merchants/${encodeURIComponent(config.publicKey)}`)
       );
+    case "WompiNequiSandboxToken":
+      return nequiSandboxTokenRequest(config, request.outcome);
+    case "WompiNequiApproval":
+      return Effect.succeed(nequiApprovalRequest(origin, request.token, config.publicKey));
     case "WompiCreatePaymentSource":
       return Effect.succeed(
         HttpClientRequest.post(`${origin}/v1/payment_sources`, {
@@ -149,18 +188,7 @@ const makeWompiRequest = (
         Effect.map((signature) =>
           HttpClientRequest.post(`${origin}/v1/transactions`, {
             headers: { authorization, "content-type": "application/json" },
-            body: HttpBody.text(
-              JSON.stringify({
-                amount_in_cents: request.body.amountInCents,
-                currency: request.body.currency,
-                customer_email: request.body.billingEmail,
-                payment_method: { installments: 1 },
-                payment_source_id: request.body.sourceId,
-                reference: request.body.reference,
-                signature,
-              }),
-              "application/json"
-            ),
+            body: HttpBody.text(signedTransactionBody(request.body, signature), "application/json"),
           })
         )
       );
@@ -261,6 +289,8 @@ const prepareRequest = (
       CloudflareAccessSupportRecovery: (value) => prepareNonProviderGroup(value, context),
       ResendEmailDelivery: (value) => prepareResend(value, context),
       WompiMerchant: (value) => prepareWompi(value, context),
+      WompiNequiApproval: (value) => prepareWompi(value, context),
+      WompiNequiSandboxToken: (value) => prepareWompi(value, context),
       WompiCreatePaymentSource: (value) => prepareWompi(value, context),
       WompiVerifyPaymentSource: (value) => prepareWompi(value, context),
       WompiCreateTransaction: (value) => prepareWompi(value, context),

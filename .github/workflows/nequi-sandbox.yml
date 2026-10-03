@@ -1,0 +1,46 @@
+name: Nequi Sandbox protocol proof
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nequi-sandbox-protocol
+  cancel-in-progress: false
+
+jobs:
+  protocol:
+    # Sandbox secrets already live in the protected production environment. This job
+    # uses no Cloudflare credentials, deploys nothing, and rejects Production Wompi.
+    if: github.ref == 'refs/heads/trunk'
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.4.1"
+      - run: bun install --frozen-lockfile
+      - name: Verify reusable sources and matching first-payment settlement
+        env:
+          FIDY_NEQUI_SANDBOX: "1"
+          WOMPI_ENVIRONMENT: ${{ secrets.WOMPI_ENVIRONMENT }}
+          WOMPI_PUBLIC_KEY: ${{ secrets.WOMPI_PUBLIC_KEY }}
+          WOMPI_PRIVATE_KEY: ${{ secrets.WOMPI_PRIVATE_KEY }}
+          WOMPI_INTEGRITY_SECRET: ${{ secrets.WOMPI_INTEGRITY_SECRET }}
+        run: bun run --cwd apps/server test:cloudflare subscription/payment-enrollment.test.ts -t 'proves Sandbox Nequi'
+      - name: Record minimized proof scope
+        if: success()
+        run: |
+          printf '%s\n' '## Nequi Sandbox protocol proof' \
+            'Revision: `${{ github.sha }}`' \
+            '- Reusable NEQUI source availability and approval were authenticated.' \
+            '- Weekly, monthly and yearly first payments reached verified success.' \
+            '- Declined weekly first payment reached the existing bounded failure decision.' \
+            '- Evidence contains no numbers, tokens, provider identities or response bodies.' \
+            '- Local D1/activity harness plus real Sandbox provider, not Production or native-platform launch approval.' >> "$GITHUB_STEP_SUMMARY"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { BunServices } from "@effect/platform-bun";
 import { Cause, Effect, Exit, Layer, Option, Path, Schema, Terminal } from "effect";
-import { FetchHttpClient, HttpClient } from "effect/unstable/http";
+import { FetchHttpClient, HttpClient } from "effect/http";
 import { formatFailure, formatOutput, runCommand } from "./command/operations";
 import { CliFailure } from "./credential/contract";
 import { makeCredentialStore, supportedBunRevision } from "./credential/runtime";

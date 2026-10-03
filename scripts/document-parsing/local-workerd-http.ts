@@ -1,5 +1,5 @@
 import { Data, Effect, ManagedRuntime, Stream } from "effect";
-import { FetchHttpClient, HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http";
+import { FetchHttpClient, HttpBody, HttpClient, HttpClientRequest } from "effect/http";
 
 const maximumResponseBytes = Number("1048576");
 const noBodyStatuses = new Set([Number("204"), Number("205"), Number("304")]);

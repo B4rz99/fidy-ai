@@ -33,6 +33,9 @@ type EffectFixture = {
   readonly atomReactVersion: string;
   readonly qualifiedEffectVersion: string;
   readonly includeOverride: boolean;
+  readonly extraOverrides: Readonly<Record<string, string>>;
+  readonly lockedOverrides: Readonly<Record<string, string | Readonly<Record<string, string>>>>;
+  readonly lockedWorkspaceVersion: string;
 };
 
 const qualifiedPackage = (
@@ -85,7 +88,10 @@ const makeFixture = (overrides: Partial<EffectFixture> = {}): string => {
       "@effect/atom-react": atomReactVersion,
     },
     devDependencies: { "@effect/vitest": vitestVersion },
-    ...(includeOverride ? { overrides: { "@effect/platform-shared": overrideVersion } } : {}),
+    overrides: {
+      ...(includeOverride ? { "@effect/platform-shared": overrideVersion } : {}),
+      ...overrides.extraOverrides,
+    },
   };
   const lockfile = {
     lockfileVersion: 1,
@@ -93,10 +99,14 @@ const makeFixture = (overrides: Partial<EffectFixture> = {}): string => {
     workspaces: {
       "": {
         name: "fixture",
-        dependencies: packageJson.dependencies,
+        dependencies: {
+          ...packageJson.dependencies,
+          effect: overrides.lockedWorkspaceVersion ?? effectVersion,
+        },
         devDependencies: packageJson.devDependencies,
       },
     },
+    overrides: overrides.lockedOverrides ?? packageJson.overrides,
     packages: {
       effect: [`effect@${effectVersion}`, ""],
       "@effect/ai": [`@effect/ai@${aiVersion}`, ""],
@@ -150,12 +160,38 @@ it("accepts direct and transitive Effect packages from one selected v4 RC family
   expect(decode(result.stdout)).toContain("Effect dependency family: 4.0.0-rc.3");
 });
 
-it("reports the manifest location when the selected Effect runtime is not v4 beta or RC", () => {
+it("accepts an exact stable v4 family without changing the installed repository family", () => {
+  const result = checkFixture(makeFixture({ effectVersion: "4.0.0" }));
+
+  expect(result.exitCode).toBe(0);
+  expect(decode(result.stdout)).toContain("Effect dependency family: 4.0.0");
+});
+
+it("reports the manifest location when the selected Effect runtime is not an exact v4 family", () => {
   const root = makeFixture({ effectVersion: "3.19.4" });
   const result = checkFixture(root);
 
   expect(result.exitCode).toBe(1);
   expect(decode(result.stderr)).toContain(`effect: 3.19.4 (${root}/package.json)`);
+});
+
+it.each(["^4.0.0", "4.0.0-rc.115", "4.0.1", "3.22.2"])(
+  "rejects %s mixed into the selected stable family",
+  (platformVersion) => {
+    const result = checkFixture(makeFixture({ effectVersion: "4.0.0", platformVersion }));
+
+    expect(result.exitCode).toBe(1);
+    expect(decode(result.stderr)).toContain(`@effect/platform-cloudflare: ${platformVersion}`);
+  }
+);
+
+it("reports a stale Effect version in the lockfile workspace declaration", () => {
+  const result = checkFixture(
+    makeFixture({ effectVersion: "4.0.0", lockedWorkspaceVersion: "4.0.0-rc.115" })
+  );
+
+  expect(result.exitCode).toBe(1);
+  expect(decode(result.stderr)).toContain("effect: 4.0.0-rc.115 (bun.lock workspace .)");
 });
 
 it("reports a beta package mixed into the selected RC family", () => {
@@ -209,6 +245,60 @@ it("requires transitive platform overrides to pin the selected beta exactly", ()
 
   expect(result.exitCode).toBe(1);
   expect(decode(result.stderr)).toContain("@effect/platform-shared override: ^4.0.0-beta.98");
+});
+
+it.each(["effect", "@effect/sql-d1", "@effect/sql-d1@^4.0.0"])(
+  "rejects a conflicting %s override even when resolved packages still agree",
+  (packageName) => {
+    const result = checkFixture(
+      makeFixture({
+        effectVersion: "4.0.0",
+        extraOverrides: { [packageName]: "4.0.0-rc.115" },
+      })
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(decode(result.stderr)).toContain(`${packageName} override: 4.0.0-rc.115 (`);
+  }
+);
+
+it("accepts Bun's qualified override objects without ignoring a conflicting family selection", () => {
+  const accepted = checkFixture(
+    makeFixture({
+      effectVersion: "4.0.0",
+      lockedOverrides: {
+        "@effect/platform-shared": "4.0.0",
+        "undici@^7": { ".": "7.29.1" },
+        "@effect/sql-d1@^4.0.0": { ".": "4.0.0" },
+      },
+    })
+  );
+  expect(accepted.exitCode).toBe(0);
+
+  const rejected = checkFixture(
+    makeFixture({
+      effectVersion: "4.0.0",
+      lockedOverrides: { "@effect/sql-d1@^4.0.0": { ".": "4.0.0-rc.115" } },
+    })
+  );
+  expect(rejected.exitCode).toBe(1);
+  expect(decode(rejected.stderr)).toContain(
+    "@effect/sql-d1@^4.0.0 override: 4.0.0-rc.115 (bun.lock overrides)"
+  );
+});
+
+it("reports a stale override retained only in the lockfile", () => {
+  const result = checkFixture(
+    makeFixture({
+      effectVersion: "4.0.0",
+      lockedOverrides: { "@effect/platform-shared": "4.0.0-rc.115" },
+    })
+  );
+
+  expect(result.exitCode).toBe(1);
+  expect(decode(result.stderr)).toContain(
+    "@effect/platform-shared override: 4.0.0-rc.115 (bun.lock overrides)"
+  );
 });
 
 it("reports a missing transitive platform override with its manifest location", () => {

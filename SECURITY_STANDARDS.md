@@ -170,6 +170,37 @@ wrong browser verifier, concurrency, and cross-User substitution.
 crosses Kapso; a recovery proof appears in a URL or Transcript; changing a phone number creates a
 new owner for old data; support approves ownership from a bank statement.
 
+#### Hosted MCP OAuth authority (accepted design; not yet installed)
+
+When implementing ADR 0033, OAuthConnection is distinct User-owned-agent authority, never a PAT,
+WebSession or Hosted Agent Session. Each call and refresh rechecks live grant, credential, audience,
+client, stable User, approved non-empty capabilities and current Consent at its authoritative unit.
+The reviewed absolute 7/30/90/365-day expiration is immutable; finite access/refresh lifetimes cannot
+extend it. Browser logout, PAT revocation and OAuth connection revocation remain independent.
+
+Approval requires the same User's fresh first-party session and origin/CSRF protection, bound to
+exact client, registered redirect, resource, S256 challenge, scope subset and expiration. Omitted
+scope means read only; escalation requires new explicit approval. Code exchange is short-lived,
+single-use and atomic. Issuer/resource/redirect substitution or missing/wrong PKCE rejects without
+partial authority. Client metadata and host names are unverified claims, not identity.
+
+Refresh atomically rotates digest-only credentials under current authority. Recognized replay
+revokes that connection's entire credential family, including a concurrently issued winner; there
+is no grace interval or recoverable replacement-token cache. Unknown credentials cannot revoke
+another connection. Expired or revoked authority cannot refresh or execute on another instance.
+Metadata retrieval requires bounded streamed bytes, deadlines, concurrency and enforceable SSRF/DNS
+rebinding protection; arbitrary URLs and redirect chains are not compatibility fallbacks.
+
+Sensitive operations, including batch children, require OAuth-specific same-User/connection evidence
+bound to exact operation, input digest, applicable revisions and short expiry. Consume it once in
+the same atomic unit as mutation and Audit. Public references, host elicitation acceptance, model
+claims and hosted-only evidence grant nothing. Unsupported browser handoff/resume fails closed.
+Raw access/refresh credentials never enter Fidy browser state, URLs, models, tools or diagnostics;
+authorization codes cross only the validated no-store/referrer-protected callback. Downstream tests
+must prove replay/concurrency, cross-User substitution, issuer/resource/redirect/PKCE refusal,
+CSRF, hostile metadata fetching and absence of partial effects at the real public/Core seam. A
+synthetic exchange is not this security evidence.
+
 ### 3. Consent, privacy, retention, and egress
 
 **Applies when:** a diff touches onboarding, consent, ingestion, transcripts, memory, retention,

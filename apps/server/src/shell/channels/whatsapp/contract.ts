@@ -49,7 +49,7 @@ export const WhatsAppMessageEvidence = Schema.Struct({
 }).annotate({ identifier: "WhatsAppMessageEvidence" });
 export type WhatsAppMessageEvidence = typeof WhatsAppMessageEvidence.Type;
 
-/** Audio-media identifier retained as WhatsApp provider evidence only. */
+/** Media identifier retained as WhatsApp provider evidence only; it grants no retrieval authority. */
 export const WhatsAppMediaId = Schema.NonEmptyString.check(
   Schema.isTrimmed(),
   Schema.isMaxLength(maximumProviderIdentifierLength)
@@ -76,7 +76,12 @@ export type WhatsAppInboundContent =
       readonly text: TranscriptText;
       readonly mediaId: WhatsAppMediaId;
     }>
-  | Readonly<{ readonly _tag: "UnusableVoiceTranscript" }>;
+  | Readonly<{ readonly _tag: "UnusableVoiceTranscript" }>
+  | Readonly<{
+      readonly _tag: "Image";
+      readonly mediaId: WhatsAppMediaId;
+      readonly caption: Option.Option<TranscriptText>;
+    }>;
 
 /** Opaque Turn-delivery correlation; the provider cannot supply User authority with this value. */
 export const HostedDeliveryCorrelationToken = Schema.String.check(Schema.isUUID()).pipe(

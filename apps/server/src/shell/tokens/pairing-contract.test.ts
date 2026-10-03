@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
-import { HttpClient, HttpClientResponse } from "effect/unstable/http";
-import { HttpApiClient, OpenApi } from "effect/unstable/httpapi";
+import { HttpClient, HttpClientResponse } from "effect/http";
+import { HttpApiClient, OpenApi } from "effect/http-api";
 import {
   PATPairingApi,
   PATPairingPollingRateLimitedApi,

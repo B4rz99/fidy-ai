@@ -37,13 +37,13 @@ import {
   Data,
   DateTime,
   Effect,
-  Encoding,
   Function,
   Layer,
   Option,
   PlatformError,
   Schema,
 } from "effect";
+import { Hex } from "effect/encoding";
 import { activeProUserCondition } from "../../../src/shell/access-tier/operations";
 import { type BoundedBodyReadFailed } from "../../http/contract";
 import { collectBoundedRequestBody } from "../../http/operations";
@@ -263,7 +263,7 @@ const randomObjectKey = (): string => {
   const entropy = Effect.runSync(
     workerCrypto.randomBytes(statementStagingObjectEntropyBytes).pipe(Effect.orDie)
   );
-  return `${statementStagingObjectPrefix}${Encoding.encodeHex(entropy)}`;
+  return `${statementStagingObjectPrefix}${Hex.encode(entropy)}`;
 };
 
 const digestUnavailable = (
@@ -468,7 +468,7 @@ const stageStatementBytes = (
     }
     const stagingId = newId();
     const objectKey = randomObjectKey();
-    const sha256 = Encoding.encodeHex(new Uint8Array(digest));
+    const sha256 = Hex.encode(new Uint8Array(digest));
     const pending = yield* insertPendingStagingRow(config, {
       byteLength: bytes.byteLength,
       createdAtEpochMs,
@@ -531,7 +531,7 @@ const headStagedObject = (
     if (object.value.size !== row.byte_length) return Option.some(failed("malformed-file"));
     const checksum = Option.fromNullishOr(object.value.checksums.sha256);
     if (Option.isNone(checksum)) return yield* unavailable();
-    return Encoding.encodeHex(new Uint8Array(checksum.value)) === row.sha256
+    return Hex.encode(new Uint8Array(checksum.value)) === row.sha256
       ? Option.none()
       : Option.some(failed("malformed-file"));
   });
@@ -567,7 +567,7 @@ const readOwnedStagedBytes = (
     const bytes = yield* readStagedObjectBytes(config, row.value);
     if (bytes.byteLength !== row.value.byte_length) return yield* failed("malformed-file");
     const digest = yield* digestUnavailable(bytes);
-    if (Encoding.encodeHex(new Uint8Array(digest)) !== row.value.sha256) {
+    if (Hex.encode(new Uint8Array(digest)) !== row.value.sha256) {
       return yield* failed("malformed-file");
     }
     return bytes;

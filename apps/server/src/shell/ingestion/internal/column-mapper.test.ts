@@ -1,5 +1,5 @@
 import { Context, Effect, Layer, Stream } from "effect";
-import { AiError, LanguageModel } from "effect/unstable/ai";
+import { AiError, LanguageModel } from "effect/ai";
 import { describe, expect } from "vitest";
 import { it } from "@effect/vitest";
 import { StatementColumnMapper, statementMappingPrompt } from "./column-mapper";

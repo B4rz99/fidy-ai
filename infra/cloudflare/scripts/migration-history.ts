@@ -1,6 +1,6 @@
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
-import * as Encoding from "effect/Encoding";
+import { Hex } from "effect/encoding";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
@@ -82,7 +82,7 @@ export const hashMigrationSources = Effect.fn("hashMigrationSources")(function* 
   return yield* Effect.forEach(sources, ({ name, source }) =>
     crypto
       .digest("SHA-256", new TextEncoder().encode(source))
-      .pipe(Effect.map((digest) => ({ name, hash: Encoding.encodeHex(digest) })))
+      .pipe(Effect.map((digest) => ({ name, hash: Hex.encode(digest) })))
   );
 });
 

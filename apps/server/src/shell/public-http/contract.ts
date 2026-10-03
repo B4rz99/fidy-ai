@@ -1,6 +1,6 @@
 import * as Arr from "effect/Array";
 import { Option, Schema } from "effect";
-import { HttpApiMiddleware } from "effect/unstable/httpapi";
+import { HttpApiMiddleware } from "effect/http-api";
 import {
   type CatalogOperation,
   getBoundOperationCatalog,

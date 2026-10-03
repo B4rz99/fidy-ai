@@ -1,14 +1,6 @@
-import {
-  DateTime,
-  Effect,
-  Array as EffectArray,
-  Encoding,
-  Option,
-  Redacted,
-  Result,
-  Schema,
-} from "effect";
-import { Model } from "effect/unstable/schema";
+import { DateTime, Effect, Array as EffectArray, Option, Redacted, Result, Schema } from "effect";
+import { Hex } from "effect/encoding";
+import { Model } from "effect/schema";
 import {
   E164PhoneNumber,
   WhatsAppBusinessPortfolioId,
@@ -69,8 +61,16 @@ const RawVoiceMessage = Schema.Struct({
   audio: Schema.Struct({ id: WhatsAppMediaId }),
   kapso: Schema.optional(Schema.Unknown),
 });
+const RawImageMessage = Schema.Struct({
+  ...rawMessageFields,
+  type: Schema.Literal("image"),
+  image: Schema.Struct({
+    id: WhatsAppMediaId,
+    caption: Model.optionalOption(TranscriptText),
+  }),
+});
 const RawKapsoEvent = Schema.Struct({
-  message: Schema.Union([RawTextMessage, RawVoiceMessage]),
+  message: Schema.Union([RawTextMessage, RawVoiceMessage, RawImageMessage]),
   conversation: Schema.Struct({
     phone_number: Model.optionalOption(Schema.String),
     business_scoped_user_id: Model.optionalOption(WhatsAppBusinessScopedUserId),
@@ -136,7 +136,7 @@ const RawIdentityChangeMessage = Schema.Struct({
  * compares it to the expected digest with the platform constant-time equality primitive.
  */
 const authenticatesDigest = (signature: string, expected: Uint8Array): boolean => {
-  const decoded = Encoding.decodeHex(signature);
+  const decoded = Hex.decode(signature);
   if (Result.isFailure(decoded)) return false;
   const provided = decoded.success;
   let difference = provided.byteLength ^ expected.byteLength;
@@ -212,6 +212,9 @@ const projectInboundContent = (
   message: typeof RawKapsoEvent.Type.message
 ): WhatsAppInboundContent => {
   if (message.type === "text") return { _tag: "Text", text: message.text.body };
+  if (message.type === "image") {
+    return { _tag: "Image", mediaId: message.image.id, caption: message.image.caption };
+  }
   const kapso = Schema.decodeUnknownOption(Schema.Struct({ transcript: Schema.Unknown }))(
     message.kapso
   );

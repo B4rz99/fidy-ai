@@ -47,7 +47,7 @@ const signInWithIdentity = ({ page, request }: SignInFixture, firstCard: boolean
     })
     .then(() => page.clock.setSystemTime(Effect.runSync(Clock.currentTimeMillis)));
 
-/** Signs in the seeded User with an available CardPaymentSource through real Core redemption. */
+/** Signs in the seeded User with an available PaymentSource through real Core redemption. */
 export const signInThroughCore = (input: SignInFixture): Promise<void> =>
   signInWithIdentity(input, false);
 

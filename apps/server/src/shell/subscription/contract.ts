@@ -1,20 +1,21 @@
 import { Schema } from "effect";
 import { type OwnedStatement } from "~/shell/owner-write/contract";
-import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import {
   BillingAttempt,
   BillingAttemptId,
   BillingEmail,
-  CardEnrollment,
-  CardEnrollmentDecisions,
-  CardEnrollmentId,
-  CardPaymentSubmission,
+  EnrollmentDecisions,
+  EnrollmentMethod,
+  PaymentEnrollment,
+  PaymentEnrollmentId,
   PaymentRequestId,
+  PaymentSubmission,
   PriceId,
   SubscriptionOffers,
   SubscriptionStatus,
   UpgradeDestination,
-  maximumTransientCardTokenCharacters,
+  maximumTransientPaymentTokenCharacters,
 } from "~/core/subscription/contract";
 import { operationPolicy, patScoped } from "~/shell/canonical-policy/contract";
 import { OperationResponse, Unavailable } from "~/shell/public-http/contract";
@@ -98,33 +99,33 @@ const InvalidFields = {
 };
 
 /** Generic direct-browser refusal that never reflects a transient token or provider response. */
-export class CardEnrollmentInvalidApi extends Schema.Error<CardEnrollmentInvalidApi>(
-  "CardEnrollmentInvalidApi"
+export class PaymentEnrollmentInvalidApi extends Schema.Error<PaymentEnrollmentInvalidApi>(
+  "PaymentEnrollmentInvalidApi"
 )(InvalidFields, { httpApiStatus: 400 }) {}
 
 /** Missing or expired WebSession authority at the dedicated enrollment boundary. */
-export class CardEnrollmentUnauthenticatedApi extends Schema.Error<CardEnrollmentUnauthenticatedApi>(
-  "CardEnrollmentUnauthenticatedApi"
+export class PaymentEnrollmentUnauthenticatedApi extends Schema.Error<PaymentEnrollmentUnauthenticatedApi>(
+  "PaymentEnrollmentUnauthenticatedApi"
 )(InvalidFields, { httpApiStatus: 401 }) {}
 
 /** Cross-origin enrollment attempt rejected before any provider or persistence effect. */
-export class CardEnrollmentOriginRejectedApi extends Schema.Error<CardEnrollmentOriginRejectedApi>(
-  "CardEnrollmentOriginRejectedApi"
+export class PaymentEnrollmentOriginRejectedApi extends Schema.Error<PaymentEnrollmentOriginRejectedApi>(
+  "PaymentEnrollmentOriginRejectedApi"
 )(InvalidFields, { httpApiStatus: 403 }) {}
 
 /** Bounded-body rejection that does not parse or report the rejected secret-bearing body. */
-export class CardEnrollmentPayloadTooLargeApi extends Schema.Error<CardEnrollmentPayloadTooLargeApi>(
-  "CardEnrollmentPayloadTooLargeApi"
+export class PaymentEnrollmentPayloadTooLargeApi extends Schema.Error<PaymentEnrollmentPayloadTooLargeApi>(
+  "PaymentEnrollmentPayloadTooLargeApi"
 )(InvalidFields, { httpApiStatus: 413 }) {}
 
 /** Non-JSON secret-bearing submission rejected without provider work. */
-export class CardEnrollmentUnsupportedMediaTypeApi extends Schema.Error<CardEnrollmentUnsupportedMediaTypeApi>(
-  "CardEnrollmentUnsupportedMediaTypeApi"
+export class PaymentEnrollmentUnsupportedMediaTypeApi extends Schema.Error<PaymentEnrollmentUnsupportedMediaTypeApi>(
+  "PaymentEnrollmentUnsupportedMediaTypeApi"
 )(InvalidFields, { httpApiStatus: 415 }) {}
 
 /** Bounded preparation-attempt pressure refuses before provider work, not as an outage. */
-export class CardEnrollmentRateLimitedApi extends Schema.Error<CardEnrollmentRateLimitedApi>(
-  "CardEnrollmentRateLimitedApi"
+export class PaymentEnrollmentRateLimitedApi extends Schema.Error<PaymentEnrollmentRateLimitedApi>(
+  "PaymentEnrollmentRateLimitedApi"
 )(
   {
     error: Schema.Struct({
@@ -136,8 +137,8 @@ export class CardEnrollmentRateLimitedApi extends Schema.Error<CardEnrollmentRat
 ) {}
 
 /** Bounded provider/configuration outage response carrying no provider details. */
-export class CardEnrollmentUnavailableApi extends Schema.Error<CardEnrollmentUnavailableApi>(
-  "CardEnrollmentUnavailableApi"
+export class PaymentEnrollmentUnavailableApi extends Schema.Error<PaymentEnrollmentUnavailableApi>(
+  "PaymentEnrollmentUnavailableApi"
 )(
   {
     error: Schema.Struct({
@@ -149,60 +150,72 @@ export class CardEnrollmentUnavailableApi extends Schema.Error<CardEnrollmentUna
 ) {}
 
 /** Browser preparation request names only the immutable server-owned Price. */
-export const PrepareCardEnrollmentPayload = Schema.Struct({ priceId: PriceId });
+export const PreparePaymentEnrollmentPayload = Schema.Struct({
+  priceId: PriceId,
+  method: EnrollmentMethod,
+});
 
 const TokenText = Schema.String.check(
   Schema.isNonEmpty(),
-  Schema.isMaxLength(maximumTransientCardTokenCharacters)
+  Schema.isMaxLength(maximumTransientPaymentTokenCharacters)
 );
 const SubmitBase = {
-  enrollmentId: CardEnrollmentId,
+  enrollmentId: PaymentEnrollmentId,
   paymentRequestId: PaymentRequestId,
   billingEmail: BillingEmail,
-  decisions: CardEnrollmentDecisions,
+  decisions: EnrollmentDecisions,
 };
 
 /** Secret-bearing submission shape; reauthorization omits card material and reuses the source. */
-export const SubmitCardEnrollmentPayload = Schema.Union([
+export const SubmitPaymentEnrollmentPayload = Schema.Union([
   Schema.Struct({
+    method: Schema.Literal("card"),
     paymentSourceMode: Schema.Literal("create"),
     ...SubmitBase,
     cardToken: Schema.RedactedFromValue(TokenText),
   }),
+  Schema.Struct({
+    method: Schema.Literal("nequi"),
+    paymentSourceMode: Schema.Literal("create"),
+    ...SubmitBase,
+    nequiToken: Schema.RedactedFromValue(
+      TokenText.check(Schema.isPattern(/^nequi_(?:test|prod)_[A-Za-z0-9_-]+$/u))
+    ),
+  }),
   Schema.Struct({ paymentSourceMode: Schema.Literal("reuse"), ...SubmitBase }),
 ]);
-export type SubmitCardEnrollmentPayload = typeof SubmitCardEnrollmentPayload.Type;
+export type SubmitPaymentEnrollmentPayload = typeof SubmitPaymentEnrollmentPayload.Type;
 
 const directErrors = [
-  CardEnrollmentInvalidApi,
-  CardEnrollmentUnauthenticatedApi,
-  CardEnrollmentOriginRejectedApi,
-  CardEnrollmentPayloadTooLargeApi,
-  CardEnrollmentUnsupportedMediaTypeApi,
-  CardEnrollmentUnavailableApi,
-  CardEnrollmentRateLimitedApi,
+  PaymentEnrollmentInvalidApi,
+  PaymentEnrollmentUnauthenticatedApi,
+  PaymentEnrollmentOriginRejectedApi,
+  PaymentEnrollmentPayloadTooLargeApi,
+  PaymentEnrollmentUnsupportedMediaTypeApi,
+  PaymentEnrollmentUnavailableApi,
+  PaymentEnrollmentRateLimitedApi,
 ] as const;
 
 /** Dedicated first-party browser operations; none join canonical agent or PAT surfaces. */
 export const SubscriptionEnrollmentGroup = HttpApiGroup.make("subscriptionEnrollment")
   .add(
-    HttpApiEndpoint.post("prepare", "/web/subscription/card-enrollments/prepare", {
-      payload: PrepareCardEnrollmentPayload,
-      success: CardEnrollment,
+    HttpApiEndpoint.post("prepare", "/web/subscription/payment-enrollments/prepare", {
+      payload: PreparePaymentEnrollmentPayload,
+      success: PaymentEnrollment,
       error: directErrors,
     })
   )
   .add(
-    HttpApiEndpoint.post("submit", "/web/subscription/card-enrollments/submit", {
-      payload: SubmitCardEnrollmentPayload,
-      success: CardPaymentSubmission,
+    HttpApiEndpoint.post("submit", "/web/subscription/payment-enrollments/submit", {
+      payload: SubmitPaymentEnrollmentPayload,
+      success: PaymentSubmission,
       error: directErrors,
     })
   )
   .add(
-    HttpApiEndpoint.get("status", "/web/subscription/card-enrollments/:enrollmentId", {
-      params: { enrollmentId: CardEnrollmentId },
-      success: CardEnrollment,
+    HttpApiEndpoint.get("status", "/web/subscription/payment-enrollments/:enrollmentId", {
+      params: { enrollmentId: PaymentEnrollmentId },
+      success: PaymentEnrollment,
       error: directErrors,
     })
   )
@@ -226,11 +239,11 @@ export type SubscriptionEnrollmentApiGroups =
     : never;
 
 /** Shared bounded generic invalid response for raw direct-browser handlers. */
-export const cardEnrollmentInvalidBody = { error: invalidError } as const;
+export const paymentEnrollmentInvalidBody = { error: invalidError } as const;
 /** Shared bounded provider/configuration outage response. */
-export const cardEnrollmentUnavailableBody = { error: unavailableError } as const;
+export const paymentEnrollmentUnavailableBody = { error: unavailableError } as const;
 /** Shared bounded preparation-attempt refusal, distinct from provider/configuration outage. */
-export const cardEnrollmentRateLimitedBody = { error: rateLimitedError } as const;
+export const paymentEnrollmentRateLimitedBody = { error: rateLimitedError } as const;
 
 /** Live credential predicate composed into a Subscription read within the caller's atomic unit. */
 export type SubscriptionReadAuthority = Readonly<{

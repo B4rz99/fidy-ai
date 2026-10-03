@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { type AsyncResult, Atom } from "effect/unstable/reactivity";
+import { type AsyncResult, Atom } from "effect/reactivity";
 import type { CanonicalSuccess, FidyClient } from "@/transport/client";
 
 export type DashboardLoadPhase = "reading" | "initializing" | "reading-initialized";

@@ -5,7 +5,7 @@ import {
   type HttpClientError,
   type HttpClientRequest,
   HttpClientResponse,
-} from "effect/unstable/http";
+} from "effect/http";
 
 /** Raw request visible only to Outbound HTTP transport tests and compatibility adapter fixtures. */
 export type TestOutboundTransportRequest = HttpClientRequest.HttpClientRequest;

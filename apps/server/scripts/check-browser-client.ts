@@ -18,7 +18,7 @@ const entrypoint = "src/client.ts";
  */
 const safeSource = [
   /^src\/client\.ts$/u,
-  /^src\/shell\/(?:identity|categories|transactions|subscription|tokens|budgets|dashboard|insights|public-http|schema-codecs|browser-login|recovery|ingestion|web-session|web-authentication|memory)\/contract\.ts$/u,
+  /^src\/shell\/(?:identity|categories|transactions|subscription|tokens|budgets|dashboard|insights|recurring|public-http|schema-codecs|browser-login|recovery|ingestion|web-session|web-authentication|memory)\/contract\.ts$/u,
   /^src\/shell\/agent\/contract\.ts$/u,
   /^src\/core\//u,
   /^src\/shell\/api\.ts$/u,
@@ -36,7 +36,7 @@ const safeDependency = [
 ] as const;
 
 const forbiddenDependency = [
-  /^node_modules\/effect\/dist\/unstable\/sql(?:\/|$)/u,
+  /^node_modules\/effect\/dist\/sql(?:\/|$)/u,
   /^node_modules\/@effect\/ai(?:-|\/)/u,
   /^node_modules\/@effect\/platform(?:-|\/)/u,
   /^node_modules\/@effect\/sql(?:-|\/)/u,

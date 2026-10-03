@@ -1,0 +1,334 @@
+[
+  {
+    "host": "claude",
+    "attempt": 1,
+    "outcome": {
+      "connected": true
+    },
+    "events": [
+      {
+        "event": "access-expired"
+      },
+      {
+        "event": "issuer-discovery",
+        "cimdAdvertised": true
+      },
+      {
+        "event": "protected-resource-discovery"
+      },
+      {
+        "event": "refresh",
+        "accepted": true,
+        "resourceBound": true
+      },
+      {
+        "event": "mcp",
+        "method": "server/discover",
+        "version": "2026-07-28",
+        "metadataVersion": "2026-07-28"
+      },
+      {
+        "event": "mcp-response",
+        "status": 200
+      }
+    ]
+  },
+  {
+    "host": "claude",
+    "attempt": 2,
+    "outcome": {
+      "connected": true
+    },
+    "events": [
+      {
+        "event": "access-expired"
+      },
+      {
+        "event": "issuer-discovery",
+        "cimdAdvertised": true
+      },
+      {
+        "event": "protected-resource-discovery"
+      },
+      {
+        "event": "refresh",
+        "accepted": true,
+        "resourceBound": true
+      },
+      {
+        "event": "mcp",
+        "method": "server/discover",
+        "version": "2026-07-28",
+        "metadataVersion": "2026-07-28"
+      },
+      {
+        "event": "mcp-response",
+        "status": 200
+      }
+    ]
+  },
+  {
+    "host": "codex",
+    "attempt": 1,
+    "outcome": {
+      "connected": true,
+      "authStatus": "oAuth",
+      "tools": []
+    },
+    "events": [
+      {
+        "event": "access-expired"
+      },
+      {
+        "event": "protected-resource-discovery"
+      },
+      {
+        "event": "issuer-discovery",
+        "cimdAdvertised": true
+      },
+      {
+        "event": "refresh",
+        "accepted": true,
+        "resourceBound": true
+      },
+      {
+        "event": "mcp",
+        "method": "initialize",
+        "version": null
+      },
+      {
+        "event": "mcp-response",
+        "status": 200
+      },
+      {
+        "event": "mcp",
+        "method": "notifications/initialized",
+        "version": "2025-11-25"
+      },
+      {
+        "event": "mcp-response",
+        "status": 202
+      },
+      {
+        "event": "mcp",
+        "version": "2025-11-25"
+      },
+      {
+        "event": "mcp-response",
+        "status": 405
+      },
+      {
+        "event": "mcp",
+        "method": "tools/list",
+        "version": "2025-11-25"
+      },
+      {
+        "event": "mcp-response",
+        "status": 200
+      },
+      {
+        "event": "mcp",
+        "method": "resources/templates/list",
+        "version": "2025-11-25"
+      },
+      {
+        "event": "mcp-response",
+        "status": 200
+      },
+      {
+        "event": "mcp",
+        "method": "resources/list",
+        "version": "2025-11-25"
+      },
+      {
+        "event": "mcp-response",
+        "status": 200
+      },
+      {
+        "event": "mcp",
+        "version": "2025-11-25"
+      },
+      {
+        "event": "mcp-response",
+        "status": 405
+      }
+    ]
+  },
+  {
+    "host": "codex",
+    "attempt": 2,
+    "outcome": {
+      "connected": true,
+      "authStatus": "oAuth",
+      "tools": []
+    },
+    "events": [
+      {
+        "event": "access-expired"
+      },
+      {
+        "event": "protected-resource-discovery"
+      },
+      {
+        "event": "issuer-discovery",
+        "cimdAdvertised": true
+      },
+      {
+        "event": "refresh",
+        "accepted": true,
+        "resourceBound": true
+      },
+      {
+        "event": "mcp",
+        "method": "initialize",
+        "version": null
+      },
+      {
+        "event": "mcp-response",
+        "status": 200
+      },
+      {
+        "event": "mcp",
+        "method": "notifications/initialized",
+        "version": "2025-11-25"
+      },
+      {
+        "event": "mcp-response",
+        "status": 202
+      },
+      {
+        "event": "mcp",
+        "version": "2025-11-25"
+      },
+      {
+        "event": "mcp-response",
+        "status": 405
+      },
+      {
+        "event": "mcp",
+        "method": "tools/list",
+        "version": "2025-11-25"
+      },
+      {
+        "event": "mcp-response",
+        "status": 200
+      },
+      {
+        "event": "mcp",
+        "method": "resources/templates/list",
+        "version": "2025-11-25"
+      },
+      {
+        "event": "mcp-response",
+        "status": 200
+      },
+      {
+        "event": "mcp",
+        "method": "resources/list",
+        "version": "2025-11-25"
+      },
+      {
+        "event": "mcp-response",
+        "status": 200
+      },
+      {
+        "event": "mcp",
+        "version": "2025-11-25"
+      },
+      {
+        "event": "mcp-response",
+        "status": 405
+      }
+    ]
+  },
+  {
+    "host": "pi",
+    "attempt": 1,
+    "outcome": {
+      "connected": true,
+      "tools": [],
+      "errors": []
+    },
+    "events": [
+      {
+        "event": "access-expired"
+      },
+      {
+        "event": "refresh",
+        "accepted": true,
+        "resourceBound": true
+      },
+      {
+        "event": "mcp",
+        "method": "initialize",
+        "version": null
+      },
+      {
+        "event": "mcp-response",
+        "status": 200
+      },
+      {
+        "event": "mcp",
+        "method": "notifications/initialized",
+        "version": "2025-11-25"
+      },
+      {
+        "event": "mcp-response",
+        "status": 202
+      },
+      {
+        "event": "mcp",
+        "version": "2025-11-25"
+      },
+      {
+        "event": "mcp-response",
+        "status": 405
+      }
+    ]
+  },
+  {
+    "host": "pi",
+    "attempt": 2,
+    "outcome": {
+      "connected": true,
+      "tools": [],
+      "errors": []
+    },
+    "events": [
+      {
+        "event": "access-expired"
+      },
+      {
+        "event": "refresh",
+        "accepted": true,
+        "resourceBound": true
+      },
+      {
+        "event": "mcp",
+        "method": "initialize",
+        "version": null
+      },
+      {
+        "event": "mcp-response",
+        "status": 200
+      },
+      {
+        "event": "mcp",
+        "method": "notifications/initialized",
+        "version": "2025-11-25"
+      },
+      {
+        "event": "mcp-response",
+        "status": 202
+      },
+      {
+        "event": "mcp",
+        "version": "2025-11-25"
+      },
+      {
+        "event": "mcp-response",
+        "status": 405
+      }
+    ]
+  }
+]

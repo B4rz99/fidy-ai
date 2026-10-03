@@ -195,10 +195,10 @@ const pairingPaths = ["/web/pairings", "/web/pairings/redeem", "/web/session/log
 const userPath = "/user";
 const hostedTurnPath = "/web/hosted-turns";
 const hostedReceiptPath = "/web/hosted-turns/delivery";
-const enrollmentPreparePath = "/web/subscription/card-enrollments/prepare";
-const enrollmentSubmitPath = "/web/subscription/card-enrollments/submit";
+const enrollmentPreparePath = "/web/subscription/payment-enrollments/prepare";
+const enrollmentSubmitPath = "/web/subscription/payment-enrollments/submit";
 const enrollmentStatusPath =
-  /^\/web\/subscription\/(?:card-enrollments|billing-attempts)\/[0-9a-f-]{36}$/u;
+  /^\/web\/subscription\/(?:payment-enrollments|billing-attempts)\/[0-9a-f-]{36}$/u;
 const enrollmentPath = (path: string): boolean =>
   path === enrollmentPreparePath ||
   path === enrollmentSubmitPath ||

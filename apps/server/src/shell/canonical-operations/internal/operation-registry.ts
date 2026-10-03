@@ -46,6 +46,7 @@ export const canonicalOperationImplementations = {
   "ingestion.getStatementSubmission": unavailableOperation,
   "ingestion.listNeedsReviewItems": unavailableOperation,
   "insights.listPendingInsights": unavailableOperation,
+  "recurring.listRecurringSeries": unavailableOperation,
   "memory.recall": unavailableOperation,
   "subscription.getUpgradeUrl": unavailableOperation,
   "subscription.listSubscriptionOffers": () => listSubscriptionOffersResponse,

@@ -1,0 +1,16 @@
+bun.lock
+  h_c6d49c804e0ad2 11,335,337,339,341,343,345,347,349
+package.json
+  h_c6d49c804e0ad2 53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d02f4005d05519ccf55188bcc398637bddc35de5",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

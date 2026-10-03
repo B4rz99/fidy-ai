@@ -1,0 +1,70 @@
+apps/server/cloudflare/whatsapp/internal/ingress.ts
+  s_095d2e546bffa3::t_c631853f415e94 222-223
+apps/server/src/shell/channels/whatsapp/contract.ts
+  s_095d2e546bffa3::t_a87ca4cf49533a 52,79-84
+apps/server/src/shell/channels/whatsapp/image-webhook.test.ts
+  s_095d2e546bffa3::t_3d00ba326f492d 1-6,10-11,16-41
+  s_095d2e546bffa3::t_cb6b22a88ea73f 42-71
+  s_095d2e546bffa3::t_353eca2ddb42e9 7-9
+  s_095d2e546bffa3::t_81fa6ee126a6fd 12-15
+  s_095d2e546bffa3::t_0618b541152220 72-74
+apps/server/src/core/ingestion/contract.ts
+  s_095d2e546bffa3::t_4bf7fa7f3a619d 16-28,44
+  s_095d2e546bffa3::t_0fceca708e05b1 151-153
+  s_095d2e546bffa3::t_1338d288273f05 1,9-10,34-43,45-77,86-87
+  s_095d2e546bffa3::t_fe7ed860879f1a 11-15,29-33
+  s_095d2e546bffa3::t_6771d775ad8397 78-85
+apps/server/ARCHITECTURE.md
+  s_095d2e546bffa3::t_19957de808f1d7 570-580
+apps/server/src/core/ingestion/media-allowance.test.ts
+  s_095d2e546bffa3::t_96a618e5594491 1-17
+  s_095d2e546bffa3::t_e8f9e6df7b9582 18-40
+  s_095d2e546bffa3::t_2aa43052529a7f 41-43
+apps/server/src/core/ingestion/capture.test.ts
+  s_095d2e546bffa3::t_449ac885c977f0 15,63-68,70,87,101-103,105,107-111,113,135,143-144,146,158-163,165
+  s_095d2e546bffa3::t_86bee2254fd7ed 156-157,166-176
+  s_095d2e546bffa3::t_b9df5b8980ee42 2-4,41-43,45-59
+  s_095d2e546bffa3::t_99a1563bb531ba 44
+  s_095d2e546bffa3::t_8b60a91ea4585d 14,16-22,29,60-62,71-86,88-93,95-100,106,114-119,121-134,136,138-142,147,149-155,177-181,183-187,189-195,197-199
+  s_095d2e546bffa3::t_2f91abaa2f9207 1,5-13,23-28,30-40,200
+  s_095d2e546bffa3::t_17f2b28ad5ba47 69,94,104,112,120,137,145,148,164,182,188,196
+apps/server/src/core/ingestion/operations.ts
+  s_095d2e546bffa3::t_ce405438c2a13e 29,38-39
+  s_095d2e546bffa3::t_63ceb286381dcd 8-9,18,58-59,71-72,79-84,86,88,110,112,118-134,167,169
+  s_095d2e546bffa3::t_d0fba9a3aa549e 37,40
+  s_095d2e546bffa3::t_df2131c8e30f07 10,48-56,60-61,63-64,66-70,99-103
+  s_095d2e546bffa3::t_c220040dbfdea1 22,137,147-166,168,170-175,177
+  s_095d2e546bffa3::t_d3ca9b548b7d6b 96-98
+  s_095d2e546bffa3::t_c67467ba3d5406 3-5,7,11,85,87,89-95,104-109,111,135,178
+  s_095d2e546bffa3::t_b660e88628e936 27-28,30-36,41-47,57,65,73-78,113-115,117
+  s_095d2e546bffa3::t_9552191d597590 62
+  s_095d2e546bffa3::t_3d65b99a0c358f 116
+  s_095d2e546bffa3::t_01e1e7e088cbf4 136
+  s_095d2e546bffa3::t_db7620cc56304a 176
+  s_095d2e546bffa3::t_326af87ee29abd 179
+apps/server/cloudflare/onboarding/consent-ingress.test.ts
+  s_095d2e546bffa3::t_deee41df57cd1c 295-329,331-332,338
+  s_095d2e546bffa3::t_6f07d99a7a9f81 330
+  s_095d2e546bffa3::t_8c91bdbc87827c 333-337
+  s_095d2e546bffa3::t_1849f0b84516ef 339-341
+apps/server/src/shell/channels/whatsapp/internal/fixtures/kapso-bsuid-image-v2.json
+  s_095d2e546bffa3::t_deb63301695383 1-30
+apps/server/src/shell/channels/whatsapp/internal/kapso-webhook.ts
+  s_095d2e546bffa3::t_8e572e5971e418 72-79,81,223-225
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "33ca245f44b337e78ed4754cf5eac18ccc6a6c9a",
+  "prompts": {},
+  "sessions": {
+    "s_095d2e546bffa3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0ff46-9060-7635-9a3e-b1da64c5b988",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

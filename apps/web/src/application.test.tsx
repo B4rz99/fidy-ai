@@ -1,5 +1,5 @@
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
-import { Data, Effect, Layer, Option } from "effect";
+import { Data, Deferred, Effect, Layer, Option } from "effect";
 import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/http";
 import type * as HttpClientError from "effect/http/HttpClientError";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -783,6 +783,87 @@ describe("rejected hosted Agent receipt", () => {
     ));
 });
 
+const dashboardUninitializedStatus = 404;
+const initializedDashboard = {
+  data: {
+    title: "Mi tablero",
+    layout: {
+      kind: "leaf",
+      widget: {
+        id: "f1d1a000-0000-4000-8000-000000000901",
+        type: "transaction-list",
+        limit: 10,
+      },
+    },
+  },
+  next: [],
+};
+
+const firstUseClient = (
+  requests: Array<string>,
+  initialize: Effect.Effect<unknown>,
+  readBack: Effect.Effect<unknown>
+): FidyClient => {
+  const httpClient = makeHttpClient((request) => {
+    const path = new URL(request.url).pathname;
+    if (path === "/dashboard/catalog") {
+      return Effect.succeed(responseJson(request, { data: [], next: [] }));
+    }
+    requests.push(path);
+    if (requests.length === 1) {
+      return Effect.succeed(
+        responseJson(
+          request,
+          {
+            error: { code: "dashboard_uninitialized", message: "Initialize explicitly." },
+            next: [],
+          },
+          dashboardUninitializedStatus
+        )
+      );
+    }
+    const response = path === "/dashboard/initialize" ? initialize : readBack;
+    return response.pipe(Effect.map((body) => responseJson(request, body)));
+  });
+  return makeFidyClient({
+    apiOrigin: "https://api.test.fidyapp.com",
+    httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
+  });
+};
+
+const verifyDashboardReadbackFailure = Effect.fnUntraced(function* () {
+  const initialized = Deferred.makeUnsafe<void>();
+  const readBack = Deferred.makeUnsafe<void>();
+  const requests: Array<string> = [];
+  const client = firstUseClient(
+    requests,
+    Deferred.await(initialized).pipe(Effect.as(initializedDashboard)),
+    Deferred.await(readBack).pipe(Effect.as({ unexpected: true }))
+  );
+  yield* fromPromise(renderRoute("/app/dashboard", client));
+  expect(yield* fromPromise(screen.findByText("Inicializando tablero…"))).toBeVisible();
+  yield* Deferred.succeed(initialized, undefined);
+  expect(yield* fromPromise(screen.findByText("Leyendo el tablero inicializado…"))).toBeVisible();
+  yield* Deferred.succeed(readBack, undefined);
+  expect(
+    yield* fromPromise(screen.findByText("El tablero se inicializó, pero no pudimos leerlo."))
+  ).toBeVisible();
+  expect(yield* fromPromise(screen.findByText("No pudimos comunicarnos con Fidy"))).toBeVisible();
+  expect(requests).toEqual(["/dashboard/view", "/dashboard/initialize", "/dashboard/view"]);
+});
+
+const verifyDashboardInitializationFailure = Effect.fnUntraced(function* () {
+  const requests: Array<string> = [];
+  const client = firstUseClient(
+    requests,
+    Effect.succeed({ unexpected: true }),
+    Effect.succeed({ unexpected: true })
+  );
+  yield* fromPromise(renderRoute("/app/dashboard", client));
+  expect(yield* fromPromise(screen.findByText("No pudimos inicializar el tablero."))).toBeVisible();
+  expect(requests).toEqual(["/dashboard/view", "/dashboard/initialize"]);
+});
+
 describe("signed-in web application data routes", () => {
   afterEach(resetApplicationTest);
 
@@ -812,6 +893,12 @@ describe("signed-in web application data routes", () => {
         ).toBeVisible();
       })
     ));
+
+  it("shows explicit initialization progress and never retries a failed second read", () =>
+    Effect.runPromise(verifyDashboardReadbackFailure()));
+
+  it("reports initialization failure without issuing another Dashboard read", () =>
+    Effect.runPromise(verifyDashboardInitializationFailure()));
 
   it("redirects the authenticated /app index to the Dashboard", () =>
     Effect.runPromise(

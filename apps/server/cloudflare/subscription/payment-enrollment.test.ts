@@ -1586,11 +1586,6 @@ it
           WOMPI_DAVIPLATA_OTP_CONFIRM_URL: policy.confirmUrl,
         };
         const outbound = yield* wompiOutboundHttp(environment);
-        const authorization = yield* authorizeDaviplataSandbox({
-          outbound,
-          policy,
-          outcome: scenario.outcome,
-        });
         const prepared = yield* fromTestPromise(() =>
           handlePaymentEnrollment({
             environment,
@@ -1605,6 +1600,11 @@ it
           yield* fromTestPromise(() => prepared.json())
         ).pipe(Effect.mapError(() => new DaviplataSandboxProofFailure()));
         yield* requireDaviplataSandboxEnrollment({ enrollment, policy });
+        const authorization = yield* authorizeDaviplataSandbox({
+          outbound,
+          policy,
+          outcome: scenario.outcome,
+        });
         const paymentRequestId = newId();
         const decisions = {
           acceptedEndUserPolicy: true,

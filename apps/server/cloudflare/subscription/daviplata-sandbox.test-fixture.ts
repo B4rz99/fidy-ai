@@ -50,9 +50,8 @@ export const requireDaviplataSandboxEnrollment = Effect.fnUntraced(function* (
 const maximumProofTokenCharacters = 4096;
 const successfulStatusMinimum = 200;
 const successfulStatusMaximumExclusive = 300;
-const secret = Schema.String.check(
-  Schema.isNonEmpty(),
-  Schema.isMaxLength(maximumProofTokenCharacters)
+const secret = Schema.RedactedFromValue(
+  Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(maximumProofTokenCharacters))
 );
 const tokenResponse = Schema.Struct({
   data: Schema.Struct({
@@ -120,24 +119,26 @@ export const authorizeDaviplataSandbox = Effect.fnUntraced(function* (
   const sent = yield* execute({
     _tag: "WompiDaviplataSandboxOtp",
     step: "send",
-    token: Redacted.make(token.data.url_services.token),
+    token: token.data.url_services.token,
   }).pipe(
     Effect.flatMap(json),
     Effect.flatMap(Schema.decodeUnknownEffect(sentResponse)),
     Effect.mapError(() => new DaviplataSandboxProofFailure())
   );
-  if (sent.data.subscription.PK !== token.data.id) return yield* new DaviplataSandboxProofFailure();
+  if (Redacted.value(sent.data.subscription.PK) !== Redacted.value(token.data.id)) {
+    return yield* new DaviplataSandboxProofFailure();
+  }
   const confirmed = yield* execute({
     _tag: "WompiDaviplataSandboxOtp",
     step: "confirm",
-    token: Redacted.make(sent.data.authorization.access_token),
+    token: sent.data.authorization.access_token,
   }).pipe(
     Effect.flatMap(json),
     Effect.flatMap(Schema.decodeUnknownEffect(confirmedResponse)),
     Effect.mapError(() => new DaviplataSandboxProofFailure())
   );
-  if (confirmed.data.subscription.PK !== token.data.id) {
+  if (Redacted.value(confirmed.data.subscription.PK) !== Redacted.value(token.data.id)) {
     return yield* new DaviplataSandboxProofFailure();
   }
-  return Redacted.make(token.data.id);
+  return token.data.id;
 });

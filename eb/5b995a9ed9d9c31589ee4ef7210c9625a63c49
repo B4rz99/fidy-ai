@@ -1,0 +1,211 @@
+apps/cli/src/login/operations.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-74
+apps/cli/test/native-store.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-54
+apps/web/src/features/dashboard/feature.tsx
+  s_fc768a11c2de27::t_c4b64cd9adfe77 11,18-35,210-233,239,244,252-257
+apps/web/tsconfig.app.json
+  s_fc768a11c2de27::t_c4b64cd9adfe77 19,25
+apps/cli/ARCHITECTURE.md
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-120
+apps/server/cloudflare/browser-acceptance-preview.ts
+  s_fc768a11c2de27::t_13fd0894565b92 280
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1,34-57,200-214,217,228-229,252,258-279,281-305
+docs/research/969-release-age-exception.md
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-22
+.github/workflows/production.yml
+  s_fc768a11c2de27::t_c4b64cd9adfe77 46,49
+.github/workflows/verify-unapplied-d1-migration.yml
+  s_fc768a11c2de27::t_c4b64cd9adfe77 43,46
+apps/cli/src/command/contract.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-29
+apps/server/cloudflare/canonical-operations/internal/query-registry.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 3,20,106-113
+apps/server/cloudflare/canonical-operations/operations.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 8,23,71-75,117,123-140,272,287-290
+apps/server/src/client.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 32,55-63
+apps/cli/src/command/operations.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-111
+apps/cli/test/process.test-fixture.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-52
+ARCHITECTURE.md
+  s_fc768a11c2de27::t_c4b64cd9adfe77 10-12,68
+apps/server/.dependency-cruiser.mjs
+  s_fc768a11c2de27::t_c4b64cd9adfe77 180
+apps/server/src/shell/public-http/contract.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 158
+apps/server/ARCHITECTURE.md
+  s_fc768a11c2de27::t_c4b64cd9adfe77 17-19,169-172,346-356,358-359
+apps/cli/.dependency-cruiser.mjs
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-72
+apps/web/e2e/real-core-journeys.spec.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 92-136
+apps/web/e2e/cli-login.spec.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-123
+apps/web/src/features/dashboard/feature-controller.test.tsx
+  s_fc768a11c2de27::t_c4b64cd9adfe77 94-99,109-114,126-131,146-151
+apps/cli/src/direct-client/failures.test.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-74
+apps/server/src/shell/canonical-operations/internal/operation-registry.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 39-40
+apps/web/e2e/real-core-fixture.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 2,11-14,34
+.github/workflows/ci.yml
+  s_fc768a11c2de27::t_c4b64cd9adfe77 27,38,185-192,256-271,280
+apps/cli/src/login/login.test-fixture.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-62
+apps/cli/src/login/operations.test.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-105
+apps/cli/src/direct-client/resources.test.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-93
+infra/cloudflare/verify-edge-policy.ts
+  s_fc768a11c2de27::t_5223b0083295d9 6
+  s_fc768a11c2de27::t_9cb37498e3ec05 5
+apps/cli/vitest.config.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-6
+apps/server/contracts/openapi.json
+  s_fc768a11c2de27::t_c4b64cd9adfe77 247,253,287,1086,2024-2062,2139,2145,2148,2687,2699,2711,2738,3502,3661,3677,3699,3715,3730,3734,3746,3750,3762,3778,3813,3832,3844,3860,3872,3888,3904,3920,3936,3940,3948,3952,3960,3976,3988,4017,4033,4049,4065,4077,4093,4105,4109,4121,4125,4137,4153,4165,4181,4474,5026,5059,5062,5162,6805-6827,8265,8353,8395,8703,8853,8889,8977,9013,9049,9081,9145,9181,9245,9472,9500,9523,9546,9569,9592,9615,9638,9661,9684,9707,9730,9753,9776,9799,9822,9845,9868,9891,10242,10322,11684,11692-11705,11750-11759,11781,11914,11994-12073,12076,12084-12097,12142-12151,12173,12377,12591,12691,12912,13011,13110,13433,13552,13679,14140,14364,14456,14467,15226,15335,15562,15787,16023
+apps/cli/src/direct-client/runtime.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-142
+apps/cli/src/login/contract.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-37
+.github/actions/bun-install/action.yml
+  s_fc768a11c2de27::t_c4b64cd9adfe77 11,18
+apps/cli/src/command/processes.test.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-25
+apps/cli/src/login/lifetime.test.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-130
+.github/workflows/mutation.yml
+  s_fc768a11c2de27::t_c4b64cd9adfe77 30
+apps/server/src/shell/audit/contract.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 17
+GLOSSARY.md
+  s_fc768a11c2de27::t_c4b64cd9adfe77 227-228
+apps/cli/src/credential/internal/local-path.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-20
+apps/web/package.json
+  s_fc768a11c2de27::t_c4b64cd9adfe77 43
+apps/web/e2e/dashboard-queries.spec.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-173
+infra/cloudflare/verify-edge-policy.test.ts
+  s_fc768a11c2de27::t_be3fe51bd06881 7
+package.json
+  s_fc768a11c2de27::t_c4b64cd9adfe77 14,21-22,35-36,80
+scripts/install-workspace.sh
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-19
+scripts/install-workspace.test.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-80
+scripts/verify.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 126
+docs/adr/0032-explicit-dashboard-creation-and-canonical-queries.md
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-47
+apps/cli/src/main.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-85
+apps/server/cloudflare/canonical-operations/internal/mutation-registry.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 10,189-195
+apps/cli/tsconfig.dependencies.json
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-4
+apps/cli/bunfig.toml
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-2
+apps/web/src/application.test.tsx
+  s_fc768a11c2de27::t_c4b64cd9adfe77 2,786-866,897-901
+  s_fc768a11c2de27::t_48179005476e91 902
+scripts/check-lint-suppressions.test.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 108,120-123
+apps/cli/src/direct-client/runtime.test.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-64
+apps/cli/test/journey-entry.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-118
+apps/server/cloudflare/dashboard/operations.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 10-11,13,20-24
+apps/cli/tsconfig.json
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-13
+apps/server/src/shell/canonical-catalog/contract.test.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 8,100-116
+  s_fc768a11c2de27::t_4a97b2cec9960c 117-119
+apps/web/ARCHITECTURE.md
+  s_fc768a11c2de27::t_c4b64cd9adfe77 64-73
+apps/web/playwright.cli.config.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-34
+apps/cli/src/credential/runtime.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-207
+apps/server/contracts/operation-policy.json
+  s_fc768a11c2de27::t_c4b64cd9adfe77 205,220-229
+  s_fc768a11c2de27::t_70853e5a297542 230-234
+apps/web/src/features/dashboard/query.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-48
+apps/cli/src/credential/contract.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-45
+apps/server/cloudflare/core-http/internal/http.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1346,1364-1371
+apps/web/src/app/routes.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 2,35
+apps/cli/src/command/operations.test.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-90
+apps/server/cloudflare/dashboard/contract.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 5,11,13,15,18,40
+apps/web/src/features/dashboard/feature.test.tsx
+  s_fc768a11c2de27::t_c4b64cd9adfe77 359-364
+apps/cli/src/command/internal/presentation.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-41
+apps/web/scripts/serve-preview.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1,46-49
+scripts/ci-changes.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 28
+apps/cli/test/windows-persistence.ps1
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-37
+scripts/install-bun.sh
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-62
+tsconfig.base.json
+  s_fc768a11c2de27::t_c4b64cd9adfe77 113-124
+apps/cli/package.json
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-25
+apps/server/cloudflare/dashboard/dashboard.test.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-3,77,103,261-268,315-1144,1196,1222,1233-1238,1296-1297,1309,1354,1383,1395,1465,1483-1484,1506,1540,1558,1579,1615,1638,1748,1803,1834,1862,1916,1970,2043,2075,2120,2241
+SECURITY_STANDARDS.md
+  s_fc768a11c2de27::t_c4b64cd9adfe77 142-148,169
+.github/workflows/nequi-sandbox.yml
+  s_fc768a11c2de27::t_c4b64cd9adfe77 28
+apps/server/cloudflare/dashboard/internal/dashboard.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1,5,12-15,29-35,41-45,49,54-92,94-103,106-107,114-132,134-155,159,162-164,166
+.github/workflows/production-inspect.yml
+  s_fc768a11c2de27::t_c4b64cd9adfe77 36,38
+apps/cli/src/credential/runtime.test.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-148
+.github/workflows/production-rollback.yml
+  s_fc768a11c2de27::t_c4b64cd9adfe77 40,43
+.github/actions/bun-runtime/action.yml
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-10
+apps/server/cloudflare/migrations/0030_dashboard_initialization.sql
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1-26
+.oxlintrc.json
+  s_fc768a11c2de27::t_c4b64cd9adfe77 143-145,226,482
+  s_fc768a11c2de27::t_4142eb42dab817 142
+apps/server/src/shell/canonical-operations/internal/mutation-registry.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 40
+apps/server/cloudflare/dashboard/internal/dashboard-mutation.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 1,325,393
+apps/server/src/shell/dashboard/contract.ts
+  s_fc768a11c2de27::t_c4b64cd9adfe77 26-31,126-144,146,153-170,174,178-179,186,193,197-198,205,271
+tsconfig.json
+  s_fc768a11c2de27::t_c4b64cd9adfe77 9
+bun.lock
+  s_fc768a11c2de27::t_3fc7da29279a94 23-38,410-411
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "eb5b995a9ed9d9c31589ee4ef7210c9625a63c49",
+  "prompts": {},
+  "sessions": {
+    "s_fc768a11c2de27": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a1020d-bbdc-74ae-ba1b-046fd82fa605",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

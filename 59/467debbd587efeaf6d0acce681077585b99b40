@@ -1,0 +1,44 @@
+apps/server/cloudflare/subscription/runtime.ts
+  s_fc768a11c2de27::t_4b42a5de598878 100
+docs/adr/0021-browser-only-payment-credential-enrollment.md
+  s_fc768a11c2de27::t_4814bb5af015ef 4-27
+apps/server/src/core/subscription/contract.ts
+  s_fc768a11c2de27::t_e85e35d8ae3226 33,205
+apps/server/ARCHITECTURE.md
+  s_fc768a11c2de27::t_f5b3cd5ee7471f 456-457,461-466,481-485
+ARCHITECTURE.md
+  s_fc768a11c2de27::t_3c0d772f79e321 68,70-71,75-77
+apps/server/cloudflare/subscription/payment-enrollment.test.ts
+  s_fc768a11c2de27::t_85065c560b23e7 587
+  s_fc768a11c2de27::t_680e4956cee65a 100-105,134-139,183-188,193-262,272-279,312-313,424-491,509-525,527,532,535,540,543-545,547-552,554-566,925-934,955-971,974-979
+  s_fc768a11c2de27::t_a0f6c7da36a085 192,263,271,280-283
+  s_fc768a11c2de27::t_4fd2d63d880829 574,682-683
+  s_fc768a11c2de27::t_473f05624514f1 575-586,588-677,679-681,692-760
+  s_fc768a11c2de27::t_8ecab147565940 492-493,567-568
+  s_fc768a11c2de27::t_19630b4c0858f0 494-508,526,533-534,541-542,546,553
+  s_fc768a11c2de27::t_ce2f3788da0b48 678
+  s_fc768a11c2de27::t_807e0f0c5582b2 528-531,536-539
+  s_fc768a11c2de27::t_b5d75746ee946f 684-691,761-762
+  s_fc768a11c2de27::t_877db51c084b4d 24-27,72,92-94,972,981
+GLOSSARY.md
+  s_fc768a11c2de27::t_95ccbfc0011884 388-389,391-392,396-397,399
+apps/server/cloudflare/public-worker.ts
+  s_fc768a11c2de27::t_4730d3bf28a466 198,204
+  s_fc768a11c2de27::t_807e0f0c5582b2 250-256
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "59467debbd587efeaf6d0acce681077585b99b40",
+  "prompts": {},
+  "sessions": {
+    "s_fc768a11c2de27": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a1020d-bbdc-74ae-ba1b-046fd82fa605",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

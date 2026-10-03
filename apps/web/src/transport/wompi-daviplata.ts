@@ -1,4 +1,4 @@
-import { Clock, Data, Effect, Option, Redacted, Schema } from "effect";
+import { Clock, Data, Effect, Encoding, Option, Redacted, Schema } from "effect";
 import { type DaviplataOtpPolicy } from "./client";
 import { UnknownJsonString, jsonStringSchema } from "@/schema-compatibility";
 import {
@@ -27,10 +27,10 @@ const TokenId = Schema.String.check(
 );
 const InitialResponse = Schema.Struct({
   data: Schema.Struct({
-    id: TokenId,
+    id: Schema.RedactedFromValue(TokenId),
     status: Schema.Literal("PENDING"),
     url_services: Schema.Struct({
-      token: SecretText,
+      token: Schema.RedactedFromValue(SecretText),
       code_otp_send: Schema.String,
       code_otp_validate: Schema.String,
     }),
@@ -40,10 +40,10 @@ const Counter = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualT
 const OtpResponse = Schema.Struct({
   data: Schema.Struct({
     subscription: Schema.Struct({
-      PK: TokenId,
+      PK: Schema.RedactedFromValue(TokenId),
       status: Schema.Literals(["PENDING", "APPROVED", "DECLINED"]),
     }),
-    authorization: Schema.Struct({ access_token: SecretText }),
+    authorization: Schema.Struct({ access_token: Schema.RedactedFromValue(SecretText) }),
     attempts: Schema.Struct({
       currentSendCode: Counter,
       limitSendCode: Counter,
@@ -113,8 +113,7 @@ const awaitAbort = (signal: AbortSignal): Effect.Effect<never, DaviplataAuthoriz
   });
 type OtpRequest<Decoder extends Schema.ConstraintDecoder<unknown>> = Readonly<{
   publicKey: string;
-  approvedUrl: string;
-  providerUrl: unknown;
+  url: string;
   authorization: Redacted.Redacted<string>;
   body: Option.Option<Redacted.Redacted<string>>;
   responseSchema: Decoder;
@@ -123,15 +122,12 @@ type OtpRequest<Decoder extends Schema.ConstraintDecoder<unknown>> = Readonly<{
 }>;
 
 /** Consumes one bearer/payload. Exact destination, bounded bytes/time, cancellation; no retries or telemetry. */
-export const postDaviplataOtp = <Decoder extends Schema.ConstraintDecoder<unknown>>(
+const postDaviplataOtp = <Decoder extends Schema.ConstraintDecoder<unknown>>(
   input: OtpRequest<Decoder>
 ): Effect.Effect<Decoder["Type"], DaviplataAuthorizationFailed, Decoder["DecodingServices"]> => {
   const request = Effect.gen(function* () {
     const origin = yield* wompiTokenizationOrigin(input.publicKey).pipe(Effect.mapError(failure));
-    yield* checkEndpoint(input.approvedUrl, origin);
-    const url = yield* Schema.decodeUnknownEffect(Schema.Literal(input.approvedUrl))(
-      input.providerUrl
-    ).pipe(Effect.mapError(failure));
+    yield* checkEndpoint(input.url, origin);
     if (
       Option.isSome(input.body) &&
       new TextEncoder().encode(Redacted.value(input.body.value)).byteLength > maximumRequestBytes
@@ -140,7 +136,7 @@ export const postDaviplataOtp = <Decoder extends Schema.ConstraintDecoder<unknow
     }
     const response = yield* Effect.tryPromise({
       try: (signal) =>
-        input.fetchImplementation(url, {
+        input.fetchImplementation(input.url, {
           method: "POST",
           headers: {
             authorization: `Bearer ${Redacted.value(input.authorization)}`,
@@ -199,7 +195,7 @@ type Authority = Readonly<{
     sendLimit: number;
     validateLimit: number;
     approved: boolean;
-    usedBearers: Array<Redacted.Redacted<string>>;
+    spentBearerDigests: Array<string>;
   };
 }>;
 const makeAuthority = (
@@ -218,15 +214,14 @@ const makeAuthority = (
     sendLimit: maximumSends,
     validateLimit: maximumValidations,
     approved: false,
-    usedBearers: [],
+    spentBearerDigests: [],
   };
   const dispose = (): void => {
     state.disposed = true;
     controller.abort();
     Option.map(state.bearer, Redacted.wipeUnsafe);
     Option.map(state.token, Redacted.wipeUnsafe);
-    state.usedBearers.forEach(Redacted.wipeUnsafe);
-    state.usedBearers.length = 0;
+    state.spentBearerDigests.length = 0;
     state.bearer = Option.none();
     state.token = Option.none();
     timer.interruptUnsafe();
@@ -250,45 +245,101 @@ const makeAuthority = (
 type Action =
   | Readonly<{ type: "send" }>
   | Readonly<{ type: "confirm"; otp: Redacted.Redacted<string> }>;
+// SHA-256 lookup fingerprints only. No spent raw credential or provider-response history is retained.
+const bearerDigest = (
+  bearer: Redacted.Redacted<string>,
+  signal: AbortSignal
+): Effect.Effect<string, DaviplataAuthorizationFailed> =>
+  Effect.gen(function* () {
+    const bytes = new TextEncoder().encode(Redacted.value(bearer));
+    return yield* Effect.tryPromise({
+      try: () => globalThis.crypto.subtle.digest("SHA-256", bytes),
+      catch: failure,
+    }).pipe(
+      Effect.raceFirst(awaitAbort(signal)),
+      Effect.map((digest) => Encoding.encodeHex(new Uint8Array(digest))),
+      Effect.ensuring(
+        Effect.sync(() => {
+          bytes.fill(0);
+        })
+      )
+    );
+  });
+const wipeOtpProjection = (authority: Authority, data: typeof OtpResponse.Type.data): void => {
+  Redacted.wipeUnsafe(data.subscription.PK);
+  if (
+    !Option.exists(
+      authority.state.bearer,
+      (retained) => retained === data.authorization.access_token
+    )
+  ) {
+    Redacted.wipeUnsafe(data.authorization.access_token);
+  }
+};
+const matchingToken = (
+  authority: Authority,
+  data: typeof OtpResponse.Type.data
+): Effect.Effect<Redacted.Redacted<string>, DaviplataAuthorizationFailed> =>
+  Effect.gen(function* () {
+    const token = authority.state.token;
+    if (
+      authority.signal.aborted ||
+      Option.isNone(token) ||
+      Redacted.value(data.subscription.PK) !== Redacted.value(token.value)
+    ) {
+      return yield* failure();
+    }
+    return token.value;
+  });
 const applyResponse = (
   authority: Authority,
   data: typeof OtpResponse.Type.data,
   action: Action
-): Effect.Effect<DaviplataProviderOutcome, DaviplataAuthorizationFailed> => {
-  const { state, dispose } = authority;
-  if (Option.isNone(state.token) || data.subscription.PK !== Redacted.value(state.token.value)) {
-    return Effect.fail(failure());
-  }
-  state.sendLimit = Math.min(state.sendLimit, data.attempts.limitSendCode);
-  state.validateLimit = Math.min(state.validateLimit, data.attempts.limitValidateCode);
-  state.sends = Math.max(state.sends, data.attempts.currentSendCode);
-  state.validates = Math.max(state.validates, data.attempts.currentValidateCode);
-  if (data.subscription.status === "DECLINED") {
-    dispose();
-    return Effect.succeed({ status: "refused" });
-  }
-  if (data.subscription.status === "APPROVED") {
-    if (action.type !== "confirm") return Effect.fail(failure());
-    state.approved = true;
-    return Effect.succeed({ status: "approved", token: state.token.value });
-  }
-  if (state.usedBearers.some((used) => Redacted.value(used) === data.authorization.access_token)) {
-    return Effect.fail(failure());
-  }
-  state.bearer = Option.some(Redacted.make(data.authorization.access_token));
-  return Effect.succeed({ status: "retry-allowed" });
-};
+): Effect.Effect<DaviplataProviderOutcome, DaviplataAuthorizationFailed> =>
+  Effect.gen(function* () {
+    const { state, dispose } = authority;
+    const token = yield* matchingToken(authority, data);
+    state.sendLimit = Math.min(state.sendLimit, data.attempts.limitSendCode);
+    state.validateLimit = Math.min(state.validateLimit, data.attempts.limitValidateCode);
+    state.sends = Math.max(state.sends, data.attempts.currentSendCode);
+    state.validates = Math.max(state.validates, data.attempts.currentValidateCode);
+    if (data.subscription.status === "DECLINED") {
+      dispose();
+      return { status: "refused" } as const;
+    }
+    if (data.subscription.status === "APPROVED") {
+      if (action.type !== "confirm") return yield* failure();
+      state.approved = true;
+      state.spentBearerDigests.length = 0;
+      return { status: "approved", token } as const;
+    }
+    const digest = yield* bearerDigest(data.authorization.access_token, authority.signal);
+    if (authority.signal.aborted || state.spentBearerDigests.includes(digest)) {
+      return yield* failure();
+    }
+    state.bearer = Option.some(data.authorization.access_token);
+    return { status: "retry-allowed" } as const;
+  }).pipe(Effect.ensuring(Effect.sync(() => wipeOtpProjection(authority, data))));
 const actionAllowed = (authority: Authority, action: Action): boolean =>
   action.type === "send"
     ? authority.state.sends < authority.state.sendLimit
     : authority.state.validates < authority.state.validateLimit;
-const sendAction = (
+const sendWithBearer = (
   authority: Authority,
-  action: Action
+  action: Action,
+  authorization: Redacted.Redacted<string>
 ): Effect.Effect<DaviplataProviderOutcome, DaviplataAuthorizationFailed> =>
   Effect.gen(function* () {
     const { state, input } = authority;
-    if (Option.isNone(state.bearer)) return { status: "refused" } as const;
+    const digest = yield* bearerDigest(authorization, authority.signal);
+    if (
+      state.disposed ||
+      state.spentBearerDigests.length >= maximumSends + maximumValidations ||
+      state.spentBearerDigests.includes(digest)
+    ) {
+      return yield* failure();
+    }
+    state.spentBearerDigests.push(digest);
     const body =
       action.type === "send"
         ? Option.none<Redacted.Redacted<string>>()
@@ -297,17 +348,11 @@ const sendAction = (
               yield* encodeOtp({ code: Redacted.value(action.otp) }).pipe(Effect.mapError(failure))
             )
           );
-    const authorization = state.bearer.value;
-    state.usedBearers.push(Redacted.make(Redacted.value(authorization)));
-    state.bearer = Option.none();
-    state.busy = true;
     if (action.type === "send") state.sends += 1;
     else state.validates += 1;
-    const url = action.type === "send" ? input.policy.sendUrl : input.policy.confirmUrl;
     const response = yield* postDaviplataOtp({
       publicKey: input.publicKey,
-      approvedUrl: url,
-      providerUrl: url,
+      url: action.type === "send" ? input.policy.sendUrl : input.policy.confirmUrl,
       authorization,
       body,
       responseSchema: OtpResponse,
@@ -315,13 +360,28 @@ const sendAction = (
       signal: authority.signal,
     });
     return yield* applyResponse(authority, response.data, action);
-  }).pipe(
-    Effect.ensuring(
-      Effect.sync(() => {
-        authority.state.busy = false;
-      })
-    )
-  );
+  });
+const sendAction = (
+  authority: Authority,
+  action: Action
+): Effect.Effect<DaviplataProviderOutcome, DaviplataAuthorizationFailed> =>
+  Effect.gen(function* () {
+    const { state } = authority;
+    if (Option.isNone(state.bearer)) return { status: "refused" } as const;
+    const authorization = state.bearer.value;
+    state.bearer = Option.none();
+    state.busy = true;
+    return yield* sendWithBearer(authority, action, authorization).pipe(
+      Effect.timeout("15 seconds"),
+      Effect.mapError(failure),
+      Effect.ensuring(
+        Effect.sync(() => {
+          Redacted.wipeUnsafe(authorization);
+          state.busy = false;
+        })
+      )
+    );
+  });
 const perform = (authority: Authority, action: Action): Effect.Effect<DaviplataProviderOutcome> =>
   Effect.gen(function* () {
     const { state } = authority;
@@ -362,8 +422,7 @@ const initialize = (
     const url = `${origin}/v1/tokens/daviplata`;
     const response = yield* postDaviplataOtp({
       publicKey: input.publicKey,
-      approvedUrl: url,
-      providerUrl: url,
+      url,
       authorization: Redacted.make(input.publicKey),
       body: Option.some(Redacted.make(body)),
       responseSchema: InitialResponse,
@@ -373,14 +432,17 @@ const initialize = (
     const data = response.data;
     const prefix = input.publicKey.startsWith("pub_prod_") ? "daviplata_prod_" : "daviplata_dev";
     if (
-      !data.id.startsWith(prefix) ||
+      authority.signal.aborted ||
+      !Redacted.value(data.id).startsWith(prefix) ||
       data.url_services.code_otp_send !== input.policy.sendUrl ||
       data.url_services.code_otp_validate !== input.policy.confirmUrl
     ) {
+      Redacted.wipeUnsafe(data.id);
+      Redacted.wipeUnsafe(data.url_services.token);
       return yield* failure();
     }
-    state.token = Option.some(Redacted.make(data.id));
-    state.bearer = Option.some(Redacted.make(data.url_services.token));
+    state.token = Option.some(data.id);
+    state.bearer = Option.some(data.url_services.token);
     const first = yield* perform(authority, { type: "send" });
     if (first.status === "uncertain" || first.status === "refused") return yield* failure();
   });

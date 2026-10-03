@@ -1,46 +1,14 @@
 import { it as effectIt } from "@effect/vitest";
-import { Clock, Effect, Exit, Fiber, Option, Redacted, Schema } from "effect";
+import { Clock, Effect, Exit, Fiber, Redacted } from "effect";
 import { TestClock } from "effect/testing";
-import { expect, it, vi } from "vitest";
-import { postDaviplataOtp, startDaviplataWithWompi } from "./wompi-daviplata";
+import { afterEach, expect, it, vi } from "vitest";
+import { startDaviplataWithWompi } from "./wompi-daviplata";
 
 // Synthetic protocol fixtures, not recorded provider responses or live Sandbox/CORS proof.
 const approvedUrl = "https://sandbox.wompi.co/synthetic/send";
-const responseSchema = Schema.Struct({ accepted: Schema.Boolean });
 const mountedSignal = (): AbortSignal => new AbortController().signal;
 
-it("sends OTP material only to the exact approved endpoint without browser credentials or redirects", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const authorization = Redacted.make("synthetic-authorization");
-      const body = Redacted.make('{"synthetic":"payload"}');
-      const provider = vi.fn((_url: RequestInfo | URL, _init?: RequestInit) =>
-        Promise.resolve(Response.json({ accepted: true }))
-      );
-      const result = yield* postDaviplataOtp({
-        approvedUrl,
-        publicKey: "pub_test_synthetic",
-        providerUrl: approvedUrl,
-        authorization,
-        body: Option.some(body),
-        signal: mountedSignal(),
-        responseSchema,
-        fetchImplementation: provider,
-      });
-      expect(result).toEqual({ accepted: true });
-      expect(provider.mock.calls[0]?.[0]).toBe(approvedUrl);
-      expect(provider.mock.calls[0]?.[1]).toMatchObject({
-        method: "POST",
-        credentials: "omit",
-        redirect: "error",
-        cache: "no-store",
-        referrerPolicy: "no-referrer",
-      });
-      expect(provider.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
-      expect(() => Redacted.value(authorization)).toThrow();
-      expect(() => Redacted.value(body)).toThrow();
-    })
-  ));
+afterEach(() => vi.restoreAllMocks());
 
 const policy = { sendUrl: approvedUrl, confirmUrl: "https://sandbox.wompi.co/synthetic/confirm" };
 const tokenId = "daviplata_devtest_synthetic";
@@ -98,6 +66,16 @@ it("rotates one-use OTP authority and keeps approved authorization inside the pr
         policy.sendUrl,
         policy.confirmUrl,
       ]);
+      for (const call of provider.mock.calls) {
+        expect(call[1]).toMatchObject({
+          method: "POST",
+          credentials: "omit",
+          redirect: "error",
+          cache: "no-store",
+          referrerPolicy: "no-referrer",
+        });
+        expect(call[1]?.signal).toBeInstanceOf(AbortSignal);
+      }
       expect(provider.mock.calls[1]?.[1]?.body).toBeUndefined();
       expect(provider.mock.calls[2]?.[1]?.headers).toEqual({
         authorization: "Bearer synthetic-send-bearer",
@@ -167,6 +145,106 @@ it("does not accept authorization approval from an OTP-send response", () =>
       expect(provider).toHaveBeenCalledTimes(2);
     })
   ));
+
+it("fingerprints one-use authority with SHA-256, clears borrowed digest buffers, and exposes only redacted approval", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const digest = vi.spyOn(globalThis.crypto.subtle, "digest");
+      const provider = vi
+        .fn((_url: RequestInfo | URL, _init?: RequestInit): Promise<Response> =>
+          Promise.resolve(otpResponse("APPROVED", "synthetic-terminal-bearer"))
+        )
+        .mockResolvedValueOnce(initialResponse())
+        .mockResolvedValueOnce(otpResponse("PENDING", "synthetic-send-bearer"));
+      const challenge = yield* start(provider);
+      const approval = yield* challenge.confirm(Redacted.make("574829"));
+      expect(digest).toHaveBeenCalledTimes(3);
+      for (const [algorithm, bytes] of digest.mock.calls) {
+        expect(algorithm).toBe("SHA-256");
+        expect(ArrayBuffer.isView(bytes)).toBe(true);
+        if (ArrayBuffer.isView(bytes)) {
+          expect(
+            new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength).every(
+              (byte) => byte === 0
+            )
+          ).toBe(true);
+        }
+      }
+      expect(Object.keys(approval).sort()).toEqual(["status", "token"]);
+      if (approval.status !== "approved") throw new Error("Expected synthetic approval");
+      expect(Redacted.isRedacted(approval.token)).toBe(true);
+      expect(Redacted.value(approval.token)).toBe(tokenId);
+      challenge.dispose();
+      expect(() => Redacted.value(approval.token)).toThrow();
+    })
+  ));
+
+it("cancels a pending digest on disposal without posting borrowed one-use authority", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const provider = vi
+        .fn(() => Promise.resolve(otpResponse("APPROVED", "synthetic-terminal-bearer")))
+        .mockResolvedValueOnce(initialResponse())
+        .mockResolvedValueOnce(otpResponse("PENDING", "synthetic-send-bearer"));
+      const challenge = yield* start(provider);
+      const pending = Promise.withResolvers<ArrayBuffer>();
+      const hashing = Promise.withResolvers<void>();
+      vi.spyOn(globalThis.crypto.subtle, "digest").mockImplementation(() => {
+        hashing.resolve();
+        return pending.promise;
+      });
+      const otp = Redacted.make("574829");
+      const fiber = yield* Effect.forkChild(challenge.confirm(otp), { startImmediately: true });
+      yield* Effect.tryPromise(() => hashing.promise);
+      challenge.dispose();
+      expect((yield* Fiber.join(fiber)).status).toBe("uncertain");
+      expect(() => Redacted.value(otp)).toThrow();
+      pending.resolve(new ArrayBuffer(32));
+      yield* Effect.tryPromise(() => pending.promise);
+      expect(provider).toHaveBeenCalledTimes(2);
+    })
+  ));
+
+it("fails closed before OTP POST if SHA-256 fingerprinting is unavailable", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      vi.spyOn(globalThis.crypto.subtle, "digest").mockRejectedValue(
+        new Error("Synthetic crypto failure")
+      );
+      const provider = vi.fn(() => Promise.resolve(initialResponse()));
+      const result = yield* Effect.exit(start(provider));
+      expect(Exit.isFailure(result)).toBe(true);
+      expect(provider).toHaveBeenCalledTimes(1);
+    })
+  ));
+
+it.each([
+  "https://other.invalid/send",
+  `${policy.sendUrl}?synthetic=1`,
+  `http://sandbox.wompi.co/synthetic/send`,
+])("rejects an invalid prepared OTP policy before tokenization: %s", (sendUrl) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const provider = vi.fn(() => Promise.resolve(initialResponse()));
+      const documentNumber = Redacted.make("1122233");
+      const productNumber = Redacted.make("3991111111");
+      const result = yield* Effect.exit(
+        startDaviplataWithWompi({
+          publicKey: "pub_test_synthetic",
+          policy: { ...policy, sendUrl },
+          fields: { documentNumber, productNumber },
+          fetchImplementation: provider,
+          signal: mountedSignal(),
+          expiresAt: (yield* Clock.currentTimeMillis) + 60_000,
+        })
+      );
+      expect(Exit.isFailure(result)).toBe(true);
+      expect(provider).not.toHaveBeenCalled();
+      expect(() => Redacted.value(documentNumber)).toThrow();
+      expect(() => Redacted.value(productNumber)).toThrow();
+    })
+  )
+);
 
 it.each([
   "https://other.invalid/send",

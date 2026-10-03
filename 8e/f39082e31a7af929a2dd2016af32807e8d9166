@@ -1,0 +1,52 @@
+apps/server/contracts/openapi.json
+  s_21ae67699c2ad6::t_54216cd79f43b7 247,253,2099,2105,2108,2647,2659,2671,2698,3549,3562-3577,3593,3609,3631,3647,3662,3678,3694,3729,3748,3752,3764,3768,3780,3796,3812,3828,3844,3860,3889,3905,3921,3937,3941,3953,3957,3969,3985,4001,4013,4029,4045,4758,4761,6504-6526,7924,8386-8409,8783,8819,8851,9033,9260,9283,9298-9320,9334,9357,9380,9403,9426,9449,9472,9495,9518,9541,9564,9587,9610,9633,9656,9679,9702,9725,11526,11725,11805-11884,11895,12165,12379,12479,12700,12799,12898,13221,13340,13467,13928,14152,14244,14255,14911,15020,15247,15472,15708
+apps/server/ARCHITECTURE.md
+  s_21ae67699c2ad6::t_7883080cb2438d 344-350
+apps/server/cloudflare/migrations/0030_dashboard_initialization.sql
+  s_21ae67699c2ad6::t_a1a1352ed62c36 1-26
+apps/server/src/shell/canonical-operations/internal/mutation-registry.ts
+  s_21ae67699c2ad6::t_50440c34e11c24 40
+apps/server/src/shell/audit/contract.ts
+  s_21ae67699c2ad6::t_3b55878a3caa09 17
+apps/server/cloudflare/dashboard/contract.ts
+  s_21ae67699c2ad6::t_bc8fb07b35221b 7,19
+apps/server/cloudflare/core-http/internal/http.ts
+  s_21ae67699c2ad6::t_7b3a025d41adfb 1344
+apps/server/cloudflare/dashboard/internal/dashboard.ts
+  s_21ae67699c2ad6::t_85ce4e8ae45880 31
+apps/server/cloudflare/dashboard/dashboard.test.ts
+  s_21ae67699c2ad6::t_a2faa97c1942a2 77,103,307,704-707,722,750-751
+  s_21ae67699c2ad6::t_cc59911f6a52f9 319-323,329-342,347-349,352-354,356-360,370-456,461-532,537-574,579-641,646-661,663-692,694-703,708-721,723-749,752-806
+  s_21ae67699c2ad6::t_ea8b2a7ffacb5a 308-312,314-318,324-326,328,343-346,350-351,361-365,807-808
+  s_21ae67699c2ad6::t_1728d5d31b3aac 1-3,366-369,457-460,533-536
+  s_21ae67699c2ad6::t_654b8dee9a51b6 355,575-578,642-645,662,693
+  s_21ae67699c2ad6::t_6af509f53e1969 313,327
+apps/server/cloudflare/dashboard/operations.ts
+  s_21ae67699c2ad6::t_d5b4aa735e7ec3 19-23
+apps/server/contracts/operation-policy.json
+  s_21ae67699c2ad6::t_54216cd79f43b7 225-238
+  s_21ae67699c2ad6::t_85f9fab39cced1 224
+apps/server/cloudflare/canonical-operations/internal/mutation-registry.ts
+  s_21ae67699c2ad6::t_8a780fdc9241f5 12,190-192,198-199
+  s_21ae67699c2ad6::t_cc59911f6a52f9 193-197
+apps/server/cloudflare/dashboard/internal/dashboard-mutation.ts
+  s_21ae67699c2ad6::t_b443ce021f6dc7 325
+apps/server/src/shell/dashboard/contract.ts
+  s_21ae67699c2ad6::t_20757bbdb49647 121-123,133-150
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "8ef39082e31a7af929a2dd2016af32807e8d9166",
+  "prompts": {},
+  "sessions": {
+    "s_21ae67699c2ad6": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0ff8c-7e68-77a8-a43e-b3a24682af5a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

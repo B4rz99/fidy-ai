@@ -30,7 +30,7 @@ export const TaxTreatment = Schema.Literal("not-taxable").annotate({
 });
 export type TaxTreatment = typeof TaxTreatment.Type;
 
-/** The only payment-method families presented for MVP enrollment. */
+/** Families represented by immutable Price terms, not a promise of current executable availability. */
 export const LaunchPaymentMethods = Schema.Tuple([
   Schema.Literal("card"),
   Schema.Literal("nequi"),
@@ -202,7 +202,7 @@ export type EnrollmentMethod = typeof EnrollmentMethod.Type;
 
 /** Current executable methods, independent of the methods represented by immutable Price terms. */
 export const EnrollmentAvailability = Schema.Struct({
-  enabledMethods: Schema.Array(EnrollmentMethod).check(Schema.isMaxLength(3)),
+  enabledMethods: Schema.UniqueArray(EnrollmentMethod).check(Schema.isMaxLength(3)),
 }).annotate({ identifier: "EnrollmentAvailability" });
 export type EnrollmentAvailability = typeof EnrollmentAvailability.Type;
 

@@ -453,11 +453,17 @@ Subscription publishes safe Price, enrollment, BillingAttempt and standing decla
 `core/subscription/contract.ts`, and calendar-period and enrollment decisions in `operations.ts`.
 Its shell contract owns both the canonical read group and the separate browser-only enrollment API;
 the browser client consumes those declarations without provider or persistence implementation.
-Enrollment remains unavailable to canonical agents and PAT callers. Card and direct-app Nequi
-authorization share the Subscription-owned PaymentEnrollment and billing lifecycle. Enrollment
+Enrollment remains unavailable to canonical agents and PAT callers. Card, direct-app Nequi and
+OTP-authorized DaviPlata share the Subscription-owned PaymentEnrollment and billing lifecycle. Enrollment
 requires a fresh WebSession and active Consent; sensitive payment details and transient provider
 authorization material are not retained. Authorization or PaymentSource availability alone never
 grants paid Pro: activation requires independently verified matching BillingAttempt settlement.
+The browser-only availability query separates executable methods from immutable Price terms.
+DaviPlata requires exact reviewed environment-matching OTP URLs; Production additionally requires
+explicit recurring activation. The browser must reject returned destinations that do not equal the
+prepared policy. Core independently verifies authorization and matches source type/email before
+retaining its private identity; only a one-way authorization digest may survive token handling.
+Document/product values and OTPs go from the mounted browser interaction directly to Wompi.
 
 The shell operations own paid-access predicates and bounded prepared standing reads. A prepared read
 carries its row decoder with its statements, so native callers never know Subscription storage
@@ -472,8 +478,11 @@ Wompi models and clients, payment-source identity, webhook verification, settlem
 ambiguity handling are private to its `internal/` implementation. Verified settlement retains the
 same immutable Price snapshot, atomic paid-period write and monotonic terminal behavior. Private
 operational health observes only bounded pending-work metadata through the owner. Existing bounded
-Core, provider and Workflow telemetry is retained; this extraction introduces no new external
-workflow, provider call or telemetry purpose.
+Core, provider and Workflow telemetry is retained and covers wallet approval, source creation and
+settlement. Sensitive browser tokenization/OTP work intentionally emits no application telemetry;
+only safe financial projections reach Fidy. The opt-in real Sandbox proof and remaining native,
+CORS and recovery release gates are recorded in
+[the DaviPlata proof runbook](../../docs/operations/daviplata-sandbox-proof.md).
 
 ### Email Authentication owner composition
 

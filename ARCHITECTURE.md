@@ -65,13 +65,16 @@ as review evidence, not competing declarations. The project-reference build orde
 web; the root gate checks generated artifact freshness, not compatibility with older revisions.
 See [Server contract artifacts](docs/server-contract-artifacts.md).
 
-Three transports sit outside the stable-User canonical operation surface: proof-bearing credential
+Four transports sit outside the stable-User canonical operation surface: proof-bearing credential
 bootstrap before a stable User exists, bounded User-authenticated statement-byte staging before a
-canonical mutation publishes the bytes, and the browser-only hosted Turn conversation channel.
+canonical mutation publishes the bytes, the browser-only hosted Turn conversation channel, and
+fresh-session reusable payment-source enrollment.
 The bootstrap establishes authority only after proof exchange; staging returns no readable content,
 grants no authority, and expires if unpublished. The bootstrap's direct-client contract is checked
 separately; staging's limits and publication boundary are specified in
-[ADR 0028](docs/adr/0028-statement-bytes-are-staged-outside-atomic-batches.md).
+[ADR 0028](docs/adr/0028-statement-bytes-are-staged-outside-atomic-batches.md). Payment enrollment
+isolates transient authorization from canonical clients under
+[ADR 0021](docs/adr/0021-browser-only-payment-credential-enrollment.md).
 
 The hosted Turn channel (`/web/hosted-turns` and `/web/hosted-turns/delivery`) accepts one User message
 and a separate visible-delivery receipt. Neither endpoint is a tool-callable operation or belongs in

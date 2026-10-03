@@ -1,0 +1,27 @@
+apps/server/cloudflare/subscription/internal/payment-enrollment.ts
+  s_a71cc4d896fb30::t_8bb5780235664c 936,947
+apps/server/cloudflare/subscription/internal/payment-enrollment-claim.ts
+  s_a71cc4d896fb30::t_3ef90245d5d609 30-31,35-38,45,48,52,55
+apps/server/ARCHITECTURE.md
+  s_a71cc4d896fb30::t_c4c2519371ed6a 456-460
+apps/web/ARCHITECTURE.md
+  s_a71cc4d896fb30::t_af97832710a780 36-40
+apps/server/cloudflare/subscription/payment-enrollment-claim.test.ts
+  s_a71cc4d896fb30::t_7adf4334ea79ac 66,69,83,86,89,92,100,103,124,133,159,167,206,215
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2e6062019c2543fc587e33e50357054398a94805",
+  "prompts": {},
+  "sessions": {
+    "s_a71cc4d896fb30": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0ff1c-4f98-75dc-b66e-204339d036e3",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

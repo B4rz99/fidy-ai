@@ -1,0 +1,50 @@
+apps/server/src/core/subscription/contract.ts
+  s_fc768a11c2de27::t_1d1511539c464d 203-219,301,311-321
+  s_fc768a11c2de27::t_effecb0930c9db 198,283-287
+apps/server/src/shell/outbound-http/internal/outbound-http.ts
+  s_fc768a11c2de27::t_0927afa3ad8835 144-149,158
+apps/server/cloudflare/subscription/contract.ts
+  s_fc768a11c2de27::t_bd9ef6258f6319 24-26
+apps/server/cloudflare/subscription/payment-enrollment.test.ts
+  s_fc768a11c2de27::t_bd26a4f4b05d49 167-204,206-208
+  s_e6b2b6f3fdd65c::t_67757af4cd04b3 205
+apps/server/src/client.ts
+  s_fc768a11c2de27::t_57b44757954ba1 93-94
+apps/server/src/shell/subscription/contract.ts
+  s_fc768a11c2de27::t_6a206e5af0e00d 186-193,210-215
+  s_fc768a11c2de27::t_74106490829e2c 8
+apps/server/cloudflare/subscription/internal/wompi-billing-client.test.ts
+  s_fc768a11c2de27::t_0e33ff12e02059 68-90
+  s_e6b2b6f3fdd65c::t_d4a216b51d4230 91-93
+apps/server/cloudflare/subscription/internal/payment-enrollment.ts
+  s_fc768a11c2de27::t_f5251fbc95b16b 13,212-234,332,341-342,348,352-355,413,455,474,544,580,1077,1152-1164,1194
+  s_fc768a11c2de27::t_7747d284c84b4c 132-150
+  s_fc768a11c2de27::t_10c11ed6ee7a33 814-818
+  s_fc768a11c2de27::t_7a9b4d83277d29 14,412,414,819-820
+apps/web/src/features/subscription/feature.test.tsx
+  s_fc768a11c2de27::t_10c11ed6ee7a33 490-501
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b519c52e5174854bbcf4a8a80ab00d7e594362fa",
+  "prompts": {},
+  "sessions": {
+    "s_e6b2b6f3fdd65c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a101dc-2692-7340-81d5-dc492f3b3df0",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_fc768a11c2de27": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a1020d-bbdc-74ae-ba1b-046fd82fa605",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

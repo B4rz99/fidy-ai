@@ -1,0 +1,140 @@
+apps/cli/src/query/query.test-fixture.ts
+  s_73b5e3f8eb29cd::t_76a10f93ff42a4 7-8,10-12
+  s_73b5e3f8eb29cd::t_803395b4ea9678 24-33,35
+  s_73b5e3f8eb29cd::t_2d8503c8c193e7 1,3-4,6,19-23,36-37,44-50,52-66
+  s_73b5e3f8eb29cd::t_47430fba8c3cc2 2,39-41,43
+  s_73b5e3f8eb29cd::t_8bcbae0381b124 5,9,14-18,38
+  s_73b5e3f8eb29cd::t_4ee933c0f92ddb 13,34,42,51,67-68
+apps/server/.dependency-cruiser.mjs
+  s_73b5e3f8eb29cd::t_09e5feb16a49f1 181-182,1328
+apps/cli/test/journey-entry.ts
+  s_73b5e3f8eb29cd::t_c6553461677ce4 8-9,56,66-69,71-87
+  s_73b5e3f8eb29cd::t_e455a6ade7dbd0 10,70
+  s_73b5e3f8eb29cd::t_5492d62bc98a34 43
+  s_73b5e3f8eb29cd::t_dcb256192eff04 88-90
+  s_73b5e3f8eb29cd::t_a3b758164d9a4f 91-97,99-101
+.oxlintrc.json
+  s_73b5e3f8eb29cd::t_9db700abf407f5 142-147
+apps/cli/src/query/runtime.test.ts
+  s_73b5e3f8eb29cd::t_86b872502ffe4e 2,7,21,44
+  s_73b5e3f8eb29cd::t_5003d64a98214b 1,6,8-20
+  s_73b5e3f8eb29cd::t_2f65fa2cc54b0d 3-5,22-43
+  s_73b5e3f8eb29cd::t_453a1f547b85bb 45-74
+apps/cli/src/query/operations.test.ts
+  s_73b5e3f8eb29cd::t_8ff579b92160c9 235-236,252-260,262,264-274,276,278-283,285-299,302-303
+  s_73b5e3f8eb29cd::t_af2054f1cca116 300-301,304-306
+  s_73b5e3f8eb29cd::t_5cfdae0ce7d7d5 2
+  s_73b5e3f8eb29cd::t_258c8509918dfb 12-13,46-48,50,52,58-59,61,117,121
+  s_73b5e3f8eb29cd::t_7df602a6bb5656 11,210-217,219-223
+  s_73b5e3f8eb29cd::t_9cf478b1ff84d4 3-5,31-45,53-55,57,62-81,83-85,87-95,97-112,114,116,118-120,122-128,165-198,200-203,205-209,224-225,227-234,237-241,243-251,307
+  s_73b5e3f8eb29cd::t_e44ef09d08ff55 82,86
+  s_73b5e3f8eb29cd::t_4ce24a02eddeee 129-132,134-146,149-156,158-164
+  s_73b5e3f8eb29cd::t_e04b2ebcb4dbde 1,14-23
+  s_73b5e3f8eb29cd::t_bec4aff25a5ad1 133
+  s_73b5e3f8eb29cd::t_fcc3d58b82e403 6,24-30,308-309
+  s_73b5e3f8eb29cd::t_7fc1bdf8f33409 7-10
+  s_73b5e3f8eb29cd::t_d27896abc064a5 49
+  s_73b5e3f8eb29cd::t_8db781825f9b6b 51
+  s_73b5e3f8eb29cd::t_f8f9aed05582b5 56
+  s_73b5e3f8eb29cd::t_f34f6810fbc823 60
+  s_73b5e3f8eb29cd::t_398c9d12450af5 96
+  s_73b5e3f8eb29cd::t_f88080c1e10e36 113
+  s_73b5e3f8eb29cd::t_0f764bfcc84363 115
+  s_73b5e3f8eb29cd::t_771a6f01c778a5 147-148
+  s_73b5e3f8eb29cd::t_22432072177d00 157
+  s_73b5e3f8eb29cd::t_c9964d140365b0 199
+  s_73b5e3f8eb29cd::t_1fe422ab3fde55 204
+  s_73b5e3f8eb29cd::t_f8645da2cc6d91 218
+  s_73b5e3f8eb29cd::t_5cb412e253373a 226
+  s_73b5e3f8eb29cd::t_dfa6a865879b2f 242
+  s_73b5e3f8eb29cd::t_e5b71cb03fba0e 261
+  s_73b5e3f8eb29cd::t_1acf5a9cbb641b 263
+  s_73b5e3f8eb29cd::t_2e2e5c686c3121 275
+  s_73b5e3f8eb29cd::t_e041d28f427ec5 277
+  s_73b5e3f8eb29cd::t_bb7319718fb7c0 284
+apps/cli/src/credential/contract.ts
+  s_73b5e3f8eb29cd::t_2f8d903aee547d 30-33
+apps/web/e2e/cli-login.spec.ts
+  s_73b5e3f8eb29cd::t_b5e7e9c83ac882 114,116-120
+  s_73b5e3f8eb29cd::t_5387b4b05a34ea 115
+  s_73b5e3f8eb29cd::t_5191762a042c86 121-125
+apps/cli/ARCHITECTURE.md
+  s_73b5e3f8eb29cd::t_7349d7f6c89a47 4-6,19-24,48-54,93-108,148
+apps/cli/src/main.ts
+  s_73b5e3f8eb29cd::t_86840dd8beb636 15,22-24
+  s_73b5e3f8eb29cd::t_d9a9e478e31ecf 9,31,33-35,37-51,104
+  s_73b5e3f8eb29cd::t_a3decedd295474 10,36
+  s_73b5e3f8eb29cd::t_b4794653f5d244 32
+apps/server/scripts/check-browser-client.ts
+  s_73b5e3f8eb29cd::t_e46210b3f59237 30-31
+apps/server/src/client.ts
+  s_73b5e3f8eb29cd::t_70b0ef6a257027 10-11
+apps/cli/src/command/internal/presentation.ts
+  s_73b5e3f8eb29cd::t_d184f466e8e5af 20,34-37
+  s_73b5e3f8eb29cd::t_21562c30d3cce3 38-39
+apps/cli/src/query/runtime.ts
+  s_73b5e3f8eb29cd::t_570533ccd4fcd9 2,5-6,8,24
+  s_73b5e3f8eb29cd::t_268140f2612483 3,12,21-23
+  s_73b5e3f8eb29cd::t_a044511de6a4da 29-31,33-35,37,72-76
+  s_73b5e3f8eb29cd::t_d786fab9c72c20 9-11,20
+  s_73b5e3f8eb29cd::t_2a4374141578f4 26-28,38-41,43-51,55-56,58-68,70-71
+  s_73b5e3f8eb29cd::t_5f4a40e67d4717 1
+  s_73b5e3f8eb29cd::t_6ebb26014d4778 4,13-16,18-19,25
+  s_73b5e3f8eb29cd::t_85ab6656c06127 7
+  s_73b5e3f8eb29cd::t_4e0cb6cfd369d6 52-54
+  s_73b5e3f8eb29cd::t_485ad5b6902376 17
+  s_73b5e3f8eb29cd::t_27b21c351a803e 32
+  s_73b5e3f8eb29cd::t_1d492355a2382d 36
+  s_73b5e3f8eb29cd::t_1194186d155fe5 42
+  s_73b5e3f8eb29cd::t_7cee0a0da75d93 57
+  s_73b5e3f8eb29cd::t_5edeae54d3d6bc 69
+apps/cli/src/query/operations.ts
+  s_73b5e3f8eb29cd::t_592129fb44e364 53,66,209
+  s_73b5e3f8eb29cd::t_bbff6b23492944 1,8,10,47-52,54-56,65,67-70,72,76,85,113-120,123-124,126-128,131-133,135-140,142-163,165-170,190-191,199,205-206,208,211-212
+  s_73b5e3f8eb29cd::t_f644d6d42b23d2 16-23,25
+  s_73b5e3f8eb29cd::t_87fe7c607f3400 73-75
+  s_73b5e3f8eb29cd::t_3332210b6d6a88 125,129-130,134
+  s_73b5e3f8eb29cd::t_8632bf96b49cc6 4,6-7,11-12,14-15,26-46,57-62,64,77-84,86-94,97-98,103-110,112,121-122,141,164,171-172,179,187-189,192-198,200-204,207,213-214
+  s_73b5e3f8eb29cd::t_9a8ce8960269ad 173-178,180-186
+  s_73b5e3f8eb29cd::t_6046c5ebba929c 2-3,95-96,99-100,102,210
+  s_73b5e3f8eb29cd::t_2d5c9733f7fb7f 5,24
+  s_73b5e3f8eb29cd::t_d3f0c6e48e3542 9,13,63,71,101,111,215-220
+apps/cli/src/direct-client/runtime.ts
+  s_73b5e3f8eb29cd::t_534490220d7779 93,95,99,101,141
+  s_73b5e3f8eb29cd::t_715cc76d683b35 8,24-47,116-120,122-124
+  s_73b5e3f8eb29cd::t_6cc589c3e412fc 121
+  s_73b5e3f8eb29cd::t_a325d1a378bed9 49-52,58,64,79,94
+  s_73b5e3f8eb29cd::t_91a543d76d5e8e 23,89,96-98,108-112,125,142-145
+  s_5dbc545240b27d::t_cced5308330be6 146
+apps/cli/src/query/contract.ts
+  s_73b5e3f8eb29cd::t_fbb872b65f1c38 1-2,12-19,24
+  s_73b5e3f8eb29cd::t_ab79b65fc0c2e4 3-8,10-11,20-23,25-29
+  s_73b5e3f8eb29cd::t_013be25544208b 9
+  s_73b5e3f8eb29cd::t_77dac0e381a9d9 30-33
+apps/server/src/shell/canonical-catalog/contract.ts
+  s_73b5e3f8eb29cd::t_9b3baa170ebb23 106,131
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "330ec949cd85480cfa43e82115a67e46812373cf",
+  "prompts": {},
+  "sessions": {
+    "s_5dbc545240b27d": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a103f5-b777-7423-b381-e2c2433616b5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_73b5e3f8eb29cd": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a103ee-cb49-721e-b4c8-444edc8acedb",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

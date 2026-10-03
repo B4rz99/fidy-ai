@@ -45,6 +45,53 @@ const signInWithIdentity = ({ page, request }: SignInFixture, firstCard: boolean
     })
     .then(() => page.clock.setSystemTime(Effect.runSync(Clock.currentTimeMillis)));
 
+/** Real public email pairing; the loopback fixture only delivers the synthetic proof. */
+export const signInWithVerifiedEmailThroughCore = ({
+  page,
+  request,
+  email,
+}: SignInFixture & Readonly<{ email: string }>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => page.goto("/auth/pair"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click()
+      );
+      const code = yield* Effect.tryPromise(() => visiblePairingCode(page));
+      yield* Effect.tryPromise(() =>
+        page.getByLabel("O accede con tu correo verificado").fill(email)
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Enviar código por correo" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Código recibido por correo")).toBeVisible()
+      );
+      const delivered = yield* Effect.tryPromise(() =>
+        request.post(`http://127.0.0.1:4175/email/login/deliver?code=${code}`)
+      );
+      expect(delivered.status()).toBe(noContentStatus);
+      const proof = "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ";
+      yield* Effect.tryPromise(() => page.getByLabel("Código recibido por correo").fill(proof));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Aprobar este navegador" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: pairingTimeoutMilliseconds })
+      );
+      expect(page.url()).not.toContain(proof);
+      expect(
+        yield* Effect.tryPromise(() =>
+          page.evaluate(() => localStorage.length + sessionStorage.length)
+        )
+      ).toBe(0);
+    })
+  );
+
+/** Independent unfunded User: never switches or deletes the first-card User's retained history. */
+export const signInFirstDaviplataThroughCore = (input: SignInFixture): Promise<void> =>
+  signInWithVerifiedEmailThroughCore({ ...input, email: "daviplata@example.com" });
+
 /** Signs in the seeded User with an available PaymentSource through real Core redemption. */
 export const signInThroughCore = (input: SignInFixture): Promise<void> =>
   signInWithIdentity(input, false);

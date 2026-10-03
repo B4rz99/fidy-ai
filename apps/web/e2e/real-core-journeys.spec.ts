@@ -4,8 +4,9 @@ import type { Cause } from "effect";
 import { playwright } from "./playwright-runtime";
 import {
   signInFirstCardThroughCore,
+  signInFirstDaviplataThroughCore,
   signInThroughCore,
-  visiblePairingCode,
+  signInWithVerifiedEmailThroughCore,
 } from "./real-core-fixture";
 
 const { expect, test } = playwright;
@@ -268,53 +269,7 @@ test("renders loading until the real Core answers Transactions", ({ page, reques
 test("approves a browser pairing through the real verified-email public route", ({
   page,
   request,
-}) =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      yield* fromPlaywright(page.goto("/auth/pair"));
-      yield* fromPlaywright(
-        page
-          .getByRole("button", {
-            name: "Iniciar sesión en el navegador",
-          })
-          .click()
-      );
-      const code = yield* fromPlaywright(visiblePairingCode(page));
-      yield* fromPlaywright(
-        page.getByLabel("O accede con tu correo verificado").fill("usuario@example.com")
-      );
-      yield* fromPlaywright(
-        page
-          .getByRole("button", {
-            name: "Enviar código por correo",
-          })
-          .click()
-      );
-      yield* fromPlaywright(expect(page.getByLabel("Código recibido por correo")).toBeVisible());
-      const delivered = yield* fromPlaywright(
-        request.post(`http://127.0.0.1:4175/email/login/deliver?code=${code}`)
-      );
-      expect(delivered.status()).toBe(noContent);
-      const proof = "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ";
-      yield* fromPlaywright(page.getByLabel("Código recibido por correo").fill(proof));
-      yield* fromPlaywright(
-        page
-          .getByRole("button", {
-            name: "Aprobar este navegador",
-          })
-          .click()
-      );
-      yield* fromPlaywright(
-        expect(page).toHaveURL(/\/app\/transactions$/u, {
-          timeout: 15_000,
-        })
-      );
-      expect(page.url()).not.toContain(proof);
-      expect(
-        yield* fromPlaywright(page.evaluate(() => localStorage.length + sessionStorage.length))
-      ).toBe(0);
-    })
-  ));
+}) => signInWithVerifiedEmailThroughCore({ page, request, email: "usuario@example.com" }));
 test("replaces a verified EmailCredential through public operations after fixture delivery", ({
   page,
   request,
@@ -666,7 +621,7 @@ const assertDaviplataSecrecy = (bodies: ReadonlyArray<ObservedFidyBody>): void =
   expect(approved).toHaveLength(1);
   expect(approved[0]?.url).toBe(`${api}/web/subscription/payment-enrollments/submit`);
   expect(approved[0]?.body).toContain('"method":"daviplata"');
-  expect(approved[0]?.body).toContain('"billingEmail":"tarjeta@example.com"');
+  expect(approved[0]?.body).toContain('"billingEmail":"daviplata@example.com"');
 };
 const submitFirstDaviplata = Effect.fnUntraced(function* (page: Page) {
   yield* fromPlaywright(page.goto("/upgrade"));
@@ -678,7 +633,7 @@ const submitFirstDaviplata = Effect.fnUntraced(function* (page: Page) {
   yield* fromPlaywright(page.getByLabel("Número de cédula").fill("1122233"));
   yield* fromPlaywright(page.getByLabel("Número de DaviPlata").fill("3991111111"));
   yield* fromPlaywright(
-    expect(page.getByLabel("Correo de facturación")).toHaveValue("tarjeta@example.com")
+    expect(page.getByLabel("Correo de facturación")).toHaveValue("daviplata@example.com")
   );
   yield* fromPlaywright(page.getByLabel(/Acepto el reglamento/iu).check());
   yield* fromPlaywright(page.getByLabel(/Autorizo el tratamiento/iu).check());
@@ -703,7 +658,7 @@ test("authorizes DaviPlata directly in the built browser and grants paid Pro onl
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      yield* fromPlaywright(signInFirstCardThroughCore({ page, request }));
+      yield* fromPlaywright(signInFirstDaviplataThroughCore({ page, request }));
       const providerCalls: Array<DaviplataFixtureStep> = [];
       const fidyBodies: Array<ObservedFidyBody> = [];
       captureDaviplataFidyBodies(page, fidyBodies);

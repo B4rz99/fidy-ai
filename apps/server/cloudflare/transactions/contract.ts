@@ -1,11 +1,13 @@
+import type { IanaTimeZone } from "../../src/core/_shared/context";
 import {
   type NotificationInterpretationEvidence,
+  type RecurringTransactionFact,
   type Transaction,
   type TransactionExtraction,
   type TransactionPair,
 } from "../../src/core/transactions/contract";
 import type { TransactionMutationOperation } from "../canonical-work/contract";
-import type { DateTime, Option } from "effect";
+import { Data, type DateTime, type Option } from "effect";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import { type Category, type CategoryId } from "../../src/core/categories/contract";
 
@@ -14,6 +16,22 @@ import type {
   NotificationEmailSourceAttestation,
   StatementLineSourceAttestation,
 } from "../../src/core/source-attestation/contract";
+
+/** Unreadable or invalid recurring facts never supply a partial detection selection. */
+export class RecurringFactsUnavailable extends Data.TaggedError("RecurringFactsUnavailable") {}
+
+/** One complete revision snapshot of effective financial history; later commits must recheck this revision. */
+export type RecurringFactSnapshot = Readonly<{
+  revision: number;
+  firstCapturedAt: DateTime.Utc;
+  timeZone: IanaTimeZone;
+}>;
+/** Bounded recurring projection with an explicit continuation; changed history never supplies mixed facts. */
+export type RecurringFactPage = Readonly<{
+  facts: ReadonlyArray<RecurringTransactionFact>;
+  cursor: BudgetContributionCursor;
+  complete: boolean;
+}>;
 
 type CaptureFacts = Readonly<{
   db: D1Database;

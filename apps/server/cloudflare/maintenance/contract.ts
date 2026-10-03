@@ -23,6 +23,7 @@ export type ScheduledOperation =
   | "hostedTurn.sweep"
   | "patPairing.sweep"
   | "dashboard.projectionRepair"
+  | "recurring.evaluate"
   | "ingestion.uploadAdmissionSweep"
   | "agent.workersAiAdmissionSweep"
   | "release.smoke.expiry"

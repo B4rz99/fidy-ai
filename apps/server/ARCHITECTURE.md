@@ -578,6 +578,34 @@ unchanged; this checkpoint neither enables production nor grants a public media 
 The existing ingress telemetry is sufficient for this refusal-only path; no new external workflow
 or provider egress is introduced.
 
+### Recurring owner composition
+
+Recurring owns historical monthly charge patterns, private supporting evidence, immutable first
+confirmations and permanent announcement eligibility. It does not own Subscription billing or
+Insight scheduling/delivery. Core publishes exact schemas and deterministic decisions; the shell
+contract declares the Free `recurring.listRecurringSeries` canonical query (`read`, no agent
+confirmation). Public HTTP and hosted queries call the same native owner.
+
+Transactions publishes bounded effective recurring facts and revision/Consent commit guards through
+its native `operations.ts`. The minimal joinable revision projection exposes only `userId` and
+`revision`; identities authorize nothing. Transaction-owned D1 triggers retain invalidation with
+financial writes, SourceAttestations and reversible Reconciliation. Recurring consumes these
+publications rather than reading Transaction tables or reproducing effective-Transaction policy.
+
+Maintenance dispatches four pending Users round-robin through the existing User coordinator.
+Persisted scan/detect/cutover phases survive interruption; pages contain 128 financial facts,
+one group is detected per step, and final series/evidence/confirmation/progress writes share one
+revision- and Consent-guarded D1 unit. V1 fails closed above 512 facts per group or 128 retained
+series; it does not report a truncated evaluation as current. Canonical reads return at most 32
+patterns with evaluation status and revision-pinned cursors, decoding output before the final
+live-authority/Audit/PAT-use unit. Corrections repair evidence; gaps never imply cancellation.
+
+The native confirmation reader returns bounded immutable occurrences with an explicit User and
+historical UserContext under current processing Consent. Suppressed confirmations never become
+delayed announcements; delivery remains #29/#26. See
+[ADR 0032](../../docs/adr/0032-deterministic-recurring-charge-detection.md) for detector, suppression,
+calendar and resource policies.
+
 ### Insights owner composition
 
 Insights publishes immutable scheduled occurrences, exact Currency-separated Money groups, lifecycle

@@ -107,9 +107,14 @@ Currency contribute. Alerts latch once each at 80% and 100% per month.
 _Avoid_: Limit, goal, target.
 
 **RecurringSeries**:
-A repeating charge detected from comparable Transaction Money in one Currency — rent or another
-recurring transaction.
-_Avoid_: Subscription (that word means the user's own paid plan).
+A historical repeating-charge pattern detected from comparable Transaction Money in one Currency
+and an explicit Counterparty. It does not establish that the charge is still active or cancelled.
+_Avoid_: Subscription (that word means the user's own paid plan), active subscription.
+
+**RecurringSeriesConfirmed**:
+An immutable occurrence recording the first detection of a RecurringSeries and its announcement
+eligibility. It means detector confirmation, not a decision or approval by the User.
+_Avoid_: User confirmation, recurring alert (delivery is separate).
 
 ### Ingestion
 

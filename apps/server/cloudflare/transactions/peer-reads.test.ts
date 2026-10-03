@@ -8,7 +8,13 @@ import { prepareUserContext } from "../identity/user-context/operations";
 import { listCategories } from "../categories/operations";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import type { BudgetContributionQuery } from "./contract";
-import { readBudgetContributions, readDashboardTransactions } from "./operations";
+import {
+  findRecurringSnapshot,
+  prepareRecurringFactGuard,
+  readBudgetContributions,
+  readDashboardTransactions,
+  readRecurringFacts,
+} from "./operations";
 
 const databases = isolatedTestDatabases();
 const userId = "10000000-0000-4000-8000-000000000051";
@@ -46,6 +52,7 @@ const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
           "0018_dashboard",
           "0019_canonical_child_guards",
           "0020_dashboard_projection",
+          "0027_recurring",
         ].map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
       })
     );
@@ -59,9 +66,63 @@ const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
         )
       )
     );
+    yield* Effect.tryPromise(() =>
+      db.batch(
+        [userId, otherUserId].map((subject) =>
+          db
+            .prepare(
+              `INSERT INTO onboarding_consent_records (id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) VALUES (?, ?, '{}', 'disclosure', 'decision', 0, 0)`
+            )
+            .bind(subject, subject)
+        )
+      )
+    );
     return db;
   });
 afterAll(() => databases.dispose());
+
+it("projects only one User's recurring facts and rolls back a stale revision commit", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          movement(db, 1),
+          movement(db, 2, { userId: otherUserId }),
+          movement(db, 3, { direction: "inflow" }),
+        ])
+      );
+      const snapshot = Option.getOrThrow(
+        yield* findRecurringSnapshot({ db, userId: UserId.make(userId) })
+      );
+      const query = {
+        db,
+        userId: UserId.make(userId),
+        revision: snapshot.revision,
+        cursor: { occurredAt: "", transactionId: "" },
+      };
+      const page = Option.getOrThrow(yield* readRecurringFacts(query));
+      expect(page.facts.map((fact) => fact.id)).toEqual([transactionId(1)]);
+      yield* Effect.tryPromise(() => movement(db, 4).run());
+      expect(Option.isNone(yield* readRecurringFacts(query))).toBe(true);
+      yield* Effect.tryPromise(() =>
+        db.prepare("CREATE TABLE peer_result (value TEXT NOT NULL) STRICT").run()
+      );
+      const rejected = yield* Effect.exit(
+        Effect.tryPromise(() =>
+          db.batch([
+            db.prepare("INSERT INTO peer_result (value) VALUES ('published')"),
+            prepareRecurringFactGuard(query),
+          ])
+        )
+      );
+      expect(rejected._tag).toBe("Failure");
+      const unchanged = yield* Effect.tryPromise(() =>
+        db.prepare("SELECT * FROM peer_result").all()
+      );
+      expect(unchanged.results).toEqual([]);
+    })
+  ));
 
 const movementDefaults = {
   userId,

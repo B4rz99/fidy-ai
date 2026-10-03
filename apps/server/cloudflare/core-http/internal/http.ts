@@ -32,6 +32,7 @@ import {
 import { BudgetId, CreateBudgetInput, UpdateBudgetInput } from "../../../src/core/budgets/contract";
 import { DeliveryEvidenceInput, InsightEventId } from "../../../src/core/insights/contract";
 import { browseBudgets, budgetRefusal, evaluateBudgetAlerts } from "../../budgets/operations";
+import { listRecurringSeries } from "../../recurring/operations";
 import { listPendingInsights } from "../../insights/operations";
 import { browseDashboard } from "../../dashboard/operations";
 import { ownsTransactionPath as transactionPath } from "../../../src/shell/transactions/runtime";
@@ -1375,6 +1376,20 @@ const dashboardResponse = (
         });
   });
 
+const primaryCanonicalOwner = (
+  input: Parameters<typeof insightResponse>[0]
+): Option.Option<Effect.Effect<Response>> => {
+  if (input.operation.id === "recurring.listRecurringSeries") {
+    return Option.some(
+      listRecurringSeries({
+        db: input.environment.DB,
+        subject: input.subject,
+        request: input.request,
+      }).pipe(Effect.withSpan(input.operation.id))
+    );
+  }
+  return Option.orElse(insightResponse(input), () => dashboardResponse(input));
+};
 /** Once admitted, every credential executes through the same canonical operation dispatch. */
 const executeCanonicalWork = (
   input: Readonly<{
@@ -1403,7 +1418,7 @@ const executeCanonicalWork = (
       catch: () => undefined,
     }).pipe(Effect.orElseSucceed(unavailable));
   }
-  const primaryOwner = Option.orElse(insightResponse(input), () => dashboardResponse(input));
+  const primaryOwner = primaryCanonicalOwner(input);
   const otherOwner = Option.orElse(budgetResponse(input), () =>
     Option.orElse(keywordRuleResponse(input), () => memoryResponse(input))
   );

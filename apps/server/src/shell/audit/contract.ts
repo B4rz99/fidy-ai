@@ -27,6 +27,7 @@ export type AuditCredentialOperation =
   | "insights.markInsightDelivered"
   | "insights.markInsightRead"
   | "insights.dismissInsight"
+  | "recurring.listRecurringSeries"
   | "memory.forget"
   | "memory.recall"
   | "memory.remember"
@@ -59,7 +60,7 @@ export type AuditAuthority = Readonly<{
 
 type AcceptedSessionOperation = Extract<
   AuditCredentialOperation,
-  `${"budgets" | "dashboard" | "insights" | "subscription"}.${string}`
+  `${"budgets" | "dashboard" | "insights" | "subscription" | "recurring"}.${string}`
 >;
 type CategoryOperation = Extract<AuditCredentialOperation, `categories.${string}`>;
 type LegacySessionOperation = Exclude<

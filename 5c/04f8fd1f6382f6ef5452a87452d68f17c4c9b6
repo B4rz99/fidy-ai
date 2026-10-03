@@ -15,6 +15,10 @@ apps/web/src/transport/wompi-nequi-lifecycle.test.ts
   s_a71cc4d896fb30::t_ce615f94ad62d7 15,34-36,148,155
 bun.lock
   s_a71cc4d896fb30::t_c4aa9721c701d1 11,335,337,339,341,343,345,347,349
+infra/cloudflare/verify-edge-policy.ts
+  s_a71cc4d896fb30::t_a0d3a8c472e57a 5
+infra/cloudflare/verify-edge-policy.test.ts
+  s_a71cc4d896fb30::t_10727f89315a45 7
 ---
 {
   "schema_version": "authorship/3.0.0",

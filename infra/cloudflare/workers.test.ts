@@ -439,13 +439,13 @@ describe("Production topology contract", () => {
       "/providers/wompi/billing-events",
       "/web/hosted-turns",
       "/web/hosted-turns/delivery",
-      "/web/subscription/card-enrollments/prepare",
-      "/web/subscription/card-enrollments/submit",
+      "/web/subscription/payment-enrollments/prepare",
+      "/web/subscription/payment-enrollments/submit",
     ]) {
       expect(expression).toContain(`"${path}"`);
     }
     for (const prefix of [
-      "/web/subscription/card-enrollments/",
+      "/web/subscription/payment-enrollments/",
       "/web/subscription/billing-attempts/",
     ]) {
       expect(expression).toContain(`starts_with(http.request.uri.path, "${prefix}")`);

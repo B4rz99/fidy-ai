@@ -2,7 +2,7 @@ import { type Miniflare } from "miniflare";
 import { type WorkflowStepConfig } from "cloudflare:workers";
 import { afterEach, expect, it, vi } from "vitest";
 import { type Cause, Clock, Effect, Option, Schema } from "effect";
-import { makeCardEnrollmentD1 } from "./card-enrollment-d1.test-fixture";
+import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import {
   dispatchBillingCollection,
@@ -34,10 +34,10 @@ afterEach(() => {
   return disposed;
 });
 
-const fixture = (): Promise<D1Database> =>
+const fixture = (method: "card" | "nequi" = "card"): Promise<D1Database> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const created = yield* makeCardEnrollmentD1(`billing-collection-${++fixtureCounter}`, [
+      const created = yield* makePaymentEnrollmentD1(`billing-collection-${++fixtureCounter}`, [
         "CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL) STRICT",
       ]);
       instance = Option.some(created.instance);
@@ -48,14 +48,14 @@ const fixture = (): Promise<D1Database> =>
           db
             .prepare(`INSERT INTO card_enrollments (id, user_id, price_id, billing_email, status,
         payment_source_mode, contracts_json, disclosure_json, prepared_at_ms, expires_at_ms,
-        payment_request_id, wompi_candidate_source_id)
-        VALUES (?, ?, ?, 'payer@example.com', 'creating', 'create', '{}', '{}', 0, 900000, ?, 3891)`)
-            .bind(enrollmentId, userId, priceId, paymentRequestId),
+        payment_request_id, wompi_candidate_source_id, method, wompi_environment)
+        VALUES (?, ?, ?, 'payer@example.com', 'creating', 'create', '{}', '{}', 0, 900000, ?, 3891, ?, 'sandbox')`)
+            .bind(enrollmentId, userId, priceId, paymentRequestId, method),
           db
             .prepare(`INSERT INTO card_payment_sources
-        (id, user_id, enrollment_id, wompi_source_id, billing_email, created_at_ms)
-        VALUES (?, ?, ?, 3891, 'payer@example.com', 0)`)
-            .bind(sourceId, userId, enrollmentId),
+        (id, user_id, enrollment_id, wompi_source_id, billing_email, created_at_ms, method)
+        VALUES (?, ?, ?, 3891, 'payer@example.com', 0, ?)`)
+            .bind(sourceId, userId, enrollmentId, method),
           db
             .prepare("UPDATE card_enrollments SET status = 'available' WHERE id = ?")
             .bind(enrollmentId),
@@ -156,6 +156,46 @@ const billingRuntime = (DB: D1Database): BillingRuntimeFixture => ({
   WOMPI_EVENT_SECRET: "test_events_payment_test_secret",
 });
 
+it("collects a Nequi source without card installment fields and settles the common paid period once", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => fixture("nequi"));
+      let posts = 0;
+      vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
+        const result = Response.json({ data: transaction("APPROVED") });
+        if (init?.method === "POST") {
+          posts++;
+          return new Request(input, init).json().then((body: unknown) => {
+            expect(body).toHaveProperty("payment_source_id", 3891);
+            expect(body).not.toHaveProperty("payment_method");
+            expect(body).not.toHaveProperty("phone_number");
+            return result;
+          });
+        }
+        return Promise.resolve(result);
+      });
+      const run = (): Promise<void> =>
+        runBillingCollectionWorkflow({
+          environment: billingRuntime(db),
+          payload: { version: 1, attemptId },
+          activity: (_name, _options, activity) => activity(),
+        });
+      yield* Effect.tryPromise(run);
+      yield* Effect.tryPromise(run);
+      expect(posts).toBe(1);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT status FROM billing_attempts WHERE id = ?").bind(attemptId).first()
+        )
+      ).toEqual({ status: "succeeded" });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM billing_paid_periods").first()
+        )
+      ).toEqual({ count: 1 });
+    })
+  ));
+
 const sendSignedEvent = (
   db: D1Database,
   input: Readonly<{ transactionId: string; status: "APPROVED" | "DECLINED"; timestamp: number }>
@@ -209,7 +249,7 @@ const state = (db: D1Database): Promise<string> =>
 it("settles verified approval with standing, Audit and follow-up exactly once across replay and reordering", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(fixture);
+      const db = yield* Effect.tryPromise(() => fixture());
       let observed = transaction("APPROVED");
       const verify = (): Effect.Effect<void, Cause.UnknownError> =>
         verifyProviderTransaction(db, () => observed);
@@ -245,7 +285,7 @@ it("settles verified approval with standing, Audit and follow-up exactly once ac
 it("holds verified negative until the retry opportunity and admits a later verified success", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(fixture);
+      const db = yield* Effect.tryPromise(() => fixture());
       let observed = transaction("DECLINED");
       const verify = (): Effect.Effect<void, Cause.UnknownError> =>
         verifyProviderTransaction(db, () => observed);
@@ -321,7 +361,7 @@ it("holds verified negative until the retry opportunity and admits a later verif
 it("restarts the negative retry opportunity after a verified pending observation", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(fixture);
+      const db = yield* Effect.tryPromise(() => fixture());
       let observed = transaction("DECLINED");
       const verify = (): Effect.Effect<void, Cause.UnknownError> =>
         verifyProviderTransaction(db, () => observed);
@@ -344,7 +384,7 @@ it("restarts the negative retry opportunity after a verified pending observation
 it("does not repeat an ambiguous Workflow POST and settles a later signed callback after provider GET", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(fixture);
+      const db = yield* Effect.tryPromise(() => fixture());
       const environment = billingRuntime(db);
       const eventSecret = environment.WOMPI_EVENT_SECRET;
       const provider = vi.fn((_request: URL, init?: RequestInit): Promise<Response> => {
@@ -455,7 +495,7 @@ it("does not repeat an ambiguous Workflow POST and settles a later signed callba
 it("retains ambiguity without a callback and settles a privileged provider-ID recovery hint", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(fixture);
+      const db = yield* Effect.tryPromise(() => fixture());
       const environment = billingRuntime(db);
       const provider = vi.fn((_url: URL, init?: RequestInit): Promise<Response> =>
         init?.method === "POST"
@@ -517,7 +557,7 @@ it("retains ambiguity without a callback and settles a privileged provider-ID re
 it("rejects forged callback evidence across Public and Core ingress without writes or provider calls", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(fixture);
+      const db = yield* Effect.tryPromise(() => fixture());
       const provider = vi.fn(() => Promise.reject(new Error("forbidden provider call")));
       vi.stubGlobal("fetch", provider);
       const request = new Request("https://api.fidyapp.com/providers/wompi/billing-events", {
@@ -546,7 +586,7 @@ it("rejects forged callback evidence across Public and Core ingress without writ
 it("durably claims each lookup before Workflow handoff, even if the handoff is ambiguous", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(fixture);
+      const db = yield* Effect.tryPromise(() => fixture());
       yield* verifyProviderTransaction(db, () => transaction("PENDING"));
       const create = vi.fn((_options: { id: string; params: unknown }): Promise<unknown> =>
         Promise.reject(new Error("handoff unavailable"))
@@ -583,7 +623,7 @@ it("durably claims each lookup before Workflow handoff, even if the handoff is a
 it("bounds pending provider-ID lookups and resumes only from a confirmed lookup hint", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(fixture);
+      const db = yield* Effect.tryPromise(() => fixture());
       yield* verifyProviderTransaction(db, () => transaction("PENDING"));
       const create = vi.fn((_options: { id: string; params: unknown }) => Promise.resolve({}));
       const workflow = { create, get: (_id: string): Promise<unknown> => Promise.resolve({}) };
@@ -616,7 +656,7 @@ it("bounds pending provider-ID lookups and resumes only from a confirmed lookup 
 it("bounds unrelated signed callback lookups and ignores identical event replay", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(fixture);
+      const db = yield* Effect.tryPromise(() => fixture());
       const secret = "test_events_payment_test_secret";
       const unrelatedId = "other-merchant-transaction";
       const timestamp = 1530291411;
@@ -699,7 +739,7 @@ it("bounds unrelated signed callback lookups and ignores identical event replay"
 it("accepts same-second signed approval after a verified negative without replaying collection", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(fixture);
+      const db = yield* Effect.tryPromise(() => fixture());
       const timestamp = 1530291411;
       const environment = billingRuntime(db);
       let observed: "APPROVED" | "DECLINED" = "DECLINED";
@@ -763,7 +803,7 @@ it("accepts same-second signed approval after a verified negative without replay
 it("rejects a signed callback with another User's source even when its reference matches", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(fixture);
+      const db = yield* Effect.tryPromise(() => fixture());
       const otherUser = "10000000-0000-4000-8000-000000000002";
       const otherEnrollment = "20000000-0000-4000-8000-000000000002";
       const otherSource = "30000000-0000-4000-8000-000000000002";
@@ -774,8 +814,8 @@ it("rejects a signed callback with another User's source even when its reference
           db
             .prepare(`INSERT INTO card_enrollments (id, user_id, price_id, billing_email, status,
         payment_source_mode, contracts_json, disclosure_json, prepared_at_ms, expires_at_ms,
-        payment_request_id, wompi_candidate_source_id)
-        VALUES (?, ?, ?, 'other@example.com', 'creating', 'create', '{}', '{}', 0, 900000, ?, 3892)`)
+        payment_request_id, wompi_candidate_source_id, wompi_environment)
+        VALUES (?, ?, ?, 'other@example.com', 'creating', 'create', '{}', '{}', 0, 900000, ?, 3892, 'sandbox')`)
             .bind(otherEnrollment, otherUser, priceId, "50000000-0000-4000-8000-000000000002"),
           db
             .prepare(`INSERT INTO card_payment_sources
@@ -865,7 +905,7 @@ it("rejects a signed callback with another User's source even when its reference
 it("publishes the armed intent once per cooldown and deduplicates Queue redelivery by Workflow identity", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(fixture);
+      const db = yield* Effect.tryPromise(() => fixture());
       const send = vi.fn((_work: unknown) => Promise.resolve());
       yield* dispatchBillingCollection({
         identity: Option.none(),
@@ -904,7 +944,7 @@ it("publishes the armed intent once per cooldown and deduplicates Queue redelive
 it("coordinates two out-of-order BillingAttempts by stable User in the Subscription D1 unit", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(fixture);
+      const db = yield* Effect.tryPromise(() => fixture());
       const secondEnrollment = "20000000-0000-4000-8000-000000000002";
       const secondAttempt = "40000000-0000-4000-8000-000000000002";
       const secondRequest = "50000000-0000-4000-8000-000000000002";
@@ -917,8 +957,8 @@ it("coordinates two out-of-order BillingAttempts by stable User in the Subscript
           db
             .prepare(`INSERT INTO card_enrollments (id, user_id, price_id, billing_email, status,
         payment_source_mode, contracts_json, disclosure_json, prepared_at_ms, expires_at_ms,
-        payment_request_id)
-        VALUES (?, ?, ?, 'payer@example.com', 'creating', 'reuse', '{}', '{}', 0, 900000, ?)`)
+        payment_request_id, wompi_environment)
+        VALUES (?, ?, ?, 'payer@example.com', 'creating', 'reuse', '{}', '{}', 0, 900000, ?, 'sandbox')`)
             .bind(secondEnrollment, userId, priceId, secondRequest),
           db
             .prepare("UPDATE card_enrollments SET status = 'available' WHERE id = ?")
@@ -967,7 +1007,7 @@ it("coordinates two out-of-order BillingAttempts by stable User in the Subscript
 it("refuses a mismatched source even with a valid provider id and reference", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(fixture);
+      const db = yield* Effect.tryPromise(() => fixture());
       const forged = { ...transaction("APPROVED"), payment_source_id: 3892 };
       const result = yield* Effect.exit(verifyProviderTransaction(db, () => forged));
       expect(result._tag).toBe("Failure");

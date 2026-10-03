@@ -143,8 +143,8 @@ const enrollmentLifetimeMs = 900_000;
 await db
   .prepare(`INSERT INTO card_enrollments
   (id, user_id, price_id, billing_email, status, payment_source_mode, contracts_json,
-   disclosure_json, prepared_at_ms, expires_at_ms, wompi_candidate_source_id)
-  VALUES (?, ?, ?, ?, 'creating', 'create', '{}', '{}', ?, ?, ?)`)
+   disclosure_json, prepared_at_ms, expires_at_ms, wompi_candidate_source_id, wompi_environment)
+  VALUES (?, ?, ?, ?, 'creating', 'create', '{}', '{}', ?, ?, ?, 'sandbox')`)
   .bind(
     sourceEnrollmentId,
     fixtureUserId,
@@ -172,7 +172,7 @@ await db
   .prepare("UPDATE card_enrollments SET status = 'available' WHERE id = ?")
   .bind(sourceEnrollmentId)
   .run();
-// A second User has verified credentials and consent but no CardPaymentSource. It must
+// A second User has verified credentials and consent but no PaymentSource. It must
 // traverse first-time tokenization instead of silently reusing the primary User's source.
 await seedIdentity({
   userId: firstCardUserId,

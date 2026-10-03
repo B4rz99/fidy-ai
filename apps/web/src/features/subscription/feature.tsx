@@ -6,7 +6,7 @@ import {
   useAtomValue,
 } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Data, Effect, Array as EffectArray, Option } from "effect";
+import { Data, Effect, Array as EffectArray, Option, Predicate, Redacted } from "effect";
 import { Atom } from "effect/unstable/reactivity";
 import { type FormEvent, type JSX, type RefCallback, useRef, useState } from "react";
 import { useSession } from "@/session/session-context";
@@ -17,7 +17,11 @@ import { Button } from "@/ui/components/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/ui/components/card";
 import { Input } from "@/ui/components/input";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
-import { type FidyClient, type SubscriptionStatus } from "@/transport/client";
+import {
+  type EnrollmentMethod,
+  type FidyClient,
+  type SubscriptionStatus,
+} from "@/transport/client";
 import { Skeleton } from "@/ui/components/skeleton";
 import { formatMoney } from "@/ui/money";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
@@ -31,6 +35,7 @@ import { type CardFields } from "@/transport/wompi-tokenization";
 import {
   type Enrollment,
   type EnrollmentGateway,
+  type PaymentFields,
   type PaymentSubmission,
   type PreparedEnrollment,
   makeEnrollmentGateway,
@@ -303,15 +308,130 @@ const allDecisionsAccepted = (decisions: EnrollmentDecisions): boolean =>
 
 const enrollmentSubmitLabel = (busy: boolean): string => (busy ? "Activando Pro…" : "Activar Pro");
 
-const PreparedEnrollmentForm = ({
+type EnrollmentFormProps = Readonly<{
+  enrollment: PreparedEnrollment;
+  busy: boolean;
+  submit: (billingEmail: string, fields?: PaymentFields) => void;
+}>;
+
+const BillingEmailField = ({
+  email,
+  disabled,
+  setEmail,
+}: Readonly<{
+  email: string;
+  disabled: boolean;
+  setEmail: (email: string) => void;
+}>): JSX.Element => (
+  <>
+    <label className="flex flex-col gap-1" htmlFor="billing-email">
+      Correo de facturación
+      <Input
+        id="billing-email"
+        autoComplete="email"
+        disabled={disabled}
+        required
+        type="email"
+        value={email}
+        onChange={(event) => setEmail(event.target.value)}
+      />
+    </label>
+    <p className="text-sm text-muted-foreground">
+      Fidy conservará este correo y lo compartirá con Wompi para los cobros automáticos posteriores
+      de tu fuente de pago reutilizable.
+    </p>
+  </>
+);
+
+const NequiNumberField = (
+  props: Readonly<{
+    disabled: boolean;
+    required: boolean;
+    value: string;
+    change: (value: string) => void;
+  }>
+): JSX.Element => (
+  <label className="flex flex-col gap-1" htmlFor="nequi-number">
+    Número de Nequi
+    <Input
+      id="nequi-number"
+      autoComplete="off"
+      inputMode="numeric"
+      pattern="3[0-9]{9}"
+      maxLength={10}
+      required={props.required}
+      disabled={props.disabled}
+      value={props.value}
+      onChange={(event) => props.change(digitsOnly(event.target.value))}
+    />
+  </label>
+);
+
+const noPendingAuthorization: Option.Option<AbortController> = Option.none();
+
+const NequiEnrollmentForm = ({ enrollment, busy, submit }: EnrollmentFormProps): JSX.Element => {
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [billingEmail, setBillingEmail] = useState<string>(enrollment.billingEmail);
+  const [awaitingApproval, setAwaitingApproval] = useState(false);
+  const [decisions, setDecisions] = useState<EnrollmentDecisions>(emptyDecisions);
+  const authorization = useRef(noPendingAuthorization);
+  const abort = (): void => {
+    Option.map(authorization.current, (controller) => controller.abort());
+  };
+  const [formLifetimeRef] = useState<RefCallback<HTMLFormElement>>(
+    () => (): ReturnType<RefCallback<HTMLFormElement>> => abort
+  );
+  const onSubmit = (event: FormEvent): void => {
+    event.preventDefault();
+    if (!allDecisionsAccepted(decisions) || busy) return;
+    abort();
+    const controller = new AbortController();
+    authorization.current = Option.some(controller);
+    submit(billingEmail.trim().toLowerCase(), {
+      method: "nequi",
+      phoneNumber: Redacted.make(phoneNumber),
+      signal: controller.signal,
+      onAwaiting: () => {
+        setPhoneNumber("");
+        setAwaitingApproval(true);
+      },
+    });
+  };
+  return (
+    <form ref={formLifetimeRef} className="flex flex-col gap-5" onSubmit={onSubmit}>
+      <NequiNumberField
+        required={!awaitingApproval}
+        disabled={busy}
+        value={phoneNumber}
+        change={(value) => {
+          setAwaitingApproval(false);
+          setPhoneNumber(value);
+        }}
+      />
+      <BillingEmailField email={billingEmail} disabled={busy} setEmail={setBillingEmail} />
+      <EnrollmentConsent
+        enrollment={enrollment}
+        disabled={busy}
+        decisions={decisions}
+        setDecisions={setDecisions}
+      />
+      {awaitingApproval && busy ? (
+        <output aria-live="polite">
+          Aprueba la suscripción en Nequi. Luego verificaremos tu fuente de pago.
+        </output>
+      ) : null}
+      <Button disabled={!allDecisionsAccepted(decisions) || busy} type="submit">
+        {busy ? "Esperando autorización…" : "Autorizar con Nequi"}
+      </Button>
+    </form>
+  );
+};
+
+const PreparedCardEnrollmentForm = ({
   enrollment,
   busy,
   submit,
-}: Readonly<{
-  enrollment: PreparedEnrollment;
-  busy: boolean;
-  submit: (billingEmail: string, card?: CardFields) => void;
-}>): JSX.Element => {
+}: EnrollmentFormProps): JSX.Element => {
   const [billingEmail, setBillingEmail] = useState<string>(enrollment.billingEmail);
   const [fields, setFields] = useState<CardFields>(emptyCardFields);
   const [decisions, setDecisions] = useState<EnrollmentDecisions>(emptyDecisions);
@@ -332,24 +452,11 @@ const PreparedEnrollmentForm = ({
       {enrollment.paymentSourceMode === "create" ? (
         <CardFieldsForm disabled={busy} fields={fields} setFields={setFields} />
       ) : (
-        <p>Usaremos de nuevo tu fuente de pago guardada. No necesitas ingresar la tarjeta.</p>
+        <p>
+          Usaremos de nuevo tu fuente de pago guardada. No necesitas ingresar los datos de nuevo.
+        </p>
       )}
-      <label className="flex flex-col gap-1" htmlFor="billing-email">
-        Correo de facturación
-        <Input
-          id="billing-email"
-          autoComplete="email"
-          disabled={busy}
-          required
-          type="email"
-          value={billingEmail}
-          onChange={(event) => setBillingEmail(event.target.value)}
-        />
-      </label>
-      <p className="text-sm text-muted-foreground">
-        Fidy conservará este correo y lo compartirá con Wompi para los cobros automáticos
-        posteriores de tu fuente de pago reutilizable.
-      </p>
+      <BillingEmailField email={billingEmail} disabled={busy} setEmail={setBillingEmail} />
       <EnrollmentConsent
         decisions={decisions}
         disabled={busy}
@@ -363,6 +470,13 @@ const PreparedEnrollmentForm = ({
   );
 };
 
+const PreparedEnrollmentForm = (props: EnrollmentFormProps): JSX.Element =>
+  props.enrollment.method === "nequi" && props.enrollment.paymentSourceMode === "create" ? (
+    <NequiEnrollmentForm key={props.enrollment.enrollmentId} {...props} />
+  ) : (
+    <PreparedCardEnrollmentForm key={props.enrollment.enrollmentId} {...props} />
+  );
+
 const EnrollmentStatusAction = ({
   current,
   busy,
@@ -375,14 +489,14 @@ const EnrollmentStatusAction = ({
   refresh: (enrollmentId: PreparedEnrollment["enrollmentId"]) => void;
 }>): JSX.Element => {
   if (current.status === "available") {
-    return <output>Tu tarjeta quedó disponible para cobros recurrentes.</output>;
+    return <output>Tu fuente de pago quedó disponible para cobros recurrentes.</output>;
   }
   if (current.status === "refused" || current.status === "expired") {
     return (
       <div className="flex flex-col gap-2">
         <p role="alert">
           {current.status === "refused"
-            ? "No pudimos inscribir la tarjeta."
+            ? "No pudimos inscribir la fuente de pago."
             : "La inscripción venció."}
         </p>
         <Button disabled={busy} onClick={prepare} type="button">
@@ -395,7 +509,7 @@ const EnrollmentStatusAction = ({
     <div className="flex flex-col gap-2">
       <output>
         {current.status === "verifying"
-          ? "Estamos verificando el resultado. No vuelvas a enviar la tarjeta."
+          ? "Estamos verificando el resultado. No vuelvas a enviar los datos."
           : "Creando tu fuente de pago…"}
       </output>
       <Button disabled={busy} onClick={() => refresh(current.enrollmentId)} type="button">
@@ -455,9 +569,13 @@ const submissionFlow = (
   prepared,
 });
 
-const preparePaymentFlow = Effect.fn(function* (gateway: EnrollmentGateway, priceId: PriceId) {
+const preparePaymentFlow = Effect.fn(function* (
+  gateway: EnrollmentGateway,
+  priceId: PriceId,
+  method: EnrollmentMethod
+) {
   const prepared = yield* Effect.tryPromise({
-    try: () => gateway.prepare(priceId),
+    try: () => gateway.prepare(priceId, method),
     catch: () => new EnrollmentInteractionFailed(),
   });
   if (prepared.status !== "verifying" && prepared.status !== "creating") {
@@ -551,7 +669,7 @@ const renderPaymentEnrollment = (input: {
   current: PaymentFlowState;
   busy: boolean;
   prepare: () => void;
-  submit: (prepared: PreparedEnrollment, email: string, card?: CardFields) => void;
+  submit: (prepared: PreparedEnrollment, email: string, fields?: PaymentFields) => void;
   refresh: (enrollmentId: PreparedEnrollment["enrollmentId"]) => void;
 }): JSX.Element => {
   const { current, busy, prepare, submit, refresh } = input;
@@ -566,7 +684,7 @@ const renderPaymentEnrollment = (input: {
           <PreparedEnrollmentForm
             busy
             enrollment={prepared.value}
-            submit={(email, card) => submit(prepared.value, email, card)}
+            submit={(email, fields) => submit(prepared.value, email, fields)}
           />
         )}
         <PaymentSubmissionStatus submission={current.value} />
@@ -580,7 +698,7 @@ const renderPaymentEnrollment = (input: {
         <PreparedEnrollmentForm
           busy={busy}
           enrollment={enrollment}
-          submit={(email, card) => submit(enrollment, email, card)}
+          submit={(email, fields) => submit(enrollment, email, fields)}
         />
       </div>
     );
@@ -600,7 +718,7 @@ const EnrollmentContent = ({
   enrollment: Option.Option<PaymentFlowState>;
   busy: boolean;
   prepare: () => void;
-  submit: (prepared: PreparedEnrollment, email: string, card?: CardFields) => void;
+  submit: (prepared: PreparedEnrollment, email: string, fields?: PaymentFields) => void;
   refresh: (enrollmentId: PreparedEnrollment["enrollmentId"]) => void;
 }>): JSX.Element =>
   Option.match(enrollment, {
@@ -609,6 +727,7 @@ const EnrollmentContent = ({
   });
 
 const PaymentDetails = ({
+  method,
   enrollment,
   busy,
   failed,
@@ -620,14 +739,15 @@ const PaymentDetails = ({
   busy: boolean;
   failed: boolean;
   prepare: () => void;
-  submit: (prepared: PreparedEnrollment, email: string, card?: CardFields) => void;
+  submit: (prepared: PreparedEnrollment, email: string, fields?: PaymentFields) => void;
   refresh: (enrollmentId: PreparedEnrollment["enrollmentId"]) => void;
+  method: EnrollmentMethod;
 }>): JSX.Element => (
-  <section aria-label="Pago con tarjeta">
+  <section aria-label={method === "card" ? "Pago con tarjeta" : "Pago con Nequi"}>
     <Card>
       <CardHeader>
         <CardTitle>
-          <h2>Pago con tarjeta</h2>
+          <h2>{method === "card" ? "Pago con tarjeta" : "Pago con Nequi"}</h2>
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
@@ -644,8 +764,8 @@ const PaymentDetails = ({
       </CardContent>
       <CardFooter>
         <p className="text-sm text-muted-foreground">
-          Los datos de tu tarjeta viajan directamente desde este navegador a Wompi. Fidy no los
-          recibe ni los conserva.
+          {method === "card" ? "Los datos de tu tarjeta" : "Tu número de Nequi"} viajan directamente
+          desde este navegador a Wompi. Fidy no los recibe ni los conserva.
         </p>
       </CardFooter>
     </Card>
@@ -833,14 +953,70 @@ const refreshEnrollmentFlow = (
 
 const submitPaymentFlow = (
   gateway: EnrollmentGateway,
-  input: Readonly<{ prepared: PreparedEnrollment; email: string; card: Option.Option<CardFields> }>
+  input: Readonly<{
+    prepared: PreparedEnrollment;
+    email: string;
+    fields: Option.Option<PaymentFields>;
+  }>
 ): Effect.Effect<PaymentFlowState, EnrollmentInteractionFailed> =>
   Effect.tryPromise({
-    try: () => gateway.submit(input.prepared, input.email, Option.getOrUndefined(input.card)),
+    try: () => gateway.submit(input.prepared, input.email, Option.getOrUndefined(input.fields)),
     catch: () => new EnrollmentInteractionFailed(),
   }).pipe(
     Effect.map((submission) => submissionFlow(submission, input.email, Option.some(input.prepared)))
   );
+
+const PaymentMethodSelection = ({
+  selected,
+  disabled,
+  select,
+}: Readonly<{
+  selected: EnrollmentMethod;
+  disabled: boolean;
+  select: (method: EnrollmentMethod) => void;
+}>): JSX.Element => (
+  <section aria-label="Método de pago" className="flex gap-2">
+    {(["card", "nequi"] as const).map((method) => (
+      <Button
+        key={method}
+        type="button"
+        aria-pressed={selected === method}
+        disabled={disabled}
+        onClick={() => select(method)}
+      >
+        {method === "card" ? "Tarjeta" : "Nequi"}
+      </Button>
+    ))}
+  </section>
+);
+
+const PaymentFlowDetails = ({
+  offer,
+  method,
+  interaction,
+}: Readonly<{
+  offer: SubscriptionOfferPresentation;
+  method: EnrollmentMethod;
+  interaction: EnrollmentInteraction;
+}>): JSX.Element => (
+  <PaymentDetails
+    method={method}
+    busy={interaction.busy}
+    enrollment={interaction.enrollment}
+    failed={interaction.failed}
+    prepare={() => interaction.start((gateway) => preparePaymentFlow(gateway, offer.id, method))}
+    refresh={(id) => interaction.start((gateway) => refreshEnrollmentFlow(gateway, id))}
+    submit={(prepared, email, fields) =>
+      interaction.start((gateway) =>
+        submitPaymentFlow(gateway, {
+          prepared,
+          email,
+          fields: Option.fromNullishOr(fields),
+        })
+      )
+    }
+  />
+);
 
 const ReadyOffersContent = ({
   offers,
@@ -850,20 +1026,33 @@ const ReadyOffersContent = ({
   gateway: Option.Option<EnrollmentGateway>;
 }>): JSX.Element => {
   const [selectedId, setSelectedId] = useState<Option.Option<PriceId>>(Option.none);
-  const { enrollment, busy, failed, interrupt, start, reset } = useEnrollmentInteraction(gateway);
+  const [method, setMethod] = useState<EnrollmentMethod>("card");
+  const interaction = useEnrollmentInteraction(gateway);
+  const { enrollment, busy, interrupt, start, reset } = interaction;
   const refreshLifetimeRef = usePaymentRefreshLifetimeRef(interrupt);
   const presented = offers.map(presentSubscriptionOffer);
   const sharedTerms = presentSubscriptionOffer(offers[0]);
-  const selectionDisabled = Option.exists(
-    enrollment,
-    (current) => current._tag === "PaymentSubmission"
-  );
+  const selectionDisabled = Option.exists(enrollment, Predicate.isTagged("PaymentSubmission"));
   const selectedOffer = Option.flatMap(selectedId, (id) =>
     EffectArray.findFirst(presented, (offer) => offer.id === id)
   );
   return (
     <div ref={refreshLifetimeRef} className="flex flex-col gap-6">
       <SubscriptionTerms offer={sharedTerms} />
+      <PaymentMethodSelection
+        selected={method}
+        disabled={busy || selectionDisabled}
+        select={(choice) => {
+          if (method === choice) return;
+          setMethod(choice);
+          reset();
+          Option.match(selectedId, {
+            onNone: () => undefined,
+            onSome: (id) =>
+              start((availableGateway) => preparePaymentFlow(availableGateway, id, choice)),
+          });
+        }}
+      />
       <OfferSelection
         disabled={busy || selectionDisabled}
         presented={presented}
@@ -871,31 +1060,17 @@ const ReadyOffersContent = ({
         select={(id) => {
           setSelectedId(Option.some(id));
           reset();
-          start((availableGateway) => preparePaymentFlow(availableGateway, id));
+          start((availableGateway) => preparePaymentFlow(availableGateway, id, method));
         }}
       />
       {Option.match(selectedOffer, {
         onNone: () => null,
         onSome: (offer) => (
-          <PaymentDetails
-            busy={busy}
-            enrollment={enrollment}
-            failed={failed}
-            prepare={() =>
-              start((availableGateway) => preparePaymentFlow(availableGateway, offer.id))
-            }
-            refresh={(id) =>
-              start((availableGateway) => refreshEnrollmentFlow(availableGateway, id))
-            }
-            submit={(prepared, email, card) =>
-              start((availableGateway) =>
-                submitPaymentFlow(availableGateway, {
-                  prepared,
-                  email,
-                  card: Option.fromNullishOr(card),
-                })
-              )
-            }
+          <PaymentFlowDetails
+            key={`${method}:${offer.id}`}
+            offer={offer}
+            method={method}
+            interaction={interaction}
           />
         ),
       })}

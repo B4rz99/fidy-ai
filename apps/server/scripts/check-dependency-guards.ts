@@ -1833,11 +1833,11 @@ const PROBES: readonly Probe[] = [
       {
         path: `${subscriptionPublished}/runtime.ts`,
         source:
-          'import { handleCardEnrollment } from "../subscription/runtime";\n' +
+          'import { handlePaymentEnrollment } from "../subscription/runtime";\n' +
           'import { executeProtectedSubscriptionQuery } from "../subscription/operations";\n' +
           'import { activePaidSubscriptionCondition } from "~/shell/subscription/operations";\n' +
           'import { SubscriptionEnrollmentApi } from "~/shell/subscription/contract";\n' +
-          "export const published = [handleCardEnrollment, executeProtectedSubscriptionQuery, activePaidSubscriptionCondition, SubscriptionEnrollmentApi];\n",
+          "export const published = [handlePaymentEnrollment, executeProtectedSubscriptionQuery, activePaidSubscriptionCondition, SubscriptionEnrollmentApi];\n",
       },
     ],
     name: "Subscription runtime composes enrollment while peers observe standing and paid access",

@@ -101,6 +101,7 @@ const terms = (
 });
 const prepared = {
   status: "prepared",
+  method: "card",
   enrollmentId,
   price: offers[1],
   billingEmail: "usuario@example.com",
@@ -133,8 +134,8 @@ const installReusedEnrollment = (page: Page): Promise<() => unknown> =>
       );
       let submitted: unknown;
       yield* Effect.tryPromise(() =>
-        page.route(`${apiOrigin}/web/subscription/card-enrollments/prepare`, (route) => {
-          expect(route.request().postDataJSON()).toEqual({ priceId: offerIds[1] });
+        page.route(`${apiOrigin}/web/subscription/payment-enrollments/prepare`, (route) => {
+          expect(route.request().postDataJSON()).toEqual({ priceId: offerIds[1], method: "card" });
           return route.fulfill({
             status: ok,
             contentType: "application/json",
@@ -143,7 +144,7 @@ const installReusedEnrollment = (page: Page): Promise<() => unknown> =>
         })
       );
       yield* Effect.tryPromise(() =>
-        page.route(`${apiOrigin}/web/subscription/card-enrollments/submit`, (route) => {
+        page.route(`${apiOrigin}/web/subscription/payment-enrollments/submit`, (route) => {
           submitted = route.request().postDataJSON();
           return route.fulfill({
             status: ok,

@@ -453,7 +453,11 @@ Subscription publishes safe Price, enrollment, BillingAttempt and standing decla
 `core/subscription/contract.ts`, and calendar-period and enrollment decisions in `operations.ts`.
 Its shell contract owns both the canonical read group and the separate browser-only enrollment API;
 the browser client consumes those declarations without provider or persistence implementation.
-Enrollment remains unavailable to canonical agents and PAT callers.
+Enrollment remains unavailable to canonical agents and PAT callers. Card and direct-app Nequi
+authorization share the Subscription-owned PaymentEnrollment and billing lifecycle. Enrollment
+requires a fresh WebSession and active Consent; sensitive payment details and transient provider
+authorization material are not retained. Authorization or PaymentSource availability alone never
+grants paid Pro: activation requires independently verified matching BillingAttempt settlement.
 
 The shell operations own paid-access predicates and bounded prepared standing reads. A prepared read
 carries its row decoder with its statements, so native callers never know Subscription storage

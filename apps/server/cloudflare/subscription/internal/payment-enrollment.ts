@@ -1,6 +1,7 @@
 import { verifiedEmailQuery } from "../../email-authentication/operations";
 import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
 import { authenticateWebSession } from "../../web-session/operations";
+import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { freshSessionQuery } from "../../../src/shell/web-session/operations";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import { UserContext, UserId } from "../../../src/core/identity/contract";
@@ -9,27 +10,40 @@ import {
   BillingAttempt,
   BillingAttemptId,
   BillingEmail,
-  CardEnrollment,
-  CardEnrollmentId,
-  CardPaymentSubmission,
+  EnrollmentMethod,
+  PaymentEnrollment,
+  PaymentEnrollmentId,
   PaymentRequestId,
+  PaymentSubmission,
   Price,
   RecurringDisclosure,
   WompiContractEvidenceSet,
 } from "../../../src/core/subscription/contract";
-import { CardPaymentSourceId, WompiSourceId } from "./wompi-model";
+import { PaymentSourceId, WompiSourceId } from "./wompi-model";
 import {
-  PrepareCardEnrollmentPayload,
-  SubmitCardEnrollmentPayload,
-  cardEnrollmentInvalidBody,
-  cardEnrollmentRateLimitedBody,
-  cardEnrollmentUnavailableBody,
+  PreparePaymentEnrollmentPayload,
+  SubmitPaymentEnrollmentPayload,
+  paymentEnrollmentInvalidBody,
+  paymentEnrollmentRateLimitedBody,
+  paymentEnrollmentUnavailableBody,
 } from "../../../src/shell/subscription/contract";
 import { type WompiEnrollmentClientService, makeWompiEnrollmentClient } from "./wompi-client";
-import { Cause, Clock, Data, DateTime, Effect, Exit, Option, Schema } from "effect";
+import {
+  Cause,
+  Clock,
+  Data,
+  DateTime,
+  Effect,
+  Encoding,
+  Exit,
+  Option,
+  Redacted,
+  Result,
+  Schema,
+} from "effect";
 
-import { claimPreparedCardEnrollment } from "./card-enrollment-claim";
-import { admitCardPreparationAttempt } from "./card-preparation-admission";
+import { claimPreparedPaymentEnrollment } from "./payment-enrollment-claim";
+import { admitEnrollmentAttempt } from "./enrollment-admission";
 import { ResourceAdmissionRefused } from "../../resource-admission/contract";
 import { RequestBodyPolicy } from "../../http/contract";
 import { readBoundedRequestBody } from "../../http/operations";
@@ -54,6 +68,7 @@ const WompiConfiguration = Schema.Struct({
   ),
 });
 const Session = Schema.Struct({
+  session_id: Schema.String,
   user_id: UserId,
   timeZone: UserContext.fields.timeZone,
   email_address: BillingEmail,
@@ -72,10 +87,12 @@ const Terms = Schema.Struct({
   paymentMethods: Price.fields.paymentMethods,
 });
 const EnrollmentRow = Schema.Struct({
-  id: CardEnrollmentId,
+  id: PaymentEnrollmentId,
   user_id: UserId,
   price_id: Price.fields.id,
   billing_email: BillingEmail,
+  method: EnrollmentMethod,
+  wompi_environment: Schema.NullOr(WompiEnvironment),
   payment_source_mode: Schema.Literals(["create", "reuse"]),
   status: Schema.Literals([
     "preparing",
@@ -127,20 +144,22 @@ const firstGroupEnd = 8;
 const secondGroupEnd = 12;
 const thirdGroupEnd = 16;
 const fourthGroupEnd = 20;
+const billingInsertResultFromEnd = -2;
 const forbiddenStatus = 403;
 const unauthorizedStatus = 401;
-const uuidPath = /^\/web\/subscription\/(?:card-enrollments|billing-attempts)\/([0-9a-f-]{36})$/u;
+const uuidPath =
+  /^\/web\/subscription\/(?:payment-enrollments|billing-attempts)\/([0-9a-f-]{36})$/u;
 const jsonPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 6144,
   deadlineMilliseconds: 2000,
 });
 const noStore = { "cache-control": "no-store" };
 const invalid = (status = 400): Response =>
-  Response.json(cardEnrollmentInvalidBody, { status, headers: noStore });
+  Response.json(paymentEnrollmentInvalidBody, { status, headers: noStore });
 const unavailable = (): Response =>
-  Response.json(cardEnrollmentUnavailableBody, { status: 503, headers: noStore });
+  Response.json(paymentEnrollmentUnavailableBody, { status: 503, headers: noStore });
 const rateLimited = (): Response =>
-  Response.json(cardEnrollmentRateLimitedBody, { status: 429, headers: noStore });
+  Response.json(paymentEnrollmentRateLimitedBody, { status: 429, headers: noStore });
 const json = (body: unknown): Response => Response.json(body, { headers: noStore });
 const instant = (ms: number): string => DateTime.formatIso(DateTime.makeUnsafe(ms));
 const id = (): string => Effect.runSync(workerCrypto.randomUUIDv4.pipe(Effect.orDie));
@@ -205,18 +224,33 @@ const authority = (
       userId: UserId.make(subject.value.userId),
       statement: protectConsentStatement({
         statement: {
-          sql: `SELECT s.userId AS user_id, u.timeZone, v.emailAddress AS email_address FROM (${session.sql}) AS s
+          sql: `SELECT s.id AS session_id, s.userId AS user_id, u.timeZone, v.emailAddress AS email_address FROM (${session.sql}) AS s
             JOIN identity_user_context AS u ON u.userId = s.userId
             JOIN (${email.sql}) AS v ON v.userId = s.userId WHERE 1 = 1`,
           params: [...session.params, ...email.params],
         },
         subject: { _tag: "User", userId: subject.value.userId },
-        requirement: "granted",
+        requirement: "active",
       }),
     })
       .first()
       .then((row) => decodeRow(Session, row));
   });
+
+const enrollmentAuthority = (session: typeof Session.Type, now: number): OwnedStatement => {
+  const fresh = freshSessionQuery({
+    subject: {
+      sql: "SELECT ? AS sessionId, ? AS userId",
+      params: [session.session_id, session.user_id],
+    },
+    current: now,
+  });
+  return protectConsentStatement({
+    statement: fresh,
+    subject: { _tag: "User", userId: session.user_id },
+    requirement: "active",
+  });
+};
 
 const price = (db: D1Database, priceId: string): Promise<Option.Option<Price>> =>
   db
@@ -255,7 +289,7 @@ const project = (
   row: typeof EnrollmentRow.Type,
   selectedPrice: Price,
   publicKey: string
-): CardEnrollment => {
+): PaymentEnrollment => {
   switch (row.status) {
     case "prepared": {
       const contracts = parse(Schema.toCodecJson(WompiContractEvidenceSet), row.contracts_json);
@@ -266,6 +300,7 @@ const project = (
       return {
         status: "prepared",
         enrollmentId: row.id,
+        method: row.method,
         price: selectedPrice,
         billingEmail: row.billing_email,
         contracts: contracts.value,
@@ -281,6 +316,7 @@ const project = (
       return {
         status: "refused",
         enrollmentId: row.id,
+        method: row.method,
         priceId: row.price_id,
         reason: row.refusal_reason ?? "provider-error",
       };
@@ -288,7 +324,12 @@ const project = (
     case "available":
     case "expired":
     case "verifying":
-      return { status: row.status, enrollmentId: row.id, priceId: row.price_id };
+      return {
+        status: row.status,
+        enrollmentId: row.id,
+        method: row.method,
+        priceId: row.price_id,
+      };
   }
 };
 
@@ -322,17 +363,35 @@ const prepare = ({
 }>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const body = yield* waitFor(() => readBody(request, PrepareCardEnrollmentPayload));
+      const body = yield* waitFor(() => readBody(request, PreparePaymentEnrollmentPayload));
       if (Option.isNone(body)) return invalid();
       const selected = yield* waitFor(() => price(environment.DB, body.value.priceId));
       if (Option.isNone(selected)) return invalid();
+      const incompatibleSource = yield* waitFor(() =>
+        environment.DB.prepare(
+          `SELECT s.id FROM card_payment_sources AS s WHERE s.user_id = ? AND (s.method <> ?
+            OR NOT EXISTS (SELECT 1 FROM card_enrollments AS origin WHERE origin.id = s.enrollment_id
+              AND (origin.wompi_environment = ? OR (origin.wompi_environment IS NULL AND EXISTS
+                (SELECT 1 FROM billing_attempts AS a WHERE a.payment_source_id = s.id AND a.wompi_environment = ?))))
+            OR EXISTS (SELECT 1 FROM billing_attempts AS a WHERE a.payment_source_id = s.id AND a.wompi_environment <> ?))`
+        )
+          .bind(
+            session.user_id,
+            body.value.method,
+            environment.WOMPI_ENVIRONMENT,
+            environment.WOMPI_ENVIRONMENT,
+            environment.WOMPI_ENVIRONMENT
+          )
+          .first()
+      );
+      if (incompatibleSource !== null) return invalid();
       const active = yield* waitFor(() =>
         environment.DB.prepare(`SELECT id FROM card_enrollments WHERE user_id = ?
     AND status IN ('preparing', 'prepared', 'creating', 'verifying') ORDER BY prepared_at_ms DESC LIMIT 1`)
           .bind(session.user_id)
           .first()
       );
-      const activeId = decodeRow(Schema.Struct({ id: CardEnrollmentId }), active);
+      const activeId = decodeRow(Schema.Struct({ id: PaymentEnrollmentId }), active);
       if (Option.isSome(activeId)) {
         const existing = yield* waitFor(() =>
           enrollment(environment.DB, session.user_id, activeId.value.id)
@@ -340,10 +399,12 @@ const prepare = ({
         if (
           Option.isSome(existing) &&
           existing.value.price_id === selected.value.id &&
+          existing.value.method === body.value.method &&
+          existing.value.wompi_environment === environment.WOMPI_ENVIRONMENT &&
           existing.value.status === "prepared" &&
           existing.value.expires_at_ms > now
         ) {
-          const presented = yield* Schema.encodeEffect(Schema.toCodecJson(CardEnrollment))(
+          const presented = yield* Schema.encodeEffect(Schema.toCodecJson(PaymentEnrollment))(
             project(existing.value, selected.value, environment.WOMPI_PUBLIC_KEY)
           );
           return json(presented);
@@ -362,14 +423,14 @@ const prepare = ({
         ) {
           const activePrice = yield* waitFor(() => price(environment.DB, existing.value.price_id));
           if (Option.isNone(activePrice)) return unavailable();
-          const presented = yield* Schema.encodeEffect(Schema.toCodecJson(CardEnrollment))(
+          const presented = yield* Schema.encodeEffect(Schema.toCodecJson(PaymentEnrollment))(
             project(existing.value, activePrice.value, environment.WOMPI_PUBLIC_KEY)
           );
           return json(presented);
         }
       }
       const attempt = yield* Effect.exit(
-        admitCardPreparationAttempt({ db: environment.DB, userId: session.user_id, now })
+        admitEnrollmentAttempt({ db: environment.DB, userId: session.user_id, now })
       );
       if (Exit.isFailure(attempt)) {
         return Option.exists(
@@ -401,16 +462,18 @@ const prepare = ({
             .run()
         );
       }
-      const enrollmentId = CardEnrollmentId.make(id());
+      const enrollmentId = PaymentEnrollmentId.make(id());
       const reserved = yield* waitFor(() =>
         environment.DB.prepare(`INSERT OR IGNORE INTO card_enrollments
-    (id, user_id, price_id, billing_email, status, payment_source_mode, contracts_json,
-    disclosure_json, prepared_at_ms, expires_at_ms) VALUES (?, ?, ?, ?, 'preparing', 'create', '{}', '{}', ?, ?)`)
+    (id, user_id, price_id, billing_email, method, wompi_environment, status, payment_source_mode, contracts_json,
+    disclosure_json, prepared_at_ms, expires_at_ms) VALUES (?, ?, ?, ?, ?, ?, 'preparing', 'create', '{}', '{}', ?, ?)`)
           .bind(
             enrollmentId,
             session.user_id,
             selected.value.id,
             session.email_address,
+            body.value.method,
+            environment.WOMPI_ENVIRONMENT,
             now,
             now + enrollmentLifetimeMs
           )
@@ -431,15 +494,18 @@ const prepare = ({
       }
       const statement = "Autorizo los cobros recurrentes de mi suscripción.";
       const disclosure = RecurringDisclosure.make({
-        revision: "wompi-card-enrollment-v1",
+        revision:
+          body.value.method === "card" ? "wompi-card-enrollment-v1" : "wompi-nequi-enrollment-v1",
         displayedText: statement,
         contentSha256: Array.from(yield* waitFor(() => digest(statement)), (byte) =>
           byte.toString(hexBase).padStart(2, "0")
         ).join(""),
       });
       const source = yield* waitFor(() =>
-        environment.DB.prepare("SELECT id FROM card_payment_sources WHERE user_id = ?")
-          .bind(session.user_id)
+        environment.DB.prepare(
+          "SELECT id FROM card_payment_sources WHERE user_id = ? AND method = ?"
+        )
+          .bind(session.user_id, body.value.method)
           .first()
       );
       const inserted = yield* waitFor(() =>
@@ -464,7 +530,7 @@ const prepare = ({
         enrollment(environment.DB, session.user_id, enrollmentId)
       );
       if (Option.isNone(retained)) return unavailable();
-      const presented = yield* Schema.encodeEffect(Schema.toCodecJson(CardEnrollment))(
+      const presented = yield* Schema.encodeEffect(Schema.toCodecJson(PaymentEnrollment))(
         project(retained.value, selected.value, environment.WOMPI_PUBLIC_KEY)
       );
       return json(presented);
@@ -554,19 +620,24 @@ const finish = ({
         })
       );
       const reference = `fidy-${attemptId}`;
+      const current = yield* Clock.currentTimeMillis;
+      const guard = enrollmentAuthority(session, current);
       const statements = [
+        environment.DB.prepare(`INSERT INTO payment_commit_guards (enrollment_id, allowed)
+          VALUES (?, (SELECT 1 FROM (${guard.sql}) LIMIT 1))`).bind(row.id, ...guard.params),
         ...(Option.isNone(wompiSourceId)
           ? []
           : [
               environment.DB.prepare(`INSERT INTO card_payment_sources
-      (id, user_id, enrollment_id, wompi_source_id, billing_email, created_at_ms)
-      VALUES (?, ?, ?, ?, ?, ?)`).bind(
+      (id, user_id, enrollment_id, wompi_source_id, billing_email, created_at_ms, method)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`).bind(
                 sourceId,
                 userId,
                 row.id,
                 wompiSourceId.value,
                 row.billing_email,
-                now
+                now,
+                row.method
               ),
             ]),
         environment.DB.prepare(
@@ -592,13 +663,20 @@ const finish = ({
           requestId
         ),
       ];
-      const committed = yield* waitFor(() => environment.DB.batch(statements));
+      const committed = yield* waitFor(() =>
+        environment.DB.batch([
+          ...statements,
+          environment.DB.prepare("DELETE FROM payment_commit_guards WHERE enrollment_id = ?").bind(
+            row.id
+          ),
+        ])
+      );
       // D1 counts the arm and outbox trigger writes alongside the BillingAttempt insertion.
-      if ((committed.at(-1)?.meta.changes ?? 0) === 0) return unavailable();
+      if ((committed.at(billingInsertResultFromEnd)?.meta.changes ?? 0) === 0) return unavailable();
       environment.onAccepted(attemptId);
       const attempt = yield* waitFor(() => attemptFor(environment.DB, userId, attemptId));
       if (Option.isNone(attempt)) return unavailable();
-      const presented = yield* Schema.encodeEffect(Schema.toCodecJson(CardPaymentSubmission))({
+      const presented = yield* Schema.encodeEffect(Schema.toCodecJson(PaymentSubmission))({
         status: "payment-pending",
         enrollmentId: row.id,
         billingAttempt: attempt.value,
@@ -645,7 +723,9 @@ const resolveCandidate = ({
         return json({ status: "source-verifying", enrollmentId: row.id });
       }
       const wompi = yield* waitFor(() => makeWompi(environment));
-      const verified = yield* Effect.exit(wompi.verifyPaymentSource(WompiSourceId.make(candidate)));
+      const verified = yield* Effect.exit(
+        wompi.verifyPaymentSource(WompiSourceId.make(candidate), row.method)
+      );
       if (Exit.isFailure(verified) || verified.value.sourceId !== candidate) {
         return json({ status: "source-verifying", enrollmentId: row.id });
       }
@@ -667,12 +747,85 @@ const resolveCandidate = ({
           row,
           requestId,
           session,
-          sourceId: CardPaymentSourceId.make(id()),
+          sourceId: PaymentSourceId.make(id()),
           now,
           wompiSourceId: Option.some(candidate),
         })
       );
     })
+  );
+
+const verifyEnrollmentAuthorization = (
+  context: Readonly<{
+    environment: ConfiguredEnrollmentEnvironment;
+    userId: string;
+    input: SubmitPaymentEnrollmentPayload;
+    now: number;
+  }>
+): Effect.Effect<Result.Result<Option.Option<string>, Response>, EnrollmentBoundaryFailure> =>
+  Effect.gen(function* () {
+    const { environment, input, userId, now } = context;
+    if (input.paymentSourceMode !== "create" || input.method !== "nequi") {
+      return Result.succeed(Option.none());
+    }
+    const prefix = environment.WOMPI_ENVIRONMENT === "sandbox" ? "nequi_test_" : "nequi_prod_";
+    if (!Redacted.value(input.nequiToken).startsWith(prefix)) return Result.fail(invalid());
+    const admission = yield* Effect.result(
+      admitEnrollmentAttempt({ db: environment.DB, userId, now })
+    );
+    if (Result.isFailure(admission)) {
+      return Result.fail(
+        admission.failure._tag === "ResourceAdmissionRefused" ? rateLimited() : unavailable()
+      );
+    }
+    const wompi = yield* waitFor(() => makeWompi(environment));
+    const approved = yield* Effect.exit(wompi.verifyNequiApproval(input.nequiToken));
+    if (Exit.isFailure(approved)) return Result.fail(unavailable());
+    if (!approved.value) return Result.fail(invalid());
+    return Result.succeed(
+      Option.some(
+        Encoding.encodeHex(
+          yield* waitFor(() =>
+            digest(`${environment.WOMPI_ENVIRONMENT}:${Redacted.value(input.nequiToken)}`)
+          )
+        )
+      )
+    );
+  });
+
+const authorizeSourcePost = (
+  input: Readonly<{ db: D1Database; session: typeof Session.Type; enrollmentId: string }>
+): Effect.Effect<boolean, EnrollmentBoundaryFailure> =>
+  Effect.gen(function* () {
+    const guard = enrollmentAuthority(input.session, yield* Clock.currentTimeMillis);
+    const live = yield* waitFor(() =>
+      input.db
+        .prepare(guard.sql)
+        .bind(...guard.params)
+        .first()
+    );
+    if (live !== null) return true;
+    // No source POST has started: retire this claim as a known refusal, never as ambiguous work.
+    yield* waitFor(() =>
+      input.db
+        .prepare(
+          "UPDATE card_enrollments SET status = 'refused', refusal_reason = 'provider-error' WHERE id = ? AND user_id = ? AND status = 'creating'"
+        )
+        .bind(input.enrollmentId, input.session.user_id)
+        .run()
+    );
+    return false;
+  });
+
+const deniedClaimResponse = (
+  input: Readonly<{ db: D1Database; userId: string; enrollmentId: string }>
+): Effect.Effect<Response, EnrollmentBoundaryFailure> =>
+  waitFor(() => enrollment(input.db, input.userId, input.enrollmentId)).pipe(
+    Effect.map((row) =>
+      Option.isSome(row) && ["creating", "verifying", "debit_pending"].includes(row.value.status)
+        ? json({ status: "source-verifying", enrollmentId: row.value.id })
+        : invalid()
+    )
   );
 
 const submit = ({
@@ -688,13 +841,15 @@ const submit = ({
 }>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const body = yield* waitFor(() => readBody(request, SubmitCardEnrollmentPayload));
+      const body = yield* waitFor(() => readBody(request, SubmitPaymentEnrollmentPayload));
       if (Option.isNone(body)) return invalid();
       const input = body.value;
       let row = yield* waitFor(() =>
         enrollment(environment.DB, session.user_id, input.enrollmentId)
       );
-      if (Option.isNone(row)) return invalid();
+      if (Option.isNone(row) || row.value.wompi_environment !== environment.WOMPI_ENVIRONMENT) {
+        return invalid();
+      }
       if (
         row.value.payment_request_id !== null &&
         row.value.payment_request_id !== input.paymentRequestId
@@ -709,7 +864,7 @@ const submit = ({
           .first()
       );
       const existingId = decodeRow(
-        Schema.Struct({ id: BillingAttemptId, enrollment_id: CardEnrollmentId }),
+        Schema.Struct({ id: BillingAttemptId, enrollment_id: PaymentEnrollmentId }),
         existing
       );
       if (Option.isSome(existingId)) {
@@ -718,7 +873,7 @@ const submit = ({
           attemptFor(environment.DB, session.user_id, existingId.value.id)
         );
         if (Option.isNone(attempt)) return invalid();
-        const presented = yield* Schema.encodeEffect(Schema.toCodecJson(CardPaymentSubmission))({
+        const presented = yield* Schema.encodeEffect(Schema.toCodecJson(PaymentSubmission))({
           status: "payment-pending",
           enrollmentId: row.value.id,
           billingAttempt: attempt.value,
@@ -762,30 +917,54 @@ const submit = ({
       ) {
         return invalid();
       }
+      if (input.paymentSourceMode === "create" && input.method !== row.value.method) {
+        return invalid();
+      }
+      const authorization = yield* verifyEnrollmentAuthorization({
+        environment,
+        userId: session.user_id,
+        input,
+        now,
+      });
+      if (Result.isFailure(authorization)) return authorization.failure;
+      const authorizationDigest = authorization.success;
       const userId = yield* Schema.decodeEffect(UserId)(session.user_id);
+      const claimedAt = yield* Clock.currentTimeMillis;
       const claimed = yield* waitFor(() =>
-        claimPreparedCardEnrollment({
+        claimPreparedPaymentEnrollment({
           db: environment.DB,
+          authorityGuard: enrollmentAuthority(session, claimedAt),
           input: {
             userId,
             enrollmentId: input.enrollmentId,
             paymentRequestId: input.paymentRequestId,
             billingEmail: input.billingEmail,
             paymentSourceMode: input.paymentSourceMode,
+            ...(Option.isNone(authorizationDigest)
+              ? {}
+              : { authorizationDigest: authorizationDigest.value }),
           },
-          nowMs: now,
+          claimedAtMs: claimedAt,
         })
       );
-      if (!claimed) return json({ status: "source-verifying", enrollmentId: row.value.id });
+      if (!claimed) {
+        return yield* deniedClaimResponse({
+          db: environment.DB,
+          userId: session.user_id,
+          enrollmentId: input.enrollmentId,
+        });
+      }
       row = yield* waitFor(() => enrollment(environment.DB, session.user_id, input.enrollmentId));
       if (Option.isNone(row)) return unavailable();
       const retained = row.value;
       if (input.paymentSourceMode === "reuse") {
         const source = decodeRow(
-          Schema.Struct({ id: CardPaymentSourceId }),
+          Schema.Struct({ id: PaymentSourceId }),
           yield* waitFor(() =>
-            environment.DB.prepare("SELECT id FROM card_payment_sources WHERE user_id = ?")
-              .bind(session.user_id)
+            environment.DB.prepare(
+              "SELECT id FROM card_payment_sources WHERE user_id = ? AND method = ?"
+            )
+              .bind(session.user_id, retained.method)
               .first()
           )
         );
@@ -835,9 +1014,15 @@ const submit = ({
         );
         return json({ status: "refused", enrollmentId: row.value.id, reason: "terms-changed" });
       }
+      if (
+        !(yield* authorizeSourcePost({ db: environment.DB, session, enrollmentId: row.value.id }))
+      ) {
+        return invalid();
+      }
       const source = yield* Effect.exit(
         wompi.createPaymentSource({
-          cardToken: input.cardToken,
+          token: input.method === "card" ? input.cardToken : input.nequiToken,
+          method: input.method,
           billingEmail: input.billingEmail,
           contracts: fresh.value,
         })
@@ -881,7 +1066,7 @@ const submit = ({
   );
 
 /** Exact-origin fresh-session direct browser boundary; provider identity never leaves Core. */
-export const handleCardEnrollment = ({
+export const handlePaymentEnrollment = ({
   request,
   environment,
 }: {
@@ -911,12 +1096,12 @@ export const handleCardEnrollment = ({
       const session = yield* waitFor(() => authority(request, environment.DB, now));
       if (Option.isNone(session)) return invalid(unauthorizedStatus);
       const path = new URL(request.url).pathname;
-      if (path === "/web/subscription/card-enrollments/prepare" && request.method === "POST") {
+      if (path === "/web/subscription/payment-enrollments/prepare" && request.method === "POST") {
         return yield* waitFor(() =>
           prepare({ request, session: session.value, environment: configured, now })
         );
       }
-      if (path === "/web/subscription/card-enrollments/submit" && request.method === "POST") {
+      if (path === "/web/subscription/payment-enrollments/submit" && request.method === "POST") {
         return yield* waitFor(() =>
           submit({ request, session: session.value, environment: configured, now })
         );
@@ -939,7 +1124,7 @@ export const handleCardEnrollment = ({
         if (row.value.status === "preparing") return unavailable();
         const selected = yield* waitFor(() => price(environment.DB, row.value.price_id));
         if (Option.isNone(selected)) return unavailable();
-        const presented = yield* Schema.encodeEffect(Schema.toCodecJson(CardEnrollment))(
+        const presented = yield* Schema.encodeEffect(Schema.toCodecJson(PaymentEnrollment))(
           project(row.value, selected.value, configured.WOMPI_PUBLIC_KEY)
         );
         return json(presented);

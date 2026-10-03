@@ -93,8 +93,9 @@ OAuthConnection grants have fixed absolute expiration, audience-bound short cred
 refresh rotation; they never become PATs, WebSessions or Hosted Agent Sessions. Connection management
 and exact sensitive-operation confirmation belong to fresh first-party browser authority.
 
-The [compatibility report](docs/research/hosted-mcp-interoperability-977.md) records partial synthetic
-host evidence and explicit blockers. No production route, grant authority, client setup promise or
+The [compatibility report](docs/research/hosted-mcp-interoperability-977.md) records passing synthetic
+exchange/discovery/refresh evidence for exact Claude Code, Codex and Pi versions, their registration
+selection and explicit unsupported sensitive interactions. No production route, grant authority, client setup promise or
 launch enablement follows from accepting the design. Exact-host interoperability, real Core/D1
 security evidence, #35's shared User allowance and operator approval remain separate gates.
 

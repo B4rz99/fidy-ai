@@ -1,0 +1,42 @@
+[
+  { "event": "protected-resource-discovery" },
+  { "event": "issuer-discovery", "cimdAdvertised": true },
+  { "event": "protected-resource-discovery" },
+  { "event": "issuer-discovery", "cimdAdvertised": true },
+  { "event": "protected-resource-discovery" },
+  { "event": "issuer-discovery", "cimdAdvertised": true },
+  {
+    "event": "registration",
+    "mechanism": "DCR",
+    "name": "pi",
+    "redirects": ["http://127.0.0.1:61899/callback"],
+    "grantTypes": ["authorization_code", "refresh_token"]
+  },
+  {
+    "event": "authorization",
+    "mechanism": "CIMD",
+    "metadataClientId": "https://chatgpt.com/oauth/codex/client.json",
+    "pkce": "S256",
+    "resourceBound": true,
+    "redirectValid": true,
+    "scope": "read"
+  },
+  { "event": "callback", "issuerMatches": true },
+  {
+    "event": "authorization",
+    "mechanism": "DCR",
+    "pkce": "S256",
+    "resourceBound": true,
+    "redirectValid": true,
+    "scope": "read"
+  },
+  { "event": "callback", "issuerMatches": true },
+  { "event": "code-exchange", "pkceValid": true, "resourceBound": true },
+  { "event": "code-exchange", "pkceValid": true, "resourceBound": true },
+  { "event": "mcp", "method": "initialize", "version": null },
+  { "event": "mcp-response", "status": 400 },
+  { "event": "protected-resource-discovery" },
+  { "event": "issuer-discovery", "cimdAdvertised": true },
+  { "event": "mcp", "method": "initialize", "version": null },
+  { "event": "mcp-response", "status": 400 }
+]

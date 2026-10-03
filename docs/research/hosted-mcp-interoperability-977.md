@@ -2,208 +2,257 @@
 
 ## Result and scope
 
-Recorded 2026-10-03 against checkout `00f50e621c353d01d30781d2a00c77314394ace2`.
-This is a disposable local compatibility investigation for
-[#977](https://github.com/B4rz99/fidy-ai/issues/977), governed by the live body and latest scope
-comment of [#33](https://github.com/B4rz99/fidy-ai/issues/33). It implements no production OAuth,
-canonical caller or web UI. The [accepted successor ADR](../adr/0033-hosted-mcp-and-oauth-agent-grants.md)
-records downstream ownership and security design; it does not certify launch interoperability.
+Recorded 2026-10-03 for [#977](https://github.com/B4rz99/fidy-ai/issues/977), under the live body and
+latest scope comment of [#33](https://github.com/B4rz99/fidy-ai/issues/33). This is a disposable
+protocol/browser-exchange investigation, **not production OAuth or a security certification**.
+The [successor ADR](../adr/0033-hosted-mcp-and-oauth-agent-grants.md) owns the accepted downstream
+design. No production deployment, real Fidy User/session, financial work, provider/model invocation,
+onboarding or launch enablement occurred.
 
-**The exact-host matrix is not green.** Pi completed synthetic browser exchange, refresh and
-legacy discovery. Codex refused the callback with required issuer validation. Claude completed
-synthetic browser exchange but later health/reconnect reported authentication needed. No actual
-Fidy sign-in, financial query/mutation, revocation, or sensitive-operation approval was tested.
-Production deployment, real Users/providers and onboarding remain unauthorized. Do not close the
-parent host acceptance gate using this report.
+**The revised three-host compatibility slice passes.** Claude Code 2.1.288 uses stateless
+2026-07-28 and CIMD; Codex 0.160.0 uses 2025-11-25 and CIMD; Pi 1.0.1 uses 2025-11-25 and DCR.
+All completed the synthetic browser exchange with S256 and resource binding, reconnected using
+rotated refresh credentials twice in separate processes, and rejected substituted callback issuers
+before token exchange. Claude's CLI health probe exercises `server/discover`; Codex's real app
+server and Pi's CLI exercise legacy initialization/discovery. This is not proof of canonical
+queries/mutations, real browser consent, atomic refresh security, or sensitive-operation execution.
 
-## Versions and source provenance
+The earlier `d905ab38f9` checkpoint was incomplete. Its observations remain in
+`evidence-stateless.json` and `evidence-legacy.json`; they do not describe the revised launch matrix.
+Continuation evidence and source inspection resolved its two Spec findings rather than weakening
+issuer policy. Sensitive handoff is specified in ADR 0033 but remains **unsupported for every host
+until its downstream browser/host implementation is tested**; annotations or SDK capabilities are
+not certification.
 
-| Component               | Exact version / evidence                                               |
-| ----------------------- | ---------------------------------------------------------------------- |
-| Claude Code             | `2.1.288`, installed only in `/tmp/fidy-977-spike`; `claude --version` |
-| Codex                   | `codex-cli 0.144.1`, installed executable; `codex --version`           |
-| Pi                      | `1.0.0`, `@earendil-works/pi-coding-agent`; `pi --version`             |
-| Bun                     | `1.4.1`                                                                |
-| Protocol fixture        | `effect@4.0.0`, isolated install; **not** root rc.115                  |
-| MCP revisions exercised | `2026-07-28` directly; Pi negotiated `2025-11-25`                      |
+## Exact versions and primary sources
 
-The npm `effect@4.0.0` tarball integrity observed via `npm view effect@4.0.0 dist.integrity`:
+| Component   | Revised tested version     | Evidence                                                                 |
+| ----------- | -------------------------- | ------------------------------------------------------------------------ |
+| Claude Code | `2.1.288`                  | isolated npm installation, `claude --version`                            |
+| Codex       | `0.160.0`                  | isolated `@openai/codex`, `codex --version`; supersedes rejected 0.144.1 |
+| Pi          | `1.0.1`                    | isolated `@earendil-works/pi-coding-agent`, `pi --version`               |
+| Effect      | `4.0.0`                    | exact isolated manifest; production workspace stays rc.115               |
+| Bun         | `1.4.1`                    | `bun --version`                                                          |
+| Protocols   | `2026-07-28`, `2025-11-25` | actual Effect request observations below                                 |
+
+The npm `effect@4.0.0` integrity observed through `npm view effect@4.0.0 dist.integrity`:
 `sha512-ooc1TG5t+FfzgYnFz2ff6BBKyZ7EwBRVXC7c4RhQUAD6/TZ2gTXXMeb4WX7a19ozQo4J73/QW+S00YAIresoMQ==`.
-The fixture manifest pins stable Effect without modifying the production Effect family. Stable
-imports use `effect/ai` and `effect/http`; the repository still uses rc.115 unstable namespaces.
+Host packages and Effect are pinned in `hosted-mcp-spike/package.json`. Only the disposable
+installation changes; a production Effect-family upgrade remains downstream work.
 
-Primary sources retrieved for this investigation:
+Primary sources checked:
 
-1. [Effect 4.0.0 McpProtocol source](https://unpkg.com/effect@4.0.0/src/ai/McpProtocol.ts),
-   lines 13–28, 182–247: dated protocol adapters, stateless 2026 and older stateful profiles.
-2. [Effect 4.0.0 McpServer source](https://unpkg.com/effect@4.0.0/src/ai/McpServer.ts),
-   lines 1490–1635: single endpoint HTTP, Origin/Accept/media policy, public `layerHttp`;
+1. [Effect 4.0.0 McpProtocol](https://unpkg.com/effect@4.0.0/src/ai/McpProtocol.ts), lines 13–28,
+   182–247: stateless 2026 and older stateful adapters;
+   [McpServer](https://unpkg.com/effect@4.0.0/src/ai/McpServer.ts), lines 1490–1635: HTTP transport,
+   Origin/Accept/media policy and `layerHttp`;
    [HttpRouter](https://unpkg.com/effect@4.0.0/src/http/HttpRouter.ts), lines 1417–1482:
-   public web handler and disposal. Source was inspected from the exact isolated install.
-3. [MCP 2026-07-28 Streamable HTTP](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http):
-   transport policy, required version/method metadata, stateless request lifecycle.
-4. [MCP authorization](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization):
-   protected-resource discovery, PKCE/resource binding, issuer response validation, scope selection,
-   refresh and step-up policy. [Client registration](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/client-registration)
-   prefers CIMD and retains DCR only for compatibility.
-5. [Claude Code MCP documentation](https://code.claude.com/docs/en/mcp), sections
-   “MCP client runtimes”, “Authenticate with remote MCP servers”, “Use pre-configured OAuth
-   credentials”, “Respond to MCP elicitation requests”: v2 supports 2026, CIMD discovery,
-   loopback callbacks, refresh and URL elicitation. This is current documentation, not proof that
-   every advertised behavior succeeded in the installed host.
-6. [Codex MCP documentation](https://developers.openai.com/codex/mcp): Streamable HTTP configuration,
-   OAuth login and scopes; exact-version source
-   [oauth.rs](https://github.com/openai/codex/blob/rust-v0.144.1/codex-rs/rmcp-client/src/oauth.rs) and
-   [perform_oauth_login.rs](https://github.com/openai/codex/blob/rust-v0.144.1/codex-rs/rmcp-client/src/perform_oauth_login.rs).
-   Do not infer successful issuer handling from those declarations.
-7. Pi installed `docs/mcp.md`, sections “Authenticate with OAuth”, “Use resources”, “Permissions”,
-   in `/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/`: DCR/public client configuration,
-   issuer discovery, loopback callbacks, refresh, no MCP Apps rendering, no automatic tool-call
-   retry. Upstream owner: [earendil-works/pi](https://github.com/earendil-works/pi),
-   `packages/coding-agent/docs/mcp.md`. Installed `dist/extensions/mcp/oauth.js` lines 180–240
-   serialize refresh; lines 310–344 forward callback issuer to the OAuth library. This installed
-   1.0.0 evidence is version-specific; mutable upstream main is not its version pin.
+   public web handler/disposal. Exact installed sources were inspected, not rc.115 API memory.
+2. [MCP 2026 transport](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http),
+   [authorization](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization),
+   [registration](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/client-registration):
+   stateless request metadata, issuer/resource validation, CIMD preference and DCR compatibility.
+3. [Claude Code documentation](https://code.claude.com/docs/en/mcp), “MCP client runtimes”,
+   “Authenticate with remote MCP servers”, “Use pre-configured OAuth credentials”, “Respond to MCP
+   elicitation requests”: v2/stateless, CIMD, loopback callbacks, refresh and URL elicitation.
+   These are sourced capabilities, not substitutes for actual observations.
+4. [Codex 0.144.1 callback source](https://github.com/openai/codex/blob/rust-v0.144.1/codex-rs/rmcp-client/src/perform_oauth_login.rs#L306-L362):
+   callback retains code/state but discards `iss`.
+   [Codex 0.160.0 source](https://github.com/openai/codex/blob/rust-v0.160.0/codex-rs/rmcp-client/src/perform_oauth_login.rs#L369-L401)
+   retains issuer; [lines 776–786](https://github.com/openai/codex/blob/rust-v0.160.0/codex-rs/rmcp-client/src/perform_oauth_login.rs#L776-L786)
+   call `handle_callback_with_issuer`. [Codex MCP docs](https://developers.openai.com/codex/mcp)
+   document HTTP/OAuth. The model-free host probe uses the installed binary's generated public
+   `ClientRequest.json`: `initialize`, `initialized`, `mcpServerStatus/list`. It drives Codex's
+   real MCP client; it does not replace it or invoke a model.
+5. Pi 1.0.1 installed `docs/mcp.md`, “Authenticate with OAuth”, “Use resources”, “Permissions”,
+   under the scratch `node_modules/@earendil-works/pi-coding-agent`: DCR, callbacks, refresh and
+   no automatic tool-call retry. Installed `dist/extensions/mcp/oauth.js`, lines 180–240,
+   serializes refresh; lines 310–344 forwards callback issuer.
+   Upstream [earendil-works/pi](https://github.com/earendil-works/pi),
+   `packages/coding-agent/docs/mcp.md`, is the owner, but mutable main is not an exact version pin.
+6. Actual host-owned CIMD documents retrieved in this continuation:
+   [Codex](https://chatgpt.com/oauth/codex/client.json),
+   [Claude Code](https://claude.ai/oauth/claude-code-client-metadata).
+   Both name themselves as public clients, permit authorization_code/refresh_token and register
+   `http://localhost/callback` and `http://127.0.0.1/callback`. The checked-in
+   `client-metadata.json` records their reviewed redirect projection. Port variation is the native
+   RFC 8252 exception, not a wildcard path. The simulator uses those operator-supplied projections;
+   it does not implement production CIMD fetching.
 
-## Actual observations versus simulation
+## Revised actual-host matrix
 
-The MCP wire implementation was **Effect**, not another MCP SDK or copied JSON-RPC handlers.
-HTTP requests in the test are client probes; they do not implement a replacement MCP server.
-The OAuth fixture deliberately simulates registration, approval and token issuance separately.
-It serves loopback HTTP, automatically approves GET `/authorize` and contains no real User,
-WebSession, Consent, D1, canonical operation or provider. An OS browser followed that fixture's
-redirect; it did not sign in to Fidy. Token/code values remained only in disposable local profiles
-and memory. Raw login logs/URLs and credential files are not checked in.
+| Behavior                                  | Claude Code 2.1.288                                    | Codex 0.160.0                                          | Pi 1.0.1                                   |
+| ----------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------ | ------------------------------------------ |
+| Add URL / synthetic browser exchange      | Pass                                                   | Pass                                                   | Pass                                       |
+| Protected-resource and issuer discovery   | Observed                                               | Observed                                               | Observed                                   |
+| Registration with CIMD and DCR advertised | **CIMD**, Claude-hosted URL                            | **CIMD**, Codex-hosted URL                             | **DCR**, claimed name `pi`                 |
+| Redirect handling                         | localhost callback; exact path, variable loopback port | 127.0.0.1 callback; exact path, variable loopback port | DCR-bound 127.0.0.1 callback               |
+| S256 authorization / verifier             | Fixture checks pass                                    | Fixture checks pass                                    | Fixture checks pass                        |
+| Resource in authorization/code/refresh    | Bound at all three seams                               | Bound at all three seams                               | Bound at all three seams                   |
+| Wrong callback issuer                     | Host rejects; no code exchange                         | Host rejects; no code exchange                         | Host rejects; no code exchange             |
+| Selected protocol                         | **2026-07-28**, `server/discover`                      | **2025-11-25**, initialized discovery                  | **2025-11-25**, initialized connection     |
+| 2026-only server                          | Stateless discovery passes                             | Startup fails with required-header refusal             | Startup fails with required-header refusal |
+| Forced expiry → rotated refresh/reconnect | Two separate process runs pass                         | Two separate process runs pass                         | Two separate process runs pass             |
+| Sensitive-operation handoff/resume        | Not certified; fail closed                             | Not certified; fail closed                             | Not certified; fail closed                 |
 
-| Behavior                              | Claude Code 2.1.288                                               | Codex 0.144.1                                                            | Pi 1.0.0                                                                                |
-| ------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| Add HTTP URL                          | Actual CLI configuration success                                  | Actual CLI configuration success                                         | Actual CLI configuration success                                                        |
-| Protected-resource / issuer discovery | Observed                                                          | Observed                                                                 | Observed                                                                                |
-| Registration                          | DCR, claimed name `Claude Code (spike)`                           | DCR, claimed name `Codex`                                                | DCR, claimed name `pi`                                                                  |
-| Callback                              | `http://localhost:56676/callback`                                 | `http://127.0.0.1:61068/callback/79JJnKJcmDd_`                           | `http://127.0.0.1:61100/callback`                                                       |
-| PKCE S256 / authorization resource    | Observed                                                          | Observed                                                                 | Observed                                                                                |
-| PKCE verifier / token resource        | Fixture checked both successfully                                 | Never reached token exchange                                             | Fixture checked both successfully                                                       |
-| Issuer response                       | `iss` emitted; exchange completed; hostile issuer not tested      | **Failed**: required issuer reported missing despite fixture emitting it | `iss` emitted; exchange completed; hostile issuer not tested                            |
-| Refresh rotation                      | One synthetic refresh accepted during login; reconnect not proved | Not reached                                                              | Repeated rotated refreshes accepted across login/list processes                         |
-| 2026-only discovery                   | Not demonstrated                                                  | Not reached                                                              | Failed: legacy `initialize` omitted required version header                             |
-| 2025-11-25 compatibility              | Reconnect returned “Needs authentication”; not proved             | Not reached                                                              | `initialize`, `notifications/initialized`, `mcp list --json` connected with empty tools |
-| CIMD preference                       | Documented, **not exercised**                                     | **Not exercised**                                                        | **Not exercised**; DCR observed                                                         |
-| Browser sensitive handoff/resume      | Documented URL elicitation, **not exercised**                     | **Not exercised**                                                        | **Not exercised**                                                                       |
+`host-outcomes.json` groups each host's two forced-expiry runs with its own safe event delta and
+caller-visible outcome. `evidence-resolved.json` retains the positive setup sequence;
+`evidence-wrong-issuer.json` contains three hostile callbacks and **zero code exchanges**;
+`evidence-strict.json` records actual Codex/Pi initialization rejection by the 2026-only server.
+Only Effect's **2025-11-25** adapter is necessary compatibility. There is no evidence requiring
+2024-11-05, 2025-03-26 or 2025-06-18; do not add them speculatively.
 
-Ports vary by run; callback paths in the observations are routing metadata, not approval authority.
-The empty tool catalog intentionally prevents any domain work. It proves connection/discovery only,
-not canonical schema projection or tool execution. Some Pi discovery requests were batched; the
-fixture's single-method observation is absent for those arrays, so do not infer which methods ran
-from that field alone. Pi's CLI `connected`/empty-tools result is the outcome evidence.
+No server notifications, SSE event resumption, MCP Apps, financial tools or application-wide
+protocol support are promised. Effect returns 405 for legacy clients' optional GET SSE probes;
+observed clients nevertheless completed POST discovery. Pi's `connected` output proves a connection
+with an empty catalog, not individual tool behavior. Claude's health command probes server discovery,
+not a financial tool call. The empty catalog prevents all domain work by construction.
 
-### Failures worth preserving
+## Diagnoses and controlled fixes
 
-- Codex's automatic OAuth flow ran twice (`mcp add` starts login itself, followed by explicit
-  `mcp login`). Both rejected with `Authorization server response missing required issuer:
-expected http://127.0.0.1:19770`. The fixture emits `iss` and advertises
-  `authorization_response_iss_parameter_supported: true`. Root cause is **not established**;
-  inspect exact callback transport and upstream source in the next focused reproduction. Do not
-  silently set the advertisement false, omit issuer validation or claim issuer interoperability.
-- Pi reached token exchange against a 2026-only Effect server, then failed with HTTP 400,
-  `MCP-Protocol-Version header is required`. Adding Effect's 2025-11-25 adapter allowed its observed
-  initialization profile and subsequent connected list. This is the only demonstrated older
-  adapter requirement. No 2024-11-05, 2025-03-26 or 2025-06-18 launch adapter is justified.
-- Claude login requires a terminal. A non-TTY attempt explicitly refused; a PTY run returned
-  `Authenticated with "spike"`. Later `mcp list` returned “Needs authentication”. The artificially
-  short three-second token window and host storage/reconnect path need isolation before attributing
-  this to a host defect. No stateless Claude discovery success is claimed.
-- Restarting the in-memory simulator invalidated saved registration/refresh state. Pi correctly
-  requested authorization again; deleting **only the disposable** Pi credential file and redoing
-  registration restored the synthetic journey. This is fixture lifecycle, not production durability.
+### Codex issuer failure
 
-## Protocol seam: red → green
+0.144.1's callback parser drops `iss` before the OAuth manager sees it. The original simulator
+already emitted `iss` and advertised issuer support, so the failure was not fixed by weakening
+metadata. 0.160.0 retains and validates it. The revised host completed exchange, and the separate
+wrong-issuer run refused before `/token`. Thus **0.144.1 is unsupported for this connection design**;
+0.160.0 is the validated host baseline. This is a version requirement, not a Fidy protocol workaround.
 
-`server.test.md` records a focused executable seam test. First run failed because the fixture module
-was absent. After adding Effect's handler, probes exposed required request metadata and `Mcp-Method`
-validation. The final independent expected result is HTTP 200 with an empty tools array, without
-initialization; a foreign browser Origin returns 403. Final run: **1 pass, 0 fail, 3 assertions**.
+### Claude reconnect failure
 
-This is not OAuth negative/security evidence. The synthetic OAuth fixture is intentionally not
-production validated; neither its maps nor automatic approval can become production authority.
-Downstream security tests must cover all parent negative cases at real ingress/Core/D1 seams.
+With the realistic ten-minute token window, a login using the canonical physical scratch path
+`/private/tmp/...` followed by a health command using symlink spelling `/tmp/...` still reported
+“Needs authentication”. Keeping the identical physical `CLAUDE_CONFIG_DIR` spelling returned
+“Connected” and a 2026 `server/discover` response. The fixture was unchanged during that comparison.
+This establishes a local profile-path discrepancy, not a Claude protocol limitation; credential-store
+namespace details are inferred, not asserted as inspected proprietary internals.
 
-## Reproduction
+Use `root=$(pwd -P)` consistently for all profiles. The original three-second expiry was also a bad
+fixture default and is replaced by the designed 600 seconds. `/expire-access` is explicit local
+fault injection so refresh evidence does not depend on waiting ten minutes or an expiry race.
 
-Artifacts are in [hosted-mcp-spike/](hosted-mcp-spike/). Executable snippets are Markdown deliberately:
-they use stable-only imports and an isolated dependency/runtime, not the rc.115 workspace. No root
-lint exclusion or suppression is needed. Extract their single JavaScript fence into the named files:
+### CIMD invalid requests
+
+Advertising CIMD caused Claude/Codex to use their HTTPS document URL as client_id instead of DCR.
+The first simulator lacked those documents' redirect declarations and correctly refused unknown
+redirects. This was an incomplete fixture, not missing Claude installation or a host auth defect.
+After retrieving both official documents and supplying exact callback declarations, both exchanged
+successfully. Pi still selected DCR under the same advertised capabilities, so DCR is necessary for
+its primary add-URL flow. Repeated names remain unverified display claims.
+
+## Registration and security conclusions
+
+**Resolved launch registration:** prefer CIMD for the validated Claude/Codex versions, retain bounded
+RFC 7591 public DCR for Pi 1.0.1. No client secret or manual pre-registration is necessary for these
+observed flows. Pre-registration may be troubleshooting, not the primary setup. This result does
+not generalize to older/newer hosts or imply that Pi can never gain CIMD support.
+
+Production fetch policy is ADR 0033's reviewed-origin/path allowlist, HTTPS-only, no redirects,
+16 KiB streamed bytes, three-second deadline, four-way concurrency and bounded cache, with
+DNS/private-address/rebinding protection. If safe destination enforcement is unavailable, fail
+closed. This simulator deliberately **never fetches arbitrary metadata URLs**; it receives a static
+operator-reviewed projection. SSRF/bounded-fetch implementation and negative tests belong to the
+future authority adapter, not this automatic-approval fixture. Claims, display names and metadata
+cannot grant User ownership.
+
+Issuer/resource/redirect/S256 checks in the fixture distinguish interoperability failures, not a
+security certification. The regression test rejects a substituted refresh resource without consuming
+its valid credential, then accepts the correct request. Real atomic refresh family revocation,
+revoked/expired grants, CSRF, two-User isolation and absence of partial D1 effects remain mandatory
+in downstream work. The fixture uses in-memory raw credentials intentionally for disposable
+interoperability and must never become a production adapter.
+
+## Sensitive browser handoff and approval design
+
+ADR 0033 specifies the same-User fresh-session approval, requested-only/narrower non-empty scopes,
+read-only omitted-scope default, no implicit write, fixed reviewed expiration and distinct revocation
+controls. It also specifies pending → approved → atomically consumed OAuthOperationConfirmation,
+exact operation/input digest/revisions, connection, expiry, public-only handoff reference,
+protocol-metadata resume and whole-batch consumption. A browser approval does not execute a mutation;
+model claims, host annotations and elicitation acceptance do not establish evidence.
+
+All three hosts remain **unsupported for sensitive execution until downstream host-facing handoff
+and resume tests pass**. Claude documentation of URL elicitation is not proof of exact resume
+behavior; Codex/Pi protocol capabilities are not confirmation. This ticket specifies that boundary
+and its fail-closed behavior rather than introducing untested production confirmation authority.
+No extra tool, custom MCP method or secret passed through the model is approved as a fallback.
+
+## Executable evidence and reproduction
+
+Artifacts live in [hosted-mcp-spike/](hosted-mcp-spike/). Snippets are Markdown because stable-only
+imports and the disposable runtime are separate from the rc.115 production workspace; no root lint
+suppression/exclusion is needed. The focused tests cover stateless discovery/Origin refusal and
+realistic exchange/resource refusal. Hosts run model-free: CLI MCP commands and Codex's app-server
+status request; no inference turn is started.
 
 ````bash
 scratch=$(mktemp -d)
 cp docs/research/hosted-mcp-spike/package.json "$scratch/"
+cp docs/research/hosted-mcp-spike/client-metadata.json "$scratch/"
 python3 - "$scratch" <<'PY'
 from pathlib import Path
 import sys
 root = Path('docs/research/hosted-mcp-spike')
-for source, output in [('server.md', 'server.mjs'), ('server.test.md', 'server.test.mjs'), ('oauth.md', 'oauth.mjs')]:
-    text = (root / source).read_text()
-    Path(sys.argv[1], output).write_text(text.split('```js\n', 1)[1].split('\n```', 1)[0] + '\n')
+for name in ['server', 'server.test', 'oauth', 'oauth.test']:
+    text = (root / (name + '.md')).read_text()
+    Path(sys.argv[1], name + '.mjs').write_text(text.split('```js\n', 1)[1].split('\n```', 1)[0] + '\n')
+text = (root / 'host-probes.md').read_text()
+Path(sys.argv[1], 'host-probes.py').write_text(text.split('```python\n', 1)[1].split('\n```', 1)[0] + '\n')
 PY
 cd "$scratch"
+root=$(pwd -P)  # identical profile spelling for every invocation
 bun install
-bun test server.test.mjs
-bun oauth.mjs --synthetic                 # 2026 only; loopback 19770
-# Stop fixture before switching:
-bun oauth.mjs --synthetic --legacy        # 2026 + 2025-11-25
+bun test server.test.mjs oauth.test.mjs
+SPIKE_PORT=19772 SPIKE_METADATA_CLIENTS="$(python3 -c 'import json; print(json.dumps(json.load(open("client-metadata.json"))["redirects"]))')" \
+  bun oauth.mjs --synthetic --legacy --cimd
 ````
 
-Use isolated homes, never existing credentials. Install Claude only into the scratch package:
+In another terminal, with the same physical scratch directory:
 
 ```bash
-bun add --exact @anthropic-ai/claude-code@2.1.288
-mkdir -p homes/pi homes/codex homes/claude
-HOME="$PWD/homes/pi" PI_CODING_AGENT_DIR="$PWD/homes/pi/agent" \
-  pi mcp add spike --url http://127.0.0.1:19770/mcp
-HOME="$PWD/homes/pi" PI_CODING_AGENT_DIR="$PWD/homes/pi/agent" \
-  pi mcp login spike --timeout 15
-HOME="$PWD/homes/pi" PI_CODING_AGENT_DIR="$PWD/homes/pi/agent" pi mcp list --json
-CODEX_HOME="$PWD/homes/codex" codex mcp add spike --url http://127.0.0.1:19770/mcp
-CODEX_HOME="$PWD/homes/codex" codex mcp login spike
-CLAUDE_CONFIG_DIR="$PWD/homes/claude" DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_TELEMETRY=1 \
-  ./node_modules/.bin/claude mcp add --transport http spike http://127.0.0.1:19770/mcp
-# Run in a terminal, not redirected stdin:
-CLAUDE_CONFIG_DIR="$PWD/homes/claude" DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_TELEMETRY=1 \
-  ./node_modules/.bin/claude mcp login spike
-CLAUDE_CONFIG_DIR="$PWD/homes/claude" DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_TELEMETRY=1 \
+root=$(pwd -P)
+mkdir -p homes/claude homes/codex homes/pi
+CLAUDE_CONFIG_DIR="$root/homes/claude" DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_TELEMETRY=1 \
+  ./node_modules/.bin/claude mcp add --transport http spike http://127.0.0.1:19772/mcp
+python3 host-probes.py claude-login homes/claude
+CLAUDE_CONFIG_DIR="$root/homes/claude" DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_TELEMETRY=1 \
   ./node_modules/.bin/claude mcp list
-curl http://127.0.0.1:19770/evidence
+CODEX_HOME="$root/homes/codex" ./node_modules/.bin/codex mcp add spike --url http://127.0.0.1:19772/mcp
+python3 host-probes.py codex-discover homes/codex
+HOME="$root/homes/pi" PI_CODING_AGENT_DIR="$root/homes/pi/agent" \
+  ./node_modules/.bin/pi mcp add spike --url http://127.0.0.1:19772/mcp
+HOME="$root/homes/pi" PI_CODING_AGENT_DIR="$root/homes/pi/agent" \
+  ./node_modules/.bin/pi mcp login spike --timeout 15
+HOME="$root/homes/pi" PI_CODING_AGENT_DIR="$root/homes/pi/agent" ./node_modules/.bin/pi mcp list --json
+curl -X POST http://127.0.0.1:19772/expire-access
+# Repeat the three discovery commands; force expiry again and repeat for rotation evidence.
+curl http://127.0.0.1:19772/evidence
 ```
 
-These commands do not invoke a model. Use the browser opened by the hosts, or open the transient
-printed authorization URL locally. Do not paste callback/token material into issue comments or
-commit logs. Stop the simulator, remove the scratch profiles, and close fixture browser tabs after
-capturing only safe observations. Checked-in `evidence-stateless.json` and `evidence-legacy.json`
-are ordered, credential-free fixture observations, not security/audit evidence. Registrations were
-DCR-only because the fixture advertised only DCR; this does **not** establish lack of CIMD support.
+The simulator automatically approves in the opened OS browser; this is **not real sign-in**. Use
+only isolated profiles. For hostile issuer evidence, start a new fixture/profile set at port 19773
+with the same metadata map and `--wrong-issuer`; all three login attempts must reject and evidence
+must contain no `code-exchange`. For adapter evidence, use another fixture/profile set at 19774
+without `--legacy`; Codex/Pi token exchange succeeds but their initialization receives 400. Do not
+restart an in-memory fixture under saved credentials and interpret lost registrations as host bugs.
 
-## Registration and downstream decisions
+Stop all scratch servers/processes and delete local credential profiles and raw login logs when
+finished. Host-probe output and checked-in observations omit codes, PKCE verifiers, bearer/refresh
+credentials and authorization URLs. No credential file or raw callback log is committed. Public
+CIMD URLs and callback redirect routes are registration metadata, not authority.
 
-The standards prefer CIMD; the current fixture demonstrates DCR fallback, not preference selection.
-Use CIMD only after fetching the actual host-owned metadata with bounded/SSRF-safe policy and
-proving each exact host selects it. Retain bounded public DCR for Pi/Codex unless reruns establish
-CIMD support. Display all client names as unverified claims. Pre-registration is standards compliant
-but adds manual setup and cannot replace the requested primary experience. Arbitrary metadata URL
-fetching, wildcard redirects and unbounded dynamic registration are unacceptable compatibility fixes.
-The ADR fixes byte/deadline/concurrency/cache/registration bounds and requires fail-closed fetching
-when DNS destination safety cannot be enforced.
+## Remaining downstream gates (not missing #977 production work)
 
-## Unresolved acceptance evidence
+The scoped protocol/browser-exchange and registration investigation is complete for the exact
+revised versions, with explicit unsupported older versions and sensitive interactions. The following
+remain **parent #33 implementation/launch gates**, not achievements of this spike:
 
-1. Resolve Codex issuer callback rejection; prove token exchange, refresh and MCP discovery without
-   weakening issuer/resource binding. Record its actual protocol revision, not SDK assumptions.
-2. Isolate Claude reconnect with a realistic ten-minute access window; prove stateless discovery,
-   refresh across processes and runtime selection. Documentation alone is insufficient.
-3. Exercise CIMD preference and metadata-fetch/redirect negatives for all three hosts. Current DCR
-   evidence is real host traffic against simulated registration, not a registration security review.
-4. Exercise URL-elicitation handoff/resume for exact hosts. Until then all sensitive interactions are
-   unsupported and fail closed, as the ADR specifies. No host/model confirmation is authority.
-5. Build real browser approval, OAuth caller/access algebra and authority only in downstream tickets,
-   then test current Consent, exact scopes, atomic code/refresh rotation, replay/concurrency, separate
-   revocation, shared User allowance and attributable Audit. Never infer these from this simulator.
+- coherent production Effect-family upgrade and canonical OAuth caller/access implementation;
+- real fresh-session Spanish approval, connection management and exact confirmation handoff;
+- real ingress/Core/D1/coordinator negative tests, User isolation, atomic refresh replay/concurrency,
+  live Consent/revocation, private discovery/nested schemas, canonical envelopes and Audit;
+- production bounded metadata fetching/admission/observability and cancellation/delivery ambiguity;
+- #35's shared User allowance, full verification, synthetic release evidence and operator approval.
 
-The report therefore records a **partially validated approach with explicit blockers**, not a complete
-successful three-host proof. #35 and explicit operator approval remain launch gates.
+Successful local interoperability is not permission to enable real Users or promise every MCP host,
+revision, notification feature or sensitive interaction.

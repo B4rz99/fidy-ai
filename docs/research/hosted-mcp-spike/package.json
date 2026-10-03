@@ -3,10 +3,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "bun test server.test.mjs",
-    "start": "bun server.mjs"
+    "test": "bun test server.test.mjs oauth.test.mjs",
+    "start": "bun oauth.mjs --synthetic --legacy --cimd"
   },
   "dependencies": {
+    "@anthropic-ai/claude-code": "2.1.288",
+    "@earendil-works/pi-coding-agent": "1.0.1",
+    "@openai/codex": "0.160.0",
     "effect": "4.0.0"
   }
 }

@@ -1,0 +1,57 @@
+apps/server/cloudflare/subscription/internal/wompi-client.ts
+  s_fc768a11c2de27::t_720a493bbe809e 70,110-112,174-179,181,280,289,335,367,406-407,430-431
+  s_fc768a11c2de27::t_af4f919bb0a900 290-293,295-317
+.env.example
+  s_fc768a11c2de27::t_11bc42252bc00d 16-20
+apps/server/cloudflare/public-worker.ts
+  s_fc768a11c2de27::t_fe569f45a841e4 203
+apps/server/src/shell/outbound-http/contract.ts
+  s_fc768a11c2de27::t_b42e6f1708f238 62
+apps/server/cloudflare/core-http/contract.ts
+  s_fc768a11c2de27::t_c944e6fa86c40f 23-25
+infra/cloudflare/edge-security.ts
+  s_fc768a11c2de27::t_ca6433a97f0e94 108
+apps/server/cloudflare/subscription/internal/payment-enrollment.ts
+  s_fc768a11c2de27::t_b17908805f4c33 814,823,826,828,985
+  s_fc768a11c2de27::t_af4f919bb0a900 820,838-842,848
+  s_fc768a11c2de27::t_1b01e07139c410 151-155,827
+infra/cloudflare/alchemy.run.ts
+  s_fc768a11c2de27::t_31e48ebe816393 293-295
+  s_fc768a11c2de27::t_af4f919bb0a900 29-37
+apps/server/cloudflare/core-http/internal/http.ts
+  s_fc768a11c2de27::t_eb1c29c3d66c81 287
+apps/server/cloudflare/core-worker.ts
+  s_fc768a11c2de27::t_978dd14a20d519 49-51
+apps/server/src/shell/outbound-http/internal/outbound-http.ts
+  s_fc768a11c2de27::t_2ea6ce05908ff7 122,124-125,135
+  s_fc768a11c2de27::t_931169c4f64a12 317
+  s_fc768a11c2de27::t_619d501fbea4f7 121,180-187,189,191-193,195,197-226
+  s_fc768a11c2de27::t_b1e15dadc99560 126-134,188,190
+apps/server/cloudflare/subscription/internal/wompi-client.test.ts
+  s_fc768a11c2de27::t_af4f919bb0a900 154-156,158-169,171-177
+  s_fc768a11c2de27::t_37fe58f73e65c5 152-153,157,170,178-189
+apps/server/cloudflare/subscription/payment-enrollment.test.ts
+  s_fc768a11c2de27::t_9b06807fbc8a6e 12
+  s_fc768a11c2de27::t_af4f919bb0a900 327-341,343-344,346-355,376,423-456,458-473,475,477-502,504-508,510,512-513,543-565,567-574,576-577,579-582,585-672
+  s_fc768a11c2de27::t_619d501fbea4f7 356-359,367-374,378-387,389-392,394,396-416,418,420,422,474,476,509,511
+  s_fc768a11c2de27::t_0092df067fffbc 345,360-366,375,377,388,421,457
+  s_fc768a11c2de27::t_6447244a00a00e 318-326,342,503,514
+  s_fc768a11c2de27::t_0a7d83369050a9 393,395,417,419
+  s_fc768a11c2de27::t_1dc1627da2c292 515
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "78deb99b9a94a232c4ddd0bde143e04a8cff3be8",
+  "prompts": {},
+  "sessions": {
+    "s_fc768a11c2de27": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a1020d-bbdc-74ae-ba1b-046fd82fa605",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,523 @@
+apps/server/contracts/openapi.json
+  s_e6b2b6f3fdd65c::t_665689a9db2d91 247,253,2139,2145,2148,2687,2699,2711,2738,3061,3067,3070,3586-3645,3661,3677,3699,3715,3730,3746-3762,3778,3813,3832-3844,3860,3863,3868,3872,3876,3888,3904,3920,3936-3960,3976-3988,4017,4033,4049,4065-4077,4093-4105,4121,4137,4153,4165,4181,4197,4201,4209,4225,4241,4244,4249,4253,4257,4579-4763,5059,5062,7045,7640-7680,8265,8533,8569,8633,8669,8853,8889,8977,9013,9049,9081,9145,9181,9245,9362,9385,9408,9431,9454,9477,9500,9523,9546,9569,9592,9615,9638,9661,9684,9707,9730,9753,9776,9799,9822,9845,9868,9891,10780,10879,11096,11495,11602,11914,12004,12377,12455,12464,12591,12691,12912,13011,13110,13433,13552,13679,14140,14364,14456,14467,14639-14741,15226,15335,15562,15787,15888,16023
+  s_e6b2b6f3fdd65c::t_f042ec5c3e9d29 16481-16483
+apps/cli/src/main.ts
+  s_e6b2b6f3fdd65c::t_602f23ca055250 4
+apps/cli/src/direct-client/failures.test.ts
+  s_e6b2b6f3fdd65c::t_df7665ff367a50 4
+apps/cli/src/direct-client/runtime.ts
+  s_e6b2b6f3fdd65c::t_7f0fae9ea8e78a 15-16
+apps/web/package.json
+  s_e6b2b6f3fdd65c::t_9c02012d40fbf5 43
+  s_e6b2b6f3fdd65c::t_5f8ebdeb5c5d6c 25,33
+apps/cli/src/direct-client/resources.test.ts
+  s_e6b2b6f3fdd65c::t_4d9e78d52b978d 4
+apps/cli/package.json
+  s_e6b2b6f3fdd65c::t_f8e70dca6107d3 17,19,22
+apps/cli/src/direct-client/runtime.test.ts
+  s_e6b2b6f3fdd65c::t_7987450a150666 4
+apps/web/src/features/dashboard/query.ts
+  s_e6b2b6f3fdd65c::t_212731e799a3c5 2
+apps/cli/test/journey-entry.ts
+  s_e6b2b6f3fdd65c::t_decbec745e22da 5-6
+.github/workflows/nequi-sandbox.yml
+  s_e6b2b6f3fdd65c::t_1679a2923923cd 1-46
+.github/workflows/production.yml
+  s_e6b2b6f3fdd65c::t_2c93c1daacf3ce 85,123
+.oxlintrc.json
+  s_e6b2b6f3fdd65c::t_e50e5656b8b23b 263,266
+.patterns/INDEX.md
+  s_e6b2b6f3fdd65c::t_ee3ac0eb297076 5-10
+.patterns/effect-4-stable.md
+  s_e6b2b6f3fdd65c::t_5dd804e7565503 1-64
+ARCHITECTURE.md
+  s_e6b2b6f3fdd65c::t_725b223a947741 87-103
+GLOSSARY.md
+  s_e6b2b6f3fdd65c::t_0342b7feca159d 110-117,232-252,408-422
+SECURITY_STANDARDS.md
+  s_e6b2b6f3fdd65c::t_4708383421ed0a 173-203
+apps/server/.dependency-cruiser.mjs
+  s_e6b2b6f3fdd65c::t_43e729f5e31b95 316,1184,1288,1353
+apps/server/ARCHITECTURE.md
+  s_e6b2b6f3fdd65c::t_2f10f7a90387ab 381-398,485-489,603-635
+apps/server/cloudflare/agent/internal/service.ts
+  s_e6b2b6f3fdd65c::t_3e3481c06e4783 41
+apps/server/cloudflare/anonymous-admission/operations.ts
+  s_e6b2b6f3fdd65c::t_596bea9193884d 1-2,41
+apps/server/cloudflare/browser-acceptance-seed.ts
+  s_e6b2b6f3fdd65c::t_70d88ef78daaf8 146-147,175
+apps/server/cloudflare/browser-acceptance-wompi.ts
+  s_e6b2b6f3fdd65c::t_2b366bcfba9608 129-134,142-147
+apps/server/cloudflare/browser-login/internal/pairing.ts
+  s_e6b2b6f3fdd65c::t_224253431873b6 17-18,126
+apps/server/cloudflare/canonical-operations/internal/query-registry.ts
+  s_e6b2b6f3fdd65c::t_78b80f95645029 10,124-128
+apps/server/cloudflare/consent/ingress/internal/ingress.ts
+  s_e6b2b6f3fdd65c::t_3c173f6f23f530 28-29,663
+apps/server/cloudflare/consent/ingress/runtime.ts
+  s_e6b2b6f3fdd65c::t_04f8a2dc99d374 2
+apps/server/cloudflare/core-http/internal/http.ts
+  s_e6b2b6f3fdd65c::t_1d3f8d475aca63 35,58,287-289,1388-1401,1430,1584,1589
+apps/server/cloudflare/email-authentication/internal/onboarding-workflow.ts
+  s_e6b2b6f3fdd65c::t_e7dad2f591a1a0 19
+apps/server/cloudflare/ingestion/internal/forwarded-email-processing.ts
+  s_e6b2b6f3fdd65c::t_e07e8ed50bed2d 20
+apps/server/cloudflare/ingestion/internal/statement-staging.ts
+  s_e6b2b6f3fdd65c::t_9e003a0bfef278 46,266,471,534,570
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_e6b2b6f3fdd65c::t_878b03a300b687 98-99
+apps/server/cloudflare/ingestion/statement-staging.test.ts
+  s_e6b2b6f3fdd65c::t_b4a9a448ad8410 6-7,291
+apps/server/cloudflare/maintenance/contract.ts
+  s_e6b2b6f3fdd65c::t_6fbb3c43761634 26
+apps/server/cloudflare/maintenance/runtime.ts
+  s_e6b2b6f3fdd65c::t_518c1dc2654cfe 28,40,181,246
+apps/server/cloudflare/migrations/0027_recurring.sql
+  s_e6b2b6f3fdd65c::t_3021b7205cd76a 1-104
+apps/server/cloudflare/migrations/0028_recurring_audit_budget.sql
+  s_e6b2b6f3fdd65c::t_f2f832a38e69be 1-45
+apps/server/cloudflare/migrations/0030_payment_enrollment.sql
+  s_e6b2b6f3fdd65c::t_f0de1812ab7e34 1-40
+apps/server/cloudflare/onboarding/consent-ingress.test.ts
+  s_e6b2b6f3fdd65c::t_9272aac7a9dd8d 295-350
+apps/server/cloudflare/public-worker.ts
+  s_e6b2b6f3fdd65c::t_4092fb7a04838f 198-199,201
+apps/server/cloudflare/recurring/contract.ts
+  s_e6b2b6f3fdd65c::t_01fcf7c79284e7 1-21
+apps/server/cloudflare/recurring/internal/confirmations.ts
+  s_e6b2b6f3fdd65c::t_56f9f68e1dffd2 1-120
+apps/server/cloudflare/recurring/internal/evaluation.ts
+  s_e6b2b6f3fdd65c::t_e3c6c0309bc28a 1-435
+apps/server/cloudflare/recurring/internal/models.ts
+  s_e6b2b6f3fdd65c::t_449f1ce23591b5 1-33
+apps/server/cloudflare/recurring/internal/query.ts
+  s_e6b2b6f3fdd65c::t_9d23f0e33342d7 1-268
+apps/server/cloudflare/recurring/operations.ts
+  s_e6b2b6f3fdd65c::t_708df5e590b62a 1-24
+apps/server/cloudflare/recurring/recurring.test-fixture.ts
+  s_e6b2b6f3fdd65c::t_135259cc1e502a 1-47
+apps/server/cloudflare/recurring/recurring.test.ts
+  s_e6b2b6f3fdd65c::t_9691324eeb63b6 1-1040
+apps/server/cloudflare/recurring/runtime.ts
+  s_e6b2b6f3fdd65c::t_512153d6982935 1-51
+apps/server/cloudflare/runtime/operational-health/internal/operator-email.ts
+  s_e6b2b6f3fdd65c::t_370189dacdd5a7 5
+apps/server/cloudflare/subscription/billing-collection.test.ts
+  s_e6b2b6f3fdd65c::t_41a1909c73e245 5,37,40,51-53,56-58,159-198,252,288,364,387,498,560,589,626,659,742,806,817-818,908,947,960-961,1010
+apps/server/cloudflare/subscription/internal/billing-workflow.ts
+  s_e6b2b6f3fdd65c::t_d1c8d9dabdf718 2-6,20-21,74,126,461,528
+apps/server/cloudflare/subscription/internal/enrollment-admission.ts
+  s_e6b2b6f3fdd65c::t_82ecd4bb580f70 39,68-69
+apps/server/cloudflare/subscription/internal/payment-enrollment-claim.ts
+  s_e6b2b6f3fdd65c::t_b4c3e2bb7022b2 2,6,12,16,20,27,30-39,43,45,48-49,52,54-55
+apps/server/cloudflare/subscription/internal/payment-enrollment.ts
+  s_e6b2b6f3fdd65c::t_44b66b62febb06 4,13-15,17,22,24-28,31-43,45-46,71,90,94-95,147,150-151,158,160,162,227,233,240-254,292,303,319,327-332,366,370-387,394,402-403,407,426,433,465,468-469,475-476,497-498,505-508,533,623-624,626-627,632-633,639-640,666-673,675,679,726-728,750,758-830,844,850-852,867,876,920-930,932,934,936,943-945,947,950-956,962,964-967,1017-1021,1024-1025,1069,1099,1104,1127
+apps/server/cloudflare/subscription/internal/wompi-billing-client.test.ts
+  s_e6b2b6f3fdd65c::t_7e8d9f24d059fd 69
+apps/server/cloudflare/subscription/internal/wompi-billing-client.ts
+  s_e6b2b6f3fdd65c::t_d8eff85b5e8ab9 19,80,118
+apps/server/cloudflare/subscription/internal/wompi-client.test.ts
+  s_e6b2b6f3fdd65c::t_c2ada2008d62a5 126-151,157-191,194,201-202,220-225
+apps/server/cloudflare/subscription/internal/wompi-client.ts
+  s_e6b2b6f3fdd65c::t_a4b84e47741147 16,20,70,107-109,112-113,118-119,133,142,172,271-301,304,318,350-351,389,407,412
+apps/server/cloudflare/subscription/internal/wompi-model.ts
+  s_e6b2b6f3fdd65c::t_c012353d5cb6b1 39-42
+apps/server/cloudflare/subscription/internal/wompi-runtime.ts
+  s_e6b2b6f3fdd65c::t_f62035a28ba1a7 5
+apps/server/cloudflare/subscription/payment-enrollment-claim.test.ts
+  s_e6b2b6f3fdd65c::t_7d243abff38bb2 7,11-12,16,35,46-47,54,65-70,82-93,99-104,123-124,133,153-199,205-206,215
+apps/server/cloudflare/subscription/payment-enrollment-d1.test-fixture.ts
+  s_e6b2b6f3fdd65c::t_36ac2d34c97cce 9-10,42
+apps/server/cloudflare/subscription/payment-enrollment-migration.test.ts
+  s_e6b2b6f3fdd65c::t_d073635f999926 1-107
+apps/server/cloudflare/subscription/payment-enrollment.test.ts
+  s_e6b2b6f3fdd65c::t_a098e04feed0c5 1-3,6-10,12-19,23,82,86,150-161,167-822,832-834,885-886,893-894,909,938-939,965-966,977,994-995,999-1000,1054-1055,1062,1067-1068,1080-1081,1122-1123,1136-1137,1169-1170,1219,1221,1231,1233,1259-1260,1264,1269-1270,1317,1351-1352,1356,1373-1374,1397-1398
+apps/server/cloudflare/subscription/runtime.ts
+  s_e6b2b6f3fdd65c::t_ee8a73db43de0c 1,31,62,101
+apps/server/cloudflare/subscription/subscription-queries.test.ts
+  s_e6b2b6f3fdd65c::t_945c5ed3c8f576 7,39
+apps/server/cloudflare/test-shards.ts
+  s_e6b2b6f3fdd65c::t_a15bf464bba1a1 20-21
+apps/server/cloudflare/tokens/internal/pat-pairing.ts
+  s_e6b2b6f3fdd65c::t_a7d39de3b896ae 27-28,207
+apps/server/cloudflare/tokens/internal/pat-routes.ts
+  s_e6b2b6f3fdd65c::t_0c8b182eec8e43 2
+apps/server/cloudflare/tokens/internal/pat-shared.ts
+  s_e6b2b6f3fdd65c::t_e6f47111c9a568 17-18,88
+apps/server/cloudflare/tokens/pats.test.ts
+  s_e6b2b6f3fdd65c::t_6354dfb92c9fdc 9,121-122
+apps/server/cloudflare/transactions/contract.ts
+  s_e6b2b6f3fdd65c::t_0db9c6df27c906 1,4,10,20-35
+apps/server/cloudflare/transactions/internal/recurring-query.ts
+  s_e6b2b6f3fdd65c::t_a1cd20bb2a551c 1-175
+apps/server/cloudflare/transactions/operations.ts
+  s_e6b2b6f3fdd65c::t_20772d8d3e4315 1-15,49-71
+apps/server/cloudflare/transactions/peer-reads.test.ts
+  s_e6b2b6f3fdd65c::t_549d7c2d8c0075 11-17,55,69-79,84-126
+apps/server/cloudflare/transactions/runtime.ts
+  s_e6b2b6f3fdd65c::t_a1e37adee52dcb 1-2,170-194,325-331
+apps/server/cloudflare/web-session/internal/lifecycle.ts
+  s_e6b2b6f3fdd65c::t_d156d4a1f07c66 2-3,18
+apps/server/cloudflare/whatsapp/internal/ingress.ts
+  s_e6b2b6f3fdd65c::t_78c0ef6eea3fba 26-27,222-223,305
+apps/server/contracts/operation-policy.json
+  s_e6b2b6f3fdd65c::t_699ddbef4cb8b6 607-621
+apps/server/package.json
+  s_e6b2b6f3fdd65c::t_ffedf2e7544150 289,291,300-303
+apps/server/scripts/check-browser-client.ts
+  s_e6b2b6f3fdd65c::t_a8ec03d4d8c2d0 21,39
+apps/server/scripts/check-dependency-guards.ts
+  s_e6b2b6f3fdd65c::t_0fefb8147db4a8 876,1836,1840,2346,2353,2838,2855
+apps/server/src/client.ts
+  s_e6b2b6f3fdd65c::t_7ab26e58ef4533 102-105,108-110,113-114,117
+apps/server/src/core/_shared/money.test.ts
+  s_e6b2b6f3fdd65c::t_5eb621d8ec229e 3,106-113
+apps/server/src/core/_shared/money.ts
+  s_e6b2b6f3fdd65c::t_759a8400f1aa51 239
+apps/server/src/core/canonical-operations/contract.ts
+  s_e6b2b6f3fdd65c::t_d40225a4617f53 5
+apps/server/src/core/ingestion/capture.test.ts
+  s_e6b2b6f3fdd65c::t_4b9d27ddffdaff 1-200
+apps/server/src/core/ingestion/contract.ts
+  s_e6b2b6f3fdd65c::t_0a6ed7ff99350e 1,9-87,151-153
+apps/server/src/core/ingestion/media-allowance.test.ts
+  s_e6b2b6f3fdd65c::t_bdf91e37ba7d4d 1-64
+apps/server/src/core/ingestion/operations.ts
+  s_e6b2b6f3fdd65c::t_51c8a0c3798347 3-5,7-11,18,22,27-137,147-179
+apps/server/src/core/recurring/contract.ts
+  s_e6b2b6f3fdd65c::t_dc78f5d2fa2525 1-90
+apps/server/src/core/recurring/internal/detector.ts
+  s_e6b2b6f3fdd65c::t_84a7ddce3ca0d9 1-235
+apps/server/src/core/recurring/operations.test.ts
+  s_e6b2b6f3fdd65c::t_38ed883f7f9c5f 1-176
+apps/server/src/core/recurring/operations.ts
+  s_e6b2b6f3fdd65c::t_cd4cb26a120b6b 1-36
+apps/server/src/core/subscription/contract.ts
+  s_e6b2b6f3fdd65c::t_9bf3d0bd37c238 197-203,206,214-218,266,273,277-278,281,283-284,292,294,296-297,300,302-303,306,308-309,313,315-316,319,321-322,327-335,338,341,344,347,350-351
+apps/server/src/core/tokens/contract.ts
+  s_e6b2b6f3fdd65c::t_6720efd62e9ecf 136,144,157-159
+apps/server/src/core/transactions/contract.ts
+  s_e6b2b6f3fdd65c::t_37cc4d666a2f7a 198-209
+apps/server/src/shell/agent/contract.ts
+  s_e6b2b6f3fdd65c::t_c0418f36b00a35 2
+apps/server/src/shell/api.ts
+  s_e6b2b6f3fdd65c::t_a92b3d05dbaa3d 2,12,32
+apps/server/src/shell/audit/contract.ts
+  s_e6b2b6f3fdd65c::t_67632a29aa0552 31,64
+apps/server/src/shell/audit/internal/daily-budget.ts
+  s_e6b2b6f3fdd65c::t_57f7a5826fdfb6 18
+apps/server/src/shell/audit/internal/recording.ts
+  s_e6b2b6f3fdd65c::t_4f5cea16bacd6f 22
+apps/server/src/shell/authorization/contract.ts
+  s_e6b2b6f3fdd65c::t_9397348396ef1e 2-3
+apps/server/src/shell/authorization/runtime.ts
+  s_e6b2b6f3fdd65c::t_d551529bb39654 2-3
+apps/server/src/shell/browser-login/contract.ts
+  s_e6b2b6f3fdd65c::t_8500d755f5dd33 8
+apps/server/src/shell/budgets/contract.ts
+  s_e6b2b6f3fdd65c::t_caa85fe7a17fc3 2
+apps/server/src/shell/canonical-catalog/contract.test.ts
+  s_e6b2b6f3fdd65c::t_913d177dff144b 3,5,42-66
+apps/server/src/shell/canonical-catalog/contract.ts
+  s_e6b2b6f3fdd65c::t_0e57b9474a1cc6 3
+apps/server/src/shell/canonical-operations/contract.ts
+  s_e6b2b6f3fdd65c::t_8af20bd071be5a 2
+apps/server/src/shell/canonical-operations/internal/implementation.ts
+  s_e6b2b6f3fdd65c::t_f3c6075e7a6fae 8-9
+apps/server/src/shell/canonical-operations/internal/operation-registry.ts
+  s_e6b2b6f3fdd65c::t_d630bf2934cad0 49
+apps/server/src/shell/canonical-operations/suggested-operations.test.ts
+  s_e6b2b6f3fdd65c::t_232ed4de4ebfc6 3
+apps/server/src/shell/canonical-policy/contract.ts
+  s_e6b2b6f3fdd65c::t_3e2c952ded5491 2
+apps/server/src/shell/categories/contract.ts
+  s_e6b2b6f3fdd65c::t_a8b10d520c33c0 3
+apps/server/src/shell/categories/internal/list-categories.ts
+  s_e6b2b6f3fdd65c::t_7a06e3b69a36e6 2
+apps/server/src/shell/categories/operations.ts
+  s_e6b2b6f3fdd65c::t_306f99b695c259 3
+apps/server/src/shell/channels/whatsapp/contract.ts
+  s_e6b2b6f3fdd65c::t_eb5b32a98f188d 52,79-84
+apps/server/src/shell/channels/whatsapp/image-webhook.test.ts
+  s_e6b2b6f3fdd65c::t_1aafde97e84a05 1-80
+apps/server/src/shell/channels/whatsapp/internal/fixtures/kapso-bsuid-image-v2.json
+  s_e6b2b6f3fdd65c::t_e6ae383ec60bdf 1-30
+apps/server/src/shell/channels/whatsapp/internal/kapso-webhook.ts
+  s_e6b2b6f3fdd65c::t_345c2f1a2683a6 1-3,64-71,73,139,215-217
+apps/server/src/shell/channels/whatsapp/runtime.ts
+  s_e6b2b6f3fdd65c::t_5a584c0c354563 2
+apps/server/src/shell/consent/runtime.ts
+  s_e6b2b6f3fdd65c::t_2f3d687287be60 2
+apps/server/src/shell/dashboard/contract.ts
+  s_e6b2b6f3fdd65c::t_26938464e36008 21
+apps/server/src/shell/email-authentication/contract.ts
+  s_e6b2b6f3fdd65c::t_c9510e5c8f798c 3
+apps/server/src/shell/email-authentication/runtime.ts
+  s_e6b2b6f3fdd65c::t_c5a2f6b1024fa5 2
+apps/server/src/shell/hosted-inference/contract.ts
+  s_e6b2b6f3fdd65c::t_c164b6a20f251e 11
+apps/server/src/shell/hosted-inference/internal/adapter.ts
+  s_e6b2b6f3fdd65c::t_43746aebe23f28 2
+apps/server/src/shell/hosted-inference/internal/inference.ts
+  s_e6b2b6f3fdd65c::t_207f026b59cc9c 2
+apps/server/src/shell/hosted-inference/internal/prompt.ts
+  s_e6b2b6f3fdd65c::t_d48a09ed05378c 2
+apps/server/src/shell/hosted-inference/internal/workers-ai.ts
+  s_e6b2b6f3fdd65c::t_715bac41ccba9f 2
+apps/server/src/shell/identity/contract.ts
+  s_e6b2b6f3fdd65c::t_af9f74939b339f 3
+apps/server/src/shell/identity/operations.ts
+  s_e6b2b6f3fdd65c::t_06981e28a9adac 2
+apps/server/src/shell/ingestion/contract.ts
+  s_e6b2b6f3fdd65c::t_75274aca1a5f86 3
+apps/server/src/shell/ingestion/internal/column-mapper.test.ts
+  s_e6b2b6f3fdd65c::t_dad660c1947dea 2
+apps/server/src/shell/ingestion/internal/column-mapper.ts
+  s_e6b2b6f3fdd65c::t_5da3ae156da0c8 3
+apps/server/src/shell/insights/contract.ts
+  s_e6b2b6f3fdd65c::t_9ad9abbef4601b 2
+apps/server/src/shell/memory/contract.ts
+  s_e6b2b6f3fdd65c::t_bdc514a29c7dbc 2
+apps/server/src/shell/memory/operations.test.ts
+  s_e6b2b6f3fdd65c::t_262e3b3307556e 2
+apps/server/src/shell/observability/registry.test.ts
+  s_e6b2b6f3fdd65c::t_3dbb44195aa295 3
+apps/server/src/shell/operations/contract.ts
+  s_e6b2b6f3fdd65c::t_a8c6e8b1af8248 3
+apps/server/src/shell/outbound-http/contract.ts
+  s_e6b2b6f3fdd65c::t_0f3df982a102bb 1-2,38,60-61
+apps/server/src/shell/outbound-http/internal/outbound-http.ts
+  s_e6b2b6f3fdd65c::t_d447b90ea45099 2-4,115-152,159-161,168-171,191,292-293
+apps/server/src/shell/outbound-http/internal/transport.ts
+  s_e6b2b6f3fdd65c::t_ec9c09f8504b3b 8
+apps/server/src/shell/outbound-http/operations.test.ts
+  s_e6b2b6f3fdd65c::t_834dc1b80f265b 25
+apps/server/src/shell/outbound-http/operations.ts
+  s_e6b2b6f3fdd65c::t_f560d2ef77ee2c 3,88
+apps/server/src/shell/outbound-http/testing.ts
+  s_e6b2b6f3fdd65c::t_675510bdcb8113 8
+apps/server/src/shell/partial-input/contract.test.ts
+  s_e6b2b6f3fdd65c::t_0264b426af3560 3
+apps/server/src/shell/public-http/contract.ts
+  s_e6b2b6f3fdd65c::t_66d221048f92d0 3
+apps/server/src/shell/recovery/contract.ts
+  s_e6b2b6f3fdd65c::t_570fe565469b74 1
+apps/server/src/shell/recurring/contract.ts
+  s_e6b2b6f3fdd65c::t_665ebf868b4634 1-29
+apps/server/src/shell/secret-material/operations.ts
+  s_e6b2b6f3fdd65c::t_5dfa7d70f709e3 2-3,60,72,84
+apps/server/src/shell/subscription/contract.ts
+  s_e6b2b6f3fdd65c::t_39eab12fb7d2d8 3,8-11,13,18,102-103,107-108,112-113,117-118,122-123,127-128,140-141,153-156,160,163,166,170,172,177-184,187,190-196,202-204,209-211,216-218,242,244,246
+apps/server/src/shell/subscription/internal/queries.ts
+  s_e6b2b6f3fdd65c::t_66098162abf8c2 2
+apps/server/src/shell/subscription/operations.ts
+  s_e6b2b6f3fdd65c::t_7d00fdcedd1423 14
+apps/server/src/shell/tokens/contract.ts
+  s_e6b2b6f3fdd65c::t_fa92c80724df53 7
+apps/server/src/shell/tokens/internal/list-pats.ts
+  s_e6b2b6f3fdd65c::t_89f337b738c920 2
+apps/server/src/shell/tokens/operations.ts
+  s_e6b2b6f3fdd65c::t_73340fdba1e02c 3
+apps/server/src/shell/tokens/pairing-contract.test.ts
+  s_e6b2b6f3fdd65c::t_d68b08341a27b0 3-4
+apps/server/src/shell/transactions/contract.ts
+  s_e6b2b6f3fdd65c::t_d62639e77256d6 2
+apps/server/src/shell/web-authentication/contract.ts
+  s_e6b2b6f3fdd65c::t_34f9ec06d1cedf 1
+apps/server/src/shell/web-session/contract.ts
+  s_e6b2b6f3fdd65c::t_b2064345128581 1
+apps/server/tools/contracts/generate.ts
+  s_e6b2b6f3fdd65c::t_b35083bb0a6f5c 4
+apps/web/ARCHITECTURE.md
+  s_e6b2b6f3fdd65c::t_82774cda61469d 36-40,69-84,90
+apps/web/cloudflare/production-policy/artifact.ts
+  s_e6b2b6f3fdd65c::t_771321e3343ef3 34
+apps/web/e2e/product-journeys.spec.ts
+  s_e6b2b6f3fdd65c::t_2f4571cca48268 104,137-138,147
+apps/web/e2e/real-core-fixture.ts
+  s_e6b2b6f3fdd65c::t_1908e2a5845ab0 50
+apps/web/e2e/real-core-journeys.spec.ts
+  s_e6b2b6f3fdd65c::t_e8b7a92539ba49 418,439,576
+apps/web/scripts/build-production.test.ts
+  s_e6b2b6f3fdd65c::t_5719cdcb110de9 134-148
+apps/web/scripts/production-workflow.test.ts
+  s_e6b2b6f3fdd65c::t_7867a00aced33f 135
+apps/web/src/application.test.tsx
+  s_e6b2b6f3fdd65c::t_44a936f16ee4ef 3-4
+apps/web/src/features/agent/feature.tsx
+  s_e6b2b6f3fdd65c::t_fac8035e5a2d25 4
+apps/web/src/features/browser-login/pairing-controller.ts
+  s_e6b2b6f3fdd65c::t_d0ef48c4a623cb 4
+apps/web/src/features/dashboard/editor-model.ts
+  s_e6b2b6f3fdd65c::t_689c55f12ee3fb 1-2,33
+apps/web/src/features/dashboard/feature-controller.test.tsx
+  s_e6b2b6f3fdd65c::t_61961fd96a9925 4
+apps/web/src/features/dashboard/feature.test.tsx
+  s_e6b2b6f3fdd65c::t_25403b3e13699f 4
+apps/web/src/features/dashboard/feature.tsx
+  s_e6b2b6f3fdd65c::t_595c597bab6d8a 3
+apps/web/src/features/dashboard/view.tsx
+  s_e6b2b6f3fdd65c::t_552365f6ecdd95 4
+apps/web/src/features/email-onboarding/controller.ts
+  s_e6b2b6f3fdd65c::t_a2cd15e875571a 4
+apps/web/src/features/email-replacement/controller.ts
+  s_e6b2b6f3fdd65c::t_c1a797e223cf28 4
+apps/web/src/features/pats/feature.tsx
+  s_e6b2b6f3fdd65c::t_8b3bf5d7e28387 4
+apps/web/src/features/recovery/feature.tsx
+  s_e6b2b6f3fdd65c::t_5a17eafdbafcf8 4
+apps/web/src/features/subscription/enrollment-gateway.ts
+  s_e6b2b6f3fdd65c::t_6a76d235f679a9 1-2,5-7,9,11,15,18-19,43,51-58,60,64,127-189,195,201,218-220,224,245,293,295
+apps/web/src/features/subscription/feature.test.tsx
+  s_e6b2b6f3fdd65c::t_da2cb61b9a452e 10-14,18,20-21,76-77,362,367-372,422-424,482-527,645,657,667,835,876,1071
+apps/web/src/features/subscription/feature.tsx
+  s_e6b2b6f3fdd65c::t_5278ed4cf2b86d 9-10,20-24,38,311-430,434,455-457,459,473-479,492,499,512,572-576,578,672,687,701,721,730,742,744,746,750,767-768,956-960,963,969-1020,1029-1031,1035,1042-1055,1063,1069-1073
+apps/web/src/features/subscription/payment-status.ts
+  s_e6b2b6f3fdd65c::t_22ee1ccd0e451d 1
+apps/web/src/features/transactions/feature.test.tsx
+  s_e6b2b6f3fdd65c::t_0484e84d619926 3
+apps/web/src/features/transactions/manual-capture.tsx
+  s_e6b2b6f3fdd65c::t_1bb2c1dc70cbd1 3
+apps/web/src/session/session.test.tsx
+  s_e6b2b6f3fdd65c::t_44bb80dc87e7f7 2
+apps/web/src/transport/browser-http-policy.ts
+  s_e6b2b6f3fdd65c::t_f135c08458bb9b 9
+apps/web/src/transport/canonical-query.test.ts
+  s_e6b2b6f3fdd65c::t_44256c94865f2c 2
+apps/web/src/transport/canonical-query.ts
+  s_e6b2b6f3fdd65c::t_545c313f6a424c 2
+apps/web/src/transport/client.test.ts
+  s_e6b2b6f3fdd65c::t_84e98badbbaaf1 26-27
+apps/web/src/transport/client.ts
+  s_e6b2b6f3fdd65c::t_d89b4f8d38308a 18-20,26-27,29-30,66-69,211-214,241,243
+apps/web/src/transport/wompi-nequi-lifecycle.test.ts
+  s_e6b2b6f3fdd65c::t_4ca1a912eecd3f 1-184
+apps/web/src/transport/wompi-nequi.test.ts
+  s_e6b2b6f3fdd65c::t_f6e3b77ad21d3b 1-48
+apps/web/src/transport/wompi-nequi.ts
+  s_e6b2b6f3fdd65c::t_d00d87b2a374e5 1-127
+apps/web/src/transport/wompi-tokenization.ts
+  s_e6b2b6f3fdd65c::t_da2b1b696fffbd 51-54,107-110,133,153
+docs/adr/0032-deterministic-recurring-charge-detection.md
+  s_e6b2b6f3fdd65c::t_0e25ed9bf170be 1-49
+docs/adr/0033-hosted-mcp-and-oauth-agent-grants.md
+  s_e6b2b6f3fdd65c::t_ecaa73158fa870 1-220
+docs/operations/admission-coverage.md
+  s_e6b2b6f3fdd65c::t_32877a8a22cc50 18,23
+docs/operations/nequi-sandbox-proof.md
+  s_e6b2b6f3fdd65c::t_ef9e62788ddd8e 1-48
+docs/research/anti-slop-effect-rules-assessment.md
+  s_e6b2b6f3fdd65c::t_a2c02481f62c77 16
+docs/research/effect-4-stable-integration.md
+  s_e6b2b6f3fdd65c::t_534c7a6145cfe7 1-92
+docs/research/effect-4-stable-migration.md
+  s_e6b2b6f3fdd65c::t_41216f810cf0fc 1-293
+docs/research/effect-4-stable-portable.md
+  s_e6b2b6f3fdd65c::t_3ed345fa06ebf4 1-199
+docs/research/hosted-mcp-interoperability-977.md
+  s_e6b2b6f3fdd65c::t_16204c9a1d79e2 1-258
+docs/research/hosted-mcp-spike/client-metadata.json
+  s_e6b2b6f3fdd65c::t_5d698f019d0cfb 1-14
+docs/research/hosted-mcp-spike/evidence-legacy.json
+  s_e6b2b6f3fdd65c::t_dedf28de7a6d4c 1-55
+docs/research/hosted-mcp-spike/evidence-resolved.json
+  s_e6b2b6f3fdd65c::t_86ea865ff864d2 1-123
+docs/research/hosted-mcp-spike/evidence-stateless.json
+  s_e6b2b6f3fdd65c::t_5cf0a53fd67b4a 1-64
+docs/research/hosted-mcp-spike/evidence-strict.json
+  s_e6b2b6f3fdd65c::t_b566a8a357cb09 1-42
+docs/research/hosted-mcp-spike/evidence-wrong-issuer.json
+  s_e6b2b6f3fdd65c::t_becf12735d3721 1-48
+docs/research/hosted-mcp-spike/host-outcomes.json
+  s_e6b2b6f3fdd65c::t_7b5d3388f036e8 1-334
+docs/research/hosted-mcp-spike/host-probes.md
+  s_e6b2b6f3fdd65c::t_bf5627e04fcc9c 1-73
+docs/research/hosted-mcp-spike/oauth.md
+  s_e6b2b6f3fdd65c::t_c672ad07b5bd7e 1-218
+docs/research/hosted-mcp-spike/oauth.test.md
+  s_e6b2b6f3fdd65c::t_434d83730c0e69 1-68
+docs/research/hosted-mcp-spike/package.json
+  s_e6b2b6f3fdd65c::t_66175678f931df 1-15
+docs/research/hosted-mcp-spike/server.md
+  s_e6b2b6f3fdd65c::t_71d3358370ba18 1-38
+docs/research/hosted-mcp-spike/server.test.md
+  s_e6b2b6f3fdd65c::t_c70400eca14c15 1-42
+infra/cloudflare/alchemy.run.ts
+  s_e6b2b6f3fdd65c::t_30028becc715e7 7,65
+infra/cloudflare/d1-migrations.test.ts
+  s_e6b2b6f3fdd65c::t_370d08d908e568 11-12
+infra/cloudflare/diagnose-smoke-routing.test.ts
+  s_e6b2b6f3fdd65c::t_86a8d0780c1e28 4
+infra/cloudflare/diagnose-smoke-routing.ts
+  s_e6b2b6f3fdd65c::t_f49724966b75d9 10
+infra/cloudflare/edge-security.ts
+  s_e6b2b6f3fdd65c::t_12ce9adfbcf25e 108-109,130
+infra/cloudflare/inspect-worker-drift.ts
+  s_e6b2b6f3fdd65c::t_e6519a076183f3 11
+infra/cloudflare/local-emulation.test.ts
+  s_e6b2b6f3fdd65c::t_7e3410f87ab264 4-8
+infra/cloudflare/package.json
+  s_e6b2b6f3fdd65c::t_7e360a3c041c88 7-8,17,20-23
+infra/cloudflare/production-release.test.ts
+  s_e6b2b6f3fdd65c::t_1ce99b863a3992 2
+infra/cloudflare/production-release.ts
+  s_e6b2b6f3fdd65c::t_a309bb5bc04bab 3-4,11,355,391
+infra/cloudflare/scripts/check-topology-drift.sh
+  s_e6b2b6f3fdd65c::t_3d54ae760433c4 7
+infra/cloudflare/scripts/migration-history.ts
+  s_e6b2b6f3fdd65c::t_358aad86dbde56 3,85
+infra/cloudflare/scripts/production-migration-ledger.ts
+  s_e6b2b6f3fdd65c::t_06e076c9c431ad 66
+infra/cloudflare/scripts/production-preflight.sh
+  s_e6b2b6f3fdd65c::t_0d32df99916b39 30
+infra/cloudflare/scripts/subprocess-test-fixture.ts
+  s_e6b2b6f3fdd65c::t_387b23df7fca55 31
+infra/cloudflare/verify-edge-policy.test.ts
+  s_e6b2b6f3fdd65c::t_f1c484c11bac91 7
+infra/cloudflare/verify-edge-policy.ts
+  s_e6b2b6f3fdd65c::t_ec4a0710756c23 5
+infra/cloudflare/verify-edge-smoke.ts
+  s_e6b2b6f3fdd65c::t_0d7b6dd7aa3eb0 4-8
+infra/cloudflare/verify-production-smoke.test.ts
+  s_e6b2b6f3fdd65c::t_11d45ae4aefaac 3
+infra/cloudflare/verify-production-smoke.ts
+  s_e6b2b6f3fdd65c::t_02ec263a44517e 3-4,11,170
+infra/cloudflare/worker-receipt.test.ts
+  s_e6b2b6f3fdd65c::t_ddb778bccb9d70 11-12
+infra/cloudflare/workers.test.ts
+  s_e6b2b6f3fdd65c::t_29b2303f9533c1 442-443,448
+package.json
+  s_e6b2b6f3fdd65c::t_39b1208df00da4 54,57,66-67,82
+patches/alchemy@2.0.0-beta.80.patch
+  s_e6b2b6f3fdd65c::t_fbdf74b4ed7031 2,5,18,27,30,50
+scripts/check-dependency-updates.ts
+  s_e6b2b6f3fdd65c::t_ed38a5e6735175 51
+scripts/check-effect-family.test.ts
+  s_e6b2b6f3fdd65c::t_838dbd6c314020 36-38,91-94,102-105,109,163-170,178-196,250-303
+scripts/check-effect-family.ts
+  s_e6b2b6f3fdd65c::t_a442bfc20ae0ce 3,5,12-21,135-154,164,181-186
+scripts/check-lint-suppressions.test.ts
+  s_e6b2b6f3fdd65c::t_d50913ebd098be 177
+scripts/document-parsing/local-workerd-http.ts
+  s_e6b2b6f3fdd65c::t_86f2c35ddc324a 2
+tools/depcruise/publication.mjs
+  s_e6b2b6f3fdd65c::t_52427067c869bf 33
+bun.lock
+  s_e6b2b6f3fdd65c::t_f524127c5a3f7b 11,14,30,32,35,43,45,54-57,75,83,116,119-122,130,133-134,152,154,156,158,252,268,270,272,274,276,278,280,282,284,286,288-298,316,318,320,322,324,326,328,330,332,334,336,338,340,342,344,410-411,530,892,1064,1654,1746,1818,1820,1822,1896-1897,1916-1917,1936,1938,1940,1942,1944,2244-2245
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "eadc5b4dbfe0fa43223ff11ab79f3d2cf7adbd5b",
+  "prompts": {},
+  "sessions": {
+    "s_e6b2b6f3fdd65c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a101dc-2692-7340-81d5-dc492f3b3df0",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

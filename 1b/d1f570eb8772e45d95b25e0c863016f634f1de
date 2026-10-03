@@ -1,0 +1,21 @@
+.github/actions/bun-runtime/action.yml
+  s_e6b2b6f3fdd65c::t_f41e1cb5273167 8-9
+scripts/install-bun.sh
+  s_e6b2b6f3fdd65c::t_474597501f4afe 18-21,23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "1bd1f570eb8772e45d95b25e0c863016f634f1de",
+  "prompts": {},
+  "sessions": {
+    "s_e6b2b6f3fdd65c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a101dc-2692-7340-81d5-dc492f3b3df0",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

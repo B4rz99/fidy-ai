@@ -1,0 +1,22 @@
+apps/web/src/transport/wompi-daviplata.test.ts
+  s_e1f14927429007::t_c9b5cae797f1ee 154-165,167,169-174,176,178-197
+  s_e1f14927429007::t_52de0a52787523 166,168,175,177
+  s_e1f14927429007::t_f89bb156e8cf2b 27,30,149-153
+  s_e1f14927429007::t_3980b4dfaf181f 198
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3b3e0e315b7abb662cb381364e31d26c38ecdb92",
+  "prompts": {},
+  "sessions": {
+    "s_e1f14927429007": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a1022e-f2c8-72ff-ba65-df310295d152",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

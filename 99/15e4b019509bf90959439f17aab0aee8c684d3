@@ -1,0 +1,40 @@
+package.json
+  s_e6b2b6f3fdd65c::t_49f97104953bbd 35
+docs/research/969-release-age-exception.md
+  s_e6b2b6f3fdd65c::t_831bd1dc86bffb 1-22
+.github/workflows/production.yml
+  s_e6b2b6f3fdd65c::t_c768d7e83fabfb 49
+.github/workflows/nequi-sandbox.yml
+  s_e6b2b6f3fdd65c::t_a60a1eee2d932e 28
+.github/workflows/production-inspect.yml
+  s_e6b2b6f3fdd65c::t_42ce5cb52810b7 38
+.github/workflows/mutation.yml
+  s_e6b2b6f3fdd65c::t_9889f701efbba0 30
+.github/workflows/production-rollback.yml
+  s_e6b2b6f3fdd65c::t_6cc4fee8372d41 43
+scripts/install-workspace.test.ts
+  s_e6b2b6f3fdd65c::t_de5cbaa7a17b84 1-13,19-55
+  s_e6b2b6f3fdd65c::t_946348de96e101 14-18
+.github/actions/bun-install/action.yml
+  s_e6b2b6f3fdd65c::t_c4812a66d63bdc 18
+scripts/install-workspace.sh
+  s_e6b2b6f3fdd65c::t_fcaf7025bead0d 1-19
+.github/workflows/verify-unapplied-d1-migration.yml
+  s_e6b2b6f3fdd65c::t_0dd7bf7e28d291 46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "9915e4b019509bf90959439f17aab0aee8c684d3",
+  "prompts": {},
+  "sessions": {
+    "s_e6b2b6f3fdd65c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a101dc-2692-7340-81d5-dc492f3b3df0",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

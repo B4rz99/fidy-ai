@@ -25,7 +25,7 @@ import {
 import {
   dispatchBillingCollection,
   reconcileBillingCandidates,
-  sweepExpiredCardPreparationAdmission,
+  sweepExpiredEnrollmentAdmission,
 } from "../subscription/runtime";
 import {
   dispatchForwardedEmail,
@@ -178,7 +178,7 @@ const admissionActivities = (
   ),
   activity(
     "billing.cardPreparationAdmissionSweep",
-    sweepExpiredCardPreparationAdmission({ db: environment.DB, now: nowEpochMs })
+    sweepExpiredEnrollmentAdmission({ db: environment.DB, now: nowEpochMs })
   ),
   activity("release.smoke.expiry", platform.expireSmokeProbes(nowEpochMs)),
 ];

@@ -36,7 +36,7 @@ export const WompiSourceId = Schema.Int.check(Schema.isGreaterThan(0))
 export type WompiSourceId = typeof WompiSourceId.Type;
 
 /** Private Fidy identity of one reusable card payment source. */
-export const CardPaymentSourceId = Schema.String.check(Schema.isUUID())
-  .pipe(Schema.brand("CardPaymentSourceId"))
-  .annotate({ identifier: "CardPaymentSourceId" });
-export type CardPaymentSourceId = typeof CardPaymentSourceId.Type;
+export const PaymentSourceId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("PaymentSourceId"))
+  .annotate({ identifier: "PaymentSourceId" });
+export type PaymentSourceId = typeof PaymentSourceId.Type;

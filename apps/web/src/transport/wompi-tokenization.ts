@@ -48,7 +48,10 @@ const decodeChunks = (chunks: ReadonlyArray<Uint8Array>, byteLength: number): st
   return new TextDecoder().decode(bytes);
 };
 
-const readBoundedResponse = (response: Response): Effect.Effect<string, CardTokenizationFailed> =>
+/** Bounds provider bytes before JSON decoding and cancels the owned reader on interruption. */
+export const readBoundedWompiResponse = (
+  response: Response
+): Effect.Effect<string, CardTokenizationFailed> =>
   Effect.callback<string, CardTokenizationFailed>((resume) => {
     if (response.body === null) {
       resume(Effect.fail(new CardTokenizationFailed()));
@@ -101,7 +104,10 @@ const readBoundedResponse = (response: Response): Effect.Effect<string, CardToke
     return cancelReader(reader).pipe(Effect.ensuring(Effect.sync(releaseReader)));
   });
 
-const wompiOrigin = (publicKey: string): Effect.Effect<string, CardTokenizationFailed> => {
+/** Selects only the fixed tokenization origin corresponding to the merchant public key. */
+export const wompiTokenizationOrigin = (
+  publicKey: string
+): Effect.Effect<string, CardTokenizationFailed> => {
   if (publicKey.startsWith("pub_test_")) {
     return Effect.succeed("https://sandbox.wompi.co");
   }
@@ -124,7 +130,7 @@ export const tokenizeCardWithWompi: {
   ): Effect.Effect<string, CardTokenizationFailed>;
 } = Function.dual(3, (publicKey: string, card: CardFields, fetchImplementation: WompiFetch) =>
   Effect.gen(function* () {
-    const origin = yield* wompiOrigin(publicKey);
+    const origin = yield* wompiTokenizationOrigin(publicKey);
     const response = yield* Effect.tryPromise({
       try: () =>
         fetchImplementation(`${origin}/v1/tokens/cards`, {
@@ -144,7 +150,7 @@ export const tokenizeCardWithWompi: {
       catch: () => new CardTokenizationFailed(),
     });
     if (!response.ok) return yield* new CardTokenizationFailed();
-    const text = yield* readBoundedResponse(response);
+    const text = yield* readBoundedWompiResponse(response);
     const json = decodeJson(text);
     if (Result.isFailure(json)) return yield* new CardTokenizationFailed();
     const decoded = decodeTokenResponse(json.success);

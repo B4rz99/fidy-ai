@@ -4,16 +4,16 @@ import { Data, Effect } from "effect";
 import { afterEach, expect } from "vitest";
 import {
   BillingEmail,
-  CardEnrollmentId,
+  PaymentEnrollmentId,
   PaymentRequestId,
 } from "../../src/core/subscription/contract";
 import { UserId } from "../../src/core/identity/contract";
-import { claimPreparedCardEnrollment } from "./internal/card-enrollment-claim";
-import { makeCardEnrollmentD1 } from "./card-enrollment-d1.test-fixture";
+import { claimPreparedPaymentEnrollment } from "./internal/payment-enrollment-claim";
+import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
 
 const userA = UserId.make("10000000-0000-4000-8000-000000000001");
 const userB = UserId.make("10000000-0000-4000-8000-000000000002");
-const enrollmentId = CardEnrollmentId.make("20000000-0000-4000-8000-000000000001");
+const enrollmentId = PaymentEnrollmentId.make("20000000-0000-4000-8000-000000000001");
 const paymentRequestId = PaymentRequestId.make("30000000-0000-4000-8000-000000000001");
 const billingEmail = BillingEmail.make("a@example.test");
 const priceId = "22700000-0000-4000-8000-000000000001";
@@ -32,7 +32,7 @@ const fromPromise = <A>(tryPromise: () => Promise<A>): Effect.Effect<A> =>
 const setup = (): Effect.Effect<D1Database> =>
   Effect.gen(function* () {
     const name = `card-enrollment-${++nextDatabase}`;
-    const { db, instance } = yield* makeCardEnrollmentD1(name, [
+    const { db, instance } = yield* makePaymentEnrollmentD1(name, [
       "CREATE TABLE users (id TEXT PRIMARY KEY NOT NULL) STRICT",
     ]);
     instances.push(instance);
@@ -43,15 +43,15 @@ const setup = (): Effect.Effect<D1Database> =>
       db
         .prepare(`INSERT INTO card_enrollments
     (id, user_id, price_id, billing_email, status, payment_source_mode,
-     contracts_json, disclosure_json, prepared_at_ms, expires_at_ms)
-    VALUES (?, ?, ?, 'a@example.test', 'prepared', 'create', '{}', '{}', ?, ?)`)
+     contracts_json, disclosure_json, prepared_at_ms, expires_at_ms, wompi_environment)
+    VALUES (?, ?, ?, 'a@example.test', 'prepared', 'create', '{}', '{}', ?, ?, 'sandbox')`)
         .bind(enrollmentId, userA, priceId, nowMs, nowMs + 900_000)
         .run()
     );
     return db;
   });
 
-it.effect("only the owning User can claim a prepared CardEnrollment, once", () =>
+it.effect("only the owning User can claim a prepared PaymentEnrollment, once", () =>
   Effect.gen(function* () {
     const db = yield* setup();
     const request = {
@@ -62,7 +62,12 @@ it.effect("only the owning User can claim a prepared CardEnrollment, once", () =
     };
     expect(
       yield* fromPromise(() =>
-        claimPreparedCardEnrollment({ db, input: { ...request, userId: userB }, nowMs })
+        claimPreparedPaymentEnrollment({
+          guard: { sql: "SELECT 1", params: [] },
+          db,
+          input: { ...request, userId: userB },
+          nowMs,
+        })
       )
     ).toBe(false);
     const unclaimed = yield* fromPromise(() =>
@@ -74,14 +79,29 @@ it.effect("only the owning User can claim a prepared CardEnrollment, once", () =
     expect(unclaimed).toEqual({ status: "prepared", payment_request_id: null });
     const outcomes = yield* fromPromise(() =>
       Promise.all([
-        claimPreparedCardEnrollment({ db, input: { ...request, userId: userA }, nowMs }),
-        claimPreparedCardEnrollment({ db, input: { ...request, userId: userA }, nowMs }),
+        claimPreparedPaymentEnrollment({
+          guard: { sql: "SELECT 1", params: [] },
+          db,
+          input: { ...request, userId: userA },
+          nowMs,
+        }),
+        claimPreparedPaymentEnrollment({
+          guard: { sql: "SELECT 1", params: [] },
+          db,
+          input: { ...request, userId: userA },
+          nowMs,
+        }),
       ])
     );
     expect(outcomes.sort((left, right) => Number(left) - Number(right))).toEqual([false, true]);
     expect(
       yield* fromPromise(() =>
-        claimPreparedCardEnrollment({ db, input: { ...request, userId: userA }, nowMs })
+        claimPreparedPaymentEnrollment({
+          guard: { sql: "SELECT 1", params: [] },
+          db,
+          input: { ...request, userId: userA },
+          nowMs,
+        })
       )
     ).toBe(false);
     expect(
@@ -100,7 +120,8 @@ it.effect("an expired preparation cannot authorize a provider source", () =>
     const db = yield* setup();
     expect(
       yield* fromPromise(() =>
-        claimPreparedCardEnrollment({
+        claimPreparedPaymentEnrollment({
+          guard: { sql: "SELECT 1", params: [] },
           db,
           input: {
             userId: userA,
@@ -129,12 +150,60 @@ it.effect("an expired preparation cannot authorize a provider source", () =>
   })
 );
 
+it.effect("rejects a source with another authorization method or provider environment", () =>
+  Effect.gen(function* () {
+    const db = yield* setup();
+    yield* fromPromise(() =>
+      claimPreparedPaymentEnrollment({
+        db,
+        guard: { sql: "SELECT 1", params: [] },
+        input: {
+          userId: userA,
+          enrollmentId,
+          paymentRequestId,
+          billingEmail,
+          paymentSourceMode: "create",
+        },
+        nowMs,
+      })
+    );
+    yield* fromPromise(() =>
+      db
+        .prepare("UPDATE card_enrollments SET wompi_candidate_source_id = 42 WHERE id = ?")
+        .bind(enrollmentId)
+        .run()
+    );
+    yield* fromPromise(() =>
+      expect(
+        db
+          .prepare(`INSERT INTO card_payment_sources
+      (id, user_id, enrollment_id, wompi_source_id, billing_email, created_at_ms, method)
+      VALUES (?, ?, ?, 42, ?, ?, 'nequi')`)
+          .bind("50000000-0000-4000-8000-000000000001", userA, enrollmentId, billingEmail, nowMs)
+          .run()
+      ).rejects.toThrow()
+    );
+    yield* fromPromise(() =>
+      expect(
+        db
+          .prepare("UPDATE card_enrollments SET wompi_environment = 'production' WHERE id = ?")
+          .bind(enrollmentId)
+          .run()
+      ).rejects.toThrow()
+    );
+    expect(
+      (yield* fromPromise(() => db.prepare("SELECT id FROM card_payment_sources").all())).results
+    ).toEqual([]);
+  })
+);
+
 it.effect("rejects a pending BillingAttempt whose snapshot differs from the selected Price", () =>
   Effect.gen(function* () {
     const db = yield* setup();
     expect(
       yield* fromPromise(() =>
-        claimPreparedCardEnrollment({
+        claimPreparedPaymentEnrollment({
+          guard: { sql: "SELECT 1", params: [] },
           db,
           input: {
             userId: userA,

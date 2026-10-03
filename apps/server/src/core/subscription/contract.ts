@@ -194,10 +194,16 @@ export const SubscriptionStatus = Schema.Struct({
 }).annotate({ identifier: "SubscriptionStatus" });
 export type SubscriptionStatus = typeof SubscriptionStatus.Type;
 
-/** Maximum safe displayed-term snapshot retained with one CardEnrollment. */
+/** Payment authorization mechanism, independent of the card issuer. */
+export const EnrollmentMethod = Schema.Literals(["card", "nequi"]).annotate({
+  identifier: "EnrollmentMethod",
+});
+export type EnrollmentMethod = typeof EnrollmentMethod.Type;
+
+/** Maximum safe displayed-term snapshot retained with one payment enrollment. */
 export const maximumEnrollmentEvidenceCharacters = 4096;
 /** Maximum opaque transient provider token admitted at the browser-only boundary. */
-export const maximumTransientCardTokenCharacters = 4096;
+export const maximumTransientPaymentTokenCharacters = 4096;
 const sha256Hex = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u));
 const providerContentHash = Schema.String.check(Schema.isPattern(/^[0-9a-f]{32,128}$/u));
 const boundedEvidenceText = Schema.String.check(
@@ -205,11 +211,11 @@ const boundedEvidenceText = Schema.String.check(
   Schema.isMaxLength(maximumEnrollmentEvidenceCharacters)
 );
 
-/** Stable identity of one short-lived card-enrollment intent. */
-export const CardEnrollmentId = Schema.String.check(Schema.isUUID())
-  .pipe(Schema.brand("CardEnrollmentId"))
-  .annotate({ identifier: "CardEnrollmentId" });
-export type CardEnrollmentId = typeof CardEnrollmentId.Type;
+/** Stable identity of one short-lived payment-enrollment intent. */
+export const PaymentEnrollmentId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("PaymentEnrollmentId"))
+  .annotate({ identifier: "PaymentEnrollmentId" });
+export type PaymentEnrollmentId = typeof PaymentEnrollmentId.Type;
 
 /** Billing destination selected explicitly for Wompi and later automatic charges. */
 export const BillingEmail = Schema.Trim.pipe(
@@ -257,24 +263,25 @@ export type WompiContractEvidenceSet = typeof WompiContractEvidenceSet.Type;
 
 /** Fidy-owned recurring-charge disclosure bound to one immutable Price. */
 export const RecurringDisclosure = Schema.Struct({
-  revision: Schema.Literal("wompi-card-enrollment-v1"),
+  revision: Schema.Literals(["wompi-card-enrollment-v1", "wompi-nequi-enrollment-v1"]),
   displayedText: boundedEvidenceText,
   contentSha256: sha256Hex,
 }).annotate({ identifier: "RecurringDisclosure" });
 export type RecurringDisclosure = typeof RecurringDisclosure.Type;
 
 /** Exactly three independent decisions; a combined consent cannot satisfy this contract. */
-export const CardEnrollmentDecisions = Schema.Struct({
+export const EnrollmentDecisions = Schema.Struct({
   acceptedEndUserPolicy: Schema.Literal(true),
   acceptedPersonalDataAuthorization: Schema.Literal(true),
   authorizedRecurringCharges: Schema.Literal(true),
-}).annotate({ identifier: "CardEnrollmentDecisions" });
-export type CardEnrollmentDecisions = typeof CardEnrollmentDecisions.Type;
+}).annotate({ identifier: "EnrollmentDecisions" });
+export type EnrollmentDecisions = typeof EnrollmentDecisions.Type;
 
 /** Browser-safe prepared state containing every term required before card entry. */
-export const PreparedCardEnrollment = Schema.Struct({
+export const PreparedPaymentEnrollment = Schema.Struct({
   status: Schema.Literal("prepared"),
-  enrollmentId: CardEnrollmentId,
+  enrollmentId: PaymentEnrollmentId,
+  method: EnrollmentMethod,
   price: Price,
   billingEmail: BillingEmail,
   contracts: WompiContractEvidenceSet,
@@ -282,58 +289,63 @@ export const PreparedCardEnrollment = Schema.Struct({
   wompiPublicKey: Schema.String.check(Schema.isPattern(/^pub_(?:test|prod)_[A-Za-z0-9_-]+$/u)),
   paymentSourceMode: Schema.Literals(["create", "reuse"]),
   expiresAt: UtcTimestamp,
-}).annotate({ identifier: "PreparedCardEnrollment" });
+}).annotate({ identifier: "PreparedPaymentEnrollment" });
 
-const CreatingCardEnrollment = Schema.Struct({
+const CreatingPaymentEnrollment = Schema.Struct({
   status: Schema.Literal("creating"),
-  enrollmentId: CardEnrollmentId,
+  enrollmentId: PaymentEnrollmentId,
+  method: EnrollmentMethod,
   priceId: PriceId,
 });
-const AvailableCardEnrollment = Schema.Struct({
+const AvailablePaymentEnrollment = Schema.Struct({
   status: Schema.Literal("available"),
-  enrollmentId: CardEnrollmentId,
+  enrollmentId: PaymentEnrollmentId,
+  method: EnrollmentMethod,
   priceId: PriceId,
 });
-const RefusedCardEnrollment = Schema.Struct({
+const RefusedPaymentEnrollment = Schema.Struct({
   status: Schema.Literal("refused"),
-  enrollmentId: CardEnrollmentId,
+  enrollmentId: PaymentEnrollmentId,
+  method: EnrollmentMethod,
   priceId: PriceId,
   reason: Schema.Literals(["provider-declined", "provider-error", "terms-changed"]),
 });
-const ExpiredCardEnrollment = Schema.Struct({
+const ExpiredPaymentEnrollment = Schema.Struct({
   status: Schema.Literal("expired"),
-  enrollmentId: CardEnrollmentId,
+  enrollmentId: PaymentEnrollmentId,
+  method: EnrollmentMethod,
   priceId: PriceId,
 });
-const VerifyingCardEnrollment = Schema.Struct({
+const VerifyingPaymentEnrollment = Schema.Struct({
   status: Schema.Literal("verifying"),
-  enrollmentId: CardEnrollmentId,
+  enrollmentId: PaymentEnrollmentId,
+  method: EnrollmentMethod,
   priceId: PriceId,
 });
 
 /** Closed browser-visible enrollment lifecycle; provider source identity is intentionally absent. */
-export const CardEnrollment = Schema.Union([
-  PreparedCardEnrollment,
-  CreatingCardEnrollment,
-  AvailableCardEnrollment,
-  RefusedCardEnrollment,
-  ExpiredCardEnrollment,
-  VerifyingCardEnrollment,
-]).annotate({ identifier: "CardEnrollment" });
-export type CardEnrollment = typeof CardEnrollment.Type;
+export const PaymentEnrollment = Schema.Union([
+  PreparedPaymentEnrollment,
+  CreatingPaymentEnrollment,
+  AvailablePaymentEnrollment,
+  RefusedPaymentEnrollment,
+  ExpiredPaymentEnrollment,
+  VerifyingPaymentEnrollment,
+]).annotate({ identifier: "PaymentEnrollment" });
+export type PaymentEnrollment = typeof PaymentEnrollment.Type;
 
 /** Closed result of the one-click browser payment action. */
-export const CardPaymentSubmission = Schema.Union([
+export const PaymentSubmission = Schema.Union([
   Schema.Struct({
     status: Schema.Literal("payment-pending"),
-    enrollmentId: CardEnrollmentId,
+    enrollmentId: PaymentEnrollmentId,
     billingAttempt: BillingAttempt,
   }),
-  Schema.Struct({ status: Schema.Literal("source-verifying"), enrollmentId: CardEnrollmentId }),
+  Schema.Struct({ status: Schema.Literal("source-verifying"), enrollmentId: PaymentEnrollmentId }),
   Schema.Struct({
     status: Schema.Literal("refused"),
-    enrollmentId: CardEnrollmentId,
+    enrollmentId: PaymentEnrollmentId,
     reason: Schema.Literals(["provider-declined", "provider-error", "terms-changed", "expired"]),
   }),
-]).annotate({ identifier: "CardPaymentSubmission" });
-export type CardPaymentSubmission = typeof CardPaymentSubmission.Type;
+]).annotate({ identifier: "PaymentSubmission" });
+export type PaymentSubmission = typeof PaymentSubmission.Type;

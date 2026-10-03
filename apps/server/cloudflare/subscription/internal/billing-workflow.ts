@@ -1,5 +1,9 @@
 import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
-import { BillingAttemptId, BillingEmail } from "../../../src/core/subscription/contract";
+import {
+  BillingAttemptId,
+  BillingEmail,
+  EnrollmentMethod,
+} from "../../../src/core/subscription/contract";
 import { IanaTimeZone } from "../../../src/core/_shared/context";
 import { Money } from "../../../src/core/_shared/money";
 import {
@@ -66,6 +70,7 @@ const Snapshot = Schema.Struct({
   wompi_reference: WompiTransactionReference,
   billing_email: BillingEmail,
   wompi_source_id: WompiSourceId,
+  method: EnrollmentMethod,
 });
 const Candidate = Schema.Struct({
   transaction_id: WompiTransactionId,
@@ -117,7 +122,7 @@ const snapshot = (
     const row = yield* attempt(() =>
       db
         .prepare(`SELECT a.id, a.user_id, a.amount, a.currency, a.billing_period, a.time_zone,
-          a.wompi_environment, a.wompi_reference, s.billing_email, s.wompi_source_id
+          a.wompi_environment, a.wompi_reference, s.billing_email, s.wompi_source_id, s.method
         FROM billing_attempts AS a JOIN card_payment_sources AS s ON s.id = a.payment_source_id
         WHERE a.id = ? AND a.user_id = s.user_id`)
         .bind(id)
@@ -452,6 +457,7 @@ const collect = (
         currency: captured.currency,
         billingEmail: captured.billing_email,
         sourceId: captured.wompi_source_id,
+        method: captured.method,
       })
     );
     // Wompi documents charge lookup by provider id, not by reference. Without a response id,

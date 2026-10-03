@@ -126,7 +126,12 @@ export const providerResponse = (request: Request): Promise<Response> => {
   if (requestUrl.includes(`/v1/payment_sources/${firstCardSourceId}`)) {
     return Promise.resolve(
       Response.json({
-        data: { id: firstCardSourceId, status: "AVAILABLE", customer_email: "tarjeta@example.com" },
+        data: {
+          id: firstCardSourceId,
+          type: "CARD",
+          status: "AVAILABLE",
+          customer_email: "tarjeta@example.com",
+        },
       })
     );
   }
@@ -134,7 +139,12 @@ export const providerResponse = (request: Request): Promise<Response> => {
   if (requestUrl.includes(`/v1/payment_sources/${sourceId}`)) {
     return Promise.resolve(
       Response.json({
-        data: { id: sourceId, status: "AVAILABLE", customer_email: "usuario@example.com" },
+        data: {
+          id: sourceId,
+          type: "CARD",
+          status: "AVAILABLE",
+          customer_email: "usuario@example.com",
+        },
       })
     );
   }

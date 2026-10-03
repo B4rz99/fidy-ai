@@ -33,8 +33,12 @@ The reply and one-use receipt stay in mounted component state, not browser stora
 channel is not a tool-callable canonical operation and uses the same origin-locked, no-store,
 redirect-rejecting, bounded browser HTTP policy as the derived clients. The
 web does not maintain copied canonical schemas, operation maps, or access policy. The Pro payment flow
-is browser-mediated: the browser creates a `PaymentRequestId` and tokenizes card fields directly with
-Wompi. The direct enrollment client belongs to one authentication lifetime: replacing or unmounting
+is browser-mediated: the browser creates a `PaymentRequestId` and tokenizes card fields or a Nequi
+number directly with Wompi. Tarjeta and Nequi share Price, Consent and payment status views but have
+separate authorization forms. Nequi approval polling is bounded to five minutes and cancelled with
+the mounted form or authentication lifetime. Numbers are cleared after tokenization, and tokens
+are cleared after submission; neither enters storage, shared atoms, navigation URLs or diagnostics.
+Reloading restarts unsubmitted authorization rather than retaining its transient token. The direct enrollment client belongs to one authentication lifetime: replacing or unmounting
 that lifetime revokes and disposes the client immediately, without waiting for Atom registry cleanup.
 The web submits through the server-owned payment boundary and observes only browser-safe
 `BillingAttempt` state through a canonical query;
@@ -59,7 +63,7 @@ storage, or application-wide state.
 Alchemy deploys the validated output as an assets-only Worker at `app.fidyapp.com`, with
 `fidyapp.com` permanently redirected to that canonical host. There is no application Worker
 entrypoint. The browser Content Security Policy permits connections only to the stable API origin and
-Wompi's fixed sandbox/production tokenization origins; card fields never pass through Fidy. Cloudflare applies
+Wompi's fixed sandbox/production tokenization origins; card fields and Nequi numbers never pass through Fidy. Cloudflare applies
 the same security headers to every SPA fallback, keeps shells and release metadata revalidating with
 `no-cache`, and removes that inherited value before assigning one-year immutable caching to
 content-hashed assets.

@@ -36,7 +36,7 @@ const cardPreparationPolicies = ResourceAdmissionPolicies.make([
 ]);
 
 /** Count authenticated preparation attempts before the existing provider-work reservation. */
-export const admitCardPreparationAttempt = ({
+export const admitEnrollmentAttempt = ({
   db,
   userId,
   now,
@@ -65,8 +65,8 @@ export const admitCardPreparationAttempt = ({
     }
   );
 
-/** Sweep only expired, standalone attempt grants; work evidence belongs to CardEnrollment D1. */
-export const sweepExpiredCardPreparationAdmission = ({
+/** Sweep only expired, standalone attempt grants; work evidence belongs to PaymentEnrollment D1. */
+export const sweepExpiredEnrollmentAdmission = ({
   db,
   now,
 }: Readonly<{ db: D1Database; now: number }>): Effect.Effect<void, Cause.UnknownError> =>

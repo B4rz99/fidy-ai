@@ -23,9 +23,11 @@ import { browserHttpClientLayer } from "./browser-http-policy";
 export type {
   CanonicalInput,
   CanonicalSuccess,
-  CardEnrollmentType,
-  CardPaymentSubmissionType,
+  PaymentEnrollmentType,
+  PaymentSubmissionType,
   SubscriptionStatus,
+  EnrollmentMethod,
+  SubmitPaymentEnrollmentPayload,
 } from "@fidy/server/client";
 export {
   BackupRecoveryCode,
@@ -61,10 +63,10 @@ export {
   IanaTimeZone,
   PaymentRequestId,
   BillingEmail,
-  CardEnrollment,
-  CardEnrollmentDecisions,
-  CardEnrollmentId,
-  CardPaymentSubmission,
+  PaymentEnrollment,
+  EnrollmentDecisions,
+  PaymentEnrollmentId,
+  PaymentSubmission,
   TokenBearer,
   TokenShortId,
   buildPATDisclosure,
@@ -206,7 +208,10 @@ class EnrollmentClientDisposed extends Data.TaggedError("EnrollmentClientDispose
  * call repeatedly. The client stays outside canonical operations and PATs.
  */
 export type SubscriptionEnrollmentClient = Readonly<{
-  execute: <A, E>(use: (client: EnrollmentApiClient) => Effect.Effect<A, E>) => Promise<A>;
+  execute: <A, E>(
+    use: (client: EnrollmentApiClient) => Effect.Effect<A, E>,
+    options?: Readonly<{ signal: AbortSignal }>
+  ) => Promise<A>;
   dispose: () => Promise<void>;
 }>;
 
@@ -233,9 +238,9 @@ export const makeSubscriptionEnrollmentClient = (
   let available = true;
   let disposal = Option.none<Promise<void>>();
   return {
-    execute: (use) =>
+    execute: (use, execution) =>
       available
-        ? runtime.runPromise(Effect.flatMap(EnrollmentClientService, use))
+        ? runtime.runPromise(Effect.flatMap(EnrollmentClientService, use), execution)
         : Effect.runPromise(Effect.fail(new EnrollmentClientDisposed())),
     dispose: () =>
       Option.match(disposal, {

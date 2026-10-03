@@ -174,7 +174,7 @@ it("keeps ordered-loop opt-outs scoped and does not re-disable refactored rules"
       expect(overrides.some(({ rules }) => "effect-guards/no-nullable-type" in rules)).toBe(false);
       expect(
         overrides.find(({ files }) =>
-          files.includes("apps/server/cloudflare/card-enrollment/card-enrollment.ts")
+          files.includes("apps/server/cloudflare/subscription/internal/payment-enrollment.ts")
         )?.rules["max-params"]
       ).toBeUndefined();
       expect(

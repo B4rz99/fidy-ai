@@ -1,4 +1,4 @@
-import { handleCardEnrollment as enroll } from "./internal/card-enrollment";
+import { handlePaymentEnrollment as enroll } from "./internal/payment-enrollment";
 import type { EnrollmentEnvironment } from "./contract";
 import {
   WorkflowEntrypoint,
@@ -28,7 +28,7 @@ import {
   reconcileBillingCandidates as reconcile,
   runBillingCollectionWorkflow as runWorkflow,
 } from "./internal/billing-workflow";
-import { sweepExpiredCardPreparationAdmission as sweep } from "./internal/card-preparation-admission";
+import { sweepExpiredEnrollmentAdmission as sweep } from "./internal/enrollment-admission";
 
 /** Offer durable billing intent to the private Queue; missed offers remain recoverable. */
 export const dispatchBillingCollection = (
@@ -59,7 +59,7 @@ export const reconcileBillingCandidates = (
 /** Classify the bounded versioned billing Queue identity without granting billing authority. */
 export const isBillingCollectionWork = (body: unknown): boolean => recognizesWork(body);
 /** Retire expired admission counts without changing enrollment or billing evidence. */
-export const sweepExpiredCardPreparationAdmission = (
+export const sweepExpiredEnrollmentAdmission = (
   input: Readonly<{ db: D1Database; now: number }>
 ): Effect.Effect<void, Cause.UnknownError> => sweep(input);
 
@@ -98,6 +98,6 @@ export const runBillingCollectionWorkflow = (
 ): Promise<void> => runWorkflow(input);
 
 /** Fresh-session browser enrollment; provider references and transient card material remain private. */
-export const handleCardEnrollment = (
+export const handlePaymentEnrollment = (
   input: Readonly<{ request: Request; environment: EnrollmentEnvironment }>
 ): Promise<Response> => enroll(input);

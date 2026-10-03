@@ -1,18 +1,21 @@
 import { Data, Effect, Encoding, Option, Redacted, Schema } from "effect";
 import {
   BillingEmail,
-  CardEnrollmentDecisions,
-  type CardEnrollmentType,
-  type CardPaymentSubmissionType,
+  EnrollmentDecisions,
+  type EnrollmentMethod,
+  type PaymentEnrollmentType,
   PaymentRequestId,
+  type PaymentSubmissionType,
   type PriceId,
+  type SubmitPaymentEnrollmentPayload,
   type SubscriptionEnrollmentClient,
 } from "@/transport/client";
 import { type CardFields, tokenizeCardWithWompi } from "@/transport/wompi-tokenization";
+import { authorizeNequiWithWompi } from "@/transport/wompi-nequi";
 import { paymentSubmissionIsTerminal } from "./payment-status";
 
-export type Enrollment = CardEnrollmentType;
-export type PaymentSubmission = CardPaymentSubmissionType;
+export type Enrollment = PaymentEnrollmentType;
+export type PaymentSubmission = PaymentSubmissionType;
 
 class EnrollmentSubmissionFailed extends Data.TaggedError("EnrollmentSubmissionFailed")<{}> {}
 
@@ -44,12 +47,20 @@ const makePaymentRequestId = (): ReturnType<typeof PaymentRequestId.make> => {
 
 type PendingPayment = Extract<PaymentSubmission, { status: "payment-pending" }>;
 
+export type NequiFields = Readonly<{
+  method: "nequi";
+  phoneNumber: Redacted.Redacted<string>;
+  onAwaiting: () => void;
+  signal: AbortSignal;
+}>;
+export type PaymentFields = CardFields | NequiFields;
+
 export type EnrollmentGateway = Readonly<{
-  prepare: (priceId: PriceId) => Promise<Enrollment>;
+  prepare: (priceId: PriceId, method?: EnrollmentMethod) => Promise<Enrollment>;
   submit: (
     enrollment: PreparedEnrollment,
     billingEmail: string,
-    card?: CardFields
+    fields?: PaymentFields
   ) => Promise<PaymentSubmission>;
   continue: (
     enrollmentId: PreparedEnrollment["enrollmentId"],
@@ -112,18 +123,81 @@ const completed = (
     return submission;
   });
 
+type SubmissionFacts = Pick<
+  SubmitPaymentEnrollmentPayload,
+  "enrollmentId" | "paymentRequestId" | "billingEmail" | "decisions"
+>;
+const submitNewSource = (
+  input: Readonly<{
+    client: SubscriptionEnrollmentClient;
+    enrollment: PreparedEnrollment;
+    facts: SubmissionFacts;
+    fields: PaymentFields;
+  }>
+): Promise<PaymentSubmission> => {
+  const { client, enrollment, facts, fields } = input;
+  if (enrollment.method === "nequi") {
+    if (!("method" in fields)) {
+      return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
+    }
+    return client.execute(
+      (transport) =>
+        authorizeNequiWithWompi({
+          publicKey: enrollment.wompiPublicKey,
+          phoneNumber: fields.phoneNumber,
+          fetch: globalThis.fetch.bind(globalThis),
+          onAwaiting: fields.onAwaiting,
+        }).pipe(
+          Effect.flatMap((nequiToken) =>
+            transport.subscriptionEnrollment
+              .submit({
+                payload: {
+                  paymentSourceMode: "create",
+                  method: "nequi",
+                  ...facts,
+                  nequiToken,
+                },
+              })
+              .pipe(Effect.ensuring(Effect.sync(() => Redacted.wipeUnsafe(nequiToken))))
+          )
+        ),
+      { signal: fields.signal }
+    );
+  }
+  if ("method" in fields) return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
+  return client.execute((transport) =>
+    tokenizeCardWithWompi(
+      enrollment.wompiPublicKey,
+      fields,
+      globalThis.fetch.bind(globalThis)
+    ).pipe(
+      Effect.map(Redacted.make),
+      Effect.flatMap((cardToken) =>
+        transport.subscriptionEnrollment.submit({
+          payload: {
+            paymentSourceMode: "create",
+            method: "card",
+            ...facts,
+            cardToken,
+          },
+        })
+      )
+    )
+  );
+};
+
 const makeSubmit =
   (
     clientService: SubscriptionEnrollmentClient,
     paymentRequests: PaymentRequestStore
   ): EnrollmentGateway["submit"] =>
-  (enrollment, billingEmail, card) => {
+  (enrollment, billingEmail, fields) => {
     globalThis.sessionStorage.setItem(billingEmailStorageKey(enrollment), billingEmail);
     const common = {
       enrollmentId: enrollment.enrollmentId,
       paymentRequestId: paymentRequestFor(paymentRequests, enrollment),
       billingEmail: BillingEmail.make(billingEmail),
-      decisions: CardEnrollmentDecisions.make({
+      decisions: EnrollmentDecisions.make({
         acceptedEndUserPolicy: true,
         acceptedPersonalDataAuthorization: true,
         authorizedRecurringCharges: true,
@@ -140,30 +214,13 @@ const makeSubmit =
         )
       );
     }
-    if (card === undefined) return Effect.runPromise(Effect.die("card fields are required"));
+    if (fields === undefined) {
+      return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
+    }
     return completed(
       paymentRequests,
       enrollment,
-      Effect.runPromise(
-        tokenizeCardWithWompi(
-          enrollment.wompiPublicKey,
-          card,
-          globalThis.fetch.bind(globalThis)
-        ).pipe(
-          Effect.map(Redacted.make),
-          Effect.flatMap((cardToken) =>
-            Effect.tryPromise({
-              try: () =>
-                clientService.execute((client) =>
-                  client.subscriptionEnrollment.submit({
-                    payload: { paymentSourceMode: "create", ...common, cardToken },
-                  })
-                ),
-              catch: () => new EnrollmentSubmissionFailed(),
-            })
-          )
-        )
-      )
+      submitNewSource({ client: clientService, enrollment, facts: common, fields })
     );
   };
 
@@ -184,7 +241,7 @@ const makeContinue =
             enrollmentId,
             paymentRequestId: paymentRequestFor(paymentRequests, enrollment),
             billingEmail: BillingEmail.make(billingEmail),
-            decisions: CardEnrollmentDecisions.make({
+            decisions: EnrollmentDecisions.make({
               acceptedEndUserPolicy: true,
               acceptedPersonalDataAuthorization: true,
               authorizedRecurringCharges: true,
@@ -232,9 +289,9 @@ export const makeEnrollmentGateway = (
             billingAttempt,
           }))
       ),
-    prepare: (priceId) =>
+    prepare: (priceId, method = "card") =>
       clientService.execute((client) =>
-        client.subscriptionEnrollment.prepare({ payload: { priceId } })
+        client.subscriptionEnrollment.prepare({ payload: { priceId, method } })
       ),
     status: (enrollmentId) =>
       clientService.execute((client) =>

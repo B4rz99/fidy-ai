@@ -55,7 +55,7 @@ import {
 import { executeProtectedSubscriptionQuery } from "../../subscription/operations";
 import {
   dispatchBillingCollection,
-  handleCardEnrollment,
+  handlePaymentEnrollment,
   receiveWompiBillingEvent,
 } from "../../subscription/runtime";
 
@@ -284,9 +284,9 @@ const providerCallbackEffect = (
 };
 
 const enrollmentCorePath = (path: string): boolean =>
-  path === "/web/subscription/card-enrollments/prepare" ||
-  path === "/web/subscription/card-enrollments/submit" ||
-  /^\/web\/subscription\/(?:card-enrollments|billing-attempts)\/[0-9a-f-]{36}$/u.test(path);
+  path === "/web/subscription/payment-enrollments/prepare" ||
+  path === "/web/subscription/payment-enrollments/submit" ||
+  /^\/web\/subscription\/(?:payment-enrollments|billing-attempts)\/[0-9a-f-]{36}$/u.test(path);
 
 /** The PAT admission variant for one piece of canonical work. */
 const patAdmission = (authority: PATAuthority, work: CanonicalWork): CanonicalWorkAdmission => ({
@@ -1572,12 +1572,12 @@ export const executeCoreHttp = ({
   if (enrollmentCorePath(url.pathname)) {
     return Effect.tryPromise({
       try: () =>
-        handleCardEnrollment({
+        handlePaymentEnrollment({
           request,
           environment: { ...environment, onAccepted: (id) => publish("billing", id) },
         }),
       catch: () => undefined,
-    }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("subscription.card-enrollment"));
+    }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("subscription.payment-enrollment"));
   }
   const directPath = directPathResponse(request, environment);
   if (Option.isSome(directPath)) return directPath.value;

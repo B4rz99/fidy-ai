@@ -105,8 +105,8 @@ const reservedRateLimitPaths = [
   "/web/session/logout",
   "/web/hosted-turns",
   "/web/hosted-turns/delivery",
-  "/web/subscription/card-enrollments/prepare",
-  "/web/subscription/card-enrollments/submit",
+  "/web/subscription/payment-enrollments/prepare",
+  "/web/subscription/payment-enrollments/submit",
   "/web/email/authentication/start",
   "/web/email/authentication/complete",
   emailReplacementPath,
@@ -127,7 +127,7 @@ const paramPrefixes = Array.from(
     ...declaredRoutes
       .filter((route) => route.includes(":"))
       .map((route) => route.slice(0, route.indexOf(":"))),
-    "/web/subscription/card-enrollments/",
+    "/web/subscription/payment-enrollments/",
     "/web/subscription/billing-attempts/",
   ])
 ).sort();

@@ -16,7 +16,7 @@ import {
   WompiTransactionId,
   WompiTransactionReference,
 } from "./wompi-model";
-import { type BillingEmail } from "../../../src/core/subscription/contract";
+import { type BillingEmail, type EnrollmentMethod } from "../../../src/core/subscription/contract";
 import { UnknownJsonString } from "../../../src/shell/schema-codecs/contract";
 import {
   OutboundHttp,
@@ -77,6 +77,7 @@ export type WompiBillingClientService = Readonly<{
     currency: string;
     billingEmail: BillingEmail;
     sourceId: WompiSourceId;
+    method: EnrollmentMethod;
   }) => Effect.Effect<WompiTransaction, WompiTransactionCreationFailed>;
   findTransaction: (
     transactionId: WompiTransactionId
@@ -114,6 +115,7 @@ const makeCreateTransaction = (
             billingEmail: input.billingEmail,
             sourceId: input.sourceId,
             reference: input.reference,
+            method: input.method,
           },
         })
         .pipe(Effect.timeout("14 seconds"));

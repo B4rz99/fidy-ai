@@ -383,18 +383,21 @@ the ServiceMarket in which the terms were offered. A later price change never re
 billing period.
 _Avoid_: Current price, price config, rate.
 
-**CardEnrollment**:
-One short-lived, User-owned authorization intent for a selected Price and reusable card source. It
-retains the accepted billing email and safe displayed terms through `prepared`, `creating`,
-`available`, `refused`, `expired`, or `verifying`; only an atomic claim of `prepared` may create a
-provider source. Card details and transient provider tokens are never CardEnrollment state.
-_Avoid_: Checkout, payment attempt, card session.
+**PaymentEnrollment**:
+One short-lived, User-owned authorization intent for a selected Price and reusable PaymentSource.
+Its EnrollmentMethod is `card` or `nequi`: direct Nequi app authorization is `nequi`, while a
+Nequi-issued card uses `card`. It retains the accepted billing email, provider environment and safe
+displayed terms through `prepared`, `creating`, `available`, `refused`, `expired`, or `verifying`;
+only an atomic live-authority claim of `prepared` may create a provider source. Card details, Nequi
+numbers and transient provider tokens are never PaymentEnrollment state.
+_Avoid_: Checkout, payment attempt, card session, CardEnrollment, nequi-account.
 
-**CardPaymentSource**:
-The private reusable provider authority created by an available CardEnrollment. Its provider
-identity remains server-only; changing Price terms requires a new CardEnrollment but can reuse this
-source without collecting card details again.
-_Avoid_: Saved card (Fidy does not store a card), payment method token.
+**PaymentSource**:
+The private reusable provider authority created by an available PaymentEnrollment. Its provider
+identity and environment remain server-only. Changing Price terms requires a new PaymentEnrollment
+but can reuse a matching-method source without collecting payment details again. Source availability
+or Nequi token approval alone never grants paid Pro; verified BillingAttempt settlement does.
+_Avoid_: Saved card (Fidy does not store a card), payment method token, CardPaymentSource.
 
 **BillingAttempt**:
 One asynchronous attempt to collect a Subscription charge, retaining its Money, Price,

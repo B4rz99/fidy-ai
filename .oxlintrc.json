@@ -256,10 +256,10 @@
         "complexity": "off"
       }
     },
-    // Card enrollment orchestrates atomic D1 claims and provider ambiguity at one Worker
+    // Payment enrollment orchestrates atomic D1 claims and provider ambiguity at one Worker
     // boundary. Its independent inputs are named; only the ordered workflow remains exempt.
     {
-      "files": ["apps/server/cloudflare/subscription/internal/card-enrollment.ts"],
+      "files": ["apps/server/cloudflare/subscription/internal/payment-enrollment.ts"],
       "rules": {
         "complexity": "off",
         "max-lines-per-function": "off"

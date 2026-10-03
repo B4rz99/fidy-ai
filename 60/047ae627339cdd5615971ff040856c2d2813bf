@@ -1,0 +1,23 @@
+infra/cloudflare/package.json
+  s_095d2e546bffa3::t_cb7b55e0499b19 20
+apps/server/package.json
+  s_095d2e546bffa3::t_f8f12970d73f4d 300
+bun.lock
+  s_095d2e546bffa3::t_a17b372f83de5e 38,103,269
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "60047ae627339cdd5615971ff040856c2d2813bf",
+  "prompts": {},
+  "sessions": {
+    "s_095d2e546bffa3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0ff46-9060-7635-9a3e-b1da64c5b988",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

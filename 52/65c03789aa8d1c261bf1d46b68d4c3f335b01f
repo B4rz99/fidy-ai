@@ -1,0 +1,31 @@
+apps/server/src/core/insights/weekly-policy.test.ts
+  s_74e559bd8b2eb1::t_fc99b15fb3191f 3,77-82
+  s_989103ff2e05ae::t_1fcde37876de0c 83-84
+apps/server/src/core/insights/contract.ts
+  s_74e559bd8b2eb1::t_b0dae926fb0fb3 117-120
+  s_74e559bd8b2eb1::t_ce7b9895a87157 121-125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5265c03789aa8d1c261bf1d46b68d4c3f335b01f",
+  "prompts": {},
+  "sessions": {
+    "s_74e559bd8b2eb1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a103fa-be97-74ea-98ef-1bbb67d7ba62",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_989103ff2e05ae": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10427-4348-7627-bf8a-d80231b6421e",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

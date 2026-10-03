@@ -341,8 +341,13 @@ readback and projection assembly remain private. Categories supplies public meta
 supplies complete cap facts, and Transactions supplies complete exact aggregates and bounded lists.
 No Dashboard caller reads another owner's persistence or replicates the effective relation.
 
-First use, edits and view preparation retain the existing one-User canonical commit, live credential
-and scope policy, Audit evidence and batch collision/refusal behavior. Views use the explicit current
+Explicit `dashboard.initializeDashboard` requires the `dashboard` PAT scope and uses the same
+one-User canonical commit as first use, edits and view preparation. An existing document is returned
+without changing its content or revision; initialization shares the document-child batch collision
+policy. Implicit creation on existing reads remains until the separate read/web migration (#968).
+Live credential and Consent checks, scope policy, Audit evidence and batch collision/refusal behavior
+remain authoritative. Existing metadata-only canonical request observation is sufficient: initialization
+adds no provider call, background work, runtime authority or content telemetry. Views use the explicit current
 IANA zone, keep Currencies and directions separate, and fail closed on incomplete or invalid facts.
 Individual document calls use the same User coordinator as batch and hosted mutations. Its turn
 covers the commit and complete projection readback, preventing a concurrent Correction from moving

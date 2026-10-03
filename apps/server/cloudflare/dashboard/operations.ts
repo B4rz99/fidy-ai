@@ -16,9 +16,11 @@ import {
 export const browseDashboard: typeof browse = (input) => browse(input);
 
 /**
- * Prepare first use or one validated edit for the shared one-User atomic unit. The caller owns
- * the commit boundary; live credential, revision and accountability guards are rechecked there.
- * An invalid initial edit leaves no document; batch collision and failure attribution stay intact.
+ * Prepare explicit initialization, first use or one validated edit for the shared one-User atomic
+ * unit. Initialization returns an existing document without changing its content or revision.
+ * The caller owns the commit boundary; live credential, revision and accountability guards are
+ * rechecked there. An invalid initial edit leaves no document; batch collision and failure
+ * attribution stay intact.
  */
 export const prepareDashboard: typeof prepare = (input) => prepare(input);
 

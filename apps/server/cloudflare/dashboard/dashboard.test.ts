@@ -1,4 +1,6 @@
-import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { applyTestMigration, installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { executeCanonicalWork } from "../canonical-operations/operations";
+import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import { afterAll, expect, it } from "vitest";
 import { BigDecimal, type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { repairDashboardProjection } from "../transactions/operations";
@@ -72,7 +74,7 @@ const seedUser = ({
     );
   });
 
-const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
+const setup = (initializeSchema = true): Effect.Effect<D1Database, Cause.UnknownError> =>
   Effect.gen(function* () {
     const db = yield* Effect.tryPromise(() => databases.acquire());
     yield* Effect.tryPromise(() =>
@@ -98,6 +100,7 @@ const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
           "0018_dashboard",
           "0019_canonical_child_guards",
           "0020_dashboard_projection",
+          ...(initializeSchema ? ["0030_dashboard_initialization"] : []),
         ].map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
       })
     );
@@ -300,6 +303,508 @@ const listIds = (
     }
     return list.widget.result.transactions.map((transaction) => transaction.id);
   });
+
+it(
+  "explicit initialization creates one valid document and preserves edits and revision on concurrent retries",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const initialize = (): Promise<Response> =>
+          send(db, 0, { path: "/dashboard/initialize", method: "POST", body: {} });
+        const replies = yield* Effect.tryPromise(() => Promise.all([initialize(), initialize()]));
+        expect(replies.map((reply) => reply.status)).toEqual([200, 200]);
+        const documents = yield* Effect.forEach(replies, (reply) =>
+          Effect.tryPromise(() => reply.json()).pipe(
+            Effect.flatMap(
+              Schema.decodeUnknownEffect(
+                Schema.Struct({ data: Schema.toCodecJson(DashboardDocument) })
+              )
+            )
+          )
+        );
+        expect(documents[0]).toEqual(documents[1]);
+        expect(documents[0].data.title).toBe("Tablero");
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(1);
+        expect(
+          (yield* Effect.tryPromise(() =>
+            send(db, 0, {
+              path: "/dashboard/edits",
+              method: "POST",
+              body: { op: "set-title", title: "Keep my edits" },
+            })
+          )).status
+        ).toBe(200);
+        const stored = (): Promise<unknown> =>
+          db
+            .prepare("SELECT document_json, revision FROM dashboard_documents WHERE user_id = ?")
+            .bind(users[0])
+            .first();
+        const before = yield* Effect.tryPromise(stored);
+        const repeated = yield* Effect.tryPromise(() => Promise.all([initialize(), initialize()]));
+        expect(repeated.map((reply) => reply.status)).toEqual([200, 200]);
+        for (const reply of repeated) {
+          const document = yield* Schema.decodeUnknownEffect(DocumentReply)(
+            yield* Effect.tryPromise(() => reply.json())
+          );
+          expect(document.data.title).toBe("Keep my edits");
+        }
+        const batched = yield* Effect.tryPromise(() =>
+          batch(db, [batchCall("dashboard.initializeDashboard", {}, 1)])
+        );
+        expect(batched.status).toBe(200);
+        expect(
+          (yield* Schema.decodeUnknownEffect(BatchDashboard)(
+            yield* Effect.tryPromise(() => batched.json())
+          )).data.results[0]?.output.data.title
+        ).toBe("Keep my edits");
+        expect(yield* Effect.tryPromise(stored)).toEqual(before);
+        expect(before).toMatchObject({ revision: 2 });
+      })
+    ),
+  30_000
+);
+
+it(
+  "dashboard-scoped PAT initialization is attributable and read-only attempts cannot partially commit a batch",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const read = `fin_${"r".repeat(8)}_${"d".repeat(43)}`;
+        const dashboard = `fin_${"d".repeat(8)}_${"e".repeat(43)}`;
+        const dashboardId = "40000000-0000-4000-8000-000000000093";
+        yield* seedPAT(db, {
+          token: read,
+          scope: "read",
+          id: "40000000-0000-4000-8000-000000000094",
+        });
+        yield* seedPAT(db, { token: dashboard, scope: "dashboard", id: dashboardId });
+        expect(
+          (yield* Effect.tryPromise(() =>
+            send(db, read, {
+              path: "/dashboard/initialize",
+              method: "POST",
+              body: {},
+            })
+          )).status
+        ).toBe(403);
+        const denied = yield* Effect.tryPromise(() =>
+          send(db, read, {
+            path: "/operations/atomic-batch",
+            method: "POST",
+            body: {
+              calls: [
+                batchCall("dashboard.getDashboard", {}, 1),
+                batchCall("dashboard.initializeDashboard", {}, 2),
+              ],
+            },
+          })
+        );
+        expect(denied.status).toBe(400);
+        expect(
+          (yield* Schema.decodeUnknownEffect(BatchFailure)(
+            yield* Effect.tryPromise(() => denied.json())
+          )).error
+        ).toMatchObject({ code: "scope_missing", failedCallIndex: 1 });
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(0);
+        const accepted = yield* Effect.tryPromise(() =>
+          send(db, dashboard, {
+            path: "/dashboard/initialize",
+            method: "POST",
+            body: {},
+          })
+        );
+        expect(accepted.status).toBe(200);
+        const initial = yield* Effect.tryPromise(() => accepted.json());
+        const repeated = yield* Effect.tryPromise(() =>
+          send(db, dashboard, {
+            path: "/operations/atomic-batch",
+            method: "POST",
+            body: {
+              calls: [batchCall("dashboard.initializeDashboard", {}, 3)],
+            },
+          })
+        );
+        expect(repeated.status).toBe(200);
+        const results = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({
+            data: Schema.Struct({
+              results: Schema.Array(Schema.Struct({ output: Schema.Json })),
+            }),
+          })
+        )(yield* Effect.tryPromise(() => repeated.json()));
+        expect(results.data.results[0]?.output).toEqual(initial);
+        const evidence = yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT user_id, pat_id, operation, outcome FROM pat_audit WHERE operation = 'dashboard.initializeDashboard' ORDER BY rowid"
+            )
+            .all()
+        );
+        expect(evidence.results).toEqual(
+          [0, 1].map(() => ({
+            user_id: users[0],
+            pat_id: dashboardId,
+            operation: "dashboard.initializeDashboard",
+            outcome: "accepted",
+          }))
+        );
+      })
+    ),
+  30_000
+);
+
+it(
+  "a foreign User credential is refused before individual or batch initialization, without revealing or changing either document",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        expect(
+          (yield* Effect.tryPromise(() =>
+            send(db, 0, {
+              path: "/dashboard/edits",
+              method: "POST",
+              body: { op: "set-title", title: "Private User A" },
+            })
+          )).status
+        ).toBe(200);
+        const snapshot = (): Promise<unknown> =>
+          db.prepare("SELECT * FROM dashboard_documents ORDER BY user_id").all();
+        const before = yield* Effect.tryPromise(snapshot);
+        const foreignDigest = yield* Effect.tryPromise(() => digest(bearer(1)));
+        const ownerDigest = yield* Effect.tryPromise(() => digest(bearer(0)));
+        const subjects = [
+          { userId: users[0] ?? "", id: sessions[1] ?? "", digest: foreignDigest },
+          { userId: users[1] ?? "", id: sessions[0] ?? "", digest: ownerDigest },
+        ];
+        const operation = CanonicalOperationId.make("dashboard.initializeDashboard");
+        for (const subject of subjects) {
+          for (const work of [
+            { _tag: "Call" as const, operation, input: {} },
+            {
+              _tag: "Batch" as const,
+              calls: [batchCall("dashboard.initializeDashboard", {}, 1)] as const,
+            },
+          ]) {
+            const response = yield* executeCanonicalWork({
+              db,
+              bucket: Option.none(),
+              subject,
+              current: DateTime.nowUnsafe().epochMilliseconds,
+              work,
+              hostedFence: Option.none(),
+              inference: Option.none(),
+            });
+            expect(response.status).not.toBe(200);
+            expect(yield* Effect.tryPromise(() => response.text())).not.toContain("Private User A");
+            expect(yield* Effect.tryPromise(snapshot)).toEqual(before);
+          }
+        }
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(1);
+        // The real User B may initialize only B's document, including through the public batch.
+        const other = yield* Effect.tryPromise(() =>
+          send(db, 1, {
+            path: "/operations/atomic-batch",
+            method: "POST",
+            body: { calls: [batchCall("dashboard.initializeDashboard", {}, 2)] },
+          })
+        );
+        expect(other.status).toBe(200);
+        expect(
+          (yield* Schema.decodeUnknownEffect(BatchDashboard)(
+            yield* Effect.tryPromise(() => other.json())
+          )).data.results[0]?.output.data.title
+        ).toBe("Tablero");
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(1);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT revision FROM dashboard_documents WHERE user_id = ?")
+              .bind(users[1])
+              .first()
+          )
+        ).toEqual({ revision: 1 });
+      })
+    ),
+  30_000
+);
+
+it(
+  "initialization obeys document-child collision policy and rolls back when required evidence cannot commit",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const collision = yield* Effect.tryPromise(() =>
+          batch(db, [
+            batchCall("dashboard.initializeDashboard", {}, 1),
+            batchCall("dashboard.getDashboard", {}, 2),
+          ])
+        );
+        expect(collision.status).toBe(400);
+        expect(
+          (yield* Schema.decodeUnknownEffect(BatchFailure)(
+            yield* Effect.tryPromise(() => collision.json())
+          )).error
+        ).toMatchObject({ code: "validation_failed", failedCallIndex: 1 });
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(`CREATE TRIGGER refuse_initialization_audit BEFORE INSERT ON dashboard_audit
+      WHEN NEW.operation = 'dashboard.initializeDashboard' BEGIN SELECT RAISE(ABORT, 'test_unavailable'); END`)
+            .run()
+        );
+        const before = yield* Effect.tryPromise(() => count(db, "dashboard_audit"));
+        const responses = [
+          yield* Effect.tryPromise(() =>
+            send(db, 0, { path: "/dashboard/initialize", method: "POST", body: {} })
+          ),
+          yield* Effect.tryPromise(() =>
+            batch(db, [batchCall("dashboard.initializeDashboard", {}, 3)])
+          ),
+        ];
+        expect(responses.map((response) => response.status)).toEqual([503, 503]);
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(before);
+      })
+    ),
+  30_000
+);
+
+it(
+  "initialization rechecks PAT authority at commit for individual and atomic-batch execution",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        for (const batched of [false, true]) {
+          const db = yield* setup();
+          const token = `fin_${"d".repeat(8)}_${"g".repeat(43)}`;
+          const id = "40000000-0000-4000-8000-000000000095";
+          yield* seedPAT(db, { token, scope: "dashboard", id });
+          let prepared = false;
+          let revoked = false;
+          // Revoke through the real binding after owner preparation, immediately before its commit.
+          const guarded: D1Database = {
+            prepare: (sql) => {
+              if (sql.includes("INSERT INTO dashboard_documents")) prepared = true;
+              return db.prepare(sql);
+            },
+            batch: <Row = unknown>(statements: D1PreparedStatement[]): Promise<D1Result<Row>[]> => {
+              if (prepared && !revoked) {
+                revoked = true;
+                return db
+                  .prepare("UPDATE pats SET revoked_at_ms = ? WHERE id = ?")
+                  .bind(DateTime.nowUnsafe().epochMilliseconds, id)
+                  .run()
+                  .then(() => db.batch<Row>(statements));
+              }
+              return db.batch<Row>(statements);
+            },
+            exec: (sql) => db.exec(sql),
+            withSession: (constraint) => db.withSession(constraint),
+            dump: () => db.dump(),
+          };
+          const response = yield* Effect.tryPromise(() =>
+            send(
+              guarded,
+              token,
+              batched
+                ? {
+                    path: "/operations/atomic-batch",
+                    method: "POST",
+                    body: {
+                      calls: [batchCall("dashboard.initializeDashboard", {}, 1)],
+                    },
+                  }
+                : { path: "/dashboard/initialize", method: "POST", body: {} }
+            )
+          );
+          expect(revoked).toBe(true);
+          expect(response.status).not.toBe(200);
+          expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
+          expect(
+            yield* Effect.tryPromise(() =>
+              db.prepare("SELECT COUNT(*) AS count FROM pat_audit").first()
+            )
+          ).toEqual({ count: 0 });
+          expect(
+            yield* Effect.tryPromise(() =>
+              db.prepare("SELECT last_used_at_ms FROM pats WHERE id = ?").bind(id).first()
+            )
+          ).toEqual({ last_used_at_ms: null });
+        }
+      })
+    ),
+  30_000
+);
+
+it(
+  "withdrawn Consent refuses initialization and batch siblings without domain effects or success evidence",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const token = `fin_${"d".repeat(8)}_${"h".repeat(43)}`;
+        yield* seedPAT(db, {
+          token,
+          scope: "dashboard",
+          id: "40000000-0000-4000-8000-000000000096",
+        });
+        const current = DateTime.nowUnsafe().epochMilliseconds;
+        const grant = "50000000-0000-4000-8000-000000000001";
+        yield* Effect.tryPromise(() =>
+          db.batch([
+            db
+              .prepare(`INSERT INTO onboarding_consent_records
+        (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms)
+        VALUES (?,?,'{}','disclosure','decision',?,?)`)
+              .bind(grant, users[0], current, current),
+            db
+              .prepare(`INSERT INTO consent_user_revocations (id,user_id,grant_record_id,session_id,occurred_at_ms)
+        VALUES (?,?,?,?,?)`)
+              .bind("50000000-0000-4000-8000-000000000002", users[0], grant, sessions[0], current),
+          ])
+        );
+        for (const credential of [token, 0]) {
+          for (const batched of [false, true]) {
+            const response = yield* Effect.tryPromise(() =>
+              send(
+                db,
+                credential,
+                batched
+                  ? {
+                      path: "/operations/atomic-batch",
+                      method: "POST",
+                      body: { calls: [batchCall("dashboard.initializeDashboard", {}, 1)] },
+                    }
+                  : { path: "/dashboard/initialize", method: "POST", body: {} }
+              )
+            );
+            expect(response.status).toBe(typeof credential === "string" ? 403 : 401);
+            if (typeof credential === "string") {
+              expect(yield* Effect.tryPromise(() => response.json())).toMatchObject({
+                error: { code: "user_action_required" },
+              });
+            }
+          }
+        }
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(0);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT COUNT(*) AS count FROM pat_audit").first()
+          )
+        ).toEqual({ count: 0 });
+      })
+    ),
+  30_000
+);
+
+it(
+  "extending initialization evidence preserves retained audits, append-only policy, retention and daily limits",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup(false);
+        expect((yield* Effect.tryPromise(() => send(db, 0, "/dashboard"))).status).toBe(200);
+        const evidence = (): Promise<unknown> =>
+          db
+            .prepare("SELECT * FROM dashboard_audit ORDER BY id")
+            .all()
+            .then((rows) => rows.results);
+        const before = yield* Effect.tryPromise(evidence);
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(`CREATE TABLE audit_retention_permits (
+      user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id), cutoff_ms INTEGER NOT NULL
+    ) STRICT`)
+            .run()
+        );
+        yield* Effect.tryPromise(() =>
+          applyTestMigration({
+            db,
+            source: new URL("../migrations/0030_dashboard_initialization.sql", import.meta.url),
+          })
+        );
+        expect(yield* Effect.tryPromise(evidence)).toEqual(before);
+        for (const sql of [
+          "UPDATE dashboard_audit SET outcome = 'rejected'",
+          "DELETE FROM dashboard_audit",
+        ]) {
+          expect(
+            Option.isNone(yield* Effect.tryPromise(() => db.prepare(sql).run()).pipe(Effect.option))
+          ).toBe(true);
+          expect(yield* Effect.tryPromise(evidence)).toEqual(before);
+        }
+        expect(
+          (yield* Effect.tryPromise(() =>
+            send(db, 0, { path: "/dashboard/initialize", method: "POST", body: {} })
+          )).status
+        ).toBe(200);
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(`INSERT INTO dashboard_audit (id, user_id, session_id, operation, outcome, occurred_at_ms)
+      WITH RECURSIVE sequence(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM sequence WHERE n < 254)
+      SELECT printf('audit-%d', n), ?, ?, 'dashboard.initializeDashboard', 'accepted', ? FROM sequence`)
+            .bind(users[0], sessions[0], DateTime.nowUnsafe().epochMilliseconds)
+            .run()
+        );
+        expect(
+          (yield* Effect.tryPromise(() =>
+            send(db, 0, { path: "/dashboard/initialize", method: "POST", body: {} })
+          )).status
+        ).toBe(429);
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(256);
+        // A permit for B cannot delete A's evidence, and cutoff equality is retained.
+        const maximum = yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT MAX(occurred_at_ms) AS time FROM dashboard_audit")
+            .first<{ time: number }>()
+        );
+        const cutoff = maximum?.time ?? 0;
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("INSERT INTO audit_retention_permits VALUES (?, ?)")
+            .bind(users[1], cutoff + 1)
+            .run()
+        );
+        expect(
+          Option.isNone(
+            yield* Effect.tryPromise(() => db.prepare("DELETE FROM dashboard_audit").run()).pipe(
+              Effect.option
+            )
+          )
+        ).toBe(true);
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("INSERT INTO audit_retention_permits VALUES (?, ?)")
+            .bind(users[0], cutoff)
+            .run()
+        );
+        expect(
+          Option.isNone(
+            yield* Effect.tryPromise(() =>
+              db.prepare("DELETE FROM dashboard_audit WHERE occurred_at_ms = ?").bind(cutoff).run()
+            ).pipe(Effect.option)
+          )
+        ).toBe(true);
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("UPDATE audit_retention_permits SET cutoff_ms = ? WHERE user_id = ?")
+            .bind(cutoff + 1, users[0])
+            .run()
+        );
+        yield* Effect.tryPromise(() =>
+          db.prepare("DELETE FROM dashboard_audit WHERE user_id = ?").bind(users[0]).run()
+        );
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(0);
+      })
+    ),
+  30_000
+);
 
 it(
   "a first invalid or missing Dashboard edit records only its refusal and never persists a document",

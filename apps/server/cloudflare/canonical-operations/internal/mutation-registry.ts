@@ -9,6 +9,7 @@ import {
   ApplyDashboardEditCanonicalInput,
   GetDashboardCanonicalInput,
   GetDashboardViewCanonicalInput,
+  InitializeDashboardCanonicalInput,
 } from "../../../src/shell/dashboard/contract";
 import { CanonicalOperationId } from "../../../src/core/canonical-operations/contract";
 import { getAtomicBatchChildIds } from "../../../src/shell/operations/contract";
@@ -186,6 +187,16 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
 >([
   ...(
     [
+      [
+        "dashboard.initializeDashboard",
+        decodeAndPrepare(InitializeDashboardCanonicalInput, (_input, work) =>
+          prepareDashboard({
+            work,
+            operation: "dashboard.initializeDashboard",
+            edit: Option.none(),
+          })
+        ),
+      ],
       [
         "dashboard.getDashboard",
         decodeAndPrepare(GetDashboardCanonicalInput, (_input, work) =>

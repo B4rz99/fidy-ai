@@ -28,7 +28,7 @@ const editBodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 16_384,
   deadlineMilliseconds: 2_000,
 });
-/** Catalog is a query; the three document-writing calls instead use the shared mutation unit. */
+/** Catalog is a query; document calls instead use the shared mutation unit. */
 const catalog = ({
   db,
   subject,

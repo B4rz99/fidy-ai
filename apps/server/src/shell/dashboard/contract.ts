@@ -118,6 +118,9 @@ export type DashboardView = typeof DashboardView.Type;
 
 const DashboardEditFailures = [NotFound, ValidationFailed] as const;
 
+/** Canonical call shape for explicit, idempotent Dashboard initialization. */
+export const InitializeDashboardCanonicalInput = Schema.Struct({});
+
 /** Canonical call shape for first-use Dashboard persistence. */
 export const GetDashboardCanonicalInput = Schema.Struct({});
 /** Canonical call shape for first-use Dashboard view persistence. */
@@ -127,6 +130,24 @@ export const ApplyDashboardEditCanonicalInput = Schema.Struct({ payload: Dashboa
 
 /** Canonical contracts for the caller's one persistent DashboardDocument and ephemeral view. */
 export const DashboardGroup = HttpApiGroup.make("dashboard")
+  .add(
+    HttpApiEndpoint.post("initializeDashboard", "/dashboard/initialize", {
+      success: OperationResponse(DashboardDocument),
+    })
+      .annotate(
+        OpenApi.Description,
+        "Initialize your default four-Widget DashboardDocument before using it. If one already " +
+          "exists, return it unchanged, preserving all edits; repeated calls never reset your Dashboard."
+      )
+      .annotateMerge(
+        operationPolicy({
+          access: patScoped("dashboard"),
+          requiredTier: "free",
+          agentConfirmation: "not-required",
+          kind: "mutation",
+        })
+      )
+  )
   .add(
     HttpApiEndpoint.get("getDashboard", "/dashboard", {
       success: OperationResponse(DashboardDocument),

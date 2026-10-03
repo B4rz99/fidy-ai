@@ -322,7 +322,7 @@ const dashboardAccess = ({
     })
   );
 
-/** Prepare one first-use read or guarded edit, without opening a D1 unit. */
+/** Prepare initialization, one first-use read or a guarded edit, without opening a D1 unit. */
 export const prepareDashboard = ({
   work,
   operation,

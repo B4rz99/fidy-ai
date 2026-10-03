@@ -1,0 +1,43 @@
+apps/web/src/features/pats/feature.tsx
+  s_989103ff2e05ae::t_81b905f377a900 10,48
+apps/server/cloudflare/categories/internal/keyword-rule-outcome.ts
+  s_989103ff2e05ae::t_e5ef0b2351ee03 33,360
+apps/server/cloudflare/onboarding/operations.ts
+  s_989103ff2e05ae::t_4a9b39a398bf79 1-6,14-48
+apps/server/cloudflare/runtime/operational-health/operations.ts
+  s_989103ff2e05ae::t_10f82a0de72920 35-37
+  s_50c28bd08103a9::t_8d38ed86f3ad5e 38
+apps/server/cloudflare/web-authentication/operations.ts
+  s_989103ff2e05ae::t_91c346840ad96f 103-105
+  s_989103ff2e05ae::t_40733969966a3b 1-14,16-39,42-96,106-136
+apps/server/cloudflare/categories/internal/canonical-keyword-rules.ts
+  s_989103ff2e05ae::t_415d419a34f07c 35,254,256
+apps/server/ARCHITECTURE.md
+  s_989103ff2e05ae::t_dc6d93c35982fc 711-712
+apps/server/scripts/check-dependency-guards.ts
+  s_989103ff2e05ae::t_4b097be70ad821 778,782-785,789-790,831,835-838,842-843
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c3260a1faa67f7b4e00f10127e0ec27be6d69476",
+  "prompts": {},
+  "sessions": {
+    "s_50c28bd08103a9": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10429-45cf-701f-bb93-ec9b2b79b908",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_989103ff2e05ae": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10427-4348-7627-bf8a-d80231b6421e",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,4 +1,4 @@
-import { HttpApiEndpoint, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
+import { HttpApiEndpoint, HttpApiSchema, OpenApi } from "effect/http-api";
 
 /** One stable User and the fresh authenticated WebSession authorizing an account change. */
 export type FreshSessionSubject = Readonly<{ id: string; user_id: string }>;

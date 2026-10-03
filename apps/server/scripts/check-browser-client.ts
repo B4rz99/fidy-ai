@@ -36,7 +36,7 @@ const safeDependency = [
 ] as const;
 
 const forbiddenDependency = [
-  /^node_modules\/effect\/dist\/unstable\/sql(?:\/|$)/u,
+  /^node_modules\/effect\/dist\/sql(?:\/|$)/u,
   /^node_modules\/@effect\/ai(?:-|\/)/u,
   /^node_modules\/@effect\/platform(?:-|\/)/u,
   /^node_modules\/@effect\/sql(?:-|\/)/u,

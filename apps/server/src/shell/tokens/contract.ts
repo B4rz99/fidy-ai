@@ -4,7 +4,7 @@ import {
   CanonicalOperationId,
 } from "~/core/canonical-operations/contract";
 import { type Option, Schema } from "effect";
-import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import {
   ActivePATList,
   ApprovePATPairingPayload,

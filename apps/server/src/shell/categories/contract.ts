@@ -1,6 +1,6 @@
 import type { AuditAuthority } from "~/shell/audit/contract";
 import { type Option, Schema } from "effect";
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api";
 import {
   Category,
   CreateKeywordRuleInput,

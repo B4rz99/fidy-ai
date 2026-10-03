@@ -1,4 +1,4 @@
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
+import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import { RotatedBackupRecoveryCode } from "~/core/recovery/contract";
 import {
   AtomicBatchEligible,

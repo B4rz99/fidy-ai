@@ -1,5 +1,5 @@
 import { Data, Effect } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import { SqlClient } from "effect/sql";
 import { Unavailable } from "~/shell/public-http/contract";
 import type { ListCategoriesResponse } from "~/shell/categories/contract";
 import { categoryResponseFromRows, categoryRowsQuery } from "./query";

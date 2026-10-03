@@ -1,0 +1,57 @@
+diff --git a/lib/Cloudflare/Workers/WorkerProvider.js b/lib/Cloudflare/Workers/WorkerProvider.js
+index 622b336b29..75ab507bb1 100644
+--- a/lib/Cloudflare/Workers/WorkerProvider.js
++++ b/lib/Cloudflare/Workers/WorkerProvider.js
+@@ -4133,6 +4133,12 @@ export const LiveWorkerProvider = () => Provider.effect(Worker, Effect.gen(funct
+             // with this Worker — see readWorkerRoutes. Empty-array props
+             // (`domain: []`, `routes: []`, `crons: []`) still observe so we
+             // can detect drift and converge deletions.
++            // versionId is an immutable upload receipt, not current traffic.
++            const uploadedVersionId = output?.versionId
++                ? yield* workers.getScriptVersion({ accountId, scriptName: workerName, versionId: output.versionId }).pipe(
++                    Effect.map(() => output.versionId),
++                    Effect.catchTag("VersionNotFound", () => Effect.succeed(undefined)))
++                : undefined;
+             const observeDomains = shouldObserveWorkerDomains(olds, output);
+             const observeRoutes = shouldObserveWorkerRoutes(olds, output);
+             const observeCrons = shouldObserveWorkerCrons(olds, output);
+@@ -4234,6 +4240,7 @@ export const LiveWorkerProvider = () => Provider.effect(Worker, Effect.gen(funct
+                 // (a getPhas call per known zone on every read); carry the
+                 // cleanup list forward like any other stable cache.
+                 affinityZoneIds: output?.affinityZoneIds,
++                versionId: uploadedVersionId,
+             };
+             // Centralized ownership decision: the engine routes `read`'s
+             // return value based on `AdoptPolicy`. We hand it the attrs
+diff --git a/src/Cloudflare/Workers/WorkerProvider.ts b/src/Cloudflare/Workers/WorkerProvider.ts
+index 798e8499d1..4a6c2efe3f 100644
+--- a/src/Cloudflare/Workers/WorkerProvider.ts
++++ b/src/Cloudflare/Workers/WorkerProvider.ts
+@@ -5587,6 +5587,19 @@ export const LiveWorkerProvider = () =>
+             // with this Worker — see readWorkerRoutes. Empty-array props
+             // (`domain: []`, `routes: []`, `crons: []`) still observe so we
+             // can detect drift and converge deletions.
++            // versionId is the last upload receipt, not the current traffic
++            // deployment. Retain it only while the immutable version exists;
++            // omitting it on every read creates false gradual-rollout drift.
++            const uploadedVersionId = output?.versionId
++              ? yield* workers.getScriptVersion({
++                  accountId,
++                  scriptName: workerName,
++                  versionId: output.versionId,
++                }).pipe(
++                  Effect.map(() => output.versionId),
++                  Effect.catchTag("VersionNotFound", () => Effect.succeed(undefined)),
++                )
++              : undefined;
+             const observeDomains = shouldObserveWorkerDomains(olds, output);
+             const observeRoutes = shouldObserveWorkerRoutes(olds, output);
+             const observeCrons = shouldObserveWorkerCrons(olds, output);
+@@ -5704,6 +5717,7 @@ export const LiveWorkerProvider = () =>
+               // (a getPhas call per known zone on every read); carry the
+               // cleanup list forward like any other stable cache.
+               affinityZoneIds: output?.affinityZoneIds,
++              versionId: uploadedVersionId,
+             } satisfies Worker["Attributes"];
+ 
+             // Centralized ownership decision: the engine routes `read`'s

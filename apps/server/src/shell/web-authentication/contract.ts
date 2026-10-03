@@ -1,4 +1,4 @@
-import { HttpApi, OpenApi } from "effect/unstable/httpapi";
+import { HttpApi, OpenApi } from "effect/http-api";
 import { BrowserLoginWebAuthGroup } from "~/shell/browser-login/contract";
 import {
   BrowserPairingEmailAuthenticationWebAuthGroup,

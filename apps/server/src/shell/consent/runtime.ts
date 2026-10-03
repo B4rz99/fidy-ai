@@ -1,5 +1,5 @@
 import { Option, type Redacted } from "effect";
-import { type HttpClient } from "effect/unstable/http";
+import { type HttpClient } from "effect/http";
 import { type DisclosureSnapshot } from "~/core/consent/contract";
 import { TranscriptText } from "~/core/agent/contract";
 import {

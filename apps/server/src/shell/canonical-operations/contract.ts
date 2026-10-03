@@ -1,5 +1,5 @@
 import type { Option } from "effect";
-import type { HttpApiEndpoint } from "effect/unstable/httpapi";
+import type { HttpApiEndpoint } from "effect/http-api";
 import type { AccessTier } from "~/core/access-tier/contract";
 import type { ProviderQualifiedMessages } from "~/core/consent/contract";
 import type { FidyApi, OperationId } from "~/shell/api";

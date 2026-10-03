@@ -1,6 +1,6 @@
 import { CanonicalTelemetry, ErrorCode } from "~/shell/public-http/contract";
 import { expect, it } from "@effect/vitest";
-import { HttpApi } from "effect/unstable/httpapi";
+import { HttpApi } from "effect/http-api";
 
 import { FidyApi, operationCatalog } from "~/shell/api";
 import { TelemetryRegistry } from "./contract";

@@ -1,6 +1,6 @@
 import { assert, expect, it } from "@effect/vitest";
 import { BigDecimal, Effect, Equal, Exit, Result, Schema } from "effect";
-import * as Arbitrary from "effect/unstable/arbitrary/Arbitrary";
+import * as Arbitrary from "effect/Arbitrary";
 import {
   Currency,
   CurrencyMismatch,
@@ -101,6 +101,14 @@ it("encodes normalized plain decimal text without trailing zeros or exponent not
     amount: "100000000000000000000",
     currency: "COP",
   });
+});
+
+it("rejects invalid Money on encoding as well as decoding", () => {
+  for (const amount of ["-1", "12.345"]) {
+    expect(() =>
+      encodeMoney({ amount: BigDecimal.fromStringUnsafe(amount), currency: Currency.make("COP") })
+    ).toThrow();
+  }
 });
 
 it("adds and compares Money with equal Currency exactly", () => {

@@ -11,7 +11,7 @@ import {
   readSubscriptionStatus,
 } from "~/shell/subscription/internal/queries";
 import { Effect, Option, Schema } from "effect";
-import { type SqlClient } from "effect/unstable/sql";
+import { type SqlClient } from "effect/sql";
 import { type UserId } from "~/core/identity/contract";
 import { SubscriptionOffers, SubscriptionStatus } from "~/core/subscription/contract";
 import { type OwnedStatement } from "~/shell/owner-write/contract";

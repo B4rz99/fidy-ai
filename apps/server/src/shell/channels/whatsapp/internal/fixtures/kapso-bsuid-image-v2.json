@@ -1,0 +1,30 @@
+{
+  "message": {
+    "id": "wamid.bsuid-image-001",
+    "timestamp": "1775217600",
+    "type": "image",
+    "from_user_id": "CO.13491208655302741918",
+    "image": {
+      "id": "media_image_123",
+      "caption": "Recibo del mercado"
+    },
+    "kapso": {
+      "direction": "inbound",
+      "has_media": true,
+      "content": "Image attached URL: https://untrusted.example/image",
+      "media_url": "https://untrusted.example/image",
+      "media_data": {
+        "url": "https://untrusted.example/image",
+        "filename": "../../receipt.html",
+        "content_type": "image/jpeg",
+        "byte_size": 204800
+      }
+    }
+  },
+  "conversation": {
+    "id": "conv_bsuid_image_001",
+    "phone_number": null,
+    "business_scoped_user_id": "CO.13491208655302741918"
+  },
+  "phone_number_id": "123456789012345"
+}

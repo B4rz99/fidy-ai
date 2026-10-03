@@ -219,6 +219,8 @@ const routeHostedInbound = (
   input: WebhookInbound
 ): Effect.Effect<Option.Option<Response>, void, HttpClient.HttpClient> =>
   Effect.gen(function* () {
+    // Image extraction is not installed yet. A caption must never become a hosted text Turn.
+    if (input.event.content._tag === "Image") return Option.some(answer(HTTP_UNAVAILABLE));
     const known = yield* findWhatsAppUser({
       db: environment.DB,
       portfolioId: input.event.caller.businessPortfolioId,

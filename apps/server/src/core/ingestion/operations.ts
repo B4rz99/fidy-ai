@@ -1,28 +1,179 @@
 import { BigDecimal, DateTime, Effect, Option, Result, Schema } from "effect";
 import type { AccessTier } from "~/core/access-tier/contract";
-import { type Currency, Money, encodeMoneyAmount } from "~/core/_shared/money";
+import { Currency, Money, encodeMoneyAmount } from "~/core/_shared/money";
+import type { CapturedInterpretationContext } from "~/core/interpretation-evidence/contract";
+import { TransactionExtraction } from "~/core/transactions/contract";
 import {
+  type CaptureInterpretation,
+  type CaptureInterpretationEvidence,
+  type CaptureInterpretationInput,
+  type CaptureOccurrence,
+  type CaptureProposal,
   type InterpretedStatementRow,
   type NeedsReviewReason,
   type NeedsReviewStatementRow,
   type ParsedStatementRow,
   type StatementAccounting,
   StatementColumnMapping,
+  captureInterpretationRevision,
   forwardedEmailOutstandingCap,
   freeForwardedEmailCap,
   freeForwardedEmailDeferredCap,
+  freeMediaSubmissionCap,
 } from "./contract";
 
 const bogotaTimeZone = DateTime.zoneMakeNamedUnsafe("America/Bogota");
 
-/** Half-open Colombia calendar month used by every forwarded-email allowance decision. */
-export const emailAllowancePeriod = (
+const captureDateParts = (
+  source: Extract<CaptureOccurrence, { readonly _tag: "LocalDate" }>
+): Readonly<DateTime.DateTime.Parts> => {
+  const [year = 0, month = 0, day = 0] = source.date.split("-").map(Number);
+  const [hour = 0, minute = 0, second = 0] = Option.getOrElse(source.time, () => "00:00:00")
+    .split(":")
+    .map(Number);
+  return { year, month, day, hour, minute, second, millisecond: 0 };
+};
+
+const sameCalendarParts = (
+  actual: Readonly<DateTime.DateTime.PartsWithWeekday>,
+  expected: Readonly<DateTime.DateTime.Parts>
+): boolean =>
+  actual.year === expected.year &&
+  actual.month === expected.month &&
+  actual.day === expected.day &&
+  actual.hour === expected.hour &&
+  actual.minute === expected.minute &&
+  actual.second === expected.second;
+
+const captureOccurrence = (
+  occurrence: Option.Option<CaptureOccurrence>,
+  context: CapturedInterpretationContext,
+  submittedAt: DateTime.Utc
+): Option.Option<DateTime.Utc> =>
+  Option.match(occurrence, {
+    onNone: () => Option.some(submittedAt),
+    onSome: (source) => {
+      if (source._tag === "Instant") return Option.some(source.value);
+      const parts = captureDateParts(source);
+      if (parts.year < 1) return Option.none();
+      const date = DateTime.makeZoned(parts, {
+        timeZone: context.timeZone,
+        adjustForTimeZone: true,
+        disambiguation: "reject",
+      });
+      if (Option.isNone(date)) return Option.none();
+      return sameCalendarParts(DateTime.toParts(date.value), parts)
+        ? Option.some(DateTime.toUtc(date.value))
+        : Option.none();
+    },
+  });
+
+type SingleCaptureProposal = Extract<CaptureProposal, { readonly _tag: "SingleMovement" }>;
+
+const captureEvidence = (
+  currency: Option.Option<Currency>,
+  occurrence: Option.Option<CaptureOccurrence>
+): CaptureInterpretationEvidence => ({
+  currencyBasis: Option.isSome(currency) ? "explicit" : "default",
+  dateBasis: Option.isSome(occurrence) ? "explicit" : "submission-date-default",
+  revision: captureInterpretationRevision,
+});
+
+const interpretSingleCapture = (
+  proposal: SingleCaptureProposal,
+  input: CaptureInterpretationInput
+): CaptureInterpretation => {
+  if (proposal.completion !== "completed") {
+    return { _tag: "NeedsReview", reason: "movement-not-completed" };
+  }
+  if (Option.isNone(proposal.money) || Option.isNone(proposal.direction)) {
+    return { _tag: "NeedsReview", reason: "missing-required-fact" };
+  }
+  const money = Money.makeOption({
+    amount: proposal.money.value.amount,
+    currency: Option.getOrElse(proposal.money.value.currency, () => Currency.make("COP")),
+  });
+  if (Option.isNone(money)) {
+    return { _tag: "NeedsReview", reason: "canonical-validation-failed" };
+  }
+  const occurrence = captureOccurrence(proposal.occurrence, input.context, input.submittedAt);
+  if (Option.isNone(occurrence) || DateTime.isGreaterThan(occurrence.value, input.now)) {
+    return { _tag: "NeedsReview", reason: "invalid-occurrence" };
+  }
+  const occurredAt = occurrence.value;
+  const extraction = TransactionExtraction.makeOption({
+    money: money.value,
+    direction: proposal.direction.value,
+    counterparty: proposal.counterparty,
+    occurredAt,
+  });
+  if (Option.isNone(extraction)) {
+    return { _tag: "NeedsReview", reason: "canonical-validation-failed" };
+  }
+  return {
+    _tag: "Extracted",
+    extraction: extraction.value,
+    evidence: captureEvidence(proposal.money.value.currency, proposal.occurrence),
+  };
+};
+
+/**
+ * Interprets decoded image/text facts, applying COP and the frozen submission instant only when
+ * absent. Missing required financial facts and non-completed/multiple movements enter review.
+ * The caller supplies captured context and the finalization instant; processing time never replaces
+ * the submission date. This pure decision neither accepts work nor grants authority to persist it.
+ */
+export const interpretCapture = (input: CaptureInterpretationInput): CaptureInterpretation => {
+  switch (input.proposal._tag) {
+    case "Unparseable":
+      return { _tag: "NeedsReview", reason: "unparseable-material" };
+    case "MultipleMovements":
+      return { _tag: "NeedsReview", reason: "multiple-movements" };
+    case "SingleMovement":
+      return interpretSingleCapture(input.proposal, input);
+  }
+};
+
+const bogotaAllowancePeriod = (
   now: DateTime.Utc
 ): Readonly<{ from: DateTime.Utc; toExclusive: DateTime.Utc }> => {
   const from = DateTime.startOf(DateTime.setZone(now, bogotaTimeZone), "month");
   return {
     from: DateTime.toUtc(from),
     toExclusive: DateTime.toUtc(DateTime.add(from, { months: 1 })),
+  };
+};
+
+/** Half-open Colombia calendar month used by every forwarded-email allowance decision. */
+export const emailAllowancePeriod = (
+  now: DateTime.Utc
+): Readonly<{ from: DateTime.Utc; toExclusive: DateTime.Utc }> => bogotaAllowancePeriod(now);
+
+/**
+ * Decides eligibility from one User's current-month, non-negative media consumption snapshot after
+ * replay handling. Admit describes publication of one new submission, not webhook acknowledgment.
+ * Recheck this decision inside the acceptance commit; this pure snapshot grants no authority and
+ * reserves no unit. Pro access bypasses only the product cap, never resource admission.
+ */
+export const decideMediaAdmission = (
+  input: Readonly<{
+    access: AccessTier;
+    consumed: number;
+    now: DateTime.Utc;
+  }>
+):
+  | Readonly<{ _tag: "Admit"; consumesFreeAllowance: boolean; remaining: Option.Option<number> }>
+  | Readonly<{ _tag: "QuotaExhausted"; resetsAt: DateTime.Utc }> => {
+  if (input.access === "pro") {
+    return { _tag: "Admit", consumesFreeAllowance: false, remaining: Option.none() };
+  }
+  if (input.consumed >= freeMediaSubmissionCap) {
+    return { _tag: "QuotaExhausted", resetsAt: bogotaAllowancePeriod(input.now).toExclusive };
+  }
+  return {
+    _tag: "Admit",
+    consumesFreeAllowance: true,
+    remaining: Option.some(freeMediaSubmissionCap - input.consumed - 1),
   };
 };
 

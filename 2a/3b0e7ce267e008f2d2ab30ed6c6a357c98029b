@@ -1,0 +1,36 @@
+docs/research/effect-4-stable-migration.md
+  s_8e3ccc4039a137::t_1028890390f51b 39-48,93-101,128-144
+  s_8e3ccc4039a137::t_9118f01c1bb200 1-38,49-92,102-127,145-207
+scripts/check-effect-family.ts
+  s_8e3ccc4039a137::t_549ee9dfcc58da 5,164
+  s_8e3ccc4039a137::t_6bf71554f5fb9f 147-154,181
+  s_8e3ccc4039a137::t_1028890390f51b 186
+  s_8e3ccc4039a137::t_5013e704034f99 12-14
+  s_8e3ccc4039a137::t_a697c16aec3d39 3,143
+  s_8e3ccc4039a137::t_794f9a0d178233 135,137-138,140-141,145-146,182-185
+  s_8e3ccc4039a137::t_a033f95e0f4832 15-20,136,139,142,144
+  s_8e3ccc4039a137::t_2f1f75141db68c 21
+scripts/check-effect-family.test.ts
+  s_8e3ccc4039a137::t_d5f36a7ce7446b 36,38,91-94,102-105,109,178-194
+  s_8e3ccc4039a137::t_1028890390f51b 261
+  s_8e3ccc4039a137::t_9fe18ad8fb76a1 195,250-260,262-263,289-303
+  s_8e3ccc4039a137::t_d521c97dbf4d63 37,264-288
+  s_8e3ccc4039a137::t_f5eb2e184e3cdb 163-170
+  s_8e3ccc4039a137::t_e06d7aafb6b539 196
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2a3b0e7ce267e008f2d2ab30ed6c6a357c98029b",
+  "prompts": {},
+  "sessions": {
+    "s_8e3ccc4039a137": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10233-8d17-76b0-b672-dd62d4a0b125",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

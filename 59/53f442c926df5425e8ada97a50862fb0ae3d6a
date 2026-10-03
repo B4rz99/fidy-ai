@@ -1,0 +1,57 @@
+ARCHITECTURE.md
+  s_8e3ccc4039a137::t_18ac1c740e3b96 84-100
+GLOSSARY.md
+  s_8e3ccc4039a137::t_f7c0bf89d52e6f 231-251
+SECURITY_STANDARDS.md
+  s_8e3ccc4039a137::t_c358fdf686f41d 166-196
+apps/server/ARCHITECTURE.md
+  s_8e3ccc4039a137::t_ac259930571519 370-387
+apps/web/ARCHITECTURE.md
+  s_8e3ccc4039a137::t_31dc34aeed0453 59-74
+docs/adr/0033-hosted-mcp-and-oauth-agent-grants.md
+  s_8e3ccc4039a137::t_bdb412c1b70c4b 1-220
+docs/research/hosted-mcp-interoperability-977.md
+  s_8e3ccc4039a137::t_34f992b7b0199f 1-258
+docs/research/hosted-mcp-spike/client-metadata.json
+  s_8e3ccc4039a137::t_56a4cdffbf03d2 1-14
+docs/research/hosted-mcp-spike/evidence-legacy.json
+  s_8e3ccc4039a137::t_d732536f7890df 1-55
+docs/research/hosted-mcp-spike/evidence-resolved.json
+  s_8e3ccc4039a137::t_f992314843f5eb 1-123
+docs/research/hosted-mcp-spike/evidence-stateless.json
+  s_8e3ccc4039a137::t_96cd00b4a7fe19 1-64
+docs/research/hosted-mcp-spike/evidence-strict.json
+  s_8e3ccc4039a137::t_345ad3b3e74218 1-42
+docs/research/hosted-mcp-spike/evidence-wrong-issuer.json
+  s_8e3ccc4039a137::t_cf28408c9069eb 1-48
+docs/research/hosted-mcp-spike/host-outcomes.json
+  s_8e3ccc4039a137::t_9bf48a5007c461 1-334
+docs/research/hosted-mcp-spike/host-probes.md
+  s_8e3ccc4039a137::t_c6c1d75fc2847b 1-73
+docs/research/hosted-mcp-spike/oauth.md
+  s_8e3ccc4039a137::t_5baaa36b8e21e9 1-218
+docs/research/hosted-mcp-spike/oauth.test.md
+  s_8e3ccc4039a137::t_f18f4e832cb451 1-68
+docs/research/hosted-mcp-spike/package.json
+  s_8e3ccc4039a137::t_56632537fa1342 1-15
+docs/research/hosted-mcp-spike/server.md
+  s_8e3ccc4039a137::t_5f497e76cc0784 1-38
+docs/research/hosted-mcp-spike/server.test.md
+  s_8e3ccc4039a137::t_367608a7aed8eb 1-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5953f442c926df5425e8ada97a50862fb0ae3d6a",
+  "prompts": {},
+  "sessions": {
+    "s_8e3ccc4039a137": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10233-8d17-76b0-b672-dd62d4a0b125",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

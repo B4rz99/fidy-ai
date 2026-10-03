@@ -6,7 +6,7 @@ import { maximumAtomicBatchCalls } from "../../src/shell/operations/contract";
 import type { BudgetOutcome } from "../budgets/contract";
 import type { TransactionOutcome } from "../transactions/contract";
 import type { KeywordRuleOutcome } from "../categories/contract";
-import type { ErrorCode } from "../../src/shell/public-http/contract";
+import type { ErrorCode, SuggestedOperation } from "../../src/shell/public-http/contract";
 import type { StatementSubmission } from "../../src/shell/ingestion/contract";
 import type { EmailForwardingAddress } from "../../src/core/ingestion/contract";
 import type { StatementPublicationOutcome } from "../ingestion/contract";
@@ -102,6 +102,8 @@ export type CommittedMutationValue =
   | Readonly<{
       _tag: "Owner";
       payload: unknown;
+      /** Owner-proposed continuations already checked against the live caller's canonical policy. */
+      next: ReadonlyArray<SuggestedOperation>;
       encode: () => Effect.Effect<unknown, Schema.SchemaError>;
     }>
   | Readonly<{ _tag: "Transaction"; transaction: Transaction }>

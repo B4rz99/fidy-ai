@@ -1,4 +1,5 @@
 import { Effect, Exit, Option, Schema } from "effect";
+import { NextOperations } from "../../../src/shell/public-http/contract";
 import { maximumAtomicBatchCalls } from "../../../src/shell/operations/contract";
 import type { HostedCommitFence } from "../../agent/contract";
 import { prepareHostedMutationCommit } from "../../agent/operations";
@@ -545,12 +546,13 @@ export const committedJsonResponse = ({
   value,
   status,
 }: Readonly<{ value: CommittedMutationValue; status: number }>): Effect.Effect<Response> =>
-  encodeCommittedValue(value).pipe(
-    Effect.map((json) =>
-      Response.json({ data: json, next: [] }, { status, headers: transactionNoStore })
-    ),
-    Effect.orElseSucceed(transactionUnavailable)
-  );
+  Effect.gen(function* () {
+    const data = yield* encodeCommittedValue(value);
+    const next = yield* Schema.encodeEffect(Schema.toCodecJson(NextOperations))(
+      value._tag === "Owner" ? value.next : []
+    );
+    return Response.json({ data, next }, { status, headers: transactionNoStore });
+  }).pipe(Effect.orElseSucceed(transactionUnavailable));
 
 const failedPreparationResponse = ({
   db,

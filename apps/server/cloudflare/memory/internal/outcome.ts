@@ -271,6 +271,7 @@ export const findMemoryValue = ({
   outcome.operation === "memory.forget"
     ? Effect.succeedSome({
         _tag: "Owner" as const,
+        next: [],
         payload: outcome.memoryId,
         encode: () => Schema.encodeEffect(Schema.toCodecJson(MemoryId))(outcome.memoryId),
       })
@@ -288,6 +289,7 @@ export const findMemoryValue = ({
               ? Option.none<CommittedMutationValue>()
               : Option.some({
                   _tag: "Owner" as const,
+                  next: [],
                   payload: memory,
                   encode: () => Schema.encodeEffect(Schema.toCodecJson(Memory))(memory),
                 });

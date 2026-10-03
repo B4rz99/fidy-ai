@@ -499,6 +499,7 @@ const findCommittedInsight = ({
       const insight = event.value;
       return Option.some({
         _tag: "Owner" as const,
+        next: [],
         payload: insight,
         encode: () => Schema.encodeEffect(Schema.toCodecJson(InsightEvent))(insight),
       });
@@ -510,6 +511,7 @@ const findCommittedInsight = ({
         const payload = { insight: event.value, deliveryAttempt };
         return {
           _tag: "Owner" as const,
+          next: [],
           payload,
           encode: () =>
             Schema.encodeEffect(

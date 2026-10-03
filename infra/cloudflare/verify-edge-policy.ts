@@ -2,7 +2,7 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-const expectedEdgePolicyDigest = "71cbc6e9478d40effa6020723c6d4767b0001febee108ecfed1dcf730cc23c8c";
+const expectedEdgePolicyDigest = "3f1915d1b5b8a0e87203299ee37ea653e37b81e1406f18dab330f3a5c01316c5";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),

@@ -350,6 +350,22 @@ one contribution between calendar buckets during a view. The projection cache re
 This publication adds no migration, runtime, external workflow or telemetry purpose;
 existing canonical spans and metadata-only accountability remain in force.
 
+`dashboard.initializeDashboard` explicitly initializes the caller's document through the same
+coordinator, owner preparation and atomic commit. It requires the `dashboard` PAT capability;
+browser and hosted authority use the existing canonical access algebra. An existing document is
+returned unchanged, including Widget identities and revision; malformed retained state is
+unavailable rather than missing. Concurrent creation returns committed D1 state, and the existing
+one-document-child batch collision rule remains in force. Caller-filtered continuations accompany
+the safe canonical result, using the same committed-result protocol individually and in batches.
+The forward Audit migration only expands the existing metadata vocabulary and retains its evidence,
+budget and retention protections. Existing canonical Work observations and metadata-only Audit are
+sufficient for this bounded workflow; no content or credential telemetry is added.
+
+This is the #967 prefactor: `getDashboard`, `getDashboardView` and web first-use still implicitly
+initialize until #968 removes that behavior. The Dashboard native tests cover explicit initialization,
+real D1/Durable Object concurrency, unchanged revisions after replay/edit, whole-unit rollback and
+live authorization, and provide the reusable seam for that read migration.
+
 ### Consent owner composition
 
 Consent publishes its declarations and decisions through `core/consent/contract.ts` and

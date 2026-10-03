@@ -78,6 +78,7 @@ export const findBudgetValue = ({
   outcome.operation === "budgets.deleteBudget"
     ? Effect.succeedSome({
         _tag: "Owner" as const,
+        next: [],
         payload: outcome.budgetId,
         encode: () => Schema.encodeEffect(Schema.toCodecJson(BudgetId))(outcome.budgetId),
       })
@@ -85,6 +86,7 @@ export const findBudgetValue = ({
         Effect.map(
           Option.map((budget) => ({
             _tag: "Owner" as const,
+            next: [],
             payload: budget,
             encode: () => Schema.encodeEffect(Schema.toCodecJson(Budget))(budget),
           }))

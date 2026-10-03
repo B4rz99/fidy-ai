@@ -222,6 +222,21 @@
       }
     },
     {
+      "id": "dashboard.initializeDashboard",
+      "policy": {
+        "access": {
+          "scope": {
+            "capability": "dashboard",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "mutation",
+        "requiredTier": "free"
+      }
+    },
+    {
       "id": "dashboard.listDashboardCatalog",
       "policy": {
         "access": {

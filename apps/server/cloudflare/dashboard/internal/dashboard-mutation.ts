@@ -19,6 +19,11 @@ import {
   WidgetId,
 } from "../../../src/core/dashboard/contract";
 
+import {
+  checkpointSuggestedOperations,
+  suggestOperation,
+} from "../../../src/shell/canonical-operations/operations";
+import { NextOperations, type SuggestedOperation } from "../../../src/shell/public-http/contract";
 import { DashboardView } from "../../../src/shell/dashboard/contract";
 import { loadDashboardFacts } from "./dashboard-view";
 import { renderDashboardView } from "../../../src/shell/dashboard/operations";
@@ -26,6 +31,7 @@ import {
   type TransactionCaller,
   callerAuthority,
   callerScope,
+  childCaller,
   credentialRefusedPreparation,
   failedPreparation,
   isPATCaller,
@@ -296,7 +302,7 @@ const preparedDashboard = ({
       ...(write.length > 0 ? [work.db.prepare(dashboardCompletion)] : []),
       audit(work, operation, "accepted"),
     ],
-    outcome: dashboardOutcome(operation),
+    outcome: dashboardOutcome(work, operation),
   },
 });
 
@@ -322,6 +328,22 @@ const dashboardAccess = ({
     })
   );
 
+/** Resolve first-use policy without treating invalid retained state as absence. */
+const dashboardBase = (
+  work: MutationContext,
+  operation: DashboardMutationOperation,
+  existing: Option.Option<StoredDashboard>
+): Effect.Effect<DashboardDocument, InvalidStoredDashboard> =>
+  Effect.gen(function* () {
+    if (Option.isSome(existing)) return existing.value.document;
+    const document = defaultDocument();
+    if (operation === "dashboard.initializeDashboard") {
+      const categories = yield* validCategories(work.db, document);
+      if (!Option.getOrElse(categories, () => false)) return yield* new InvalidStoredDashboard();
+    }
+    return document;
+  });
+
 /** Prepare one first-use read or guarded edit, without opening a D1 unit. */
 export const prepareDashboard = ({
   work,
@@ -336,7 +358,7 @@ export const prepareDashboard = ({
     const access = yield* dashboardAccess({ work, operation, edit });
     if (Option.isSome(access)) return access.value;
     const existing = yield* findDashboardDocument({ db: work.db, userId: work.subject.userId });
-    const base = Option.isSome(existing) ? existing.value.document : defaultDocument();
+    const base = yield* dashboardBase(work, operation, existing);
     const decision = yield* decideDocument({ work, operation, edit, base });
     if (Result.isFailure(decision)) return decision.failure;
     const document = decision.success;
@@ -357,13 +379,62 @@ export const prepareDashboard = ({
     });
   }).pipe(Effect.orElseSucceed(failedPreparation));
 
+/** Continuations never advertise a capability the committed caller cannot currently exercise. */
+const initializationNext = (
+  work: MutationContext
+): Effect.Effect<ReadonlyArray<SuggestedOperation>> =>
+  Effect.gen(function* () {
+    const capabilities = yield* Effect.filter(["read", "dashboard"] as const, (capability) =>
+      Effect.tryPromise(() =>
+        liveTransactionAuthority({
+          ...work,
+          subject: childCaller({ subject: work.subject, requiredScope: Option.some(capability) }),
+        })
+      ).pipe(Effect.orElseSucceed(() => false))
+    );
+    return checkpointSuggestedOperations({
+      candidates: [
+        suggestOperation({
+          tool: "dashboard.getDashboardView",
+          hint: "Render the initialized Dashboard with current financial facts.",
+        }),
+        suggestOperation({
+          tool: "dashboard.applyDashboardEdit",
+          args: Option.none(),
+          hint: "Customize the retained Dashboard using its current Widget identities.",
+        }),
+      ],
+      caller: {
+        accessCaller: isPATCaller(work.subject)
+          ? { _tag: "PAT", capabilities }
+          : { _tag: "WebSession", fresh: false },
+        tier: "free",
+      },
+    });
+  });
+
 /** Commit-time owner decisions stay with the Dashboard, not in the common mutation unit. */
-const dashboardOutcome = (operation: DashboardMutationOperation): OwnerOutcome => ({
+const dashboardOutcome = (
+  work: MutationContext,
+  operation: DashboardMutationOperation
+): OwnerOutcome => ({
   _tag: "Owner",
   operation,
   collisionKey: Option.some("dashboard-document"),
   guardFacts: Option.none(),
-  read: (db, userId) => findDashboardValue({ db, userId, operation }),
+  read: (db, userId) =>
+    Effect.gen(function* () {
+      const value = yield* findDashboardValue({ db, userId, operation });
+      if (
+        operation !== "dashboard.initializeDashboard" ||
+        Option.isNone(value) ||
+        value.value._tag !== "Owner"
+      ) {
+        return value;
+      }
+      const next = yield* initializationNext(work);
+      return Option.some({ ...value.value, next });
+    }),
   triggerRefusal: (_work, kind) =>
     kind === "audit"
       ? Option.some({
@@ -399,6 +470,7 @@ export const findDashboardValue = ({
       const document = found.value.document;
       return Option.some({
         _tag: "Owner" as const,
+        next: [],
         payload: document,
         encode: () => Schema.encodeEffect(Schema.toCodecJson(DashboardDocument))(document),
       });
@@ -413,6 +485,7 @@ export const findDashboardValue = ({
     });
     return Option.some({
       _tag: "Owner" as const,
+      next: [],
       payload: view,
       encode: () => Schema.encodeEffect(Schema.toCodecJson(DashboardView))(view),
     });
@@ -422,7 +495,8 @@ export const findDashboardValue = ({
 export const presentDashboard = (
   value: Extract<CommittedMutationValue, { _tag: "Owner" }>
 ): Effect.Effect<Response> =>
-  value.encode().pipe(
-    Effect.map((data) => Response.json({ data, next: [] }, { headers: transactionNoStore })),
-    Effect.orElseSucceed(transactionUnavailable)
-  );
+  Effect.gen(function* () {
+    const data = yield* value.encode();
+    const next = yield* Schema.encodeEffect(Schema.toCodecJson(NextOperations))(value.next);
+    return Response.json({ data, next }, { headers: transactionNoStore });
+  }).pipe(Effect.orElseSucceed(transactionUnavailable));

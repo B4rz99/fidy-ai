@@ -15,6 +15,7 @@ export type AuditCredentialOperation =
   | "categories.listKeywordRules"
   | "categories.updateKeywordRule"
   | "dashboard.getDashboard"
+  | "dashboard.initializeDashboard"
   | "dashboard.getDashboardView"
   | "dashboard.listDashboardCatalog"
   | "dashboard.applyDashboardEdit"

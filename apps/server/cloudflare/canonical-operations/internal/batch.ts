@@ -644,7 +644,10 @@ const presentCommitted = ({
       const result = yield* decodeAtomicBatchResult({
         callId: child.call.callId,
         operation: child.operation.id,
-        output: { data: committedMutationPayload(value), next: [] },
+        output: {
+          data: committedMutationPayload(value),
+          next: value._tag === "Owner" ? value.next : [],
+        },
       });
       const output = yield* Schema.encodeEffect(child.operation.success)(result.output);
       results.push({ callId: result.callId, operation: result.operation, output });

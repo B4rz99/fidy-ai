@@ -376,6 +376,7 @@ export const findKeywordRuleValue = ({
   outcome.operation === "categories.deleteKeywordRule"
     ? Effect.succeedSome({
         _tag: "Owner" as const,
+        next: [],
         payload: outcome.ruleId,
         encode: () => Schema.encodeEffect(Schema.toCodecJson(KeywordRuleId))(outcome.ruleId),
       })
@@ -383,6 +384,7 @@ export const findKeywordRuleValue = ({
         Effect.map(
           Option.map((rule) => ({
             _tag: "Owner" as const,
+            next: [],
             payload: rule,
             encode: () => Schema.encodeEffect(Schema.toCodecJson(KeywordRule))(rule),
           }))

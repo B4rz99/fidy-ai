@@ -1341,6 +1341,7 @@ const insightResponse = (
 };
 
 const DashboardOperation = Schema.Literals([
+  "dashboard.initializeDashboard",
   "dashboard.getDashboard",
   "dashboard.getDashboardView",
   "dashboard.listDashboardCatalog",

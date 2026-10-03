@@ -5,6 +5,7 @@ import { type CanonicalOperationId } from "../../src/core/canonical-operations/c
 import type { CatalogOperation } from "../../src/shell/canonical-catalog/contract";
 import { atomicBatchOperation } from "../../src/shell/operations/contract";
 import { operationCatalog } from "../../src/shell/api";
+import { patScopeCapability } from "../../src/shell/canonical-policy/contract";
 import { memoryOperationIds } from "../../src/shell/memory/contract";
 import type { HostedCommitFence } from "../agent/contract";
 import type { CanonicalMutationPreparation, CanonicalWork } from "./contract";
@@ -20,6 +21,7 @@ import { unavailableStatement } from "../ingestion/operations";
 import {
   type TransactionCaller,
   type TransactionSubject,
+  childCaller,
   refusedPreparation,
   transactionUnavailable,
 } from "../canonical-work/operations";
@@ -73,29 +75,34 @@ const executeCall = ({
     if (Option.isNone(adapter)) return transactionUnavailable();
     const catalogOperation = operationCatalog.byId.get(work.operation);
     if (catalogOperation === undefined) return transactionUnavailable();
+    // Admission is coordination data; the declaration determines the capability rechecked at commit.
+    const caller = childCaller({
+      subject,
+      requiredScope: patScopeCapability(catalogOperation.policy.access),
+    });
     const input = Schema.decodeUnknownOption(catalogOperation.input)(work.input);
     if (Option.isNone(input)) {
       // The call cannot be decoded against the operation it names, so the owner adapter answers for
       // it under its own input classification and no write is attempted.
       return yield* executeSingleCanonicalMutation({
         db,
-        subject,
+        subject: caller,
         current,
         preparation: refusedPreparation(
-          adapter.value.invalidRefusal({ db, subject, current, input: work.input, bucket })
+          adapter.value.invalidRefusal({ db, subject: caller, current, input: work.input, bucket })
         ),
         present: adapter.value.present,
         retryStatement: Option.none(),
         hostedFence,
       });
     }
-    const ownerWork = { db, subject, current, input: input.value, bucket };
+    const ownerWork = { db, subject: caller, current, input: input.value, bucket };
     const preparation = yield* adapter.value.prepare(ownerWork);
     const retryStatement = (): Effect.Effect<CanonicalMutationPreparation> =>
       retryStatementPreparation(adapter.value, ownerWork);
     const response = yield* executeSingleCanonicalMutation({
       db,
-      subject,
+      subject: caller,
       current,
       preparation,
       present: adapter.value.present,

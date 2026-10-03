@@ -118,6 +118,8 @@ export type DashboardView = typeof DashboardView.Type;
 
 const DashboardEditFailures = [NotFound, ValidationFailed] as const;
 
+/** Explicit initialization accepts no target identity; the live caller owns the document. */
+export const InitializeDashboardCanonicalInput = Schema.Record(Schema.String, Schema.Never);
 /** Canonical call shape for first-use Dashboard persistence. */
 export const GetDashboardCanonicalInput = Schema.Struct({});
 /** Canonical call shape for first-use Dashboard view persistence. */
@@ -127,6 +129,24 @@ export const ApplyDashboardEditCanonicalInput = Schema.Struct({ payload: Dashboa
 
 /** Canonical contracts for the caller's one persistent DashboardDocument and ephemeral view. */
 export const DashboardGroup = HttpApiGroup.make("dashboard")
+  .add(
+    HttpApiEndpoint.post("initializeDashboard", "/dashboard/initialize", {
+      success: OperationResponse(DashboardDocument),
+    })
+      .annotate(
+        OpenApi.Description,
+        "Initialize the caller's default DashboardDocument if missing. Repeated calls return the " +
+          "retained document unchanged, preserving its Widget identities and any edits."
+      )
+      .annotateMerge(
+        operationPolicy({
+          access: patScoped("dashboard"),
+          requiredTier: "free",
+          agentConfirmation: "not-required",
+          kind: "mutation",
+        })
+      )
+  )
   .add(
     HttpApiEndpoint.get("getDashboard", "/dashboard", {
       success: OperationResponse(DashboardDocument),

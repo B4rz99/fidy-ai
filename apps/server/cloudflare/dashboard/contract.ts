@@ -4,6 +4,7 @@ import type {
   DashboardGroup,
   GetDashboardCanonicalInput,
   GetDashboardViewCanonicalInput,
+  InitializeDashboardCanonicalInput,
 } from "../../src/shell/dashboard/contract";
 import type { TransactionCaller } from "../canonical-work/contract";
 
@@ -15,6 +16,7 @@ export type DashboardMutationOperation = Exclude<
 >;
 
 type DashboardInputs = {
+  "dashboard.initializeDashboard": typeof InitializeDashboardCanonicalInput.Type;
   "dashboard.getDashboard": typeof GetDashboardCanonicalInput.Type;
   "dashboard.getDashboardView": typeof GetDashboardViewCanonicalInput.Type;
   "dashboard.applyDashboardEdit": typeof ApplyDashboardEditCanonicalInput.Type;

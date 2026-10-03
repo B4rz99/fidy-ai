@@ -10,6 +10,7 @@ on:
       - refactor/596-websession-owner-operations
       - feat/publish-categories
       - "stack/580/**"
+      - "stack/967-972/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

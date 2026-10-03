@@ -15,4 +15,4 @@ runs:
         key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'tools/*/bun.lock') }}
     - name: Install dependencies
       shell: bash
-      run: bun install --frozen-lockfile
+      run: bash scripts/install-workspace.sh

@@ -35,7 +35,7 @@ jobs:
       - name: Set up Bun
         uses: ./.github/actions/bun-runtime
       - name: Install locked workspace
-        run: bun install --frozen-lockfile --ignore-scripts
+        run: bash scripts/install-workspace.sh --ignore-scripts
       - name: Configure Alchemy's ephemeral Cloudflare profile
         uses: ./.github/actions/configure-alchemy-cloudflare-profile
       - name: Report public and Core Worker deployments without changing traffic

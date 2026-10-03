@@ -46,7 +46,7 @@ jobs:
         uses: ./.github/actions/bun-runtime
 
       - name: Install the locked workspace
-        run: bun install --frozen-lockfile --ignore-scripts
+        run: bash scripts/install-workspace.sh --ignore-scripts
 
       - name: Select the server-approved Workers AI model
         run: |

@@ -40,7 +40,7 @@ jobs:
         uses: ./.github/actions/bun-runtime
 
       - name: Install locked workspace
-        run: bun install --frozen-lockfile --ignore-scripts
+        run: bash scripts/install-workspace.sh --ignore-scripts
 
       - name: Verify source release and retrieve its captured receipt
         env:

@@ -27,7 +27,10 @@ export class CliFailure extends Data.TaggedError("CliFailure")<{
     | "TransportUnavailable"
     | "ClaimAmbiguous"
     | "ClaimStorageFailed"
-    | "Expired";
+    | "Expired"
+    | "LoginRequired"
+    | "QueryUnavailable"
+    | "InputTooLarge";
 }> {}
 
 /** Native credential storage boundary; raw retrieval stays inside the credential owner. */

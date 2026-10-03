@@ -139,6 +139,12 @@
     "yoda": "error"
   },
   "overrides": [
+    // #970 confines dynamic generated-client dispatch to one bridge. The selected catalog input
+    // is decoded before invocation and the corresponding success/failure codec encodes output.
+    {
+      "files": ["apps/cli/src/query/runtime.ts"],
+      "rules": { "typescript/consistent-type-assertions": "off" }
+    },
     {
       "files": ["apps/cli/vitest.config.ts"],
       "rules": { "import/no-default-export": "off" }

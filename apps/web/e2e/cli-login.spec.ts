@@ -111,7 +111,18 @@ const cliJourney = Effect.fn(function* ({
   expect(status).toContain('"availability":"available"');
   expect(status).toContain('"scopes":["read"]');
   expect(status).toContain('"lifetimeDays":7');
-  yield* complete(["reuse"]);
+  const categories = yield* complete(["categories", "listCategories"]);
+  expect(categories).toContain('"label":"Restaurantes"');
+  const historyInput = `${directory}/history.json`;
+  yield* filesystem.writeFileString(historyInput, '{"query":{"currency":"COP"}}');
+  const transactions = yield* complete([
+    "transactions",
+    "listTransactions",
+    "--input",
+    historyInput,
+  ]);
+  expect(transactions).toContain('"data":');
+  expect(transactions).toContain('"next":');
 });
 
 test("CLI login claims a web-approved grant and a second process reuses native saved access", ({

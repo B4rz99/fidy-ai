@@ -178,6 +178,8 @@ export default {
           "^src/shell/api\\.ts$",
           "^src/shell/authorization/runtime\\.ts$",
           "^src/shell/(agent|canonical-operations|email-authentication|public-http|subscription|tokens|web-authentication)/contract\\.ts$",
+          // Pure shared access decisions are deliberate CLI/browser discovery authority (#970).
+          "^src/shell/canonical-policy/operations\\.ts$",
         ],
       },
     },
@@ -1323,6 +1325,7 @@ export default {
           "^src/shell/agent/contract\\.ts$",
           "^src/shell/authorization/runtime\\.ts$",
           "^src/shell/canonical-operations/contract\\.ts$",
+          "^src/shell/canonical-policy/operations\\.ts$",
           "^src/shell/(public-http|schema-codecs|tokens|subscription|web-authentication)/contract\\.ts$",
           "^src/shell/email-authentication/(contract|path)\\.ts$",
         ],

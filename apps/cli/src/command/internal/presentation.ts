@@ -17,7 +17,7 @@ export const failures: Readonly<Record<CliFailure["reason"], string>> = {
   UnsupportedRuntime:
     "Este CLI requiere el Bun verificado bb35d1b81. Ejecuta bash scripts/install-bun.sh y usa ese ejecutable.",
   InvalidInput:
-    "Uso: fidy login [--recipient NOMBRE --scopes read,write,dashboard --lifetime DÍAS] | status | logout [--json]. Selecciona solo los permisos que necesitas.",
+    "Uso: fidy login [--recipient NOMBRE --scopes read,write,dashboard --lifetime DÍAS] | status | logout | commands | GRUPO OPERACIÓN [--input ARCHIVO|-] [--json]. Usa GRUPO OPERACIÓN --help para consultar el formato de entrada.",
   StorageUnavailable:
     "No se puede usar el almacén nativo. Desbloquea Keychain (macOS), inicia Secret Service/GNOME Keyring/KWallet (Linux) o habilita Credential Manager (Windows). No hay alternativa en texto plano. Si persiste, revisa permisos locales y elimina un login.lock abandonado solo cuando no haya otra instancia activa.",
   StorageInconsistent:
@@ -31,7 +31,12 @@ export const failures: Readonly<Record<CliFailure["reason"], string>> = {
   DependencyUnavailable:
     "La vinculación no está disponible temporalmente. Inténtalo más tarde. Si ya aprobaste, " +
     recovery,
-  TransportUnavailable: "No se pudo iniciar la vinculación de forma segura. Inténtalo más tarde.",
+  TransportUnavailable:
+    "No se pudo completar la solicitud de forma segura. Comprueba la conexión e inténtalo más tarde.",
+  LoginRequired: "No hay acceso guardado. Ejecuta fidy login antes de consultar datos.",
+  QueryUnavailable:
+    "Esta consulta no está disponible con tus permisos. Usa fidy commands para ver las consultas disponibles.",
+  InputTooLarge: "El archivo o stdin supera el límite de 64 KiB. Reduce la solicitud.",
   ClaimAmbiguous: "No se puede confirmar si el servidor entregó el permiso. " + recovery,
   ClaimStorageFailed:
     "El servidor entregó el permiso, pero no se pudo guardar. Ejecuta logout para limpiar el acceso parcial. " +

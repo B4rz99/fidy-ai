@@ -1,9 +1,9 @@
 # CLI architecture
 
 `@fidy/cli` is a Bun-only User-facing presentation application, not a domain or authorization
-implementation. Its initial surface is `login`, `status`, and local `logout`, in Spanish. It owns
-one saved login, with no profiles, pasted PATs, passwords or headless credential provisioning.
-Canonical domain commands belong to #970, not this slice.
+implementation. Its surface is `login`, `status`, local `logout`, and server-derived canonical
+queries, in Spanish. It owns one saved login, with no profiles, pasted PATs, passwords or headless
+credential provisioning. Mutations/batches and friendly per-field flags remain separate work.
 
 ## Runtime and execution
 
@@ -16,6 +16,12 @@ scope set and fixed lifetime. Explicit non-secret arguments are also supported:
 bun run cli login --recipient 'Mi agente' --scopes read --lifetime 7
 bun run cli status --json
 bun run cli logout
+bun run cli commands --json
+bun run cli categories listCategories --json
+bun run cli transactions listTransactions --help
+bun run cli transactions listTransactions --input request.json --json
+# request.json: {"query":{"currency":"COP"}}
+# --input - reads stdin instead; it cannot be combined with a file.
 ```
 
 The CLI refuses another runtime revision before accessing credentials. The installer uses exact
@@ -39,6 +45,13 @@ suite and real-public/Core/browser journey. Cloudflare remains the sole server r
 - `direct-client/runtime.ts` constructs `HttpApiClient` from the server-published `PATPairingApi`.
   It also owns the fixed-origin bounded transport seam handed to #970. It does not copy routes,
   protocol schemas or canonical policy. The direct API remains outside stable-User canonical work.
+- `query/operations.ts` owns policy-derived discovery, whole-input decoding, generic invocation,
+  canonical result encoding and terminal-safe presentation. `query/runtime.ts` constructs one
+  credential-bound generated client per invocation and owns bounded file/stdin consumption.
+  Runtime dispatch has one narrow typed bridge; the selected canonical input codec checks the
+  complete request before it reaches the client and its result/failure codec encodes the output.
+  The catalog includes middleware failures, so expired/revoked authority and Consent refusal use
+  the same canonical envelopes as ordinary declared failures. No suggestion is executed.
 - `credential/contract.ts` declares `load`, `save`, `clear`, `Option` absence and redacted bearer
   values. `runtime.ts` owns native/file persistence. `main.ts` alone composes production adapters,
   process arguments, OS home and interruption handling.
@@ -76,6 +89,22 @@ prematurely. Preflight verifies native set/get/delete and metadata write usabili
 pairing, but a later failure remains possible and never reports login success.
 
 ## Transport, claim certainty and lifetime
+
+Query help and `commands --json` reflect identities, descriptions and JSON schemas from the
+assembled server catalog. Saved scopes select query-only presentation; account-security work,
+mutations and the batch envelope are unavailable. The server independently checks every call.
+Queries with no input require no file or invented payload; other queries take their canonical
+nested `{params, query, payload, headers}` shape from one explicit file/stdin source.
+Input is limited to 64 KiB, responses to 1 MiB, and both have 15-second deadlines. Money remains
+exact decimal text; DateTime and Option values cross the selected canonical JSON codec rather
+than being stringified as runtime objects. Machine stdout contains one canonical envelope;
+human stdout adds Spanish result/failure labels. Retry-After and guidance use stderr. Declared
+failure codes/messages and partial SuggestedOperation arguments remain in the envelope. Only
+eligible queries receive executable next-call guidance; no suggestion bypasses input decoding.
+Failures exit nonzero without silent login, retries or commercial-allowance inference.
+Existing server metadata-only Work observation suffices for queries; no client content tracing
+is added. Transport captures bounded Retry-After metadata before success/error decoding and
+retains no raw response or cause for diagnostics.
 
 Both fresh and saved access are bound to the fixed production API origin. There is no API-origin
 argument or environment override. The only displayed approval URL is
@@ -116,5 +145,5 @@ and derived-client behavior in separate Bun processes with an isolated real nati
 raw transport maps the fixed production origin onto the existing loopback public/Core topology. It
 is not bundled, exported, or reachable from production main. Browser acceptance approves the public
 code through the existing fresh web UI, then verifies second-process status and authorized query
-reuse. No production test-only issuance route exists. Secrets are excluded from traces, screenshots,
+reuse through Category listing and Transaction browsing. No production test-only issuance route exists. Secrets are excluded from traces, screenshots,
 video and subprocess output.

@@ -103,7 +103,7 @@ export const makeOperationCatalog = <Id extends string, Groups extends HttpApiGr
 
   HttpApi.reflect(api, {
     onGroup: () => {},
-    onEndpoint: ({ endpoint, group, mergedAnnotations }) => {
+    onEndpoint: ({ endpoint, group, mergedAnnotations, errors }) => {
       const defaultId = `${group.identifier}.${endpoint.identifier}`;
       const reflectedId = Context.getOrElse(mergedAnnotations, OpenApi.Identifier, () =>
         group.topLevel ? endpoint.identifier : defaultId
@@ -128,7 +128,7 @@ export const makeOperationCatalog = <Id extends string, Groups extends HttpApiGr
         route: endpoint.path,
         input: canonicalInput(endpoint),
         success: asOperationSchema(unionSchema(Array.from(endpoint.success))),
-        failure: asOperationSchema(unionSchema(Array.from(endpoint.error))),
+        failure: asOperationSchema(unionSchema(Array.from(errors.values()).flat())),
         // Access policy must be an explicit choice on each canonical operation;
         // unlike descriptive OpenAPI metadata, group defaults could silently
         // authorize a newly added operation with a policy nobody reviewed.

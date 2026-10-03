@@ -22,7 +22,7 @@ import {
   HttpClientError,
   type HttpClientRequest,
   HttpClientResponse,
-} from "effect/unstable/http";
+} from "effect/http";
 import assert from "node:assert/strict";
 import { WhatsAppBusinessPhoneNumberId } from "~/shell/channels/whatsapp/contract";
 import { makeCloudflareAccessOutboundHttp } from "~/shell/outbound-http/internal/outbound-http";

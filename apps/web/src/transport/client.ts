@@ -15,9 +15,9 @@ import {
   type WebAuthApiGroups,
 } from "@fidy/server/client";
 import { Context, Data, Effect, Layer, ManagedRuntime, Option, Schema } from "effect";
-import { FetchHttpClient, type HttpClient } from "effect/unstable/http";
-import { HttpApiClient } from "effect/unstable/httpapi";
-import { AtomHttpApi } from "effect/unstable/reactivity";
+import { FetchHttpClient, type HttpClient } from "effect/http";
+import { HttpApiClient } from "effect/http-api";
+import { AtomHttpApi } from "effect/reactivity";
 import { browserHttpClientLayer } from "./browser-http-policy";
 
 export type {

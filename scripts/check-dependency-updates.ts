@@ -48,7 +48,7 @@
 // vulnerability cannot outlive the vulnerability it was written for.
 
 import { Array as Arr, Console, Data, DateTime, Effect, Layer, Option, Schema } from "effect";
-import { FetchHttpClient, HttpClient } from "effect/unstable/http";
+import { FetchHttpClient, HttpClient } from "effect/http";
 
 /**
  * The check itself could not run — a manifest that will not parse, a registry

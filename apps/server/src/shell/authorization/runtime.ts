@@ -1,6 +1,6 @@
 import type { Layer } from "effect";
-import { HttpClientRequest } from "effect/unstable/http";
-import { HttpApiMiddleware } from "effect/unstable/httpapi";
+import { HttpClientRequest } from "effect/http";
+import { HttpApiMiddleware } from "effect/http-api";
 import type { TokenBearer } from "~/core/tokens/contract";
 import { TokenAuthorization } from "./contract";
 

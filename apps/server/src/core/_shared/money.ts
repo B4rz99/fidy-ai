@@ -236,7 +236,7 @@ export const currencyMetadata = (alphabeticCode: Currency): CurrencyMetadata => 
   fractionalDigits: fractionalDigits(alphabeticCode),
 });
 
-const plainDecimalPattern = /^(?:0|[1-9]\d*)(?:\.\d+)?$/;
+const plainDecimalPattern = /^(?:0|[1-9]\d*)(?:\.\d+)?$/u;
 const zero = BigDecimal.make(0n, 0);
 
 type ReadonlyBigDecimal = Readonly<BigDecimal.BigDecimal>;

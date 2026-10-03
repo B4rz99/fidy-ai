@@ -14,7 +14,8 @@ import {
   selectPublicCodeSymbols,
 } from "../../../src/core/browser-login/operations";
 import { WhatsAppCallerReference } from "../../../src/core/identity/contract";
-import { Clock, Crypto, DateTime, Effect, Encoding, Option, PlatformError, Schema } from "effect";
+import { Clock, Crypto, DateTime, Effect, Option, PlatformError, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
 import { RequestBodyPolicy } from "../../http/contract";
 import { readBoundedRequestBody } from "../../http/operations";
 
@@ -122,9 +123,7 @@ export const startBrowserPairing = (db: D1Database): Promise<Response> =>
           .run()
       );
       const publicCode = samplePublicCode();
-      const privateVerifier = Encoding.encodeBase64Url(
-        crypto.getRandomValues(new Uint8Array(digestBytes))
-      );
+      const privateVerifier = Base64Url.encode(crypto.getRandomValues(new Uint8Array(digestBytes)));
       const pairingId = uuid();
       const proofDigest = yield* attempt(() => sha256(privateVerifier));
       const result = yield* attempt(() =>

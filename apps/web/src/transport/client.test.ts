@@ -23,8 +23,8 @@ import {
   type HttpClientRequest as HttpClientRequestType,
   HttpClientResponse,
   UrlParams,
-} from "effect/unstable/http";
-import { AsyncResult, AtomRegistry } from "effect/unstable/reactivity";
+} from "effect/http";
+import { AsyncResult, AtomRegistry } from "effect/reactivity";
 import { describe, expect, it } from "@effect/vitest";
 import { vi } from "vitest";
 import { type BrowserHttpBoundary, browserHttpClientLayer } from "./browser-http-policy";

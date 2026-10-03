@@ -1,11 +1,7 @@
 import { type WompiEnvironment } from "~/shell/secret-material/contract";
-import { type Crypto, Effect, Encoding, Match, Option, Redacted } from "effect";
-import {
-  FetchHttpClient,
-  HttpBody,
-  type HttpClient,
-  HttpClientRequest,
-} from "effect/unstable/http";
+import { type Crypto, Effect, Match, Option, Redacted } from "effect";
+import { Hex } from "effect/encoding";
+import { FetchHttpClient, HttpBody, type HttpClient, HttpClientRequest } from "effect/http";
 import { makeProviderTransport } from "./transport";
 import {
   OutboundHttpFailure,
@@ -116,7 +112,7 @@ const transactionSignature = (
         `${body.reference}${body.amountInCents}${body.currency}${Redacted.value(integritySecret)}`
       )
     )
-    .pipe(Effect.map(Encoding.encodeHex), Effect.mapError(unavailableTransport));
+    .pipe(Effect.map(Hex.encode), Effect.mapError(unavailableTransport));
 
 const nequiApprovalRequest = (
   origin: string,

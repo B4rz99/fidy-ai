@@ -1,6 +1,6 @@
 import * as Arr from "effect/Array";
 import { type Effect, Option, Schema } from "effect";
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
+import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import {
   ErrorCode,

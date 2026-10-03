@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { HttpApi } from "effect/unstable/httpapi";
+import { HttpApi } from "effect/http-api";
 import { MemoryGroup, memoryOperationIds } from "./contract";
 
 const compareText = (left: string, right: string): number => left.localeCompare(right);

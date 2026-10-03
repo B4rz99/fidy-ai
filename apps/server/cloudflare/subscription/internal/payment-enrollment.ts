@@ -34,13 +34,13 @@ import {
   Data,
   DateTime,
   Effect,
-  Encoding,
   Exit,
   Option,
   Redacted,
   Result,
   Schema,
 } from "effect";
+import { Hex } from "effect/encoding";
 
 import { claimPreparedPaymentEnrollment } from "./payment-enrollment-claim";
 import { admitEnrollmentAttempt } from "./enrollment-admission";
@@ -784,7 +784,7 @@ const verifyEnrollmentAuthorization = (
     if (!approved.value) return Result.fail(invalid());
     return Result.succeed(
       Option.some(
-        Encoding.encodeHex(
+        Hex.encode(
           yield* waitFor(() =>
             digest(`${environment.WOMPI_ENVIRONMENT}:${Redacted.value(input.nequiToken)}`)
           )

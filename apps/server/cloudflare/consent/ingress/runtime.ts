@@ -1,5 +1,5 @@
 import { Context, type Crypto, Effect, Layer, Option, Redacted } from "effect";
-import { FetchHttpClient, HttpClient } from "effect/unstable/http";
+import { FetchHttpClient, HttpClient } from "effect/http";
 import { makeDisclosureSender, makeEmailStatusSender } from "../../../src/shell/consent/runtime";
 import { type ConsentIngressEnvironment } from "./contract";
 import { receiveConsentText, recoverDisclosures, sweepExpired } from "./internal/ingress";

@@ -16,7 +16,7 @@ import {
 } from "../../runtime/telemetry/operations";
 import type { WorkflowStepConfig } from "cloudflare:workers";
 import { Cause, Clock, Context, Effect, Exit, Layer, Option, Redacted, Schema } from "effect";
-import { FetchHttpClient, HttpClient } from "effect/unstable/http";
+import { FetchHttpClient, HttpClient } from "effect/http";
 
 const Pending = Schema.Struct({
   email_address: EmailAddress,

@@ -1,5 +1,5 @@
 import { type Duration, Effect, Option, Schema } from "effect";
-import { type Prompt, Tool } from "effect/unstable/ai";
+import { type Prompt, Tool } from "effect/ai";
 import { type TranscriptEntry, maximumModelRoundMillis } from "~/core/agent/contract";
 import { operationCatalog } from "~/shell/api";
 import {

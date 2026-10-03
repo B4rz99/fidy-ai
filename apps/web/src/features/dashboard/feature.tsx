@@ -1,6 +1,6 @@
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Effect, Exit, Option, Result } from "effect";
-import type { AsyncResult } from "effect/unstable/reactivity";
+import type { AsyncResult } from "effect/reactivity";
 import { type JSX, useRef, useState } from "react";
 import { Button } from "@/ui/components/button";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";

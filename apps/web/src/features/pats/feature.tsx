@@ -1,7 +1,7 @@
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Effect, Option } from "effect";
-import { type Atom, Reactivity } from "effect/unstable/reactivity";
+import { type Atom, Reactivity } from "effect/reactivity";
 import { type JSX, useState } from "react";
 import { SensitiveClipboardBoundary } from "@/browser/use-sensitive-clipboard";
 import { type BrowserAuthentication, useSession } from "@/session/session-context";

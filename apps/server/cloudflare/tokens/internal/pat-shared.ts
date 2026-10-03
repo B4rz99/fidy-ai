@@ -14,7 +14,8 @@ import {
   pairingMilliseconds,
 } from "../../../src/shell/tokens/operations";
 import { patPairingUnavailableBody } from "../../../src/shell/tokens/contract";
-import { DateTime, Effect, Encoding, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
+import { Base64Url } from "effect/encoding";
 import { freshSessionExists } from "../../../src/shell/web-session/operations";
 import { RequestBodyPolicy } from "../../http/contract";
 import { readBoundedRequestBody } from "../../http/operations";
@@ -84,7 +85,7 @@ export const equalsDigest = ({
 };
 /** Opaque private proof; no raw value is ever stored. */
 export const newProof = (): string =>
-  Encoding.encodeBase64Url(crypto.getRandomValues(new Uint8Array(digestBytes)));
+  Base64Url.encode(crypto.getRandomValues(new Uint8Array(digestBytes)));
 /** Uniform human-readable safe short id, never authentication material. */
 export const newShortId = (): string => {
   let shortId = "";

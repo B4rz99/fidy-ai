@@ -27,7 +27,7 @@ commands=(
   'bun run --cwd apps/web build:production'
   'cd infra/cloudflare
    bun scripts/check-applied-migration-drift.ts
-   bun ../../node_modules/alchemy/bin/alchemy.ts provider cloudflare bootstrap --profile "$ALCHEMY_PROFILE" --no-input
+   bun ../../node_modules/alchemy/bin/alchemy.js provider cloudflare bootstrap --profile "$ALCHEMY_PROFILE" --no-input
    bash scripts/check-topology-drift.sh'
 )
 

@@ -1,6 +1,6 @@
 import { useAtomSet } from "@effect/atom-react";
 import { BigDecimal, DateTime, Effect, Option } from "effect";
-import type * as Atom from "effect/unstable/reactivity/Atom";
+import type * as Atom from "effect/reactivity/Atom";
 import { useState } from "react";
 import type { FormEvent, JSX } from "react";
 import { Button } from "@/ui/components/button";

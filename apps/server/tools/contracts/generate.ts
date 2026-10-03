@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { type Cause, Effect, Option, type SchemaAST, type SchemaRepresentation } from "effect";
-import { OpenApi } from "effect/unstable/httpapi";
+import { OpenApi } from "effect/http-api";
 import { FidyApi, operationCatalog } from "../../src/shell/api";
 import { PATPairingApi } from "../../src/shell/tokens/contract";
 import { publishOperationAccess } from "../../src/shell/canonical-policy/contract";

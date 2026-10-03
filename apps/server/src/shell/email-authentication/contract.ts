@@ -1,6 +1,6 @@
 import type { OwnedStatement } from "~/shell/owner-write/contract";
 import { Data, type Effect, Schema } from "effect";
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
+import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import { BrowserLoginPairingInvalidApi } from "~/shell/browser-login/contract";
 import { BrowserLoginPairingId, BrowserLoginPrivateVerifier } from "~/core/browser-login/contract";
 

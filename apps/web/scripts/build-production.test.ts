@@ -131,6 +131,21 @@ describe("production static release identity", () => {
     })
   );
 
+  it.effect("rejects stable SQL implementation material in a hashed browser asset", () =>
+    Effect.gen(function* () {
+      const directory = yield* productionOutput();
+      yield* Effect.tryPromise(() =>
+        Bun.write(
+          join(directory, "assets/app-AbCd1234.js"),
+          "node_modules/effect/dist/sql/SqlClient.js"
+        )
+      );
+      yield* Effect.tryPromise(() =>
+        expect(validate(directory)).rejects.toThrow("forbidden server or Secret material")
+      );
+    })
+  );
+
   it.effect("rejects source maps from the production artifact", () =>
     Effect.gen(function* () {
       const directory = yield* productionOutput();

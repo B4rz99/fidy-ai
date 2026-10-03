@@ -1,5 +1,5 @@
 import { DateTime, Option, type Schema } from "effect";
-import type { Prompt } from "effect/unstable/ai";
+import type { Prompt } from "effect/ai";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { listLaunchCategories } from "~/core/categories/operations";
 import type { User } from "~/core/identity/contract";

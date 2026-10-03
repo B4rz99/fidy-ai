@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
+import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import { RecurringSeriesPage } from "~/core/recurring/contract";
 import { operationPolicy, patScoped } from "~/shell/canonical-policy/contract";
 import { OperationResponse, ValidationFailed } from "~/shell/public-http/contract";

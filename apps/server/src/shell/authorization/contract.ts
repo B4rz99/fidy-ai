@@ -1,6 +1,6 @@
 import { Context, type Crypto, type DateTime, type Effect } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
-import { HttpApiMiddleware, HttpApiSecurity, OpenApi } from "effect/unstable/httpapi";
+import type { SqlClient } from "effect/sql";
+import { HttpApiMiddleware, HttpApiSecurity, OpenApi } from "effect/http-api";
 import type { AuditCaller, AuditOutcome } from "~/core/audit/contract";
 import type {
   CanonicalCapabilities,

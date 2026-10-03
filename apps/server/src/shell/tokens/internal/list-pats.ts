@@ -1,5 +1,5 @@
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import { SqlClient } from "effect/sql";
 import {
   type ActivePATList,
   ActivePATMetadata,

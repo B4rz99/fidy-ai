@@ -1,6 +1,6 @@
 import { InterpretationRevision } from "~/core/interpretation-evidence/contract";
 import { Data, Schema } from "effect";
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api";
 import {
   EmailForwardingAddress,
   EmailForwardingStatus,

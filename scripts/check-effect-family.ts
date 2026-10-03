@@ -1,17 +1,23 @@
 #!/usr/bin/env bun
 
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Predicate, Schema } from "effect";
 
-const effectPrereleaseVersion = /^4\.0\.0-(?:beta|rc)\.\d+$/u;
+const effectFamilyVersion = /^4\.(?:0\.0-(?:beta|rc)\.\d+|\d+\.\d+)$/u;
 const PackageEntry = Schema.TupleWithRest(Schema.Tuple([Schema.String]), [Schema.Unknown]);
-const Lockfile = Schema.Struct({
-  packages: Schema.Record(Schema.String, PackageEntry),
-  workspaces: Schema.Record(Schema.String, Schema.Unknown),
-});
 const Manifest = Schema.Struct({
   dependencies: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
   devDependencies: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
   overrides: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+});
+const Lockfile = Schema.Struct({
+  packages: Schema.Record(Schema.String, PackageEntry),
+  workspaces: Schema.Record(Schema.String, Manifest),
+  overrides: Schema.optionalKey(
+    Schema.Record(
+      Schema.String,
+      Schema.Union([Schema.String, Schema.Record(Schema.String, Schema.String)])
+    )
+  ),
 });
 
 type Finding = {
@@ -126,6 +132,26 @@ const missingOverrides = ({
   });
 };
 
+const overridePins = (
+  overrides: Readonly<Record<string, string | Readonly<Record<string, string>>>>,
+  location: string
+): ReadonlyArray<Finding> =>
+  Object.entries(overrides).flatMap(([name, selection]) => {
+    const separator = name.lastIndexOf("@");
+    const packageName = separator > 0 ? name.slice(0, separator) : name;
+    if (!isCoordinatedEffectPackage(packageName)) return [];
+    const versions = Predicate.isString(selection) ? [selection] : Object.values(selection);
+    return versions.map((version) => ({ packageName: `${name} override`, version, location }));
+  });
+
+const lockedWorkspacePins = (lockfile: typeof Lockfile.Type): ReadonlyArray<Finding> =>
+  directPins(
+    Object.entries(lockfile.workspaces).map(([workspace, value]) => ({
+      path: `bun.lock workspace ${workspace || "."}`,
+      value,
+    }))
+  );
+
 const main = Effect.gen(function* () {
   const root = repositoryRoot();
   const lockfile = yield* readLockfile(`${root}/bun.lock`);
@@ -135,7 +161,7 @@ const main = Effect.gen(function* () {
   });
   const direct = directPins(manifests);
   const selected = direct.find(({ packageName }) => packageName === "effect");
-  if (selected === undefined || !effectPrereleaseVersion.test(selected.version)) {
+  if (selected === undefined || !effectFamilyVersion.test(selected.version)) {
     const finding = Option.match(Option.fromUndefinedOr(selected), {
       onNone: () => ({ version: "missing", location: "workspace manifests" }),
       onSome: ({ version, location }) => ({ version, location }),
@@ -152,6 +178,12 @@ const main = Effect.gen(function* () {
   const findings = [
     ...mismatches(direct, selected.version),
     ...mismatches(locked, selected.version),
+    ...mismatches(lockedWorkspacePins(lockfile), selected.version),
+    ...mismatches(
+      manifests.flatMap(({ path, value }) => overridePins(value.overrides ?? {}, path)),
+      selected.version
+    ),
+    ...mismatches(overridePins(lockfile.overrides ?? {}, "bun.lock overrides"), selected.version),
     ...missingOverrides({
       locked,
       direct,

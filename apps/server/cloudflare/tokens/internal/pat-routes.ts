@@ -1,5 +1,5 @@
 import { PATPairingDirectGroup, PATsGroup } from "../../../src/shell/tokens/contract";
-import { HttpApi } from "effect/unstable/httpapi";
+import { HttpApi } from "effect/http-api";
 import { claimPATPairing } from "./pat-claim";
 import { approvePATPairing, inspectPATPairing, startPATPairing } from "./pat-pairing";
 import { createManualPAT, listPATs, revokeAllPATs, revokePAT } from "./pat-management";

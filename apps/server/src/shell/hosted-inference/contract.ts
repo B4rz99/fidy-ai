@@ -8,7 +8,7 @@ import {
   type Option,
   Schema,
 } from "effect";
-import type { Response } from "effect/unstable/ai";
+import type { Response } from "effect/ai";
 import type { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import type { User } from "~/core/identity/contract";
 import { type TranscriptEntry, maximumToolCallsPerTurn } from "~/core/agent/contract";

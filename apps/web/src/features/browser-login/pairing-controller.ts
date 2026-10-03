@@ -1,7 +1,7 @@
 import { useAtomSet } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { type Context, DateTime, Effect, Option, Redacted, Schema } from "effect";
-import type { Atom } from "effect/unstable/reactivity";
+import type { Atom } from "effect/reactivity";
 import { useState } from "react";
 import { useSession } from "@/session/session-context";
 import {

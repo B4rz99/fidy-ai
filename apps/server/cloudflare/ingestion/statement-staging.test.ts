@@ -3,7 +3,8 @@ import {
   type StatementStagingFailureReason,
   StatementStagingId,
 } from "../../src/shell/ingestion/contract";
-import { Data, Effect, Encoding, Fiber, Option, Result } from "effect";
+import { Data, Effect, Fiber, Option, Result } from "effect";
+import { Hex } from "effect/encoding";
 import { Miniflare } from "miniflare";
 import { applyTestMigration } from "../d1-test-fixture";
 import { afterEach, describe, expect, it } from "vitest";
@@ -287,7 +288,7 @@ const onlyStagingRow = (database: D1Database): Promise<Option.Option<StagingRowR
 const digestHex = (bytes: Uint8Array): Promise<string> =>
   crypto.subtle
     .digest("SHA-256", Uint8Array.from(bytes))
-    .then((value) => Encoding.encodeHex(new Uint8Array(value)));
+    .then((value) => Hex.encode(new Uint8Array(value)));
 
 describe("Cloudflare statement byte staging", () => {
   it("keeps staged bytes non-authoritative and private until canonical publication", () =>

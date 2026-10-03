@@ -58,6 +58,7 @@ const otherTransactionId = "24000000-0000-4000-8000-000000000262";
 const backupRecoveryCode = "ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2";
 const now = Effect.runSync(Clock.currentTimeMillis);
 const trialDurationMs = 604_800_000;
+const expiredTrialAgeMs = 691_200_000;
 type SeedIdentity = Readonly<{
   userId: string;
   bsuid: string;
@@ -65,6 +66,7 @@ type SeedIdentity = Readonly<{
   consentId: string;
   disclosure: string;
   decision: string;
+  createdAtMs: number;
 }>;
 const defaultIdentity: SeedIdentity = {
   userId: fixtureUserId,
@@ -73,6 +75,7 @@ const defaultIdentity: SeedIdentity = {
   consentId: "24000000-0000-4000-8000-000000000260",
   disclosure: "disclosure",
   decision: "decision",
+  createdAtMs: now,
 };
 const seedIdentity = (overrides: Partial<SeedIdentity> = {}): Promise<void> => {
   const identity = { ...defaultIdentity, ...overrides };
@@ -81,20 +84,20 @@ const seedIdentity = (overrides: Partial<SeedIdentity> = {}): Promise<void> => {
       .prepare(
         "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?,?,?,?,?)"
       )
-      .bind(identity.userId, "CO", "es-CO", "America/Bogota", now),
+      .bind(identity.userId, "CO", "es-CO", "America/Bogota", identity.createdAtMs),
     db
       .prepare(
         "INSERT INTO whatsapp_identities (user_id, portfolio_id, bsuid, verified_at_ms) VALUES (?,?,?,?)"
       )
-      .bind(identity.userId, "acceptance-portfolio", identity.bsuid, now),
+      .bind(identity.userId, "acceptance-portfolio", identity.bsuid, identity.createdAtMs),
     db
       .prepare(
         "INSERT INTO verified_email_credentials (user_id, email_address, verified_at_ms) VALUES (?,?,?)"
       )
-      .bind(identity.userId, identity.email, now),
+      .bind(identity.userId, identity.email, identity.createdAtMs),
     db
       .prepare("INSERT INTO trial_periods (user_id, started_at_ms, ends_at_ms) VALUES (?,?,?)")
-      .bind(identity.userId, now, now + trialDurationMs),
+      .bind(identity.userId, identity.createdAtMs, identity.createdAtMs + trialDurationMs),
     db
       .prepare(`INSERT INTO onboarding_consent_records
     (id, user_id, disclosure_json, disclosure_message_id, decision_message_id,
@@ -105,8 +108,8 @@ const seedIdentity = (overrides: Partial<SeedIdentity> = {}): Promise<void> => {
         "{}",
         identity.disclosure,
         identity.decision,
-        now,
-        now
+        identity.createdAtMs,
+        identity.createdAtMs
       ),
   ];
   return statements.reduce<Promise<void>>(
@@ -189,6 +192,8 @@ await seedIdentity({
   bsuid: "CO.FirstDaviplata",
   email: "daviplata@example.com",
   consentId: "24000000-0000-4000-8000-000000000292",
+  // Born eight days ago: original TrialPeriod is expired before any payment is verified.
+  createdAtMs: now - expiredTrialAgeMs,
 });
 
 const recoveryDigest = new Uint8Array(

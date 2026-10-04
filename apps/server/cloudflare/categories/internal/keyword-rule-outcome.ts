@@ -30,7 +30,7 @@ import {
   findOwnedKeywordRules,
   keywordRuleJsonHeaders,
 } from "./keyword-rule-shared";
-import { decideKeywordRuleConflict } from "./keyword-rule-conflict";
+import { validateKeywordRuleChange } from "../../../src/core/categories/operations";
 import type {
   CanonicalMutationRefusal,
   CommittedMutationValue,
@@ -357,7 +357,7 @@ export const keywordRuleAbortFailure = ({
       // A rule created earlier was never in retained rows; absence after rollback proves nothing.
       return Option.none<CategoryFailure>();
     }
-    return yield* decideKeywordRuleConflict({ rules: projected, outcome });
+    return yield* validateKeywordRuleChange({ rules: projected, change: outcome });
   });
 
 /**

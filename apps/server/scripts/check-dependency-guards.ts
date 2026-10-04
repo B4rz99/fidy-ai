@@ -775,14 +775,19 @@ const PROBES: readonly Probe[] = [
     expect: {
       kind: "rejected",
       mustContain: [
-        `error foreign-module-imports-cloudflare-onboarding-internal: scripts/${PROBE_PREFIX}onboarding-private/probe.ts → cloudflare/onboarding/internal/completion.ts`,
+        `error foreign-module-imports-cloudflare-onboarding-internal: scripts/${PROBE_PREFIX}onboarding-private/probe.ts → cloudflare/onboarding/internal/${PROBE_PREFIX}composition.ts`,
       ],
     },
     files: [
       {
+        path: `cloudflare/onboarding/internal/${PROBE_PREFIX}composition.ts`,
+        source: "export const privateComposition = () => undefined;\n",
+      },
+      {
         path: `scripts/${PROBE_PREFIX}onboarding-private/probe.ts`,
         source:
-          'import { complete } from "../../cloudflare/onboarding/internal/completion";\nexport const bypass = complete;\n',
+          `import { privateComposition } from "../../cloudflare/onboarding/internal/${PROBE_PREFIX}composition";\n` +
+          "export const bypass = privateComposition;\n",
       },
     ],
   },
@@ -823,14 +828,19 @@ const PROBES: readonly Probe[] = [
     expect: {
       kind: "rejected",
       mustContain: [
-        `error foreign-module-imports-cloudflare-web-authentication-internal: scripts/${PROBE_PREFIX}web-auth-private/probe.ts → cloudflare/web-authentication/internal/protocol.ts`,
+        `error foreign-module-imports-cloudflare-web-authentication-internal: scripts/${PROBE_PREFIX}web-auth-private/probe.ts → cloudflare/web-authentication/internal/${PROBE_PREFIX}dispatch.ts`,
       ],
     },
     files: [
       {
+        path: `cloudflare/web-authentication/internal/${PROBE_PREFIX}dispatch.ts`,
+        source: "export const privateDispatch = () => undefined;\n",
+      },
+      {
         path: `scripts/${PROBE_PREFIX}web-auth-private/probe.ts`,
         source:
-          'import { respond } from "../../cloudflare/web-authentication/internal/protocol";\nexport const bypass = respond;\n',
+          `import { privateDispatch } from "../../cloudflare/web-authentication/internal/${PROBE_PREFIX}dispatch";\n` +
+          "export const bypass = privateDispatch;\n",
       },
     ],
   },

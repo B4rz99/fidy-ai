@@ -1,12 +1,13 @@
-import { type ReactNode, createContext, useContext, useState } from "react";
+import { type ReactNode, createContext, useCallback, useContext, useState } from "react";
 
 const RegistrationContext = createContext(() => {});
 
 /** Keeps the approved registration placeholder local; it never submits account data. */
 export const Registration = ({ children }: { children: ReactNode }): React.JSX.Element => {
   const [open, setOpen] = useState(false);
+  const showRegistration = useCallback(() => setOpen(true), []);
   return (
-    <RegistrationContext value={() => setOpen(true)}>
+    <RegistrationContext value={showRegistration}>
       {children}
       {open && (
         <dialog

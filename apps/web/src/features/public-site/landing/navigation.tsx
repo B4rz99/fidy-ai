@@ -20,7 +20,7 @@ export const Header = (): React.JSX.Element => {
     }
   };
   return (
-    <header role="banner" className={`wrap nav main-nav${open ? " nav-open" : ""}`}>
+    <header className={`wrap nav main-nav${open ? " nav-open" : ""}`}>
       <a className="logo" href="/" aria-label="Fidy, inicio">
         <img src={logoUrl} alt="fidy" />
       </a>

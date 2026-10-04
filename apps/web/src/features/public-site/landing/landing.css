@@ -355,7 +355,7 @@ html:has(.fidy-landing) {
   display: block;
   text-align: right;
   font-size: 8px;
-  color: #7b8275;
+  color: #62695c;
   margin-top: 4px;
 }
 .fidy-landing .chat-input {
@@ -371,7 +371,7 @@ html:has(.fidy-landing) {
   border-radius: 20px;
   padding: 8px 12px;
   flex: 1;
-  color: #85827c;
+  color: #6b6862;
 }
 .fidy-landing .send {
   border: 0;

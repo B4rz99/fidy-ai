@@ -62,14 +62,15 @@ export const mountMotion = (root: HTMLDivElement): (() => void) => {
     (entries) => {
       for (const entry of entries) {
         if (!entry.isIntersecting) continue;
+        const isDemo = entry.target.id === "demo";
         observer.unobserve(entry.target);
         enter({
           element: entry.target,
           delay: 0,
-          duration: entry.target.id === "demo" ? demoDuration : entranceDuration,
-          distance: entry.target.id === "demo" ? "3%" : "4%",
+          duration: isDemo ? demoDuration : entranceDuration,
+          distance: isDemo ? "3%" : "4%",
         });
-        if (entry.target.id === "demo") playConversation(entry.target);
+        if (isDemo) playConversation(entry.target);
       }
     },
     { threshold: 0.12 }

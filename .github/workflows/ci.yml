@@ -24,6 +24,7 @@ jobs:
     outputs:
       builds: ${{ steps.plan.outputs.builds }}
       unit: ${{ steps.plan.outputs.unit }}
+      cli-native-package: ${{ steps.plan.outputs.unit }}
       cli-native: ${{ steps.plan.outputs.unit }}
       cloudflare-adapters: ${{ steps.plan.outputs.cloudflare-adapters }}
       cloudflare-infra: ${{ steps.plan.outputs.cloudflare-infra }}
@@ -254,13 +255,31 @@ jobs:
       - name: Fluid Attacks SCA
         run: docker run --rm --pull=always -v "$PWD:/src" docker.io/fluidattacks/sca:latest sca --strict scan /src/.fluidattacks/sca.yaml
 
-  cli-native:
+  cli-native-package:
     needs: changes
+    if: ${{ needs.changes.outputs.cli-native-package == 'true' }}
+    name: Package CLI native conformance
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/bun-install
+      - name: Bundle the real credential adapter and native probe
+        run: bun run --cwd apps/cli build:native
+      - name: Publish same-run native conformance artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cli-native-conformance
+          path: apps/cli/dist/native-store/
+          if-no-files-found: error
+          retention-days: 1
+
+  cli-native:
+    needs: [changes, cli-native-package]
     if: ${{ needs.changes.outputs.cli-native == 'true' }}
     name: CLI native store (${{ matrix.os }})
-    # Windows install/cache extraction takes ~4 minutes, and post-job cache saving
-    # also counts. Keep setup headroom separate from the short conformance budget.
-    timeout-minutes: 15
+    # Run the same bundled adapter/probe on each OS without workspace install/cache extraction.
+    timeout-minutes: 5
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -268,10 +287,14 @@ jobs:
         os: [macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: ./.github/actions/bun-install
+      - uses: ./.github/actions/bun-runtime
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cli-native-conformance
+          path: test-results/cli-native
       - name: Native cross-process and Windows local-persistence conformance
         timeout-minutes: 1
-        run: bun run --cwd apps/cli test:native
+        run: bun test-results/cli-native/native-store.js
 
   required-checks:
     name: Required Checks
@@ -281,6 +304,7 @@ jobs:
       - static
       - builds
       - unit
+      - cli-native-package
       - cli-native
       - cloudflare-adapters
       - cloudflare-infra

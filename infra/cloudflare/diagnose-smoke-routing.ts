@@ -1,23 +1,12 @@
 /// <reference types="bun-types" />
 
-import { Context, Data, Effect, Exit, Layer, Option, Schema, Stream } from "effect";
-import {
-  FetchHttpClient,
-  HttpBody,
-  HttpClient,
-  HttpClientRequest,
-  type HttpClientResponse,
-} from "effect/http";
+import { Context, Data, Effect, Exit, Layer, Option, Schema } from "effect";
+import { FetchHttpClient, HttpClient } from "effect/http";
+import { exchangeSmoke, observeSmokeCore, smokeHeaders } from "./smoke-exchange";
 import {
   SmokeIdentity,
-  SmokeIdentityEquality,
   SmokeRequest,
-  SmokeResponse,
-  smokeCoreVersionHeader,
   smokeDiagnosticRevision,
-  smokeFailureHeader,
-  smokeIdentityHeader,
-  smokePath,
 } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 
 const RoutingConfig = Schema.Struct({
@@ -47,99 +36,20 @@ type RoutingSample = Pick<
   RoutingObservation,
   "round" | "pairing" | "method" | "replica" | "window"
 >;
-type CoreObservation = Readonly<{
-  version: Option.Option<string>;
-  source: RoutingObservation["coreSource"];
-}>;
 class RoutingDiagnosticFailed extends Data.TaggedError("RoutingDiagnosticFailed")<{}> {}
-const origin = "https://api.fidyapp.com";
 const rounds = 6;
 const ordinarySamplesPerRound = 8;
-const responseLimit = 4096;
 const readyStatus = 200;
 const refusedStatus = 503;
 const diagnosticProbeId = "00000000000000000000000000000000";
-const SmokeResult = Schema.Struct({ ...SmokeResponse.fields, public: SmokeIdentity });
-
-const readIdentity = Effect.fn(function* (response: HttpClientResponse.HttpClientResponse) {
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  yield* Stream.runForEachWhile(response.stream, (chunk) =>
-    Effect.sync(() => {
-      size += chunk.byteLength;
-      if (size > responseLimit) return false;
-      chunks.push(chunk);
-      return true;
-    })
-  );
-  if (size > responseLimit) return Option.none<SmokeIdentity>();
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  const result = Schema.decodeOption(Schema.fromJsonString(SmokeResult))(
-    new TextDecoder().decode(bytes)
-  );
-  return Option.map(result, (value) => value.core);
-});
-
-const rejectedCore = (
-  response: HttpClientResponse.HttpClientResponse,
-  config: RoutingConfig
-): CoreObservation => {
-  if (response.status === refusedStatus && response.headers[smokeFailureHeader] === "identity") {
-    const version = Schema.decodeUnknownOption(SmokeIdentity.fields.workerVersionId)(
-      response.headers[smokeCoreVersionHeader]
-    );
-    if (Option.isSome(version)) return { version, source: "header" } satisfies CoreObservation;
-    // Older stable code lacks the observed-version header. True equality names the exact
-    // supplied stable version; it is not a guess about fallback identity.
-    const equality = Schema.decodeUnknownOption(SmokeIdentityEquality)(
-      response.headers[smokeIdentityHeader]
-    );
-    if (Option.isSome(equality) && equality.value[0] === "1") {
-      return {
-        version: Option.some(config.STABLE_CORE_VERSION_ID),
-        source: "equality",
-      } satisfies CoreObservation;
-    }
-  }
-  return { version: Option.none<string>(), source: "unavailable" };
-};
-
-const observeCore = Effect.fn(function* (
-  response: HttpClientResponse.HttpClientResponse,
-  sample: RoutingSample,
-  config: RoutingConfig
-) {
-  if (sample.method === "GET" && response.status === readyStatus) {
-    const version = Option.map(
-      yield* readIdentity(response),
-      (identity) => identity.workerVersionId
-    );
-    return {
-      version,
-      source: Option.isSome(version) ? "body" : "unavailable",
-    } satisfies CoreObservation;
-  }
-  if (sample.method === "POST") return rejectedCore(response, config);
-  return { version: Option.none<string>(), source: "unavailable" } satisfies CoreObservation;
-});
-
 const routingRequest = Effect.fn(function* (config: RoutingConfig, sample: RoutingSample) {
   const publicVersion =
     sample.pairing === "candidate" ? config.PUBLIC_VERSION_ID : config.STABLE_PUBLIC_VERSION_ID;
-  const coreOverride = `${config.CORE_WORKER_NAME}="${config.CORE_VERSION_ID}"`;
-  const headers = {
-    "cloudflare-workers-version-overrides": `${config.PUBLIC_WORKER_NAME}="${publicVersion}", ${coreOverride}`,
-    "x-fidy-smoke-proof": config.SMOKE_PROOF,
-  };
+  const headers = smokeHeaders({ config, publicVersion: Option.some(publicVersion) });
   // Both methods use the same URL and override. The reserved revision stops POST effects,
   // even on older Core code, whose Production revision cannot be all-zero.
-  const url = `${origin}${smokePath}?readiness=1`;
-  if (sample.method === "GET") return HttpClientRequest.get(url, { headers });
+  const query = "?readiness=1";
+  if (sample.method === "GET") return { query, headers, body: Option.none<string>() };
   const body = yield* Schema.encodeEffect(Schema.fromJsonString(SmokeRequest))({
     protocolVersion: 1,
     probeId: diagnosticProbeId,
@@ -148,18 +58,19 @@ const routingRequest = Effect.fn(function* (config: RoutingConfig, sample: Routi
     expectedGitRevision: smokeDiagnosticRevision,
     expectedContractDigest: config.CONTRACT_DIGEST,
   });
-  return HttpClientRequest.post(url, { headers, body: HttpBody.text(body, "application/json") });
+  return { query, headers, body: Option.some(body) };
 });
 
 const observeRouting = Effect.fn(
   function* (config: RoutingConfig, sample: RoutingSample) {
     const request = yield* routingRequest(config, sample);
-    const client = yield* HttpClient.HttpClient;
-    const response = yield* HttpClient.withScope(client).execute(request);
-    const observedPublic = Schema.decodeUnknownOption(SmokeIdentity.fields.workerVersionId)(
-      response.headers["x-fidy-smoke-worker-version"]
-    );
-    const core = yield* observeCore(response, sample, config);
+    const response = yield* exchangeSmoke(request);
+    const observedPublic = response.publicVersion;
+    const core = observeSmokeCore({
+      response,
+      method: sample.method,
+      stableCore: config.STABLE_CORE_VERSION_ID,
+    });
     return {
       ...sample,
       status: response.status,

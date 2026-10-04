@@ -1,24 +1,19 @@
 /// <reference types="bun-types" />
 
-import { Cause, Context, Data, Effect, Exit, Layer, Option, Schedule, Schema } from "effect";
+import { Cause, Context, Effect, Exit, Layer, Option, Schedule, Schema } from "effect";
 import { Hex } from "effect/encoding";
+import { FetchHttpClient, HttpBody, HttpClient, HttpClientRequest } from "effect/http";
 import {
-  FetchHttpClient,
-  HttpBody,
-  HttpClient,
-  HttpClientRequest,
-  type HttpClientResponse,
-} from "effect/http";
-import {
-  SmokeFailureStage,
   SmokeIdentity,
-  SmokeIdentityEquality,
-  SmokeResponse,
-  smokeFailureHeader,
-  smokeIdentityHeader,
-  smokePath,
+  SmokeRequest,
 } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
-import { verifySmokeIdentity } from "../../apps/server/cloudflare/runtime/release-smoke/operations";
+import {
+  CandidateRoutingPending,
+  ReleaseSmokeFailed,
+  checkSmokeExchange,
+  exchangeSmoke,
+  smokeHeaders,
+} from "./smoke-exchange";
 import { verifyEdgeSmoke } from "./verify-edge-smoke";
 
 const RunnerConfig = Schema.Struct({
@@ -34,132 +29,49 @@ const RunnerConfig = Schema.Struct({
   SMOKE_PROOF: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
 });
 type RunnerConfig = typeof RunnerConfig.Type;
-class ReleaseSmokeFailed extends Data.TaggedError("ReleaseSmokeFailed")<{
-  readonly reason: string;
-}> {}
-
-class CandidateRoutingPending extends Data.TaggedError("CandidateRoutingPending")<{
-  readonly reason: string;
-}> {}
-
 const apiOrigin = "https://api.fidyapp.com";
 const maxAttempts = 20;
 const pollDelayMs = 1500;
 const authorityRefusedStatus = 403;
-const unavailableStatus = 503;
-const successStart = 200;
-const successEnd = 300;
 const probeEntropyBytes = 16;
 
 const candidateHeaders = (
   config: RunnerConfig,
   publicVersionId: string
-): Readonly<Record<string, string>> => ({
-  "cloudflare-workers-version-overrides": `${config.PUBLIC_WORKER_NAME}="${publicVersionId}", ${config.CORE_WORKER_NAME}="${config.CORE_VERSION_ID}"`,
-  "x-fidy-smoke-proof": config.SMOKE_PROOF,
-});
+): Readonly<Record<string, string>> =>
+  smokeHeaders({ config, publicVersion: Option.some(publicVersionId) });
 
-const call = Effect.fn(function* (
-  path: string,
-  headers: Readonly<Record<string, string>>,
-  body: Option.Option<string>
-) {
-  const client = yield* HttpClient.HttpClient;
-  const url = `${apiOrigin}${path}`;
-  const request = Option.isSome(body)
-    ? HttpClientRequest.post(url, {
-        headers: { ...headers, "content-type": "application/json" },
-        body: HttpBody.text(body.value, "application/json"),
-      })
-    : HttpClientRequest.get(url, { headers });
-  return yield* client.execute(request).pipe(Effect.timeout("8 seconds"));
-});
+const callEdge = Effect.fn(
+  function* (path: string, headers: Readonly<Record<string, string>>, body: Option.Option<string>) {
+    const client = yield* HttpClient.HttpClient;
+    const url = `${apiOrigin}${path}`;
+    const request = Option.isSome(body)
+      ? HttpClientRequest.post(url, {
+          headers: { ...headers, "content-type": "application/json" },
+          body: HttpBody.text(body.value, "application/json"),
+        })
+      : HttpClientRequest.get(url, { headers });
+    const response = yield* HttpClient.withScope(client).execute(request);
+    return { status: response.status, headers: new Headers(response.headers) };
+  },
+  Effect.scoped,
+  Effect.timeout("8 seconds"),
+  Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
+  Effect.provideService(HttpClient.TracerDisabledWhen, () => true)
+);
 
-const candidateResponseDiagnostic = (
-  response: HttpClientResponse.HttpClientResponse,
-  expectedPublic: SmokeIdentity
-): string => {
-  const observedVersion = response.headers["x-fidy-smoke-worker-version"];
-  let versionState = "other";
-  if (observedVersion === undefined) versionState = "missing";
-  else if (observedVersion === expectedPublic.workerVersionId) versionState = "expected";
-  const stage = Schema.decodeUnknownOption(SmokeFailureStage)(response.headers[smokeFailureHeader]);
-  const equality = Schema.decodeUnknownOption(SmokeIdentityEquality)(
-    response.headers[smokeIdentityHeader]
-  );
-  const identityDetail =
-    Option.contains(stage, "identity") && Option.isSome(equality)
-      ? `, coreVersion=${equality.value[0] === "1"}, coreRevision=${equality.value[1] === "1"}, coreDigest=${equality.value[2] === "1"}`
-      : "";
-  const detail = Option.match(stage, {
-    onNone: () => "",
-    onSome: (value) => `, stage=${value}${identityDetail}`,
-  });
-  return `Candidate smoke response rejected (status=${response.status}, version=${versionState}, noStore=${response.headers["cache-control"] === "no-store"}${detail})`;
-};
-
-const isRoutingFallback = (
-  response: HttpClientResponse.HttpClientResponse,
-  expectedPublic: SmokeIdentity
-): boolean =>
-  response.status >= successStart &&
-  response.status < successEnd &&
-  response.headers["cache-control"] === "no-store" &&
-  Schema.is(SmokeIdentity.fields.workerVersionId)(
-    response.headers["x-fidy-smoke-worker-version"]
-  ) &&
-  response.headers["x-fidy-smoke-worker-version"] !== expectedPublic.workerVersionId;
-
-const checkPublicResponse = Effect.fn(function* (
-  response: HttpClientResponse.HttpClientResponse,
-  expectedPublic: SmokeIdentity
-) {
-  if (isRoutingFallback(response, expectedPublic)) {
-    return yield* new CandidateRoutingPending({
-      reason: candidateResponseDiagnostic(response, expectedPublic),
-    });
-  }
-  if (
-    response.status < successStart ||
-    response.status >= successEnd ||
-    response.headers["cache-control"] !== "no-store" ||
-    response.headers["x-fidy-smoke-worker-version"] !== expectedPublic.workerVersionId
-  ) {
-    return yield* new ReleaseSmokeFailed({
-      reason: candidateResponseDiagnostic(response, expectedPublic),
-    });
-  }
-});
-
-const check = Effect.fn(function* (
-  response: HttpClientResponse.HttpClientResponse,
+const expectedPair = (
   config: RunnerConfig,
-  expectedPublic: SmokeIdentity
-) {
-  yield* checkPublicResponse(response, expectedPublic);
-  const raw = yield* response.json;
-  const result = Schema.decodeUnknownOption(
-    Schema.Struct({ ...SmokeResponse.fields, public: SmokeIdentity })
-  )(raw);
-  const expected = { gitRevision: config.RELEASE_GIT_SHA, contractDigest: config.CONTRACT_DIGEST };
-  if (
-    Option.isNone(result) ||
-    !verifySmokeIdentity({
-      expected: expectedPublic,
-      observed: result.value.public,
-    }) ||
-    !verifySmokeIdentity({
-      expected: { ...expected, workerVersionId: config.CORE_VERSION_ID },
-      observed: result.value.core,
-    })
-  ) {
-    return yield* new ReleaseSmokeFailed({
-      reason: Option.isNone(result)
-        ? "Smoke response did not match the owned schema"
-        : `Smoke identity mismatch (publicVersion=${result.value.public.workerVersionId === expectedPublic.workerVersionId}, publicRevision=${result.value.public.gitRevision === expectedPublic.gitRevision}, publicDigest=${result.value.public.contractDigest === expectedPublic.contractDigest}, coreVersion=${result.value.core.workerVersionId === config.CORE_VERSION_ID}, coreRevision=${result.value.core.gitRevision === config.RELEASE_GIT_SHA}, coreDigest=${result.value.core.contractDigest === config.CONTRACT_DIGEST})`,
-    });
-  }
-  return result.value.status;
+  publicIdentity: SmokeIdentity,
+  replayIdentity = false
+): Parameters<typeof checkSmokeExchange>[1] => ({
+  public: publicIdentity,
+  core: {
+    gitRevision: config.RELEASE_GIT_SHA,
+    contractDigest: config.CONTRACT_DIGEST,
+    workerVersionId: config.CORE_VERSION_ID,
+  },
+  replayIdentity,
 });
 
 const awaitSyntheticWork = Effect.fn(function* (
@@ -168,7 +80,7 @@ const awaitSyntheticWork = Effect.fn(function* (
   expectedPublic: SmokeIdentity
 ) {
   const probeId = Hex.encode(crypto.getRandomValues(new Uint8Array(probeEntropyBytes)));
-  const request = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+  const request = yield* Schema.encodeEffect(Schema.fromJsonString(SmokeRequest))({
     protocolVersion: 1,
     probeId,
     expectedPublicVersionId: expectedPublic.workerVersionId,
@@ -179,19 +91,11 @@ const awaitSyntheticWork = Effect.fn(function* (
   // Overrides can fall back after readiness too. Core's identity rejection precedes all
   // admission/effects; replay the same probe within the existing bound, never other failures.
   let status = yield* Effect.gen(function* () {
-    const response = yield* call(smokePath, headers, Option.some(request));
-    if (
-      "cloudflare-workers-version-overrides" in headers &&
-      response.status === unavailableStatus &&
-      response.headers[smokeFailureHeader] === "identity" &&
-      response.headers["cache-control"] === "no-store" &&
-      response.headers["x-fidy-smoke-worker-version"] === expectedPublic.workerVersionId
-    ) {
-      return yield* new CandidateRoutingPending({
-        reason: candidateResponseDiagnostic(response, expectedPublic),
-      });
-    }
-    return yield* check(response, config, expectedPublic);
+    const response = yield* exchangeSmoke({ query: "", headers, body: Option.some(request) });
+    return yield* checkSmokeExchange(
+      response,
+      expectedPair(config, expectedPublic, "cloudflare-workers-version-overrides" in headers)
+    );
   }).pipe(
     Effect.retry({
       times: 6,
@@ -203,10 +107,9 @@ const awaitSyntheticWork = Effect.fn(function* (
   );
   for (let attempt = 0; attempt < maxAttempts && status !== "passed"; attempt++) {
     yield* Effect.sleep(`${pollDelayMs} millis`);
-    status = yield* check(
-      yield* call(`${smokePath}?probeId=${probeId}`, headers, Option.none()),
-      config,
-      expectedPublic
+    status = yield* checkSmokeExchange(
+      yield* exchangeSmoke({ query: `?probeId=${probeId}`, headers, body: Option.none() }),
+      expectedPair(config, expectedPublic)
     );
   }
   if (status !== "passed") {
@@ -223,12 +126,12 @@ const checkEdge = Effect.fn(function* (
   const result = yield* verifyEdgeSmoke({
     probe: ({ method, path, headers: probeHeaders }) =>
       Effect.gen(function* () {
-        const response = yield* call(
+        const response = yield* callEdge(
           path,
           { ...headers, ...probeHeaders },
           method === "POST" ? Option.some("{}") : Option.none()
         );
-        return { status: response.status, headers: new Headers(response.headers) };
+        return response;
       }),
     candidate: Option.some({
       proof: config.SMOKE_PROOF,
@@ -268,15 +171,15 @@ export const verifyReadOnlySmokeRouting = Effect.fn(function* (
         };
   const headers =
     mode === "promoted"
-      ? { "x-fidy-smoke-proof": config.SMOKE_PROOF }
+      ? smokeHeaders({ config, publicVersion: Option.none() })
       : candidateHeaders(config, expectedPublic.workerVersionId);
   let diagnostic = "No valid readiness response";
   yield* Effect.gen(function* () {
-    const response = yield* call(`${smokePath}?readiness=1`, headers, Option.none());
+    const response = yield* exchangeSmoke({ query: "?readiness=1", headers, body: Option.none() });
     if (response.status === authorityRefusedStatus) {
       return yield* new ReleaseSmokeFailed({ reason: "Read-only routing authority refused" });
     }
-    return yield* check(response, config, expectedPublic).pipe(
+    return yield* checkSmokeExchange(response, expectedPair(config, expectedPublic)).pipe(
       Effect.catch((error) => {
         diagnostic =
           error instanceof ReleaseSmokeFailed || error instanceof CandidateRoutingPending
@@ -364,15 +267,11 @@ export const verifyPromotedSmoke = Effect.fn(function* (env: unknown) {
     });
   }
   const config = decoded.value;
-  yield* awaitSyntheticWork(
-    config,
-    { "x-fidy-smoke-proof": config.SMOKE_PROOF },
-    {
-      gitRevision: config.RELEASE_GIT_SHA,
-      contractDigest: config.CONTRACT_DIGEST,
-      workerVersionId: config.PUBLIC_VERSION_ID,
-    }
-  );
+  yield* awaitSyntheticWork(config, smokeHeaders({ config, publicVersion: Option.none() }), {
+    gitRevision: config.RELEASE_GIT_SHA,
+    contractDigest: config.CONTRACT_DIGEST,
+    workerVersionId: config.PUBLIC_VERSION_ID,
+  });
 });
 
 if (import.meta.main) {

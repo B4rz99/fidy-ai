@@ -1,0 +1,34 @@
+apps/server/cloudflare/subscription/refunds.test.ts
+  s_ba89dc1029bca1::t_2a9ae73e3d7481 818-825,841-855,860-872
+  s_ba89dc1029bca1::t_af80cfd0f7dec3 983-1007,1011-1016,1018-1060
+  s_ba89dc1029bca1::t_6c4ed98d15048c 811-814,817,826-836,839-840,874-923,929-942,944-981
+  s_ba89dc1029bca1::t_06e54981d3f5c0 810,815-816,837-838,873,924-928,943
+  s_ba89dc1029bca1::t_5a56f60b2e9995 1008-1010,1017,1061
+  s_ba89dc1029bca1::t_5571b3c7f9d320 856-859,982
+apps/server/cloudflare/subscription/runtime.ts
+  s_ba89dc1029bca1::t_17dfd374e6a2f2 16,23,51-55,59-60,62-63,70-71,101-103
+apps/server/cloudflare/subscription/contract.ts
+  s_ba89dc1029bca1::t_730d599e314e66 124-128
+apps/server/cloudflare/subscription/internal/refund-workflow.ts
+  s_ba89dc1029bca1::t_4c54d04f6759f3 110,112-118
+  s_ba89dc1029bca1::t_7a3d9bf0c9f272 105-106,139-140
+  s_ba89dc1029bca1::t_383a7898f462b5 102,111
+apps/server/cloudflare/migrations/0032_billing_corrections.sql
+  s_ba89dc1029bca1::t_1573a5a499c984 74-80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "1005c0e6800db9ea589e5de546dae3f493655bdd",
+  "prompts": {},
+  "sessions": {
+    "s_ba89dc1029bca1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a103f6-761c-710c-b806-670edee0d3aa",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

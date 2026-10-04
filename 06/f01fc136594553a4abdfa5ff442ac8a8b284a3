@@ -1,0 +1,28 @@
+apps/server/cloudflare/subscription/refunds.test.ts
+  s_ba89dc1029bca1::t_121b854a72f0ec 7,43
+apps/server/cloudflare/subscription/refund-charge.test-fixture.ts
+  s_ba89dc1029bca1::t_6e553f41ca5a96 1-37
+apps/server/cloudflare/subscription/refund-support.test.ts
+  s_ba89dc1029bca1::t_1f6194349292cf 248
+  s_ba89dc1029bca1::t_2ecbd537c532a9 6-7,227-247,249-254,256-257,259-271,273,275-278,280-290,292-308,314-317
+  s_ba89dc1029bca1::t_5b76ff0a0fb65c 2
+  s_ba89dc1029bca1::t_15749c433ae6aa 258
+  s_ba89dc1029bca1::t_d91b9edb830165 309-310,313
+  s_ba89dc1029bca1::t_67fa868ebf8719 255,272,274,279,291,311-312,318-319
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "06f01fc136594553a4abdfa5ff442ac8a8b284a3",
+  "prompts": {},
+  "sessions": {
+    "s_ba89dc1029bca1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a103f6-761c-710c-b806-670edee0d3aa",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

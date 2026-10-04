@@ -1,0 +1,231 @@
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_ba89dc1029bca1::t_4c891af6dd69c3 101
+apps/server/cloudflare/queue/internal/dispatch.ts
+  s_ba89dc1029bca1::t_07411269c48479 112-114,116-118,125-127
+  s_ba89dc1029bca1::t_aa7fd3cf351b3b 20-25,107-111,115,119-124,128-137,163-167
+  s_ba89dc1029bca1::t_9c0df9e6099173 138
+apps/server/src/shell/outbound-http/internal/outbound-http.ts
+  s_ba89dc1029bca1::t_a9ad868661717a 214-217,219-226,282
+  s_ba89dc1029bca1::t_65c0c425728366 213,218,227-228
+  s_ba89dc1029bca1::t_b8734878ef8db7 229-241,397,446,460
+  s_ba89dc1029bca1::t_88114b204bf80a 439-444,454
+  s_ba89dc1029bca1::t_2b08236876a2ab 242-243
+  s_ba89dc1029bca1::t_4bc9247f3d6b68 283-284
+  s_ba89dc1029bca1::t_971729e6395d21 396
+  s_ba89dc1029bca1::t_c16394e5b37c3f 445
+  s_ba89dc1029bca1::t_f6690e39fbe2a1 447-449,451-453
+  s_ba89dc1029bca1::t_a26a53c6ec046b 455-459
+  s_ba89dc1029bca1::t_cbf88dddfbc589 371,384,450
+apps/server/src/shell/outbound-http/operations.ts
+  s_ba89dc1029bca1::t_25421b2768770c 10
+  s_ba89dc1029bca1::t_6f6f689a0e4cd5 11-13
+  s_ba89dc1029bca1::t_db3976b2209fff 31-38
+apps/server/cloudflare/maintenance/runtime.ts
+  s_ba89dc1029bca1::t_07411269c48479 94-101
+  s_ba89dc1029bca1::t_43835c916732a1 28
+  s_ba89dc1029bca1::t_f2e921b23f5cd5 27,102-108
+apps/server/src/shell/observability/contract.ts
+  s_ba89dc1029bca1::t_7ee869a8fc2b42 94
+apps/server/cloudflare/subscription/refunds.test.ts
+  s_ba89dc1029bca1::t_4e4e458a90c47e 6,31-35,81-89,210,229-231,234
+  s_ba89dc1029bca1::t_48386433f07c69 27,39-40,44,464-469,488-507
+  s_ba89dc1029bca1::t_8a7d9d80df773b 3
+  s_ba89dc1029bca1::t_aa7fd3cf351b3b 48,90-103,105-118,246-277,289-298,300-325,327-364,366-415
+  s_ba89dc1029bca1::t_07411269c48479 8-13,278-287,417-463,470-486
+  s_ba89dc1029bca1::t_5938646a3c7679 487
+  s_ba89dc1029bca1::t_d2b436a2d6ff52 7,120
+  s_ba89dc1029bca1::t_ecfbe31ca56377 1-2
+  s_ba89dc1029bca1::t_ea019c6528bb69 21,23,25
+  s_ba89dc1029bca1::t_874a284efd5aeb 104,119,245,299,326,365
+  s_ba89dc1029bca1::t_690de0e9cc66ce 288
+  s_ba89dc1029bca1::t_d06603ca2cb4d3 22,160,177
+  s_ba89dc1029bca1::t_45f3cc31fb1bb4 416
+  s_ba89dc1029bca1::t_b4baf81faedc9e 4-5,14-20,24,26,50,60-61,121-122,135
+  s_ba89dc1029bca1::t_a9ad868661717a 28-30,36-38,41-43,45,49,51-59,62-80,123-134,136-159,161-176,178-209,211-228,235-244
+  s_ba89dc1029bca1::t_14dfc83c1ee474 46-47,232-233
+apps/server/src/core/subscription/refund-rules.test.ts
+  s_ba89dc1029bca1::t_2e7cc7b2ea7faf 1-2,4-7,17-18,31
+  s_ba89dc1029bca1::t_aa7fd3cf351b3b 8-16,19,21-25,27-30
+  s_ba89dc1029bca1::t_8ec999023dbc21 3,20,26
+apps/server/cloudflare/subscription/internal/wompi-refund-client.ts
+  s_ba89dc1029bca1::t_2791fb14032a26 1-8,45,54-55,58-59,64,81,94,101,122
+  s_ba89dc1029bca1::t_417990a5a79ecd 71,114
+  s_ba89dc1029bca1::t_a9ad868661717a 9-44,46-53,56-57,60-63,65-70,72-80,82-93,95-100,102-113,115-121,123-137
+  s_ba89dc1029bca1::t_5c165c786cedad 138-139
+apps/server/cloudflare/ingestion/statement-staging.test.ts
+  s_ba89dc1029bca1::t_62124d246c77af 62
+apps/server/cloudflare/transactions/runtime.ts
+  s_ba89dc1029bca1::t_aa7fd3cf351b3b 226-245,247,355
+  s_ba89dc1029bca1::t_67593ba6188a8d 1,71-74,76
+  s_ba89dc1029bca1::t_db51429420c9bf 246,248-249,361
+  s_ba89dc1029bca1::t_b07200db9d5b0a 75
+apps/server/cloudflare/subscription/payment-enrollment-d1.test-fixture.ts
+  s_ba89dc1029bca1::t_cacbe80334435c 44
+apps/server/cloudflare/subscription/internal/refund-http-response.ts
+  s_ba89dc1029bca1::t_6320f5ba2d549b 1-10
+  s_ba89dc1029bca1::t_d40645a934edde 11-16
+  s_ba89dc1029bca1::t_e70934e9f1e9d2 17-19
+  s_ba89dc1029bca1::t_bd7862bb1520fa 20-28
+apps/server/cloudflare/maintenance/contract.ts
+  s_ba89dc1029bca1::t_de4e310fcedaab 17
+  s_ba89dc1029bca1::t_297a97c618c015 16
+infra/cloudflare/alchemy.run.ts
+  s_ba89dc1029bca1::t_9eac0450d556eb 212-214,273-274
+  s_ba89dc1029bca1::t_dcf17beddfc373 275-276
+apps/server/cloudflare/access-tier.test.ts
+  s_ba89dc1029bca1::t_48386433f07c69 95-110
+  s_ba89dc1029bca1::t_aa7fd3cf351b3b 43-45
+apps/server/cloudflare/subscription/internal/refund-support.ts
+  s_ba89dc1029bca1::t_07411269c48479 71-73,107-108,111-112,143-144,147-148,152-154
+  s_ba89dc1029bca1::t_b0e169d47c6092 24,51,54,68,156
+  s_ba89dc1029bca1::t_043ce204922bfb 1-9,12-20,22-23,25,27-40,42-49,55-58,60-67,69-70,74-88,90-95,97-103,105-106,109-110,113-115,117-125,127-131,133-142,145-146,149-151,155,157-163,166-167
+  s_ba89dc1029bca1::t_aa7fd3cf351b3b 11,50,52-53
+  s_ba89dc1029bca1::t_321fd1147d30d6 132
+  s_ba89dc1029bca1::t_27ddc296a854fe 10,21,26,41,59,89,96,104,116,126,164-165
+apps/server/cloudflare/core-http/internal/http.ts
+  s_ba89dc1029bca1::t_92b5c3bc30f266 62
+  s_ba89dc1029bca1::t_8e46321d08dccc 55-56,58,516,1587-1589,1591
+  s_ba89dc1029bca1::t_8c75c633f2a0d5 57
+  s_ba89dc1029bca1::t_1e34ae072f5757 1590
+  s_ba89dc1029bca1::t_30e3299fc43e1c 1592
+apps/server/src/core/subscription/contract.ts
+  s_ba89dc1029bca1::t_4fdf6cb02f7088 4
+  s_ba89dc1029bca1::t_8b706801c6bfd2 6,381-394,400-403,407-458,464-472,480-481
+  s_ba89dc1029bca1::t_a9ad868661717a 395,398-399,404-406,459-463,473-479
+  s_ba89dc1029bca1::t_aa7fd3cf351b3b 396-397
+apps/server/src/shell/outbound-http/contract.ts
+  s_ba89dc1029bca1::t_417704e3058567 76-77
+  s_ba89dc1029bca1::t_b534aa6259dab6 78-79
+apps/server/cloudflare/core-worker.ts
+  s_ba89dc1029bca1::t_0f75f0a258e202 24
+  s_ba89dc1029bca1::t_c7c9734dac6d3f 25-27
+  s_ba89dc1029bca1::t_719d59562f900a 28,53-54
+tools/depcruise/publication.mjs
+  s_ba89dc1029bca1::t_70e435bce31765 44-45
+apps/server/cloudflare/subscription/operations.ts
+  s_ba89dc1029bca1::t_b83f294dacbc27 1,16,20,24
+  s_ba89dc1029bca1::t_a9ad868661717a 12-15,21-23,25-26
+  s_ba89dc1029bca1::t_b780ba2c14d79b 7-8
+  s_ba89dc1029bca1::t_93e0568ff0a5c2 30
+  s_ba89dc1029bca1::t_558e273d77fb20 2-5,9-11,27-29,31-50,53-54
+  s_74e559bd8b2eb1::t_72f97312f695b9 6,51-52,55
+apps/server/cloudflare/subscription/internal/refund-acceptance.ts
+  s_ba89dc1029bca1::t_22b552bcb84c1b 8-10,17,19,25,29,46,49,59,81,83-84,91-92,95,118,236,240
+  s_ba89dc1029bca1::t_e41f12ec5a3b8d 2,30,39,58,80,101-105,119-127,193-196,216,250
+  s_ba89dc1029bca1::t_aa7fd3cf351b3b 244-246
+  s_ba89dc1029bca1::t_182a87647fa4e1 1,18
+  s_ba89dc1029bca1::t_a9ad868661717a 3-7,20-24,26-28,31-38,41-43,50-57,60-79,82,85-90,96-100,106-112,116-117,128-192,197-215,217-235,237-239,248-249,251-254
+  s_ba89dc1029bca1::t_48386433f07c69 11-16,47-48
+  s_ba89dc1029bca1::t_1bbc39605132ce 40,44-45,93-94,247,255
+  s_ba89dc1029bca1::t_417990a5a79ecd 113-115,241-243
+apps/server/cloudflare/subscription/internal/refund-workflow.ts
+  s_ba89dc1029bca1::t_820f5acbba2dfa 18,195,203-205,215-216,234
+  s_ba89dc1029bca1::t_c2a91c507fc694 19,33,86,89,94,137,227,241
+  s_ba89dc1029bca1::t_2ce429d479f1a2 65,74
+  s_ba89dc1029bca1::t_417990a5a79ecd 124-126
+  s_ba89dc1029bca1::t_d6d30ef51d740a 166-167
+  s_ba89dc1029bca1::t_07411269c48479 3-7,84-85,87,90-92,95-96,98-112,138,196-202,206-214,217-226,228-233,235-237
+  s_ba89dc1029bca1::t_e015f70327af98 160
+  s_ba89dc1029bca1::t_48386433f07c69 20-32,88
+  s_ba89dc1029bca1::t_3f81ff5510423b 93,97,113,140
+  s_ba89dc1029bca1::t_a9ad868661717a 11-16,35-41,43-46,51-58,60-64,66-73,75-77,79-82,114-123,127-128,131-136,139,141-156,159,161,164-165,169-174,176-192,238-240,242-255
+  s_ba89dc1029bca1::t_877056663d4647 1-2,8-10,17,34,42,47-50,59,78,83,129-130,157-158,162-163,168,175,193-194
+apps/server/cloudflare/core-http/contract.ts
+  s_ba89dc1029bca1::t_9e3cf2d01fe346 23
+apps/server/src/core/subscription/operations.ts
+  s_ba89dc1029bca1::t_aa7fd3cf351b3b 7
+  s_ba89dc1029bca1::t_8287af2573ba1a 1,6,8-11,15-16
+  s_ba89dc1029bca1::t_75369eb048953f 2,12-14
+  s_ba89dc1029bca1::t_e7a1e751a30353 17
+apps/server/cloudflare/subscription/internal/operational-observation.ts
+  s_ba89dc1029bca1::t_16fa870220ddcb 14-17
+apps/server/cloudflare/migrations/0032_billing_corrections.sql
+  s_ba89dc1029bca1::t_1b4e8a8ef79e3a 64,73-75,93,97-102,136-143
+  s_ba89dc1029bca1::t_7e18fcf1a58de7 84-86
+  s_ba89dc1029bca1::t_ebc196b1f128b6 1-63,65-72,76-83,87-92,94-96,103-135,144-148
+apps/server/cloudflare/ingestion/forwarding-address.test.ts
+  s_ba89dc1029bca1::t_2eb9724a032b80 57-58
+apps/server/cloudflare/public-worker.ts
+  s_ba89dc1029bca1::t_07411269c48479 345-347
+  s_ba89dc1029bca1::t_aa7fd3cf351b3b 215-218,270
+  s_ba89dc1029bca1::t_182dcadb82043a 264
+  s_ba89dc1029bca1::t_c8d127c6257c6e 1
+apps/server/cloudflare/agent/hosted-turn.test.ts
+  s_ba89dc1029bca1::t_a71eb398c806d3 209
+apps/server/cloudflare/ingestion/statement-processing.test.ts
+  s_ba89dc1029bca1::t_1c43c516bbc670 39
+apps/server/cloudflare/subscription/refund-support.test.ts
+  s_ba89dc1029bca1::t_aa7fd3cf351b3b 12-14,16-17,20-29,31-32,37-39,41-49,51-76,105-108,110-145,155-162,165-167,171,181,184-185
+  s_ba89dc1029bca1::t_e3a8cc8bf707e3 1-5,10-11,15,18-19,33-36,40,77
+  s_ba89dc1029bca1::t_d570cf49235fa4 6-9,78-87,90-101,103-104,163
+  s_ba89dc1029bca1::t_1245fc4d85693f 30,50,109
+  s_ba89dc1029bca1::t_b8763839314e80 148,154
+  s_ba89dc1029bca1::t_07411269c48479 146-147
+  s_ba89dc1029bca1::t_da6e786f81449e 149-153
+  s_ba89dc1029bca1::t_9ebafdb056675d 88-89
+  s_ba89dc1029bca1::t_89c730e2eb97f3 102
+  s_ba89dc1029bca1::t_fe6bab67c9eaf4 164
+  s_ba89dc1029bca1::t_0159b3a86f06e6 168-170
+  s_ba89dc1029bca1::t_6c58bf4812594e 172-174,178-180
+  s_ba89dc1029bca1::t_b75a2a4a5613ad 182-183
+  s_ba89dc1029bca1::t_ef823ce24b49c0 175-177
+docs/runbooks/billing-corrections.md
+  s_ba89dc1029bca1::t_8442ab30cd527e 66-67
+  s_ba89dc1029bca1::t_088e263936a2f3 1-55,63-65,68-122
+  s_ba89dc1029bca1::t_48386433f07c69 56-62
+apps/server/cloudflare/runtime/telemetry/operations.ts
+  s_ba89dc1029bca1::t_9ebafdb056675d 101
+apps/server/cloudflare/queue/contract.ts
+  s_ba89dc1029bca1::t_68e02b8e4c370e 19
+apps/server/src/shell/subscription/operations.ts
+  s_ba89dc1029bca1::t_6132b2954e7bde 47-50
+apps/server/cloudflare/subscription/contract.ts
+  s_ba89dc1029bca1::t_91cef8207167a3 10-29
+  s_ba89dc1029bca1::t_4b29ccd023fd8d 6,35,37,42,44-57
+  s_ba89dc1029bca1::t_bab0a27641b7ba 36
+  s_ba89dc1029bca1::t_d5e3cb03241ab3 30-31,34
+  s_ba89dc1029bca1::t_48386433f07c69 103-110
+  s_ba89dc1029bca1::t_2965d770296af8 7,94,98,114
+  s_ba89dc1029bca1::t_aa7fd3cf351b3b 32-33,38-41
+  s_ba89dc1029bca1::t_07411269c48479 1-5,95-97,99-102,111-113,115-117
+  s_ba89dc1029bca1::t_a6244740d8cd67 43,118
+apps/server/src/shell/subscription/internal/query-sql.ts
+  s_ba89dc1029bca1::t_cb0b0f0642c398 41-44
+apps/server/cloudflare/subscription/runtime.ts
+  s_ba89dc1029bca1::t_e67feb0b880ae2 6
+  s_ba89dc1029bca1::t_c1a3fe58ea256d 3,60-61
+  s_ba89dc1029bca1::t_da6e786f81449e 73-82
+  s_ba89dc1029bca1::t_bbbb24357bb47a 2,5,16,50,54,58
+  s_ba89dc1029bca1::t_00451e484368a4 35
+  s_ba89dc1029bca1::t_18c43537d0129b 17-18,25,65-72,83-84,86-90
+  s_ba89dc1029bca1::t_e2a79dc53870f7 4
+  s_ba89dc1029bca1::t_48386433f07c69 100-112
+  s_ba89dc1029bca1::t_a9ad868661717a 93-94
+  s_ba89dc1029bca1::t_07411269c48479 19-24,51-53,55-57,59,62-64
+  s_ba89dc1029bca1::t_9c9af481eb0f73 1,7,91-92,95-99,113-115
+  s_ba89dc1029bca1::t_c4102e1b9c8a9e 85,116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3b92e1ca7a9ec9d35528c3f5e7c79d91446cb636",
+  "prompts": {},
+  "sessions": {
+    "s_74e559bd8b2eb1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a103fa-be97-74ea-98ef-1bbb67d7ba62",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_ba89dc1029bca1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a103f6-761c-710c-b806-670edee0d3aa",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

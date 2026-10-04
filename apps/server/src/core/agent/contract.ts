@@ -1,4 +1,5 @@
 import { OnboardingConsentBasis } from "~/core/consent/contract";
+import { InsightEventId } from "~/core/insights/contract";
 import { UserId } from "~/core/identity/contract";
 import { type Option, Schema, Struct } from "effect";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
@@ -88,6 +89,18 @@ export const TranscriptText = Schema.String.check(
   .pipe(Schema.brand("TranscriptText"))
   .annotate({ identifier: "TranscriptText" });
 export type TranscriptText = typeof TranscriptText.Type;
+
+/** Exact verified proactive message in the User Transcript, linked to an InsightEvent rather than a fabricated requested Turn or session. */
+export const ProactiveInsightTranscriptEntry = Schema.TaggedStruct(
+  "ProactiveInsightTranscriptEntry",
+  {
+    id: TranscriptEntryId,
+    insightEventId: InsightEventId,
+    occurredAt: UtcTimestamp,
+    text: TranscriptText,
+  }
+);
+export type ProactiveInsightTranscriptEntry = typeof ProactiveInsightTranscriptEntry.Type;
 
 const TranscriptIdentity = {
   id: TranscriptEntryId,

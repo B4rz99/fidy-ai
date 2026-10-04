@@ -30,6 +30,11 @@ const compositionRoots = new Set([
   "cloudflare/ingestion/forwarded-email.test.ts",
   "cloudflare/ingestion/statement-ingestion.test.ts",
   "cloudflare/insights/insight-store.test.ts",
+  // WeeklySummary integration composes real Consent, Identity, Transactions, Insights,
+  // channel claims and Agent Transcript owners; no production module imports this fixture.
+  "cloudflare/weekly-summary.test-fixture.ts",
+  "cloudflare/agent/proactive-transcript.test.ts",
+  "cloudflare/whatsapp/insight-delivery.test.ts",
   "cloudflare/recurring/recurring.test-fixture.ts",
   "cloudflare/memory/memory.test.ts",
   "cloudflare/onboarding/consent-ingress.test.ts",

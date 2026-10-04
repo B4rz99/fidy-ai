@@ -1,8 +1,13 @@
-import type { Effect, Option } from "effect";
+import { Effect, type Option } from "effect";
+import {
+  expireProactiveTranscript as expireProactiveTranscriptOwned,
+  prepareProactiveTranscript as prepareProactiveTranscriptOwned,
+  readProactiveTranscript as readProactiveTranscriptOwned,
+} from "./internal/proactive-transcript";
 import type { OnboardingConsentBasis } from "../../src/shell/consent/contract";
 import type { TranscriptTurnId } from "../../src/core/agent/contract";
 import { readAdmittedBasis } from "./internal/admitted-consent";
-import type { AgentUnavailable, HostedCommitFence } from "./contract";
+import { AgentUnavailable, type HostedCommitFence } from "./contract";
 import type { UserId } from "../../src/core/identity/contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import {
@@ -12,6 +17,22 @@ import {
   channelUserEntryQuery,
   prepareChannelTurn,
 } from "./internal/channel-evidence";
+
+/** Copy only the channel's exact protected verified text into the User Transcript, without inventing a Turn or session. Commit alongside Insight settlement. */
+export const prepareProactiveTranscript: typeof prepareProactiveTranscriptOwned = (input) =>
+  prepareProactiveTranscriptOwned(input);
+/** Read one same-User, unexpired proactive Transcript entry under current processing Consent for an ordinary correlated reply. */
+export const readProactiveTranscript = (
+  input: Parameters<typeof readProactiveTranscriptOwned>[0]
+): Effect.Effect<
+  Effect.Success<ReturnType<typeof readProactiveTranscriptOwned>>,
+  AgentUnavailable
+> => readProactiveTranscriptOwned(input).pipe(Effect.mapError(() => new AgentUnavailable()));
+/** Execute the fixed proactive Transcript retention policy independently of later User messages. */
+export const expireProactiveTranscript = (
+  input: Parameters<typeof expireProactiveTranscriptOwned>[0]
+): Effect.Effect<void, AgentUnavailable> =>
+  expireProactiveTranscriptOwned(input).pipe(Effect.mapError(() => new AgentUnavailable()));
 
 /** Same-User Turn lifecycle metadata, with id, user_id, hosted_session_id, status, started_at_ms, terminal_at_ms and failure_reason; no Transcript content or credential. */
 export const hostedChannelTurnQuery = (userId: UserId): OwnedStatement => channelTurnQuery(userId);

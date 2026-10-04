@@ -1,3 +1,31 @@
+import { prepareWeeklyDeliverySettlement as prepareWeeklyDeliverySettlementOwned } from "./internal/weekly-settlement";
+import { type DateTime, Effect, Option } from "effect";
+import { type InsightEventId, type ScheduleId } from "../../src/core/insights/contract";
+import { prepareWeeklyConsentDecision } from "../consent/operations";
+import { type WeeklyConsentContext } from "../consent/contract";
+import {
+  type DueWeeklySchedule,
+  InsightUnavailable,
+  type WeeklyMaterialization,
+  type WeeklyOccurrenceGuard,
+  type WeeklyScheduleAdvance,
+  type WeeklyScheduleSnapshot,
+  type WeeklySummaryReport,
+} from "./contract";
+import {
+  discoverSchedules,
+  findSchedule,
+  noteScheduleEvaluation,
+  occurrenceGuard,
+  prepareScheduleDisable,
+  prepareScheduleEnable,
+  scheduleAdvance,
+} from "./internal/weekly-schedule";
+import {
+  findReport,
+  materialize,
+  weeklyReportDeliveryQuery as weeklyReportDeliveryQueryOwned,
+} from "./internal/weekly-generation";
 import type { UserId } from "../../src/core/identity/contract";
 import {
   discoverDueInsights as discover,
@@ -8,6 +36,68 @@ import {
   prepareInsightTransition as prepare,
   insightRefusal as refuse,
 } from "./internal/insight-store";
+
+/** Compose actual verified channel evidence, forward-only attention and outbox settlement with the Agent's exact Transcript copy in one caller-coordinated D1 batch. */
+export const prepareWeeklyDeliverySettlement: typeof prepareWeeklyDeliverySettlementOwned = (
+  input
+) => prepareWeeklyDeliverySettlementOwned(input);
+
+/** Materialize only the latest relevant cutoff under the existing User coordinator and caller-owned security admission. Complete revision guards commit financial facts, occurrence, report, outbox and schedule advance atomically; unavailable facts never become no activity. */
+export const materializeWeeklySummary = (
+  input: Readonly<{ db: D1Database; userId: UserId; id: ScheduleId; now: DateTime.Utc }>
+): Effect.Effect<WeeklyMaterialization, InsightUnavailable> => materialize(input);
+/** Recheck the enabled schedule and captured grant in the channel owner's irreversible claim action. */
+export const weeklyReportDeliveryQuery: typeof weeklyReportDeliveryQueryOwned = (input) =>
+  weeklyReportDeliveryQueryOwned(input);
+
+/** Read the complete immutable same-User report under current processing Consent; this read cannot authorize provider egress. */
+export const findWeeklySummaryReport = (
+  input: Readonly<{ db: D1Database; userId: UserId; id: InsightEventId }>
+): Effect.Effect<Option.Option<WeeklySummaryReport>, InsightUnavailable> => findReport(input);
+
+/** Apply an authenticated exchange-qualified WhatsApp decision and schedule activation/revocation in one atomic User-coordinated unit. This is not a canonical or model-callable Consent operation. */
+export const recordWeeklySummaryDecision = (
+  input: WeeklyConsentContext & Readonly<{ choice: string; decisionMessageId: string }>
+): Effect.Effect<boolean, InsightUnavailable> =>
+  Effect.gen(function* () {
+    const decision = yield* prepareWeeklyConsentDecision(input).pipe(
+      Effect.mapError(() => new InsightUnavailable())
+    );
+    if (Option.isNone(decision)) return false;
+    const actions = [...decision.value.statements];
+    if (decision.value.decision === "accept") {
+      if (Option.isNone(decision.value.grantId)) return yield* new InsightUnavailable();
+      actions.push(
+        ...(yield* prepareScheduleEnable({ ...input, grantId: decision.value.grantId.value }))
+      );
+    }
+    if (decision.value.decision === "revoke") actions.push(prepareScheduleDisable(input));
+    yield* Effect.tryPromise({
+      try: () => input.db.batch(actions),
+      catch: () => new InsightUnavailable(),
+    });
+    return true;
+  });
+
+/** Current same-User instruction for authorized processing under existing User coordination; absence grants no authority. */
+export const findWeeklySchedule = (
+  input: Readonly<{ db: D1Database; userId: UserId }>
+): Effect.Effect<Option.Option<WeeklyScheduleSnapshot>, InsightUnavailable> => findSchedule(input);
+/** Bounded identities only. Re-read under User coordination; discovery grants no access or send permission. */
+export const discoverDueWeeklySchedules = (
+  input: Readonly<{ db: D1Database; now: DateTime.Utc }>
+): Effect.Effect<ReadonlyArray<DueWeeklySchedule>, InsightUnavailable> => discoverSchedules(input);
+/** Rotate recovery discovery fairly even when a due User has withdrawn processing authority; this updates operational metadata only. */
+export const noteWeeklyScheduleEvaluation = (
+  input: Readonly<{ db: D1Database; userId: UserId; id: ScheduleId; now: DateTime.Utc }>
+): Effect.Effect<void, InsightUnavailable> => noteScheduleEvaluation(input);
+/** Guard an owner statement ending at its WHERE condition against current captured schedule and exact live Consent grant. */
+export const prepareWeeklyOccurrenceGuard = (input: WeeklyOccurrenceGuard): D1PreparedStatement =>
+  occurrenceGuard(input);
+/** Commit after the occurrence/report/outbox writes in the same batch; stale, disabled, revoked or replayed work aborts the entire unit. */
+export const prepareWeeklyScheduleAdvance = (
+  input: WeeklyScheduleAdvance
+): ReadonlyArray<D1PreparedStatement> => scheduleAdvance(input);
 
 /**
  * Read one User's authoritative occurrence inside that User's coordination boundary. The caller

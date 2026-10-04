@@ -94,3 +94,62 @@ export class InvalidInsightTransition extends Data.TaggedError("InvalidInsightTr
 
 /** Every caller-actionable failure raised by the insights core. */
 export type InsightFailure = InsightNotFound | InvalidInsightTransition;
+
+/** A start-inclusive, end-exclusive financial reporting interval. */
+export const InsightPeriod = Schema.Struct({
+  from: UtcTimestamp,
+  toExclusive: UtcTimestamp,
+})
+  .check(
+    Schema.makeFilter((period) =>
+      period.from.epochMilliseconds < period.toExclusive.epochMilliseconds
+        ? undefined
+        : "Expected a non-empty reporting interval"
+    )
+  )
+  .annotate({ identifier: "InsightPeriod" });
+export type InsightPeriod = typeof InsightPeriod.Type;
+
+/** Consecutive seven-local-day periods anchored to the original scheduled instant. */
+export const WeeklyPeriods = Schema.Struct({
+  current: InsightPeriod,
+  previous: InsightPeriod,
+})
+  .check(
+    Schema.makeFilter((periods) =>
+      periods.previous.toExclusive.epochMilliseconds === periods.current.from.epochMilliseconds
+        ? undefined
+        : "Expected adjacent reporting periods"
+    )
+  )
+  .annotate({ identifier: "WeeklyPeriods" });
+export type WeeklyPeriods = typeof WeeklyPeriods.Type;
+
+/** Weekly wall-clock instructions; weekday uses Sunday=0 through Saturday=6. */
+export const WeeklyTiming = Schema.Struct({
+  weekday: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 6 })),
+  hour: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 23 })),
+  minute: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 59 })),
+}).annotate({ identifier: "WeeklyTiming" });
+export type WeeklyTiming = typeof WeeklyTiming.Type;
+
+/** One User-owned weekly instruction; execution advancement never changes its revision or retained reports. */
+export const WeeklySchedule = Schema.Struct({
+  id: ScheduleId,
+  version: ScheduleVersion,
+  enabled: Schema.Boolean,
+  timing: WeeklyTiming,
+  timeZone: IanaTimeZone,
+  serviceMarket: ServiceMarket,
+  locale: Locale,
+  nextScheduledAt: UtcTimestamp,
+}).annotate({ identifier: "WeeklySchedule" });
+export type WeeklySchedule = typeof WeeklySchedule.Type;
+
+/** Temporal eligibility only; every Ready attempt still needs live Consent, identity and admission. */
+export const InsightDeliveryDecision = Schema.Union([
+  Schema.TaggedStruct("Ready", {}),
+  Schema.TaggedStruct("Deferred", { nextEligibleAt: UtcTimestamp }),
+  Schema.TaggedStruct("Expired", {}),
+]).annotate({ identifier: "InsightDeliveryDecision" });
+export type InsightDeliveryDecision = typeof InsightDeliveryDecision.Type;

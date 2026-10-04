@@ -1,4 +1,6 @@
 import { Config, Schema } from "effect";
+import { weeklyDisclosure } from "~/shell/consent/internal/weekly-disclosure";
+
 import { DisclosureSnapshot } from "~/core/consent/contract";
 import { decidePATRevocation } from "~/core/consent/operations";
 import { type OwnedStatement } from "~/shell/owner-write/contract";
@@ -32,6 +34,9 @@ import {
   type RevokeAllPairingConsentsInput,
   type RevokeOnePATConsentInput,
 } from "./contract";
+
+/** Exact source-controlled contextual opt-in, independent of model-generated presentation. */
+export const weeklyDisclosureFor = (): DisclosureSnapshot => weeklyDisclosure();
 
 export {
   canRecordConsentIngressDecision,

@@ -27,6 +27,79 @@ import {
   isWhatsAppWindowOpen as isWhatsAppWindowOpenOwned,
   readWhatsAppPendingWork as readWhatsAppPendingWorkOwned,
 } from "./internal/whatsapp-turn";
+import {
+  expireInsightChannelEvidence as expireInsightChannelEvidenceOwned,
+  findInsightDeliveryUser as findInsightDeliveryUserOwned,
+  findInsightRecipient as findInsightRecipientOwned,
+  insightVerifiedDeliveryQuery as insightVerifiedDeliveryQueryOwned,
+  insightVerifiedTranscriptQuery as insightVerifiedTranscriptQueryOwned,
+  prepareInsightRecipient as prepareInsightRecipientOwned,
+  readInsightDeliveryEvidence as readInsightDeliveryEvidenceOwned,
+  reconcileInsightStatus as reconcileInsightStatusOwned,
+  recordInsightSend as recordInsightSendOwned,
+  stageInsightDelivery as stageInsightDeliveryOwned,
+  startInsightSend as startInsightSendOwned,
+} from "./internal/insight-delivery";
+
+/** Copy complete exact verified channel text under current purpose and retention; published query never authorizes a requested Turn. */
+export const insightVerifiedTranscriptQuery: typeof insightVerifiedTranscriptQueryOwned = (input) =>
+  insightVerifiedTranscriptQueryOwned(input);
+/** Read actual immutable started/verified metadata; text stays protected by current processing Consent and retention. */
+export const readInsightDeliveryEvidence = (
+  input: Parameters<typeof readInsightDeliveryEvidenceOwned>[0]
+): Effect.Effect<
+  Effect.Success<ReturnType<typeof readInsightDeliveryEvidenceOwned>>,
+  WhatsAppUnavailable
+> => readInsightDeliveryEvidenceOwned(input).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
+/** Expire exact content independently of User interaction, preserving metadata-only no-resend tombstones. */
+export const expireInsightChannelEvidence = (
+  input: Parameters<typeof expireInsightChannelEvidenceOwned>[0]
+): Effect.Effect<void, WhatsAppUnavailable> =>
+  expireInsightChannelEvidenceOwned(input).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
+
+/** Persist routing only in the authenticated inbound owner's atomic association-qualified unit. */
+export const prepareInsightRecipient: typeof prepareInsightRecipientOwned = (input) =>
+  prepareInsightRecipientOwned(input);
+/** Load a channel route under active processing Consent; exact association is rechecked at send initiation. */
+export const findInsightRecipient = (
+  input: Parameters<typeof findInsightRecipientOwned>[0]
+): Effect.Effect<
+  Effect.Success<ReturnType<typeof findInsightRecipientOwned>>,
+  WhatsAppUnavailable
+> => findInsightRecipientOwned(input).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
+/** Freeze a full approved body without provider I/O under live occurrence and proactive Consent guards. */
+export const stageInsightDelivery = (
+  input: Parameters<typeof stageInsightDeliveryOwned>[0]
+): Effect.Effect<boolean, WhatsAppUnavailable> =>
+  stageInsightDeliveryOwned(input).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
+/** Claim provider initiation at most once under current Consent, association and captured temporal policy. */
+export const startInsightSend = (
+  input: Parameters<typeof startInsightSendOwned>[0]
+): Effect.Effect<Effect.Success<ReturnType<typeof startInsightSendOwned>>, WhatsAppUnavailable> =>
+  startInsightSendOwned(input).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
+/** Provider acceptance is not verified delivery. Record only the exact already-started claim. */
+export const recordInsightSend = (
+  input: Parameters<typeof recordInsightSendOwned>[0]
+): Effect.Effect<void, WhatsAppUnavailable> =>
+  recordInsightSendOwned(input).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
+/** Reconcile authenticated exact correlation, business-phone, message and timestamp evidence without resending. */
+export const reconcileInsightStatus = (
+  input: Parameters<typeof reconcileInsightStatusOwned>[0]
+): Effect.Effect<
+  Effect.Success<ReturnType<typeof reconcileInsightStatusOwned>>,
+  WhatsAppUnavailable
+> => reconcileInsightStatusOwned(input).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
+/** Metadata-only coordination hint; it cannot authorize a User action. */
+export const findInsightDeliveryUser = (
+  input: Parameters<typeof findInsightDeliveryUserOwned>[0]
+): Effect.Effect<
+  Effect.Success<ReturnType<typeof findInsightDeliveryUserOwned>>,
+  WhatsAppUnavailable
+> => findInsightDeliveryUserOwned(input).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
+/** Compose proof of actual provider delivery with caller-owned lifecycle effects; no text escapes. */
+export const insightVerifiedDeliveryQuery: typeof insightVerifiedDeliveryQueryOwned = (input) =>
+  insightVerifiedDeliveryQueryOwned(input);
+
 /** Resolve signed correlation and business-phone evidence to a coordination hint; the exact User attempt must still be rechecked. */
 export const findWhatsAppDeliveryUser = (
   input: Parameters<typeof findWhatsAppDeliveryUserOwned>[0]

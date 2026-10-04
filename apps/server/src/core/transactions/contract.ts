@@ -119,13 +119,28 @@ export const Direction = Schema.Literals(["inflow", "outflow"]).annotate({
 });
 export type Direction = typeof Direction.Type;
 
-/** Effective Transactions grouped by interval, Category, Currency, and direction for Dashboard. */
+/** Purpose-neutral effective facts grouped by interval, Category, Currency, and direction. */
 export type EffectiveTransactionAggregate = Readonly<{
   categoryId: CategoryId;
   direction: Direction;
   sum: Money;
   maximum: Money;
   count: bigint;
+}>;
+
+/** One half-open UTC selection of effective financial facts. */
+export type TransactionPeriod = Readonly<{ from: DateTime.Utc; toExclusive: DateTime.Utc }>;
+
+/** Complete exact aggregates for one explicitly selected interval, not a bounded history page. */
+export type PeriodAggregates = Readonly<{
+  period: TransactionPeriod;
+  aggregates: ReadonlyArray<EffectiveTransactionAggregate>;
+}>;
+
+/** Two positional selections observed at one revision; callers bind each position to their own purpose. */
+export type CompletePeriodAggregates = Readonly<{
+  revision: number;
+  periods: readonly [PeriodAggregates, PeriodAggregates];
 }>;
 
 /** A user-recognizable person or organization explicitly identified on the other side. */

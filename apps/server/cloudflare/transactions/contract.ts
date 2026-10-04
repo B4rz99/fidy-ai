@@ -17,6 +17,11 @@ import type {
   StatementLineSourceAttestation,
 } from "../../src/core/source-attestation/contract";
 
+/** Unreadable or malformed aggregate facts never become empty history or partial report totals. */
+export class TransactionAggregatesUnavailable extends Data.TaggedError(
+  "TransactionAggregatesUnavailable"
+) {}
+
 /** Unreadable or invalid recurring facts never supply a partial detection selection. */
 export class RecurringFactsUnavailable extends Data.TaggedError("RecurringFactsUnavailable") {}
 

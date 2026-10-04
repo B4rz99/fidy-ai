@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
 import { SqlClient } from "effect/sql";
-import { UserId } from "~/core/identity/contract";
+import { UserId, type WhatsAppCallerReference } from "~/core/identity/contract";
 
 import type { OwnedStatement } from "~/shell/owner-write/contract";
 import { Unavailable } from "~/shell/public-http/contract";
@@ -9,6 +9,15 @@ import type { WebSessionAuthority, WebSessionSubject } from "~/shell/web-session
 import { webSessionCredentialAuthority } from "~/shell/web-session/operations";
 import { currentUserQuery, decodeUser } from "~/shell/identity/internal/user-query";
 import type { CurrentUserResponse, PreparedCurrentUserRead } from "./contract";
+
+/** Commit-time same-User WhatsAppIdentity predicate; a pre-coordination lookup grants no authority. */
+export const whatsAppAssociationQuery = ({
+  userId,
+  caller,
+}: Readonly<{ userId: UserId; caller: WhatsAppCallerReference }>): OwnedStatement => ({
+  sql: "SELECT user_id AS userId FROM whatsapp_identities WHERE user_id = ? AND portfolio_id = ? AND bsuid = ?",
+  params: [userId, caller.businessPortfolioId, caller.businessScopedUserId],
+});
 
 const userUnavailable = (): Unavailable =>
   Unavailable.make({

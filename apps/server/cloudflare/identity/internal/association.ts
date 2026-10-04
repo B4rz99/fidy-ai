@@ -1,4 +1,5 @@
 import { Effect, Option, Schema } from "effect";
+import { whatsAppAssociationQuery } from "../../../src/shell/identity/operations";
 import { UserId } from "../../../src/core/identity/contract";
 import {
   type IdentityStatement,
@@ -31,10 +32,11 @@ export const associationQuery = ({
   userId,
   portfolioId,
   bsuid,
-}: WhatsAppAssociationSubject): IdentityStatement => ({
-  sql: "SELECT user_id AS userId FROM whatsapp_identities WHERE user_id = ? AND portfolio_id = ? AND bsuid = ?",
-  params: [userId, portfolioId, bsuid],
-});
+}: WhatsAppAssociationSubject): IdentityStatement =>
+  whatsAppAssociationQuery({
+    userId,
+    caller: { businessPortfolioId: portfolioId, businessScopedUserId: bsuid },
+  });
 
 export const associationProjection = ({
   userId,

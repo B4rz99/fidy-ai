@@ -1,11 +1,13 @@
 # Effect v4 observability at the Cloudflare boundary
 
+Selected sources: `node_modules/effect/src/{Effect,Tracer,Logger,Metric,ErrorReporter}.ts`.
+
 Telemetry is a closed, provider-neutral metadata contract. Cloudflare logs, traces, metrics, and
 alerts are adapters; core and domain code do not import an observability SDK.
 
 ## Work boundaries
 
-Name meaningful work with `Effect.fn` or `Effect.withSpan` at the Worker, canonical operation,
+Name meaningful work with named `Effect.fn("operation")` or `Effect.withSpan` at the Worker, canonical operation,
 Queue/Workflow activity, provider adapter, and parser boundaries. Use stable low-cardinality names.
 Expected domain decisions are outcomes, not defects; classify provider failures, defects, interruption,
 and resource exhaustion separately.

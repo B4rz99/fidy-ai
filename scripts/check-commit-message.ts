@@ -1,11 +1,7 @@
 #!/usr/bin/env bun
 
-// The convention is not defined in this file. It is parsed out of README.md's
-// "Commit convention" section, which is therefore the allowlist itself rather
-// than a description of one. Three consumers read this module — the commit-msg
-// hook, the pre-push hook and the `PR Title` CI check — so a list kept here
-// would be a fourth copy of a list that has already drifted twice: the README
-// documented a `docs` scope and `test`/`perf` types that the hook rejected.
+// The convention is parsed from CODING_STANDARDS.md's marked lists. The commit-msg
+// hook, pre-push hook, and PR-title check share this source instead of duplicating it.
 //
 // Parsing is strict on purpose. A missing marker or an empty table throws
 // rather than falling back to "allow everything", because a silently permissive
@@ -26,7 +22,7 @@ const HEADER_SHAPE_ERROR = "Commit header must follow format: type(scope): #123 
 const NAME_COLUMN = 14;
 
 type ScopeSection = {
-  /** The HTML comment in README.md the table follows. */
+  /** The HTML comment in the convention document the table follows. */
   readonly marker: string;
   /** Printed above the group in the failure message. */
   readonly lead: string;
@@ -58,7 +54,7 @@ export type CommitConvention = {
   readonly formatErrors: (errors: readonly string[]) => string;
 };
 
-const CONVENTION_SOURCE = new URL("../README.md", import.meta.url);
+const CONVENTION_SOURCE = new URL("../CODING_STANDARDS.md", import.meta.url);
 
 // Order matters: it is the order scopes are printed in, slices first.
 const SCOPE_SECTIONS: readonly ScopeSection[] = [
@@ -80,7 +76,7 @@ const blockAfter = (markdown: string, marker: string): readonly string[] => {
 
   if (marked === -1) {
     throw new Error(
-      `README.md is missing the "${marker}" marker: the commit convention is unreadable`
+      `CODING_STANDARDS.md is missing the "${marker}" marker: the commit convention is unreadable`
     );
   }
 
@@ -100,7 +96,7 @@ const parseTypes = (markdown: string): readonly string[] => {
     .match(/`[a-z]+`/g);
 
   if (spans === null) {
-    throw new Error(`README.md lists no commit types under "${TYPES_MARKER}"`);
+    throw new Error(`CODING_STANDARDS.md lists no commit types under "${TYPES_MARKER}"`);
   }
 
   return spans.map((span) => span.slice(1, -1));
@@ -129,7 +125,7 @@ const parseScopeGroup = (markdown: string, section: ScopeSection): ScopeGroup =>
   );
 
   if (scopes.length === 0) {
-    throw new Error(`README.md lists no scopes under "${section.marker}"`);
+    throw new Error(`CODING_STANDARDS.md lists no scopes under "${section.marker}"`);
   }
 
   return { lead: section.lead, scopes };
@@ -217,8 +213,8 @@ const messageErrors = (message: string, allowlist: Allowlist): readonly string[]
 };
 
 /**
- * Parses the convention out of `markdown` — any document carrying the README's
- * markers, not README.md alone. Throws when a marker is missing, or when the
+ * Parses the convention out of any `markdown` carrying the documented markers.
+ * Throws when a marker is missing, or when the
  * list or table under it holds no entries.
  */
 export const parseCommitConvention = (markdown: string): CommitConvention => {
@@ -232,7 +228,7 @@ export const parseCommitConvention = (markdown: string): CommitConvention => {
 };
 
 /**
- * The convention as README.md publishes it, re-read on every call. Rejects when
+ * The convention as CODING_STANDARDS.md publishes it, re-read on every call. Rejects when
  * the file cannot be read or does not parse.
  */
 export const loadCommitConvention = (): Promise<CommitConvention> =>

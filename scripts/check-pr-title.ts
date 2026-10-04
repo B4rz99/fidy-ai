@@ -10,7 +10,7 @@ if (title === undefined || title.trim().length === 0) {
 }
 
 // The squashed trunk subject is the PR title, so it answers to the same
-// allowlist the commit-msg hook enforces: README.md's commit convention.
+// allowlist the commit-msg hook enforces: CODING_STANDARDS.md's commit convention.
 const convention = await loadCommitConvention();
 const errors = convention.validateHeader(title);
 

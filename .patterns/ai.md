@@ -1,8 +1,11 @@
 # Effect v4 AI boundaries and Workers AI
 
-Use this reference when working with `effect/unstable/ai`. The application-facing boundary is a
-provider-neutral `LanguageModel`; the production adapter will use a Cloudflare Workers AI binding.
-No direct external-model adapter or local model fallback is an authority.
+Use this reference for `effect/ai`, backed by the selected release's
+`node_modules/effect/src/ai/{LanguageModel,Prompt,Tool,Toolkit}.ts`. Fidy's provider-neutral hosted
+inference contract lives in `apps/server/src/shell/hosted-inference/operations.ts`; its implemented
+Workers AI adapter lives under `apps/server/cloudflare/ai/`. Effect's `LanguageModel` is a library
+service, not a second Fidy authority. No direct external-model adapter or local model fallback is an
+authority.
 
 ## Core mechanics
 
@@ -52,7 +55,9 @@ that fact is deliberately part of the closed application contract.
 
 ## Testing
 
-Portable tests use a stub LanguageModel to prove prompt projection, tool authorization, confirmation,
-round limits, structured decoding, interruption, and redaction. Adapter tests use the Workers AI
+Portable tests substitute the owned HostedInference boundary to prove prompt projection, tool
+authorization, confirmation, round limits, structured decoding, interruption, and redaction. Tests
+specifically exercising Effect's model integration can stub LanguageModel below that boundary.
+Adapter tests use the Workers AI
 binding seam or an explicit transport fixture to prove bounds and safe failure classification. A stub
 model cannot claim model availability, provider latency, or production retention behavior.

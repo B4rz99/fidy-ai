@@ -25,7 +25,7 @@ All changes reach `trunk` through a squash-merged PR. Direct pushes to `trunk` a
 
 - Reuse the task branch. For new work without a task branch, create one from the intended base using `<type>/<short-name>`.
 - Commit with the convention (enforced by the commit-msg hook): a `type(scope): #123 summary` header, then `- ` bullet body lines only. Put the originating GitHub issue number immediately after the colon, without parentheses. Trailers (`Co-Authored-By`, etc.) are rejected.
-  - **type** and **scope** come from the allowlist published in README.md's "Commit convention"
+  - **type** and **scope** come from the allowlist published in CODING_STANDARDS.md's "Commit messages"
     section, which the hooks and the `PR Title` check parse directly. Read it there rather than
     from a copy here — a copy is exactly what drifts. For server domain work, use the owning slice
     (`apps/server/ARCHITECTURE.md` §2); otherwise use the matching cross-cutting scope.

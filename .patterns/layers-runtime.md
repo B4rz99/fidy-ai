@@ -1,8 +1,7 @@
 # Services, Layers, Config & Cloudflare adapters
 
-How Effect v4 services, Layer composition, Config, and scoped resources work, read from the vendored
-Effect source. Use this pattern when composing a Worker adapter, a deterministic test layer, or a
-provider boundary.
+Selected sources: `node_modules/effect/src/{Context,Layer,Config,ConfigProvider,ManagedRuntime}.ts`.
+Use this pattern when composing a Worker adapter, a deterministic test layer, or a provider boundary.
 
 ## Defining services (v4 = `Context.Service`)
 
@@ -16,17 +15,12 @@ class DataStore extends Context.Service<
   {
     readonly read: (id: string) => Effect.Effect<unknown, DataStoreError>;
   }
->()("fidy/DataStore") {
-  static readonly layer = Layer.effect(
-    DataStore,
-    Effect.gen(function* () {
-      return DataStore.of({ read: (id) => /* D1 adapter */ Effect.succeed(id) });
-    })
-  );
-}
+>()("fidy/DataStore") {}
 ```
 
-Use one stable key per service, name effectful methods with `Effect.fn`, and expose `layer`,
+Provide the real implementation separately through `Layer.effect` or `Layer.succeed`; a placeholder
+success is not a D1 adapter. Use one stable key per service, name meaningful Work with `Effect.fn`,
+and expose `layer`,
 `layerNoDeps`, `layerTest`, or `layerConfig` deliberately. A `Context.Reference` is appropriate for
 safe defaults such as Clock or ConfigProvider; it is not a substitute for a required authority.
 

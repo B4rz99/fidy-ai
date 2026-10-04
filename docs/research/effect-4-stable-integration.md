@@ -1,11 +1,33 @@
 # Coordinated stable Effect integration (#978–#981)
 
-This is the current migration handoff. The #978 preparation and #979 portable reports are
-historical intermediate evidence; their pending compile/review statements are not final verdicts.
-The selected graph is now applied across portable server, native execution, actual web and tooling.
-Latest trunk's #977 accepted MCP design is preserved; this migration installs no MCP/OAuth authority.
+**Status: migration merged and released on 2026-10-03.** This is a historical migration record,
+not a pending handoff or an instruction to reapply its dependency snapshot.
 
-## Source and behavior
+## Final outcome
+
+[PR #992](https://github.com/B4rz99/fidy-ai/pull/992) merged the complete #978–#981 migration as
+`152e7d421f68574e46445e3e3cc00c4757e605a3`.
+
+- [Final independent review and CI evidence](https://github.com/B4rz99/fidy-ai/pull/992#issuecomment-5971693618):
+  Standards / Security / Spec reported **0 / 0 / 0 findings** across all four slices.
+- [PR CI](https://github.com/B4rz99/fidy-ai/actions/runs/37140440789) succeeded, including native
+  adapters, infrastructure, builds, unit/artifacts, Workspace Gate, Secrets, SAST, SCA, and Required
+  Checks. [Exact Linux browser acceptance](https://github.com/B4rz99/fidy-ai/actions/runs/37140440789/job/111253637838)
+  reported **37 passed**, resolving the local port limitation recorded below.
+- [Automatic Production release](https://github.com/B4rz99/fidy-ai/actions/runs/37140919339) succeeded
+  for the squash revision. The [final release record](https://github.com/B4rz99/fidy-ai/pull/992#issuecomment-5971763993)
+  records promotion/probe evidence and closure of all four migration issues.
+- This release did not authorize onboarding or real-user launch and installed no MCP/OAuth authority.
+  The braces advisory remained accepted risk at release, not a remediation claim.
+
+The [preparation](effect-4-stable-migration.md) and [portable](effect-4-stable-portable.md) reports
+preserve intermediate evidence. The sections below preserve the **pre-merge implementation record**:
+commands, lock hashes, temporary log paths, admission exceptions, vulnerability status, and pending
+gates describe that checkpoint, not today's worktree or an outstanding migration. Current API
+references are in [the selected source map](../../.patterns/effect-4-stable.md); current dependency
+policy and exceptions are owned by the repository's policy files, not this historical report.
+
+## Source and behavior (pre-merge record)
 
 - Exact Effect 4.0.0 family: 11 direct declarations and eight locked coordinated packages.
   Alchemy beta.80 / Distilled rc.13 are the admitted required upgrades. Independent toolchain pins
@@ -37,7 +59,7 @@ No new external workflow was added. Existing bounded Worker/provider Work observ
 projections remain at their existing boundaries; namespace and representation changes introduce no
 new telemetry purpose. Live provider rollout and Production execution are not claimed by local tests.
 
-## Verification
+## Verification (local pre-merge record)
 
 Logs: `/tmp/fidy-980-evidence/`; earlier seam evidence: `/tmp/fidy-979-evidence/`.
 During implementation, the first type-aware lint exposed remaining namespaces; those failures were
@@ -62,7 +84,7 @@ running an altered acceptance-origin graph. The exact configured browser group a
 verification still require fresh CI runners. No local browser or Linux pass is claimed merely
 from a Vite build or mocked HTTP test.
 
-## Supply-chain and release boundaries
+## Supply-chain and release boundaries (pre-merge record)
 
 The frozen lock SHA-256 remains `21e35b52db3930feea44ee9e4f921a81e88a28153a23042faecdab711ce199e1`.
 The recorded one-time age exception admits only this snapshot; `minimumReleaseAge = 604800` and
@@ -79,6 +101,11 @@ patched version and the npm registry still publishes 3.0.3 as latest. This is ca
 The static dependency-policy gate validates that pair; CI must pass SCA with its established policy.
 This is bounded accepted risk, not remediation or an SCA waiver from the cooldown exception.
 Upstream must still be rechecked and the acceptance removed when an eligible remedy exists.
+
+## Review and authorization requirements recorded before merge
+
+The following requirements were pending at this checkpoint and were satisfied by the final review,
+CI, and release evidence above; they are retained to document the original authorization boundary.
 
 Independent Standards/Security/Spec review must cover the entire migration, not just #980/#981.
 After synchronizing trunk, `git diff fe37ea1b8a...HEAD` includes every migration slice while excluding

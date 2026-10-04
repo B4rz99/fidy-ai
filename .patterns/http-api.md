@@ -1,5 +1,8 @@
 # Effect v4 HttpApi and Cloudflare adapter boundaries
 
+Import HttpApi modules from `effect/http-api`. Selected source:
+`node_modules/effect/src/http-api/{HttpApi,HttpApiBuilder,HttpApiClient,HttpApiSchema,OpenApi}.ts`.
+
 Use HttpApi as the define-once public contract. The canonical operation declaration derives typed
 server/client artifacts, OpenAPI, reflected access metadata, and browser/tool policy. Cloudflare
 Workers consume the declaration; they do not create a second route or operation registry.

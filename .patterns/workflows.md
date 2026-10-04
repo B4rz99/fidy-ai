@@ -1,8 +1,14 @@
 # Effect workflows at the Cloudflare boundary
 
-Use this reference before introducing durable multi-step execution. A Workflow owns orchestration,
-not Fidy domain authority. The Cloudflare Workflow adapter is the production seam; until it exists,
-durable operations fail closed rather than using a process-local loop.
+Fidy uses native Cloudflare Workflows for durable orchestration, with Effect programs inside owned
+steps. This is not an Effect WorkflowEngine deployment. Existing runtime seams include
+`apps/server/cloudflare/ingestion/runtime.ts`, `email-authentication/runtime.ts`, and
+`subscription/runtime.ts` under the same Cloudflare directory. They adapt `WorkflowEntrypoint` and
+`WorkflowStep.do` to owner operations; a Workflow orchestrates but does not own domain authority.
+
+When comparing Effect's workflow APIs, inspect `node_modules/effect/src/workflow/Workflow.ts`
+against the selected package exports first. Import availability is not a reason to introduce a
+second durable engine or replace the existing platform seam.
 
 ## Boundary and atomicity
 

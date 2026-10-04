@@ -42,7 +42,7 @@ const commits = [
   ...new Set(pushLines.length > 0 ? pushedCommits : [text(["git", "rev-parse", "HEAD"])]),
 ];
 
-// The same allowlist the commit-msg hook enforces: README.md's commit
+// The same allowlist the commit-msg hook enforces: CODING_STANDARDS.md's commit
 // convention section.
 const convention = await loadCommitConvention();
 

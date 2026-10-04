@@ -314,6 +314,54 @@ scope and tier. Hints are one English sentence of at most 140 characters.
 
 ---
 
+## Commit messages
+
+Use `type(scope): #123 summary` followed by one or more `-` body bullets. The `#123` immediately after
+the colon is the originating GitHub issue reference; use `- Fixes #123` in the body or PR description
+when merging should close the issue. Commit, pre-push, and PR-title checks read these marked lists.
+
+Allowed types:
+
+<!-- commit-types -->
+
+`feat` · `fix` · `refactor` · `chore` · `docs` · `test` · `ci`
+
+Slice scopes:
+
+<!-- commit-scopes:slices -->
+
+| scope          | when to use                           |
+| -------------- | ------------------------------------- |
+| `identity`     | users, channel identities, sessions   |
+| `consent`      | consent records and revocations       |
+| `transactions` | the ledger and reconciliation         |
+| `categories`   | spending categories and keyword rules |
+| `budgets`      | monthly caps and alerts               |
+| `recurring`    | recurring series                      |
+| `dashboard`    | dashboard read model                  |
+| `insights`     | insight events                        |
+| `ingestion`    | capture and review                    |
+| `tokens`       | PATs and scopes                       |
+| `audit`        | the audit trail                       |
+| `transcript`   | transcript and user notes             |
+| `memory`       | durable User-chosen prose             |
+| `billing`      | subscriptions and payments            |
+
+Cross-cutting scopes:
+
+<!-- commit-scopes:cross-cutting -->
+
+| scope        | when to use                                |
+| ------------ | ------------------------------------------ |
+| `api`        | API assembly, transport, and authorization |
+| `channels`   | vendor adapters and callbacks              |
+| `agent`      | hosted agent and its harness               |
+| `frontend`   | web app                                    |
+| `cloudflare` | Worker, D1, DO, Queue, Workflow, R2, or AI |
+| `repo`       | tooling, configuration, hooks, and CI      |
+| `deps`       | dependency updates                         |
+| `docs`       | documentation                              |
+
 ## The two design smells
 
 Both are signals to change the design, not the prose:

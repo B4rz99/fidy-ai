@@ -1,7 +1,11 @@
 # Coordinated stable Effect migration baseline (#978)
 
-This records preparation, not the final applied source. See [the integration report](effect-4-stable-integration.md)
-for subsequent implementation, cleanup and verification.
+**Historical preparation checkpoint (2026-10-03), not current implementation instructions.**
+The complete migration subsequently merged and released through [PR #992](https://github.com/B4rz99/fidy-ai/pull/992).
+See [the integration report's final outcome](effect-4-stable-integration.md#final-outcome) for review,
+CI, and release evidence. Pending gates, package versions, temporary paths, and the one-time admission
+exception below describe this checkpoint only; they neither reopen completed work nor authorize a
+new dependency exception.
 
 ## Decision and explicit admission exception
 

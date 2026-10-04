@@ -3,6 +3,14 @@
 - **Issue:** [#224](https://github.com/B4rz99/fidy-ai/issues/224)
 - **Research date:** 2026-08-13
 - **Status:** **Professional determination still required; do not release billing from this report alone.**
+- **Tracker reconciliation (2026-10-04):** [#224](https://github.com/B4rz99/fidy-ai/issues/224) was
+  closed on 2026-08-13, but its recorded acceptance criteria remain unchecked and it has no comments
+  supplying the professional determination. Issue closure is not evidence of legal approval.
+
+This is dated research, not a current tax opinion. Its unresolved conclusions remain unresolved by
+this record. A later approval must identify the professional determination and approved tax-treatment
+artifacts; neither tracker status nor a software deployment substitutes for that evidence. Legal and
+merchant facts must be revalidated when obtaining the determination.
 
 ## Question and boundary
 

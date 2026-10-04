@@ -1,45 +1,45 @@
-# Effect SQL and Cloudflare D1 adapter guidance
+# Effect SQL and Cloudflare D1
 
-This reference covers the typed SQL ideas useful for a future Cloudflare D1 adapter. It is not an
-invitation to add a local relational runtime. D1 is the only intended relational authority; until its
-adapter exists, persistence operations fail closed.
+Sources: `node_modules/effect/src/sql/{SqlClient,Statement,SqlError}.ts` and
+`node_modules/@effect/sql-d1/src/D1Client.ts`. Public imports are `effect/sql` and
+`@effect/sql-d1/D1Client`. D1 is implemented, not a future persistence adapter.
 
 ## Query seams
 
-Use `effect/unstable/sql` only behind a shell-owned D1 adapter. Keep SQL construction, row decoding,
-column mapping, and failure classification in that adapter. Core modules receive plain domain values
-and never import SQL, platform bindings, or database drivers.
+SQL, row decoding, column mapping, and failure classification belong to Cloudflare adapters.
+Core receives domain values, not SQL statements or platform bindings. Parameterize values;
+raw fragments are reviewed static adapter code, never user/model/provider-controlled SQL.
+Bound both queries and returned rows, and decode driver output with the owned Schema.
+A generic row type is not runtime validation.
 
-Every query must have a bounded input and output. Decode every row with Schema before using it. Map
-D1 integer, text, blob, and JSON values explicitly to domain types such as exact Money, UTC timestamps,
-identifiers, and bounded JSON. A typed row helper is not proof that an untrusted row has domain shape.
+## Atomicity: batch is not an interactive transaction
 
-Parameterize values. A raw SQL escape hatch is an adapter-only tool for reviewed static fragments and
-must never receive model output, uploaded content, provider text, or user-controlled identifiers.
+`D1Client.batch(statements)` submits a fixed set of statements to native `D1Database.batch`,
+returning results in order with each statement's result-name transformation. A statement failure
+rolls back the native batch. The D1 driver does **not** support `SqlClient.withTransaction` or
+streaming queries; its transaction acquirer defects. Do not copy transaction examples from other
+SQL drivers into a D1 adapter.
 
-## Atomic units
+Fidy's canonical mutation composition already lives in
+`apps/server/cloudflare/canonical-operations/internal/mutation-unit.ts` and `batch.ts`.
+Extend that owned unit rather than inventing a parallel transaction abstraction. Prepared child
+mutations participate in one commit; a child must not independently commit or call a provider.
+Authority checks and same-User guards remain part of the mutation design, not an assumption supplied
+by the SQL client. Coordination belongs to the existing Durable Object boundary.
 
-A D1 atomic unit owns one domain transition and any required outbox record. Reusable owner operations
-must accept a caller-owned unit rather than opening nested units. A Queue or Workflow submission is
-not assumed atomic with a D1 commit unless the Cloudflare adapter proves the coupling; use an outbox
-and idempotent consumer when work continues after commit.
+A D1 commit and Queue/Workflow submission are separate effects. Retain bounded dispatch intent with
+the state change and deliver idempotently. Never hold a unit across a provider call; ambiguous
+provider acceptance requires reconciliation, not speculative replay.
 
-Do not hold an atomic unit across a provider request. Provider ambiguity is handled by a durable
-intent, reconciliation, or Workflow step. Coordination keys belong to a Durable Object, not a local
-lock or a database row invented as a replacement.
+## Failure and telemetry boundaries
 
-## Errors and unavailable boundaries
+Map driver/platform failures into the owner's closed safe error set. Missing bindings or required
+schema fail closed, with no local persistence fallback. Upstream SQL errors can retain causes and
+SQL spans can include query text; do not publish raw errors or adopt default tracing as Fidy's
+metadata-only policy. Parameterization is not a telemetry redaction guarantee.
 
-Map platform failures to a closed adapter error set containing safe categories such as unavailable,
-conflict, not-found, validation, and resource-limit. Do not expose statements, bindings, credentials,
-row contents, or platform topology in errors. If the D1 binding, schema, or required adapter is
-missing, return the typed unavailable result; never fall back to a map, array, local queue, or best-
-effort write.
+## Evidence
 
-## Testing
-
-Portable tests cover schema mapping, atomic decision composition, idempotency, authorization, and
-redaction without a platform. Cloudflare adapter tests use an isolated D1 binding and verify commit
-and rollback, explicit User isolation, bounded reads, duplicate delivery, and deletion/retention.
-An in-memory fake may exercise a pure contract only; it cannot claim persistence, transaction, or
-cross-Worker evidence.
+Portable tests cover row codecs, decisions, and error projection. Cloudflare tests prove actual
+commit/rollback, same-User isolation, guards, bounded reads, duplicate handling, and retention.
+A fake database or SQL compilation assertion cannot establish atomicity or cross-Worker behavior.

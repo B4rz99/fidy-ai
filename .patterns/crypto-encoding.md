@@ -1,20 +1,21 @@
 # Effect v4 crypto, encoding, and secret handling
 
-Audit baseline: `effect@4.0.0-rc.116` (`d62dd0d6…`) plus the vendored upstream snapshot
-`8d40572d…`, which contains post-rc.116 changes.
+Selected sources: `node_modules/effect/src/Crypto.ts`, `Redacted.ts`, and
+`encoding/{Base64,Base64Url,Hex,EncodingError}.ts` under the same source directory.
+See [the source map](effect-4-stable.md) for release versus upstream authority.
 
 Use this pattern when generating identifiers or bearer secrets, hashing, encoding binary values, comparing secret-derived values, or handling `Redacted` configuration.
 
 ## Separate the concerns
 
-| Concern                           | API                                          | Security property                                                        |
-| --------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------ |
-| Entropy, UUIDs, ULIDs, SHA digest | `Crypto.Crypto`                              | Platform-backed cryptographic implementation                             |
-| Binary-to-text representation     | `Encoding`                                   | Reversible encoding only; no secrecy or authenticity                     |
-| Accidental display/log protection | `Redacted`                                   | Presentation guard only; not encryption or access control                |
-| Constant-time byte comparison     | platform `timingSafeEqual`                   | Reduces timing leakage for equal-length secret-derived bytes             |
-| Password storage                  | dedicated password KDF                       | Salted, work-factor-controlled password hashing; plain SHA is unsuitable |
-| Message authentication            | protocol/library HMAC or signature primitive | Authenticity; a bare digest is not a MAC                                 |
+| Concern                           | API                                                 | Security property                                                        |
+| --------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------ |
+| Entropy, UUIDs, ULIDs, SHA digest | `Crypto.Crypto`                                     | Platform-backed cryptographic implementation                             |
+| Binary-to-text representation     | `Base64`, `Base64Url`, `Hex` from `effect/encoding` | Reversible encoding only; no secrecy or authenticity                     |
+| Accidental display/log protection | `Redacted`                                          | Presentation guard only; not encryption or access control                |
+| Constant-time byte comparison     | platform `timingSafeEqual`                          | Reduces timing leakage for equal-length secret-derived bytes             |
+| Password storage                  | dedicated password KDF                              | Salted, work-factor-controlled password hashing; plain SHA is unsuitable |
+| Message authentication            | protocol/library HMAC or signature primitive        | Authenticity; a bare digest is not a MAC                                 |
 
 Never describe Base64, Base64Url, or hex as encryption. Never describe `Redacted` as secure storage.
 
@@ -25,18 +26,24 @@ The Cloudflare Worker adapter uses Web Crypto for entropy and digests; portable 
 repository's deterministic `TestCrypto` seam rather than a process-runtime service.
 
 ```ts
+import { Crypto, Effect, Redacted } from "effect";
+import { Base64Url } from "effect/encoding";
+
 const makeBearer = Effect.gen(function* () {
   const crypto = yield* Crypto.Crypto;
   const bytes = yield* crypto.randomBytes(32);
-  return Redacted.make(Encoding.encodeBase64Url(bytes));
+  return Redacted.make(Base64Url.encode(bytes));
 });
 ```
 
-`randomBytes(size)` validates that size is a non-negative safe integer and can fail with `PlatformError`; `digest` can also fail with `PlatformError` (`.repos/effect/packages/effect/src/Crypto.ts:213-299`). Decide at the owning boundary whether platform crypto failure is recoverable. `Effect.orDie` is acceptable only where failure means the configured runtime is broken and retry/business recovery is meaningless; do not scatter it through domain logic.
+`Crypto.make` validates `randomBytes(size)` as a non-negative safe integer and exposes a
+`PlatformError` channel; `digest` also exposes `PlatformError`. Its underlying synchronous entropy
+callback can still throw a defect. Decide at the owning adapter whether platform failure is
+recoverable. Use `Effect.orDie` only where failure means a broken runtime, not business recovery.
 
 Rules:
 
-- Generate bearer secrets, verification entropy, nonces, and security identities from `Crypto.Crypto.randomBytes`, never `Math.random`, timestamps, counters, or `Encoding.randomHex`.
+- Generate bearer secrets, verification entropy, nonces, and security identities from `Crypto.Crypto.randomBytes`, never `Math.random`, timestamps, counters, or `Hex.random`.
 - Choose entropy in bytes first, then encode. Hex emits two characters per byte; Base64Url is denser and URL/header safe.
 - Use SHA-256 or stronger for fingerprints and lookup digests. SHA-1 exists for interoperability, not new security designs.
 - A fast digest does not make a low-entropy code safe against offline guessing. Include enough entropy or use a protocol-specific KDF/pepper design.
@@ -44,12 +51,21 @@ Rules:
 - `randomUUIDv4`, `randomUUIDv7`, and `randomULID` produce identifiers, not bearer credentials.
   Use explicit random bytes for secrets. ULIDs expose their creation time: their first 10 Crockford
   base32 characters encode the `Clock` timestamp in milliseconds and the remaining 16 encode 80
-  random bits (`Crypto.ts:150-170`, `:291-298`). Use that sortability only when timestamp disclosure
+  random bits (see `Crypto.make` and `randomULID`). Use that sortability only when timestamp disclosure
   is acceptable; it adds no secrecy.
 
 ## Encoding is a boundary with failure
 
-Encoding functions accept strings as UTF-8 or raw `Uint8Array`s. Decode functions return `Result<Uint8Array, EncodingError>` (or strings), rather than throwing. Base64Url accepts padded and unpadded forms; Base64 requires valid padding; hex requires even length and valid characters (`.repos/effect/packages/effect/src/Encoding.ts:147-251,290-376,405-517`).
+Use `Base64.encode/decode`, `Base64Url.encode/decode`, and `Hex.encode/decode` from
+`effect/encoding`. Encoders accept UTF-8 strings or bytes; decoders return
+`Result<Uint8Array, EncodingError>`. Each module's `decodeString` converts to UTF-8 text.
+
+`Base64Url.encode` emits unpadded URL-safe text, but its decoder accepts padded and unpadded
+forms and strips CR/LF. Base64 also strips CR/LF and requires valid length/padding. Hex requires
+even length and valid characters. Successful decoding therefore does **not** prove a canonical
+credential spelling. Enforce the protocol's alphabet and padding rules, and compare re-encoding
+when canonical spelling is required. `EncodingError` retains input: map it to a safe failure
+rather than logging or exposing it.
 
 At an untrusted boundary:
 
@@ -59,9 +75,11 @@ At an untrusted boundary:
 4. parse/validate the decoded value with Schema;
 5. map failure to the boundary's declared safe error.
 
-Do not silently fall back to empty bytes or an empty secret after decode failure. Avoid `decode*String` for arbitrary binary content, and remember that `TextDecoder`'s default UTF-8 decoding is not a canonical validation step by itself.
+Do not silently fall back to empty bytes or an empty secret after decode failure. Avoid `decodeString` for arbitrary binary content, and remember that `TextDecoder`'s default UTF-8 decoding is not a canonical validation step by itself.
 
-`Encoding.randomHex` uses `Math.random()` and rounds lengths via unsigned 32-bit behavior. It is explicitly non-cryptographic (`Encoding.ts:405-449`); reserve it for throwaway labels where unpredictability does not matter.
+`Hex.random` uses `Math.random()` and rounds lengths via unsigned 32-bit behavior. Reserve it
+for throwaway labels where unpredictability does not matter; secure hex starts with
+`crypto.randomBytes` followed by `Hex.encode`.
 
 ## Secret lifetime and redaction
 
@@ -89,12 +107,16 @@ For secret-derived proofs:
 4. return one coarse public authentication failure regardless of mismatch reason.
 
 ```ts
+import { timingSafeEqual } from "node:crypto";
+
 const sameDigest = (left: Uint8Array, right: Uint8Array): boolean =>
   left.byteLength === right.byteLength && timingSafeEqual(left, right);
 ```
 
 Constant-time equality does not repair a weak protocol. Verify the exact signed bytes, preserve raw request bodies when required by webhook protocols, reject stale/replayed messages where the protocol supports timestamps/nonces, and use the vendor's maintained verification library when available.
 
+The comparison example belongs in a platform adapter with `node:crypto` support (including a
+Worker with the required compatibility configuration), not portable domain code.
 Direct platform crypto is appropriate at an adapter for primitives Effect does not expose, such as
 constant-time equality or HMAC. Keep platform imports out of pure domain modules and hide them behind
 a small named function/port when behavior needs deterministic testing.

@@ -1,92 +1,73 @@
 # Fidy
 
-Fidy is an agent-first personal finance product for Colombia. Users manage their finances through
-WhatsApp, and their own agents use the same canonical API as Fidy's hosted agent.
+Fidy is an agent-first personal finance product being built for Colombia. It brings financial
+records, budgets, and insights into one system that people can use through conversation, a web
+application, or their own agents.
 
-The project is under development. Cloudflare is the production platform; the server package currently
-provides domain, contract, and provider-boundary code while Cloudflare adapters are added.
+**Fidy is in development and has not launched.** Implemented components are not a promise that a
+channel, integration, or workflow is available to real users.
 
-## Run locally
+## One financial model, multiple interfaces
 
-Requirements: [Bun](https://bun.sh), [Gitleaks](https://github.com/gitleaks/gitleaks), and
-[TruffleHog](https://github.com/trufflesecurity/trufflehog). Secret scans run in the pre-push hook.
+WhatsApp is the conversational channel: users describe financial activity and interact with Fidy's
+hosted agent. The React web application provides structured views and controls for financial data,
+dashboards, account security, and subscriptions. A canonical API gives user-owned agents access to
+the same operations, with explicit permissions rather than unrestricted database access.
 
-```sh
-bun install
-cp .env.example .env
-bun run dev
-```
+These interfaces share one domain model. A transaction captured through conversation is not a
+separate record system from one viewed on the web. The hosted agent invokes the same canonical
+operations as other authorized clients; generated text never grants permission or becomes an
+independent source of financial truth.
 
-Alchemy starts the browser at <http://localhost:5173>, public ingress at
-<http://127.0.0.1:8787>, and private Core at <http://127.0.0.1:8788> with the Production
-service-binding graph. `bun run dev:web` remains available for isolated UI work, but it does not prove
-the Cloudflare boundary. The built static artifact can be checked with:
+## Financial records with context
 
-```sh
-bun run --cwd apps/web build
-bun run --cwd apps/web test:browser
-```
+The implemented foundation includes transaction capture and correction, source evidence,
+categorization and user-defined keyword rules, budgets, dashboard documents and views, statement
+processing and review, recurring-charge detection, and user-owned Memory for relevant context.
 
-## Tests and checks
+Money uses exact decimal values with explicit Currency. Different currencies remain separate rather
+than being silently converted or summed together. Corrections and reconciliation preserve source
+evidence, and uncertain imported material can require review instead of becoming an unquestioned
+financial fact.
 
-```sh
-bun run test:core
-bun run test
-bun run verify
-```
+Some product paths remain deliberately unavailable. Forwarded institutional email requires verified
+sender and connection admission before inbound routing can be enabled. Receipt/image processing is
+not yet an executable capture path, and hosted MCP/OAuth access remains a design rather than a live
+integration.
 
-See [`.env.example`](./.env.example) for retained local configuration and the project documentation:
+## Technical foundation
 
-- [Domain glossary](./GLOSSARY.md)
-- [System architecture](./ARCHITECTURE.md)
-- [Server architecture](./apps/server/ARCHITECTURE.md)
-- [Web architecture](./apps/web/ARCHITECTURE.md)
-- [Coding standards](./CODING_STANDARDS.md)
+Fidy is a TypeScript monorepo built around Effect and Schema. Domain decisions are separated from
+provider and platform adapters. Canonical operation declarations supply typed clients, OpenAPI,
+access policy, and hosted-agent tool descriptions, keeping interfaces aligned without parallel
+hand-maintained contracts.
 
-## Commit messages
+The web application uses React, Vite, and Effect Atom. The Bun CLI provides a user-owned-agent
+credential entrypoint through browser-approved pairing and native OS credential storage; it is not
+a separate authorization authority.
 
-Use `type(scope): #123 summary` followed by one or more `-` body bullets. The `#123` immediately after
-the colon is the originating GitHub issue reference; use `- Fixes #123` in the body or PR description
-when merging should close the issue.
+Cloudflare provides the production execution model:
 
-Allowed types:
+- **Workers** separate public ingress from the private application boundary.
+- **D1** retains authoritative application state; **Durable Objects** coordinate per-user work.
+- **Queues and Workflows** handle redelivery and durable multi-step execution.
+- **R2** retains bounded private source material.
+- **Workers AI** supplies Fidy-controlled hosted inference.
 
-<!-- commit-types -->
+Alchemy declares the deployment topology. Specialist adapters connect WhatsApp through Kapso/Meta,
+payments through Wompi, and outbound email through Resend.
 
-`feat` · `fix` · `refactor` · `chore` · `docs` · `test` · `ci`
+## Trust boundaries
 
-Slice scopes:
+Authorization is enforced by the server for each protected action. Browser sessions, personal access
+tokens, consent, and sensitive-operation confirmation have distinct responsibilities. An agent's
+request or a queued identifier cannot bypass those checks.
 
-<!-- commit-scopes:slices -->
+Financial changes and their required accountability evidence commit together. External delivery and
+provider calls are treated separately: retries must account for uncertain outcomes rather than
+assuming that a timeout means nothing happened. Hosted replies become completed Transcript evidence
+only after authenticated delivery evidence, not merely after generation.
 
-| scope          | when to use                           |
-| -------------- | ------------------------------------- |
-| `identity`     | users, channel identities, sessions   |
-| `consent`      | consent records and revocations       |
-| `transactions` | the ledger and reconciliation         |
-| `categories`   | spending categories and keyword rules |
-| `budgets`      | monthly caps and alerts               |
-| `recurring`    | recurring series                      |
-| `dashboard`    | dashboard read model                  |
-| `insights`     | insight events                        |
-| `ingestion`    | capture and review                    |
-| `tokens`       | PATs and scopes                       |
-| `audit`        | the audit trail                       |
-| `transcript`   | transcript and user notes             |
-| `memory`       | durable User-chosen prose             |
-| `billing`      | subscriptions and payments            |
-
-Cross-cutting scopes:
-
-<!-- commit-scopes:cross-cutting -->
-
-| scope        | when to use                                |
-| ------------ | ------------------------------------------ |
-| `api`        | API assembly, transport, and authorization |
-| `channels`   | vendor adapters and callbacks              |
-| `agent`      | hosted agent and its harness               |
-| `frontend`   | web app                                    |
-| `cloudflare` | Worker, D1, DO, Queue, Workflow, R2, or AI |
-| `repo`       | tooling, configuration, hooks, and CI      |
-| `deps`       | dependency updates                         |
-| `docs`       | documentation                              |
+Telemetry is limited to approved operational metadata. Credentials, financial content, prompts,
+replies, and raw provider payloads are not diagnostic data. Missing authority or an unavailable
+adapter produces a closed failure rather than a local-state or alternate-provider fallback.

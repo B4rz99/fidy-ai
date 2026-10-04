@@ -1,0 +1,23 @@
+apps/server/cloudflare/subscription/payment-enrollment-d1.test-fixture.ts
+  s_ba89dc1029bca1::t_5cc1c488b4b858 44
+apps/server/src/shell/outbound-http/operations.test.ts
+  s_ba89dc1029bca1::t_6e5f372586870f 133-141
+docs/runbooks/billing-corrections.md
+  s_ba89dc1029bca1::t_8cba9f3ec4dd80 9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e58e6f07ff382108f6fb4a1a46fd8fa489621484",
+  "prompts": {},
+  "sessions": {
+    "s_ba89dc1029bca1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a103f6-761c-710c-b806-670edee0d3aa",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

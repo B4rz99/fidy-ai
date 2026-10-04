@@ -70,7 +70,12 @@ const setup = Effect.fn(function* () {
       db.prepare(`CREATE TRIGGER ${name} BEFORE ${event} ON ${table} BEGIN SELECT 1; END`).run()
     );
   }
-  for (const name of ["0017_forwarded_email", "0019_canonical_child_guards"]) {
+  for (const name of [
+    "0017_forwarded_email",
+    "0019_canonical_child_guards",
+    "0032_commercial_allowances",
+    "0034_forwarded_email_deferral",
+  ]) {
     yield* wait(() =>
       applyTestMigration({ db, source: new URL(`../migrations/${name}.sql`, import.meta.url) })
     );

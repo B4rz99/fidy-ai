@@ -3,6 +3,7 @@ import { CanonicalAdmissionUnavailable } from "../contract";
 import { canonicalRetryLifetimeMs } from "../../../src/core/quotas/contract";
 
 const Replay = Schema.Struct({
+  identity: Schema.String,
   operation: Schema.String,
   inputHash: Schema.String,
   state: Schema.Literals(["pending", "completed"]),
@@ -27,7 +28,7 @@ export const retainedReplay = ({
     try: () =>
       db
         .prepare(
-          `SELECT operation,input_digest AS inputHash,state,expires_at_ms AS expiresAt,status,body,content_type AS contentType FROM canonical_request_replays WHERE user_id = ? AND retry_key_digest = ? AND expires_at_ms > ?`
+          `SELECT identity,operation,input_digest AS inputHash,state,expires_at_ms AS expiresAt,status,body,content_type AS contentType FROM canonical_request_replays WHERE user_id = ? AND retry_key_digest = ? AND expires_at_ms > ?`
         )
         .bind(userId, retryKey, current)
         .first<unknown>(),

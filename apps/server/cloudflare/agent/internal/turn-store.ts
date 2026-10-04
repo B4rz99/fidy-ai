@@ -451,13 +451,16 @@ const writeToolEntry = (
           )
         : Option.none<string>();
     const authority = hostedAuthority({ subject: input.subject, current: transactionNow() });
-    const result = yield* Effect.tryPromise(() =>
-      input.db.batch([
-        ...participants,
-        prepareToolEntry({ ...input, authority, inputJson, outcomeJson }),
-      ])
-    );
-    return result[result.length - 1]?.meta.changes === 1 ? Option.some(entry) : Option.none();
+    const statement = prepareToolEntry({ ...input, authority, inputJson, outcomeJson });
+    const changed =
+      participants.length === 0
+        ? yield* Effect.tryPromise(() => statement.run()).pipe(
+            Effect.map((result) => result.meta.changes)
+          )
+        : yield* Effect.tryPromise(() => input.db.batch([...participants, statement])).pipe(
+            Effect.map((results) => results[results.length - 1]?.meta.changes)
+          );
+    return changed === 1 ? Option.some(entry) : Option.none();
   });
 
 /** Publish successful new history and its one User+Turn unit atomically, before exposing any rows to inference. */

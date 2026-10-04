@@ -750,7 +750,7 @@ it.effect(
         sendPublic({
           db,
           request: new Request(`https://api.fidyapp.com${path}`, {
-            headers: { authorization: `Bearer ${token}` },
+            headers: { authorization: `Bearer ${token}`, "cf-connecting-ip": "192.0.2.35" },
           }),
         });
       expect(

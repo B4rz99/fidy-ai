@@ -46,6 +46,32 @@ const scopeDecision = (
   if (access._tag === "Allowed") return "accepted";
   return access.reason === "pat_scope_missing" ? "scope_missing" : "unauthenticated";
 };
+/** Resolve a live credential without granting an operation. Admission rechecks every declared capability before charging, and owners recheck requiredScope at publication. */
+export const resolveCanonicalPATCredential = ({
+  request,
+  db,
+  operation,
+}: Readonly<{ request: Request; db: D1Database; operation: CatalogOperation }>): Promise<
+  AuthorizedPAT | "unauthenticated" | "user_action_required"
+> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const pat = yield* authenticate(request, db);
+      if (Option.isNone(pat) || Option.isNone(scopesFrom(pat.value.scopes_json))) {
+        return "unauthenticated";
+      }
+      if ((yield* readConsentStatus({ db, userId: pat.value.user_id })) === "Revoked") {
+        return "user_action_required";
+      }
+      return {
+        patId: pat.value.id,
+        userId: pat.value.user_id,
+        digest: new Uint8Array(pat.value.bearer_digest),
+        requiredScope: patScopeCapability(operation.policy.access),
+      };
+    })
+  );
+
 /** Every declared operation uses the same bearer, subject, expiry and policy decision. */
 export const authorizeCanonicalPAT = ({
   request,

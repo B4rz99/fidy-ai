@@ -2,6 +2,7 @@ import { operationCatalog } from "../../../src/shell/api";
 import { type Cause, Effect, Option } from "effect";
 import type { TransactionCaller } from "../../canonical-work/operations";
 import { executeProtectedCategories, listOwnKeywordRules } from "../../categories/operations";
+import { executeProtectedQuotaQuery } from "../../quotas/operations";
 import { executeProtectedSubscriptionQuery } from "../../subscription/operations";
 import { browseBudgets, evaluateBudgetAlerts } from "../../budgets/operations";
 import { browseTransactions } from "../../transactions/operations";
@@ -65,6 +66,23 @@ const historyOwner =
 
 // This installed-owner registry selects only canonical catalog entries; it declares no private tool.
 const queryOwners = new Map<string, QueryOwner>([
+  [
+    "quota.getQuota",
+    ({ db, subject }): Effect.Effect<Response, Cause.UnknownError> =>
+      executeProtectedQuotaQuery({ db, subject }),
+  ],
+  [
+    "subscription.getUpgradeUrl",
+    ({ db, subject }): Effect.Effect<Response, Cause.UnknownError> =>
+      Effect.tryPromise(() =>
+        executeProtectedSubscriptionQuery({
+          db,
+          subject,
+          operation: "subscription.getUpgradeUrl",
+          browserOrigin: Option.none(),
+        })
+      ),
+  ],
   [
     "categories.listCategories",
     ({ db, subject }): Effect.Effect<Response, Cause.UnknownError> =>

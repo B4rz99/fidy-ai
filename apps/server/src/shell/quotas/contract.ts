@@ -1,7 +1,7 @@
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
-import { QuotaStatus } from "../../core/quotas/contract";
-import { operationPolicy, patScoped } from "../canonical-policy/contract";
-import { OperationResponse, Unavailable } from "../public-http/contract";
+import { QuotaStatus } from "~/core/quotas/contract";
+import { operationPolicy, patScoped } from "~/shell/canonical-policy/contract";
+import { OperationResponse, Unavailable } from "~/shell/public-http/contract";
 
 /** Observe independent Free meters; inspection remains callable when the canonical-call meter is exhausted. */
 export const QuotasGroup = HttpApiGroup.make("quota").add(

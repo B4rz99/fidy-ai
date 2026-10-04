@@ -332,7 +332,9 @@ const coreEnvironment = (runtime: Runtime): Parameters<typeof coreWorker.fetch>[
 
 const send = (runtime: Runtime, request: Request): Promise<Response> => {
   const core = coreEnvironment(runtime);
-  return publicWorker.fetch(request, {
+  const headers = new Headers(request.headers);
+  headers.set("cf-connecting-ip", "192.0.2.35");
+  return publicWorker.fetch(new Request(request, { headers }), {
     BROWSER_ORIGIN: browserOrigin,
     CORE: { fetch: (internal) => coreWorker.fetch(new Request(internal), core) },
     LOCAL_CANONICAL_READ_BEARER: "",
@@ -633,6 +635,7 @@ const batchWithBearer = (
  */
 const flakyReadbackDb = (db: D1Database): D1Database => {
   let batched = false;
+  let publicationPrepared = false;
   let failed = false;
   const wrapStatement = (statement: unknown): object => {
     if (typeof statement !== "object" || statement === null) {
@@ -659,12 +662,15 @@ const flakyReadbackDb = (db: D1Database): D1Database => {
     get: (target, property): unknown => {
       if (property === "batch") {
         return (...args: Parameters<D1Database["batch"]>): ReturnType<D1Database["batch"]> => {
-          batched = true;
+          batched ||= publicationPrepared;
           return target.batch(...args);
         };
       }
       if (property === "prepare") {
-        return (query: string): unknown => wrapStatement(target.prepare(query));
+        return (query: string): unknown => {
+          publicationPrepared ||= /INSERT INTO statement_submissions/iu.test(query);
+          return wrapStatement(target.prepare(query));
+        };
       }
       return Reflect.get(target, property, target);
     },
@@ -3062,15 +3068,19 @@ it(
             }),
           ])
         );
-        expect(outOfScope.status).toBe(400);
-        const rejection = yield* fromTestPromise(() => batchRejectionOf(outOfScope));
-        expect(rejection.error).toMatchObject({
-          code: "scope_missing",
-          failedCallIndex: 0,
-          operation: "ingestion.submitForExtraction",
-        });
+        expect(outOfScope.status).toBe(403);
+        const rejection = yield* Schema.decodeUnknownEffect(FailureResponse)(
+          yield* fromTestPromise(() => outOfScope.json())
+        );
+        expect(rejection.error.code).toBe("scope_missing");
+        expect(outOfScope.headers.get("Fidy-Canonical-Remaining")).toBe("50");
         expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(0);
-        expect(yield* fromTestPromise(() => count(runtime.db, "pat_audit"))).toBe(0);
+        expect(
+          yield* fromTestPromise(() => count(runtime.db, "pat_audit WHERE outcome = 'accepted'"))
+        ).toBe(0);
+        expect(
+          yield* fromTestPromise(() => count(runtime.db, "pat_audit WHERE outcome = 'rejected'"))
+        ).toBe(1);
 
         const committed = yield* fromTestPromise(() =>
           batchWithBearer(runtime, writeToken, [
@@ -3193,10 +3203,6 @@ it(
         );
         expect(refused.status).toBe(400);
         const rejection = yield* fromTestPromise(() => batchRejectionOf(refused));
-        // The aggregate bound alone would let one child exceed the per-operation body cap: each
-        // child is named and refused on the failure contract before any child is admitted. The
-        // refusal's own message proves the size bound refused this child, not the input schema:
-        // this payload is schema-invalid too, and an input-schema refusal is answered differently.
         expect(rejection.error).toMatchObject({
           code: "validation_failed",
           failedCallIndex: 0,

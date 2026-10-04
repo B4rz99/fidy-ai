@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { AccessTier } from "../access-tier/contract";
+import { AccessTier } from "~/core/access-tier/contract";
 
 /** Each meter counts one concrete accepted unit; the meters never form a weighted balance. */
 export const AllowanceKind = Schema.Literals([

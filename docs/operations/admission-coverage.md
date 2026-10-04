@@ -23,4 +23,13 @@ Rejected authenticated attempts at the three paid-or-staged work boundaries (sta
 Workers AI, PaymentEnrollment preparation) are separately bounded. Cheap canonical audit-budget and
 hosted Turn allowance refusals occur before provider work; malformed requests and invalid proofs
 are discarded without assigning a stable User. Proof/source controls before User creation follow
-their own bounded rules. Commercial Free allowances from #35 remain out of scope.
+their own bounded rules.
+
+Canonical request protection additionally uses D1-backed per-User 60/minute admission with burst
+10, two concurrent requests, and 90-second leases. Final unresolved bearer refusals use trusted
+keyed source evidence; valid PATs sharing a NAT are not charged to that source bucket. Media
+publication has independent outstanding-work capacity (50/User, 2,500 global) before any provider
+retrieval. These security controls also apply to Uncapped commercial standing.
+
+[Commercial Free allowances from #35](commercial-allowances.md) are documented separately; they
+never replace the resource and spend controls above.

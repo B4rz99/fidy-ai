@@ -1,15 +1,22 @@
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { UserActionRequired } from "../../src/shell/public-http/contract";
 import type { CatalogOperation } from "../../src/shell/canonical-catalog/contract";
 import type { AuditAuthority } from "../../src/shell/audit/contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
+import { patScopeCapability } from "../../src/shell/canonical-policy/contract";
 import type { CanonicalCapability } from "../../src/core/canonical-operations/contract";
-import { livePATCredential, recordProtectedPATUse } from "../../src/shell/tokens/operations";
+import {
+  livePATCredential,
+  recordAuditedPATUseFromAuthority,
+} from "../../src/shell/tokens/operations";
 import { liveWebSessionAuthority } from "../../src/shell/identity/operations";
 import {
-  prepareAuthorizedAuditCall,
   prepareCanonicalAdmissionRefusal,
+  prepareCanonicalReplayAccess,
+  recordedPATReplayCallProof,
+  refusedByAuditBudget,
 } from "../../src/shell/audit/operations";
-import { CanonicalRetryKey, QuotaStatus } from "../../src/core/quotas/contract";
+import { CanonicalRetryKey, type QuotaStatus } from "../../src/core/quotas/contract";
 import { allowancePeriod } from "../../src/core/quotas/operations";
 import {
   decodeQuotaStatus,
@@ -61,7 +68,7 @@ const noAuthority = (): Response =>
 const scopeMissing = (): Response =>
   Response.json(
     {
-      error: { code: "scope_missing", message: "A required canonical capability is missing." },
+      error: { code: "scope_missing", message: "This PAT lacks the required operation scope." },
       next: [],
     },
     { status: 403 }
@@ -179,6 +186,29 @@ const replayResponse = (replay: Replay): Response => {
   Option.map(replay.contentType, (value) => headers.set("content-type", value));
   return new Response(replay.body.value, { status: replay.status.value, headers });
 };
+const forbiddenHttpStatus = 403;
+/** A withdrawn-Consent refusal is public recovery guidance, never the original financial body. Rebuild the closed refusal instead of turning it into an invalid-credential response. */
+const deniedDisclosure = (response: Response): Effect.Effect<Response> => {
+  if (response.status !== forbiddenHttpStatus) return Effect.succeed(noAuthority());
+  return Effect.tryPromise({ try: () => response.clone().json(), catch: () => undefined }).pipe(
+    Effect.map((body) => Schema.decodeUnknownOption(UserActionRequired)(body)),
+    Effect.map((refusal) =>
+      Option.isSome(refusal)
+        ? Response.json(
+            {
+              error: {
+                code: "user_action_required",
+                message: "Return to Fidy to review your withdrawn Consent.",
+              },
+              next: [],
+            },
+            { status: forbiddenHttpStatus }
+          )
+        : noAuthority()
+    ),
+    Effect.orElseSucceed(noAuthority)
+  );
+};
 const disclose = <E, R>(
   input: Call<E, R>,
   response: Response
@@ -188,62 +218,98 @@ const disclose = <E, R>(
     const status = yield* standing({ ...input, current });
     if (Option.isNone(status)) return unavailable();
     return input.caller._tag === "PAT" ? attachStanding(response, status.value, current) : response;
-  });
-const inspection = <E, R>(
-  input: Call<E, R>,
-  operation: "quota.getQuota" | "subscription.getUpgradeUrl"
-): Effect.Effect<Response, CanonicalAdmissionUnavailable | Schema.SchemaError> =>
-  Effect.gen(function* () {
-    const { db, caller, current, browserOrigin, scopes } = input;
-    const authority = authorityAt(caller, current, scopes);
-    const rows = yield* batch(db, [
-      ...prepareAuthorizedQuotaRead({
-        db,
-        userId: caller.value.userId,
-        current,
-        authority: proof(authority),
-      }),
-      prepareAuthorizedAuditCall({
-        db,
-        authority,
-        id: newId(),
-        operation,
-        outcome: "accepted",
-        current,
-        afterOwnerWrite: false,
-      }),
-      ...(caller._tag === "PAT"
-        ? [
-            bind(
-              db,
-              recordProtectedPATUse({ authority: patAuthority(caller, current, scopes), current })
-            ),
-          ]
-        : []),
-    ]);
-    const status = decodeQuotaStatus({ row: rows[1]?.results[0], current });
-    if (Option.isNone(status)) return unavailable();
-    const data =
-      operation === "quota.getQuota"
-        ? yield* Schema.encodeEffect(Schema.toCodecJson(QuotaStatus))(status.value)
-        : { url: new URL("/upgrade", browserOrigin).href };
-    return Response.json({ data, next: [] });
-  });
+  }).pipe(
+    Effect.catchIf(
+      (failure) => quotaFailure(failure.cause) === "authority",
+      () => deniedDisclosure(response)
+    )
+  );
 const matchingReplay = <E, R>(call: MeteredCall<E, R>, replay: Replay): Response =>
   replay.operation !== call.operation.id || replay.inputHash !== call.inputHash
     ? invalid("The retry key is already bound to different operation inputs.")
     : replayResponse(replay);
+const unsuccessfulHttpStatus = 400;
+const replayReceiptComplete = ({
+  rows,
+  accepted,
+}: Readonly<{ rows: ReadonlyArray<D1Result>; accepted: boolean }>): boolean =>
+  rows[0]?.meta.changes === 1 && (!accepted || rows[1]?.meta.changes === 1);
+
+const auditReplay = <E, R>({
+  call,
+  replay,
+  current,
+}: Readonly<{ call: MeteredCall<E, R>; replay: Replay; current: number }>): Effect.Effect<
+  Response,
+  CanonicalAdmissionUnavailable
+> =>
+  Effect.gen(function* () {
+    const { db, caller, retryKey, operation, scopes } = call;
+    if (caller._tag !== "PAT" || Option.isNone(retryKey)) return unavailable();
+    const response = replayResponse(replay);
+    const authority = patAuthority(caller, current, scopes);
+    const auditId = newId();
+    const accepted = response.status < unsuccessfulHttpStatus;
+    const rows = yield* batch(db, [
+      prepareCanonicalReplayAccess({
+        db,
+        authority,
+        id: auditId,
+        operation: operation.id,
+        current,
+        outcome: accepted ? "accepted" : "rejected",
+        retainedResponseProof: {
+          sql: "SELECT 1 FROM canonical_request_replays WHERE user_id = ? AND retry_key_digest = ? AND identity = ? AND operation = ? AND input_digest = ? AND state = 'completed' AND expires_at_ms = ? AND expires_at_ms > ?",
+          params: [
+            caller.value.userId,
+            retryKey.value,
+            replay.identity,
+            operation.id,
+            call.inputHash,
+            replay.expiresAt,
+            current,
+          ],
+        },
+      }),
+      ...(accepted
+        ? [
+            bind(
+              db,
+              recordAuditedPATUseFromAuthority({
+                authority,
+                current,
+                evidence: recordedPATReplayCallProof({ auditId, operation: operation.id }),
+              })
+            ),
+          ]
+        : []),
+    ]);
+    return replayReceiptComplete({ rows, accepted }) ? response : unavailable();
+  });
+
 const replayOf = <E, R>(
   call: MeteredCall<E, R>
-): Effect.Effect<Option.Option<Response>, CanonicalAdmissionUnavailable> => {
-  if (Option.isNone(call.retryKey)) return Effect.succeedNone;
-  return retainedReplay({
-    db: call.db,
-    userId: call.caller.value.userId,
-    retryKey: call.retryKey.value,
-    current: call.current,
-  }).pipe(Effect.map((row) => Option.map(row, (replay) => matchingReplay(call, replay))));
-};
+): Effect.Effect<Option.Option<Response>, CanonicalAdmissionUnavailable> =>
+  Effect.gen(function* () {
+    if (Option.isNone(call.retryKey)) return Option.none();
+    const current = Math.max(call.current, yield* Clock.currentTimeMillis);
+    const row = yield* retainedReplay({
+      db: call.db,
+      userId: call.caller.value.userId,
+      retryKey: call.retryKey.value,
+      current,
+    });
+    if (Option.isNone(row)) return Option.none();
+    const replay = row.value;
+    if (
+      replay.operation !== call.operation.id ||
+      replay.inputHash !== call.inputHash ||
+      replay.state !== "completed"
+    ) {
+      return Option.some(matchingReplay(call, replay));
+    }
+    return Option.some(yield* auditReplay({ call, replay, current }));
+  });
 const recoverAcceptance = <E, R>(
   call: MeteredCall<E, R>,
   failure: CanonicalAdmissionUnavailable
@@ -293,7 +359,6 @@ const acceptanceStatements = <E, R>(
     db
       .prepare("INSERT INTO canonical_request_acceptances VALUES (?,?,?,?,?)")
       .bind(identity, caller.value.userId, caller.value.patId, operation.id, current),
-    bind(db, recordProtectedPATUse({ authority: patAuthority(caller, current, scopes), current })),
   ];
 };
 const finishReplay = <E, R>(
@@ -339,27 +404,78 @@ const externalCall = <E, R>(
 const operationResponse = <E, R>(
   call: MeteredCall<E, R>
 ): Effect.Effect<Response, E | CanonicalAdmissionUnavailable | Schema.SchemaError, R> => {
-  if (call.operation.id === "quota.getQuota") return inspection(call, "quota.getQuota");
-  if (call.operation.id === "subscription.getUpgradeUrl") {
-    return inspection(call, "subscription.getUpgradeUrl");
+  if (
+    call.operation.id === "quota.getQuota" ||
+    call.operation.id === "subscription.getUpgradeUrl"
+  ) {
+    return call.work;
   }
   if (call.caller._tag === "WebSession") return call.work;
   return externalCall(call);
 };
+const primaryScopeFailure = <E, R>(
+  input: RequestCall<E, R>
+): Effect.Effect<Option.Option<Response>, CanonicalAdmissionUnavailable> => {
+  if (input.operation.id === "operations.executeAtomicBatch") return Effect.succeedNone;
+  const scope = patScopeCapability(input.operation.policy.access);
+  return checkScopes({ ...input, scopes: Option.isSome(scope) ? [scope.value] : [] });
+};
+
+const unadmittedRefusal = <E, R>(
+  input: RequestCall<E, R>,
+  identity: string,
+  response: Response
+): Effect.Effect<Response, CanonicalAdmissionUnavailable> =>
+  Effect.gen(function* () {
+    if (input.caller._tag !== "PAT") return response;
+    const result = yield* batch(input.db, [
+      prepareCanonicalAdmissionRefusal({
+        db: input.db,
+        authority: livePATCredential({ subject: input.caller.value, current: input.current }),
+        id: identity,
+        operation: input.operation.id,
+        current: input.current,
+      }),
+    ]).pipe(Effect.result);
+    if (result._tag === "Failure") {
+      if (refusedByAuditBudget(result.failure.cause)) return rateLimited();
+      return yield* result.failure;
+    }
+    return result.success[0]?.meta.changes === 1 ? response : noAuthority();
+  });
+
 const authorizedCall = <E, R>(
   input: RequestCall<E, R>,
   identity: string
 ): Effect.Effect<Response, E | CanonicalAdmissionUnavailable | Schema.SchemaError, R> =>
   Effect.gen(function* () {
+    // Browser work has no commercial charge. Keep its owner's canonical input/refusal contract;
+    // external envelopes alone require reflected preflight before spending a commercial unit.
+    if (input.caller._tag === "WebSession") {
+      return yield* disclose({ ...input, scopes: [] }, yield* input.work);
+    }
+    // A batch derives authority from its decoded children, not a synthetic envelope capability.
+    const primaryFailure = yield* primaryScopeFailure(input);
+    if (Option.isSome(primaryFailure)) {
+      return yield* unadmittedRefusal(input, identity, primaryFailure.value);
+    }
     const valid = yield* validatedCanonicalInput(input);
-    if (Option.isNone(valid)) return invalid("Invalid canonical operation input.");
+    if (Option.isNone(valid)) {
+      return yield* unadmittedRefusal(
+        input,
+        identity,
+        invalid("Invalid canonical operation input.")
+      );
+    }
     const authorized: Call<E, R> = { ...input, scopes: valid.value.scopes };
     const scopeFailure = yield* checkScopes(authorized);
-    if (Option.isSome(scopeFailure)) return scopeFailure.value;
+    if (Option.isSome(scopeFailure)) {
+      return yield* unadmittedRefusal(input, identity, scopeFailure.value);
+    }
     const wireKey = Option.fromNullishOr(input.request.headers.get("Fidy-Retry-Key"));
     const key = Option.flatMap(wireKey, Schema.decodeOption(CanonicalRetryKey));
     if (Option.isSome(wireKey) && Option.isNone(key)) {
-      return invalid("Invalid canonical retry key.");
+      return yield* unadmittedRefusal(input, identity, invalid("Invalid canonical retry key."));
     }
     const retryKey = Option.isNone(key)
       ? Option.none<string>()
@@ -392,7 +508,7 @@ export const protectCanonicalSource = ({
   });
 
 /** One external envelope is charged before work; exact replay never starts new work. Browser calls are commercially free. */
-export const protectCanonicalRequest = <E, R>(
+const executeProtectedRequest = <E, R>(
   input: RequestCall<E, R>
 ): Effect.Effect<Response, never, R> =>
   Effect.gen(function* () {
@@ -418,3 +534,48 @@ export const protectCanonicalRequest = <E, R>(
       Effect.ensuring(releaseRequest({ db: input.db, id }))
     );
   });
+
+/** Header disclosure proves only the live User-owned credential and Consent, not business capability. Missing scope or invalid input can still report that User's allowance; failed proof discloses nothing. */
+const authenticatedResponse = ({
+  db,
+  caller,
+  response,
+}: Readonly<{
+  db: D1Database;
+  caller: AuthorizedCanonicalCaller;
+  response: Response;
+}>): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const current = yield* Clock.currentTimeMillis;
+    const authority =
+      caller._tag === "PAT"
+        ? livePATCredential({ subject: caller.value, current })
+        : liveWebSessionAuthority({ subject: caller.value, current });
+    const rows = yield* batch(
+      db,
+      prepareAuthorizedQuotaRead({
+        db,
+        userId: caller.value.userId,
+        current,
+        authority: proof(authority),
+      })
+    );
+    const status = decodeQuotaStatus({ row: rows[1]?.results[0], current });
+    return Option.isSome(status) ? attachStanding(response, status.value, current) : noAuthority();
+  }).pipe(
+    Effect.catch((failure) =>
+      quotaFailure(failure.cause) === "authority"
+        ? deniedDisclosure(response)
+        : Effect.succeed(unavailable())
+    )
+  );
+
+/** Decorate all authenticated outcomes, including validation, protection and dependency refusals, without spending a commercial unit or relaxing owner disclosure authority. */
+export const protectCanonicalRequest = <E, R>(
+  input: RequestCall<E, R>
+): Effect.Effect<Response, never, R> =>
+  executeProtectedRequest(input).pipe(
+    Effect.flatMap((response) =>
+      authenticatedResponse({ db: input.db, caller: input.caller, response })
+    )
+  );

@@ -157,6 +157,7 @@ export const canonicalAdmissionMigrationNames = (
       "0032_commercial_allowances",
       "0033_canonical_request_protection",
       "0034_forwarded_email_deferral",
+      "0035_media_submissions",
     ]),
   ].sort();
 

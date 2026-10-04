@@ -38,3 +38,4 @@ CREATE TABLE canonical_request_replays (
   CHECK ((state = 'pending' AND status IS NULL AND body IS NULL) OR (state = 'completed' AND status IS NOT NULL AND body IS NOT NULL))
 );
 CREATE INDEX canonical_request_replay_expiry ON canonical_request_replays(expires_at_ms);
+CREATE INDEX commercial_allowance_consumption_expiry ON commercial_allowance_consumptions(accepted_at_ms);

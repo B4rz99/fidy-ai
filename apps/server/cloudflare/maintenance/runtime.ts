@@ -8,6 +8,8 @@ import {
   type ScheduledWorkFailed,
 } from "./contract";
 import { executeSchedule } from "./operations";
+import { sweepCanonicalAdmission } from "../canonical-admission/runtime";
+import { sweepCommercialAllowances } from "../quotas/runtime";
 import type { ForwardedEmailEnvironment } from "../ingestion/contract";
 import type { PlatformMaintenance } from "../runtime/contract";
 import { makePlatformMaintenance } from "../runtime/runtime";
@@ -37,6 +39,7 @@ import {
   statementRetention,
   sweepExpiredUploadAdmission,
   sweepForwardedEmail,
+  sweepMediaSubmissions,
 } from "../ingestion/runtime";
 import { sweepExpiredPATPairings } from "../tokens/runtime";
 import { advanceRecurringWork } from "../recurring/runtime";
@@ -186,6 +189,10 @@ const admissionActivities = (
   platform: PlatformMaintenance
 ): ReadonlyArray<ScheduledActivity> => [
   activity(
+    "ingestion.mediaRetention",
+    sweepMediaSubmissions({ db: environment.DB, now: nowEpochMs })
+  ),
+  activity(
     "ingestion.uploadAdmissionSweep",
     sweepExpiredUploadAdmission({ db: environment.DB, now: nowEpochMs })
   ),
@@ -198,6 +205,14 @@ const admissionActivities = (
     sweepExpiredEnrollmentAdmission({ db: environment.DB, now: nowEpochMs })
   ),
   activity("release.smoke.expiry", platform.expireSmokeProbes(nowEpochMs)),
+  activity(
+    "canonical.admissionRetention",
+    sweepCanonicalAdmission({ db: environment.DB, current: nowEpochMs })
+  ),
+  activity(
+    "quota.consumptionRetention",
+    sweepCommercialAllowances({ db: environment.DB, current: nowEpochMs })
+  ),
 ];
 
 const statementActivities = (

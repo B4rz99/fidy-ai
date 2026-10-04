@@ -8,6 +8,7 @@ import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
 import { executeProtectedSubscriptionQuery } from "./operations";
 
 import coreWorker from "../core-worker";
+import { applyTestMigration } from "../d1-test-fixture";
 
 const fromTestPromise = <A>(run: () => PromiseLike<A>): Effect.Effect<A> =>
   Effect.tryPromise(() => Promise.resolve(run())).pipe(Effect.orDie);
@@ -59,6 +60,11 @@ const fixture = (): Promise<D1Database> =>
             .map((statement) => db.prepare(statement))
         )
       );
+      for (const name of ["0032_commercial_allowances", "0033_canonical_request_protection"]) {
+        yield* fromTestPromise(() =>
+          applyTestMigration({ db, source: new URL(`../migrations/${name}.sql`, import.meta.url) })
+        );
+      }
       const past = Date.parse("2026-09-01T12:00:00Z");
       const future = (yield* Clock.currentTimeMillis) + 86_400_000;
       yield* fromTestPromise(() =>

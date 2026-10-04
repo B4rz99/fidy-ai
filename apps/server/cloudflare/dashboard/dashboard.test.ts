@@ -1,7 +1,13 @@
-import { applyTestMigration, installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import {
+  applyTestMigration,
+  canonicalAdmissionMigrationNames,
+  installTestSchema,
+  isolatedTestDatabases,
+} from "../d1-test-fixture";
 import { executeCanonicalQuery, executeCanonicalWork } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
-import { afterAll, expect, it } from "vitest";
+import { ScopeMissing } from "../../src/shell/public-http/contract";
+import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { BigDecimal, type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { repairDashboardProjection } from "../transactions/operations";
 import { DashboardDocument } from "../../src/core/dashboard/contract";
@@ -80,7 +86,7 @@ const setup = (initializeSchema = true): Effect.Effect<D1Database, Cause.Unknown
     yield* Effect.tryPromise(() =>
       installTestSchema({
         db,
-        sources: [
+        sources: canonicalAdmissionMigrationNames([
           "0001_categories",
           "0003_pending_consent",
           "0004_onboarding_email",
@@ -97,11 +103,12 @@ const setup = (initializeSchema = true): Effect.Effect<D1Database, Cause.Unknown
           "0015_statement_submission",
           "0016_budgets",
           "0017_statement_dispatch",
+          "0017_forwarded_email",
           "0018_dashboard",
           "0019_canonical_child_guards",
           "0020_dashboard_projection",
           ...(initializeSchema ? ["0030_dashboard_initialization"] : []),
-        ].map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
+        ]).map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
       })
     );
     const current = DateTime.nowUnsafe().epochMilliseconds;
@@ -143,20 +150,24 @@ const seedPAT = (
     );
   });
 
+beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
+afterEach(() => vi.useRealTimers());
 const coordinatorByDatabase = new WeakMap<D1Database, Map<string, UserTransactionCoordinator>>();
 const coordinatorObservers = new WeakMap<D1Database, (operation: string) => void>();
 const send = (
   db: D1Database,
   credential: number | string,
   pathAndBody: string | Readonly<{ path: string; method: "POST" | "PUT"; body: object }>
-): Promise<Response> =>
-  publicWorker.fetch(
+): Promise<Response> => {
+  vi.setSystemTime(DateTime.nowUnsafe().epochMilliseconds + 1000);
+  return publicWorker.fetch(
     new Request(
       `https://api.fidyapp.com${typeof pathAndBody === "string" ? pathAndBody : pathAndBody.path}`,
       {
         method: typeof pathAndBody === "string" ? "GET" : pathAndBody.method,
         headers: {
           origin: "https://app.fidyapp.com",
+          "cf-connecting-ip": "192.0.2.35",
           ...(typeof credential === "number"
             ? { cookie: `__Host-fidy_session=${bearer(credential)}` }
             : { authorization: `Bearer ${credential}`, "x-provider-id": users[0] ?? "" }),
@@ -233,6 +244,7 @@ const send = (
       },
     }
   );
+};
 
 const BatchFailure = Schema.Struct({
   error: Schema.Struct({
@@ -480,6 +492,26 @@ it(
 );
 
 type QueryFault = "revoked" | "withdrawn" | "audit-failed";
+const assertQueryRefusal = Effect.fn(function* ({
+  reply,
+  http,
+  pat,
+  fault,
+}: Readonly<{ reply: Response; http: boolean; pat: boolean; fault: QueryFault }>) {
+  const noAuthority = http && (fault === "withdrawn" || (pat && fault === "revoked"));
+  expect(reply.status).toBe(noAuthority ? 401 : 503);
+  expect(yield* Effect.tryPromise(() => reply.json())).toEqual(
+    noAuthority
+      ? {
+          error: {
+            code: "unauthenticated",
+            message: "Present a currently authorized credential and retry.",
+          },
+          next: [],
+        }
+      : { status: "unavailable" }
+  );
+});
 const queryFault = ({
   db,
   fault,
@@ -595,8 +627,7 @@ const queryReleaseFailure = Effect.fnUntraced(function* ({
         })
       );
   expect(injected).toBe(true);
-  expect(reply.status).toBe(503);
-  expect(yield* Effect.tryPromise(() => reply.json())).toEqual({ status: "unavailable" });
+  yield* assertQueryRefusal({ reply, http, pat, fault });
   expect(
     (yield* Effect.tryPromise(() =>
       db.prepare("SELECT * FROM dashboard_documents ORDER BY user_id").all()
@@ -726,12 +757,12 @@ it(
             },
           })
         );
-        expect(denied.status).toBe(400);
+        expect(denied.status).toBe(403);
         expect(
-          (yield* Schema.decodeUnknownEffect(BatchFailure)(
+          (yield* Schema.decodeUnknownEffect(ScopeMissing)(
             yield* Effect.tryPromise(() => denied.json())
           )).error
-        ).toMatchObject({ code: "scope_missing", failedCallIndex: 0 });
+        ).toMatchObject({ code: "scope_missing" });
         expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
         expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(0);
         const accepted = yield* Effect.tryPromise(() =>
@@ -764,7 +795,7 @@ it(
         const evidence = yield* Effect.tryPromise(() =>
           db
             .prepare(
-              "SELECT user_id, pat_id, operation, outcome FROM pat_audit WHERE operation = 'dashboard.initializeDashboard' ORDER BY rowid"
+              "SELECT user_id, pat_id, operation, outcome FROM pat_audit WHERE operation = 'dashboard.initializeDashboard' AND outcome = 'accepted' ORDER BY rowid"
             )
             .all()
         );
@@ -1340,9 +1371,9 @@ it(
             },
           })
         );
-        expect(denied.status).toBe(400);
+        expect(denied.status).toBe(403);
         expect(
-          (yield* Schema.decodeUnknownEffect(BatchFailure)(
+          (yield* Schema.decodeUnknownEffect(ScopeMissing)(
             yield* Effect.tryPromise(() => denied.json())
           )).error.code
         ).toBe("scope_missing");

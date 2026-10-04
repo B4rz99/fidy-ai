@@ -20,7 +20,7 @@ import {
   dispatchOnboardingEmail,
 } from "../../email-authentication/runtime";
 
-import { ScopeMissing, UserActionRequired } from "../../../src/shell/public-http/contract";
+import { UserActionRequired } from "../../../src/shell/public-http/contract";
 import { categoryUnavailable } from "../../../src/shell/categories/operations";
 import { listCategoriesPath } from "../../../src/shell/categories/contract";
 import { MemoryId, RememberInput, ReviseInput } from "../../../src/core/memory/contract";
@@ -67,7 +67,8 @@ import {
   receiveWompiBillingEvent,
 } from "../../subscription/runtime";
 
-import { authorizeCanonicalPAT, listPATs } from "../../tokens/operations";
+import { executeProtectedQuotaQuery } from "../../quotas/operations";
+import { listPATs, resolveCanonicalPATCredential } from "../../tokens/operations";
 import { recallMemories, rejectMemoryMutation } from "../../memory/operations";
 import { canonicalOperation, canonicalRoute } from "../../routing/operations";
 import {
@@ -541,22 +542,6 @@ const consentRevokedResponse = (): Response =>
           error: {
             code: "user_action_required",
             message: "Return to Fidy to review your withdrawn Consent.",
-          },
-          next: [],
-        })
-      )
-    ),
-    HTTP_FORBIDDEN
-  );
-
-const scopeMissingResponse = (): Response =>
-  jsonResponse(
-    JSON.stringify(
-      Schema.encodeSync(Schema.toCodecJson(ScopeMissing))(
-        ScopeMissing.make({
-          error: {
-            code: "scope_missing",
-            message: "This PAT lacks the required operation scope.",
           },
           next: [],
         })
@@ -1409,6 +1394,40 @@ const primaryCanonicalOwner = (
   }
   return Option.orElse(insightResponse(input), () => dashboardResponse(input));
 };
+const subscriptionQueryResponse = ({
+  environment,
+  subject,
+  operation: declaration,
+}: Readonly<{
+  environment: CoreHttpEnvironment;
+  subject: TransactionCaller;
+  operation: CatalogOperation;
+}>): Option.Option<Effect.Effect<Response>> => {
+  const operation = (
+    [
+      "subscription.listSubscriptionOffers",
+      "subscription.getSubscriptionStatus",
+      "subscription.getUpgradeUrl",
+    ] as const
+  ).find((id) => id === declaration.id);
+  if (operation === undefined) return Option.none();
+  const work =
+    operation === "subscription.getUpgradeUrl"
+      ? {
+          db: environment.DB,
+          subject,
+          operation,
+          browserOrigin: Option.some(environment.BROWSER_ORIGIN),
+        }
+      : { db: environment.DB, subject, operation };
+  return Option.some(
+    Effect.tryPromise({
+      try: () => executeProtectedSubscriptionQuery(work),
+      catch: () => undefined,
+    }).pipe(Effect.orElseSucceed(unavailable))
+  );
+};
+
 /** Once admitted, every credential executes through the same canonical operation dispatch. */
 const executeCanonicalWork = (
   input: Readonly<{
@@ -1419,24 +1438,12 @@ const executeCanonicalWork = (
   }>
 ): Effect.Effect<Response> => {
   const { request, environment, operation, subject } = input;
-  if (operation.id === "categories.listCategories") return categoriesResponse(environment, subject);
-  if (
-    operation.id === "subscription.listSubscriptionOffers" ||
-    operation.id === "subscription.getSubscriptionStatus"
-  ) {
-    return Effect.tryPromise({
-      try: () =>
-        executeProtectedSubscriptionQuery({
-          db: environment.DB,
-          subject,
-          operation:
-            operation.id === "subscription.listSubscriptionOffers"
-              ? "subscription.listSubscriptionOffers"
-              : "subscription.getSubscriptionStatus",
-        }),
-      catch: () => undefined,
-    }).pipe(Effect.orElseSucceed(unavailable));
+  if (operation.id === "quota.getQuota") {
+    return executeProtectedQuotaQuery({ db: environment.DB, subject });
   }
+  if (operation.id === "categories.listCategories") return categoriesResponse(environment, subject);
+  const subscription = subscriptionQueryResponse(input);
+  if (Option.isSome(subscription)) return subscription.value;
   const primaryOwner = primaryCanonicalOwner(input);
   const otherOwner = Option.orElse(budgetResponse(input), () =>
     Option.orElse(keywordRuleResponse(input), () => memoryResponse(input))
@@ -1478,10 +1485,6 @@ const authorizedCanonicalResponse = (
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
-    if (request.headers.has("authorization")) {
-      const sourceFailure = yield* protectCanonicalSource({ db: environment.DB, request, current });
-      if (Option.isSome(sourceFailure)) return sourceFailure.value;
-    }
     if (!request.headers.has("authorization")) {
       return yield* Effect.tryPromise({
         try: () => transactionSession({ request, db: environment.DB }),
@@ -1501,7 +1504,7 @@ const authorizedCanonicalResponse = (
       );
     }
     return yield* Effect.tryPromise({
-      try: () => authorizeCanonicalPAT({ request, db: environment.DB, operation }),
+      try: () => resolveCanonicalPATCredential({ request, db: environment.DB, operation }),
       catch: () => undefined,
     }).pipe(
       Effect.match({
@@ -1513,7 +1516,6 @@ const authorizedCanonicalResponse = (
         onSuccess: (authorized) => {
           if (typeof authorized === "object") return authorized;
           if (authorized === "user_action_required") return consentRevokedResponse();
-          if (authorized === "scope_missing") return scopeMissingResponse();
           return jsonResponse(
             '{"error":{"code":"unauthenticated","message":"Present a valid credential and retry."},"next":[]}',
             HTTP_UNAUTHORIZED
@@ -1524,6 +1526,13 @@ const authorizedCanonicalResponse = (
         (result): result is Response => result instanceof Response,
         (subject) =>
           executeProtectedCanonicalWork({ request, environment, operation, current, subject })
+      ),
+      Effect.filterOrElse(
+        (response) => response.status !== HTTP_UNAUTHORIZED,
+        (response) =>
+          protectCanonicalSource({ db: environment.DB, request, current }).pipe(
+            Effect.map((failure) => (Option.isSome(failure) ? failure.value : response))
+          )
       )
     );
   });

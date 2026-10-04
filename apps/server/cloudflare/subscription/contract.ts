@@ -55,8 +55,13 @@ export type RefundSupportEnvironment = Readonly<{
 export type SubscriptionQueryInput = Readonly<{
   db: D1Database;
   subject: TransactionCaller;
-  operation: "subscription.listSubscriptionOffers" | "subscription.getSubscriptionStatus";
-}>;
+}> &
+  (
+    | Readonly<{
+        operation: "subscription.listSubscriptionOffers" | "subscription.getSubscriptionStatus";
+      }>
+    | Readonly<{ operation: "subscription.getUpgradeUrl"; browserOrigin: Option.Option<string> }>
+  );
 
 /** Explicit native bindings for direct browser enrollment and accepted-work notification. */
 export type EnrollmentEnvironment = Readonly<{

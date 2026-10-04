@@ -3278,6 +3278,70 @@
         ],
         "type": "object"
       },
+      "MediaNeedsReviewItem": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "id": {
+            "$ref": "#/components/schemas/NeedsReviewItemId"
+          },
+          "locale": {
+            "$ref": "#/components/schemas/Locale"
+          },
+          "mediaSubmissionId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "extraction-unavailable",
+              "unparseable-material"
+            ],
+            "type": "string"
+          },
+          "serviceMarket": {
+            "$ref": "#/components/schemas/ServiceMarket"
+          },
+          "sourceChannel": {
+            "enum": [
+              "whatsapp"
+            ],
+            "type": "string"
+          },
+          "sourceFormat": {
+            "enum": [
+              "image"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "expired"
+            ],
+            "type": "string"
+          },
+          "timeZone": {
+            "$ref": "#/components/schemas/IanaTimeZone"
+          }
+        },
+        "required": [
+          "id",
+          "mediaSubmissionId",
+          "reason",
+          "serviceMarket",
+          "locale",
+          "timeZone",
+          "sourceChannel",
+          "sourceFormat",
+          "status",
+          "createdAt"
+        ],
+        "type": "object"
+      },
       "Memory": {
         "additionalProperties": false,
         "properties": {
@@ -3478,6 +3542,9 @@
           },
           {
             "$ref": "#/components/schemas/EmailNeedsReviewItem"
+          },
+          {
+            "$ref": "#/components/schemas/MediaNeedsReviewItem"
           }
         ]
       },
@@ -4567,6 +4634,62 @@
           "channel",
           "provider",
           "providerMessageId"
+        ],
+        "type": "object"
+      },
+      "QuotaExhaustedEncoded": {
+        "additionalProperties": false,
+        "properties": {
+          "_tag": {
+            "enum": [
+              "QuotaExhausted"
+            ],
+            "type": "string"
+          },
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "allowance": {
+                "enum": [
+                  "forwarded_email",
+                  "media_submission",
+                  "hosted_history_turn",
+                  "canonical_call"
+                ],
+                "type": "string"
+              },
+              "code": {
+                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`, `dashboard_uninitialized`, `unavailable`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
+                "enum": [
+                  "quota_exhausted"
+                ],
+                "type": "string"
+              },
+              "message": {
+                "description": "Why the call failed and what to do about it, written to you rather than to the user. Decide your next move from it; do not relay it verbatim.",
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                "type": "string"
+              },
+              "resetsAt": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "allowance",
+              "resetsAt"
+            ],
+            "type": "object"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "error",
+          "next"
         ],
         "type": "object"
       },
@@ -7893,6 +8016,29 @@
               "hint"
             ],
             "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "hint": {
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "quota.getQuota"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
           }
         ]
       },
@@ -8455,6 +8601,72 @@
         "type": "string"
       },
       "Union_11": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": [
+                  "Limited"
+                ],
+                "type": "string"
+              },
+              "consumed": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "limit": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "period": {
+                "additionalProperties": false,
+                "properties": {
+                  "resetsAt": {
+                    "type": "string"
+                  },
+                  "startsAt": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "startsAt",
+                  "resetsAt"
+                ],
+                "type": "object"
+              },
+              "remaining": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "_tag",
+              "limit",
+              "consumed",
+              "remaining",
+              "period"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": [
+                  "Uncapped"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "_tag"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "Union_12": {
         "anyOf": [
           {
             "additionalProperties": false,
@@ -9298,7 +9510,7 @@
           }
         ]
       },
-      "Union_12": {
+      "Union_13": {
         "anyOf": [
           {
             "additionalProperties": false,
@@ -10519,11 +10731,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BrowserLoginPairingApprovalRateLimitedEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/BrowserLoginPairingApprovalRateLimitedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
                 }
               }
             },
-            "description": "BrowserLoginPairingApprovalRateLimited"
+            "description": "BrowserLoginPairingApprovalRateLimited | QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -10638,6 +10860,23 @@
               }
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -10734,6 +10973,23 @@
               }
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -10832,6 +11088,23 @@
               }
             },
             "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -10931,6 +11204,23 @@
               }
             },
             "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -11041,6 +11331,23 @@
               }
             },
             "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -11148,6 +11455,23 @@
               }
             },
             "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -11244,6 +11568,23 @@
               }
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           },
           "503": {
             "content": {
@@ -11350,6 +11691,23 @@
               }
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -11448,6 +11806,23 @@
               }
             },
             "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -11547,6 +11922,23 @@
               }
             },
             "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -11654,6 +12046,23 @@
               }
             },
             "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -11757,6 +12166,23 @@
               }
             },
             "description": "DashboardUninitialized"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -11866,6 +12292,23 @@
               }
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -11966,6 +12409,23 @@
               }
             },
             "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -12046,6 +12506,23 @@
               }
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -12149,6 +12626,23 @@
               }
             },
             "description": "DashboardUninitialized"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -12252,6 +12746,23 @@
               }
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -12341,6 +12852,23 @@
               }
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -12419,6 +12947,23 @@
               }
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -12534,6 +13079,23 @@
               }
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -12643,6 +13205,23 @@
               }
             },
             "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -12743,6 +13322,23 @@
               }
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -12855,6 +13451,23 @@
               }
             },
             "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -12964,6 +13577,23 @@
               }
             },
             "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -13063,6 +13693,23 @@
               }
             },
             "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -13162,6 +13809,23 @@
               }
             },
             "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -13274,6 +13938,23 @@
               }
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -13372,11 +14053,18 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    }
+                  ]
                 }
               }
             },
-            "description": "ResourceLimited"
+            "description": "ResourceLimited | QuotaExhausted"
           },
           "503": {
             "content": {
@@ -13490,11 +14178,18 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    }
+                  ]
                 }
               }
             },
-            "description": "ResourceLimited"
+            "description": "ResourceLimited | QuotaExhausted"
           },
           "503": {
             "content": {
@@ -13609,11 +14304,18 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    }
+                  ]
                 }
               }
             },
-            "description": "ResourceLimited"
+            "description": "ResourceLimited | QuotaExhausted"
           },
           "503": {
             "content": {
@@ -13746,11 +14448,18 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    }
+                  ]
                 }
               }
             },
-            "description": "ResourceLimited"
+            "description": "ResourceLimited | QuotaExhausted"
           },
           "503": {
             "content": {
@@ -13799,13 +14508,13 @@
                 "properties": {
                   "calls": {
                     "items": {
-                      "$ref": "#/components/schemas/Union_11"
+                      "$ref": "#/components/schemas/Union_12"
                     },
                     "maxItems": 12,
                     "minItems": 1,
                     "prefixItems": [
                       {
-                        "$ref": "#/components/schemas/Union_11"
+                        "$ref": "#/components/schemas/Union_12"
                       }
                     ],
                     "type": "array"
@@ -13832,13 +14541,13 @@
                       "properties": {
                         "results": {
                           "items": {
-                            "$ref": "#/components/schemas/Union_12"
+                            "$ref": "#/components/schemas/Union_13"
                           },
                           "maxItems": 12,
                           "minItems": 1,
                           "prefixItems": [
                             {
-                              "$ref": "#/components/schemas/Union_12"
+                              "$ref": "#/components/schemas/Union_13"
                             }
                           ],
                           "type": "array"
@@ -13909,6 +14618,23 @@
               }
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -14001,6 +14727,23 @@
               }
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -14088,6 +14831,23 @@
               }
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           },
           "503": {
             "content": {
@@ -14207,11 +14967,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ManualPATIssuanceRateLimitedEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ManualPATIssuanceRateLimitedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
                 }
               }
             },
-            "description": "ManualPATIssuanceRateLimited"
+            "description": "ManualPATIssuanceRateLimited | QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -14320,6 +15090,23 @@
               }
             },
             "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -14418,11 +15205,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ManualPATIssuanceRateLimitedEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ManualPATIssuanceRateLimitedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
                 }
               }
             },
-            "description": "ManualPATIssuanceRateLimited"
+            "description": "ManualPATIssuanceRateLimited | QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -14521,11 +15318,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PATPairingReviewRateLimitedEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PATPairingReviewRateLimitedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
                 }
               }
             },
-            "description": "PATPairingReviewRateLimited"
+            "description": "PATPairingReviewRateLimited | QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -14544,6 +15351,151 @@
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "mutation",
+        "x-fidy-required-tier": "free"
+      }
+    },
+    "/quota": {
+      "get": {
+        "description": "Read your four independent Free allowances and exact America/Bogota month reset. This query consumes no canonical unit and remains available at zero remaining; Trial and Pro are uncapped.",
+        "operationId": "quota.getQuota",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "accessTier": {
+                          "$ref": "#/components/schemas/AccessTier"
+                        },
+                        "canonicalCalls": {
+                          "$ref": "#/components/schemas/Union_11"
+                        },
+                        "forwardedEmails": {
+                          "$ref": "#/components/schemas/Union_11"
+                        },
+                        "hostedHistoryTurns": {
+                          "$ref": "#/components/schemas/Union_11"
+                        },
+                        "mediaSubmissions": {
+                          "$ref": "#/components/schemas/Union_11"
+                        }
+                      },
+                      "required": [
+                        "accessTier",
+                        "forwardedEmails",
+                        "mediaSubmissions",
+                        "hostedHistoryTurns",
+                        "canonicalCalls"
+                      ],
+                      "type": "object"
+                    },
+                    "next": {
+                      "$ref": "#/components/schemas/Arrays_"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequiredEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserActionRequiredEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissingEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          },
+          {
+            "webSession": []
+          }
+        ],
+        "tags": [
+          "quota"
+        ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
+        "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-operation-kind": "query",
         "x-fidy-required-tier": "free"
       }
     },
@@ -14615,6 +15567,23 @@
               }
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -14714,6 +15683,23 @@
               }
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -14807,6 +15793,23 @@
               }
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           },
           "503": {
             "content": {
@@ -14911,6 +15914,23 @@
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
+          },
           "503": {
             "content": {
               "application/json": {
@@ -15013,6 +16033,23 @@
               }
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -15175,11 +16212,18 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    }
+                  ]
                 }
               }
             },
-            "description": "ResourceLimited"
+            "description": "ResourceLimited | QuotaExhausted"
           }
         },
         "security": [
@@ -15283,11 +16327,18 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    }
+                  ]
                 }
               }
             },
-            "description": "ResourceLimited"
+            "description": "ResourceLimited | QuotaExhausted"
           }
         },
         "security": [
@@ -15387,6 +16438,23 @@
               }
             },
             "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -15502,11 +16570,18 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    }
+                  ]
                 }
               }
             },
-            "description": "ResourceLimited"
+            "description": "ResourceLimited | QuotaExhausted"
           }
         },
         "security": [
@@ -15619,11 +16694,18 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    }
+                  ]
                 }
               }
             },
-            "description": "ResourceLimited"
+            "description": "ResourceLimited | QuotaExhausted"
           }
         },
         "security": [
@@ -15739,6 +16821,23 @@
               }
             },
             "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -15844,11 +16943,18 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    }
+                  ]
                 }
               }
             },
-            "description": "ResourceLimited"
+            "description": "ResourceLimited | QuotaExhausted"
           }
         },
         "security": [
@@ -15970,11 +17076,18 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    }
+                  ]
                 }
               }
             },
-            "description": "ResourceLimited"
+            "description": "ResourceLimited | QuotaExhausted"
           }
         },
         "security": [
@@ -16080,11 +17193,18 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    }
+                  ]
                 }
               }
             },
-            "description": "ResourceLimited"
+            "description": "ResourceLimited | QuotaExhausted"
           }
         },
         "security": [
@@ -16178,6 +17298,23 @@
               }
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           },
           "503": {
             "content": {
@@ -16278,6 +17415,23 @@
               }
             },
             "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -16427,6 +17581,23 @@
               }
             },
             "description": "EmailReplacementUnsupportedMediaTypeApi"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
           }
         },
         "security": [
@@ -16486,6 +17657,9 @@
     },
     {
       "name": "subscription"
+    },
+    {
+      "name": "quota"
     },
     {
       "name": "pats"

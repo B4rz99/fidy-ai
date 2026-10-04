@@ -1,6 +1,6 @@
 import { hostedDeliveryReceipt, pendingExecutionRecoveryMs } from "../agent/contract";
 import { Miniflare } from "miniflare";
-import { afterAll, afterEach, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   canonicalAdmissionMigrationNames,
   hostedTurnTestMigrations,
@@ -22,7 +22,7 @@ import {
   AtomicBatchCallId,
   AtomicBatchRejected,
 } from "../../src/shell/operations/contract";
-import { ErrorCode } from "../../src/shell/public-http/contract";
+import { ErrorCode, ScopeMissing } from "../../src/shell/public-http/contract";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import { DisclosureSnapshot } from "../../src/shell/consent/contract";
 import { CategoryId, CategoryKeyword, KeywordRuleId } from "../../src/core/categories/contract";
@@ -644,13 +644,46 @@ const seedPAT = ({
         .run()
     );
   });
+const publicationStatements = (
+  db: D1Database
+): Readonly<{
+  prepare: D1Database["prepare"];
+  publishes: (statements: ReadonlyArray<D1PreparedStatement>) => boolean;
+}> => {
+  const writes = new WeakSet<D1PreparedStatement>();
+  const wrap = (statement: D1PreparedStatement, publishes: boolean): D1PreparedStatement => {
+    const proxy = new Proxy(statement, {
+      get: (target, property): unknown => {
+        if (property === "bind") {
+          return (...params: Parameters<D1PreparedStatement["bind"]>): D1PreparedStatement =>
+            wrap(target.bind(...params), publishes);
+        }
+        const value: unknown = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    if (publishes) writes.add(proxy);
+    return proxy;
+  };
+  return {
+    prepare: (sql) =>
+      wrap(
+        db.prepare(sql),
+        /(?:INSERT INTO|UPDATE|DELETE FROM)\s+(?:transaction_corrections|transactions|transaction_reconciliation_members)\b/iu.test(
+          sql
+        )
+      ),
+    publishes: (statements) => statements.some((statement) => writes.has(statement)),
+  };
+};
 const countingDb = (db: D1Database): Readonly<{ db: D1Database; batches: () => number }> => {
   let batches = 0;
+  const publication = publicationStatements(db);
   return {
     db: {
-      prepare: (sql) => db.prepare(sql),
+      prepare: publication.prepare,
       batch: (statements) => {
-        batches += 1;
+        if (publication.publishes(statements)) batches += 1;
         return db.batch(statements);
       },
       exec: (sql) => db.exec(sql),
@@ -660,13 +693,19 @@ const countingDb = (db: D1Database): Readonly<{ db: D1Database; batches: () => n
     batches: () => batches,
   };
 };
-const racingBatch = (db: D1Database, before: () => Promise<unknown>): D1Database => ({
-  prepare: (sql) => db.prepare(sql),
-  batch: (statements) => before().then(() => db.batch(statements)),
-  exec: (sql) => db.exec(sql),
-  withSession: (constraint) => db.withSession(constraint),
-  dump: () => db.dump(),
-});
+const racingBatch = (db: D1Database, before: () => Promise<unknown>): D1Database => {
+  const publication = publicationStatements(db);
+  return {
+    prepare: publication.prepare,
+    batch: (statements) =>
+      publication.publishes(statements)
+        ? before().then(() => db.batch(statements))
+        : db.batch(statements),
+    exec: (sql) => db.exec(sql),
+    withSession: (constraint) => db.withSession(constraint),
+    dump: () => db.dump(),
+  };
+};
 const concurrentCorrection = ({
   db,
   userId,
@@ -717,12 +756,17 @@ const concurrentMoneyCorrection = ({
         .bind(amount, userId, transactionId)
         .run()
     );
+beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
+afterEach(() => vi.useRealTimers());
 const sendPublicRequest = (
   db: D1Database,
   request: Request,
   coordinator?: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>
-): Promise<Response> =>
-  publicWorker.fetch(request, {
+): Promise<Response> => {
+  vi.setSystemTime(Effect.runSync(Clock.currentTimeMillis) + 1000);
+  const headers = new Headers(request.headers);
+  headers.set("cf-connecting-ip", "192.0.2.35");
+  return publicWorker.fetch(new Request(request, { headers }), {
     BROWSER_ORIGIN: "https://app.fidyapp.com",
     LOCAL_CANONICAL_READ_BEARER: "",
     PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
@@ -757,6 +801,7 @@ const sendPublicRequest = (
         }),
     },
   });
+};
 effectIt.effect(
   "routes a browser Turn through public ingress, Core and the per-User coordinator to Workers AI",
   () =>
@@ -2018,7 +2063,7 @@ it("serializes concurrent links through the User coordinator so only one pair co
         Promise.all([link(firstId, secondId), link(secondId, thirdId), link(firstId, secondId)])
       );
       expect(results.map(({ status }) => status).sort((left, right) => left - right)).toEqual([
-        200, 400, 400,
+        200, 400, 429,
       ]);
       const state = yield* fromTestPromise(() => reconciliationState(db, owner));
       expect(state.decisions).toHaveLength(1);
@@ -2383,6 +2428,7 @@ it("links and unlinks under the caller's live credential scope and records only 
           .all<{ operation: string; outcome: string }>()
       );
       expect(audits.results).toEqual([
+        { operation: "transactions.linkTransactions", outcome: "rejected" },
         { operation: "transactions.linkTransactions", outcome: "accepted" },
         { operation: "transactions.unlinkTransactions", outcome: "accepted" },
       ]);
@@ -2941,8 +2987,11 @@ it("bounds authenticated audit growth atomically per stable User at the public b
       expect((yield* fromTestPromise(() => call(0))).status).toBe(429);
       // The expensive history batch must not run once this User is admitted no further reads.
       const cheapDb: D1Database = {
-        prepare: (sql) => db.prepare(sql),
-        batch: () => Promise.reject(new Error("History batch must not run")),
+        prepare: (sql) => {
+          if (/FROM\s+transactions\b/iu.test(sql)) throw new Error("History query must not run");
+          return db.prepare(sql);
+        },
+        batch: (statements) => db.batch(statements),
         exec: (sql) => db.exec(sql),
         withSession: (constraint) => db.withSession(constraint),
         dump: () => db.dump(),
@@ -4464,12 +4513,11 @@ it("enforces each child's live PAT scope and commits a mixed two-child batch und
       const refused = yield* fromTestPromise(() =>
         sendPublicRequest(db, bearerRequest(0, readToken, [transactionCall(1, input())]))
       );
-      expect(refused.status).toBe(400);
-      const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
+      expect(refused.status).toBe(403);
+      const rejection = yield* Schema.decodeUnknownEffect(ScopeMissing)(
         yield* fromTestPromise(() => refused.json())
       ).pipe(Effect.orDie);
       expect(rejection.error.code).toBe("scope_missing");
-      expect(rejection.error.failedCallIndex).toBe(0);
       expect(
         yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
       ).toBe(1);
@@ -4808,12 +4856,11 @@ it("executes a mixed-owner batch under one write PAT and refuses a read PAT with
           ])
         )
       );
-      expect(refused.status).toBe(400);
-      const rejection = yield* Schema.decodeUnknownEffect(BatchRejection)(
+      expect(refused.status).toBe(403);
+      const rejection = yield* Schema.decodeUnknownEffect(ScopeMissing)(
         yield* fromTestPromise(() => refused.json())
       ).pipe(Effect.orDie);
       expect(rejection.error.code).toBe("scope_missing");
-      expect(rejection.error.failedCallIndex).toBe(0);
       expect(
         yield* fromTestPromise(() =>
           countRows(db, "SELECT COUNT(*) AS count FROM memories WHERE user_id = ?", users[0] ?? "")
@@ -5242,8 +5289,14 @@ it("serializes concurrent batches and individual mutations through one User coor
           ]),
           coordinator
         );
-      const responses = yield* fromTestPromise(() =>
-        Promise.all([individual(0), batch(0, 10), batch(0, 20), individual(1)])
+      const responses = yield* Effect.all(
+        [
+          fromTestPromise(() => individual(0)),
+          fromTestPromise(() => batch(0, 10)),
+          fromTestPromise(() => batch(0, 20)),
+          fromTestPromise(() => individual(1)),
+        ],
+        { concurrency: 2 }
       );
       expect(responses.map(({ status }) => status)).toEqual([201, 200, 200, 201]);
       const ownerList = yield* fromTestPromise(() =>
@@ -6064,9 +6117,9 @@ it("records a batch envelope for a PAT without the child's scope, but never for 
       const child = yield* fromTestPromise(() =>
         sendPublicRequest(db, bearerRequest(0, token, [transactionCall(1, input())]))
       );
-      expect(child.status).toBe(400);
+      expect(child.status).toBe(403);
       expect(yield* fromTestPromise(() => auditedPATOperations(db, users[0] ?? ""))).toHaveLength(
-        1
+        2
       );
       yield* fromTestPromise(() =>
         db
@@ -6090,7 +6143,7 @@ it("records a batch envelope for a PAT without the child's scope, but never for 
         )).status
       ).toBe(401);
       expect(yield* fromTestPromise(() => auditedPATOperations(db, users[0] ?? ""))).toHaveLength(
-        1
+        2
       );
       expect(
         yield* fromTestPromise(() =>

@@ -1,8 +1,17 @@
+import type { UserId } from "../../src/core/identity/contract";
+import type { WhatsAppInboundEvent } from "../../src/shell/channels/whatsapp/contract";
 import { type Effect, type Option, Schema } from "effect";
 import {
   type StatementSubmission,
   StatementSubmissionId,
 } from "../../src/shell/ingestion/contract";
+
+/** Already authenticated channel evidence; User and current association/Consent are rechecked in publication, never inferred from a provider id or caption. */
+export type MediaAdmissionInput = Readonly<{
+  db: D1Database;
+  userId: UserId;
+  event: WhatsAppInboundEvent;
+}>;
 
 /** Only a Cloudflare Email Routing event may supply this envelope; no HTTP path accepts it. */
 export type ForwardedEmailMessage = Pick<

@@ -1,5 +1,5 @@
 import { DateTime } from "effect";
-import type { AccessTier } from "../access-tier/contract";
+import type { AccessTier } from "~/core/access-tier/contract";
 import {
   type AllowanceKind,
   type AllowanceMeter,

@@ -8,6 +8,7 @@ import {
 } from "../../src/shell/canonical-catalog/contract";
 import "../../src/shell/api";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { executeCanonicalQuery } from "../canonical-operations/operations";
 import { protectCanonicalRequest, protectCanonicalSource } from "./operations";
 import type { AuthorizedCanonicalCaller } from "./contract";
 
@@ -64,6 +65,162 @@ const setup = Effect.gen(function* () {
   return { db, current };
 });
 type Fixture = Readonly<{ db: D1Database; current: number }>;
+
+it("keeps recovery Audit saturation distinct from commercial exhaustion and store failure", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* setup;
+      yield* io(() =>
+        fixture.db
+          .prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM seq WHERE n<256)
+   INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
+   SELECT printf('quota-budget-%d',n),?,?,'transactions.listTransactions','accepted',? FROM seq`)
+          .bind(userId, patId, fixture.current)
+          .run()
+      );
+      for (const id of ["quota.getQuota", "subscription.getUpgradeUrl"] as const) {
+        const response = yield* inspect(fixture, id);
+        expect(response.status).toBe(429);
+        expect(response.headers.get("retry-after")).toBe("1");
+      }
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare("SELECT count(*) AS total FROM commercial_allowance_consumptions")
+            .first()
+        )
+      ).toEqual({ total: 0 });
+      expect(
+        yield* io(() =>
+          fixture.db.prepare("SELECT last_used_at_ms FROM pats WHERE id = ?").bind(patId).first()
+        )
+      ).toEqual({ last_used_at_ms: null });
+    })
+  ));
+
+it("attributes malformed retry references without commercial consumption or successful PAT activity", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* setup;
+      expect((yield* read(fixture, Option.some(""))).status).toBe(400);
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare("SELECT operation,outcome FROM pat_audit WHERE user_id = ?")
+            .bind(userId)
+            .all()
+        )
+      ).toMatchObject({
+        results: [{ operation: "transactions.getTransaction", outcome: "rejected" }],
+      });
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare("SELECT count(*) AS total FROM commercial_allowance_consumptions")
+            .first()
+        )
+      ).toEqual({ total: 0 });
+      expect(
+        yield* io(() =>
+          fixture.db.prepare("SELECT last_used_at_ms FROM pats WHERE id = ?").bind(patId).first()
+        )
+      ).toEqual({ last_used_at_ms: null });
+    })
+  ));
+
+it("shares quota inspection and upgrade recovery with catalog query execution", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* setup;
+      for (const id of ["quota.getQuota", "subscription.getUpgradeUrl"] as const) {
+        const result = yield* executeCanonicalQuery({
+          db: fixture.db,
+          subject: caller.value,
+          operation: operation(id).id,
+          input: {},
+          bucket: Option.none(),
+        });
+        expect(Option.isSome(result)).toBe(true);
+        if (Option.isSome(result)) expect(result.value.status).toBe(200);
+      }
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare("SELECT count(*) AS total FROM commercial_allowance_consumptions")
+            .first()
+        )
+      ).toEqual({ total: 0 });
+    })
+  ));
+
+it("does not advance PAT activity from admission without the domain owner's Audit proof", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* setup;
+      expect((yield* read(fixture, Option.none())).status).toBe(404);
+      expect(
+        yield* io(() =>
+          fixture.db.prepare("SELECT last_used_at_ms FROM pats WHERE id = ?").bind(patId).first()
+        )
+      ).toEqual({ last_used_at_ms: null });
+    })
+  ));
+
+it("attributes completed replay disclosure to the current PAT without reexecuting or charging", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* setup;
+      const key = "audited-replay";
+      yield* read(fixture, Option.some(key));
+      const otherId = "20000000-0000-4000-8000-000000000002";
+      const otherDigest = new Uint8Array(32).fill(2);
+      yield* io(() =>
+        fixture.db
+          .prepare(
+            "INSERT INTO pats (id,user_id,short_id,bearer_digest,recipient_label,scopes_json,lifetime_days,created_at_ms,issued_at_ms,expires_at_ms,request_id) SELECT ?,user_id,'87654321',?,'second','[\"read\"]',7,created_at_ms,issued_at_ms,expires_at_ms,? FROM pats WHERE id = ?"
+          )
+          .bind(otherId, otherDigest, "40000000-0000-4000-8000-000000000002", patId)
+          .run()
+      );
+      const replay = yield* protectCanonicalRequest({
+        ...fixture,
+        caller: { _tag: "PAT", value: { ...caller.value, patId: otherId, digest: otherDigest } },
+        operation: operation("transactions.getTransaction"),
+        browserOrigin: "http://localhost:3000",
+        request: new Request(`https://core.internal/transactions/${targetId}`, {
+          headers: { "Fidy-Retry-Key": key },
+        }),
+        work: work(fixture.db),
+      });
+      expect(replay.status).toBe(404);
+      expect(yield* effects(fixture.db)).toEqual({ total: 1 });
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare("SELECT user_id,pat_id,operation,outcome FROM pat_audit WHERE pat_id = ?")
+            .bind(otherId)
+            .all()
+        )
+      ).toMatchObject({
+        results: [
+          {
+            user_id: userId,
+            pat_id: otherId,
+            operation: "transactions.getTransaction",
+            outcome: "rejected",
+          },
+        ],
+      });
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare("SELECT count(*) AS total FROM commercial_allowance_consumptions")
+            .first()
+        )
+      ).toEqual({ total: 1 });
+    })
+  ));
+
 const work = (db: D1Database): Effect.Effect<Response, TestFailure> =>
   io(() => db.prepare("INSERT INTO domain_effects DEFAULT VALUES").run()).pipe(
     Effect.as(
@@ -100,7 +257,13 @@ const inspect = (
     request: new Request(
       `https://core.internal${op === "quota.getQuota" ? "/quota" : "/subscription/upgrade-url"}`
     ),
-    work: work(fixture.db),
+    work: executeCanonicalQuery({
+      db: fixture.db,
+      subject: caller.value,
+      operation: operation(op).id,
+      input: {},
+      bucket: Option.none(),
+    }).pipe(Effect.map((result) => Option.getOrThrow(result))),
   });
 const effects = (db: D1Database): Effect.Effect<unknown, TestFailure> =>
   io(() => db.prepare("SELECT count(*) AS total FROM domain_effects").first());

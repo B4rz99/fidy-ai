@@ -257,7 +257,11 @@ export const refusedTransactionResponse = (refusal: TransactionRefusal): Respons
   refusalOutcomes[refusal.outcome].response();
 
 /** The canonical daily-write-budget refusal every Transaction entry point shares. */
-export const rateLimitedTransactionResponse = (): Response => limited();
+export const rateLimitedTransactionResponse = (): Response => {
+  const response = limited();
+  response.headers.set("retry-after", "1");
+  return response;
+};
 
 /** The canonical failure code one already-recorded Transaction refusal is reported as. */
 export const refusalFailureCode = (outcome: TransactionRefusal["outcome"]): ErrorCode =>

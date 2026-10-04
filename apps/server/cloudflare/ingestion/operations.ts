@@ -1,3 +1,7 @@
+import { admitMedia } from "./internal/media-submissions";
+import type { MediaAdmissionInput } from "./contract";
+import type { Effect } from "effect";
+
 import {
   overdueIngestionRetention,
   pendingIngestionWork,
@@ -27,6 +31,10 @@ import {
   forwardingAddressMutationAdapter,
   forwardingAuditLimitRefusal as forwardingAuditRefusal,
 } from "./internal/forwarding-address-mutation";
+
+/** Atomically accept an authenticated image with its media unit, attribution, visible review and durable outbox. Exact delivery replay is free; no provider retrieval occurs here. */
+export const acceptWhatsAppMedia = (input: MediaAdmissionInput): Effect.Effect<Response> =>
+  admitMedia(input);
 
 /** Stage bounded bytes under a live User session; the result grants no extraction authority. */
 export const uploadStagedStatement: typeof uploadStatement = (input) => uploadStatement(input);

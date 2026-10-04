@@ -8,6 +8,7 @@ import type {
   AuditQueryCall,
   AuthorizedAuditCall,
   CanonicalAdmissionRefusal,
+  CanonicalReplayAccess,
   OwnerAuditCall,
 } from "~/shell/audit/contract";
 
@@ -110,6 +111,19 @@ export const queryCallStatement = ({ missingWhen, ...input }: AuditQueryCall): O
     params: [id, operation, ...missingWhen.params, current, ...authority.bindings],
   };
 };
+
+/** Replay reads get current-credential accountability without restating or reexecuting domain work. */
+export const replayAccessStatement = ({
+  authority,
+  id,
+  operation,
+  current,
+  outcome,
+  retainedResponseProof,
+}: CanonicalReplayAccess): OwnedStatement => ({
+  sql: `INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms) SELECT ?,user_id,id,?,?,? FROM pats WHERE ${authority.predicate} AND EXISTS (${retainedResponseProof.sql})`,
+  params: [id, operation, outcome, current, ...authority.bindings, ...retainedResponseProof.params],
+});
 
 /** Builds evidence under the exact credential gate held by the coordinator. */
 export const authorizedCallStatement = (input: AuthorizedAuditCall): OwnedStatement => {

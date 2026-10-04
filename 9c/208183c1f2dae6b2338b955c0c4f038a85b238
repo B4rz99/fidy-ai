@@ -1,0 +1,31 @@
+docs/operations/production-releases.md
+  s_f747c6561b3cbe::t_4c76f6e90e0cbb 214-220
+infra/cloudflare/diagnose-smoke-routing.test.ts
+  s_f747c6561b3cbe::t_3b2c3da325a1da 262-263
+infra/cloudflare/diagnose-smoke-routing.ts
+  s_f747c6561b3cbe::t_da7c0141943744 3-5,48,51-52,61,67-73
+infra/cloudflare/smoke-exchange.test.ts
+  s_f747c6561b3cbe::t_5e1938242a73d2 1-118
+infra/cloudflare/smoke-exchange.ts
+  s_f747c6561b3cbe::t_1628e85abd814c 1-225
+infra/cloudflare/verify-production-smoke.test.ts
+  s_f747c6561b3cbe::t_7ee051d0515603 95-162
+infra/cloudflare/verify-production-smoke.ts
+  s_f747c6561b3cbe::t_4ba1478a3dbe98 3,5,8,10-16,41-42,44-61,63,65-74,83,94-98,110-112,129,134,174,178,182,270-274
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "9c208183c1f2dae6b2338b955c0c4f038a85b238",
+  "prompts": {},
+  "sessions": {
+    "s_f747c6561b3cbe": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0ff5e-5010-71c0-9c9b-ef422f4bf5b1",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

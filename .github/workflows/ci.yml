@@ -197,6 +197,7 @@ jobs:
           name: browser-timings
           path: |
             apps/web/test-results/browser-timings.json
+            apps/web/test-results/cli-browser-timings.json
             apps/web/test-results/verify-browser.json
           if-no-files-found: error
           retention-days: 7
@@ -257,7 +258,9 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.cli-native == 'true' }}
     name: CLI native store (${{ matrix.os }})
-    timeout-minutes: 5
+    # Windows install/cache extraction takes ~4 minutes, and post-job cache saving
+    # also counts. Keep setup headroom separate from the short conformance budget.
+    timeout-minutes: 15
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -267,6 +270,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/bun-install
       - name: Native cross-process and Windows local-persistence conformance
+        timeout-minutes: 1
         run: bun run --cwd apps/cli test:native
 
   required-checks:

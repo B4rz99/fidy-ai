@@ -12,6 +12,11 @@ import { playwright } from "./playwright-runtime";
 import { signInThroughCore } from "./real-core-fixture";
 
 const { expect, test } = playwright;
+if (Bun.env.CLI_ACCEPTANCE_MODE !== "cli") {
+  throw new Error(
+    "The native CLI journey requires bun run test:browser:cli and its isolated topology."
+  );
+}
 class CliJourneyFailed extends Data.TaggedError("CliJourneyFailed") {}
 const wait = <A>(promise: Promise<A>): Effect.Effect<A, CliJourneyFailed> =>
   Effect.tryPromise({ try: () => promise, catch: () => new CliJourneyFailed() });

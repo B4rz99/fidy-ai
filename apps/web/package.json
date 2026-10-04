@@ -16,7 +16,8 @@
     "check:shadcn": "bun scripts/check-shadcn-integrity.ts",
     "lint:deps": "bun ../../tools/depcruise/run.mjs",
     "lint:deps:probes": "bun scripts/check-dependency-guards.ts",
-    "test:browser": "bun --bun playwright test --config playwright.config.ts"
+    "test:browser": "bun --bun playwright test --config playwright.config.ts",
+    "test:browser:cli": "CLI_ACCEPTANCE_MODE=cli bun --bun playwright test --config playwright.cli.config.ts"
   },
   "dependencies": {
     "@base-ui/react": "1.8.0",

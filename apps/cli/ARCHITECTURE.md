@@ -195,8 +195,12 @@ origin substitution and partial persistence. Cancellation/overflow tests assert 
 not only fiber termination. Test-only process ownership in `test/process.test-fixture.ts` also
 settles each real child and closes its reader on interruption; native conformance and browser
 acceptance share this seam rather than starting detached processes. `bun run --cwd apps/cli test:native` checks actual cross-process native
-persistence. Linux browser CI runs inside an unlocked DBus/Secret Service session; separate macOS
-and Windows native jobs are required whenever unit verification is selected. Windows additionally
+persistence. Linux browser CI runs inside an unlocked DBus/Secret Service session. The browser gate runs the
+shared suite and then `bun run --cwd apps/web test:browser:cli` with a fresh, dedicated public/Core
+and D1 topology; the shared suite excludes the CLI mutation journey so other journeys cannot alter
+its exact query results or Audit evidence. Separate macOS and Windows native jobs are required
+whenever unit verification is selected. Their setup/cache budget is separate from the one-minute
+conformance-step deadline. Windows additionally
 reads the native credential's persistence enum (never its blob) and requires local-machine storage.
 
 `test/journey-entry.ts` is an explicitly broad test composition. It runs the same command/login/store

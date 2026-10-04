@@ -1,0 +1,49 @@
+apps/web/src/features/oauth-connections/view.tsx
+  s_99853caa398493::t_bfd10fee4353ce 31,47
+  s_99853caa398493::t_d77c534cf51e10 143-147
+apps/server/src/core/audit/contract.ts
+  s_99853caa398493::t_ae00731130f80a 50
+infra/cloudflare/verify-edge-policy.ts
+  s_99853caa398493::t_d87bbd919ef6ba 5-7
+apps/web/src/features/oauth-connections/management-view.tsx
+  s_99853caa398493::t_bed1ecc9fef97b 55-56
+apps/server/src/shell/audit/internal/oauth-activity.ts
+  s_99853caa398493::t_60a01c57e7e8d5 15,24,33
+apps/web/src/features/oauth-connections/management-view.test.tsx
+  s_99853caa398493::t_6beaea39645655 43
+  s_99853caa398493::t_c6541a4fc598f7 44-90
+  s_99853caa398493::t_9bbbcc0c37a1b9 1-4,7-8,42
+infra/cloudflare/verify-edge-policy.test.ts
+  s_99853caa398493::t_32fe35572a6df9 7
+apps/web/src/features/oauth-connections/feature.test.tsx
+  s_99853caa398493::t_77524b9f2c709d 1-9,17,19-25,29-41,46-48,76,98-100
+  s_99853caa398493::t_d6bf6c69a42d25 18,43
+  s_99853caa398493::t_682ceefd9ea5c5 49,97,274
+  s_99853caa398493::t_18d8ccc13c28bb 10
+  s_99853caa398493::t_5659b81463a446 42
+  s_99853caa398493::t_88bc70f690fd6b 71
+  s_99853caa398493::t_525b526be59fe8 11-16,26-28,44-45,50-70,72-75,77-96,101-273,275-276
+apps/cli/src/canonical/operations.ts
+  s_99853caa398493::t_691d90eda156df 151,187-194
+  s_99853caa398493::t_c127f5d2e2b2ba 152-153
+  s_99853caa398493::t_53b22cfe3d43dd 135,158-161
+  s_99853caa398493::t_d437edde93b386 162
+apps/server/cloudflare/oauth-agents/oauth-ingress.test.ts
+  s_99853caa398493::t_17181e417cf1fc 2282-2284,2329-2330
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "33d69e4707a57f5c68302cc945d5331293b84844",
+  "prompts": {},
+  "sessions": {
+    "s_99853caa398493": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a1072b-731e-76e6-be76-24b40cec8e56",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

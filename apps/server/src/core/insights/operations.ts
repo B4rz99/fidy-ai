@@ -1,5 +1,5 @@
 import { Cron, DateTime, Effect } from "effect";
-import type { IanaTimeZone } from "../_shared/context";
+import type { IanaTimeZone } from "~/core/_shared/context";
 import type { InsightDeliveryDecision, WeeklyPeriods, WeeklyTiming } from "./contract";
 import { type InsightLifecycleState, InvalidInsightTransition } from "./contract";
 

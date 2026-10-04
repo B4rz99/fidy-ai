@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime, Schema } from "effect";
 import { WeeklyPeriods, WeeklyTiming } from "./contract";
-import { IanaTimeZone } from "../_shared/context";
+import { IanaTimeZone } from "~/core/_shared/context";
 import {
   decideInsightDelivery,
   insightDeliveryDeadline,

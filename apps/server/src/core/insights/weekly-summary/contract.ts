@@ -1,7 +1,7 @@
 import { BigDecimal, Schema } from "effect";
-import { Currency, Money, type ReadonlyMoney } from "../../_shared/money";
-import { WeeklyPeriods } from "../contract";
-import { CategoryId } from "../../categories/contract";
+import { Currency, Money, type ReadonlyMoney } from "~/core/_shared/money";
+import { WeeklyPeriods } from "~/core/insights/contract";
+import { CategoryId } from "~/core/categories/contract";
 
 const changeFor = (order: number): "Increased" | "Decreased" | "Unchanged" => {
   if (order > 0) return "Increased";

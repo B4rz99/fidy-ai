@@ -1,5 +1,5 @@
 import { Option, type Redacted } from "effect";
-import { buildInsightTemplateSender } from "./internal/insight-template";
+import { buildInsightTemplateSender } from "~/shell/channels/whatsapp/internal/insight-template";
 import { type HttpClient } from "effect/http";
 import { type WhatsAppBusinessScopedUserId } from "~/core/identity/contract";
 import { TranscriptText } from "~/core/agent/contract";

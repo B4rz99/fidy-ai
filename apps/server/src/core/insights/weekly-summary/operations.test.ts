@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { Schema } from "effect";
 import { buildWeeklySummary, presentWeeklySummary, summarizeWeek } from "./operations";
-import { Money } from "../../_shared/money";
-import { CategoryId, CategoryLabel } from "../../categories/contract";
-import type { EffectiveTransactionAggregate } from "../../transactions/contract";
-import { weeklyPeriods } from "../operations";
-import { UtcTimestamp } from "../../_shared/time";
-import { IanaTimeZone } from "../../_shared/context";
+import { Money } from "~/core/_shared/money";
+import { CategoryId, CategoryLabel } from "~/core/categories/contract";
+import type { EffectiveTransactionAggregate } from "~/core/transactions/contract";
+import { weeklyPeriods } from "~/core/insights/operations";
+import { UtcTimestamp } from "~/core/_shared/time";
+import { IanaTimeZone } from "~/core/_shared/context";
 import { WeeklySummaryPayload } from "./contract";
 
 const periods = weeklyPeriods({

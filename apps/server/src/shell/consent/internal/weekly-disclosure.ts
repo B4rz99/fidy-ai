@@ -1,4 +1,4 @@
-import { DisclosureSnapshot } from "../../../core/consent/contract";
+import { DisclosureSnapshot } from "~/core/consent/contract";
 import { Schema } from "effect";
 import { currentDisclosureFacts } from "./current-disclosure";
 

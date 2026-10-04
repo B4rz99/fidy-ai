@@ -1,5 +1,5 @@
 import { Config, Schema } from "effect";
-import { weeklyDisclosure } from "./internal/weekly-disclosure";
+import { weeklyDisclosure } from "~/shell/consent/internal/weekly-disclosure";
 
 import { DisclosureSnapshot } from "~/core/consent/contract";
 import { decidePATRevocation } from "~/core/consent/operations";

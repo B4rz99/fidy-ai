@@ -7,7 +7,7 @@ import {
   type InsightTemplateSender,
   InsightTemplateSummary,
   InsightTemplateUnavailable,
-} from "../contract";
+} from "~/shell/channels/whatsapp/contract";
 import { sendKapsoMessage } from "./kapso-client";
 
 const maximumTemplateLength = 1024;

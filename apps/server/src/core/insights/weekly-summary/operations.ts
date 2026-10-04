@@ -4,11 +4,11 @@ import {
   type Money,
   type ReadonlyMoney,
   encodeMoneyAmount,
-} from "../../_shared/money";
-import type { IanaTimeZone } from "../../_shared/context";
-import type { Category, CategoryId } from "../../categories/contract";
-import type { TransactionPeriod } from "../../transactions/contract";
-import { WeeklyPeriods } from "../contract";
+} from "~/core/_shared/money";
+import type { IanaTimeZone } from "~/core/_shared/context";
+import type { Category, CategoryId } from "~/core/categories/contract";
+import type { TransactionPeriod } from "~/core/transactions/contract";
+import { WeeklyPeriods } from "~/core/insights/contract";
 import {
   type WeeklyComparison,
   type WeeklySummaryOutcome,

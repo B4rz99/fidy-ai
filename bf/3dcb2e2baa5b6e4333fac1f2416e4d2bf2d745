@@ -1,0 +1,25 @@
+apps/web/scripts/ci-workflow.test.ts
+  s_f747c6561b3cbe::t_92e96c8e8efed1 66-90
+.github/workflows/ci.yml
+  s_f747c6561b3cbe::t_3a26e2432ca7d2 27,258,260-278,281-282,290-294,297,307
+apps/cli/package.json
+  s_f747c6561b3cbe::t_049e922a764445 14
+apps/cli/ARCHITECTURE.md
+  s_f747c6561b3cbe::t_3dc305f3efdcb1 219-225
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "bf3dcb2e2baa5b6e4333fac1f2416e4d2bf2d745",
+  "prompts": {},
+  "sessions": {
+    "s_f747c6561b3cbe": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0ff5e-5010-71c0-9c9b-ef422f4bf5b1",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

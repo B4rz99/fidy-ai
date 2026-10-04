@@ -5,7 +5,7 @@ import {
   atomicBatchOperation,
   getAtomicBatchInputSchema,
 } from "../../../src/shell/operations/contract";
-import { patScopeCapability } from "../../../src/shell/canonical-policy/contract";
+import { userOwnedAgentCapability } from "../../../src/shell/canonical-policy/contract";
 import type { CanonicalCapability } from "../../../src/core/canonical-operations/contract";
 import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
 import { readBoundedRequestBody } from "../../http/operations";
@@ -103,7 +103,7 @@ const requiredScopes = (
   operation: CatalogOperation,
   input: unknown
 ): Option.Option<ReadonlyArray<CanonicalCapability>> => {
-  const single = patScopeCapability(operation.policy.access);
+  const single = userOwnedAgentCapability(operation.policy.access);
   if (Option.isSome(single)) return Option.some([single.value]);
   if (operation.id !== atomicBatchOperation) return Option.some([]);
   const batch = Schema.decodeUnknownOption(
@@ -114,7 +114,7 @@ const requiredScopes = (
   for (const call of batch.value.payload.calls) {
     const child = getBoundOperationCatalog().byId.get(call.operation);
     if (child === undefined) return Option.none();
-    const scope = patScopeCapability(child.policy.access);
+    const scope = userOwnedAgentCapability(child.policy.access);
     if (Option.isNone(scope)) return Option.none();
     scopes.add(scope.value);
   }

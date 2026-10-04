@@ -5,7 +5,7 @@ import {
 } from "../../src/core/subscription/contract";
 import { Data, type Option, Schema } from "effect";
 import { type WorkflowStepConfig } from "cloudflare:workers";
-import { type TransactionCaller } from "../canonical-work/contract";
+import { type QueryCaller } from "../canonical-work/contract";
 
 /** Constructed only after origin-side verification against the separate billing-support Access app. */
 export type RefundAuthority = typeof RefundSupportAdmission.fields.authority.Type;
@@ -54,7 +54,7 @@ export type RefundSupportEnvironment = Readonly<{
 /** Canonical safe observation under the caller's live credential and User. */
 export type SubscriptionQueryInput = Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: QueryCaller;
 }> &
   (
     | Readonly<{

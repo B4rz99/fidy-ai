@@ -1,4 +1,6 @@
-import { Option } from "effect";
+import { Option, Schema } from "effect";
+import { OAuthConnectionListQuery, OAuthRequestId } from "@/transport/client";
+import { OAuthManagementFeature, OAuthReviewFeature } from "@/features/oauth-connections/feature";
 import { type JSX, Suspense, createElement, lazy } from "react";
 import {
   type RouterHistory,
@@ -81,6 +83,13 @@ const patManagementRoute = createRoute({
   path: "/settings/pats",
   component: PATManagementFeature,
 });
+const oauthManagementRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/settings/agents",
+  validateSearch: (search) =>
+    Schema.decodeSync(Schema.Struct({ after: OAuthConnectionListQuery.fields.after.from }))(search),
+  component: OAuthManagementFeature,
+});
 const emailReplacementRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: "/settings/email",
@@ -99,7 +108,14 @@ const subscriptionOffersRoute = createRoute({
 const browserLoginPairingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/auth/pair",
+  validateSearch: (search) =>
+    Schema.decodeSync(Schema.Struct({ oauthRequest: Schema.optionalKey(OAuthRequestId) }))(search),
   component: BrowserLoginPairingFeature,
+});
+const oauthReviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/oauth/review/$requestId",
+  component: OAuthReviewFeature,
 });
 const emailOnboardingRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -109,11 +125,13 @@ const emailOnboardingRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   createPublicSiteRoute(rootRoute),
   browserLoginPairingRoute,
+  oauthReviewRoute,
   subscriptionOffersRoute,
   emailOnboardingRoute,
   authenticatedRoute.addChildren([
     signedInRoute.addChildren([signedInIndexRoute, dashboardRoute, agentRoute, transactionsRoute]),
     patManagementRoute,
+    oauthManagementRoute,
     emailReplacementRoute,
     backupRecoveryRoute,
   ]),

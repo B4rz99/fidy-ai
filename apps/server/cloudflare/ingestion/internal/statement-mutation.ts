@@ -20,6 +20,7 @@ import {
   statementRefusalResponse,
 } from "./statement-ingestion";
 import {
+  type TransactionCaller,
   callerAuthority,
   callerScope,
   failedPreparation,
@@ -58,7 +59,7 @@ export const canonicalStatementRefusal = ({
   refusal,
 }: Readonly<{
   config: StatementStagingConfig;
-  subject: Parameters<typeof callerAuthority>[0]["subject"];
+  subject: TransactionCaller;
   current: number;
   refusal: StatementPublicationRefusal;
 }>): CanonicalMutationRefusal => ({

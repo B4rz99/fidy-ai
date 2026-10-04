@@ -3,10 +3,10 @@
 import { edgeSecurityPolicy } from "./edge-security";
 
 // Includes #225's support/correction boundaries, #35's canonical admission/allowance headers,
-// and #1004's declaration-derived browser-only PaymentEnrollment transport policy.
+// #33's bounded OAuth/MCP ingress, and #1004's browser-only PaymentEnrollment transport policy.
 // Includes #27's private weekly Queue/Workflow topology, bounded dead-letter consumer,
-// and fail-closed Core configuration; public routing and edge policy are unchanged.
-const expectedEdgePolicyDigest = "d0b99849d9f86c521021bbc26d5207513236b3b1b4815987335c7151e22a19d0";
+// and fail-closed Core configuration; public routing and edge policy are unchanged by #27.
+const expectedEdgePolicyDigest = "345388bf0d8836318c58fe14fc03a534ef2729fbba2ec145a8f11c397b7d7731";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),

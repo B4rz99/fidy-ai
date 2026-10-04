@@ -97,9 +97,34 @@ not tools or atomic-batch children. `src/client.ts` publishes their intended dec
 native implementation. Server implementations consume owners directly, not through this client facade.
 Contract checks establish freshness; prelaunch compatibility with older revisions is not a gate.
 
-Hosted MCP/OAuth remains a design, not an installed authority. Its planned OAuth caller must enter
-the same canonical policy and User coordinator without becoming a PAT, WebSession, or Hosted Agent
-Session. [ADR 0033](../../docs/adr/0033-hosted-mcp-and-oauth-agent-grants.md) owns that decision.
+### Hosted MCP and OAuth development authority
+
+[ADR 0033](../../docs/adr/0033-hosted-mcp-and-oauth-agent-grants.md) defines the installed development
+slice, not launch enablement. `oauth-agents` owns separately identifiable OAuthConnections, fresh
+browser approval, atomic Consent/code publication, PKCE exchange and digest-only finite credentials.
+The reviewed absolute 7/30/90/365-day grant lifetime cannot grow through use or refresh. Refresh
+atomically rotates credentials under the original User coordinator; recognized replay revokes the
+entire credential family, including a concurrent winner. Lost delivery requires new browser approval,
+with no grace window or recoverable replacement cache.
+
+`mcp` projects installed eligible canonical queries from the assembled declarations through Effect's
+protocol runtime. Discovery is deterministic and authorization-private, including nested
+SuggestedOperations. Calls use the shared canonical owner invocation under live OAuth credential,
+grant, User, Consent and capability guards, with distinct Audit attribution and exact Money codecs.
+Account-security operations and every mutation remain refused; OAuth callers never inherit PAT,
+WebSession or Hosted Agent Session lifecycle authority.
+
+Fresh first-party browser settings list bounded connection metadata and at most three attributable
+canonical activity entries, then revoke one or all owned connections atomically with append-only
+Consent evidence. Safety controls remain reachable after processing Consent withdrawal. Revocation
+stops later calls and refresh without undoing committed work or affecting PATs, browser logout or
+Hosted Agent Sessions. Malformed or unavailable metadata fails closed, never as an empty list.
+
+Public bounds, deadlines and cancellation fence queued query/refresh work. Already-started D1 batches
+settle atomically even when delivery is lost; cancellation is not rollback or retry authority.
+Existing bounded public/Core/coordinator Work observations export metadata only, never arguments,
+financial results, credentials, URLs or raw causes. Sensitive confirmation and exact-host/operator
+launch gates remain separate work.
 
 ## 4. Subject, proof, and provider boundaries
 

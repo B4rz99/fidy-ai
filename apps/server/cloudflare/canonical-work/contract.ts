@@ -1,4 +1,5 @@
 import { Data } from "effect";
+import type { OAuthAuthority, OAuthCaller } from "../../src/shell/oauth-agents/contract";
 import type { PATAuthority } from "../../src/shell/tokens/contract";
 import type { WebSessionAuthority } from "../../src/shell/web-session/contract";
 import type { AuthorizedPAT } from "../tokens/contract";
@@ -25,6 +26,8 @@ export type TransactionSubject = Readonly<{ id: string; userId: string; digest: 
 
 /** The two live caller subjects that may execute Transaction work. */
 export type TransactionCaller = TransactionSubject | AuthorizedPAT;
+/** Canonical queries additionally accept distinct OAuth User-owned-agent authority. */
+export type QueryCaller = TransactionCaller | OAuthCaller;
 
 export const transactionNoStore = { "cache-control": "no-store" };
 
@@ -67,6 +70,8 @@ export type TransactionRefusal = Readonly<{
 
 /** One live-authority gate over a credential table: its table, predicate, and bindings. */
 export type TransactionAuthority = PATAuthority | WebSessionAuthority;
+/** A live query gate keeps OAuth attribution distinct from other credentials. */
+export type QueryAuthority = TransactionAuthority | OAuthAuthority;
 
 /** The canonical shared daily-write-budget refusal every owner reports. */
 export const dailyAuditMessage = "The caller's daily canonical write budget is exhausted.";

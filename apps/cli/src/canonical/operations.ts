@@ -137,8 +137,7 @@ export const invokeOperation = Effect.fn(function* (
   const name = id.slice(separator + 1);
   const call = client[group]?.[name];
   if (call === undefined) return yield* new CliFailure({ reason: "OperationUnavailable" });
-  const uncertainReason =
-    operation.policy.kind === "mutation" ? "MutationAmbiguous" : "TransportUnavailable";
+  const uncertainReason = uncertainCallReason(operation.policy.kind);
   const result = yield* call(decoded).pipe(
     Effect.catchDefect(() => Effect.fail(new CliFailure({ reason: uncertainReason }))),
     Effect.onInterrupt(() =>
@@ -155,8 +154,16 @@ export const invokeOperation = Effect.fn(function* (
     Effect.mapError(() => new CliFailure({ reason: uncertainReason }))
   );
   const output: OperationResult = { envelope, failed, retryAfterSeconds, allowance };
+  if (unindexedBatchUnavailable(id, output)) {
+    return yield* new CliFailure({ reason: "MutationAmbiguous" });
+  }
   return output;
 });
+
+const uncertainCallReason = (
+  kind: "mutation" | "query"
+): "MutationAmbiguous" | "TransportUnavailable" =>
+  kind === "mutation" ? "MutationAmbiguous" : "TransportUnavailable";
 
 const radix = 16;
 const terminalSafe = (text: string): string =>
@@ -182,6 +189,14 @@ const failureGuidance = Schema.Struct({ error: Schema.Struct({ code: Schema.Stri
 const batchRejectionGuidance = Schema.Struct({
   error: Schema.Struct({ failedCallIndex: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)) }),
 });
+const unindexedBatchUnavailable = (id: string, result: OperationResult): boolean =>
+  id === atomicBatchOperation &&
+  result.failed &&
+  Option.exists(
+    Schema.decodeUnknownOption(failureGuidance)(result.envelope),
+    ({ error }) => error.code === "unavailable"
+  ) &&
+  Option.isNone(Schema.decodeUnknownOption(batchRejectionGuidance)(result.envelope));
 const showBatchRejection = (
   id: string,
   result: OperationResult,

@@ -19,7 +19,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "mutation",
@@ -34,7 +34,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "required",
         "kind": "mutation",
@@ -49,7 +49,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "query",
@@ -64,7 +64,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "query",
@@ -79,7 +79,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "query",
@@ -94,7 +94,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "required",
         "kind": "mutation",
@@ -109,7 +109,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "mutation",
@@ -124,7 +124,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "required",
         "kind": "mutation",
@@ -139,7 +139,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "query",
@@ -154,7 +154,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "query",
@@ -169,7 +169,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "required",
         "kind": "mutation",
@@ -184,7 +184,7 @@
             "capability": "dashboard",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "required",
         "kind": "mutation",
@@ -199,7 +199,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "query",
@@ -214,7 +214,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "query",
@@ -229,7 +229,7 @@
             "capability": "dashboard",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "mutation",
@@ -244,7 +244,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "query",
@@ -281,7 +281,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "query",
@@ -296,7 +296,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "mutation",
@@ -311,7 +311,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "mutation",
@@ -326,7 +326,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "query",
@@ -341,7 +341,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "query",
@@ -356,7 +356,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "query",
@@ -371,7 +371,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "required",
         "kind": "mutation",
@@ -386,7 +386,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "mutation",
@@ -401,7 +401,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "required",
         "kind": "mutation",
@@ -416,7 +416,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "query",
@@ -431,7 +431,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "required",
         "kind": "mutation",
@@ -446,7 +446,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "required",
         "kind": "mutation",
@@ -461,7 +461,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "required",
         "kind": "mutation",
@@ -476,7 +476,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "query",
@@ -491,7 +491,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "mutation",
@@ -506,7 +506,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "required",
         "kind": "mutation",
@@ -520,7 +520,7 @@
           "scope": {
             "evaluation": "children"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "required",
         "kind": "mutation",
@@ -601,7 +601,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "query",
@@ -627,7 +627,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "query",
@@ -642,7 +642,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "query",
@@ -657,7 +657,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "query",
@@ -672,7 +672,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "query",
@@ -687,7 +687,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "mutation",
@@ -702,7 +702,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "required",
         "kind": "mutation",
@@ -717,7 +717,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "query",
@@ -732,7 +732,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "mutation",
@@ -747,7 +747,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "query",
@@ -762,7 +762,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "query",
@@ -777,7 +777,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "query",
@@ -792,7 +792,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "not-required",
         "kind": "mutation",
@@ -807,7 +807,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "agentConfirmation": "required",
         "kind": "mutation",

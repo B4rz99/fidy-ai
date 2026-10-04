@@ -15,7 +15,7 @@ import {
   ValidationFailed,
   createdStatus,
 } from "~/shell/public-http/contract";
-import { operationPolicy, patScoped } from "~/shell/canonical-policy/contract";
+import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
 
 /** Canonical public path for Category discovery. */
 export const listCategoriesPath = "/categories";
@@ -52,19 +52,19 @@ const retainedKeywordRuleParams = (): Schema.Struct<{ readonly id: typeof Keywor
   Schema.Struct({ id: KeywordRuleId });
 
 const read = operationPolicy({
-  access: patScoped("read"),
+  access: userOwnedAgentScoped("read"),
   requiredTier: "free",
   agentConfirmation: "not-required",
   kind: "query",
 });
 const additiveWrite = operationPolicy({
-  access: patScoped("write"),
+  access: userOwnedAgentScoped("write"),
   requiredTier: "free",
   agentConfirmation: "not-required",
   kind: "mutation",
 });
 const destructiveWrite = operationPolicy({
-  access: patScoped("write"),
+  access: userOwnedAgentScoped("write"),
   requiredTier: "free",
   agentConfirmation: "required",
   kind: "mutation",
@@ -75,7 +75,7 @@ export const CategoriesGroup = HttpApiGroup.make("categories")
   .add(
     HttpApiEndpoint.get("listCategories", listCategoriesPath, {
       success: ListCategoriesResponse,
-      error: Unavailable,
+      error: [Unavailable, ValidationFailed],
     })
       .annotate(
         OpenApi.Description,

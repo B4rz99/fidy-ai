@@ -18,7 +18,7 @@ import {
   UpgradeDestination,
   maximumTransientPaymentTokenCharacters,
 } from "~/core/subscription/contract";
-import { operationPolicy, patScoped } from "~/shell/canonical-policy/contract";
+import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
 import { OperationResponse, Unavailable } from "~/shell/public-http/contract";
 
 const getUpgradeUrl = HttpApiEndpoint.get("getUpgradeUrl", "/subscription/upgrade-url", {
@@ -31,7 +31,7 @@ const getUpgradeUrl = HttpApiEndpoint.get("getUpgradeUrl", "/subscription/upgrad
   )
   .annotateMerge(
     operationPolicy({
-      access: patScoped("read"),
+      access: userOwnedAgentScoped("read"),
       requiredTier: "free",
       agentConfirmation: "not-required",
       kind: "query",
@@ -50,7 +50,7 @@ const listSubscriptionOffers = HttpApiEndpoint.get(
   )
   .annotateMerge(
     operationPolicy({
-      access: patScoped("read"),
+      access: userOwnedAgentScoped("read"),
       requiredTier: "free",
       agentConfirmation: "not-required",
       kind: "query",
@@ -67,7 +67,7 @@ const getSubscriptionStatus = HttpApiEndpoint.get("getSubscriptionStatus", "/sub
   )
   .annotateMerge(
     operationPolicy({
-      access: patScoped("read"),
+      access: userOwnedAgentScoped("read"),
       requiredTier: "free",
       agentConfirmation: "not-required",
       kind: "query",
@@ -262,7 +262,7 @@ export const paymentEnrollmentRateLimitedBody = { error: rateLimitedError } as c
 
 /** Live credential predicate composed into a Subscription read within the caller's atomic unit. */
 export type SubscriptionReadAuthority = Readonly<{
-  table: "pats" | "web_sessions";
+  table: "pats" | "web_sessions" | "oauth_access_credentials";
   predicate: string;
   bindings: ReadonlyArray<string | number | Uint8Array>;
 }>;

@@ -1,9 +1,13 @@
+import type { OAuthAuthority, OAuthCaller } from "../../src/shell/oauth-agents/contract";
+import { liveOAuthAuthority } from "../../src/shell/oauth-agents/operations";
 import type {
   CanonicalMutationPreparation,
   CanonicalMutationRefusal,
 } from "../canonical-operations/contract";
 import {
   type CanonicalRefusalDisposition,
+  type QueryAuthority,
+  type QueryCaller,
   type TransactionAuthority,
   TransactionBoundaryFailure,
   type TransactionCaller,
@@ -42,20 +46,24 @@ export const boundaryFailure = (cause: unknown): TransactionBoundaryFailure =>
   new TransactionBoundaryFailure({ cause });
 
 /** True when the caller is an authorized PAT rather than a WebSession. */
-export const isPATCaller = (subject: TransactionCaller): subject is AuthorizedPAT =>
-  "patId" in subject;
-/** The exact PAT capability a caller operates under; a WebSession carries none. */
-export const callerScope = (subject: TransactionCaller): Option.Option<CanonicalCapability> =>
-  isPATCaller(subject) ? subject.requiredScope : Option.none();
+export const isPATCaller = (subject: QueryCaller): subject is AuthorizedPAT => "patId" in subject;
+/** Distinguish OAuth authority without granting browser or PAT lifecycle privileges. */
+export const isOAuthCaller = (subject: QueryCaller): subject is OAuthCaller =>
+  "oauthConnectionId" in subject;
+/** The exact User-owned agent capability; a WebSession carries none. */
+export const callerScope = (subject: QueryCaller): Option.Option<CanonicalCapability> =>
+  isPATCaller(subject) || isOAuthCaller(subject) ? subject.requiredScope : Option.none();
 /** Restore the exact authority one canonical child is executed and audited under: a PAT scope. */
-export const childCaller = ({
+export const childCaller = <Caller extends QueryCaller>({
   subject,
   requiredScope,
 }: Readonly<{
-  subject: TransactionCaller;
+  subject: Caller;
   requiredScope: Option.Option<CanonicalCapability>;
-}>): TransactionCaller =>
-  isPATCaller(subject) && Option.isSome(requiredScope) ? { ...subject, requiredScope } : subject;
+}>): Caller =>
+  (isPATCaller(subject) || isOAuthCaller(subject)) && Option.isSome(requiredScope)
+    ? { ...subject, requiredScope }
+    : subject;
 export const transactionNow = (): number => Effect.runSync(Clock.currentTimeMillis);
 export const transactionId = (): string => newId();
 
@@ -432,8 +440,8 @@ export const unauthenticatedTransaction = (): Response =>
 export const refusedTransactionWork = ({
   db,
   subject,
-}: Readonly<{ db: D1Database; subject: TransactionCaller }>): Promise<Response> =>
-  isPATCaller(subject)
+}: Readonly<{ db: D1Database; subject: QueryCaller }>): Promise<Response> =>
+  isPATCaller(subject) || isOAuthCaller(subject)
     ? refusedPATWork({ db, userId: subject.userId })
     : Promise.resolve(unauthenticatedTransaction());
 
@@ -441,7 +449,7 @@ export const refusedTransactionWork = ({
 export const refusedCredentialResponse = ({
   db,
   subject,
-}: Readonly<{ db: D1Database; subject: TransactionCaller }>): Effect.Effect<Response> =>
+}: Readonly<{ db: D1Database; subject: QueryCaller }>): Effect.Effect<Response> =>
   Effect.tryPromise(() => refusedTransactionWork({ db, subject })).pipe(
     Effect.orElseSucceed(transactionUnavailable)
   );
@@ -450,15 +458,26 @@ export const refusedCredentialResponse = ({
 export const isPATAuthority = (authority: TransactionAuthority): authority is PATAuthority =>
   authority.table === "pats";
 /** Recheck bearer, lifetime, scope, and Consent for either Transaction caller inside a D1 unit. */
-export const callerAuthority = ({
+export function callerAuthority(
+  input: Readonly<{ subject: OAuthCaller; current: number }>
+): OAuthAuthority;
+export function callerAuthority(
+  input: Readonly<{ subject: TransactionCaller; current: number }>
+): TransactionAuthority;
+export function callerAuthority(
+  input: Readonly<{ subject: QueryCaller; current: number }>
+): QueryAuthority;
+export function callerAuthority({
   subject,
   current,
-}: Readonly<{ subject: TransactionCaller; current: number }>): TransactionAuthority =>
-  isPATCaller(subject)
+}: Readonly<{ subject: QueryCaller; current: number }>): QueryAuthority {
+  if (isOAuthCaller(subject)) return liveOAuthAuthority({ subject, current });
+  return isPATCaller(subject)
     ? livePATAuthority({ subject, current })
     : liveWebSessionAuthority({ subject, current });
+}
 
-const authorityExists = (db: D1Database, authority: TransactionAuthority): Promise<boolean> =>
+const authorityExists = (db: D1Database, authority: QueryAuthority): Promise<boolean> =>
   db
     .prepare(`SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}`)
     .bind(...authority.bindings)
@@ -472,14 +491,14 @@ export const liveTransactionCredential = ({
   current,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: QueryCaller;
   current: number;
 }>): Promise<boolean> =>
   authorityExists(
     db,
     isPATCaller(subject)
       ? livePATCredential({ subject, current })
-      : liveWebSessionAuthority({ subject, current })
+      : callerAuthority({ subject, current })
   );
 
 /** True while the caller's authority for the exact scope it presented is still live. */
@@ -489,7 +508,7 @@ export const liveTransactionAuthority = ({
   current,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: QueryCaller;
   current: number;
 }>): Promise<boolean> => authorityExists(db, callerAuthority({ subject, current }));
 
@@ -497,6 +516,8 @@ export type {
   CanonicalRefusalDisposition,
   TransactionSubject,
   TransactionCaller,
+  QueryCaller,
+  QueryAuthority,
   TransactionMutationOperation,
   TransactionRefusal,
   TransactionAuthority,

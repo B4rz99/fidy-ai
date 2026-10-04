@@ -9,7 +9,11 @@ import {
   freePatCaller,
   suggestOperation,
 } from "./operations";
-import { patScopeCapability, patScoped, webOrHosted } from "~/shell/canonical-policy/contract";
+import {
+  userOwnedAgentCapability,
+  userOwnedAgentScoped,
+  webOrHosted,
+} from "~/shell/canonical-policy/contract";
 import { SuggestedOperation } from "~/shell/public-http/contract";
 
 const allCapabilities = ["read", "write", "dashboard"] as const;
@@ -44,7 +48,7 @@ it("publishes one partial-input OpenAPI member per PAT-callable canonical operat
 
   expect(publishedTools.sort()).toEqual(
     operationCatalog.operations
-      .filter((operation) => Option.isSome(patScopeCapability(operation.policy.access)))
+      .filter((operation) => Option.isSome(userOwnedAgentCapability(operation.policy.access)))
       .map((operation) => operation.id)
       .sort()
   );
@@ -216,7 +220,7 @@ it("hides non-PAT operations from PAT suggestions while allowing an eligible web
 
 it("keeps Pro operations out of free responses", () => {
   const policy = {
-    access: patScoped("read"),
+    access: userOwnedAgentScoped("read"),
     requiredTier: "pro",
     agentConfirmation: "not-required",
     kind: "query",

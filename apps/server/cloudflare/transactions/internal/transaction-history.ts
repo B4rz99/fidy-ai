@@ -3,6 +3,7 @@ import {
   prepareAuditQueryCall,
   prepareAuthorizedAuditCall,
   recordCanonicalPATWork,
+  recordOAuthCall,
   refusedByAuditBudget,
 } from "../../../src/shell/audit/operations";
 import { nextTransactionPage } from "../../../src/shell/transactions/operations";
@@ -18,14 +19,16 @@ import {
 } from "../../../src/core/transactions/contract";
 import { Currency } from "../../../src/core/_shared/money";
 import { effectiveTransactionRelation } from "./effective-transaction";
-import { DateTime, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
 import type { AuthorizedPAT } from "../../tokens/contract";
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import { prepareOwnedStatement } from "../../database/operations";
 import {
-  type TransactionAuthority,
-  type TransactionCaller,
+  type QueryAuthority,
+  type QueryCaller,
   type TransactionSubject,
+  callerAuthority,
+  isOAuthCaller,
   isPATCaller,
   missingTransactionMessage,
   transactionNoStore as noStore,
@@ -88,7 +91,7 @@ const rateLimited = (): Response => failure("rate_limited", HTTP_RATE_LIMITED);
 const noSession = (): Response => failure("unauthenticated", HTTP_UNAUTHENTICATED);
 const failedAudit = (error: unknown): Response =>
   refusedByAuditBudget(error) ? rateLimited() : unavailable();
-type Subject = TransactionCaller;
+type Subject = QueryCaller;
 type Selection = Readonly<{ request: Request; subject: Subject }> &
   (
     | Readonly<{ search: true; id: Option.Option<never> }>
@@ -173,7 +176,7 @@ const parseQuery = (
   return Option.filter(decoded, (query) => validDecodedQuery(query, search));
 };
 
-type AuthorityCondition = Pick<TransactionAuthority, "table" | "predicate" | "bindings">;
+type AuthorityCondition = Pick<QueryAuthority, "table" | "predicate" | "bindings">;
 type HistoryRow = Readonly<{
   db: D1Database;
   userId: string;
@@ -542,6 +545,49 @@ const presentPATHistory = (
   return Promise.resolve(rows === undefined ? unavailable() : presentHistory(rows, selection));
 };
 
+const readOAuthHistory = ({
+  db,
+  selection,
+  query,
+  current,
+}: Readonly<{
+  db: D1Database;
+  selection: Selection;
+  query: Option.Option<typeof Query.Type>;
+  current: number;
+}>): Promise<Response> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      if (!isOAuthCaller(selection.subject)) return unavailable();
+      const authority = callerAuthority({ subject: selection.subject, current });
+      const results = yield* Effect.tryPromise(() =>
+        db.batch([
+          ...(Option.isSome(query)
+            ? [historyStatement({ db, selection, query: query.value, authority })]
+            : []),
+          prepareOwnedStatement({
+            db,
+            statement: recordOAuthCall({
+              authority,
+              id: uuid(),
+              current,
+              operation: historyOperation(selection),
+              outcome: Option.isSome(query) ? "accepted" : "rejected",
+            }),
+          }),
+        ])
+      );
+      if (results.at(-1)?.meta.changes !== 1) {
+        return yield* Effect.tryPromise(() =>
+          refusedPATWork({ db, userId: selection.subject.userId })
+        );
+      }
+      if (Option.isNone(query)) return invalid();
+      const rows = results[0];
+      return rows === undefined ? unavailable() : presentHistory(rows, selection);
+    })
+  );
+
 const readAuthorizedHistory = (
   db: D1Database,
   input: Readonly<{
@@ -552,6 +598,7 @@ const readAuthorizedHistory = (
 ): Promise<Response> => {
   const { selection, query, current } = input;
   const { subject } = selection;
+  if (isOAuthCaller(subject)) return readOAuthHistory({ db, selection, query, current });
   if (isPATCaller(subject)) {
     const patSelection = { ...selection, subject };
     return db
@@ -584,7 +631,7 @@ export const browseTransactions = ({
   const query = parseQuery(selection);
   const current = now();
   const { subject } = selection;
-  if (Option.isNone(query) && !isPATCaller(subject)) {
+  if (Option.isNone(query) && !isPATCaller(subject) && !isOAuthCaller(subject)) {
     return invalidQueryAudit(db, { ...selection, subject }, current);
   }
   return dailyAuditExhausted({ db, userId: subject.userId, current })

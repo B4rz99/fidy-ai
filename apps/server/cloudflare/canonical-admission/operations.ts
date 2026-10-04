@@ -4,7 +4,7 @@ import { UserActionRequired } from "../../src/shell/public-http/contract";
 import type { CatalogOperation } from "../../src/shell/canonical-catalog/contract";
 import type { AuditAuthority } from "../../src/shell/audit/contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
-import { patScopeCapability } from "../../src/shell/canonical-policy/contract";
+import { userOwnedAgentCapability } from "../../src/shell/canonical-policy/contract";
 import type { CanonicalCapability } from "../../src/core/canonical-operations/contract";
 import {
   livePATCredential,
@@ -421,7 +421,7 @@ const primaryScopeFailure = <E, R>(
   input: RequestCall<E, R>
 ): Effect.Effect<Option.Option<Response>, CanonicalAdmissionUnavailable> => {
   if (input.operation.id === "operations.executeAtomicBatch") return Effect.succeedNone;
-  const scope = patScopeCapability(input.operation.policy.access);
+  const scope = userOwnedAgentCapability(input.operation.policy.access);
   return checkScopes({ ...input, scopes: Option.isSome(scope) ? [scope.value] : [] });
 };
 

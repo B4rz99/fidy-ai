@@ -9,7 +9,7 @@ import {
   Unavailable,
   createdStatus,
 } from "~/shell/public-http/contract";
-import { operationPolicy, patScoped } from "~/shell/canonical-policy/contract";
+import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
 /** Declared content-free failure when a Memory write would exceed aggregate capacity. */
 export class MemoryCapacityExceededApi extends Schema.Error<MemoryCapacityExceededApi>(
   "MemoryCapacityExceededApi"
@@ -30,19 +30,19 @@ export class MemoryCapacityExceededApi extends Schema.Error<MemoryCapacityExceed
 }
 
 const rememberPolicy = operationPolicy({
-  access: patScoped("write"),
+  access: userOwnedAgentScoped("write"),
   requiredTier: "free",
   agentConfirmation: "not-required",
   kind: "mutation",
 });
 const destructiveWritePolicy = operationPolicy({
-  access: patScoped("write"),
+  access: userOwnedAgentScoped("write"),
   requiredTier: "free",
   agentConfirmation: "required",
   kind: "mutation",
 });
 const recallPolicy = operationPolicy({
-  access: patScoped("read"),
+  access: userOwnedAgentScoped("read"),
   requiredTier: "free",
   agentConfirmation: "not-required",
   kind: "query",

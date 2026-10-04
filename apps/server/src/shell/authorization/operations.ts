@@ -3,8 +3,8 @@ import type { OperationAccessCaller } from "~/shell/canonical-policy/contract";
 
 /** Projects attributable authority into the identity-free facts consumed by access policy. */
 export const toAccessCaller = (caller: CanonicalCaller): OperationAccessCaller => {
-  if (caller.auditCaller._tag === "PAT") {
-    return { _tag: "PAT", capabilities: caller.capabilities };
+  if (caller.auditCaller._tag === "PAT" || caller.auditCaller._tag === "OAuthAgent") {
+    return { _tag: caller.auditCaller._tag, capabilities: caller.capabilities };
   }
   if ("fresh" in caller) {
     return { _tag: "WebSession", fresh: caller.fresh };

@@ -36,7 +36,14 @@ const SignedInNavigation = ({ onLogout }: { readonly onLogout: () => void }): JS
       Correo
     </Button>
     <Button className="justify-start" render={<Link to="/settings/pats" />} variant="ghost">
-      Tokens
+      Tokens personales (PAT)
+    </Button>
+    <Button
+      className="justify-start"
+      render={<Link to="/settings/agents" search={{}} />}
+      variant="ghost"
+    >
+      Agentes conectados
     </Button>
     <Button className="justify-start" render={<Link to="/settings/recovery" />} variant="ghost">
       Recuperación

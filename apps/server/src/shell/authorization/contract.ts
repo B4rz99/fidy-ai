@@ -10,10 +10,12 @@ import type { UserId } from "~/core/identity/contract";
 import { TokenBearerFormat } from "~/core/tokens/contract";
 import {
   ConsentRequired,
+  PaywallRequired,
   QuotaExhausted,
   ResourceLimited,
   ScopeMissing,
   Unauthenticated,
+  Unavailable,
   UserActionRequired,
 } from "~/shell/public-http/contract";
 import type { CanonicalAuthorityRoot } from "~/shell/canonical-policy/contract";
@@ -22,12 +24,13 @@ import type { CanonicalAuthorityRoot } from "~/shell/canonical-policy/contract";
 export const webSessionCookieName = "__Host-fidy_session";
 
 type HostedAuditCaller = Extract<AuditCaller, { readonly _tag: "HostedAgentSession" }>;
+type OAuthAuditCaller = Extract<AuditCaller, { readonly _tag: "OAuthAgent" }>;
 type PatAuditCaller = Extract<AuditCaller, { readonly _tag: "PAT" }>;
 type WebSessionAuditCaller = Extract<AuditCaller, { readonly _tag: "WebSession" }>;
 type CanonicalAuthority =
   | Readonly<{ auditCaller: HostedAuditCaller; authorityRoot: CanonicalAuthorityRoot }>
   | Readonly<{
-      auditCaller: PatAuditCaller;
+      auditCaller: PatAuditCaller | OAuthAuditCaller;
       authorityRoot: "no-verified-whatsapp-authority";
     }>
   | Readonly<{
@@ -106,7 +109,9 @@ export class TokenAuthorization extends HttpApiMiddleware.Service<
     ConsentRequired,
     UserActionRequired,
     ScopeMissing,
+    PaywallRequired,
     QuotaExhausted,
     ResourceLimited,
+    Unavailable,
   ],
 }) {}

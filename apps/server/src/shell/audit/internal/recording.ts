@@ -94,6 +94,23 @@ export const ownerCallStatement = (input: OwnerAuditCall): OwnedStatement => {
 /** Builds the found/absent metadata decision inside the query's live credential snapshot. */
 export const queryCallStatement = ({ missingWhen, ...input }: AuditQueryCall): OwnedStatement => {
   const { authority, id, operation, current } = input;
+  if (authority.table === "oauth_access_credentials") {
+    return {
+      sql: `INSERT INTO pat_audit (id,user_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms)
+        SELECT ?,?,?,?,?,CASE WHEN EXISTS (${missingWhen.sql}) THEN 'rejected' ELSE 'accepted' END,?
+        FROM ${authority.table} WHERE ${authority.predicate}`,
+      params: [
+        id,
+        authority.attribution.userId,
+        authority.attribution.connectionId,
+        authority.attribution.credentialId,
+        operation,
+        ...missingWhen.params,
+        current,
+        ...authority.bindings,
+      ],
+    };
+  }
   const pat = authorityCaller(authority);
   const table = destination(operation, pat);
   const credential = credentialColumn(table, pat);
@@ -128,6 +145,22 @@ export const replayAccessStatement = ({
 /** Builds evidence under the exact credential gate held by the coordinator. */
 export const authorizedCallStatement = (input: AuthorizedAuditCall): OwnedStatement => {
   const { authority, id, operation, outcome, current, afterOwnerWrite } = input;
+  if (authority.table === "oauth_access_credentials") {
+    return {
+      sql: `INSERT INTO pat_audit (id,user_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms)
+        SELECT ?,?,?,?,?,?,? FROM ${authority.table} WHERE ${authority.predicate} ${commitGuard(afterOwnerWrite)}`,
+      params: [
+        id,
+        authority.attribution.userId,
+        authority.attribution.connectionId,
+        authority.attribution.credentialId,
+        operation,
+        outcome === "accepted" || outcome === "success" ? "accepted" : "rejected",
+        current,
+        ...authority.bindings,
+      ],
+    };
+  }
   const pat = authorityCaller(authority);
   const table = destination(operation, pat);
   const credential = credentialColumn(table, pat);

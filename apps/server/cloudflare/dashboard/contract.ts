@@ -4,7 +4,7 @@ import type {
   DashboardGroup,
   InitializeDashboardCanonicalInput,
 } from "../../src/shell/dashboard/contract";
-import type { TransactionCaller } from "../canonical-work/contract";
+import type { QueryCaller, TransactionCaller } from "../canonical-work/contract";
 
 /** Canonical operation names derived from Dashboard's one published declaration. */
 export type DashboardOperation = `dashboard.${keyof typeof DashboardGroup.endpoints}`;
@@ -33,13 +33,13 @@ export type DashboardMutationCall = {
  */
 export type DashboardRequest = Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
   request: Request;
 }> &
   (
-    | Readonly<{ operation: DashboardQueryOperation }>
+    | Readonly<{ operation: DashboardQueryOperation; subject: QueryCaller }>
     | Readonly<{
         operation: DashboardMutationOperation;
+        subject: TransactionCaller;
         runMutation: (call: DashboardMutationCall) => Effect.Effect<Response>;
       }>
   );

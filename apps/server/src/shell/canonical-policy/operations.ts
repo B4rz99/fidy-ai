@@ -7,9 +7,11 @@ import type {
   OperationAccessDecision,
   OperationAccessDenial,
   OperationPolicyValue,
-  PATScopeCheck,
+  UserOwnedAgentScopeCheck,
 } from "./contract";
 
+const isUserAgent = (caller: OperationAccessCaller): boolean =>
+  caller._tag === "PAT" || caller._tag === "OAuthAgent";
 const allowed: OperationAccessDecision = { _tag: "Allowed" };
 const denied = (reason: OperationAccessDenial): OperationAccessDecision => ({
   _tag: "Denied",
@@ -20,22 +22,22 @@ const decidePatCapability = (
   capability: CanonicalCapability,
   capabilities: ReadonlyArray<CanonicalCapability>
 ): OperationAccessDecision =>
-  capabilities.includes(capability) ? allowed : denied("pat_scope_missing");
+  capabilities.includes(capability) ? allowed : denied("user_owned_agent_scope_missing");
 
-const decidePATScope = (
-  scope: PATScopeCheck,
+const decideAgentScope = (
+  scope: UserOwnedAgentScopeCheck,
   capabilities: ReadonlyArray<CanonicalCapability>
 ): OperationAccessDecision => {
   if (scope._tag === "Children") return allowed;
   return decidePatCapability(scope.capability, capabilities);
 };
 
-const decidePATScoped = (
-  requirement: Extract<OperationAccess, { readonly _tag: "PATScoped" }>,
+const decideUserOwnedAgentScoped = (
+  requirement: Extract<OperationAccess, { readonly _tag: "UserOwnedAgentScoped" }>,
   caller: OperationAccessCaller
 ): OperationAccessDecision => {
-  if (caller._tag !== "PAT") return allowed;
-  return decidePATScope(requirement.scope, caller.capabilities);
+  if (caller._tag !== "PAT" && caller._tag !== "OAuthAgent") return allowed;
+  return decideAgentScope(requirement.scope, caller.capabilities);
 };
 
 const decideFreshWebSession = (caller: OperationAccessCaller): OperationAccessDecision => {
@@ -57,12 +59,12 @@ export const decideOperationAccess: {
   (self: OperationAccess, caller: OperationAccessCaller): OperationAccessDecision;
 } = Function.dual(2, (requirement: OperationAccess, caller: OperationAccessCaller) => {
   switch (requirement._tag) {
-    case "PATScoped":
-      return decidePATScoped(requirement, caller);
+    case "UserOwnedAgentScoped":
+      return decideUserOwnedAgentScoped(requirement, caller);
     case "FreshWebSessionOnly":
       return decideFreshWebSession(caller);
     case "WebOrHosted":
-      return caller._tag === "PAT" ? denied("caller_ineligible") : allowed;
+      return isUserAgent(caller) ? denied("caller_ineligible") : allowed;
     case "VerifiedWhatsAppHostedOnly":
       return decideVerifiedWhatsAppHosted(caller);
     case "FreshWebOrVerifiedWhatsAppHosted":
@@ -85,7 +87,7 @@ export const isHostedVisible: {
 /** Whether a successful hosted tool call completes the Turn without another model round. */
 export const completesHostedTurn = (policy: OperationPolicyValue): boolean => {
   if (policy.kind !== "mutation") return false;
-  if (policy.access._tag === "PATScoped") {
+  if (policy.access._tag === "UserOwnedAgentScoped") {
     return policy.access.scope._tag === "Operation" && policy.access.scope.capability === "write";
   }
   return policy.access._tag !== "FreshWebSessionOnly";

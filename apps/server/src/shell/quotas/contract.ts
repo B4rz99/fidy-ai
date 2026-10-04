@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import { QuotaStatus } from "~/core/quotas/contract";
-import { operationPolicy, patScoped } from "~/shell/canonical-policy/contract";
+import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
 import { OperationResponse, Unavailable } from "~/shell/public-http/contract";
 
 /** Canonical response protocol names; never interpret security-rate headers as a commercial meter. */
@@ -52,7 +52,7 @@ export const QuotasGroup = HttpApiGroup.make("quota").add(
     )
     .annotateMerge(
       operationPolicy({
-        access: patScoped("read"),
+        access: userOwnedAgentScoped("read"),
         requiredTier: "free",
         agentConfirmation: "not-required",
         kind: "query",

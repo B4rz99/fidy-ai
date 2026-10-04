@@ -3,13 +3,13 @@ import {
   recordedPATCallProof,
   refusedByAuditBudget,
 } from "../../src/shell/audit/operations";
-import { liveWebSessionAuthority } from "../../src/shell/identity/operations";
 import {
   livePATAuthority,
   recordAuditedPATUseFromAuthority,
 } from "../../src/shell/tokens/operations";
 import {
-  type TransactionCaller,
+  type QueryCaller,
+  callerAuthority,
   isPATCaller,
   rateLimitedTransactionResponse,
 } from "../canonical-work/operations";
@@ -206,12 +206,10 @@ const unavailable = (): Response =>
 export const executeProtectedQuotaQuery = ({
   db,
   subject,
-}: Readonly<{ db: D1Database; subject: TransactionCaller }>): Effect.Effect<Response> =>
+}: Readonly<{ db: D1Database; subject: QueryCaller }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
-    const authority = isPATCaller(subject)
-      ? livePATAuthority({ subject, current })
-      : liveWebSessionAuthority({ subject, current });
+    const authority = callerAuthority({ subject, current });
     const auditId = newId();
     const rows = yield* Effect.tryPromise(() =>
       db.batch([

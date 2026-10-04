@@ -1,3 +1,5 @@
+import { oauthPaths } from "../../../src/shell/oauth-agents/contract";
+import { handleOAuthRequest } from "../../oauth-agents/runtime";
 import { type MemoryOperationId, memoryOperationIds } from "../../../src/shell/memory/contract";
 
 import {
@@ -1423,6 +1425,14 @@ const reservedCoreResponse = (
     return Option.some(Effect.succeed(jsonResponse('{"status":"not_found"}', HTTP_NOT_FOUND)));
   }
   if (path === smokePath) return Option.some(smokeResponse(request, environment));
+  if (refundSupportRoute(path)) {
+    return Option.some(
+      Effect.tryPromise({
+        try: () => handleRefundSupport({ request, environment }),
+        catch: () => undefined,
+      }).pipe(Effect.orElseSucceed(unavailable))
+    );
+  }
   return Option.none();
 };
 
@@ -1433,16 +1443,18 @@ export const executeCoreHttp = ({
   publish,
 }: RequestExecution): Effect.Effect<Response> => {
   const url = new URL(request.url);
+  if (Object.values(oauthPaths).some((path) => path === url.pathname)) {
+    return handleOAuthRequest({
+      request,
+      db: environment.DB,
+      browserOrigin: environment.BROWSER_ORIGIN,
+      coordinator: environment.USER_TRANSACTION_COORDINATOR,
+    });
+  }
   const reserved = reservedCoreResponse(request, environment, url.pathname);
   if (Option.isSome(reserved)) return reserved.value;
   if (["/providers/kapso/callback", "/providers/wompi/billing-events"].includes(url.pathname)) {
     return providerCallbackEffect(request, environment, publish);
-  }
-  if (refundSupportRoute(url.pathname)) {
-    return Effect.tryPromise({
-      try: () => handleRefundSupport({ request, environment }),
-      catch: () => undefined,
-    }).pipe(Effect.orElseSucceed(unavailable));
   }
   if (enrollmentCorePath(url.pathname)) {
     return Effect.tryPromise({

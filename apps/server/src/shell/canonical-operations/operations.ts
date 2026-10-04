@@ -26,6 +26,12 @@ import {
   type SuggestedOperation as SuggestedOperationValue,
 } from "~/shell/public-http/contract";
 
+import { responseSuggestions } from "~/shell/canonical-operations/internal/response-suggestions";
+
+/** Apply caller-policy continuation privacy throughout an encoded canonical response without projecting away domain data. */
+export const checkpointResponseSuggestions: typeof responseSuggestions = (input) =>
+  responseSuggestions(input);
+
 type CandidateArgs<Id extends OperationId> = keyof CanonicalInput<Id> extends never
   ? Record<never, never>
   : { readonly args: Option.Option<PartialInput<CanonicalInput<Id>>> };

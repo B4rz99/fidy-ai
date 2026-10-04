@@ -29,7 +29,7 @@ import {
   OperationResponse,
   ValidationFailed,
 } from "~/shell/public-http/contract";
-import { operationPolicy, patScoped } from "~/shell/canonical-policy/contract";
+import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
 
 const SpendingChartResult = Schema.Struct({
   appliedPeriod: AppliedDashboardPeriod,
@@ -161,7 +161,7 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
       )
       .annotateMerge(
         operationPolicy({
-          access: patScoped("dashboard"),
+          access: userOwnedAgentScoped("dashboard"),
           requiredTier: "free",
           agentConfirmation: "not-required",
           kind: "mutation",
@@ -180,7 +180,7 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
       )
       .annotateMerge(
         operationPolicy({
-          access: patScoped("read"),
+          access: userOwnedAgentScoped("read"),
           requiredTier: "free",
           agentConfirmation: "not-required",
           kind: "query",
@@ -199,7 +199,7 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
       )
       .annotateMerge(
         operationPolicy({
-          access: patScoped("read"),
+          access: userOwnedAgentScoped("read"),
           requiredTier: "free",
           agentConfirmation: "not-required",
           kind: "query",
@@ -218,7 +218,7 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
       )
       .annotateMerge(
         operationPolicy({
-          access: patScoped("read"),
+          access: userOwnedAgentScoped("read"),
           requiredTier: "free",
           agentConfirmation: "not-required",
           kind: "query",
@@ -238,7 +238,7 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
       )
       .annotateMerge(
         operationPolicy({
-          access: patScoped("dashboard"),
+          access: userOwnedAgentScoped("dashboard"),
           requiredTier: "free",
           agentConfirmation: "required",
           kind: "mutation",

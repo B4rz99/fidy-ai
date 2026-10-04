@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import { RecurringSeriesPage } from "~/core/recurring/contract";
-import { operationPolicy, patScoped } from "~/shell/canonical-policy/contract";
+import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
 import { OperationResponse, ValidationFailed } from "~/shell/public-http/contract";
 
 const maximumCursorLength = 1024;
@@ -20,7 +20,7 @@ export const RecurringGroup = HttpApiGroup.make("recurring").add(
     )
     .annotateMerge(
       operationPolicy({
-        access: patScoped("read"),
+        access: userOwnedAgentScoped("read"),
         requiredTier: "free",
         agentConfirmation: "not-required",
         kind: "query",

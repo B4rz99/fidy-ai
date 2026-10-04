@@ -5,8 +5,8 @@ import {
   type CatalogOperation,
   getBoundOperationCatalog,
 } from "~/shell/canonical-catalog/contract";
+import { userOwnedAgentCapability } from "~/shell/canonical-policy/contract";
 import { AllowanceKind } from "~/core/quotas/contract";
-import { patScopeCapability } from "~/shell/canonical-policy/contract";
 
 const englishSentenceSegmenter = new Intl.Segmenter("en", {
   granularity: "sentence",
@@ -77,7 +77,9 @@ const suggestedOperationMember = (
  */
 export const SuggestedOperation = Schema.suspend(() => {
   const members = getBoundOperationCatalog()
-    .operations.filter((operation) => Option.isSome(patScopeCapability(operation.policy.access)))
+    .operations.filter((operation) =>
+      Option.isSome(userOwnedAgentCapability(operation.policy.access))
+    )
     .map(suggestedOperationMember);
   if (!Arr.isReadonlyArrayNonEmpty(members)) {
     throw new Error("SuggestedOperation requires at least one canonical operation");
@@ -353,13 +355,29 @@ export class NotFound extends Schema.Error<NotFound>(notFoundTag)(
 
 /** The caller's stable-User request or write admission budget is exhausted. No domain write was accepted. */
 export class ResourceLimited extends Schema.Error<ResourceLimited>(resourceLimitedTag)(
-  errorResponse(resourceLimitedTag, detail("rate_limited")),
+  errorResponse(
+    resourceLimitedTag,
+    Schema.Struct({
+      ...detail("rate_limited").fields,
+      retryAfterSeconds: Schema.optionalKey(
+        CanonicalRetryAfterBody.fields.error.fields.retryAfterSeconds
+      ),
+    })
+  ),
   { httpApiStatus: 429 }
 ) {}
 
 /** A required private dependency could not complete the canonical operation. */
 export class Unavailable extends Schema.Error<Unavailable>(unavailableTag)(
-  errorResponse(unavailableTag, detail("unavailable")),
+  errorResponse(
+    unavailableTag,
+    Schema.Struct({
+      ...detail("unavailable").fields,
+      retryAfterSeconds: Schema.optionalKey(
+        CanonicalRetryAfterBody.fields.error.fields.retryAfterSeconds
+      ),
+    })
+  ),
   { httpApiStatus: 503 }
 ) {}
 

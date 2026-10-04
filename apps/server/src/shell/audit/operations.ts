@@ -1,5 +1,8 @@
+import type { CanonicalOperationId } from "~/core/canonical-operations/contract";
+import type { OAuthAuthority } from "~/shell/oauth-agents/contract";
 import type { OwnedStatement } from "~/shell/owner-write/contract";
 import {
+  type AuditCredentialOperation,
   type AuditQueryCall,
   AuditUnavailable,
   type AuthorizedAuditCall,
@@ -24,10 +27,36 @@ import {
   dailyAuditCount as countDailyCalls,
 } from "~/shell/audit/internal/daily-budget";
 
+import { recentOAuthActivity } from "~/shell/audit/internal/oauth-activity";
 import * as patEvidence from "~/shell/audit/internal/pat-evidence";
 
 export { dailyAuditBudget, utcDayMilliseconds } from "./contract";
 
+/** Reads at most three attributable canonical outcomes under the caller's same-User live browser guard. Unreadable or malformed evidence is unavailable, not empty activity. */
+export const readOAuthActivity: typeof recentOAuthActivity = (input) => recentOAuthActivity(input);
+/** Append canonical metadata under the exact OAuth-owned live authority in the same protected query unit. */
+export const recordOAuthCall = (
+  input: Readonly<{
+    id: string;
+    authority: OAuthAuthority;
+    operation: AuditCredentialOperation | CanonicalOperationId;
+    current: number;
+    outcome: "accepted" | "rejected";
+  }>
+): OwnedStatement => ({
+  sql: `INSERT INTO pat_audit (id,user_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms)
+    SELECT ?,?,?,?,?,?,? FROM ${input.authority.table} WHERE ${input.authority.predicate}`,
+  params: [
+    input.id,
+    input.authority.attribution.userId,
+    input.authority.attribution.connectionId,
+    input.authority.attribution.credentialId,
+    input.operation,
+    input.outcome,
+    input.current,
+    ...input.authority.bindings,
+  ],
+});
 /**
  * Records approved call metadata only while the supplied User-owned credential is live.
  * Commit the returned statement in the canonical unit, after the owner write when

@@ -5157,6 +5157,10 @@
                 "minLength": 1,
                 "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
+              },
+              "retryAfterSeconds": {
+                "exclusiveMinimum": 0,
+                "type": "integer"
               }
             },
             "required": [
@@ -8549,6 +8553,10 @@
                 "minLength": 1,
                 "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
+              },
+              "retryAfterSeconds": {
+                "exclusiveMinimum": 0,
+                "type": "integer"
               }
             },
             "required": [
@@ -10707,6 +10715,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -10746,6 +10764,16 @@
               }
             },
             "description": "BrowserLoginPairingApprovalRateLimited | QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -10841,6 +10869,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -10877,6 +10915,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -10895,7 +10943,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "query",
@@ -10954,6 +11002,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -10990,6 +11048,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -11008,7 +11076,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "query",
@@ -11059,6 +11127,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -11105,6 +11183,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -11123,7 +11211,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "mutation",
@@ -11175,6 +11263,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -11221,6 +11319,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -11239,7 +11347,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "required",
         "x-fidy-operation-kind": "mutation",
@@ -11302,6 +11410,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -11348,6 +11466,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -11366,7 +11494,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "query",
@@ -11426,6 +11554,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -11472,6 +11610,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -11490,7 +11638,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "required",
         "x-fidy-operation-kind": "mutation",
@@ -11548,6 +11696,16 @@
               }
             },
             "description": "Unauthenticated"
+          },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
           },
           "403": {
             "content": {
@@ -11613,7 +11771,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "query",
@@ -11672,6 +11830,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -11708,6 +11876,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -11726,7 +11904,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "query",
@@ -11777,6 +11955,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -11823,6 +12011,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -11841,7 +12039,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "mutation",
@@ -11893,6 +12091,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -11939,6 +12147,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -11957,7 +12175,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "required",
         "x-fidy-operation-kind": "mutation",
@@ -12017,6 +12235,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -12063,6 +12291,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -12081,7 +12319,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "required",
         "x-fidy-operation-kind": "mutation",
@@ -12137,6 +12375,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -12183,6 +12431,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -12201,7 +12459,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "query",
@@ -12273,6 +12531,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -12309,6 +12577,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -12327,7 +12605,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "query",
@@ -12380,6 +12658,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -12426,6 +12714,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -12444,7 +12742,7 @@
             "capability": "dashboard",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "required",
         "x-fidy-operation-kind": "mutation",
@@ -12487,6 +12785,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -12523,6 +12831,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -12541,7 +12859,7 @@
             "capability": "dashboard",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "mutation",
@@ -12597,6 +12915,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -12643,6 +12971,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -12661,7 +12999,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "query",
@@ -12727,6 +13065,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -12763,6 +13111,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -12833,6 +13191,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -12869,6 +13237,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -12887,7 +13265,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "query",
@@ -12928,6 +13306,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -12964,6 +13352,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -12982,7 +13380,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "mutation",
@@ -13060,6 +13458,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -13096,6 +13504,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -13114,7 +13532,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "query",
@@ -13176,6 +13594,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -13222,6 +13650,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -13240,7 +13678,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "required",
         "x-fidy-operation-kind": "mutation",
@@ -13339,6 +13777,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -13357,7 +13805,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "mutation",
@@ -13422,6 +13870,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -13468,6 +13926,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -13486,7 +13954,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "query",
@@ -13548,6 +14016,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -13594,6 +14072,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -13612,7 +14100,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "required",
         "x-fidy-operation-kind": "mutation",
@@ -13664,6 +14152,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -13710,6 +14208,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -13728,7 +14236,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "required",
         "x-fidy-operation-kind": "mutation",
@@ -13780,6 +14288,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -13826,6 +14344,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -13844,7 +14372,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "required",
         "x-fidy-operation-kind": "mutation",
@@ -13919,6 +14447,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -13955,6 +14493,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -13973,7 +14521,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "query",
@@ -14028,6 +14576,16 @@
               }
             },
             "description": "Unauthenticated"
+          },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
           },
           "403": {
             "content": {
@@ -14093,7 +14651,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "query",
@@ -14143,6 +14701,16 @@
               }
             },
             "description": "Unauthenticated"
+          },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
           },
           "403": {
             "content": {
@@ -14218,7 +14786,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "mutation",
@@ -14269,6 +14837,16 @@
               }
             },
             "description": "Unauthenticated"
+          },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
           },
           "403": {
             "content": {
@@ -14344,7 +14922,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "required",
         "x-fidy-operation-kind": "mutation",
@@ -14404,6 +14982,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -14488,7 +15076,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "required",
         "x-fidy-operation-kind": "mutation",
@@ -14599,6 +15187,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -14635,6 +15233,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -14652,7 +15260,7 @@
           "scope": {
             "evaluation": "children"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "required",
         "x-fidy-operation-kind": "mutation",
@@ -14708,6 +15316,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -14744,6 +15362,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -14811,6 +15439,16 @@
               }
             },
             "description": "Unauthenticated"
+          },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
           },
           "403": {
             "content": {
@@ -14923,6 +15561,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -14982,6 +15630,16 @@
               }
             },
             "description": "ManualPATIssuanceRateLimited | QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -15061,6 +15719,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -15107,6 +15775,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -15181,6 +15859,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -15220,6 +15908,16 @@
               }
             },
             "description": "ManualPATIssuanceRateLimited | QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -15294,6 +15992,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -15333,6 +16041,16 @@
               }
             },
             "description": "PATPairingReviewRateLimited | QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -15428,6 +16146,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -15492,7 +16220,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "query",
@@ -15548,6 +16276,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -15584,6 +16322,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -15664,6 +16412,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -15700,6 +16458,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -15718,7 +16486,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "query",
@@ -15774,6 +16542,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -15838,7 +16616,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "query",
@@ -15894,6 +16672,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -15958,7 +16746,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "query",
@@ -16014,6 +16802,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -16050,6 +16848,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -16068,7 +16876,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "query",
@@ -16188,6 +16996,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -16224,6 +17042,16 @@
               }
             },
             "description": "ResourceLimited | QuotaExhausted"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -16242,7 +17070,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "query",
@@ -16293,6 +17121,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -16339,6 +17177,16 @@
               }
             },
             "description": "ResourceLimited | QuotaExhausted"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -16357,7 +17205,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "mutation",
@@ -16409,6 +17257,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -16455,6 +17313,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -16473,7 +17341,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "required",
         "x-fidy-operation-kind": "mutation",
@@ -16536,6 +17404,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -16582,6 +17460,16 @@
               }
             },
             "description": "ResourceLimited | QuotaExhausted"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -16600,7 +17488,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "query",
@@ -16660,6 +17548,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -16706,6 +17604,16 @@
               }
             },
             "description": "ResourceLimited | QuotaExhausted"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -16724,7 +17632,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "required",
         "x-fidy-operation-kind": "mutation",
@@ -16792,6 +17700,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -16838,6 +17756,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -16856,7 +17784,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "query",
@@ -16909,6 +17837,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -16955,6 +17893,16 @@
               }
             },
             "description": "ResourceLimited | QuotaExhausted"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -16973,7 +17921,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "mutation",
@@ -17052,6 +18000,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -17088,6 +18046,16 @@
               }
             },
             "description": "ResourceLimited | QuotaExhausted"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -17106,7 +18074,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "query",
@@ -17159,6 +18127,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -17205,6 +18183,16 @@
               }
             },
             "description": "ResourceLimited | QuotaExhausted"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -17223,7 +18211,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "mutation",
@@ -17278,6 +18266,16 @@
               }
             },
             "description": "Unauthenticated"
+          },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
           },
           "403": {
             "content": {
@@ -17343,7 +18341,7 @@
             "capability": "read",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "query",
@@ -17396,6 +18394,16 @@
             },
             "description": "Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -17432,6 +18440,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [
@@ -17450,7 +18468,7 @@
             "capability": "write",
             "evaluation": "operation"
           },
-          "type": "pat-scoped"
+          "type": "user-owned-agent-scoped"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "mutation",
@@ -17539,6 +18557,16 @@
             },
             "description": "EmailReplacementFreshPairingRequiredApi | Unauthenticated"
           },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -17598,6 +18626,16 @@
               }
             },
             "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
           }
         },
         "security": [

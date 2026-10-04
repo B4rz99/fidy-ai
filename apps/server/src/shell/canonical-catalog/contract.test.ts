@@ -5,10 +5,14 @@ import { getAtomicBatchCallSchema } from "~/shell/operations/contract";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import { makeOperationCatalog } from "./contract";
 import { getCanonicalOperationInput } from "~/shell/canonical-operations/operations";
-import { operationPolicy, patScopeCapability, patScoped } from "~/shell/canonical-policy/contract";
+import {
+  operationPolicy,
+  userOwnedAgentCapability,
+  userOwnedAgentScoped,
+} from "~/shell/canonical-policy/contract";
 
 const policy = operationPolicy({
-  access: patScoped("read"),
+  access: userOwnedAgentScoped("read"),
   requiredTier: "free",
   agentConfirmation: "not-required",
   kind: "query",
@@ -29,12 +33,12 @@ it("reads inherited descriptive metadata through reflected annotations", () => {
   expect(reflected?.description).toBe("Inspect the available items before choosing one.");
   expect(reflected?.policy.kind).toBe("query");
   expect(reflected?.policy.access).toEqual({
-    _tag: "PATScoped",
+    _tag: "UserOwnedAgentScoped",
     scope: { _tag: "Operation", capability: "read" },
   });
   const published = OpenApi.fromApi(api).paths["/items"]?.get;
   expect(Reflect.get(published ?? {}, "x-fidy-access")).toEqual({
-    type: "pat-scoped",
+    type: "user-owned-agent-scoped",
     scope: { evaluation: "operation", capability: "read" },
   });
 });
@@ -100,7 +104,9 @@ it("decodes a batch child with the same normalization as its typed catalog input
 it("a read-only capability exposes only queries and cannot name any mutation batch child", () => {
   const children = getAtomicBatchCallSchema();
   for (const operation of operationCatalog.operations) {
-    if (!Option.exists(patScopeCapability(operation.policy.access), (scope) => scope === "read")) {
+    if (
+      !Option.exists(userOwnedAgentCapability(operation.policy.access), (scope) => scope === "read")
+    ) {
       continue;
     }
     expect(operation.policy.kind, operation.id).toBe("query");

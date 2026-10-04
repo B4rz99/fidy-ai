@@ -1,3 +1,4 @@
+import { oauthPaths } from "../src/shell/oauth-agents/contract";
 import { refundSupportBasePath, refundSupportReadPath } from "./subscription/contract";
 import { deriveAnonymousSource } from "./anonymous-admission/operations";
 import { keywordRulePath, listCategoriesPath } from "../src/shell/categories/contract";
@@ -250,19 +251,39 @@ const preflightPaths = new Set<string>([
   ...browserMutationPaths,
 ]);
 const ownedPaths = new Set<string>(["/health", listCategoriesPath, userPath, ...postPaths]);
+const oauthPath = (path: string): boolean =>
+  Object.values(oauthPaths).some((owned) => owned === path);
 const ownedPath = (path: string): boolean =>
+  oauthPath(path) ||
   ownedPaths.has(path) ||
   refundSupportPath(path) ||
   enrollmentPath(path) ||
   transactionPath(path) ||
   patRoute(path) ||
   canonicalRoute(path);
+const oauthMethods = (path: string): ReadonlyArray<string> => {
+  if (path === oauthPaths.mcp) return ["GET", "POST"];
+  return [
+    oauthPaths.register,
+    oauthPaths.token,
+    oauthPaths.cancel,
+    oauthPaths.connect,
+    oauthPaths.revoke,
+    oauthPaths.revokeAll,
+  ].some((owned) => owned === path)
+    ? ["POST"]
+    : ["GET"];
+};
+const specialMethods = (path: string): Option.Option<ReadonlyArray<string>> => {
+  if (oauthPath(path)) return Option.some(oauthMethods(path));
+  if (refundSupportPath(path)) return Option.some(refundMethods(path));
+  return paymentEnrollmentTransport(path).pipe(Option.map((transport) => [transport.method]));
+};
 const allowedMethods = (path: string): ReadonlyArray<string> => {
-  if (refundSupportPath(path)) return refundMethods(path);
+  const special = specialMethods(path);
+  if (Option.isSome(special)) return special.value;
   if (transactionPath(path)) return transactionMethods(path);
   if (patRoute(path)) return patMethods(path);
-  const enrollment = paymentEnrollmentTransport(path);
-  if (Option.isSome(enrollment)) return [enrollment.value.method];
   if (path === smokePath) return ["GET", "POST"];
   if (ownedPaths.has(path)) return [postPaths.has(path) ? "POST" : "GET"];
   return canonicalMethods(path);
@@ -350,13 +371,42 @@ const fallbackHeaders = (request: Request, path: string): Headers => {
   headers.delete(smokeProofHeader);
   return headers;
 };
-const forwardedHeaders = (request: Request, path: string): Headers => {
-  const enrollment = paymentEnrollmentTransport(path);
-  if (Option.isSome(enrollment)) {
-    return new Headers(
-      enrollment.value.forwardedHeaders.map((name) => [name, request.headers.get(name) ?? ""])
-    );
+const oauthHeaders = (request: Request, path: string): Headers => {
+  const headers = new Headers({ "content-type": request.headers.get("content-type") ?? "" });
+  if (oauthBrowserPath(path)) {
+    headers.set("origin", request.headers.get("origin") ?? "");
+    headers.set("cookie", request.headers.get("cookie") ?? "");
   }
+  if (path === oauthPaths.mcp) {
+    for (const name of [
+      "authorization",
+      "accept",
+      "origin",
+      "mcp-protocol-version",
+      "mcp-session-id",
+      "mcp-method",
+      "mcp-name",
+    ]) {
+      const value = request.headers.get(name);
+      if (value !== null) headers.set(name, value);
+    }
+  }
+  return headers;
+};
+const specialForwardedHeaders = (request: Request, path: string): Option.Option<Headers> => {
+  if (oauthPath(path)) return Option.some(oauthHeaders(request, path));
+  return paymentEnrollmentTransport(path).pipe(
+    Option.map(
+      (transport) =>
+        new Headers(
+          transport.forwardedHeaders.map((name) => [name, request.headers.get(name) ?? ""])
+        )
+    )
+  );
+};
+const forwardedHeaders = (request: Request, path: string): Headers => {
+  const special = specialForwardedHeaders(request, path);
+  if (Option.isSome(special)) return special.value;
   if (path === smokePath) {
     return new Headers({
       [smokeProofHeader]: request.headers.get(smokeProofHeader) ?? "",
@@ -400,15 +450,26 @@ const coreRequest = (
     const path = new URL(request.url).pathname;
     const headers = forwardedHeaders(request, path);
     yield* canonicalAdmissionHeaders(request, environment, headers);
-    if (path === "/pat-pairings") {
+    if (path === "/pat-pairings" || oauthPath(path)) {
       headers.set(
-        "x-pat-source",
+        oauthPath(path) ? "x-oauth-source" : "x-pat-source",
         yield* deriveAnonymousSource({
           request,
           browserOrigin: environment.BROWSER_ORIGIN,
           admissionKey: environment.PAT_ADMISSION_KEY,
         })
       );
+    }
+    if (oauthPath(path)) {
+      // Transfer this body directly: cloning an unfinished stream would leave an unread tee branch
+      // and prevent Core's bounded-body cancellation from closing the ingress source.
+      return new Request(`https://core.internal${path}${new URL(request.url).search}`, {
+        method: request.method,
+        headers,
+        body: request.body,
+        signal: request.signal,
+        duplex: "half",
+      });
     }
     // Clone the streamed request before replacing its URL and admitted headers.
     // Rebuilding a Request from the raw body requires runtime-specific duplex options.
@@ -422,6 +483,7 @@ const coreRequest = (
   });
 
 const hasPreflight = (path: string): boolean =>
+  oauthBrowserPath(path) ||
   preflightPaths.has(path) ||
   enrollmentPath(path) ||
   transactionPath(path) ||
@@ -450,7 +512,17 @@ const cookieAdmittedPath = (path: string): boolean =>
   memoryPath(path) ||
   path === listCategoriesPath ||
   keywordRulePath(path);
+const oauthBrowserPath = (path: string): boolean =>
+  [
+    oauthPaths.review,
+    oauthPaths.cancel,
+    oauthPaths.connect,
+    oauthPaths.connections,
+    oauthPaths.revoke,
+    oauthPaths.revokeAll,
+  ].some((owned) => owned === path);
 const requiresBrowserOrigin = (request: Request, path: string): boolean =>
+  oauthBrowserPath(path) ||
   sessionPaths.has(path) ||
   enrollmentPath(path) ||
   (cookieAdmittedPath(path) && request.headers.has("cookie")) ||

@@ -170,7 +170,7 @@ wrong browser verifier, concurrency, and cross-User substitution.
 crosses Kapso; a recovery proof appears in a URL or Transcript; changing a phone number creates a
 new owner for old data; support approves ownership from a bank statement.
 
-#### Hosted MCP OAuth authority (accepted design; not yet installed)
+#### Hosted MCP OAuth authority (bounded development slices installed; not launch-enabled)
 
 When implementing ADR 0033, OAuthConnection is distinct User-owned-agent authority, never a PAT,
 WebSession or Hosted Agent Session. Each call and refresh rechecks live grant, credential, audience,

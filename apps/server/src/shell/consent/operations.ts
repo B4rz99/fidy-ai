@@ -1,9 +1,13 @@
 import { Config, Schema } from "effect";
+import { PATScopes } from "~/core/tokens/contract";
 import { weeklyDisclosure } from "~/shell/consent/internal/weekly-disclosure";
-
 import { DisclosureSnapshot } from "~/core/consent/contract";
 import { decidePATRevocation } from "~/core/consent/operations";
 import { type OwnedStatement } from "~/shell/owner-write/contract";
+import {
+  userRevocationProofStatement,
+  userRevocationStatement,
+} from "~/shell/consent/internal/oauth-management";
 import { currentDisclosureFacts } from "~/shell/consent/internal/current-disclosure";
 import {
   expirePATConsentsStatement,
@@ -28,6 +32,9 @@ import {
   type ExpirePATConsentsInput,
   type ExpirePairingConsentsInput,
   type ManualPATConsentInput,
+  type OAuthGrantConsentInput,
+  type OAuthGrantConsentSubject,
+  type OAuthReplayConsentInput,
   type PATRevocationProtection,
   type PairedPATConsentInput,
   type RevokeAllPATConsentsInput,
@@ -46,6 +53,62 @@ export {
   isConsentIngressDecisionPhase,
 } from "~/core/consent/operations";
 
+/** Append the exact reviewed OAuth grant after its guarded connection insertion in the same unit. */
+export const grantOAuthConsent = (input: OAuthGrantConsentInput): OwnedStatement => ({
+  sql: `INSERT INTO oauth_grant_consents (id,connection_id,user_id,session_id,disclosure_revision,disclosure_text,accepted_at_ms)
+    SELECT ?,?,?,?,?,?,? WHERE changes() = 1`,
+  params: [
+    input.id,
+    input.connectionId,
+    input.session.user_id,
+    input.session.id,
+    "oauth-grant-2026-10",
+    Schema.encodeSync(
+      Schema.fromJsonString(
+        Schema.Struct({
+          capabilities: PATScopes,
+          expiresAt: Schema.Int,
+          purpose: Schema.String,
+        })
+      )
+    )({
+      capabilities: input.scopes,
+      expiresAt: input.expiresAt,
+      purpose:
+        "Autorizar al cliente externo indicado para usar Fidy durante el intervalo aprobado.",
+    }),
+    input.current,
+  ],
+});
+/** Appends the exact first-party decision for each owner-selected same-User grant, in its revocation unit. Already terminal grants gain no duplicate evidence. */
+export const revokeOAuthUserConsent: typeof userRevocationStatement = (input) =>
+  userRevocationStatement(input);
+/** Requires the same fresh browser decision's immutable Consent evidence for each terminal transition. */
+export const oauthUserRevocationProof: typeof userRevocationProofStatement = (input) =>
+  userRevocationProofStatement(input);
+/** Automatic replay cleanup requires same-User grant evidence and atomic replay selection, not renewed Consent to issue credentials. */
+export const revokeOAuthReplayConsent = (input: OAuthReplayConsentInput): OwnedStatement => ({
+  sql: `INSERT INTO oauth_revocation_consents(id,user_id,connection_id,reason,occurred_at_ms)
+    SELECT ?,?,?,'refresh_replay',? WHERE EXISTS (${input.replay.sql})
+    AND EXISTS (SELECT 1 FROM oauth_grant_consents WHERE connection_id = ? AND user_id = ?)`,
+  params: [
+    input.id,
+    input.userId,
+    input.connectionId,
+    input.current,
+    ...input.replay.params,
+    input.connectionId,
+    input.userId,
+  ],
+});
+/** Lends same-User OAuth grant evidence without exposing Consent's ledger columns to the credential owner. */
+export const protectOAuthGrantConsentAuthority = <Authority extends ConsentAuthority>(
+  input: Readonly<{ authority: Authority; subject: OAuthGrantConsentSubject }>
+): Authority => ({
+  ...input.authority,
+  predicate: `${input.authority.predicate} AND EXISTS (SELECT 1 FROM oauth_grant_consents WHERE connection_id = ? AND user_id = ?)`,
+  bindings: [...input.authority.bindings, input.subject.connectionId, input.subject.userId],
+});
 /**
  * Validates the exact current disclosure and policy facts presented before User creation.
  * Material legal-copy changes require a new source-controlled revision and matching digest.

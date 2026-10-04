@@ -4,12 +4,15 @@ import {
   recordedPATCallProof,
   refusedByAuditBudget,
 } from "../../../src/shell/audit/operations";
-import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
 import {
   livePATAuthority,
   recordAuditedPATUseFromAuthority,
 } from "../../../src/shell/tokens/operations";
-import { isPATCaller, rateLimitedTransactionResponse } from "../../canonical-work/operations";
+import {
+  callerAuthority,
+  isPATCaller,
+  rateLimitedTransactionResponse,
+} from "../../canonical-work/operations";
 import { prepareOwnedStatement } from "../../database/operations";
 import { newId } from "../../secret-material/operations";
 import type { SubscriptionQueryInput } from "../contract";
@@ -36,9 +39,7 @@ export const queryUpgrade = (
     Effect.gen(function* () {
       const { db, subject } = input;
       const current = yield* Clock.currentTimeMillis;
-      const authority = isPATCaller(subject)
-        ? livePATAuthority({ subject, current })
-        : liveWebSessionAuthority({ subject, current });
+      const authority = callerAuthority({ subject, current });
       const auditId = newId();
       const rows = yield* Effect.tryPromise(() =>
         db.batch([

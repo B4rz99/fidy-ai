@@ -13,7 +13,7 @@ import {
 } from "../../../src/core/budgets/operations";
 import { BigDecimal, DateTime, Effect, Option, Ref, Schema } from "effect";
 import {
-  type TransactionCaller,
+  type QueryCaller,
   transactionFailure,
   transactionNoStore,
   transactionNow,
@@ -227,7 +227,7 @@ const readAuthorizedBudget = ({
   query,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: QueryCaller;
   operation: BudgetQueryOperation;
   id: Option.Option<BudgetId>;
   query: Option.Option<typeof BudgetStatusQueryParameters.Type>;
@@ -269,7 +269,7 @@ export const browseBudgets = ({
   operation,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: QueryCaller;
   request: Request;
   operation: BudgetQueryOperation;
 }>): Promise<Response> =>

@@ -1,6 +1,7 @@
 import { DateTime, Effect, Option, Schema } from "effect";
 import { type AuditCaller, AuditLogEntry } from "~/core/audit/contract";
 
+import { OAuthConnectionId, OAuthCredentialId } from "~/core/oauth-agents/contract";
 import { UserId } from "~/core/identity/contract";
 import { PATId } from "~/core/tokens/contract";
 import { WebSessionId } from "~/core/web-session/contract";
@@ -19,6 +20,8 @@ const Row = Schema.Struct({
   subjectUserId: AuditLogEntry.fields.subjectUserId,
   sessionId: Schema.OptionFromNullOr(WebSessionId),
   patId: Schema.OptionFromNullOr(PATId),
+  oauthConnectionId: Schema.OptionFromOptionalKey(Schema.NullOr(OAuthConnectionId)),
+  oauthCredentialId: Schema.OptionFromOptionalKey(Schema.NullOr(OAuthCredentialId)),
   operation: AuditLogEntry.fields.operation,
   outcome: AuditLogEntry.fields.outcome,
   occurredAt: Schema.Int,
@@ -26,6 +29,7 @@ const Row = Schema.Struct({
 
 const projection = (table: string, caller: "session" | "pat", outcome: string): string =>
   `SELECT id, user_id AS subjectUserId, session_id AS sessionId, ${caller === "pat" ? "pat_id" : "NULL"} AS patId,
+    ${caller === "pat" ? "oauth_connection_id AS oauthConnectionId, oauth_credential_id AS oauthCredentialId," : ""}
     operation, ${outcome} AS outcome, occurred_at_ms AS occurredAt FROM ${table} WHERE user_id = ?
     ORDER BY occurred_at_ms, id LIMIT ?`;
 const evidenceQueries = [
@@ -76,6 +80,18 @@ const callerOf = (row: typeof Row.Type): AuditCaller => {
     return { _tag: "WebSession", webSessionId: row.sessionId.value };
   }
   if (Option.isSome(row.patId)) return { _tag: "PAT", patId: row.patId.value };
+  if (
+    Option.isSome(row.oauthConnectionId) &&
+    row.oauthConnectionId.value !== null &&
+    Option.isSome(row.oauthCredentialId) &&
+    row.oauthCredentialId.value !== null
+  ) {
+    return {
+      _tag: "OAuthAgent",
+      connectionId: row.oauthConnectionId.value,
+      credentialId: row.oauthCredentialId.value,
+    };
+  }
   throw new Error("Audit evidence has no caller");
 };
 

@@ -1,0 +1,76 @@
+apps/cli/src/canonical/operations.test.ts
+  s_7b7014a6174e05::t_4cade295ba0d5a 146-151,153-154
+  s_7b7014a6174e05::t_1faf93e7c8d2bc 133-145,155-164
+  s_7b7014a6174e05::t_203508a8eb430b 209
+  s_7b7014a6174e05::t_ac96d004e27e4c 180
+  s_7b7014a6174e05::t_ceef8519dd8709 200-208,210-222,224,256-257,292
+  s_7b7014a6174e05::t_a1e275640ad494 113-132,235,240-241,246,250
+  s_7b7014a6174e05::t_814bc274e33a7e 152,171-172,182,184-185
+  s_7b7014a6174e05::t_13839eccbf2815 165-170,173-179,181,183,186-199,234
+  s_7b7014a6174e05::t_1f9a1ad92dc678 223,225-233,236-239,242-245,247-249,251-255,258-291,293-297,464
+apps/cli/src/canonical/canonical.test-fixture.ts
+  s_7b7014a6174e05::t_ee1ed0d3087bc0 24
+  s_7b7014a6174e05::t_1887def5a0999e 16-18,23
+  s_7b7014a6174e05::t_58f95ce13ec9fc 25,58
+apps/server/src/client.ts
+  s_7b7014a6174e05::t_df39185ac8fb6e 27
+apps/cli/ARCHITECTURE.md
+  s_7b7014a6174e05::t_670474df1f6215 146-159,231-237
+apps/cli/test/allowance-entry.ts
+  s_7b7014a6174e05::t_5b6585ff599071 1-10,12-17,24-38
+  s_7b7014a6174e05::t_381b14a7dffe61 11,18-23
+apps/server/cloudflare/canonical-admission/operations.ts
+  s_7b7014a6174e05::t_835bcdccc9ddbf 2,170,172-176
+  s_7b7014a6174e05::t_3d316668df91fb 180
+apps/server/.dependency-cruiser.mjs
+  s_7b7014a6174e05::t_de3125a568711b 180,1331
+apps/cli/src/canonical/contract.ts
+  s_7b7014a6174e05::t_15d82fd78cc65b 1,11,23
+apps/cli/src/canonical/operations.ts
+  s_7b7014a6174e05::t_1f85cb5564fc99 2,124,131-133,157,204-215,343
+  s_7b7014a6174e05::t_b8714c5fdd1a3a 216-218,220-227,240,242
+  s_7b7014a6174e05::t_3b146be3550b78 241,243
+  s_7b7014a6174e05::t_bd7b63c2624d75 200-203
+  s_7b7014a6174e05::t_00d25b41c83276 219
+docs/operations/commercial-allowances.md
+  s_7b7014a6174e05::t_0e1b75597564c2 30-42
+apps/server/src/shell/quotas/contract.ts
+  s_7b7014a6174e05::t_2521aa595c7a99 1,7-14,21-39
+  s_7b7014a6174e05::t_5ac30165b28d6f 15-20
+  s_7b7014a6174e05::t_1afb94ad1d5412 40-42
+apps/cli/src/direct-client/runtime.ts
+  s_7b7014a6174e05::t_ab33e73d407363 38-40
+  s_7b7014a6174e05::t_33e198efb76403 2
+  s_7b7014a6174e05::t_b57c05218e6b2c 8,120,142,175
+  s_7b7014a6174e05::t_70a1aeaae9dace 96-111
+apps/server/cloudflare/canonical-admission/operations.test.ts
+  s_7b7014a6174e05::t_25d472cef5c3d5 70
+  s_7b7014a6174e05::t_e41f0ec36b9e5c 83-87,94-97,99-104,106-107,138,150-152,154-158,171-175,336-339,587-590,609-614
+  s_7b7014a6174e05::t_9e3886a74be236 108-109
+  s_7b7014a6174e05::t_95e7d1eb9a116c 88-91,93,98
+  s_7b7014a6174e05::t_6c7c9faa5d643b 78-81,110-137
+  s_7b7014a6174e05::t_e837d06353a00c 82
+  s_7b7014a6174e05::t_bee4efdafcb9a3 3,72-76,335,585-586,591-593,608,615-617
+  s_7b7014a6174e05::t_df0b30d8e446dd 71
+  s_7b7014a6174e05::t_dceb5524cebb64 581
+  s_7b7014a6174e05::t_6e639e22e67790 139-149,159-160,162-168,170,176-177
+  s_7b7014a6174e05::t_a0ecea2a30a9a5 77,92,105,153,161,169
+apps/cli/src/canonical/runtime.ts
+  s_7b7014a6174e05::t_d34300c4c88402 19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5a5b4c157fa9cd565c7096598b6e2cf55e2ad75c",
+  "prompts": {},
+  "sessions": {
+    "s_7b7014a6174e05": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a1070b-8ed8-7386-8139-24c350e9b4d8",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

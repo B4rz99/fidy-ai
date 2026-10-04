@@ -1,0 +1,50 @@
+apps/server/cloudflare/subscription/refund-support.test.ts
+  s_ba89dc1029bca1::t_f29d51ae06ef08 105-114,118,167-172,174-182,184-199,201-210,212,221
+  s_ba89dc1029bca1::t_9eceeacca7f027 183
+  s_ba89dc1029bca1::t_ced6f10b4572af 173
+  s_ba89dc1029bca1::t_c3c60dd53ef39e 200
+  s_ba89dc1029bca1::t_1974700635a5a4 211
+  s_ba89dc1029bca1::t_703700b377ffe7 213-215,218-220
+  s_ba89dc1029bca1::t_cd45d0051302a3 222-224
+  s_74e559bd8b2eb1::t_7166e387d19ef6 216-217,225
+apps/server/cloudflare/subscription/internal/refund-support.ts
+  s_ba89dc1029bca1::t_9a7fc0efe70c10 104,113,117
+apps/server/src/shell/outbound-http/operations.test.ts
+  s_ba89dc1029bca1::t_f4eab43b076223 111-126,128-136,138-144
+  s_cd1ccb754ed1fc::t_2382d481390d83 127,137
+apps/server/cloudflare/subscription/refunds.test.ts
+  s_ba89dc1029bca1::t_ff27cdae7c69a3 739-758,760-772,775-782,784-794,797,809
+  s_cd1ccb754ed1fc::t_14e69b59eef82a 759,773-774,783,795-796,798-808
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a7fc0ef7e07f240855df9d6b20eed92501200acd",
+  "prompts": {},
+  "sessions": {
+    "s_74e559bd8b2eb1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a103fa-be97-74ea-98ef-1bbb67d7ba62",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_ba89dc1029bca1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a103f6-761c-710c-b806-670edee0d3aa",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_cd1ccb754ed1fc": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10465-36c4-76e6-be76-249fbcaa8d50",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

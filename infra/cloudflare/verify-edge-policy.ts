@@ -2,8 +2,9 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-// Includes #225's origin-verified support routes, ingress budget, and gated correction Workflow.
-const expectedEdgePolicyDigest = "5ba17e42d66b38963adbd3fbfa345fffe77d4edadafc1c909c34b98aa12e709e";
+// Includes #225's support/correction boundaries and #35's trusted canonical source,
+// retry-key forwarding, quota route, and explicitly exposed allowance headers.
+const expectedEdgePolicyDigest = "5c08fd76cfd999f306646f08014cb6089de7e9c0b3f7d664d600a5ec6f68a135";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),

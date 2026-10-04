@@ -183,6 +183,7 @@ const setup = Effect.fn(function* () {
     CREATE TABLE trial_periods (user_id TEXT PRIMARY KEY,started_at_ms INTEGER,ends_at_ms INTEGER);
     CREATE TABLE subscriptions (user_id TEXT PRIMARY KEY,attempt_id TEXT,paid_period_ends_at_ms INTEGER);
     CREATE TABLE billing_paid_periods (attempt_id TEXT PRIMARY KEY,starts_at_ms INTEGER);
+ CREATE TABLE billing_access_adjustments (attempt_id TEXT,ends_at_ms INTEGER);
     CREATE TABLE statement_review_audit (id TEXT PRIMARY KEY, user_id TEXT, operation TEXT, outcome TEXT, occurred_at_ms INTEGER);
     CREATE TABLE statement_needs_review (id TEXT PRIMARY KEY, user_id TEXT, submission_id TEXT, record_number INTEGER, reason TEXT, original_evidence TEXT, issues TEXT, status TEXT, evidence_expires_at_ms INTEGER, created_at_ms INTEGER, service_market TEXT, locale TEXT, time_zone TEXT, source_format TEXT, parser_revision TEXT, extractor_revision TEXT);`)
   );

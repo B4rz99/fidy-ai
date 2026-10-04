@@ -152,6 +152,7 @@ reconciliation policy; timeout or lost acknowledgment is not proof of rejection.
 | Ingestion                        | Bounded material admission, interpretation, Transaction-or-review finalization, and retention            |
 | Subscription                     | Prices, PaymentEnrollment, BillingAttempts, and settled paid periods                                     |
 | AccessTier                       | Data-free decision from Identity's original TrialPeriod and Subscription's settled paid interval         |
+| Quotas                           | Independent commercial consumption and live meter projections, separate from resource protection         |
 | Recurring                        | Historical charge-pattern evidence and immutable confirmations, not billing or delivery                  |
 | Insights                         | Scheduled occurrences, lifecycle, and delivery evidence over published historical facts                  |
 | Memory                           | Current User-owned prose and aggregate capacity, without a revision history or embedding authority       |
@@ -218,9 +219,13 @@ limits belong in the [background-work runbook](../../docs/operations/cloudflare-
 
 Installed code does not by itself enable a channel or provider. In particular, forwarded-email
 routing remains disabled until institution Connection admission and authenticated institutional
-sender proof exist. Receipt/image policy is not a durable media execution path; unavailable media
-work must not retain material or admit a hosted Turn. Deployment configuration and owner contracts
-remain the evidence for executable capabilities, not this document's directory inventory.
+sender proof exist. Receipt/image acceptance atomically publishes commercial consumption,
+accountability, visible review, and an identity-only outbox; provider retrieval/extraction is not
+installed. Accepted images therefore remain visibly extraction-unavailable, with bounded
+locator/caption retention. Rejected images retain no deferred bytes and admit no hosted Turn.
+[Commercial allowances](../../docs/operations/commercial-allowances.md) document the separate
+accounting boundaries. Deployment configuration and owner contracts remain the evidence for
+executable capabilities, not this document's directory inventory.
 
 ## 8. Evidence and test boundaries
 

@@ -35,6 +35,7 @@ const setup = Effect.gen(function* () {
  CREATE TABLE trial_periods(user_id TEXT,started_at_ms INTEGER,ends_at_ms INTEGER);
  CREATE TABLE subscriptions(user_id TEXT,attempt_id TEXT,paid_period_ends_at_ms INTEGER);
  CREATE TABLE billing_paid_periods(attempt_id TEXT,starts_at_ms INTEGER);
+ CREATE TABLE billing_access_adjustments(attempt_id TEXT,ends_at_ms INTEGER);
  CREATE TABLE whatsapp_identities(user_id TEXT,portfolio_id TEXT,bsuid TEXT);
  CREATE TABLE onboarding_consent_records(user_id TEXT PRIMARY KEY,accepted_at_ms INTEGER);
  CREATE TABLE consent_user_revocations(user_id TEXT PRIMARY KEY);`)

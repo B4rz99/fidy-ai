@@ -57,11 +57,20 @@ const rawInput = ({
   Option.Option<unknown>
 > =>
   Effect.gen(function* () {
-    const fields: Record<string, unknown> = {};
-    if (operation.httpFields.includes("params")) fields.params = requestParams(request, operation);
-    if (operation.httpFields.includes("query")) fields.query = requestQuery(request);
+    const fields: Record<"params" | "query" | "headers" | "payload", Option.Option<Schema.Json>> = {
+      params: Option.none(),
+      query: Option.none(),
+      headers: Option.none(),
+      payload: Option.none(),
+    };
+    if (operation.httpFields.includes("params")) {
+      fields.params = Option.some(requestParams(request, operation));
+    }
+    if (operation.httpFields.includes("query")) {
+      fields.query = Option.some(requestQuery(request));
+    }
     if (operation.httpFields.includes("headers")) {
-      fields.headers = Object.fromEntries(request.headers);
+      fields.headers = Option.some(Object.fromEntries(request.headers));
     }
     if (operation.httpFields.includes("payload")) {
       if (request.headers.get("content-type")?.split(";")[0]?.trim() !== "application/json") {
@@ -76,11 +85,18 @@ const rawInput = ({
         }),
         bodyPolicy
       );
-      fields.payload = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Json))(
-        new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+      fields.payload = Option.some(
+        yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Json))(
+          new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+        )
       );
     }
-    return Schema.decodeUnknownOption(operation.httpInput)(fields);
+    const wire = Object.fromEntries(
+      Object.entries(fields).flatMap(([key, value]) =>
+        Option.match(value, { onNone: () => [], onSome: (input) => [[key, input]] })
+      )
+    );
+    return Schema.decodeOption(operation.httpInput)(wire);
   }).pipe(Effect.orElseSucceed(() => Option.none()));
 
 const requiredScopes = (

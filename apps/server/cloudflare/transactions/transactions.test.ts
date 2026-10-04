@@ -4474,7 +4474,9 @@ it("raw PAT batches cannot turn query, recursive, browser-only or under-scoped c
             ])
           )
         );
-        expect(response.status).toBe(400);
+        expect(response.status).toBe(
+          child.operation === "dashboard.initializeDashboard" ? 403 : 400
+        );
         const body = yield* fromTestPromise(() => response.text());
         expect(body).not.toContain("fin_");
         expect(

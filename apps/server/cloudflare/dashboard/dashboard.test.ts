@@ -1,9 +1,4 @@
-import {
-  applyTestMigration,
-  canonicalAdmissionMigrationNames,
-  installTestSchema,
-  isolatedTestDatabases,
-} from "../d1-test-fixture";
+import { applyTestMigration, installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { executeCanonicalQuery, executeCanonicalWork } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import { ScopeMissing } from "../../src/shell/public-http/contract";
@@ -86,29 +81,14 @@ const setup = (initializeSchema = true): Effect.Effect<D1Database, Cause.Unknown
     yield* Effect.tryPromise(() =>
       installTestSchema({
         db,
-        sources: canonicalAdmissionMigrationNames([
-          "0001_categories",
-          "0003_pending_consent",
-          "0004_onboarding_email",
-          "0005_verified_onboarding",
-          "0006_browser_login",
-          "0009_transactions",
-          "0010_pat_lifecycle",
-          "0011_transaction_corrections",
-          "0012_statement_staging",
-          "0012_transaction_search",
-          "0013_category_keyword_rules",
-          "0013_transaction_reconciliation",
-          "0014_memory",
-          "0015_statement_submission",
-          "0016_budgets",
-          "0017_statement_dispatch",
-          "0017_forwarded_email",
-          "0018_dashboard",
-          "0019_canonical_child_guards",
-          "0020_dashboard_projection",
-          ...(initializeSchema ? ["0030_dashboard_initialization"] : []),
-        ]).map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
+        sources: [
+          ...new Bun.Glob("*.sql").scanSync({
+            cwd: new URL("../migrations/", import.meta.url).pathname,
+          }),
+        ]
+          .filter((name) => initializeSchema || name !== "0030_dashboard_initialization.sql")
+          .sort()
+          .map((name) => new URL(`../migrations/${name}`, import.meta.url)),
       })
     );
     const current = DateTime.nowUnsafe().epochMilliseconds;
@@ -851,12 +831,12 @@ it(
               body: { calls },
             })
           );
-          expect(denied.status).toBe(400);
+          expect(denied.status).toBe(403);
           expect(
-            (yield* Schema.decodeUnknownEffect(BatchFailure)(
+            (yield* Schema.decodeUnknownEffect(ScopeMissing)(
               yield* Effect.tryPromise(() => denied.json())
             )).error
-          ).toMatchObject({ code: "scope_missing", failedCallIndex: 1 });
+          ).toMatchObject({ code: "scope_missing" });
           expect(
             yield* Effect.tryPromise(() =>
               db.prepare("SELECT COUNT(*) AS count FROM transactions").first()
@@ -1143,13 +1123,6 @@ it(
             .all()
             .then((rows) => rows.results);
         const before = yield* Effect.tryPromise(evidence);
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(`CREATE TABLE audit_retention_permits (
-      user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id), cutoff_ms INTEGER NOT NULL
-    ) STRICT`)
-            .run()
-        );
         yield* Effect.tryPromise(() =>
           applyTestMigration({
             db,

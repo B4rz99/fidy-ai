@@ -23,6 +23,7 @@ const database = Effect.gen(function* () {
         "CREATE TABLE subscriptions (user_id TEXT, paid_period_ends_at_ms INTEGER, attempt_id TEXT)"
       ),
       db.prepare("CREATE TABLE billing_paid_periods (attempt_id TEXT, starts_at_ms INTEGER)"),
+      db.prepare("CREATE TABLE billing_access_adjustments (attempt_id TEXT, ends_at_ms INTEGER)"),
       db.prepare("CREATE TABLE authority (userId TEXT PRIMARY KEY, live INTEGER)"),
       db.prepare("CREATE TABLE publication (id TEXT PRIMARY KEY)"),
       db.prepare("INSERT INTO users VALUES (?),(?)").bind(userId, otherUser),
@@ -127,6 +128,40 @@ it("keeps exact replay uncharged and rolls consumption back with a failed public
       expect(
         Option.getOrThrow(yield* readQuotaStatus({ db, userId, current })).mediaSubmissions
       ).toMatchObject({ consumed: 1 });
+    })
+  ));
+
+it("uses corrected paid standing at publication without retroactively charging Pro acceptance", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* database;
+      yield* io(() =>
+        db.batch([
+          db
+            .prepare("INSERT INTO subscriptions VALUES (?,?,?)")
+            .bind(userId, current + 1, "paid-attempt"),
+          db
+            .prepare("INSERT INTO billing_paid_periods VALUES (?,?)")
+            .bind("paid-attempt", current - 1),
+        ])
+      );
+      yield* io(() => consume(db, "paid"));
+      expect(
+        Option.getOrThrow(yield* readQuotaStatus({ db, userId, current })).mediaSubmissions
+      ).toEqual({ _tag: "Uncapped" });
+      yield* io(() =>
+        db
+          .prepare("INSERT INTO billing_access_adjustments VALUES (?,?)")
+          .bind("paid-attempt", current)
+          .run()
+      );
+      expect(
+        Option.getOrThrow(yield* readQuotaStatus({ db, userId, current })).mediaSubmissions
+      ).toMatchObject({ _tag: "Limited", consumed: 0, remaining: 2 });
+      yield* io(() => consume(db, "free-after-correction"));
+      expect(
+        Option.getOrThrow(yield* readQuotaStatus({ db, userId, current })).mediaSubmissions
+      ).toMatchObject({ _tag: "Limited", consumed: 1, remaining: 1 });
     })
   ));
 

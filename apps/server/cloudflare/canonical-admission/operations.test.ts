@@ -1,6 +1,7 @@
 import { Clock, Data, DateTime, Deferred, Effect, Fiber, Option, Schema } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { QuotaStatus } from "../../src/core/quotas/contract";
+import { Unavailable } from "../../src/shell/public-http/contract";
 import { UserId } from "../../src/core/identity/contract";
 import {
   type CatalogOperation,
@@ -125,6 +126,35 @@ it("attributes malformed retry references without commercial consumption or succ
           fixture.db.prepare("SELECT last_used_at_ms FROM pats WHERE id = ?").bind(patId).first()
         )
       ).toEqual({ last_used_at_ms: null });
+    })
+  ));
+
+it("returns the declared unavailable payload from both recovery owners on store failure", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* setup;
+      const broken = new Proxy(fixture.db, {
+        get(target, key): unknown {
+          if (key === "batch") return () => Promise.reject(new Error("private-store-failure"));
+          return Reflect.get(target, key, target);
+        },
+      });
+      for (const id of ["quota.getQuota", "subscription.getUpgradeUrl"] as const) {
+        const result = yield* executeCanonicalQuery({
+          db: broken,
+          subject: caller.value,
+          operation: operation(id).id,
+          input: {},
+          bucket: Option.none(),
+        });
+        const response = Option.getOrThrow(result);
+        expect(response.status).toBe(503);
+        expect(
+          yield* Schema.decodeUnknownEffect(Schema.toCodecJson(Unavailable))(
+            yield* io(() => response.json())
+          )
+        ).toMatchObject({ error: { code: "unavailable" }, next: [] });
+      }
     })
   ));
 

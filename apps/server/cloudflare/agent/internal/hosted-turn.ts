@@ -1,3 +1,5 @@
+import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
+import { readWeeklyPauseNotice } from "../../insights/operations";
 import { type HostedCommitFence, pendingExecutionRecoveryMs } from "../contract";
 import {
   executeCanonicalQuery,
@@ -18,6 +20,7 @@ import {
   maximumToolCallsPerTurn,
 } from "../../../src/core/agent/contract";
 import { UserId } from "../../../src/core/identity/contract";
+import { readContextualProactiveReply } from "./proactive-transcript";
 import { assembleWorkingContext } from "./working-context";
 import {
   compactionEntryTrigger,
@@ -151,6 +154,7 @@ export const browserHostedDelivery: HostedDelivery = ({ text, turnId, receipt })
 
 type WhatsAppHostedDelivery = Readonly<{
   _tag: "WhatsApp";
+  contextualReplyQuery: Option.Option<OwnedStatement>;
   send: (
     input: Readonly<{
       text: TranscriptText;
@@ -243,6 +247,8 @@ export const resumeWhatsAppTurn = ({
     recipient: Readonly<{
       bsuid: WhatsAppHostedSubject["bsuid"];
       businessPhoneNumberId: WhatsAppInboundEvidence["businessPhoneNumberId"];
+      portfolioId: WhatsAppHostedSubject["portfolioId"];
+      replyToMessageId: Option.Option<WhatsAppProviderMessageId>;
     }>
   ) => WhatsAppHostedDelivery;
   signal: AbortSignal;
@@ -252,8 +258,7 @@ export const resumeWhatsAppTurn = ({
     Effect.gen(function* () {
       const work = yield* readWhatsAppPendingWork({ db, userId, turnId });
       if (Option.isNone(work)) return new Response(null, { status: 200 });
-      const { startedAtMs, sessionId, portfolioId, bsuid, businessPhoneNumberId, text } =
-        work.value;
+      const { startedAtMs, sessionId, portfolioId, bsuid, text } = work.value;
       const subject: WhatsAppHostedSubject = {
         _tag: "WhatsAppHosted",
         userId,
@@ -288,6 +293,7 @@ export const resumeWhatsAppTurn = ({
           signal,
           executeMutation: Option.none(),
           admittedWhatsAppTurn: Option.some(turnId),
+          contextualReplyQuery: deliver(work.value).contextualReplyQuery,
         })
       );
       if (Option.isNone(prepared)) {
@@ -314,7 +320,7 @@ export const resumeWhatsAppTurn = ({
           executeMutation: Option.none(),
           startedAtMs,
           prepared: prepared.value,
-          deliver: deliver({ bsuid, businessPhoneNumberId }),
+          deliver: deliver(work.value),
           signal,
           scheduleRecovery,
         })
@@ -422,6 +428,8 @@ const executeHostedTurn = (input: AdmittedTurnInput): Promise<Response> => {
           signal,
           executeMutation,
           admittedWhatsAppTurn: Option.none(),
+          contextualReplyQuery:
+            "inbound" in input ? input.deliver.contextualReplyQuery : Option.none(),
         })
       );
       if (Option.isNone(prepared) || isAborted()) return unavailable();
@@ -517,6 +525,7 @@ type WorkPreflight = Readonly<{
   signal: AbortSignal;
   executeMutation: HostedTurnInput["executeMutation"];
   admittedWhatsAppTurn: Option.Option<TranscriptTurnId>;
+  contextualReplyQuery: Option.Option<OwnedStatement>;
 }>;
 
 /** Check the complete semantic request before any Pending or User evidence can be written. */
@@ -533,6 +542,7 @@ const prepareHostedWork = ({
   signal,
   executeMutation,
   admittedWhatsAppTurn,
+  contextualReplyQuery,
 }: WorkPreflight): Promise<Option.Option<PreparedHostedText>> =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -556,6 +566,12 @@ const prepareHostedWork = ({
               signal,
             })
           );
+      const proactiveReply = yield* readContextualProactiveReply({
+        db,
+        userId,
+        now: startedAtMs,
+        proof: contextualReplyQuery,
+      });
       const context = assembleWorkingContext({
         sessionId: selection.id,
         userId,
@@ -565,6 +581,7 @@ const prepareHostedWork = ({
         memories: continuity.memories,
         compactedConversation: continuity.compactedConversation,
         transcript: continuity.transcript.filter(({ entry }) => entry.turnId !== activeTurnId),
+        proactiveReply,
         activeRequest: text,
       });
       const prepared = yield* Effect.tryPromise(() =>
@@ -1508,7 +1525,7 @@ const proposeWhatsAppDelivery = ({
     })
   );
 
-const proposeDelivery = ({
+const proposeChannelDelivery = ({
   db,
   userId,
   turnId,
@@ -1542,6 +1559,22 @@ const proposeDelivery = ({
           return unavailable();
         })
       );
+
+/** The pause notice is fixed product copy, never a model-generated claim or proactive new Session. */
+const proposeDelivery = (input: Parameters<typeof proposeChannelDelivery>[0]): Promise<Response> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const notice = yield* readWeeklyPauseNotice({
+        db: input.db,
+        userId: input.userId,
+        turnId: input.turnId,
+      });
+      const answer = Option.isNone(notice)
+        ? input.answer
+        : yield* Schema.decodeEffect(TranscriptText)(`${notice.value}\n\n${input.answer}`);
+      return yield* Effect.tryPromise(() => proposeChannelDelivery({ ...input, answer }));
+    })
+  );
 
 /** Complete only after the authenticated browser has rendered and acknowledged the staged reply. */
 export const acknowledgeBrowserTurn = ({

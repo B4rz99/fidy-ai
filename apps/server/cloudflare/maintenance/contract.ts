@@ -1,3 +1,4 @@
+import type { WeeklyDeliveryWork, WeeklyEnvironment } from "../insights/contract";
 import { Data, type Effect, type Option } from "effect";
 import type { PlatformMaintenanceInput } from "../runtime/contract";
 
@@ -28,6 +29,7 @@ export type ScheduledOperation =
   | "patPairing.sweep"
   | "dashboard.projectionRepair"
   | "recurring.evaluate"
+  | "insights.weekly.dispatch"
   | "ingestion.uploadAdmissionSweep"
   | "ingestion.mediaRetention"
   | "agent.workersAiAdmissionSweep"
@@ -67,4 +69,11 @@ export type CoreMaintenanceInput = Omit<
     BILLING_COLLECTION_QUEUE: Option.Option<Queue>;
     STATEMENT_EXTRACTION_QUEUE: Option.Option<Queue>;
     HOSTED_WHATSAPP_QUEUE: Option.Option<Queue>;
-  }>;
+  }> &
+  WeeklyEnvironment &
+  Partial<
+    Readonly<{
+      WEEKLY_DELIVERY_QUEUE: Queue<WeeklyDeliveryWork>;
+      WEEKLY_DELIVERY_WORKFLOW: Workflow<WeeklyDeliveryWork>;
+    }>
+  >;

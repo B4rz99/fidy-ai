@@ -17,6 +17,7 @@ import {
   type WhatsAppInboundEvent,
   WhatsAppProviderMessageId,
 } from "../../src/shell/channels/whatsapp/contract";
+import { Model } from "effect/schema";
 import { Data, type DateTime, type Option, Schema } from "effect";
 import { type ConsentRecordId } from "../../src/core/consent/contract";
 import { type IanaTimeZone } from "../../src/core/_shared/context";
@@ -99,6 +100,7 @@ export const WhatsAppInboundEvidence = Schema.Struct({
   businessPhoneNumberId: WhatsAppBusinessPhoneNumberId,
   occurredAtMs: Schema.Int,
   receivedAtMs: Schema.Int,
+  replyToMessageId: Model.optionalOption(WhatsAppProviderMessageId),
 });
 export type WhatsAppInboundEvidence = typeof WhatsAppInboundEvidence.Type;
 /** Private Core-to-User-coordinator text work. Never a public bearer or a Queue envelope. */
@@ -138,6 +140,7 @@ export type WhatsAppPendingWork = Readonly<{
   bsuid: WhatsAppBusinessScopedUserId;
   businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
   associationCurrent: boolean;
+  replyToMessageId: Option.Option<WhatsAppProviderMessageId>;
   text: TranscriptText;
 }>;
 /** Safe projection of one exact User-owned send attempt, never its private correlation or routing row. */

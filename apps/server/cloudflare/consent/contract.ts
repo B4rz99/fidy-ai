@@ -5,6 +5,19 @@ import { ConsentRecordId, DisclosureSnapshot } from "../../src/core/consent/cont
 import type { UserId, WhatsAppCallerReference } from "../../src/core/identity/contract";
 import { type OwnedStatement } from "../../src/shell/owner-write/contract";
 
+/** Offer purpose and retry identity are explicit; short offers have no durable governor source. */
+export type WeeklyConsentOfferRequest =
+  | Readonly<{ _tag: "ShortOffer"; origin: "proactive" }>
+  | (Readonly<{ _tag: "GovernorQuestion"; sourceId: string }> &
+      (
+        | Readonly<{ origin: "proactive" }>
+        | Readonly<{
+            origin: "requested";
+            requestedAt: DateTime.Utc;
+            rejectionOfferId: Option.Option<ConsentRecordId>;
+          }>
+      ));
+
 /** Opaque exchange identity binds a fixed explicit choice to one exact delivered disclosure. */
 export const WeeklyConsentOffer = Schema.Struct({
   id: ConsentRecordId,
@@ -33,7 +46,7 @@ export type WeeklyConsentAction = Readonly<{
 
 /** Prepared same-User decision. The orchestrator must commit these statements and schedule enable/disable atomically under User coordination. */
 export type PreparedWeeklyConsentDecision = Readonly<{
-  decision: "accept" | "decline" | "revoke";
+  decision: "accept" | "continue" | "decline" | "revoke";
   grantId: Option.Option<ConsentRecordId>;
   statements: ReadonlyArray<D1PreparedStatement>;
 }>;

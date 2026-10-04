@@ -177,6 +177,17 @@ const setup = (
           )
           .run()
       );
+      // Other delivery purposes have no evidence in this pre-User routing fixture.
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db.prepare(
+            "CREATE TABLE insight_whatsapp_claims (user_id TEXT, correlation_token TEXT, business_phone_number_id TEXT, send_started_at_ms INTEGER)"
+          ),
+          db.prepare(
+            "CREATE TABLE weekly_governor_questions (user_id TEXT, correlation_token TEXT, business_phone_number_id TEXT, send_started_at_ms INTEGER)"
+          ),
+        ])
+      );
       yield* Effect.tryPromise(() =>
         applyMigration(new URL("../migrations/0026_whatsapp_recovery.sql", import.meta.url))
       );
@@ -404,6 +415,37 @@ it("routes only authenticated text of a verified BSUID to the User coordinator",
       const sweptReplay = inbound("wamid.swept", "Texto exacto", String(nowSeconds - 31 * 86_400));
       expect((yield* Effect.tryPromise(() => send(sweptReplay))).status).toBe(409);
       expect(calls).toHaveLength(3);
+    })
+  ));
+
+it("preserves a contextual reply identity across the Core-to-coordinator wire codec", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const calls: unknown[] = [];
+      const coordinator = (_userId: string, request: Request): Promise<Response> =>
+        request.json().then((body: unknown) => {
+          calls.push(body);
+          return new Response(null, { status: 202 });
+        });
+      const { db, send } = yield* Effect.tryPromise(() => setup(Option.some(coordinator)));
+      yield* Effect.tryPromise(() => seedVoiceUser(db, "10000000-0000-4000-8000-000000000071"));
+      const reply = encodeJson({
+        message: {
+          id: "wamid.contextual-reply",
+          timestamp: String(nowSeconds),
+          type: "text",
+          from_user_id: bsuid,
+          text: { body: "Sigue" },
+          context: { id: "wamid.proactive" },
+        },
+        conversation: { business_scoped_user_id: bsuid },
+        phone_number_id: "123456789012345",
+      });
+      expect((yield* Effect.tryPromise(() => send(reply))).status).toBe(202);
+      expect(calls).toHaveLength(1);
+      const admission = yield* Schema.decodeUnknownEffect(WhatsAppTurnAdmission)(calls[0]);
+      expect(admission.replyToMessageId).toEqual(Option.some("wamid.proactive"));
+      expect(admission.text).toBe("Sigue");
     })
   ));
 

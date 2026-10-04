@@ -7,7 +7,7 @@ import { Brand, type DateTime, Option } from "effect";
 import { type User, type UserId } from "../../../src/core/identity/contract";
 
 import type { HostedInitialTextContext } from "../../../src/shell/hosted-inference/contract";
-import { hostedContextSections } from "./context-sections";
+import { type ProactiveReplyContext, hostedContextSections } from "./context-sections";
 
 const makeInitialContext = Brand.nominal<HostedInitialTextContext>();
 
@@ -33,6 +33,7 @@ export const assembleWorkingContext = ({
   memories,
   compactedConversation,
   transcript,
+  proactiveReply,
   activeRequest,
 }: Readonly<{
   sessionId: HostedAgentSessionId;
@@ -45,6 +46,7 @@ export const assembleWorkingContext = ({
     Readonly<{ sessionId: HostedAgentSessionId; userId: UserId; text: string }>
   >;
   transcript: ReadonlyArray<SessionTranscriptEntry>;
+  proactiveReply: Option.Option<ProactiveReplyContext>;
   activeRequest: string;
 }>): HostedInitialTextContext => {
   const ordered = transcript
@@ -67,6 +69,7 @@ export const assembleWorkingContext = ({
         (item) => item.sessionId === sessionId && item.userId === userId
       ),
       transcript: ordered.map(({ entry }) => entry),
+      proactiveReply: Option.filter(proactiveReply, (item) => item.userId === userId),
     }),
     activeRequest: { _tag: "Present", text: activeRequest },
   });

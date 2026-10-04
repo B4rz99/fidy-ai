@@ -172,4 +172,11 @@ export const hostedTurnTestMigrations = [
   "0024_hosted_whatsapp",
   "0025_voice_refusal",
   "0026_whatsapp_recovery",
+  "0018_insight_events",
+  "0030_weekly_schedules",
+  "0031_proactive_whatsapp",
+  "0032_proactive_transcript",
+  "0033_weekly_dispatch",
+  "0034_insight_provider_scope",
+  "0035_proactivity_governor",
 ] as const;

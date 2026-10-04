@@ -209,7 +209,6 @@ const migrationNames = [
   "0017_statement_dispatch",
   "0018_batch_envelope_audit",
   "0018_dashboard",
-  "0018_insight_events",
   "0019_canonical_child_guards",
   "0020_restore_audit_budgets",
   "0020_dashboard_projection",
@@ -1002,6 +1001,7 @@ const queuedWhatsAppTurn = (
           subject,
           inbound: WhatsAppInboundEvidence.make({
             messageId: WhatsAppProviderMessageId.make(`wamid.isolation.${index}`),
+            replyToMessageId: Option.none(),
             businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
             occurredAtMs: now(),
             receivedAtMs: now(),
@@ -1340,6 +1340,7 @@ it("runs WhatsApp text through hosted inference but awaits signed delivery befor
             executeMutation: Option.none(),
             deliver: {
               _tag: "WhatsApp",
+              contextualReplyQuery: Option.none(),
               send: ({ correlationToken }) => {
                 tokens.push(correlationToken);
                 return Promise.resolve({
@@ -1744,6 +1745,7 @@ it("refuses a free-form reply when the verified inbound event is outside its 24-
             subject: caller,
             inbound: WhatsAppInboundEvidence.make({
               messageId: WhatsAppProviderMessageId.make("wamid.old"),
+              replyToMessageId: Option.none(),
               businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
               occurredAtMs: now() - 86_400_001,
               receivedAtMs: now(),
@@ -1752,7 +1754,7 @@ it("refuses a free-form reply when the verified inbound event is outside its 24-
             inference: inferenceModel,
             bucket: Option.none(),
             executeMutation: Option.none(),
-            deliver: { _tag: "WhatsApp", send: sends },
+            deliver: { _tag: "WhatsApp", contextualReplyQuery: Option.none(), send: sends },
             signal: makeAbortController().signal,
             scheduleRecovery: () => Promise.resolve(),
           },
@@ -1817,6 +1819,7 @@ it("interrupts a staged reply once if recovery finds no provider send started", 
       });
       const inbound = WhatsAppInboundEvidence.make({
         messageId: WhatsAppProviderMessageId.make("wamid.abandoned"),
+        replyToMessageId: Option.none(),
         businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
         occurredAtMs: now(),
         receivedAtMs: now(),
@@ -1911,6 +1914,7 @@ it("does not send when recovery interrupts a staged reply during scheduling", ()
             }),
             inbound: WhatsAppInboundEvidence.make({
               messageId: WhatsAppProviderMessageId.make("wamid.recovery-race"),
+              replyToMessageId: Option.none(),
               businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
               occurredAtMs: now(),
               receivedAtMs: now(),
@@ -1919,7 +1923,7 @@ it("does not send when recovery interrupts a staged reply during scheduling", ()
             inference: model,
             bucket: Option.none(),
             executeMutation: Option.none(),
-            deliver: { _tag: "WhatsApp", send: sends },
+            deliver: { _tag: "WhatsApp", contextualReplyQuery: Option.none(), send: sends },
             signal: makeAbortController().signal,
             scheduleRecovery: () => {
               const timestamp = now();
@@ -1980,6 +1984,7 @@ it("does not send when a window closes while a prepared reply waits for recovery
             }),
             inbound: WhatsAppInboundEvidence.make({
               messageId: WhatsAppProviderMessageId.make("wamid.window-race"),
+              replyToMessageId: Option.none(),
               businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
               occurredAtMs: now(),
               receivedAtMs: now(),
@@ -1988,7 +1993,7 @@ it("does not send when a window closes while a prepared reply waits for recovery
             inference: model,
             bucket: Option.none(),
             executeMutation: Option.none(),
-            deliver: { _tag: "WhatsApp", send: sends },
+            deliver: { _tag: "WhatsApp", contextualReplyQuery: Option.none(), send: sends },
             signal: makeAbortController().signal,
             scheduleRecovery: () =>
               db
@@ -2059,6 +2064,7 @@ it("fails an ambiguous WhatsApp send as DeliveryUnconfirmed without replaying a 
             executeMutation: Option.none(),
             deliver: {
               _tag: "WhatsApp",
+              contextualReplyQuery: Option.none(),
               send: ({ correlationToken }) => {
                 tokens.push(correlationToken);
                 return Promise.resolve({ kind: "ambiguous" });

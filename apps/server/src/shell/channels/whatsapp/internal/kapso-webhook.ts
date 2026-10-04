@@ -44,6 +44,7 @@ const invalidKapsoInvariant = (_reason: string): InvalidWhatsAppPayload =>
 
 const rawMessageFields = {
   id: WhatsAppProviderMessageId,
+  context: Model.optionalOption(Schema.Struct({ id: WhatsAppProviderMessageId })),
   timestamp: Schema.String.check(Schema.isPattern(/^[0-9]{1,16}$/u)),
   from: Model.optionalOption(Schema.String),
   from_user_id: Model.optionalOption(WhatsAppBusinessScopedUserId),
@@ -273,6 +274,7 @@ const projectEvent = Effect.fn(function* (
     occurredAt,
     receivedAt,
     content,
+    replyToMessageId: Option.map(raw.message.context, ({ id }) => id),
   } satisfies WhatsAppInboundEvent;
 });
 

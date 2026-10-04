@@ -26,6 +26,7 @@ import {
   type InsightWhatsAppStage,
   type InsightWhatsAppStart,
   type WhatsAppStatusAdmission,
+  type WhatsAppTurnAdmission,
 } from "../contract";
 
 const Claim = Schema.Struct({
@@ -384,6 +385,79 @@ export const expireInsightChannelEvidence = (
       .bind(input.userId, hostedTranscriptRetentionMs, input.now, input.now)
       .run()
   ).pipe(Effect.asVoid);
+
+/** Bounded independent retention, including Users with no Hosted Agent Session. */
+export const sweepInsightChannelEvidence = (
+  input: Readonly<{ db: D1Database; now: number }>
+): Effect.Effect<void, InsightDeliveryFailure> =>
+  Effect.gen(function* () {
+    const rows = yield* Effect.tryPromise(() =>
+      input.db
+        .prepare(
+          "SELECT DISTINCT user_id FROM insight_whatsapp_claims WHERE (text IS NOT NULL OR summary_json IS NOT NULL) AND ((send_started_at_ms IS NOT NULL AND send_started_at_ms+2592000000<=?) OR (state='staged' AND expires_at_ms<=?)) LIMIT 64"
+        )
+        .bind(input.now, input.now)
+        .all()
+    );
+    const users = yield* Schema.decodeUnknownEffect(
+      Schema.Array(Schema.Struct({ user_id: UserId }))
+    )(rows.results);
+    for (const user of users) {
+      yield* expireInsightChannelEvidence({ ...input, userId: user.user_id });
+    }
+  });
+
+/** Identity-bound attention metadata, independent of model and processing availability; no report content is released. */
+export const weeklySummaryReplyQuery = (proof: WhatsAppTurnAdmission): OwnedStatement => {
+  const association = whatsAppIdentityQuery({
+    userId: proof.userId,
+    portfolioId: proof.portfolioId,
+    bsuid: proof.bsuid,
+  });
+  const statement: OwnedStatement = {
+    sql: `SELECT d.user_id,d.insight_event_id,NULL AS question_id,? AS occurred_at_ms,d.delivered_at_ms FROM insight_whatsapp_claims AS d WHERE d.user_id=? AND d.portfolio_id=? AND d.bsuid=? AND d.provider_message_id=? AND d.state='delivered' UNION ALL SELECT d.user_id,NULL,d.id,?,d.delivered_at_ms FROM weekly_governor_questions AS d WHERE d.user_id=? AND d.portfolio_id=? AND d.bsuid=? AND d.provider_message_id=? AND d.state='delivered'`,
+    params: [
+      proof.occurredAtMs,
+      proof.userId,
+      proof.portfolioId,
+      proof.bsuid,
+      Option.getOrElse(proof.replyToMessageId, () => ""),
+      proof.occurredAtMs,
+      proof.userId,
+      proof.portfolioId,
+      proof.bsuid,
+      Option.getOrElse(proof.replyToMessageId, () => ""),
+    ],
+  };
+  return {
+    sql: `SELECT v.* FROM (${statement.sql}) AS v WHERE EXISTS (${association.sql})`,
+    params: [...statement.params, ...association.params],
+  };
+};
+
+/** Live same-association delivery evidence for one referenced message. The caller must separately guard its own data read. */
+export const contextualInsightQuery = (
+  input: Pick<WhatsAppTurnAdmission, "userId" | "portfolioId" | "bsuid" | "replyToMessageId">
+): Option.Option<OwnedStatement> => {
+  if (Option.isNone(input.replyToMessageId)) return Option.none();
+  const association = whatsAppIdentityQuery(input);
+  return Option.some(
+    protectConsentStatement({
+      subject: { _tag: "User", userId: input.userId },
+      requirement: "active",
+      statement: {
+        sql: `SELECT user_id,insight_event_id FROM insight_whatsapp_claims WHERE user_id=? AND portfolio_id=? AND bsuid=? AND provider_message_id=? AND state='delivered' AND EXISTS (${association.sql})`,
+        params: [
+          input.userId,
+          input.portfolioId,
+          input.bsuid,
+          input.replyToMessageId.value,
+          ...association.params,
+        ],
+      },
+    })
+  );
+};
 
 /** Complete exact visible-text row for the Agent's atomic copy, guarded by current purpose and channel retention. Published columns are user_id, insight_event_id, delivered_at_ms and text. */
 export const insightVerifiedTranscriptQuery = (

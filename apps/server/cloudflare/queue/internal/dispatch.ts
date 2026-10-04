@@ -1,3 +1,5 @@
+import { WeeklyDeliveryWork } from "../../insights/contract";
+import { receiveWeeklyWork } from "../../insights/runtime";
 import { Clock, Data, Effect, Option, Schema } from "effect";
 import type { CoreQueueEnvironment, CoreQueueHandler } from "../contract";
 import {
@@ -136,15 +138,35 @@ const receiveBillingQueue: CoreQueueHandler = (batch, environment) =>
     })
   );
 
+const receiveIdentityOnlyQueue = (
+  batch: MessageBatch<unknown>,
+  environment: CoreQueueEnvironment
+): Option.Option<Promise<void>> => {
+  if (batch.messages.some((message) => Schema.is(WeeklyDeliveryWork)(message.body))) {
+    return Option.some(
+      receiveWeeklyWork({
+        messages: batch.messages,
+        workflow: Option.fromUndefinedOr(environment.WEEKLY_DELIVERY_WORKFLOW),
+        coordinator: environment.USER_TRANSACTION_COORDINATOR,
+      }).pipe(Effect.runPromise)
+    );
+  }
+  if (batch.messages.some((message) => Schema.is(WhatsAppWork)(message.body))) {
+    return Option.some(
+      receiveWhatsAppWork({
+        messages: batch.messages,
+        coordinator: environment.USER_TRANSACTION_COORDINATOR,
+      })
+    );
+  }
+  return Option.none();
+};
+
 const receiveWorkQueue: CoreQueueHandler = (batch, environment) => {
   const smoke = receiveReservedSmoke(batch, environment);
   if (Option.isSome(smoke)) return smoke.value;
-  if (batch.messages.some((message) => Schema.is(WhatsAppWork)(message.body))) {
-    return receiveWhatsAppWork({
-      messages: batch.messages,
-      coordinator: environment.USER_TRANSACTION_COORDINATOR,
-    });
-  }
+  const identityOnly = receiveIdentityOnlyQueue(batch, environment);
+  if (Option.isSome(identityOnly)) return identityOnly.value;
   if (batch.messages.some((message) => isForwardedEmailWork(message.body))) {
     return receiveForwardedQueue(batch, environment);
   }

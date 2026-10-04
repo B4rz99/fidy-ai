@@ -267,13 +267,11 @@ export const browseBudgets = ({
   subject,
   request,
   operation,
-  reconcile,
 }: Readonly<{
   db: D1Database;
   subject: TransactionCaller;
   request: Request;
   operation: BudgetQueryOperation;
-  reconcile: () => Effect.Effect<boolean>;
 }>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -291,7 +289,6 @@ export const browseBudgets = ({
         return transactionUnavailable();
       }
       if (Option.isNone(parsed)) return operation === "budgets.getBudget" ? missing() : invalid();
-      if (!(yield* reconcile())) return transactionUnavailable();
       return yield* readAuthorizedBudget({ db, subject, operation, ...parsed.value });
     }).pipe(Effect.orElseSucceed(transactionUnavailable))
   );

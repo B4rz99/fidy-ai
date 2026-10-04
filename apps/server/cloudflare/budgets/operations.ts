@@ -26,7 +26,7 @@ export const prepareUpdateBudget: typeof updateBudget = (input) => updateBudget(
 /** Prepare removal of one caller-owned Budget and its operational marks in the canonical unit. */
 export const prepareDeleteBudget: typeof deleteBudget = (input) => deleteBudget(input);
 
-/** Execute canonical Budget reads with live authority, accountability, and completed alert work. */
+/** Observe Budget facts with live authority and accountability, without advancing pending alerts. */
 export const browseBudgets: typeof browse = (input) => browse(input);
 
 /**

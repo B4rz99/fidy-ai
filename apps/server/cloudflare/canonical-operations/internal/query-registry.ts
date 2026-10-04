@@ -4,7 +4,7 @@ import type { TransactionCaller } from "../../canonical-work/operations";
 import { executeProtectedCategories, listOwnKeywordRules } from "../../categories/operations";
 import { executeProtectedQuotaQuery } from "../../quotas/operations";
 import { executeProtectedSubscriptionQuery } from "../../subscription/operations";
-import { browseBudgets, evaluateBudgetAlerts } from "../../budgets/operations";
+import { browseBudgets } from "../../budgets/operations";
 import { browseTransactions } from "../../transactions/operations";
 import { browseDashboard } from "../../dashboard/operations";
 import { recallMemories } from "../../memory/operations";
@@ -37,7 +37,6 @@ const budgetOwner =
         subject,
         request,
         operation,
-        reconcile: () => evaluateBudgetAlerts({ db, userId: subject.userId }),
       })
     );
 const historyOwner =

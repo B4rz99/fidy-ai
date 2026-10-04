@@ -72,8 +72,9 @@ Generated artifacts are review evidence, not alternate registries.
 Canonical Policy owns discovery and execution policy. Native Canonical Operations coordinates
 catalog-bound execution through owner operations; its dispatch and adapter registries remain
 private. HTTP and hosted callers share installed-query selection and invocation, including
-Transaction-history selection and Budget reconciliation. HTTP retains transport admission and the
-original request for owner input classification; hosted canonical arguments reconstruct only their
+Transaction-history selection and observational Budget reads. Alert reconciliation belongs to
+coordinated Budget/Transaction mutation execution, never query invocation. HTTP retains transport
+admission and the original request for owner input classification; hosted canonical arguments reconstruct only their
 declared route. Both cross the same invocation seam, which binds the declared capability and preserves
 owner refusals, live accounting and interruption. Removing Canonical Operations would redistribute
 this invocation knowledge across callers rather than remove it.

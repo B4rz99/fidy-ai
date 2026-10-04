@@ -120,7 +120,8 @@ const executeCall = ({
 
 /** Dispatch a bounded batch or an individual catalog call within one User coordination turn. */
 const affectsBudget = (operation: CanonicalOperationId): boolean =>
-  operation.startsWith("budgets.") || operation.startsWith("transactions.");
+  operationCatalog.byId.get(operation)?.policy.kind === "mutation" &&
+  (operation.startsWith("budgets.") || operation.startsWith("transactions."));
 
 const executeQueryCall = (
   input: WorkInput,

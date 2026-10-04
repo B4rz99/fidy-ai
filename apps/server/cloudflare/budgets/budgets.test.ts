@@ -1,4 +1,6 @@
 import { evaluateBudgetAlerts, readBudgetCaps, readBudgetSpending } from "./operations";
+import { executeCanonicalWork } from "../canonical-operations/operations";
+import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import {
   canonicalAdmissionMigrationNames,
   installTestSchema,
@@ -1131,11 +1133,7 @@ it(
           )).status
         ).toBe(503);
         expect(moved).toBe(true);
-        expect(
-          (yield* Effect.tryPromise(() =>
-            send(db, request(0, "/budget-status?timeZone=America%2FBogota"))
-          )).status
-        ).toBe(503);
+        // The next query resumes the new financial revision, without first draining alert work.
         const report = yield* Effect.tryPromise(() =>
           send(db, request(0, "/budget-status?timeZone=America%2FBogota"))
         );
@@ -1434,6 +1432,141 @@ it("keeps peer Budget cap and spending projections within one explicit User", ()
       expect(secondReport.statuses.map((status) => encodeMoneyAmount(status.spent.amount))).toEqual(
         ["5.02"]
       );
+    })
+  ));
+
+it("keeps read-only HTTP and hosted queries observational even with pending or invalid alert work", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const token = `fin_${"r".repeat(8)}_${"a".repeat(43)}`;
+      const patId = "40000000-0000-4000-8000-000000000033";
+      yield* seedPAT(db, { token, scope: "read", id: patId });
+      const budgetIds: Array<string> = [];
+      for (const index of [0, 1]) {
+        const response = yield* Effect.tryPromise(() =>
+          send(db, request(index, "/budgets", "POST", payload()))
+        );
+        expect(response.status).toBe(201);
+        const created = yield* Schema.decodeUnknownEffect(Created)(
+          yield* Effect.tryPromise(() => response.json())
+        );
+        budgetIds.push(created.data.id);
+        const occurredAt = DateTime.formatIso(DateTime.nowUnsafe());
+        yield* Effect.tryPromise(() =>
+          db.batch([
+            db
+              .prepare(`INSERT INTO transactions
+              (id, user_id, amount, currency, direction, category_id, occurred_at, created_at)
+              VALUES (?, ?, '80.01', 'COP', 'outflow', ?, ?, ?)`)
+              .bind(
+                `30000000-0000-4000-8000-00000000009${index}`,
+                users[index],
+                category,
+                occurredAt,
+                occurredAt
+              ),
+            db
+              .prepare(
+                "INSERT INTO budget_reconciliation_work (user_id, occurred_at) VALUES (?, 'zz-invalid')"
+              )
+              .bind(users[index]),
+          ])
+        );
+      }
+      const snapshot = (): Promise<ReadonlyArray<ReadonlyArray<unknown>>> =>
+        Promise.all([
+          db.prepare("SELECT * FROM budgets ORDER BY user_id, id").all(),
+          db
+            .prepare("SELECT * FROM budget_month_latches ORDER BY user_id, budget_id, from_utc")
+            .all(),
+          db
+            .prepare(
+              "SELECT * FROM budget_threshold_alerts ORDER BY user_id, budget_id, from_utc, threshold"
+            )
+            .all(),
+          db
+            .prepare("SELECT * FROM budget_reconciliation_work ORDER BY user_id, occurred_at")
+            .all(),
+        ]).then((results) => results.map((result) => result.results));
+      const before = yield* Effect.tryPromise(snapshot);
+      const subject = {
+        userId: users[0],
+        patId,
+        digest: yield* Effect.tryPromise(() => digest(token)),
+        requiredScope: Option.some("read" as const),
+      };
+      const queries = [
+        { operation: "budgets.listBudgets", path: "/budgets", input: {} },
+        {
+          operation: "budgets.getBudget",
+          path: `/budgets/${budgetIds[0]}`,
+          input: { params: { id: budgetIds[0] } },
+        },
+        {
+          operation: "budgets.getBudgetStatus",
+          path: "/budget-status?timeZone=America%2FBogota",
+          input: { query: { timeZone: "America/Bogota" } },
+        },
+        { operation: "transactions.listTransactions", path: "/transactions", input: {} },
+      ];
+      for (const query of queries) {
+        const http = yield* Effect.tryPromise(() => send(db, patRequest(token, query.path)));
+        expect(http.status).toBe(200);
+        expect(yield* Effect.tryPromise(snapshot)).toEqual(before);
+        const hosted = yield* executeCanonicalWork({
+          db,
+          subject,
+          current: DateTime.nowUnsafe().epochMilliseconds,
+          bucket: Option.none(),
+          hostedFence: Option.none(),
+          inference: Option.none(),
+          work: {
+            _tag: "Call",
+            operation: CanonicalOperationId.make(query.operation),
+            input: query.input,
+          },
+        });
+        expect(hosted.status).toBe(200);
+        expect(yield* Effect.tryPromise(snapshot)).toEqual(before);
+      }
+      expect(
+        (yield* Effect.tryPromise(() => send(db, patRequest(token, `/budgets/${budgetIds[1]}`))))
+          .status
+      ).toBe(404);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          send(db, patRequest(token, "/budget-status?timeZone=invalid"))
+        )).status
+      ).toBe(400);
+      expect(yield* Effect.tryPromise(snapshot)).toEqual(before);
+      // A failed retained-state decode also cannot perform or consume pending alert work.
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE budgets SET cap = 'invalid' WHERE user_id = ?").bind(users[0]).run()
+      );
+      const corrupted = yield* Effect.tryPromise(snapshot);
+      expect((yield* Effect.tryPromise(() => send(db, patRequest(token, "/budgets")))).status).toBe(
+        503
+      );
+      const failure = yield* executeCanonicalWork({
+        db,
+        subject,
+        current: DateTime.nowUnsafe().epochMilliseconds,
+        bucket: Option.none(),
+        hostedFence: Option.none(),
+        inference: Option.none(),
+        work: {
+          _tag: "Call",
+          operation: CanonicalOperationId.make("budgets.listBudgets"),
+          input: {},
+        },
+      });
+      expect(failure.status).toBe(503);
+      expect(yield* Effect.tryPromise(snapshot)).toEqual(corrupted);
+      const audit = yield* Effect.tryPromise(() =>
+        db.prepare("SELECT operation FROM pat_audit WHERE pat_id = ?").bind(patId).all()
+      );
+      expect(audit.results.length).toBeGreaterThanOrEqual(8);
     })
   ));
 

@@ -2,6 +2,7 @@ apps/server/cloudflare/core-http/internal/http.ts
   s_03ac5c7c2fb46d::t_d8396e546f5356 104,234-245
 infra/cloudflare/verify-edge-policy.ts
   s_03ac5c7c2fb46d::t_eb4d4c6c5e14e9 7-8
+  s_03ac5c7c2fb46d::t_7b4cfee01693a7 9
 apps/server/cloudflare/onboarding/consent-ingress.test.ts
   s_03ac5c7c2fb46d::t_6f747864ecd956 421-430,432-451
   s_03ac5c7c2fb46d::t_c7f3e1d041464b 431
@@ -10,6 +11,8 @@ apps/server/cloudflare/transactions/transactions.test.ts
   s_03ac5c7c2fb46d::t_2cf25ecc349133 119
 apps/server/cloudflare/ingestion/statement-ingestion.test.ts
   s_03ac5c7c2fb46d::t_9c271fe34ffd99 130
+infra/cloudflare/verify-edge-policy.test.ts
+  s_03ac5c7c2fb46d::t_5f2962f9c34802 7
 ---
 {
   "schema_version": "authorship/3.0.0",

@@ -680,7 +680,7 @@ html:has(.fidy-landing) {
   margin: auto;
 }
 .fidy-landing .closing p {
-  color: light-dark(#223413, var(--night-text));
+  color: #223413;
   margin: 22px auto;
 }
 .fidy-landing .closing .btn {

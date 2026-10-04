@@ -16,7 +16,7 @@ import {
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import { prepareOwnedStatement } from "../../database/operations";
 import {
-  type TransactionCaller,
+  type QueryCaller,
   callerAuthority,
   isPATCaller,
   liveTransactionAuthority,
@@ -49,7 +49,7 @@ const accountQuery = ({
   operation,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: QueryCaller;
   current: number;
   operation: DashboardQueryOperation;
 }>): Effect.Effect<void, DashboardQueryLimited | DashboardUnavailable> =>
@@ -98,7 +98,7 @@ export const queryDashboard = ({
   operation,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: QueryCaller;
   operation: DashboardQueryOperation;
 }>): Effect.Effect<Response> =>
   Effect.gen(function* () {

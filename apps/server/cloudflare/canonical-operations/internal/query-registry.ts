@@ -1,6 +1,10 @@
 import { operationCatalog } from "../../../src/shell/api";
 import { type Cause, Effect, Option } from "effect";
-import type { TransactionCaller } from "../../canonical-work/operations";
+import {
+  type QueryCaller,
+  isOAuthCaller,
+  transactionUnavailable,
+} from "../../canonical-work/operations";
 import { executeProtectedCategories, listOwnKeywordRules } from "../../categories/operations";
 import { executeProtectedQuotaQuery } from "../../quotas/operations";
 import { executeProtectedSubscriptionQuery } from "../../subscription/operations";
@@ -19,7 +23,7 @@ import {
 
 export type QueryWork = Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: QueryCaller;
   request: Request;
   bucket: Option.Option<R2Bucket>;
   browserOrigin: Option.Option<string>;
@@ -87,7 +91,9 @@ const queryOwners = new Map<string, QueryOwner>([
   [
     "pats.listPATs",
     ({ db, subject }): Effect.Effect<Response, Cause.UnknownError> =>
-      Effect.tryPromise(() => listPATs({ db, subject })),
+      isOAuthCaller(subject)
+        ? Effect.succeed(transactionUnavailable())
+        : Effect.tryPromise(() => listPATs({ db, subject })),
   ],
   [
     "categories.listCategories",

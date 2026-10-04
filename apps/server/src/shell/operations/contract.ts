@@ -9,7 +9,11 @@ import {
   OperationResponse,
 } from "~/shell/public-http/contract";
 import type { CatalogOperation, OperationCatalog } from "~/shell/canonical-catalog/contract";
-import { isPATScoped, operationPolicy, patScopedChildren } from "~/shell/canonical-policy/contract";
+import {
+  isUserOwnedAgentScoped,
+  operationPolicy,
+  userOwnedAgentScopedChildren,
+} from "~/shell/canonical-policy/contract";
 
 const operationsGroupName = "operations";
 const atomicBatchEndpointName = "executeAtomicBatch";
@@ -112,7 +116,7 @@ const mutationOperations = (catalog: OperationCatalog): ReadonlyArray<CatalogOpe
     (operation) =>
       operation.atomicBatchEligible &&
       operation.policy.kind === "mutation" &&
-      (isPATScoped(operation.policy.access) ||
+      (isUserOwnedAgentScoped(operation.policy.access) ||
         operation.policy.access._tag === "FreshWebSessionOnly")
   );
 
@@ -238,7 +242,7 @@ export const makeOperationsGroup = (ordinaryCatalog: OperationCatalog): Operatio
       )
       .annotateMerge(
         operationPolicy({
-          access: patScopedChildren,
+          access: userOwnedAgentScopedChildren,
           requiredTier: "free",
           agentConfirmation: "required",
           kind: "mutation",

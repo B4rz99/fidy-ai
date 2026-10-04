@@ -9,6 +9,7 @@ import {
   BrowserLoginPollingRateLimitedApi,
   type EmailAddress,
   type EmailVerificationCode,
+  OAuthRequestId,
   type WebAuthClient,
 } from "@/transport/client";
 
@@ -392,7 +393,16 @@ export const useBrowserLoginPairing = (): BrowserLoginPairing => {
     startPairing({
       onAuthenticated: () => {
         completeLogin();
-        router.navigate({ to: "/app/transactions" }).catch(() => undefined);
+        const requestedReview = Schema.decodeUnknownOption(OAuthRequestId)(
+          router.state.location.search.oauthRequest
+        );
+        const navigation = Option.isSome(requestedReview)
+          ? router.navigate({
+              to: "/oauth/review/$requestId",
+              params: { requestId: requestedReview.value },
+            })
+          : router.navigate({ to: "/app/transactions" });
+        navigation.catch(() => undefined);
       },
       onStateChange: setPairingState,
     });

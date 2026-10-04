@@ -1,3 +1,4 @@
+import type { OAuthAuthority } from "../../../src/shell/oauth-agents/contract";
 import { Option, Schema } from "effect";
 import { recordAuthorizedCall } from "../../../src/shell/audit/operations";
 import { KeywordRule, maximumKeywordRulesPerUser } from "../../../src/core/categories/contract";
@@ -29,7 +30,7 @@ export const keywordRulesQuery = ({ userId }: Readonly<{ userId: string }>): Own
 export const protectedKeywordRulesQuery = ({
   userId,
   authority,
-}: Readonly<{ userId: string; authority: Authority }>): OwnedStatement => ({
+}: Readonly<{ userId: string; authority: Authority | OAuthAuthority }>): OwnedStatement => ({
   sql: `SELECT ${ruleColumns} FROM keyword_rules WHERE user_id = ?
     AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})
     ORDER BY created_at, id LIMIT ${boundedRuleCount}`,

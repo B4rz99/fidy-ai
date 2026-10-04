@@ -7,7 +7,7 @@ import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/op
 import { Effect } from "effect";
 import { prepareOwnedStatement } from "../../database/operations";
 import {
-  type TransactionCaller,
+  type QueryCaller,
   callerAuthority,
   isPATCaller,
   liveTransactionAuthority,
@@ -22,7 +22,7 @@ type BudgetAuditOperation =
 
 type BudgetAuditCall = Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: QueryCaller;
   operation: BudgetAuditOperation;
   outcome: "accepted" | "rejected";
   current: number;

@@ -90,16 +90,22 @@ Security-sensitive browser actions use the server-established fresh-session requ
 completion use the canonical typed client with no-store requests. Neither value enters a URL, browser
 storage, or application-wide state.
 
-### Planned OAuth connection UX
+### OAuth connection approval and management UX
 
-ADR 0033 defines a future independent `oauth-connections` feature; #977 adds no browser route or
-credential handling. After established fresh sign-in, one concise Spanish screen shows the claimed
+The independent `oauth-connections` feature implements ADR 0033's approval slice. After established fresh sign-in, one concise Spanish screen shows the claimed
 client name, only requested permissions, a narrower non-empty approval subset, compact
 7/30/90/365-day duration (90 default), expiration and Conectar / Cancelar. Omitted scope defaults to
 read only, with no implicit write or unrequested capability. Escalation needs a new explicit review.
 
-Settings distinguish individual/all OAuth connection revocation from PAT controls and browser
-logout. Sensitive-operation handoff shows a server-owned exact operation/input/revision projection,
+Conectar submits the exact reviewed scope subset, duration and absolute expiration through the typed
+origin/CSRF-protected client. Its void command result prevents callback codes from entering Atom result
+state; it immediately navigates to the server-owned registered callback. Fidy never handles or stores
+access/refresh credentials. An ambiguous approval failure disables repeat approval and asks the User
+to restart from the agent.
+
+`/settings/agents` lists server-derived connection identity, unverified name, approved Spanish permissions, absolute expiration, status and up to three retained canonical activity entries. Duplicate names remain separate; pagination belongs to the router and server resources/commands belong to the authentication registry. One/all agent revocation controls are distinct from Tokens personales (PAT) and Cerrar sesión. They explain that committed work is not undone and expired/revoked agents require new approval. Successful commands invalidate the list; unavailable or malformed reads never become empty state, and uncertain commands never report success. Previously loaded data is visibly stale and controls are disabled when refresh fails.
+
+Future sensitive-operation handoff shows a server-owned exact operation/input/revision projection,
 requires same-User fresh authority and origin/CSRF-protected approval, and carries no credential in
 URLs, browser state or model content. A public reference conveys no permission. The server owns
 single-use consumption and resume policy; unsupported host interaction fails closed. Browser-safe

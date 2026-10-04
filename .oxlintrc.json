@@ -229,7 +229,7 @@
     },
     // Vite and Vitest require default-exported configuration objects.
     {
-      "files": ["apps/web/{playwright,playwright.cli,vite,vitest}.config.ts"],
+      "files": ["apps/web/{playwright,playwright.cli,playwright.oauth,vite,vitest}.config.ts"],
       "rules": {
         "import/no-default-export": "off"
       }

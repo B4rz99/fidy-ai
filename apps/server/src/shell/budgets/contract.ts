@@ -15,22 +15,22 @@ import {
   ValidationFailed,
   createdStatus,
 } from "~/shell/public-http/contract";
-import { operationPolicy, patScoped } from "~/shell/canonical-policy/contract";
+import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
 
 const read = operationPolicy({
-  access: patScoped("read"),
+  access: userOwnedAgentScoped("read"),
   requiredTier: "free",
   agentConfirmation: "not-required",
   kind: "query",
 });
 const additiveWrite = operationPolicy({
-  access: patScoped("write"),
+  access: userOwnedAgentScoped("write"),
   requiredTier: "free",
   agentConfirmation: "not-required",
   kind: "mutation",
 });
 const destructiveWrite = operationPolicy({
-  access: patScoped("write"),
+  access: userOwnedAgentScoped("write"),
   requiredTier: "free",
   agentConfirmation: "required",
   kind: "mutation",

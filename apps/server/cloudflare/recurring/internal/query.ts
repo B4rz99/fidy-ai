@@ -18,7 +18,7 @@ import {
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import { prepareOwnedStatement } from "../../database/operations";
 import {
-  type TransactionCaller,
+  type QueryCaller,
   callerAuthority,
   childCaller,
   isPATCaller,
@@ -51,7 +51,7 @@ const Row = Schema.Struct({
 });
 type Call = Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: QueryCaller;
   current: number;
   accepted: boolean;
 }>;
@@ -194,7 +194,7 @@ const pageStatements = (
 };
 const revisionAssertion = (
   db: D1Database,
-  userId: TransactionCaller["userId"],
+  userId: QueryCaller["userId"],
   revision: number
 ): D1PreparedStatement =>
   db
@@ -251,7 +251,7 @@ export const list = ({
   request,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: QueryCaller;
   request: Request;
 }>): Effect.Effect<Response> => {
   const call = {

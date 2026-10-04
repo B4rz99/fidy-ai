@@ -10,7 +10,7 @@ import { type CatalogOperation } from "../../../src/shell/canonical-catalog/cont
 import { type ErrorCode } from "../../../src/shell/public-http/contract";
 import { grantsRequiredTier } from "../../../src/shell/canonical-operations/operations";
 import { operationCatalog } from "../../../src/shell/api";
-import { patScopeCapability } from "../../../src/shell/canonical-policy/contract";
+import { userOwnedAgentCapability } from "../../../src/shell/canonical-policy/contract";
 import { Effect, Option, Schema } from "effect";
 import { maximumSubmissionInputBytes } from "../../ingestion/contract";
 
@@ -141,7 +141,7 @@ const childAccess = ({
   db: D1Database;
   subject: TransactionCaller;
   current: number;
-  capability: ReturnType<typeof patScopeCapability>;
+  capability: ReturnType<typeof userOwnedAgentCapability>;
 }>): Promise<ChildAccess> => {
   const scoped = childCaller({ subject, requiredScope: capability });
   return liveTransactionAuthority({ db, subject: scoped, current }).then((allowed) => {
@@ -352,7 +352,7 @@ const childAccessStep = ({
   catalogOperation: CatalogOperation;
   index: number;
 }>): Effect.Effect<Option.Option<CallStep>> => {
-  const capability = patScopeCapability(catalogOperation.policy.access);
+  const capability = userOwnedAgentCapability(catalogOperation.policy.access);
   return Effect.tryPromise(() => childAccess({ db, subject, current, capability })).pipe(
     Effect.orElseSucceed(() => "credential_refused" as const),
     Effect.map((access) => scopeStep(access, catalogOperation, index))
@@ -472,7 +472,7 @@ const prepareCall = ({
   return Effect.gen(function* () {
     const accessStep = yield* childAccessStep({ db, subject, current, catalogOperation, index });
     if (Option.isSome(accessStep)) return accessStep.value;
-    const capability = patScopeCapability(catalogOperation.policy.access);
+    const capability = userOwnedAgentCapability(catalogOperation.policy.access);
     const scopedSubject = childCaller({ subject, requiredScope: capability });
     const decodedCall = Schema.decodeUnknownOption(getAtomicBatchCallSchema())(call);
     if (Option.isNone(decodedCall)) {

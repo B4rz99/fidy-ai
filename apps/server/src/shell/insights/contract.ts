@@ -7,7 +7,7 @@ import {
   InsightEventId,
 } from "~/core/insights/contract";
 import { NotFound, OperationResponse, ValidationFailed } from "~/shell/public-http/contract";
-import { operationPolicy, patScoped } from "~/shell/canonical-policy/contract";
+import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
 
 /** Canonical operations over the caller's shared InsightEvent stream. */
 const InsightParams = Schema.Struct({ id: InsightEventId });
@@ -40,7 +40,7 @@ export const InsightsGroup = HttpApiGroup.make("insights")
       )
       .annotateMerge(
         operationPolicy({
-          access: patScoped("read"),
+          access: userOwnedAgentScoped("read"),
           requiredTier: "free",
           agentConfirmation: "not-required",
           kind: "query",
@@ -62,7 +62,7 @@ export const InsightsGroup = HttpApiGroup.make("insights")
       )
       .annotateMerge(
         operationPolicy({
-          access: patScoped("write"),
+          access: userOwnedAgentScoped("write"),
           requiredTier: "free",
           agentConfirmation: "required",
           kind: "mutation",
@@ -83,7 +83,7 @@ export const InsightsGroup = HttpApiGroup.make("insights")
       )
       .annotateMerge(
         operationPolicy({
-          access: patScoped("write"),
+          access: userOwnedAgentScoped("write"),
           requiredTier: "free",
           agentConfirmation: "required",
           kind: "mutation",
@@ -103,7 +103,7 @@ export const InsightsGroup = HttpApiGroup.make("insights")
       )
       .annotateMerge(
         operationPolicy({
-          access: patScoped("write"),
+          access: userOwnedAgentScoped("write"),
           requiredTier: "free",
           agentConfirmation: "required",
           kind: "mutation",

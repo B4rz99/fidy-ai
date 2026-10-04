@@ -24,6 +24,15 @@ export {
   HostedTurnProgressRequest,
   type HostedTurnApiGroups,
 } from "~/shell/agent/contract";
+export {
+  OAuthConnectionId,
+  OAuthConnectionList,
+  OAuthConnectionListQuery,
+  OAuthConnectionMetadata,
+  OAuthRequestId,
+  OAuthReview,
+  OAuthReviewChoice,
+} from "~/shell/oauth-agents/contract";
 export { CanonicalAllowance, canonicalAllowanceHeaders } from "~/shell/quotas/contract";
 export { isHttpOrigin, ResourceLimited } from "~/shell/public-http/contract";
 export {

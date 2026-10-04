@@ -3,6 +3,7 @@ import { prepareConsentAction } from "../../consent/operations";
 import {
   prepareAuthorizedAuditCall,
   recordCanonicalPATWork,
+  recordOAuthCall,
   refusedByAuditBudget,
 } from "../../../src/shell/audit/operations";
 import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
@@ -11,7 +12,10 @@ import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { activeProUserCondition } from "../../../src/shell/access-tier/operations";
 import { prepareOwnedStatement } from "../../database/operations";
 import {
+  type QueryCaller,
   type TransactionCaller,
+  callerAuthority,
+  isOAuthCaller,
   isPATCaller,
   refusedTransactionWork,
   transactionId,
@@ -71,10 +75,24 @@ export const forwardingAddressAudit = ({
   operation,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: QueryCaller;
   current: number;
   operation: ForwardingAddressOperation;
 }>): ReadonlyArray<D1PreparedStatement> => {
+  if (isOAuthCaller(subject)) {
+    return [
+      prepareOwnedStatement({
+        db,
+        statement: recordOAuthCall({
+          authority: callerAuthority({ subject, current }),
+          id: transactionId(),
+          current,
+          operation,
+          outcome: "accepted",
+        }),
+      }),
+    ];
+  }
   if (isPATCaller(subject)) {
     return [
       prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) }),
@@ -144,7 +162,7 @@ export const forwardingAddressGuardAudit = ({
   });
 };
 
-const auditCommitted = (results: D1Result[], subject: TransactionCaller): boolean => {
+const auditCommitted = (results: D1Result[], subject: QueryCaller): boolean => {
   const committed = results.at(-1)?.meta.changes === 1;
   return committed && (!isPATCaller(subject) || results.at(results.length - 2)?.meta.changes === 1);
 };
@@ -215,7 +233,7 @@ const responseFor = Effect.fn(function* (row: typeof AddressRow.Type, current: n
 export const forwardingAddressResponse = Effect.fn(function* (
   input: Readonly<{
     db: D1Database;
-    subject: TransactionCaller;
+    subject: QueryCaller;
     operation: "ingestion.getEmailForwarding";
   }>
 ) {

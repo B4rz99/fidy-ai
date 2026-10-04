@@ -1,4 +1,5 @@
 import { Data, Struct } from "effect";
+import type { OAuthAuthority } from "~/shell/oauth-agents/contract";
 import type { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import type { OwnedStatement } from "~/shell/owner-write/contract";
 import { AuditLogEntry } from "~/core/audit/contract";
@@ -56,11 +57,13 @@ export const dailyAuditBudget = 256;
 export const utcDayMilliseconds = 86400000;
 
 /** A live, User-scoped credential gate supplied by the credential owner; Audit never resolves identity. */
-export type AuditAuthority = Readonly<{
-  table: "web_sessions" | "pats";
-  predicate: string;
-  bindings: ReadonlyArray<string | number | Uint8Array>;
-}>;
+export type AuditAuthority =
+  | Readonly<{
+      table: "web_sessions" | "pats";
+      predicate: string;
+      bindings: ReadonlyArray<string | number | Uint8Array>;
+    }>
+  | OAuthAuthority;
 
 type AcceptedSessionOperation = Extract<
   AuditCredentialOperation,
@@ -93,7 +96,7 @@ export type AuthorizedAuditCall = Readonly<{
         outcome: AcceptedOutcome;
       }>
     | Readonly<{
-        authority: AuditAuthority & { table: "pats" };
+        authority: AuditAuthority & { table: "pats" | "oauth_access_credentials" };
         operation: AuditCredentialOperation;
         outcome: AcceptedOutcome;
       }>

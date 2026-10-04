@@ -8,7 +8,7 @@ import {
 } from "../../../src/core/ingestion/contract";
 import { loadMediaItems } from "./media-review";
 import { currentMillis } from "../../runtime/operations";
-import type { TransactionCaller } from "../../canonical-work/operations";
+import type { QueryCaller } from "../../canonical-work/operations";
 import { commitReadAudit, unavailableStatement, validationFailed } from "./statement-ingestion";
 
 class ReviewReadUnavailable extends Data.TaggedError("ReviewReadUnavailable")<{}> {}
@@ -176,7 +176,7 @@ export const listNeedsReviewItems = (
   input: Readonly<{
     database: D1Database;
     environment: Parameters<typeof commitReadAudit>[0];
-    subject: TransactionCaller;
+    subject: QueryCaller;
     url: URL;
   }>
 ): Effect.Effect<Response> =>

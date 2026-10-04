@@ -1,9 +1,10 @@
+import type { OAuthCaller } from "../../../src/shell/oauth-agents/contract";
+import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
 import type { KeywordRuleOperation, KeywordRuleOutcome } from "../contract";
 import {
   insertKeywordRule,
   keywordRulesFromRows,
   protectedKeywordRulesQuery,
-  recordBrowserKeywordRuleRead,
   recordBrowserKeywordRuleWork,
   removeKeywordRule,
   replaceKeywordRule,
@@ -18,7 +19,7 @@ import {
 import { ListKeywordRulesResponse } from "../../../src/shell/categories/contract";
 import { NotFound, ValidationFailed } from "../../../src/shell/public-http/contract";
 import { normalizeSearchText as normalizeCategoryKeyword } from "../../../src/core/search/operations";
-import { recordCanonicalPATWork } from "../../../src/shell/audit/operations";
+import { recordAuthorizedCall, recordCanonicalPATWork } from "../../../src/shell/audit/operations";
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { prepareOwnedStatement } from "../../database/operations";
@@ -34,11 +35,14 @@ import {
 } from "./keyword-rule-shared";
 import { validateKeywordRuleChange } from "../../../src/core/categories/operations";
 import {
+  type QueryCaller,
   type TransactionCaller,
+  type TransactionSubject,
   callerAuthority,
   callerScope,
   credentialRefusedPreparation,
   failedPreparation,
+  isOAuthCaller,
   isPATCaller,
   liveTransactionAuthority,
   transactionNow as now,
@@ -375,7 +379,7 @@ export const prepareDeleteKeywordRule = ({
 const listStatements = ({
   db,
   subject,
-}: Readonly<{ db: D1Database; subject: Subject }>): Array<D1PreparedStatement> => {
+}: Readonly<{ db: D1Database; subject: QueryCaller }>): Array<D1PreparedStatement> => {
   const current = now();
   const pat = isPATCaller(subject);
   return [
@@ -402,14 +406,32 @@ const listStatements = ({
               afterOwnerWrite: false,
             },
           })
-        : recordBrowserKeywordRuleRead({
-            subject,
-            operation: "categories.listKeywordRules",
-            id: uuid(),
-            current,
-          }),
+        : listAudit(subject, current),
     }),
   ];
+};
+const listAudit = (
+  subject: TransactionSubject | OAuthCaller,
+  current: number
+): ReturnType<typeof recordAuthorizedCall> => {
+  const fields = {
+    id: uuid(),
+    current,
+    operation: "categories.listKeywordRules" as const,
+    afterOwnerWrite: false,
+  };
+  if (isOAuthCaller(subject)) {
+    return recordAuthorizedCall({
+      ...fields,
+      authority: callerAuthority({ subject, current }),
+      outcome: "accepted",
+    });
+  }
+  return recordAuthorizedCall({
+    ...fields,
+    authority: liveWebSessionAuthority({ subject, current }),
+    outcome: "success",
+  });
 };
 
 /**
@@ -419,7 +441,7 @@ const listStatements = ({
 const refusedWork = ({
   db,
   subject,
-}: Readonly<{ db: D1Database; subject: Subject }>): Effect.Effect<Response> =>
+}: Readonly<{ db: D1Database; subject: QueryCaller }>): Effect.Effect<Response> =>
   Effect.tryPromise(() => refusedTransactionWork({ db, subject })).pipe(
     Effect.orElseSucceed(keywordRuleUnavailable)
   );
@@ -428,7 +450,7 @@ const refusedWork = ({
 export const listOwnKeywordRules = ({
   db,
   subject,
-}: Readonly<{ db: D1Database; subject: Subject }>): Promise<Response> =>
+}: Readonly<{ db: D1Database; subject: QueryCaller }>): Promise<Response> =>
   Effect.gen(function* () {
     const statements = listStatements({ db, subject });
     const results = yield* Effect.tryPromise(() => db.batch(statements));

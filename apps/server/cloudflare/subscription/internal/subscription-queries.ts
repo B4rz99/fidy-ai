@@ -2,7 +2,6 @@ import {
   prepareAuthorizedAuditCall,
   recordCanonicalPATWork,
 } from "../../../src/shell/audit/operations";
-import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import {
   prepareSubscriptionOffers,
@@ -14,7 +13,7 @@ import { Effect } from "effect";
 import { prepareOwnedStatement } from "../../database/operations";
 import { currentMillis } from "../../runtime/operations";
 import { newId } from "../../secret-material/operations";
-import { isPATCaller } from "../../canonical-work/operations";
+import { callerAuthority, isPATCaller } from "../../canonical-work/operations";
 import { type SubscriptionQueryInput as QueryInput } from "../contract";
 
 const headers = { "cache-control": "no-store", "content-type": "application/json; charset=utf-8" };
@@ -45,9 +44,7 @@ const subscriptionStatements = (
   current: number
 ): Readonly<{ statements: ReadonlyArray<D1PreparedStatement>; read: PreparedSubscriptionRead }> => {
   const pat = isPATCaller(subject);
-  const authority = pat
-    ? livePATAuthority({ subject, current })
-    : liveWebSessionAuthority({ subject, current });
+  const authority = callerAuthority({ subject, current });
   const read =
     operation === "subscription.listSubscriptionOffers"
       ? prepareSubscriptionOffers(authority)

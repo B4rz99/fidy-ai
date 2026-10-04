@@ -5,6 +5,7 @@ import {
   makeCoreWorker,
   runBillingCollectionWorkflow,
 } from "./browser-acceptance-core-module";
+import { browserAcceptanceTopology } from "./browser-acceptance/operations";
 import { newId } from "./secret-material/operations";
 import { db, firstCardUserId, fixtureUserId } from "./browser-acceptance-seed";
 import {
@@ -31,21 +32,16 @@ if (certificate === undefined || key === undefined) {
   throw new Error("Browser acceptance requires TLS certificate and key");
 }
 
-const acceptanceMode = Schema.decodeUnknownSync(Schema.Literals(["shared", "cli"]))(
-  Bun.env.CLI_ACCEPTANCE_MODE ?? "shared"
-);
-const isolatedPublicPort = 4184;
-const sharedPublicPort = 4174;
-const isolatedOperatorPort = 4185;
-const sharedOperatorPort = 4175;
-const publicPort = acceptanceMode === "cli" ? isolatedPublicPort : sharedPublicPort;
-const operatorPort = acceptanceMode === "cli" ? isolatedOperatorPort : sharedOperatorPort;
+const selectedTopology = browserAcceptanceTopology();
+const acceptanceMode = selectedTopology.mode;
+const publicPort = selectedTopology.apiPort;
+const operatorPort = selectedTopology.operatorPort;
 const browserOrigin = browserOrigins.acceptance;
-const isolatedBrowserOrigin = "https://127.0.0.1:4183";
+const isolatedBrowserOrigin = selectedTopology.app;
 // Bridge only the isolated fixture's port identity; production origin policy stays unchanged.
 const bridgeBrowserOrigin = (response: Response): Response => {
   if (
-    acceptanceMode !== "cli" ||
+    acceptanceMode === "shared" ||
     response.headers.get("access-control-allow-origin") !== browserOrigin
   ) {
     return response;
@@ -280,7 +276,7 @@ const server = Bun.serve({
     // Cloudflare supplies this header at the edge; never accept a client-provided value.
     const ingress = new Request(request);
     ingress.headers.set("cf-connecting-ip", "127.0.0.1");
-    if (acceptanceMode === "cli" && ingress.headers.get("origin") === isolatedBrowserOrigin) {
+    if (acceptanceMode !== "shared" && ingress.headers.get("origin") === isolatedBrowserOrigin) {
       ingress.headers.set("origin", browserOrigin);
     }
     return worker

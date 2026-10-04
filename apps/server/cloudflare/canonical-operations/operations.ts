@@ -1,11 +1,22 @@
 import { Cause, Effect, Exit, Option, Schema } from "effect";
+import type { OAuthCaller } from "../../src/shell/oauth-agents/contract";
+import { recordOAuthCall } from "../../src/shell/audit/operations";
+import { liveOAuthAuthority } from "../../src/shell/oauth-agents/operations";
+import { prepareOwnedStatement } from "../database/operations";
+import { currentMillis } from "../runtime/operations";
+import { newId } from "../secret-material/operations";
 import { HostedInference } from "../../src/shell/hosted-inference/operations";
 import { type HostedInferenceService } from "../../src/shell/hosted-inference/contract";
 import { type CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import type { CatalogOperation } from "../../src/shell/canonical-catalog/contract";
 import { atomicBatchOperation } from "../../src/shell/operations/contract";
 import { operationCatalog } from "../../src/shell/api";
-import { patScopeCapability } from "../../src/shell/canonical-policy/contract";
+import { decideOperationAccess } from "../../src/shell/canonical-policy/operations";
+import {
+  type SuggestedOperationCaller,
+  grantsRequiredTier,
+} from "../../src/shell/canonical-operations/operations";
+import { userOwnedAgentCapability } from "../../src/shell/canonical-policy/contract";
 import { memoryOperationIds } from "../../src/shell/memory/contract";
 import type { HostedCommitFence } from "../agent/contract";
 import type { CanonicalMutationPreparation, CanonicalWork } from "./contract";
@@ -15,19 +26,158 @@ import {
   canonicalMutationAdapter,
 } from "./internal/mutation-registry";
 import { executeSingleCanonicalMutation } from "./internal/mutation-unit";
+import { checkpointQueryResponse } from "./internal/oauth-query";
+import { withQueryLifetime } from "./internal/query-lifetime";
+import { resolveOAuthQueryCaller } from "../oauth-agents/operations";
 import { canonicalQueryOwner } from "./internal/query-registry";
 import { matchesRoute } from "../routing/operations";
 import { evaluateBudgetAlerts } from "../budgets/operations";
 import { unavailableStatement } from "../ingestion/operations";
 import {
+  type QueryCaller,
   type TransactionCaller,
   childCaller,
+  refusedCredentialResponse,
   refusedPreparation,
   transactionUnavailable,
 } from "../canonical-work/operations";
 import { transactionNoStore } from "../canonical-work/contract";
 
 const httpServiceUnavailable = 503;
+const scopeMissingStatus = 403;
+const paywallRequiredStatus = 402;
+const refuseOAuthQuery = (
+  input: Readonly<{
+    db: D1Database;
+    subject: OAuthCaller;
+    current: number;
+    operation: CatalogOperation;
+    response: Response;
+  }>
+): Effect.Effect<Response> =>
+  Effect.tryPromise(() =>
+    prepareOwnedStatement({
+      db: input.db,
+      statement: recordOAuthCall({
+        authority: liveOAuthAuthority(input),
+        id: newId(),
+        current: input.current,
+        operation: input.operation.id,
+        outcome: "rejected",
+      }),
+    }).run()
+  ).pipe(
+    Effect.map((recorded) =>
+      recorded.meta.changes === 1 ? input.response : transactionUnavailable()
+    ),
+    Effect.orElseSucceed(transactionUnavailable)
+  );
+
+const installedOAuthQuery = (id: string): Option.Option<CatalogOperation> => {
+  const operation = operationCatalog.byId.get(id);
+  return operation?.policy.kind === "query" && Option.isSome(canonicalQueryOwner(operation.id))
+    ? Option.some(operation)
+    : Option.none();
+};
+const queryRefusal = (code: string, message: string, status: number): Response =>
+  Response.json(
+    { error: { code, message }, next: [] },
+    { status, headers: { "cache-control": "no-store" } }
+  );
+const queryPolicyRefusal = (
+  operation: CatalogOperation,
+  caller: SuggestedOperationCaller
+): Option.Option<Response> => {
+  if (decideOperationAccess(operation.policy.access, caller.accessCaller)._tag === "Denied") {
+    return Option.some(
+      queryRefusal(
+        "scope_missing",
+        "The credential does not grant this query's scope.",
+        scopeMissingStatus
+      )
+    );
+  }
+  return grantsRequiredTier({
+    requiredTier: operation.policy.requiredTier,
+    callerTier: caller.tier,
+  })
+    ? Option.none()
+    : Option.some(
+        queryRefusal("paywall_required", "This query requires Pro access.", paywallRequiredStatus)
+      );
+};
+
+const queryValidationRefusal = (
+  operation: CatalogOperation,
+  input: Schema.Json
+): Option.Option<Response> =>
+  Option.isSome(Schema.decodeOption(operation.input, { onExcessProperty: "error" })(input))
+    ? Option.none()
+    : Option.some(
+        Response.json(
+          {
+            error: {
+              code: "validation_failed",
+              message: "Invalid canonical query input.",
+              fields: [],
+            },
+            next: [],
+          },
+          { status: 400, headers: { "cache-control": "no-store" } }
+        )
+      );
+
+type OAuthQueryWork = Readonly<{
+  db: D1Database;
+  subject: OAuthCaller;
+  operation: string;
+  input: Schema.Json;
+  signal: AbortSignal;
+  deadlineMilliseconds: number;
+}>;
+
+/** Execute an installed query under its exact OAuth capability, bounded lifetime, and canonical owner. */
+export const executeOAuthQuery = (input: OAuthQueryWork): Effect.Effect<Response> =>
+  withQueryLifetime({ ...input, execute: (db) => executeOAuthQueryWork({ ...input, db }) });
+
+const executeOAuthQueryWork = (input: OAuthQueryWork): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const installed = installedOAuthQuery(input.operation);
+    if (Option.isNone(installed)) return transactionUnavailable();
+    const operation = installed.value;
+    const scope = userOwnedAgentCapability(operation.policy.access);
+    if (Option.isNone(scope)) return transactionUnavailable();
+    const current = currentMillis();
+    const admission = { ...input.subject, requiredScope: Option.none() };
+    const caller = yield* resolveOAuthQueryCaller({ db: input.db, subject: admission, current });
+    if (input.signal.aborted || currentMillis() >= input.deadlineMilliseconds) {
+      return transactionUnavailable();
+    }
+    if (Option.isNone(caller)) {
+      return yield* refusedCredentialResponse({ db: input.db, subject: admission });
+    }
+    const refusal = { db: input.db, subject: admission, current, operation };
+    const policyRefusal = queryPolicyRefusal(operation, caller.value);
+    if (Option.isSome(policyRefusal)) {
+      return yield* refuseOAuthQuery({ ...refusal, response: policyRefusal.value });
+    }
+    const subject = { ...input.subject, requiredScope: scope };
+    const validationRefusal = queryValidationRefusal(operation, input.input);
+    if (Option.isSome(validationRefusal)) {
+      return yield* refuseOAuthQuery({ ...refusal, response: validationRefusal.value });
+    }
+    const response = yield* executeCanonicalQuery({
+      db: input.db,
+      subject,
+      operation: operation.id,
+      input: input.input,
+      bucket: Option.none(),
+    }).pipe(
+      Effect.map((response) => Option.getOrElse(response, transactionUnavailable)),
+      Effect.orElseSucceed(transactionUnavailable)
+    );
+    return yield* checkpointQueryResponse({ response, caller: caller.value });
+  }).pipe(Effect.orElseSucceed(transactionUnavailable));
 
 /**
  * The hosted-inference service non-Memory work runs under: every method dies. Only the Memory
@@ -299,7 +449,7 @@ const invokeQueryOwner = ({
   browserOrigin,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: QueryCaller;
   operation: CatalogOperation;
   request: Request;
   bucket: Option.Option<R2Bucket>;
@@ -314,7 +464,7 @@ const invokeQueryOwner = ({
           db,
           subject: childCaller({
             subject,
-            requiredScope: patScopeCapability(operation.policy.access),
+            requiredScope: userOwnedAgentCapability(operation.policy.access),
           }),
           request,
           bucket,
@@ -399,7 +549,7 @@ export const executeCanonicalQuery = ({
   bucket,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: QueryCaller;
   operation: CanonicalOperationId;
   input: Schema.Json;
   bucket: Option.Option<R2Bucket>;

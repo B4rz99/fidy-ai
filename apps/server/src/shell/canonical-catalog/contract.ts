@@ -98,6 +98,13 @@ const requestInput = (endpoint: HttpApiEndpoint.Top): Option.Option<PartialInput
     : Option.some(Schema.make<PartialInputSchema>(new SchemaAST.Objects(fields, [])));
 };
 
+const httpFields = (endpoint: HttpApiEndpoint.Top): CatalogOperation["httpFields"] => [
+  ...(endpoint.params === undefined ? [] : ["params" as const]),
+  ...(endpoint.query === undefined ? [] : ["query" as const]),
+  ...(endpoint.headers === undefined ? [] : ["headers" as const]),
+  ...(payloadSchemas(endpoint).length === 0 ? [] : ["payload" as const]),
+];
+
 /**
  * Reflects canonical ids, partial target inputs, and callability policy from the
  * same assembled HttpApi used by the server and generators. Duplicate ids fail
@@ -136,14 +143,11 @@ export const makeOperationCatalog = <Id extends string, Groups extends HttpApiGr
         route: endpoint.path,
         input: canonicalInput(endpoint),
         httpInput: canonicalInput(endpoint, true),
-        httpFields: [
-          ...(endpoint.params === undefined ? [] : ["params" as const]),
-          ...(endpoint.query === undefined ? [] : ["query" as const]),
-          ...(endpoint.headers === undefined ? [] : ["headers" as const]),
-          ...(payloadSchemas(endpoint).length === 0 ? [] : ["payload" as const]),
-        ],
+        httpFields: httpFields(endpoint),
         success: asOperationSchema(unionSchema(Array.from(endpoint.success))),
-        failure: asOperationSchema(unionSchema(Array.from(errors.values()).flat())),
+        failure: asOperationSchema(
+          unionSchema([...errors.values()].flatMap((schemas) => [...schemas]))
+        ),
         // Access policy must be an explicit choice on each canonical operation;
         // unlike descriptive OpenAPI metadata, group defaults could silently
         // authorize a newly added operation with a policy nobody reviewed.

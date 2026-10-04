@@ -6,7 +6,7 @@ import type { ListCategoriesResponse } from "~/shell/categories/contract";
 const maximumCategoryCount = 100;
 
 type Authority = Readonly<{
-  table: "pats" | "web_sessions";
+  table: "pats" | "web_sessions" | "oauth_access_credentials";
   predicate: string;
   bindings: ReadonlyArray<string | number | Uint8Array>;
 }>;

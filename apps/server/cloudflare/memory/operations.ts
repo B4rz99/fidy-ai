@@ -22,7 +22,11 @@ import {
   readCurrentMemories,
   replaceMemory,
 } from "./internal/storage";
-import { dailyAuditExhausted, recordCanonicalPATWork } from "../../src/shell/audit/operations";
+import {
+  dailyAuditExhausted,
+  recordCanonicalPATWork,
+  recordOAuthCall,
+} from "../../src/shell/audit/operations";
 import { livePATAuthority, recordLivePATUse } from "../../src/shell/tokens/operations";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { type HostedInference } from "../../src/shell/hosted-inference/operations";
@@ -31,6 +35,7 @@ import { prepareOwnedStatement } from "../database/operations";
 import { newId } from "../secret-material/operations";
 import { currentMillis } from "../runtime/operations";
 import {
+  type QueryCaller,
   type TransactionBoundaryFailure,
   type TransactionCaller,
   type TransactionSubject,
@@ -38,6 +43,7 @@ import {
   callerAuthority,
   callerScope,
   failedPreparation,
+  isOAuthCaller,
   isPATCaller,
   liveTransactionAuthority,
   refusedCredentialResponse,
@@ -120,7 +126,7 @@ const budgetExhausted = ({
   current,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: QueryCaller;
   current: number;
 }>): Effect.Effect<boolean, TransactionBoundaryFailure> =>
   waitFor(() => dailyAuditExhausted({ db, userId: subject.userId, current }));
@@ -445,17 +451,33 @@ const recallStatements = ({
   statement,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: QueryCaller;
   current: number;
   statement: D1PreparedStatement;
-}>): ReadonlyArray<D1PreparedStatement> =>
-  isPATCaller(subject)
+}>): ReadonlyArray<D1PreparedStatement> => {
+  if (isOAuthCaller(subject)) {
+    return [
+      statement,
+      prepareOwnedStatement({
+        db,
+        statement: recordOAuthCall({
+          authority: callerAuthority({ subject, current }),
+          id: memoryId(),
+          current,
+          operation: "memory.recall",
+          outcome: "accepted",
+        }),
+      }),
+    ];
+  }
+  return isPATCaller(subject)
     ? [
         prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) }),
         statement,
         patRecallAudit({ db, subject, current }),
       ]
     : [statement, browserRecallAudit({ db, subject, current })];
+};
 
 /** Classify a recall unit whose read or live-authority audit row did not commit. */
 const recallRefused = ({
@@ -463,7 +485,7 @@ const recallRefused = ({
   subject,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: QueryCaller;
 }>): Effect.Effect<Response, TransactionBoundaryFailure> =>
   Effect.gen(function* () {
     const live = yield* waitFor(() =>
@@ -475,7 +497,7 @@ const recallRefused = ({
 /** The projection rows one committed recall unit returned, or None when its audit did not commit. */
 const recallRows = (
   committed: ReadonlyArray<D1Result>,
-  subject: TransactionCaller
+  subject: QueryCaller
 ): Option.Option<ReadonlyArray<unknown>> => {
   const rows = committed[isPATCaller(subject) ? 1 : 0];
   const audited = committed.at(-1);
@@ -490,7 +512,7 @@ export const recallMemories = ({
   subject,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: QueryCaller;
 }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const current = memoryNow();

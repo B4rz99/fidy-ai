@@ -27,7 +27,7 @@ import {
   ValidationFailed,
   acceptedStatus,
 } from "~/shell/public-http/contract";
-import { operationPolicy, patScoped } from "~/shell/canonical-policy/contract";
+import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
 /** Canonical Transaction facts supplied to resolve one pending statement row. */
 export const ResolveNeedsReviewItemInput = Schema.Struct({
   extraction: TransactionExtraction,
@@ -35,19 +35,19 @@ export const ResolveNeedsReviewItemInput = Schema.Struct({
 export type ResolveNeedsReviewItemInput = typeof ResolveNeedsReviewItemInput.Type;
 
 const read = operationPolicy({
-  access: patScoped("read"),
+  access: userOwnedAgentScoped("read"),
   requiredTier: "free",
   agentConfirmation: "not-required",
   kind: "query",
 });
 const write = operationPolicy({
-  access: patScoped("write"),
+  access: userOwnedAgentScoped("write"),
   requiredTier: "free",
   agentConfirmation: "not-required",
   kind: "mutation",
 });
 const confirmedWrite = operationPolicy({
-  access: patScoped("write"),
+  access: userOwnedAgentScoped("write"),
   requiredTier: "free",
   agentConfirmation: "required",
   kind: "mutation",

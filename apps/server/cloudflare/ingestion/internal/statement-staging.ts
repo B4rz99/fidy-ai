@@ -1393,42 +1393,44 @@ export const readOwnedStatementSubmission: {
   (
     input: OwnedSubmissionInput
   ): (
-    config: StatementStagingConfig
+    config: Pick<StatementStagingConfig, "database">
   ) => ReturnType<StatementStagingService["readOwnedStatementSubmission"]>;
   (
-    config: StatementStagingConfig,
+    config: Pick<StatementStagingConfig, "database">,
     input: OwnedSubmissionInput
   ): ReturnType<StatementStagingService["readOwnedStatementSubmission"]>;
-} = Function.dual(2, (config: StatementStagingConfig, input: OwnedSubmissionInput) =>
-  platformUnavailable(() =>
-    config.database
-      .prepare(
-        `SELECT id, source_format, parser_revision, status, submitted_at_ms, started_at_ms,
+} = Function.dual(
+  2,
+  (config: Pick<StatementStagingConfig, "database">, input: OwnedSubmissionInput) =>
+    platformUnavailable(() =>
+      config.database
+        .prepare(
+          `SELECT id, source_format, parser_revision, status, submitted_at_ms, started_at_ms,
                 completed_at_ms, failure_reason, input_rows, accepted_rows, needs_review_rows
          FROM statement_submissions WHERE id = ? AND user_id = ?`
-      )
-      .bind(input.submissionId, input.userId)
-      .first()
-  ).pipe(
-    Effect.map((value) =>
-      Option.map(
-        Schema.decodeUnknownOption(StoredSubmissionRow)(value),
-        (row): StoredStatementSubmission => ({
-          acceptedRows: row.accepted_rows,
-          completedAtMs: row.completed_at_ms,
-          failureReason: row.failure_reason,
-          id: row.id,
-          inputRows: row.input_rows,
-          needsReviewRows: row.needs_review_rows,
-          parserRevision: row.parser_revision,
-          sourceFormat: row.source_format,
-          startedAtMs: row.started_at_ms,
-          status: row.status,
-          submittedAtMs: row.submitted_at_ms,
-        })
+        )
+        .bind(input.submissionId, input.userId)
+        .first()
+    ).pipe(
+      Effect.map((value) =>
+        Option.map(
+          Schema.decodeUnknownOption(StoredSubmissionRow)(value),
+          (row): StoredStatementSubmission => ({
+            acceptedRows: row.accepted_rows,
+            completedAtMs: row.completed_at_ms,
+            failureReason: row.failure_reason,
+            id: row.id,
+            inputRows: row.input_rows,
+            needsReviewRows: row.needs_review_rows,
+            parserRevision: row.parser_revision,
+            sourceFormat: row.source_format,
+            startedAtMs: row.started_at_ms,
+            status: row.status,
+            submittedAtMs: row.submitted_at_ms,
+          })
+        )
       )
     )
-  )
 );
 
 const expireStatementSubmissions = (

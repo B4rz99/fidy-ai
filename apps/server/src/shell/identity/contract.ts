@@ -2,7 +2,7 @@ import type { Effect } from "effect";
 import type { OwnedStatement } from "~/shell/owner-write/contract";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
 import { User, UserPreferences } from "~/core/identity/contract";
-import { operationPolicy, patScoped } from "~/shell/canonical-policy/contract";
+import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
 import { OperationResponse, Unavailable } from "~/shell/public-http/contract";
 
 /**
@@ -22,7 +22,7 @@ export const IdentityGroup = HttpApiGroup.make("identity").add(
     )
     .annotateMerge(
       operationPolicy({
-        access: patScoped("read"),
+        access: userOwnedAgentScoped("read"),
         requiredTier: "free",
         agentConfirmation: "not-required",
         kind: "query",
@@ -39,7 +39,7 @@ export const IdentityGroup = HttpApiGroup.make("identity").add(
     )
     .annotateMerge(
       operationPolicy({
-        access: patScoped("write"),
+        access: userOwnedAgentScoped("write"),
         requiredTier: "free",
         agentConfirmation: "not-required",
         kind: "mutation",

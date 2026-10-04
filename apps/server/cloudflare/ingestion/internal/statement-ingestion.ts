@@ -16,6 +16,7 @@ import {
   recordCanonicalPATWork,
   refusedByAuditBudget,
 } from "../../../src/shell/audit/operations";
+import type { OAuthCaller } from "../../../src/shell/oauth-agents/contract";
 import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import { Data, Effect, Function, Option, Result, Schema } from "effect";
@@ -24,6 +25,7 @@ import {
   StatementStaging,
   type StoredStatementSubmission,
   newIngestionId,
+  readOwnedStatementSubmission,
   stagedMaterialMessage,
   statementSubmissionReadAudit,
   submissionProjection,
@@ -47,8 +49,10 @@ import {
   ResourceAdmissionUnits,
 } from "../../resource-admission/contract";
 import {
-  type TransactionCaller,
+  type QueryCaller,
   type TransactionSubject,
+  callerAuthority,
+  isOAuthCaller,
   isPATCaller,
   refusedTransactionWork,
 } from "../../canonical-work/operations";
@@ -410,7 +414,7 @@ export const sweepExpiredUploadAdmission = ({
 const refusedCredential = ({
   db,
   subject,
-}: Readonly<{ db: D1Database; subject: TransactionCaller }>): Effect.Effect<Response> =>
+}: Readonly<{ db: D1Database; subject: QueryCaller }>): Effect.Effect<Response> =>
   Effect.tryPromise({
     try: () => refusedTransactionWork({ db, subject }),
     catch: () => undefined,
@@ -428,16 +432,37 @@ export const submitForExtractionInput = (
  * read counts once toward the shared daily budget). A malformed id binds no value, so it is still
  * audited as absent.
  */
+const oauthReadAudit = (
+  input: Readonly<{
+    database: D1Database;
+    subject: OAuthCaller;
+    current: number;
+    operation: StatementAuditRead["operation"];
+  }>
+): D1PreparedStatement =>
+  prepareAuthorizedAuditCall({
+    db: input.database,
+    authority: callerAuthority(input),
+    id: newIngestionId(),
+    current: input.current,
+    operation: input.operation,
+    outcome: "accepted",
+    afterOwnerWrite: false,
+  });
+
 const readStatements = (
   input: Readonly<{
     current: number;
     database: D1Database;
-    subject: TransactionCaller;
+    subject: QueryCaller;
     submissionId: string;
     operation: "ingestion.getStatementSubmission" | "ingestion.listNeedsReviewItems";
   }>
 ): ReadonlyArray<D1PreparedStatement> => {
   const { current, database, subject, submissionId, operation } = input;
+  if (isOAuthCaller(subject)) {
+    return [oauthReadAudit({ database, subject, current, operation })];
+  }
   if (!isPATCaller(subject)) {
     const authority = liveWebSessionAuthority({ subject, current });
     return [
@@ -487,21 +512,17 @@ type StatementAuditRead = Readonly<{
 
 export const commitReadAudit: {
   (
-    subject: TransactionCaller,
+    subject: QueryCaller,
     read: StatementAuditRead
   ): (environment: StatementIngestionEnvironment) => Effect.Effect<Option.Option<Response>>;
   (
     environment: StatementIngestionEnvironment,
-    subject: TransactionCaller,
+    subject: QueryCaller,
     read: StatementAuditRead
   ): Effect.Effect<Option.Option<Response>>;
 } = Function.dual(
   3,
-  (
-    environment: StatementIngestionEnvironment,
-    subject: TransactionCaller,
-    read: StatementAuditRead
-  ) =>
+  (environment: StatementIngestionEnvironment, subject: QueryCaller, read: StatementAuditRead) =>
     Effect.gen(function* () {
       const isPAT = isPATCaller(subject);
       const outcome = yield* Effect.result(
@@ -546,13 +567,11 @@ export const readStatementSubmission = ({
 }: Readonly<{
   request: Request;
   environment: StatementIngestionEnvironment;
-  subject: TransactionCaller;
+  subject: QueryCaller;
 }>): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const current = currentMillis();
-      const staging = stagingService(environment, current);
-      if (Option.isNone(staging)) return unavailable();
       if (yield* budgetSpent(environment.DB, subject.userId, current)) {
         return statementDailyBudgetResponse();
       }
@@ -565,10 +584,13 @@ export const readStatementSubmission = ({
       if (Option.isSome(refused)) return refused.value;
       if (Option.isNone(submissionId)) return submissionNotFound();
       // This owned projection adds no authority: the audit above already committed under the caller.
-      const stored = yield* staging.value.readOwnedStatementSubmission({
-        submissionId: submissionId.value,
-        userId: subject.userId,
-      });
+      const stored = yield* readOwnedStatementSubmission(
+        { database: environment.DB },
+        {
+          submissionId: submissionId.value,
+          userId: subject.userId,
+        }
+      );
       if (Option.isNone(stored)) return submissionNotFound();
       const response = yield* submissionResponse(stored.value, HTTP_OK);
       return Option.getOrElse(response, () => submissionNotFound());

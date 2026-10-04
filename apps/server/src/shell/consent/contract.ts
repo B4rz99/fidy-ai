@@ -1,4 +1,7 @@
 import { type Option, Schema } from "effect";
+import type { UserId } from "~/core/identity/contract";
+import type { OAuthConnectionId } from "~/core/oauth-agents/contract";
+import type { PATScopes } from "~/core/tokens/contract";
 import { DisclosureSnapshot } from "~/core/consent/contract";
 import { type OwnedStatement } from "~/shell/owner-write/contract";
 import { type PATGrantSelection, type PairingGrantSelection } from "~/shell/tokens/contract";
@@ -36,6 +39,36 @@ export type {
   WhatsAppSentMessage,
   WhatsAppWebhookReceipt,
 } from "~/shell/channels/whatsapp/contract";
+
+/** Exact non-empty reviewed capabilities and finite lifetime lent to Consent publication. */
+export type OAuthGrantConsentInput = Readonly<{
+  id: string;
+  connectionId: OAuthConnectionId;
+  session: FreshSessionSubject;
+  current: number;
+  scopes: PATScopes;
+  expiresAt: number;
+}>;
+/** Replay recognition is an owner-held selection rechecked in the revocation unit, never cached permission. */
+export type OAuthReplayConsentInput = Readonly<{
+  id: string;
+  userId: UserId;
+  connectionId: OAuthConnectionId;
+  current: number;
+  replay: OwnedStatement;
+}>;
+/** Owner-selected live connections for one fresh browser decision; the selection returns connection_id and user_id and is rechecked at commit. */
+export type OAuthUserRevocationInput = Readonly<{
+  session: FreshSessionSubject;
+  current: number;
+  reason: "user_one" | "user_all";
+  selection: OwnedStatement;
+}>;
+/** Same-User grant evidence, independent of a credential owner's persistence representation. */
+export type OAuthGrantConsentSubject = Readonly<{
+  connectionId: OAuthConnectionId;
+  userId: UserId;
+}>;
 
 /** Persist and decode only a validated version of the exact disclosure shown to the caller. */
 export const PendingDisclosureJson = Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot));
@@ -110,7 +143,12 @@ export type ConsentProtectedStatement = Readonly<{
 
 /** The closed credential owners that compose their live authority with Consent standing. */
 export type ConsentAuthority = Readonly<{
-  table: "pats" | "pat_pairings" | "web_sessions";
+  table:
+    | "pats"
+    | "pat_pairings"
+    | "web_sessions"
+    | "oauth_access_credentials"
+    | "oauth_refresh_credentials";
   predicate: string;
   bindings: ReadonlyArray<string | number | Uint8Array>;
 }>;

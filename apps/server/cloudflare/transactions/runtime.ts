@@ -9,7 +9,12 @@ import { CanonicalWorkAdmission } from "../canonical-operations/contract";
 import {
   canonicalWorkRequiresInference,
   executeCanonicalWork,
+  executeOAuthQuery,
 } from "../canonical-operations/operations";
+import { currentMillis } from "../runtime/operations";
+import { OAuthQueryAdmission } from "../../src/shell/mcp/contract";
+import { OAuthRefreshAdmission, OAuthRevocationAdmission } from "../oauth-agents/contract";
+import { executeOAuthRefresh, executeOAuthRevocation } from "../oauth-agents/operations";
 import type { HostedCommitFence } from "../agent/contract";
 import { UserId } from "../../src/core/identity/contract";
 
@@ -226,6 +231,69 @@ const privateIngestionActivity = ({
   );
 };
 
+type OAuthActivityInput = Readonly<{
+  request: Request;
+  candidate: unknown;
+  environment: CoordinatorEnvironment;
+  userId: string;
+}>;
+const privateOAuthRevocation = (input: OAuthActivityInput): Effect.Effect<Response> => {
+  const revocation = Schema.decodeUnknownOption(OAuthRevocationAdmission)(input.candidate);
+  return Option.isNone(revocation) || revocation.value.userId !== input.userId
+    ? Effect.succeed(transactionUnavailable())
+    : executeOAuthRevocation({
+        db: input.environment.DB,
+        admission: revocation.value,
+        signal: input.request.signal,
+      });
+};
+const privateOAuthActivity = (
+  input: OAuthActivityInput
+): Option.Option<Effect.Effect<Response>> => {
+  const path = new URL(input.request.url).pathname;
+  if (path === "/oauth-revoke") {
+    return Option.some(privateOAuthRevocation(input));
+  }
+  if (path === "/oauth-refresh") {
+    const refresh = Schema.decodeUnknownOption(OAuthRefreshAdmission)(input.candidate);
+    return Option.some(
+      Option.isNone(refresh) || refresh.value.userId !== input.userId
+        ? Effect.succeed(transactionUnavailable())
+        : executeOAuthRefresh({
+            db: input.environment.DB,
+            admission: refresh.value,
+            signal: input.request.signal,
+          })
+    );
+  }
+  return path === "/oauth-query" ? Option.some(privateOAuthQuery(input)) : Option.none();
+};
+const privateOAuthQuery = (input: OAuthActivityInput): Effect.Effect<Response> => {
+  const oauth = Schema.decodeUnknownOption(OAuthQueryAdmission)(input.candidate);
+  if (Option.isNone(oauth) || oauth.value.userId !== input.userId) {
+    return Effect.succeed(transactionUnavailable());
+  }
+  const admitted = oauth.value;
+  if (input.request.signal.aborted || currentMillis() >= admitted.deadlineMilliseconds) {
+    return Effect.succeed(transactionUnavailable());
+  }
+  return executeOAuthQuery({
+    db: input.environment.DB,
+    signal: input.request.signal,
+    deadlineMilliseconds: admitted.deadlineMilliseconds,
+    operation: admitted.operation,
+    input: admitted.input,
+    subject: {
+      userId: admitted.userId,
+      oauthConnectionId: admitted.connectionId,
+      credentialId: admitted.credentialId,
+      clientId: admitted.clientId,
+      resource: admitted.resource,
+      digest: new Uint8Array(admitted.digest),
+      requiredScope: Option.none(),
+    },
+  });
+};
 const privateWeeklyActivity = (
   input: Readonly<{
     request: Request;
@@ -388,6 +456,13 @@ export class UserTransactionCoordinator {
             userId,
           });
           if (Option.isSome(owner)) return yield* owner.value;
+          const oauth = privateOAuthActivity({
+            request,
+            candidate: candidate.value,
+            environment,
+            userId,
+          });
+          if (Option.isSome(oauth)) return yield* oauth.value;
           const admission = Schema.decodeUnknownOption(CanonicalWorkAdmission)(candidate.value);
           if (
             Option.isNone(admission) ||

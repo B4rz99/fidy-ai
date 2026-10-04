@@ -1,3 +1,4 @@
+import { OAuthConnectionsGroup, OAuthReviewGroup } from "~/shell/oauth-agents/contract";
 import { HttpApi, OpenApi } from "effect/http-api";
 import { BrowserLoginWebAuthGroup } from "~/shell/browser-login/contract";
 import {
@@ -53,6 +54,8 @@ export { BrowserPairingEmailAuthenticationWebAuthGroup } from "~/shell/email-aut
 /** Direct browser authentication API. Secret-bearing responses never enter the canonical API. */
 export class WebAuthApi extends HttpApi.make("webAuth")
   .add(BrowserLoginWebAuthGroup)
+  .add(OAuthReviewGroup)
+  .add(OAuthConnectionsGroup)
   .add(EmailOnboardingWebAuthGroup)
   .add(BrowserPairingEmailAuthenticationWebAuthGroup)
   .annotate(OpenApi.Title, "fidy-ai WebAuth API") {}

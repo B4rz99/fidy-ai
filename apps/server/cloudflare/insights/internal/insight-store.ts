@@ -17,6 +17,7 @@ import {
   InsightLifecycleState,
 } from "../../../src/core/insights/contract";
 import {
+  type QueryCaller,
   type TransactionCaller,
   auditLimitRefusal,
   callerAuthority,
@@ -192,7 +193,7 @@ type MutationOperation = Exclude<InsightOperation, "insights.listPendingInsights
 
 type InsightCall = Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: QueryCaller;
   operation: InsightOperation;
   outcome: "accepted" | "rejected";
   current: number;
@@ -334,7 +335,7 @@ export const listPendingInsights = ({
   request,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: QueryCaller;
   request: Request;
 }>): Effect.Effect<Response> =>
   Effect.gen(function* () {

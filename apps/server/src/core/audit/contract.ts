@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { OAuthConnectionId, OAuthCredentialId } from "~/core/oauth-agents/contract";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { UserId } from "~/core/identity/contract";
@@ -19,6 +20,10 @@ export type AuditOutcome = typeof AuditOutcome.Type;
 /** Exactly one credential-neutral source of canonical-call authority. */
 export const AuditCaller = Schema.Union([
   Schema.TaggedStruct("PAT", { patId: PATId }),
+  Schema.TaggedStruct("OAuthAgent", {
+    connectionId: OAuthConnectionId,
+    credentialId: OAuthCredentialId,
+  }),
   Schema.TaggedStruct("WebSession", { webSessionId: WebSessionId }),
   Schema.TaggedStruct("HostedAgentSession", { hostedAgentSessionId: HostedAgentSessionId }),
 ]).annotate({ identifier: "AuditCaller" });
@@ -38,3 +43,14 @@ export const AuditLogEntry = Schema.Struct({
   occurredAt: UtcTimestamp,
 }).annotate({ identifier: "AuditLogEntry" });
 export type AuditLogEntry = typeof AuditLogEntry.Type;
+
+/** Bounded metadata-only activity for an OAuthConnection's settings projection, never call bodies. */
+export const OAuthRecentActivity = Schema.Array(
+  Schema.Struct({
+    id: AuditLogEntryId,
+    operation: AuditLogEntry.fields.operation,
+    outcome: AuditLogEntry.fields.outcome,
+    occurredAt: AuditLogEntry.fields.occurredAt,
+  })
+).check(Schema.isMaxLength(3));
+export type OAuthRecentActivity = typeof OAuthRecentActivity.Type;

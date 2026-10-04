@@ -2,7 +2,7 @@ import { patBearerPrefix } from "../../../src/core/tokens/contract";
 import { readConsentStatus } from "../../consent/operations";
 import { type CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
 import { decideOperationAccess } from "../../../src/shell/canonical-policy/operations";
-import { patScopeCapability } from "../../../src/shell/canonical-policy/contract";
+import { userOwnedAgentCapability } from "../../../src/shell/canonical-policy/contract";
 import { type Cause, Effect, Option, Schema } from "effect";
 import { PATRow, digest, equalsDigest, scopesFrom, shortLength, validBearer } from "./pat-shared";
 import { currentMillis } from "../../runtime/operations";
@@ -44,7 +44,7 @@ const scopeDecision = (
     capabilities: scopes.value,
   });
   if (access._tag === "Allowed") return "accepted";
-  return access.reason === "pat_scope_missing" ? "scope_missing" : "unauthenticated";
+  return access.reason === "user_owned_agent_scope_missing" ? "scope_missing" : "unauthenticated";
 };
 /** Resolve a live credential without granting an operation. Admission rechecks every declared capability before charging, and owners recheck requiredScope at publication. */
 export const resolveCanonicalPATCredential = ({
@@ -67,7 +67,7 @@ export const resolveCanonicalPATCredential = ({
         patId: pat.value.id,
         userId: pat.value.user_id,
         digest: new Uint8Array(pat.value.bearer_digest),
-        requiredScope: patScopeCapability(operation.policy.access),
+        requiredScope: userOwnedAgentCapability(operation.policy.access),
       };
     })
   );
@@ -93,7 +93,7 @@ export const authorizeCanonicalPAT = ({
             patId: pat.value.id,
             userId: pat.value.user_id,
             digest: new Uint8Array(pat.value.bearer_digest),
-            requiredScope: patScopeCapability(operation.policy.access),
+            requiredScope: userOwnedAgentCapability(operation.policy.access),
           }
         : decision;
     })

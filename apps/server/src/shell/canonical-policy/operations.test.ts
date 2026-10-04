@@ -5,11 +5,11 @@ import {
   type OperationAccessCaller,
   freshWebOrVerifiedWhatsAppHosted,
   freshWebSessionOnly,
-  isPATScoped,
-  patScopeCapability,
-  patScoped,
-  patScopedChildren,
+  isUserOwnedAgentScoped,
   publishOperationAccess,
+  userOwnedAgentCapability,
+  userOwnedAgentScoped,
+  userOwnedAgentScopedChildren,
   verifiedWhatsAppHostedOnly,
   webOrHosted,
 } from "./contract";
@@ -27,14 +27,14 @@ it("round-trips every published access variant through the canonical codec", () 
   const examples = [
     {
       published: {
-        type: "pat-scoped",
+        type: "user-owned-agent-scoped",
         scope: { evaluation: "operation", capability: "write" },
       },
-      canonical: patScoped("write"),
+      canonical: userOwnedAgentScoped("write"),
     },
     {
-      published: { type: "pat-scoped", scope: { evaluation: "children" } },
-      canonical: patScopedChildren,
+      published: { type: "user-owned-agent-scoped", scope: { evaluation: "children" } },
+      canonical: userOwnedAgentScopedChildren,
     },
     {
       published: { type: "fresh-web-session-only" },
@@ -58,16 +58,22 @@ it("round-trips every published access variant through the canonical codec", () 
 });
 
 it("decides every canonical caller class from one access requirement", () => {
-  expect(decideOperationAccess(patScoped("read"), pat(["read"]))).toEqual({ _tag: "Allowed" });
-  expect(decideOperationAccess(patScoped("read"), pat(["write"]))).toEqual({
-    _tag: "Denied",
-    reason: "pat_scope_missing",
-  });
-  expect(decideOperationAccess(patScopedChildren, pat([]))).toEqual({ _tag: "Allowed" });
-  expect(decideOperationAccess(patScoped("dashboard"), web(false))).toEqual({ _tag: "Allowed" });
-  expect(decideOperationAccess(patScoped("write"), hosted("verified-whatsapp"))).toEqual({
+  expect(decideOperationAccess(userOwnedAgentScoped("read"), pat(["read"]))).toEqual({
     _tag: "Allowed",
   });
+  expect(decideOperationAccess(userOwnedAgentScoped("read"), pat(["write"]))).toEqual({
+    _tag: "Denied",
+    reason: "user_owned_agent_scope_missing",
+  });
+  expect(decideOperationAccess(userOwnedAgentScopedChildren, pat([]))).toEqual({ _tag: "Allowed" });
+  expect(decideOperationAccess(userOwnedAgentScoped("dashboard"), web(false))).toEqual({
+    _tag: "Allowed",
+  });
+  expect(decideOperationAccess(userOwnedAgentScoped("write"), hosted("verified-whatsapp"))).toEqual(
+    {
+      _tag: "Allowed",
+    }
+  );
 
   expect(decideOperationAccess(freshWebSessionOnly, web(true))).toEqual({ _tag: "Allowed" });
   expect(decideOperationAccess(freshWebSessionOnly, web(false))).toEqual({
@@ -122,17 +128,19 @@ it("decides every canonical caller class from one access requirement", () => {
 });
 
 it("derives PAT and hosted discovery from the same access requirement", () => {
-  expect(isPATScoped(patScoped("read"))).toBe(true);
-  expect(isPATScoped(freshWebSessionOnly)).toBe(false);
-  expect(isPATScoped(webOrHosted)).toBe(false);
-  expect(isPATScoped(verifiedWhatsAppHostedOnly)).toBe(false);
-  expect(isPATScoped(freshWebOrVerifiedWhatsAppHosted)).toBe(false);
+  expect(isUserOwnedAgentScoped(userOwnedAgentScoped("read"))).toBe(true);
+  expect(isUserOwnedAgentScoped(freshWebSessionOnly)).toBe(false);
+  expect(isUserOwnedAgentScoped(webOrHosted)).toBe(false);
+  expect(isUserOwnedAgentScoped(verifiedWhatsAppHostedOnly)).toBe(false);
+  expect(isUserOwnedAgentScoped(freshWebOrVerifiedWhatsAppHosted)).toBe(false);
 
-  expect(Option.getOrUndefined(patScopeCapability(patScoped("dashboard")))).toBe("dashboard");
-  expect(Option.isNone(patScopeCapability(patScopedChildren))).toBe(true);
-  expect(Option.isNone(patScopeCapability(freshWebSessionOnly))).toBe(true);
+  expect(Option.getOrUndefined(userOwnedAgentCapability(userOwnedAgentScoped("dashboard")))).toBe(
+    "dashboard"
+  );
+  expect(Option.isNone(userOwnedAgentCapability(userOwnedAgentScopedChildren))).toBe(true);
+  expect(Option.isNone(userOwnedAgentCapability(freshWebSessionOnly))).toBe(true);
 
-  expect(isHostedVisible(patScoped("read"), "verified-whatsapp")).toBe(true);
+  expect(isHostedVisible(userOwnedAgentScoped("read"), "verified-whatsapp")).toBe(true);
   expect(isHostedVisible(freshWebSessionOnly, "verified-whatsapp")).toBe(false);
   expect(isHostedVisible(webOrHosted, "verified-whatsapp")).toBe(true);
   expect(isHostedVisible(verifiedWhatsAppHostedOnly, "verified-whatsapp")).toBe(true);
@@ -150,9 +158,15 @@ it("derives hosted turn completion without a separate operation allowlist", () =
     kind: "mutation",
   } as const;
 
-  expect(completesHostedTurn({ ...mutationPolicy, access: patScoped("write") })).toBe(true);
-  expect(completesHostedTurn({ ...mutationPolicy, access: patScoped("read") })).toBe(false);
-  expect(completesHostedTurn({ ...mutationPolicy, access: patScopedChildren })).toBe(false);
+  expect(completesHostedTurn({ ...mutationPolicy, access: userOwnedAgentScoped("write") })).toBe(
+    true
+  );
+  expect(completesHostedTurn({ ...mutationPolicy, access: userOwnedAgentScoped("read") })).toBe(
+    false
+  );
+  expect(completesHostedTurn({ ...mutationPolicy, access: userOwnedAgentScopedChildren })).toBe(
+    false
+  );
   expect(completesHostedTurn({ ...mutationPolicy, access: verifiedWhatsAppHostedOnly })).toBe(true);
   expect(completesHostedTurn({ ...mutationPolicy, access: freshWebSessionOnly })).toBe(false);
   expect(completesHostedTurn({ ...mutationPolicy, access: freshWebOrVerifiedWhatsAppHosted })).toBe(

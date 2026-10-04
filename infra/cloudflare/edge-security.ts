@@ -1,3 +1,4 @@
+import { oauthPaths } from "../../apps/server/src/shell/oauth-agents/contract";
 import { operationCatalog } from "@fidy/server/canonical-catalog";
 import {
   emailReplacementCompletionPath,
@@ -98,6 +99,7 @@ const httpDdosRules: ReadonlyArray<Cloudflare.Ruleset.Rule> = [
 // from the canonical API; unmatched paths never charge legitimate callers' shared source-IP budget.
 const reservedRateLimitPaths = [
   "/health",
+  ...Object.values(oauthPaths),
   reservedIngress.httpCallbacks.kapso.path,
   reservedIngress.httpCallbacks.wompi.path,
   "/web/onboarding/email/verify",

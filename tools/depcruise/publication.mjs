@@ -46,6 +46,8 @@ const compositionRoots = new Set([
   // Correction isolation constructs the actual User coordinator with migrated D1 persistence.
   "cloudflare/subscription/refunds.test.ts",
   "cloudflare/tokens/pats.test.ts",
+  // Real public/Core OAuth bootstrap with isolated admission and fresh-session D1.
+  "cloudflare/oauth-agents/oauth-ingress.test.ts",
   "cloudflare/transactions/transactions.test.ts",
   "cloudflare/audit/internal/audit.test.ts",
 ]);

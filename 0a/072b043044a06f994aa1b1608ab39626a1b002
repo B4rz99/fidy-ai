@@ -1,0 +1,37 @@
+apps/server/src/shell/channels/whatsapp/runtime.ts
+  s_74e559bd8b2eb1::t_c9dbd3f5077782 2
+apps/server/src/shell/consent/operations.ts
+  s_74e559bd8b2eb1::t_d6fb0201cbb816 2
+apps/server/src/core/insights/weekly-summary/contract.ts
+  s_74e559bd8b2eb1::t_f86a39f5831d92 2-4
+apps/server/src/core/insights/operations.ts
+  s_74e559bd8b2eb1::t_1130daeb95cf66 2
+apps/server/src/core/insights/weekly-summary/operations.test.ts
+  s_74e559bd8b2eb1::t_859183403c191e 4-9
+apps/server/src/shell/consent/internal/weekly-disclosure.ts
+  s_74e559bd8b2eb1::t_a6d476bbd415ab 1
+apps/server/src/core/insights/weekly-policy.test.ts
+  s_74e559bd8b2eb1::t_674088e8f8f21d 4
+apps/server/src/core/insights/weekly-summary/operations.ts
+  s_74e559bd8b2eb1::t_e12a2ce78da73f 7-11
+tools/depcruise/publication.mjs
+  s_74e559bd8b2eb1::t_d04f0cab5a9814 33-37
+apps/server/src/shell/channels/whatsapp/internal/insight-template.ts
+  s_74e559bd8b2eb1::t_e6c109bbbc141e 10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0a072b043044a06f994aa1b1608ab39626a1b002",
+  "prompts": {},
+  "sessions": {
+    "s_74e559bd8b2eb1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a103fa-be97-74ea-98ef-1bbb67d7ba62",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

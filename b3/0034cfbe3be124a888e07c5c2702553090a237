@@ -48,6 +48,8 @@ apps/server/cloudflare/canonical-admission/operations.ts
   s_99853caa398493::t_fd04886539c7d5 7,424
 infra/cloudflare/verify-edge-policy.ts
   s_99853caa398493::t_1044c7bba72cbb 6
+  s_99853caa398493::t_7f07e7cc928ffc 9
+  s_99853caa398493::t_b0dad721f1cf84 8
 apps/web/src/features/oauth-connections/view.test.tsx
   s_c9cf1ab550f807::t_e67316353ef6a0 39-41,43-45
   s_c9cf1ab550f807::t_249ff3f4783fdf 8,57
@@ -809,6 +811,8 @@ apps/server/src/shell/web-authentication/contract.ts
   s_c9cf1ab550f807::t_c75bb47009ac27 57
 apps/server/cloudflare/insights/internal/insight-store.ts
   s_f8e1b549f56623::t_216f86b2ef737e 20,196,338
+infra/cloudflare/verify-edge-policy.test.ts
+  s_99853caa398493::t_62c9d8daf787c7 7
 ---
 {
   "schema_version": "authorship/3.0.0",

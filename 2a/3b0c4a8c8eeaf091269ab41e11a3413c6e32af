@@ -1,0 +1,19 @@
+apps/server/cloudflare/subscription/contract.ts
+  s_ba89dc1029bca1::t_17307cdb51784f 11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2a3b0c4a8c8eeaf091269ab41e11a3413c6e32af",
+  "prompts": {},
+  "sessions": {
+    "s_ba89dc1029bca1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a103f6-761c-710c-b806-670edee0d3aa",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

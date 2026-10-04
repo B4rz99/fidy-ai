@@ -1,10 +1,11 @@
 import { type WorkflowStepConfig } from "cloudflare:workers";
+import assert from "node:assert/strict";
 import { afterEach, expect, it, vi } from "vitest";
 import { type Cause, Clock, Effect, Exit, Option, Schema } from "effect";
 import { type Miniflare } from "miniflare";
 import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
 import { executeProtectedSubscriptionQuery, getRefund, startRefund } from "./operations";
-import { type RefundStartCall, RefundSupportAdmission } from "./contract";
+import { type RefundStartCall, RefundSupportAdmission, RefundWorkFailure } from "./contract";
 import { UserTransactionCoordinator } from "../transactions/runtime";
 import {
   dispatchRefunds,
@@ -111,7 +112,13 @@ const providerReply = (
   id: string,
   status: string,
   correlation: Partial<
-    Readonly<{ amount_in_cents: number; transaction_id: string; reference: string }>
+    Readonly<{
+      id: number;
+      v2_refund_id: string;
+      amount_in_cents: number;
+      transaction_id: string;
+      reference: string;
+    }>
   > = {}
 ): Response =>
   Response.json(
@@ -947,7 +954,7 @@ it("classifies unavailable Workflow handoff without acknowledging or changing fi
       const db = yield* fixture();
       const accepted = yield* startRefund(call(db));
       let acknowledgments = 0;
-      const refused = yield* Effect.flip(
+      const refused = yield* Effect.exit(
         receiveRefunds({
           environment: {
             BILLING_REFUND_WORKFLOW: {
@@ -967,7 +974,7 @@ it("classifies unavailable Workflow handoff without acknowledging or changing fi
           },
         })
       );
-      expect(refused).toMatchObject({ _tag: "RefundWorkFailure", reason: "unavailable" });
+      assert.deepStrictEqual(refused, Exit.fail(new RefundWorkFailure({ reason: "unavailable" })));
       expect(acknowledgments).toBe(0);
       expect(
         yield* getRefund({
@@ -985,7 +992,7 @@ it("contains publication failure without releasing the reservation or claiming a
     Effect.gen(function* () {
       const db = yield* fixture();
       const accepted = yield* startRefund(call(db));
-      const failed = yield* Effect.flip(
+      const failed = yield* Effect.exit(
         dispatchRefunds({
           DB: db,
           BILLING_COLLECTION_QUEUE: {
@@ -993,7 +1000,7 @@ it("contains publication failure without releasing the reservation or claiming a
           },
         })
       );
-      expect(failed).toMatchObject({ _tag: "RefundWorkFailure", reason: "unavailable" });
+      assert.deepStrictEqual(failed, Exit.fail(new RefundWorkFailure({ reason: "unavailable" })));
       expect(
         yield* getRefund({
           db,
@@ -1032,18 +1039,26 @@ it("refuses out-of-bound verification work with a closed failure before handoff 
         Promise.reject(new Error("No provider request"))
       );
       vi.stubGlobal("fetch", provider);
-      expect(
-        yield* Effect.flip(
+      assert.deepStrictEqual(
+        yield* Effect.exit(
           receiveRefunds({
             environment: { BILLING_REFUND_WORKFLOW: { create: creator, get: creator } },
             batch: { messages: [{ body: work, ack }] },
           })
-        )
-      ).toMatchObject({ _tag: "RefundWorkFailure", reason: "invalid-work" });
-      yield* Effect.tryPromise(() =>
-        expect(
-          runRefundWorkflow({ ...workflowFor(db, accepted.id), payload: work })
-        ).rejects.toMatchObject({ _tag: "RefundWorkFailure", reason: "invalid-work" })
+        ),
+        Exit.fail(new RefundWorkFailure({ reason: "invalid-work" }))
+      );
+      assert.deepStrictEqual(
+        yield* Effect.exit(
+          Effect.tryPromise({
+            try: () => runRefundWorkflow({ ...workflowFor(db, accepted.id), payload: work }),
+            catch: (error: unknown): RefundWorkFailure => {
+              assert.ok(error instanceof RefundWorkFailure);
+              return error;
+            },
+          })
+        ),
+        Exit.fail(new RefundWorkFailure({ reason: "invalid-work" }))
       );
       expect(creator).not.toHaveBeenCalled();
       expect(ack).not.toHaveBeenCalled();
@@ -1058,6 +1073,89 @@ it("refuses out-of-bound verification work with a closed failure before handoff 
       ).toEqual(accepted);
     })
   ));
+
+it.each(["pending", "hourly"])(
+  "atomically limits concurrent %s correction admission without partial financial effects",
+  (limit) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* fixture();
+        const count = limit === "pending" ? 3 : 11;
+        for (let index = 1; index <= count; index++) {
+          const identity = `50000000-0000-4000-8000-${index.toString().padStart(12, "0")}`;
+          const accepted = yield* startRefund(call(db, "1", identity));
+          if (limit === "hourly") {
+            vi.stubGlobal("fetch", (): Promise<Response> =>
+              Promise.resolve(
+                providerReply(accepted.id, "DECLINED", {
+                  amount_in_cents: 100,
+                  id: 1000 + index,
+                  v2_refund_id: `declined-${accepted.id}`,
+                })
+              )
+            );
+            yield* Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)));
+            expect(
+              yield* getRefund({
+                db,
+                authority: call(db).authority,
+                userId,
+                refundAttemptId: accepted.id,
+              })
+            ).toMatchObject({ status: "failed", failure: "provider-declined" });
+          }
+        }
+        const beforeStanding = yield* standing(db);
+        const results = yield* Effect.forEach(
+          ["50000000-0000-4000-8000-000000000101", "50000000-0000-4000-8000-000000000102"],
+          (identity) => Effect.exit(startRefund(call(db, "1", identity))),
+          { concurrency: "unbounded" }
+        );
+        expect(results.filter(Exit.isSuccess)).toHaveLength(1);
+        const failures = results.filter(Exit.isFailure);
+        assert.deepStrictEqual(failures, [Exit.fail("limited")]);
+        const financialState = (): Promise<unknown> =>
+          db
+            .prepare(`SELECT
+    (SELECT COUNT(*) FROM refund_attempts) AS attempts,
+    (SELECT SUM(amount_in_cents) FROM refund_attempts WHERE status<>'failed') AS reserved,
+    (SELECT COUNT(*) FROM refund_outbox) AS outbox,
+    (SELECT COUNT(*) FROM refund_submission_claims) AS claims,
+    (SELECT COUNT(*) FROM refund_outcome_evidence) AS outcomes,
+    (SELECT COUNT(*) FROM billing_access_adjustments) AS adjustments,
+    (SELECT COUNT(*) FROM subscription_renewal_stops) AS stops`)
+            .first();
+        const before = yield* Effect.tryPromise(financialState);
+        const expected =
+          limit === "pending"
+            ? {
+                attempts: 4,
+                reserved: 400,
+                outbox: 4,
+                claims: 0,
+                outcomes: 0,
+                adjustments: 0,
+                stops: 0,
+              }
+            : {
+                attempts: 12,
+                reserved: 100,
+                outbox: 12,
+                claims: 11,
+                outcomes: 11,
+                adjustments: 0,
+                stops: 0,
+              };
+        expect(before).toEqual(expected);
+        assert.deepStrictEqual(
+          yield* Effect.exit(startRefund(call(db, "1", "50000000-0000-4000-8000-000000000103"))),
+          Exit.fail("limited")
+        );
+        expect(yield* Effect.tryPromise(financialState)).toEqual(before);
+        expect(yield* standing(db)).toEqual(beforeStanding);
+      })
+    )
+);
 
 it("reports malformed retained correction state as unavailable, not absent or a new intent", () =>
   Effect.runPromise(

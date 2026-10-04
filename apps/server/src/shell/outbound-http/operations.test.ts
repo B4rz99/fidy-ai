@@ -130,12 +130,15 @@ it.effect(
         { _tag: "WompiSandboxRefund", body: "{}" },
         { _tag: "WompiSandboxCardVoid", transactionId: "provider-charge" },
       ] as const) {
-        expect(yield* Effect.flip(outbound.execute(request))).toEqual(
-          new OutboundHttpFailure({
-            reason: "transport-failed",
-            responseStatus: Option.none(),
-            responseHeaders: {},
-          })
+        assert.deepStrictEqual(
+          yield* Effect.exit(outbound.execute(request)),
+          Exit.fail(
+            new OutboundHttpFailure({
+              reason: "transport-failed",
+              responseStatus: Option.none(),
+              responseHeaders: {},
+            })
+          )
         );
       }
       expect(calls).toBe(0);

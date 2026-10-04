@@ -6,7 +6,7 @@ accepted or executed by this implementation, even if the operator has refund per
 
 ## Enable protected Sandbox support
 
-- Apply `0032_billing_corrections.sql` through the normal private-Core D1 migration process.
+- Apply `0035_billing_corrections.sql` through the normal private-Core D1 migration process.
 - Use `WOMPI_ENVIRONMENT=sandbox` and the merchant's `prv_test_…` private key.
 - Configure a **separate Cloudflare Access application** for
   `/internal/support/billing-refunds` and its read subpaths. Its allow policy grants refund permission

@@ -16,6 +16,7 @@ export const makeCanonicalClient: CanonicalClientFactory = Effect.fn(function* (
       maximumResponseBytes: 1_048_576,
       maximumRequestBytes: maximumInputBytes,
       captureRetry: options.captureRetry,
+      captureAllowance: options.captureAllowance,
     }),
     baseUrl: apiOrigin,
   }).pipe(Effect.provideContext(authorization));

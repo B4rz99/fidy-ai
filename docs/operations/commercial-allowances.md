@@ -27,7 +27,19 @@ sharing a NAT. Trusted Cloudflare source evidence is forwarded by the public Wor
 `quota.getQuota` and `subscription.getUpgradeUrl` use shared audited owner queries and remain
 commercially unmetered at zero. They retain security protection. Quota exhaustion returns 429 with
 an allowance and exact period reset; security refusals use `rate_limited` and `Retry-After`, not a
-commercial reset. The browser honors bounded `Retry-After` pacing only for decoded canonical
+commercial reset.
+
+The response protocol publishes `Fidy-Canonical-Allowance: canonical_call`,
+`Fidy-Canonical-Limit`, `Fidy-Canonical-Remaining` and `Fidy-Canonical-Reset`. Free limit and remaining
+are non-negative integer text; Trial/Pro publish `uncapped` for both. Reset is an absolute ISO UTC
+instant, not Retry-After. `shell/quotas/contract.ts` owns the reusable `CanonicalAllowance` codec
+and header names, published outward through `@fidy/server/client`. Consumers validate the whole
+projection; missing or malformed metadata means unavailable, never an inferred zero. The CLI
+renders valid standing and unavailable guidance on stderr, preserving canonical JSON stdout and
+making no additional quota request. It suppresses a visible monthly counter/reset for uncapped
+standing and does not equate uncapped commercial access with unlimited security capacity.
+
+The browser honors bounded `Retry-After` pacing only for decoded canonical
 `ResourceLimited` refusals, which prove non-admission. It retries at most six times within the
 existing 15-second deadline; it does not replay uncertain mutations or commercial exhaustion.
 

@@ -1,3 +1,4 @@
+import type { CanonicalAllowance } from "@fidy/server/client";
 import { type Effect, type Option, type Schema, type Scope } from "effect";
 import type { CliFailure, Credential, CredentialStore } from "../credential/contract";
 import type { HttpClient } from "effect/http";
@@ -7,6 +8,7 @@ export type OperationResult = Readonly<{
   envelope: Schema.Json;
   failed: boolean;
   retryAfterSeconds: Option.Option<number>;
+  allowance: Option.Option<CanonicalAllowance>;
 }>;
 
 /** Dynamic generated-client port. Only selected, whole-input-decoded calls may reach it. */
@@ -18,6 +20,7 @@ export type CanonicalClientFactory = (
     httpClient: HttpClient.HttpClient;
     credential: Credential;
     captureRetry: (seconds: number) => void;
+    captureAllowance: (allowance: Option.Option<CanonicalAllowance>) => void;
   }>
 ) => Effect.Effect<CanonicalClient, never, Scope.Scope>;
 

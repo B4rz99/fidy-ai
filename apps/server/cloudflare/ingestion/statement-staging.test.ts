@@ -59,7 +59,7 @@ const migrationNames = [
   "0017_statement_dispatch",
   "0018_batch_envelope_audit",
   "0019_canonical_child_guards",
-  "0032_billing_corrections",
+  "0035_billing_corrections",
 ] as const;
 const workerScript = "export default { fetch() { return new Response('ok') } }";
 const stagingWorkerName = "statement-staging-test-worker";

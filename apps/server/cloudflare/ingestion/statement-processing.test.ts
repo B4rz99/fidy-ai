@@ -36,7 +36,7 @@ const migrations = [
   "0015_statement_submission",
   "0016_statement_processing",
   "0017_statement_dispatch",
-  "0032_billing_corrections",
+  "0035_billing_corrections",
 ];
 const storage = isolatedTestStorage();
 

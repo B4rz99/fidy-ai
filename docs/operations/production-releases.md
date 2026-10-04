@@ -211,8 +211,13 @@ removed after the experiment; production exposes no call-form selector.
 GET observes identity only. POST supplies the reserved all-zero Git revision and is rejected before
 admission, binding checks or publication—even in local zero-revision configuration. Older Production
 Core code also rejects it because its configured revision is nonzero. The runner caps each request
-at eight seconds, the run at 125 seconds (including settling) and streamed GET responses at 4 KiB;
-redirects and automatic HTTP tracing are disabled. Output contains only method, pairing, round,
+at eight seconds and the run at 125 seconds (including settling). Both runners use
+`infra/cloudflare/smoke-exchange.ts` for override construction, bounded response decoding and closed
+identity classification. All readiness, diagnostic POST, synthetic POST and probe-poll responses
+are capped at 4 KiB of actual streamed bytes before JSON decoding, regardless of Content-Length.
+Overflow and transport failure fail the exchange; malformed JSON cannot establish identity or a
+passing verdict. Interruption cancels the owned reader, and the request scope closes after each
+exchange. Redirects and automatic HTTP tracing are disabled. Output contains only method, pairing, round,
 replica, observation window, status, validated public/Core version IDs and identity source. New Core rejection headers carry a validated version ID; older Core
 can be identified by true equality against the captured stable version, marked `equality`, never
 assumed from a fallback. Missing/malformed identity remains `unavailable` and cannot satisfy the

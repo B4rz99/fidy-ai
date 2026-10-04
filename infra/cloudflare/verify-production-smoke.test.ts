@@ -92,6 +92,74 @@ const edgeResponse = (path: string): Response =>
     headers: { ...securityHeaders, "x-fidy-smoke-worker-version": publicCandidate },
   });
 
+for (const phase of ["readiness", "synthetic"] as const) {
+  for (const hostileBody of ["overflow", "malformed"] as const) {
+    it(
+      `withholds attestation and further work after ${hostileBody} ${phase} bytes`,
+      () =>
+        Effect.runPromise(
+          Effect.scoped(
+            Effect.gen(function* () {
+              let attested = false;
+              let syntheticCalls = 0;
+              const mockedFetch = vi
+                .spyOn(globalThis, "fetch")
+                .mockImplementation((input, init) => {
+                  const request = new Request(input, init);
+                  if (request.method === "POST") syntheticCalls++;
+                  return Promise.resolve(
+                    new Response(
+                      hostileBody === "overflow" ? "x".repeat(4097) : "private-provider-body",
+                      {
+                        headers: {
+                          ...securityHeaders,
+                          "x-fidy-smoke-worker-version": intermediateRequest(request)
+                            ? publicStable
+                            : publicCandidate,
+                        },
+                      }
+                    )
+                  );
+                });
+              try {
+                const services = yield* Layer.build(FetchHttpClient.layer);
+                const exit = yield* Effect.exit(
+                  (phase === "readiness"
+                    ? verifyCandidateSmoke(config)
+                    : verifyProductionSmoke(config)
+                  ).pipe(
+                    Effect.andThen(
+                      Effect.sync(() => {
+                        attested = true;
+                      })
+                    ),
+                    Effect.provideService(
+                      HttpClient.HttpClient,
+                      Context.get(services, HttpClient.HttpClient)
+                    ),
+                    Effect.provideService(FetchHttpClient.Fetch, mockedFetch)
+                  )
+                );
+                expect(Exit.isFailure(exit)).toBe(true);
+                expect(attested).toBe(false);
+                if (phase === "readiness") expect(syntheticCalls).toBe(0);
+                const error = Exit.isFailure(exit)
+                  ? Cause.findErrorOption(exit.cause)
+                  : Option.none();
+                expect(
+                  Option.isSome(error) && "reason" in error.value && error.value.reason
+                ).not.toContain("private-provider-body");
+              } finally {
+                mockedFetch.mockRestore();
+              }
+            })
+          )
+        ),
+      40_000
+    );
+  }
+}
+
 const routingModes = ["candidate", "intermediate", "promoted"] as const;
 describe("read-only routing readiness", () => {
   it("starts neither synthetic pairing until old ingress also reaches the exact candidate Core", () =>

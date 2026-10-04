@@ -259,19 +259,8 @@ describe("read-only smoke routing diagnosis", () => {
             );
           });
           try {
-            const observations = yield* runDiagnostic(config, mockedFetch);
-            expect(
-              observations
-                .filter((value) => value.method === "GET")
-                .every((value) => value.coreVersion === "unavailable")
-            ).toBe(true);
-            expect(
-              observations
-                .filter((value) => value.method === "POST")
-                .every(
-                  (value) => value.coreVersion === coreCandidate && value.coreSource === "header"
-                )
-            ).toBe(true);
+            const exit = yield* Effect.exit(runDiagnostic(config, mockedFetch));
+            expect(Exit.isFailure(exit)).toBe(true);
           } finally {
             mockedFetch.mockRestore();
           }

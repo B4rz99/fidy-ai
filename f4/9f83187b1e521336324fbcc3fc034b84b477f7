@@ -1,0 +1,269 @@
+apps/server/src/shell/authorization/contract.ts
+  s_cd1ccb754ed1fc::t_74d8f445d7ccbb 23,29
+apps/server/src/shell/canonical-policy/operations.ts
+  s_cd1ccb754ed1fc::t_b949d220db27ba 10,25,28,35-36,62-63,90
+  s_cd1ccb754ed1fc::t_9bfe374b058e2e 27,40
+  s_cd1ccb754ed1fc::t_26faa0dc6a7b6a 67
+  s_cd1ccb754ed1fc::t_5ec36f3ffca6e6 13-14
+  s_cd1ccb754ed1fc::t_4c2c16144fc3b7 39
+apps/server/cloudflare/oauth-agents/operations.ts
+  s_cd1ccb754ed1fc::t_cf6cd54ed9ea96 3-7
+  s_cd1ccb754ed1fc::t_5ec36f3ffca6e6 14-16,18-20,22-34,39-50,52-57
+  s_cd1ccb754ed1fc::t_53110a0136d33e 2,35-38
+  s_cd1ccb754ed1fc::t_90083ab7b1548a 61
+  s_cd1ccb754ed1fc::t_fddde126da0219 1,8-13,17,21,51,58-60
+apps/server/cloudflare/oauth-agents/oauth-ingress.test.ts
+  s_cd1ccb754ed1fc::t_bbfd1b3e3acce3 676-678
+  s_cd1ccb754ed1fc::t_e06a0a3c698032 1243,1268,1304
+  s_cd1ccb754ed1fc::t_4a27de30d406b1 7,1011
+  s_cd1ccb754ed1fc::t_d68360060aa327 352-363,366-367,374-375
+  s_cd1ccb754ed1fc::t_7e11f251096365 398-498
+  s_cd1ccb754ed1fc::t_2c705a0db207bc 884-889,903,921,925-929,1028-1029,1041-1042
+  s_cd1ccb754ed1fc::t_666c540db4d3b9 4-5
+  s_cd1ccb754ed1fc::t_d0631740c82a67 22
+  s_cd1ccb754ed1fc::t_d739f48cc82351 226,268-269,276-277
+  s_cd1ccb754ed1fc::t_691b0081bbaef4 174,950,956-957,961,971-973,1027
+  s_cd1ccb754ed1fc::t_886fda6a75861a 680-681
+  s_cd1ccb754ed1fc::t_8cea4a84a25e49 1455
+  s_cd1ccb754ed1fc::t_5ec36f3ffca6e6 49-60,97-108,233-267,278-334,560-675,679,682-783,835-883,890-902,904-909,911-920,922-924,930-949,951-955,958-960,963-970,974-997,1003-1005,1019-1026,1030-1040,1322-1324
+  s_cd1ccb754ed1fc::t_de8681eb0d5e29 8,37,962,998-1002,1006,1008-1010
+  s_cd1ccb754ed1fc::t_637fa528c5bf62 1
+  s_cd1ccb754ed1fc::t_34dcb1ff36b4d3 6,335,340
+  s_cd1ccb754ed1fc::t_cf6cd54ed9ea96 336-339,341-351,364-365,368-373,376-397
+  s_cd1ccb754ed1fc::t_a7991d732bf104 525-526,528-529,551-552,554-555
+  s_cd1ccb754ed1fc::t_0f175f80531c99 910
+  s_cd1ccb754ed1fc::t_e6048154397776 1007
+  s_cd1ccb754ed1fc::t_7f8fd6a8495188 2,15
+  s_cd1ccb754ed1fc::t_eea8d5892b956b 30-34,227-232,270-275,499-524,527,530-550,553,556-559,784-834,1012-1018
+apps/server/src/shell/insights/contract.ts
+  s_cd1ccb754ed1fc::t_e5b27aab3d5790 10,43,65,86,106
+apps/server/cloudflare/transactions/runtime.ts
+  s_cd1ccb754ed1fc::t_88c6c1fb0db116 230-231,235,252,378
+  s_cd1ccb754ed1fc::t_a7991d732bf104 232-234
+  s_cd1ccb754ed1fc::t_5ec36f3ffca6e6 222-229,236-251,372-377
+  s_cd1ccb754ed1fc::t_999195da8ee227 9,11
+apps/server/src/shell/consent/operations.ts
+  s_cd1ccb754ed1fc::t_5ec36f3ffca6e6 51-59,61-72
+  s_cd1ccb754ed1fc::t_7e11f251096365 48,75-77,80
+  s_cd1ccb754ed1fc::t_f5afaf65425432 2,60,74,78-79,81
+  s_cd1ccb754ed1fc::t_fd664d1313d808 47,49-50,73
+  s_cd1ccb754ed1fc::t_7a696b4297bb55 30-31
+apps/server/src/shell/audit/contract.ts
+  s_cd1ccb754ed1fc::t_e04c63cbc80326 57
+apps/server/src/shell/categories/internal/query.ts
+  s_cd1ccb754ed1fc::t_4c9db7ab6d767f 9
+apps/server/cloudflare/oauth-agents/internal/exchange.ts
+  s_cd1ccb754ed1fc::t_cf6cd54ed9ea96 3
+  s_cd1ccb754ed1fc::t_32fc8cf998922c 18
+  s_cd1ccb754ed1fc::t_d699177a606c0e 122-132
+  s_cd1ccb754ed1fc::t_06ee427e493e1d 185
+  s_cd1ccb754ed1fc::t_a7991d732bf104 21-23,25-28,30,33-35,37-47,56-77,81-103,107-121,133-163,165-184,186-189,194-199,206-208
+  s_cd1ccb754ed1fc::t_97f7ac8e6e0064 9
+  s_cd1ccb754ed1fc::t_7f26eeacd71df7 6-8,10,51-55,190-193,200-205
+  s_cd1ccb754ed1fc::t_ce2fd80ffe8834 4-5
+  s_cd1ccb754ed1fc::t_f424692cdd1311 12,29,36,49-50,78-80,104-106,164
+  s_cd1ccb754ed1fc::t_2eb13ee17222e6 11,24,31-32
+  s_cd1ccb754ed1fc::t_3241db6f70165e 1-2,13-17,19-20,48
+apps/server/src/shell/canonical-policy/contract.ts
+  s_cd1ccb754ed1fc::t_59d1590d59b87d 20,136,142,151,170,177
+  s_cd1ccb754ed1fc::t_b1a5622121c379 118
+  s_cd1ccb754ed1fc::t_b564e34141328c 21,25,28,37,57,59,78,80,127,137-138,143-144,174,181
+  s_cd1ccb754ed1fc::t_cf6cd54ed9ea96 171-172,178-180
+apps/server/src/shell/canonical-catalog/contract.ts
+  s_cd1ccb754ed1fc::t_5ec36f3ffca6e6 131-133
+  s_cd1ccb754ed1fc::t_a1dd61778d9fe0 106
+apps/server/src/shell/identity/contract.ts
+  s_cd1ccb754ed1fc::t_7839633cbf4d11 5,25,42
+apps/web/src/features/oauth-connections/view.test.tsx
+  s_cd1ccb754ed1fc::t_e1717034a29bf9 21
+  s_cd1ccb754ed1fc::t_ce007a3f763107 23,25,46
+  s_cd1ccb754ed1fc::t_5ec36f3ffca6e6 27-33,47-54
+apps/server/src/shell/budgets/contract.ts
+  s_cd1ccb754ed1fc::t_8caf45ebee3a5a 18,21,27,33
+apps/server/src/shell/consent/contract.ts
+  s_cd1ccb754ed1fc::t_7e11f251096365 44-51,53-56
+  s_cd1ccb754ed1fc::t_3201a9fec50df4 131
+  s_cd1ccb754ed1fc::t_d5ead84debba9a 2-4,43,52
+  s_cd1ccb754ed1fc::t_25ab7a443e1ea2 57
+apps/server/src/shell/mcp/contract.ts
+  s_cd1ccb754ed1fc::t_312318d388ca17 6
+  s_cd1ccb754ed1fc::t_5c79ed977e400f 1-2,7-8,13,17-19
+  s_cd1ccb754ed1fc::t_e326c9e6993804 3-4,9-12
+  s_cd1ccb754ed1fc::t_6684b1f783df18 5
+  s_cd1ccb754ed1fc::t_5ec36f3ffca6e6 14-16
+apps/server/contracts/openapi.json
+  s_cd1ccb754ed1fc::t_9b8f72637517f3 10659,10755,10853,10952,11062,11169,11275,11371,11469,11568,11675,11778,11887,11987,12067,12170,12362,12440,12555,12664,12764,12876,12985,13084,13183,13295,13408,13526,13645,13782,13929,14735,14838,14941,15034,15201,15309,15408,15528,15645,15760,15870,15996,16106,16209,16299
+apps/server/src/core/oauth-agents/contract.ts
+  s_cd1ccb754ed1fc::t_6d12c4423311ab 4,6,8,10
+  s_cd1ccb754ed1fc::t_cf6cd54ed9ea96 25-27
+  s_cd1ccb754ed1fc::t_cc3cbbb5fe7626 1,34-35,39
+  s_cd1ccb754ed1fc::t_f0bb56b1eb8f52 3,5,7,9,11-12,19
+  s_cd1ccb754ed1fc::t_0ebd9daedef7ab 28-29
+  s_cd1ccb754ed1fc::t_6f6f7b48d5ca76 24,30
+  s_cd1ccb754ed1fc::t_5ec36f3ffca6e6 31-33,36-38
+  s_cd1ccb754ed1fc::t_7d5c1b6203ee3c 2,17
+  s_cd1ccb754ed1fc::t_7f26eeacd71df7 13-16,18,20-23
+apps/web/ARCHITECTURE.md
+  s_cd1ccb754ed1fc::t_2c229dc239eda2 88,90,95-101
+apps/server/src/shell/memory/contract.ts
+  s_cd1ccb754ed1fc::t_87c871743f9c65 12,33,39,45
+apps/server/cloudflare/tokens/internal/pat-authorization.ts
+  s_cd1ccb754ed1fc::t_775add6b244994 5,47,70
+apps/web/e2e/oauth-review.spec.ts
+  s_cd1ccb754ed1fc::t_291fc26b019f59 1
+  s_cd1ccb754ed1fc::t_e9798fd27ad065 55,190,300
+  s_cd1ccb754ed1fc::t_eea8d5892b956b 26-32
+  s_cd1ccb754ed1fc::t_5ec36f3ffca6e6 135-151,153-189
+  s_cd1ccb754ed1fc::t_43fc2f898d28e0 152
+apps/server/cloudflare/public-worker.ts
+  s_cd1ccb754ed1fc::t_5ca5442c24cdbb 376,386-389
+  s_cd1ccb754ed1fc::t_5ec36f3ffca6e6 377-385
+apps/server/src/shell/authorization/operations.ts
+  s_cd1ccb754ed1fc::t_e872be6548f0fa 6-7
+apps/server/src/shell/oauth-agents/operations.ts
+  s_cd1ccb754ed1fc::t_5ec36f3ffca6e6 8-10,14-15
+  s_cd1ccb754ed1fc::t_086cf596ed45c7 1-2,7,11-13,26-29,43-44
+  s_cd1ccb754ed1fc::t_7e11f251096365 3-6,16-25,30-42
+apps/server/cloudflare/mcp/runtime.ts
+  s_cd1ccb754ed1fc::t_c23704d4c28da4 1-4,6-7,9-15,20-21
+  s_cd1ccb754ed1fc::t_a7991d732bf104 16-19,22-132,134-166
+  s_cd1ccb754ed1fc::t_efbf0eb2d48687 5,8,133
+apps/server/src/core/oauth-agents/operations.test.ts
+  s_cd1ccb754ed1fc::t_bf6ee05a7d3c64 59-80
+  s_cd1ccb754ed1fc::t_7f26eeacd71df7 2-6,12-47,49-51
+  s_cd1ccb754ed1fc::t_6816dcb835c376 56,58
+  s_cd1ccb754ed1fc::t_9832826f9d5ad3 1,7-11,52-55,57,81
+  s_cd1ccb754ed1fc::t_cce3f5a7b79d0f 48
+apps/web/src/features/oauth-connections/feature.tsx
+  s_cd1ccb754ed1fc::t_d699177a606c0e 6-11,69-72
+  s_cd1ccb754ed1fc::t_589ce0f1d1208a 12,76-77
+  s_cd1ccb754ed1fc::t_5ec36f3ffca6e6 37-41,43-53,94-98,115-120
+  s_cd1ccb754ed1fc::t_bba00d1afb4cb3 42,87-93,99,129-130
+  s_cd1ccb754ed1fc::t_a7991d732bf104 74
+  s_cd1ccb754ed1fc::t_8ef6d9069e7c73 78-81
+apps/server/src/core/audit/contract.ts
+  s_cd1ccb754ed1fc::t_5ec36f3ffca6e6 23-26
+  s_cd1ccb754ed1fc::t_f357452a41bd0a 2
+apps/server/src/shell/canonical-policy/operations.test.ts
+  s_cd1ccb754ed1fc::t_3f23d863679b3a 8,10-12,30,33,36-37,64,66,68,131-135,140-141,143
+  s_cd1ccb754ed1fc::t_cf6cd54ed9ea96 61-63,69,72-76,137-139,161-169
+apps/server/src/shell/audit/internal/query.ts
+  s_cd1ccb754ed1fc::t_5ec36f3ffca6e6 83-93
+  s_cd1ccb754ed1fc::t_d13c1a211ca9a7 4,23-24,32,94
+apps/server/src/shell/operations/contract.ts
+  s_cd1ccb754ed1fc::t_15fbc0185df5c1 119,217
+  s_cd1ccb754ed1fc::t_cf6cd54ed9ea96 12-16
+apps/server/src/shell/canonical-catalog/contract.test.ts
+  s_cd1ccb754ed1fc::t_ca33a54df21e34 15,36,41
+  s_cd1ccb754ed1fc::t_cf6cd54ed9ea96 8-12,107-109
+apps/server/cloudflare/migrations/0033_oauth_authority.sql
+  s_cd1ccb754ed1fc::t_f445a01631498d 54-56
+  s_cd1ccb754ed1fc::t_4cd847f61472d9 38-53
+  s_cd1ccb754ed1fc::t_b0de7c6c0ef1e9 1-6,8-15,17-37,57-60
+  s_cd1ccb754ed1fc::t_936b1dd9fa467f 7,16
+apps/server/src/shell/categories/contract.ts
+  s_cd1ccb754ed1fc::t_5dee4935e12147 78
+  s_cd1ccb754ed1fc::t_11bf25cc3898f1 18,55,61,67
+apps/server/cloudflare/core-http/internal/http.ts
+  s_cd1ccb754ed1fc::t_edcc6f231f6701 1584
+ARCHITECTURE.md
+  s_cd1ccb754ed1fc::t_4fc22c9a2cea2d 91,94,98-102
+apps/server/cloudflare/oauth-agents/internal/approval.ts
+  s_cd1ccb754ed1fc::t_b657ec031c341e 2,120
+  s_cd1ccb754ed1fc::t_99efa712eac1cd 16,38-39,45-46,63,100
+  s_cd1ccb754ed1fc::t_bf102c0ce03384 1,21
+  s_cd1ccb754ed1fc::t_a7991d732bf104 8-14,24-32,34-37,40-44,47-62,64-89,91-99,101-109,118-119,121-133,135-136
+  s_cd1ccb754ed1fc::t_fa13781f3447fb 90,134
+  s_cd1ccb754ed1fc::t_d282977db18d4d 15,17-20,22-23
+  s_cd1ccb754ed1fc::t_82bb92bf10cdb5 7
+  s_cd1ccb754ed1fc::t_456dd14bacb47b 33
+  s_cd1ccb754ed1fc::t_7f26eeacd71df7 3-6,110-117
+apps/server/src/shell/ingestion/contract.ts
+  s_cd1ccb754ed1fc::t_6ff452592d6bd5 30,38,44,50
+apps/server/cloudflare/secret-material/operations.ts
+  s_cd1ccb754ed1fc::t_5ec36f3ffca6e6 25-30,32-38,40-42
+  s_cd1ccb754ed1fc::t_df5bd1a54c0528 1-2,24,31
+  s_cd1ccb754ed1fc::t_0d10de43547a78 39
+  s_cd1ccb754ed1fc::t_41f6706f1fea7e 4
+apps/server/cloudflare/canonical-operations/internal/batch.ts
+  s_cd1ccb754ed1fc::t_b6923fb275f030 13,144,355,475
+apps/server/cloudflare/categories/internal/canonical-category.ts
+  s_cd1ccb754ed1fc::t_c8382cd6acca86 148-151,161-162
+  s_cd1ccb754ed1fc::t_c8d7e8a8eaf216 1-2,13,22,49,52-55,66-67,101,104,119,123,140
+  s_cd1ccb754ed1fc::t_5ec36f3ffca6e6 23-24,56-65,152-160,163-165
+apps/server/ARCHITECTURE.md
+  s_cd1ccb754ed1fc::t_9c6b61720620d1 383-387,391-393,398-399
+apps/server/src/core/oauth-agents/operations.ts
+  s_cd1ccb754ed1fc::t_7f26eeacd71df7 3-10,15-17,20-21,23-28
+  s_cd1ccb754ed1fc::t_2ebc1238c1fea8 12-13,18
+  s_cd1ccb754ed1fc::t_40135a260c350a 11,14,19,22
+apps/server/src/shell/audit/operations.ts
+  s_cd1ccb754ed1fc::t_ed9f9298e2c4eb 40
+  s_cd1ccb754ed1fc::t_0cf3cdc1af26b1 1,4,29,39,51
+  s_cd1ccb754ed1fc::t_5ec36f3ffca6e6 30-38
+  s_cd1ccb754ed1fc::t_7e11f251096365 41-50
+apps/server/src/shell/subscription/contract.ts
+  s_cd1ccb754ed1fc::t_049493dd36cab3 21,34,53,70
+apps/server/src/shell/canonical-operations/suggested-operations.test.ts
+  s_cd1ccb754ed1fc::t_cf6cd54ed9ea96 12-16
+  s_cd1ccb754ed1fc::t_b57f21fc453097 51,223
+apps/server/cloudflare/canonical-operations/operations.ts
+  s_cd1ccb754ed1fc::t_a7991d732bf104 43-45,51-53,72-74
+  s_cd1ccb754ed1fc::t_3d3260b714c4a2 4-8,59,86
+  s_cd1ccb754ed1fc::t_5ec36f3ffca6e6 38-40,46-50,54-58,60-71,75-85,87-89
+  s_cd1ccb754ed1fc::t_04e4293eaff0ae 16,351
+  s_cd1ccb754ed1fc::t_1ed15246b3801e 2-3,9,37,41-42,90
+apps/server/src/shell/dashboard/contract.ts
+  s_cd1ccb754ed1fc::t_1d3b38319e2750 32,164,183,202,221,241
+apps/server/cloudflare/oauth-agents/runtime.ts
+  s_cd1ccb754ed1fc::t_599203b92dd2e6 23,185
+  s_cd1ccb754ed1fc::t_3600f35f858cf1 1
+  s_cd1ccb754ed1fc::t_5ec36f3ffca6e6 33-38,43-47
+  s_cd1ccb754ed1fc::t_16d98e4486c602 24,184
+  s_cd1ccb754ed1fc::t_ea49beb4e7175c 188
+apps/server/src/shell/public-http/contract.ts
+  s_cd1ccb754ed1fc::t_cf6cd54ed9ea96 79-81
+  s_cd1ccb754ed1fc::t_c128caf50883aa 8
+apps/server/src/shell/recurring/contract.ts
+  s_cd1ccb754ed1fc::t_c7a0912ed5e7d9 4,23
+apps/server/contracts/operation-policy.json
+  s_cd1ccb754ed1fc::t_9b8f72637517f3 22,37,52,67,82,97,112,127,142,157,172,187,202,217,232,247,284,299,314,329,344,359,374,389,404,419,434,449,464,479,494,509,523,615,630,645,660,675,690,705,720,735,750,765,780,795
+apps/web/src/features/oauth-connections/view.tsx
+  s_cd1ccb754ed1fc::t_a7991d732bf104 76-90,92-98,101-114,161-163
+  s_cd1ccb754ed1fc::t_5ec36f3ffca6e6 21-27,117-123,157-160
+  s_cd1ccb754ed1fc::t_76347e481fc3cc 1,5
+  s_cd1ccb754ed1fc::t_8d23f39c24fbae 91,99-100,115
+apps/server/src/shell/transactions/contract.ts
+  s_cd1ccb754ed1fc::t_d29712f81f03f4 22,25,31,37
+apps/server/cloudflare/oauth-agents/internal/review.ts
+  s_cd1ccb754ed1fc::t_a7991d732bf104 159-164
+  s_cd1ccb754ed1fc::t_405b7bf42195e6 168
+  s_cd1ccb754ed1fc::t_67fd5981ae4cab 2-3,47,120
+  s_cd1ccb754ed1fc::t_5ec36f3ffca6e6 60-62,165-167
+apps/server/src/shell/oauth-agents/contract.ts
+  s_cd1ccb754ed1fc::t_e52f5a82c64c58 1,8,12-13,18-24,30-32
+  s_cd1ccb754ed1fc::t_38267a4c1fd482 14-17
+  s_cd1ccb754ed1fc::t_3cfc9d58b49c04 2
+  s_cd1ccb754ed1fc::t_7e11f251096365 25-29
+  s_cd1ccb754ed1fc::t_e90cb765f02444 91,123
+  s_cd1ccb754ed1fc::t_d68360060aa327 3-7
+  s_cd1ccb754ed1fc::t_6f651956e4b7b8 120
+  s_cd1ccb754ed1fc::t_f047ab4e002f33 110,117-118,121-122,124,177
+  s_cd1ccb754ed1fc::t_cb7482381068d0 119
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f49f83187b1e521336324fbcc3fc034b84b477f7",
+  "prompts": {},
+  "sessions": {
+    "s_cd1ccb754ed1fc": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10465-36c4-76e6-be76-249fbcaa8d50",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

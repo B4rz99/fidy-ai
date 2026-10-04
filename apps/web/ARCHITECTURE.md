@@ -16,7 +16,12 @@ Workers do not serve web routes or static assets.
 Effect Atom derives browser transport from the assembled `FidyApi` with
 `AtomHttpApi.Service()("FidyClient", { api: FidyApi, httpClient: ... })`. A shared browser HTTP policy
 layer bounds and sanitizes that transport beneath each generated client; the web application does not
-hand-wrap endpoints or declare a second canonical surface. Shared and server state belongs to Effect
+hand-wrap endpoints or declare a second canonical surface. Only GET/HEAD transport failures retry
+once. Canonical requests may additionally retry a decoded `ResourceLimited` refusal with bounded
+`Retry-After` pacing (six retries, delays of one to five seconds) inside the original 15-second
+deadline. This proves non-admission; commercial exhaustion, uncertain mutations, authentication,
+and enrollment refusals never gain automatic replay. Cancellation interrupts pacing as well as
+in-flight transport. Shared and server state belongs to Effect
 Atom, navigation state to TanStack Router, and irreducible one-component interaction state to React.
 
 ## 2. Behavioral ownership

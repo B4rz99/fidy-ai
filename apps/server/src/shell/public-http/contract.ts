@@ -351,7 +351,7 @@ export class NotFound extends Schema.Error<NotFound>(notFoundTag)(
   { httpApiStatus: 404 }
 ) {}
 
-/** The caller's stable-User write budget is exhausted for the current admission window. */
+/** The caller's stable-User request or write admission budget is exhausted. No domain write was accepted. */
 export class ResourceLimited extends Schema.Error<ResourceLimited>(resourceLimitedTag)(
   errorResponse(resourceLimitedTag, detail("rate_limited")),
   { httpApiStatus: 429 }

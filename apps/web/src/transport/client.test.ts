@@ -167,6 +167,135 @@ describe("subscription enrollment transport", () => {
 });
 
 describe("browser HTTP policy", () => {
+  it.effect("retries a canonical mutation only after a declared unadmitted resource refusal", () =>
+    Effect.gen(function* () {
+      const started = Deferred.makeUnsafe<void>();
+      let attempts = 0;
+      const respond = Effect.fn(function* (request: HttpClientRequest.HttpClientRequest) {
+        attempts++;
+        yield* Deferred.succeed(started, undefined);
+        return HttpClientResponse.fromWeb(
+          request,
+          Response.json(
+            attempts === 1
+              ? { error: { code: "rate_limited", message: "Retry later." }, next: [] }
+              : { data: "accepted", next: [] },
+            { status: attempts === 1 ? 429 : 200, headers: { "retry-after": "1" } }
+          )
+        );
+      });
+      const base = makeHttpClient(respond);
+      const client = yield* makePolicyTestClient(Layer.succeed(HttpClient.HttpClient, base));
+      const work = yield* Effect.forkChild(client.post(`${policyTestOrigin}/dashboard/initialize`));
+      yield* Deferred.await(started);
+      yield* TestClock.adjust("1 second");
+      const result = yield* Fiber.join(work);
+      expect(result.status).toBe(200);
+      expect(yield* result.json).toEqual({ data: "accepted", next: [] });
+      expect(attempts).toBe(2);
+    })
+  );
+
+  it.effect("bounds resource-refusal retries and preserves the final declared body", () =>
+    Effect.gen(function* () {
+      let attempts = 0;
+      const started = Deferred.makeUnsafe<void>();
+      const body = { error: { code: "rate_limited", message: "Retry later." }, next: [] };
+      const respond = Effect.fn(function* (request: HttpClientRequest.HttpClientRequest) {
+        attempts++;
+        yield* Deferred.succeed(started, undefined);
+        return HttpClientResponse.fromWeb(
+          request,
+          Response.json(body, { status: 429, headers: { "retry-after": "1" } })
+        );
+      });
+      const base = makeHttpClient(respond);
+      const client = yield* makePolicyTestClient(Layer.succeed(HttpClient.HttpClient, base));
+      const work = yield* Effect.forkChild(client.get(`${policyTestOrigin}/dashboard/view`));
+      yield* Deferred.await(started);
+      for (let index = 0; index < 6; index++) {
+        yield* TestClock.adjust("1 second");
+      }
+      const result = yield* Fiber.join(work);
+      expect(result.status).toBe(429);
+      expect(yield* result.json).toEqual(body);
+      expect(attempts).toBe(7);
+    })
+  );
+
+  it.effect("keeps resource pacing inside the original deadline and interruption lifetime", () =>
+    Effect.gen(function* () {
+      for (const interrupted of [false, true]) {
+        let attempts = 0;
+        const started = Deferred.makeUnsafe<void>();
+        const respond = Effect.fn(function* (request: HttpClientRequest.HttpClientRequest) {
+          attempts++;
+          yield* Deferred.succeed(started, undefined);
+          return HttpClientResponse.fromWeb(
+            request,
+            Response.json(
+              { error: { code: "rate_limited", message: "Retry later." }, next: [] },
+              { status: 429, headers: { "retry-after": "5" } }
+            )
+          );
+        });
+        const client = yield* makePolicyTestClient(
+          Layer.succeed(HttpClient.HttpClient, makeHttpClient(respond))
+        );
+        const work = yield* Effect.forkChild(
+          client.post(`${policyTestOrigin}/dashboard/initialize`)
+        );
+        yield* Deferred.await(started);
+        if (interrupted) {
+          yield* Fiber.interrupt(work);
+          yield* TestClock.adjust("15 seconds");
+          expect(attempts).toBe(1);
+        } else {
+          yield* TestClock.adjust("15 seconds");
+          const exit = yield* Fiber.await(work);
+          expect(Exit.isFailure(exit)).toBe(true);
+          expect(attempts).toBeLessThanOrEqual(3);
+        }
+      }
+    })
+  );
+
+  it.effect(
+    "does not replay uncertain mutations, commercial exhaustion or noncanonical refusals",
+    () =>
+      Effect.gen(function* () {
+        const cases = [
+          { boundary: "canonical", status: 503, code: "unavailable", retry: "1" },
+          { boundary: "canonical", status: 429, code: "quota_exhausted", retry: "1" },
+          { boundary: "canonical", status: 429, code: "rate_limited", retry: "invalid" },
+          { boundary: "web-auth", status: 429, code: "rate_limited", retry: "1" },
+          { boundary: "enrollment", status: 429, code: "rate_limited", retry: "1" },
+        ] as const;
+        for (const entry of cases) {
+          let attempts = 0;
+          const body = { error: { code: entry.code, message: "Retry later." }, next: [] };
+          const base = makeHttpClient((request) => {
+            attempts++;
+            return Effect.succeed(
+              HttpClientResponse.fromWeb(
+                request,
+                Response.json(body, {
+                  status: entry.status,
+                  headers: { "retry-after": entry.retry },
+                })
+              )
+            );
+          });
+          const client = yield* makePolicyTestClient(
+            Layer.succeed(HttpClient.HttpClient, base),
+            entry.boundary
+          );
+          const result = yield* client.post(`${policyTestOrigin}/work`);
+          expect(yield* result.json).toEqual(body);
+          expect(attempts).toBe(1);
+        }
+      })
+  );
   it.effect("terminates a request when its browser deadline expires", () =>
     Effect.gen(function* () {
       const neverClient = makeHttpClient(() => Effect.never);

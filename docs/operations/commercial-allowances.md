@@ -27,7 +27,9 @@ sharing a NAT. Trusted Cloudflare source evidence is forwarded by the public Wor
 `quota.getQuota` and `subscription.getUpgradeUrl` use shared audited owner queries and remain
 commercially unmetered at zero. They retain security protection. Quota exhaustion returns 429 with
 an allowance and exact period reset; security refusals use `rate_limited` and `Retry-After`, not a
-commercial reset.
+commercial reset. The browser honors bounded `Retry-After` pacing only for decoded canonical
+`ResourceLimited` refusals, which prove non-admission. It retries at most six times within the
+existing 15-second deadline; it does not replay uncertain mutations or commercial exhaustion.
 
 Retry identity binds one User, operation, and exact normalized input. Accepted responses replay
 without another unit or domain execution for a fixed 24 hours from first acceptance. Current

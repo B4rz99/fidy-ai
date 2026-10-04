@@ -1,4 +1,5 @@
-import { type Duration, Effect, Function, Layer, Stream } from "effect";
+import { ResourceLimited } from "@fidy/server/client";
+import { type Duration, Effect, Function, Layer, Option, Schema, Stream } from "effect";
 import {
   FetchHttpClient,
   Headers,
@@ -42,6 +43,15 @@ const browserHttpPolicies: Readonly<Record<BrowserHttpBoundary, BrowserHttpPolic
 const diagnosticsUrl = "https://browser-api.invalid";
 const disableAutomaticHttpSpan = (): boolean => true;
 const safeResponseHeaders = ["content-type"] as const;
+const resourceLimitedStatus = 429;
+const maximumResourceRetries = 6;
+const maximumResourceDelaySeconds = 5;
+const millisecondsPerSecond = 1_000;
+const RetrySeconds = Schema.NumberFromString.check(
+  Schema.isInt(),
+  Schema.isGreaterThan(0),
+  Schema.isLessThanOrEqualTo(maximumResourceDelaySeconds)
+);
 const redirectStatusMinimum = 300;
 const redirectStatusMaximumExclusive = 400;
 const noContentStatus = 204;
@@ -54,14 +64,18 @@ const diagnosticsRequest = (
   request: HttpClientRequest.HttpClientRequest
 ): HttpClientRequest.HttpClientRequest => HttpClientRequest.make(request.method)(diagnosticsUrl);
 
-const projectResponseHeaders = (response: HttpClientResponse.HttpClientResponse): Headers.Headers =>
-  Headers.fromInput(
-    Object.fromEntries(
-      safeResponseHeaders.flatMap((name) =>
-        name in response.headers ? [[name, response.headers[name]]] : []
-      )
-    )
-  );
+const projectResponseHeaders = (
+  response: HttpClientResponse.HttpClientResponse
+): Headers.Headers => {
+  const retry = Schema.decodeUnknownOption(RetrySeconds)(response.headers["retry-after"]);
+  const values: Array<readonly [string, string]> = [];
+  for (const name of safeResponseHeaders) {
+    const value = Option.fromUndefinedOr(response.headers[name]);
+    if (Option.isSome(value)) values.push([name, value.value]);
+  }
+  if (Option.isSome(retry)) values.push(["retry-after", String(retry.value)]);
+  return Headers.fromInput(values);
+};
 
 const diagnosticsResponse = (
   request: HttpClientRequest.HttpClientRequest,
@@ -228,12 +242,42 @@ const isSafeRetryRequest = (request: HttpClientRequest.HttpClientRequest): boole
 const isRetryableTransportFailure = (error: HttpClientError.HttpClientError): boolean =>
   error.reason._tag === "TransportError";
 
+const resourceRefusalDelay = (
+  response: HttpClientResponse.HttpClientResponse
+): Effect.Effect<Option.Option<number>> =>
+  Effect.gen(function* () {
+    if (response.status !== resourceLimitedStatus) return Option.none();
+    const seconds = Schema.decodeUnknownOption(RetrySeconds)(response.headers["retry-after"]);
+    if (Option.isNone(seconds)) return Option.none();
+    const body = yield* response.json.pipe(Effect.option);
+    if (Option.isNone(body)) return Option.none();
+    const refusal = Schema.decodeOption(Schema.toCodecJson(ResourceLimited))(body.value);
+    return Option.isSome(refusal)
+      ? Option.some(seconds.value * millisecondsPerSecond)
+      : Option.none();
+  });
+
+/** A declared resource refusal proves non-admission, unlike a transport failure or uncertain 5xx. */
+const retryResourceRefusals = (
+  attempt: Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError>
+): Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError> =>
+  Effect.gen(function* () {
+    for (let retried = 0; retried < maximumResourceRetries; retried++) {
+      const response = yield* attempt;
+      const delay = yield* resourceRefusalDelay(response);
+      if (Option.isNone(delay)) return response;
+      yield* Effect.sleep(delay.value);
+    }
+    return yield* attempt;
+  });
+
 const makePolicyClient = (
   client: HttpClient.HttpClient,
   apiOrigin: string,
-  policy: BrowserHttpPolicy
-): HttpClient.HttpClient =>
-  HttpClient.transform(client, (responseEffect, request) => {
+  boundary: BrowserHttpBoundary
+): HttpClient.HttpClient => {
+  const policy = browserHttpPolicies[boundary];
+  return HttpClient.transform(client, (responseEffect, request) => {
     let destination: URL;
     try {
       destination = new URL(request.url);
@@ -253,7 +297,9 @@ const makePolicyClient = (
     const boundedRetries = isSafeRetryRequest(request)
       ? attempt.pipe(Effect.retry({ times: 1, while: isRetryableTransportFailure }))
       : attempt;
-    return boundedRetries.pipe(
+    const admittedResponse =
+      boundary === "canonical" ? retryResourceRefusals(boundedRetries) : boundedRetries;
+    return admittedResponse.pipe(
       Effect.timeoutOrElse({
         duration: policy.deadline,
         orElse: () => Effect.fail(requestFailure(request, "browser request deadline exceeded")),
@@ -264,6 +310,7 @@ const makePolicyClient = (
       Effect.provideService(HttpClient.TracerPropagationEnabled, false)
     );
   });
+};
 
 /**
  * Places browser HTTP policy beneath one generated API client. `boundary` selects that API
@@ -271,7 +318,9 @@ const makePolicyClient = (
  * the only destination the resulting client will send to. `httpClient` supplies the underlying
  * browser or test transport. Requests include browser credentials, disable caching and automatic
  * redirects, and expose only sanitized transport failures; only GET and HEAD transport failures
- * retry, once.
+ * retry, once. Canonical requests can additionally retry a declared, unadmitted resource refusal
+ * with bounded Retry-After pacing inside the same absolute deadline. Uncertain mutations and
+ * enrollment/authentication refusals are never automatically replayed.
  */
 export const browserHttpClientLayer: {
   (
@@ -292,9 +341,7 @@ export const browserHttpClientLayer: {
   ): Layer.Layer<HttpClient.HttpClient> =>
     Layer.effect(
       HttpClient.HttpClient,
-      Effect.map(HttpClient.HttpClient, (client) =>
-        makePolicyClient(client, apiOrigin, browserHttpPolicies[boundary])
-      )
+      Effect.map(HttpClient.HttpClient, (client) => makePolicyClient(client, apiOrigin, boundary))
     ).pipe(
       Layer.provide(
         httpClient.pipe(

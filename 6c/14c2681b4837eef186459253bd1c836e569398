@@ -1,0 +1,23 @@
+apps/web/e2e/real-core-journeys.spec.ts
+  s_5dbc545240b27d::t_1deec472700efb 55,75,477,487
+  s_5dbc545240b27d::t_a682078157a674 24-30,64-74,78-88,193-195,198-200,360-362
+  s_5dbc545240b27d::t_38e3f2e0396e15 485
+  s_5dbc545240b27d::t_99fb4e76a56a9d 23,97,109
+  s_5dbc545240b27d::t_44fe025752cf2c 50-54,56-63,76-77,478-484,488
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "6c14c2681b4837eef186459253bd1c836e569398",
+  "prompts": {},
+  "sessions": {
+    "s_5dbc545240b27d": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a103f5-b777-7423-b381-e2c2433616b5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

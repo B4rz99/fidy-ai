@@ -17,7 +17,12 @@ import {
 } from "../../ingestion/runtime";
 import { WhatsAppWork } from "../../whatsapp/contract";
 import { receiveWhatsAppWork } from "../../whatsapp/runtime";
-import { isBillingCollectionWork, receiveBillingCollection } from "../../subscription/runtime";
+import {
+  isBillingCollectionWork,
+  isRefundWork,
+  receiveBillingCollection,
+  receiveRefunds,
+} from "../../subscription/runtime";
 
 const receiveEmailQueue: CoreQueueHandler = (batch, environment) => {
   if (batch.messages.some((message) => isEmailReplacementWork(message.body))) {
@@ -99,6 +104,38 @@ const receiveForwardedQueue = (
   }).pipe(Effect.withSpan("ingestion.forwarded-email.queue"), Effect.runPromise);
 };
 
+const receiveBillingQueue: CoreQueueHandler = (batch, environment) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const refunds = batch.messages.filter((message) => isRefundWork(message.body));
+      const charges = batch.messages.filter((message) => isBillingCollectionWork(message.body));
+      if (refunds.length + charges.length !== batch.messages.length) {
+        return yield* Effect.fail("Invalid billing work");
+      }
+      if (refunds.length > 0) {
+        if (environment.BILLING_REFUND_WORKFLOW === undefined) {
+          return yield* Effect.fail("Billing refunds unavailable");
+        }
+        yield* receiveRefunds({
+          environment: { BILLING_REFUND_WORKFLOW: environment.BILLING_REFUND_WORKFLOW },
+          batch: { messages: refunds },
+        });
+      }
+      if (charges.length > 0) {
+        if (environment.BILLING_COLLECTION_WORKFLOW === undefined) {
+          return yield* Effect.fail("Billing collection unavailable");
+        }
+        yield* receiveBillingCollection({
+          environment: {
+            DB: environment.DB,
+            BILLING_COLLECTION_WORKFLOW: environment.BILLING_COLLECTION_WORKFLOW,
+          },
+          batch: { messages: charges },
+        });
+      }
+    })
+  );
+
 const receiveWorkQueue: CoreQueueHandler = (batch, environment) => {
   const smoke = receiveReservedSmoke(batch, environment);
   if (Option.isSome(smoke)) return smoke.value;
@@ -123,19 +160,11 @@ const receiveWorkQueue: CoreQueueHandler = (batch, environment) => {
       messages: batch.messages,
     }).pipe(Effect.runPromise);
   }
-  if (!batch.messages.some((message) => isBillingCollectionWork(message.body))) {
-    return receiveEmailQueue(batch, environment);
-  }
-  if (environment.BILLING_COLLECTION_WORKFLOW === undefined) {
-    return Promise.reject(new Error("Billing collection unavailable"));
-  }
-  return receiveBillingCollection({
-    environment: {
-      DB: environment.DB,
-      BILLING_COLLECTION_WORKFLOW: environment.BILLING_COLLECTION_WORKFLOW,
-    },
-    batch,
-  }).pipe(Effect.withSpan("billing.collection.queue"), Effect.runPromise);
+  return batch.messages.some(
+    (message) => isBillingCollectionWork(message.body) || isRefundWork(message.body)
+  )
+    ? receiveBillingQueue(batch, environment)
+    : receiveEmailQueue(batch, environment);
 };
 
 /** Queue redelivery exposes no receipt, User, or provider details on failure. */

@@ -98,6 +98,7 @@ const migrationNames = [
   "0027_recurring",
   "0028_recurring_audit_budget",
   "0029_audit_owner_retention",
+  "0032_billing_corrections",
 ] as const;
 
 const digest = (text: string): Promise<Uint8Array> =>

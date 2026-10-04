@@ -1,6 +1,59 @@
-import type { BillingAttemptId } from "../../src/core/subscription/contract";
-import { Data, type Option } from "effect";
+import {
+  type BillingAttemptId,
+  type RefundAttemptId,
+  StartRefundInput,
+} from "../../src/core/subscription/contract";
+import { Data, type Option, Schema } from "effect";
+import { type WorkflowStepConfig } from "cloudflare:workers";
 import { type TransactionCaller } from "../canonical-work/contract";
+
+/** Constructed only after origin-side verification against the separate billing-support Access app. */
+export type RefundAuthority = Readonly<{
+  operatorId: string;
+  expiresAtMs: number;
+  permission: "billing.refund";
+}>;
+
+/** Money and dates cross the native request boundary through their canonical codecs. */
+export type RefundStartCall = Readonly<{
+  db: D1Database;
+  environment: string;
+  authority: RefundAuthority;
+  input: typeof StartRefundInput.Encoded;
+}>;
+export type RefundReadCall = Readonly<{
+  db: D1Database;
+  authority: RefundAuthority;
+  userId: string;
+  refundAttemptId: string;
+}>;
+export const maximumRefundOperatorIdLength = 128;
+export const refundSupportBasePath = "/internal/support/billing-refunds";
+export const refundSupportReadPath =
+  /^\/internal\/support\/billing-refunds\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/u;
+
+/** Private Core-to-User coordinator admission; neither ingress nor PATs can construct this route. */
+export const RefundSupportAdmission = Schema.TaggedStruct("BillingRefundSupport", {
+  authority: Schema.Struct({
+    operatorId: Schema.String.check(
+      Schema.isNonEmpty(),
+      Schema.isMaxLength(maximumRefundOperatorIdLength)
+    ),
+    expiresAtMs: Schema.Int,
+    permission: Schema.Literal("billing.refund"),
+  }),
+  input: Schema.toEncoded(StartRefundInput),
+});
+
+/** Origin-verified support transport has a separate Access application audience. */
+export type RefundSupportEnvironment = Readonly<{
+  DB: D1Database;
+  WOMPI_ENVIRONMENT: string;
+  CLOUDFLARE_ACCESS_ISSUER: string;
+  CLOUDFLARE_ACCESS_AUDIENCE: string;
+  USER_TRANSACTION_COORDINATOR: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
+}> &
+  Partial<Readonly<{ BILLING_SUPPORT_AUDIENCE: string }>>;
 
 /** Canonical safe observation under the caller's live credential and User. */
 export type SubscriptionQueryInput = Readonly<{
@@ -36,6 +89,31 @@ export type BillingCollectionEnvironment = Readonly<{
   WOMPI_PRIVATE_KEY: string;
   WOMPI_INTEGRITY_SECRET: string;
   WOMPI_EVENT_SECRET: string;
+}>;
+
+export type RefundWorkflowExecution = Readonly<{
+  environment: BillingRuntime;
+  payload: unknown;
+  activity: (name: string, options: WorkflowStepConfig, run: () => Promise<void>) => Promise<void>;
+}>;
+export type RefundDispatchInput = Readonly<{
+  DB: D1Database;
+  BILLING_COLLECTION_QUEUE: Readonly<{
+    send: (
+      work:
+        | Readonly<{ version: 1; kind: "refund"; refundAttemptId: RefundAttemptId }>
+        | Readonly<{
+            version: 1;
+            kind: "refund-void-verification";
+            refundAttemptId: RefundAttemptId;
+            verification: number;
+          }>
+    ) => Promise<unknown>;
+  }>;
+}>;
+export type RefundReceiveInput = Readonly<{
+  environment: Readonly<{ BILLING_REFUND_WORKFLOW: BillingWorkflowStarter }>;
+  batch: Readonly<{ messages: ReadonlyArray<{ body: unknown; ack: () => void }> }>;
 }>;
 
 export type BillingRuntime = Pick<

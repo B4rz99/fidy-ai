@@ -7,7 +7,10 @@ import {
   loadWompiIntegritySecret,
   loadWompiPrivateKey,
 } from "~/shell/secret-material/operations";
-import { makeOutboundHttp } from "~/shell/outbound-http/internal/outbound-http";
+import {
+  makeCloudflareAccessSigningKeysHttp,
+  makeOutboundHttp,
+} from "~/shell/outbound-http/internal/outbound-http";
 import type { OutboundHttpFailure, OutboundHttpRequest, OutboundHttpResponse } from "./contract";
 
 const WompiPublicKey = Schema.String.check(
@@ -24,6 +27,14 @@ export type OutboundHttpService = Readonly<{
     request: OutboundHttpRequest
   ) => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure>;
 }>;
+
+/** Configuration-scoped, bounded Access signing-key lookup; requests cannot select a destination. */
+export const makeAccessSigningKeysOutboundHttp = (
+  input: Readonly<{
+    issuer: string;
+    httpClient: HttpClient.HttpClient;
+  }>
+): OutboundHttpService => makeCloudflareAccessSigningKeysHttp(input);
 
 /** A Kapso-only Outbound HTTP authority; every other provider request fails closed. */
 export const makeKapsoOutboundHttp = (

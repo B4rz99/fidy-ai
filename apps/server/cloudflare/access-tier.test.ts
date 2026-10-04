@@ -40,6 +40,9 @@ it("derives each decision from one User's original trial and current settled pai
             "CREATE TABLE subscriptions (user_id TEXT, attempt_id TEXT, paid_period_ends_at_ms INTEGER)"
           ),
           db.prepare("CREATE TABLE billing_paid_periods (attempt_id TEXT, starts_at_ms INTEGER)"),
+          db.prepare(
+            "CREATE TABLE billing_access_adjustments (attempt_id TEXT, ends_at_ms INTEGER)"
+          ),
           db.prepare("INSERT INTO trial_periods VALUES (?, 200, 300)").bind(userId),
           db
             .prepare("INSERT INTO trial_periods VALUES (?, 100, 350)")
@@ -89,6 +92,22 @@ it("derives each decision from one User's original trial and current settled pai
       expect(
         yield* Effect.tryPromise(() => tier(450, "20000000-0000-4000-8000-000000000002"))
       ).toBe(0);
+      yield* Effect.tryPromise(() =>
+        db.prepare("INSERT INTO billing_access_adjustments VALUES ('attempt',450)").run()
+      );
+      expect(yield* Effect.tryPromise(() => tier(449))).toBe(1);
+      expect(yield* Effect.tryPromise(() => tier(450))).toBe(0);
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db.prepare("INSERT INTO billing_paid_periods VALUES ('newer-attempt',425)"),
+          db
+            .prepare(
+              "UPDATE subscriptions SET attempt_id='newer-attempt',paid_period_ends_at_ms=550 WHERE user_id=?"
+            )
+            .bind(userId),
+        ])
+      );
+      expect(yield* Effect.tryPromise(() => tier(450))).toBe(1);
     } finally {
       yield* Effect.tryPromise(() => mf.dispose());
     }

@@ -209,6 +209,9 @@ export default Alchemy.Stack(
     const billingCollectionWorkflow = Cloudflare.Workflow("BillingCollectionWorkflowV1", {
       className: "BillingCollectionWorkflowV1",
     });
+    const billingRefundWorkflow = Cloudflare.Workflow("BillingRefundWorkflowV1", {
+      className: "BillingRefundWorkflowV1",
+    });
     const hostedWhatsAppQueue = yield* Cloudflare.Queues.Queue("HostedWhatsAppQueue");
     const onboardingEmailQueue = yield* Cloudflare.Queues.Queue("OnboardingEmailQueue");
     const onboardingEmailWorkflow = Cloudflare.Workflow("OnboardingEmailWorkflowV1", {
@@ -267,6 +270,10 @@ export default Alchemy.Stack(
           : operatorAlertEmail,
         BILLING_COLLECTION_QUEUE: billingCollectionQueue,
         BILLING_COLLECTION_WORKFLOW: billingCollectionWorkflow,
+        BILLING_REFUND_WORKFLOW: billingRefundWorkflow,
+        BILLING_SUPPORT_AUDIENCE: yield* Config.String("BILLING_SUPPORT_AUDIENCE").pipe(
+          Config.withDefault("")
+        ),
         ONBOARDING_EMAIL_QUEUE: onboardingEmailQueue,
         ONBOARDING_EMAIL_WORKFLOW: onboardingEmailWorkflow,
         BROWSER_PAIRING_EMAIL_QUEUE: browserPairingEmailQueue,

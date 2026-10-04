@@ -20,6 +20,7 @@ export type CoreHttpEnvironment = Readonly<{
   Partial<SmokeEnvironment> &
   Partial<
     Readonly<{
+      BILLING_SUPPORT_AUDIENCE: string;
       WOMPI_DAVIPLATA_ACTIVATED: string;
       WOMPI_DAVIPLATA_OTP_SEND_URL: string;
       WOMPI_DAVIPLATA_OTP_CONFIRM_URL: string;

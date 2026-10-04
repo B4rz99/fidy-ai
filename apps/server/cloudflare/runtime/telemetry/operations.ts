@@ -98,6 +98,7 @@ type WorkerExecution = Readonly<{
     | "workflow.browserPairingEmail"
     | "workflow.emailReplacement"
     | "workflow.billingCollection"
+    | "workflow.billingRefund"
     | "workflow.statementExtraction"
     | "workflow.operationalCanary"
     | "workflow.releaseSmoke"

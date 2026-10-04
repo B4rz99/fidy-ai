@@ -210,6 +210,37 @@ const signedTransactionBody = (
     signature,
   });
 
+const makeSandboxCorrectionRequest = (
+  request: Extract<WompiRequest, { _tag: "WompiSandboxRefund" | "WompiSandboxCardVoid" }>,
+  config: WompiTransportConfig
+): Effect.Effect<HttpClientRequest.HttpClientRequest, OutboundHttpFailure> => {
+  if (config.environment !== "sandbox") return rejectRequest();
+  const authorization = `Bearer ${Redacted.value(config.privateKey)}`;
+  return Effect.succeed(
+    request._tag === "WompiSandboxRefund"
+      ? jsonRequest(`${wompiSandboxOrigin}/v1/refunds`, request.body, { authorization })
+      : HttpClientRequest.post(
+          `${wompiSandboxOrigin}/v1/transactions/${encodeURIComponent(request.transactionId)}/void`,
+          { headers: { authorization } }
+        )
+  );
+};
+
+const makeSignedTransactionRequest = (
+  config: WompiTransportConfig,
+  crypto: Crypto.Crypto,
+  body: WompiTransactionBody
+): Effect.Effect<HttpClientRequest.HttpClientRequest, OutboundHttpFailure> => {
+  const origin = config.environment === "sandbox" ? wompiSandboxOrigin : wompiProductionOrigin;
+  return transactionSignature(crypto, config.integritySecret, body).pipe(
+    Effect.map((signature) =>
+      jsonRequest(`${origin}/v1/transactions`, signedTransactionBody(body, signature), {
+        authorization: `Bearer ${Redacted.value(config.privateKey)}`,
+      })
+    )
+  );
+};
+
 const makeWompiRequest = (
   request: WompiRequest,
   config: WompiTransportConfig,
@@ -248,15 +279,9 @@ const makeWompiRequest = (
             }
           )
         ),
-      WompiCreateTransaction: (value) =>
-        transactionSignature(crypto, config.integritySecret, value.body).pipe(
-          Effect.map((signature) =>
-            HttpClientRequest.post(`${origin}/v1/transactions`, {
-              headers: { authorization, "content-type": "application/json" },
-              body: HttpBody.text(signedTransactionBody(value.body, signature), "application/json"),
-            })
-          )
-        ),
+      WompiCreateTransaction: (value) => makeSignedTransactionRequest(config, crypto, value.body),
+      WompiSandboxRefund: (value) => makeSandboxCorrectionRequest(value, config),
+      WompiSandboxCardVoid: (value) => makeSandboxCorrectionRequest(value, config),
       WompiFindTransaction: (value) =>
         Effect.succeed(
           HttpClientRequest.get(
@@ -343,6 +368,7 @@ const prepareNonProviderGroup = (
           }),
       });
     case "CloudflareAccessSupportRecovery":
+    case "CloudflareAccessSigningKeys":
       return rejectRequest();
   }
 };
@@ -355,6 +381,7 @@ const prepareRequest = (
     Match.tagsExhaustive({
       KapsoMessages: (value) => prepareNonProviderGroup(value, context),
       CloudflareAccessSupportRecovery: (value) => prepareNonProviderGroup(value, context),
+      CloudflareAccessSigningKeys: (value) => prepareNonProviderGroup(value, context),
       ResendEmailDelivery: (value) => prepareResend(value, context),
       WompiMerchant: (value) => prepareWompi(value, context),
       WompiNequiApproval: (value) => prepareWompi(value, context),
@@ -366,6 +393,8 @@ const prepareRequest = (
       WompiVerifyPaymentSource: (value) => prepareWompi(value, context),
       WompiCreateTransaction: (value) => prepareWompi(value, context),
       WompiFindTransaction: (value) => prepareWompi(value, context),
+      WompiSandboxRefund: (value) => prepareWompi(value, context),
+      WompiSandboxCardVoid: (value) => prepareWompi(value, context),
     })
   );
 
@@ -405,6 +434,28 @@ export const makeOutboundHttp = (config: OutboundHttpConfig): PrivateOutboundHtt
   return {
     execute: (request) => prepareRequest(request, context).pipe(Effect.flatMap(executePrepared)),
   };
+};
+
+/** Configuration, never a request-supplied URL, selects one Cloudflare Access team's signing keys. */
+export const makeCloudflareAccessSigningKeysHttp = ({
+  issuer,
+  httpClient,
+}: Readonly<{
+  issuer: string;
+  httpClient: HttpClient.HttpClient;
+}>): PrivateOutboundHttpService => {
+  const http = makeProviderTransport("cloudflare-access")(httpClient);
+  return makeService((request) =>
+    request._tag === "CloudflareAccessSigningKeys" &&
+    /^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/u.test(issuer)
+      ? Effect.succeed({
+          http,
+          request: HttpClientRequest.get(`${issuer}/cdn-cgi/access/certs`),
+          maximumResponseBytes: maximumWompiResponseBytes,
+          redirect: "error" as const,
+        })
+      : rejectRequest()
+  );
 };
 
 export const makeCloudflareAccessOutboundHttp = ({

@@ -52,10 +52,14 @@ import {
   handleWebAuthentication,
   ownsWebAuthenticationPath,
 } from "../../web-authentication/operations";
-import { executeProtectedSubscriptionQuery } from "../../subscription/operations";
+import {
+  executeProtectedSubscriptionQuery,
+  refundSupportRoute,
+} from "../../subscription/operations";
 import {
   dispatchBillingCollection,
   handlePaymentEnrollment,
+  handleRefundSupport,
   receiveWompiBillingEvent,
 } from "../../subscription/runtime";
 
@@ -509,6 +513,7 @@ const reconciliationOperation = (
 };
 
 const ownedCorePath = (path: string): boolean =>
+  refundSupportRoute(path) ||
   enrollmentCorePath(path) ||
   [
     "/health",
@@ -1578,6 +1583,12 @@ export const executeCoreHttp = ({
   if (Option.isSome(reserved)) return reserved.value;
   if (["/providers/kapso/callback", "/providers/wompi/billing-events"].includes(url.pathname)) {
     return providerCallbackEffect(request, environment, publish);
+  }
+  if (refundSupportRoute(url.pathname)) {
+    return Effect.tryPromise({
+      try: () => handleRefundSupport({ request, environment }),
+      catch: () => undefined,
+    }).pipe(Effect.orElseSucceed(unavailable));
   }
   if (enrollmentCorePath(url.pathname)) {
     return Effect.tryPromise({

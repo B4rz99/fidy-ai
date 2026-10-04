@@ -16,6 +16,7 @@ export type CoreQueueEnvironment = Readonly<{
       BROWSER_PAIRING_EMAIL_WORKFLOW: Workflow;
       EMAIL_REPLACEMENT_WORKFLOW: Workflow;
       BILLING_COLLECTION_WORKFLOW: Workflow;
+      BILLING_REFUND_WORKFLOW: Workflow;
       STATEMENT_EXTRACTION_WORKFLOW: Workflow;
       OPERATIONAL_CANARY_QUEUE_NAME: string;
       OPERATIONAL_CANARY_WORKFLOW: Workflow;

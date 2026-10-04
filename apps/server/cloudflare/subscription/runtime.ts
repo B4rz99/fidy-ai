@@ -1,3 +1,10 @@
+import {
+  dispatchRefunds as dispatchCorrections,
+  dispatchVoidVerification as dispatchVerification,
+  runRefundWorkflow as executeRefundWorkflow,
+  receiveRefunds as receiveCorrections,
+  isRefundWork as recognizesRefund,
+} from "./internal/refund-workflow";
 import { handlePaymentEnrollment as enroll } from "./internal/payment-enrollment";
 import type { EnrollmentEnvironment } from "./contract";
 import {
@@ -6,7 +13,16 @@ import {
   type WorkflowStep,
   type WorkflowStepConfig,
 } from "cloudflare:workers";
-import { type Cause, type Effect, type Option } from "effect";
+import { type Cause, Context, Effect, Layer, type Option, type Schema } from "effect";
+import { FetchHttpClient, HttpClient } from "effect/http";
+import { makeAccessSigningKeysOutboundHttp } from "../../src/shell/outbound-http/operations";
+import {
+  type RefundDispatchInput,
+  type RefundReceiveInput,
+  type RefundSupportEnvironment,
+  type RefundWorkflowExecution,
+} from "./contract";
+import { handleRefundSupport as supportRefund } from "./internal/refund-support";
 import {
   type BillingCollectionEnvironment,
   type BillingCollectionFailure,
@@ -16,6 +32,7 @@ import {
 } from "./contract";
 import {
   cloudflareWorkerTelemetry,
+  observeProviderFetch,
   observeWorkerPromise,
   workerRelease,
 } from "../runtime/telemetry/operations";
@@ -29,6 +46,73 @@ import {
   runBillingCollectionWorkflow as runWorkflow,
 } from "./internal/billing-workflow";
 import { sweepExpiredEnrollmentAdmission as sweep } from "./internal/enrollment-admission";
+
+/** Publish bounded versioned correction identities from their atomic acceptance outbox. */
+export const dispatchRefunds = (
+  input: RefundDispatchInput
+): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> => dispatchCorrections(input);
+/** Handoff keeps acknowledgment and duplicate execution behavior within the Subscription owner. */
+export const receiveRefunds = (
+  input: RefundReceiveInput
+): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> => receiveCorrections(input);
+/** Classify correction work without interpreting payment/provider data as authority. */
+export const isRefundWork = (body: unknown): boolean => recognizesRefund(body);
+
+/** Reconcile only claimed card voids through bounded read-only transaction lookups. */
+export const dispatchVoidVerification = (
+  input: RefundDispatchInput
+): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> => dispatchVerification(input);
+
+/** Construct bounded signing-key transport for origin-verified billing support. */
+export const handleRefundSupport = (
+  input: Readonly<{ request: Request; environment: RefundSupportEnvironment }>
+): Promise<Response> =>
+  Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const clients = yield* Layer.build(FetchHttpClient.layer).pipe(
+          Effect.provideService(
+            FetchHttpClient.Fetch,
+            observeProviderFetch(globalThis.fetch, {
+              provider: "cloudflare-access",
+              environment: workerRelease(input.environment),
+              telemetry: cloudflareWorkerTelemetry,
+            })
+          )
+        );
+        const http = makeAccessSigningKeysOutboundHttp({
+          issuer: input.environment.CLOUDFLARE_ACCESS_ISSUER,
+          httpClient: Context.get(clients, HttpClient.HttpClient),
+        });
+        return yield* supportRefund({ ...input, http });
+      })
+    )
+  );
+
+/** Execute one versioned correction with a durable no-retry submission claim. */
+export const runRefundWorkflow = (input: RefundWorkflowExecution): Promise<void> =>
+  executeRefundWorkflow(input);
+
+export class BillingRefundWorkflowV1 extends WorkflowEntrypoint<BillingRuntime, unknown> {
+  run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {
+    return captureWorkflowFailure({
+      db: this.env.DB,
+      work: observeWorkerPromise(
+        () =>
+          runRefundWorkflow({
+            environment: this.env,
+            payload: event.payload,
+            activity: (name, options, activity) => step.do(name, options, activity),
+          }),
+        {
+          environment: workerRelease(this.env),
+          telemetry: cloudflareWorkerTelemetry,
+          operation: "workflow.billingRefund",
+        }
+      ),
+    });
+  }
+}
 
 /** Offer durable billing intent to the private Queue; missed offers remain recoverable. */
 export const dispatchBillingCollection = (

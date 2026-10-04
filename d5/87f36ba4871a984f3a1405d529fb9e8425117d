@@ -1,0 +1,58 @@
+apps/server/cloudflare/canonical-admission/operations.test.ts
+  s_5dbc545240b27d::t_10115c32496a2c 132-152,157-159
+  s_5dbc545240b27d::t_c63a5163c41016 4
+  s_5dbc545240b27d::t_b1384bc9a60802 153-156
+  s_5dbc545240b27d::t_f72e38752dfbdf 160
+apps/server/cloudflare/canonical-admission/internal/request-input.ts
+  s_5dbc545240b27d::t_5df7ae5e6051a3 99
+  s_5dbc545240b27d::t_b1384bc9a60802 60-64,67,88-91,94-98
+  s_5dbc545240b27d::t_7da0166990f535 65,73
+  s_5dbc545240b27d::t_822513b00f0d0b 66,68
+  s_5dbc545240b27d::t_e2559959f6cae1 69-71
+infra/cloudflare/workers.test.ts
+  s_5dbc545240b27d::t_704d053e88c7f8 1043-1046
+  s_5dbc545240b27d::t_734441dc571c73 906
+infra/cloudflare/verify-edge-policy.test.ts
+  s_5dbc545240b27d::t_ade778e743edc3 7
+apps/server/cloudflare/ingestion/media-submissions.test.ts
+  s_5dbc545240b27d::t_4d4feb834a0250 38
+apps/server/cloudflare/ingestion/forwarded-email.test.ts
+  s_5dbc545240b27d::t_cdebe558d709c4 186
+apps/server/cloudflare/d1-test-fixture.ts
+  s_5dbc545240b27d::t_d3b45f48ad75b1 157-158
+  s_5dbc545240b27d::t_6eb114884e6d1a 159
+apps/server/cloudflare/dashboard/dashboard.test.ts
+  s_5dbc545240b27d::t_22fb117ad71018 1,84-89,91
+  s_5dbc545240b27d::t_f3eb49f56744d8 834,836,839
+  s_5dbc545240b27d::t_56bebe6181c2d1 90
+infra/cloudflare/verify-edge-policy.ts
+  s_5dbc545240b27d::t_a324cad569a00f 5-7
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_5dbc545240b27d::t_b16cb45f532256 4477-4479
+apps/server/cloudflare/quotas/operations.test.ts
+  s_5dbc545240b27d::t_fb338699a1134f 26
+  s_5dbc545240b27d::t_3d16b30a5e28ab 134,167
+  s_5dbc545240b27d::t_e83bf385b15680 135-166
+apps/server/cloudflare/quotas/operations.ts
+  s_5dbc545240b27d::t_0ceb2c1153f055 29
+  s_5dbc545240b27d::t_903a95fd1f2e21 1-28,30-198,204-258
+  s_5dbc545240b27d::t_b1384bc9a60802 199-203
+apps/server/ARCHITECTURE.md
+  s_5dbc545240b27d::t_0bbca66a027e3a 155,222-228
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d587f36ba4871a984f3a1405d529fb9e8425117d",
+  "prompts": {},
+  "sessions": {
+    "s_5dbc545240b27d": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a103f5-b777-7423-b381-e2c2433616b5",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

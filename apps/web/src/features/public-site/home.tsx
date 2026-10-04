@@ -1,11 +1,11 @@
 import { HomeContent } from "@/features/public-site/landing/home-content";
 import { Registration } from "@/features/public-site/landing/registration";
-import { mountMotion } from "@/features/public-site/landing/motion";
+import { LandingTheme } from "@/features/public-site/landing/theme";
 import "@/features/public-site/landing/landing.css";
 
 /** Presents the approved public landing and local-only product demonstrations. */
 export const PublicHome = (): React.JSX.Element => (
-  <div className="fidy-landing variant-a" ref={mountMotion}>
+  <LandingTheme detail={false}>
     <title>Fidy — Tu plata, más clara</title>
     <meta
       name="description"
@@ -14,5 +14,5 @@ export const PublicHome = (): React.JSX.Element => (
     <Registration>
       <HomeContent />
     </Registration>
-  </div>
+  </LandingTheme>
 );

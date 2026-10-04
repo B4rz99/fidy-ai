@@ -161,6 +161,34 @@ test("renders the public home route without serious accessibility violations", (
       yield* wait(expectSeriousAccessibilityViolations(page));
     })
   ));
+test("persists landing appearance across reloads and feature pages", ({ page }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(page.goto("/"));
+      yield* wait(
+        expect(page.getByRole("button", { name: "Sistema", exact: true })).toHaveAttribute(
+          "aria-pressed",
+          "true"
+        )
+      );
+      yield* wait(page.getByRole("button", { name: "Oscuro", exact: true }).click());
+      yield* wait(expect(page.locator(".fidy-landing")).toHaveAttribute("data-theme", "dark"));
+      yield* wait(waitForEntrances(page));
+      yield* wait(expectSeriousAccessibilityViolations(page));
+      yield* wait(page.reload());
+      yield* wait(
+        expect(page.getByRole("button", { name: "Oscuro", exact: true })).toHaveAttribute(
+          "aria-pressed",
+          "true"
+        )
+      );
+      yield* wait(page.goto("/funciones/agentes"));
+      yield* wait(expect(page.locator(".fidy-landing")).toHaveAttribute("data-theme", "dark"));
+      yield* wait(expectSeriousAccessibilityViolations(page));
+      yield* wait(page.getByRole("button", { name: "Claro", exact: true }).click());
+      yield* wait(expect(page.locator(".fidy-landing")).toHaveAttribute("data-theme", "light"));
+    })
+  ));
 test("renders the policy route without serious accessibility violations", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {

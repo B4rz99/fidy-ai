@@ -4390,6 +4390,63 @@ it("gives a stale correction the same refusal Audit alone and inside a batch", (
     })
   ));
 
+it("raw PAT batches cannot turn query, recursive, browser-only or under-scoped children into authority", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const current = yield* Clock.currentTimeMillis;
+      const token = `fin_${"a".repeat(8)}_${"b".repeat(43)}`;
+      yield* seedPAT({ db, userId: users[0] ?? "", token, scopes: ["write"], current });
+      yield* fromTestPromise(() =>
+        installTestSchema({
+          db,
+          sources: ["0018_dashboard", "0030_dashboard_initialization"].map(
+            (name) => new URL(`../migrations/${name}.sql`, import.meta.url)
+          ),
+        })
+      );
+      const children = [
+        { operation: "categories.listCategories", input: {} },
+        {
+          operation: "operations.executeAtomicBatch",
+          input: { payload: { calls: [transactionCall(3, input())] } },
+        },
+        { operation: "pats.inspectPATPairing", input: { payload: { publicCode: "ABCD-1234" } } },
+        { operation: "dashboard.initializeDashboard", input: {} },
+      ];
+      for (const child of children) {
+        const response = yield* fromTestPromise(() =>
+          sendPublicRequest(
+            db,
+            bearerRequest(0, token, [
+              transactionCall(1, input()),
+              { callId: batchCallId(2), ...child },
+            ])
+          )
+        );
+        expect(response.status).toBe(400);
+        const body = yield* fromTestPromise(() => response.text());
+        expect(body).not.toContain("fin_");
+        expect(
+          yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM transactions"))
+        ).toBe(0);
+        expect(
+          yield* fromTestPromise(() =>
+            countRows(db, "SELECT COUNT(*) AS count FROM dashboard_documents")
+          )
+        ).toBe(0);
+        expect(
+          yield* fromTestPromise(() =>
+            countRows(db, "SELECT COUNT(*) AS count FROM pat_audit WHERE outcome = 'accepted'")
+          )
+        ).toBe(0);
+        expect(
+          yield* fromTestPromise(() => countRows(db, "SELECT COUNT(*) AS count FROM pats"))
+        ).toBe(1);
+      }
+    })
+  ));
+
 it("enforces each child's live PAT scope and commits a mixed two-child batch under one PAT unit", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -5345,6 +5402,85 @@ it("attributes movement and shared Audit budgets to the exact child without cons
           countRows(auditDb, "SELECT COUNT(*) AS count FROM transaction_audit")
         )
       ).toBe(255);
+    })
+  ));
+
+it("a PAT cannot read or correct another User's Transaction individually or after an earlier batch child", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const current = yield* Clock.currentTimeMillis;
+      const token = `fin_${"a".repeat(8)}_${"b".repeat(43)}`;
+      const neighborId = "30000000-0000-4000-8000-000000000007";
+      yield* seedPAT({ db, userId: users[0] ?? "", token, scopes: ["read", "write"], current });
+      yield* fromTestPromise(() =>
+        seedTransaction({ db, userId: users[1] ?? "", id: neighborId, categoryId: category })
+      );
+      for (const method of ["GET", "PUT"] as const) {
+        const response = yield* fromTestPromise(() =>
+          sendPublicRequest(
+            db,
+            new Request(`https://api.fidyapp.com/transactions/${neighborId}`, {
+              method,
+              headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+              body:
+                method === "GET"
+                  ? undefined
+                  : JSON.stringify({
+                      expectedRevision: 0,
+                      changes: { notes: "foreign correction" },
+                    }),
+            })
+          )
+        );
+        expect(response.status).toBe(404);
+        expect(yield* fromTestPromise(() => response.text())).not.toContain("seed");
+      }
+      const batch = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          bearerRequest(0, token, [
+            transactionCall(1, input()),
+            correctionCall(2, neighborId, {
+              expectedRevision: 0,
+              changes: { notes: "foreign correction" },
+            }),
+          ])
+        )
+      );
+      expect(batch.status).toBe(400);
+      expect(
+        (yield* Schema.decodeUnknownEffect(BatchRejection)(
+          yield* fromTestPromise(() => batch.json())
+        )).error
+      ).toMatchObject({ code: "not_found", failedCallIndex: 1 });
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?",
+            users[0] ?? ""
+          )
+        )
+      ).toBe(0);
+      expect(
+        yield* fromTestPromise(() =>
+          db
+            .prepare("SELECT notes, revision FROM transactions WHERE user_id = ?")
+            .bind(users[1])
+            .all()
+        )
+      ).toMatchObject({
+        results: [{ notes: "seed", revision: 0 }],
+      });
+      expect(
+        yield* fromTestPromise(() =>
+          countRows(
+            db,
+            "SELECT COUNT(*) AS count FROM pat_audit WHERE outcome = 'accepted' AND operation != 'transactions.getTransaction'"
+          )
+        )
+      ).toBe(0);
     })
   ));
 

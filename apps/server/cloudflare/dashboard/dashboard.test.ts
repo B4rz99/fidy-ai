@@ -782,6 +782,70 @@ it(
 );
 
 it(
+  "write and dashboard PAT scopes remain independent for individual mutations and later batch children",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        for (const scope of ["write", "dashboard"] as const) {
+          const db = yield* setup();
+          const token = `fin_${"a".repeat(8)}_${"b".repeat(43)}`;
+          yield* seedPAT(db, { token, scope, id: "40000000-0000-4000-8000-000000000097" });
+          const transaction = {
+            payload: {
+              money: { amount: "25.02", currency: "COP" },
+              categoryId: "10000000-0000-4000-8000-000000000001",
+              direction: "outflow",
+              occurredAt: "2026-01-01T12:00:00.000Z",
+            },
+          };
+          const forbidden =
+            scope === "write"
+              ? { path: "/dashboard/initialize", method: "POST" as const, body: {} }
+              : { path: "/transactions", method: "POST" as const, body: transaction.payload };
+          expect((yield* Effect.tryPromise(() => send(db, token, forbidden))).status).toBe(403);
+          const calls =
+            scope === "write"
+              ? [
+                  batchCall("transactions.createTransaction", transaction, 1),
+                  batchCall("dashboard.initializeDashboard", {}, 2),
+                ]
+              : [
+                  batchCall("dashboard.initializeDashboard", {}, 1),
+                  batchCall("transactions.createTransaction", transaction, 2),
+                ];
+          const denied = yield* Effect.tryPromise(() =>
+            send(db, token, {
+              path: "/operations/atomic-batch",
+              method: "POST",
+              body: { calls },
+            })
+          );
+          expect(denied.status).toBe(400);
+          expect(
+            (yield* Schema.decodeUnknownEffect(BatchFailure)(
+              yield* Effect.tryPromise(() => denied.json())
+            )).error
+          ).toMatchObject({ code: "scope_missing", failedCallIndex: 1 });
+          expect(
+            yield* Effect.tryPromise(() =>
+              db.prepare("SELECT COUNT(*) AS count FROM transactions").first()
+            )
+          ).toEqual({ count: 0 });
+          expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
+          expect(
+            yield* Effect.tryPromise(() =>
+              db
+                .prepare("SELECT COUNT(*) AS count FROM pat_audit WHERE outcome = 'accepted'")
+                .first()
+            )
+          ).toEqual({ count: 0 });
+        }
+      })
+    ),
+  30_000
+);
+
+it(
   "a foreign User credential is refused before individual or batch initialization, without revealing or changing either document",
   () =>
     Effect.runPromise(

@@ -197,7 +197,32 @@ const operatorCode = (request: Request, path: string): Option.Option<string> =>
   operatorRoute(request, path, "POST")
     ? Option.fromNullishOr(new URL(request.url).searchParams.get("code"))
     : Option.none();
+// Loopback-only metadata evidence for the native CLI journey, never public ingress.
+const CliEvidence = Schema.Struct({
+  entries: Schema.Array(
+    Schema.Struct({
+      operation: Schema.String,
+      outcome: Schema.Literals(["accepted", "rejected"]),
+      patId: Schema.String,
+    })
+  ),
+});
+const cliEvidence = (): Promise<Response> =>
+  db
+    .prepare(
+      "SELECT operation, outcome, pat_id AS patId FROM pat_audit WHERE user_id = ? AND pat_id IS NOT NULL ORDER BY rowid DESC LIMIT 32"
+    )
+    .bind(fixtureUserId)
+    .all()
+    .then((rows) =>
+      Response.json(Schema.decodeUnknownSync(CliEvidence)({ entries: rows.results }), {
+        headers: { "cache-control": "no-store" },
+      })
+    );
 const operatorSetup = (request: Request): Option.Option<Promise<Response>> => {
+  if (acceptanceMode === "cli" && operatorRoute(request, "/cli/evidence", "GET")) {
+    return Option.some(cliEvidence());
+  }
   // Loopback-only test setup for a fresh journey; never part of public ingress.
   if (operatorRoute(request, "/dashboard/reset", "POST")) {
     return Option.some(

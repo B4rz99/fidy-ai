@@ -5,6 +5,8 @@ const isCI = Boolean(process.env.CI);
 /** Browser checks intentionally exercise the built static shell, not a development server. */
 export default defineConfig({
   testDir: "./e2e",
+  // Native CLI mutations and exact Audit assertions require a separate User/D1 topology.
+  testIgnore: "cli-login.spec.ts",
   fullyParallel: false,
   forbidOnly: isCI,
   retries: 0,

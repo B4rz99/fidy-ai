@@ -141,4 +141,9 @@ Browser journey sign-in fixtures advance only the browser's initial polling time
 approval; real Core proof verification, rate limits, and session creation are unchanged. Dedicated
 pairing journeys retain real-time cadence and real approval/redemption evidence. The mocked expiry
 case advances the browser clock through a pending request and its deadline rather than sleeping.
-CI preserves per-test JSON timings without capturing traces, screenshots, or video.
+The browser verification group also runs the native CLI journey through
+`bun run test:browser:cli` in its dedicated `4183–4185` public/Core topology, with fresh D1 and
+isolated native credentials. The shared suite excludes that journey: other tests must not change
+its exact result comparisons or PAT Audit counts, and its loopback evidence observer exists only in
+CLI acceptance mode. CI preserves separate shared/CLI per-test JSON timings without capturing
+traces, screenshots, or video.

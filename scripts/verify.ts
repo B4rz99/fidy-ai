@@ -211,6 +211,16 @@ const checks: Array<Check> = [
     "test:browser",
   ]),
   {
+    ...rootCheck("browser", "Isolated native CLI browser journey", [
+      "bun",
+      "run",
+      "--cwd",
+      "apps/web",
+      "test:browser:cli",
+    ]),
+    env: { ...Bun.env, CLI_ACCEPTANCE_MODE: "cli" },
+  },
+  {
     group: "mutation",
     label: "Install mutation runner",
     command: ["bun", "install", "--frozen-lockfile"],

@@ -27,6 +27,8 @@ const safeSource = [
   /^src\/shell\/partial-input\/contract\.ts$/u,
   /^src\/shell\/authorization\/runtime\.ts$/u,
   /^src\/shell\/canonical-operations\/contract\.ts$/u,
+  // Access decisions are pure and shared with server execution; no client-owned policy copy.
+  /^src\/shell\/canonical-policy\/operations\.ts$/u,
 ] as const;
 
 const safeDependency = [

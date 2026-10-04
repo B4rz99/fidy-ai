@@ -7,7 +7,14 @@ export {
   makeTokenAuthorizationClientLive,
   TokenAuthorizationClientAnonymousLive,
 } from "~/shell/authorization/runtime";
-export { FidyApi, type FidyApiGroups, type OperationId } from "~/shell/api";
+export { FidyApi, operationCatalog, type FidyApiGroups, type OperationId } from "~/shell/api";
+export { decideOperationAccess } from "~/shell/canonical-policy/operations";
+export {
+  atomicBatchChildOperations,
+  atomicBatchOperation,
+  getAtomicBatchInputSchema,
+  projectAtomicBatchSchemas,
+} from "~/shell/operations/contract";
 export {
   HostedTurnApi,
   HostedTurnRequest,

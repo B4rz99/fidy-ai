@@ -1,0 +1,50 @@
+infra/cloudflare/verify-edge-policy.test.ts
+  s_99853caa398493::t_2ff31ad988099f 7
+apps/server/cloudflare/public-worker.ts
+  s_99853caa398493::t_e2ad0e5423720f 396-398,404-406,408-409
+  s_99853caa398493::t_467488cce4e85b 253,280
+  s_99853caa398493::t_d499f442ffe207 399-403
+  s_99853caa398493::t_13571e92d88fa7 8,208,317,348,362,421
+infra/cloudflare/verify-edge-policy.ts
+  s_99853caa398493::t_cfe577663839bc 7
+  s_99853caa398493::t_1044c7bba72cbb 6
+  s_e278ac208f4e8a::t_53e423f3eab537 5,13-18
+apps/server/ARCHITECTURE.md
+  s_99853caa398493::t_514e016121a204 218-227
+apps/server/cloudflare/core-http/internal/http.ts
+  s_99853caa398493::t_251e5e2f126678 59,279
+apps/server/cloudflare/subscription/internal/payment-enrollment.ts
+  s_99853caa398493::t_1873087528073d 3,1156-1158,1168,1173,1178-1180,1182,1190
+apps/server/cloudflare/subscription/payment-enrollment.test.ts
+  s_99853caa398493::t_9eb16f3b55ddb2 26,330,367-373,393,399,402-405,409-433,435,439-472,557-676
+apps/server/src/shell/subscription/contract.ts
+  s_99853caa398493::t_1726de1415936e 245
+apps/server/src/shell/subscription/runtime.ts
+  s_99853caa398493::t_e5116a32304629 1-41
+apps/server/src/shell/subscription/transport.test.ts
+  s_99853caa398493::t_bd2221c27c2155 1-27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7ee46c00b5c8f3b238ee54a034236e4b538733e4",
+  "prompts": {},
+  "sessions": {
+    "s_99853caa398493": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a1072b-731e-76e6-be76-24b40cec8e56",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_e278ac208f4e8a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10731-a41d-7121-98b3-ec6e9e1e04de",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

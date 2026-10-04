@@ -1,4 +1,4 @@
-import { createRemoteJWKSet, customFetch, jwtVerify } from "jose";
+import { type JWKSCacheInput, createRemoteJWKSet, customFetch, jwksCache, jwtVerify } from "jose";
 import { Effect, Option, Schema } from "effect";
 import { StartRefundInput } from "../../../src/core/subscription/contract";
 import { type OutboundHttpService } from "../../../src/shell/outbound-http/operations";
@@ -26,11 +26,18 @@ const Claims = Schema.Struct({
   email: Schema.String.check(Schema.isPattern(/^[^@\s]+@[^@\s]+$/u)),
 });
 type KeyLookup = ReturnType<typeof createRemoteJWKSet>;
-let cachedKeys: Option.Option<Readonly<{ issuer: string; keys: KeyLookup }>> = Option.none();
-const signingKeys = (issuer: string, http: OutboundHttpService): KeyLookup => {
-  if (Option.isSome(cachedKeys) && cachedKeys.value.issuer === issuer) return cachedKeys.value.keys;
-  const keys = createRemoteJWKSet(new URL(`${issuer}/cdn-cgi/access/certs`), {
-    [customFetch]: () =>
+// Cache only trusted public key data. Resolvers and in-flight lookups belong to one authorization.
+let cachedKeyData: Option.Option<Readonly<{ issuer: string; data: JWKSCacheInput }>> =
+  Option.none();
+const signingKeys = (issuer: string, http: OutboundHttpService, signal: AbortSignal): KeyLookup => {
+  const retained =
+    Option.isSome(cachedKeyData) && cachedKeyData.value.issuer === issuer
+      ? cachedKeyData.value
+      : { issuer, data: {} satisfies JWKSCacheInput };
+  cachedKeyData = Option.some(retained);
+  return createRemoteJWKSet(new URL(`${issuer}/cdn-cgi/access/certs`), {
+    [jwksCache]: retained.data,
+    [customFetch]: (_url, options): Promise<Response> =>
       Effect.runPromise(
         http.execute({ _tag: "CloudflareAccessSigningKeys" }).pipe(
           Effect.timeout("5 seconds"),
@@ -41,11 +48,10 @@ const signingKeys = (issuer: string, http: OutboundHttpService): KeyLookup => {
                 headers: { "content-type": "application/json" },
               })
           )
-        )
+        ),
+        { signal: AbortSignal.any([signal, options.signal]) }
       ),
   });
-  cachedKeys = Option.some({ issuer, keys });
-  return keys;
 };
 const validSupportConfiguration = (environment: RefundSupportEnvironment): boolean =>
   /^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/u.test(environment.CLOUDFLARE_ACCESS_ISSUER) &&
@@ -71,8 +77,8 @@ const authorize = (
     ) {
       return Option.none();
     }
-    const verified = yield* Effect.tryPromise(() =>
-      jwtVerify(token, signingKeys(issuer, input.http), {
+    const verified = yield* Effect.tryPromise((signal) =>
+      jwtVerify(token, signingKeys(issuer, input.http, signal), {
         issuer,
         audience,
         algorithms: ["RS256"],

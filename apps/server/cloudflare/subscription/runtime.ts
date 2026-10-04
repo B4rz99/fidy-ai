@@ -93,7 +93,8 @@ export const handleRefundSupport = (
         });
         return yield* supportRefund({ ...input, http });
       })
-    )
+    ),
+    { signal: input.request.signal }
   );
 
 /** Execute one versioned correction with a durable no-retry submission claim. */

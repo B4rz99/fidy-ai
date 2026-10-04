@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Exit, Option, Schema } from "effect";
 import { type Miniflare } from "miniflare";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
@@ -28,15 +28,14 @@ const setup = Effect.fnUntraced(function* () {
   const issuer = `https://refund-support-${number}.cloudflareaccess.com`;
   const admissions: unknown[] = [];
   const services = yield* Effect.context<never>();
+  const signingKeys = { keys: [{ ...jwk, kid: "billing-test", alg: "RS256", use: "sig" }] };
   vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const request = new Request(input, init);
     expect(request.url).toBe(`${issuer}/cdn-cgi/access/certs`);
     expect(request.headers.has("cf-access-jwt-assertion")).toBe(false);
     expect(request.headers.has("authorization")).toBe(false);
     expect(request.headers.has("traceparent")).toBe(false);
-    return Promise.resolve(
-      Response.json({ keys: [{ ...jwk, kid: "billing-test", alg: "RS256", use: "sig" }] })
-    );
+    return Promise.resolve(Response.json(signingKeys));
   });
   const environment = {
     DB: made.db,
@@ -73,7 +72,7 @@ const setup = Effect.fnUntraced(function* () {
       .setIssuedAt()
       .setExpirationTime(expires)
       .sign(keys.privateKey);
-  return { environment, token, admissions };
+  return { environment, token, admissions, signingKeys };
 });
 const publicSupport = (
   request: Request,
@@ -222,6 +221,60 @@ it.each([
     })
   )
 );
+
+it("aborts the owned signing-key lookup when its request is cancelled without cancelling another authorization", () => {
+  const controller = new AbortController();
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const prepared = yield* setup();
+      const assertion = yield* Effect.tryPromise(() => prepared.token("refund-permission"));
+      const firstEntered = Promise.withResolvers<AbortSignal>();
+      const secondEntered = Promise.withResolvers<AbortSignal>();
+      const firstReply = Promise.withResolvers<Response>();
+      const secondReply = Promise.withResolvers<Response>();
+      let lookups = 0;
+      vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        const incoming = new Request(input, init);
+        lookups++;
+        const reply = lookups === 1 ? firstReply : secondReply;
+        incoming.signal.addEventListener(
+          "abort",
+          () => reply.reject(new DOMException("Cancelled lookup", "AbortError")),
+          { once: true }
+        );
+        if (lookups === 1) firstEntered.resolve(incoming.signal);
+        else secondEntered.resolve(incoming.signal);
+        return reply.promise;
+      });
+      const first = Effect.runPromiseExit(
+        Effect.tryPromise(() =>
+          handleRefundSupport({
+            request: new Request(request(assertion), { signal: controller.signal }),
+            environment: prepared.environment,
+          })
+        )
+      );
+      const firstSignal = yield* Effect.tryPromise(() => firstEntered.promise);
+      const second = Effect.runPromiseExit(
+        Effect.tryPromise(() =>
+          handleRefundSupport({ request: request(assertion), environment: prepared.environment })
+        )
+      );
+      controller.abort();
+      const interrupted = yield* Effect.tryPromise(() => first);
+      expect(Exit.isFailure(interrupted)).toBe(true);
+      expect(firstSignal.aborted).toBe(true);
+      expect(prepared.admissions).toEqual([]);
+      const secondSignal = yield* Effect.tryPromise(() => secondEntered.promise);
+      expect(secondSignal.aborted).toBe(false);
+      secondReply.resolve(Response.json(prepared.signingKeys));
+      const permitted = yield* Effect.tryPromise(() => second);
+      expect(Exit.isSuccess(permitted)).toBe(true);
+      if (Exit.isSuccess(permitted)) expect(permitted.value.status).toBe(202);
+      expect(prepared.admissions).toHaveLength(1);
+    })
+  );
+});
 
 it("forwards billing support to Core without inheriting PAT or recovery permission", () =>
   Effect.runPromise(

@@ -1,0 +1,78 @@
+apps/web/src/ui/money.ts
+  s_e278ac208f4e8a::t_3c9bb3b96855aa 11,17-19
+  s_e278ac208f4e8a::t_631d3da2d51c89 3-10,12-16,20-35,45-46,48-49
+apps/web/src/features/dashboard/feature-commands.test.tsx
+  s_e278ac208f4e8a::t_bc3da1f593c64d 3,17-19,22-46,52-82,88-90,93-99,101-115,123-128
+  s_e278ac208f4e8a::t_d39863e0f87b90 7-8,91
+  s_e278ac208f4e8a::t_1622f0f9f3ac0d 83-87,117
+  s_e278ac208f4e8a::t_caa2b0d00eeb3b 4
+  s_e278ac208f4e8a::t_c0ef3ac8cde4b6 1-2,5-6,9-16,20,47-51,92,100,116,118-122
+  s_e278ac208f4e8a::t_0520771bfcb665 21
+apps/web/src/features/subscription/enrollment-command.ts
+  s_e278ac208f4e8a::t_8dfb1a473b832c 7-11
+  s_e278ac208f4e8a::t_9674359ead45e6 1-6,12-32
+apps/web/src/transport/wompi-tokenization.test.ts
+  s_e278ac208f4e8a::t_702d8f68f2ec68 1-2,13-14,229
+  s_e278ac208f4e8a::t_caa2b0d00eeb3b 247-248,250-251,290-291,293-294
+  s_e278ac208f4e8a::t_49d167a0db4efa 11-12,230-246,249,252-289,292,295-299
+apps/web/src/features/dashboard/money-presentation.ts
+  s_e278ac208f4e8a::t_7a05b500a8a11f 4
+  s_e278ac208f4e8a::t_b5af23fcfc16e4 11-12,22-23
+  s_e278ac208f4e8a::t_49d167a0db4efa 24-27
+  s_e278ac208f4e8a::t_b634c7dd2e0bce 31
+apps/web/src/features/dashboard/view.tsx
+  s_e278ac208f4e8a::t_6b665e8010c3b8 818,894-912,941
+apps/web/src/features/signed-in/feature.test.tsx
+  s_e278ac208f4e8a::t_b634c7dd2e0bce 73-78
+  s_e278ac208f4e8a::t_caa2b0d00eeb3b 12,17
+  s_e278ac208f4e8a::t_d3c399233d14bf 11,62
+  s_e278ac208f4e8a::t_3ff8aaa9debccf 84-85,87,94-95
+  s_e278ac208f4e8a::t_2dfb0da77c0754 1-10,13-16,18,20-28,30-60,63-72,82,88-93,96-121,123,125-155
+  s_e278ac208f4e8a::t_629c17e2161b0b 79
+apps/web/src/features/subscription/enrollment-command.test.ts
+  s_e278ac208f4e8a::t_adef8cffc4d513 1-17,24,28,32-36,62
+  s_e278ac208f4e8a::t_62b234d7916cb0 18-23,25-27,29-31,37-61
+apps/web/src/features/dashboard/money-presentation.test.ts
+  s_e278ac208f4e8a::t_c36f813e6af041 28,31
+  s_e278ac208f4e8a::t_adb5502022c5fd 2,8,29-30,32-38
+  s_e278ac208f4e8a::t_49d167a0db4efa 42-44,68-82
+  s_e278ac208f4e8a::t_a32c1471b7d25a 39,45-46,48-53,83
+  s_e278ac208f4e8a::t_7f1e446e84aa34 6,41,47,66-67
+  s_e278ac208f4e8a::t_a3ac76eda28609 40,84
+apps/web/src/features/dashboard/feature.tsx
+  s_e278ac208f4e8a::t_ff86051c86007a 2,43-46,88-89,116-126,132-133,277
+  s_e278ac208f4e8a::t_ad8f88306ff793 41,47,52,57,127-131,135-136
+  s_e278ac208f4e8a::t_07961d6c6e8f17 42
+apps/web/src/features/dashboard/feature-controller.test.tsx
+  s_e278ac208f4e8a::t_3706bfef95faf9 147-149,159-174
+  s_e278ac208f4e8a::t_ef26c96421f0ea 120-130,136,151
+  s_e278ac208f4e8a::t_4deb23948a6ada 150,152-158,175
+apps/web/src/features/subscription/feature.tsx
+  s_e278ac208f4e8a::t_1b70ddafacbe62 10-11,854-858,861-866,888-889,894-896
+  s_e278ac208f4e8a::t_aa38d92560f9b3 20-27,834-848,878,880,883
+  s_e278ac208f4e8a::t_93769574ce5770 9,849
+apps/web/src/features/dashboard/feature.test.tsx
+  s_e278ac208f4e8a::t_1b52705872f8f4 783,798
+apps/web/src/transport/wompi-tokenization.ts
+  s_e278ac208f4e8a::t_46087e9a3dd314 24,67,81,99-102,132-139,144-147,152,163-167
+  s_e278ac208f4e8a::t_7abeaed464f29f 66
+apps/web/src/features/signed-in/feature.tsx
+  s_e278ac208f4e8a::t_433e07a3e9e695 1,3-4,22-28,51-58,74-75,77-84,92-99
+  s_e278ac208f4e8a::t_d16729d5f09084 100
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1e8dee0ac78fc9c438723f5d69b0f1122e6c305b",
+  "prompts": {},
+  "sessions": {
+    "s_e278ac208f4e8a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10731-a41d-7121-98b3-ec6e9e1e04de",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

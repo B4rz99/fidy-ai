@@ -43,6 +43,8 @@ const compositionRoots = new Set([
   "cloudflare/subscription/payment-enrollment.test.ts",
   // Public/Core billing-support proof verifies the independent operator authority boundary.
   "cloudflare/subscription/refund-support.test.ts",
+  // Correction isolation constructs the actual User coordinator with migrated D1 persistence.
+  "cloudflare/subscription/refunds.test.ts",
   "cloudflare/tokens/pats.test.ts",
   "cloudflare/transactions/transactions.test.ts",
   "cloudflare/audit/internal/audit.test.ts",

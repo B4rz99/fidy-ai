@@ -38,7 +38,11 @@ const Charge = Schema.Struct({
   method: Schema.Literals(["card", "nequi", "daviplata"]),
 });
 const codec = Schema.fromJsonString(RefundAttempt);
-const RowSnapshot = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown));
+type EncodedRefund = typeof RefundAttempt.Encoded;
+type RefundLifecycle =
+  | Pick<Extract<EncodedRefund, { status: "pending" }>, "status" | "progress">
+  | Pick<Extract<EncodedRefund, { status: "succeeded" }>, "status" | "verifiedAt">
+  | Pick<Extract<EncodedRefund, { status: "failed" }>, "status" | "failedAt" | "failure">;
 const reject = (reason: RefundStartFailure): Effect.Effect<never, RefundStartFailure> =>
   Effect.fail(reason);
 const safeFailure = (error: unknown): RefundStartFailure =>
@@ -47,32 +51,47 @@ export const liveRefundAuthority = (authority: RefundAuthority): boolean =>
   Schema.is(RefundSupportAdmission.fields.authority)(authority) &&
   authority.expiresAtMs > currentMillis();
 
-const lifecycle = (row: typeof RefundRow.Type): Readonly<Record<string, unknown>> => {
-  if (row.status === "pending") return { status: row.status, progress: row.progress };
-  const finalized =
-    row.finalized_at_ms === null
-      ? undefined
-      : DateTime.formatIso(DateTime.makeUnsafe(row.finalized_at_ms));
-  if (row.status === "succeeded") return { status: row.status, verifiedAt: finalized };
-  return { status: row.status, failedAt: finalized, failure: row.failure };
+const lifecycle = (
+  row: typeof RefundRow.Type
+): Effect.Effect<RefundLifecycle, RefundStartFailure> => {
+  if (row.status === "pending") {
+    return Effect.succeed({ status: row.status, progress: row.progress });
+  }
+  if (row.finalized_at_ms === null) return reject("unavailable");
+  const finalized = DateTime.formatIso(DateTime.makeUnsafe(row.finalized_at_ms));
+  if (row.status === "succeeded") {
+    return Effect.succeed({ status: row.status, verifiedAt: finalized });
+  }
+  if (row.failure === null) return reject("unavailable");
+  return Effect.succeed({ status: row.status, failedAt: finalized, failure: row.failure });
 };
 /** Decode a bounded, closed retained view without exposing any Wompi correlation facts. */
-const view = (row: typeof RefundRow.Type): Effect.Effect<RefundAttempt, Schema.SchemaError> =>
+const view = (
+  row: typeof RefundRow.Type
+): Effect.Effect<RefundAttempt, Schema.SchemaError | RefundStartFailure> =>
   Effect.gen(function* () {
-    const snapshot = yield* Schema.decodeEffect(RowSnapshot)(row.snapshot_json);
-    return yield* Schema.decodeUnknownEffect(RefundAttempt)({ ...snapshot, ...lifecycle(row) });
+    const retained = yield* Schema.decodeEffect(codec)(row.snapshot_json);
+    const snapshot = yield* Schema.encodeEffect(RefundAttempt)(retained);
+    const progress = yield* lifecycle(row);
+    return yield* Schema.decodeEffect(RefundAttempt)({ ...snapshot, ...progress });
   });
+const decodeRow = (
+  row: unknown
+): Effect.Effect<Option.Option<typeof RefundRow.Type>, Schema.SchemaError> =>
+  row === null
+    ? Effect.succeedNone
+    : Schema.decodeUnknownEffect(RefundRow)(row).pipe(Effect.asSome);
 const readRow = (
   db: D1Database,
   userId: string,
   requestId: string
-): Effect.Effect<Option.Option<typeof RefundRow.Type>, Cause.UnknownError> =>
+): Effect.Effect<Option.Option<typeof RefundRow.Type>, Cause.UnknownError | Schema.SchemaError> =>
   Effect.tryPromise(() =>
     db
       .prepare("SELECT * FROM refund_attempts WHERE user_id=? AND request_id=?")
       .bind(userId, requestId)
       .first()
-  ).pipe(Effect.map(Schema.decodeUnknownOption(RefundRow)));
+  ).pipe(Effect.flatMap(decodeRow));
 const replayView = (
   row: typeof RefundRow.Type,
   intent: string
@@ -88,7 +107,7 @@ export const getRefund = (call: RefundReadCall): Effect.Effect<RefundAttempt, Re
         .bind(call.userId, call.refundAttemptId)
         .first()
     );
-    const decoded = Schema.decodeUnknownOption(RefundRow)(row);
+    const decoded = yield* decodeRow(row);
     if (Option.isNone(decoded)) return yield* reject("charge-unavailable");
     return yield* view(decoded.value);
   }).pipe(Effect.mapError(safeFailure));

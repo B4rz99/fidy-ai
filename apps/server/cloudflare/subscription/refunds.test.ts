@@ -1,10 +1,11 @@
 import { type WorkflowStepConfig } from "cloudflare:workers";
 import { afterEach, expect, it, vi } from "vitest";
-import { type Cause, Clock, Effect, Exit, Option } from "effect";
+import { type Cause, Clock, Effect, Exit, Option, Schema } from "effect";
 import { type Miniflare } from "miniflare";
 import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
 import { executeProtectedSubscriptionQuery, getRefund, startRefund } from "./operations";
-import { type RefundStartCall } from "./contract";
+import { type RefundStartCall, RefundSupportAdmission } from "./contract";
+import { UserTransactionCoordinator } from "../transactions/runtime";
 import {
   dispatchRefunds,
   dispatchVoidVerification,
@@ -78,11 +79,15 @@ const fixture = (activeTrial = false): Effect.Effect<D1Database, Cause.UnknownEr
     );
     return db;
   });
-const standing = (db: D1Database): Effect.Effect<unknown, Cause.UnknownError> =>
+const standing = (
+  db: D1Database,
+  scopedUserId = userId,
+  sessionId = requestId
+): Effect.Effect<unknown, Cause.UnknownError> =>
   Effect.tryPromise(() =>
     executeProtectedSubscriptionQuery({
       db,
-      subject: { id: requestId, userId, digest: new Uint8Array(32) },
+      subject: { id: sessionId, userId: scopedUserId, digest: new Uint8Array(32) },
       operation: "subscription.getSubscriptionStatus",
     })
   ).pipe(Effect.flatMap((response) => Effect.tryPromise(() => response.json())));
@@ -102,7 +107,13 @@ const workflowFor = (db: D1Database, id: string): Parameters<typeof runRefundWor
     run: () => Promise<void>
   ): Promise<void> => run(),
 });
-const providerReply = (id: string, status: string, amount = 400000): Response =>
+const providerReply = (
+  id: string,
+  status: string,
+  correlation: Partial<
+    Readonly<{ amount_in_cents: number; transaction_id: string; reference: string }>
+  > = {}
+): Response =>
   Response.json(
     {
       data: {
@@ -110,8 +121,9 @@ const providerReply = (id: string, status: string, amount = 400000): Response =>
         v2_refund_id: "v2_refund_abc",
         status,
         transaction_id: "provider-charge",
-        amount_in_cents: amount,
+        amount_in_cents: 400000,
         reference: `fidy-refund-${id}`,
+        ...correlation,
       },
     },
     { status: 201 }
@@ -133,6 +145,121 @@ const call = (db: D1Database, amount = "4000", identity = requestId): RefundStar
     reason: "user-request" as const,
   },
 });
+const assertPendingIntegrity = Effect.fnUntraced(function* (
+  db: D1Database,
+  id: string,
+  reserved: number = 400000
+) {
+  expect(
+    yield* getRefund({ db, authority: call(db).authority, userId, refundAttemptId: id })
+  ).toMatchObject({ status: "pending" });
+  expect(yield* standing(db)).toMatchObject({ data: { accessTier: "pro" } });
+  const retained = yield* Effect.tryPromise(() =>
+    db
+      .prepare(`SELECT
+    (SELECT COUNT(*) FROM refund_outcome_evidence) AS outcomes,
+    (SELECT COUNT(*) FROM billing_access_adjustments) AS adjustments,
+    (SELECT COUNT(*) FROM subscription_renewal_stops) AS stops,
+    (SELECT SUM(amount_in_cents) FROM refund_attempts WHERE status<>'failed') AS reserved,
+    (SELECT COUNT(*) FROM refund_submission_claims WHERE refund_id=?) AS claims`)
+      .bind(id)
+      .first()
+  );
+  expect(retained).toEqual({ outcomes: 0, adjustments: 0, stops: 0, reserved, claims: 1 });
+});
+
+it("isolates mismatched coordinator Users and foreign charge identities before any financial acceptance", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fixture();
+      const accepted = yield* startRefund(call(db));
+      const otherUserId = "10000000-0000-4000-8000-000000000002";
+      const otherSessionId = "50000000-0000-4000-8000-000000000002";
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db.prepare("INSERT INTO users VALUES (?,'America/Bogota')").bind(otherUserId),
+          db.prepare("INSERT INTO trial_periods VALUES (?,1000,604801000)").bind(otherUserId),
+          db
+            .prepare("INSERT INTO web_sessions VALUES (?,?,?,NULL,9999999999999,9999999999999)")
+            .bind(otherSessionId, otherUserId, new Uint8Array(32)),
+        ])
+      );
+      const originalStanding = yield* standing(db);
+      const otherStanding = yield* standing(db, otherUserId, otherSessionId);
+      const coordinator = new UserTransactionCoordinator(
+        {
+          id: { name: otherUserId },
+          storage: { setAlarm: (): Promise<void> => Promise.resolve() },
+        },
+        {
+          DB: db,
+          WOMPI_ENVIRONMENT: "sandbox",
+          HOSTED_AI_MODEL: "",
+          AI: {
+            run: (): Promise<never> => Promise.reject(new Error("No inference during corrections")),
+          },
+        }
+      );
+      for (const scopedUserId of [userId, otherUserId]) {
+        const body = yield* Schema.encodeEffect(Schema.fromJsonString(RefundSupportAdmission))({
+          _tag: "BillingRefundSupport",
+          authority: call(db).authority,
+          input: { ...call(db).input, userId: scopedUserId, requestId: otherSessionId },
+        });
+        const response = yield* Effect.tryPromise(() =>
+          coordinator.fetch(
+            new Request("https://coordinator.internal/billing-refund-work", {
+              method: "POST",
+              body,
+            })
+          )
+        );
+        expect(response.status).toBe(scopedUserId === userId ? 403 : 404);
+      }
+      expect(
+        yield* Effect.flip(
+          getRefund({
+            db,
+            authority: call(db).authority,
+            userId: otherUserId,
+            refundAttemptId: accepted.id,
+          })
+        )
+      ).toBe("charge-unavailable");
+      expect(
+        yield* getRefund({
+          db,
+          authority: call(db).authority,
+          userId,
+          refundAttemptId: accepted.id,
+        })
+      ).toEqual(accepted);
+      expect(yield* standing(db)).toEqual(originalStanding);
+      expect(yield* standing(db, otherUserId, otherSessionId)).toEqual(otherStanding);
+      const retained = yield* Effect.tryPromise(() =>
+        db
+          .prepare(`SELECT
+    (SELECT COUNT(*) FROM refund_attempts) AS attempts,
+    (SELECT SUM(amount_in_cents) FROM refund_attempts) AS reserved,
+    (SELECT COUNT(*) FROM refund_outbox) AS outbox,
+    (SELECT COUNT(*) FROM refund_submission_claims) AS claims,
+    (SELECT COUNT(*) FROM refund_outcome_evidence) AS outcomes,
+    (SELECT COUNT(*) FROM subscription_renewal_stops) AS stops,
+    (SELECT COUNT(*) FROM billing_access_adjustments) AS adjustments`)
+          .first()
+      );
+      expect(retained).toEqual({
+        attempts: 1,
+        reserved: 400000,
+        outbox: 1,
+        claims: 0,
+        outcomes: 0,
+        stops: 0,
+        adjustments: 0,
+      });
+    })
+  ));
+
 it("accepts an attributable asynchronous correction and replays identical intent without another reservation", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -243,58 +370,68 @@ it("settles an authenticated matching Sandbox refund exactly once without mutati
     })
   ));
 
-it.each(["lost-response", "ERROR", "PENDING", "FAILED", "SUCCESSFUL", "wrong-amount"])(
-  "retains the reservation and access after %s without repeating the mutation",
-  (outcome) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const db = yield* fixture();
-        const accepted = yield* startRefund(call(db));
-        let posts = 0;
-        vi.stubGlobal("fetch", (): Promise<Response> => {
-          posts++;
-          return outcome === "lost-response"
-            ? Promise.reject(new Error("uncertain"))
-            : Promise.resolve(
-                providerReply(
-                  accepted.id,
-                  outcome === "wrong-amount" ? "APPROVED" : outcome,
-                  outcome === "wrong-amount" ? 400001 : 400000
-                )
-              );
-        });
-        yield* Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)));
-        yield* Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)));
-        expect(posts).toBe(1);
-        expect(
-          yield* getRefund({
-            db,
-            authority: call(db).authority,
-            userId,
-            refundAttemptId: accepted.id,
-          })
-        ).toMatchObject({ status: "pending", progress: "outcome-unknown" });
-        expect(yield* standing(db)).toMatchObject({ data: { accessTier: "pro" } });
-        const republished: unknown[] = [];
-        yield* dispatchRefunds({
-          DB: db,
-          BILLING_COLLECTION_QUEUE: {
-            send: (body) => {
-              republished.push(body);
-              return Promise.resolve();
-            },
+it.each([
+  "lost-response",
+  "ERROR",
+  "PENDING",
+  "FAILED",
+  "SUCCESSFUL",
+  "wrong-amount",
+  "wrong-transaction",
+  "wrong-reference",
+])("retains the reservation and access after %s without repeating the mutation", (outcome) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fixture();
+      const accepted = yield* startRefund(call(db));
+      let posts = 0;
+      vi.stubGlobal("fetch", (): Promise<Response> => {
+        posts++;
+        return outcome === "lost-response"
+          ? Promise.reject(new Error("uncertain"))
+          : Promise.resolve(
+              providerReply(accepted.id, outcome.startsWith("wrong-") ? "APPROVED" : outcome, {
+                amount_in_cents: outcome === "wrong-amount" ? 400001 : 400000,
+                transaction_id:
+                  outcome === "wrong-transaction" ? "unrelated-charge" : "provider-charge",
+                reference:
+                  outcome === "wrong-reference"
+                    ? "fidy-refund-10000000-0000-4000-8000-000000000099"
+                    : `fidy-refund-${accepted.id}`,
+              })
+            );
+      });
+      yield* Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)));
+      yield* Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)));
+      expect(posts).toBe(1);
+      yield* assertPendingIntegrity(db, accepted.id);
+      expect(
+        yield* getRefund({
+          db,
+          authority: call(db).authority,
+          userId,
+          refundAttemptId: accepted.id,
+        })
+      ).toMatchObject({ status: "pending", progress: "outcome-unknown" });
+      expect(yield* standing(db)).toMatchObject({ data: { accessTier: "pro" } });
+      const republished: unknown[] = [];
+      yield* dispatchRefunds({
+        DB: db,
+        BILLING_COLLECTION_QUEUE: {
+          send: (body) => {
+            republished.push(body);
+            return Promise.resolve();
           },
-        });
-        expect(republished).toEqual([]);
-        expect(
-          Exit.isFailure(
-            yield* Effect.exit(
-              startRefund(call(db, "6000", "50000000-0000-4000-8000-000000000002"))
-            )
-          )
-        ).toBe(true);
-      })
-    )
+        },
+      });
+      expect(republished).toEqual([]);
+      expect(
+        Exit.isFailure(
+          yield* Effect.exit(startRefund(call(db, "6000", "50000000-0000-4000-8000-000000000002")))
+        )
+      ).toBe(true);
+    })
+  )
 );
 
 it.each(["DECLINED", "CANCELLED"])(
@@ -485,13 +622,157 @@ it("derives the whole card void Money and reconciles a lost response by transact
     })
   ));
 
+it.each([
+  { field: "transaction identity", patch: { id: "unrelated-charge" } },
+  { field: "charge reference", patch: { reference: "unrelated-reference" } },
+  { field: "original Money", patch: { amount_in_cents: 990001 } },
+  { field: "Currency", patch: { currency: "USD" } },
+  { field: "payment source", patch: { payment_source_id: 3892 } },
+])("refuses mismatched void $field in both submission and read-only verification", ({ patch }) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fixture();
+      const accepted = yield* startRefund({
+        ...call(db),
+        input: { ...call(db).input, intent: { kind: "card-void" } },
+      });
+      let posts = 0;
+      let lookups = 0;
+      vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        const request = new Request(input, init);
+        if (request.method === "POST") posts++;
+        else lookups++;
+        return Promise.resolve(
+          Response.json({
+            data: {
+              id: "provider-charge",
+              status: "VOIDED",
+              reference: "fidy-test",
+              amount_in_cents: 990000,
+              currency: "COP",
+              payment_source_id: 3891,
+              ...patch,
+            },
+          })
+        );
+      });
+      yield* Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)));
+      yield* assertPendingIntegrity(db, accepted.id, 990000);
+      yield* Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)));
+      expect(posts).toBe(1);
+      expect(lookups).toBe(1);
+      yield* assertPendingIntegrity(db, accepted.id, 990000);
+      expect(
+        yield* Effect.flip(startRefund(call(db, "1000", "50000000-0000-4000-8000-000000000003")))
+      ).toBe("amount-exceeds-remaining");
+    })
+  )
+);
+
+it("keeps the mutation claim and reservation after provider approval but failed durable settlement", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fixture();
+      const accepted = yield* startRefund(call(db));
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TRIGGER injected_settlement_failure BEFORE INSERT ON refund_outcome_evidence BEGIN SELECT RAISE(ABORT,'injected durable settlement failure'); END"
+          )
+          .run()
+      );
+      let posts = 0;
+      vi.stubGlobal("fetch", (): Promise<Response> => {
+        posts++;
+        return Promise.resolve(providerReply(accepted.id, "APPROVED"));
+      });
+      const failed = yield* Effect.exit(
+        Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)))
+      );
+      expect(Exit.isFailure(failed)).toBe(true);
+      expect(posts).toBe(1);
+      yield* assertPendingIntegrity(db, accepted.id);
+      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER injected_settlement_failure").run());
+      yield* Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)));
+      expect(posts).toBe(1);
+      yield* assertPendingIntegrity(db, accepted.id);
+      expect(
+        yield* Effect.flip(startRefund(call(db, "6000", "50000000-0000-4000-8000-000000000003")))
+      ).toBe("amount-exceeds-remaining");
+    })
+  ));
+
+it("allows only one financial POST when independent Workflow executions race the durable submission claim", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fixture();
+      const accepted = yield* startRefund(call(db));
+      const entered = Promise.withResolvers<void>();
+      const reply = Promise.withResolvers<Response>();
+      let posts = 0;
+      vi.stubGlobal("fetch", (): Promise<Response> => {
+        posts++;
+        entered.resolve();
+        return reply.promise;
+      });
+      const winner = runRefundWorkflow(workflowFor(db, accepted.id));
+      yield* Effect.tryPromise(() => entered.promise);
+      yield* Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)));
+      expect(posts).toBe(1);
+      yield* assertPendingIntegrity(db, accepted.id);
+      reply.resolve(providerReply(accepted.id, "APPROVED"));
+      yield* Effect.tryPromise(() => winner);
+      yield* Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)));
+      expect(posts).toBe(1);
+      expect(
+        yield* getRefund({
+          db,
+          authority: call(db).authority,
+          userId,
+          refundAttemptId: accepted.id,
+        })
+      ).toMatchObject({ status: "succeeded" });
+      expect(yield* standing(db)).toMatchObject({ data: { accessTier: "free" } });
+    })
+  ));
+
+it("reports malformed retained correction state as unavailable, not absent or a new intent", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fixture();
+      const accepted = yield* startRefund(call(db));
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db.prepare("PRAGMA ignore_check_constraints=ON"),
+          db
+            .prepare("UPDATE refund_attempts SET progress='unrecognized' WHERE id=?")
+            .bind(accepted.id),
+        ])
+      );
+      expect(
+        yield* Effect.flip(
+          getRefund({ db, authority: call(db).authority, userId, refundAttemptId: accepted.id })
+        )
+      ).toBe("unavailable");
+      expect(yield* Effect.flip(startRefund(call(db)))).toBe("unavailable");
+      const retained = yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "SELECT COUNT(*) AS attempts,SUM(amount_in_cents) AS reserved FROM refund_attempts"
+          )
+          .first()
+      );
+      expect(retained).toEqual({ attempts: 1, reserved: 400000 });
+    })
+  ));
+
 it("preserves an independently active TrialPeriod after a successful full refund", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* fixture(true);
       const accepted = yield* startRefund(call(db, "9900"));
       vi.stubGlobal("fetch", (): Promise<Response> =>
-        Promise.resolve(providerReply(accepted.id, "APPROVED", 990000))
+        Promise.resolve(providerReply(accepted.id, "APPROVED", { amount_in_cents: 990000 }))
       );
       yield* Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)));
       expect(

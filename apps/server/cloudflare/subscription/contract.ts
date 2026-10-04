@@ -8,11 +8,7 @@ import { type WorkflowStepConfig } from "cloudflare:workers";
 import { type TransactionCaller } from "../canonical-work/contract";
 
 /** Constructed only after origin-side verification against the separate billing-support Access app. */
-export type RefundAuthority = Readonly<{
-  operatorId: string;
-  expiresAtMs: number;
-  permission: "billing.refund";
-}>;
+export type RefundAuthority = typeof RefundSupportAdmission.fields.authority.Type;
 
 /** Money and dates cross the native request boundary through their canonical codecs. */
 export type RefundStartCall = Readonly<{

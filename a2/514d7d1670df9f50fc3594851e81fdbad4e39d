@@ -1,0 +1,19 @@
+apps/web/src/features/public-site/landing/landing.test.tsx
+  s_7ab0fc05e25db9::t_c30165b5bb4038 194-195,207-209
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a2514d7d1670df9f50fc3594851e81fdbad4e39d",
+  "prompts": {},
+  "sessions": {
+    "s_7ab0fc05e25db9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1052a-b73d-70c3-9c02-9d67c7511dea",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

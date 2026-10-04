@@ -1,7 +1,10 @@
 # Portable stable Effect migration (#979)
 
-This records the intermediate portable batch. See [the integration report](effect-4-stable-integration.md)
-for subsequent cleanup, final gates and review status.
+**Historical intermediate checkpoint (2026-10-03), not an outstanding portable migration.**
+The complete migration subsequently merged and released through [PR #992](https://github.com/B4rz99/fidy-ai/pull/992).
+See [the integration report's final outcome](effect-4-stable-integration.md#final-outcome) for review,
+CI, and release evidence. Pending review, failed full-graph checks, branch names, and retained old
+patches below describe this intermediate batch, not the final result or current worktree.
 
 ## Scope and integration state
 

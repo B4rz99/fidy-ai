@@ -1,83 +1,44 @@
 # Streams & incremental encoding (v4)
 
-How to use stable `Stream` and `effect/unstable/encoding` without accidentally buffering hostile or
-unbounded input. Citations are relative to `.repos/effect/packages/effect/src/`.
+Sources: `node_modules/effect/src/Stream.ts`, `Channel.ts`, and `encoding/Ndjson.ts` under the same
+source directory. Import `Stream` from `effect` and `Ndjson` from `effect/encoding`.
 
-## Reach for Stream only when incrementality matters
+## Incrementality must earn its complexity
 
-Use a plain `Effect<ReadonlyArray<A>>` for a small bounded collection already in memory. Use
-`Stream<A, E, R>` when production/consumption is incremental, backpressure or cancellation matters,
-the source owns a resource, or the total input should not be materialized.
+Use `Effect<ReadonlyArray<A>>` for a small bounded collection already in memory. Use Stream when
+production/consumption is incremental, backpressure or cancellation matters, or the source owns a
+resource. A Stream does nothing until run.
 
-A Stream is a description until run. Common terminal operations:
+`runForEach` processes incrementally; `runFold` / `runFoldEffect` retain an accumulator; `runDrain`
+discards values; `runHead` stops after the first. `runCollect` materializes everything and therefore
+requires a proven bound. `take(n)` limits elements, not bytes: arbitrary-size chunks still require
+cumulative byte accounting before allocation. Content-Length is an early check, never proof.
 
-- `runDrain` executes effects and discards values (`Stream.ts:10776`);
-- `runForEach` processes each element incrementally (`Stream.ts:10648-10676`);
-- `runFold` / `runFoldEffect` retain only the accumulator (`Stream.ts:10474-10568`);
-- `runHead` stops after the first element (`Stream.ts:10570-10593`);
-- `runCollect` appends every element to one Array and is therefore safe only after a proven bound
-  (`Stream.ts:10396-10405`).
+## Ownership and concurrency
 
-`Stream.take(n)` bounds the **number of elements**, not bytes. For a stream of arbitrary-size byte
-chunks, track cumulative byte length in the fold and fail before materializing beyond the contract.
-A `Content-Length` check is an early rejection optimization, never proof: the body may omit or lie
-about it.
+Runners manage a Scope. Resource-backed constructors must release readers/files/bodies on completion,
+failure, and interruption. Use scoped acquisition and finalizers rather than hoping every consumer
+remembers cleanup. `toPull` exposes a scoped pull whose normal end uses `Cause.Done`; reserve manual
+pull control for boundaries that genuinely require it.
 
-## Resource lifetime and cancellation
+`fromReadableStream` and `toReadableStream*` bridge Web streams. Map foreign failures to the owning
+closed error set and verify cancellation releases the reader/body.
 
-Stream runners manage an internal Scope (`Stream.run` uses `Effect.scopedWith`,
-`Stream.ts:10365-10392`). Constructors backed by files, HTTP bodies, sockets, readers, or custom
-resources must release those resources on completion, failure, or interruption. Use the provided
-scoped constructor or `Stream.ensuring`; do not acquire a reader outside the Stream and hope every
-consumer remembers to cancel it.
+`mapEffect` is sequential by default, supports finite `concurrency`, and preserves input order unless
+`unordered: true`. It has no `bufferSize` option. Each queue, buffer, grouping, and concurrent mapper
+needs its own capacity decision. `groupByKey` can organize process-local work but cannot provide
+per-User durable serialization, transactions, or authorization.
 
-`Stream.toPull` exposes a scoped pull and therefore adds `Scope` to requirements; the pull fails with
-`Cause.Done` at normal end (`Stream.ts:10778-10810`). Use it only when a library boundary genuinely
-requires manual pull control.
+## NDJSON
 
-Web conversion is available through `fromReadableStream` and `toReadableStream*`
-(`Stream.ts:1242`, `:10922-11072`). Map foreign reader failures into a closed adapter error and make
-sure cancellation releases the reader/body.
+`Ndjson.decode` / `decodeString` frame and parse records; `decodeSchema` / `decodeSchemaString`
+add schema decoding. Corresponding `encodeSchema*` APIs apply the schema's encoded representation.
+Compose channels with `Stream.pipeThroughChannel`.
 
-## Effectful mapping and concurrency
+Typed records do not bound line length, record count, or total bytes. Apply those limits at the
+transport/parser boundary. `ignoreEmptyLines` changes syntax acceptance, not validation or limits.
+Msgpack is not an export of the selected encoding namespace; do not restore old examples.
 
-`Stream.mapEffect` accepts `{ concurrency?, unordered? }`; it no longer has a `bufferSize` option
-(`Stream.ts:1861-1888`). Mapping is sequential by default. With concurrent mapping, results remain
-input-ordered unless `unordered: true`, which permits outputs to be emitted as soon as their effects
-complete (`Channel.ts:2053-2055`, `:2073-2090`). Set finite concurrency from the external capacity
-being protected. `"unbounded"` is appropriate only for an already-small, proven-bounded input.
-
-Buffering decouples producer and consumer but moves the memory bound. Every `buffer`, queue, grouping,
-or concurrent mapper needs a capacity decision derived from input limits and downstream latency.
-
-For keyed work, `groupByKey` creates per-key streams and supports idle lifetime
-(`Stream.ts:8143` onward). It is not automatically a per-key domain transaction or authorization
-boundary. Keep stable User identity explicit and bound the number of live keys.
-
-## NDJSON and Msgpack
-
-V4's incremental codecs live in `effect/unstable/encoding`:
-
-- `Ndjson.decodeString` / `decode` split text/bytes into parsed JSON values;
-- `Ndjson.decodeSchemaString(schema)()` / `decodeSchema(schema)()` additionally decode every value
-  through the Schema;
-- matching `encodeSchemaString` / `encodeSchema` apply the schema's encoded representation before
-  serialization (`unstable/encoding/Ndjson.ts:65-280`).
-
-Compose them with `Stream.pipeThroughChannel`; the canonical examples are
-`.repos/effect/ai-docs/src/03_stream/30_encoding.ts`.
-
-A typed decoder proves each record's shape but does not bound line length, record count, or total
-bytes. Apply transport/parser limits before or together with decoding. `ignoreEmptyLines` changes
-syntax acceptance only; it is not validation.
-
-## Error ownership
-
-Keep transport/read errors, framing errors (`NdjsonError`), and schema errors distinct until the
-adapter can map them into the owning domain failure. Catching every stream failure as one generic
-error too early loses whether input was malformed, capacity was exceeded, or I/O was interrupted.
-Never catch interruption as malformed input.
-
-For provider responses, expose only a safe closed error and discard the raw body after bounded
-validation. For ingestion, preserve the allowed evidence separately according to retention policy;
-a Stream pipeline is not itself a retention control.
+Keep read failures, framing errors, and schema errors distinct until mapping to the owner's safe
+failure. Preserve interruption. A Stream pipeline does not implement retention: discard provider
+bodies after bounded validation and retain ingestion evidence only through its existing owner.

@@ -7,7 +7,7 @@ import { SensitiveClipboardBoundary } from "@/browser/use-sensitive-clipboard";
 import { type BrowserAuthentication, useSession } from "@/session/session-context";
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { type FidyClient } from "@/transport/client";
-import { bearerRevealLifetime } from "./policy";
+import { sensitiveClipboardLifetime } from "@/browser/sensitive-clipboard";
 import { type IssueManualPATCommand, ManualPATView } from "./view";
 import {
   type ActivePATManagementState,
@@ -45,7 +45,7 @@ const PATManagementContent = ({
   <SensitiveClipboardBoundary
     className={Option.some("flex flex-col gap-8")}
     key={authentication}
-    lifetime={bearerRevealLifetime}
+    lifetime={sensitiveClipboardLifetime}
   >
     {(clipboard) => (
       <>

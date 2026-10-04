@@ -29,9 +29,12 @@ import {
   recentWindowMs,
   unavailableMetrics,
 } from "./internal/event-metrics";
-import { Available, probeSuccessStatus, probeUrl } from "./internal/capability-probes";
 import { Clock, Effect, Exit, Option, Schema } from "effect";
 import { Check, WorkflowStatus, periodMs, recordCanary, staleMs } from "./internal/canary";
+
+const Available = Schema.Struct({ usable: Schema.Literal(1) });
+const probeUrl = "https://internal.invalid/operational/probe";
+const probeSuccessStatus = 204;
 
 /** An actual Queue consumer, not queue.send(), proves Queue execution. */
 export const receiveCanary = (

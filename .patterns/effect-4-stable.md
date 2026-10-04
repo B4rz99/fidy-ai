@@ -1,16 +1,19 @@
 # Selected stable Effect source
 
-The application now uses exact **effect@4.0.0**, coordinated platform/SQL/Atom packages at
-4.0.0 and **alchemy@2.0.0-beta.80**. Read this source map before the older topic notes.
-Those notes retain historical RC line citations; they are not authority for current import
-paths, renamed checks or AST annotations. Verify the named symbol in the installed source.
-Do not invent old-path aliases or a second RC implementation.
+The application uses exact **effect@4.0.0**, coordinated platform/SQL/Atom packages at
+4.0.0 and **alchemy@2.0.0-beta.80**. Topic notes cite source files and symbols in these selected
+packages. Verify against the installed release before adopting an upstream example; matching
+package version strings alone do not establish identical source.
 
 The npm artifacts include upstream TypeScript source. The frozen lock records integrity;
 #978 compared every new resolved identity with its registry integrity. Current primary
 sources are `node_modules/effect/src`, `node_modules/@effect/atom-react/src` and
-`node_modules/alchemy/src` (and its patched `lib` counterpart). The older vendored
-`.repos/effect` and `.repos/alchemy` snapshots are historical references, not this release.
+`node_modules/alchemy/src` (and its patched `lib` counterpart).
+
+`.repos/effect` is refreshed to upstream main **43416c4142**, which declares 4.0.0 but differs from
+the published 4.0.0 source. Use it for upstream tests, examples, and investigation, not as proof that
+a newer behavior exists in the pinned application. `.repos/alchemy` remains an older snapshot;
+the installed beta.80 source plus `patches/alchemy@2.0.0-beta.80.patch` defines the selected behavior.
 For a fresh checkout, install the admitted frozen graph first. Published source is also
 available at `https://unpkg.com/effect@4.0.0/src/<module>.ts` and
 `https://unpkg.com/alchemy@2.0.0-beta.80/src/<module>.ts`; the latter does not contain Fidy's patch.

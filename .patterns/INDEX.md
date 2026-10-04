@@ -4,9 +4,9 @@ Read the pattern for the area you are changing, then use its cited source in the
 
 For Effect/Alchemy, first read [the selected stable source map](effect-4-stable.md). Current
 API authority is the integrity-locked published TypeScript source in the installed 4.0.0 / beta.80
-packages. `.repos/effect` and `.repos/alchemy`, and RC line citations in the older topic notes,
-are historical snapshots; verify named symbols against the selected release rather than copying
-obsolete paths. React 19.2.8 → `.repos/react`; for React application code, treat the installed
+packages, including Fidy's Alchemy patch. `.repos/effect` is a refreshed upstream-main reference;
+it is not byte-identical to the pinned release. `.repos/alchemy` remains an older snapshot.
+React 19.2.8 → `.repos/react`; for React application code, treat the installed
 public API and official React documentation as the application-facing contract.
 
 | Area                                                              | Pattern                                    |
@@ -15,8 +15,8 @@ public API and official React documentation as the application-facing contract.
 | Outbound HTTP clients, retries, redirects, bounded responses      | [http-client.md](http-client.md)           |
 | HttpApi operations, typed clients, OpenAPI, middleware, testing   | [http-api.md](http-api.md)                 |
 | Schema, JSON codecs, brands, models, Money                        | [schema.md](schema.md)                     |
-| SQL and a future D1 adapter                                       | [sql.md](sql.md)                           |
-| Durable workflows, activities, compensation                       | [workflows.md](workflows.md)               |
+| SQL, D1 batches, and atomic mutation units                        | [sql.md](sql.md)                           |
+| Native Cloudflare Workflows and Effect step boundaries            | [workflows.md](workflows.md)               |
 | Crypto, encoding, redacted secrets                                | [crypto-encoding.md](crypto-encoding.md)   |
 | AI model, tools, toolkit, Workers AI boundary                     | [ai.md](ai.md)                             |
 | Layers, services, config, Workers runtime assembly                | [layers-runtime.md](layers-runtime.md)     |

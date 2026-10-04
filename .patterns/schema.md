@@ -1,243 +1,103 @@
 # Schema (v4)
 
-How `effect` v4 Schema actually works, read from the source. Citations are `<path>:<line>`
-relative to `packages/effect/`, except `migration/schema.md` (repo root), which is the
-canonical v3→v4 rename map — read it before trusting any v3 muscle memory. Schema lives in
-core `effect` (`Schema`, `SchemaAST`, `SchemaIssue`, `SchemaTransformation`, and `SchemaGetter`
-are top-level stable modules), not in a separate `@effect/schema` package. `SchemaError` is the
-`Schema.SchemaError` class, exported from `Schema.ts`; the separate
-`effect/SchemaError` module no longer exists in rc.116 or the newer vendored snapshot.
+Selected sources: `node_modules/effect/src/Schema.ts`, `SchemaAST.ts`, `SchemaIssue.ts`,
+`SchemaTransformation.ts`, `SchemaGetter.ts`, `Arbitrary.ts`, and `schema/Model.ts` under that same
+source directory. Use named symbols rather than old RC line numbers. Schema is part of `effect`;
+Model and schema compilers are under `effect/schema`.
 
-## v3 → v4 in one breath
+## Define and decode the owned boundary
 
-Variadic APIs became array-taking: `Union([A, B])`, `Literals(["a", "b"])`, `Tuple([A, B])`
-(`migration/schema.md` summary table). `filter` → `check(...)` with `is*`-prefixed
-primitives (`isUUID`, `isPattern`, `isBetween`, …); `annotations()` → `annotate()`
-(`Schema.ts:653-654`); `pick/omit/partial/extend` → `mapFields` + `Struct.pick/omit/map/assign`;
-`transform/transformOrFail` → `from.pipe(Schema.decodeTo(to, transformation))`
-(`Schema.ts:5585-5601`); `parseJson(s)` → `fromJsonString(s)` (`Schema.ts:12756-12797`). Decoding APIs:
-`decodeUnknownEffect` (`Schema.ts:1516`), `decodeUnknownExit` (`:1635`),
-`decodeUnknownSync` (`:1920`, throws), plus `is` and `asserts`. Effect/Exit/synchronous adapters
-wrap schema mismatches in `Schema.SchemaError { issue: SchemaIssue.Issue }`
-(`Schema.ts:1148-1223`). `positive`/`nonNegative`
-filters are gone — use `isGreaterThanOrEqualTo(0)` / the BigDecimal variants.
+Use `Schema.Struct`, `Schema.Class`, or `Schema.TaggedErrorClass` according to the boundary's needs.
+Array-taking APIs include `Union([A, B])`, `Literals(["a", "b"])`, and `Tuple([A, B])`.
+Attach checks with `.check(...)` and metadata with `.annotate(...)`.
 
-`ParseOptions.errors` defaults to `"first"` (`SchemaAST.ts:470`); pass `{ errors: "all" }`
-at every user-facing boundary or you report one field problem at a time.
-`onExcessProperty` defaults to `"ignore"` (strips unknown keys — silent, but lossless
-decode needs `"error"` if you care).
+- `decodeUnknownEffect` reports `Schema.SchemaError`; `decodeUnknownResult` is a synchronous,
+  non-throwing alternative for service-free decoding. `decodeUnknownSync` throws.
+- `errors: "all"` collects field issues; default parsing reports the first error.
+- `onExcessProperty: "ignore"` is the default and strips unknown keys. Use `"error"` when the
+  boundary requires rejection rather than dropping extra input.
+- `optionalKey(S)` permits absence; `optional(S)` also permits `undefined`; `NullOr(S)` permits
+  null. Preserve these distinctions rather than adding accidental defaults.
+- Constructor defaults affect `.make`; decoding defaults deliberately change input acceptance.
+- `Schema.Redacted` transforms its inner value. `disallowJsonEncode: true` forbids that JSON
+  encoding path; redaction itself is not encryption or authorization.
 
-## `unstable/schema/Model`: boundary variants, not a generic domain model
+## JSON and generated artifacts
 
-`Model` builds one field declaration into database variants (`select`, `insert`, `update`) and JSON variants (`json`, `jsonCreate`, `jsonUpdate`). Its helpers encode policy such as database-generated fields, app-generated fields, sensitive fields, date defaults, and representation changes (`unstable/schema/Model.ts:1-44,46-174`). Use it only when one owned record genuinely needs those coordinated variants. Do not replace ordinary domain Structs/Classes with `Model.Class` merely because the module is named “Model”; explicit schemas remain clearer when boundaries do not share one record shape.
+| Need                                    | API                                                    |
+| --------------------------------------- | ------------------------------------------------------ |
+| JSON-compatible value codec             | `Schema.toCodecJson(S)`                                |
+| JSON text containing that value         | `Schema.fromJsonString(Schema.toCodecJson(S))`         |
+| Query/header/string-tree representation | `Schema.toCodecStringTree(S)`                          |
+| JSON Schema                             | `Schema.toJsonSchemaDocument(S, options)`              |
+| Semantic equality                       | `Schema.toEquivalence(S)`                              |
+| Generated decoded fixtures              | `Arbitrary.schema(S)` from `effect/Arbitrary`          |
+| Third-party Standard Schema contract    | `Schema.toStandardSchemaV1` / `toStandardJSONSchemaV1` |
 
-Current repository usage is narrower: `Model.optionalOption(S)` models webhook fields where an encoded key may be missing **or** null and both decode to `Option.none`; `Option.some(value)` encodes as the present value (`unstable/schema/Model.ts:293-324`, `apps/server/src/shell/channels/whatsapp/internal/kapso-webhook.ts`). This deliberately collapses “missing” and “null.” Use plain `optionalKey`, `NullOr`, or another transformation when that distinction has domain meaning.
+`fromJsonString(S)` alone parses JSON and applies S as supplied; it does not first derive a JSON
+codec. Encode stored documents through the same owned codec used to decode them.
 
-If adopting full Model variants:
+JSON Schema describes the encoded representation and cannot express every runtime check. Keep
+explicit `identifier` annotations for reusable definitions. Brands do not supply them. Struct-level
+custom checks can be absent from generated JSON Schema; actual decoding remains authoritative.
+Compare generated contracts against decoding when changing checks or optionality.
 
-- inspect and test every generated schema instead of assuming insert/update optionality;
-- treat `GeneratedByDb`/`GeneratedByApp` as inclusion rules, not generation mechanisms;
-- treat `Sensitive` as JSON-shape omission only, not logging/storage encryption or authorization (`Model.ts:204-291`);
-- keep database rows, public JSON, and domain invariants separate where their evolution differs;
-- verify checks/annotations survive the variant field transformations you apply.
+## Checks, transformations, and brands
 
-## One schema, many artifacts
+Use `SchemaTransformation.transform` for pure mappings and `transformEffect` when either direction
+can fail or require services. Compose with `Schema.decodeTo`; effectful transformations fail with
+`SchemaIssue.Issue`, not an arbitrary domain error. Place checks on the correct side: encoded-side
+checks run on decode input and encode output.
 
-A canonical entity schema derives everything else; nothing is written twice:
+Current checks include `isStartingWith`, `isBetweenLength`, `isPattern`, and numeric/BigDecimal
+variants. String length checks count UTF-16 units. Pattern projection to JSON Schema supports a
+restricted Unicode-mode regex subset; verify both runtime acceptance and generated output when
+changing flags.
 
-| Artifact           | API                                                                     | Notes                                                                                                                      |
-| ------------------ | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| JSON codec         | `Schema.toCodecJson(S)` (`Schema.ts:14484-14557`)                       | `Encoded = Json`; declarations use their `toCodecJson` annotation (BigDecimal → string)                                    |
-| String-keyed codec | `Schema.toCodecStringTree(S)` (`Schema.ts:14562-14645`)                 | what httpapi applies to params/query/headers                                                                               |
-| JSON-string codec  | `Schema.fromJsonString(S)` (`Schema.ts:9156-9209`)                      | `JSON.parse` then decode through `S` **as-is** — wrap `toCodecJson(S)` first unless `S` is already JSON-encodable          |
-| JSON Schema        | `Schema.toJsonSchemaDocument(S, options?)` (`Schema.ts:14423-14451`)    | draft 2020-12, describes the **encoded** (JSON) side; objects are open by default, closed with `onExcessProperty: "error"` |
-| Equivalence        | `Schema.toEquivalence(S)` (`Schema.ts:14238-14267`)                     | BigDecimal compares scale-insensitively                                                                                    |
-| Arbitrary          | `Arbitrary.schema(S)` (`unstable/arbitrary/Arbitrary.ts:362-367`)       | native generation from the decoded Schema type; see `.patterns/testing.md`                                                 |
-| Standard Schema    | `toStandardSchemaV1` / `toStandardJSONSchemaV1` (`Schema.ts:1313-1364`) | for third-party libs                                                                                                       |
+`Schema.brand("Id")` adds a nominal TypeScript type only: no runtime validation or AST annotation.
+Compose it with checks and an explicit identifier. `Schema.fromBrand(identifier, constructor)` can
+reuse a Brand constructor's checks; it is not the same operation as a type-only brand.
 
-### Experimental schema compilers
+Struct-level `Schema.makeFilter` sees decoded fields and can report `{ path, issue }` for a specific
+field. Recheck derived structs: `mapFields` preserves field schemas, but drops struct checks unless
+`unsafePreserveChecks` is requested and does not preserve the original struct annotations. Prefer
+reattaching checks and identifiers deliberately over preserving checks that may read removed fields.
 
-`effect/unstable/schema` now exports `SchemaCompiler`, `SchemaJITCompiler`, and
-`SchemaAOTCompiler`. All three install decoder operations for an exact AST into the same registry
-used transparently by normal Schema parser APIs; they do not introduce a second compiled-schema API
-(`unstable/schema/SchemaCompiler.ts:1-16`, `:180-209`). `SchemaJITCompiler.enable(ast)` lazily
-compiles and falls back to interpreted parsing when code generation is unavailable
-(`SchemaJITCompiler.ts:73-89`). `SchemaAOTCompiler.compile(targets)` emits a JavaScript module whose
-`install(asts)` must receive the same ASTs in the same order; regenerate it whenever the schema or
-Effect version changes (`SchemaAOTCompiler.ts:57-117`). Treat these as measured optimizations:
-install before consumers capture parser entries, benchmark the real boundary, and retain ordinary
-Schema decoding as the semantic contract.
+## Tagged unions and field errors
 
-## Structs, optionality, constructors
+`Schema.tag` supplies a constructor default, not an optional decode field. `TaggedStruct` uses
+`_tag`; for another discriminator use ordinary structs plus `Schema.toTaggedUnion("type")`.
+`Union(..., { mode: "oneOf" })` rejects overlapping matches; default `anyOf` accepts the first.
 
-- `optionalKey(S)` = exact optional (`age?: number`, key may be absent, `Schema.ts:2395-2445`);
-  `optional(S)` = `optionalKey(UndefinedOr(S))` (`:2473-2513`). Nullable DB columns are
-  `NullOr(S)` (`:4997-5012`) — three distinct shapes; model which one you mean, no defaults.
-  `requiredKey` reverses `optionalKey` (`:2465`).
-- Fields are readonly by default; `withDecodingDefaultType(Effect.succeed(x))`
-  (`Schema.ts:6025-6064`) is the "default on decode" tool — deliberate, visible, not a fallback.
-- Constructors: every schema has `.make(input)` (throws on invalid, `Schema.ts:211`),
-  `.makeOption` (`:235`), `.makeEffect` (`:248`). `withConstructorDefault` (`:5775-5829`) makes a
-  field omittable in `make` only — decode still requires it.
-- `Schema.Class<Self>("Id")({ ...fields })` (`Schema.ts:14317-14670`) gives a validated-construction
-  data class with schema-derived codecs; `TaggedClass` (`:14720`) adds `_tag`. Plain
-  `Struct`s are sufficient for pure data; classes buy methods + nominal identity.
-- `Schema.Redacted(inner, { label? })` validates and transforms the wrapped value rather than
-  treating it as opaque. Decoding an existing `Redacted` preserves its runtime label while applying
-  `inner`; JSON decoding uses the configured label (`Schema.ts:13380-13495`). Use
-  `disallowJsonEncode: true` when the value must never cross that JSON boundary.
+A missing or unknown discriminator can produce a root-level union issue rather than a field error.
+Use `SchemaIssue.makeFormatterStandardSchemaV1()` for `{ path, message }` issues, then project the
+boundary's safe error. Formatter messages may include rejected input: never publish raw schema
+errors containing credentials or provider data.
 
-## Transformations
+## Money: reuse the existing codec
 
-Use `SchemaTransformation.transform` for pure infallible mappings and
-`SchemaTransformation.transformEffect` when decode or encode can fail or require services. Each
-effectful function receives the value plus `ParseOptions` and must fail with a `SchemaIssue.Issue`
-(`SchemaTransformation.ts:344-389`). `makeTransformation` is the lower-level constructor for pairing
-existing `SchemaGetter.Getter`s and is idempotent when passed an existing transformation
-(`SchemaTransformation.ts:300-338`). Compose either with `Schema.decodeTo`; keep checks on the
-appropriate encoded or type side so both directions enforce the intended boundary.
+`apps/server/src/core/_shared/money.ts` owns Money and Currency. Its codec validates non-negative
+plain decimal text, encodes normalized **non-exponent** text, and checks fractional precision against
+the Currency. Zero is valid until the owning operation requires a positive amount.
 
-## Checks, brands, sibling-dependent validation
+Reuse `Money`, its JSON codec, and `encodeMoneyAmount`; do not reconstruct them with the stock
+BigDecimal transformation. `BigDecimal.fromString` accepts spellings Money forbids, while
+`BigDecimal.format` can produce exponent notation for large magnitudes as well as small fractions.
+Currency precision does not prevent the large-magnitude branch. `money.test.ts` is the regression
+seam for round trips, Currency mismatch, precision, and canonical text.
 
-- `.check(c1, c2, ...)` appends filters without changing the type (`Schema.ts:5135-5145`);
-  `refine(guard)` narrows it (`:5147-5189`). Primitives: `isUUID` (`:7032`), `isPattern`
-  (`:6820`), `isGreaterThanOrEqualToBigDecimal` etc. (`:8793-8808`).
-- Reusable checks are plain values (`SchemaAST.Filter<T>`) — export them from one module and
-  `.check(...)` them onto any schema of that type.
-- **Brands add zero runtime checks** (`Schema.ts:5200-5244`) — compose:
-  `Schema.String.check(Schema.isUUID()).pipe(Schema.brand("UserId"))`. There is no prebuilt
-  branded-UUID schema. `fromBrand` (`:5254-5258`) reuses a `Brand.Constructor`'s checks.
-- **Struct-level checks see the whole decoded value** — this is how currency-dependent
-  precision works. `makeFilter` (`Schema.ts:6659-6671`) may return `undefined`/`true`, `false`, a
-  message string, `{ path, issue }` to blame a specific field, or an array of those to
-  report several at once (`FilterOutput`, `:6712-6720`; worked examples in
-  `migration/schema.md` § filter). Verified: a check on
-  `Struct({ currency, amount })` returning `{ path: ["amount"], issue: "..." }` produces a
-  properly-pathed field error. Struct checks run after all fields decode.
-- Checks attached to the **from** side of a transformation run on decode input AND on
-  encode output — an encode that produces text violating the check fails loudly (verified;
-  this is the mechanism that makes a Money text-format contract bidirectional).
+## Model and compilers
 
-## Deriving schemas (`mapFields`) — a trap
+`Model` from `effect/schema` derives coordinated database and JSON variants. Use it only when one
+owned record genuinely needs those variants; `GeneratedByDb` is an inclusion rule, not a database
+generator, and `Sensitive` is JSON omission, not storage protection.
 
-`Base.mapFields(Struct.omit(["id", "createdAt"]))` is the idiom (`Schema.ts:3510-3551`);
-`fieldsAssign` extends (`:3622-3624`); make a field optional in the derived shape with
-`Struct.mapPick(["categoryId"], Schema.optionalKey)`. What survives: **field-level** checks,
-brands, annotations, and transformations (they live on the field schemas — verified). What
-does NOT survive: **struct-level `.check(...)`s** (dropped unless
-`{ unsafePreserveChecks: true }`, `:3517-3524`, unsafe because the check may read removed fields)
-and **struct-level annotations, including `identifier`** (verified: `mapFields` builds a
-fresh AST). Re-annotate and re-check every derived schema:
-`CreateTransactionInput = Transaction.mapFields(...).check(...).annotate({ identifier: "CreateTransactionInput" })`.
+The WhatsApp webhook uses `Model.optionalOption(S)`: absent **or null** becomes `Option.none`.
+Use explicit optionality/null schemas when that distinction matters.
 
-## Discriminated unions
-
-- `Schema.tag("bar")` = `Literal("bar")` + constructor default (`Schema.ts:6076-6102`) — the tag
-  is omittable in `make` but **required in decode input**. `tagDefaultOmit` also strips it
-  on encode (`:6123-6137`). `TaggedStruct(tag, fields)` hardcodes the key `_tag` (`:6145-6202`), as
-  does `TaggedUnion({ Circle: {...} })` (`:6403-6477`) — for fidy's `type`-discriminated widgets
-  use plain structs with `type: Schema.tag("bar_chart")` and
-  `Schema.Union([...]).pipe(Schema.toTaggedUnion("type"))` (`:6283-6319`), which works with any
-  tag key and adds `cases`, `guards`, `isAnyOf`, and exhaustive `match`.
-- Union parsing narrows candidates by non-optional literal "sentinel" fields via a cached
-  index (`SchemaAST.ts:2680-2703`, `:2715-2860`) — a 20-member widget union costs one map lookup, and
-  members are only tried when their sentinel matches.
-- `Union(members, { mode: "oneOf" })` fails when multiple members match; default `anyOf`
-  takes the first (`SchemaAST.ts:2890-2975`).
-- **Error-quality trap**: when NO candidate matches (unknown or missing `type`), the parser
-  raises `AnyOf(ast, input, [])` with zero member issues (`SchemaAST.ts:2965-2974`), and the
-  formatter renders one **root-path** issue containing the whole expected-union blurb and
-  the entire rejected value (`SchemaIssue.ts:1084-1092`) — no field path. When the sentinel
-  DOES match, member field errors come out properly pathed (verified). If a friendly
-  "unknown widget type" message matters, pre-check the tag with a `Literals` schema or catch
-  the empty `AnyOf`.
-
-## BigDecimal and Money — what stock codecs give, what must be built
-
-`Schema.BigDecimal` validates in-memory instances (`Schema.ts:12547-12665`);
-`Schema.BigDecimalFromString` is `String → BigDecimal` via
-`SchemaTransformation.bigDecimalFromString` (`Schema.ts:12710-12742`,
-`SchemaTransformation.ts:1440-1455`), i.e. decode = `BigDecimal.fromString`, encode =
-`BigDecimal.format`. `toCodecJson` on any struct containing `Schema.BigDecimal` uses the
-same pair (declaration annotation, `Schema.ts:12647-12665`). Measured behavior:
-
-- **Decode (`fromString`, `BigDecimal.ts:1277-1324`) is far laxer than fidy's Money text rule.**
-  It accepts empty string (→ zero, `:1278-1280`), exponent notation (`"1e3"` → 1000), leading
-  `+`, leading zeros (`"00042"`), bare `".5"` / `"5."` (parsing logic `BigDecimal.ts:1285-1317`). It
-  rejects whitespace, `_` separators, `NaN`/`Infinity`, double dots. It does **not**
-  normalize — `"0.10"` decodes with scale 2.
-- **Encode (`format`, `BigDecimal.ts:1381-1411`) normalizes first** — trailing zeros are
-  stripped: `BigDecimal("25000.00")` encodes to `"25000"` — **but switches to exponent
-  notation when |normalized scale| ≥ 16** (`:1382-1385`, `toExponential` `:1432-1449`):
-  `1e16` → `"1e+16"`, `0.0000000000000001` → `"1e-16"`. Never locale-formatted.
-- Comparison/equality are scale-insensitive: `Order` (`BigDecimal.ts:658`), `Equivalence`
-  (`:1103`), and `Equal.symbol` (`:63`) all treat `0.10 = 0.1`; `normalize` (`:192`) is
-  cheap and cached on the instance.
-
-**Verdict for fidy Money**: the stock transformation is the right primitive but needs a
-gate. Build `AmountText = Schema.String.check(Schema.isPattern(CANONICAL_DECIMAL_RE))` and
-pipe it: `AmountText.pipe(Schema.decodeTo(Schema.BigDecimal,
-SchemaTransformation.bigDecimalFromString))`. The pattern check rejects exponent/empty/`+`
-input on decode, and — because from-side checks also run on encode output — a formatted
-`"1e+16"` fails the encode instead of leaking (verified). The scale ≥ 16 branch is
-unreachable once currency precision checks bound the scale, but the check makes that a
-loud invariant rather than an assumption. Currency-dependent precision is a struct-level
-`makeFilter` on `{ amount, currency }` testing `BigDecimal.normalize(amount).scale <=
-precision(currency)` with `{ path: ["amount"], issue }`. Positivity is contextual:
-`Money.check(...)` would apply everywhere, so keep zero-permitting Money shared and add
-`isGreaterThanBigDecimal(zero)`-style checks (`Schema.ts:8793-8800`) in the owning schemas — but
-note those are struct-level once they target a field of a shared sub-schema, so they are
-subject to the `mapFields` drop trap above.
-
-## Field-level errors: `{ path, message }[]`
-
-`SchemaIssue.makeFormatterStandardSchemaV1()` (`SchemaIssue.ts:1026-1034`) flattens any issue tree
-into `{ message, path: PropertyKey[] }` entries — exactly fidy's error contract. Idiom:
-
-```ts
-Schema.decodeUnknownEffect(S, { errors: "all" })(input).pipe(
-  Effect.catchTag("SchemaError", (e) =>
-    Effect.fail(makeValidationError(SchemaIssue.makeFormatterStandardSchemaV1()(e.issue).issues))
-  )
-);
-```
-
-Verified output for a two-field failure: `[{ path: ["currency"], message: "Expected \"USD\" |
-\"COP\", got \"EUR\"" }, { path: ["amount"], message: "Invalid BigDecimal string: x" }]`.
-`makeFormatterDefault` (`:1149-1154`) renders the same tree as a multi-line string (what
-`Schema.SchemaError.message` uses, `Schema.ts:1193-1197`). Custom messages: `message`/`expected`
-annotations on schemas and checks feed the formatter (`Schema.ts:16551-16637` lists annotation
-keys); per-issue hooks via `leafHook`/`checkHook`.
-
-## JSON Schema for LLM structured outputs
-
-`Schema.toJsonSchemaDocument(S)` targets draft 2020-12 and describes the **JSON-encoded**
-form through the representation layer (`Schema.ts:14305-14416`) — safe to
-feed an LLM and decode its output through the same canonical schema. Measured mappings:
-`identifier` annotation → `$ref` + a named definition (annotate every shared entity or
-everything inlines); `Literals` → `enum`; structs are **open by default** with
-`additionalProperties: true`, matching decode's default `onExcessProperty: "ignore"`; pass
-`{ onExcessProperty: "error" }` to emit `additionalProperties: false` where representable
-(`internal/schema/toJsonSchemaDocument.ts:492-510`; tests `test/schema/toJsonSchemaDocument.test.ts:121-168`).
-`isUUID` → `pattern` + `format: "uuid"`; brands invisible; struct-level `makeFilter` checks are
-**silently lossy** (nothing to express them in JSON Schema).
-`BigDecimal` emits bare `{ "type": "string" }` — annotate the amount's string side with
-`description`/`pattern` or the model has no format hint. `toStandardJSONSchemaV1`
-(`Schema.ts:1378`) exists for libraries that expect the standard wrapper.
-
-## Decoding stored documents (D1 rows, JSON, model output)
-
-- **JSON / model JSON (already-parsed values)**: decode with
-  `Schema.decodeUnknownEffect(Schema.toCodecJson(Doc), { errors: "all" })`; write back
-  through `Schema.encodeUnknownEffect(Schema.toCodecJson(Doc))` — encode-on-write is the
-  cheap insurance that the document matches the schema before it hits D1, since encode
-  runs the same checks in reverse (verified: encode fails on check-violating values).
-- **JSON in a text column / raw model string**: `Schema.fromJsonString(Schema.toCodecJson(Doc))`
-  — `fromJsonString` alone does NOT apply JSON codecs, it decodes the parsed value through
-  the schema as given (`Schema.ts:12756-12797`); with a BigDecimal-typed field that fails.
-  It does annotate `contentMediaType`/`contentSchema` so JSON Schema generation stays
-  accurate (`:12789-12795`).
-- **Row structs**: plain `decodeUnknownEffect(RowSchema)` on driver output; model nullable
-  columns as `NullOr`, absent-vs-null distinctly.
-- Deep equality for decoded documents: `Schema.toEquivalence(Doc)` — respects declaration
-  equivalences (BigDecimal scale-insensitive), unlike naive JSON comparison.
+`SchemaCompiler`, `SchemaJITCompiler`, and `SchemaAOTCompiler` also live in `effect/schema`.
+They install operations for exact AST identities into the normal parser registry. JIT falls back
+when code generation is unavailable; AOT output must be installed with matching ASTs in the original
+order. Regenerate on schema/Effect changes and install before consumers capture parser entries.
+Adopt compilation only after measuring the actual boundary; ordinary Schema semantics remain the
+contract.

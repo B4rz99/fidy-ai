@@ -1,8 +1,10 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { Effect, Exit, Option, Schema } from "effect";
+import { type Cause, Clock, Effect, Exit, Option, Schema } from "effect";
 import { type Miniflare } from "miniflare";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
+import { seedRefundCharge } from "./refund-charge.test-fixture";
+import { startRefund } from "./operations";
 import { RefundSupportAdmission, type RefundSupportEnvironment } from "./contract";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import coreWorker from "../core-worker";
@@ -220,6 +222,99 @@ it.each([
       });
     })
   )
+);
+
+it.each(["missing", "recovery-audience", "expired", "mismatched-user"])(
+  "refuses %s correction reads through Public and Core without disclosure or financial effects",
+  (scenario) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const prepared = yield* setup();
+        const db = prepared.environment.DB;
+        yield* seedRefundCharge(db);
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "INSERT INTO users VALUES ('10000000-0000-4000-8000-000000000002','America/Bogota')"
+            )
+            .run()
+        );
+        const retained = yield* startRefund({
+          db,
+          environment: "sandbox",
+          authority: {
+            operatorId: "support-operator",
+            permission: "billing.refund",
+            expiresAtMs: (yield* Clock.currentTimeMillis) + 60000,
+          },
+          input: {
+            userId: "10000000-0000-4000-8000-000000000001",
+            billingAttemptId: "40000000-0000-4000-8000-000000000001",
+            requestId: "50000000-0000-4000-8000-000000000001",
+            intent: { kind: "refund", money: { amount: "4000", currency: "COP" } },
+            reason: "user-request",
+          },
+        });
+        const snapshot = (): Effect.Effect<ReadonlyArray<unknown>, Cause.UnknownError> =>
+          Effect.tryPromise(() =>
+            db.batch(
+              [
+                "refund_attempts",
+                "refund_outbox",
+                "refund_submission_claims",
+                "refund_outcome_evidence",
+                "billing_access_adjustments",
+                "subscription_renewal_stops",
+                "subscriptions",
+                "billing_attempts",
+                "billing_paid_periods",
+                "billing_transaction_evidence",
+              ].map((table) => db.prepare(`SELECT * FROM ${table}`))
+            )
+          ).pipe(Effect.map((rows) => rows.map((row) => row.results)));
+        const before = yield* snapshot();
+        const read = (
+          assertion: string,
+          userId = "10000000-0000-4000-8000-000000000001"
+        ): Promise<Response> =>
+          publicSupport(
+            new Request(
+              `https://api.fidyapp.com/internal/support/billing-refunds/${userId}/${retained.id}`,
+              { headers: { "cf-access-jwt-assertion": assertion } }
+            ),
+            prepared.environment
+          );
+        const permitted = yield* Effect.tryPromise(() => prepared.token("refund-permission"));
+        const visible = yield* Effect.tryPromise(() => read(permitted));
+        expect(visible.status).toBe(200);
+        expect(yield* Effect.tryPromise(() => visible.json())).toMatchObject({
+          data: { id: retained.id, status: "pending" },
+        });
+        let assertion = yield* Effect.tryPromise(() =>
+          prepared.token(
+            scenario === "recovery-audience" ? "recovery-permission" : "refund-permission",
+            scenario === "expired" ? "-1m" : "5m"
+          )
+        );
+        if (scenario === "missing") assertion = "";
+        const refused = yield* Effect.tryPromise(() =>
+          read(
+            assertion,
+            scenario === "mismatched-user"
+              ? "10000000-0000-4000-8000-000000000002"
+              : "10000000-0000-4000-8000-000000000001"
+          )
+        );
+        expect(refused.status).toBe(scenario === "mismatched-user" ? 404 : 401);
+        expect(yield* Effect.tryPromise(() => refused.json())).toEqual({
+          error: {
+            code: scenario === "mismatched-user" ? "charge-unavailable" : "unauthenticated",
+          },
+        });
+        expect(prepared.admissions).toEqual([]);
+        expect(yield* snapshot()).toEqual(before);
+      })
+    )
 );
 
 it("aborts the owned signing-key lookup when its request is cancelled without cancelling another authorization", () => {

@@ -1,0 +1,31 @@
+apps/server/cloudflare/secret-material/runtime.ts
+  s_e278ac208f4e8a::t_ec9163dc0d3b55 4
+  s_e278ac208f4e8a::t_d7355e87cfc057 1-2,5
+apps/server/src/core/transactions/contract.test.ts
+  s_e278ac208f4e8a::t_603de168e745ef 39,49-50
+  s_e278ac208f4e8a::t_297a160e6f3e89 40-48
+apps/server/cloudflare/secret-material/operations.ts
+  s_e278ac208f4e8a::t_a33c16a23abcd4 1-2,4
+  s_e278ac208f4e8a::t_1a9100231eb51a 3
+apps/server/src/core/_shared/time.ts
+  s_e278ac208f4e8a::t_8e6fbc7ae35e62 43-47
+  s_e278ac208f4e8a::t_fbed284c41f89d 22-42,48-49
+apps/server/cloudflare/secret-material/internal/worker-crypto.ts
+  s_e278ac208f4e8a::t_2921882889476c 1,3,19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "13acc87d6875afb1129e2931b4d0efb01ab0dad8",
+  "prompts": {},
+  "sessions": {
+    "s_e278ac208f4e8a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10731-a41d-7121-98b3-ec6e9e1e04de",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

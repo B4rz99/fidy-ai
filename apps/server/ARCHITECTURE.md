@@ -71,8 +71,24 @@ Generated artifacts are review evidence, not alternate registries.
 
 Canonical Policy owns discovery and execution policy. Native Canonical Operations coordinates
 catalog-bound execution through owner operations; its dispatch and adapter registries remain
-private. HTTP and hosted callers use the same query and mutation implementations. Discovery does
-not grant execution authority, and unavailable operations never fall back to a different path.
+private. HTTP and hosted callers share installed-query selection and invocation, including
+Transaction-history selection and Budget reconciliation. HTTP retains transport admission and the
+original request for owner input classification; hosted canonical arguments reconstruct only their
+declared route. Both cross the same invocation seam, which binds the declared capability and preserves
+owner refusals, live accounting and interruption. Removing Canonical Operations would redistribute
+this invocation knowledge across callers rather than remove it.
+
+Canonical Operations sends HTTP Dashboard document/view queries through the existing per-User
+coordinator for every input form. A query admission contains only a catalog-bound path/query target
+plus the caller's credential proof, never transport headers or bearer plaintext. The coordinator
+rejects foreign subjects, mutation identities and substituted targets before invoking a query owner.
+Hosted queries execute inside their already held Turn coordination. Agent retains Turn, confirmation
+and Transcript behavior; domain owners retain their substantive implementation and authority.
+Tokens' installed PAT-metadata query consumes the admitted caller proof instead of reauthenticating
+from transport cookies. Its D1 snapshot rechecks the exact WebSession digest, User, lifetime and
+Consent for both the safe metadata read and Audit; PAT callers cannot manage their own credentials.
+Individual and batch mutations keep their existing execution. Discovery does not grant execution
+authority, and unavailable operations never fall back to a different path.
 
 The direct browser/proof transports described in root architecture remain separate: credential
 bootstrap, statement-byte staging, hosted conversation/delivery, and payment enrollment. They are

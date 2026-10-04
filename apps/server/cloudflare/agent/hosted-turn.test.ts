@@ -2362,6 +2362,119 @@ it("executes an eligible canonical query under the live User authority and retai
     })
   ));
 
+it("executes filtered Transaction history in a hosted Turn without exposing another User's matching movement", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const ownId = "70000000-0000-4000-8000-000000000011";
+      const foreignId = "70000000-0000-4000-8000-000000000012";
+      yield* Effect.tryPromise(() =>
+        db.batch(
+          [users[0], users[1]].map((user, index) =>
+            db
+              .prepare(
+                "INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, notes, occurred_at, created_at) VALUES (?, ?, '12.34', 'USD', 'outflow', '10000000-0000-4000-8000-000000000016', 'Pago literal', '2025-01-10T12:00:00.000Z', '2025-01-10T12:00:00.000Z')"
+              )
+              .bind(index === 0 ? ownId : foreignId, user)
+          )
+        )
+      );
+      let round = 0;
+      const coordinator = coordinatorFor(db, () => {
+        round++;
+        return Promise.resolve(
+          round === 1
+            ? Response.json({
+                choices: [
+                  {
+                    message: {
+                      role: "assistant",
+                      content: null,
+                      tool_calls: [
+                        {
+                          id: "filtered-history",
+                          type: "function",
+                          function: {
+                            name: "transactions__listTransactions",
+                            arguments: encodeJson({
+                              query: { direction: "outflow", currency: "USD" },
+                            }),
+                          },
+                        },
+                      ],
+                    },
+                    finish_reason: "tool_calls",
+                  },
+                ],
+                usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
+              })
+            : reply("Encontré el movimiento")
+        );
+      });
+      const credential = yield* Effect.tryPromise(() => subject(0));
+      const response = yield* Effect.tryPromise(() =>
+        coordinator.fetch(
+          new Request("https://coordinator.internal/hosted-turn", {
+            method: "POST",
+            body: encodeJson({
+              userId: credential.userId,
+              sessionId: credential.id,
+              digest: Array.from(credential.digest),
+              text: "Muestra mis movimientos de salida en USD",
+            }),
+          })
+        )
+      );
+      expect(yield* Effect.tryPromise(() => acknowledgeVisibleReply(db, 0, response))).toBe(
+        "Encontré el movimiento"
+      );
+      const result = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ outcome_json: Schema.fromJsonString(CanonicalToolOutcome) })
+      )(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT outcome_json FROM transcript_entries WHERE user_id = ? AND kind = 'tool_result'"
+            )
+            .bind(users[0])
+            .first()
+        )
+      );
+      expect(result.outcome_json._tag).toBe("Succeeded");
+      if (result.outcome_json._tag !== "Succeeded") {
+        throw new Error("Expected successful canonical history");
+      }
+      const output = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          data: Schema.Array(
+            Schema.Struct({
+              id: Schema.String,
+              money: Schema.Struct({ amount: Schema.String, currency: Schema.String }),
+            })
+          ),
+        })
+      )(result.outcome_json.output);
+      expect(output.data).toEqual([{ id: ownId, money: { amount: "12.34", currency: "USD" } }]);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT operation, outcome FROM transaction_audit WHERE user_id = ?")
+            .bind(users[0])
+            .all()
+        )).results
+      ).toEqual([{ operation: "transactions.listTransactions", outcome: "success" }]);
+      expect((yield* Effect.tryPromise(() => retained(db, users[1]))).results).toEqual([]);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT COUNT(*) AS count FROM transaction_audit WHERE user_id = ?")
+            .bind(users[1])
+            .first()
+        )
+      ).toEqual({ count: 0 });
+    })
+  ));
+
 it("retains an unavailable tool outcome when a canonical query stalls beyond the Turn deadline", () =>
   Effect.runPromise(
     Effect.gen(function* () {

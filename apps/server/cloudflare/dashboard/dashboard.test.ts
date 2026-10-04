@@ -471,6 +471,97 @@ it(
   30_000
 );
 
+it("preserves Dashboard input refusals through coordinated HTTP and hosted query execution", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* initializedSetup();
+      const beforeAudit = yield* Effect.tryPromise(() => count(db, "dashboard_audit"));
+      const credential = {
+        id: sessions[0] ?? "",
+        userId: users[0] ?? "",
+        digest: yield* Effect.tryPromise(() => digest(bearer(0))),
+      };
+      for (const [operation, path] of [
+        ["dashboard.getDashboard", "/dashboard"],
+        ["dashboard.getDashboardView", "/dashboard/view"],
+      ] as const) {
+        for (const suffix of ["?unexpected=1", "?unexpected=1&unexpected=2"]) {
+          const http = yield* Effect.tryPromise(() => send(db, 0, `${path}${suffix}`));
+          expect(http.status).toBe(400);
+          const hosted = Option.getOrThrow(
+            yield* executeCanonicalQuery({
+              db,
+              subject: credential,
+              operation: CanonicalOperationId.make(operation),
+              input: { query: { unexpected: "1" } },
+              bucket: Option.none(),
+            })
+          );
+          expect(hosted.status).toBe(400);
+          expect(yield* Effect.tryPromise(() => http.json())).toEqual(
+            yield* Effect.tryPromise(() => hosted.json())
+          );
+        }
+      }
+      expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(beforeAudit);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db.prepare("SELECT user_id, revision FROM dashboard_documents ORDER BY user_id").all()
+        )).results
+      ).toEqual([{ user_id: users[0], revision: 1 }]);
+    })
+  ));
+
+it("rejects a substituted query target, mutation id or foreign User admission before Dashboard effects", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* initializedSetup();
+      const coordinator = new UserTransactionCoordinator(
+        {
+          id: { name: users[0] ?? "" },
+          storage: { setAlarm: (): Promise<void> => Promise.resolve() },
+        },
+        {
+          DB: db,
+          AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+          HOSTED_AI_MODEL: approvedWorkersAiModel,
+        }
+      );
+      const beforeAudit = yield* Effect.tryPromise(() => count(db, "dashboard_audit"));
+      for (const attack of [
+        { index: 0, operation: "dashboard.getDashboard", target: "/transactions" },
+        { index: 0, operation: "dashboard.getDashboard", target: "//attacker.test/dashboard" },
+        { index: 0, operation: "dashboard.initializeDashboard", target: "/dashboard/initialize" },
+        { index: 1, operation: "dashboard.getDashboard", target: "/dashboard" },
+      ]) {
+        const proof = yield* Effect.tryPromise(() => digest(bearer(attack.index)));
+        const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+          _tag: "WebSessionWork",
+          userId: users[attack.index],
+          sessionId: sessions[attack.index],
+          digest: Array.from(proof),
+          work: { _tag: "Query", operation: attack.operation, target: attack.target },
+        });
+        const response = yield* Effect.tryPromise(() =>
+          coordinator.fetch(
+            new Request("https://coordinator.internal/query", {
+              method: "POST",
+              body,
+            })
+          )
+        );
+        expect(response.status).toBe(503);
+        expect(yield* Effect.tryPromise(() => response.json())).toEqual({ status: "unavailable" });
+      }
+      expect(yield* Effect.tryPromise(() => count(db, "dashboard_audit"))).toBe(beforeAudit);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db.prepare("SELECT user_id, revision FROM dashboard_documents ORDER BY user_id").all()
+        )).results
+      ).toEqual([{ user_id: users[0], revision: 1 }]);
+    })
+  ));
+
 type QueryFault = "revoked" | "withdrawn" | "audit-failed";
 const assertQueryRefusal = Effect.fn(function* ({
   reply,
@@ -2354,9 +2445,9 @@ it(
   30_000
 );
 
-it(
-  "keeps one exact day chart when a concurrent Correction moves a Transaction between buckets",
-  () =>
+it.each(["/dashboard/view", "/dashboard/view?"])(
+  "keeps one exact day chart at %s when a concurrent Correction moves a Transaction between buckets",
+  (viewPath) =>
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* setup();
@@ -2453,7 +2544,7 @@ it(
           if (operation === "transactions.updateTransaction") correctionQueued.resolve();
         };
         coordinatorObservers.set(delayed, observe);
-        const pendingView = send(delayed, 0, "/dashboard/view");
+        const pendingView = send(delayed, 0, viewPath);
         yield* Effect.tryPromise(() => firstBucketRead.promise);
         const correction = send(delayed, 0, {
           path: `/transactions/${transaction.id}`,
@@ -2500,9 +2591,9 @@ it(
         ]);
         expect((yield* Effect.tryPromise(() => correction)).status).toBe(200);
         coordinatorObservers.delete(delayed);
-        expect(
-          yield* chart(yield* Effect.tryPromise(() => send(delayed, 0, "/dashboard/view")))
-        ).toEqual([{ date: localDate(second), amount: "10" }]);
+        expect(yield* chart(yield* Effect.tryPromise(() => send(delayed, 0, viewPath)))).toEqual([
+          { date: localDate(second), amount: "10" },
+        ]);
       })
     ),
   30_000

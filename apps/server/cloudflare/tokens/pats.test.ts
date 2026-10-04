@@ -6,7 +6,9 @@ import {
 } from "../d1-test-fixture";
 import * as D1Client from "@effect/sql-d1/D1Client";
 import { listCategoriesResponse } from "../../src/shell/categories/operations";
-import { Clock, Context, Data, DateTime, Effect, Layer, Schema } from "effect";
+import { Clock, Context, Data, DateTime, Effect, Layer, Option, Schema } from "effect";
+import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
+import { executeCanonicalQuery } from "../canonical-operations/operations";
 import { SqlClient } from "effect/sql";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
@@ -1895,6 +1897,186 @@ it("does not commit a PAT when its ConsentRecord is silently refused", () =>
       ).toBe(0);
     })
   ));
+it("shares subject-owned PAT metadata and Audit between HTTP and headerless hosted queries", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { db, send, sessions } = yield* awaitPromise(setup());
+      const issued = yield* issueManualPAT({
+        send,
+        session: sessions[0],
+        requestId: "70000000-0000-4000-8000-000000000071",
+        grant: manualGrant(),
+      });
+      const foreign = yield* issueManualPAT({
+        send,
+        session: sessions[1],
+        requestId: "70000000-0000-4000-8000-000000000072",
+        grant: manualGrant(),
+      });
+      const http = yield* awaitPromise(
+        send({ path: "/pats", method: "GET", session: sessions[0] })
+      );
+      const hosted = Option.getOrThrow(
+        yield* executeCanonicalQuery({
+          db,
+          operation: CanonicalOperationId.make("pats.listPATs"),
+          input: {},
+          subject: {
+            id: "40000000-0000-4000-8000-000000000001",
+            userId: userA,
+            digest: yield* awaitPromise(dig("1".repeat(43))),
+          },
+          bucket: Option.none(),
+        })
+      );
+      expect(http.status).toBe(200);
+      expect(hosted.status).toBe(200);
+      const body = yield* awaitPromise(http.json());
+      expect(yield* awaitPromise(hosted.json())).toEqual(body);
+      const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(body);
+      expect(encoded).toContain(issued.pat.shortId);
+      expect(encoded).not.toContain(foreign.pat.shortId);
+      expect(encoded).not.toContain(issued.bearer);
+      expect(
+        (yield* awaitPromise(
+          db
+            .prepare(
+              "SELECT user_id, session_id, outcome FROM pat_audit WHERE operation = 'pats.listPATs' ORDER BY rowid"
+            )
+            .all()
+        )).results
+      ).toEqual([
+        { user_id: userA, session_id: "40000000-0000-4000-8000-000000000001", outcome: "accepted" },
+        { user_id: userA, session_id: "40000000-0000-4000-8000-000000000001", outcome: "accepted" },
+      ]);
+      expect(yield* awaitPromise(db.prepare("SELECT COUNT(*) AS count FROM pats").first())).toEqual(
+        { count: 2 }
+      );
+    })
+  ));
+
+for (const refusal of ["revoked", "withdrawn", "suppressed-audit"] as const) {
+  it(`keeps HTTP and hosted PAT metadata refusal effect-free after ${refusal}`, () =>
+    runTest(
+      Effect.gen(function* () {
+        const { db, send, sessions } = yield* awaitPromise(setup());
+        const subject = {
+          id: "40000000-0000-4000-8000-000000000001",
+          userId: userA,
+          digest: yield* awaitPromise(dig("1".repeat(43))),
+        };
+        if (refusal === "revoked") {
+          yield* awaitPromise(
+            db
+              .prepare("UPDATE web_sessions SET revoked_at_ms = ? WHERE id = ?")
+              .bind(clock(), subject.id)
+              .run()
+          );
+        }
+        if (refusal === "withdrawn") {
+          const current = clock();
+          const grantId = "e0000000-0000-4000-8000-000000000041";
+          yield* awaitPromise(
+            db.batch([
+              db
+                .prepare(
+                  "INSERT INTO onboarding_consent_records (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES (?,?,'{}','disclosure','decision',?,?)"
+                )
+                .bind(grantId, userA, current, current),
+              db
+                .prepare(
+                  "INSERT INTO consent_user_revocations (id,user_id,grant_record_id,session_id,occurred_at_ms) VALUES (?,?,?,?,?)"
+                )
+                .bind("e0000000-0000-4000-8000-000000000042", userA, grantId, subject.id, current),
+            ])
+          );
+        }
+        if (refusal === "suppressed-audit") {
+          yield* awaitPromise(
+            db
+              .prepare(
+                "CREATE TRIGGER refuse_list_audit BEFORE INSERT ON pat_audit WHEN NEW.operation = 'pats.listPATs' BEGIN SELECT RAISE(IGNORE); END"
+              )
+              .run()
+          );
+        }
+        const http = yield* awaitPromise(
+          send({ path: "/pats", method: "GET", session: sessions[0] })
+        );
+        const hosted = Option.getOrThrow(
+          yield* executeCanonicalQuery({
+            db,
+            subject,
+            operation: CanonicalOperationId.make("pats.listPATs"),
+            input: {},
+            bucket: Option.none(),
+          })
+        );
+        const Refusal = Schema.Struct({ error: Schema.Struct({ code: Schema.String }) });
+        expect(http.status).toBe(401);
+        expect(hosted.status).toBe(401);
+        expect(
+          yield* Schema.decodeUnknownEffect(Refusal)(yield* awaitPromise(http.json()))
+        ).toEqual({ error: { code: "unauthenticated" } });
+        expect(
+          yield* Schema.decodeUnknownEffect(Refusal)(yield* awaitPromise(hosted.json()))
+        ).toEqual({ error: { code: "unauthenticated" } });
+        expect(
+          yield* awaitPromise(
+            db
+              .prepare("SELECT COUNT(*) AS count FROM pat_audit WHERE operation = 'pats.listPATs'")
+              .first()
+          )
+        ).toEqual({ count: 0 });
+        expect(
+          yield* awaitPromise(db.prepare("SELECT COUNT(*) AS count FROM pats").first())
+        ).toEqual({ count: 0 });
+      })
+    ));
+}
+
+it("refuses PAT metadata for substituted User, digest and PAT caller proofs without Audit", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { db } = yield* awaitPromise(setup());
+      const proof = yield* awaitPromise(dig("1".repeat(43)));
+      const subject = { id: "40000000-0000-4000-8000-000000000001", userId: userA, digest: proof };
+      for (const attack of [
+        { ...subject, userId: userB },
+        { ...subject, digest: new Uint8Array(32) },
+        {
+          userId: userA,
+          patId: "90000000-0000-4000-8000-000000000001",
+          digest: proof,
+          requiredScope: Option.some("read" as const),
+        },
+      ]) {
+        const response = Option.getOrThrow(
+          yield* executeCanonicalQuery({
+            db,
+            subject: attack,
+            operation: CanonicalOperationId.make("pats.listPATs"),
+            input: {},
+            bucket: Option.none(),
+          })
+        );
+        expect(response.status).toBe(401);
+        expect(
+          yield* Schema.decodeUnknownEffect(
+            Schema.Struct({ error: Schema.Struct({ code: Schema.String }) })
+          )(yield* awaitPromise(response.json()))
+        ).toEqual({ error: { code: "unauthenticated" } });
+      }
+      expect(
+        yield* awaitPromise(
+          db
+            .prepare("SELECT COUNT(*) AS count FROM pat_audit WHERE operation = 'pats.listPATs'")
+            .first()
+        )
+      ).toEqual({ count: 0 });
+    })
+  ));
+
 it("denies PAT metadata reads after explicit Consent withdrawal at protected work", () =>
   runTest(
     Effect.gen(function* () {

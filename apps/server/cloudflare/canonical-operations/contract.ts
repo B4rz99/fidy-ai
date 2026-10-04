@@ -156,13 +156,17 @@ const Call = {
 } as const;
 
 /**
- * Every piece of composable canonical work one User coordinator executes. A Call carries one
- * catalog mutation's canonical input; a Batch carries the bounded raw child list the batch adapter
- * decodes per child. Each owner adapter rechecks live authority and domain state before the shared
- * D1 unit commits anything.
+ * Canonical work one User coordinator executes. A Call carries catalog-owned canonical input;
+ * a Query carries only an admitted HTTP path/query target, never headers or credential plaintext;
+ * a Batch carries the bounded raw child list. Query owners retain input classification and live
+ * accounting; mutation owners retain their shared atomic commit.
  */
 export const CanonicalWork = Schema.Union([
   Schema.TaggedStruct("Call", Call),
+  Schema.TaggedStruct("Query", {
+    operation: CanonicalOperationId,
+    target: Schema.String.check(Schema.isPattern(/^\//u)),
+  }),
   Schema.TaggedStruct("Batch", Batch),
 ]);
 export type CanonicalWork = typeof CanonicalWork.Type;

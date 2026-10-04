@@ -34,6 +34,8 @@ import { transactionNow } from "../canonical-work/operations";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { browseTransactions, transactionInput, transactionSession } from "./operations";
+import { executeCanonicalQuery } from "../canonical-operations/operations";
+import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import { dailyAuditCount } from "../../src/shell/audit/operations";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure") {}
@@ -3154,6 +3156,215 @@ it("rejects forged browser origins and malformed Money before any public mutatio
       expect(invalidAudit?.outcome).toBe("validation_failed");
     })
   ));
+
+it("retains the Transaction owner's not-found refusal and Audit for malformed canonical query identities", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => setup());
+      const subject = Option.getOrThrow(
+        yield* fromTestPromise(() => transactionSession({ request: request(0), db }))
+      );
+      const response = yield* executeCanonicalQuery({
+        db,
+        subject,
+        operation: CanonicalOperationId.make("transactions.getTransaction"),
+        input: { params: { id: "not-an-id" } },
+        bucket: Option.none(),
+      });
+      expect(Option.isSome(response)).toBe(true);
+      expect(Option.getOrThrow(response).status).toBe(404);
+      const http = yield* fromTestPromise(() =>
+        sendPublicRequest(
+          db,
+          new Request("https://api.fidyapp.com/transactions/not-an-id", {
+            headers: {
+              origin: "https://app.fidyapp.com",
+              cookie: `__Host-fidy_session=${bearer(0)}`,
+            },
+          })
+        )
+      );
+      expect(http.status).toBe(404);
+      expect(yield* fromTestPromise(() => http.json())).toEqual(
+        yield* fromTestPromise(() => Option.getOrThrow(response).json())
+      );
+      expect(
+        (yield* fromTestPromise(() =>
+          db
+            .prepare("SELECT operation, outcome FROM transaction_audit WHERE user_id = ?")
+            .bind(users[0])
+            .all()
+        )).results
+      ).toEqual([
+        { operation: "transactions.getTransaction", outcome: "not_found" },
+        { operation: "transactions.getTransaction", outcome: "not_found" },
+      ]);
+      expect(
+        yield* fromTestPromise(() =>
+          db.prepare("SELECT COUNT(*) AS count FROM transactions").first()
+        )
+      ).toEqual({ count: 0 });
+    })
+  ));
+
+type HistoryQueryCase = Readonly<{
+  name: string;
+  operation: CanonicalOperationId;
+  input: Schema.Json;
+  path: string;
+  ownId: string;
+  status: number;
+  page: boolean;
+  accounted: boolean;
+  compareBody: boolean;
+  arrange: (db: D1Database, current: number, patId: string) => Promise<unknown>;
+}>;
+const historyQueryCase = (
+  name: string,
+  changes: Partial<HistoryQueryCase> = {}
+): HistoryQueryCase => ({
+  name,
+  operation: CanonicalOperationId.make("transactions.listTransactions"),
+  input: { query: { direction: "outflow", currency: "USD" } },
+  path: "/transactions?direction=outflow&currency=USD",
+  ownId: "70000000-0000-4000-8000-000000000001",
+  status: 200,
+  page: true,
+  accounted: true,
+  compareBody: true,
+  arrange: () => Promise.resolve(),
+  ...changes,
+});
+
+for (const scenario of [
+  historyQueryCase("filtered"),
+  historyQueryCase("search", {
+    operation: CanonicalOperationId.make("transactions.searchTransactions"),
+    input: { query: { q: "Pago literal" } },
+    path: "/transactions/search?q=Pago%20literal",
+  }),
+  historyQueryCase("foreign", {
+    operation: CanonicalOperationId.make("transactions.getTransaction"),
+    input: { params: { id: "70000000-0000-4000-8000-000000000002" } },
+    path: "/transactions/70000000-0000-4000-8000-000000000002",
+    status: 404,
+    page: false,
+  }),
+  historyQueryCase("corrupt", { ownId: "malformed-retained-identity", status: 503, page: false }),
+  historyQueryCase("unavailable", {
+    status: 503,
+    page: false,
+    accounted: false,
+    arrange: (db) => db.prepare("DROP TABLE transaction_audit").run(),
+  }),
+  historyQueryCase("revoked", {
+    status: 401,
+    page: false,
+    accounted: false,
+    compareBody: false,
+    arrange: (db, current, patId) =>
+      db.prepare("UPDATE pats SET revoked_at_ms = ? WHERE id = ?").bind(current, patId).run(),
+  }),
+]) {
+  it(`keeps HTTP and hosted query outcomes and PAT accounting aligned for ${scenario.name} Transaction history`, () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* fromTestPromise(() => setup());
+        const current = DateTime.nowUnsafe().epochMilliseconds;
+        const token = `fin_${"q".repeat(8)}_${"p".repeat(43)}`;
+        const patId = "40000000-0000-4000-8000-000000000001";
+        const ownId = scenario.ownId;
+        const foreignId = "70000000-0000-4000-8000-000000000002";
+        const userId = Option.getOrThrow(Option.fromUndefinedOr(users[0]));
+        yield* seedPAT({ db, userId, token, scopes: ["read"], current });
+        yield* fromTestPromise(() =>
+          db.batch([
+            db
+              .prepare(
+                "INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, notes, occurred_at, created_at) VALUES (?, ?, '12.34', 'USD', 'outflow', ?, 'Pago literal', '2025-01-10T12:00:00.000Z', '2025-01-10T12:00:00.000Z')"
+              )
+              .bind(ownId, users[0], category),
+            db
+              .prepare(
+                "INSERT INTO transactions (id, user_id, amount, currency, direction, category_id, notes, occurred_at, created_at) VALUES (?, ?, '99', 'COP', 'outflow', ?, 'Pago literal', '2025-01-10T12:00:00.000Z', '2025-01-10T12:00:00.000Z')"
+              )
+              .bind(foreignId, users[1], category),
+          ])
+        );
+        yield* fromTestPromise(() => scenario.arrange(db, current, patId));
+        const { operation, input: args, path } = scenario;
+        const http = yield* fromTestPromise(() =>
+          sendPublicRequest(
+            db,
+            new Request(`https://api.fidyapp.com${path}`, {
+              headers: { origin: "https://app.fidyapp.com", authorization: `Bearer ${token}` },
+            })
+          )
+        );
+        const hosted = Option.getOrThrow(
+          yield* executeCanonicalQuery({
+            db,
+            operation,
+            input: args,
+            bucket: Option.none(),
+            subject: {
+              patId,
+              userId,
+              digest: yield* fromTestPromise(() => digest(token)),
+              requiredScope: Option.some("read"),
+            },
+          })
+        );
+        expect(http.status).toBe(scenario.status);
+        expect(hosted.status).toBe(scenario.status);
+        const httpBody = yield* fromTestPromise(() => http.json());
+        const hostedBody = yield* fromTestPromise(() => hosted.json());
+        if (scenario.compareBody) {
+          expect(hostedBody).toEqual(httpBody);
+        }
+        if (scenario.page) {
+          const page = yield* Schema.decodeUnknownEffect(Listed)(httpBody);
+          expect(page.data.map(({ id }) => id)).toEqual([ownId]);
+          const money = Option.getOrThrow(Option.fromUndefinedOr(page.data[0]?.money));
+          expect(money.currency).toBe("USD");
+          expect(encodeMoneyAmount(money.amount)).toBe("12.34");
+        }
+        const audited = yield* fromTestPromise(() =>
+          db
+            .prepare("SELECT operation, outcome FROM pat_audit WHERE pat_id = ? ORDER BY rowid")
+            .bind(patId)
+            .all()
+        );
+        const activity = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ last_used_at_ms: Schema.OptionFromNullOr(Schema.Int) })
+        )(
+          yield* fromTestPromise(() =>
+            db.prepare("SELECT last_used_at_ms FROM pats WHERE id = ?").bind(patId).first()
+          )
+        );
+        if (!scenario.accounted) {
+          expect(audited.results).toEqual([]);
+          expect(Option.isNone(activity.last_used_at_ms)).toBe(true);
+        } else {
+          expect(audited.results).toEqual([
+            { operation, outcome: "accepted" },
+            { operation, outcome: "accepted" },
+          ]);
+          expect(Option.getOrThrow(activity.last_used_at_ms)).toBeGreaterThanOrEqual(current);
+        }
+        expect(
+          (yield* fromTestPromise(() =>
+            db.prepare("SELECT id FROM transactions ORDER BY id").all()
+          )).results
+        ).toEqual([ownId, foreignId].sort().map((id) => ({ id })));
+        expect(
+          yield* fromTestPromise(() =>
+            db.prepare("SELECT COUNT(*) AS count FROM source_attestations").first()
+          )
+        ).toEqual({ count: 0 });
+      })
+    ));
+}
 
 it("continues the canonical history beyond its first bounded page without losing tied movements", () =>
   Effect.runPromise(

@@ -3,13 +3,8 @@ import { patIdentityQuery } from "~/shell/tokens/operations";
 import { Option } from "effect";
 import { authorizedCallStatement } from "./recording";
 import type { OwnedStatement } from "~/shell/owner-write/contract";
-import { protectConsentStatement } from "~/shell/consent/operations";
-import type { FreshSessionSubject } from "~/shell/web-session/contract";
-import {
-  freshSessionExists,
-  freshSessionParams,
-  liveSessionConditions,
-} from "~/shell/web-session/operations";
+import type { FreshSessionSubject, WebSessionAuthority } from "~/shell/web-session/contract";
+import { freshSessionExists, freshSessionParams } from "~/shell/web-session/operations";
 import type { AuditedPATOperation, PATAuthority } from "~/shell/tokens/contract";
 
 type AuditTime = Readonly<{ id: string; current: number }>;
@@ -73,19 +68,17 @@ export const recordClaimedPAT = (
 /** Account for PAT listing only while the same User-owned WebSession remains live. */
 export const recordPATList = ({
   session,
+  authority,
   input,
-}: Readonly<{ session: FreshSessionSubject; input: AuditTime }>): OwnedStatement => {
-  const sessionGuard = liveSessionConditions({ session, current: input.current });
-  return protectConsentStatement({
-    statement: {
-      sql: `INSERT INTO pat_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
-        SELECT ?,?,?,'pats.listPATs','accepted',? WHERE ${sessionGuard.sql}`,
-      params: [input.id, session.user_id, session.id, input.current, ...sessionGuard.params],
-    },
-    subject: { _tag: "User", userId: session.user_id },
-    requirement: "unrevoked",
-  });
-};
+}: Readonly<{
+  session: FreshSessionSubject;
+  authority: WebSessionAuthority;
+  input: AuditTime;
+}>): OwnedStatement => ({
+  sql: `INSERT INTO pat_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
+    SELECT ?,?,?,'pats.listPATs','accepted',? WHERE EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`,
+  params: [input.id, session.user_id, session.id, input.current, ...authority.bindings],
+});
 
 type RevokeAuditInput = AuditTime & Readonly<{ shortId: string }>;
 /** Link the exact revoked PAT to its User's audit in the same atomic lifecycle unit. */

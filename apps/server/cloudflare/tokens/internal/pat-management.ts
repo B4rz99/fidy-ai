@@ -37,20 +37,37 @@ import { newId } from "../../secret-material/operations";
 import { currentMillis } from "../../runtime/operations";
 import { commitPATUnit } from "./pat-unit";
 import { prepareOwnedStatement } from "../../database/operations";
+import { authenticateCanonicalWebSession } from "../../web-session/operations";
+import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
+import type { PATMetadataQuery } from "../contract";
 
 export { createManualPAT } from "./pat-manual";
 
-/** List only currently active, subject-owned, safe PAT metadata. */
-export const listPATs = ({
-  request,
-  db,
-}: Readonly<{ request: Request; db: D1Database }>): Promise<Response> =>
+/** Decode the browser transport only; listing below owns the live proof, snapshot and Audit. */
+export const listPATs = (
+  input: Readonly<{ request: Request; db: D1Database }>
+): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const session = yield* Effect.tryPromise(() => webSession({ request, db, fresh: false }));
-      if (Option.isNone(session)) return unauthorized();
+      const subject = yield* Effect.tryPromise(() =>
+        authenticateCanonicalWebSession({ ...input, current: currentMillis() })
+      );
+      if (Option.isNone(subject)) return unauthorized();
+      return yield* Effect.tryPromise(() =>
+        listPATsForCaller({ db: input.db, subject: subject.value })
+      );
+    })
+  );
+
+/** List only active, same-User safe metadata while rechecking the exact caller proof in D1. */
+export const listPATsForCaller = ({ db, subject }: PATMetadataQuery): Promise<Response> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      if ("patId" in subject) return unauthorized();
       const current = currentMillis();
-      const metadata = preparePATMetadata({ userId: session.value.user_id, current, session });
+      const authority = liveWebSessionAuthority({ subject, current });
+      const session = { id: subject.id, user_id: subject.userId };
+      const metadata = preparePATMetadata({ userId: subject.userId, current, authority });
       return yield* Effect.gen(function* () {
         const [rows, recorded] = yield* Effect.tryPromise({
           try: () =>
@@ -62,7 +79,8 @@ export const listPATs = ({
               prepareOwnedStatement({
                 db,
                 statement: recordPATList({
-                  session: session.value,
+                  session,
+                  authority,
                   input: { id: newId(), current },
                 }),
               }),

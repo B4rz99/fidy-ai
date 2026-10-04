@@ -16,6 +16,7 @@ import {
 } from "./internal/mutation-registry";
 import { executeSingleCanonicalMutation } from "./internal/mutation-unit";
 import { canonicalQueryOwner } from "./internal/query-registry";
+import { matchesRoute } from "../routing/operations";
 import { evaluateBudgetAlerts } from "../budgets/operations";
 import { unavailableStatement } from "../ingestion/operations";
 import {
@@ -24,6 +25,7 @@ import {
   refusedPreparation,
   transactionUnavailable,
 } from "../canonical-work/operations";
+import { transactionNoStore } from "../canonical-work/contract";
 
 const httpServiceUnavailable = 503;
 
@@ -138,8 +140,30 @@ const executeQueryCall = (
   );
 };
 
+const executeRequestQuery = (
+  input: WorkInput & Readonly<{ work: Extract<CanonicalWork, { _tag: "Query" }> }>
+): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const operation = queryDeclaration(input.work.operation);
+    if (Option.isNone(operation)) return transactionUnavailable();
+    const request = requestFromTarget(operation.value, input.work.target);
+    if (Option.isNone(request)) return transactionUnavailable();
+    return Option.getOrElse(
+      yield* invokeQueryOwner({
+        ...input,
+        operation: operation.value,
+        request: request.value,
+        browserOrigin: Option.none(),
+      }).pipe(Effect.orElseSucceed(() => Option.none())),
+      transactionUnavailable
+    );
+  });
+
 const executeWork = (input: WorkInput): Effect.Effect<Response, never, HostedInference> =>
   Effect.gen(function* () {
+    if (input.work._tag === "Query") {
+      return yield* executeRequestQuery({ ...input, work: input.work });
+    }
     const budgetWork =
       input.work._tag === "Call"
         ? affectsBudget(input.work.operation)
@@ -190,6 +214,7 @@ const isMemoryOperation = (operation: CanonicalOperationId): boolean =>
  * their work.
  */
 export const canonicalWorkRequiresInference = (work: CanonicalWork): boolean => {
+  if (work._tag === "Query") return false;
   if (work._tag === "Batch") {
     return work.calls.some((call) => Option.exists(rawOperation(call), isMemoryOperation));
   }
@@ -247,19 +272,123 @@ const requestFor = (operation: CatalogOperation, input: Schema.Json): Option.Opt
   return Option.some(new Request(url, { method: operation.method }));
 };
 
-/** Only a declared query with valid canonical input may reach native query dispatch. */
-const queryDeclaration = (
-  operation: CanonicalOperationId,
-  input: Schema.Json
-): Option.Option<CatalogOperation> =>
+/** Only a declared query may reach dispatch; its owner classifies malformed route/query input. */
+const queryDeclaration = (operation: CanonicalOperationId): Option.Option<CatalogOperation> =>
   Option.fromUndefinedOr(operationCatalog.byId.get(operation)).pipe(
-    Option.filter((declared) => declared.policy.kind === "query"),
-    Option.filter((declared) => Option.isSome(Schema.decodeOption(declared.input)(input)))
+    Option.filter((declared) => declared.policy.kind === "query")
   );
 
-/** Call a canonical owner with a live User subject and catalog-owned route; its domain/Audit
- * effects are the owner's effects. Returns None for an uninstalled owner, invalid route arguments,
- * or an owner defect. A canonical refusal remains Some(response), so the caller can retain it.
+const queryOrigin = "https://canonical.internal";
+
+/** Reconstruct only the named query's route, without forwarding transport credential material. */
+const requestFromTarget = (operation: CatalogOperation, target: string): Option.Option<Request> =>
+  Option.liftThrowable(() => new URL(target, queryOrigin))().pipe(
+    Option.filter(
+      (url) => url.origin === queryOrigin && matchesRoute(operation.route, url.pathname)
+    ),
+    Option.map((url) => new Request(url, { method: operation.method }))
+  );
+
+const invokeQueryOwner = ({
+  db,
+  subject,
+  operation,
+  request,
+  bucket,
+  browserOrigin,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  operation: CatalogOperation;
+  request: Request;
+  bucket: Option.Option<R2Bucket>;
+  browserOrigin: Option.Option<string>;
+}>): Effect.Effect<Option.Option<Response>, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const owner = canonicalQueryOwner(operation.id);
+    if (Option.isNone(owner)) return Option.none();
+    const result = yield* Effect.exit(
+      Effect.suspend(() =>
+        owner.value({
+          db,
+          subject: childCaller({
+            subject,
+            requiredScope: patScopeCapability(operation.policy.access),
+          }),
+          request,
+          bucket,
+          browserOrigin,
+        })
+      )
+    );
+    // Caller deadlines remain interruptions, never owner defects or validation refusals.
+    if (Exit.isFailure(result) && Cause.hasInterrupts(result.cause)) {
+      return yield* Effect.failCause(result.cause);
+    }
+    return Exit.isSuccess(result) ? Option.some(result.value) : Option.none();
+  });
+
+/**
+ * Execute an admitted HTTP query through the installed owner dispatch. Document/view assembly
+ * and accounting stay inside the same User coordinator, including rejected query strings. The
+ * HTTP adapter retains transport admission; owners retain validation, live authority and Audit.
+ * The coordinator receives a catalog-bound target only, never cookies or bearer plaintext.
+ */
+export const executeCanonicalHttpQuery = ({
+  operation: operationId,
+  coordinate,
+  ...input
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller;
+  operation: CanonicalOperationId;
+  request: Request;
+  bucket: Option.Option<R2Bucket>;
+  browserOrigin: string;
+  coordinate: (work: CanonicalWork) => Effect.Effect<Response>;
+}>): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const operation = queryDeclaration(operationId);
+    if (Option.isNone(operation) || Option.isNone(canonicalQueryOwner(operationId))) {
+      return Response.json(
+        {
+          error: {
+            code: "unavailable",
+            message: "Canonical operation is temporarily unavailable.",
+          },
+          next: [],
+        },
+        { status: httpServiceUnavailable, headers: transactionNoStore }
+      );
+    }
+    const url = new URL(input.request.url);
+    if (
+      input.request.method !== operation.value.method ||
+      !matchesRoute(operation.value.route, url.pathname)
+    ) {
+      return transactionUnavailable();
+    }
+    if (operationId === "dashboard.getDashboard" || operationId === "dashboard.getDashboardView") {
+      return yield* coordinate({
+        _tag: "Query",
+        operation: operationId,
+        target: url.href.slice(url.origin.length),
+      });
+    }
+    return Option.getOrElse(
+      yield* invokeQueryOwner({
+        ...input,
+        operation: operation.value,
+        browserOrigin: Option.some(input.browserOrigin),
+      }),
+      transactionUnavailable
+    );
+  }).pipe(Effect.orElseSucceed(transactionUnavailable), Effect.withSpan(operationId));
+
+/** Call a query owner inside an already held User coordination turn. Canonical arguments build
+ * only the catalog-owned route; owners classify malformed identities and filters exactly as for
+ * HTTP. None means an uninstalled owner, unrepresentable arguments or an owner defect; canonical
+ * refusals remain Some(response). Interruption reaches the caller unchanged.
  */
 export const executeCanonicalQuery = ({
   db,
@@ -275,27 +404,16 @@ export const executeCanonicalQuery = ({
   bucket: Option.Option<R2Bucket>;
 }>): Effect.Effect<Option.Option<Response>, Cause.UnknownError> =>
   Effect.gen(function* () {
-    const operation = queryDeclaration(operationId, input);
+    const operation = queryDeclaration(operationId);
     if (Option.isNone(operation)) return Option.none();
-    const owner = canonicalQueryOwner(operation.value.id);
     const request = requestFor(operation.value, input);
-    if (Option.isNone(owner) || Option.isNone(request)) return Option.none();
-    const result = yield* Effect.exit(
-      Effect.suspend(() =>
-        owner.value({
-          db,
-          subject: childCaller({
-            subject,
-            requiredScope: patScopeCapability(operation.value.policy.access),
-          }),
-          request: request.value,
-          bucket,
-        })
-      )
-    );
-    // The caller's deadline must not be swallowed as a canonical owner defect.
-    if (Exit.isFailure(result) && Cause.hasInterrupts(result.cause)) {
-      return yield* Effect.failCause(result.cause);
-    }
-    return Exit.isSuccess(result) ? Option.some(result.value) : Option.none();
+    if (Option.isNone(request)) return Option.none();
+    return yield* invokeQueryOwner({
+      db,
+      subject,
+      operation: operation.value,
+      request: request.value,
+      bucket,
+      browserOrigin: Option.none(),
+    });
   });

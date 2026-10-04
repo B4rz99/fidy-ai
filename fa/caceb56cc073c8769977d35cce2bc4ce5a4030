@@ -1,0 +1,67 @@
+apps/cli/ARCHITECTURE.md
+  s_49871fd774dd99::t_f9cbf9faf379de 146-159,231-237
+apps/cli/src/canonical/canonical.test-fixture.ts
+  s_49871fd774dd99::t_557dcc74cc7880 16-18,23-25,58
+apps/cli/src/canonical/contract.ts
+  s_49871fd774dd99::t_2d351cb1e4ed96 1,11,23
+apps/cli/src/canonical/operations.test.ts
+  s_49871fd774dd99::t_b36274c4e15b6a 113-297,464
+apps/cli/src/canonical/operations.ts
+  s_49871fd774dd99::t_1727d1f9414746 2,124,131-133,157,200-227,240-243,343
+apps/cli/src/canonical/runtime.ts
+  s_49871fd774dd99::t_cfcda57628ec76 19
+apps/cli/src/direct-client/runtime.ts
+  s_49871fd774dd99::t_f6de1491f35211 2,8,38-40,96-111,120,142,175
+apps/cli/test/allowance-entry.ts
+  s_49871fd774dd99::t_182e549e5926f3 1-69
+apps/server/.dependency-cruiser.mjs
+  s_49871fd774dd99::t_5a4a8329505722 180,1331
+apps/server/cloudflare/canonical-admission/operations.test.ts
+  s_49871fd774dd99::t_dae08233eb3581 3,70-177,335-339,581,585-593,608-617
+apps/server/cloudflare/canonical-admission/operations.ts
+  s_49871fd774dd99::t_fce5c197721b33 2,170,172-176,180
+apps/server/src/client.ts
+  s_49871fd774dd99::t_e54c3409a3aa56 27
+apps/server/src/shell/quotas/contract.ts
+  s_49871fd774dd99::t_d6d1b87f240b74 1,7-42
+bun.lock
+  s_49871fd774dd99::t_2d712975519cd9 144-145
+docs/operations/commercial-allowances.md
+  s_49871fd774dd99::t_16bc25e4552189 30-42
+docs/operations/production-releases.md
+  s_49871fd774dd99::t_671e6689aa3f5a 214-220
+docs/research/969-release-age-exception.md
+  s_49871fd774dd99::t_3131ce27972691 20-46
+infra/cloudflare/diagnose-smoke-routing.test.ts
+  s_49871fd774dd99::t_8988242e9fb115 262-263
+infra/cloudflare/diagnose-smoke-routing.ts
+  s_49871fd774dd99::t_62316081d865ea 3-5,48,51-52,61,67-73
+infra/cloudflare/smoke-exchange.test.ts
+  s_49871fd774dd99::t_c805c93aded67b 1-118
+infra/cloudflare/smoke-exchange.ts
+  s_49871fd774dd99::t_bc30a7678f8659 1-225
+infra/cloudflare/verify-production-smoke.test.ts
+  s_49871fd774dd99::t_b2c462ed8496e9 95-162
+infra/cloudflare/verify-production-smoke.ts
+  s_49871fd774dd99::t_fbffef571d05d6 3,5,8,10-16,41-42,44-61,63,65-74,83,94-98,110-112,129,134,174,178,182,270-274
+package.json
+  s_49871fd774dd99::t_ff5d8ebeb4b08b 76-77
+scripts/install-workspace.sh
+  s_49871fd774dd99::t_75f46c26049645 2-3,17-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "facaceb56cc073c8769977d35cce2bc4ce5a4030",
+  "prompts": {},
+  "sessions": {
+    "s_49871fd774dd99": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10722-ee19-7681-bce9-c9de9ef2c1e3",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,25 @@
+infra/cloudflare/package.json
+  s_49bb4863b26cd3::t_6819f9556f76cd 20
+apps/server/package.json
+  s_49bb4863b26cd3::t_f8399614ae04ad 300
+scripts/install-workspace.sh
+  s_49bb4863b26cd3::t_ac44ee5bca803d 2-3,16-17
+bun.lock
+  s_49bb4863b26cd3::t_82af3fd3c0fdda 54,119,252
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3812ba7ed4f837b8cfde8a83c6b5facbcb6524f2",
+  "prompts": {},
+  "sessions": {
+    "s_49bb4863b26cd3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10426-25e2-7530-b8bf-20c3de175883",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

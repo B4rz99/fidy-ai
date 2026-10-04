@@ -127,6 +127,7 @@ const buildPlatformModule = (): Promise<string> =>
   Bun.build({
     entrypoints: [new URL("../coordinator-test-harness.ts", import.meta.url).pathname],
     target: "browser",
+    external: ["cloudflare:workers"],
   }).then((built) => {
     const output = built.outputs[0];
     if (!built.success || output === undefined) throw new Error("Coordinator bundle failed");

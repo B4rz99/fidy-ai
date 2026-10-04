@@ -101,7 +101,7 @@ import {
   validationFailed,
 } from "../../ingestion/operations";
 
-import { type WhatsAppStatusAdmission, type WhatsAppTurnAdmission } from "../../whatsapp/contract";
+import { WhatsAppStatusAdmission, WhatsAppTurnAdmission } from "../../whatsapp/contract";
 import { dispatchWhatsAppWork, receiveWhatsAppWebhook } from "../../whatsapp/runtime";
 
 import type { CoreHttpEnvironment } from "../contract";
@@ -231,12 +231,18 @@ const forwardHostedWhatsApp = (
   path: "whatsapp" | "whatsapp/status",
   admission: WhatsAppTurnAdmission | WhatsAppStatusAdmission
 ): Promise<Response> =>
-  environment.USER_TRANSACTION_COORDINATOR.getByName(admission.userId).fetch(
-    new Request(`https://coordinator.internal/hosted-turn/${path}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(admission),
-    })
+  Effect.runPromise(
+    Schema.encodeEffect(
+      Schema.fromJsonString(Schema.Union([WhatsAppTurnAdmission, WhatsAppStatusAdmission]))
+    )(admission)
+  ).then((body) =>
+    environment.USER_TRANSACTION_COORDINATOR.getByName(admission.userId).fetch(
+      new Request(`https://coordinator.internal/hosted-turn/${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+      })
+    )
   );
 
 const callbackEffect = (

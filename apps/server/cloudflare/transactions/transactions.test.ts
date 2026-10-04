@@ -116,6 +116,7 @@ const buildPlatformModule = (): Promise<string> =>
         Bun.build({
           entrypoints: [new URL("../coordinator-test-harness.ts", import.meta.url).pathname],
           target: "browser",
+          external: ["cloudflare:workers"],
         })
       );
       if (!built.success) throw new Error("Fixture bundle failed");

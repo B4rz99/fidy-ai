@@ -213,6 +213,10 @@ export default Alchemy.Stack(
       className: "BillingRefundWorkflowV1",
     });
     const hostedWhatsAppQueue = yield* Cloudflare.Queues.Queue("HostedWhatsAppQueue");
+    const weeklyDeliveryQueue = yield* Cloudflare.Queues.Queue("WeeklyDeliveryQueue");
+    const weeklyDeliveryWorkflow = Cloudflare.Workflow("WeeklyDeliveryWorkflow", {
+      className: "WeeklyDeliveryWorkflow",
+    });
     const onboardingEmailQueue = yield* Cloudflare.Queues.Queue("OnboardingEmailQueue");
     const onboardingEmailWorkflow = Cloudflare.Workflow("OnboardingEmailWorkflowV1", {
       className: "OnboardingEmailWorkflowV1",
@@ -252,6 +256,23 @@ export default Alchemy.Stack(
         STATEMENT_STAGING_BUCKET: statementStagingBucket,
         STATEMENT_EXTRACTION_QUEUE: statementExtractionQueue,
         HOSTED_WHATSAPP_QUEUE: hostedWhatsAppQueue,
+        WEEKLY_DELIVERY_QUEUE: weeklyDeliveryQueue,
+        WEEKLY_DELIVERY_WORKFLOW: weeklyDeliveryWorkflow,
+        WEEKLY_SUMMARY_ENABLED: yield* Config.String("WEEKLY_SUMMARY_ENABLED").pipe(
+          Config.withDefault("disabled")
+        ),
+        WEEKLY_SUMMARY_TEMPLATE_JSON: yield* Config.String("WEEKLY_SUMMARY_TEMPLATE_JSON").pipe(
+          Config.withDefault("")
+        ),
+        WEEKLY_QUESTION_TEMPLATE_JSON: yield* Config.String("WEEKLY_QUESTION_TEMPLATE_JSON").pipe(
+          Config.withDefault("")
+        ),
+        PROACTIVITY_ASK_AFTER: yield* Config.String("PROACTIVITY_ASK_AFTER").pipe(
+          Config.withDefault("4")
+        ),
+        PROACTIVITY_PAUSE_AFTER: yield* Config.String("PROACTIVITY_PAUSE_AFTER").pipe(
+          Config.withDefault("2")
+        ),
         STATEMENT_EXTRACTION_WORKFLOW: statementExtractionWorkflow,
         USER_TRANSACTION_COORDINATOR: Cloudflare.DurableObject("UserTransactionCoordinator", {
           className: "UserTransactionCoordinator",
@@ -356,6 +377,13 @@ export default Alchemy.Stack(
     });
     yield* Cloudflare.Queues.Consumer("EmailReplacementConsumer", {
       queueId: emailReplacementQueue.queueId,
+      scriptName: core.workerName,
+      deadLetterQueue: asyncDeadLetters.queueName,
+      settings: { batchSize: 10, maxRetries: 3 },
+    });
+
+    yield* Cloudflare.Queues.Consumer("WeeklyDeliveryConsumer", {
+      queueId: weeklyDeliveryQueue.queueId,
       scriptName: core.workerName,
       deadLetterQueue: asyncDeadLetters.queueName,
       settings: { batchSize: 10, maxRetries: 3 },

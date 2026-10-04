@@ -65,7 +65,12 @@ import {
   type WhatsAppTurnAdmission,
   WhatsAppWork,
 } from "../../whatsapp/contract";
-import { classifyWhatsAppAdmission, reconcileWhatsAppStatus } from "../../whatsapp/operations";
+import { handleWeeklyChoice, reconcileWeeklyChannel, recordWeeklyReply } from "./weekly-channel";
+import {
+  classifyWhatsAppAdmission,
+  contextualProactiveInsightQuery,
+  reconcileWhatsAppStatus,
+} from "../../whatsapp/operations";
 
 const digestBytes = 32;
 const HTTP_ACCEPTED = 202;
@@ -162,6 +167,7 @@ const startWhatsAppTurn = ({
         businessPhoneNumberId: proof.businessPhoneNumberId,
         occurredAtMs: proof.occurredAtMs,
         receivedAtMs: proof.receivedAtMs,
+        replyToMessageId: proof.replyToMessageId,
       },
       text: proof.text,
       inference,
@@ -169,6 +175,7 @@ const startWhatsAppTurn = ({
       executeMutation: Option.none(),
       deliver: {
         _tag: "WhatsApp",
+        contextualReplyQuery: contextualProactiveInsightQuery(proof),
         send: ({ text, correlationToken }) =>
           sendWhatsAppAttempt({ sender, admission: proof, text, correlationToken }),
       },
@@ -399,6 +406,9 @@ const runWhatsAppStatus = (owner: AgentServiceInput, request: Request): Promise<
       if (Option.isNone(admission) || admission.value.userId !== userId) {
         return transactionUnavailable();
       }
+      if (yield* reconcileWeeklyChannel({ environment: env, userId, status: admission.value })) {
+        return new Response(null, { status: 200 });
+      }
       const reconciled = yield* reconcileWhatsAppStatus({ db: env.DB, admission: admission.value });
       if (reconciled._tag === "Refused") return transactionUnavailable();
       if (reconciled._tag === "TerminalEvidence") {
@@ -456,6 +466,10 @@ const runWhatsAppWork = (
             scheduleRecovery: (dueAtMs) => state.storage.setAlarm(dueAtMs),
             deliver: (admission) => ({
               _tag: "WhatsApp",
+              contextualReplyQuery: contextualProactiveInsightQuery({
+                ...admission,
+                userId: UserId.make(userId),
+              }),
               send: ({ text, correlationToken }) =>
                 sendWhatsAppAttempt({
                   sender: prepared.value.sender,
@@ -482,60 +496,66 @@ const runWhatsAppWork = (
   );
 };
 
+const readWhatsAppAdmission = (request: Request): Effect.Effect<Option.Option<TurnAdmission>> =>
+  Effect.tryPromise(() => request.json()).pipe(
+    Effect.orElseSucceed(() => undefined),
+    Effect.map(Schema.decodeUnknownOption(TurnAdmission))
+  );
+
 const runWhatsAppTurn = (
   owner: AgentServiceInput,
   request: Request,
   deadline: ReturnType<typeof hostedDeadline>
 ): Promise<Response> => {
-  const userId = owner.userId;
   const env = owner.environment;
-  const state = { storage: { setAlarm: owner.scheduleRecovery } };
-  return Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const candidate = yield* Effect.tryPromise(() => request.json()).pipe(
-          Effect.orElseSucceed(() => undefined)
-        );
-        const admission = Schema.decodeUnknownOption(TurnAdmission)(candidate);
-        if (Option.isNone(admission) || admission.value.userId !== userId) {
-          return transactionUnavailable();
-        }
-        const proof = admission.value;
-        const replay = yield* classifyWhatsAppAdmission({
-          db: env.DB,
-          proof,
-          now: transactionNow(),
-        });
-        if (replay !== "fresh") {
-          const status = { expired: 422, replay: 200, conflict: 409 }[replay];
-          return new Response(null, { status });
-        }
-        const prepared = yield* prepareWhatsAppExecution(env, userId, deadline.admittedTurnId);
-        if (Option.isNone(prepared)) return transactionUnavailable();
-        return yield* Effect.tryPromise(() =>
-          startWhatsAppTurn({
-            db: env.DB,
-            proof,
-            inference: prepared.value.inference,
-            sender: prepared.value.sender,
-            signal: deadline.signal,
-            scheduleRecovery: (dueAtMs) => state.storage.setAlarm(dueAtMs),
-            onAdmitted: deadline.onAdmitted,
-          })
-        );
-      }).pipe(
-        Effect.provideService(
-          FetchHttpClient.Fetch,
-          observeProviderFetch(globalThis.fetch, {
-            provider: "kapso",
-            environment: env,
-            telemetry: cloudflareWorkerTelemetry,
-          })
-        ),
-        Effect.withSpan("agent.whatsappTurn.execution"),
-        Effect.orElseSucceed(transactionUnavailable)
-      )
-    )
+  return Effect.gen(function* () {
+    const admission = yield* readWhatsAppAdmission(request);
+    if (Option.isNone(admission) || admission.value.userId !== owner.userId) {
+      return transactionUnavailable();
+    }
+    const proof = admission.value;
+    const replay = yield* classifyWhatsAppAdmission({
+      db: env.DB,
+      proof,
+      now: transactionNow(),
+    });
+    if (replay !== "fresh") {
+      const status = { expired: 422, replay: 200, conflict: 409 }[replay];
+      return new Response(null, { status });
+    }
+    const choice = yield* handleWeeklyChoice({
+      environment: env,
+      proof,
+      now: transactionNow(),
+    });
+    if (Option.isSome(choice)) return choice.value;
+    yield* recordWeeklyReply({ db: env.DB, proof });
+    const prepared = yield* prepareWhatsAppExecution(env, owner.userId, deadline.admittedTurnId);
+    if (Option.isNone(prepared)) return transactionUnavailable();
+    return yield* Effect.tryPromise(() =>
+      startWhatsAppTurn({
+        db: env.DB,
+        proof,
+        inference: prepared.value.inference,
+        sender: prepared.value.sender,
+        signal: deadline.signal,
+        scheduleRecovery: owner.scheduleRecovery,
+        onAdmitted: deadline.onAdmitted,
+      })
+    );
+  }).pipe(
+    Effect.provideService(
+      FetchHttpClient.Fetch,
+      observeProviderFetch(globalThis.fetch, {
+        provider: "kapso",
+        environment: env,
+        telemetry: cloudflareWorkerTelemetry,
+      })
+    ),
+    Effect.withSpan("agent.whatsappTurn.execution"),
+    Effect.orElseSucceed(transactionUnavailable),
+    Effect.scoped,
+    Effect.runPromise
   );
 };
 

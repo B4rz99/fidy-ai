@@ -7,6 +7,7 @@ import { DisclosureSnapshot } from "../../src/core/consent/contract";
 import { currentDisclosureFor, weeklyDisclosureFor } from "../../src/shell/consent/operations";
 import {
   createWeeklyConsentOffer,
+  createWeeklyGovernorConsentOffer,
   findWeeklyConsentGrant,
   prepareWeeklyConsentAction,
   prepareWeeklyConsentDecision,
@@ -184,6 +185,95 @@ it.live(
         yield* decide({ ...context, choice: offer.declineChoice, decisionMessageId: "decline" })
       ).toBe(true);
       expect(Option.isNone(yield* findWeeklyConsentGrant({ db, userId }))).toBe(true);
+    })
+);
+
+it.live("never proactively re-asks after a recorded no but permits a User-requested offer", () =>
+  Effect.gen(function* () {
+    const db = yield* setup();
+    const context = { db, userId, caller, now };
+    const offer = Option.getOrThrow(yield* createWeeklyConsentOffer(context));
+    yield* recordWeeklyConsentDisclosure({
+      ...context,
+      offerId: offer.id,
+      disclosureMessageId: "no-disclosure",
+    });
+    expect(
+      yield* decide({ ...context, choice: offer.declineChoice, decisionMessageId: "no-decision" })
+    ).toBe(true);
+    expect(Option.isNone(yield* createWeeklyConsentOffer(context))).toBe(true);
+    expect(
+      Option.isSome(
+        yield* createWeeklyGovernorConsentOffer({
+          ...context,
+          request: {
+            _tag: "GovernorQuestion",
+            origin: "requested",
+            sourceId: "49000000-0000-4000-8000-000000000001",
+            requestedAt: now,
+            rejectionOfferId: Option.some(offer.id),
+          },
+        })
+      )
+    ).toBe(true);
+  })
+);
+
+it.live(
+  "a later no invalidates outstanding offers and already-prepared acceptance atomically",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const context = { db, userId, caller, now };
+      const accepted = Option.getOrThrow(yield* createWeeklyConsentOffer(context));
+      yield* recordWeeklyConsentDisclosure({
+        ...context,
+        offerId: accepted.id,
+        disclosureMessageId: "accepted-disclosure",
+      });
+      expect(
+        yield* decide({
+          ...context,
+          choice: accepted.acceptChoice,
+          decisionMessageId: "accepted-choice",
+        })
+      ).toBe(true);
+      const outstanding = Option.getOrThrow(yield* createWeeklyConsentOffer(context));
+      yield* recordWeeklyConsentDisclosure({
+        ...context,
+        offerId: outstanding.id,
+        disclosureMessageId: "outstanding-disclosure",
+      });
+      const prepared = Option.getOrThrow(
+        yield* prepareWeeklyConsentDecision({
+          ...context,
+          choice: outstanding.acceptChoice,
+          decisionMessageId: "prepared-choice",
+        })
+      );
+      expect(
+        yield* decide({ ...context, choice: accepted.revokeChoice, decisionMessageId: "later-no" })
+      ).toBe(true);
+      const stale = yield* Effect.exit(Effect.tryPromise(() => db.batch([...prepared.statements])));
+      expect(stale._tag).toBe("Failure");
+      expect(
+        yield* decide({
+          ...context,
+          choice: outstanding.acceptChoice,
+          decisionMessageId: "late-accept",
+        })
+      ).toBe(false);
+      expect(Option.isNone(yield* findWeeklyConsentGrant({ db, userId }))).toBe(true);
+      const original = yield* testPromise(() =>
+        db
+          .prepare("SELECT decision,decision_message_id FROM weekly_consent_offers WHERE id=?")
+          .bind(accepted.id)
+          .first()
+      );
+      expect(original).toMatchObject({
+        decision: "accept",
+        decision_message_id: "accepted-choice",
+      });
     })
 );
 

@@ -1,9 +1,10 @@
-import { DateTime, Option, type Schema } from "effect";
+import { DateTime, Option, Schema } from "effect";
 import type { Prompt } from "effect/ai";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { listLaunchCategories } from "~/core/categories/operations";
 import type { User } from "~/core/identity/contract";
 import {
+  ProactiveInsightTranscriptEntry,
   type TranscriptEntry,
   TranscriptEntryId,
   TranscriptText,
@@ -183,6 +184,15 @@ const projectEvidenceSection = (
       return [quotedUserContext("compacted_conversation", section.text)];
     case "Transcript":
       return projectTranscriptSection(section.entry);
+    case "ProactiveReply":
+      return [
+        quotedUserContext(
+          "proactive_reply",
+          Schema.encodeSync(
+            Schema.fromJsonString(Schema.toCodecJson(ProactiveInsightTranscriptEntry))
+          )(section.entry)
+        ),
+      ];
     case "ToolResult":
       return [exactTranscriptResultMessage(section)];
     case "InvalidOutputFeedback":

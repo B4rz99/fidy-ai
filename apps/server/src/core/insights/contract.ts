@@ -13,6 +13,13 @@ export const InsightKind = Schema.Literals([
 ]);
 export type InsightKind = typeof InsightKind.Type;
 
+/** Positive bounded counts: pauseAfter is additional deliveries after the question. */
+export const ProactivityThresholds = Schema.Struct({
+  askAfter: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })),
+  pauseAfter: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })),
+});
+export type ProactivityThresholds = typeof ProactivityThresholds.Type;
+
 /** Stable identity of one generated occurrence. */
 export const InsightEventId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("InsightEventId"))

@@ -77,6 +77,7 @@ const event = (id: string): WhatsAppInboundEvent => ({
   },
   occurredAt: current,
   receivedAt: current,
+  replyToMessageId: Option.none(),
   content: { _tag: "Image", mediaId: WhatsAppMediaId.make(`media-${id}`), caption: Option.none() },
 });
 it("atomically publishes only two unique Free images with visible review and uncharged delivery replay", () =>

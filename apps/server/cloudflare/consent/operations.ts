@@ -20,6 +20,8 @@ import {
   discloseOffer,
   findGrant,
   guardedAction,
+  hasChoiceReceipt,
+  latestRejection,
   prepareDecision,
 } from "./internal/weekly-consent";
 import type {
@@ -27,14 +29,29 @@ import type {
   WeeklyConsentAction,
   WeeklyConsentContext,
   WeeklyConsentOffer,
+  WeeklyConsentOfferRequest,
 } from "./contract";
 import type { ConsentRecord, ConsentRecordId } from "../../src/core/consent/contract";
 import type { UserId } from "../../src/core/identity/contract";
 import type { Option } from "effect";
 
+/** Recognize an already applied qualified privacy choice without starting another operation. */
+export const hasWeeklyConsentChoiceReceipt: typeof hasChoiceReceipt = (input) =>
+  hasChoiceReceipt(input);
+
+/** Snapshot the latest same-User rejection so an older requested prompt cannot bypass a later no. */
+export const latestWeeklyConsentRejection: typeof latestRejection = (input) =>
+  latestRejection(input);
+
 /** Begin a bounded contextual offer for an authenticated established WhatsAppIdentity. No grant is recorded. */
 export const createWeeklyConsentOffer = (
   input: WeeklyConsentContext
+): Effect.Effect<Option.Option<WeeklyConsentOffer>, ConsentUnavailable> =>
+  createOffer({ ...input, request: { _tag: "ShortOffer", origin: "proactive" } });
+
+/** Durable governor questions retain their exact retry identity and a bounded 24-hour choice lifetime. */
+export const createWeeklyGovernorConsentOffer = (
+  input: WeeklyConsentContext & Readonly<{ request: WeeklyConsentOfferRequest }>
 ): Effect.Effect<Option.Option<WeeklyConsentOffer>, ConsentUnavailable> => createOffer(input);
 
 /** The native channel calls this only after sending the offer's exact fixed disclosure; model claims cannot call this seam. */

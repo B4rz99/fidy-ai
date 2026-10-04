@@ -1,4 +1,6 @@
 import { executeRefundSupportAdmission } from "../subscription/operations";
+import { WeeklyActivity, type WeeklyEnvironment } from "../insights/contract";
+import { executeWeeklyWork } from "../insights/runtime";
 import { RecurringWork } from "../recurring/contract";
 import { evaluateRecurringSeries } from "../recurring/operations";
 import { makeAgentService } from "../agent/runtime";
@@ -11,7 +13,7 @@ import {
 import type { HostedCommitFence } from "../agent/contract";
 import { UserId } from "../../src/core/identity/contract";
 
-import { Data, Effect, Exit, Option, Schema, type Scope } from "effect";
+import { Data, DateTime, Effect, Exit, Option, Schema, type Scope } from "effect";
 
 import { optionalHostedInference } from "../ai/runtime";
 import type { WorkersAiEnvironment } from "../ai/contract";
@@ -75,7 +77,8 @@ type CoordinatorEnvironment = Readonly<{
       WOMPI_ENVIRONMENT: string;
     }>
   > &
-  WorkersAiEnvironment;
+  WorkersAiEnvironment &
+  WeeklyEnvironment;
 
 const executeStatementActivity = (
   activity: typeof StatementCoordinatorActivity.Type,
@@ -223,13 +226,36 @@ const privateIngestionActivity = ({
   );
 };
 
-const privateOwnerActivity = (
+const privateWeeklyActivity = (
   input: Readonly<{
     request: Request;
     candidate: unknown;
     environment: CoordinatorEnvironment;
     userId: string;
   }>
+): Option.Option<Effect.Effect<Response>> => {
+  if (input.request.method !== "POST" || new URL(input.request.url).pathname !== "/weekly-work") {
+    return Option.none();
+  }
+  const work = Schema.decodeUnknownOption(WeeklyActivity)(input.candidate);
+  if (Option.isNone(work) || work.value.userId !== input.userId) {
+    return Option.some(Effect.succeed(transactionUnavailable()));
+  }
+  return Option.some(
+    executeWeeklyWork({
+      environment: input.environment,
+      userId: UserId.make(input.userId),
+      work: work.value,
+      now: DateTime.makeUnsafe(transactionNow()),
+    }).pipe(
+      Effect.map((result) => Response.json(result, { headers: { "cache-control": "no-store" } })),
+      Effect.orElseSucceed(transactionUnavailable)
+    )
+  );
+};
+
+const privateOwnerActivity = (
+  input: Parameters<typeof privateWeeklyActivity>[0]
 ): Option.Option<Effect.Effect<Response>> => {
   if (
     input.request.method === "POST" &&
@@ -244,7 +270,10 @@ const privateOwnerActivity = (
       })
     );
   }
-  return Option.orElse(privateRecurringActivity(input), () => privateIngestionActivity(input));
+  return privateWeeklyActivity(input).pipe(
+    Option.orElse(() => privateRecurringActivity(input)),
+    Option.orElse(() => privateIngestionActivity(input))
+  );
 };
 
 const reservedCoordinatorProbe = ({

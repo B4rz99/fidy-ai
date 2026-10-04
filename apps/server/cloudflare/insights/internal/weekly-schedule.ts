@@ -9,6 +9,7 @@ import {
 } from "../../../src/core/insights/contract";
 import { nextWeeklyOccurrence } from "../../../src/core/insights/operations";
 import { prepareConsentAction, prepareWeeklyConsentAction } from "../../consent/operations";
+import { readUserContext } from "../../identity/user-context/operations";
 import { newId } from "../../secret-material/operations";
 import {
   DueWeeklySchedule,
@@ -173,9 +174,13 @@ export const prepareScheduleEnable = (
     const timing: WeeklyTiming = Option.isSome(previous)
       ? previous.value.timing
       : { weekday: 0, hour: 18, minute: 0 };
-    const timeZone = Option.isSome(previous)
-      ? previous.value.timeZone
-      : IanaTimeZone.make("America/Bogota");
+    const userContext = yield* readUserContext({
+      db: input.db,
+      userId: input.userId,
+      authority: Option.none(),
+    }).pipe(Effect.mapError(() => new InsightUnavailable()));
+    if (Option.isNone(userContext)) return yield* new InsightUnavailable();
+    const timeZone = Option.isSome(previous) ? previous.value.timeZone : userContext.value.timeZone;
     const id = Option.isSome(previous) ? previous.value.id : ScheduleId.make(newId());
     const version = Option.isSome(previous) ? previous.value.version + 1 : 1;
     const next = nextWeeklyOccurrence({ after: input.now, timing, timeZone });

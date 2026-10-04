@@ -1,3 +1,4 @@
+import type { WeeklyDeliveryWork, WeeklyEnvironment } from "./insights/contract";
 import type { CoreMaintenanceInput } from "./maintenance/contract";
 import { runCoreMaintenance } from "./maintenance/runtime";
 import { makeCoreHttp } from "./core-http/runtime";
@@ -26,11 +27,13 @@ export {
   BillingRefundWorkflowV1,
   runBillingCollectionWorkflow,
 } from "./subscription/runtime";
+export { WeeklyDeliveryWorkflow } from "./insights/runtime";
 export { UserTransactionCoordinator } from "./transactions/runtime";
 export { ReleaseSmokeWorkflowV1 } from "./runtime/release-smoke/runtime";
 export { StatementExtractionWorkflowV1 } from "./ingestion/runtime";
 
 type CoreEnvironment = WorkerTelemetryEnvironment &
+  WeeklyEnvironment &
   Readonly<{ CONTRACT_DIGEST: string; RELEASE_GIT_SHA: string }> & {
     readonly AI: WorkersAiEnvironment["AI"];
     readonly DB: D1Database;
@@ -77,6 +80,8 @@ type CoreEnvironment = WorkerTelemetryEnvironment &
       STATEMENT_EXTRACTION_QUEUE: Queue;
       STATEMENT_EXTRACTION_WORKFLOW: Workflow;
       HOSTED_WHATSAPP_QUEUE: Queue;
+      WEEKLY_DELIVERY_QUEUE: Queue<WeeklyDeliveryWork>;
+      WEEKLY_DELIVERY_WORKFLOW: Workflow<WeeklyDeliveryWork>;
     }>
   > &
   Partial<
@@ -96,9 +101,45 @@ type CoreWorker = Readonly<{
   queue: (batch: MessageBatch<unknown>, environment: CoreEnvironment) => Promise<void>;
 }>;
 
+const weeklyMaintenanceInput = (
+  environment: CoreEnvironment
+): Pick<
+  CoreMaintenanceInput,
+  | "WEEKLY_DELIVERY_QUEUE"
+  | "WEEKLY_DELIVERY_WORKFLOW"
+  | "WEEKLY_SUMMARY_ENABLED"
+  | "WEEKLY_SUMMARY_TEMPLATE_JSON"
+  | "WEEKLY_QUESTION_TEMPLATE_JSON"
+  | "PROACTIVITY_ASK_AFTER"
+  | "PROACTIVITY_PAUSE_AFTER"
+> => ({
+  ...(environment.WEEKLY_DELIVERY_QUEUE === undefined
+    ? {}
+    : { WEEKLY_DELIVERY_QUEUE: environment.WEEKLY_DELIVERY_QUEUE }),
+  ...(environment.WEEKLY_DELIVERY_WORKFLOW === undefined
+    ? {}
+    : { WEEKLY_DELIVERY_WORKFLOW: environment.WEEKLY_DELIVERY_WORKFLOW }),
+  ...(environment.WEEKLY_SUMMARY_ENABLED === undefined
+    ? {}
+    : { WEEKLY_SUMMARY_ENABLED: environment.WEEKLY_SUMMARY_ENABLED }),
+  ...(environment.WEEKLY_SUMMARY_TEMPLATE_JSON === undefined
+    ? {}
+    : { WEEKLY_SUMMARY_TEMPLATE_JSON: environment.WEEKLY_SUMMARY_TEMPLATE_JSON }),
+  ...(environment.WEEKLY_QUESTION_TEMPLATE_JSON === undefined
+    ? {}
+    : { WEEKLY_QUESTION_TEMPLATE_JSON: environment.WEEKLY_QUESTION_TEMPLATE_JSON }),
+  ...(environment.PROACTIVITY_ASK_AFTER === undefined
+    ? {}
+    : { PROACTIVITY_ASK_AFTER: environment.PROACTIVITY_ASK_AFTER }),
+  ...(environment.PROACTIVITY_PAUSE_AFTER === undefined
+    ? {}
+    : { PROACTIVITY_PAUSE_AFTER: environment.PROACTIVITY_PAUSE_AFTER }),
+});
+
 /** Normalize only the bindings needed by the published scheduled composition. */
 const maintenanceInput = (environment: CoreEnvironment): CoreMaintenanceInput => ({
   DB: environment.DB,
+  ...weeklyMaintenanceInput(environment),
   USER_TRANSACTION_COORDINATOR: environment.USER_TRANSACTION_COORDINATOR,
   AI: environment.AI,
   RELEASE_GIT_SHA: environment.RELEASE_GIT_SHA,

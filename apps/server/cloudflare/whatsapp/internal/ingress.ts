@@ -39,6 +39,8 @@ import {
   type WhatsAppAuthenticatedInbound as WebhookInbound,
 } from "../contract";
 import { acceptWhatsAppMedia } from "../../ingestion/operations";
+import { findInsightDeliveryUser } from "./insight-delivery";
+import { findWeeklyQuestionUser } from "./weekly-question";
 import { findWhatsAppDeliveryUser } from "./whatsapp-turn";
 
 const HTTP_OK = 200;
@@ -249,6 +251,7 @@ const routeHostedInbound = (
         occurredAtMs: DateTime.toEpochMillis(input.event.occurredAt),
         receivedAtMs: input.receivedAtMs,
         text,
+        replyToMessageId: input.event.replyToMessageId,
       })
     );
     return Option.some(response);
@@ -329,6 +332,22 @@ const handleInbound = (
     });
   });
 
+const findHostedStatusUser = (
+  input: Parameters<typeof findInsightDeliveryUser>[0]
+): Effect.Effect<Option.Option<UserId>, void> =>
+  Effect.gen(function* () {
+    const candidates = [
+      findInsightDeliveryUser(input).pipe(Effect.mapError(() => undefined)),
+      findWeeklyQuestionUser(input).pipe(Effect.mapError(() => undefined)),
+      findWhatsAppDeliveryUser(input).pipe(Effect.mapError(() => undefined)),
+    ];
+    for (const candidate of candidates) {
+      const user = yield* candidate;
+      if (Option.isSome(user)) return user;
+    }
+    return Option.none();
+  });
+
 const handleHostedLifecycle = (
   base: WebhookBase,
   eventName: string,
@@ -337,11 +356,12 @@ const handleHostedLifecycle = (
   Effect.gen(function* () {
     const hosted = yield* Effect.exit(authenticateHostedStatus({ ...base, eventName }));
     if (Exit.isFailure(hosted)) return answer(HTTP_UNAUTHORIZED);
-    const user = yield* findWhatsAppDeliveryUser({
+    const lookup = {
       db: environment.DB,
       correlationToken: hosted.value.correlationToken,
       businessPhoneNumberId: hosted.value.businessPhoneNumberId,
-    }).pipe(Effect.mapError(() => undefined));
+    };
+    const user = yield* findHostedStatusUser(lookup);
     if (Option.isSome(user)) {
       return yield* attempt(() =>
         environment.onHostedStatus({

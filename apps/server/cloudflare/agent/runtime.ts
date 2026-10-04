@@ -6,6 +6,7 @@ import {
   AgentUnavailable,
 } from "./contract";
 import { makeHostedService } from "./internal/service";
+import { sweepProactiveTranscript } from "./internal/proactive-transcript";
 import { sweepHostedTurns } from "./internal/hosted-turn-sweep";
 
 /** Construct the complete hosted workflow inside the existing User coordinator; construction grants no subject or Consent authority. */
@@ -21,5 +22,14 @@ export const makeAgentService = (input: AgentServiceInput): AgentService => {
 };
 /** Construct only fixed-policy, bounded recovery and retention, without model, channel or admission authority. */
 export const makeAgentRetention = ({ db }: Readonly<{ db: D1Database }>): AgentRetention => ({
-  sweep: (now) => sweepHostedTurns({ db, now }).pipe(Effect.mapError(() => new AgentUnavailable())),
+  sweep: (now) =>
+    Effect.partition(
+      [sweepHostedTurns({ db, now }), sweepProactiveTranscript({ db, now })],
+      (work) => work,
+      { concurrency: 1 }
+    ).pipe(
+      Effect.flatMap(([, failures]) =>
+        failures.length > 0 ? Effect.fail(new AgentUnavailable()) : Effect.void
+      )
+    ),
 });

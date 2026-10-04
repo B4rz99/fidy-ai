@@ -1,3 +1,4 @@
+import { buildWeeklyQuestionSender } from "~/shell/channels/whatsapp/internal/weekly-question";
 import { Option, type Redacted } from "effect";
 import { buildInsightTemplateSender } from "~/shell/channels/whatsapp/internal/insight-template";
 import { type HttpClient } from "effect/http";
@@ -8,6 +9,7 @@ import { type OutboundHttpService, makeKapsoOutboundHttp } from "~/shell/outboun
 import {
   type HostedDeliveryCorrelationToken,
   type InsightTemplateSender,
+  type WeeklyQuestionSender,
   type WhatsAppBusinessPhoneNumberId,
   type WhatsAppDelivery,
   type WhatsAppInboundEvent,
@@ -20,6 +22,11 @@ export const makeInsightTemplateSender = (
     outboundHttp: OutboundHttpService;
   }>
 ): InsightTemplateSender => buildInsightTemplateSender(input);
+
+/** Build the separately approved full-disclosure sender at the bounded external-provider seam. */
+export const makeWeeklyQuestionSender = (
+  input: Readonly<{ configuration: unknown; outboundHttp: OutboundHttpService }>
+): WeeklyQuestionSender => buildWeeklyQuestionSender(input);
 
 /** One bounded provider attempt; no send acceptance is a delivery receipt. */
 export const makeHostedSender = ({

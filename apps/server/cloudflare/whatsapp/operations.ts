@@ -1,4 +1,15 @@
 import { Effect } from "effect";
+import {
+  expireWeeklyQuestions as expireQuestions,
+  findWeeklyQuestionUser as findQuestionUser,
+  weeklyQuestionDeliveryQuery as questionDeliveryQuery,
+  readWeeklyReplyChoice as readReplyChoice,
+  reconcileWeeklyQuestion as reconcileQuestion,
+  recordWeeklyQuestionSend as recordQuestion,
+  stageWeeklyQuestion as stageQuestion,
+  startWeeklyQuestion as startQuestion,
+} from "./internal/weekly-question";
+
 import { WhatsAppUnavailable } from "./contract";
 import { inspectWhatsApp as inspect } from "./internal/operational-observation";
 import {
@@ -28,6 +39,7 @@ import {
   readWhatsAppPendingWork as readWhatsAppPendingWorkOwned,
 } from "./internal/whatsapp-turn";
 import {
+  contextualInsightQuery,
   expireInsightChannelEvidence as expireInsightChannelEvidenceOwned,
   findInsightDeliveryUser as findInsightDeliveryUserOwned,
   findInsightRecipient as findInsightRecipientOwned,
@@ -39,7 +51,38 @@ import {
   recordInsightSend as recordInsightSendOwned,
   stageInsightDelivery as stageInsightDeliveryOwned,
   startInsightSend as startInsightSendOwned,
+  sweepInsightChannelEvidence as sweepInsightEvidence,
+  weeklySummaryReplyQuery as weeklyReply,
 } from "./internal/insight-delivery";
+
+/** Independent bounded deletion of expired channel content, including Users without a Hosted Session. */
+export const sweepInsightChannelEvidence = (
+  input: Readonly<{ db: D1Database; now: number }>
+): Effect.Effect<void, WhatsAppUnavailable> =>
+  sweepInsightEvidence(input).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
+
+/** Same-User, same-association proof of a contextual reply to a verified category delivery. */
+export const weeklySummaryReplyQuery: typeof weeklyReply = (input) => weeklyReply(input);
+
+/** Stage the exact approved disclosure under same-User intent and current association. */
+export const stageWeeklyQuestion: typeof stageQuestion = (input) => stageQuestion(input);
+/** Claim once, with current purpose, association and the product delivery window. */
+export const startWeeklyQuestion: typeof startQuestion = (input) => startQuestion(input);
+/** Acceptance is not delivery; a started question never has a blind resend path. */
+export const recordWeeklyQuestionSend: typeof recordQuestion = (input) => recordQuestion(input);
+/** Signed correlation routing hint only, rechecked by the User coordinator. */
+export const findWeeklyQuestionUser: typeof findQuestionUser = (input) => findQuestionUser(input);
+/** Reconcile actual signed delivery; no counter or Consent decision is invented. */
+export const reconcileWeeklyQuestion: typeof reconcileQuestion = (input) =>
+  reconcileQuestion(input);
+/** Metadata proof only; questions never become counted scheduled messages. */
+export const weeklyQuestionDeliveryQuery: typeof questionDeliveryQuery = (input) =>
+  questionDeliveryQuery(input);
+/** Literal yes/no is actionable only as an authenticated reply to this User's verified disclosure. */
+export const readWeeklyReplyChoice: typeof readReplyChoice = (input) => readReplyChoice(input);
+
+/** Independently delete expired exact prompt content while preserving no-resend identities. */
+export const expireWeeklyQuestions: typeof expireQuestions = (input) => expireQuestions(input);
 
 /** Copy complete exact verified channel text under current purpose and retention; published query never authorizes a requested Turn. */
 export const insightVerifiedTranscriptQuery: typeof insightVerifiedTranscriptQueryOwned = (input) =>
@@ -89,6 +132,10 @@ export const reconcileInsightStatus = (
   Effect.Success<ReturnType<typeof reconcileInsightStatusOwned>>,
   WhatsAppUnavailable
 > => reconcileInsightStatusOwned(input).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
+/** Scope a contextual reference to one actually delivered same-User message, without reading its report. */
+export const contextualProactiveInsightQuery: typeof contextualInsightQuery = (input) =>
+  contextualInsightQuery(input);
+
 /** Metadata-only coordination hint; it cannot authorize a User action. */
 export const findInsightDeliveryUser = (
   input: Parameters<typeof findInsightDeliveryUserOwned>[0]

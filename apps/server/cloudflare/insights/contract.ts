@@ -1,11 +1,29 @@
 import { Data, type DateTime, Schema } from "effect";
 import { ConsentRecordId } from "../../src/core/consent/contract";
-import { InsightEventId, ScheduleId, WeeklySchedule } from "../../src/core/insights/contract";
+import {
+  InsightEventId,
+  ProactivityThresholds,
+  ScheduleId,
+  WeeklySchedule,
+} from "../../src/core/insights/contract";
 import { UserId } from "../../src/core/identity/contract";
 import { UtcTimestamp } from "../../src/core/_shared/time";
 import { WeeklySummaryPayload } from "../../src/core/insights/weekly-summary/contract";
 import { InsightTemplateSummary } from "../../src/shell/channels/whatsapp/contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
+
+const unansweredDeliveries = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 200 }));
+/** Governor standing is separate from legal permission. Paused execution has no pending question. */
+export const WeeklyGovernor = Schema.Union([
+  Schema.TaggedStruct("Attentive", { unanswered: unansweredDeliveries }),
+  Schema.TaggedStruct("QuestionPending", { unanswered: unansweredDeliveries }),
+  Schema.TaggedStruct("QuestionDelivered", { unanswered: unansweredDeliveries }),
+  Schema.TaggedStruct("Paused", {
+    unanswered: unansweredDeliveries,
+    pausedAt: UtcTimestamp,
+  }),
+]);
+export type WeeklyGovernor = typeof WeeklyGovernor.Type;
 
 /** Historical instruction plus the explicit owner and particular delivery grant; never reusable authority. */
 export const WeeklyScheduleSnapshot = Schema.Struct({
@@ -53,6 +71,53 @@ export const WeeklySummaryWork = Schema.Struct({
   insightEventId: InsightEventId,
 });
 export type WeeklySummaryWork = typeof WeeklySummaryWork.Type;
+
+/** Separate question identity; a question is not a financial InsightEvent or a counted delivery. */
+export const WeeklyQuestionWork = Schema.Struct({
+  kind: Schema.Literal("weekly-question"),
+  version: Schema.Literal(1),
+  userId: UserId,
+  id: Schema.String.check(Schema.isUUID()),
+});
+export type WeeklyQuestionWork = typeof WeeklyQuestionWork.Type;
+export const WeeklyDeliveryWork = Schema.Union([WeeklySummaryWork, WeeklyQuestionWork]);
+export type WeeklyDeliveryWork = typeof WeeklyDeliveryWork.Type;
+export const WeeklyActivity = Schema.Union([
+  WeeklyDeliveryWork,
+  Schema.Struct({
+    kind: Schema.Literal("weekly-recover"),
+    version: Schema.Literal(1),
+    userId: UserId,
+    work: WeeklyDeliveryWork,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("weekly-generate"),
+    version: Schema.Literal(1),
+    userId: UserId,
+    id: ScheduleId,
+  }),
+]);
+export type WeeklyActivity = typeof WeeklyActivity.Type;
+/** Workflow history retains only the next permissible instant, never provider/report/recipient text. */
+export const WeeklyActivityResult = Schema.Union([
+  Schema.TaggedStruct("Done", {}),
+  Schema.TaggedStruct("RecoveryAdmitted", {}),
+  Schema.TaggedStruct("Deferred", { nextEligibleAtMs: Schema.Int }),
+]);
+export type WeeklyActivityResult = typeof WeeklyActivityResult.Type;
+/** Both approved templates and an explicit enablement gate are required before native execution. */
+export type WeeklyEnvironment = Readonly<{ DB: D1Database }> &
+  Partial<
+    Readonly<{
+      WEEKLY_SUMMARY_ENABLED: string;
+      WEEKLY_SUMMARY_TEMPLATE_JSON: string;
+      WEEKLY_QUESTION_TEMPLATE_JSON: string;
+      PROACTIVITY_ASK_AFTER: string;
+      PROACTIVITY_PAUSE_AFTER: string;
+      KAPSO_API_KEY: string;
+    }>
+  >;
+export const WeeklyThresholdConfiguration = Schema.toCodecStringTree(ProactivityThresholds);
 
 /** A coordination hint only; processing must re-read the event inside this User's boundary. */
 export const DueInsight = Schema.Struct({ userId: UserId, id: InsightEventId });

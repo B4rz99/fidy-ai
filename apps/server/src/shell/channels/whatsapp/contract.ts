@@ -21,6 +21,7 @@ import {
   WhatsAppProviderMessageId,
 } from "~/core/provider-evidence/contract";
 import { TranscriptText } from "~/core/agent/contract";
+import { ConsentRecordId, DisclosureSnapshot } from "~/core/consent/contract";
 import { Currency } from "~/core/_shared/money";
 import { type TelemetryHttpStatus } from "~/shell/observability/contract";
 
@@ -34,6 +35,36 @@ export const InsightTemplateConfiguration = Schema.Struct({
   body: Schema.Literal("Tu resumen semanal: {{1}} Consulta tus movimientos en Fidy."),
 });
 export type InsightTemplateConfiguration = typeof InsightTemplateConfiguration.Type;
+
+/** The operator must approve this complete disclosure template separately from the summary template. */
+export const WeeklyQuestionTemplateConfiguration = Schema.Struct({
+  name: InsightTemplateConfiguration.fields.name,
+  language: Schema.Literal("es"),
+  approval: Schema.Literal("approved"),
+  body: Schema.Literal("Fidy: {{1}}"),
+});
+export const WeeklyQuestionOffer = Schema.Struct({
+  id: ConsentRecordId,
+  disclosure: DisclosureSnapshot,
+  acceptChoice: Schema.String,
+  declineChoice: Schema.String,
+});
+export type WeeklyQuestionSender = Readonly<{
+  prepare: (
+    offer: typeof WeeklyQuestionOffer.Type
+  ) => Effect.Effect<
+    Readonly<{ parameter: string; text: TranscriptText }>,
+    InsightTemplateUnavailable
+  >;
+  send: (
+    input: Readonly<{
+      recipient: WhatsAppBusinessScopedUserId;
+      businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
+      correlationToken: HostedDeliveryCorrelationToken;
+      offer: typeof WeeklyQuestionOffer.Type;
+    }>
+  ) => Effect.Effect<WhatsAppSentMessage, InsightTemplateUnavailable | WhatsAppSendFailed>;
+}>;
 
 const maximumTemplateLength = 1024;
 const SummaryPart = TranscriptText.check(
@@ -154,6 +185,7 @@ export type WhatsAppInboundEvent = Readonly<{
   readonly occurredAt: DateTime.Utc;
   readonly receivedAt: DateTime.Utc;
   readonly content: WhatsAppInboundContent;
+  readonly replyToMessageId: Option.Option<WhatsAppProviderMessageId>;
 }>;
 
 const WhatsAppCallerReplacement = WhatsAppCaller.mapFields(

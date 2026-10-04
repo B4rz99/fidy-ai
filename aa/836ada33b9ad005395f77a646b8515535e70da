@@ -1,0 +1,19 @@
+apps/web/src/features/public-site/landing/landing.css
+  s_7ab0fc05e25db9::t_31aae6a6c9c6bf 683
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "aa836ada33b9ad005395f77a646b8515535e70da",
+  "prompts": {},
+  "sessions": {
+    "s_7ab0fc05e25db9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1052a-b73d-70c3-9c02-9d67c7511dea",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

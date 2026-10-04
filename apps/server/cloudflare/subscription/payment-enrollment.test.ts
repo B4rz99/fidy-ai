@@ -23,6 +23,7 @@ import { cloudflareWorkerTelemetry } from "../runtime/telemetry/operations";
 import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
 import { executeProtectedSubscriptionQuery } from "./operations";
 import { makeCoreHttp } from "../core-http/runtime";
+import { SubscriptionEnrollmentGroup } from "../../src/shell/subscription/contract";
 import { applyTestMigration } from "../d1-test-fixture";
 import { type TransactionSubject } from "../canonical-work/contract";
 import {
@@ -326,6 +327,7 @@ it("requires Nequi approval before creating a reusable source and collecting one
   Effect.runPromise(
     Effect.gen(function* () {
       const { db, environment, request } = yield* fromTestPromise(setup);
+      const { publicFetch } = enrollmentWorkers(environment);
       let approved = false;
       let sourceCreations = 0;
       const provider = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -362,15 +364,13 @@ it("requires Nequi approval before creating a reusable source and collecting one
         return Promise.resolve(available);
       });
       vi.stubGlobal("fetch", provider);
-      const preparedResponse = yield* fromTestPromise(() =>
-        handlePaymentEnrollment({
-          request: request("/web/subscription/payment-enrollments/prepare", "POST", {
-            priceId,
-            method: "nequi",
-          }),
-          environment,
-        })
-      );
+      const prepareRequest = request(SubscriptionEnrollmentGroup.endpoints.prepare.path, "POST", {
+        priceId,
+        method: "nequi",
+      });
+      prepareRequest.headers.set("authorization", "Bearer not-browser-authority");
+      prepareRequest.headers.set("x-untrusted-header", "must-not-cross");
+      const preparedResponse = yield* fromTestPromise(() => publicFetch(prepareRequest));
       const prepared = yield* fromTestPromise(() => preparedResponse.json());
       expect(preparedResponse.status).toBe(200);
       const enrollmentId = (yield* Schema.decodeUnknownEffect(
@@ -390,33 +390,86 @@ it("requires Nequi approval before creating a reusable source and collecting one
         },
       };
       const pending = yield* fromTestPromise(() =>
-        handlePaymentEnrollment({
-          request: request("/web/subscription/payment-enrollments/submit", "POST", payload),
-          environment,
-        })
+        publicFetch(request(SubscriptionEnrollmentGroup.endpoints.submit.path, "POST", payload))
       );
       expect(pending.status).toBe(400);
       expect(sourceCreations).toBe(0);
       approved = true;
       const accepted = yield* fromTestPromise(() =>
-        handlePaymentEnrollment({
-          request: request("/web/subscription/payment-enrollments/submit", "POST", payload),
-          environment,
-        })
+        publicFetch(request(SubscriptionEnrollmentGroup.endpoints.submit.path, "POST", payload))
       );
       expect(accepted.status).toBe(200);
-      expect(yield* fromTestPromise(() => accepted.json())).toMatchObject({
+      const submitted = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentSubmission))(
+        yield* fromTestPromise(() => accepted.json())
+      );
+      expect(submitted).toMatchObject({
         status: "payment-pending",
         billingAttempt: { status: "pending" },
       });
+      if (submitted.status !== "payment-pending") throw new Error("Missing BillingAttempt");
+      const status = yield* fromTestPromise(() =>
+        publicFetch(
+          request(
+            SubscriptionEnrollmentGroup.endpoints.status.path.replace(":enrollmentId", enrollmentId)
+          )
+        )
+      );
+      expect(status.status).toBe(200);
+      expect(yield* fromTestPromise(() => status.json())).toMatchObject({
+        enrollmentId,
+        status: "available",
+      });
+      const attempt = yield* fromTestPromise(() =>
+        publicFetch(
+          request(
+            SubscriptionEnrollmentGroup.endpoints.billingAttempt.path.replace(
+              ":billingAttemptId",
+              submitted.billingAttempt.id
+            )
+          )
+        )
+      );
+      expect(attempt.status).toBe(200);
+      expect(yield* fromTestPromise(() => attempt.json())).toMatchObject({ status: "pending" });
       const replay = yield* fromTestPromise(() =>
-        handlePaymentEnrollment({
-          request: request("/web/subscription/payment-enrollments/submit", "POST", payload),
-          environment,
-        })
+        publicFetch(request(SubscriptionEnrollmentGroup.endpoints.submit.path, "POST", payload))
       );
       expect(replay.status).toBe(200);
       expect(sourceCreations).toBe(1);
+      yield* fromTestPromise(() =>
+        db.prepare("UPDATE web_sessions SET user_id = ?").bind(userB).run()
+      );
+      for (const endpoint of [
+        SubscriptionEnrollmentGroup.endpoints.status,
+        SubscriptionEnrollmentGroup.endpoints.billingAttempt,
+      ]) {
+        const addressedId =
+          endpoint.identifier === "status" ? enrollmentId : submitted.billingAttempt.id;
+        const foreign = yield* fromTestPromise(() =>
+          publicFetch(request(endpoint.path.replace(/:[^/]+/u, addressedId)))
+        );
+        expect(foreign.status).toBe(400);
+        expect(yield* fromTestPromise(() => foreign.text())).not.toContain(addressedId);
+      }
+      const foreignSubmit = yield* fromTestPromise(() =>
+        publicFetch(request(SubscriptionEnrollmentGroup.endpoints.submit.path, "POST", payload))
+      );
+      expect(foreignSubmit.status).toBe(400);
+      expect(sourceCreations).toBe(1);
+      yield* fromTestPromise(() =>
+        db.prepare("UPDATE web_sessions SET user_id = ?").bind(userA).run()
+      );
+      const unchanged = yield* fromTestPromise(() =>
+        publicFetch(
+          request(
+            SubscriptionEnrollmentGroup.endpoints.status.path.replace(":enrollmentId", enrollmentId)
+          )
+        )
+      );
+      expect(yield* fromTestPromise(() => unchanged.json())).toMatchObject({
+        enrollmentId,
+        status: "available",
+      });
       expect(
         yield* fromTestPromise(() =>
           db.prepare("SELECT count(*) AS count FROM billing_attempts").first()
@@ -499,6 +552,126 @@ it.each(["sandbox", "production"] as const)(
         expect(provider).not.toHaveBeenCalled();
       })
     )
+);
+
+const enrollmentWorkers = (
+  environment: Awaited<ReturnType<typeof setup>>["environment"]
+): Readonly<{
+  publicFetch: (request: Request) => Promise<Response>;
+  coreFetch: (request: Request) => Promise<Response>;
+}> => {
+  const core = makeCoreHttp(cloudflareWorkerTelemetry);
+  const ingress = makePublicWorker(cloudflareWorkerTelemetry);
+  const coreEnvironment = {
+    ...environment,
+    RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
+    CONTRACT_DIGEST: "0".repeat(64),
+    USER_TRANSACTION_COORDINATOR: {
+      getByName: (): Pick<Fetcher, "fetch"> => ({
+        fetch: () => Promise.resolve(new Response(null, { status: 503 })),
+      }),
+    },
+    KAPSO_API_KEY: "fixture-unused",
+    KAPSO_WEBHOOK_SECRET: "fixture-unused",
+    WHATSAPP_BUSINESS_PORTFOLIO_ID: "fixture-unused",
+    CLOUDFLARE_ACCESS_ISSUER: "https://fixture-unused.example",
+    CLOUDFLARE_ACCESS_AUDIENCE: "fixture-unused",
+  };
+  const coreFetch = (request: Request): Promise<Response> => core(request, coreEnvironment);
+  return {
+    coreFetch,
+    publicFetch: (request) =>
+      ingress.fetch(request, {
+        BROWSER_ORIGIN: browserOrigins.local,
+        CORE: {
+          fetch: (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+            const forwarded = new Request(input, init);
+            // Forwarding is itself the public/Core protocol under test, not an owner mock.
+            expect(forwarded.headers.has("authorization")).toBe(false);
+            expect(forwarded.headers.has("x-untrusted-header")).toBe(false);
+            expect(forwarded.headers.get("cookie")).toBe(request.headers.get("cookie") ?? "");
+            expect(forwarded.headers.get("origin")).toBe(request.headers.get("origin"));
+            return coreFetch(forwarded);
+          },
+        },
+        LOCAL_CANONICAL_READ_BEARER: localCanonicalReadBearer,
+        PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
+        RELEASE_GIT_SHA: coreEnvironment.RELEASE_GIT_SHA,
+      }),
+  };
+};
+
+it.each(Object.values(SubscriptionEnrollmentGroup.endpoints))(
+  "keeps $identifier browser-only through public and Core, including method and proof refusals",
+  (endpoint) => {
+    const body = endpoint.method === "POST" ? { priceId } : undefined;
+    return Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = yield* fromTestPromise(setup);
+        const workers = enrollmentWorkers(fixture.environment);
+        const path = endpoint.path.replace(/:[^/]+/u, "10000000-0000-4000-8000-000000000001");
+        const provider = vi.fn(() => Promise.resolve(new Response(merchant)));
+        vi.stubGlobal("fetch", provider);
+        const preflight = fixture.request(path, "OPTIONS");
+        preflight.headers.set("access-control-request-method", endpoint.method);
+        preflight.headers.set("access-control-request-headers", "content-type");
+        const admitted = yield* fromTestPromise(() => workers.publicFetch(preflight));
+        expect(admitted.status).toBe(204);
+        expect(admitted.headers.get("access-control-allow-origin")).toBe(browserOrigins.local);
+        expect(admitted.headers.get("access-control-allow-credentials")).toBe("true");
+        expect(admitted.headers.get("access-control-allow-methods")).toContain(endpoint.method);
+
+        for (const seam of ["publicFetch", "coreFetch"] as const) {
+          const wrongMethod = endpoint.method === "GET" ? "POST" : "GET";
+          const refusedMethod = yield* fromTestPromise(() =>
+            workers[seam](fixture.request(path, wrongMethod))
+          );
+          expect(refusedMethod.status).toBe(seam === "publicFetch" ? 405 : 400);
+          expect(refusedMethod.headers.get("cache-control")).toBe("no-store");
+          for (const failure of [
+            "missing-origin",
+            "foreign-origin",
+            "missing-session",
+            "PAT-only",
+          ]) {
+            const request = fixture.request(path, endpoint.method, body);
+            removeBrowserProof(request, failure);
+            request.headers.set("x-untrusted-header", "must-not-cross");
+            const refused = yield* fromTestPromise(() => workers[seam](request));
+            expect(refused.status).toBe(failure.endsWith("origin") ? 403 : 401);
+            expect(refused.headers.get("cache-control")).toBe("no-store");
+          }
+          for (const update of [
+            "UPDATE web_sessions SET fresh_until_ms = 0",
+            "UPDATE web_sessions SET revoked_at_ms = 1",
+            "INSERT INTO consent_user_revocations VALUES ('10000000-0000-4000-8000-000000000001')",
+          ]) {
+            yield* fromTestPromise(() => fixture.db.prepare(update).run());
+            const refused = yield* fromTestPromise(() =>
+              workers[seam](fixture.request(path, endpoint.method, body))
+            );
+            expect(refused.status).toBe(401);
+            yield* fromTestPromise(() =>
+              fixture.db.batch([
+                fixture.db.prepare(
+                  "UPDATE web_sessions SET fresh_until_ms = hard_expires_at_ms, revoked_at_ms = NULL"
+                ),
+                fixture.db.prepare("DELETE FROM consent_user_revocations"),
+              ])
+            );
+          }
+        }
+        expect(provider).not.toHaveBeenCalled();
+        for (const table of ["card_enrollments", "card_payment_sources", "billing_attempts"]) {
+          expect(
+            yield* fromTestPromise(() =>
+              fixture.db.prepare(`SELECT count(*) AS count FROM ${table}`).first()
+            )
+          ).toEqual({ count: 0 });
+        }
+      })
+    );
+  }
 );
 
 const removeBrowserProof = (request: Request, failure: string): void => {

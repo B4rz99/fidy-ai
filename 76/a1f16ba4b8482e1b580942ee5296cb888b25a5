@@ -1,0 +1,29 @@
+apps/server/package.json
+  s_cfc2b176144667::t_5fcbf3deccfcf8 311
+scripts/install-workspace.sh
+  s_cfc2b176144667::t_8fd2d5245b9992 2,16-17
+apps/web/package.json
+  s_cfc2b176144667::t_8cc0f2a4e43686 31,60
+docs/research/1005-release-age-exception.md
+  s_cfc2b176144667::t_b6258c1a19a6f0 1-22
+infra/cloudflare/package.json
+  s_cfc2b176144667::t_da0fe431b14368 26
+bun.lock
+  s_cfc2b176144667::t_558c0abb6c81d0 65,80,93,109,126,243,245,247,249,251,411-412,769,773,1553,1555,1701,1703,1927
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "76a1f16ba4b8482e1b580942ee5296cb888b25a5",
+  "prompts": {},
+  "sessions": {
+    "s_cfc2b176144667": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10723-2418-73d5-8f2b-079f13ca3692",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

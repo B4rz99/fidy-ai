@@ -1,0 +1,31 @@
+apps/server/cloudflare/core-http/internal/http.ts
+  s_03ac5c7c2fb46d::t_d8396e546f5356 103,233-244
+infra/cloudflare/verify-edge-policy.ts
+  s_03ac5c7c2fb46d::t_eb4d4c6c5e14e9 7-9
+apps/server/cloudflare/onboarding/consent-ingress.test.ts
+  s_03ac5c7c2fb46d::t_6f747864ecd956 421-430,432-451
+  s_03ac5c7c2fb46d::t_c7f3e1d041464b 431
+  s_03ac5c7c2fb46d::t_89943c701c1cf1 180-190
+infra/cloudflare/verify-edge-policy.test.ts
+  s_03ac5c7c2fb46d::t_6c53808455c95f 7
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_03ac5c7c2fb46d::t_2cf25ecc349133 119
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_03ac5c7c2fb46d::t_9c271fe34ffd99 130
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e0b91a8b049addc30e815a45670cdad19e30c15d",
+  "prompts": {},
+  "sessions": {
+    "s_03ac5c7c2fb46d": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a1050d-fc55-7771-8f2c-48bd52a56f3c",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

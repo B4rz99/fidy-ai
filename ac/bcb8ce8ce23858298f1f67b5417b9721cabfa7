@@ -1,0 +1,153 @@
+apps/server/.dependency-cruiser.mjs
+  s_c9cf1ab550f807::t_562a20ac36e280 180,1326
+apps/server/src/core/oauth-agents/operations.ts
+  s_c9cf1ab550f807::t_677ddcd712ad66 1-4,8-11
+  s_c9cf1ab550f807::t_290bf940bc6fc4 5-7
+tools/depcruise/publication.mjs
+  s_c9cf1ab550f807::t_0a23fb54b1fde9 40-41
+apps/web/src/features/browser-login/pairing-controller.ts
+  s_c9cf1ab550f807::t_098ef1b70a7495 12
+  s_c9cf1ab550f807::t_69d8c5e0aa5630 396-398,400-403
+  s_c9cf1ab550f807::t_28e915dfebfbb1 399,404-405
+apps/web/src/transport/client.ts
+  s_c9cf1ab550f807::t_432e347e4463fa 34
+apps/server/src/client.ts
+  s_c9cf1ab550f807::t_5b14c40c6624a6 20
+apps/server/cloudflare/oauth-agents/internal/review.ts
+  s_c9cf1ab550f807::t_0b6944b27cc254 11-12,111-112
+  s_c9cf1ab550f807::t_1dcbd2b0c4b4a1 48,118-121,136-138,157,169,175
+  s_c9cf1ab550f807::t_098ef1b70a7495 60-61,63-64,168,170
+  s_c9cf1ab550f807::t_3f1a8602a2cd22 14-15,24,49-51
+  s_c9cf1ab550f807::t_83a8ddf95b46c5 10,13,57-59,68,97
+  s_c9cf1ab550f807::t_69d8c5e0aa5630 2-9,16-23,30,37-41,52-56,62,65-67,69-96,98-110,113-117,122-135,139-156,158-167,171-173,178-179
+  s_c9cf1ab550f807::t_aabedcf4a5b6e6 1
+  s_c9cf1ab550f807::t_1a26e30d383330 25-28,31-36,42-47
+  s_c9cf1ab550f807::t_9ba569f47e6bed 174,176
+  s_c9cf1ab550f807::t_690fa138f548cb 29,177
+apps/server/cloudflare/oauth-agents/oauth-ingress.test.ts
+  s_c9cf1ab550f807::t_aee7e83ba1c808 2-9,85
+  s_c9cf1ab550f807::t_21e7dd8c09c663 424-426,428-430
+  s_c9cf1ab550f807::t_7ef2442369a53f 75-81
+  s_c9cf1ab550f807::t_582852c200de95 568-570
+  s_c9cf1ab550f807::t_6d89a2d975cd30 490-497,501-515,518-567,571-620
+  s_c9cf1ab550f807::t_a038021ad6ecd5 74
+  s_c9cf1ab550f807::t_69d8c5e0aa5630 11-73,82-84,88-90,92-101,103-127,130,132-150,398-423,431-439,441-451,453-489,621-697
+  s_c9cf1ab550f807::t_f07c2b44361343 516-517
+  s_c9cf1ab550f807::t_942b4de040e831 86-87,91,128,248
+  s_c9cf1ab550f807::t_319153868e7e13 1
+  s_c9cf1ab550f807::t_e195fae8a19dba 102,427,498-500
+  s_c9cf1ab550f807::t_d847fb08377eed 440,452
+  s_c9cf1ab550f807::t_290bf940bc6fc4 152-185,189-197,200-247,249-397
+  s_c9cf1ab550f807::t_29b771fc1189f0 129,131,151,186-188,198-199
+  s_c9cf1ab550f807::t_31cc3aba155585 10
+  s_c9cf1ab550f807::t_b39e2e4cbc31f6 698-701
+apps/web/src/features/oauth-connections/view.tsx
+  s_c9cf1ab550f807::t_3cf9570c446cd8 19,73
+  s_c9cf1ab550f807::t_4f9e8907eab63a 81-83
+  s_c9cf1ab550f807::t_a162318c9b0243 1-2,10-13,20,49-50,67-72,116
+  s_c9cf1ab550f807::t_098ef1b70a7495 3-9,21-48,51-66,74-80,84-93,96-98,103-115
+  s_c9cf1ab550f807::t_e67316353ef6a0 14-18,94-95,99-102
+apps/server/cloudflare/oauth-agents/runtime.ts
+  s_c9cf1ab550f807::t_1a26e30d383330 2-17,23-29,32-35,42-83,85-88,90-107,109-111,115-118,123-133,138-141,146-155,160-163,166-168,170-171,175-177,181-194,196-197,199
+  s_c9cf1ab550f807::t_7dee4a5f5d022b 21
+  s_c9cf1ab550f807::t_897dba633ef973 108
+  s_c9cf1ab550f807::t_b45ca28efb851c 112,145
+  s_c9cf1ab550f807::t_6d89a2d975cd30 113,120-121,135-137,142-143,156-159,164-165,172-174,178,180
+  s_c9cf1ab550f807::t_58239fa6e8ffde 1,19-20,30,84,169
+  s_c9cf1ab550f807::t_69d8c5e0aa5630 200
+  s_c9cf1ab550f807::t_4fb9c26dbf2c6e 37,114,119,122,134,144,179,195,198
+  s_c9cf1ab550f807::t_28d65f332e0e7b 39-40
+  s_c9cf1ab550f807::t_441c821dc502a7 22
+  s_c9cf1ab550f807::t_601bf6c03f10a3 38
+  s_c9cf1ab550f807::t_b3853ebb96e75b 41
+  s_c9cf1ab550f807::t_f0df2fdb049f31 18,31,36,89
+  s_c9cf1ab550f807::t_203a8dd2cc0898 201-208
+apps/server/cloudflare/public-worker.ts
+  s_c9cf1ab550f807::t_582852c200de95 415-419
+  s_c9cf1ab550f807::t_6912a45e23fd65 267-269,274
+  s_c9cf1ab550f807::t_674152344a7acd 276
+  s_c9cf1ab550f807::t_8fa3f0c4b5b8f9 370-377,379
+  s_c9cf1ab550f807::t_69d8c5e0aa5630 258-259,261,270-273,434,463-464,466
+  s_c9cf1ab550f807::t_7b740ca23d636c 1,401,403
+  s_c9cf1ab550f807::t_853c97947071ce 411-414,420-421
+infra/cloudflare/edge-security.ts
+  s_c9cf1ab550f807::t_765e9792593cc9 1,101
+apps/server/cloudflare/core-http/internal/http.ts
+  s_c9cf1ab550f807::t_69d8c5e0aa5630 1580-1584
+  s_c9cf1ab550f807::t_20ee5cbc132a34 1-2,1579,1585
+apps/server/cloudflare/oauth-agents/internal/response.ts
+  s_c9cf1ab550f807::t_d9f45731106ebc 2-4
+  s_c9cf1ab550f807::t_290bf940bc6fc4 5-6
+  s_c9cf1ab550f807::t_a1739e916c4078 1
+apps/server/cloudflare/oauth-agents/internal/bootstrap.ts
+  s_c9cf1ab550f807::t_098ef1b70a7495 9-12,18,22-23,26-29,33-47,53-68,70-72,74-75,92-95,99-160,164-173
+  s_c9cf1ab550f807::t_1cf3349598768b 73
+  s_c9cf1ab550f807::t_1cedb0b53429ee 1,20-21
+  s_c9cf1ab550f807::t_40df0dac1a603e 19,51,69,76,79-80
+  s_c9cf1ab550f807::t_0e342990e3f278 14-15,91
+  s_c9cf1ab550f807::t_05ba031879081f 3-6,8,13,16-17,24-25,83-90,96-98
+  s_c9cf1ab550f807::t_290bf940bc6fc4 48-49
+  s_c9cf1ab550f807::t_9ed4259e82a065 7
+  s_c9cf1ab550f807::t_6d89a2d975cd30 30-32,50,52,77-78,81-82,161-163
+  s_c9cf1ab550f807::t_44a9f73b57ae48 2
+  s_c9cf1ab550f807::t_46b39db57d29d5 174-182
+apps/server/scripts/check-browser-client.ts
+  s_c9cf1ab550f807::t_2a59bd114a5914 21
+apps/server/cloudflare/migrations/0032_oauth_review.sql
+  s_c9cf1ab550f807::t_1ff844c3ad2f7e 1-28
+apps/web/src/app/routes.ts
+  s_c9cf1ab550f807::t_6bbc9448cc06d6 1-3,121
+  s_c9cf1ab550f807::t_582852c200de95 105
+  s_c9cf1ab550f807::t_69d8c5e0aa5630 104,108-112
+apps/web/src/features/oauth-connections/view.test.tsx
+  s_c9cf1ab550f807::t_6d89a2d975cd30 9-21,25-27
+  s_c9cf1ab550f807::t_e67316353ef6a0 32-34,36-38
+  s_c9cf1ab550f807::t_249ff3f4783fdf 8,41
+  s_c9cf1ab550f807::t_26823b8d0af462 1-7,22-24,28-31,35,39-40,42-44
+apps/web/e2e/oauth-review.spec.ts
+  s_c9cf1ab550f807::t_d49437d6a34d6e 9-11,80
+  s_c9cf1ab550f807::t_db0f5dc7bb1597 221-227
+  s_c9cf1ab550f807::t_49048533ba6733 3,26,30,56,68,88,170
+  s_c9cf1ab550f807::t_c01ce313d99ed9 243
+  s_c9cf1ab550f807::t_582852c200de95 31-55,57-67,69-79,81-87,89-108,110-128,167-169,171-220,228-242
+  s_c9cf1ab550f807::t_99e8ccb40ffcb1 2,4-7,12,27,29,109
+  s_c9cf1ab550f807::t_1c4fe06d7b36b7 8
+  s_c9cf1ab550f807::t_4f9e8907eab63a 130-143,145,147-154,156,158-165,244-247
+  s_c9cf1ab550f807::t_fbb59f7cd27101 21-23,129
+  s_c9cf1ab550f807::t_463381243d9db0 1,13-20,24-25,28,166
+  s_c9cf1ab550f807::t_43d492d8346a46 144,146,155,157
+apps/server/src/shell/oauth-agents/contract.ts
+  s_c9cf1ab550f807::t_1fc7dac658fffd 20,25-27,39-42,57-67,71-76,82-84
+  s_c9cf1ab550f807::t_cb9083b8171bfa 2
+  s_c9cf1ab550f807::t_3ead6f1167b024 15-17,90-94,110-111
+  s_c9cf1ab550f807::t_590a395f891888 34
+  s_c9cf1ab550f807::t_3ef5f411113797 80-81
+  s_c9cf1ab550f807::t_290bf940bc6fc4 47-50,53-54
+  s_c9cf1ab550f807::t_54a90b262dcc60 3,68
+  s_c9cf1ab550f807::t_69d8c5e0aa5630 28-33,35-38,43-46,51-52,55-56,77-79,85-89,95-109,112-150
+  s_c9cf1ab550f807::t_7f793d64b83646 21-24,69-70
+  s_c9cf1ab550f807::t_c8f3af8259f8a2 1,4-14,18-19
+apps/server/src/shell/web-authentication/contract.ts
+  s_c9cf1ab550f807::t_c75bb47009ac27 1,57
+apps/web/src/features/oauth-connections/feature.tsx
+  s_c9cf1ab550f807::t_098ef1b70a7495 12-31,33-45,49-54,63-70,75-87,93-101
+  s_c9cf1ab550f807::t_bf080f79a7c4eb 55-56
+  s_c9cf1ab550f807::t_56c3948d00a2ba 3-4,6,10,32,46,60,62,71-74
+  s_c9cf1ab550f807::t_fca508f3a74694 1-2,5,7-9,11,47-48,57-59,61,88-92,102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "acbcb8ce8ce23858298f1f67b5417b9721cabfa7",
+  "prompts": {},
+  "sessions": {
+    "s_c9cf1ab550f807": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a103eb-8fe8-76e6-be76-2498607b77a0",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    }
+  }
+}

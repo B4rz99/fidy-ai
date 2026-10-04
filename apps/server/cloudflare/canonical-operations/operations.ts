@@ -1,3 +1,7 @@
+import {
+  executeHostedStatementCall as heldStatementCall,
+  executeHostedStatementQuery as heldStatementQuery,
+} from "./internal/hosted-statement";
 import { Cause, Effect, Exit, Option, Schema } from "effect";
 import type { OAuthCaller } from "../../src/shell/oauth-agents/contract";
 import { recordOAuthCall } from "../../src/shell/audit/operations";
@@ -23,13 +27,14 @@ import type { CanonicalMutationPreparation, CanonicalWork } from "./contract";
 import { executeCanonicalBatch, executeHostedCanonicalBatch, rawOperation } from "./internal/batch";
 import {
   type CanonicalMutationAdapter,
+  canonicalHostedStatementAdapter,
   canonicalMutationAdapter,
 } from "./internal/mutation-registry";
 import { executeSingleCanonicalMutation } from "./internal/mutation-unit";
 import { checkpointQueryResponse } from "./internal/oauth-query";
 import { withQueryLifetime } from "./internal/query-lifetime";
 import { resolveOAuthQueryCaller } from "../oauth-agents/operations";
-import { canonicalQueryOwner } from "./internal/query-registry";
+import { canonicalHostedStatementQueryOwner, canonicalQueryOwner } from "./internal/query-registry";
 import { matchesRoute } from "../routing/operations";
 import { evaluateBudgetAlerts } from "../budgets/operations";
 import { unavailableStatement } from "../ingestion/operations";
@@ -42,6 +47,14 @@ import {
   transactionUnavailable,
 } from "../canonical-work/operations";
 import { transactionNoStore } from "../canonical-work/contract";
+
+/** Read only installed statement queries under Agent's current upload conversation authority. */
+export const executeHostedStatementQuery: typeof heldStatementQuery = (input) =>
+  heldStatementQuery(input);
+
+/** Execute only installed statement work under Agent's verified live Turn and origin Session. */
+export const executeHostedStatementCall: typeof heldStatementCall = (input) =>
+  heldStatementCall(input);
 
 const httpServiceUnavailable = 503;
 const scopeMissingStatus = 403;
@@ -391,6 +404,14 @@ export const executeCanonicalWork = (
     )
   );
 };
+
+/** The verified statement channel discovers only adapters installed for its native authority. */
+export const installedHostedStatementOperations = (): ReadonlyArray<CatalogOperation> =>
+  operationCatalog.operations.filter(
+    ({ id }) =>
+      Option.isSome(canonicalHostedStatementAdapter(id)) ||
+      Option.isSome(canonicalHostedStatementQueryOwner(id))
+  );
 
 /** Installed canonical operations retain their declaration identity, policy and codecs. */
 export const installedCanonicalOperations = (): ReadonlyArray<CatalogOperation> =>

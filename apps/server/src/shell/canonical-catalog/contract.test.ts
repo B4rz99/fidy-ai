@@ -60,7 +60,11 @@ it("keeps optional review paging and the existing UTF-16 search bounds", () => {
   const review = Schema.decodeSync(getCanonicalOperationInput("ingestion.listNeedsReviewItems"))({
     query: {},
   });
-  expect(review.query).toEqual({ offset: Option.none(), limit: Option.none() });
+  expect(review.query).toEqual({
+    offset: Option.none(),
+    limit: Option.none(),
+    status: Option.none(),
+  });
 
   const search = Schema.decodeOption(getCanonicalOperationInput("transactions.searchTransactions"));
   expect(Option.isNone(search({ query: { q: "a" } }))).toBe(true);

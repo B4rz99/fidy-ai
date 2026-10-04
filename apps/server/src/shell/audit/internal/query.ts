@@ -157,9 +157,9 @@ export const queryPublications = ({
       try: () =>
         database
           .prepare(
-            `SELECT * FROM (${projection("statement_submission_audit")} UNION ALL ${projection("statement_review_audit")}) ORDER BY occurredAt, id LIMIT ?`
+            `SELECT * FROM (${projection("statement_submission_audit")} UNION ALL ${projection("statement_review_audit")} UNION ALL ${projection("statement_clarification_audit")}) ORDER BY occurredAt, id LIMIT ?`
           )
-          .bind(request.userId, request.userId, request.limit)
+          .bind(request.userId, request.userId, request.userId, request.limit)
           .all<unknown>(),
       catch: () => new AuditUnavailable(),
     });

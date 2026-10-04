@@ -27,6 +27,13 @@ const sessionDestinations = new Map([
 const sessionDestination = (operation: AuditCredentialOperation): string => {
   const owner = operation.split(".")[0];
   if (owner === "ingestion") {
+    if (
+      operation === "ingestion.resolveNeedsReviewItem" ||
+      operation === "ingestion.skipNeedsReviewItem" ||
+      operation === "ingestion.abandonStatementSubmission"
+    ) {
+      return "statement_clarification_audit";
+    }
     return operation === "ingestion.listNeedsReviewItems"
       ? "statement_review_audit"
       : "statement_submission_audit";
@@ -36,7 +43,9 @@ const sessionDestination = (operation: AuditCredentialOperation): string => {
 const destination = (operation: AuditCredentialOperation, pat: boolean): string =>
   pat ? "pat_audit" : sessionDestination(operation);
 const credentialColumn = (table: string, pat: boolean): ReadonlyArray<string> =>
-  table === "statement_submission_audit" || table === "statement_review_audit"
+  table === "statement_submission_audit" ||
+  table === "statement_review_audit" ||
+  table === "statement_clarification_audit"
     ? []
     : [pat ? "pat_id" : "session_id"];
 const outcomeColumns = (table: string, outcome: string): ReadonlyArray<string> =>

@@ -310,6 +310,9 @@ export type PATSubject = Readonly<{
 export type AuditedPATMutation = Extract<
   AuditedPATOperation,
   | "ingestion.submitForExtraction"
+  | "ingestion.resolveNeedsReviewItem"
+  | "ingestion.skipNeedsReviewItem"
+  | "ingestion.abandonStatementSubmission"
   | "transactions.createTransaction"
   | "transactions.linkTransactions"
   | "transactions.unlinkTransactions"

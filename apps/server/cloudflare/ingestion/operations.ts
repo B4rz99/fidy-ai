@@ -3,6 +3,25 @@ import type { MediaAdmissionInput } from "./contract";
 import type { Effect } from "effect";
 
 import {
+  prepareStatementDocumentAdmission as documentAdmission,
+  readHeldStatementDocument as readDocument,
+  readHeldStatementDocumentReference as readDocumentReference,
+  readHeldStatementDocumentSubmission as readDocumentSubmission,
+  releaseHeldStatementDocumentUpload as releaseDocumentUpload,
+  stageHeldStatementDocument as stageDocument,
+  withHeldStatementDocumentUpload as withDocumentUpload,
+} from "./internal/statement-document";
+import { readHeldStatementQuery as heldQuery } from "./internal/statement-held-query";
+import { prepareStatementSessionActivity as sessionActivity } from "./internal/statement-session";
+import {
+  prepareHeldStatementAbandonment as heldAbandon,
+  prepareHeldStatementReviewDecision as heldReview,
+  prepareStatementAbandonment as prepareAbandon,
+  prepareStatementReviewDecision as prepareReview,
+  clarificationRefusal as reviewRefusal,
+} from "./internal/statement-clarification-mutation";
+
+import {
   overdueIngestionRetention,
   pendingIngestionWork,
 } from "./internal/operational-observation";
@@ -25,6 +44,7 @@ import {
 import { processForwardedEmail as processEmail } from "./internal/forwarded-email-processing";
 import {
   statementDailyBudgetRefusal as budgetRefusal,
+  prepareHeldStatementSubmission as heldSubmission,
   statementMutationAdapter,
 } from "./internal/statement-mutation";
 import {
@@ -35,6 +55,46 @@ import {
 /** Atomically accept an authenticated image with its media unit, attribution, visible review and durable outbox. Exact delivery replay is free; no provider retrieval occurs here. */
 export const acceptWhatsAppMedia = (input: MediaAdmissionInput): Effect.Effect<Response> =>
   admitMedia(input);
+
+/** Share installed queries with the verified upload conversation without borrowing credentials. */
+export const readHeldStatementQuery: typeof heldQuery = (input) => heldQuery(input);
+
+/** Compose clarification deadlines and permanent session boundaries in Agent's lifecycle unit. */
+export const prepareStatementSessionActivity: typeof sessionActivity = (input) =>
+  sessionActivity(input);
+
+/** Admit direct attachment evidence in Agent's guarded Turn transaction. */
+export const prepareStatementDocumentAdmission: typeof documentAdmission = (input) =>
+  documentAdmission(input);
+/** Read only the admitted upload's media identity under live held authority. */
+export const readHeldStatementDocumentReference: typeof readDocumentReference = (input) =>
+  readDocumentReference(input);
+export const readHeldStatementDocument: typeof readDocument = (input) => readDocument(input);
+export const readHeldStatementDocumentSubmission: typeof readDocumentSubmission = (input) =>
+  readDocumentSubmission(input);
+/** Apply installed upload budgets before provider retrieval and release bounded outstanding work. */
+export const withHeldStatementDocumentUpload: typeof withDocumentUpload = (input) =>
+  withDocumentUpload(input);
+/** Release only this admitted Turn's retained upload occupancy during recovery. */
+export const releaseHeldStatementDocumentUpload: typeof releaseDocumentUpload = (input) =>
+  releaseDocumentUpload(input);
+/** Stage verified bounded bytes with durable same-Turn retry identity. */
+export const stageHeldStatementDocument: typeof stageDocument = (input) => stageDocument(input);
+
+/** Share canonical row settlement with Agent's held, verified origin-session authority. */
+export const prepareHeldStatementReviewDecision: typeof heldReview = (input) => heldReview(input);
+/** Share canonical cancellation with Agent's held, verified origin-session authority. */
+export const prepareHeldStatementAbandonment: typeof heldAbandon = (input) => heldAbandon(input);
+
+/** Prepare a canonical row decision with capture, erasure, entitlement and Audit in one unit. */
+export const prepareStatementReviewDecision: typeof prepareReview = (input) => prepareReview(input);
+/** Prepare permanent explicit abandonment under live caller authority. */
+export const prepareStatementAbandonment: typeof prepareAbandon = (work) => prepareAbandon(work);
+/** Attribute a stale or foreign clarification without exposing source evidence. */
+export const statementClarificationRefusal: typeof reviewRefusal = (input) => reviewRefusal(input);
+
+/** Publish staged bytes and verified origin through the shared hosted canonical unit. */
+export const prepareHeldStatementSubmission: typeof heldSubmission = (work) => heldSubmission(work);
 
 /** Stage bounded bytes under a live User session; the result grants no extraction authority. */
 export const uploadStagedStatement: typeof uploadStatement = (input) => uploadStatement(input);

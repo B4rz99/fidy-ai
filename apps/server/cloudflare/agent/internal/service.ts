@@ -22,6 +22,10 @@ import { UserId } from "../../../src/core/identity/contract";
 import { type CanonicalOperationId } from "../../../src/core/canonical-operations/contract";
 import { atomicBatchOperation } from "../../../src/shell/operations/contract";
 import type { HostedInferenceService } from "../../../src/shell/hosted-inference/contract";
+import {
+  type OutboundHttpService,
+  makeKapsoOutboundHttp,
+} from "../../../src/shell/outbound-http/operations";
 import { makeHostedSender } from "../../../src/shell/channels/whatsapp/runtime";
 import {
   Cause,
@@ -47,6 +51,7 @@ import {
   acknowledgeBrowserTurn,
   browserHostedDelivery,
   completeHostedTurnWithAdmission,
+  completeWhatsAppDocumentTurnWithAdmission,
   completeWhatsAppTurnWithAdmission,
   readHostedProgress,
   resumeWhatsAppTurn,
@@ -60,7 +65,8 @@ import {
 } from "../../runtime/telemetry/operations";
 import {
   WhatsAppStatusAdmission as StatusAdmission,
-  WhatsAppTurnAdmission as TurnAdmission,
+  WhatsAppInboundAdmission as TurnAdmission,
+  type WhatsAppDocumentAdmission,
   WhatsAppHostedSubject,
   type WhatsAppTurnAdmission,
   WhatsAppWork,
@@ -116,6 +122,7 @@ const prepareWhatsAppExecution = (
     Readonly<{
       inference: HostedInferenceService;
       sender: ReturnType<typeof makeHostedSender>;
+      outbound: OutboundHttpService;
     }>
   >,
   never,
@@ -134,7 +141,11 @@ const prepareWhatsAppExecution = (
       apiKey: Redacted.make(environment.KAPSO_API_KEY),
       httpClient: Context.get(clients, HttpClient.HttpClient),
     });
-    return Option.some({ inference: inference.value, sender });
+    const outbound = makeKapsoOutboundHttp({
+      apiKey: Redacted.make(environment.KAPSO_API_KEY),
+      httpClient: Context.get(clients, HttpClient.HttpClient),
+    });
+    return Option.some({ inference: inference.value, sender, outbound });
   });
 
 const startWhatsAppTurn = ({
@@ -145,45 +156,53 @@ const startWhatsAppTurn = ({
   signal,
   scheduleRecovery,
   onAdmitted,
+  bucket,
+  outbound,
 }: Readonly<{
   db: D1Database;
-  proof: WhatsAppTurnAdmission;
+  bucket: Option.Option<R2Bucket>;
+  outbound: OutboundHttpService;
+  proof: WhatsAppTurnAdmission | WhatsAppDocumentAdmission;
   inference: HostedInferenceService;
   sender: ReturnType<typeof makeHostedSender>;
   signal: AbortSignal;
   scheduleRecovery: (dueAtMs: number) => Promise<void>;
   onAdmitted: (turnId: TranscriptTurnId) => void;
-}>): Promise<Response> =>
-  completeWhatsAppTurnWithAdmission({
-    input: {
-      db,
-      subject: WhatsAppHostedSubject.make({
-        userId: proof.userId,
-        portfolioId: proof.portfolioId,
-        bsuid: proof.bsuid,
-      }),
-      inbound: {
-        messageId: proof.messageId,
-        businessPhoneNumberId: proof.businessPhoneNumberId,
-        occurredAtMs: proof.occurredAtMs,
-        receivedAtMs: proof.receivedAtMs,
-        replyToMessageId: proof.replyToMessageId,
-      },
-      text: proof.text,
-      inference,
-      bucket: Option.none(),
-      executeMutation: Option.none(),
-      deliver: {
-        _tag: "WhatsApp",
-        contextualReplyQuery: contextualProactiveInsightQuery(proof),
-        send: ({ text, correlationToken }) =>
-          sendWhatsAppAttempt({ sender, admission: proof, text, correlationToken }),
-      },
-      signal,
-      scheduleRecovery,
+}>): Promise<Response> => {
+  const input: Parameters<typeof completeWhatsAppTurnWithAdmission>[0]["input"] = {
+    db,
+    subject: WhatsAppHostedSubject.make({
+      userId: proof.userId,
+      portfolioId: proof.portfolioId,
+      bsuid: proof.bsuid,
+    }),
+    inbound: {
+      messageId: proof.messageId,
+      businessPhoneNumberId: proof.businessPhoneNumberId,
+      occurredAtMs: proof.occurredAtMs,
+      receivedAtMs: proof.receivedAtMs,
+      replyToMessageId: proof.replyToMessageId,
     },
-    onAdmitted,
-  });
+    text: proof.text,
+    inference,
+    bucket,
+    executeMutation: Option.none(),
+    deliver: {
+      _tag: "WhatsApp",
+      contextualReplyQuery: contextualProactiveInsightQuery(proof),
+      send: ({ text, correlationToken }) =>
+        sendWhatsAppAttempt({ sender, admission: proof, text, correlationToken }),
+    },
+    signal,
+    scheduleRecovery,
+  };
+  return "document" in proof
+    ? completeWhatsAppDocumentTurnWithAdmission({
+        input: { ...input, document: proof.document, outbound },
+        onAdmitted,
+      })
+    : completeWhatsAppTurnWithAdmission({ input, onAdmitted });
+};
 
 const hostedResponseDeadlineMs = 25_000;
 /** A soft response deadline; admission/preflight is interrupted, committed work is not. */
@@ -260,7 +279,6 @@ const boundedHostedOwner = ({
 
 const recoverAbandonedWork = (owner: AgentServiceInput): Promise<void> => {
   const env = owner.environment;
-  const state = { storage: { setAlarm: owner.scheduleRecovery } };
   return Effect.runPromise(
     Effect.gen(function* () {
       const next = yield* expireHostedPending({
@@ -269,7 +287,7 @@ const recoverAbandonedWork = (owner: AgentServiceInput): Promise<void> => {
         now: transactionNow(),
       });
       if (Option.isSome(next)) {
-        yield* Effect.tryPromise(() => state.storage.setAlarm(next.value));
+        yield* Effect.tryPromise(() => owner.scheduleRecovery(next.value));
       }
     })
   );
@@ -443,7 +461,6 @@ const runWhatsAppWork = (
 ): Promise<Response> => {
   const userId = owner.userId;
   const env = owner.environment;
-  const state = { storage: { setAlarm: owner.scheduleRecovery } };
   return Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -458,12 +475,14 @@ const runWhatsAppWork = (
         if (Option.isNone(prepared)) return transactionUnavailable();
         return yield* Effect.tryPromise(() =>
           resumeWhatsAppTurn({
+            outbound: prepared.value.outbound,
             db: env.DB,
             userId: UserId.make(userId),
             turnId: work.value.turnId,
+            bucket: Option.fromUndefinedOr(env.STATEMENT_STAGING_BUCKET),
             inference: prepared.value.inference,
             signal: deadline.signal,
-            scheduleRecovery: (dueAtMs) => state.storage.setAlarm(dueAtMs),
+            scheduleRecovery: owner.scheduleRecovery,
             deliver: (admission) => ({
               _tag: "WhatsApp",
               contextualReplyQuery: contextualProactiveInsightQuery({
@@ -496,10 +515,12 @@ const runWhatsAppWork = (
   );
 };
 
-const readWhatsAppAdmission = (request: Request): Effect.Effect<Option.Option<TurnAdmission>> =>
+const readWhatsAppAdmission = (
+  request: Request
+): Effect.Effect<Option.Option<typeof TurnAdmission.Type>> =>
   Effect.tryPromise(() => request.json()).pipe(
     Effect.orElseSucceed(() => undefined),
-    Effect.map(Schema.decodeUnknownOption(TurnAdmission))
+    Effect.map(Schema.decodeUnknownOption(Schema.toCodecJson(TurnAdmission)))
   );
 
 const runWhatsAppTurn = (
@@ -536,6 +557,8 @@ const runWhatsAppTurn = (
       startWhatsAppTurn({
         db: env.DB,
         proof,
+        bucket: Option.fromUndefinedOr(env.STATEMENT_STAGING_BUCKET),
+        outbound: prepared.value.outbound,
         inference: prepared.value.inference,
         sender: prepared.value.sender,
         signal: deadline.signal,

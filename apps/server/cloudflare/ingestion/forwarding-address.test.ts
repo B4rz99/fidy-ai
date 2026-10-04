@@ -50,6 +50,7 @@ const setup = Effect.fn(function* () {
     CREATE TABLE statement_submission_assertion (id INTEGER PRIMARY KEY CHECK (id = 1), accepted INTEGER CHECK (accepted = 1));
     CREATE TABLE transaction_audit (user_id TEXT, operation TEXT, occurred_at_ms INTEGER);
     CREATE TABLE pat_audit (user_id TEXT, pat_id TEXT, operation TEXT, occurred_at_ms INTEGER);
+    CREATE TABLE statement_clarification_audit (id TEXT PRIMARY KEY, user_id TEXT, operation TEXT, outcome TEXT, occurred_at_ms INTEGER);
     CREATE TABLE category_audit (user_id TEXT, occurred_at_ms INTEGER);
     CREATE TABLE memory_audit (user_id TEXT, occurred_at_ms INTEGER);
     CREATE TABLE trial_periods (user_id TEXT PRIMARY KEY, started_at_ms INTEGER, ends_at_ms INTEGER);

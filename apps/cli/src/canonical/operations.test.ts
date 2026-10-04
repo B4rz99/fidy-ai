@@ -188,28 +188,9 @@ it.effect(
           },
           ["read", "write"]
         );
-        const args =
-          example.code === "paywall_required"
-            ? ["ingestion", "submitForExtraction", "--input", "-"]
-            : ["categories", "listCategories"];
-        expect(
-          yield* runQueryCommand(args, {
-            ...fixture.dependencies,
-            readInput: () =>
-              Effect.succeed(
-                encodeFixture({
-                  payload: {
-                    idempotencyKey: "01900000-0000-4000-8000-000000000001",
-                    reference: {
-                      stagingId: "01900000-0000-4000-8000-000000000002",
-                      byteLength: 1,
-                      sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                    },
-                  },
-                })
-              ),
-          })
-        ).toBe(true);
+        expect(yield* runQueryCommand(["categories", "listCategories"], fixture.dependencies)).toBe(
+          true
+        );
         expect(decodeOutput(fixture.stdout.join(""))).toEqual(envelope);
         expect(fixture.stderr.join("")).toContain("0 de 50 llamadas canónicas restantes");
         expect(fixture.stderr.join("")).toContain("2026-11-01T05:00:00.000Z (UTC)");

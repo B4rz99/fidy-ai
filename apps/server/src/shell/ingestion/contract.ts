@@ -6,6 +6,7 @@ import {
   EmailForwardingStatus,
   NeedsReviewItem,
   NeedsReviewItemId,
+  NeedsReviewStatus,
   NotificationEmailInterpretationReviewReason,
   type ParsedStatementRow,
   type StatementSourceFormat,
@@ -27,7 +28,11 @@ import {
   ValidationFailed,
   acceptedStatus,
 } from "~/shell/public-http/contract";
-import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
+import {
+  operationPolicy,
+  userOwnedAgentScoped,
+  verifiedWhatsAppHostedOnly,
+} from "~/shell/canonical-policy/contract";
 /** Canonical Transaction facts supplied to resolve one pending statement row. */
 export const ResolveNeedsReviewItemInput = Schema.Struct({
   extraction: TransactionExtraction,
@@ -42,6 +47,12 @@ const read = operationPolicy({
 });
 const write = operationPolicy({
   access: userOwnedAgentScoped("write"),
+  requiredTier: "free",
+  agentConfirmation: "not-required",
+  kind: "mutation",
+});
+const statementUpload = operationPolicy({
+  access: verifiedWhatsAppHostedOnly,
   requiredTier: "free",
   agentConfirmation: "not-required",
   kind: "mutation",
@@ -83,9 +94,9 @@ export const IngestionGroup = HttpApiGroup.make("ingestion")
     })
       .annotate(
         OpenApi.Description,
-        "Idempotently queue one bounded CSV or XLSX statement whose bytes were first staged through the authenticated statement staging transport. Free includes one lifetime backfill; Pro access permits ongoing submissions. Poll the returned submission and inspect NeedsReviewItems after completion."
+        "Publish one bounded CSV or XLSX directly attached in the verified WhatsApp conversation. The server stages bytes and binds upload provenance; browser and PAT callers cannot publish. Free includes one lifetime backfill consumed on capture; Trial and Pro permit ongoing submissions."
       )
-      .annotateMerge(write)
+      .annotateMerge(statementUpload)
   )
   .add(
     HttpApiEndpoint.get("getStatementSubmission", "/ingestion/statements/:id", {
@@ -102,6 +113,7 @@ export const IngestionGroup = HttpApiGroup.make("ingestion")
   .add(
     HttpApiEndpoint.get("listNeedsReviewItems", "/ingestion/needs-review", {
       query: Schema.Struct({
+        status: Schema.OptionFromOptionalKey(NeedsReviewStatus),
         offset: Schema.OptionFromOptionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
         limit: Schema.OptionFromOptionalKey(
           Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 }))
@@ -111,7 +123,7 @@ export const IngestionGroup = HttpApiGroup.make("ingestion")
     })
       .annotate(
         OpenApi.Description,
-        "List up to 100 of the caller's visible statement rows and forwarded emails requiring review, followed by retained resolution metadata. Use offset and limit to page; pending statement items include parser-bounded original row evidence and email items reference their expiring IngestSample."
+        "List up to 100 of the caller's visible statement rows and forwarded emails requiring review, followed by retained resolution metadata. Use offset and limit to page, and status to filter. For one clarification question, request status=pending and limit=1. Pending statement items include parser-bounded original row evidence and email items reference their expiring IngestSample."
       )
       .annotateMerge(read)
   )
@@ -125,6 +137,30 @@ export const IngestionGroup = HttpApiGroup.make("ingestion")
       .annotate(
         OpenApi.Description,
         "Resolve one pending statement row using its captured ServiceMarket, locale, and time zone. Atomically create the Transaction and immutable statement-line SourceAttestation, then erase original row evidence."
+      )
+      .annotateMerge(confirmedWrite)
+  )
+  .add(
+    HttpApiEndpoint.post("skipNeedsReviewItem", "/ingestion/needs-review/:id/skip", {
+      params: Schema.Struct({ id: NeedsReviewItemId }),
+      success: OperationResponse(StatementSubmission),
+      error: NotFound,
+    })
+      .annotate(
+        OpenApi.Description,
+        "Explicitly skip one pending statement row, erase its evidence, and complete clarification when no rows remain."
+      )
+      .annotateMerge(confirmedWrite)
+  )
+  .add(
+    HttpApiEndpoint.post("abandonStatementSubmission", "/ingestion/statements/:id/abandon", {
+      params: Schema.Struct({ id: StatementSubmissionId }),
+      success: OperationResponse(StatementSubmission),
+      error: NotFound,
+    })
+      .annotate(
+        OpenApi.Description,
+        "Permanently abandon pending statement clarification while preserving captured Transactions."
       )
       .annotateMerge(confirmedWrite)
   );

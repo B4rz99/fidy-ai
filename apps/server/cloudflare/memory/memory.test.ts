@@ -3,6 +3,7 @@ import {
   canonicalAdmissionMigrationNames,
   hostedTurnTestMigrations,
   isolatedTestDatabases,
+  statementAuditTestMigrations,
 } from "../d1-test-fixture";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
@@ -90,6 +91,7 @@ const setup = (): Promise<D1Database> =>
           "0013_transaction_reconciliation",
           "0014_memory",
           "0015_statement_submission",
+          "0016_statement_processing",
           "0016_budgets",
           "0016_hosted_turn",
           "0017_hosted_compaction",
@@ -99,6 +101,9 @@ const setup = (): Promise<D1Database> =>
           "0019_canonical_child_guards",
           "0020_dashboard_projection",
           ...hostedTurnTestMigrations,
+          "0018_dashboard",
+          "0018_insight_events",
+          ...statementAuditTestMigrations,
         ]).reduce<Promise<void>>(
           (previous, name) => previous.then(() => applyMigration(db, name)),
           Promise.resolve()

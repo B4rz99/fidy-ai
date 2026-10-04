@@ -1,5 +1,12 @@
+import { executeStatementExtraction, statementRetention } from "../ingestion/runtime";
 import { makeAgentRetention, makeAgentService } from "./runtime";
 import { AgentUnavailable } from "./contract";
+import { confirmationOutage } from "./statement-recovery.test-fixture";
+import { publicationOutage } from "./statement-publication-recovery.test-fixture";
+import {
+  type UploadRefusalCase,
+  seedStatementUploadRefusal,
+} from "./statement-upload.test-fixture";
 import { prepareHostedMutationCommit, readAdmittedHostedConsent } from "./operations";
 import {
   CanonicalToolOutcome,
@@ -28,7 +35,9 @@ import { afterAll, afterEach, expect, it, vi } from "vitest";
 import {
   HostedDeliveryCorrelationToken,
   WhatsAppBusinessPhoneNumberId,
+  WhatsAppDocument,
   type WhatsAppHostedLifecycleEvidence,
+  WhatsAppMediaId,
   WhatsAppProviderMessageId,
 } from "../../src/shell/channels/whatsapp/contract";
 import { makeCloudflareHostedInference } from "../ai/runtime";
@@ -38,6 +47,8 @@ import {
   hostedTurnTestMigrations,
   installTestSchema,
   isolatedTestDatabases,
+  isolatedTestStorage,
+  statementAuditTestMigrations,
 } from "../d1-test-fixture";
 import { findWhatsAppUser } from "../identity/operations";
 import { observeOperationalHealth } from "../runtime/operational-health/operations";
@@ -70,7 +81,9 @@ import {
   acknowledgeBrowserTurn,
   browserHostedDelivery,
   completeHostedTurn as completeHostedTurnWithAlarm,
+  completeWhatsAppDocumentTurnWithAdmission,
   completeWhatsAppTurnWithAdmission,
+  resumeWhatsAppTurn,
 } from "./internal/hosted-turn";
 import {
   admitHostedTurn,
@@ -213,10 +226,13 @@ const migrationNames = [
   "0020_restore_audit_budgets",
   "0020_dashboard_projection",
   ...hostedTurnTestMigrations,
-  "0027_recurring",
-  "0028_recurring_audit_budget",
-  "0029_audit_owner_retention",
   "0035_billing_corrections",
+  "0009_email_replacement",
+  "0016_budgets",
+  "0016_statement_processing",
+  "0018_dashboard",
+  "0018_insight_events",
+  ...statementAuditTestMigrations,
 ] as const;
 const legacyTurn = "10000000-0000-4000-8000-000000000731";
 const legacyUser = "10000000-0000-4000-8000-000000000732";
@@ -1716,6 +1732,1105 @@ it("treats signed voice instructions as User text without granting identity or t
       ).toHaveLength(0);
     })
   ));
+
+const finishLatestWhatsAppFixture = ({
+  db,
+  subject,
+}: Readonly<{ db: D1Database; subject: WhatsAppHostedSubject }>): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const row = yield* Effect.tryPromise(() =>
+      db
+        .prepare(
+          "SELECT correlation_token,provider_message_id,proposed_at_ms FROM hosted_whatsapp_delivery WHERE user_id=? ORDER BY proposed_at_ms DESC,rowid DESC LIMIT 1"
+        )
+        .bind(subject.userId)
+        .first()
+    );
+    const delivery = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({
+        correlation_token: HostedDeliveryCorrelationToken,
+        provider_message_id: WhatsAppProviderMessageId,
+        proposed_at_ms: Schema.Int,
+      })
+    )(row);
+    const evidence = yield* recordWhatsAppStatus({
+      db,
+      userId: subject.userId,
+      evidence: {
+        correlationToken: delivery.correlation_token,
+        businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+        messageEvidence: {
+          channel: "whatsapp",
+          provider: "kapso",
+          providerMessageId: delivery.provider_message_id,
+        },
+        occurredAt: DateTime.makeUnsafe(now()),
+        outcome: "delivered",
+      },
+      receivedAtMs: now(),
+    });
+    if (Option.isNone(evidence)) return yield* Effect.die("Missing delivered statement reply");
+    expect(
+      yield* finishHostedTurn({
+        db,
+        userId: subject.userId,
+        turnId: evidence.value.turnId,
+        startedAtMs: delivery.proposed_at_ms,
+        result: { _tag: "Completed", text: TranscriptText.make(evidence.value.text) },
+        subject,
+        now: now(),
+      })
+    ).toBe(true);
+  }).pipe(Effect.orDie);
+const documentStorage = isolatedTestStorage();
+afterAll(() => documentStorage.dispose());
+const assertForeignStatementRead = (
+  db: D1Database,
+  userId: string,
+  submissionId: string
+): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const outcome = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ outcome_json: Schema.String })
+    )(
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "SELECT outcome_json FROM transcript_entries WHERE user_id=? AND kind='tool_result' AND operation='ingestion.getStatementSubmission'"
+          )
+          .bind(userId)
+          .first()
+      )
+    );
+    expect(outcome.outcome_json).toContain("not_found");
+    expect(outcome.outcome_json).not.toContain(submissionId);
+    expect(outcome.outcome_json).not.toContain("originalEvidence");
+  }).pipe(Effect.orDie);
+const finishStatementExtraction = ({
+  db,
+  bucket,
+  userId,
+}: Readonly<{ db: D1Database; bucket: R2Bucket; userId: string }>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const submission = yield* Schema.decodeUnknownEffect(Schema.Struct({ id: Schema.String }))(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT id FROM statement_submissions WHERE user_id=?").bind(userId).first()
+        )
+      );
+      const coordinator = new UserTransactionCoordinator(
+        { id: { name: userId }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+        {
+          DB: db,
+          STATEMENT_STAGING_BUCKET: bucket,
+          AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+          HOSTED_AI_MODEL: approvedWorkersAiModel,
+        }
+      );
+      yield* Effect.tryPromise(() =>
+        executeStatementExtraction({
+          payload: { version: 1, userId, submissionId: submission.id },
+          coordinator: {
+            getByName: (name) => {
+              expect(name).toBe(userId);
+              return coordinator;
+            },
+          },
+          activity: (_name, _options, run) => run(),
+        })
+      );
+    })
+  );
+const assertRefusedDocument = ({
+  db,
+  bucket,
+  refusal,
+  mediaRequests,
+  delivered,
+}: Readonly<{
+  db: D1Database;
+  bucket: R2Bucket;
+  refusal: Exclude<UploadRefusalCase, "none">;
+  mediaRequests: number;
+  delivered: string;
+}>): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const expected = {
+      paywall: { requests: 2, message: "cambia a Pro" },
+      "media-unavailable": { requests: 1, message: "más tarde" },
+      "attempt-user": { requests: 0, message: "límite de cargas" },
+      "attempt-global": { requests: 0, message: "límite de cargas" },
+      user: { requests: 0, message: "límite de cargas" },
+      global: { requests: 0, message: "límite de cargas" },
+      spend: { requests: 0, message: "límite de cargas" },
+      outstanding: { requests: 0, message: "límite de cargas" },
+    }[refusal];
+    expect(mediaRequests).toBe(expected.requests);
+    expect(delivered).toContain(expected.message);
+    expect(delivered).not.toContain("CSV o XLSX válido");
+    expect(
+      (yield* Effect.tryPromise(() =>
+        db.prepare("SELECT id FROM statement_submissions WHERE user_id=?").bind(users[0]).all()
+      )).results
+    ).toHaveLength(0);
+    expect(
+      (yield* Effect.tryPromise(() =>
+        db.prepare("SELECT id FROM transactions WHERE user_id=?").bind(users[0]).all()
+      )).results
+    ).toHaveLength(0);
+    expect((yield* Effect.tryPromise(() => bucket.list())).objects).toHaveLength(
+      refusal === "paywall" ? 1 : 0
+    );
+    expect(
+      (yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "SELECT grant_id FROM resource_admission_events WHERE policy_key='ingestion.upload.outstanding.v1' AND scope_key=? AND released_at_epoch_ms IS NULL AND grant_id LIKE 'ingestion-upload-%'"
+          )
+          .bind(users[0])
+          .all()
+      )).results
+    ).toHaveLength(0);
+    if (refusal === "paywall") {
+      expect(delivered).toContain("/upgrade");
+      const rows = yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "SELECT outcome_json FROM transcript_entries WHERE user_id=? AND kind='tool_result'"
+          )
+          .bind(users[0])
+          .all()
+      );
+      const [result] = yield* Schema.decodeUnknownEffect(
+        Schema.Tuple([Schema.Struct({ outcome_json: Schema.fromJsonString(CanonicalToolOutcome) })])
+      )(rows.results);
+      expect(result.outcome_json).toMatchObject({
+        _tag: "CanonicalOperationFailed",
+        failure: { error: { code: "paywall_required" } },
+      });
+    }
+  });
+const assertQueuedStatement = ({
+  db,
+  mediaRequests,
+  delivered,
+}: Readonly<{ db: D1Database; mediaRequests: number; delivered: string }>): Effect.Effect<
+  void,
+  Cause.UnknownError
+> =>
+  Effect.gen(function* () {
+    expect(mediaRequests).toBe(2);
+    expect(delivered).toBe("");
+    expect(
+      yield* Effect.tryPromise(() =>
+        db.prepare("SELECT status FROM hosted_turns WHERE user_id=?").bind(users[0]).first()
+      )
+    ).toEqual({ status: "pending" });
+    expect(
+      (yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT turn_id FROM hosted_whatsapp_delivery WHERE user_id=?")
+          .bind(users[0])
+          .all()
+      )).results
+    ).toHaveLength(0);
+    expect(
+      (yield* Effect.tryPromise(() =>
+        db.prepare("SELECT id FROM transactions WHERE user_id=?").bind(users[0]).all()
+      )).results
+    ).toHaveLength(0);
+  });
+const assertSettledStatement = ({
+  db,
+  decision,
+  delivered,
+}: Readonly<{
+  db: D1Database;
+  decision: "resolve" | "skip" | "abandon";
+  delivered: string;
+}>): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    expect(delivered).toContain(decision === "abandon" ? "Se abandonó" : "extracto está listo");
+    expect(
+      (yield* Effect.tryPromise(() =>
+        db.prepare("SELECT id FROM transactions WHERE user_id=?").bind(users[0]).all()
+      )).results
+    ).toHaveLength({ resolve: 2, skip: 1, abandon: 1 }[decision]);
+    expect(
+      (yield* Effect.tryPromise(() =>
+        db.prepare("SELECT id FROM source_attestations WHERE user_id=?").bind(users[0]).all()
+      )).results
+    ).toHaveLength({ resolve: 2, skip: 1, abandon: 1 }[decision]);
+    expect(
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT state FROM statement_clarifications WHERE user_id=?")
+          .bind(users[0])
+          .first()
+      )
+    ).toEqual({ state: decision === "abandon" ? "abandoned" : "completed" });
+    expect(
+      (yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT turn_id FROM statement_whatsapp_documents WHERE user_id=?")
+          .bind(users[0])
+          .all()
+      )).results
+    ).toHaveLength(0);
+  });
+
+const assertExtractedStatement = ({
+  db,
+  bucket,
+}: Readonly<{ db: D1Database; bucket: R2Bucket }>): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    expect(
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "SELECT status,published_submission_id FROM statement_staging_objects WHERE user_id=?"
+          )
+          .bind(users[0])
+          .first()
+      )
+    ).toEqual({ status: "deleting", published_submission_id: null });
+    yield* statementRetention({ database: db, bucket, nowEpochMs: now }).sweepStaging.pipe(
+      Effect.orDie
+    );
+    expect((yield* Effect.tryPromise(() => bucket.list())).objects).toHaveLength(0);
+    expect(
+      (yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT record_number,reason,issues FROM statement_needs_review WHERE user_id=?")
+          .bind(users[0])
+          .all()
+      )).results
+    ).toHaveLength(1);
+    expect(
+      (yield* Effect.tryPromise(() =>
+        db.prepare("SELECT amount,currency FROM transactions WHERE user_id=?").bind(users[0]).all()
+      )).results
+    ).toEqual([{ amount: "13000", currency: "COP" }]);
+    expect(
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT state FROM statement_clarifications WHERE user_id=?")
+          .bind(users[0])
+          .first()
+      )
+    ).toEqual({ state: "awaiting" });
+  });
+
+const assertStatementQuestion = (
+  work: StatementRecoveryFixture
+): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    yield* assertExtractedStatement(work);
+    expect((yield* resumeInterruptedStatement(work)).status).toBe(202);
+    const row = yield* Effect.tryPromise(() =>
+      work.db
+        .prepare("SELECT text AS proposed_text FROM hosted_whatsapp_delivery WHERE user_id=?")
+        .bind(users[0])
+        .first()
+    );
+    const question = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ proposed_text: Schema.String })
+    )(row);
+    expect(question.proposed_text).toContain("fila 2");
+    expect(question.proposed_text).toContain("indica fecha, importe, moneda");
+  });
+
+type StatementRecoveryFixture = Readonly<{
+  db: D1Database;
+  bucket: R2Bucket;
+  inference: HostedInferenceService;
+  deliver: Parameters<typeof resumeWhatsAppTurn>[0]["deliver"];
+}>;
+const resumeInterruptedStatement = ({
+  db,
+  bucket,
+  inference,
+  deliver,
+}: StatementRecoveryFixture): Effect.Effect<Response, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const pending = yield* Schema.decodeUnknownEffect(Schema.Struct({ id: TranscriptTurnId }))(
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT id FROM hosted_turns WHERE user_id=? AND status='pending'")
+          .bind(users[0])
+          .first()
+      )
+    );
+    const resumed = yield* Effect.tryPromise(() =>
+      resumeWhatsAppTurn({
+        db,
+        userId: UserId.make(users[0]),
+        turnId: pending.id,
+        bucket: Option.some(bucket),
+        outbound: { execute: () => Effect.die(new Error("Statement recovery must not download")) },
+        inference,
+        deliver,
+        signal: makeAbortController().signal,
+        scheduleRecovery: () => Promise.resolve(),
+      })
+    );
+    expect(
+      (yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "SELECT id FROM transcript_entries WHERE user_id=? AND turn_id=? AND kind='tool_call'"
+          )
+          .bind(users[0], pending.id)
+          .all()
+      )).results
+    ).toHaveLength(1);
+    expect(
+      (yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "SELECT id FROM transcript_entries WHERE user_id=? AND turn_id=? AND kind='tool_result'"
+          )
+          .bind(users[0], pending.id)
+          .all()
+      )).results
+    ).toHaveLength(1);
+    return resumed;
+  });
+
+const publishStatementWithRecovery = ({
+  db,
+  bucket,
+  checkpoint,
+  start,
+  inference,
+  deliver,
+}: Readonly<{
+  db: D1Database;
+  bucket: R2Bucket;
+  checkpoint: "none" | "stage" | "publication" | "outcome";
+  start: (database: D1Database) => Promise<Response>;
+  inference: HostedInferenceService;
+  deliver: Parameters<typeof resumeWhatsAppTurn>[0]["deliver"];
+}>): Promise<Response> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      if (checkpoint === "none") return yield* Effect.tryPromise(() => start(db));
+      const interrupted = yield* Effect.exit(
+        Effect.tryPromise(() => start(publicationOutage({ db, checkpoint })))
+      );
+      // This owner seam rejects when the simulated connection loss also prevents delivery proposal.
+      expect(Exit.isFailure(interrupted)).toBe(true);
+      const resumed = yield* resumeInterruptedStatement({ db, bucket, inference, deliver });
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db.prepare("SELECT id FROM statement_submissions WHERE user_id=?").bind(users[0]).all()
+        )).results
+      ).toHaveLength(1);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT submission_id FROM statement_ingestion_outbox WHERE user_id=?")
+            .bind(users[0])
+            .all()
+        )).results
+      ).toHaveLength(1);
+      expect((yield* Effect.tryPromise(() => bucket.list())).objects).toHaveLength(1);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT grant_id FROM resource_admission_events WHERE policy_key='ingestion.upload.user.v1' AND scope_key=?"
+            )
+            .bind(users[0])
+            .all()
+        )).results
+      ).toHaveLength(1);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT grant_id FROM resource_admission_events WHERE policy_key='ingestion.upload.outstanding.v1' AND scope_key=? AND released_at_epoch_ms IS NULL"
+            )
+            .bind(users[0])
+            .all()
+        )).results
+      ).toHaveLength(0);
+      return resumed;
+    })
+  );
+const confirmStatementWithRecovery = ({
+  db,
+  bucket,
+  checkpoint,
+  confirm,
+  inference,
+  deliver,
+}: Readonly<{
+  db: D1Database;
+  bucket: R2Bucket;
+  checkpoint: "none" | "consumed" | "committed" | "outcome";
+  confirm: (database: D1Database) => Promise<Response>;
+  inference: HostedInferenceService;
+  deliver: Parameters<typeof resumeWhatsAppTurn>[0]["deliver"];
+}>): Promise<Response> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      if (checkpoint === "none") return yield* Effect.tryPromise(() => confirm(db));
+      const interrupted = yield* Effect.tryPromise(() =>
+        confirm(confirmationOutage({ db, checkpoint }))
+      );
+      expect(interrupted.status).toBe(503);
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(now() + 135_001);
+      try {
+        return yield* resumeInterruptedStatement({ db, bucket, inference, deliver });
+      } finally {
+        vi.useRealTimers();
+      }
+    })
+  );
+it.each([
+  { decision: "resolve", expired: false, name: "resolve", checkpoint: "none", refusal: "none" },
+  { decision: "skip", expired: false, name: "skip", checkpoint: "none", refusal: "none" },
+  { decision: "abandon", expired: false, name: "abandon", checkpoint: "none", refusal: "none" },
+  {
+    decision: "resolve",
+    expired: true,
+    name: "expired session",
+    checkpoint: "none",
+    refusal: "none",
+  },
+  {
+    decision: "resolve",
+    expired: false,
+    name: "recovery after consumption",
+    checkpoint: "consumed",
+    refusal: "none",
+  },
+  {
+    decision: "resolve",
+    expired: false,
+    name: "recovery after commit",
+    checkpoint: "committed",
+    refusal: "none",
+  },
+  {
+    decision: "resolve",
+    expired: false,
+    name: "recovery after outcome",
+    checkpoint: "outcome",
+    refusal: "none",
+  },
+  {
+    decision: "resolve",
+    expired: false,
+    name: "attempt-user budget",
+    checkpoint: "none",
+    refusal: "attempt-user",
+  },
+  {
+    decision: "resolve",
+    expired: false,
+    name: "attempt-global budget",
+    checkpoint: "none",
+    refusal: "attempt-global",
+  },
+  {
+    decision: "resolve",
+    expired: false,
+    name: "User upload budget",
+    checkpoint: "none",
+    refusal: "user",
+  },
+  {
+    decision: "resolve",
+    expired: false,
+    name: "global upload budget",
+    checkpoint: "none",
+    refusal: "global",
+  },
+  {
+    decision: "resolve",
+    expired: false,
+    name: "upload spend budget",
+    checkpoint: "none",
+    refusal: "spend",
+  },
+  {
+    decision: "resolve",
+    expired: false,
+    name: "outstanding upload budget",
+    checkpoint: "none",
+    refusal: "outstanding",
+  },
+  {
+    decision: "resolve",
+    expired: false,
+    name: "friendly Free paywall",
+    checkpoint: "none",
+    refusal: "paywall",
+  },
+  {
+    decision: "resolve",
+    expired: false,
+    name: "temporary media unavailability",
+    checkpoint: "none",
+    refusal: "media-unavailable",
+  },
+  {
+    decision: "resolve",
+    expired: false,
+    name: "publication recovery after staging",
+    checkpoint: "none",
+    refusal: "none",
+    publication: "stage",
+  },
+  {
+    decision: "resolve",
+    expired: false,
+    name: "publication recovery after commit",
+    checkpoint: "none",
+    refusal: "none",
+    publication: "publication",
+  },
+  {
+    decision: "resolve",
+    expired: false,
+    name: "publication recovery after outcome",
+    checkpoint: "none",
+    refusal: "none",
+    publication: "outcome",
+  },
+] as const)(
+  "captures clean direct WhatsApp statement rows and settles clarification by $name",
+  (testCase) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { decision, expired, checkpoint, refusal } = testCase;
+        const publication = "publication" in testCase ? (testCase.publication ?? "none") : "none";
+        const db = yield* Effect.tryPromise(() => setup());
+        const { bucket } = yield* Effect.tryPromise(() => documentStorage.acquire());
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "INSERT INTO whatsapp_identities (user_id,portfolio_id,bsuid,verified_at_ms) VALUES (?,?,?,?)"
+            )
+            .bind(users[0], "portfolio-1", "CO.13491208655302741918", now())
+            .run()
+        );
+        const bytes = new TextEncoder().encode(
+          "fecha,valor,moneda,contraparte\n2026-08-01,-13000,COP,Cafe\nunknown,unknown,COP,Tienda\n"
+        );
+        const digest = new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
+        const metadata = {
+          id: "direct-statement",
+          mime_type: "text/csv",
+          file_size: String(bytes.length),
+          sha256: digest,
+          download_url: "https://api.kapso.ai/meta/whatsapp/media_download?token=signed-token",
+          download_url_expires_at: DateTime.formatIso(DateTime.makeUnsafe(now() + 240000)),
+        };
+        yield* Effect.tryPromise(() =>
+          seedStatementUploadRefusal({ db, userId: users[0], current: now(), kind: refusal })
+        );
+        let mediaRequests = 0;
+        let delivered = "";
+        let replySequence = 0;
+        const sends = ({
+          text,
+        }: Readonly<{ text: TranscriptText }>): Promise<{
+          kind: "accepted";
+          messageId: WhatsAppProviderMessageId;
+        }> => {
+          delivered = text;
+          replySequence += 1;
+          return Promise.resolve({
+            kind: "accepted",
+            messageId: WhatsAppProviderMessageId.make(`wamid.statement.reply.${replySequence}`),
+          });
+        };
+        const caller = WhatsAppHostedSubject.make({
+          userId: UserId.make(users[0]),
+          portfolioId: WhatsAppBusinessPortfolioId.make("portfolio-1"),
+          bsuid: WhatsAppBusinessScopedUserId.make("CO.13491208655302741918"),
+        });
+        const inferenceModel = yield* Effect.tryPromise(() =>
+          inference(() => Promise.resolve(reply("unused")))
+        );
+        const startDocument = (database: D1Database): Promise<Response> =>
+          completeWhatsAppDocumentTurnWithAdmission({
+            input: {
+              db: database,
+              bucket: Option.some(bucket),
+              subject: WhatsAppHostedSubject.make({
+                userId: UserId.make(users[0]),
+                portfolioId: WhatsAppBusinessPortfolioId.make("portfolio-1"),
+                bsuid: WhatsAppBusinessScopedUserId.make("CO.13491208655302741918"),
+              }),
+              document: WhatsAppDocument.make({
+                mediaId: WhatsAppMediaId.make("direct-statement"),
+                fileName: Option.none(),
+                caption: Option.none(),
+              }),
+              outbound: {
+                execute: (request) => {
+                  mediaRequests += 1;
+                  return Effect.succeed({
+                    status: refusal === "media-unavailable" ? 503 : 200,
+                    headers: {},
+                    body:
+                      request._tag === "KapsoMediaMetadata"
+                        ? new TextEncoder().encode(JSON.stringify(metadata))
+                        : bytes,
+                  });
+                },
+              },
+              inbound: WhatsAppInboundEvidence.make({
+                messageId: WhatsAppProviderMessageId.make("wamid.direct-statement"),
+                businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+                occurredAtMs: now(),
+                receivedAtMs: now(),
+                replyToMessageId: Option.none(),
+              }),
+              text: TranscriptText.make("Adjunté un extracto."),
+              inference: inferenceModel,
+              executeMutation: Option.none(),
+              deliver: {
+                _tag: "WhatsApp",
+                contextualReplyQuery: Option.none(),
+                send: sends,
+              },
+              signal: makeAbortController().signal,
+              scheduleRecovery: () => Promise.resolve(),
+            },
+            onAdmitted: () => {},
+          });
+        const response = yield* Effect.tryPromise(() =>
+          publishStatementWithRecovery({
+            db,
+            bucket,
+            checkpoint: publication,
+            start: startDocument,
+            inference: inferenceModel,
+            deliver: () => ({ _tag: "WhatsApp", contextualReplyQuery: Option.none(), send: sends }),
+          })
+        );
+        expect(response.status).toBe(202);
+        if (refusal !== "none") {
+          yield* assertRefusedDocument({ db, bucket, refusal, mediaRequests, delivered });
+          return;
+        }
+        yield* assertQueuedStatement({ db, mediaRequests, delivered });
+        yield* Effect.tryPromise(() => finishStatementExtraction({ db, bucket, userId: users[0] }));
+        yield* assertStatementQuestion({
+          db,
+          bucket,
+          inference: inferenceModel,
+          deliver: () => ({ _tag: "WhatsApp", contextualReplyQuery: Option.none(), send: sends }),
+        });
+        yield* finishLatestWhatsAppFixture({ db, subject: caller });
+        const review = yield* Schema.decodeUnknownEffect(Schema.Struct({ id: Schema.String }))(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT id FROM statement_needs_review WHERE user_id=?")
+              .bind(users[0])
+              .first()
+          )
+        );
+        const extraction = {
+          money: { amount: "33000", currency: "COP" },
+          counterparty: "Tienda",
+          direction: "outflow",
+          occurredAt: "2026-08-02T12:00:00.000Z",
+        };
+        const submission = yield* Schema.decodeUnknownEffect(Schema.Struct({ id: Schema.String }))(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT id FROM statement_submissions WHERE user_id=?")
+              .bind(users[0])
+              .first()
+          )
+        );
+        const operation = {
+          resolve: "ingestion__resolveNeedsReviewItem",
+          skip: "ingestion__skipNeedsReviewItem",
+          abandon: "ingestion__abandonStatementSubmission",
+        }[decision];
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "INSERT INTO whatsapp_identities (user_id,portfolio_id,bsuid,verified_at_ms) VALUES (?,?,?,?)"
+            )
+            .bind(users[1], "portfolio-1", "CO.13491208655302741919", now())
+            .run()
+        );
+        const foreignCaller = WhatsAppHostedSubject.make({
+          userId: UserId.make(users[1]),
+          portfolioId: WhatsAppBusinessPortfolioId.make("portfolio-1"),
+          bsuid: WhatsAppBusinessScopedUserId.make("CO.13491208655302741919"),
+        });
+        let foreignRounds = 0;
+        const foreignModel = yield* Effect.tryPromise(() =>
+          inference(() => {
+            foreignRounds += 1;
+            return Promise.resolve(
+              Response.json({
+                choices: [
+                  {
+                    message: {
+                      role: "assistant",
+                      content: null,
+                      tool_calls: [
+                        {
+                          id: `foreign-statement-${foreignRounds}`,
+                          type: "function",
+                          function: {
+                            name:
+                              foreignRounds === 1
+                                ? "ingestion__getStatementSubmission"
+                                : "ingestion__resolveNeedsReviewItem",
+                            arguments: JSON.stringify(
+                              foreignRounds === 1
+                                ? { params: { id: submission.id } }
+                                : { params: { id: review.id }, payload: { extraction } }
+                            ),
+                          },
+                        },
+                      ],
+                    },
+                    finish_reason: "tool_calls",
+                  },
+                ],
+                usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
+              })
+            );
+          })
+        );
+        const foreignResponse = yield* Effect.tryPromise(() =>
+          completeWhatsAppTurnWithAdmission({
+            input: {
+              db,
+              subject: foreignCaller,
+              bucket: Option.some(bucket),
+              inbound: WhatsAppInboundEvidence.make({
+                messageId: WhatsAppProviderMessageId.make("wamid.foreign-statement"),
+                businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+                occurredAtMs: now(),
+                receivedAtMs: now(),
+                replyToMessageId: Option.none(),
+              }),
+              text: TranscriptText.make("Consulta el extracto."),
+              inference: foreignModel,
+              executeMutation: Option.none(),
+              deliver: {
+                _tag: "WhatsApp",
+                contextualReplyQuery: Option.none(),
+                send: () =>
+                  Promise.resolve({
+                    kind: "accepted",
+                    messageId: WhatsAppProviderMessageId.make("wamid.foreign-statement.reply"),
+                  }),
+              },
+              signal: makeAbortController().signal,
+              scheduleRecovery: () => Promise.resolve(),
+            },
+            onAdmitted: () => {},
+          })
+        );
+        expect(foreignResponse.status).toBe(202);
+        yield* finishLatestWhatsAppFixture({ db, subject: foreignCaller });
+        yield* assertForeignStatementRead(db, users[1], submission.id);
+        const foreignChallenge = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ command: TranscriptText })
+        )(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT command FROM hosted_confirmations WHERE user_id=?")
+              .bind(users[1])
+              .first()
+          )
+        );
+        const foreignWrite = yield* Effect.tryPromise(() =>
+          completeWhatsAppTurnWithAdmission({
+            input: {
+              db,
+              subject: foreignCaller,
+              bucket: Option.some(bucket),
+              inbound: WhatsAppInboundEvidence.make({
+                messageId: WhatsAppProviderMessageId.make("wamid.foreign-statement.write"),
+                businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+                occurredAtMs: now(),
+                receivedAtMs: now(),
+                replyToMessageId: Option.none(),
+              }),
+              text: foreignChallenge.command,
+              inference: inferenceModel,
+              executeMutation: Option.none(),
+              deliver: {
+                _tag: "WhatsApp",
+                contextualReplyQuery: Option.none(),
+                send: () =>
+                  Promise.resolve({
+                    kind: "accepted",
+                    messageId: WhatsAppProviderMessageId.make("wamid.foreign-write.reply"),
+                  }),
+              },
+              signal: makeAbortController().signal,
+              scheduleRecovery: () => Promise.resolve(),
+            },
+            onAdmitted: () => {},
+          })
+        );
+        expect(foreignWrite.status).toBe(202);
+        yield* finishLatestWhatsAppFixture({ db, subject: foreignCaller });
+        const refusedWrite = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ outcome_json: Schema.String })
+        )(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT outcome_json FROM transcript_entries WHERE user_id=? AND kind='tool_result' AND operation='ingestion.resolveNeedsReviewItem' ORDER BY sequence DESC LIMIT 1"
+              )
+              .bind(users[1])
+              .first()
+          )
+        );
+        expect(refusedWrite.outcome_json).toContain("not_found");
+        expect(
+          (yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT review_id FROM statement_review_decisions WHERE review_id=?")
+              .bind(review.id)
+              .all()
+          )).results
+        ).toHaveLength(0);
+
+        expect(
+          (yield* Effect.tryPromise(() =>
+            db.prepare("SELECT id FROM transactions WHERE user_id=?").bind(users[1]).all()
+          )).results
+        ).toHaveLength(0);
+        const argumentsValue =
+          decision === "resolve"
+            ? { params: { id: review.id }, payload: { extraction } }
+            : { params: { id: decision === "skip" ? review.id : submission.id } };
+        const clarifyModel = yield* Effect.tryPromise(() =>
+          inference(() =>
+            Promise.resolve(
+              Response.json({
+                choices: [
+                  {
+                    message: {
+                      role: "assistant",
+                      content: null,
+                      tool_calls: [
+                        {
+                          id: "clarify-statement-row",
+                          type: "function",
+                          function: {
+                            name: operation,
+                            arguments: JSON.stringify(argumentsValue),
+                          },
+                        },
+                      ],
+                    },
+                    finish_reason: "tool_calls",
+                  },
+                ],
+                usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
+              })
+            )
+          )
+        );
+        const followUp = ({
+          text,
+          messageId,
+          model,
+          phoneNumber,
+          database,
+        }: Readonly<{
+          text: TranscriptText;
+          messageId: string;
+          model: HostedInferenceService;
+          phoneNumber: string;
+          database: D1Database;
+        }>): Promise<Response> =>
+          completeWhatsAppTurnWithAdmission({
+            input: {
+              db: database,
+              subject: caller,
+              bucket: Option.some(bucket),
+              inbound: WhatsAppInboundEvidence.make({
+                messageId: WhatsAppProviderMessageId.make(messageId),
+                businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make(phoneNumber),
+                occurredAtMs: now(),
+                receivedAtMs: now(),
+                replyToMessageId: Option.none(),
+              }),
+              text,
+              inference: model,
+              executeMutation: Option.none(),
+              deliver: { _tag: "WhatsApp", contextualReplyQuery: Option.none(), send: sends },
+              signal: makeAbortController().signal,
+              scheduleRecovery: () => Promise.resolve(),
+            },
+            onAdmitted: () => {},
+          });
+        const factsResponse = yield* Effect.tryPromise(() =>
+          followUp({
+            database: db,
+            text: TranscriptText.make(
+              decision === "resolve"
+                ? "Fila 2: salida de 33000 COP a Tienda el 2 de agosto de 2026."
+                : `${decision === "skip" ? "Omitir la fila 2" : "Cancelar lo pendiente del extracto"}.`
+            ),
+            messageId: "wamid.statement.facts",
+            model: clarifyModel,
+            phoneNumber: "123456789",
+          })
+        );
+        expect(factsResponse.status).toBe(202);
+        expect(
+          (yield* Effect.tryPromise(() =>
+            db.prepare("SELECT id FROM transactions WHERE user_id=?").bind(users[0]).all()
+          )).results
+        ).toHaveLength(1);
+        yield* finishLatestWhatsAppFixture({ db, subject: caller });
+        const confirmation = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ command: TranscriptText })
+        )(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT command FROM hosted_confirmations WHERE user_id=?")
+              .bind(users[0])
+              .first()
+          )
+        );
+        if (expired) {
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "UPDATE hosted_agent_sessions SET started_at_ms=?,last_activity_at_ms=? WHERE user_id=?"
+              )
+              .bind(now() - 900_002, now() - 900_001, users[0])
+              .run()
+          );
+          const expiredResponse = yield* Effect.tryPromise(() =>
+            followUp({
+              database: db,
+              text: confirmation.command,
+              messageId: "wamid.expired-statement.confirmation",
+              model: inferenceModel,
+              phoneNumber: "123456789",
+            })
+          );
+          expect(expiredResponse.status).toBe(401);
+          expect(
+            yield* Effect.tryPromise(() =>
+              db
+                .prepare("SELECT state FROM statement_clarifications WHERE user_id=?")
+                .bind(users[0])
+                .first()
+            )
+          ).toEqual({ state: "abandoned" });
+          expect(
+            (yield* Effect.tryPromise(() =>
+              db.prepare("SELECT id FROM transactions WHERE user_id=?").bind(users[0]).all()
+            )).results
+          ).toHaveLength(1);
+          expect(
+            yield* Effect.tryPromise(() =>
+              db
+                .prepare("SELECT consumed_turn_id FROM hosted_confirmations WHERE user_id=?")
+                .bind(users[0])
+                .first()
+            )
+          ).toEqual({ consumed_turn_id: null });
+          return;
+        }
+        const foreignConfirmation = yield* Effect.tryPromise(() =>
+          completeWhatsAppTurnWithAdmission({
+            input: {
+              db,
+              subject: foreignCaller,
+              bucket: Option.some(bucket),
+              inbound: WhatsAppInboundEvidence.make({
+                messageId: WhatsAppProviderMessageId.make("wamid.foreign-confirmation"),
+                businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+                occurredAtMs: now(),
+                receivedAtMs: now(),
+                replyToMessageId: Option.none(),
+              }),
+              text: confirmation.command,
+              inference: inferenceModel,
+              executeMutation: Option.none(),
+              deliver: {
+                _tag: "WhatsApp",
+                contextualReplyQuery: Option.none(),
+                send: () => Promise.reject(new Error("Foreign confirmation must not deliver")),
+              },
+              signal: makeAbortController().signal,
+              scheduleRecovery: () => Promise.resolve(),
+            },
+            onAdmitted: () => {},
+          })
+        );
+        expect(foreignConfirmation.status).toBe(401);
+        expect(
+          (yield* Effect.tryPromise(() =>
+            db.prepare("SELECT id FROM transactions WHERE user_id=?").bind(users[1]).all()
+          )).results
+        ).toHaveLength(0);
+        const wrongPhone = yield* Effect.tryPromise(() =>
+          followUp({
+            database: db,
+            text: confirmation.command,
+            messageId: "wamid.statement.wrong-phone",
+            model: inferenceModel,
+            phoneNumber: "987654321",
+          })
+        );
+        expect(wrongPhone.status).toBe(401);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT consumed_turn_id FROM hosted_confirmations WHERE user_id=?")
+              .bind(users[0])
+              .first()
+          )
+        ).toEqual({ consumed_turn_id: null });
+        expect(
+          (yield* Effect.tryPromise(() =>
+            db.prepare("SELECT id FROM transactions WHERE user_id=?").bind(users[0]).all()
+          )).results
+        ).toHaveLength(1);
+        expect(
+          (yield* Effect.tryPromise(() =>
+            confirmStatementWithRecovery({
+              db,
+              bucket,
+              checkpoint,
+              inference: inferenceModel,
+              deliver: () => ({
+                _tag: "WhatsApp",
+                contextualReplyQuery: Option.none(),
+                send: sends,
+              }),
+              confirm: (database) =>
+                followUp({
+                  database,
+                  text: confirmation.command,
+                  messageId: "wamid.statement.confirm",
+                  model: inferenceModel,
+                  phoneNumber: "123456789",
+                }),
+            })
+          )).status
+        ).toBe(202);
+        yield* assertSettledStatement({ db, decision, delivered });
+      })
+    )
+);
 
 it("refuses a free-form reply when the verified inbound event is outside its 24-hour window", () =>
   Effect.runPromise(

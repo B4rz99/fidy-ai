@@ -81,7 +81,7 @@
         "additionalProperties": false,
         "properties": {
           "at": {
-            "$ref": "#/components/schemas/Union_7"
+            "$ref": "#/components/schemas/Union_8"
           },
           "op": {
             "enum": [
@@ -145,7 +145,7 @@
             "$ref": "#/components/schemas/UtcTimestamp"
           },
           "requested": {
-            "$ref": "#/components/schemas/Union_3"
+            "$ref": "#/components/schemas/Union_4"
           },
           "timeZone": {
             "$ref": "#/components/schemas/IanaTimeZone"
@@ -244,13 +244,13 @@
       },
       "Arrays_3": {
         "items": {
-          "$ref": "#/components/schemas/Objects_28"
+          "$ref": "#/components/schemas/Objects_27"
         },
         "type": "array"
       },
       "Arrays_4": {
         "items": {
-          "$ref": "#/components/schemas/Objects_28"
+          "$ref": "#/components/schemas/Objects_27"
         },
         "type": "array"
       },
@@ -335,7 +335,7 @@
         "additionalProperties": false,
         "properties": {
           "axis": {
-            "$ref": "#/components/schemas/Union_5"
+            "$ref": "#/components/schemas/Union_6"
           },
           "besideWidget": {
             "$ref": "#/components/schemas/WidgetId"
@@ -1234,7 +1234,7 @@
             "type": "string"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_6"
+            "$ref": "#/components/schemas/Union_7"
           },
           "money": {
             "$ref": "#/components/schemas/Money_2"
@@ -1762,7 +1762,7 @@
         "additionalProperties": false,
         "properties": {
           "aggregation": {
-            "$ref": "#/components/schemas/Union_4"
+            "$ref": "#/components/schemas/Union_5"
           },
           "categories": {
             "$ref": "#/components/schemas/Arrays_2"
@@ -1774,7 +1774,7 @@
             "type": "string"
           },
           "period": {
-            "$ref": "#/components/schemas/Union_3"
+            "$ref": "#/components/schemas/Union_4"
           },
           "title": {
             "maxLength": 80,
@@ -1801,7 +1801,7 @@
         "additionalProperties": false,
         "properties": {
           "aggregation": {
-            "$ref": "#/components/schemas/Union_4"
+            "$ref": "#/components/schemas/Union_5"
           },
           "categories": {
             "$ref": "#/components/schemas/Arrays_2"
@@ -1816,7 +1816,7 @@
             "type": "string"
           },
           "period": {
-            "$ref": "#/components/schemas/Union_3"
+            "$ref": "#/components/schemas/Union_4"
           },
           "title": {
             "maxLength": 80,
@@ -2000,7 +2000,7 @@
             "type": "string"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_6"
+            "$ref": "#/components/schemas/Union_7"
           },
           "id": {
             "$ref": "#/components/schemas/TransactionId"
@@ -2132,7 +2132,7 @@
             "additionalProperties": false,
             "properties": {
               "axis": {
-                "$ref": "#/components/schemas/Union_5"
+                "$ref": "#/components/schemas/Union_6"
               },
               "children": {
                 "items": {
@@ -2489,7 +2489,7 @@
                 "$ref": "#/components/schemas/InterpretationRevision"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_10"
+                "$ref": "#/components/schemas/Union_11"
               },
               "receivedEmailId": {
                 "maxLength": 256,
@@ -2587,7 +2587,7 @@
                     "type": "string"
                   },
                   {
-                    "$ref": "#/components/schemas/Union_10"
+                    "$ref": "#/components/schemas/Union_11"
                   }
                 ]
               },
@@ -3054,7 +3054,7 @@
             "additionalProperties": false,
             "properties": {
               "axis": {
-                "$ref": "#/components/schemas/Union_5"
+                "$ref": "#/components/schemas/Union_6"
               },
               "children": {
                 "items": {
@@ -3498,7 +3498,7 @@
         "additionalProperties": false,
         "properties": {
           "at": {
-            "$ref": "#/components/schemas/Union_7"
+            "$ref": "#/components/schemas/Union_8"
           },
           "op": {
             "enum": [
@@ -3859,7 +3859,7 @@
             "$ref": "#/components/schemas/TransactionCreatedAt"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_6"
+            "$ref": "#/components/schemas/Union_7"
           },
           "id": {
             "$ref": "#/components/schemas/TransactionId"
@@ -3971,22 +3971,6 @@
       "Objects_27": {
         "additionalProperties": false,
         "properties": {
-          "data": {
-            "$ref": "#/components/schemas/StatementSubmission"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Objects_28": {
-        "additionalProperties": false,
-        "properties": {
           "message": {
             "type": "string"
           },
@@ -4000,7 +3984,7 @@
         ],
         "type": "object"
       },
-      "Objects_29": {
+      "Objects_28": {
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -4009,6 +3993,22 @@
         },
         "required": [
           "id"
+        ],
+        "type": "object"
+      },
+      "Objects_29": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Transaction"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
         ],
         "type": "object"
       },
@@ -4027,8 +4027,20 @@
       "Objects_30": {
         "additionalProperties": false,
         "properties": {
+          "id": {
+            "$ref": "#/components/schemas/NeedsReviewItemId"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "Objects_31": {
+        "additionalProperties": false,
+        "properties": {
           "data": {
-            "$ref": "#/components/schemas/Transaction"
+            "$ref": "#/components/schemas/StatementSubmission"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -4040,7 +4052,35 @@
         ],
         "type": "object"
       },
-      "Objects_31": {
+      "Objects_32": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/StatementSubmissionId"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "Objects_33": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/StatementSubmission"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_34": {
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -4052,7 +4092,7 @@
         ],
         "type": "object"
       },
-      "Objects_32": {
+      "Objects_35": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4081,63 +4121,19 @@
         ],
         "type": "object"
       },
-      "Objects_33": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/InsightEvent"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Objects_34": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/InsightEvent"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Objects_35": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/Memory"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
       "Objects_36": {
         "additionalProperties": false,
         "properties": {
-          "id": {
-            "$ref": "#/components/schemas/MemoryId"
+          "data": {
+            "$ref": "#/components/schemas/InsightEvent"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
           }
         },
         "required": [
-          "id"
+          "data",
+          "next"
         ],
         "type": "object"
       },
@@ -4145,7 +4141,7 @@
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/Memory"
+            "$ref": "#/components/schemas/InsightEvent"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -4160,20 +4156,8 @@
       "Objects_38": {
         "additionalProperties": false,
         "properties": {
-          "id": {
-            "$ref": "#/components/schemas/MemoryId"
-          }
-        },
-        "required": [
-          "id"
-        ],
-        "type": "object"
-      },
-      "Objects_39": {
-        "additionalProperties": false,
-        "properties": {
           "data": {
-            "$ref": "#/components/schemas/MemoryId"
+            "$ref": "#/components/schemas/Memory"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -4182,6 +4166,18 @@
         "required": [
           "data",
           "next"
+        ],
+        "type": "object"
+      },
+      "Objects_39": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/MemoryId"
+          }
+        },
+        "required": [
+          "id"
         ],
         "type": "object"
       },
@@ -4205,7 +4201,7 @@
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/IssuedManualPATResponse"
+            "$ref": "#/components/schemas/Memory"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -4220,6 +4216,50 @@
       "Objects_41": {
         "additionalProperties": false,
         "properties": {
+          "id": {
+            "$ref": "#/components/schemas/MemoryId"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "Objects_42": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/MemoryId"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_43": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/IssuedManualPATResponse"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_44": {
+        "additionalProperties": false,
+        "properties": {
           "publicCode": {
             "type": "string"
           }
@@ -4229,7 +4269,7 @@
         ],
         "type": "object"
       },
-      "Objects_42": {
+      "Objects_45": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4245,7 +4285,7 @@
         ],
         "type": "object"
       },
-      "Objects_43": {
+      "Objects_46": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -5452,7 +5492,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_8"
+                "$ref": "#/components/schemas/Union_9"
               },
               "sourceProvider": {
                 "maxLength": 80,
@@ -5686,10 +5726,10 @@
             "$ref": "#/components/schemas/Arrays_2"
           },
           "groupBy": {
-            "$ref": "#/components/schemas/Union_2"
+            "$ref": "#/components/schemas/Union_3"
           },
           "period": {
-            "$ref": "#/components/schemas/Union_3"
+            "$ref": "#/components/schemas/Union_4"
           },
           "title": {
             "maxLength": 80,
@@ -5718,13 +5758,13 @@
             "$ref": "#/components/schemas/Arrays_2"
           },
           "groupBy": {
-            "$ref": "#/components/schemas/Union_2"
+            "$ref": "#/components/schemas/Union_3"
           },
           "id": {
             "$ref": "#/components/schemas/WidgetId"
           },
           "period": {
-            "$ref": "#/components/schemas/Union_3"
+            "$ref": "#/components/schemas/Union_4"
           },
           "title": {
             "maxLength": 80,
@@ -5809,26 +5849,13 @@
         ],
         "type": "object"
       },
-      "StagedStatementReferencePartial": {
-        "additionalProperties": false,
-        "properties": {
-          "byteLength": {
-            "maximum": 5242880,
-            "minimum": 1,
-            "type": "integer"
-          },
-          "sha256": {
-            "$ref": "#/components/schemas/StatementContentDigest"
-          },
-          "stagingId": {
-            "$ref": "#/components/schemas/StatementStagingId"
-          }
-        },
-        "type": "object"
-      },
       "StatementAccounting": {
         "additionalProperties": false,
         "properties": {
+          "abandonedRows": {
+            "minimum": 0,
+            "type": "integer"
+          },
           "acceptedRows": {
             "minimum": 0,
             "type": "integer"
@@ -5838,6 +5865,10 @@
             "type": "integer"
           },
           "needsReviewRows": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "skippedRows": {
             "minimum": 0,
             "type": "integer"
           }
@@ -5855,6 +5886,166 @@
       },
       "StatementNeedsReviewItem": {
         "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "createdAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "extractorRevision": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "id": {
+                "$ref": "#/components/schemas/NeedsReviewItemId"
+              },
+              "issues": {
+                "$ref": "#/components/schemas/Arrays_3"
+              },
+              "knownMoney": {
+                "$ref": "#/components/schemas/Money_2"
+              },
+              "locale": {
+                "$ref": "#/components/schemas/Locale"
+              },
+              "parserRevision": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "reason": {
+                "$ref": "#/components/schemas/Union_10"
+              },
+              "recordNumber": {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              "serviceMarket": {
+                "$ref": "#/components/schemas/ServiceMarket"
+              },
+              "sourceChannel": {
+                "enum": [
+                  "statement-upload"
+                ],
+                "type": "string"
+              },
+              "sourceFormat": {
+                "$ref": "#/components/schemas/Union_9"
+              },
+              "sourceProvider": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "skipped"
+                ],
+                "type": "string"
+              },
+              "submissionId": {
+                "$ref": "#/components/schemas/StatementSubmissionId"
+              },
+              "timeZone": {
+                "$ref": "#/components/schemas/IanaTimeZone"
+              }
+            },
+            "required": [
+              "id",
+              "submissionId",
+              "recordNumber",
+              "reason",
+              "serviceMarket",
+              "locale",
+              "timeZone",
+              "sourceFormat",
+              "sourceChannel",
+              "parserRevision",
+              "extractorRevision",
+              "issues",
+              "createdAt",
+              "status"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "createdAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "extractorRevision": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "id": {
+                "$ref": "#/components/schemas/NeedsReviewItemId"
+              },
+              "issues": {
+                "$ref": "#/components/schemas/Arrays_3"
+              },
+              "knownMoney": {
+                "$ref": "#/components/schemas/Money_2"
+              },
+              "locale": {
+                "$ref": "#/components/schemas/Locale"
+              },
+              "parserRevision": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "reason": {
+                "$ref": "#/components/schemas/Union_10"
+              },
+              "recordNumber": {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              "serviceMarket": {
+                "$ref": "#/components/schemas/ServiceMarket"
+              },
+              "sourceChannel": {
+                "enum": [
+                  "statement-upload"
+                ],
+                "type": "string"
+              },
+              "sourceFormat": {
+                "$ref": "#/components/schemas/Union_9"
+              },
+              "sourceProvider": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "abandoned"
+                ],
+                "type": "string"
+              },
+              "submissionId": {
+                "$ref": "#/components/schemas/StatementSubmissionId"
+              },
+              "timeZone": {
+                "$ref": "#/components/schemas/IanaTimeZone"
+              }
+            },
+            "required": [
+              "id",
+              "submissionId",
+              "recordNumber",
+              "reason",
+              "serviceMarket",
+              "locale",
+              "timeZone",
+              "sourceFormat",
+              "sourceChannel",
+              "parserRevision",
+              "extractorRevision",
+              "issues",
+              "createdAt",
+              "status"
+            ],
+            "type": "object"
+          },
           {
             "additionalProperties": false,
             "properties": {
@@ -6003,7 +6194,7 @@
                 "type": "string"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_9"
+                "$ref": "#/components/schemas/Union_10"
               },
               "recordNumber": {
                 "exclusiveMinimum": 0,
@@ -6019,7 +6210,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_8"
+                "$ref": "#/components/schemas/Union_9"
               },
               "sourceProvider": {
                 "minLength": 1,
@@ -6052,8 +6243,7 @@
               "extractorRevision",
               "issues",
               "createdAt",
-              "status",
-              "originalEvidence"
+              "status"
             ],
             "type": "object"
           },
@@ -6084,7 +6274,7 @@
                 "type": "string"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_9"
+                "$ref": "#/components/schemas/Union_10"
               },
               "recordNumber": {
                 "exclusiveMinimum": 0,
@@ -6100,7 +6290,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_8"
+                "$ref": "#/components/schemas/Union_9"
               },
               "sourceProvider": {
                 "minLength": 1,
@@ -6164,7 +6354,7 @@
                 "type": "string"
               },
               "reason": {
-                "$ref": "#/components/schemas/Union_9"
+                "$ref": "#/components/schemas/Union_10"
               },
               "recordNumber": {
                 "exclusiveMinimum": 0,
@@ -6183,7 +6373,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_8"
+                "$ref": "#/components/schemas/Union_9"
               },
               "sourceProvider": {
                 "minLength": 1,
@@ -6245,7 +6435,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_8"
+                "$ref": "#/components/schemas/Union_9"
               },
               "status": {
                 "enum": [
@@ -6277,7 +6467,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_8"
+                "$ref": "#/components/schemas/Union_9"
               },
               "startedAt": {
                 "$ref": "#/components/schemas/UtcTimestamp"
@@ -6308,6 +6498,46 @@
               "accounting": {
                 "$ref": "#/components/schemas/StatementAccounting"
               },
+              "id": {
+                "$ref": "#/components/schemas/StatementSubmissionId"
+              },
+              "parserRevision": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "sourceFormat": {
+                "$ref": "#/components/schemas/Union_9"
+              },
+              "startedAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "status": {
+                "enum": [
+                  "awaiting-clarification"
+                ],
+                "type": "string"
+              },
+              "submittedAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              }
+            },
+            "required": [
+              "id",
+              "sourceFormat",
+              "parserRevision",
+              "submittedAt",
+              "status",
+              "startedAt",
+              "accounting"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "accounting": {
+                "$ref": "#/components/schemas/StatementAccounting"
+              },
               "completedAt": {
                 "$ref": "#/components/schemas/UtcTimestamp"
               },
@@ -6319,7 +6549,51 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_8"
+                "$ref": "#/components/schemas/Union_9"
+              },
+              "startedAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "status": {
+                "enum": [
+                  "abandoned"
+                ],
+                "type": "string"
+              },
+              "submittedAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              }
+            },
+            "required": [
+              "id",
+              "sourceFormat",
+              "parserRevision",
+              "submittedAt",
+              "status",
+              "startedAt",
+              "completedAt",
+              "accounting"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "accounting": {
+                "$ref": "#/components/schemas/StatementAccounting"
+              },
+              "completedAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "id": {
+                "$ref": "#/components/schemas/StatementSubmissionId"
+              },
+              "parserRevision": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "sourceFormat": {
+                "$ref": "#/components/schemas/Union_9"
               },
               "startedAt": {
                 "$ref": "#/components/schemas/UtcTimestamp"
@@ -6373,7 +6647,7 @@
                 "type": "string"
               },
               "sourceFormat": {
-                "$ref": "#/components/schemas/Union_8"
+                "$ref": "#/components/schemas/Union_9"
               },
               "startedAt": {
                 "$ref": "#/components/schemas/UtcTimestamp"
@@ -6423,20 +6697,6 @@
           "idempotencyKey",
           "reference"
         ],
-        "type": "object"
-      },
-      "SubmitForExtractionInputPartial": {
-        "additionalProperties": false,
-        "properties": {
-          "idempotencyKey": {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
-            "type": "string"
-          },
-          "reference": {
-            "$ref": "#/components/schemas/StagedStatementReferencePartial"
-          }
-        },
         "type": "object"
       },
       "SubscriptionOffers": {
@@ -7476,39 +7736,6 @@
                 "additionalProperties": false,
                 "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
                 "properties": {
-                  "payload": {
-                    "$ref": "#/components/schemas/SubmitForExtractionInputPartial"
-                  }
-                },
-                "type": "object"
-              },
-              "hint": {
-                "maxLength": 140,
-                "minLength": 1,
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-                "type": "string"
-              },
-              "tool": {
-                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
-                "enum": [
-                  "ingestion.submitForExtraction"
-                ],
-                "type": "string"
-              }
-            },
-            "required": [
-              "tool",
-              "hint"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "args": {
-                "additionalProperties": false,
-                "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
-                "properties": {
                   "params": {
                     "additionalProperties": false,
                     "properties": {
@@ -7558,6 +7785,9 @@
                       "offset": {
                         "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
                         "type": "string"
+                      },
+                      "status": {
+                        "$ref": "#/components/schemas/Union_2"
                       }
                     },
                     "type": "object"
@@ -7617,6 +7847,84 @@
                 "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
                 "enum": [
                   "ingestion.resolveNeedsReviewItem"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
+                "properties": {
+                  "params": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "$ref": "#/components/schemas/NeedsReviewItemId"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              },
+              "hint": {
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "ingestion.skipNeedsReviewItem"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
+                "properties": {
+                  "params": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "$ref": "#/components/schemas/StatementSubmissionId"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              },
+              "hint": {
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "ingestion.abandonStatementSubmission"
                 ],
                 "type": "string"
               }
@@ -8118,7 +8426,7 @@
             "$ref": "#/components/schemas/TransactionCreatedAt"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_6"
+            "$ref": "#/components/schemas/Union_7"
           },
           "id": {
             "$ref": "#/components/schemas/TransactionId"
@@ -8195,7 +8503,7 @@
             "type": "string"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_6"
+            "$ref": "#/components/schemas/Union_7"
           },
           "money": {
             "$ref": "#/components/schemas/Money_2"
@@ -8392,7 +8700,7 @@
             "$ref": "#/components/schemas/TransactionCreatedAt"
           },
           "direction": {
-            "$ref": "#/components/schemas/Union_6"
+            "$ref": "#/components/schemas/Union_7"
           },
           "id": {
             "$ref": "#/components/schemas/TransactionId"
@@ -8602,13 +8910,25 @@
       },
       "Union_10": {
         "enum": [
+          "malformed-source-row",
+          "missing-required-fact",
+          "ambiguous-direction",
+          "ambiguous-currency",
+          "canonical-validation-failed",
+          "mapping-unavailable",
+          "model-unavailable"
+        ],
+        "type": "string"
+      },
+      "Union_11": {
+        "enum": [
           "provider-retrieval-failed",
           "processing-interrupted",
           "consent-revoked"
         ],
         "type": "string"
       },
-      "Union_11": {
+      "Union_12": {
         "anyOf": [
           {
             "additionalProperties": false,
@@ -8674,7 +8994,7 @@
           }
         ]
       },
-      "Union_12": {
+      "Union_13": {
         "anyOf": [
           {
             "additionalProperties": false,
@@ -9161,40 +9481,8 @@
               "input": {
                 "additionalProperties": false,
                 "properties": {
-                  "payload": {
-                    "$ref": "#/components/schemas/SubmitForExtractionInput"
-                  }
-                },
-                "required": [
-                  "payload"
-                ],
-                "type": "object"
-              },
-              "operation": {
-                "enum": [
-                  "ingestion.submitForExtraction"
-                ],
-                "type": "string"
-              }
-            },
-            "required": [
-              "callId",
-              "operation",
-              "input"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "callId": {
-                "$ref": "#/components/schemas/AtomicBatchCallId"
-              },
-              "input": {
-                "additionalProperties": false,
-                "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_29"
+                    "$ref": "#/components/schemas/Objects_28"
                   },
                   "payload": {
                     "$ref": "#/components/schemas/ResolveNeedsReviewItemInput"
@@ -9230,7 +9518,71 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_31"
+                    "$ref": "#/components/schemas/Objects_30"
+                  }
+                },
+                "required": [
+                  "params"
+                ],
+                "type": "object"
+              },
+              "operation": {
+                "enum": [
+                  "ingestion.skipNeedsReviewItem"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "callId",
+              "operation",
+              "input"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "callId": {
+                "$ref": "#/components/schemas/AtomicBatchCallId"
+              },
+              "input": {
+                "additionalProperties": false,
+                "properties": {
+                  "params": {
+                    "$ref": "#/components/schemas/Objects_32"
+                  }
+                },
+                "required": [
+                  "params"
+                ],
+                "type": "object"
+              },
+              "operation": {
+                "enum": [
+                  "ingestion.abandonStatementSubmission"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "callId",
+              "operation",
+              "input"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "callId": {
+                "$ref": "#/components/schemas/AtomicBatchCallId"
+              },
+              "input": {
+                "additionalProperties": false,
+                "properties": {
+                  "params": {
+                    "$ref": "#/components/schemas/Objects_34"
                   },
                   "payload": {
                     "$ref": "#/components/schemas/DeliveryEvidenceInput"
@@ -9266,7 +9618,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_31"
+                    "$ref": "#/components/schemas/Objects_34"
                   }
                 },
                 "required": [
@@ -9298,7 +9650,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_31"
+                    "$ref": "#/components/schemas/Objects_34"
                   }
                 },
                 "required": [
@@ -9362,7 +9714,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_36"
+                    "$ref": "#/components/schemas/Objects_39"
                   },
                   "payload": {
                     "$ref": "#/components/schemas/ReviseInput"
@@ -9398,7 +9750,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_38"
+                    "$ref": "#/components/schemas/Objects_41"
                   }
                 },
                 "required": [
@@ -9462,7 +9814,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "payload": {
-                    "$ref": "#/components/schemas/Objects_41"
+                    "$ref": "#/components/schemas/Objects_44"
                   }
                 },
                 "required": [
@@ -9518,7 +9870,7 @@
           }
         ]
       },
-      "Union_13": {
+      "Union_14": {
         "anyOf": [
           {
             "additionalProperties": false,
@@ -9873,35 +10225,12 @@
               },
               "operation": {
                 "enum": [
-                  "ingestion.submitForExtraction"
-                ],
-                "type": "string"
-              },
-              "output": {
-                "$ref": "#/components/schemas/Objects_27"
-              }
-            },
-            "required": [
-              "callId",
-              "operation",
-              "output"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "callId": {
-                "$ref": "#/components/schemas/AtomicBatchCallId"
-              },
-              "operation": {
-                "enum": [
                   "ingestion.resolveNeedsReviewItem"
                 ],
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_30"
+                "$ref": "#/components/schemas/Objects_29"
               }
             },
             "required": [
@@ -9919,12 +10248,12 @@
               },
               "operation": {
                 "enum": [
-                  "insights.markInsightDelivered"
+                  "ingestion.skipNeedsReviewItem"
                 ],
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_32"
+                "$ref": "#/components/schemas/Objects_31"
               }
             },
             "required": [
@@ -9942,7 +10271,7 @@
               },
               "operation": {
                 "enum": [
-                  "insights.markInsightRead"
+                  "ingestion.abandonStatementSubmission"
                 ],
                 "type": "string"
               },
@@ -9965,30 +10294,7 @@
               },
               "operation": {
                 "enum": [
-                  "insights.dismissInsight"
-                ],
-                "type": "string"
-              },
-              "output": {
-                "$ref": "#/components/schemas/Objects_34"
-              }
-            },
-            "required": [
-              "callId",
-              "operation",
-              "output"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "callId": {
-                "$ref": "#/components/schemas/AtomicBatchCallId"
-              },
-              "operation": {
-                "enum": [
-                  "memory.remember"
+                  "insights.markInsightDelivered"
                 ],
                 "type": "string"
               },
@@ -10011,7 +10317,30 @@
               },
               "operation": {
                 "enum": [
-                  "memory.revise"
+                  "insights.markInsightRead"
+                ],
+                "type": "string"
+              },
+              "output": {
+                "$ref": "#/components/schemas/Objects_36"
+              }
+            },
+            "required": [
+              "callId",
+              "operation",
+              "output"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "callId": {
+                "$ref": "#/components/schemas/AtomicBatchCallId"
+              },
+              "operation": {
+                "enum": [
+                  "insights.dismissInsight"
                 ],
                 "type": "string"
               },
@@ -10034,12 +10363,12 @@
               },
               "operation": {
                 "enum": [
-                  "memory.forget"
+                  "memory.remember"
                 ],
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_39"
+                "$ref": "#/components/schemas/Objects_38"
               }
             },
             "required": [
@@ -10057,7 +10386,7 @@
               },
               "operation": {
                 "enum": [
-                  "pats.createManualPAT"
+                  "memory.revise"
                 ],
                 "type": "string"
               },
@@ -10080,7 +10409,7 @@
               },
               "operation": {
                 "enum": [
-                  "pats.inspectPATPairing"
+                  "memory.forget"
                 ],
                 "type": "string"
               },
@@ -10103,7 +10432,7 @@
               },
               "operation": {
                 "enum": [
-                  "pats.approvePATPairing"
+                  "pats.createManualPAT"
                 ],
                 "type": "string"
               },
@@ -10117,10 +10446,66 @@
               "output"
             ],
             "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "callId": {
+                "$ref": "#/components/schemas/AtomicBatchCallId"
+              },
+              "operation": {
+                "enum": [
+                  "pats.inspectPATPairing"
+                ],
+                "type": "string"
+              },
+              "output": {
+                "$ref": "#/components/schemas/Objects_45"
+              }
+            },
+            "required": [
+              "callId",
+              "operation",
+              "output"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "callId": {
+                "$ref": "#/components/schemas/AtomicBatchCallId"
+              },
+              "operation": {
+                "enum": [
+                  "pats.approvePATPairing"
+                ],
+                "type": "string"
+              },
+              "output": {
+                "$ref": "#/components/schemas/Objects_46"
+              }
+            },
+            "required": [
+              "callId",
+              "operation",
+              "output"
+            ],
+            "type": "object"
           }
         ]
       },
       "Union_2": {
+        "enum": [
+          "pending",
+          "expired",
+          "resolved",
+          "skipped",
+          "abandoned"
+        ],
+        "type": "string"
+      },
+      "Union_3": {
         "enum": [
           "category",
           "day",
@@ -10128,7 +10513,7 @@
         ],
         "type": "string"
       },
-      "Union_3": {
+      "Union_4": {
         "enum": [
           "this-week",
           "this-month",
@@ -10139,7 +10524,7 @@
         ],
         "type": "string"
       },
-      "Union_4": {
+      "Union_5": {
         "enum": [
           "sum",
           "average",
@@ -10147,14 +10532,14 @@
         ],
         "type": "string"
       },
-      "Union_5": {
+      "Union_6": {
         "enum": [
           "row",
           "column"
         ],
         "type": "string"
       },
-      "Union_6": {
+      "Union_7": {
         "description": "Which way the money moved, seen from the user: `outflow` is money leaving them, `inflow` is money reaching them. The amount is unsigned, so this is the only field that carries the sign.",
         "enum": [
           "inflow",
@@ -10162,7 +10547,7 @@
         ],
         "type": "string"
       },
-      "Union_7": {
+      "Union_8": {
         "anyOf": [
           {
             "enum": [
@@ -10176,22 +10561,10 @@
           }
         ]
       },
-      "Union_8": {
+      "Union_9": {
         "enum": [
           "csv",
           "xlsx"
-        ],
-        "type": "string"
-      },
-      "Union_9": {
-        "enum": [
-          "malformed-source-row",
-          "missing-required-fact",
-          "ambiguous-direction",
-          "ambiguous-currency",
-          "canonical-validation-failed",
-          "mapping-unavailable",
-          "model-unavailable"
         ],
         "type": "string"
       },
@@ -10274,7 +10647,7 @@
                 ]
               },
               "direction": {
-                "$ref": "#/components/schemas/Union_6"
+                "$ref": "#/components/schemas/Union_7"
               },
               "money": {
                 "$ref": "#/components/schemas/Money_2"
@@ -13389,9 +13762,17 @@
     },
     "/ingestion/needs-review": {
       "get": {
-        "description": "List up to 100 of the caller's visible statement rows and forwarded emails requiring review, followed by retained resolution metadata. Use offset and limit to page; pending statement items include parser-bounded original row evidence and email items reference their expiring IngestSample.",
+        "description": "List up to 100 of the caller's visible statement rows and forwarded emails requiring review, followed by retained resolution metadata. Use offset and limit to page, and status to filter. For one clarification question, request status=pending and limit=1. Pending statement items include parser-bounded original row evidence and email items reference their expiring IngestSample.",
         "operationId": "ingestion.listNeedsReviewItems",
         "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/Union_2"
+            }
+          },
           {
             "in": "query",
             "name": "offset",
@@ -13568,7 +13949,143 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_30"
+                  "$ref": "#/components/schemas/Objects_29"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequiredEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserActionRequiredEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissingEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundEncoded"
+                }
+              }
+            },
+            "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          },
+          {
+            "webSession": []
+          }
+        ],
+        "tags": [
+          "ingestion"
+        ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "user-owned-agent-scoped"
+        },
+        "x-fidy-agent-confirmation": "required",
+        "x-fidy-operation-kind": "mutation",
+        "x-fidy-required-tier": "free"
+      }
+    },
+    "/ingestion/needs-review/{id}/skip": {
+      "post": {
+        "description": "Explicitly skip one pending statement row, erase its evidence, and complete clarification when no rows remain.",
+        "operationId": "ingestion.skipNeedsReviewItem",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/NeedsReviewItemId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Objects_31"
                 }
               }
             },
@@ -13687,7 +14204,7 @@
     },
     "/ingestion/statements": {
       "post": {
-        "description": "Idempotently queue one bounded CSV or XLSX statement whose bytes were first staged through the authenticated statement staging transport. Free includes one lifetime backfill; Pro access permits ongoing submissions. Poll the returned submission and inspect NeedsReviewItems after completion.",
+        "description": "Publish one bounded CSV or XLSX directly attached in the verified WhatsApp conversation. The server stages bytes and binds upload provenance; browser and PAT callers cannot publish. Free includes one lifetime backfill consumed on capture; Trial and Pro permit ongoing submissions.",
         "operationId": "ingestion.submitForExtraction",
         "parameters": [],
         "requestBody": {
@@ -13705,7 +14222,20 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_27"
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/StatementSubmission"
+                    },
+                    "next": {
+                      "$ref": "#/components/schemas/Arrays_"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
                 }
               }
             },
@@ -13801,11 +14331,7 @@
           "ingestion"
         ],
         "x-fidy-access": {
-          "scope": {
-            "capability": "write",
-            "evaluation": "operation"
-          },
-          "type": "user-owned-agent-scoped"
+          "type": "verified-whatsapp-hosted-only"
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "mutation",
@@ -13961,6 +14487,142 @@
         "x-fidy-required-tier": "free"
       }
     },
+    "/ingestion/statements/{id}/abandon": {
+      "post": {
+        "description": "Permanently abandon pending statement clarification while preserving captured Transactions.",
+        "operationId": "ingestion.abandonStatementSubmission",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/StatementSubmissionId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Objects_33"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequiredEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserActionRequiredEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissingEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundEncoded"
+                }
+              }
+            },
+            "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          },
+          {
+            "webSession": []
+          }
+        ],
+        "tags": [
+          "ingestion"
+        ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "user-owned-agent-scoped"
+        },
+        "x-fidy-agent-confirmation": "required",
+        "x-fidy-operation-kind": "mutation",
+        "x-fidy-required-tier": "free"
+      }
+    },
     "/insights/{id}/delivered": {
       "post": {
         "description": "Record one actual external send attempt for the caller's pending InsightEvent and mark it delivered. Use this only after a provider accepted the send: supply its UTC send instant, channel, provider, and message id. This operation sends nothing itself.",
@@ -13990,7 +14652,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_32"
+                  "$ref": "#/components/schemas/Objects_35"
                 }
               }
             },
@@ -14126,7 +14788,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_34"
+                  "$ref": "#/components/schemas/Objects_37"
                 }
               }
             },
@@ -14262,7 +14924,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_33"
+                  "$ref": "#/components/schemas/Objects_36"
                 }
               }
             },
@@ -14676,7 +15338,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_35"
+                  "$ref": "#/components/schemas/Objects_38"
                 }
               }
             },
@@ -14812,7 +15474,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_39"
+                  "$ref": "#/components/schemas/Objects_42"
                 }
               }
             },
@@ -14956,7 +15618,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_37"
+                  "$ref": "#/components/schemas/Objects_40"
                 }
               }
             },
@@ -15096,13 +15758,13 @@
                 "properties": {
                   "calls": {
                     "items": {
-                      "$ref": "#/components/schemas/Union_12"
+                      "$ref": "#/components/schemas/Union_13"
                     },
                     "maxItems": 12,
                     "minItems": 1,
                     "prefixItems": [
                       {
-                        "$ref": "#/components/schemas/Union_12"
+                        "$ref": "#/components/schemas/Union_13"
                       }
                     ],
                     "type": "array"
@@ -15129,13 +15791,13 @@
                       "properties": {
                         "results": {
                           "items": {
-                            "$ref": "#/components/schemas/Union_13"
+                            "$ref": "#/components/schemas/Union_14"
                           },
                           "maxItems": 12,
                           "minItems": 1,
                           "prefixItems": [
                             {
-                              "$ref": "#/components/schemas/Union_13"
+                              "$ref": "#/components/schemas/Union_14"
                             }
                           ],
                           "type": "array"
@@ -15535,7 +16197,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_40"
+                  "$ref": "#/components/schemas/Objects_43"
                 }
               }
             },
@@ -15826,7 +16488,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_43"
+                  "$ref": "#/components/schemas/Objects_46"
                 }
               }
             },
@@ -15948,7 +16610,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Objects_41"
+                "$ref": "#/components/schemas/Objects_44"
               }
             }
           },
@@ -15959,7 +16621,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_42"
+                  "$ref": "#/components/schemas/Objects_45"
                 }
               }
             },
@@ -16091,16 +16753,16 @@
                           "$ref": "#/components/schemas/AccessTier"
                         },
                         "canonicalCalls": {
-                          "$ref": "#/components/schemas/Union_11"
+                          "$ref": "#/components/schemas/Union_12"
                         },
                         "forwardedEmails": {
-                          "$ref": "#/components/schemas/Union_11"
+                          "$ref": "#/components/schemas/Union_12"
                         },
                         "hostedHistoryTurns": {
-                          "$ref": "#/components/schemas/Union_11"
+                          "$ref": "#/components/schemas/Union_12"
                         },
                         "mediaSubmissions": {
-                          "$ref": "#/components/schemas/Union_11"
+                          "$ref": "#/components/schemas/Union_12"
                         }
                       },
                       "required": [
@@ -16928,7 +17590,7 @@
             "name": "direction",
             "required": false,
             "schema": {
-              "$ref": "#/components/schemas/Union_6"
+              "$ref": "#/components/schemas/Union_7"
             }
           },
           {

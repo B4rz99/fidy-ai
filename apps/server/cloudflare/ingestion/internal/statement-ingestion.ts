@@ -1,7 +1,4 @@
-import {
-  admitResourceWithAttemptPressure,
-  releaseOutstandingResource,
-} from "../../resource-admission/operations";
+import { releaseOutstandingResource } from "../../resource-admission/operations";
 import { maximumSubmissionInputBytes } from "../contract";
 import {
   StagedStatementBytes,
@@ -23,6 +20,7 @@ import { Data, Effect, Function, Option, Result, Schema } from "effect";
 import {
   type StatementPublicationRefusal,
   StatementStaging,
+  type StatementStagingConfig,
   type StoredStatementSubmission,
   newIngestionId,
   readOwnedStatementSubmission,
@@ -30,24 +28,17 @@ import {
   statementSubmissionReadAudit,
   submissionProjection,
 } from "./statement-staging";
+import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { RequestBodyPolicy } from "../../http/contract";
 import { boundedJsonBody } from "../../http/operations";
 import { currentMillis } from "../../runtime/operations";
 import { prepareOwnedStatement } from "../../database/operations";
+import { ResourceAdmissionRefused } from "../../resource-admission/contract";
 import {
-  type ResourceAdmissionAuthorityConfig,
-  ResourceAdmissionCharges,
-  type ResourceAdmissionCharges as ResourceAdmissionChargesType,
-  ResourceAdmissionDurationMs,
-  ResourceAdmissionEpochMs,
-  ResourceAdmissionGrantId,
-  ResourceAdmissionLimit,
-  ResourceAdmissionPolicies,
-  ResourceAdmissionPolicyKey,
-  ResourceAdmissionRefused,
-  ResourceAdmissionScopeKey,
-  ResourceAdmissionUnits,
-} from "../../resource-admission/contract";
+  admitStatementUpload,
+  statementUploadAuthority,
+  uploadWindowMilliseconds,
+} from "./statement-upload-admission";
 import {
   type QueryCaller,
   type TransactionSubject,
@@ -88,106 +79,8 @@ const HTTP_TOO_MANY_REQUESTS = 429;
 const HTTP_UNAVAILABLE = 503;
 /** The body bound one canonical statement submission request accepts. */
 
-const uploadWindowMilliseconds = 3_600_000;
-const uploadLeaseMilliseconds = 600_000;
-const maximumUploadsPerUserPerHour = 20;
-const maximumUploadsPerHour = 500;
-// Attempts include refused uploads; the smaller work limits still govern R2 writes.
-const maximumUploadAttemptsPerUserPerHour = 40;
-const maximumUploadAttemptsPerHour = 1000;
-const maximumConcurrentUploads = 2;
 const maximumAdmissionSweep = 128;
-const uploadGrantPrefix = "ingestion-upload-";
-const oneUnit = ResourceAdmissionUnits.make(1);
 const noStore = { "cache-control": "no-store" } as const;
-
-/**
- * Worker-owned upload admission. Byte, content, and reference bounds live in the staging service;
- * these claims bound how often one User may start an upload and how much private R2-backed
- * transient material all Users may create per hour before any staging row or object exists.
- */
-const ingestionPolicies = ResourceAdmissionPolicies.make([
-  {
-    dimension: "stable_user",
-    durationMs: ResourceAdmissionDurationMs.make(uploadWindowMilliseconds),
-    key: ResourceAdmissionPolicyKey.make("ingestion.upload.attempt.user.v1"),
-    kind: "rolling_window",
-    limit: ResourceAdmissionLimit.make(maximumUploadAttemptsPerUserPerHour),
-  },
-  {
-    dimension: "operation",
-    durationMs: ResourceAdmissionDurationMs.make(uploadWindowMilliseconds),
-    key: ResourceAdmissionPolicyKey.make("ingestion.upload.attempt.global.v1"),
-    kind: "rolling_window",
-    limit: ResourceAdmissionLimit.make(maximumUploadAttemptsPerHour),
-  },
-  {
-    dimension: "stable_user",
-    durationMs: ResourceAdmissionDurationMs.make(uploadWindowMilliseconds),
-    key: ResourceAdmissionPolicyKey.make("ingestion.upload.user.v1"),
-    kind: "rolling_window",
-    limit: ResourceAdmissionLimit.make(maximumUploadsPerUserPerHour),
-  },
-  {
-    dimension: "operation",
-    durationMs: ResourceAdmissionDurationMs.make(uploadWindowMilliseconds),
-    key: ResourceAdmissionPolicyKey.make("ingestion.upload.operation.v1"),
-    kind: "rolling_window",
-    limit: ResourceAdmissionLimit.make(maximumUploadsPerHour),
-  },
-  {
-    dimension: "spend",
-    durationMs: ResourceAdmissionDurationMs.make(uploadWindowMilliseconds),
-    key: ResourceAdmissionPolicyKey.make("ingestion.upload.spend.v1"),
-    kind: "rolling_window",
-    limit: ResourceAdmissionLimit.make(maximumUploadsPerHour),
-  },
-  {
-    dimension: "outstanding_work",
-    key: ResourceAdmissionPolicyKey.make("ingestion.upload.outstanding.v1"),
-    kind: "outstanding",
-    leaseMs: ResourceAdmissionDurationMs.make(uploadLeaseMilliseconds),
-    limit: ResourceAdmissionLimit.make(maximumConcurrentUploads),
-  },
-]);
-
-const uploadAttemptCharges = (userId: string): ResourceAdmissionChargesType =>
-  ResourceAdmissionCharges.make([
-    {
-      policyKey: ResourceAdmissionPolicyKey.make("ingestion.upload.attempt.user.v1"),
-      scopeKey: ResourceAdmissionScopeKey.make(userId),
-      units: oneUnit,
-    },
-    {
-      policyKey: ResourceAdmissionPolicyKey.make("ingestion.upload.attempt.global.v1"),
-      scopeKey: ResourceAdmissionScopeKey.make("statement-staging"),
-      units: oneUnit,
-    },
-  ]);
-
-const ingestionCharges = (userId: string): ResourceAdmissionChargesType =>
-  ResourceAdmissionCharges.make([
-    {
-      policyKey: ResourceAdmissionPolicyKey.make("ingestion.upload.user.v1"),
-      scopeKey: ResourceAdmissionScopeKey.make(userId),
-      units: oneUnit,
-    },
-    {
-      policyKey: ResourceAdmissionPolicyKey.make("ingestion.upload.operation.v1"),
-      scopeKey: ResourceAdmissionScopeKey.make("statement-staging"),
-      units: oneUnit,
-    },
-    {
-      policyKey: ResourceAdmissionPolicyKey.make("ingestion.upload.spend.v1"),
-      scopeKey: ResourceAdmissionScopeKey.make("r2-statement-staging"),
-      units: oneUnit,
-    },
-    {
-      policyKey: ResourceAdmissionPolicyKey.make("ingestion.upload.outstanding.v1"),
-      scopeKey: ResourceAdmissionScopeKey.make(userId),
-      units: oneUnit,
-    },
-  ]);
 
 const submissionInputPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: maximumSubmissionInputBytes,
@@ -332,20 +225,13 @@ export const uploadStagedStatement = ({
     const nowEpochMs = currentMillis();
     const staging = stagingService(environment, nowEpochMs);
     if (Option.isNone(staging)) return unavailable();
-    const admission: ResourceAdmissionAuthorityConfig = {
-      database: environment.DB,
-      nowEpochMs: () => ResourceAdmissionEpochMs.make(nowEpochMs),
-      policies: ingestionPolicies,
-    };
-    const grantId = ResourceAdmissionGrantId.make(`${uploadGrantPrefix}work-${newIngestionId()}`);
+    const admission = statementUploadAuthority({ db: environment.DB, current: nowEpochMs });
     const admitted = yield* Effect.result(
-      admitResourceWithAttemptPressure(admission, {
-        attempt: {
-          charges: uploadAttemptCharges(subject.userId),
-          grantId: ResourceAdmissionGrantId.make(`${uploadGrantPrefix}attempt-${newIngestionId()}`),
-          statements: [],
-        },
-        work: { charges: ingestionCharges(subject.userId), grantId, statements: [] },
+      admitStatementUpload({
+        db: environment.DB,
+        userId: subject.userId,
+        current: nowEpochMs,
+        statements: () => [],
       })
     );
     if (Result.isFailure(admitted)) {
@@ -353,13 +239,14 @@ export const uploadStagedStatement = ({
     }
     // The claim is held only while this upload is in flight; its lease bounds an interrupted one.
     const staged = yield* Effect.result(
-      staging.value
-        .stageStatementBytes({ request, userId: subject.userId })
-        .pipe(
-          Effect.ensuring(
-            releaseOutstandingResource(admission, { grantId, statements: [] }).pipe(Effect.ignore)
-          )
+      staging.value.stageStatementBytes({ request, userId: subject.userId }).pipe(
+        Effect.ensuring(
+          releaseOutstandingResource(admission, {
+            grantId: admitted.success.grantId,
+            statements: [],
+          }).pipe(Effect.ignore)
         )
+      )
     );
     if (Result.isFailure(staged)) {
       return staged.failure._tag === "StatementStagingFailed"
@@ -555,6 +442,36 @@ export const commitReadAudit: {
     })
 );
 
+/** One canonical submission query, with prepared transport authority and optional conversation scope. */
+export const readCanonicalSubmission = ({
+  config,
+  userId,
+  submissionId,
+  scope,
+}: Readonly<{
+  config: Pick<StatementStagingConfig, "database">;
+  userId: string;
+  submissionId: StatementSubmissionId;
+  scope: Option.Option<OwnedStatement>;
+}>): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    if (Option.isSome(scope)) {
+      const eligible = yield* Effect.tryPromise(() =>
+        config.database
+          .prepare(
+            `SELECT 1 FROM statement_submissions WHERE id=? AND user_id=? AND (${scope.value.sql})`
+          )
+          .bind(submissionId, userId, ...scope.value.params)
+          .first()
+      );
+      if (eligible === null) return submissionNotFound();
+    }
+    const stored = yield* readOwnedStatementSubmission(config, { userId, submissionId });
+    if (Option.isNone(stored)) return submissionNotFound();
+    const response = yield* submissionResponse(stored.value, HTTP_OK);
+    return Option.getOrElse(response, submissionNotFound);
+  }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())));
+
 /**
  * Reads one owned statement submission only after its canonical call committed a metadata-only
  * audit row under the caller's live authority; a dead credential writes nothing and is refused, and
@@ -583,16 +500,11 @@ export const readStatementSubmission = ({
       });
       if (Option.isSome(refused)) return refused.value;
       if (Option.isNone(submissionId)) return submissionNotFound();
-      // This owned projection adds no authority: the audit above already committed under the caller.
-      const stored = yield* readOwnedStatementSubmission(
-        { database: environment.DB },
-        {
-          submissionId: submissionId.value,
-          userId: subject.userId,
-        }
-      );
-      if (Option.isNone(stored)) return submissionNotFound();
-      const response = yield* submissionResponse(stored.value, HTTP_OK);
-      return Option.getOrElse(response, () => submissionNotFound());
+      return yield* readCanonicalSubmission({
+        config: { database: environment.DB },
+        userId: subject.userId,
+        submissionId: submissionId.value,
+        scope: Option.none(),
+      });
     }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
   );

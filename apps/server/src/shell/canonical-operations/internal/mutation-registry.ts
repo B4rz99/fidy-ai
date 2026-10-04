@@ -58,6 +58,8 @@ export const canonicalMutationImplementations = {
   "ingestion.enableEmailForwarding": unavailableMutation,
   "ingestion.submitForExtraction": unavailableMutation,
   "ingestion.resolveNeedsReviewItem": unavailableMutation,
+  "ingestion.skipNeedsReviewItem": unavailableMutation,
+  "ingestion.abandonStatementSubmission": unavailableMutation,
   "insights.markInsightDelivered": unavailableMutation,
   "insights.markInsightRead": unavailableMutation,
   "insights.dismissInsight": unavailableMutation,

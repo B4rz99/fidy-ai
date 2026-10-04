@@ -1,5 +1,6 @@
 import { Effect, Exit, Option, Schema } from "effect";
 import { maximumAtomicBatchCalls } from "../../../src/shell/operations/contract";
+import type { HostedCanonicalCaller } from "../../canonical-work/contract";
 import type { HostedCommitFence } from "../../agent/contract";
 import { prepareHostedMutationCommit } from "../../agent/operations";
 import {
@@ -37,6 +38,10 @@ import type {
   CommittedMutationValue,
   PreparedCanonicalMutation,
 } from "../contract";
+
+const isHostedUnitCaller = (
+  subject: TransactionCaller | HostedCanonicalCaller
+): subject is HostedCanonicalCaller => "_tag" in subject;
 
 /** What one caller-owned D1 unit did with its ordered canonical mutations. */
 export type CanonicalMutationUnitExecution =
@@ -351,6 +356,15 @@ const classifyAbortedUnit = ({
     return { _tag: "Aborted" } as const;
   });
 
+/** Hosted aborts cannot be classified through a borrowed browser credential. */
+const classifyUnitCallerAbort = (
+  input: Omit<Parameters<typeof classifyAbortedUnit>[0], "subject"> &
+    Readonly<{ subject: TransactionCaller | HostedCanonicalCaller }>
+): Effect.Effect<CanonicalMutationUnitExecution> =>
+  isHostedUnitCaller(input.subject)
+    ? Effect.succeed({ _tag: "Unavailable" })
+    : classifyAbortedUnit({ ...input, subject: input.subject });
+
 /** Read one committed child's canonical success value, or None when the readback is incomplete. */
 const findCommittedValue = ({
   db,
@@ -390,7 +404,7 @@ const childStatements = ({
   index,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: Readonly<{ userId: string }>;
   current: number;
   mutation: PreparedCanonicalMutation;
   index: number;
@@ -426,7 +440,7 @@ export const executeCanonicalMutationUnit = ({
   hostedFence,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionCaller;
+  subject: TransactionCaller | HostedCanonicalCaller;
   current: number;
   mutations: ReadonlyArray<PreparedCanonicalMutation>;
   hostedFence: Option.Option<HostedCommitFence>;
@@ -454,7 +468,7 @@ export const executeCanonicalMutationUnit = ({
       ];
       const attempt = yield* Effect.exit(Effect.tryPromise(() => db.batch(statements)));
       if (Exit.isFailure(attempt)) {
-        return yield* classifyAbortedUnit({
+        return yield* classifyUnitCallerAbort({
           db,
           subject,
           current,

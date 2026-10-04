@@ -6,6 +6,7 @@ import {
   hostedTurnTestMigrations,
   installTestSchema,
   isolatedTestDatabases,
+  statementAuditTestMigrations,
 } from "../d1-test-fixture";
 import { it as effectIt } from "@effect/vitest";
 import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
@@ -193,6 +194,7 @@ const setup = (platform = false): Promise<D1Database> =>
             "0013_transaction_reconciliation",
             "0014_memory",
             "0015_statement_submission",
+            "0016_statement_processing",
             "0016_budgets",
             "0016_hosted_turn",
             "0017_hosted_compaction",
@@ -202,6 +204,10 @@ const setup = (platform = false): Promise<D1Database> =>
             "0019_canonical_child_guards",
             "0020_dashboard_projection",
             ...hostedTurnTestMigrations,
+            "0009_email_replacement",
+            "0018_dashboard",
+            "0018_insight_events",
+            ...statementAuditTestMigrations,
           ]).map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
         })
       );

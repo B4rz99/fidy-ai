@@ -7,11 +7,27 @@ export const maximumRetainedReviewEvidence = 5_000;
 export const expireStatementReviewEvidence = ({
   DB,
 }: Readonly<{ DB: D1Database }>): Promise<void> =>
-  DB.prepare(`UPDATE statement_needs_review
+  DB.batch([
+    DB.prepare(`UPDATE statement_hosted_origins SET abandoned_at_ms = ?
+      WHERE submission_id IN (SELECT submission_id FROM statement_hosted_origins
+        WHERE abandoned_at_ms IS NULL AND expires_at_ms <= ? ORDER BY expires_at_ms LIMIT ?)`).bind(
+      currentMillis(),
+      currentMillis(),
+      maximumRetainedReviewEvidence
+    ),
+    DB.prepare(`UPDATE statement_clarifications SET state = 'abandoned', ended_at_ms = ?
+      WHERE submission_id IN (SELECT submission_id FROM statement_clarifications
+        WHERE state = 'awaiting' AND expires_at_ms <= ? ORDER BY expires_at_ms LIMIT ?)`).bind(
+      currentMillis(),
+      currentMillis(),
+      maximumRetainedReviewEvidence
+    ),
+    DB.prepare(`UPDATE statement_needs_review
     SET status = 'expired', original_evidence = NULL, known_money = NULL
     WHERE id IN (SELECT id FROM statement_needs_review
       WHERE status = 'pending' AND evidence_expires_at_ms <= ?
-      ORDER BY evidence_expires_at_ms, id LIMIT ?)`)
-    .bind(currentMillis(), maximumRetainedReviewEvidence)
-    .run()
-    .then(() => undefined);
+      ORDER BY evidence_expires_at_ms, id LIMIT ?)`).bind(
+      currentMillis(),
+      maximumRetainedReviewEvidence
+    ),
+  ]).then(() => undefined);

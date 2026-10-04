@@ -9,7 +9,7 @@ const DailyAuditTotal = Schema.Struct({
 
 /**
  * The canonical AuditLogEntry rows one User's UTC day counts. Batch-envelope refusals are
- * excluded; each audit trigger counts the same six-table union.
+ * excluded; each audit trigger counts the same seven-table union.
  */
 export const auditDayCountExpression = `(SELECT count(*) FROM transaction_audit WHERE user_id = ?
       AND operation != 'operations.executeAtomicBatch' AND occurred_at_ms >= ? AND occurred_at_ms < ?)
@@ -24,15 +24,17 @@ export const auditDayCountExpression = `(SELECT count(*) FROM transaction_audit 
       + (SELECT count(*) FROM statement_submission_audit WHERE user_id = ?
       AND occurred_at_ms >= ? AND occurred_at_ms < ?)
       + (SELECT count(*) FROM statement_review_audit WHERE user_id = ?
+      AND occurred_at_ms >= ? AND occurred_at_ms < ?)
+      + (SELECT count(*) FROM statement_clarification_audit WHERE user_id = ?
       AND occurred_at_ms >= ? AND occurred_at_ms < ?)`;
 
-/** Parameters for the six-table UTC-day count; callers use this with `auditDayCountExpression` in D1. */
+/** Parameters for the seven-table UTC-day count; callers use this with `auditDayCountExpression` in D1. */
 export const auditDayBindings = ({
   userId,
   current,
 }: Readonly<{ userId: string; current: number }>): ReadonlyArray<string | number> => {
   const start = Math.floor(current / utcDayMilliseconds) * utcDayMilliseconds;
-  return Array.from({ length: 6 }).flatMap(() => [userId, start, start + utcDayMilliseconds]);
+  return Array.from({ length: 7 }).flatMap(() => [userId, start, start + utcDayMilliseconds]);
 };
 
 /** How many canonical audit rows one User has committed in the UTC day containing `current`. */

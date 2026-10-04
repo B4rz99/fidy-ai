@@ -163,6 +163,21 @@ export const canonicalAdmissionMigrationNames = (
       "0035_media_submissions",
     ]),
   ].sort();
+/** Shared final clarification schema; processing and the shared Audit base must precede it. */
+export const statementClarificationTestMigrations = [
+  "0032_statement_capture_entitlement",
+  "0033_statement_clarification",
+  "0034_statement_clarification_audit",
+  "0035_statement_hosted_origin",
+  "0036_statement_whatsapp_documents",
+] as const;
+/** Canonical Audit's full shared-budget dependencies for owner integration harnesses. */
+export const statementAuditTestMigrations = [
+  "0027_recurring",
+  "0028_recurring_audit_budget",
+  "0029_audit_owner_retention",
+  ...statementClarificationTestMigrations,
+] as const;
 
 /** Ordered schema additions shared by isolated D1 integration harnesses across owners. */
 export const hostedTurnTestMigrations = [

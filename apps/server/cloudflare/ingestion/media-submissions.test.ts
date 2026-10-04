@@ -135,6 +135,8 @@ it("publishes accepted unextractable images through the canonical visible-review
  CREATE TABLE statement_submission_audit(id TEXT PRIMARY KEY,user_id TEXT,operation TEXT,outcome TEXT,occurred_at_ms INTEGER);
  CREATE TABLE statement_review_audit(id TEXT PRIMARY KEY,user_id TEXT,operation TEXT,outcome TEXT,occurred_at_ms INTEGER);
  CREATE TABLE statement_submissions(id TEXT,user_id TEXT);
+ CREATE TABLE statement_clarifications(submission_id TEXT,user_id TEXT,state TEXT,expires_at_ms INTEGER);
+ CREATE TABLE statement_review_decisions(review_id TEXT,user_id TEXT,decision TEXT,transaction_id TEXT,decided_at_ms INTEGER);
  CREATE TABLE statement_needs_review(id TEXT,submission_id TEXT,record_number INTEGER,reason TEXT,original_evidence TEXT,issues TEXT,status TEXT,created_at_ms INTEGER,service_market TEXT,locale TEXT,time_zone TEXT,source_format TEXT,parser_revision TEXT,extractor_revision TEXT,evidence_expires_at_ms INTEGER,user_id TEXT);
  CREATE TABLE forwarded_email_needs_review(id TEXT,receipt_id TEXT,reason TEXT,created_at_ms INTEGER,evidence_expires_at_ms INTEGER,user_id TEXT);
  CREATE TABLE forwarded_email_receipts(id TEXT,time_zone TEXT,user_id TEXT);`)

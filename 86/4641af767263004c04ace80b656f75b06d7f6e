@@ -1,0 +1,28 @@
+apps/web/src/features/public-site/landing/navigation.tsx
+  s_7ab0fc05e25db9::t_a260a7a900e0f4 23
+apps/web/src/features/public-site/landing/registration.tsx
+  s_7ab0fc05e25db9::t_a260a7a900e0f4 1,8,10
+apps/web/e2e/static-shell.spec.ts
+  s_7ab0fc05e25db9::t_955b7c44257ced 151-159
+  s_7ab0fc05e25db9::t_2376dae149b25e 8-9,160
+apps/web/src/features/public-site/landing/motion.ts
+  s_7ab0fc05e25db9::t_a260a7a900e0f4 65,70-71,73
+apps/web/src/features/public-site/landing/landing.css
+  s_7ab0fc05e25db9::t_e480220742a587 358,374
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "864641af767263004c04ace80b656f75b06d7f6e",
+  "prompts": {},
+  "sessions": {
+    "s_7ab0fc05e25db9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1052a-b73d-70c3-9c02-9d67c7511dea",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,4 +1,5 @@
 import { type AnyRootRoute, createRoute } from "@tanstack/react-router";
+import { FeatureDetail } from "@/features/public-site/landing/feature-detail";
 import { PublicHome } from "./home";
 import { PublicSiteLayout } from "./layout";
 import { PublicSiteNotFound } from "./not-found";
@@ -30,5 +31,19 @@ export const createPublicSiteRoute = <TRootRoute extends AnyRootRoute>(rootRoute
     component: PublicSiteNotFound,
   });
 
-  return publicSiteRoute.addChildren([homeRoute, policyRoute, notFoundRoute]);
+  const detailRoutes = [
+    "transacciones",
+    "presupuestos",
+    "asistente",
+    "tablero",
+    "insights",
+    "agentes",
+  ].map((slug, index) =>
+    createRoute({
+      getParentRoute: () => publicSiteRoute,
+      path: `/funciones/${slug}`,
+      component: () => <FeatureDetail index={index} />,
+    })
+  );
+  return publicSiteRoute.addChildren([homeRoute, policyRoute, notFoundRoute, ...detailRoutes]);
 };

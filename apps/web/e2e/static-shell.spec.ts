@@ -5,6 +5,8 @@ import { type Cause, Effect } from "effect";
 const wait = <A>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
   Effect.tryPromise(() => promise);
 const json = (value: object, space: number): string => JSON.stringify(value, undefined, space);
+const waitForEntrances = (page: Page): Promise<Animation[]> =>
+  page.evaluate(() => Promise.all(document.getAnimations().map((animation) => animation.finished)));
 const expectSeriousAccessibilityViolations = (page: Page): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -146,8 +148,16 @@ test("renders the public home route without serious accessibility violations", (
   Effect.runPromise(
     Effect.gen(function* () {
       yield* wait(page.goto("/"));
-      yield* wait(expect(page).toHaveTitle("fidy"));
-      yield* wait(expect(page.getByRole("heading", { level: 1, name: "Fidy" })).toBeVisible());
+      yield* wait(expect(page).toHaveTitle("Fidy — Tu plata, más clara"));
+      yield* wait(
+        expect(
+          page.getByRole("heading", {
+            level: 1,
+            name: "Tu plata, más clara. Tu vida, más tranquila.",
+          })
+        ).toBeVisible()
+      );
+      yield* wait(waitForEntrances(page));
       yield* wait(expectSeriousAccessibilityViolations(page));
     })
   ));

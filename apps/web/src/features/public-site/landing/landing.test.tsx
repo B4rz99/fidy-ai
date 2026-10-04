@@ -191,11 +191,8 @@ it("honors reduced motion and cancels owned animations on unmount", () => {
 it("restores a saved theme and tolerates unavailable browser storage", () => {
   localStorage.setItem("fidy-landing-theme", "dark");
   const view = render(<FeatureDetail index={0} />);
-  expect(screen.getByRole("button", { name: "Oscuro", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "true"
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Claro", exact: true }));
+  expect(screen.getByRole("button", { name: "Oscuro" })).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(screen.getByRole("button", { name: "Claro" }));
   expect(localStorage.getItem("fidy-landing-theme")).toBe("light");
   view.unmount();
   vi.stubGlobal("localStorage", {
@@ -207,13 +204,7 @@ it("restores a saved theme and tolerates unavailable browser storage", () => {
     },
   });
   render(<FeatureDetail index={0} />);
-  expect(screen.getByRole("button", { name: "Sistema", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "true"
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Oscuro", exact: true }));
-  expect(screen.getByRole("button", { name: "Oscuro", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "true"
-  );
+  expect(screen.getByRole("button", { name: "Sistema" })).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(screen.getByRole("button", { name: "Oscuro" }));
+  expect(screen.getByRole("button", { name: "Oscuro" })).toHaveAttribute("aria-pressed", "true");
 });

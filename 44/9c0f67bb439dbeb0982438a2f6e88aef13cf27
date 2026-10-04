@@ -1,0 +1,38 @@
+apps/server/cloudflare/subscription/refunds.test.ts
+  s_e278ac208f4e8a::t_b730b86be8ca4b 124-130,137-153
+  s_e278ac208f4e8a::t_49d3295bb03619 132-136
+  s_e278ac208f4e8a::t_391dcec0816e49 131
+apps/server/cloudflare/subscription/subscription-queries.test.ts
+  s_e278ac208f4e8a::t_6e630270524f12 156-160
+  s_e278ac208f4e8a::t_51055953fb7bd1 142-154,161-166,168-188
+  s_e278ac208f4e8a::t_76f4f2bc416a0c 155
+  s_e278ac208f4e8a::t_d885fcc276cc20 167
+apps/server/cloudflare/tokens/internal/pat-management.ts
+  s_e278ac208f4e8a::t_9708d1485f9588 17,51,53,64,146,192
+apps/server/cloudflare/tokens/pats.test.ts
+  s_e278ac208f4e8a::t_35c2303bc611d5 1900-1916,1923-1928,1930-1951
+  s_e278ac208f4e8a::t_5cda299b04ad0e 1918-1922
+  s_e278ac208f4e8a::t_79546f52793de4 1917
+  s_e278ac208f4e8a::t_a252bc3c1007a3 1929
+apps/server/cloudflare/subscription/internal/subscription-queries.ts
+  s_e278ac208f4e8a::t_ad57da4cd82bd3 13,103
+apps/server/cloudflare/subscription/internal/refund-acceptance.ts
+  s_e278ac208f4e8a::t_2fb4f804f1dea8 1,50,101-102,161,259-260
+  s_e278ac208f4e8a::t_8c66ceaa00f1b5 49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "449c0f67bb439dbeb0982438a2f6e88aef13cf27",
+  "prompts": {},
+  "sessions": {
+    "s_e278ac208f4e8a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10731-a41d-7121-98b3-ec6e9e1e04de",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

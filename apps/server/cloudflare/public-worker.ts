@@ -4,6 +4,7 @@ import { keywordRulePath, listCategoriesPath } from "../src/shell/categories/con
 import { atomicBatchOperation } from "../src/shell/operations/contract";
 import { emailReplacementOperations } from "../src/shell/email-authentication/operations";
 import { statementStagingPath } from "../src/shell/ingestion/contract";
+import { paymentEnrollmentTransport } from "../src/shell/subscription/runtime";
 import {
   transactionMethods,
   ownsTransactionPath as transactionPath,
@@ -203,16 +204,7 @@ const pairingPaths = ["/web/pairings", "/web/pairings/redeem", "/web/session/log
 const userPath = "/user";
 const hostedTurnPath = "/web/hosted-turns";
 const hostedReceiptPath = "/web/hosted-turns/delivery";
-const enrollmentAvailabilityPath = "/web/subscription/payment-enrollments/availability";
-const enrollmentPreparePath = "/web/subscription/payment-enrollments/prepare";
-const enrollmentSubmitPath = "/web/subscription/payment-enrollments/submit";
-const enrollmentStatusPath =
-  /^\/web\/subscription\/(?:payment-enrollments|billing-attempts)\/[0-9a-f-]{36}$/u;
-const enrollmentPath = (path: string): boolean =>
-  path === enrollmentAvailabilityPath ||
-  path === enrollmentPreparePath ||
-  path === enrollmentSubmitPath ||
-  enrollmentStatusPath.test(path);
+const enrollmentPath = (path: string): boolean => Option.isSome(paymentEnrollmentTransport(path));
 const rotateRecoveryPath = "/recovery/backup-code/rotate";
 const replacementPaths = [
   emailReplacementOperations.request.path,
@@ -236,8 +228,6 @@ const postPaths = new Set<string>([
   supportRecoveryPath,
   ...emailAuthenticationPaths,
   ...pairingPaths,
-  enrollmentPreparePath,
-  enrollmentSubmitPath,
   statementStagingPath,
   smokePath,
   hostedTurnPath,
@@ -259,13 +249,7 @@ const preflightPaths = new Set<string>([
   userPath,
   ...browserMutationPaths,
 ]);
-const ownedPaths = new Set<string>([
-  "/health",
-  listCategoriesPath,
-  userPath,
-  enrollmentAvailabilityPath,
-  ...postPaths,
-]);
+const ownedPaths = new Set<string>(["/health", listCategoriesPath, userPath, ...postPaths]);
 const ownedPath = (path: string): boolean =>
   ownedPaths.has(path) ||
   refundSupportPath(path) ||
@@ -277,7 +261,8 @@ const allowedMethods = (path: string): ReadonlyArray<string> => {
   if (refundSupportPath(path)) return refundMethods(path);
   if (transactionPath(path)) return transactionMethods(path);
   if (patRoute(path)) return patMethods(path);
-  if (enrollmentStatusPath.test(path)) return ["GET"];
+  const enrollment = paymentEnrollmentTransport(path);
+  if (Option.isSome(enrollment)) return [enrollment.value.method];
   if (path === smokePath) return ["GET", "POST"];
   if (ownedPaths.has(path)) return [postPaths.has(path) ? "POST" : "GET"];
   return canonicalMethods(path);
@@ -308,8 +293,7 @@ const browserHeaders = (request: Request, path: string): Headers => {
   if (
     cookieForwardPaths.has(path) ||
     replacementPaths.some((owned) => owned === path) ||
-    patBrowserRoute(path) ||
-    enrollmentPath(path)
+    patBrowserRoute(path)
   ) {
     headers.set("cookie", request.headers.get("cookie") ?? "");
   }
@@ -340,7 +324,7 @@ const credentialBearerHeaders = (request: Request, path: string): Option.Option<
       )
     : Option.none();
 const browserForwardPath = (path: string): boolean =>
-  path === verificationPath || isBrowserMutation(path) || enrollmentPath(path);
+  path === verificationPath || isBrowserMutation(path);
 const directHeaders = (request: Request, path: string): Option.Option<Headers> => {
   if (patDirectRoute(path)) {
     return Option.some(new Headers({ "content-type": request.headers.get("content-type") ?? "" }));
@@ -354,11 +338,7 @@ const directHeaders = (request: Request, path: string): Option.Option<Headers> =
   }
   return Option.none();
 };
-const browserForwardHeaders = (request: Request, path: string): Headers => {
-  const headers = browserHeaders(request, path);
-  if (enrollmentPath(path)) headers.set("origin", request.headers.get("origin") ?? "");
-  return headers;
-};
+
 const fallbackHeaders = (request: Request, path: string): Headers => {
   if (forwardsSession(request, path)) {
     return new Headers({
@@ -371,6 +351,12 @@ const fallbackHeaders = (request: Request, path: string): Headers => {
   return headers;
 };
 const forwardedHeaders = (request: Request, path: string): Headers => {
+  const enrollment = paymentEnrollmentTransport(path);
+  if (Option.isSome(enrollment)) {
+    return new Headers(
+      enrollment.value.forwardedHeaders.map((name) => [name, request.headers.get(name) ?? ""])
+    );
+  }
   if (path === smokePath) {
     return new Headers({
       [smokeProofHeader]: request.headers.get(smokeProofHeader) ?? "",
@@ -382,7 +368,7 @@ const forwardedHeaders = (request: Request, path: string): Headers => {
   if (Option.isSome(direct)) return direct.value;
   const bearerHeaders = credentialBearerHeaders(request, path);
   if (Option.isSome(bearerHeaders)) return bearerHeaders.value;
-  if (browserForwardPath(path)) return browserForwardHeaders(request, path);
+  if (browserForwardPath(path)) return browserHeaders(request, path);
   return fallbackHeaders(request, path);
 };
 const canonicalAdmissionHeaders = (

@@ -19,6 +19,7 @@ import {
   type WhatsAppUnavailable,
 } from "../whatsapp/contract";
 import {
+  contextualProactiveInsightQuery,
   insightVerifiedDeliveryQuery,
   insightVerifiedTranscriptQuery,
   reconcileInsightStatus,
@@ -37,12 +38,12 @@ import {
   weeklySummaryTestDatabases,
   weeklySummaryTestNow,
   weeklySummaryTestUser,
+  withdrawWeeklyFixtureConsent,
 } from "../weekly-summary.test-fixture";
-import {
-  expireProactiveTranscript,
-  prepareProactiveTranscript,
-  readProactiveTranscript,
-} from "./operations";
+import { prepareProactiveTranscript, readProactiveTranscript } from "./operations";
+
+import { readContextualProactiveReply } from "./internal/proactive-transcript";
+import { makeAgentRetention } from "./runtime";
 
 const sender = makeInsightTemplateSender({
   configuration: {
@@ -108,6 +109,7 @@ const settlement = (input: InsightWhatsAppStage): ReadonlyArray<D1PreparedStatem
     }),
     ...prepareWeeklyDeliverySettlement({
       ...scope,
+      thresholds: { askAfter: 4, pauseAfter: 2 },
       db: input.db,
       proof: insightVerifiedDeliveryQuery(scope),
     }),
@@ -136,6 +138,51 @@ const verify = (
     });
   });
 afterAll(() => weeklySummaryTestDatabases.dispose());
+it.live(
+  "contextual financial reads bind User and live association, and a cached proof cannot survive Consent withdrawal",
+  () =>
+    Effect.gen(function* () {
+      const input = yield* deliveredFixture(yield* weeklySummaryTestDatabase);
+      yield* verify(input);
+      yield* Effect.tryPromise(() => input.db.batch([...settlement(input)]));
+      const proof = contextualProactiveInsightQuery({
+        userId: input.userId,
+        portfolioId: recipient.portfolioId,
+        bsuid: recipient.bsuid,
+        replyToMessageId: Option.some(WhatsAppProviderMessageId.make("wamid.proactive")),
+      });
+      const context = {
+        db: input.db,
+        userId: input.userId,
+        now: input.now.epochMilliseconds,
+        proof,
+      };
+      const visible = Option.getOrThrow(yield* readContextualProactiveReply(context));
+      expect(visible.userId).toBe(input.userId);
+      expect(visible.entry.text).toBe((yield* sender.prepare(input.summary)).text);
+      expect(
+        Option.isNone(
+          yield* readContextualProactiveReply({ ...context, userId: weeklySummaryOtherUser })
+        )
+      ).toBe(true);
+      yield* Effect.tryPromise(() =>
+        input.db
+          .prepare("UPDATE whatsapp_identities SET bsuid='CO.changed' WHERE user_id=?")
+          .bind(input.userId)
+          .run()
+      );
+      expect(Option.isNone(yield* readContextualProactiveReply(context))).toBe(true);
+      yield* Effect.tryPromise(() =>
+        input.db
+          .prepare("UPDATE whatsapp_identities SET bsuid=? WHERE user_id=?")
+          .bind(recipient.bsuid, input.userId)
+          .run()
+      );
+      yield* withdrawWeeklyFixtureConsent({ db: input.db, userId: input.userId, now: context.now });
+      expect(Option.isNone(yield* readContextualProactiveReply(context))).toBe(true);
+    })
+);
+
 it.live(
   "copies exact verified text and actual send evidence atomically once without inventing a Turn or regressing read",
   () =>
@@ -207,7 +254,11 @@ it.live(
       expect(Option.isSome(yield* readProactiveTranscript(scope))).toBe(true);
       const deadline = DateTime.toEpochMillis(DateTime.add(input.now, { days: 30 }));
       expect(Option.isNone(yield* readProactiveTranscript({ ...scope, now: deadline }))).toBe(true);
-      yield* expireProactiveTranscript({ ...scope, now: deadline });
+      yield* Effect.tryPromise(() =>
+        input.db.prepare("DROP TABLE hosted_compaction_attempts").run()
+      );
+      const sweep = yield* Effect.exit(makeAgentRetention({ db: input.db }).sweep(deadline));
+      expect(sweep._tag).toBe("Failure");
       const retained = yield* Effect.tryPromise(() =>
         input.db.prepare("SELECT 1 FROM proactive_transcript_entries").first()
       );

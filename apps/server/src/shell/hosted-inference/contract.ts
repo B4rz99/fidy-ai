@@ -11,7 +11,11 @@ import {
 import type { Response } from "effect/ai";
 import type { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import type { User } from "~/core/identity/contract";
-import { type TranscriptEntry, maximumToolCallsPerTurn } from "~/core/agent/contract";
+import {
+  type ProactiveInsightTranscriptEntry,
+  type TranscriptEntry,
+  maximumToolCallsPerTurn,
+} from "~/core/agent/contract";
 
 /** Ordered semantic material projected by Agent without exposing provider prompt fragments. */
 export type HostedContextSection =
@@ -24,6 +28,7 @@ export type HostedContextSection =
   | Readonly<{ _tag: "Memory"; text: string }>
   | Readonly<{ _tag: "CompactedConversation"; text: string }>
   | Readonly<{ _tag: "Transcript"; entry: TranscriptEntry }>
+  | Readonly<{ _tag: "ProactiveReply"; entry: ProactiveInsightTranscriptEntry }>
   | Readonly<{
       _tag: "ToolResult";
       toolCallId: Extract<

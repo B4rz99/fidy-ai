@@ -1,5 +1,6 @@
 import {
   HostedAgentSessionId,
+  ProactiveInsightTranscriptEntry,
   TranscriptEntry,
   TranscriptTurnId,
 } from "../../src/core/agent/contract";
@@ -48,6 +49,7 @@ it("orders exact current-session evidence while excluding prior sessions, anothe
     },
     startedAt: now,
     memories: [{ text: "current Memory" }],
+    proactiveReply: Option.none(),
     compactedConversation: Option.some({
       sessionId: sessionA,
       userId: userA,
@@ -94,6 +96,7 @@ it("does not load an old or foreign CompactedConversation into a new session", (
     },
     startedAt: now,
     memories: [],
+    proactiveReply: Option.none(),
     transcript: [],
     activeRequest: "hola",
   };
@@ -106,5 +109,33 @@ it("does not load an old or foreign CompactedConversation into a new session", (
       compactedConversation: Option.some({ ...scope, text: "private" }),
     });
     expect(result.sections.some((section) => section._tag === "CompactedConversation")).toBe(false);
+  }
+});
+
+it("a contextual proactive message remains same-User data, without inventing a requested Turn or prior session", () => {
+  const proactive = Schema.decodeSync(ProactiveInsightTranscriptEntry)({
+    _tag: "ProactiveInsightTranscriptEntry",
+    id: "f1d1a000-0000-4000-8000-000000000288",
+    insightEventId: "f1d1a000-0000-4000-8000-000000000289",
+    occurredAt: "2026-09-25T12:00:00Z",
+    text: "Tu resumen semanal: 12 COP.",
+  });
+  for (const owner of [userA, userB]) {
+    const context = assembleWorkingContext({
+      sessionId: sessionA,
+      userId: userA,
+      activeTurnId: activeTurn,
+      user: { serviceMarket: "CO", locale: "es-CO", timeZone: IanaTimeZone.make("America/Bogota") },
+      startedAt: now,
+      memories: [],
+      compactedConversation: Option.none(),
+      transcript: [],
+      proactiveReply: Option.some({ userId: owner, entry: proactive }),
+      activeRequest: "¿Qué significa este resumen?",
+    });
+    expect(context.sections.filter((section) => section._tag === "ProactiveReply")).toEqual(
+      owner === userA ? [{ _tag: "ProactiveReply", entry: proactive }] : []
+    );
+    expect(context.sections.some((section) => section._tag === "Transcript")).toBe(false);
   }
 });

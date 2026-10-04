@@ -128,8 +128,8 @@ export const prepareWhatsAppInbound = ({
     statement: {
       sql: `INSERT INTO hosted_whatsapp_inbound
       (turn_id, user_id, portfolio_id, bsuid, message_id, business_phone_number_id,
-       occurred_at_ms, received_at_ms)
-      SELECT id, user_id, ?, ?, ?, ?, ?, ? FROM channel_turns
+       occurred_at_ms, received_at_ms,reply_to_message_id)
+      SELECT id, user_id, ?, ?, ?, ?, ?, ?,NULLIF(?,'') FROM channel_turns
       WHERE id = ? AND user_id = ? AND status = 'pending'`,
       params: [
         subject.portfolioId,
@@ -138,6 +138,7 @@ export const prepareWhatsAppInbound = ({
         inbound.businessPhoneNumberId,
         inbound.occurredAtMs,
         inbound.receivedAtMs,
+        Option.getOrElse(inbound.replyToMessageId, () => ""),
         id,
         subject.userId,
       ],

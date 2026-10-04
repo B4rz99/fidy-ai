@@ -1,3 +1,14 @@
+import { weeklyThresholds } from "./internal/weekly-execution";
+import { requestQuestion } from "./internal/weekly-work";
+import {
+  findGovernor,
+  prepareNotice,
+  prepareNoticeCompletion,
+  prepareQuestionDelivered,
+  prepareReply,
+  prepareReset,
+  readNotice,
+} from "./internal/weekly-governor";
 import { prepareWeeklyDeliverySettlement as prepareWeeklyDeliverySettlementOwned } from "./internal/weekly-settlement";
 import { type DateTime, Effect, Option } from "effect";
 import { type InsightEventId, type ScheduleId } from "../../src/core/insights/contract";
@@ -37,6 +48,28 @@ import {
   insightRefusal as refuse,
 } from "./internal/insight-store";
 
+/** Reject invalid governor knobs before production execution or delivery settlement. */
+export const readWeeklyThresholds: typeof weeklyThresholds = (input) => weeklyThresholds(input);
+
+/** Authenticated explicit command creates a bounded, replay-safe request; no Consent is inferred. */
+export const requestWeeklySummaryConsent: typeof requestQuestion = (input) =>
+  requestQuestion(input);
+
+/** Observe same-User governor standing under current processing Consent. */
+export const findWeeklyGovernor: typeof findGovernor = (input) => findGovernor(input);
+/** Compose an authenticated category-correlated reply with its admitted User request. */
+export const prepareWeeklyGovernorReply: typeof prepareReply = (input) => prepareReply(input);
+/** Question delivery never increments scheduled-message counters. */
+export const prepareWeeklyQuestionDelivery: typeof prepareQuestionDelivered = (input) =>
+  prepareQuestionDelivered(input);
+/** Reserve the pause mention for an admitted User-initiated session only. */
+export const prepareWeeklyPauseNotice: typeof prepareNotice = (input) => prepareNotice(input);
+/** Fixed copy, not model inference, accompanies this exact admitted Turn's answer. */
+export const readWeeklyPauseNotice: typeof readNotice = (input) => readNotice(input);
+/** Consume the mention only with authoritative visible delivery of its exact prefix. */
+export const prepareWeeklyPauseNoticeCompletion: typeof prepareNoticeCompletion = (input) =>
+  prepareNoticeCompletion(input);
+
 /** Compose actual verified channel evidence, forward-only attention and outbox settlement with the Agent's exact Transcript copy in one caller-coordinated D1 batch. */
 export const prepareWeeklyDeliverySettlement: typeof prepareWeeklyDeliverySettlementOwned = (
   input
@@ -64,14 +97,16 @@ export const recordWeeklySummaryDecision = (
       Effect.mapError(() => new InsightUnavailable())
     );
     if (Option.isNone(decision)) return false;
-    const actions = [...decision.value.statements];
-    if (decision.value.decision === "accept") {
+    const actions = [...decision.value.statements, prepareReset(input)];
+    if (decision.value.decision === "accept" || decision.value.decision === "continue") {
       if (Option.isNone(decision.value.grantId)) return yield* new InsightUnavailable();
       actions.push(
         ...(yield* prepareScheduleEnable({ ...input, grantId: decision.value.grantId.value }))
       );
     }
-    if (decision.value.decision === "revoke") actions.push(prepareScheduleDisable(input));
+    if (decision.value.decision === "revoke" || decision.value.decision === "decline") {
+      actions.push(prepareScheduleDisable(input));
+    }
     yield* Effect.tryPromise({
       try: () => input.db.batch(actions),
       catch: () => new InsightUnavailable(),

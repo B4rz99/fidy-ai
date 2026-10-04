@@ -34,6 +34,7 @@ import {
   occurrenceGuard,
   scheduleAdvance,
 } from "./weekly-schedule";
+import { findGovernor } from "./weekly-governor";
 
 type GenerationScope = Readonly<{
   db: D1Database;
@@ -160,22 +161,35 @@ const commit = (
     catch: () => new InsightUnavailable(),
   }).pipe(Effect.asVoid);
 
+const eligibleWeeklySchedule = (
+  input: Readonly<{ db: D1Database; userId: UserId; id: ScheduleId; now: DateTime.Utc }>
+): Effect.Effect<Option.Option<WeeklyScheduleSnapshot>, InsightUnavailable> =>
+  Effect.gen(function* () {
+    const found = yield* findSchedule(input);
+    const governor = yield* findGovernor(input);
+    const blocked = Option.exists(
+      governor,
+      (state) => state._tag === "Paused" || state._tag === "QuestionPending"
+    );
+    return Option.filter(
+      found,
+      (snapshot) =>
+        snapshot.id === input.id &&
+        snapshot.enabled &&
+        snapshot.nextScheduledAt.epochMilliseconds <= input.now.epochMilliseconds &&
+        !blocked
+    );
+  });
+
 /** Caller enters the existing User coordinator and security admission before financial evaluation. No provider action occurs here. */
 export const materialize = (
   input: Readonly<{ db: D1Database; userId: UserId; id: ScheduleId; now: DateTime.Utc }>
 ): Effect.Effect<WeeklyMaterialization, InsightUnavailable> =>
   Effect.gen(function* () {
     yield* noteScheduleEvaluation(input);
-    const found = yield* findSchedule(input);
+    const found = yield* eligibleWeeklySchedule(input);
     if (Option.isNone(found)) return { _tag: "NoWork" } as const;
     const snapshot = found.value;
-    if (
-      snapshot.id !== input.id ||
-      !snapshot.enabled ||
-      snapshot.nextScheduledAt.epochMilliseconds > input.now.epochMilliseconds
-    ) {
-      return { _tag: "NoWork" } as const;
-    }
     const scheduledAt = latestWeeklyOccurrence({
       atOrBefore: input.now,
       timing: snapshot.timing,
@@ -218,7 +232,7 @@ export const materialize = (
 export const weeklyReportDeliveryQuery = (
   input: Readonly<{ userId: UserId; insightEventId: InsightEventId }>
 ): OwnedStatement => ({
-  sql: `SELECT 1 FROM weekly_summary_reports AS r JOIN insight_events AS e ON e.id=r.insight_event_id AND e.user_id=r.user_id JOIN weekly_schedules AS s ON s.id=e.schedule_id AND s.user_id=e.user_id WHERE r.user_id=? AND r.insight_event_id=? AND s.enabled=1 AND s.consent_grant_id=r.consent_grant_id`,
+  sql: `SELECT 1 FROM weekly_summary_reports AS r JOIN insight_events AS e ON e.id=r.insight_event_id AND e.user_id=r.user_id JOIN weekly_schedules AS s ON s.id=e.schedule_id AND s.user_id=e.user_id WHERE r.user_id=? AND r.insight_event_id=? AND s.enabled=1 AND s.consent_grant_id=r.consent_grant_id AND NOT EXISTS (SELECT 1 FROM weekly_governors AS g WHERE g.user_id=s.user_id AND (g.paused_at_ms IS NOT NULL OR (g.question_needed=1 AND g.question_delivered=0)))`,
   params: [input.userId, input.insightEventId],
 });
 

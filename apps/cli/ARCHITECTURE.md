@@ -143,6 +143,20 @@ Existing server metadata-only Work observation suffices for these synchronous ca
 no client content tracing is added. Transport captures bounded Retry-After metadata before success/error decoding and
 retains no raw response or cause for diagnostics.
 
+Canonical allowance display consumes the server-published `CanonicalAllowance` codec and
+`canonicalAllowanceHeaders` names. Transport projects only `Fidy-Canonical-Allowance`,
+`Fidy-Canonical-Limit`, `Fidy-Canonical-Remaining` and `Fidy-Canonical-Reset`, with bounded header
+text and runtime decoding before presentation. Projection precedes typed success/error decoding:
+Effect's `decoded-and-response` mode returns only after successful decoding and cannot preserve
+metadata on its own for declared failures. Valid Free standing displays remaining/limit, shared-PAT
+meaning and an exact ISO UTC reset on stderr; `uncapped` displays no monthly counter or reset,
+while explicitly retaining security protections. Missing, malformed or unpublished standing is
+unavailable, never zero. `quota_exhausted`, `rate_limited` and `paywall_required` receive distinct
+guidance, and only Retry-After supplies a request delay. Canonical JSON stdout remains one unchanged
+envelope: there is no extra metadata JSON mode or appended domain field. There is no local balance,
+automatic quota query, retry or telemetry. Explicit `quota getQuota` derives from the ordinary
+canonical declaration and retains the server's unmetered, security-protected semantics.
+
 Atomic input uses the server-owned non-empty ordered child union and declared maximum of twelve
 calls, with caller-chosen UUID `callId` correlation. Each child's schema, eligibility and scope are
 checked locally, then current server authority, tier, Consent, domain policy and atomicity are
@@ -214,3 +228,10 @@ observer proves attributable accepted PAT Audit for each mutation child; it is n
 public ingress. Public/Core negative cases prove independent scopes, cross-User refusal and
 whole-domain rollback. No production test-only issuance route exists. Secrets are excluded from
 traces, screenshots, video and subprocess output.
+
+`test/allowance-entry.ts` is a separate test-only process composition. The server's Canonical Admission
+integration tests feed actual D1-backed response bodies and allowlisted headers into this process;
+its synthetic credential and replaced transport invoke the same generated client, decoding and
+stderr/stdout presentation as production. It proves Free success, exhausted and declared-failure
+metadata, shared-PAT replay standing, Trial uncapped standing and security refusal. This is local
+server-adapter-to-CLI evidence, not a live ingress/provider or Production test.

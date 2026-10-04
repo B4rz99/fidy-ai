@@ -1,4 +1,5 @@
 import {
+  type CanonicalAllowance,
   type PATScope,
   atomicBatchChildOperations,
   atomicBatchOperation,
@@ -120,11 +121,15 @@ export const invokeOperation = Effect.fn(function* (
   }
   const decoded = yield* decodeInput(operation, input, credential.grant.pat.scopes);
   let retryAfterSeconds = Option.none<number>();
+  let allowance = Option.none<CanonicalAllowance>();
   const client = yield* options.clientFactory({
     httpClient: options.httpClient,
     credential,
     captureRetry: (seconds) => {
       retryAfterSeconds = Option.some(seconds);
+    },
+    captureAllowance: (standing) => {
+      allowance = standing;
     },
   });
   const separator = id.indexOf(".");
@@ -149,7 +154,7 @@ export const invokeOperation = Effect.fn(function* (
   )(failed ? result.failure : result.success).pipe(
     Effect.mapError(() => new CliFailure({ reason: uncertainReason }))
   );
-  const output: OperationResult = { envelope, failed, retryAfterSeconds };
+  const output: OperationResult = { envelope, failed, retryAfterSeconds, allowance };
   return output;
 });
 
@@ -192,6 +197,34 @@ const showBatchRejection = (
 const suggestedGuidance = Schema.Struct({
   next: Schema.Array(Schema.Struct({ tool: Schema.String, hint: Schema.String })),
 });
+const showAllowance = (
+  result: OperationResult,
+  dependencies: CanonicalDependencies
+): Effect.Effect<void> => {
+  if (Option.isNone(result.allowance)) {
+    return dependencies.stderr(
+      "Información de llamadas canónicas no disponible; no se estima un saldo local.\n"
+    );
+  }
+  const meter = result.allowance.value;
+  return dependencies.stderr(
+    meter.limit === "uncapped"
+      ? "El servidor indica acceso sin medidor comercial mensual; siguen aplicando las protecciones de solicitudes y seguridad.\n"
+      : `${meter.remaining} de ${meter.limit} llamadas canónicas restantes, compartidas por todos tus PAT. Reinicio: ${DateTime.formatIso(meter.resetsAt)} (UTC).\n`
+  );
+};
+const allowanceFailureCode = Schema.Literals([
+  "quota_exhausted",
+  "rate_limited",
+  "paywall_required",
+]);
+const allowanceFailureGuidance: Readonly<Record<typeof allowanceFailureCode.Type, string>> = {
+  quota_exhausted:
+    "La capacidad sigue siendo Free; espera el reinicio exacto indicado por el servidor o revisa las siguientes operaciones permitidas. No se reintenta automáticamente.\n",
+  rate_limited:
+    "Es una protección de solicitudes o seguridad, no agotamiento del cupo comercial. Respeta Retry-After cuando esté disponible.\n",
+  paywall_required: "Esta capacidad requiere Pro; revisa las siguientes operaciones permitidas.\n",
+};
 const showFailureGuidance = Effect.fn(function* (
   result: OperationResult,
   dependencies: CanonicalDependencies
@@ -204,6 +237,10 @@ const showFailureGuidance = Effect.fn(function* (
   const failure = Schema.decodeUnknownOption(failureGuidance)(result.envelope);
   if (Option.isNone(failure)) return;
   const code = failure.value.error.code;
+  const allowanceCode = Schema.decodeUnknownOption(allowanceFailureCode)(code);
+  if (Option.isSome(allowanceCode)) {
+    yield* dependencies.stderr(allowanceFailureGuidance[allowanceCode.value]);
+  }
   if (code === "unauthenticated") {
     yield* dependencies.stderr(
       "El acceso puede estar vencido o revocado. Revisa fidy status y el permiso en la web; usa logout y login si necesitas otro permiso.\n"
@@ -303,6 +340,7 @@ export const runOperationCommand = Effect.fn(function* (
     json: dependencies.json,
   });
   yield* dependencies.stdout(formatOperationResult({ result, json: dependencies.json }));
+  yield* showAllowance(result, dependencies);
   yield* showBatchRejection(id, result, dependencies);
   yield* showFailureGuidance(result, dependencies);
   yield* showSuggestions(result, credential, dependencies);

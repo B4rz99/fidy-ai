@@ -110,6 +110,191 @@ it.effect("executes an input-free query and emits only its canonical envelope on
   })
 );
 
+it.effect(
+  "displays authoritative Free allowance on stderr without altering the canonical envelope or making extra calls",
+  () =>
+    Effect.gen(function* () {
+      const fixture = makeQueryFixture({
+        body: '{"data":[],"next":[]}',
+        status: 200,
+        headers: {
+          "Fidy-Canonical-Allowance": "canonical_call",
+          "Fidy-Canonical-Limit": "50",
+          "Fidy-Canonical-Remaining": "49",
+          "Fidy-Canonical-Reset": "2026-11-01T05:00:00.000Z",
+        },
+      });
+      yield* runQueryCommand(["categories", "listCategories"], fixture.dependencies);
+      expect(fixture.stdout).toEqual(['{"data":[],"next":[]}\n']);
+      expect(fixture.stderr.join("")).toContain("49 de 50 llamadas canónicas restantes");
+      expect(fixture.stderr.join("")).toContain("2026-11-01T05:00:00.000Z (UTC)");
+      expect(fixture.requests).toEqual(["https://api.fidyapp.com/categories"]);
+    })
+);
+
+it.effect(
+  "keeps commercial exhaustion, security rejection and Pro-only failures distinct while preserving their metadata",
+  () =>
+    Effect.gen(function* () {
+      for (const example of [
+        {
+          code: "quota_exhausted",
+          status: 429,
+          message: "Free allowance exhausted.",
+          detail: { allowance: "canonical_call", resetsAt: "2026-11-01T05:00:00.000Z" },
+          guidance: "sigue siendo Free",
+          retry: "",
+        },
+        {
+          code: "rate_limited",
+          status: 429,
+          message: "Request protection.",
+          detail: {},
+          guidance: "protección de solicitudes",
+          retry: "12",
+        },
+        {
+          code: "paywall_required",
+          status: 402,
+          message: "Pro capability.",
+          detail: {},
+          guidance: "requiere Pro",
+          retry: "",
+        },
+        {
+          code: "unauthenticated",
+          status: 401,
+          message: "Authenticate.",
+          detail: {},
+          guidance: "revocado",
+          retry: "",
+        },
+      ]) {
+        const envelope = {
+          error: { code: example.code, message: example.message, ...example.detail },
+          next: [],
+        };
+        const fixture = makeQueryFixture(
+          {
+            body: encodeFixture(envelope),
+            status: example.status,
+            headers: {
+              "Fidy-Canonical-Allowance": "canonical_call",
+              "Fidy-Canonical-Limit": "50",
+              "Fidy-Canonical-Remaining": "0",
+              "Fidy-Canonical-Reset": "2026-11-01T05:00:00.000Z",
+              "retry-after": example.retry,
+            },
+          },
+          ["read", "write"]
+        );
+        const args =
+          example.code === "paywall_required"
+            ? ["ingestion", "submitForExtraction", "--input", "-"]
+            : ["categories", "listCategories"];
+        expect(
+          yield* runQueryCommand(args, {
+            ...fixture.dependencies,
+            readInput: () =>
+              Effect.succeed(
+                encodeFixture({
+                  payload: {
+                    idempotencyKey: "01900000-0000-4000-8000-000000000001",
+                    reference: {
+                      stagingId: "01900000-0000-4000-8000-000000000002",
+                      byteLength: 1,
+                      sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    },
+                  },
+                })
+              ),
+          })
+        ).toBe(true);
+        expect(decodeOutput(fixture.stdout.join(""))).toEqual(envelope);
+        expect(fixture.stderr.join("")).toContain("0 de 50 llamadas canónicas restantes");
+        expect(fixture.stderr.join("")).toContain("2026-11-01T05:00:00.000Z (UTC)");
+        expect(fixture.stderr.join("")).toContain(example.guidance);
+        expect(fixture.stderr.join("").includes("12 segundos")).toBe(
+          example.code === "rate_limited"
+        );
+        expect(fixture.requests).toHaveLength(1);
+      }
+    })
+);
+
+it.effect(
+  "reports absent or malformed commercial metadata as unavailable without false zero counters or terminal injection",
+  () =>
+    Effect.gen(function* () {
+      const valid = {
+        "Fidy-Canonical-Allowance": "canonical_call",
+        "Fidy-Canonical-Limit": "50",
+        "Fidy-Canonical-Remaining": "49",
+        "Fidy-Canonical-Reset": "2026-11-01T05:00:00.000Z",
+      };
+      const oversizedHeaderCharacters = 65;
+      const unavailableHeaders: ReadonlyArray<Readonly<Record<string, string>>> = [
+        {},
+        { "RateLimit-Remaining": "0", "RateLimit-Reset": "12" },
+        { ...valid, "Fidy-Canonical-Allowance": "other" },
+        { ...valid, "Fidy-Canonical-Remaining": "" },
+        { ...valid, "Fidy-Canonical-Remaining": "-1" },
+        { ...valid, "Fidy-Canonical-Remaining": "51" },
+        { ...valid, "Fidy-Canonical-Remaining": "9007199254740992" },
+        { ...valid, "Fidy-Canonical-Reset": "not a date" },
+        { ...valid, "Fidy-Canonical-Reset": "secret\u001b[2J\u009b" },
+        { ...valid, "Fidy-Canonical-Remaining": "secret\u001b[2J" },
+        { ...valid, "Fidy-Canonical-Remaining": "1".repeat(oversizedHeaderCharacters) },
+        { ...valid, "Fidy-Canonical-Limit": "uncapped" },
+      ];
+      for (const headers of unavailableHeaders) {
+        const fixture = makeQueryFixture({ body: '{"data":[],"next":[]}', status: 200, headers });
+        yield* runQueryCommand(["categories", "listCategories"], fixture.dependencies);
+        expect(fixture.stdout).toEqual(['{"data":[],"next":[]}\n']);
+        const guidance = fixture.stderr.join("");
+        expect(guidance).toContain("no disponible");
+        expect(guidance).not.toContain("llamadas canónicas restantes");
+        expect(guidance).not.toContain("secret");
+        expect(guidance).not.toContain("\u001b");
+        expect(guidance).not.toContain("\u202e");
+        expect(fixture.requests).toHaveLength(1);
+      }
+    })
+);
+
+it.effect(
+  "shows server uncapped standing without inventing a Trial/Pro meter and retains security guidance",
+  () =>
+    Effect.gen(function* () {
+      for (const response of [
+        { status: 200, body: '{"data":[],"next":[]}' },
+        {
+          status: 429,
+          body: '{"error":{"code":"rate_limited","message":"Security protection."},"next":[]}',
+        },
+      ]) {
+        const fixture = makeQueryFixture({
+          ...response,
+          headers: {
+            "Fidy-Canonical-Allowance": "canonical_call",
+            "Fidy-Canonical-Limit": "uncapped",
+            "Fidy-Canonical-Remaining": "uncapped",
+            "Fidy-Canonical-Reset": "2026-11-01T05:00:00.000Z",
+            "retry-after": "12",
+          },
+        });
+        yield* runQueryCommand(["categories", "listCategories"], fixture.dependencies);
+        expect(decodeOutput(fixture.stdout.join(""))).toEqual(decodeOutput(response.body));
+        expect(fixture.stderr.join("")).toContain("sin medidor comercial mensual");
+        expect(fixture.stderr.join("")).toContain("protecciones de solicitudes y seguridad");
+        expect(fixture.stderr.join("")).toContain("12 segundos");
+        expect(fixture.stderr.join("")).not.toContain("llamadas canónicas restantes");
+        expect(fixture.stderr.join("")).not.toContain("Reinicio:");
+        expect(fixture.requests).toHaveLength(1);
+      }
+    })
+);
+
 it.effect("decodes nested query filters and encodes exact Money, dates and optional values", () =>
   Effect.gen(function* () {
     const transaction = {
@@ -276,6 +461,7 @@ it.effect(
         maximumResponseBytes: 1024,
         maximumRequestBytes: 1024,
         captureRetry: () => {},
+        captureAllowance: () => {},
       });
       for (const destination of [
         "https://attacker.example/transactions",

@@ -1,9 +1,11 @@
 import {
+  CanonicalAllowance,
   PATPairingApi,
   PATPairingInvalidApi,
   PATPairingPollingRateLimitedApi,
   PATPairingRateLimitedApi,
   PATPairingUnavailableApi,
+  canonicalAllowanceHeaders,
 } from "@fidy/server/client";
 import { Clock, DateTime, Effect, Option, Redacted, Schema, Stream } from "effect";
 import {
@@ -33,7 +35,9 @@ const RetryDate = Schema.String.check(
   )
 );
 const retryDelay = (header: unknown, now: number): Option.Option<number> => {
-  const seconds = Schema.decodeUnknownOption(RetrySeconds)(header);
+  const seconds = Schema.decodeUnknownOption(Schema.String.check(Schema.isPattern(/^[0-9]+$/u)))(
+    header
+  ).pipe(Option.flatMap(Schema.decodeUnknownOption(RetrySeconds)));
   if (Option.isSome(seconds)) return seconds;
   return Schema.decodeUnknownOption(RetryDate)(header).pipe(
     Option.flatMap(DateTime.make),
@@ -89,6 +93,22 @@ const validDestination = (request: HttpClientRequest.HttpClientRequest): boolean
   return url.origin === apiOrigin && url.username === "" && url.password === "" && url.hash === "";
 };
 
+const maximumAllowanceHeaderCharacters = 64;
+const projectAllowance = (
+  headers: Readonly<Record<string, string>>
+): Option.Option<CanonicalAllowance> => {
+  const header = (name: string): Option.Option<string> =>
+    Schema.decodeUnknownOption(
+      Schema.String.check(Schema.isMaxLength(maximumAllowanceHeaderCharacters))
+    )(headers[name]);
+  return Schema.decodeUnknownOption(Schema.toCodecJson(CanonicalAllowance))({
+    allowance: Option.getOrUndefined(header(canonicalAllowanceHeaders.allowance)),
+    limit: Option.getOrUndefined(header(canonicalAllowanceHeaders.limit)),
+    remaining: Option.getOrUndefined(header(canonicalAllowanceHeaders.remaining)),
+    resetsAt: Option.getOrUndefined(header(canonicalAllowanceHeaders.resetsAt)),
+  });
+};
+
 /** Fixed-origin policy for derived clients. No automatic telemetry, redirects or unbounded bytes escape. */
 export const makeProtectedClient = (
   options: Readonly<{
@@ -97,6 +117,7 @@ export const makeProtectedClient = (
     maximumResponseBytes: number;
     maximumRequestBytes: number;
     captureRetry: (seconds: number) => void;
+    captureAllowance: (allowance: Option.Option<CanonicalAllowance>) => void;
   }>
 ): HttpClient.HttpClient.With<CliFailure | HttpClientError.HttpClientError> =>
   HttpClient.transform(options.client, (execute, request) => {
@@ -118,6 +139,7 @@ export const makeProtectedClient = (
       Effect.tap((response) =>
         Clock.currentTimeMillis.pipe(
           Effect.map((now) => {
+            options.captureAllowance(projectAllowance(response.headers));
             const retry = retryDelay(response.headers["retry-after"], now);
             if (Option.isSome(retry)) options.captureRetry(retry.value);
             return undefined;
@@ -150,6 +172,7 @@ export const protectClient = (
     maximumResponseBytes,
     maximumRequestBytes,
     captureRetry: () => {},
+    captureAllowance: () => {},
   });
 
 const safeStartFailure = (failure: unknown): CliFailure => {

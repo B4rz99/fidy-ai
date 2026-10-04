@@ -24,6 +24,7 @@ export {
   HostedTurnProgressRequest,
   type HostedTurnApiGroups,
 } from "~/shell/agent/contract";
+export { CanonicalAllowance, canonicalAllowanceHeaders } from "~/shell/quotas/contract";
 export { isHttpOrigin, ResourceLimited } from "~/shell/public-http/contract";
 export {
   ActivePATList,

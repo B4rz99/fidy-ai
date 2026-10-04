@@ -1,0 +1,25 @@
+apps/server/cloudflare/agent/hosted-turn.test.ts
+  s_ba89dc1029bca1::t_527651d8be866d 209
+apps/server/cloudflare/ingestion/statement-staging.test.ts
+  s_ba89dc1029bca1::t_dd8b8c55547675 62
+apps/server/cloudflare/ingestion/statement-processing.test.ts
+  s_ba89dc1029bca1::t_97fac084deb8bb 39
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_ba89dc1029bca1::t_1239226f9b910d 101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5ac401d0780b2bc697111d853b68d629c01404b6",
+  "prompts": {},
+  "sessions": {
+    "s_ba89dc1029bca1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a103f6-761c-710c-b806-670edee0d3aa",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

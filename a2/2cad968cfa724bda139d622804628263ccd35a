@@ -244,6 +244,7 @@ apps/server/cloudflare/transactions/runtime.ts
   s_03ac5c7c2fb46d::t_b5242cb67fd7c2 80-81,229-236,244-254
   s_03ac5c7c2fb46d::t_bfcb763c8076c4 240,255-256
   s_03ac5c7c2fb46d::t_e4e5a3ece0ceb1 237-239,241-243
+  s_03ac5c7c2fb46d::t_d2a5217bdbde3c 257-258,273-276
 apps/server/cloudflare/insights/operations.ts
   s_03ac5c7c2fb46d::t_ae823387ac661c 2,53-54
   s_03ac5c7c2fb46d::t_63f10776c82fe2 101

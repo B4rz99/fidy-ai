@@ -1,0 +1,33 @@
+apps/server/ARCHITECTURE.md
+  s_deef8f5cc43798::t_a373b5e72bf5ad 711-712
+apps/server/cloudflare/categories/internal/canonical-keyword-rules.ts
+  s_deef8f5cc43798::t_89e3b9e221ceaf 35,254,256
+apps/server/cloudflare/categories/internal/keyword-rule-outcome.ts
+  s_deef8f5cc43798::t_e3ca0aac77b5ee 33,360
+apps/server/cloudflare/onboarding/operations.ts
+  s_deef8f5cc43798::t_61650febb7ab78 1-6,14-48
+apps/server/cloudflare/runtime/operational-health/operations.ts
+  s_deef8f5cc43798::t_9cdeebfb4bf700 35-38
+apps/server/cloudflare/web-authentication/operations.ts
+  s_deef8f5cc43798::t_2211c402962da7 1-14,16-39,42-96,103-136
+apps/server/scripts/check-dependency-guards.ts
+  s_deef8f5cc43798::t_4fa5c99124cfb1 778,782-785,789-790,831,835-838,842-843
+apps/web/src/features/pats/feature.tsx
+  s_deef8f5cc43798::t_52f83e7d8de4f8 10,48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "40e855ad2e41c062845196b0851692f543d5ca00",
+  "prompts": {},
+  "sessions": {
+    "s_deef8f5cc43798": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a1047b-6c95-721e-b4c8-445bd5f6a50a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

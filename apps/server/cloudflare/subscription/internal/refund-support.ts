@@ -101,7 +101,7 @@ const submit = (
       boundedJsonBody({
         request: input.request,
         policy: bodyPolicy,
-        schema: Schema.toEncoded(StartRefundInput),
+        schema: StartRefundInput,
       })
     );
     if (Option.isNone(body)) {
@@ -110,10 +110,11 @@ const submit = (
         { status: 400, headers: { "cache-control": "no-store" } }
       );
     }
+    const encodedInput = yield* Schema.encodeEffect(StartRefundInput)(body.value);
     const admission = RefundSupportAdmission.make({
       _tag: "BillingRefundSupport",
       authority: input.authority,
-      input: body.value,
+      input: encodedInput,
     });
     const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(RefundSupportAdmission))(
       admission

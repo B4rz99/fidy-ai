@@ -102,17 +102,20 @@ const publicSupport = (
         }),
     },
   });
-const request = (assertion: string): Request =>
+const request = (
+  assertion: string,
+  body: string = Schema.encodeSync(Schema.fromJsonString(RefundSupportAdmission.fields.input))({
+    userId: "10000000-0000-4000-8000-000000000001",
+    billingAttemptId: "40000000-0000-4000-8000-000000000001",
+    requestId: "50000000-0000-4000-8000-000000000001",
+    intent: { kind: "refund", money: { amount: "4000", currency: "COP" } },
+    reason: "user-request",
+  })
+): Request =>
   new Request("https://api.fidyapp.com/internal/support/billing-refunds", {
     method: "POST",
     headers: { "content-type": "application/json", "cf-access-jwt-assertion": assertion },
-    body: Schema.encodeSync(Schema.fromJsonString(RefundSupportAdmission.fields.input))({
-      userId: "10000000-0000-4000-8000-000000000001",
-      billingAttemptId: "40000000-0000-4000-8000-000000000001",
-      requestId: "50000000-0000-4000-8000-000000000001",
-      intent: { kind: "refund", money: { amount: "4000", currency: "COP" } },
-      reason: "user-request",
-    }),
+    body,
   });
 it("requires the separate origin-verified refund permission and retains only attributable support evidence", () =>
   Effect.runPromise(
@@ -159,6 +162,65 @@ it.each(["missing", "recovery-audience", "expired", "service-token", "tampered"]
         expect(prepared.admissions).toEqual([]);
       })
     )
+);
+
+it.each([
+  "zero",
+  "negative",
+  "excessive-precision",
+  "invalid-identity",
+  "oversized",
+  "malformed-json",
+])("refuses authorized %s input through Public and Core without financial effects", (scenario) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const prepared = yield* setup();
+      const assertion = yield* Effect.tryPromise(() => prepared.token("refund-permission"));
+      let amount = "4000";
+      if (scenario === "zero") amount = "0";
+      if (scenario === "negative") amount = "-1";
+      if (scenario === "excessive-precision") amount = "0.001";
+      let body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))({
+        userId: "10000000-0000-4000-8000-000000000001",
+        billingAttemptId:
+          scenario === "invalid-identity"
+            ? "not-an-identity"
+            : "40000000-0000-4000-8000-000000000001",
+        requestId: "50000000-0000-4000-8000-000000000001",
+        intent: { kind: "refund", money: { amount, currency: "COP" } },
+        reason: "user-request",
+      });
+      if (scenario === "oversized") body = " ".repeat(4097) + body;
+      if (scenario === "malformed-json") body = "{";
+      const response = yield* Effect.tryPromise(() =>
+        publicSupport(request(assertion, body), prepared.environment)
+      );
+      expect(response.status).toBe(400);
+      expect(yield* Effect.tryPromise(() => response.json())).toEqual({
+        error: { code: "invalid-request" },
+      });
+      expect(prepared.admissions).toEqual([]);
+      const retained = yield* Effect.tryPromise(() =>
+        prepared.environment.DB.prepare(`SELECT
+    (SELECT COUNT(*) FROM refund_attempts) AS attempts,
+    (SELECT COUNT(*) FROM refund_outbox) AS outbox,
+    (SELECT COUNT(*) FROM refund_submission_claims) AS claims,
+    (SELECT COUNT(*) FROM refund_outcome_evidence) AS outcomes,
+    (SELECT COUNT(*) FROM billing_access_adjustments) AS adjustments,
+    (SELECT COUNT(*) FROM subscription_renewal_stops) AS stops,
+    (SELECT COUNT(*) FROM subscriptions) AS subscriptions`).first()
+      );
+      expect(retained).toEqual({
+        attempts: 0,
+        outbox: 0,
+        claims: 0,
+        outcomes: 0,
+        adjustments: 0,
+        stops: 0,
+        subscriptions: 0,
+      });
+    })
+  )
 );
 
 it("forwards billing support to Core without inheriting PAT or recovery permission", () =>

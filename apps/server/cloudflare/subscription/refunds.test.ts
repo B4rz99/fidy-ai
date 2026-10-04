@@ -736,6 +736,77 @@ it("allows only one financial POST when independent Workflow executions race the
     })
   ));
 
+it.each(["production-environment", "live-private-key", "production-captured-charge"])(
+  "refuses %s before claiming or executing accepted corrections",
+  (scenario) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* fixture();
+        const accepted = yield* startRefund(call(db));
+        if (scenario === "production-captured-charge") {
+          // Deliberately inject impossible stored provenance to prove the execution barrier independently
+          // of acceptance and immutable charge snapshots. This is isolated test-fixture corruption only.
+          yield* Effect.tryPromise(() =>
+            db.batch([
+              db.prepare("DROP TRIGGER billing_attempt_snapshot_immutable"),
+              db
+                .prepare("UPDATE billing_attempts SET wompi_environment='production' WHERE id=?")
+                .bind(attemptId),
+            ])
+          );
+        }
+        const originalStanding = yield* standing(db);
+        const provider = vi.fn((): Promise<Response> =>
+          Promise.reject(new Error("Prohibited financial egress"))
+        );
+        vi.stubGlobal("fetch", provider);
+        const workflow = workflowFor(db, accepted.id);
+        yield* Effect.tryPromise(() =>
+          runRefundWorkflow({
+            ...workflow,
+            environment: {
+              ...workflow.environment,
+              WOMPI_ENVIRONMENT: scenario === "production-environment" ? "production" : "sandbox",
+              WOMPI_PRIVATE_KEY:
+                scenario === "live-private-key"
+                  ? "prv_prod_synthetic_only"
+                  : workflow.environment.WOMPI_PRIVATE_KEY,
+            },
+          })
+        );
+        expect(provider).not.toHaveBeenCalled();
+        expect(
+          yield* getRefund({
+            db,
+            authority: call(db).authority,
+            userId,
+            refundAttemptId: accepted.id,
+          })
+        ).toEqual(accepted);
+        expect(yield* standing(db)).toEqual(originalStanding);
+        const retained = yield* Effect.tryPromise(() =>
+          db
+            .prepare(`SELECT
+    (SELECT COUNT(*) FROM refund_attempts) AS attempts,
+    (SELECT SUM(amount_in_cents) FROM refund_attempts) AS reserved,
+    (SELECT COUNT(*) FROM refund_submission_claims) AS claims,
+    (SELECT COUNT(*) FROM refund_outcome_evidence) AS outcomes,
+    (SELECT COUNT(*) FROM billing_access_adjustments) AS adjustments,
+    (SELECT COUNT(*) FROM subscription_renewal_stops) AS stops`)
+            .first()
+        );
+        expect(retained).toEqual({
+          attempts: 1,
+          reserved: 400000,
+          claims: 0,
+          outcomes: 0,
+          adjustments: 0,
+          stops: 0,
+        });
+      })
+    )
+);
+
 it("reports malformed retained correction state as unavailable, not absent or a new intent", () =>
   Effect.runPromise(
     Effect.gen(function* () {

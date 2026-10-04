@@ -108,6 +108,40 @@ it.effect(
     })
 );
 
+it.effect(
+  "refuses both Sandbox correction operations under Production transport authority without HTTP",
+  () =>
+    Effect.gen(function* () {
+      let calls = 0;
+      const httpClient = HttpClient.make((request) => {
+        calls++;
+        return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}")));
+      });
+      const crypto = Context.get(yield* Layer.build(TestCrypto), Crypto.Crypto);
+      const outbound = makeWompiOutboundHttp({
+        environment: "production",
+        publicKey: "pub_prod_synthetic_only",
+        privateKey: Redacted.make("prv_prod_synthetic_only"),
+        integritySecret: Redacted.make("synthetic-integrity-secret"),
+        httpClient,
+        crypto,
+      });
+      for (const request of [
+        { _tag: "WompiSandboxRefund", body: "{}" },
+        { _tag: "WompiSandboxCardVoid", transactionId: "provider-charge" },
+      ] as const) {
+        expect(yield* Effect.flip(outbound.execute(request))).toEqual(
+          new OutboundHttpFailure({
+            reason: "transport-failed",
+            responseStatus: Option.none(),
+            responseHeaders: {},
+          })
+        );
+      }
+      expect(calls).toBe(0);
+    })
+);
+
 const sandboxOtpPolicy = DaviplataOtpPolicy.make({
   sendUrl: "https://sandbox.wompi.co/synthetic-test/send",
   confirmUrl: "https://sandbox.wompi.co/synthetic-test/confirm",

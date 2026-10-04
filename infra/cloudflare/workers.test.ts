@@ -441,12 +441,14 @@ describe("Production topology contract", () => {
       "/web/hosted-turns/delivery",
       "/web/subscription/payment-enrollments/prepare",
       "/web/subscription/payment-enrollments/submit",
+      "/internal/support/billing-refunds",
     ]) {
       expect(expression).toContain(`"${path}"`);
     }
     for (const prefix of [
       "/web/subscription/payment-enrollments/",
       "/web/subscription/billing-attempts/",
+      "/internal/support/billing-refunds/",
     ]) {
       expect(expression).toContain(`starts_with(http.request.uri.path, "${prefix}")`);
     }

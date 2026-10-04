@@ -6,6 +6,7 @@ import {
 import { statementStagingPath } from "@fidy/server/ingestion-contract";
 import type * as Cloudflare from "alchemy/Cloudflare";
 import { browserOrigins, productionTopology } from "../../apps/server/cloudflare/runtime/contract";
+import { refundSupportBasePath } from "../../apps/server/cloudflare/subscription/contract";
 
 const kapsoCallbackPath = "/providers/kapso/callback";
 const wompiCallbackPath = "/providers/wompi/billing-events";
@@ -114,6 +115,7 @@ const reservedRateLimitPaths = [
   emailReplacementCompletionPath,
   "/recovery/backup-code/rotate",
   "/internal/support-recovery",
+  refundSupportBasePath,
   "/user",
   "/pat-pairings",
   "/pat-pairings/claim",
@@ -130,6 +132,7 @@ const paramPrefixes = Array.from(
       .map((route) => route.slice(0, route.indexOf(":"))),
     "/web/subscription/payment-enrollments/",
     "/web/subscription/billing-attempts/",
+    `${refundSupportBasePath}/`,
   ])
 ).sort();
 const rateLimitExpression = `http.request.uri.path in {${exactPaths.map((path) => `"${path}"`).join(" ")}}${paramPrefixes

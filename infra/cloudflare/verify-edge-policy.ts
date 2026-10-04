@@ -2,8 +2,8 @@
 
 import { edgeSecurityPolicy } from "./edge-security";
 
-// Includes #969 Dashboard initialization and #232's gated enrollment availability.
-const expectedEdgePolicyDigest = "fa914a976ee8731f22e81330c770fc19c6c7d8e71aea0de0d2c641806802f960";
+// Includes #225's origin-verified support routes, ingress budget, and gated correction Workflow.
+const expectedEdgePolicyDigest = "5ba17e42d66b38963adbd3fbfa345fffe77d4edadafc1c909c34b98aa12e709e";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),

@@ -1,0 +1,69 @@
+apps/server/cloudflare/public-worker.ts
+  s_49871fd774dd99::t_cb13c1b5404100 264-265,296,327,341,354-358
+  s_49871fd774dd99::t_232fcc5a39b26b 7
+  s_49871fd774dd99::t_86fe733b4e4dc5 359
+  s_27635c550e78df::t_201799326b1b79 207,252,371
+apps/server/cloudflare/subscription/internal/payment-enrollment.ts
+  s_49871fd774dd99::t_5277a206be0bfc 1156-1158,1168,1173,1178,1180
+  s_49871fd774dd99::t_89aecc1730dd7a 1179,1182,1190
+  s_49871fd774dd99::t_013393dccd10c1 3
+apps/server/src/shell/subscription/runtime.ts
+  s_49871fd774dd99::t_65a55d7f0a5d3d 1-5,7-17,24-27,34-36
+  s_49871fd774dd99::t_9a7f950c173f11 6,22,28,30-33
+  s_49871fd774dd99::t_7a062560b6d58f 19,29
+  s_49871fd774dd99::t_5c65f9999edab2 18,20-21,23
+  s_49871fd774dd99::t_da5de8bfd04ca9 37-39
+  s_27635c550e78df::t_e24b28ba68c544 40-41
+apps/server/cloudflare/core-http/internal/http.ts
+  s_49871fd774dd99::t_2f5079156fe23f 57,277
+apps/server/src/shell/subscription/transport.test.ts
+  s_49871fd774dd99::t_6a885422478405 1-5,7-12,14,18-27
+  s_49871fd774dd99::t_99ce1a3a99179b 6
+  s_49871fd774dd99::t_e3d38ff9a340be 15-17
+  s_49871fd774dd99::t_d37b135cd5310e 13
+apps/server/cloudflare/subscription/payment-enrollment.test.ts
+  s_49871fd774dd99::t_da8bc1a02b0d7b 26,557-602
+  s_49871fd774dd99::t_192d25288a5da6 604-605,609-634,636-672,675-676
+  s_49871fd774dd99::t_125395a179f255 452
+  s_49871fd774dd99::t_13c7f105350296 330,393,399,402-405,409-419,421-424,429-433,435
+  s_49871fd774dd99::t_0d5226ac226b8c 425-428
+  s_49871fd774dd99::t_299e8ca2bddb44 606-608,673-674
+  s_49871fd774dd99::t_4c82351c3de6ba 367-373,439-443,445-451,453-470,472
+  s_7b7014a6174e05::t_cbdefe795b59f9 420,444,471,603,635
+apps/server/ARCHITECTURE.md
+  s_49871fd774dd99::t_5cbe456432cb6e 193-202
+apps/server/src/shell/subscription/contract.ts
+  s_49871fd774dd99::t_34414871e778e7 245
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0b1ee47a54e5048e4d1dc939c91ae31cd11c34db",
+  "prompts": {},
+  "sessions": {
+    "s_27635c550e78df": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a103f7-dbf1-77a4-9a23-299cef121b80",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_49871fd774dd99": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10722-ee19-7681-bce9-c9de9ef2c1e3",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_7b7014a6174e05": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a1070b-8ed8-7386-8139-24c350e9b4d8",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

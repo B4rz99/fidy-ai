@@ -63,6 +63,31 @@ describe("pull-request checks workflow policy", () => {
     expect(checksWorkflow).toContain("run: bun scripts/ci-changes.ts");
   });
 
+  it("runs native conformance from a same-run bundle without installing platform workspace dependencies", () => {
+    const packageJob = checksWorkflow.slice(
+      checksWorkflow.indexOf("\n  cli-native-package:\n"),
+      checksWorkflow.indexOf("\n  cli-native:\n")
+    );
+    const nativeJob = checksWorkflow.slice(
+      checksWorkflow.indexOf("\n  cli-native:\n"),
+      checksWorkflow.indexOf("\n  required-checks:\n")
+    );
+    const requiredJob = checksWorkflow.slice(checksWorkflow.indexOf("\n  required-checks:\n"));
+
+    expect(packageJob).toContain("runs-on: ubuntu-latest");
+    expect(packageJob).toContain("bun run --cwd apps/cli build:native");
+    expect(packageJob).toContain("if-no-files-found: error");
+    expect(nativeJob).toContain("needs: [changes, cli-native-package]");
+    expect(nativeJob).toContain("./.github/actions/bun-runtime");
+    expect(nativeJob).toContain("actions/download-artifact@");
+    expect(nativeJob).toContain("bun test-results/cli-native/native-store.js");
+    expect(nativeJob).not.toContain("bun-install");
+    expect(nativeJob).not.toContain("run-id:");
+    expect(nativeJob).not.toContain("repository:");
+    expect(requiredJob).toContain("- cli-native-package");
+    expect(checksWorkflow).toContain("cli-native-package: ${{ steps.plan.outputs.unit }}");
+  });
+
   it("runs mutation testing weekly on Sundays without blocking pull requests", () => {
     expect(checksWorkflow).not.toContain("test:mutation");
     return Bun.file(`${repositoryRoot}/.github/workflows/mutation.yml`)

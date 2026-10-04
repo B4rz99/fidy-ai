@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "bun --bun vitest run",
     "test:native": "bun test/native-store.ts",
+    "build:native": "bun build test/native-store.ts --target=bun --outfile=dist/native-store/native-store.js && cp test/windows-persistence.ps1 dist/native-store/windows-persistence.ps1",
     "lint:deps": "bun ../../tools/depcruise/run.mjs . src test"
   },
   "dependencies": {

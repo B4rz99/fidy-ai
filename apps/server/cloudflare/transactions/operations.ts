@@ -12,10 +12,19 @@ import type {
   RecurringFactPage,
   RecurringFactSnapshot,
   RecurringFactsUnavailable,
+  TransactionAggregatesUnavailable,
 } from "./contract";
 import { readBudgetContributions as ownerReadBudgetContributions } from "./internal/budget-query";
 import { readDashboardTransactions as ownerReadDashboardTransactions } from "./internal/dashboard-read";
-import { findDashboardAggregate as ownerFindDashboardAggregate } from "./internal/dashboard-projection";
+import {
+  findDashboardAggregate as ownerFindDashboardAggregate,
+  periodAggregateGuard,
+  readPeriodAggregates,
+} from "./internal/dashboard-projection";
+import type {
+  CompletePeriodAggregates,
+  TransactionPeriod,
+} from "../../src/core/transactions/contract";
 import { browseTransactions as ownerBrowseTransactions } from "./internal/transaction-history";
 import {
   correctionInput as ownerCorrectionInput,
@@ -45,6 +54,21 @@ import {
 } from "./internal/ingestion-capture";
 
 export * from "./contract";
+
+/** Read two complete exact selections at one financial revision; None is unavailable authority/readiness, never empty history. */
+export const readCompletePeriodAggregates = (
+  input: Readonly<{
+    db: D1Database;
+    userId: UserId;
+    periods: readonly [TransactionPeriod, TransactionPeriod];
+  }>
+): Effect.Effect<Option.Option<CompletePeriodAggregates>, TransactionAggregatesUnavailable> =>
+  readPeriodAggregates(input);
+
+/** Recheck processing Consent, complete readiness and the observed revision in the caller's atomic publication batch. */
+export const preparePeriodAggregateGuard = (
+  input: Readonly<{ db: D1Database; userId: UserId; revision: number }>
+): D1PreparedStatement => periodAggregateGuard(input);
 
 /** Read one User's effective-fact revision under current processing Consent; absence is no authorized history. */
 export const findRecurringSnapshot = (

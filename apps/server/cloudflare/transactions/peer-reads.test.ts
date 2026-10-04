@@ -10,8 +10,10 @@ import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import type { BudgetContributionQuery } from "./contract";
 import {
   findRecurringSnapshot,
+  preparePeriodAggregateGuard,
   prepareRecurringFactGuard,
   readBudgetContributions,
+  readCompletePeriodAggregates,
   readDashboardTransactions,
   readRecurringFacts,
 } from "./operations";
@@ -121,6 +123,98 @@ it("projects only one User's recurring facts and rolls back a stale revision com
         db.prepare("SELECT * FROM peer_result").all()
       );
       expect(unchanged.results).toEqual([]);
+    })
+  ));
+
+it("reads complete exact two-period aggregates from one owned effective revision", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          movement(db, 1, { amount: "9007199254740993.01" }),
+          movement(db, 2, { amount: "0.02" }),
+          movement(db, 3, { amount: "7", direction: "inflow", currency: "USD" }),
+          movement(db, 4, { userId: otherUserId, amount: "999" }),
+          movement(db, 5, { occurredAt: "2026-04-30T05:00:00.000Z", amount: "4" }),
+          movement(db, 6, { occurredAt: DateTime.formatIso(to), amount: "100" }),
+        ])
+      );
+      const facts = Option.getOrThrow(
+        yield* readCompletePeriodAggregates({
+          db,
+          userId: UserId.make(userId),
+          periods: [
+            { from, toExclusive: to },
+            { from: DateTime.makeUnsafe("2026-04-01T05:00:00.000Z"), toExclusive: from },
+          ],
+        })
+      );
+      expect(facts.revision).toBeGreaterThan(0);
+      expect(
+        facts.periods.map((selection) =>
+          selection.aggregates.map((fact) => ({
+            currency: fact.sum.currency,
+            amount: encodeMoneyAmount(fact.sum.amount),
+            direction: fact.direction,
+            count: fact.count,
+          }))
+        )
+      ).toEqual([
+        [
+          { currency: "COP", amount: "9007199254740993.03", direction: "outflow", count: 2n },
+          { currency: "USD", amount: "7", direction: "inflow", count: 1n },
+        ],
+        [{ currency: "COP", amount: "4", direction: "outflow", count: 1n }],
+      ]);
+    })
+  ));
+
+it("rolls back stale aggregate publication and distinguishes authorized empty history from missing readiness", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const query = {
+        db,
+        userId: UserId.make(userId),
+        periods: [
+          { from, toExclusive: to },
+          { from: DateTime.makeUnsafe("2026-04-01T05:00:00.000Z"), toExclusive: from },
+        ],
+      } as const;
+      const empty = Option.getOrThrow(yield* readCompletePeriodAggregates(query));
+      expect(empty.revision).toBe(0);
+      expect(empty.periods.map((selection) => selection.aggregates)).toEqual([[], []]);
+      yield* Effect.tryPromise(() =>
+        db.prepare("CREATE TABLE report_publication (value TEXT) STRICT").run()
+      );
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db.prepare("INSERT INTO report_publication VALUES ('empty')"),
+          preparePeriodAggregateGuard({ db, userId: query.userId, revision: empty.revision }),
+        ])
+      );
+      yield* Effect.tryPromise(() => movement(db, 1).run());
+      const refused = yield* Effect.exit(
+        Effect.tryPromise(() =>
+          db.batch([
+            db.prepare("INSERT INTO report_publication VALUES ('stale')"),
+            preparePeriodAggregateGuard({ db, userId: query.userId, revision: empty.revision }),
+          ])
+        )
+      );
+      expect(refused._tag).toBe("Failure");
+      expect(
+        (yield* Effect.tryPromise(() => db.prepare("SELECT value FROM report_publication").all()))
+          .results
+      ).toEqual([{ value: "empty" }]);
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("UPDATE dashboard_projection_state SET readiness = 'dirty' WHERE user_id = ?")
+          .bind(userId)
+          .run()
+      );
+      expect(Option.isNone(yield* readCompletePeriodAggregates(query))).toBe(true);
     })
   ));
 

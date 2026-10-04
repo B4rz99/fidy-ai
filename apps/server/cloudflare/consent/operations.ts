@@ -15,6 +15,47 @@ import { onboardingEvidence, revocationEvidence } from "./internal/evidence";
 import { acceptedCallerProjection, operationalProjection } from "./internal/pre-user-projections";
 import { loadStanding, loadStatus } from "./internal/standing";
 import { withdrawalProjection } from "./internal/withdrawal-projection";
+import {
+  createOffer,
+  discloseOffer,
+  findGrant,
+  guardedAction,
+  prepareDecision,
+} from "./internal/weekly-consent";
+import type {
+  PreparedWeeklyConsentDecision,
+  WeeklyConsentAction,
+  WeeklyConsentContext,
+  WeeklyConsentOffer,
+} from "./contract";
+import type { ConsentRecord, ConsentRecordId } from "../../src/core/consent/contract";
+import type { UserId } from "../../src/core/identity/contract";
+import type { Option } from "effect";
+
+/** Begin a bounded contextual offer for an authenticated established WhatsAppIdentity. No grant is recorded. */
+export const createWeeklyConsentOffer = (
+  input: WeeklyConsentContext
+): Effect.Effect<Option.Option<WeeklyConsentOffer>, ConsentUnavailable> => createOffer(input);
+
+/** The native channel calls this only after sending the offer's exact fixed disclosure; model claims cannot call this seam. */
+export const recordWeeklyConsentDisclosure = (
+  input: WeeklyConsentContext & Readonly<{ offerId: ConsentRecordId; disclosureMessageId: string }>
+): Effect.Effect<boolean, ConsentUnavailable> => discloseOffer(input);
+
+/** Prepare an exact authenticated choice without committing authority. Commit together with schedule enable/disable under User coordination; stale, foreign or replayed choices refuse without partial effects. */
+export const prepareWeeklyConsentDecision = (
+  input: WeeklyConsentContext & Readonly<{ choice: string; decisionMessageId: string }>
+): Effect.Effect<Option.Option<PreparedWeeklyConsentDecision>, ConsentUnavailable> =>
+  prepareDecision(input);
+
+/** Decoded same-User grant evidence; it is a snapshot, not permission for later work. */
+export const findWeeklyConsentGrant = (
+  input: Readonly<{ db: D1Database; userId: UserId }>
+): Effect.Effect<Option.Option<ConsentRecord>, ConsentUnavailable> => findGrant(input);
+
+/** Add current processing Consent and this exact live weekly grant to a caller-owned atomic action. */
+export const prepareWeeklyConsentAction = (input: WeeklyConsentAction): D1PreparedStatement =>
+  guardedAction(input);
 
 /**
  * Read the exact historical Consent basis for the explicit User. This is admission evidence,

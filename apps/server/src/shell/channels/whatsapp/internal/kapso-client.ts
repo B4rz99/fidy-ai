@@ -12,10 +12,7 @@ import {
   type WhatsAppSentMessage,
 } from "~/shell/channels/whatsapp/contract";
 import { TelemetryHttpStatus } from "~/shell/observability/contract";
-import {
-  type OutboundHttpFailure,
-  type OutboundHttpResponse,
-} from "~/shell/outbound-http/contract";
+import { type OutboundHttpFailure } from "~/shell/outbound-http/contract";
 import { OutboundHttp, type OutboundHttpService } from "~/shell/outbound-http/operations";
 import {
   firstServerErrorStatus,
@@ -193,21 +190,32 @@ export const makeWhatsAppDelivery = ({
   deliveryMode: KapsoDeliveryMode;
   outboundHttp: OutboundHttpService;
 }>): WhatsAppDelivery => {
-  const postMessage = (
-    input: KapsoSendInput,
-    body: string
-  ): Effect.Effect<OutboundHttpResponse, WhatsAppSendFailed> =>
-    outboundHttp
-      .execute({
-        _tag: "KapsoMessages",
-        businessPhoneNumberId: input.businessPhoneNumberId,
-        body,
-      })
-      .pipe(Effect.mapError(mapExternalKapsoFailure));
   const sendText = Effect.fn("Kapso.sendText")(function* (input: KapsoSendInput) {
     const address = yield* resolveRecipientAddress(deliveryMode, input.destination);
     const body = yield* encodeTextMessage(address, input.text, input.opaqueCallbackData);
-    const response = yield* postMessage(input, body);
+    return yield* sendKapsoMessage({
+      outboundHttp,
+      businessPhoneNumberId: input.businessPhoneNumberId,
+      body,
+    });
+  });
+  return KapsoClient.of({ sendText });
+};
+
+/** Execute exactly one bounded provider mutation; no transport failure permits blind retry. */
+export const sendKapsoMessage = ({
+  outboundHttp,
+  businessPhoneNumberId,
+  body,
+}: Readonly<{
+  outboundHttp: OutboundHttpService;
+  businessPhoneNumberId: KapsoSendInput["businessPhoneNumberId"];
+  body: string;
+}>): Effect.Effect<WhatsAppSentMessage, WhatsAppSendFailed> =>
+  Effect.gen(function* () {
+    const response = yield* outboundHttp
+      .execute({ _tag: "KapsoMessages", businessPhoneNumberId, body })
+      .pipe(Effect.mapError(mapExternalKapsoFailure));
     const decodedStatus = Schema.decodeOption(TelemetryHttpStatus)(response.status);
     const responseText = new TextDecoder().decode(response.body);
     if (Option.isNone(decodedStatus)) return yield* rejected("invalid_response");
@@ -225,17 +233,12 @@ export const makeWhatsAppDelivery = ({
       return yield* classifyFailureBody(responseBody, responseStatus);
     }
     return yield* decodeSentMessage(responseBody, responseStatus);
-  });
-  return KapsoClient.of({
-    sendText: (input) =>
-      sendText(input).pipe(
-        Effect.timeoutOrElse({
-          duration: `${kapsoRequestTimeoutMilliseconds} millis`,
-          orElse: () => Effect.fail(ambiguous("timeout")),
-        })
-      ),
-  });
-};
+  }).pipe(
+    Effect.timeoutOrElse({
+      duration: `${kapsoRequestTimeoutMilliseconds} millis`,
+      orElse: () => Effect.fail(ambiguous("timeout")),
+    })
+  );
 
 /** True-external seam for authorized WhatsApp text delivery. */
 export class KapsoClient extends Context.Service<KapsoClient, WhatsAppDelivery>()(

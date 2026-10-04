@@ -1,4 +1,12 @@
-import type { EffectiveTransactionAggregate } from "../../../src/core/transactions/contract";
+import type {
+  CompletePeriodAggregates,
+  EffectiveTransactionAggregate,
+  TransactionPeriod,
+} from "../../../src/core/transactions/contract";
+import type { UserId } from "../../../src/core/identity/contract";
+import { prepareConsentAction } from "../../consent/operations";
+import { protectConsentStatement } from "../../../src/shell/consent/operations";
+import { TransactionAggregatesUnavailable } from "../contract";
 import { BigDecimal, Effect, Option, Schema } from "effect";
 import { Currency, Money } from "../../../src/core/_shared/money";
 import { CategoryId } from "../../../src/core/categories/contract";
@@ -104,7 +112,7 @@ const projectionQueries = (
         ORDER BY length(max_minor) DESC, max_minor DESC) AS rank ${selectedBuckets})
       SELECT currency, direction, category_id, SUM(count) AS count,
         MAX(CASE WHEN rank = 1 THEN maximum END) AS maximum
-      FROM chosen GROUP BY currency, direction, category_id`)
+      FROM chosen GROUP BY currency, direction, category_id ORDER BY currency, direction, category_id`)
       .bind(...params),
     db
       .prepare(`SELECT currency, direction, category_id, position,
@@ -177,3 +185,104 @@ export const findDashboardAggregate = ({
     const sums = decodeSums(digits.results);
     return Option.flatMap(sums, (decoded) => decodeGroups(groups.results, decoded));
   }).pipe(Effect.orElseSucceed(() => Option.none()));
+
+const AggregateRevision = Schema.Struct({
+  revision: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+});
+const revisionSelection = (
+  userId: UserId
+): Readonly<{ sql: string; params: readonly [UserId] }> => ({
+  sql: `SELECT COALESCE(f.revision, 0) AS revision FROM dashboard_projection_state p
+    LEFT JOIN transaction_fact_state f ON f.user_id = p.user_id
+    WHERE p.user_id = ? AND p.version = 1 AND p.readiness = 'ready'`,
+  params: [userId],
+});
+
+const AggregateBatch = Schema.Tuple([
+  Schema.Struct({ results: Schema.Array(AggregateRevision).check(Schema.isMaxLength(1)) }),
+  Schema.Struct({ results: Schema.Array(Schema.Unknown) }),
+  Schema.Struct({ results: Schema.Array(Schema.Unknown) }),
+  Schema.Struct({ results: Schema.Array(Schema.Unknown) }),
+  Schema.Struct({ results: Schema.Array(Schema.Unknown) }),
+]);
+const decodeAggregateBatch = (
+  raw: unknown,
+  periods: readonly [TransactionPeriod, TransactionPeriod]
+): Effect.Effect<Option.Option<CompletePeriodAggregates>, TransactionAggregatesUnavailable> => {
+  const batch = Schema.decodeUnknownOption(AggregateBatch)(raw);
+  if (Option.isNone(batch)) return Effect.fail(new TransactionAggregatesUnavailable());
+  const [state, firstGroups, firstDigits, secondGroups, secondDigits] = batch.value;
+  const revision = state.results[0];
+  if (revision === undefined) return Effect.succeedNone;
+  const first = Option.flatMap(decodeSums(firstDigits.results), (sums) =>
+    decodeGroups(firstGroups.results, sums)
+  );
+  const second = Option.flatMap(decodeSums(secondDigits.results), (sums) =>
+    decodeGroups(secondGroups.results, sums)
+  );
+  if (Option.isNone(first) || Option.isNone(second)) {
+    return Effect.fail(new TransactionAggregatesUnavailable());
+  }
+  return Effect.succeedSome({
+    revision: revision.revision,
+    periods: [
+      { period: periods[0], aggregates: first.value },
+      { period: periods[1], aggregates: second.value },
+    ],
+  });
+};
+
+/** Both intervals and readiness are read in one D1 snapshot under current processing Consent. */
+export const readPeriodAggregates = (
+  input: Readonly<{
+    db: D1Database;
+    userId: UserId;
+    periods: readonly [TransactionPeriod, TransactionPeriod];
+  }>
+): Effect.Effect<Option.Option<CompletePeriodAggregates>, TransactionAggregatesUnavailable> =>
+  Effect.gen(function* () {
+    const firstRange = projectionRange(
+      input.periods[0].from.epochMilliseconds,
+      input.periods[0].toExclusive.epochMilliseconds
+    );
+    const secondRange = projectionRange(
+      input.periods[1].from.epochMilliseconds,
+      input.periods[1].toExclusive.epochMilliseconds
+    );
+    if (Option.isNone(firstRange) || Option.isNone(secondRange)) return Option.none();
+    const result = yield* Effect.tryPromise({
+      try: () =>
+        input.db.batch([
+          prepareConsentAction({
+            db: input.db,
+            subject: { _tag: "User", userId: input.userId },
+            requirement: "active",
+            statement: revisionSelection(input.userId),
+          }),
+          ...projectionQueries(input.db, input.userId, firstRange.value),
+          ...projectionQueries(input.db, input.userId, secondRange.value),
+        ]),
+      catch: () => new TransactionAggregatesUnavailable(),
+    });
+    return yield* decodeAggregateBatch(result, input.periods);
+  });
+
+/** A failed readiness, authority or revision assertion aborts all caller-owned publication writes. */
+export const periodAggregateGuard = (
+  input: Readonly<{ db: D1Database; userId: UserId; revision: number }>
+): D1PreparedStatement => {
+  const selection = revisionSelection(input.userId);
+  const protectedSelection = protectConsentStatement({
+    subject: { _tag: "User", userId: input.userId },
+    requirement: "active",
+    statement: {
+      sql: `SELECT 1 FROM (${selection.sql}) WHERE revision = ?`,
+      params: [...selection.params, input.revision],
+    },
+  });
+  return input.db
+    .prepare(
+      `INSERT INTO transaction_fact_assertion (id, accepted) VALUES (1, CASE WHEN EXISTS (${protectedSelection.sql}) THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`
+    )
+    .bind(...protectedSelection.params);
+};

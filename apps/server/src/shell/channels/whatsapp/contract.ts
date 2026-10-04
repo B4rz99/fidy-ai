@@ -20,10 +20,67 @@ import {
   ProviderMessageEvidence,
   WhatsAppProviderMessageId,
 } from "~/core/provider-evidence/contract";
-import { type TranscriptText } from "~/core/agent/contract";
+import { TranscriptText } from "~/core/agent/contract";
+import { Currency } from "~/core/_shared/money";
 import { type TelemetryHttpStatus } from "~/shell/observability/contract";
 
 const maximumProviderIdentifierLength = 256;
+
+/** Operator-controlled approval snapshot. Only the exact reviewed positional full-summary body is supported. */
+export const InsightTemplateConfiguration = Schema.Struct({
+  name: Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9_]{0,511}$/u)),
+  language: Schema.Literal("es"),
+  approval: Schema.Literal("approved"),
+  body: Schema.Literal("Tu resumen semanal: {{1}} Consulta tus movimientos en Fidy."),
+});
+export type InsightTemplateConfiguration = typeof InsightTemplateConfiguration.Type;
+
+const maximumTemplateLength = 1024;
+const SummaryPart = TranscriptText.check(
+  Schema.isMaxLength(maximumTemplateLength),
+  Schema.isPattern(/^[^\r\n\t]+$/u)
+);
+/** Rendered owner report facts, with the complete frozen Currency keyspace supplied independently of sections. No calculation belongs to delivery. */
+export const InsightTemplateSummary = Schema.Struct({
+  period: SummaryPart,
+  currencies: Schema.NonEmptyArray(Currency),
+  sections: Schema.NonEmptyArray(Schema.Struct({ currency: Currency, text: SummaryPart })),
+}).check(
+  Schema.makeFilter((summary) => {
+    const keys = summary.currencies;
+    return (
+      (keys.every(
+        (key, index) =>
+          (index === 0 || (keys[index - 1] ?? key) < key) &&
+          summary.sections[index]?.currency === key
+      ) &&
+        keys.length === summary.sections.length) ||
+      "Expected every Currency exactly once in alphabetic order"
+    );
+  })
+);
+export type InsightTemplateSummary = typeof InsightTemplateSummary.Type;
+
+/** A complete summary never truncates to fit a provider template. Invalid or absent approval makes no provider call. */
+export class InsightTemplateUnavailable extends Data.TaggedError(
+  "InsightTemplateUnavailable"
+)<{}> {}
+export type InsightTemplateSender = Readonly<{
+  prepare: (
+    summary: unknown
+  ) => Effect.Effect<
+    Readonly<{ parameter: string; text: TranscriptText }>,
+    InsightTemplateUnavailable
+  >;
+  send: (
+    input: Readonly<{
+      recipient: WhatsAppBusinessScopedUserId;
+      businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
+      correlationToken: HostedDeliveryCorrelationToken;
+      summary: unknown;
+    }>
+  ) => Effect.Effect<WhatsAppSentMessage, InsightTemplateUnavailable | WhatsAppSendFailed>;
+}>;
 
 export { WhatsAppBusinessPhoneNumberId, WhatsAppProviderMessageId };
 

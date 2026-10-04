@@ -11,12 +11,80 @@ import {
 import { type Sha256Digest } from "../../src/shell/consent/contract";
 import {
   HostedDeliveryCorrelationToken,
+  type InsightTemplateSender,
   WhatsAppBusinessPhoneNumberId,
   type WhatsAppDeliveryKey,
   type WhatsAppInboundEvent,
   WhatsAppProviderMessageId,
 } from "../../src/shell/channels/whatsapp/contract";
-import { Data, type Option, Schema } from "effect";
+import { Data, type DateTime, type Option, Schema } from "effect";
+import { type ConsentRecordId } from "../../src/core/consent/contract";
+import { type IanaTimeZone } from "../../src/core/_shared/context";
+import { type InsightEventId } from "../../src/core/insights/contract";
+import { type OwnedStatement } from "../../src/shell/owner-write/contract";
+
+/** Exact provider-qualified route. Current Identity association must still be checked at egress. */
+export const InsightRecipient = Schema.Struct({
+  portfolioId: WhatsAppBusinessPortfolioId,
+  bsuid: WhatsAppBusinessScopedUserId,
+  businessPhoneNumberId: WhatsAppBusinessPhoneNumberId,
+});
+export type InsightRecipient = typeof InsightRecipient.Type;
+/** Channel staging is native-only; guard is an owner-built live occurrence/grant/schedule query, never request material. */
+export type InsightWhatsAppStage = Readonly<{
+  db: D1Database;
+  userId: UserId;
+  insightEventId: InsightEventId;
+  grantId: ConsentRecordId;
+  recipient: InsightRecipient;
+  summary: unknown;
+  scheduledAt: DateTime.Utc;
+  expiresAt: DateTime.Utc;
+  timeZone: IanaTimeZone;
+  now: DateTime.Utc;
+  guard: OwnedStatement;
+  sender: InsightTemplateSender;
+}>;
+/** Claim once under current purpose, recipient, temporal and caller-owned resource authority. */
+export type InsightWhatsAppStart = Readonly<{
+  db: D1Database;
+  userId: UserId;
+  insightEventId: InsightEventId;
+  grantId: ConsentRecordId;
+  now: DateTime.Utc;
+  guard: OwnedStatement;
+}>;
+/** Ready data is transient provider work; it never enters a Queue or Workflow result/history. */
+export type InsightWhatsAppClaim =
+  | Readonly<{ _tag: "NotClaimed" | "Expired" }>
+  | Readonly<{ _tag: "Deferred"; nextEligibleAt: DateTime.Utc }>
+  | Readonly<{
+      _tag: "Ready";
+      correlationToken: HostedDeliveryCorrelationToken;
+      request: Parameters<InsightTemplateSender["send"]>[0];
+    }>;
+export type InsightWhatsAppSendResult = Readonly<{
+  db: D1Database;
+  userId: UserId;
+  insightEventId: InsightEventId;
+  correlationToken: HostedDeliveryCorrelationToken;
+  outcome:
+    | Readonly<{ kind: "accepted"; providerMessageId: WhatsAppProviderMessageId }>
+    | Readonly<{ kind: "ambiguous" | "rejected" }>;
+}>;
+/** Actual started send and verified delivery metadata; text is available only under current processing Consent within fixed retention. */
+export type InsightVerifiedDeliveryEvidence = Readonly<{
+  insightEventId: InsightEventId;
+  providerMessageId: WhatsAppProviderMessageId;
+  sentAt: DateTime.Utc;
+  deliveredAt: DateTime.Utc;
+  text: Option.Option<TranscriptText>;
+}>;
+
+/** Verified channel evidence is inert; Insights and Agent compose its actual effects in their atomic unit. */
+export type InsightWhatsAppReconciliation =
+  | Readonly<{ _tag: "Refused" | "Recorded" }>
+  | Readonly<{ _tag: "VerifiedDelivery"; userId: UserId; insightEventId: InsightEventId }>;
 
 /** A claimed channel subject, not authority until D1 rechecks the stable User association. */
 export const WhatsAppHostedSubject = Schema.TaggedStruct("WhatsAppHosted", {

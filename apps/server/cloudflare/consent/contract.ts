@@ -1,6 +1,42 @@
 import { type TranscriptTurnId } from "../../src/core/agent/contract";
 import { type OnboardingConsentBasis } from "../../src/shell/consent/contract";
-import { Data, type Effect, type Option } from "effect";
+import { Data, type DateTime, type Effect, type Option, Schema } from "effect";
+import { ConsentRecordId, DisclosureSnapshot } from "../../src/core/consent/contract";
+import type { UserId, WhatsAppCallerReference } from "../../src/core/identity/contract";
+import { type OwnedStatement } from "../../src/shell/owner-write/contract";
+
+/** Opaque exchange identity binds a fixed explicit choice to one exact delivered disclosure. */
+export const WeeklyConsentOffer = Schema.Struct({
+  id: ConsentRecordId,
+  disclosure: DisclosureSnapshot,
+  acceptChoice: Schema.String,
+  declineChoice: Schema.String,
+  revokeChoice: Schema.String,
+});
+export type WeeklyConsentOffer = typeof WeeklyConsentOffer.Type;
+
+/** Authenticated native channel context; never exposed as a canonical tool or PAT operation. */
+export type WeeklyConsentContext = Readonly<{
+  db: D1Database;
+  userId: UserId;
+  caller: WhatsAppCallerReference;
+  now: DateTime.Utc;
+}>;
+
+/** An owner action ending at its WHERE condition; protected standing is re-evaluated at commit. */
+export type WeeklyConsentAction = Readonly<{
+  db: D1Database;
+  userId: UserId;
+  grantId: ConsentRecordId;
+  statement: OwnedStatement;
+}>;
+
+/** Prepared same-User decision. The orchestrator must commit these statements and schedule enable/disable atomically under User coordination. */
+export type PreparedWeeklyConsentDecision = Readonly<{
+  decision: "accept" | "decline" | "revoke";
+  grantId: Option.Option<ConsentRecordId>;
+  statements: ReadonlyArray<D1PreparedStatement>;
+}>;
 
 /** A current decision for one explicit User; absence never borrows another User's grant. */
 export type ConsentStatus = "Missing" | "Granted" | "Revoked";

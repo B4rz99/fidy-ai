@@ -1,15 +1,25 @@
 import { Option, type Redacted } from "effect";
+import { buildInsightTemplateSender } from "./internal/insight-template";
 import { type HttpClient } from "effect/http";
 import { type WhatsAppBusinessScopedUserId } from "~/core/identity/contract";
 import { TranscriptText } from "~/core/agent/contract";
 import { makeWhatsAppDelivery as buildDelivery } from "~/shell/channels/whatsapp/internal/kapso-client";
-import { makeKapsoOutboundHttp } from "~/shell/outbound-http/operations";
+import { type OutboundHttpService, makeKapsoOutboundHttp } from "~/shell/outbound-http/operations";
 import {
   type HostedDeliveryCorrelationToken,
+  type InsightTemplateSender,
   type WhatsAppBusinessPhoneNumberId,
   type WhatsAppDelivery,
   type WhatsAppInboundEvent,
 } from "./contract";
+
+/** Construct with operator-owned approved configuration, never a request's template selection. Missing or invalid configuration disables all delivery. */
+export const makeInsightTemplateSender = (
+  input: Readonly<{
+    configuration: unknown;
+    outboundHttp: OutboundHttpService;
+  }>
+): InsightTemplateSender => buildInsightTemplateSender(input);
 
 /** One bounded provider attempt; no send acceptance is a delivery receipt. */
 export const makeHostedSender = ({

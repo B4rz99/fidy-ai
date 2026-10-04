@@ -1,0 +1,47 @@
+apps/cli/src/command/internal/presentation.ts
+  s_61f7daafa6bb7c::t_a6b072e0915c4b 20
+apps/cli/src/canonical/operations.ts
+  s_61f7daafa6bb7c::t_52ac636e220695 55-56,62-63,65,244
+  s_61f7daafa6bb7c::t_23c02545e7444e 14
+  s_61f7daafa6bb7c::t_0b549e1fd215c8 34-36,64,242-243,245-247,260,263
+apps/cli/src/canonical/internal/flags.test.ts
+  s_61f7daafa6bb7c::t_657ee1ee08453a 1-6,14-17,34,41-44,53-54,59-60,72-74,80,87-89,100-101,107-108
+  s_61f7daafa6bb7c::t_aa02395fe8639b 7-13,18-33,35-40,45-52,55-58,61-71,75-79,81-86,90-99,102-106
+apps/web/e2e/cli-login.spec.ts
+  s_61f7daafa6bb7c::t_aa02395fe8639b 83-85,110-121
+  s_61f7daafa6bb7c::t_8912dde2f5fa2b 82,109,122,124
+apps/cli/src/canonical/flags.test.ts
+  s_61f7daafa6bb7c::t_aa02395fe8639b 13-16,19-29,44-75,77,79-96,102-120,128-189
+  s_61f7daafa6bb7c::t_67215fa4415236 1,4-12,18,30-32,97,100,125-126,191-192
+  s_61f7daafa6bb7c::t_27c49b89d9d666 3,101,124
+  s_61f7daafa6bb7c::t_b451b02d8c8918 2
+  s_61f7daafa6bb7c::t_3060cb55112ea6 17
+  s_61f7daafa6bb7c::t_d90e472d05653c 76,78
+  s_61f7daafa6bb7c::t_bb828250433b6c 33-43,98-99,121-123,127,190
+apps/cli/src/canonical/internal/flags.ts
+  s_61f7daafa6bb7c::t_4d0b9c7afa338a 1,39,110-111
+  s_61f7daafa6bb7c::t_5d5af5ee4dd9a1 100-103,117
+  s_61f7daafa6bb7c::t_34a73f101c2af3 33-38,40-41
+  s_61f7daafa6bb7c::t_16866872193f03 2-20,25-26,83-88,98-99,108,112,129,137-138,141,149-153,159-163,179-181
+  s_61f7daafa6bb7c::t_aa02395fe8639b 21-24,28-32,43-50,54-55,65-69,77,89-92,94-97,104-107,113-116,123-127,134,139-140,142-145,147,155,157-158,164-178
+  s_61f7daafa6bb7c::t_e005ac294e0649 27,42,51-53,56-64,70-75,79-82,93,109,118-121,130-132,136
+  s_61f7daafa6bb7c::t_d90e472d05653c 76,78,122,128,133,135,146,148,154,156
+apps/cli/ARCHITECTURE.md
+  s_61f7daafa6bb7c::t_9402ce39badf4f 6-7,23-25,110-134
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b9732175bc8e974bc5233d895ed244807d070976",
+  "prompts": {},
+  "sessions": {
+    "s_61f7daafa6bb7c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10464-5382-721e-b4c8-4456bd50218f",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

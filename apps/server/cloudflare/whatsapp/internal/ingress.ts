@@ -38,6 +38,7 @@ import {
   type WhatsAppIngressEnvironment as Environment,
   type WhatsAppAuthenticatedInbound as WebhookInbound,
 } from "../contract";
+import { acceptWhatsAppMedia } from "../../ingestion/operations";
 import { findWhatsAppDeliveryUser } from "./whatsapp-turn";
 
 const HTTP_OK = 200;
@@ -219,14 +220,21 @@ const routeHostedInbound = (
   input: WebhookInbound
 ): Effect.Effect<Option.Option<Response>, void, HttpClient.HttpClient> =>
   Effect.gen(function* () {
-    // Image extraction is not installed yet. A caption must never become a hosted text Turn.
-    if (input.event.content._tag === "Image") return Option.some(answer(HTTP_UNAVAILABLE));
     const known = yield* findWhatsAppUser({
       db: environment.DB,
       portfolioId: input.event.caller.businessPortfolioId,
       bsuid: input.event.caller.businessScopedUserId,
     }).pipe(Effect.mapError(() => undefined));
-    if (Option.isNone(known)) return Option.none();
+    if (Option.isNone(known)) {
+      return input.event.content._tag === "Image"
+        ? Option.some(answer(HTTP_UNAVAILABLE))
+        : Option.none();
+    }
+    if (input.event.content._tag === "Image") {
+      return Option.some(
+        yield* acceptWhatsAppMedia({ db: environment.DB, userId: known.value, event: input.event })
+      );
+    }
     if (input.event.content._tag === "UnusableVoiceTranscript") {
       return Option.some(yield* refuseVoice(environment, input, known.value));
     }

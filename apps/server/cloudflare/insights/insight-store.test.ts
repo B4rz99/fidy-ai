@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { InsightUnavailable } from "./contract";
 import { UserId } from "../../src/core/identity/contract";
-import { applyTestMigration, isolatedTestDatabases } from "../d1-test-fixture";
+import {
+  applyTestMigration,
+  canonicalAdmissionMigrationNames,
+  isolatedTestDatabases,
+} from "../d1-test-fixture";
 import { afterAll, expect } from "vitest";
 import { it as effectIt } from "@effect/vitest";
 import { DateTime, Effect, Exit, Option, Schema } from "effect";
@@ -107,10 +111,14 @@ const setup = (): Effect.Effect<D1Database> =>
       "0019_canonical_child_guards",
       "0020_dashboard_projection",
     ];
-    yield* Effect.forEach(migrations, (migration) => migrate(db, migration), {
-      concurrency: 1,
-      discard: true,
-    });
+    yield* Effect.forEach(
+      canonicalAdmissionMigrationNames(migrations),
+      (migration) => migrate(db, migration),
+      {
+        concurrency: 1,
+        discard: true,
+      }
+    );
     const current = DateTime.nowUnsafe().epochMilliseconds;
     yield* Effect.forEach(users, (_user, index) => seedUser(db, index, current), {
       concurrency: 1,
@@ -159,6 +167,7 @@ const send = (
       method,
       headers: {
         origin: "https://app.fidyapp.com",
+        "cf-connecting-ip": "192.0.2.35",
         ...("pat" in input
           ? { authorization: `Bearer ${input.pat}` }
           : { cookie: `__Host-fidy_session=${String(input.index + 1).repeat(43)}` }),

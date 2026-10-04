@@ -1,4 +1,5 @@
 import {
+  canonicalAdmissionMigrationNames,
   hostedTurnTestMigrations,
   installTestSchema,
   isolatedTestDatabases,
@@ -125,7 +126,7 @@ const setup = (
       yield* awaitPromise(
         installTestSchema({
           db,
-          sources: migrationNames.map(
+          sources: canonicalAdmissionMigrationNames(migrationNames).map(
             (name) => new URL(`../migrations/${name}.sql`, import.meta.url)
           ),
         })
@@ -300,6 +301,178 @@ const issueManualPAT = ({
       yield* awaitPromise(response.json())
     )).data;
   });
+const seedExpiredAdmission = ({
+  db,
+  userId,
+  patId,
+  current,
+}: Readonly<{ db: D1Database; userId: string; patId: string; current: number }>): Promise<
+  ReadonlyArray<D1Result>
+> =>
+  db.batch([
+    db
+      .prepare(
+        "INSERT INTO canonical_request_replays VALUES (?,?,?,?,?, ?,?,'completed',200,?, 'application/json')"
+      )
+      .bind(
+        userId,
+        "a".repeat(64),
+        "c".repeat(64),
+        "categories.listCategories",
+        `expired-${userId}`,
+        current - 86400001,
+        current - 1,
+        '{"private":"expired snapshot"}'
+      ),
+    db
+      .prepare(
+        "INSERT INTO canonical_request_replays VALUES (?,?,?,?,?, ?,?,'completed',200,?, 'application/json')"
+      )
+      .bind(
+        userId,
+        "b".repeat(64),
+        "c".repeat(64),
+        "categories.listCategories",
+        `live-${userId}`,
+        current,
+        current + 86400000,
+        '{"private":"live snapshot"}'
+      ),
+    db
+      .prepare("INSERT INTO commercial_allowance_consumptions VALUES (?,'canonical_call',?,?,?,0)")
+      .bind(userId, `expired-${userId}`, current - 94 * 86400000, current - 94 * 86400000),
+    db
+      .prepare("INSERT INTO commercial_allowance_consumptions VALUES (?,'canonical_call',?,?,?,0)")
+      .bind(userId, `live-${userId}`, current, current),
+    db
+      .prepare("INSERT INTO canonical_request_acceptances VALUES (?,?,?,?,?)")
+      .bind(
+        `expired-${userId}`,
+        userId,
+        patId,
+        "categories.listCategories",
+        current - 94 * 86400000
+      ),
+    db
+      .prepare("INSERT INTO canonical_request_acceptances VALUES (?,?,?,?,?)")
+      .bind(`live-${userId}`, userId, patId, "categories.listCategories", current),
+  ]);
+
+it("Core maintenance removes expired replay bodies and admission state for inactive Users while preserving live records", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { db, send, sessions, scheduled } = yield* awaitPromise(setup());
+      const current = clock();
+      for (const [index, userId] of [userA, userB].entries()) {
+        const issued = yield* issueManualPAT({
+          send,
+          session: sessions[index] ?? "",
+          requestId: `40000000-0000-4000-8000-00000000000${index}`,
+          grant: manualGrant(),
+        });
+        const patId = yield* Schema.decodeUnknownEffect(Schema.String)(
+          yield* awaitPromise(
+            db
+              .prepare("SELECT id FROM pats WHERE short_id = ?")
+              .bind(issued.pat.shortId)
+              .first<unknown>("id")
+          )
+        );
+        yield* awaitPromise(seedExpiredAdmission({ db, userId, patId, current }));
+      }
+      yield* Effect.result(awaitPromise(scheduled()));
+      expect(
+        (yield* awaitPromise(
+          db.prepare("SELECT identity,body FROM canonical_request_replays ORDER BY user_id").all()
+        )).results
+      ).toEqual([
+        { identity: `live-${userA}`, body: '{"private":"live snapshot"}' },
+        { identity: `live-${userB}`, body: '{"private":"live snapshot"}' },
+      ]);
+      expect(
+        (yield* awaitPromise(
+          db
+            .prepare("SELECT identity FROM commercial_allowance_consumptions ORDER BY user_id")
+            .all()
+        )).results
+      ).toEqual([{ identity: `live-${userA}` }, { identity: `live-${userB}` }]);
+      expect(
+        (yield* awaitPromise(
+          db.prepare("SELECT id FROM canonical_request_acceptances ORDER BY user_id").all()
+        )).results
+      ).toEqual([{ id: `live-${userA}` }, { id: `live-${userB}` }]);
+    })
+  ));
+
+it("valid PAT callers behind a saturated unresolved-bearer source keep their own admission budget", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { db, send, sessions } = yield* awaitPromise(setup());
+      const issued = yield* issueManualPAT({
+        send,
+        session: sessions[0],
+        requestId: "40000000-0000-4000-8000-000000000005",
+        grant: manualGrant(),
+      });
+      let denied: Response = Response.json({});
+      for (let attempt = 0; attempt < 11; attempt += 1) {
+        denied = yield* awaitPromise(
+          send({ path: "/categories", method: "GET", bearer: "invalid" })
+        );
+      }
+      expect(denied.status).toBe(429);
+      const before = yield* awaitPromise(
+        db
+          .prepare(
+            "SELECT subject,virtual_at_ms FROM canonical_request_buckets WHERE subject LIKE 'source:%'"
+          )
+          .all()
+      );
+      const valid = yield* awaitPromise(
+        send({ path: "/categories", method: "GET", bearer: issued.bearer })
+      );
+      expect(valid.status).toBe(200);
+      expect(valid.headers.get("Fidy-Canonical-Remaining")).toBe("49");
+      expect(
+        (yield* awaitPromise(
+          db
+            .prepare(
+              "SELECT subject,virtual_at_ms FROM canonical_request_buckets WHERE subject LIKE 'source:%'"
+            )
+            .all()
+        )).results
+      ).toEqual(before.results);
+    })
+  ));
+
+it("authenticated scope and input refusals retain commercial allowance headers without charging", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { send, sessions } = yield* awaitPromise(setup());
+      const issued = yield* issueManualPAT({
+        send,
+        session: sessions[0],
+        requestId: "40000000-0000-4000-8000-000000000006",
+        grant: manualGrant({ scopes: ["write"] }),
+      });
+      const denied = yield* awaitPromise(
+        send({ path: "/categories", method: "GET", bearer: issued.bearer })
+      );
+      expect(denied.status).toBe(403);
+      expect(denied.headers.get("Fidy-Canonical-Remaining")).toBe("50");
+      const invalid = yield* awaitPromise(
+        send({
+          path: "/transactions",
+          method: "POST",
+          bearer: issued.bearer,
+          payload: { not: "a transaction" },
+        })
+      );
+      expect(invalid.status).toBe(400);
+      expect(invalid.headers.get("Fidy-Canonical-Remaining")).toBe("50");
+    })
+  ));
+
 afterEach(() => vi.useRealTimers());
 afterAll(() => databases.dispose());
 it("releases one scoped bearer to the private-code holder after web approval, never on replay", () =>
@@ -2340,7 +2513,13 @@ it("rechecks PAT scope after admission at the protected D1 read and audit", () =
 it("gates every declared canonical path by live PAT and exact operation scope before any unavailable adapter", () =>
   runTest(
     Effect.gen(function* () {
-      const { db, send, sessions } = yield* awaitPromise(setup());
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const { db, send: unpacedSend, sessions } = yield* awaitPromise(setup());
+      // This exercises capability boundaries, independently of the request-protection burst.
+      const send = (input: Send): Promise<Response> => {
+        vi.setSystemTime(clock() + 1000);
+        return unpacedSend(input);
+      };
       const issue = (
         scope: "read" | "write" | "dashboard",
         index: number
@@ -2441,7 +2620,7 @@ it("gates every declared canonical path by live PAT and exact operation scope be
         (yield* awaitPromise(
           db
             .prepare(
-              "SELECT COUNT(*) AS count FROM pat_audit WHERE operation = 'transactions.updateTransaction'"
+              "SELECT COUNT(*) AS count FROM pat_audit WHERE operation = 'transactions.updateTransaction' AND outcome = 'accepted'"
             )
             .first<{ count: number }>()
         ))?.count
@@ -2572,7 +2751,7 @@ it("gates every declared canonical path by live PAT and exact operation scope be
             bearer: reader.bearer,
           })
         )).status
-      ).toBe(404);
+      ).toBe(400);
       expect(
         (yield* awaitPromise(
           send({

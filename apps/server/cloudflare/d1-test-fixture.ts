@@ -144,6 +144,26 @@ export const isolatedTestStorage = (): Readonly<{
   };
 };
 
+/** Canonical/hosted admission reads live Trial/Subscription standing in the same database. */
+export const canonicalAdmissionMigrationNames = (
+  names: ReadonlyArray<string>
+): ReadonlyArray<string> =>
+  [
+    ...new Set([
+      ...names,
+      "0009_card_enrollment",
+      "0012_billing_collection",
+      "0016_subscription_standing",
+      "0030_payment_enrollment",
+      "0031_daviplata_enrollment",
+      "0035_billing_corrections",
+      "0032_commercial_allowances",
+      "0033_canonical_request_protection",
+      "0034_forwarded_email_deferral",
+      "0035_media_submissions",
+    ]),
+  ].sort();
+
 /** Ordered schema additions shared by isolated D1 integration harnesses across owners. */
 export const hostedTurnTestMigrations = [
   "0021_hosted_confirmation",

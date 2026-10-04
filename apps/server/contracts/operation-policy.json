@@ -594,6 +594,21 @@
       }
     },
     {
+      "id": "quota.getQuota",
+      "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredTier": "free"
+      }
+    },
+    {
       "id": "recovery.rotateBackupRecoveryCode",
       "policy": {
         "access": {

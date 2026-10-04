@@ -20,6 +20,9 @@ export type CatalogOperation = {
   readonly method: HttpApiEndpoint.Top["method"];
   readonly route: string;
   readonly input: OperationSchema;
+  /** HTTP codecs preserve string query/parameter decoding without treating JSON bodies as string trees. */
+  readonly httpInput: OperationSchema;
+  readonly httpFields: ReadonlyArray<"params" | "query" | "headers" | "payload">;
   readonly success: OperationSchema;
   readonly failure: OperationSchema;
   readonly policy: OperationPolicyValue;
@@ -45,11 +48,16 @@ const unionSchema = (schemas: ReadonlyArray<Schema.Top>): Schema.Top => {
 const asOperationSchema = (schema: Schema.Top): OperationSchema =>
   Schema.make<OperationSchema>(Schema.toCodecJson(schema).ast);
 
-const canonicalInput = (endpoint: HttpApiEndpoint.Top): OperationSchema => {
+const canonicalInput = (endpoint: HttpApiEndpoint.Top, http = false): OperationSchema => {
   const fields: Array<SchemaAST.PropertySignature> = [];
   const add = (name: string, schema: Option.Option<Schema.Top>): void => {
     if (Option.isSome(schema)) {
-      fields.push(new SchemaAST.PropertySignature(name, schema.value.ast));
+      fields.push(
+        new SchemaAST.PropertySignature(
+          name,
+          http && name !== "payload" ? Schema.toCodecStringTree(schema.value).ast : schema.value.ast
+        )
+      );
     }
   };
   add("params", Option.fromUndefinedOr(endpoint.params));
@@ -127,6 +135,13 @@ export const makeOperationCatalog = <Id extends string, Groups extends HttpApiGr
         method: endpoint.method,
         route: endpoint.path,
         input: canonicalInput(endpoint),
+        httpInput: canonicalInput(endpoint, true),
+        httpFields: [
+          ...(endpoint.params === undefined ? [] : ["params" as const]),
+          ...(endpoint.query === undefined ? [] : ["query" as const]),
+          ...(endpoint.headers === undefined ? [] : ["headers" as const]),
+          ...(payloadSchemas(endpoint).length === 0 ? [] : ["payload" as const]),
+        ],
         success: asOperationSchema(unionSchema(Array.from(endpoint.success))),
         failure: asOperationSchema(unionSchema(Array.from(errors.values()).flat())),
         // Access policy must be an explicit choice on each canonical operation;

@@ -1,6 +1,6 @@
-import { PaymentEnrollmentId } from "@fidy/server/client";
-import type { APIRequestContext, Page, Route } from "@playwright/test";
-import { DateTime, Effect, Schema } from "effect";
+import { PaymentEnrollmentId, ResourceLimited } from "@fidy/server/client";
+import type { APIRequestContext, APIResponse, Page, Route } from "@playwright/test";
+import { DateTime, Effect, Option, Schema } from "effect";
 import type { Cause } from "effect";
 import { playwright } from "./playwright-runtime";
 import {
@@ -20,6 +20,14 @@ const forbidden = 403;
 const unauthorized = 401;
 const noContent = 204;
 const notFound = 404;
+const canonicalRecoveryMilliseconds = 15_000;
+const resourceProbeRetries = 6;
+const maximumProbeDelaySeconds = 5;
+const RetrySeconds = Schema.NumberFromString.check(
+  Schema.isInt(),
+  Schema.isGreaterThan(0),
+  Schema.isLessThanOrEqualTo(maximumProbeDelaySeconds)
+);
 
 // Playwright owns these promises; each call is made at its point in the test Effect.
 const fromPlaywright = <A>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
@@ -39,10 +47,79 @@ const fetchWithBearer = ({
     .fetch(url, { credentials: "omit", headers: { authorization: `Bearer ${token}` } })
     .then((response) => response.text().then((body) => ({ status: response.status, body })));
 
-const fetchWithSession = (url: string): Promise<{ status: number; body: string }> =>
-  window
-    .fetch(url, { credentials: "include" })
-    .then((response) => response.text().then((body) => ({ status: response.status, body })));
+const SessionProbeWire = Schema.Struct({
+  status: Schema.Int,
+  body: Schema.String,
+  retryAfter: Schema.OptionFromNullOr(Schema.String),
+});
+// Headers.get is raw browser wire input; the driver decodes absence into Option before pacing.
+const fetchWithSession = (url: string): Promise<typeof SessionProbeWire.Encoded> =>
+  window.fetch(url, { credentials: "include" }).then((response) =>
+    response.text().then((body) => ({
+      status: response.status,
+      body,
+      retryAfter: response.headers.get("retry-after"),
+    }))
+  );
+const inspectBrowserSnapshot = (
+  page: Page,
+  url: string
+): Effect.Effect<
+  Readonly<{ status: number; body: string }>,
+  Cause.UnknownError | Cause.TimeoutError
+> =>
+  Effect.gen(function* () {
+    const limited = 429;
+    const millisecondsPerSecond = 1_000;
+    for (let retry = 0; retry < resourceProbeRetries; retry++) {
+      const received = yield* fromPlaywright(page.evaluate(fetchWithSession, url));
+      const wire = yield* Schema.decodeEffect(SessionProbeWire)(received).pipe(Effect.orDie);
+      const seconds = Option.flatMap(wire.retryAfter, Schema.decodeOption(RetrySeconds));
+      const refusal = Schema.decodeOption(
+        Schema.fromJsonString(Schema.toCodecJson(ResourceLimited))
+      )(wire.body);
+      if (wire.status !== limited || Option.isNone(seconds) || Option.isNone(refusal)) {
+        return { status: wire.status, body: wire.body };
+      }
+      yield* Effect.sleep(seconds.value * millisecondsPerSecond);
+    }
+    const wire = yield* fromPlaywright(page.evaluate(fetchWithSession, url));
+    return { status: wire.status, body: wire.body };
+  }).pipe(Effect.timeout(canonicalRecoveryMilliseconds));
+// Direct test probes do not use the app's policy-bearing client. Pace only declared
+// resource refusals, preserving real Core limits and all state/status assertions.
+const probeCanonicalRequest = (
+  send: () => Promise<APIResponse>
+): Effect.Effect<APIResponse, Cause.UnknownError | Cause.TimeoutError> =>
+  Effect.gen(function* () {
+    const limited = 429;
+    const millisecondsPerSecond = 1_000;
+    for (let retry = 0; retry < resourceProbeRetries; retry++) {
+      const response = yield* fromPlaywright(send());
+      if (response.status() !== limited) return response;
+      const seconds = Schema.decodeUnknownOption(RetrySeconds)(response.headers()["retry-after"]);
+      if (Option.isNone(seconds)) return response;
+      const body: unknown = yield* fromPlaywright(response.json());
+      if (Option.isNone(Schema.decodeUnknownOption(Schema.toCodecJson(ResourceLimited))(body))) {
+        return response;
+      }
+      yield* Effect.sleep(seconds.value * millisecondsPerSecond);
+    }
+    return yield* fromPlaywright(send());
+  }).pipe(Effect.timeout(canonicalRecoveryMilliseconds));
+const inspectCanonicalSnapshot = (
+  page: Page,
+  path: string
+): Effect.Effect<
+  Readonly<{ status: number; body: string }>,
+  Cause.UnknownError | Cause.TimeoutError
+> =>
+  Effect.gen(function* () {
+    const response = yield* probeCanonicalRequest(() =>
+      page.context().request.get(path, { headers: { origin: appOrigin } })
+    );
+    return { status: response.status(), body: yield* fromPlaywright(response.text()) };
+  });
 const assertUnderScopedBrowser = (
   page: Page,
   request: APIRequestContext,
@@ -100,7 +177,7 @@ test("fresh and concurrent Dashboard first use explicitly initializes through au
       ).toBe(noContent);
       yield* fromPlaywright(signInFirstCardThroughCore({ page, request }));
       for (const path of ["/dashboard", "/dashboard/view"]) {
-        const absent = yield* fromPlaywright(page.evaluate(fetchWithSession, `${api}${path}`));
+        const absent = yield* inspectCanonicalSnapshot(page, `${api}${path}`);
         expect(absent.status).toBe(notFound);
         expect(absent.body).toContain("dashboard_uninitialized");
       }
@@ -113,21 +190,25 @@ test("fresh and concurrent Dashboard first use explicitly initializes through au
         Promise.all([page.goto("/app/dashboard"), other.goto("/app/dashboard")])
       );
       yield* fromPlaywright(
-        expect(page.getByRole("heading", { name: "Tablero", exact: true })).toBeVisible()
+        expect(page.getByRole("heading", { name: "Tablero", exact: true })).toBeVisible({
+          timeout: canonicalRecoveryMilliseconds,
+        })
       );
       yield* fromPlaywright(
-        expect(other.getByRole("heading", { name: "Tablero", exact: true })).toBeVisible()
+        expect(other.getByRole("heading", { name: "Tablero", exact: true })).toBeVisible({
+          timeout: canonicalRecoveryMilliseconds,
+        })
       );
       expect(initializeCalls.length).toBeGreaterThan(0);
       expect(initializeCalls.every((method) => method === "POST")).toBe(true);
-      const before = yield* fromPlaywright(page.evaluate(fetchWithSession, `${api}/dashboard`));
+      const before = yield* inspectCanonicalSnapshot(page, `${api}/dashboard`);
       expect(before.status).toBe(ok);
       const countBefore = initializeCalls.length;
       yield* fromPlaywright(page.reload());
       yield* fromPlaywright(
         expect(page.getByRole("heading", { name: "Tablero", exact: true })).toBeVisible()
       );
-      const after = yield* fromPlaywright(page.evaluate(fetchWithSession, `${api}/dashboard`));
+      const after = yield* inspectCanonicalSnapshot(page, `${api}/dashboard`);
       expect(after).toEqual(before);
       expect(initializeCalls).toHaveLength(countBefore);
       yield* fromPlaywright(other.close());
@@ -223,7 +304,7 @@ test("renders a seeded Category identity from real public and Core routes", ({ p
           request,
         })
       );
-      const categories = yield* fromPlaywright(
+      const categories = yield* probeCanonicalRequest(() =>
         page.request.get(`${api}/categories`, {
           headers: {
             origin: "https://127.0.0.1:4173",
@@ -240,7 +321,7 @@ test("renders a seeded Category identity from real public and Core routes", ({ p
         ]),
       });
       const occurredAt = DateTime.formatIso(yield* DateTime.now);
-      const captured = yield* fromPlaywright(
+      const captured = yield* probeCanonicalRequest(() =>
         page.request.post(`${api}/transactions`, {
           headers: {
             origin: "https://127.0.0.1:4173",
@@ -276,8 +357,9 @@ test("a browser cannot render or fetch another User's private Transaction throug
         })
       );
       yield* fromPlaywright(page.goto("/app/transactions"));
-      const refusal = yield* fromPlaywright(
-        page.evaluate(fetchWithSession, `${api}/transactions/24000000-0000-4000-8000-000000000262`)
+      const refusal = yield* inspectBrowserSnapshot(
+        page,
+        `${api}/transactions/24000000-0000-4000-8000-000000000262`
       );
       expect(refusal.status).toBe(notFound);
       expect(refusal.body).not.toContain("OTHER-USER-PRIVATE");
@@ -392,19 +474,18 @@ const submitReusedCard = Effect.fnUntraced(function* (page: Page, request: APIRe
   );
   yield* fromPlaywright(page.getByLabel(/Acepto el reglamento/iu).check());
   yield* fromPlaywright(page.getByLabel(/Autorizo el tratamiento/iu).check());
-  const submission = page.waitForResponse(
-    (response) => response.url() === `${api}/web/subscription/payment-enrollments/submit`
-  );
-  yield* fromPlaywright(
-    page
-      .getByRole("button", {
-        name: "Activar Pro",
-      })
-      .click()
-  );
+  // Capture the body as soon as the response arrives, before successful submission can navigate.
+  const submission = page
+    .waitForResponse(
+      (response) => response.url() === `${api}/web/subscription/payment-enrollments/submit`
+    )
+    .then((response) =>
+      response.json().then((body: unknown) => ({ status: response.status(), body }))
+    );
+  yield* fromPlaywright(page.getByRole("button", { name: "Activar Pro" }).click());
   const submitted = yield* fromPlaywright(submission);
-  expect(submitted.status()).toBe(ok);
-  const submissionBody: unknown = yield* fromPlaywright(submitted.json());
+  expect(submitted.status).toBe(ok);
+  const submissionBody = submitted.body;
   expect(submissionBody).toMatchObject({
     status: "payment-pending",
     billingAttempt: {

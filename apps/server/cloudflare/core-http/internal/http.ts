@@ -1,5 +1,9 @@
 import { type MemoryOperationId, memoryOperationIds } from "../../../src/shell/memory/contract";
 
+import {
+  protectCanonicalRequest,
+  protectCanonicalSource,
+} from "../../canonical-admission/operations";
 import { UserId } from "../../../src/core/identity/contract";
 import { HostedTurnProgressRequest } from "../../../src/shell/agent/contract";
 import {
@@ -16,12 +20,12 @@ import {
   dispatchOnboardingEmail,
 } from "../../email-authentication/runtime";
 
-import { ScopeMissing, UserActionRequired } from "../../../src/shell/public-http/contract";
+import { UserActionRequired } from "../../../src/shell/public-http/contract";
 import { categoryUnavailable } from "../../../src/shell/categories/operations";
 import { listCategoriesPath } from "../../../src/shell/categories/contract";
 import { MemoryId, RememberInput, ReviseInput } from "../../../src/core/memory/contract";
 import { type TelemetryService } from "../../../src/shell/observability/contract";
-import { type Cause, Effect, Exit, Option, Schema } from "effect";
+import { type Cause, Clock, Effect, Exit, Option, Schema } from "effect";
 import {
   browseTransactions,
   correctionInput,
@@ -63,7 +67,8 @@ import {
   receiveWompiBillingEvent,
 } from "../../subscription/runtime";
 
-import { authorizeCanonicalPAT, listPATs } from "../../tokens/operations";
+import { executeProtectedQuotaQuery } from "../../quotas/operations";
+import { listPATs, resolveCanonicalPATCredential } from "../../tokens/operations";
 import { recallMemories, rejectMemoryMutation } from "../../memory/operations";
 import { canonicalOperation, canonicalRoute } from "../../routing/operations";
 import {
@@ -537,22 +542,6 @@ const consentRevokedResponse = (): Response =>
           error: {
             code: "user_action_required",
             message: "Return to Fidy to review your withdrawn Consent.",
-          },
-          next: [],
-        })
-      )
-    ),
-    HTTP_FORBIDDEN
-  );
-
-const scopeMissingResponse = (): Response =>
-  jsonResponse(
-    JSON.stringify(
-      Schema.encodeSync(Schema.toCodecJson(ScopeMissing))(
-        ScopeMissing.make({
-          error: {
-            code: "scope_missing",
-            message: "This PAT lacks the required operation scope.",
           },
           next: [],
         })
@@ -1405,6 +1394,40 @@ const primaryCanonicalOwner = (
   }
   return Option.orElse(insightResponse(input), () => dashboardResponse(input));
 };
+const subscriptionQueryResponse = ({
+  environment,
+  subject,
+  operation: declaration,
+}: Readonly<{
+  environment: CoreHttpEnvironment;
+  subject: TransactionCaller;
+  operation: CatalogOperation;
+}>): Option.Option<Effect.Effect<Response>> => {
+  const operation = (
+    [
+      "subscription.listSubscriptionOffers",
+      "subscription.getSubscriptionStatus",
+      "subscription.getUpgradeUrl",
+    ] as const
+  ).find((id) => id === declaration.id);
+  if (operation === undefined) return Option.none();
+  const work =
+    operation === "subscription.getUpgradeUrl"
+      ? {
+          db: environment.DB,
+          subject,
+          operation,
+          browserOrigin: Option.some(environment.BROWSER_ORIGIN),
+        }
+      : { db: environment.DB, subject, operation };
+  return Option.some(
+    Effect.tryPromise({
+      try: () => executeProtectedSubscriptionQuery(work),
+      catch: () => undefined,
+    }).pipe(Effect.orElseSucceed(unavailable))
+  );
+};
+
 /** Once admitted, every credential executes through the same canonical operation dispatch. */
 const executeCanonicalWork = (
   input: Readonly<{
@@ -1415,24 +1438,12 @@ const executeCanonicalWork = (
   }>
 ): Effect.Effect<Response> => {
   const { request, environment, operation, subject } = input;
-  if (operation.id === "categories.listCategories") return categoriesResponse(environment, subject);
-  if (
-    operation.id === "subscription.listSubscriptionOffers" ||
-    operation.id === "subscription.getSubscriptionStatus"
-  ) {
-    return Effect.tryPromise({
-      try: () =>
-        executeProtectedSubscriptionQuery({
-          db: environment.DB,
-          subject,
-          operation:
-            operation.id === "subscription.listSubscriptionOffers"
-              ? "subscription.listSubscriptionOffers"
-              : "subscription.getSubscriptionStatus",
-        }),
-      catch: () => undefined,
-    }).pipe(Effect.orElseSucceed(unavailable));
+  if (operation.id === "quota.getQuota") {
+    return executeProtectedQuotaQuery({ db: environment.DB, subject });
   }
+  if (operation.id === "categories.listCategories") return categoriesResponse(environment, subject);
+  const subscription = subscriptionQueryResponse(input);
+  if (Option.isSome(subscription)) return subscription.value;
   const primaryOwner = primaryCanonicalOwner(input);
   const otherOwner = Option.orElse(budgetResponse(input), () =>
     Option.orElse(keywordRuleResponse(input), () => memoryResponse(input))
@@ -1452,49 +1463,79 @@ const executeCanonicalWork = (
   return Effect.succeed(unavailableCanonicalAdapter());
 };
 
+const executeProtectedCanonicalWork = (
+  input: Parameters<typeof executeCanonicalWork>[0] & Readonly<{ current: number }>
+): Effect.Effect<Response> =>
+  protectCanonicalRequest({
+    db: input.environment.DB,
+    request: input.request,
+    operation: input.operation,
+    current: input.current,
+    browserOrigin: input.environment.BROWSER_ORIGIN,
+    caller: isPATCaller(input.subject)
+      ? { _tag: "PAT", value: input.subject }
+      : { _tag: "WebSession", value: input.subject },
+    work: executeCanonicalWork(input),
+  });
+
 const authorizedCanonicalResponse = (
   request: Request,
   environment: CoreHttpEnvironment,
   operation: CatalogOperation
-): Effect.Effect<Response> => {
-  if (!request.headers.has("authorization")) {
-    return Effect.tryPromise({
-      try: () => transactionSession({ request, db: environment.DB }),
+): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const current = yield* Clock.currentTimeMillis;
+    if (!request.headers.has("authorization")) {
+      return yield* Effect.tryPromise({
+        try: () => transactionSession({ request, db: environment.DB }),
+        catch: () => undefined,
+      }).pipe(
+        Effect.flatMap((session) => {
+          if (Option.isNone(session)) return Effect.succeed(unauthenticatedTransaction());
+          return executeProtectedCanonicalWork({
+            request,
+            environment,
+            operation,
+            current,
+            subject: session.value,
+          });
+        }),
+        Effect.orElseSucceed(unavailable)
+      );
+    }
+    return yield* Effect.tryPromise({
+      try: () => resolveCanonicalPATCredential({ request, db: environment.DB, operation }),
       catch: () => undefined,
     }).pipe(
-      Effect.flatMap((session) => {
-        if (Option.isNone(session)) return Effect.succeed(unauthenticatedTransaction());
-        return executeCanonicalWork({ request, environment, operation, subject: session.value });
+      Effect.match({
+        onFailure: () =>
+          jsonResponse(
+            JSON.stringify({ error: categoryUnavailable().error, next: [] }),
+            HTTP_SERVICE_UNAVAILABLE
+          ),
+        onSuccess: (authorized) => {
+          if (typeof authorized === "object") return authorized;
+          if (authorized === "user_action_required") return consentRevokedResponse();
+          return jsonResponse(
+            '{"error":{"code":"unauthenticated","message":"Present a valid credential and retry."},"next":[]}',
+            HTTP_UNAUTHORIZED
+          );
+        },
       }),
-      Effect.orElseSucceed(unavailable)
+      Effect.filterOrElse(
+        (result): result is Response => result instanceof Response,
+        (subject) =>
+          executeProtectedCanonicalWork({ request, environment, operation, current, subject })
+      ),
+      Effect.filterOrElse(
+        (response) => response.status !== HTTP_UNAUTHORIZED,
+        (response) =>
+          protectCanonicalSource({ db: environment.DB, request, current }).pipe(
+            Effect.map((failure) => (Option.isSome(failure) ? failure.value : response))
+          )
+      )
     );
-  }
-  return Effect.tryPromise({
-    try: () => authorizeCanonicalPAT({ request, db: environment.DB, operation }),
-    catch: () => undefined,
-  }).pipe(
-    Effect.match({
-      onFailure: () =>
-        jsonResponse(
-          JSON.stringify({ error: categoryUnavailable().error, next: [] }),
-          HTTP_SERVICE_UNAVAILABLE
-        ),
-      onSuccess: (authorized) => {
-        if (typeof authorized === "object") return authorized;
-        if (authorized === "user_action_required") return consentRevokedResponse();
-        if (authorized === "scope_missing") return scopeMissingResponse();
-        return jsonResponse(
-          '{"error":{"code":"unauthenticated","message":"Present a valid credential and retry."},"next":[]}',
-          HTTP_UNAUTHORIZED
-        );
-      },
-    }),
-    Effect.filterOrElse(
-      (result): result is Response => result instanceof Response,
-      (subject) => executeCanonicalWork({ request, environment, operation, subject })
-    )
-  );
-};
+  });
 
 const healthResponse = (environment: CoreHttpEnvironment): Response => {
   const configuration = Schema.decodeExit(ReleaseConfiguration)(environment);

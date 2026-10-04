@@ -903,6 +903,7 @@ describe("Cloudflare Worker topology (continued)", () => {
           new Request("https://api.fidyapp.com/categories", {
             headers: {
               authorization: `Bearer ${localCanonicalReadBearer}`,
+              "cf-connecting-ip": "192.0.2.35",
               origin: "https://app.fidyapp.com",
             },
           }),
@@ -1039,7 +1040,10 @@ describe("Cloudflare Worker topology (continued)", () => {
       const response = yield* Effect.tryPromise(() =>
         observedPublic.fetch(
           new Request("https://api.fidyapp.com/categories", {
-            headers: { authorization: `Bearer ${localCanonicalReadBearer}` },
+            headers: {
+              authorization: `Bearer ${localCanonicalReadBearer}`,
+              "cf-connecting-ip": "192.0.2.35",
+            },
           }),
           makePublicEnvironment({
             CORE: {

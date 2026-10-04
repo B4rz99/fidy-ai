@@ -1,5 +1,6 @@
 import {
   applyTestMigration,
+  canonicalAdmissionMigrationNames,
   hostedTurnTestMigrations,
   isolatedTestDatabases,
 } from "../d1-test-fixture";
@@ -118,7 +119,7 @@ const setup = (): Promise<{
         "0020_dashboard_projection",
         ...hostedTurnTestMigrations,
       ];
-      for (const name of migrationNames) {
+      for (const name of canonicalAdmissionMigrationNames(migrationNames)) {
         yield* awaitPromise(
           applyTestMigration({ db, source: new URL(`../migrations/${name}.sql`, import.meta.url) })
         );

@@ -81,6 +81,10 @@ const applyApiPolicy = (
   const headers = new Headers(response.headers);
   for (const [name, value] of Object.entries(apiSecurityHeaders)) headers.set(name, value);
   appendVary(headers, "Origin");
+  headers.set(
+    "access-control-expose-headers",
+    "Fidy-Canonical-Allowance, Fidy-Canonical-Limit, Fidy-Canonical-Remaining, Fidy-Canonical-Reset, Retry-After"
+  );
 
   if (Option.contains(origin, browserOrigin)) {
     headers.set("access-control-allow-credentials", "true");
@@ -135,7 +139,10 @@ const isAllowedPreflightHeaders = (value: Option.Option<string>): boolean =>
   value.value
     .split(",")
     .map((header) => header.trim().toLowerCase())
-    .every((header) => header === "authorization" || header === "content-type");
+    .every(
+      (header) =>
+        header === "authorization" || header === "content-type" || header === "fidy-retry-key"
+    );
 
 const preflightResponse = (request: Request, browserOrigin: string): Response => {
   const requestedMethod = Option.fromNullishOr(
@@ -378,6 +385,27 @@ const forwardedHeaders = (request: Request, path: string): Headers => {
   if (browserForwardPath(path)) return browserForwardHeaders(request, path);
   return fallbackHeaders(request, path);
 };
+const canonicalAdmissionHeaders = (
+  request: Request,
+  environment: PublicEnvironment,
+  headers: Headers
+): Effect.Effect<void, void> =>
+  Effect.gen(function* () {
+    headers.delete("x-canonical-source");
+    if (!canonicalRoute(new URL(request.url).pathname)) return;
+    if (request.headers.has("fidy-retry-key")) {
+      headers.set("Fidy-Retry-Key", request.headers.get("fidy-retry-key") ?? "");
+    }
+    if (!request.headers.has("authorization")) return;
+    headers.set(
+      "x-canonical-source",
+      yield* deriveAnonymousSource({
+        request,
+        browserOrigin: environment.BROWSER_ORIGIN,
+        admissionKey: environment.PAT_ADMISSION_KEY,
+      })
+    );
+  });
 const coreRequest = (
   request: Request,
   environment: PublicEnvironment
@@ -385,6 +413,7 @@ const coreRequest = (
   Effect.gen(function* () {
     const path = new URL(request.url).pathname;
     const headers = forwardedHeaders(request, path);
+    yield* canonicalAdmissionHeaders(request, environment, headers);
     if (path === "/pat-pairings") {
       headers.set(
         "x-pat-source",

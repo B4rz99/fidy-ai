@@ -1,3 +1,4 @@
+import type { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { patIdentityQuery } from "~/shell/tokens/operations";
 import { Option } from "effect";
 import { authorizedCallStatement } from "./recording";
@@ -18,6 +19,15 @@ export const recordedPATCallProof = ({
   auditId,
   operation,
 }: Readonly<{ auditId: string; operation: AuditedPATOperation }>): OwnedStatement => ({
+  sql: "SELECT 1 FROM pat_audit WHERE id = ? AND user_id = pats.user_id AND pat_id = pats.id AND operation = ? AND outcome = 'accepted'",
+  params: [auditId, operation],
+});
+
+/** A successful retained-response read can cover an entire canonical envelope, including a batch. The proof still identifies the current PAT, User, operation and exact Audit write. */
+export const recordedPATReplayCallProof = ({
+  auditId,
+  operation,
+}: Readonly<{ auditId: string; operation: CanonicalOperationId }>): OwnedStatement => ({
   sql: "SELECT 1 FROM pat_audit WHERE id = ? AND user_id = pats.user_id AND pat_id = pats.id AND operation = ? AND outcome = 'accepted'",
   params: [auditId, operation],
 });

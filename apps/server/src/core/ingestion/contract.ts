@@ -1,3 +1,4 @@
+import { freeAllowanceLimits } from "~/core/quotas/contract";
 import { Option, Schema, Struct } from "effect";
 import {
   CapturedInterpretationContext,
@@ -149,10 +150,10 @@ export type ForwardedEmailDeliveryId = typeof ForwardedEmailDeliveryId.Type;
 // Transport-only limits remain at their owning shell boundary.
 
 /** Free receipt and screenshot extraction share two unique submissions per Bogotá calendar month. */
-export const freeMediaSubmissionCap = 2;
+export const freeMediaSubmissionCap = freeAllowanceLimits.media_submission;
 
 /** Issue #22 grants each Free User fifty unique notification emails per Bogotá calendar month. */
-export const freeForwardedEmailCap = 50;
+export const freeForwardedEmailCap = freeAllowanceLimits.forwarded_email;
 
 /** One additional month of Free email can wait without making retained work unbounded. */
 export const freeForwardedEmailDeferredCap = 50;
@@ -511,10 +512,24 @@ export const EmailNeedsReviewItem = Schema.Union([
 ]).annotate({ identifier: "EmailNeedsReviewItem" });
 export type EmailNeedsReviewItem = typeof EmailNeedsReviewItem.Type;
 
+/** A receipt/screenshot whose acceptance is durable even while extraction is unavailable. No bytes, captions or provider routing are disclosed by this review projection. */
+export const MediaNeedsReviewItem = Schema.Struct({
+  id: NeedsReviewItemId,
+  mediaSubmissionId: Schema.String.check(Schema.isUUID()).pipe(Schema.brand("MediaSubmissionId")),
+  reason: Schema.Literals(["extraction-unavailable", "unparseable-material"]),
+  ...CapturedInterpretationContext.fields,
+  sourceChannel: Schema.Literal("whatsapp"),
+  sourceFormat: Schema.Literal("image"),
+  status: Schema.Literals(["pending", "expired"]),
+  createdAt: UtcTimestamp,
+}).annotate({ identifier: "MediaNeedsReviewItem" });
+export type MediaNeedsReviewItem = typeof MediaNeedsReviewItem.Type;
+
 /** Every visible Ingestion outcome requiring User review, independent of source channel. */
 export const NeedsReviewItem = Schema.Union([
   StatementNeedsReviewItem,
   EmailNeedsReviewItem,
+  MediaNeedsReviewItem,
 ]).annotate({ identifier: "NeedsReviewItem" });
 export type NeedsReviewItem = typeof NeedsReviewItem.Type;
 

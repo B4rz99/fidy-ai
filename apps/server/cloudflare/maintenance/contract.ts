@@ -5,6 +5,8 @@ import type { PlatformMaintenanceInput } from "../runtime/contract";
 export type ScheduledOperation =
   | "async.health"
   | "audit.retention"
+  | "canonical.admissionRetention"
+  | "quota.consumptionRetention"
   | "operational.events.retention"
   | "operational.canary.publish"
   | "onboarding.email.dispatch"
@@ -27,6 +29,7 @@ export type ScheduledOperation =
   | "dashboard.projectionRepair"
   | "recurring.evaluate"
   | "ingestion.uploadAdmissionSweep"
+  | "ingestion.mediaRetention"
   | "agent.workersAiAdmissionSweep"
   | "release.smoke.expiry"
   | "ingestion.reviewEvidenceExpiry"

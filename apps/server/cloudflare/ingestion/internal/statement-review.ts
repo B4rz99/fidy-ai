@@ -6,6 +6,7 @@ import {
   StatementNeedsReviewItem,
   StatementRowEvidence,
 } from "../../../src/core/ingestion/contract";
+import { loadMediaItems } from "./media-review";
 import { currentMillis } from "../../runtime/operations";
 import type { TransactionCaller } from "../../canonical-work/operations";
 import { commitReadAudit, unavailableStatement, validationFailed } from "./statement-ingestion";
@@ -193,14 +194,22 @@ export const listNeedsReviewItems = (
         [
           loadStatementItems(input.database, input.subject.userId, asOf),
           loadEmailItems(input.database, input.subject.userId, asOf),
+          loadMediaItems({
+            db: input.database,
+            userId: input.subject.userId,
+            asOf,
+            limit: maximumOffset + pageSize,
+          }),
         ],
         { concurrency: "unbounded" }
       )
     );
     if (Result.isFailure(loaded)) return unavailableStatement();
-    const [statement, email] = loaded.success;
-    if (Option.isNone(statement) || Option.isNone(email)) return unavailableStatement();
-    const items = [...statement.value, ...email.value];
+    const [statement, email, media] = loaded.success;
+    if (Option.isNone(statement) || Option.isNone(email) || Option.isNone(media)) {
+      return unavailableStatement();
+    }
+    const items = [...statement.value, ...email.value, ...media.value];
     items.sort(
       (left, right) =>
         DateTime.toEpochMillis(right.createdAt) - DateTime.toEpochMillis(left.createdAt)

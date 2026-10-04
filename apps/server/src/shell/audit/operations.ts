@@ -3,15 +3,19 @@ import {
   type AuditQueryCall,
   AuditUnavailable,
   type AuthorizedAuditCall,
+  type CanonicalAdmissionRefusal,
+  type CanonicalReplayAccess,
   type EmailReplacementEvidence,
   type OwnerAuditCall,
   dailyAuditBudget,
 } from "./contract";
 import { emailReplacementEvidence } from "~/shell/audit/internal/email-evidence";
 import {
+  admissionRefusalStatement,
   authorizedCallStatement,
   ownerCallStatement,
   queryCallStatement,
+  replayAccessStatement,
 } from "~/shell/audit/internal/recording";
 import {
   auditDayBindings,
@@ -63,6 +67,24 @@ export const prepareAuthorizedAuditCall = ({
   return db.prepare(statement.sql).bind(...statement.params);
 };
 
+/** Record an authenticated admission refusal without retaining input, key, or error detail. */
+export const prepareCanonicalAdmissionRefusal = ({
+  db,
+  ...input
+}: CanonicalAdmissionRefusal & Readonly<{ db: D1Database }>): D1PreparedStatement => {
+  const statement = admissionRefusalStatement(input);
+  return db.prepare(statement.sql).bind(...statement.params);
+};
+
+/** Bind current-PAT disclosure evidence and the exact retained response proof in one read/accountability unit. */
+export const prepareCanonicalReplayAccess = ({
+  db,
+  ...input
+}: CanonicalReplayAccess & Readonly<{ db: D1Database }>): D1PreparedStatement => {
+  const statement = replayAccessStatement(input);
+  return db.prepare(statement.sql).bind(...statement.params);
+};
+
 /** Bind approved credential-replacement evidence to its owner's atomic D1 transition. */
 export const prepareEmailReplacementEvidence = ({
   db,
@@ -78,6 +100,10 @@ export const prepareEmailReplacementEvidence = ({
  */
 export const recordedPATCallProof: typeof patEvidence.recordedPATCallProof = (input) =>
   patEvidence.recordedPATCallProof(input);
+
+/** Exact current-PAT proof for a successfully disclosed retained canonical envelope. */
+export const recordedPATReplayCallProof: typeof patEvidence.recordedPATReplayCallProof = (input) =>
+  patEvidence.recordedPATReplayCallProof(input);
 
 /** Attribute a successful PAT issuance/approval only after the credential owner's preceding write. */
 export const recordSessionPATTransition: typeof patEvidence.recordSessionPATTransition = (input) =>
@@ -104,7 +130,8 @@ export const recordRejectedPATWork: typeof patEvidence.recordRejectedPATWork = (
 /** Classify commit-time Audit budget refusal without returning a raw D1 error or its contents. */
 export const refusedByAuditBudget = (cause: unknown): boolean =>
   String(cause).includes("transaction_audit_limit") ||
-  String(cause).includes("statement_audit_limit");
+  String(cause).includes("statement_audit_limit") ||
+  String(cause).includes("batch_envelope_limit");
 
 /** Count one explicit User's canonical work without exposing Audit's storage projections or failures. */
 export const dailyAuditCount = (

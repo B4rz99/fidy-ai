@@ -5,6 +5,7 @@ import {
   type CatalogOperation,
   getBoundOperationCatalog,
 } from "~/shell/canonical-catalog/contract";
+import { AllowanceKind } from "~/core/quotas/contract";
 import { patScopeCapability } from "~/shell/canonical-policy/contract";
 
 const englishSentenceSegmenter = new Intl.Segmenter("en", {
@@ -259,6 +260,19 @@ const notFoundTag = "NotFound";
 const unavailableTag = "Unavailable";
 const resourceLimitedTag = "ResourceLimited";
 
+/** A Free capability remains available, but its concrete monthly allowance is exhausted. */
+export class QuotaExhausted extends Schema.Error<QuotaExhausted>("QuotaExhausted")(
+  errorResponse(
+    "QuotaExhausted",
+    Schema.Struct({
+      ...detail("quota_exhausted").fields,
+      allowance: AllowanceKind,
+      resetsAt: Schema.DateTimeUtc,
+    })
+  ),
+  { httpApiStatus: 429 }
+) {}
+
 /**
  * API failures are schema-backed tagged errors. Their `_tag` supports selective
  * in-process handling but is omitted during encoding because `code` is the
@@ -337,7 +351,7 @@ export class NotFound extends Schema.Error<NotFound>(notFoundTag)(
   { httpApiStatus: 404 }
 ) {}
 
-/** The caller's stable-User write budget is exhausted for the current admission window. */
+/** The caller's stable-User request or write admission budget is exhausted. No domain write was accepted. */
 export class ResourceLimited extends Schema.Error<ResourceLimited>(resourceLimitedTag)(
   errorResponse(resourceLimitedTag, detail("rate_limited")),
   { httpApiStatus: 429 }

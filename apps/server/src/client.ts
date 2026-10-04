@@ -24,7 +24,7 @@ export {
   HostedTurnProgressRequest,
   type HostedTurnApiGroups,
 } from "~/shell/agent/contract";
-export { isHttpOrigin } from "~/shell/public-http/contract";
+export { isHttpOrigin, ResourceLimited } from "~/shell/public-http/contract";
 export {
   ActivePATList,
   ActivePATMetadata,

@@ -34,6 +34,7 @@ import {
 import { makeCloudflareHostedInference } from "../ai/runtime";
 import {
   applyTestMigration,
+  canonicalAdmissionMigrationNames,
   hostedTurnTestMigrations,
   installTestSchema,
   isolatedTestDatabases,
@@ -186,6 +187,9 @@ const migrationNames = [
   "0004_onboarding_email",
   "0005_verified_onboarding",
   "0006_browser_login",
+  "0007_browser_pairing_email",
+  "0008_support_recovery",
+  "0009_email_replacement",
   "0009_card_enrollment",
   "0009_transactions",
   "0010_pat_lifecycle",
@@ -198,14 +202,21 @@ const migrationNames = [
   "0014_memory",
   "0015_statement_submission",
   "0016_subscription_standing",
+  "0016_budgets",
   "0016_hosted_turn",
   "0017_hosted_compaction",
   "0017_forwarded_email",
   "0017_statement_dispatch",
   "0018_batch_envelope_audit",
+  "0018_dashboard",
+  "0018_insight_events",
   "0019_canonical_child_guards",
   "0020_restore_audit_budgets",
+  "0020_dashboard_projection",
   ...hostedTurnTestMigrations,
+  "0027_recurring",
+  "0028_recurring_audit_budget",
+  "0029_audit_owner_retention",
   "0035_billing_corrections",
 ] as const;
 const legacyTurn = "10000000-0000-4000-8000-000000000731";
@@ -279,7 +290,7 @@ const setup = (seedLegacyTurn = false): Promise<D1Database> =>
         yield* Effect.tryPromise(() =>
           installTestSchema({
             db,
-            sources: migrationNames.map(
+            sources: canonicalAdmissionMigrationNames(migrationNames).map(
               (name) => new URL(`../migrations/${name}.sql`, import.meta.url)
             ),
           })
@@ -2106,6 +2117,116 @@ it("fails an ambiguous WhatsApp send as DeliveryUnconfirmed without replaying a 
       expect(Option.isSome(late) && late.value.state).toBe("unconfirmed");
       expect(tokens).toHaveLength(1);
       expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toHaveLength(2);
+    })
+  ));
+
+const runHistoryQueryTurn = (
+  db: D1Database
+): Effect.Effect<ReadonlyArray<unknown>, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const caller = yield* Effect.tryPromise(() => subject(0));
+    const requests: Array<unknown> = [];
+    const coordinator = coordinatorFor(db, (request) => {
+      requests.push(request);
+      return Promise.resolve(
+        requests.length === 1
+          ? Response.json({
+              choices: [
+                {
+                  message: {
+                    role: "assistant",
+                    content: null,
+                    tool_calls: [1, 2].map((index) => ({
+                      id: `history_${index}`,
+                      type: "function",
+                      function: {
+                        name: "transactions__listTransactions",
+                        arguments: '{"query":{}}',
+                      },
+                    })),
+                  },
+                  finish_reason: "tool_calls",
+                },
+              ],
+              usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
+            })
+          : reply("Historia revisada")
+      );
+    });
+    const response = yield* Effect.tryPromise(() =>
+      coordinator.fetch(
+        new Request("https://coordinator.internal/hosted-turn", {
+          method: "POST",
+          body: encodeJson({
+            userId: caller.userId,
+            sessionId: caller.id,
+            digest: Array.from(caller.digest),
+            text: "Lee las transacciones guardadas",
+          }),
+        })
+      )
+    );
+    yield* Effect.tryPromise(() => acknowledgeVisibleReply(db, 0, response));
+    return requests;
+  });
+const seedHistoryTransaction = (db: D1Database, counterparty: string): Promise<D1Result> =>
+  db
+    .prepare(
+      "INSERT INTO transactions (id,user_id,amount,currency,direction,counterparty,category_id,occurred_at,created_at) VALUES (?,?,'2500','COP','outflow',?,'10000000-0000-4000-8000-000000000001',?,?)"
+    )
+    .bind(
+      newId(),
+      users[0],
+      counterparty,
+      DateTime.formatIso(DateTime.makeUnsafe(now())),
+      DateTime.formatIso(DateTime.makeUnsafe(now()))
+    )
+    .run();
+const historyUnits = (db: D1Database): Promise<number> =>
+  db
+    .prepare(
+      "SELECT COALESCE(SUM(units),0) AS units FROM commercial_allowance_consumptions WHERE user_id = ? AND allowance = 'hosted_history_turn'"
+    )
+    .bind(users[0])
+    .first<number>("units")
+    .then((value) => Option.getOrThrow(Option.fromNullishOr(value)));
+
+it("charges saved history once per Turn and withholds newly loaded rows from the third Free Turn", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      yield* Effect.tryPromise(() => seedHistoryTransaction(db, "previously loaded history"));
+      const first = yield* runHistoryQueryTurn(db);
+      expect(encodeJson(first[1])).toContain("previously loaded history");
+      yield* runHistoryQueryTurn(db);
+      expect(yield* Effect.tryPromise(() => historyUnits(db))).toBe(2);
+      yield* Effect.tryPromise(() =>
+        seedHistoryTransaction(db, "NEW PRIVATE HISTORY MUST NOT REACH INFERENCE")
+      );
+      const requests = yield* runHistoryQueryTurn(db);
+      const followup = encodeJson(requests[1]);
+      expect(followup).toContain("quota_exhausted");
+      expect(followup).toContain("hosted_history_turn");
+      expect(followup).not.toContain("NEW PRIVATE HISTORY MUST NOT REACH INFERENCE");
+      expect(yield* Effect.tryPromise(() => historyUnits(db))).toBe(2);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT COUNT(*) AS count FROM transcript_entries WHERE kind = 'tool_result'")
+            .first<number>("count")
+        )
+      ).toBe(6);
+    })
+  ));
+
+it("leaves successful empty saved-history reads commercially free", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const requests = yield* runHistoryQueryTurn(db);
+      expect(requests).toHaveLength(2);
+      expect(encodeJson(requests[1])).not.toContain("quota_exhausted");
+      expect(yield* Effect.tryPromise(() => historyUnits(db))).toBe(0);
     })
   ));
 

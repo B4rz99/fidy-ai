@@ -1,6 +1,9 @@
 import { type CatalogOperation } from "../../src/shell/canonical-catalog/contract";
 import { type AuthorizedPAT, type PATAuthorizationDecision, type PATRequest } from "./contract";
-import { authorizeCanonicalPAT as authorize } from "./internal/pat-authorization";
+import {
+  authorizeCanonicalPAT as authorize,
+  resolveCanonicalPATCredential as resolveCredential,
+} from "./internal/pat-authorization";
 import {
   patBrowserRoute as browserRoute,
   patDirectRoute as directRoute,
@@ -15,6 +18,11 @@ import { commitPATUnit as commit } from "./internal/pat-unit";
 export const authorizeCanonicalPAT = (
   input: PATRequest & Readonly<{ operation: CatalogOperation }>
 ): Promise<AuthorizedPAT | Exclude<PATAuthorizationDecision, "accepted">> => authorize(input);
+
+/** Resolve only bearer ownership, lifetime and Consent; this proof grants no operation capability. The protected canonical coordinator and domain owner enforce the requested scope. */
+export const resolveCanonicalPATCredential = (
+  input: PATRequest & Readonly<{ operation: CatalogOperation }>
+): Promise<AuthorizedPAT | "unauthenticated" | "user_action_required"> => resolveCredential(input);
 
 /** Dispatch only a declared PAT operation; private pairing proofs and persisted grants stay with Tokens. */
 export const handlePATRequest = (input: PATRequest): Promise<Response> => handle(input);

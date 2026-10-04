@@ -26,7 +26,11 @@ import {
 } from "./internal/forwarded-email-delivery";
 import { StatementStaging } from "./internal/statement-staging";
 import { sweepExpiredUploadAdmission as sweepUploadAdmission } from "./internal/statement-ingestion";
+import { sweepMedia } from "./internal/media-retention";
 import { expireStatementReviewEvidence as expireReview } from "./internal/statement-review-retention";
+
+/** Bounded inactive-User cleanup of expired media locators, outbox identities and aged accountability. */
+export const sweepMediaSubmissions: typeof sweepMedia = (input) => sweepMedia(input);
 
 /** Reoffer bounded committed extraction identities; a Queue offer never authorizes extraction. */
 export const dispatchStatementExtraction: typeof dispatchStatements = (input) =>

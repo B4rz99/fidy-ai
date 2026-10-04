@@ -14,6 +14,7 @@ import {
   getRefund as observeRefund,
 } from "./internal/refund-acceptance";
 
+import { queryUpgrade } from "./internal/upgrade-query";
 import { pendingBillingWork } from "./internal/operational-observation";
 import { executeProtectedSubscriptionQuery as observe } from "./internal/subscription-queries";
 
@@ -56,7 +57,8 @@ export const executeRefundSupportAdmission = (
 /** Observe one User's safe billing-derived standing with live credential and Audit checks at commit. */
 export const executeProtectedSubscriptionQuery = (
   input: SubscriptionQueryInput
-): Promise<Response> => observe(input);
+): Promise<Response> =>
+  input.operation === "subscription.getUpgradeUrl" ? queryUpgrade(input) : observe(input);
 
 /**
  * Observe the oldest at-most-eight pending BillingAttempt identities and creation times for private

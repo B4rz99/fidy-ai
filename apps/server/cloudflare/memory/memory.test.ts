@@ -1,9 +1,10 @@
 import {
   applyTestMigration,
+  canonicalAdmissionMigrationNames,
   hostedTurnTestMigrations,
   isolatedTestDatabases,
 } from "../d1-test-fixture";
-import { afterAll, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
 import { ErrorCode } from "../../src/shell/public-http/contract";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
@@ -70,7 +71,7 @@ const setup = (): Promise<D1Database> =>
       coordinators.clear();
       const db = yield* fromTestPromise(() => databases.acquire());
       yield* fromTestPromise(() =>
-        [
+        canonicalAdmissionMigrationNames([
           "0001_categories",
           "0002_resource_admission",
           "0003_pending_consent",
@@ -98,7 +99,7 @@ const setup = (): Promise<D1Database> =>
           "0019_canonical_child_guards",
           "0020_dashboard_projection",
           ...hostedTurnTestMigrations,
-        ].reduce<Promise<void>>(
+        ]).reduce<Promise<void>>(
           (previous, name) => previous.then(() => applyMigration(db, name)),
           Promise.resolve()
         )
@@ -205,11 +206,17 @@ const forwardedBody = (input: Send): Option.Option<string> =>
   Option.orElse(Option.fromUndefinedOr(input.body), () =>
     Option.map(Option.fromUndefinedOr(input.payload), (payload) => JSON.stringify(payload))
   );
-const send = (db: D1Database, input: Send): Promise<Response> =>
-  publicWorker.fetch(
+beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
+afterEach(() => vi.useRealTimers());
+const send = (db: D1Database, input: Send): Promise<Response> => {
+  vi.setSystemTime(clock() + 1000);
+  return publicWorker.fetch(
     new Request(`https://api.fidyapp.com${input.path}`, {
       method: input.method,
-      headers: forwardedHeaders(input),
+      headers: new Headers({
+        ...Object.fromEntries(forwardedHeaders(input)),
+        "cf-connecting-ip": "192.0.2.35",
+      }),
       body: Option.getOrUndefined(forwardedBody(input)),
     }),
     {
@@ -222,6 +229,7 @@ const send = (db: D1Database, input: Send): Promise<Response> =>
       },
     }
   );
+};
 
 const issuedPAT = Schema.Struct({
   pat: Schema.Struct({ shortId: Schema.String }),
@@ -472,7 +480,7 @@ it("refuses malformed, empty, and oversized prose without changing Memory state"
             }),
         ],
         (run) => fromTestPromise(run),
-        { concurrency: "unbounded" }
+        { concurrency: 2 }
       );
       expect(refusals.map(({ status }) => status)).toEqual([400, 400, 400, 400, 400, 400]);
       const list = yield* decode(Listed, yield* fromTestPromise(() => recalled(db, cookie(0))));
@@ -681,7 +689,7 @@ it("requires the declared PAT scope, lifetime, revocation standing, and Consent 
       const patAudit = yield* fromTestPromise(() =>
         db
           .prepare(
-            "SELECT operation, outcome FROM pat_audit WHERE user_id = ? AND operation LIKE 'memory.%'"
+            "SELECT operation, outcome FROM pat_audit WHERE user_id = ? AND operation LIKE 'memory.%' AND outcome = 'accepted'"
           )
           .bind(users[0])
           .all<{ operation: string; outcome: string }>()

@@ -1,6 +1,10 @@
 import { evaluateBudgetAlerts, readBudgetCaps, readBudgetSpending } from "./operations";
-import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
-import { afterAll, expect, it } from "vitest";
+import {
+  canonicalAdmissionMigrationNames,
+  installTestSchema,
+  isolatedTestDatabases,
+} from "../d1-test-fixture";
+import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { Budget, BudgetStatusReport } from "../../src/core/budgets/contract";
 import { IanaTimeZone } from "../../src/core/_shared/context";
@@ -101,7 +105,9 @@ const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
     yield* Effect.tryPromise(() =>
       installTestSchema({
         db,
-        sources: migrations.map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
+        sources: canonicalAdmissionMigrationNames(migrations).map(
+          (name) => new URL(`../migrations/${name}.sql`, import.meta.url)
+        ),
       })
     );
     const current = DateTime.nowUnsafe().epochMilliseconds;
@@ -111,8 +117,12 @@ const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
     return db;
   });
 afterAll(() => databases.dispose());
+beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
+afterEach(() => vi.useRealTimers());
 const coordinatorByDatabase = new WeakMap<D1Database, Map<string, UserTransactionCoordinator>>();
 const send = (db: D1Database, request: Request): Promise<Response> => {
+  vi.setSystemTime(DateTime.nowUnsafe().epochMilliseconds + 1000);
+  request.headers.set("cf-connecting-ip", "192.0.2.35");
   const coordinators =
     coordinatorByDatabase.get(db) ?? new Map<string, UserTransactionCoordinator>();
   coordinatorByDatabase.set(db, coordinators);
@@ -1305,8 +1315,9 @@ it(
         );
         expect(pending?.count).toBe(8);
         const retryCount = 7;
-        const refusals = yield* Effect.tryPromise(() =>
-          Promise.all(Array.from({ length: retryCount }, correction))
+        const refusals = yield* Effect.all(
+          Array.from({ length: retryCount }, () => Effect.tryPromise(correction)),
+          { concurrency: 2 }
         );
         expect(refusals.map((response) => response.status)).toEqual(Array(retryCount).fill(503));
         expect((yield* Effect.tryPromise(() => correction())).status).toBe(200);

@@ -1,5 +1,6 @@
 import { verifiedEmailQuery } from "../../email-authentication/operations";
 import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
+import { paymentEnrollmentTransport } from "../../../src/shell/subscription/runtime";
 import { authenticateWebSession } from "../../web-session/operations";
 import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { freshSessionQuery } from "../../../src/shell/web-session/operations";
@@ -173,8 +174,6 @@ const fourthGroupEnd = 20;
 const billingInsertResultFromEnd = -2;
 const forbiddenStatus = 403;
 const unauthorizedStatus = 401;
-const uuidPath =
-  /^\/web\/subscription\/(?:payment-enrollments|billing-attempts)\/([0-9a-f-]{36})$/u;
 const jsonPolicy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 6144,
   deadlineMilliseconds: 2000,
@@ -1154,11 +1153,9 @@ export const handlePaymentEnrollment = ({
       const now = yield* Clock.currentTimeMillis;
       const session = yield* waitFor(() => authority(request, environment.DB, now));
       if (Option.isNone(session)) return invalid(unauthorizedStatus);
-      const path = new URL(request.url).pathname;
-      if (
-        path === "/web/subscription/payment-enrollments/availability" &&
-        request.method === "GET"
-      ) {
+      const transport = paymentEnrollmentTransport(new URL(request.url).pathname);
+      if (Option.isNone(transport) || request.method !== transport.value.method) return invalid();
+      if (transport.value.operation === "availability") {
         const availability = EnrollmentAvailability.make({
           enabledMethods: Option.isSome(daviplataPolicy(configured))
             ? ["card", "nequi", "daviplata"]
@@ -1168,21 +1165,21 @@ export const handlePaymentEnrollment = ({
           yield* Schema.encodeEffect(Schema.toCodecJson(EnrollmentAvailability))(availability)
         );
       }
-      if (path === "/web/subscription/payment-enrollments/prepare" && request.method === "POST") {
+      if (transport.value.operation === "prepare") {
         return yield* waitFor(() =>
           prepare({ request, session: session.value, environment: configured, now })
         );
       }
-      if (path === "/web/subscription/payment-enrollments/submit" && request.method === "POST") {
+      if (transport.value.operation === "submit") {
         return yield* waitFor(() =>
           submit({ request, session: session.value, environment: configured, now })
         );
       }
-      const match = uuidPath.exec(path);
-      if (match !== null && request.method === "GET") {
-        if (path.startsWith("/web/subscription/billing-attempts/")) {
+      if (Option.isSome(transport.value.parameter)) {
+        const addressedId = transport.value.parameter.value;
+        if (transport.value.operation === "billingAttempt") {
           const attempt = yield* waitFor(() =>
-            attemptFor(environment.DB, session.value.user_id, match[1] ?? "")
+            attemptFor(environment.DB, session.value.user_id, addressedId)
           );
           if (Option.isNone(attempt)) return invalid();
           return json(
@@ -1190,7 +1187,7 @@ export const handlePaymentEnrollment = ({
           );
         }
         const row = yield* waitFor(() =>
-          enrollment(environment.DB, session.value.user_id, match[1] ?? "")
+          enrollment(environment.DB, session.value.user_id, addressedId)
         );
         if (Option.isNone(row)) return invalid();
         if (row.value.status === "preparing") return unavailable();

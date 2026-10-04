@@ -54,6 +54,7 @@ import {
   ownsWebAuthenticationPath,
 } from "../../web-authentication/operations";
 import { refundSupportRoute } from "../../subscription/operations";
+import { paymentEnrollmentTransport } from "../../../src/shell/subscription/runtime";
 import {
   dispatchBillingCollection,
   handlePaymentEnrollment,
@@ -273,10 +274,7 @@ const providerCallbackEffect = (
 };
 
 const enrollmentCorePath = (path: string): boolean =>
-  path === "/web/subscription/payment-enrollments/availability" ||
-  path === "/web/subscription/payment-enrollments/prepare" ||
-  path === "/web/subscription/payment-enrollments/submit" ||
-  /^\/web\/subscription\/(?:payment-enrollments|billing-attempts)\/[0-9a-f-]{36}$/u.test(path);
+  Option.isSome(paymentEnrollmentTransport(path));
 
 /** The PAT admission variant for one piece of canonical work. */
 const patAdmission = (authority: PATAuthority, work: CanonicalWork): CanonicalWorkAdmission => ({

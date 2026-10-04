@@ -1,5 +1,6 @@
 import { Clock, Data, DateTime, Deferred, Effect, Fiber, Option, Schema } from "effect";
 import { afterAll, expect, it } from "vitest";
+import { CanonicalAllowance, canonicalAllowanceHeaders } from "../../src/shell/quotas/contract";
 import { QuotaStatus } from "../../src/core/quotas/contract";
 import { Unavailable } from "../../src/shell/public-http/contract";
 import { UserId } from "../../src/core/identity/contract";
@@ -66,6 +67,114 @@ const setup = Effect.gen(function* () {
   return { db, current };
 });
 type Fixture = Readonly<{ db: D1Database; current: number }>;
+const reportedAllowance = (response: Response): CanonicalAllowance =>
+  Schema.decodeSync(Schema.toCodecJson(CanonicalAllowance))({
+    allowance: response.headers.get(canonicalAllowanceHeaders.allowance),
+    limit: response.headers.get(canonicalAllowanceHeaders.limit),
+    remaining: response.headers.get(canonicalAllowanceHeaders.remaining),
+    resetsAt: response.headers.get(canonicalAllowanceHeaders.resetsAt),
+  });
+
+const cliPresentation = Effect.fn(function* (
+  response: Response,
+  command: "quota" | "transaction" | "categories"
+) {
+  const body = yield* io(() => response.clone().text());
+  const headers: Record<string, string> = {};
+  for (const name of [...Object.values(canonicalAllowanceHeaders), "content-type", "retry-after"]) {
+    const value = response.headers.get(name);
+    if (value !== null) headers[name] = value;
+  }
+  const wire = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
+    body,
+    status: response.status,
+    headers,
+    command,
+  });
+  const deadlineMilliseconds = 15_000;
+  const child = Bun.spawnSync(
+    [process.execPath, new URL("../../../cli/test/allowance-entry.ts", import.meta.url).pathname],
+    {
+      stdin: new TextEncoder().encode(wire),
+      timeout: deadlineMilliseconds,
+    }
+  );
+  return {
+    exitCode: child.exitCode,
+    stdout: new TextDecoder().decode(child.stdout),
+    stderr: new TextDecoder().decode(child.stderr),
+  };
+});
+
+it("displays post-admission Free standing on a successful metered canonical call", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* setup;
+      const response = yield* protectCanonicalRequest({
+        ...fixture,
+        caller,
+        operation: operation("categories.listCategories"),
+        browserOrigin: "http://localhost:3000",
+        request: new Request("https://core.internal/categories"),
+        work: Effect.succeed(Response.json({ data: [], next: [] })),
+      });
+      expect(response.status).toBe(200);
+      const output = yield* cliPresentation(response, "categories");
+      expect(output.exitCode).toBe(0);
+      expect(output.stdout).toBe('{"data":[],"next":[]}\n');
+      expect(output.stderr).toContain("49 de 50 llamadas canónicas restantes");
+      expect(output.stderr).toContain(
+        `${DateTime.formatIso(reportedAllowance(response).resetsAt)} (UTC)`
+      );
+      expect(
+        yield* io(() =>
+          fixture.db
+            .prepare("SELECT count(*) AS total FROM commercial_allowance_consumptions")
+            .first()
+        )
+      ).toEqual({ total: 1 });
+    })
+  ));
+
+it("publishes the reusable uncapped response contract during Trial without hiding security rejection", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* setup;
+      const trialDuration = 604_800_000;
+      yield* io(() =>
+        fixture.db
+          .prepare("INSERT INTO trial_periods VALUES (?,?,?)")
+          .bind(userId, fixture.current - 1, fixture.current - 1 + trialDuration)
+          .run()
+      );
+      const success = yield* inspect(fixture, "quota.getQuota");
+      expect(reportedAllowance(success)).toMatchObject({
+        limit: "uncapped",
+        remaining: "uncapped",
+      });
+      const successOutput = yield* cliPresentation(success, "quota");
+      expect(successOutput.exitCode).toBe(0);
+      expect(successOutput.stderr).toContain("sin medidor comercial mensual");
+      expect(successOutput.stderr).not.toContain("llamadas canónicas restantes");
+      expect(reportedAllowance(yield* read(fixture, Option.none()))).toMatchObject({
+        limit: "uncapped",
+        remaining: "uncapped",
+      });
+      for (let index = 0; index < 8; index++) yield* inspect(fixture, "quota.getQuota");
+      const rejected = yield* inspect(fixture, "quota.getQuota");
+      expect(rejected.status).toBe(429);
+      expect(rejected.headers.get("retry-after")).toBe("1");
+      expect(reportedAllowance(rejected)).toMatchObject({
+        limit: "uncapped",
+        remaining: "uncapped",
+      });
+      const rejectedOutput = yield* cliPresentation(rejected, "quota");
+      expect(rejectedOutput.exitCode).toBe(1);
+      expect(rejectedOutput.stdout).toContain('"code":"rate_limited"');
+      expect(rejectedOutput.stderr).toContain("1 segundos");
+      expect(rejectedOutput.stderr).toContain("sin medidor comercial mensual");
+    })
+  ));
 
 it("keeps recovery Audit saturation distinct from commercial exhaustion and store failure", () =>
   Effect.runPromise(
@@ -223,6 +332,11 @@ it("attributes completed replay disclosure to the current PAT without reexecutin
         work: work(fixture.db),
       });
       expect(replay.status).toBe(404);
+      expect(reportedAllowance(replay)).toMatchObject({ limit: 50, remaining: 49 });
+      const replayOutput = yield* cliPresentation(replay, "transaction");
+      expect(replayOutput.exitCode).toBe(1);
+      expect(replayOutput.stderr).toContain("49 de 50 llamadas canónicas restantes");
+      expect(replayOutput.stdout).toContain('"code":"not_found"');
       expect(yield* effects(fixture.db)).toEqual({ total: 1 });
       expect(
         yield* io(() =>
@@ -464,10 +578,19 @@ it("keeps inspection and upgrade available at zero and refuses before domain exe
       const statusResponse = yield* inspect(fixture, "quota.getQuota");
       const status = yield* Schema.decodeUnknownEffect(
         Schema.toCodecJson(Schema.Struct({ data: QuotaStatus }))
-      )(yield* io<unknown>(() => statusResponse.json()));
+      )(yield* io<unknown>(() => statusResponse.clone().json()));
       if (status.data.canonicalCalls._tag !== "Limited") {
         return yield* new TestFailure({ cause: "expected Free" });
       }
+      const published = reportedAllowance(statusResponse);
+      expect(published).toMatchObject({ limit: 50, remaining: 50 });
+      const successOutput = yield* cliPresentation(statusResponse, "quota");
+      expect(successOutput.exitCode).toBe(0);
+      expect(successOutput.stderr).toContain("50 de 50 llamadas canónicas restantes");
+      expect(successOutput.stdout).toBe((yield* io(() => statusResponse.clone().text())) + "\n");
+      expect(DateTime.formatIso(published.resetsAt)).toBe(
+        DateTime.formatIso(status.data.canonicalCalls.period.resetsAt)
+      );
       const startsAt = DateTime.toEpochMillis(status.data.canonicalCalls.period.startsAt);
       yield* io(() =>
         db.batch(
@@ -482,7 +605,16 @@ it("keeps inspection and upgrade available at zero and refuses before domain exe
       );
       const refused = yield* read(fixture, Option.none());
       expect(refused.status).toBe(429);
-      expect(refused.headers.get("Fidy-Canonical-Remaining")).toBe("0");
+      expect(reportedAllowance(refused)).toMatchObject({ limit: 50, remaining: 0 });
+      const refusedOutput = yield* cliPresentation(refused, "transaction");
+      expect(refusedOutput.exitCode).toBe(1);
+      expect(refusedOutput.stderr).toContain("0 de 50 llamadas canónicas restantes");
+      expect(refusedOutput.stderr).toContain("sigue siendo Free");
+      expect(refusedOutput.stderr).not.toContain("segundos");
+      expect(refusedOutput.stdout).toBe((yield* io(() => refused.clone().text())) + "\n");
+      expect(DateTime.formatIso(reportedAllowance(refused).resetsAt)).toBe(
+        DateTime.formatIso(status.data.canonicalCalls.period.resetsAt)
+      );
       expect(yield* io<unknown>(() => refused.json())).toMatchObject({
         error: {
           code: "quota_exhausted",

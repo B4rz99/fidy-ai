@@ -13,15 +13,16 @@ type QueryFixture = Readonly<{
   requests: Array<string>;
 }>;
 type FixtureFactory = (
-  response?: Readonly<{ body: string; status: number }>,
+  response?:
+    | Readonly<{ body: string; status: number }>
+    | Readonly<{ body: string; status: number; headers: Readonly<Record<string, string>> }>,
   scopes?: ReadonlyArray<PATScope>
 ) => QueryFixture;
 export const makeCanonicalFixture =
   (clientFactory: CanonicalClientFactory): FixtureFactory =>
-  (
-    { body, status } = { body: '{"data":[],"next":[]}', status: 200 },
-    scopes = ["read"]
-  ): QueryFixture => {
+  (response = { body: '{"data":[],"next":[]}', status: 200 }, scopes = ["read"]): QueryFixture => {
+    const { body, status } = response;
+    const headers = "headers" in response ? response.headers : { "retry-after": "12" };
     const stdout: Array<string> = [];
     const stderr: Array<string> = [];
     const requests: Array<string> = [];
@@ -54,7 +55,7 @@ export const makeCanonicalFixture =
             request,
             new Response(body, {
               status,
-              headers: { "content-type": "application/json", "retry-after": "12" },
+              headers: { "content-type": "application/json", ...headers },
             })
           );
         })

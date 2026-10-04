@@ -1,4 +1,5 @@
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { canonicalAllowanceHeaders } from "../../src/shell/quotas/contract";
 import { UserActionRequired } from "../../src/shell/public-http/contract";
 import type { CatalogOperation } from "../../src/shell/canonical-catalog/contract";
 import type { AuditAuthority } from "../../src/shell/audit/contract";
@@ -166,14 +167,17 @@ const checkScopes = <E, R>(
 const attachStanding = (response: Response, status: QuotaStatus, current: number): Response => {
   const headers = new Headers(response.headers);
   const meter = status.canonicalCalls;
-  headers.set("Fidy-Canonical-Allowance", "canonical_call");
-  headers.set("Fidy-Canonical-Limit", meter._tag === "Uncapped" ? "uncapped" : String(meter.limit));
+  headers.set(canonicalAllowanceHeaders.allowance, "canonical_call");
   headers.set(
-    "Fidy-Canonical-Remaining",
+    canonicalAllowanceHeaders.limit,
+    meter._tag === "Uncapped" ? "uncapped" : String(meter.limit)
+  );
+  headers.set(
+    canonicalAllowanceHeaders.remaining,
     meter._tag === "Uncapped" ? "uncapped" : String(meter.remaining)
   );
   headers.set(
-    "Fidy-Canonical-Reset",
+    canonicalAllowanceHeaders.resetsAt,
     DateTime.formatIso(allowancePeriod(DateTime.makeUnsafe(current)).resetsAt)
   );
   return new Response(response.body, { status: response.status, headers });

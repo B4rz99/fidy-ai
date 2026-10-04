@@ -191,6 +191,16 @@ mutation execution under
 Recurring consumes Transaction-owned facts and invalidation under its
 [design ADR](../../docs/adr/0032-deterministic-recurring-charge-detection.md).
 
+Subscription's portable declaration and fixed-policy runtime own dedicated PaymentEnrollment
+transport recognition: declared methods, parameterized status paths and the cookie-only/origin
+forwarding projection. Public ingress and private Core consume that same browser-only meaning;
+the native Subscription owner dispatches the recognized declaration identity rather than maintaining
+another route/method list. Each adapter still enforces its own origin, method, transport and proof
+checks, and the owner still rechecks live authority and Consent at the protected action.
+Removing this runtime would recreate path recognition in ingress and Core, method recognition in
+ingress and Subscription, and the enrollment-only forwarding policy in ingress. It owns no generic
+routing bucket, provider representation or credential authority.
+
 Payment enrollment requires fresh browser authority and Consent and stays outside canonical/PAT
 access. Transient payment authorization material goes directly from the browser to Wompi. Paid Pro
 requires independently verified matching settlement, not authorization or PaymentSource availability.

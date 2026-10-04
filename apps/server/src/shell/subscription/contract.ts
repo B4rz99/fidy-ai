@@ -242,7 +242,7 @@ export const SubscriptionEnrollmentGroup = HttpApiGroup.make("subscriptionEnroll
     })
   );
 
-/** Direct no-store card enrollment API excluded from FidyApi, OpenAPI, agents, and PATs. */
+/** Direct no-store payment-source enrollment API excluded from FidyApi, OpenAPI, agents, and PATs. */
 export class SubscriptionEnrollmentApi extends HttpApi.make("subscriptionEnrollmentApi")
   .add(SubscriptionEnrollmentGroup)
   .annotate(OpenApi.Title, "fidy-ai Subscription enrollment API") {}

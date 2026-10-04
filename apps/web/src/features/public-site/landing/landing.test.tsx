@@ -10,6 +10,7 @@ const preference = Object.assign(new EventTarget(), { matches: false });
 const cancel = vi.fn();
 const animate = vi.fn(() => ({ cancel }));
 beforeEach(() => {
+  localStorage.clear();
   preference.matches = false;
   vi.stubGlobal("matchMedia", () => preference);
   vi.stubGlobal(
@@ -185,4 +186,34 @@ it("honors reduced motion and cancels owned animations on unmount", () => {
   cancel.mockClear();
   view.unmount();
   expect(cancel).toHaveBeenCalled();
+});
+
+it("restores a saved theme and tolerates unavailable browser storage", () => {
+  localStorage.setItem("fidy-landing-theme", "dark");
+  const view = render(<FeatureDetail index={0} />);
+  expect(screen.getByRole("button", { name: "Oscuro", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true"
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Claro", exact: true }));
+  expect(localStorage.getItem("fidy-landing-theme")).toBe("light");
+  view.unmount();
+  vi.stubGlobal("localStorage", {
+    getItem: () => {
+      throw new Error("Storage unavailable");
+    },
+    setItem: () => {
+      throw new Error("Storage unavailable");
+    },
+  });
+  render(<FeatureDetail index={0} />);
+  expect(screen.getByRole("button", { name: "Sistema", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true"
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Oscuro", exact: true }));
+  expect(screen.getByRole("button", { name: "Oscuro", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true"
+  );
 });

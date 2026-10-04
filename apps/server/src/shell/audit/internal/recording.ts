@@ -7,6 +7,7 @@ import type {
   AuditCredentialOperation,
   AuditQueryCall,
   AuthorizedAuditCall,
+  CanonicalAdmissionRefusal,
   OwnerAuditCall,
 } from "~/shell/audit/contract";
 
@@ -19,6 +20,7 @@ const sessionDestinations = new Map([
   ["dashboard", "dashboard_audit"],
   ["insights", "insight_audit"],
   ["subscription", "pat_audit"],
+  ["quota", "pat_audit"],
   ["recurring", "pat_audit"],
 ]);
 const sessionDestination = (operation: AuditCredentialOperation): string => {
@@ -51,6 +53,17 @@ const callerOwnership = (input: OwnerAuditCall): OwnedStatement => {
   }
 };
 const authorityCaller = (authority: AuditAuthority): boolean => authority.table === "pats";
+
+/** Admission refusals are canonical metadata, not allowance counters or retained request bodies. */
+export const admissionRefusalStatement = ({
+  authority,
+  id,
+  operation,
+  current,
+}: CanonicalAdmissionRefusal): OwnedStatement => ({
+  sql: `INSERT INTO pat_audit (id,user_id,${authority.table === "pats" ? "pat_id" : "session_id"},operation,outcome,occurred_at_ms) SELECT ?,user_id,id,?,'rejected',? FROM ${authority.table} WHERE ${authority.predicate}`,
+  params: [id, operation, current, ...authority.bindings],
+});
 
 /** Records fixed metadata after an owner-scoped existence proof, retaining the owner's atomic guard. */
 export const ownerCallStatement = (input: OwnerAuditCall): OwnedStatement => {

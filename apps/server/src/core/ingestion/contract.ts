@@ -1,3 +1,4 @@
+import { freeAllowanceLimits } from "~/core/quotas/contract";
 import { Option, Schema, Struct } from "effect";
 import {
   CapturedInterpretationContext,
@@ -149,10 +150,10 @@ export type ForwardedEmailDeliveryId = typeof ForwardedEmailDeliveryId.Type;
 // Transport-only limits remain at their owning shell boundary.
 
 /** Free receipt and screenshot extraction share two unique submissions per Bogotá calendar month. */
-export const freeMediaSubmissionCap = 2;
+export const freeMediaSubmissionCap = freeAllowanceLimits.media_submission;
 
 /** Issue #22 grants each Free User fifty unique notification emails per Bogotá calendar month. */
-export const freeForwardedEmailCap = 50;
+export const freeForwardedEmailCap = freeAllowanceLimits.forwarded_email;
 
 /** One additional month of Free email can wait without making retained work unbounded. */
 export const freeForwardedEmailDeferredCap = 50;

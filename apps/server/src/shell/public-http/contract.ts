@@ -5,6 +5,7 @@ import {
   type CatalogOperation,
   getBoundOperationCatalog,
 } from "~/shell/canonical-catalog/contract";
+import { AllowanceKind } from "~/core/quotas/contract";
 import { patScopeCapability } from "~/shell/canonical-policy/contract";
 
 const englishSentenceSegmenter = new Intl.Segmenter("en", {
@@ -258,6 +259,19 @@ const paywallRequiredTag = "PaywallRequired";
 const notFoundTag = "NotFound";
 const unavailableTag = "Unavailable";
 const resourceLimitedTag = "ResourceLimited";
+
+/** A Free capability remains available, but its concrete monthly allowance is exhausted. */
+export class QuotaExhausted extends Schema.Error<QuotaExhausted>("QuotaExhausted")(
+  errorResponse(
+    "QuotaExhausted",
+    Schema.Struct({
+      ...detail("quota_exhausted").fields,
+      allowance: AllowanceKind,
+      resetsAt: Schema.DateTimeUtc,
+    })
+  ),
+  { httpApiStatus: 429 }
+) {}
 
 /**
  * API failures are schema-backed tagged errors. Their `_tag` supports selective

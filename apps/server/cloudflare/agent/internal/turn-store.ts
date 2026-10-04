@@ -1,3 +1,6 @@
+import { loadsSavedHistory } from "./history-allowance";
+import { prepareConsumption, quotaFailure } from "../../quotas/operations";
+import { allowancePeriod } from "../../../src/core/quotas/operations";
 import { readMemoryContext } from "../../memory/operations";
 import {
   AssistantTranscriptEntry,
@@ -23,6 +26,7 @@ import { decideHostedAdmission, terminalPrefixCursor } from "../../../src/core/a
 
 import { webSessionCredentialAuthority } from "../../../src/shell/web-session/operations";
 import { Cause, DateTime, Effect, Option, Schema } from "effect";
+import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { type TransactionSubject, transactionNow } from "../../canonical-work/operations";
 import { readConsentStanding } from "../../consent/operations";
 import { readUserContext } from "../../identity/user-context/operations";
@@ -390,46 +394,118 @@ export const readHostedContinuity = ({
 export type HostedContinuity = Effect.Success<ReturnType<typeof readHostedContinuity>>;
 
 /** Append one decoded tool entry only while its User's Turn remains Pending. */
-export const appendHostedToolEntry = ({
+type HostedToolEntry = CanonicalToolCallEntry | CanonicalToolResultEntry;
+type ToolPublication = Readonly<{
+  db: D1Database;
+  userId: UserId;
+  subject: HostedSubject;
+  entry: HostedToolEntry;
+}>;
+const prepareToolEntry = ({
   db,
   userId,
   entry,
-}: Readonly<{
-  db: D1Database;
-  userId: UserId;
-  entry: CanonicalToolCallEntry | CanonicalToolResultEntry;
-}>): Effect.Effect<boolean, Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable> =>
+  authority,
+  inputJson,
+  outcomeJson,
+}: ToolPublication &
+  Readonly<{
+    authority: OwnedStatement;
+    inputJson: Option.Option<string>;
+    outcomeJson: Option.Option<string>;
+  }>): D1PreparedStatement =>
+  db
+    .prepare(`INSERT INTO transcript_entries
+  (id,user_id,hosted_session_id,turn_id,kind,occurred_at_ms,iteration,tool_call_id,operation,input_json,outcome_json)
+  SELECT ?,user_id,hosted_session_id,id,?,?,?,?,?,?,? FROM hosted_turns
+  WHERE id = ? AND user_id = ? AND status = 'pending' AND EXISTS (${authority.sql})`)
+    .bind(
+      entry.id,
+      entry._tag === "CanonicalToolCallEntry" ? "tool_call" : "tool_result",
+      entry.occurredAt.epochMilliseconds,
+      entry.iteration,
+      entry.toolCallId,
+      entry.operation,
+      Option.getOrNull(inputJson),
+      Option.getOrNull(outcomeJson),
+      entry.turnId,
+      userId,
+      ...authority.params
+    );
+const writeToolEntry = (
+  input: ToolPublication,
+  participants: ReadonlyArray<D1PreparedStatement>
+): Effect.Effect<Option.Option<HostedToolEntry>, Cause.UnknownError | Schema.SchemaError> =>
   Effect.gen(function* () {
-    const call = entry._tag === "CanonicalToolCallEntry";
-    const inputJson = call
-      ? yield* Schema.encodeEffect(Schema.fromJsonString(CanonicalToolEvidence))(entry.input)
-      : null;
+    const entry = input.entry;
+    const inputJson =
+      entry._tag === "CanonicalToolCallEntry"
+        ? Option.some(
+            yield* Schema.encodeEffect(Schema.fromJsonString(CanonicalToolEvidence))(entry.input)
+          )
+        : Option.none<string>();
     const outcomeJson =
       entry._tag === "CanonicalToolResultEntry"
-        ? yield* Schema.encodeEffect(Schema.fromJsonString(CanonicalToolOutcome))(entry.outcome)
-        : null;
+        ? Option.some(
+            yield* Schema.encodeEffect(Schema.fromJsonString(CanonicalToolOutcome))(entry.outcome)
+          )
+        : Option.none<string>();
+    const authority = hostedAuthority({ subject: input.subject, current: transactionNow() });
     const result = yield* Effect.tryPromise(() =>
-      db
-        .prepare(`INSERT INTO transcript_entries
-    (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, iteration,
-      tool_call_id, operation, input_json, outcome_json)
-    SELECT ?, user_id, hosted_session_id, id, ?, ?, ?, ?, ?, ?, ? FROM hosted_turns
-    WHERE id = ? AND user_id = ? AND status = 'pending'`)
-        .bind(
-          entry.id,
-          call ? "tool_call" : "tool_result",
-          entry.occurredAt.epochMilliseconds,
-          entry.iteration,
-          entry.toolCallId,
-          entry.operation,
-          inputJson,
-          outcomeJson,
-          entry.turnId,
-          userId
-        )
-        .run()
+      input.db.batch([
+        ...participants,
+        prepareToolEntry({ ...input, authority, inputJson, outcomeJson }),
+      ])
     );
-    return result.meta.changes === 1;
+    return result[result.length - 1]?.meta.changes === 1 ? Option.some(entry) : Option.none();
+  });
+
+/** Publish successful new history and its one User+Turn unit atomically, before exposing any rows to inference. */
+export const appendHostedToolEntry = (
+  input: ToolPublication
+): Effect.Effect<
+  Option.Option<HostedToolEntry>,
+  Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable
+> =>
+  Effect.gen(function* () {
+    const { db, userId, subject, entry } = input;
+    if (entry._tag !== "CanonicalToolResultEntry" || !loadsSavedHistory(entry)) {
+      return yield* writeToolEntry(input, []);
+    }
+    const current = transactionNow();
+    const live = hostedAuthority({ subject, current });
+    const authority = {
+      sql: `SELECT user_id AS userId FROM hosted_turns WHERE id = ? AND user_id = ? AND status = 'pending' AND EXISTS (${live.sql})`,
+      params: [entry.turnId, userId, ...live.params],
+    };
+    const published = yield* writeToolEntry(
+      input,
+      prepareConsumption({
+        db,
+        userId,
+        allowance: "hosted_history_turn",
+        identity: entry.turnId,
+        current,
+        authority,
+      })
+    ).pipe(Effect.result);
+    if (published._tag === "Success") return published.success;
+    if (quotaFailure(published.failure.cause) !== "exhausted") return yield* published.failure;
+    const rejected: CanonicalToolResultEntry = {
+      ...entry,
+      outcome: {
+        _tag: "CanonicalOperationFailed",
+        failure: {
+          error: {
+            code: "quota_exhausted",
+            allowance: "hosted_history_turn",
+            resetsAt: DateTime.formatIso(allowancePeriod(DateTime.makeUnsafe(current)).resetsAt),
+          },
+          next: [],
+        },
+      },
+    };
+    return yield* writeToolEntry({ ...input, entry: rejected }, []);
   });
 
 /** Charge one User-scoped pre-admission model attempt, including abandoned work. */

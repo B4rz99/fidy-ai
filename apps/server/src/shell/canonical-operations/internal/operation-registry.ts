@@ -48,6 +48,7 @@ export const canonicalOperationImplementations = {
   "insights.listPendingInsights": unavailableOperation,
   "recurring.listRecurringSeries": unavailableOperation,
   "memory.recall": unavailableOperation,
+  "quota.getQuota": unavailableOperation,
   "subscription.getUpgradeUrl": unavailableOperation,
   "subscription.listSubscriptionOffers": () => listSubscriptionOffersResponse,
   "subscription.getSubscriptionStatus": (_input, caller) =>

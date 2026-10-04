@@ -150,6 +150,15 @@ export const recordLivePATUse = ({
   };
 };
 
+/** Advance activity within a peer-owned admission unit holding the exact current multi-scope PAT gate. */
+export const recordProtectedPATUse = ({
+  authority,
+  current,
+}: Readonly<{ authority: PATAuthority; current: number }>): OwnedStatement => ({
+  sql: `UPDATE pats SET last_used_at_ms = ? WHERE ${authority.predicate}`,
+  params: [current, ...authority.bindings],
+});
+
 /**
  * The same activity advance built from the exact live-authority gate a consumer already holds, so a
  * caller that is not the subject can still gate PAT activity on its own committed canonical audit.

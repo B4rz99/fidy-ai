@@ -1,3 +1,4 @@
+import { activateDeferredEmails, prepareEmailProcessingAdmission } from "./email-allowance";
 import { UserContext, UserId } from "../../../src/core/identity/contract";
 import { prepareUserContext } from "../../identity/user-context/operations";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
@@ -63,12 +64,18 @@ const ExpiredReceipt = Schema.Struct({
 });
 
 class EmailUnavailable extends Data.TaggedError("EmailUnavailable")<{
-  readonly reason: "authority" | "size";
+  readonly reason: "authority" | "size" | "capacity";
 }> {}
 
 const authorityUnavailable = (): EmailUnavailable => new EmailUnavailable({ reason: "authority" });
 const io = <A>(tryWork: () => Promise<A>): Effect.Effect<A, EmailUnavailable> =>
-  Effect.tryPromise({ try: tryWork, catch: authorityUnavailable });
+  Effect.tryPromise({
+    try: tryWork,
+    catch: (cause) =>
+      cause instanceof Error && cause.message.includes("forwarded_email_deferred_capacity")
+        ? new EmailUnavailable({ reason: "capacity" })
+        : authorityUnavailable(),
+  });
 
 /** Worker-native entropy and digest, supplied at the Email Worker boundary. */
 export const emailCrypto = Crypto.make({
@@ -323,17 +330,17 @@ export const receiveForwardedEmail = Effect.fn(function* (
   const publication = yield* Effect.result(
     io(() =>
       environment.DB.batch([
-        environment.DB.prepare(
-          "UPDATE forwarded_email_receipts SET state = 'queued' WHERE id = ? AND user_id = ? AND state = 'storing'"
-        ).bind(id, approved.user_id),
-        environment.DB.prepare(
-          `INSERT INTO forwarded_email_outbox (receipt_id, user_id)
-       SELECT id, user_id FROM forwarded_email_receipts WHERE id = ? AND user_id = ? AND state = 'queued'`
-        ).bind(id, approved.user_id),
+        ...prepareEmailProcessingAdmission({
+          db: environment.DB,
+          userId: approved.user_id,
+          receiptId: id,
+          current: now,
+          state: "storing",
+        }),
       ])
     )
   );
-  if (Result.isSuccess(publication) && publication.success[1]?.meta.changes === 1) return;
+  if (Result.isSuccess(publication) && publication.success[3]?.meta.changes === 1) return;
   // A failed batch is ambiguous (the response can be lost after commit). Never delete a
   // successfully queued object; otherwise remove both private bytes and its reservation.
   const committed = yield* io(() =>
@@ -353,12 +360,19 @@ export const receiveForwardedEmail = Effect.fn(function* (
       .bind(id, approved.user_id)
       .run()
   );
+  if (Result.isFailure(publication) && publication.failure.reason === "capacity") {
+    reject(message);
+    return;
+  }
   return yield* authorityUnavailable();
 });
 
 /** Publish only an opaque receipt identity and its explicit UserId; redelivery is expected. */
 export const dispatchForwardedEmail = Effect.fn(function* (environment: ForwardedEmailEnvironment) {
   const now = yield* Clock.currentTimeMillis;
+  yield* activateDeferredEmails({ db: environment.DB, current: now }).pipe(
+    Effect.mapError(authorityUnavailable)
+  );
   const dispatch = protectConsentStatement({
     subject: { _tag: "Owner", column: "o.user_id" },
     requirement: "active",

@@ -10,6 +10,8 @@ import type { UserId } from "~/core/identity/contract";
 import { TokenBearerFormat } from "~/core/tokens/contract";
 import {
   ConsentRequired,
+  QuotaExhausted,
+  ResourceLimited,
   ScopeMissing,
   Unauthenticated,
   UserActionRequired,
@@ -99,5 +101,12 @@ export class TokenAuthorization extends HttpApiMiddleware.Service<
     agentBearer: agentBearerSecurity,
     webSession: webSessionSecurity,
   },
-  error: [Unauthenticated, ConsentRequired, UserActionRequired, ScopeMissing],
+  error: [
+    Unauthenticated,
+    ConsentRequired,
+    UserActionRequired,
+    ScopeMissing,
+    QuotaExhausted,
+    ResourceLimited,
+  ],
 }) {}

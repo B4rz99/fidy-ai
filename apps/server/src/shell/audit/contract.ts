@@ -1,4 +1,5 @@
 import { Data, Struct } from "effect";
+import type { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import type { OwnedStatement } from "~/shell/owner-write/contract";
 import { AuditLogEntry } from "~/core/audit/contract";
 /** The closed canonical vocabulary shared with credential accountability. */
@@ -34,6 +35,8 @@ export type AuditCredentialOperation =
   | "memory.remember"
   | "memory.revise"
   | "operations.executeAtomicBatch"
+  | "quota.getQuota"
+  | "subscription.getUpgradeUrl"
   | "subscription.getSubscriptionStatus"
   | "subscription.listSubscriptionOffers"
   | "transactions.createTransaction"
@@ -61,7 +64,7 @@ export type AuditAuthority = Readonly<{
 
 type AcceptedSessionOperation = Extract<
   AuditCredentialOperation,
-  `${"budgets" | "dashboard" | "insights" | "subscription" | "recurring"}.${string}`
+  `${"budgets" | "dashboard" | "insights" | "subscription" | "recurring" | "quota"}.${string}`
 >;
 type CategoryOperation = Extract<AuditCredentialOperation, `categories.${string}`>;
 type LegacySessionOperation = Exclude<
@@ -96,6 +99,14 @@ export type AuthorizedAuditCall = Readonly<{
       }>
     | (Readonly<{ authority: AuditAuthority & { table: "web_sessions" } }> & SessionDecision)
   );
+
+/** Metadata-only admission refusal under the credential owner's current canonical authority. */
+export type CanonicalAdmissionRefusal = Readonly<{
+  authority: AuditAuthority;
+  id: string;
+  operation: CanonicalOperationId;
+  current: number;
+}>;
 
 /** Found/absent decisions supported by the query recorder's live credential snapshot. */
 export type AuditQueryCall = Readonly<{

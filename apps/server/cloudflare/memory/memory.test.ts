@@ -1,5 +1,6 @@
 import {
   applyTestMigration,
+  canonicalAdmissionMigrationNames,
   hostedTurnTestMigrations,
   isolatedTestDatabases,
 } from "../d1-test-fixture";
@@ -70,7 +71,7 @@ const setup = (): Promise<D1Database> =>
       coordinators.clear();
       const db = yield* fromTestPromise(() => databases.acquire());
       yield* fromTestPromise(() =>
-        [
+        canonicalAdmissionMigrationNames([
           "0001_categories",
           "0002_resource_admission",
           "0003_pending_consent",
@@ -98,7 +99,7 @@ const setup = (): Promise<D1Database> =>
           "0019_canonical_child_guards",
           "0020_dashboard_projection",
           ...hostedTurnTestMigrations,
-        ].reduce<Promise<void>>(
+        ]).reduce<Promise<void>>(
           (previous, name) => previous.then(() => applyMigration(db, name)),
           Promise.resolve()
         )

@@ -2,6 +2,7 @@ import { hostedDeliveryReceipt, pendingExecutionRecoveryMs } from "../agent/cont
 import { Miniflare } from "miniflare";
 import { afterAll, afterEach, expect, it } from "vitest";
 import {
+  canonicalAdmissionMigrationNames,
   hostedTurnTestMigrations,
   installTestSchema,
   isolatedTestDatabases,
@@ -173,7 +174,7 @@ const setup = (platform = false): Promise<D1Database> =>
       yield* fromTestPromise(() =>
         installTestSchema({
           db,
-          sources: [
+          sources: canonicalAdmissionMigrationNames([
             "0001_categories",
             "0002_resource_admission",
             "0003_pending_consent",
@@ -198,7 +199,7 @@ const setup = (platform = false): Promise<D1Database> =>
             "0019_canonical_child_guards",
             "0020_dashboard_projection",
             ...hostedTurnTestMigrations,
-          ].map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
+          ]).map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
         })
       );
       const current = yield* Clock.currentTimeMillis;

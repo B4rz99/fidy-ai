@@ -16,6 +16,7 @@ import { MemoryGroup } from "~/shell/memory/contract";
 import { makeOperationsGroup } from "~/shell/operations/contract";
 import { SubscriptionGroup } from "~/shell/subscription/contract";
 import { PATsGroup } from "~/shell/tokens/contract";
+import { QuotasGroup } from "~/shell/quotas/contract";
 import { RecoveryGroup } from "~/shell/recovery/contract";
 import { TransactionsGroup } from "~/shell/transactions/contract";
 
@@ -32,6 +33,7 @@ const OrdinaryFidyApi = HttpApi.make("fidy")
   .add(RecurringGroup)
   .add(MemoryGroup)
   .add(SubscriptionGroup)
+  .add(QuotasGroup)
   .add(PATsGroup)
   .add(RecoveryGroup);
 

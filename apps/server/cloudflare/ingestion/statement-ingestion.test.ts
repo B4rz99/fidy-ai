@@ -9,6 +9,7 @@ import { Clock, Data, Effect, Option, Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { afterAll, afterEach, expect, it } from "vitest";
 import {
+  canonicalAdmissionMigrationNames,
   hostedTurnTestMigrations,
   installTestSchema,
   isolatedTestStorage,
@@ -263,7 +264,7 @@ const setup = (coordination: Coordination = "direct"): Promise<Runtime> =>
       yield* fromTestPromise(() =>
         installTestSchema({
           db: runtime.db,
-          sources: migrationNames.map(
+          sources: canonicalAdmissionMigrationNames(migrationNames).map(
             (name) => new URL(`../migrations/${name}.sql`, import.meta.url)
           ),
         })

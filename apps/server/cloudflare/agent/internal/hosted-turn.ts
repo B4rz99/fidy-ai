@@ -1045,11 +1045,13 @@ type ToolIdentity = Readonly<{
 const recordHostedToolCall = ({
   db,
   userId,
+  subject,
   identity,
   input,
 }: Readonly<{
   db: D1Database;
   userId: UserId;
+  subject: HostedSubject;
   identity: ToolIdentity;
   input: CanonicalToolEvidence;
 }>): Promise<boolean> =>
@@ -1061,7 +1063,7 @@ const recordHostedToolCall = ({
         id: TranscriptEntryId.make(newId()),
         input,
       });
-      return yield* appendHostedToolEntry({ db, userId, entry });
+      return Option.isSome(yield* appendHostedToolEntry({ db, userId, subject, entry }));
     })
   );
 
@@ -1069,11 +1071,13 @@ const recordHostedToolCall = ({
 const recordHostedToolOutcome = ({
   db,
   userId,
+  subject,
   identity,
   outcome,
 }: Readonly<{
   db: D1Database;
   userId: UserId;
+  subject: HostedSubject;
   identity: ToolIdentity;
   outcome: CanonicalToolOutcome;
 }>): Promise<Option.Option<HostedToolEvent>> =>
@@ -1085,14 +1089,16 @@ const recordHostedToolOutcome = ({
         id: TranscriptEntryId.make(newId()),
         outcome,
       });
-      return (yield* appendHostedToolEntry({ db, userId, entry: result }))
-        ? Option.some({
-            _tag: "ToolResult",
-            toolCallId: result.toolCallId,
-            operation: result.operation,
-            outcome: result.outcome,
-          })
-        : Option.none();
+      const published = yield* appendHostedToolEntry({ db, userId, subject, entry: result });
+      if (Option.isNone(published) || published.value._tag !== "CanonicalToolResultEntry") {
+        return Option.none();
+      }
+      return Option.some({
+        _tag: "ToolResult",
+        toolCallId: published.value.toolCallId,
+        operation: published.value.operation,
+        outcome: published.value.outcome,
+      });
     })
   );
 
@@ -1175,7 +1181,7 @@ const executeHostedTool = ({
         operation: operation.id,
       };
       const recorded = yield* Effect.tryPromise(() =>
-        recordHostedToolCall({ db, userId, identity, input: evidence.value })
+        recordHostedToolCall({ db, userId, subject, identity, input: evidence.value })
       );
       if (!recorded) return Option.none();
       const valid = Schema.decodeOption(operation.input)(evidence.value);
@@ -1188,6 +1194,7 @@ const executeHostedTool = ({
             db,
             userId,
             identity,
+            subject,
             outcome: {
               _tag: "ToolInputRejected",
               failure: { code: "validation_failed" },
@@ -1214,6 +1221,7 @@ const executeHostedTool = ({
             db,
             userId,
             identity,
+            subject,
             outcome: {
               _tag: "ToolInputRejected",
               failure: {
@@ -1269,7 +1277,7 @@ const executeHostedTool = ({
             failure: { code: "canonical_result_unavailable" },
           };
       const event = yield* Effect.tryPromise(() =>
-        recordHostedToolOutcome({ db, userId, identity, outcome })
+        recordHostedToolOutcome({ db, userId, subject, identity, outcome })
       );
       if (
         operation.policy.kind === "mutation" &&
@@ -1365,7 +1373,7 @@ const executeConfirmedHostedTurn = ({
           operation: operation.id,
         };
         const saved = yield* Effect.tryPromise(() =>
-          recordHostedToolCall({ db, userId, identity, input: approved.value.input })
+          recordHostedToolCall({ db, userId, subject, identity, input: approved.value.input })
         );
         if (!saved) {
           yield* finish({ _tag: "Failed", reason: "HostedInferenceFailed" });
@@ -1388,7 +1396,7 @@ const executeConfirmedHostedTurn = ({
           fencedMutationOutcome({ db, userId, identity, response })
         );
         const result = yield* Effect.tryPromise(() =>
-          recordHostedToolOutcome({ db, userId, identity, outcome })
+          recordHostedToolOutcome({ db, userId, subject, identity, outcome })
         );
         if (Option.isNone(result)) return unavailable();
         return yield* Effect.tryPromise(() =>

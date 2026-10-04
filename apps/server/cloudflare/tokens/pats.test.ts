@@ -1,4 +1,5 @@
 import {
+  canonicalAdmissionMigrationNames,
   hostedTurnTestMigrations,
   installTestSchema,
   isolatedTestDatabases,
@@ -125,7 +126,7 @@ const setup = (
       yield* awaitPromise(
         installTestSchema({
           db,
-          sources: migrationNames.map(
+          sources: canonicalAdmissionMigrationNames(migrationNames).map(
             (name) => new URL(`../migrations/${name}.sql`, import.meta.url)
           ),
         })

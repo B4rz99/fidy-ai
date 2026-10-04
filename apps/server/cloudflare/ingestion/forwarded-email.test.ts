@@ -3,14 +3,20 @@ import { it } from "@effect/vitest";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import type { TelemetryWorkRecord } from "../../src/shell/observability/contract";
 import { makeWorkerTelemetry } from "../runtime/telemetry/operations";
-import { Clock, Data, Effect, Exit, Option } from "effect";
+import { TestClock } from "effect/testing";
+import { allowancePeriod } from "../../src/core/quotas/operations";
+import { Clock, Data, DateTime, Effect, Exit, Option } from "effect";
 import { Miniflare } from "miniflare";
 import { applyTestMigration } from "../d1-test-fixture";
 import { afterEach, expect } from "vitest";
 import emailWorker, { makeEmailWorker } from "./email-worker";
 import { runEmailMaintenance } from "../maintenance/runtime";
 import { EmailScheduleUnavailable } from "../maintenance/contract";
-import { receiveForwardedEmailWork } from "./runtime";
+import {
+  dispatchForwardedEmail,
+  receiveForwardedEmail,
+  receiveForwardedEmailWork,
+} from "./runtime";
 import { listNeedsReviewItems, processForwardedEmail } from "./operations";
 
 import { UserTransactionCoordinator } from "../transactions/runtime";
@@ -174,6 +180,9 @@ const setup = Effect.fn(function* () {
     CREATE TABLE source_attestations (id TEXT PRIMARY KEY, user_id TEXT, transaction_id TEXT, kind TEXT, service_market TEXT, locale TEXT, time_zone TEXT, interpretation_revision TEXT, created_at TEXT, statement_submission_id TEXT, statement_record_number INTEGER, statement_content_hash TEXT, source_format TEXT);
     CREATE TABLE statement_submissions (id TEXT PRIMARY KEY);
     CREATE TABLE consent_user_context (user_id TEXT PRIMARY KEY, time_zone TEXT);
+    CREATE TABLE trial_periods (user_id TEXT PRIMARY KEY,started_at_ms INTEGER,ends_at_ms INTEGER);
+    CREATE TABLE subscriptions (user_id TEXT PRIMARY KEY,attempt_id TEXT,paid_period_ends_at_ms INTEGER);
+    CREATE TABLE billing_paid_periods (attempt_id TEXT PRIMARY KEY,starts_at_ms INTEGER);
     CREATE TABLE statement_review_audit (id TEXT PRIMARY KEY, user_id TEXT, operation TEXT, outcome TEXT, occurred_at_ms INTEGER);
     CREATE TABLE statement_needs_review (id TEXT PRIMARY KEY, user_id TEXT, submission_id TEXT, record_number INTEGER, reason TEXT, original_evidence TEXT, issues TEXT, status TEXT, evidence_expires_at_ms INTEGER, created_at_ms INTEGER, service_market TEXT, locale TEXT, time_zone TEXT, source_format TEXT, parser_revision TEXT, extractor_revision TEXT);`)
   );
@@ -206,7 +215,12 @@ const setup = Effect.fn(function* () {
       .bind(userA)
       .run()
   );
-  for (const name of ["0017_forwarded_email", "0018_forwarded_email_processing"]) {
+  for (const name of [
+    "0017_forwarded_email",
+    "0018_forwarded_email_processing",
+    "0032_commercial_allowances",
+    "0034_forwarded_email_deferral",
+  ]) {
     yield* wait(() =>
       applyTestMigration({ db, source: new URL(`../migrations/${name}.sql`, import.meta.url) })
     );
@@ -242,6 +256,148 @@ const setup = Effect.fn(function* () {
   };
   return { env, db, bucket, jobs };
 });
+
+it.effect("reevaluates upgrades fairly even when an older revoked User fills a sweep", () =>
+  Effect.gen(function* () {
+    const current = DateTime.toEpochMillis(DateTime.makeUnsafe("2026-07-20T12:00:00Z"));
+    yield* TestClock.setTime(current);
+    const { db, env, jobs } = yield* setup();
+    const start = DateTime.toEpochMillis(allowancePeriod(DateTime.makeUnsafe(current)).startsAt);
+    for (const userId of [userA, userB]) {
+      yield* wait(() =>
+        db.batch(
+          Array.from({ length: 50 }, (_, index) =>
+            db
+              .prepare(
+                "INSERT INTO commercial_allowance_consumptions VALUES (?,'forwarded_email',?,?,?,1)"
+              )
+              .bind(userId, `seed-${index}`, start, current)
+          )
+        )
+      );
+    }
+    for (let index = 0; index < 26; index++) {
+      const bytes = new TextEncoder().encode(
+        `From: bank@example.test\r\nSubject: Deferred ${index}\r\n\r\nPago ${index}`
+      );
+      yield* receiveForwardedEmail({
+        message: delivery(`${localA}@fidyapp.com`, bytes).message,
+        environment: env,
+      });
+    }
+    yield* TestClock.setTime(current + 1);
+    yield* receiveForwardedEmail({
+      message: delivery(`${localB}@fidyapp.com`).message,
+      environment: env,
+    });
+    yield* wait(() =>
+      db.prepare("INSERT INTO consent_user_revocations VALUES (?)").bind(userA).run()
+    );
+    yield* wait(() =>
+      db
+        .prepare("INSERT INTO trial_periods VALUES (?,?,?)")
+        .bind(userB, current, current + 604800000)
+        .run()
+    );
+    yield* TestClock.setTime(current + 2);
+    yield* dispatchForwardedEmail(env);
+    yield* dispatchForwardedEmail(env);
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]?.userId).toBe(userB);
+    expect(
+      yield* wait(() =>
+        db
+          .prepare("SELECT COUNT(*) AS total FROM forwarded_email_deferrals WHERE user_id = ?")
+          .bind(userA)
+          .first()
+      )
+    ).toEqual({ total: 26 });
+    expect(
+      yield* wait(() =>
+        db
+          .prepare(
+            "SELECT SUM(units) AS total FROM commercial_allowance_consumptions WHERE user_id = ?"
+          )
+          .bind(userA)
+          .first()
+      )
+    ).toEqual({ total: 50 });
+  })
+);
+
+it.effect(
+  "defers the 51st unique Free email, keeps exact replay uncharged, and activates it in the new Bogotá month",
+  () =>
+    Effect.gen(function* () {
+      const current = DateTime.toEpochMillis(DateTime.makeUnsafe("2026-07-20T12:00:00Z"));
+      yield* TestClock.setTime(current);
+      const { db, env, jobs } = yield* setup();
+      const period = allowancePeriod(DateTime.makeUnsafe(current));
+      yield* wait(() =>
+        db.batch(
+          Array.from({ length: 49 }, (_, index) =>
+            db
+              .prepare(
+                "INSERT INTO commercial_allowance_consumptions VALUES (?,'forwarded_email',?,?,?,1)"
+              )
+              .bind(userA, `seed-${index}`, DateTime.toEpochMillis(period.startsAt), current)
+          )
+        )
+      );
+      yield* receiveForwardedEmail({ message: delivery().message, environment: env });
+      const extra = new TextEncoder().encode(
+        "From: bank@example.test\r\nSubject: Other purchase\r\n\r\nPago diferente"
+      );
+      yield* receiveForwardedEmail({
+        message: delivery(`${localA}@fidyapp.com`, extra).message,
+        environment: env,
+      });
+      yield* receiveForwardedEmail({
+        message: delivery(`${localA}@fidyapp.com`, extra).message,
+        environment: env,
+      });
+      expect(
+        yield* wait(() =>
+          db.prepare("SELECT count(*) AS total FROM forwarded_email_deferrals").first()
+        )
+      ).toEqual({ total: 1 });
+      expect(
+        yield* wait(() =>
+          db.prepare("SELECT count(*) AS total FROM forwarded_email_outbox").first()
+        )
+      ).toEqual({ total: 1 });
+      expect(
+        yield* wait(() =>
+          db
+            .prepare(
+              "SELECT sum(units) AS total FROM commercial_allowance_consumptions WHERE user_id = ?"
+            )
+            .bind(userA)
+            .first()
+        )
+      ).toEqual({ total: 50 });
+      yield* dispatchForwardedEmail(env);
+      expect(jobs).toHaveLength(1);
+      yield* TestClock.setTime(DateTime.toEpochMillis(period.resetsAt));
+      yield* dispatchForwardedEmail(env);
+      expect(
+        yield* wait(() =>
+          db.prepare("SELECT count(*) AS total FROM forwarded_email_deferrals").first()
+        )
+      ).toEqual({ total: 0 });
+      expect(
+        yield* wait(() =>
+          db
+            .prepare(
+              "SELECT sum(units) AS total FROM commercial_allowance_consumptions WHERE user_id = ? AND period_start_ms = ?"
+            )
+            .bind(userA, DateTime.toEpochMillis(period.resetsAt))
+            .first()
+        )
+      ).toEqual({ total: 1 });
+      expect(new Set(jobs.map((job) => job.receiptId)).size).toBe(2);
+    })
+);
 
 const coordinatorFor = (
   db: D1Database,

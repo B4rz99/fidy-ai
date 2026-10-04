@@ -1,3 +1,4 @@
+import { allowanceConsumptionCount } from "../../quotas/operations";
 import { prepareConsentAction } from "../../consent/operations";
 import {
   prepareAuthorizedAuditCall,
@@ -23,6 +24,7 @@ import {
   EmailForwardingLocalPart,
   EmailForwardingStatus,
   freeForwardedEmailCap,
+  freeForwardedEmailDeferredCap,
 } from "../../../src/core/ingestion/contract";
 
 import { emailAllowancePeriod } from "../../../src/core/ingestion/operations";
@@ -32,6 +34,7 @@ const AddressRow = Schema.Struct({
   local_part: EmailForwardingLocalPart,
   created_at_ms: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   consumed: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  deferred: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   pro: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1 })),
 });
 const domain = "fidyapp.com";
@@ -44,7 +47,7 @@ export type ForwardingAddressOperation =
   | "ingestion.getEmailForwarding";
 
 const rows = (db: D1Database, userId: string, current: number): D1PreparedStatement => {
-  const period = emailAllowancePeriod(DateTime.makeUnsafe(current));
+  const consumption = allowanceConsumptionCount({ userId, allowance: "forwarded_email", current });
   const pro = activeProUserCondition({ userId, nowEpochMs: current });
   return prepareConsentAction({
     db,
@@ -52,16 +55,11 @@ const rows = (db: D1Database, userId: string, current: number): D1PreparedStatem
     requirement: "active",
     statement: {
       sql: `SELECT a.id, a.local_part, a.created_at_ms,
-      (SELECT count(*) FROM forwarded_email_receipts r WHERE r.user_id = a.user_id
-       AND r.received_at_ms >= ? AND r.received_at_ms < ?) AS consumed,
+      (${consumption.sql}) AS consumed,
+      (SELECT count(*) FROM forwarded_email_deferrals d WHERE d.user_id = a.user_id) AS deferred,
       ${pro.sql} AS pro
      FROM email_forwarding_addresses a WHERE a.user_id = ?`,
-      params: [
-        DateTime.toEpochMillis(period.from),
-        DateTime.toEpochMillis(period.toExclusive),
-        ...pro.params,
-        userId,
-      ],
+      params: [...consumption.params, ...pro.params, userId],
     },
   });
 };
@@ -194,8 +192,8 @@ const responseFor = Effect.fn(function* (row: typeof AddressRow.Type, current: n
       row.pro === 1
         ? Option.none()
         : Option.some(Math.max(0, freeForwardedEmailCap - row.consumed)),
-    deferredEmails: 0,
-    deferredCapacityRemaining: freeForwardedEmailCap,
+    deferredEmails: row.deferred,
+    deferredCapacityRemaining: Math.max(0, freeForwardedEmailDeferredCap - row.deferred),
     resetsAt: period.toExclusive,
   };
   const encoded = yield* Schema.encodeEffect(Schema.toCodecJson(EmailForwardingStatus))(

@@ -1,4 +1,5 @@
 import { BigDecimal, DateTime, Effect, Option, Result, Schema } from "effect";
+import { allowancePeriod } from "~/core/quotas/operations";
 import type { AccessTier } from "~/core/access-tier/contract";
 import { Currency, Money, encodeMoneyAmount } from "~/core/_shared/money";
 import type { CapturedInterpretationContext } from "~/core/interpretation-evidence/contract";
@@ -21,8 +22,6 @@ import {
   freeForwardedEmailDeferredCap,
   freeMediaSubmissionCap,
 } from "./contract";
-
-const bogotaTimeZone = DateTime.zoneMakeNamedUnsafe("America/Bogota");
 
 const captureDateParts = (
   source: Extract<CaptureOccurrence, { readonly _tag: "LocalDate" }>
@@ -137,11 +136,8 @@ export const interpretCapture = (input: CaptureInterpretationInput): CaptureInte
 const bogotaAllowancePeriod = (
   now: DateTime.Utc
 ): Readonly<{ from: DateTime.Utc; toExclusive: DateTime.Utc }> => {
-  const from = DateTime.startOf(DateTime.setZone(now, bogotaTimeZone), "month");
-  return {
-    from: DateTime.toUtc(from),
-    toExclusive: DateTime.toUtc(DateTime.add(from, { months: 1 })),
-  };
+  const period = allowancePeriod(now);
+  return { from: period.startsAt, toExclusive: period.resetsAt };
 };
 
 /** Half-open Colombia calendar month used by every forwarded-email allowance decision. */

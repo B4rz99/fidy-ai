@@ -3,12 +3,14 @@ import {
   type AuditQueryCall,
   AuditUnavailable,
   type AuthorizedAuditCall,
+  type CanonicalAdmissionRefusal,
   type EmailReplacementEvidence,
   type OwnerAuditCall,
   dailyAuditBudget,
 } from "./contract";
 import { emailReplacementEvidence } from "~/shell/audit/internal/email-evidence";
 import {
+  admissionRefusalStatement,
   authorizedCallStatement,
   ownerCallStatement,
   queryCallStatement,
@@ -60,6 +62,15 @@ export const prepareAuthorizedAuditCall = ({
   ...input
 }: AuthorizedAuditCall & Readonly<{ db: D1Database }>): D1PreparedStatement => {
   const statement = authorizedCallStatement(input);
+  return db.prepare(statement.sql).bind(...statement.params);
+};
+
+/** Record an authenticated admission refusal without retaining input, key, or error detail. */
+export const prepareCanonicalAdmissionRefusal = ({
+  db,
+  ...input
+}: CanonicalAdmissionRefusal & Readonly<{ db: D1Database }>): D1PreparedStatement => {
+  const statement = admissionRefusalStatement(input);
   return db.prepare(statement.sql).bind(...statement.params);
 };
 

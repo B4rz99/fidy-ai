@@ -79,9 +79,10 @@ const queryJourney = Effect.fn(function* (complete: Complete, invoke: Invoke) {
   expect(status).toContain('"lifetimeDays":7');
   const categories = yield* complete(["categories", "listCategories"]);
   expect(categories).toContain('"label":"Restaurantes"');
-  const transactions = yield* invoke("transactions", "listTransactions", {
-    query: { currency: "COP" },
-  });
+  const transactions = yield* complete(["transactions", "listTransactions", "--currency", "COP"]);
+  expect(transactions).toBe(
+    yield* invoke("transactions", "listTransactions", { query: { currency: "COP" } })
+  );
   expect(transactions).toContain('"data":');
   expect(transactions).toContain('"next":');
   const result = yield* Schema.decodeEffect(
@@ -105,11 +106,22 @@ const mutationJourney = Effect.fn(function* (
   invoke: Invoke,
   categoryId: string
 ) {
-  const created = yield* invoke("transactions", "createTransaction", {
-    payload: transactionFacts(categoryId, "CLI individual"),
-  });
+  const created = yield* complete([
+    "transactions",
+    "createTransaction",
+    "--amount",
+    "9007199254740993.15",
+    "--currency",
+    "USD",
+    "--direction",
+    "outflow",
+    "--category-id",
+    categoryId,
+    "--occurred-at",
+    "2026-01-01T12:00:00.000Z",
+  ]);
   expect(created).toContain('"amount":"9007199254740993.15"');
-  expect(created).toContain('"notes":"CLI individual"');
+  expect(created).toContain('"direction":"outflow"');
   expect(yield* complete(["dashboard", "initializeDashboard"])).toContain('"title":"Tablero"');
   expect(
     yield* invoke("dashboard", "applyDashboardEdit", {

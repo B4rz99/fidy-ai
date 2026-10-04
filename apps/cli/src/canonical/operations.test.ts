@@ -155,7 +155,6 @@ it.effect(
         ["transactions", "createTransaction"],
         ["pats", "listPATs"],
         ["unknown", "query"],
-        ["transactions", "listTransactions"],
         ["categories", "listCategories", "--input", "request.json"],
         ["transactions", "listTransactions", "--input", "-", "--input", "file.json"],
       ]) {

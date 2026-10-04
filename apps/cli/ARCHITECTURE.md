@@ -3,8 +3,8 @@
 `@fidy/cli` is a Bun-only User-facing presentation application, not a domain or authorization
 implementation. Its surface is `login`, `status`, local `logout`, and server-derived canonical
 queries, mutations and ordered atomic batches, in Spanish. It owns one saved login, with no
-profiles, pasted PATs, passwords or headless credential provisioning. Friendly per-field flags
-remain separate work.
+profiles, pasted PATs, passwords or headless credential provisioning. Friendly scalar flags derive
+from the canonical encoded input schema; structured file/stdin input remains the complete contract.
 
 ## Runtime and execution
 
@@ -20,6 +20,9 @@ bun run cli logout
 bun run cli commands --json
 bun run cli categories listCategories --json
 bun run cli transactions listTransactions --help
+bun run cli transactions listTransactions --currency COP --json
+bun run cli transactions createTransaction --amount 25000 --currency COP --direction outflow \
+  --occurred-at 2026-01-01T12:00:00.000Z --json
 bun run cli transactions listTransactions --input request.json --json
 # request.json: {"query":{"currency":"COP"}}
 # --input - reads stdin instead; it cannot be combined with a file.
@@ -104,7 +107,31 @@ eligible presentation only. `write` and `dashboard` remain independent; a `read`
 no mutations or batches. Account-security operations that exclude PATs are unavailable even through
 direct selection or raw batch input. The server independently checks every call.
 Queries with no input require no file or invented payload; other queries take their canonical
-nested `{params, query, payload, headers}` shape from one explicit file/stdin source.
+nested `{params, query, payload, headers}` shape from one explicit file/stdin source or generated
+scalar flags. `--help` and machine discovery include each flag's canonical path, required status,
+encoded constraints (including descriptions and literal choices), structured-only fields and naming
+policy. Omission lets the canonical decoder apply defaults; the CLI never invents them.
+
+Flag names use unique leaf names in kebab-case. All colliding suffixes grow together using the
+nearest meaningful parent; top-level transport prefixes are a last resort. `input`, `help` and
+`json` are reserved. If full paths still collide, the operation falls back to structured input.
+Derivation traverses ordinary objects and local schema references to depth eight and exposes at
+most 24 scalars. Numeric/boolean encoded types and strings with enum, format or a pattern without
+whitespace character classes are eligible; a scalar-or-null union is eligible for its scalar
+representation. Other unions, arrays, unconstrained/free-text strings and deeper shapes remain
+structured-only. This is a deterministic encoded-shape policy, not semantic prose classification.
+Required structured-only fields mean the whole invocation needs file/stdin; optional ones can be
+omitted but cannot be overridden with flags. Potentially sensitive/free-text input belongs in
+file/stdin to avoid shell-history disclosure. Typed credential bootstrap is never a canonical flag.
+
+Field flags require separate `--name value` pairs, including `true`/`false` for booleans; there are
+no implicit booleans, aliases, positional values or `--name=value` syntax. Unknown, duplicate or
+ambiguous names and mixing operation flags with `--input` fail before any file read or remote
+execution. Empty strings, false and zero remain explicit values; omitted fields stay omitted.
+The CLI assembles required containers and supplied nested fields, then crosses the same complete
+canonical decoder and generated-client path as JSON. Money and branded/date text remain encoded
+strings until that decoder. Input-free commands stay input-free; optional query filters can all be
+omitted. Parser work is bounded to 50 arguments of 256 characters each.
 Input is limited to 64 KiB, responses to 1 MiB, and both have 15-second deadlines. Money remains
 exact decimal text; DateTime and Option values cross the selected canonical JSON codec rather
 than being stringified as runtime objects. Machine stdout contains one canonical envelope;

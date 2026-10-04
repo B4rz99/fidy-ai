@@ -17,7 +17,7 @@ export const failures: Readonly<Record<CliFailure["reason"], string>> = {
   UnsupportedRuntime:
     "Este CLI requiere el Bun verificado bb35d1b81. Ejecuta bash scripts/install-bun.sh y usa ese ejecutable.",
   InvalidInput:
-    "Uso: fidy login [--recipient NOMBRE --scopes read,write,dashboard --lifetime DÍAS] | status | logout | commands | GRUPO OPERACIÓN [--input ARCHIVO|-] [--json]. Usa GRUPO OPERACIÓN --help para consultar el formato de entrada.",
+    "Uso: fidy login [--recipient NOMBRE --scopes read,write,dashboard --lifetime DÍAS] | status | logout | commands | GRUPO OPERACIÓN [--input ARCHIVO|- | --CAMPO VALOR ...] [--json]. No mezcles fuentes, repitas flags ni uses nombres desconocidos. Usa GRUPO OPERACIÓN --help para consultar nombres, requisitos, opciones y entrada estructurada. Texto libre o sensible: archivo/stdin, no historial del shell.",
   StorageUnavailable:
     "No se puede usar el almacén nativo. Desbloquea Keychain (macOS), inicia Secret Service/GNOME Keyring/KWallet (Linux) o habilita Credential Manager (Windows). No hay alternativa en texto plano. Si persiste, revisa permisos locales y elimina un login.lock abandonado solo cuando no haya otra instancia activa.",
   StorageInconsistent:

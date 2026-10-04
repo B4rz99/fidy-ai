@@ -11,6 +11,7 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import { CliFailure, type Credential } from "../credential/contract";
 import { formatFailure } from "../command/operations";
 import type { CanonicalDependencies, OperationResult } from "./contract";
+import { type FlagPlan, assembleFlags, deriveFlags, flagHelp } from "./internal/flags";
 
 const eligibleOperation = (id: string, scopes: ReadonlyArray<PATScope>): boolean => {
   const operation = operationCatalog.byId.get(id);
@@ -30,6 +31,9 @@ type OperationDescription = Readonly<{
   description: string;
   policy: (typeof operationCatalog.operations)[number]["policy"];
   requiresInput: boolean;
+  flags: FlagPlan["flags"];
+  structured: FlagPlan["structured"];
+  flagHelp: string;
   input: ReturnType<typeof Schema.toJsonSchemaDocument>;
   output: ReturnType<typeof Schema.toJsonSchemaDocument>;
 }>;
@@ -48,12 +52,17 @@ export const discoverOperations = (
               includeChild: (child) => eligibleOperation(child.id, scopes),
             })
           : { input: operation.input, output: operation.success };
+      const input = Schema.toJsonSchemaDocument(schemas.input);
+      const plan = deriveFlags(input);
       return {
         id: operation.id,
         description: operation.description,
         policy: operation.policy,
         requiresInput: Option.isSome(operation.partialInput),
-        input: Schema.toJsonSchemaDocument(schemas.input),
+        flags: plan.flags,
+        structured: plan.structured,
+        flagHelp,
+        input,
         output: Schema.toJsonSchemaDocument(schemas.output),
       };
     });
@@ -230,7 +239,12 @@ const readInput = Effect.fn(function* (
   command: OperationDescription,
   dependencies: CanonicalDependencies
 ) {
-  if (args.length === 2 && !command.requiresInput) return {};
+  if (!args.slice(2).includes("--input")) {
+    return yield* Effect.try({
+      try: () => assembleFlags({ args: args.slice(2), plan: deriveFlags(command.input) }),
+      catch: () => new CliFailure({ reason: "InvalidInput" }),
+    });
+  }
   const path = args[3];
   if (args.length !== 4 || args[2] !== "--input" || path === undefined || !command.requiresInput) {
     return yield* new CliFailure({ reason: "InvalidInput" });
@@ -243,10 +257,10 @@ const readInput = Effect.fn(function* (
   );
 });
 
-const maximumArguments = 4;
+const maximumArguments = 50;
 const maximumArgumentCharacters = 256;
 const Arguments = Schema.Array(
-  Schema.NonEmptyString.check(Schema.isMaxLength(maximumArgumentCharacters))
+  Schema.String.check(Schema.isMaxLength(maximumArgumentCharacters))
 ).check(Schema.isMaxLength(maximumArguments));
 
 /** Generic group/operation parser, input decoding, derived execution and channel-separated presentation. */

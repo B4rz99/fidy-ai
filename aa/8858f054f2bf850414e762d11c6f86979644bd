@@ -1,0 +1,55 @@
+.github/workflows/ci.yml
+  s_deef8f5cc43798::t_6543aea81e6af7 200,261-263,273
+apps/web/playwright.config.ts
+  s_deef8f5cc43798::t_06843ed4964e0e 8-9
+apps/web/playwright.cli.config.ts
+  s_deef8f5cc43798::t_c2b779368f58c8 9,11-13
+  s_deef8f5cc43798::t_c7bba37c375de2 2
+apps/web/ARCHITECTURE.md
+  s_deef8f5cc43798::t_1ca98788d451d5 144-149
+apps/web/package.json
+  s_deef8f5cc43798::t_b051ef4d227cd4 19-20
+apps/web/e2e/cli-login.spec.ts
+  s_deef8f5cc43798::t_684e01262a2cc7 15-17
+  s_deef8f5cc43798::t_36e40be9d3a993 18-19
+apps/cli/ARCHITECTURE.md
+  s_deef8f5cc43798::t_afdc0ff5535f63 198-203
+scripts/verify.ts
+  s_deef8f5cc43798::t_17bdec2da52974 214-222
+  s_49bb4863b26cd3::t_05b3cc517357e3 213
+apps/web/scripts/browser-topology.test.ts
+  s_deef8f5cc43798::t_58514d467a93f4 1,3-6,13-29
+  s_deef8f5cc43798::t_0bb4fe5ee3e9ed 7-12
+  s_deef8f5cc43798::t_e2276525b2ae53 2
+scripts/verify.test.ts
+  s_deef8f5cc43798::t_2bafef9e9c8111 45-49,51-62
+  s_deef8f5cc43798::t_32067b89a1f761 4,7-11,14-17,25-30,32-44
+  s_deef8f5cc43798::t_734fe998a0ff75 1-3,5-6,12-13,18-24,63-64
+  s_deef8f5cc43798::t_0608c0caabbcd9 31,50,65-71
+package.json
+  s_deef8f5cc43798::t_5a05d41b351f8c 35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "aa8858f054f2bf850414e762d11c6f86979644bd",
+  "prompts": {},
+  "sessions": {
+    "s_49bb4863b26cd3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10426-25e2-7530-b8bf-20c3de175883",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_deef8f5cc43798": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a1047b-6c95-721e-b4c8-445bd5f6a50a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

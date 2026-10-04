@@ -1,0 +1,145 @@
+ARCHITECTURE.md
+  s_2d094d1e0233b5::t_d1fe7c5ca1ee6d 104
+apps/server/cloudflare/public-worker.ts
+  s_2d094d1e0233b5::t_32cdc40d37f708 269-276,483-490
+apps/server/src/shell/audit/operations.ts
+  s_2d094d1e0233b5::t_0d12ae63c15515 10
+  s_2d094d1e0233b5::t_32cdc40d37f708 32-45,47-68
+  s_2d094d1e0233b5::t_bbf68ce9361cd1 1,31,46
+apps/web/src/features/signed-in/feature.tsx
+  s_2d094d1e0233b5::t_66066be191a60b 39-40,46
+  s_2d094d1e0233b5::t_32cdc40d37f708 41-45
+apps/web/scripts/serve-preview.ts
+  s_2d094d1e0233b5::t_1cf86b82789a72 46,54
+  s_2d094d1e0233b5::t_32cdc40d37f708 49-53
+apps/web/src/features/oauth-connections/management-view.tsx
+  s_2d094d1e0233b5::t_70483a9d294f17 1-2,8-10,19-20,30-32,36-39,48,75-78,86-92,119-120
+  s_2d094d1e0233b5::t_32cdc40d37f708 3-7,11-18,21-29,33-35,40-47,49-74,79-85,93-118
+apps/web/ARCHITECTURE.md
+  s_2d094d1e0233b5::t_e39f127307077b 88,101-103
+apps/server/src/shell/consent/operations.ts
+  s_2d094d1e0233b5::t_32cdc40d37f708 81-89,92-98
+  s_2d094d1e0233b5::t_999f2cb135aa14 33,76-80,90-91,99-101
+apps/web/e2e/oauth-review.spec.ts
+  s_2d094d1e0233b5::t_b25d2a0a66a0ba 11,27-28
+  s_2d094d1e0233b5::t_ed50c281190a06 239,284
+  s_2d094d1e0233b5::t_3728c6c0197358 5,59,202
+  s_2d094d1e0233b5::t_32cdc40d37f708 8-10,12-26,206-238,240-283,285-426,542-604
+  s_2d094d1e0233b5::t_b36e527fa24647 1
+  s_2d094d1e0233b5::t_f36c18ab39fb4d 605
+  s_2d094d1e0233b5::t_bdebf02aefb237 427
+apps/server/src/shell/audit/contract.ts
+  s_2d094d1e0233b5::t_d70fdbd95fd163 1,4,12
+  s_2d094d1e0233b5::t_32cdc40d37f708 5-11
+apps/server/cloudflare/oauth-agents/internal/management.ts
+  s_2d094d1e0233b5::t_4ec2673b34cc49 8,51-60,62-69,71-72,78,80,98,100,161,163,165,167
+  s_2d094d1e0233b5::t_ef3481adae6c57 27,48-50
+  s_2d094d1e0233b5::t_dae58afaa5526e 13
+  s_2d094d1e0233b5::t_e908eed581906b 1,18,26,118
+  s_2d094d1e0233b5::t_32cdc40d37f708 6-7,9-12,38-47,73-77,79,81-97,99,101-104,106-117,119-155,157-160,162,164,166,168-177
+  s_2d094d1e0233b5::t_32c625db4064e9 2-5,14-17,19-25,28-37,156
+  s_2d094d1e0233b5::t_8cc280d338b180 61,70,105
+apps/web/src/features/oauth-connections/management-view.test.tsx
+  s_2d094d1e0233b5::t_b28c6b7d96f9bb 1
+  s_2d094d1e0233b5::t_316e71e5e25dbd 2-15,19-22,32-33,37-40
+  s_2d094d1e0233b5::t_32cdc40d37f708 16-18,23-31,34-36
+apps/web/src/features/oauth-connections/management-feature.tsx
+  s_2d094d1e0233b5::t_f4346ad212a9ff 40,52
+  s_2d094d1e0233b5::t_687d595993eabf 1,4,6-7,34-39,69,82-83
+  s_2d094d1e0233b5::t_be97c9a7be0c6f 2
+  s_2d094d1e0233b5::t_bfe6d07bdaa903 3,5,8-11,73-74,84-87,112
+  s_2d094d1e0233b5::t_32cdc40d37f708 12-33,41-51,53-68,70-72,75-81,88-111
+apps/web/src/app/routes.ts
+  s_2d094d1e0233b5::t_57ff62db78f05b 2,86-88,93-94,136
+  s_2d094d1e0233b5::t_32cdc40d37f708 89-92
+  s_2d094d1e0233b5::t_c532d8fe62d0d2 3
+apps/server/src/shell/web-authentication/contract.ts
+  s_2d094d1e0233b5::t_aedd1b0689fe3e 1,58
+apps/server/src/client.ts
+  s_2d094d1e0233b5::t_32cdc40d37f708 20-27
+apps/web/e2e/real-core-fixture.ts
+  s_2d094d1e0233b5::t_bea43a418a98e7 11,19
+  s_2d094d1e0233b5::t_32cdc40d37f708 14-18
+apps/web/playwright.oauth.config.ts
+  s_2d094d1e0233b5::t_f7f2e8866285c8 1-19,22-26,29-34
+  s_2d094d1e0233b5::t_32cdc40d37f708 20-21,27-28
+.oxlintrc.json
+  s_2d094d1e0233b5::t_941a68e4c14879 226
+apps/web/src/transport/client.ts
+  s_2d094d1e0233b5::t_32cdc40d37f708 34-41
+apps/server/ARCHITECTURE.md
+  s_2d094d1e0233b5::t_5f4a665462b070 387,411-413
+apps/server/cloudflare/migrations/0035_oauth_management.sql
+  s_2d094d1e0233b5::t_8ab11ae9c72f0e 1-15
+apps/server/cloudflare/oauth-agents/contract.ts
+  s_2d094d1e0233b5::t_8d69e29015a919 2,11-18
+apps/server/cloudflare/oauth-agents/operations.ts
+  s_2d094d1e0233b5::t_32cdc40d37f708 27-31,33,35-45
+  s_2d094d1e0233b5::t_ab77422eb87e29 32,34
+  s_2d094d1e0233b5::t_f58fea46594faf 13-14,26
+apps/server/src/shell/consent/contract.ts
+  s_2d094d1e0233b5::t_bf45d048a1e762 60-65
+  s_2d094d1e0233b5::t_af2efe50d89b19 59
+apps/web/src/features/oauth-connections/feature.tsx
+  s_2d094d1e0233b5::t_82fba66340dd64 2,15,18-23
+apps/server/cloudflare/browser-acceptance-preview.ts
+  s_2d094d1e0233b5::t_b0ccb7ced29b0a 34,45-46,53,263
+  s_2d094d1e0233b5::t_32cdc40d37f708 48-49
+  s_2d094d1e0233b5::t_f3910279f1dd9b 37-39,41-43
+apps/server/cloudflare/oauth-agents/runtime.ts
+  s_2d094d1e0233b5::t_3cb9b78ea357a4 23
+  s_2d094d1e0233b5::t_08885fecb587d4 165-171,173-180,182,184,210
+  s_2d094d1e0233b5::t_32cdc40d37f708 205-209
+  s_2d094d1e0233b5::t_653d1550aaff4b 172,181,183,211
+apps/server/src/shell/oauth-agents/contract.ts
+  s_2d094d1e0233b5::t_7aa57e48aa71c2 163
+  s_2d094d1e0233b5::t_3e391fd1bfe153 49-51,152-159,161-162,164,168-170,178-179
+  s_2d094d1e0233b5::t_32cdc40d37f708 165-167,171-177,180-200
+  s_2d094d1e0233b5::t_ceac18add1bf76 13
+  s_2d094d1e0233b5::t_d6eb47ecb1062f 2,160
+  s_2d094d1e0233b5::t_834d8db421d1dc 14
+apps/server/cloudflare/oauth-agents/internal/revocation.ts
+  s_2d094d1e0233b5::t_b01f83491919ae 3-4,13-15,70,106
+  s_2d094d1e0233b5::t_b8c10c3fe33718 1-2,12
+  s_2d094d1e0233b5::t_1daa3b79016cea 9
+  s_2d094d1e0233b5::t_e1e7d273cbb566 16-19,21,30-35,37-40,42-69,72,92-94
+  s_2d094d1e0233b5::t_2945b803c7ae7a 10-11,22-27,29
+  s_2d094d1e0233b5::t_32cdc40d37f708 5-8,71,73-91,95-105
+  s_2d094d1e0233b5::t_f7b473e16e9e95 20,28,36,41
+apps/server/cloudflare/transactions/runtime.ts
+  s_2d094d1e0233b5::t_b5282f15be62e9 224-231,239,245
+  s_2d094d1e0233b5::t_e75a284b80b684 12-13,244,246
+  s_2d094d1e0233b5::t_32cdc40d37f708 232-238,241
+SECURITY_STANDARDS.md
+  s_2d094d1e0233b5::t_9799fd48840371 173
+apps/server/cloudflare/oauth-agents/oauth-ingress.test.ts
+  s_2d094d1e0233b5::t_4bd4df71c26214 813
+  s_2d094d1e0233b5::t_1f79d4f9a116a5 472-474
+  s_2d094d1e0233b5::t_190acaa1ce6d66 459
+  s_2d094d1e0233b5::t_32cdc40d37f708 138-145,444-452,455-457,460-470,483-485,491-586,588,590-643,645-749,751-794,796-812,814-959,961-1017
+  s_2d094d1e0233b5::t_063689faafadbb 476
+  s_2d094d1e0233b5::t_457896607de165 490
+  s_2d094d1e0233b5::t_2e47c35816de51 435-442,454,458,477-482,486-489
+  s_2d094d1e0233b5::t_a22a3acb2e6e02 471,475,587,589
+  s_2d094d1e0233b5::t_b27c375db99b70 644,750,795
+  s_2d094d1e0233b5::t_f7c34623a91380 443,453,960
+  s_2d094d1e0233b5::t_1cd89e6f78e11a 24
+GLOSSARY.md
+  s_2d094d1e0233b5::t_26f773de1cfd0e 238
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "bb37143fcd37d9739cd1144ae3f8c4da4c47d06b",
+  "prompts": {},
+  "sessions": {
+    "s_2d094d1e0233b5": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a1051a-86ca-76e6-be76-24a9cc61fe03",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

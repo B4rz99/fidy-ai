@@ -1,0 +1,39 @@
+apps/server/src/core/insights/weekly-summary/operations.test.ts
+  s_74e559bd8b2eb1::t_96f308668a60e2 3,5,31-35,37-41,43-49,52-54
+  s_74e559bd8b2eb1::t_6eaa801d7dfd01 36,42,50-51
+apps/server/src/core/insights/weekly-summary/operations.ts
+  s_74e559bd8b2eb1::t_3bf4014a689bbe 1-4,7-9,12-15,17,120,123-126,128-132,134-137,139-140,142-147,149-153,155-159,161-164,166-168,170,172-173
+  s_74e559bd8b2eb1::t_903f558fbd9bef 154
+  s_74e559bd8b2eb1::t_419ae5e3ffe201 121
+  s_74e559bd8b2eb1::t_f673cce21b2ac2 5-6
+  s_74e559bd8b2eb1::t_6df3201c85a94e 16
+  s_74e559bd8b2eb1::t_ef917e0adf2fa4 122
+  s_74e559bd8b2eb1::t_0ee416708aca8c 127
+  s_74e559bd8b2eb1::t_3487619b70b58e 133
+  s_74e559bd8b2eb1::t_ed914d6bbb730f 138
+  s_74e559bd8b2eb1::t_b407c6e43fa57b 141
+  s_74e559bd8b2eb1::t_9f43119ac3508b 148
+  s_74e559bd8b2eb1::t_49eab0d4f6799e 160
+  s_74e559bd8b2eb1::t_010ace209c53b6 165
+  s_74e559bd8b2eb1::t_3c13c58463476f 169
+  s_74e559bd8b2eb1::t_0b6bd94c697666 171
+  s_74e559bd8b2eb1::t_2e2f4e2d3c3800 174
+apps/server/src/core/insights/weekly-summary/contract.ts
+  s_74e559bd8b2eb1::t_a2fb6c686228ad 139-145
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e1996544d70aaa3209d7014e359a899660229a6c",
+  "prompts": {},
+  "sessions": {
+    "s_74e559bd8b2eb1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a103fa-be97-74ea-98ef-1bbb67d7ba62",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

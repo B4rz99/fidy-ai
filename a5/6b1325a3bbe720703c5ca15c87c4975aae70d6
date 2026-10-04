@@ -1,0 +1,65 @@
+apps/server/cloudflare/insights/operations.ts
+  s_74e559bd8b2eb1::t_99fa366c3e4b9c 23
+  s_74e559bd8b2eb1::t_55d995e46c383f 43-44
+  s_74e559bd8b2eb1::t_26c9601584fb8a 24-27,45-46
+apps/server/cloudflare/whatsapp/contract.ts
+  s_74e559bd8b2eb1::t_4516830ec83e71 14
+  s_74e559bd8b2eb1::t_6768b4f65e589a 20-21
+  s_74e559bd8b2eb1::t_898215875b487c 22,24-26,32-33,48,57,75
+  s_74e559bd8b2eb1::t_43322909e7e12d 27-31,34-47,49-56,58-74,76-78
+  s_ba89dc1029bca1::t_5e1acc5563e647 23
+apps/server/cloudflare/whatsapp/internal/insight-delivery.ts
+  s_74e559bd8b2eb1::t_af1cb278f0652e 265
+  s_74e559bd8b2eb1::t_510d78e1fd3b6f 1,11,50-52,285
+  s_74e559bd8b2eb1::t_a6e22c751be831 149-175,221
+  s_74e559bd8b2eb1::t_0716846afcee65 2-6,13-16,26-27,48,54-55,69-71,81,101,128,178,256,267-269,299,322
+  s_74e559bd8b2eb1::t_ecb075f92c35ec 10,53,84,104,181,235-237,259,306
+  s_74e559bd8b2eb1::t_7dd2a27fc79445 266,276
+  s_74e559bd8b2eb1::t_bea05da23fd32f 176-177
+  s_74e559bd8b2eb1::t_43322909e7e12d 7-9,12,17-25,28-47,49,56-68,72-80,82-83,85-100,102-103,105-127,129-148,179-180,182-220,222-234,238-255,257-258,260-264,270-275,277-284,286-298,300-305,307-321,323-328
+apps/server/cloudflare/migrations/0031_proactive_whatsapp.sql
+  s_74e559bd8b2eb1::t_4fcb13b1e4b5f1 1-30,32-36
+  s_74e559bd8b2eb1::t_e8575bd025ea43 31
+apps/server/cloudflare/whatsapp/operations.ts
+  s_74e559bd8b2eb1::t_04be491a9c17a6 83
+  s_74e559bd8b2eb1::t_164d903dd51f4f 30-37,39-82
+  s_74e559bd8b2eb1::t_ee284ba3980ac1 38
+apps/server/cloudflare/weekly-summary.test-fixture.ts
+  s_74e559bd8b2eb1::t_24df316715ebfc 1,5-8,69-72,74-78,80-84,86-89,91-92,94,96-101
+  s_74e559bd8b2eb1::t_dc9ba436a701b7 73,93,95
+  s_74e559bd8b2eb1::t_99dc6523537520 79,85,90
+apps/server/cloudflare/insights/internal/weekly-generation.ts
+  s_74e559bd8b2eb1::t_e9c95c3fe1b41a 16,217-221
+  s_74e559bd8b2eb1::t_d4bafa122ef9fe 222-224
+apps/server/cloudflare/whatsapp/insight-delivery.test.ts
+  s_74e559bd8b2eb1::t_c8b301a398d3a5 133-135,137-138
+  s_74e559bd8b2eb1::t_a6e22c751be831 48
+  s_74e559bd8b2eb1::t_d5e1ce33af7462 25-26
+  s_74e559bd8b2eb1::t_dd46d46fb8bf9b 1-6,8-13,15-22,24,27-30,32-38,40-42,47,49,57,80,82-100,102-109,111-114,116-122,125-129,131-132,139-141,143-158,160-168,170-181,183-187,189-192,194-197
+  s_74e559bd8b2eb1::t_61801390cb147d 123
+  s_74e559bd8b2eb1::t_6c4cda805ab226 7,14,23,31,39,43-46,50-56,58-79,81,101,110,115,124,130,136,142,159,169,182,188,193
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a56b1325a3bbe720703c5ca15c87c4975aae70d6",
+  "prompts": {},
+  "sessions": {
+    "s_74e559bd8b2eb1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a103fa-be97-74ea-98ef-1bbb67d7ba62",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_ba89dc1029bca1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a103f6-761c-710c-b806-670edee0d3aa",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

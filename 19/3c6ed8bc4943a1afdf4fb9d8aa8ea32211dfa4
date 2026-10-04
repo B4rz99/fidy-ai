@@ -1,0 +1,40 @@
+infra/cloudflare/package.json
+  s_7b7014a6174e05::t_dc3fc004e8f828 26
+package.json
+  s_7b7014a6174e05::t_dbda6084a49765 76-77
+docs/research/969-release-age-exception.md
+  s_7b7014a6174e05::t_896aacf46baaa1 21-33,35-46
+  s_cfc2b176144667::t_4792b041584e71 20,34
+apps/web/package.json
+  s_7b7014a6174e05::t_e03bc44de735ad 31,60
+apps/server/package.json
+  s_7b7014a6174e05::t_14da242b00bc43 311
+scripts/install-workspace.sh
+  s_7b7014a6174e05::t_c883a994374d83 2-3,17-18
+bun.lock
+  s_7b7014a6174e05::t_d4466fac2dca15 65,80,93,109,126,144-145,245,247,249,251,253,413-414,771,775,1555,1557,1703,1705,1927
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "193c6ed8bc4943a1afdf4fb9d8aa8ea32211dfa4",
+  "prompts": {},
+  "sessions": {
+    "s_7b7014a6174e05": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a1070b-8ed8-7386-8139-24c350e9b4d8",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_cfc2b176144667": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10723-2418-73d5-8f2b-079f13ca3692",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

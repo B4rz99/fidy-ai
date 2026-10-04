@@ -11,7 +11,9 @@ export const pendingBillingWork = (
 ): D1PreparedStatement =>
   input.db
     .prepare(
-      `SELECT id, created_at_ms AS created, NULL AS deadline FROM billing_attempts
-    WHERE status = 'pending' ORDER BY created_at_ms LIMIT ?`
+      `SELECT id,created,NULL AS deadline FROM (
+        SELECT id,created_at_ms AS created FROM billing_attempts WHERE status='pending'
+        UNION ALL SELECT id,created_at_ms AS created FROM refund_attempts WHERE status='pending'
+      ) ORDER BY created LIMIT ?`
     )
     .bind(Schema.decodeSync(SampleSize)(input.limit));

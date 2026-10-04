@@ -44,8 +44,10 @@ export const activePaidSubscriptionCondition = ({
   sql: `EXISTS (SELECT 1 FROM subscriptions AS subscription
     WHERE subscription.user_id = ? AND subscription.paid_period_ends_at_ms > ?
     AND EXISTS (SELECT 1 FROM billing_paid_periods AS period
-      WHERE period.attempt_id = subscription.attempt_id AND period.starts_at_ms <= ?))`,
-  params: [userId, nowEpochMs, nowEpochMs],
+      WHERE period.attempt_id = subscription.attempt_id AND period.starts_at_ms <= ?)
+    AND NOT EXISTS (SELECT 1 FROM billing_access_adjustments adjustment
+      WHERE adjustment.attempt_id=subscription.attempt_id AND adjustment.ends_at_ms<=?))`,
+  params: [userId, nowEpochMs, nowEpochMs, nowEpochMs],
 });
 
 /** Prepare complete public Prices with a live authority recheck and closed JSON projection. */

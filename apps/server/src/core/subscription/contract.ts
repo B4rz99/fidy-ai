@@ -1,9 +1,9 @@
 import { canonicalEmailAddressChecks } from "~/core/email-authentication/contract";
 import { BigDecimal, Schema, SchemaTransformation } from "effect";
 import { IanaTimeZone, ServiceMarket } from "~/core/_shared/context";
-import { Money } from "~/core/_shared/money";
+import { Money, type ReadonlyMoney } from "~/core/_shared/money";
 import { UtcTimestamp } from "~/core/_shared/time";
-import { TrialPeriod } from "~/core/identity/contract";
+import { TrialPeriod, UserId } from "~/core/identity/contract";
 import { AccessTier } from "~/core/access-tier/contract";
 
 /** Stable identity of one immutable set of Subscription price terms. */
@@ -378,3 +378,104 @@ export const PaymentSubmission = Schema.Union([
   }),
 ]).annotate({ identifier: "PaymentSubmission" });
 export type PaymentSubmission = typeof PaymentSubmission.Type;
+
+/** Stable identity of one asynchronous billing correction; provider identities remain private. */
+export const RefundAttemptId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("RefundAttemptId"))
+  .annotate({ identifier: "RefundAttemptId" });
+export type RefundAttemptId = typeof RefundAttemptId.Type;
+
+/** Caller-selected retry identity scoped to one User; changing the intent requires a new identity. */
+export const RefundRequestId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("RefundRequestId"))
+  .annotate({ identifier: "RefundRequestId" });
+export type RefundRequestId = typeof RefundRequestId.Type;
+
+/** A correction moves positive exact Money; zero never reserves refundable capacity. */
+export const RefundMoney = Money.check(
+  Schema.makeFilter<ReadonlyMoney>(
+    (money) => BigDecimal.Order(money.amount, zero) > 0 || "Refund Money must be greater than zero"
+  )
+).annotate({ identifier: "RefundMoney" });
+export type RefundMoney = typeof RefundMoney.Type;
+
+/** Closed support reason; arbitrary support notes never become retained payment evidence. */
+export const RefundReason = Schema.Literals([
+  "user-request",
+  "duplicate-collection",
+  "service-error",
+]).annotate({ identifier: "RefundReason" });
+
+/** Card voids always address the complete charge; a partial void cannot be requested. */
+export const RefundIntent = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("refund"), money: RefundMoney }),
+  Schema.Struct({ kind: Schema.Literal("card-void") }),
+]).annotate({ identifier: "RefundIntent" });
+export type RefundIntent = typeof RefundIntent.Type;
+
+/** Support addresses Fidy identities; neither a User credential nor a provider id grants this authority. */
+export const StartRefundInput = Schema.Struct({
+  userId: UserId,
+  billingAttemptId: BillingAttemptId,
+  requestId: RefundRequestId,
+  intent: RefundIntent,
+  reason: RefundReason,
+}).annotate({ identifier: "StartRefundInput" });
+export type StartRefundInput = typeof StartRefundInput.Type;
+
+/** Sandbox evidence is explicitly provisional, never a legal determination for a real sale. */
+export const CorrectionTreatment = Schema.Struct({
+  policyId: Schema.Literal("refund-ends-paid-period-v1"),
+  taxTreatment: TaxTreatment,
+  paidPeriodEffect: Schema.Literal("end-refunded-period-at-verification"),
+  renewalEffect: Schema.Literal("stop-future-renewals"),
+  accounting: Schema.Struct({ kind: Schema.Literal("sandbox-only") }),
+}).annotate({ identifier: "CorrectionTreatment" });
+export type CorrectionTreatment = typeof CorrectionTreatment.Type;
+
+const RefundSnapshot = {
+  id: RefundAttemptId,
+  userId: UserId,
+  subscriptionId: SubscriptionId,
+  billingAttemptId: BillingAttemptId,
+  priceId: PriceId,
+  kind: Schema.Literals(["refund", "card-void"]),
+  money: RefundMoney,
+  requestId: RefundRequestId,
+  reason: RefundReason,
+  treatment: CorrectionTreatment,
+  createdAt: UtcTimestamp,
+};
+
+/** Safe retained correction history; submission ambiguity remains pending and reserves its Money. */
+export const RefundAttempt = Schema.Union([
+  Schema.Struct({
+    ...RefundSnapshot,
+    status: Schema.Literal("pending"),
+    progress: Schema.Literals(["queued", "verifying", "outcome-unknown"]),
+  }),
+  Schema.Struct({
+    ...RefundSnapshot,
+    status: Schema.Literal("succeeded"),
+    verifiedAt: UtcTimestamp,
+  }),
+  Schema.Struct({
+    ...RefundSnapshot,
+    status: Schema.Literal("failed"),
+    failedAt: UtcTimestamp,
+    failure: Schema.Literals(["provider-declined", "provider-cancelled", "provider-refused"]),
+  }),
+]).annotate({ identifier: "RefundAttempt" });
+export type RefundAttempt = typeof RefundAttempt.Type;
+
+/** Closed support failures contain neither provider payloads nor persistence diagnostics. */
+export const RefundStartFailure = Schema.Literals([
+  "unsupported",
+  "charge-unavailable",
+  "amount-exceeds-remaining",
+  "currency-mismatch",
+  "idempotency-conflict",
+  "limited",
+  "unavailable",
+]).annotate({ identifier: "RefundStartFailure" });
+export type RefundStartFailure = typeof RefundStartFailure.Type;

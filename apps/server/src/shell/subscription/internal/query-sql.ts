@@ -38,7 +38,10 @@ export const subscriptionStandingQuery = ({
   return {
     sql: `SELECT t.startedAtMs AS started_at_ms, t.endsAtMs AS trial_ends_at_ms,
       s.price_id, a.amount, a.currency, a.billing_period, a.service_market, a.tax_treatment,
-      p.starts_at_ms, p.ends_at_ms, p.renewal_anchor_ms
+      p.starts_at_ms,
+      MIN(p.ends_at_ms,COALESCE((SELECT MIN(adjustment.ends_at_ms) FROM billing_access_adjustments adjustment
+        WHERE adjustment.attempt_id=p.attempt_id),p.ends_at_ms)) AS ends_at_ms,
+      p.renewal_anchor_ms
       FROM (${trial.sql}) AS t LEFT JOIN subscriptions AS s ON s.user_id = ?
       LEFT JOIN billing_attempts AS a ON a.id = s.attempt_id AND a.user_id = s.user_id
       LEFT JOIN billing_paid_periods AS p ON p.attempt_id = a.id

@@ -91,6 +91,7 @@ export const TelemetryRegistry = {
     "workflow.browserPairingEmail",
     "workflow.emailReplacement",
     "workflow.billingCollection",
+    "workflow.billingRefund",
     "workflow.statementExtraction",
     "workflow.operationalCanary",
     "workflow.releaseSmoke",

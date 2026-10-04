@@ -1,3 +1,4 @@
+import { refundSupportBasePath, refundSupportReadPath } from "./subscription/contract";
 import { deriveAnonymousSource } from "./anonymous-admission/operations";
 import { keywordRulePath, listCategoriesPath } from "../src/shell/categories/contract";
 import { atomicBatchOperation } from "../src/shell/operations/contract";
@@ -211,6 +212,10 @@ const replacementPaths = [
   emailReplacementOperations.complete.path,
 ] as const;
 const supportRecoveryPath = "/internal/support-recovery";
+const refundMethods = (path: string): ReadonlyArray<string> =>
+  path === refundSupportBasePath ? ["POST"] : ["GET"];
+const refundSupportPath = (path: string): boolean =>
+  path === refundSupportBasePath || refundSupportReadPath.test(path);
 const emailAuthenticationPaths = [
   "/web/email/authentication/start",
   "/web/email/authentication/complete",
@@ -256,11 +261,13 @@ const ownedPaths = new Set<string>([
 ]);
 const ownedPath = (path: string): boolean =>
   ownedPaths.has(path) ||
+  refundSupportPath(path) ||
   enrollmentPath(path) ||
   transactionPath(path) ||
   patRoute(path) ||
   canonicalRoute(path);
 const allowedMethods = (path: string): ReadonlyArray<string> => {
+  if (refundSupportPath(path)) return refundMethods(path);
   if (transactionPath(path)) return transactionMethods(path);
   if (patRoute(path)) return patMethods(path);
   if (enrollmentStatusPath.test(path)) return ["GET"];
@@ -335,7 +342,9 @@ const directHeaders = (request: Request, path: string): Option.Option<Headers> =
   if (path === callbackPath || path === wompiBillingEventPath) {
     return Option.some(providerHeaders(request, path));
   }
-  if (path === supportRecoveryPath) return Option.some(supportHeaders(request));
+  if (path === supportRecoveryPath || refundSupportPath(path)) {
+    return Option.some(supportHeaders(request));
+  }
   return Option.none();
 };
 const browserForwardHeaders = (request: Request, path: string): Headers => {

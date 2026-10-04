@@ -206,6 +206,7 @@ const migrationNames = [
   "0019_canonical_child_guards",
   "0020_restore_audit_budgets",
   ...hostedTurnTestMigrations,
+  "0035_billing_corrections",
 ] as const;
 const legacyTurn = "10000000-0000-4000-8000-000000000731";
 const legacyUser = "10000000-0000-4000-8000-000000000732";

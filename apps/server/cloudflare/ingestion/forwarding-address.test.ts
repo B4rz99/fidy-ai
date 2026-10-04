@@ -54,7 +54,8 @@ const setup = Effect.fn(function* () {
     CREATE TABLE memory_audit (user_id TEXT, occurred_at_ms INTEGER);
     CREATE TABLE trial_periods (user_id TEXT PRIMARY KEY, started_at_ms INTEGER, ends_at_ms INTEGER);
     CREATE TABLE subscriptions (user_id TEXT PRIMARY KEY, attempt_id TEXT, paid_period_ends_at_ms INTEGER);
-    CREATE TABLE billing_paid_periods (attempt_id TEXT PRIMARY KEY, starts_at_ms INTEGER);`)
+    CREATE TABLE billing_paid_periods (attempt_id TEXT PRIMARY KEY, starts_at_ms INTEGER);
+    CREATE TABLE billing_access_adjustments (attempt_id TEXT, ends_at_ms INTEGER);`)
   );
   for (const [name, event, table] of [
     ["statement_submission_audit_no_update", "UPDATE", "statement_submission_audit"],

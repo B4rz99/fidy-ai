@@ -1,6 +1,19 @@
-import { DateTime, Effect, Function } from "effect";
+import { BigDecimal, DateTime, Effect, Function, Option } from "effect";
+import { type ReadonlyMoney, encodeMoneyAmount } from "~/core/_shared/money";
 import type { IanaTimeZone } from "~/core/_shared/context";
 import { type BillingPeriod, type PriceId } from "./contract";
+
+/** Exact COP minor units accepted by the provider and SQLite; unsafe integers fail closed. */
+export const refundMinorUnits = (money: ReadonlyMoney): Option.Option<number> => {
+  if (money.currency !== "COP" || BigDecimal.Order(money.amount, BigDecimal.make(0n, 0)) <= 0) {
+    return Option.none();
+  }
+  const [whole = "0", fraction = ""] = encodeMoneyAmount(money.amount).split(".");
+  const providerFractionDigits = 2;
+  if (fraction.length > providerFractionDigits) return Option.none();
+  const cents = BigInt(whole) * 100n + BigInt(fraction.padEnd(providerFractionDigits, "0"));
+  return cents <= BigInt(Number.MAX_SAFE_INTEGER) ? Option.some(Number(cents)) : Option.none();
+};
 
 /** Calendar paid-period facts derived from verified settlement in the captured named time zone. */
 export type PaidPeriodWindow = Readonly<{

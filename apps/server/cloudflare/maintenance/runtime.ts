@@ -24,6 +24,8 @@ import {
 } from "../email-authentication/runtime";
 import {
   dispatchBillingCollection,
+  dispatchRefunds,
+  dispatchVoidVerification,
   reconcileBillingCandidates,
   sweepExpiredEnrollmentAdmission,
 } from "../subscription/runtime";
@@ -89,6 +91,21 @@ const emailActivities = (environment: CoreMaintenanceInput): ReadonlyArray<Sched
 ];
 
 const billingActivities = (environment: CoreMaintenanceInput): ReadonlyArray<ScheduledActivity> => [
+  activity(
+    "billing.refund.reconcile",
+    Option.match(environment.BILLING_COLLECTION_QUEUE, {
+      onNone: () => Effect.void,
+      onSome: (queue) =>
+        dispatchVoidVerification({ DB: environment.DB, BILLING_COLLECTION_QUEUE: queue }),
+    })
+  ),
+  activity(
+    "billing.refund.dispatch",
+    Option.match(environment.BILLING_COLLECTION_QUEUE, {
+      onNone: () => Effect.void,
+      onSome: (queue) => dispatchRefunds({ DB: environment.DB, BILLING_COLLECTION_QUEUE: queue }),
+    })
+  ),
   activity(
     "billing.collection.dispatch",
     Option.match(environment.BILLING_COLLECTION_QUEUE, {

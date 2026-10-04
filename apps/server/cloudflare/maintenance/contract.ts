@@ -13,6 +13,8 @@ export type ScheduledOperation =
   | "browserPairing.email.reconcile"
   | "emailReplacement.dispatch"
   | "emailReplacement.reconcile"
+  | "billing.refund.dispatch"
+  | "billing.refund.reconcile"
   | "billing.collection.dispatch"
   | "billing.collection.reconcile"
   | "billing.cardPreparationAdmissionSweep"

@@ -21,7 +21,11 @@ export {
   OnboardingEmailWorkflowV1,
 } from "./email-authentication/runtime";
 export { OperationalCanaryWorkflowV1 } from "./operational-canary-workflow";
-export { BillingCollectionWorkflowV1, runBillingCollectionWorkflow } from "./subscription/runtime";
+export {
+  BillingCollectionWorkflowV1,
+  BillingRefundWorkflowV1,
+  runBillingCollectionWorkflow,
+} from "./subscription/runtime";
 export { UserTransactionCoordinator } from "./transactions/runtime";
 export { ReleaseSmokeWorkflowV1 } from "./runtime/release-smoke/runtime";
 export { StatementExtractionWorkflowV1 } from "./ingestion/runtime";
@@ -46,6 +50,8 @@ type CoreEnvironment = WorkerTelemetryEnvironment &
     readonly WOMPI_INTEGRITY_SECRET: string;
   } & Partial<
     Readonly<{
+      BILLING_SUPPORT_AUDIENCE: string;
+      BILLING_REFUND_WORKFLOW: Workflow;
       WOMPI_DAVIPLATA_ACTIVATED: string;
       WOMPI_DAVIPLATA_OTP_SEND_URL: string;
       WOMPI_DAVIPLATA_OTP_CONFIRM_URL: string;

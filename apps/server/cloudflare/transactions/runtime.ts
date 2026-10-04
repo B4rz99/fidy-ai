@@ -1,3 +1,4 @@
+import { executeRefundSupportAdmission } from "../subscription/operations";
 import { RecurringWork } from "../recurring/contract";
 import { evaluateRecurringSeries } from "../recurring/operations";
 import { makeAgentService } from "../agent/runtime";
@@ -67,7 +68,12 @@ type CoordinatorEnvironment = Readonly<{
 }> &
   /** Native optional binding, normalized to Option when work enters the application. */
   Partial<
-    Readonly<{ STATEMENT_STAGING_BUCKET: R2Bucket; EMAIL_BUCKET: R2Bucket; KAPSO_API_KEY: string }>
+    Readonly<{
+      STATEMENT_STAGING_BUCKET: R2Bucket;
+      EMAIL_BUCKET: R2Bucket;
+      KAPSO_API_KEY: string;
+      WOMPI_ENVIRONMENT: string;
+    }>
   > &
   WorkersAiEnvironment;
 
@@ -217,6 +223,30 @@ const privateIngestionActivity = ({
   );
 };
 
+const privateOwnerActivity = (
+  input: Readonly<{
+    request: Request;
+    candidate: unknown;
+    environment: CoordinatorEnvironment;
+    userId: string;
+  }>
+): Option.Option<Effect.Effect<Response>> => {
+  if (
+    input.request.method === "POST" &&
+    new URL(input.request.url).pathname === "/billing-refund-work"
+  ) {
+    return Option.some(
+      executeRefundSupportAdmission({
+        db: input.environment.DB,
+        userId: input.userId,
+        candidate: input.candidate,
+        environment: input.environment.WOMPI_ENVIRONMENT ?? "",
+      })
+    );
+  }
+  return Option.orElse(privateRecurringActivity(input), () => privateIngestionActivity(input));
+};
+
 const reservedCoordinatorProbe = ({
   db,
   userId,
@@ -322,20 +352,13 @@ export class UserTransactionCoordinator {
         Effect.gen(function* () {
           const candidate = yield* Effect.option(Effect.tryPromise(() => request.json()));
           if (Option.isNone(candidate)) return transactionUnavailable();
-          const recurring = privateRecurringActivity({
+          const owner = privateOwnerActivity({
             request,
             candidate: candidate.value,
             environment,
             userId,
           });
-          if (Option.isSome(recurring)) return yield* recurring.value;
-          const ingestion = privateIngestionActivity({
-            request,
-            candidate: candidate.value,
-            environment,
-            userId,
-          });
-          if (Option.isSome(ingestion)) return yield* ingestion.value;
+          if (Option.isSome(owner)) return yield* owner.value;
           const admission = Schema.decodeUnknownOption(CanonicalWorkAdmission)(candidate.value);
           if (
             Option.isNone(admission) ||

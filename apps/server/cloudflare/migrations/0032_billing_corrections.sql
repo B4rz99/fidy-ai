@@ -71,7 +71,13 @@ CREATE TABLE refund_submission_claims (
   claimed_at_ms INTEGER NOT NULL
 ) STRICT;
 CREATE TRIGGER refund_claim_requires_pending BEFORE INSERT ON refund_submission_claims
-WHEN NOT EXISTS (SELECT 1 FROM refund_attempts WHERE id=NEW.refund_id AND status='pending')
+WHEN NOT EXISTS (SELECT 1 FROM refund_attempts r
+  JOIN billing_attempts a ON a.id=r.billing_attempt_id
+  JOIN billing_transaction_evidence e ON e.transaction_id=r.transaction_id AND e.attempt_id=a.id
+  WHERE r.id=NEW.refund_id AND r.status='pending' AND a.status='succeeded'
+    AND a.wompi_environment='sandbox' AND e.status='APPROVED'
+    AND (SELECT COUNT(*) FROM billing_transaction_evidence
+      WHERE attempt_id=a.id AND status='APPROVED')=1)
 BEGIN SELECT RAISE(IGNORE); END;
 CREATE TRIGGER refund_claim_immutable BEFORE UPDATE ON refund_submission_claims
 BEGIN SELECT RAISE(ABORT, 'refund_claim_immutable'); END;

@@ -99,15 +99,23 @@ const submissionClaim = (
     db.batch([
       db
         .prepare(`INSERT INTO refund_submission_claims(refund_id,claimed_at_ms) VALUES (?,?)
-      ON CONFLICT(refund_id) DO NOTHING`)
+      ON CONFLICT(refund_id) DO NOTHING RETURNING refund_id`)
         .bind(id, currentMillis()),
       db
-        .prepare("UPDATE refund_attempts SET progress='verifying' WHERE id=? AND status='pending'")
+        .prepare(`UPDATE refund_attempts SET progress='verifying' WHERE id=? AND status='pending'
+          AND EXISTS (SELECT 1 FROM refund_submission_claims WHERE refund_id=refund_attempts.id)`)
         .bind(id),
     ])
   ).pipe(
-    Effect.map((results) =>
-      results[0]?.meta.changes === 1 ? ("claimed" as const) : ("existing" as const)
+    Effect.flatMap((results) =>
+      results[0]?.results.length === 1
+        ? Effect.succeed("claimed" as const)
+        : Effect.tryPromise(() =>
+            db
+              .prepare("SELECT refund_id FROM refund_submission_claims WHERE refund_id=?")
+              .bind(id)
+              .first()
+          ).pipe(Effect.map((row) => (row === null ? ("absent" as const) : ("existing" as const))))
     )
   );
 };
@@ -128,7 +136,8 @@ const execute = (
       environment.DB.prepare(`SELECT r.id,r.kind,r.transaction_id,r.amount_in_cents,
     r.original_cents,a.wompi_reference,s.wompi_source_id FROM refund_attempts r
     JOIN billing_attempts a ON a.id=r.billing_attempt_id JOIN card_payment_sources s ON s.id=a.payment_source_id
-    WHERE r.id=? AND r.status='pending' AND a.wompi_environment='sandbox'`)
+    WHERE r.id=? AND r.status='pending' AND a.wompi_environment='sandbox'
+      AND (SELECT COUNT(*) FROM billing_transaction_evidence WHERE attempt_id=a.id AND status='APPROVED')=1`)
         .bind(work.refundAttemptId)
         .first()
     );

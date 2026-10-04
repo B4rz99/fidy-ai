@@ -807,6 +807,258 @@ it.each(["production-environment", "live-private-key", "production-captured-char
     )
 );
 
+it.each([
+  { kind: "refund", timing: "before-execution" },
+  { kind: "card-void", timing: "before-execution" },
+  { kind: "refund", timing: "at-claim" },
+  { kind: "card-void", timing: "at-claim" },
+] as const)(
+  "blocks delayed duplicate approval $timing before submitting an accepted $kind",
+  ({ kind, timing }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* fixture();
+        const input = call(db);
+        const accepted = yield* startRefund({
+          ...input,
+          input: { ...input.input, intent: kind === "card-void" ? { kind } : input.input.intent },
+        });
+        yield* Effect.tryPromise(() =>
+          timing === "before-execution"
+            ? db
+                .prepare(
+                  "INSERT INTO billing_transaction_evidence(transaction_id,attempt_id,status,first_observed_at_ms,finalized_at_ms) VALUES ('delayed-approved-charge',?,'APPROVED',0,1)"
+                )
+                .bind(attemptId)
+                .run()
+            : // Real SQLite injection happens after the Workflow snapshot read, during claim insertion.
+              db
+                .prepare(`CREATE TRIGGER inject_delayed_approval BEFORE INSERT ON refund_submission_claims BEGIN
+            INSERT INTO billing_transaction_evidence(transaction_id,attempt_id,status,first_observed_at_ms,finalized_at_ms)
+            SELECT 'delayed-approved-charge',billing_attempt_id,'APPROVED',0,1 FROM refund_attempts WHERE id=NEW.refund_id;
+          END`)
+                .run()
+        );
+        const before = yield* standing(db);
+        const provider = vi.fn((): Promise<Response> =>
+          Promise.resolve(providerReply(accepted.id, "APPROVED"))
+        );
+        vi.stubGlobal("fetch", provider);
+        yield* Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)));
+        expect(provider).not.toHaveBeenCalled();
+        expect(
+          yield* getRefund({ db, authority: input.authority, userId, refundAttemptId: accepted.id })
+        ).toEqual(accepted);
+        expect(yield* standing(db)).toEqual(before);
+        const retained = yield* Effect.tryPromise(() =>
+          db
+            .prepare(`SELECT
+    (SELECT COUNT(*) FROM refund_submission_claims) AS claims,
+    (SELECT COUNT(*) FROM refund_outcome_evidence) AS outcomes,
+    (SELECT COUNT(*) FROM billing_access_adjustments) AS adjustments,
+    (SELECT COUNT(*) FROM subscription_renewal_stops) AS stops,
+    (SELECT SUM(amount_in_cents) FROM refund_attempts) AS reserved`)
+            .first()
+        );
+        expect(retained).toEqual({
+          claims: 0,
+          outcomes: 0,
+          adjustments: 0,
+          stops: 0,
+          reserved: kind === "refund" ? 400000 : 990000,
+        });
+      })
+    )
+);
+
+it.each(["missing-submission-claim", "unpublished-revision"])(
+  "refuses verification-only work with %s without provider or financial effects",
+  (scenario) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* fixture();
+        const accepted = yield* startRefund({
+          ...call(db),
+          input: { ...call(db).input, intent: { kind: "card-void" } },
+        });
+        const provider = vi.fn((): Promise<Response> =>
+          Promise.resolve(Response.json({ data: { status: "PENDING" } }))
+        );
+        vi.stubGlobal("fetch", provider);
+        if (scenario === "unpublished-revision") {
+          yield* Effect.tryPromise(() => runRefundWorkflow(workflowFor(db, accepted.id)));
+          expect(provider).toHaveBeenCalledTimes(1);
+          provider.mockClear();
+        }
+        const before = yield* getRefund({
+          db,
+          authority: call(db).authority,
+          userId,
+          refundAttemptId: accepted.id,
+        });
+        const beforeStanding = yield* standing(db);
+        yield* Effect.tryPromise(() =>
+          runRefundWorkflow({
+            ...workflowFor(db, accepted.id),
+            payload: {
+              version: 1,
+              kind: "refund-void-verification",
+              refundAttemptId: accepted.id,
+              verification: 1,
+            },
+          })
+        );
+        expect(provider).not.toHaveBeenCalled();
+        expect(
+          yield* getRefund({
+            db,
+            authority: call(db).authority,
+            userId,
+            refundAttemptId: accepted.id,
+          })
+        ).toEqual(before);
+        expect(yield* standing(db)).toEqual(beforeStanding);
+        const retained = yield* Effect.tryPromise(() =>
+          db
+            .prepare(`SELECT
+    (SELECT COUNT(*) FROM refund_submission_claims) AS claims,
+    (SELECT COUNT(*) FROM refund_outcome_evidence) AS outcomes,
+    (SELECT COUNT(*) FROM billing_access_adjustments) AS adjustments,
+    (SELECT COUNT(*) FROM subscription_renewal_stops) AS stops,
+    (SELECT SUM(amount_in_cents) FROM refund_attempts) AS reserved,
+    (SELECT verification_attempts FROM refund_outbox) AS revisions`)
+            .first()
+        );
+        expect(retained).toEqual({
+          claims: scenario === "missing-submission-claim" ? 0 : 1,
+          outcomes: 0,
+          adjustments: 0,
+          stops: 0,
+          reserved: 990000,
+          revisions: 0,
+        });
+      })
+    )
+);
+
+it("classifies unavailable Workflow handoff without acknowledging or changing financial state", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fixture();
+      const accepted = yield* startRefund(call(db));
+      let acknowledgments = 0;
+      const refused = yield* Effect.flip(
+        receiveRefunds({
+          environment: {
+            BILLING_REFUND_WORKFLOW: {
+              create: () => Promise.reject(new Error("Unavailable Workflow service")),
+              get: () => Promise.reject(new Error("Workflow not found")),
+            },
+          },
+          batch: {
+            messages: [
+              {
+                body: workflowFor(db, accepted.id).payload,
+                ack: (): void => {
+                  acknowledgments++;
+                },
+              },
+            ],
+          },
+        })
+      );
+      expect(refused).toMatchObject({ _tag: "RefundWorkFailure", reason: "unavailable" });
+      expect(acknowledgments).toBe(0);
+      expect(
+        yield* getRefund({
+          db,
+          authority: call(db).authority,
+          userId,
+          refundAttemptId: accepted.id,
+        })
+      ).toEqual(accepted);
+    })
+  ));
+
+it("contains publication failure without releasing the reservation or claiming a mutation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fixture();
+      const accepted = yield* startRefund(call(db));
+      const failed = yield* Effect.flip(
+        dispatchRefunds({
+          DB: db,
+          BILLING_COLLECTION_QUEUE: {
+            send: (): Promise<unknown> => Promise.reject(new Error("Queue unavailable")),
+          },
+        })
+      );
+      expect(failed).toMatchObject({ _tag: "RefundWorkFailure", reason: "unavailable" });
+      expect(
+        yield* getRefund({
+          db,
+          authority: call(db).authority,
+          userId,
+          refundAttemptId: accepted.id,
+        })
+      ).toEqual(accepted);
+      const retained = yield* Effect.tryPromise(() =>
+        db
+          .prepare(`SELECT
+    (SELECT SUM(amount_in_cents) FROM refund_attempts) AS reserved,
+    (SELECT COUNT(*) FROM refund_submission_claims) AS claims,
+    (SELECT COUNT(*) FROM refund_outcome_evidence) AS outcomes,
+    (SELECT COUNT(*) FROM refund_outbox WHERE published_at_ms IS NULL) AS unpublished`)
+          .first()
+      );
+      expect(retained).toEqual({ reserved: 400000, claims: 0, outcomes: 0, unpublished: 1 });
+    })
+  ));
+
+it("refuses out-of-bound verification work with a closed failure before handoff or execution", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fixture();
+      const accepted = yield* startRefund(call(db));
+      const work = {
+        version: 1,
+        kind: "refund-void-verification",
+        refundAttemptId: accepted.id,
+        verification: 9,
+      };
+      const creator = vi.fn((): Promise<unknown> => Promise.reject(new Error("No handoff")));
+      const ack = vi.fn();
+      const provider = vi.fn((): Promise<Response> =>
+        Promise.reject(new Error("No provider request"))
+      );
+      vi.stubGlobal("fetch", provider);
+      expect(
+        yield* Effect.flip(
+          receiveRefunds({
+            environment: { BILLING_REFUND_WORKFLOW: { create: creator, get: creator } },
+            batch: { messages: [{ body: work, ack }] },
+          })
+        )
+      ).toMatchObject({ _tag: "RefundWorkFailure", reason: "invalid-work" });
+      yield* Effect.tryPromise(() =>
+        expect(
+          runRefundWorkflow({ ...workflowFor(db, accepted.id), payload: work })
+        ).rejects.toMatchObject({ _tag: "RefundWorkFailure", reason: "invalid-work" })
+      );
+      expect(creator).not.toHaveBeenCalled();
+      expect(ack).not.toHaveBeenCalled();
+      expect(provider).not.toHaveBeenCalled();
+      expect(
+        yield* getRefund({
+          db,
+          authority: call(db).authority,
+          userId,
+          refundAttemptId: accepted.id,
+        })
+      ).toEqual(accepted);
+    })
+  ));
+
 it("reports malformed retained correction state as unavailable, not absent or a new intent", () =>
   Effect.runPromise(
     Effect.gen(function* () {

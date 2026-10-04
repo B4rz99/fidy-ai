@@ -13,13 +13,14 @@ import {
   type WorkflowStep,
   type WorkflowStepConfig,
 } from "cloudflare:workers";
-import { type Cause, Context, Effect, Layer, type Option, type Schema } from "effect";
+import { type Cause, Context, Effect, Layer, type Option, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { makeAccessSigningKeysOutboundHttp } from "../../src/shell/outbound-http/operations";
 import {
   type RefundDispatchInput,
   type RefundReceiveInput,
   type RefundSupportEnvironment,
+  RefundWorkFailure,
   type RefundWorkflowExecution,
 } from "./contract";
 import { handleRefundSupport as supportRefund } from "./internal/refund-support";
@@ -47,21 +48,27 @@ import {
 } from "./internal/billing-workflow";
 import { sweepExpiredEnrollmentAdmission as sweep } from "./internal/enrollment-admission";
 
+const refundWorkFailure = (error: unknown): RefundWorkFailure =>
+  new RefundWorkFailure({
+    reason: Schema.isSchemaError(error) ? "invalid-work" : "unavailable",
+  });
+
 /** Publish bounded versioned correction identities from their atomic acceptance outbox. */
 export const dispatchRefunds = (
   input: RefundDispatchInput
-): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> => dispatchCorrections(input);
+): Effect.Effect<void, RefundWorkFailure> =>
+  dispatchCorrections(input).pipe(Effect.mapError(refundWorkFailure));
 /** Handoff keeps acknowledgment and duplicate execution behavior within the Subscription owner. */
-export const receiveRefunds = (
-  input: RefundReceiveInput
-): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> => receiveCorrections(input);
+export const receiveRefunds = (input: RefundReceiveInput): Effect.Effect<void, RefundWorkFailure> =>
+  receiveCorrections(input).pipe(Effect.mapError(refundWorkFailure));
 /** Classify correction work without interpreting payment/provider data as authority. */
 export const isRefundWork = (body: unknown): boolean => recognizesRefund(body);
 
 /** Reconcile only claimed card voids through bounded read-only transaction lookups. */
 export const dispatchVoidVerification = (
   input: RefundDispatchInput
-): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> => dispatchVerification(input);
+): Effect.Effect<void, RefundWorkFailure> =>
+  dispatchVerification(input).pipe(Effect.mapError(refundWorkFailure));
 
 /** Construct bounded signing-key transport for origin-verified billing support. */
 export const handleRefundSupport = (
@@ -91,7 +98,9 @@ export const handleRefundSupport = (
 
 /** Execute one versioned correction with a durable no-retry submission claim. */
 export const runRefundWorkflow = (input: RefundWorkflowExecution): Promise<void> =>
-  executeRefundWorkflow(input);
+  Effect.runPromise(
+    Effect.tryPromise({ try: () => executeRefundWorkflow(input), catch: refundWorkFailure })
+  );
 
 export class BillingRefundWorkflowV1 extends WorkflowEntrypoint<BillingRuntime, unknown> {
   run(event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void> {

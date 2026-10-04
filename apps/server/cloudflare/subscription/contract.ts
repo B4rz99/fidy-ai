@@ -121,6 +121,11 @@ export type BillingRuntime = Pick<
   "DB" | "WOMPI_ENVIRONMENT" | "WOMPI_PUBLIC_KEY" | "WOMPI_PRIVATE_KEY" | "WOMPI_INTEGRITY_SECRET"
 >;
 
+/** Closed correction-work failure; Queue redelivery remains possible without publishing platform diagnostics. */
+export class RefundWorkFailure extends Data.TaggedError("RefundWorkFailure")<{
+  readonly reason: "unavailable" | "invalid-work";
+}> {}
+
 /** Closed internal-workflow failure; raw causes never cross browser or canonical response boundaries. */
 export class BillingCollectionFailure extends Data.TaggedError("BillingCollectionFailure")<{
   readonly cause: Option.Option<unknown>;

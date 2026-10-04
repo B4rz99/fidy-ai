@@ -7,4 +7,4 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
-      run: bash scripts/install-bun.sh "$RUNNER_TEMP/fidy-bun-bb35d1b81"
+      run: bash scripts/install-bun.sh "$RUNNER_TEMP/fidy-bun-b73ae471a"

@@ -1,5 +1,10 @@
 import { type CatalogOperation } from "../../src/shell/canonical-catalog/contract";
-import { type AuthorizedPAT, type PATAuthorizationDecision, type PATRequest } from "./contract";
+import {
+  type AuthorizedPAT,
+  type PATAuthorizationDecision,
+  type PATMetadataQuery,
+  type PATRequest,
+} from "./contract";
 import {
   authorizeCanonicalPAT as authorize,
   resolveCanonicalPATCredential as resolveCredential,
@@ -11,7 +16,7 @@ import {
   patMethods as methods,
   patRoute as route,
 } from "./internal/pat-routes";
-import { listPATs as list } from "./internal/pat-management";
+import { listPATsForCaller as list } from "./internal/pat-management";
 import { commitPATUnit as commit } from "./internal/pat-unit";
 
 /** Admit one declared canonical operation using the exact bearer, User, lifetime, Consent and scope. Protected work rechecks the returned proof in its atomic unit. */
@@ -27,8 +32,8 @@ export const resolveCanonicalPATCredential = (
 /** Dispatch only a declared PAT operation; private pairing proofs and persisted grants stay with Tokens. */
 export const handlePATRequest = (input: PATRequest): Promise<Response> => handle(input);
 
-/** List only safe active metadata for the presented WebSession's User after current Consent and Audit checks. */
-export const listPATs = (input: PATRequest): Promise<Response> => list(input);
+/** List safe active metadata under the exact caller proof, rechecking live WebSession and Consent in the audited D1 snapshot. PAT credentials cannot manage themselves. */
+export const listPATs = (input: PATMetadataQuery): Promise<Response> => list(input);
 
 /** Commit owner-composed PAT work with a final constraint that rolls back a skipped guard or Audit. */
 export const commitPATUnit = (

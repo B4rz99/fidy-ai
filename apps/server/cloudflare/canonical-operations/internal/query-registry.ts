@@ -10,6 +10,7 @@ import { browseDashboard } from "../../dashboard/operations";
 import { recallMemories } from "../../memory/operations";
 import { listRecurringSeries } from "../../recurring/operations";
 import { listPendingInsights } from "../../insights/operations";
+import { listPATs } from "../../tokens/operations";
 import {
   forwardingAddressResponse,
   listNeedsReviewItems,
@@ -21,6 +22,7 @@ export type QueryWork = Readonly<{
   subject: TransactionCaller;
   request: Request;
   bucket: Option.Option<R2Bucket>;
+  browserOrigin: Option.Option<string>;
 }>;
 export type QueryOwner = (work: QueryWork) => Effect.Effect<Response, Cause.UnknownError>;
 
@@ -73,15 +75,20 @@ const queryOwners = new Map<string, QueryOwner>([
   ],
   [
     "subscription.getUpgradeUrl",
-    ({ db, subject }): Effect.Effect<Response, Cause.UnknownError> =>
+    ({ db, subject, browserOrigin }): Effect.Effect<Response, Cause.UnknownError> =>
       Effect.tryPromise(() =>
         executeProtectedSubscriptionQuery({
           db,
           subject,
           operation: "subscription.getUpgradeUrl",
-          browserOrigin: Option.none(),
+          browserOrigin,
         })
       ),
+  ],
+  [
+    "pats.listPATs",
+    ({ db, subject }): Effect.Effect<Response, Cause.UnknownError> =>
+      Effect.tryPromise(() => listPATs({ db, subject })),
   ],
   [
     "categories.listCategories",

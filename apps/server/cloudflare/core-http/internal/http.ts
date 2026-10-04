@@ -27,7 +27,6 @@ import { MemoryId, RememberInput, ReviseInput } from "../../../src/core/memory/c
 import { type TelemetryService } from "../../../src/shell/observability/contract";
 import { type Cause, Clock, Effect, Exit, Option, Schema } from "effect";
 import {
-  browseTransactions,
   correctionInput,
   transactionInput,
   transactionPairInput,
@@ -35,9 +34,7 @@ import {
 } from "../../transactions/operations";
 import { BudgetId, CreateBudgetInput, UpdateBudgetInput } from "../../../src/core/budgets/contract";
 import { DeliveryEvidenceInput, InsightEventId } from "../../../src/core/insights/contract";
-import { browseBudgets, budgetRefusal, evaluateBudgetAlerts } from "../../budgets/operations";
-import { listRecurringSeries } from "../../recurring/operations";
-import { listPendingInsights } from "../../insights/operations";
+import { budgetRefusal } from "../../budgets/operations";
 import { browseDashboard } from "../../dashboard/operations";
 import { ownsTransactionPath as transactionPath } from "../../../src/shell/transactions/runtime";
 import {
@@ -56,10 +53,7 @@ import {
   handleWebAuthentication,
   ownsWebAuthenticationPath,
 } from "../../web-authentication/operations";
-import {
-  executeProtectedSubscriptionQuery,
-  refundSupportRoute,
-} from "../../subscription/operations";
+import { refundSupportRoute } from "../../subscription/operations";
 import {
   dispatchBillingCollection,
   handlePaymentEnrollment,
@@ -67,9 +61,9 @@ import {
   receiveWompiBillingEvent,
 } from "../../subscription/runtime";
 
-import { executeProtectedQuotaQuery } from "../../quotas/operations";
-import { listPATs, resolveCanonicalPATCredential } from "../../tokens/operations";
-import { recallMemories, rejectMemoryMutation } from "../../memory/operations";
+import { resolveCanonicalPATCredential } from "../../tokens/operations";
+import { rejectMemoryMutation } from "../../memory/operations";
+import { executeCanonicalHttpQuery } from "../../canonical-operations/operations";
 import { canonicalOperation, canonicalRoute } from "../../routing/operations";
 import {
   BatchInput,
@@ -86,12 +80,10 @@ import {
 } from "../../../src/shell/operations/contract";
 import { operationCatalog } from "../../../src/shell/api";
 import {
-  executeProtectedCategories,
   keywordRuleIdFromPath,
   keywordRuleInput,
   keywordRuleInvalidInput,
   keywordRuleUnknownId,
-  listOwnKeywordRules,
 } from "../../categories/operations";
 import { contractDigestPattern, gitRevisionPattern } from "../../runtime/contract";
 import { smokeFailureHeader, smokePath } from "../../runtime/release-smoke/contract";
@@ -103,9 +95,6 @@ import {
 
 import { statementStagingPath } from "../../../src/shell/ingestion/contract";
 import {
-  forwardingAddressResponse,
-  listNeedsReviewItems,
-  readStatementSubmission,
   submitForExtractionInput,
   uploadStagedStatement,
   validationFailed,
@@ -236,15 +225,6 @@ const methodNotAllowed = (): Response =>
     status: HTTP_METHOD_NOT_ALLOWED,
   });
 
-const categoriesResponse = (
-  environment: CoreHttpEnvironment,
-  subject: TransactionCaller
-): Effect.Effect<Response> =>
-  Effect.tryPromise({
-    try: () => executeProtectedCategories({ db: environment.DB, subject }),
-    catch: () => undefined,
-  }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("categories.listCategories"));
-
 const forwardHostedWhatsApp = (
   environment: CoreHttpEnvironment,
   path: "whatsapp" | "whatsapp/status",
@@ -340,6 +320,7 @@ const coordinatorAdmission = (
 
 /** Inert per-admission URL suffix; the coordinator decodes the admission from the body alone. */
 const coordinatorRoutes = {
+  Query: "canonical",
   Call: "call",
   Batch: "batch",
 } as const;
@@ -556,39 +537,6 @@ const unavailableCanonicalAdapter = (): Response =>
     HTTP_SERVICE_UNAVAILABLE
   );
 
-/** True for the admitted read operations Transaction history owns. */
-const isTransactionHistoryRead = (operation: CatalogOperation): boolean =>
-  operation.id === "transactions.listTransactions" ||
-  operation.id === "transactions.searchTransactions" ||
-  operation.id === "transactions.getTransaction";
-
-/** Dispatch one admitted Transaction history read: search, one record, or the list. */
-const dispatchCanonicalHistory = (
-  input: Readonly<{
-    request: Request;
-    environment: CoreHttpEnvironment;
-    subject: TransactionCaller;
-    operation: CatalogOperation;
-  }>
-): Promise<Response> => {
-  const { request, environment, subject, operation } = input;
-  return browseTransactions({
-    db: environment.DB,
-    selection:
-      operation.id === "transactions.searchTransactions"
-        ? { request, subject, search: true, id: Option.none() }
-        : {
-            request,
-            subject,
-            search: false,
-            id:
-              operation.id === "transactions.getTransaction"
-                ? Option.some(new URL(request.url).pathname.split("/").at(-1) ?? "")
-                : Option.none(),
-          },
-  });
-};
-
 /** One canonical call for an admitted owner operation, without restating its published id. */
 const ownerCall = (
   operation: CanonicalOperationId | MemoryMutationId,
@@ -650,14 +598,6 @@ const keywordRuleResponse = (
   }>
 ): Option.Option<Effect.Effect<Response>> => {
   const { request, environment, operation, subject } = input;
-  if (operation.id === "categories.listKeywordRules") {
-    return Option.some(
-      Effect.tryPromise({
-        try: () => listOwnKeywordRules({ db: environment.DB, subject }),
-        catch: () => undefined,
-      }).pipe(Effect.orElseSucceed(unavailable))
-    );
-  }
   if (
     operation.id !== "categories.createKeywordRule" &&
     operation.id !== "categories.updateKeywordRule" &&
@@ -894,9 +834,6 @@ const BudgetOperation = Schema.Literals([
   "budgets.createBudget",
   "budgets.updateBudget",
   "budgets.deleteBudget",
-  "budgets.listBudgets",
-  "budgets.getBudget",
-  "budgets.getBudgetStatus",
 ]);
 const budgetResponse = ({
   request,
@@ -920,20 +857,6 @@ const budgetResponse = ({
         budgetMutationResponse({ request, environment, subject, operation: selectedId }).pipe(
           Effect.withSpan(operation.id)
         )
-      );
-    case "budgets.listBudgets":
-    case "budgets.getBudget":
-    case "budgets.getBudgetStatus":
-      return Option.some(
-        Effect.tryPromise(() =>
-          browseBudgets({
-            db: environment.DB,
-            request,
-            subject,
-            operation: selectedId,
-            reconcile: () => evaluateBudgetAlerts({ db: environment.DB, userId: subject.userId }),
-          })
-        ).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan(operation.id))
       );
     default:
       return Option.none();
@@ -966,11 +889,6 @@ const memoryResponse = (
   }>
 ): Option.Option<Effect.Effect<Response>> => {
   const { request, environment, operation, subject } = input;
-  if (operation.id === "memory.recall") {
-    return Option.some(
-      recallMemories({ db: environment.DB, subject }).pipe(Effect.withSpan("memory.recall"))
-    );
-  }
   return Option.map(memoryMutationOperation(operation.id), (owned) =>
     memoryMutationResponse({ request, environment, subject, operation: owned }).pipe(
       Effect.withSpan(owned)
@@ -1156,15 +1074,6 @@ const forwardingCanonicalResponse = ({
       }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan(operation.id))
     );
   }
-  if (operation.id === "ingestion.getEmailForwarding") {
-    return Option.some(
-      forwardingAddressResponse({
-        db: environment.DB,
-        subject,
-        operation: "ingestion.getEmailForwarding",
-      }).pipe(Effect.withSpan(operation.id))
-    );
-  }
   return Option.none();
 };
 
@@ -1186,27 +1095,6 @@ const ingestionCanonicalResponse = (
           work: canonicalCall(operation.id, { payload: input.value }),
         });
       }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("ingestion.submitForExtraction"))
-    );
-  }
-  if (operation.id === "ingestion.getStatementSubmission") {
-    return Option.some(
-      Effect.tryPromise({
-        try: () => readStatementSubmission({ environment, request, subject }),
-        catch: () => undefined,
-      }).pipe(
-        Effect.orElseSucceed(unavailable),
-        Effect.withSpan("ingestion.getStatementSubmission")
-      )
-    );
-  }
-  if (operation.id === "ingestion.listNeedsReviewItems") {
-    return Option.some(
-      listNeedsReviewItems({
-        database: environment.DB,
-        environment,
-        subject,
-        url: new URL(request.url),
-      }).pipe(Effect.withSpan("ingestion.listNeedsReviewItems"))
     );
   }
   return Option.none();
@@ -1263,14 +1151,6 @@ const transactionResponse = (
       }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan(atomicBatchOperation))
     );
   }
-  if (isTransactionHistoryRead(operation)) {
-    return Option.some(
-      Effect.tryPromise({
-        try: () => dispatchCanonicalHistory({ request, environment, subject, operation }),
-        catch: () => undefined,
-      }).pipe(Effect.orElseSucceed(unavailable))
-    );
-  }
   return Option.none();
 };
 
@@ -1285,13 +1165,6 @@ const insightResponse = (
   }>
 ): Option.Option<Effect.Effect<Response>> => {
   const { request, environment, operation, subject } = input;
-  if (operation.id === "insights.listPendingInsights") {
-    return Option.some(
-      listPendingInsights({ db: environment.DB, subject, request }).pipe(
-        Effect.withSpan(operation.id)
-      )
-    );
-  }
   if (
     operation.id !== "insights.markInsightDelivered" &&
     operation.id !== "insights.markInsightRead" &&
@@ -1338,9 +1211,6 @@ const insightResponse = (
 
 const DashboardOperation = Schema.Literals([
   "dashboard.initializeDashboard",
-  "dashboard.getDashboard",
-  "dashboard.getDashboardView",
-  "dashboard.listDashboardCatalog",
   "dashboard.applyDashboardEdit",
 ]);
 
@@ -1355,78 +1225,17 @@ const dashboardResponse = (
 ): Option.Option<Effect.Effect<Response>> =>
   Option.map(Schema.decodeUnknownOption(DashboardOperation)(input.operation.id), (operation) => {
     const request = { db: input.environment.DB, subject: input.subject, request: input.request };
-    if (operation === "dashboard.getDashboard" || operation === "dashboard.getDashboardView") {
-      if (input.request.url.includes("?")) return browseDashboard({ ...request, operation });
-      return sendToCoordinator({
-        environment: input.environment,
-        subject: input.subject,
-        work: ownerCall(CanonicalOperationId.make(operation), {}),
-      }).pipe(Effect.orElseSucceed(unavailable));
-    }
-    return operation === "dashboard.listDashboardCatalog"
-      ? browseDashboard({ ...request, operation })
-      : browseDashboard({
-          ...request,
-          operation,
-          runMutation: (call) =>
-            sendToCoordinator({
-              environment: input.environment,
-              subject: input.subject,
-              work: ownerCall(
-                CanonicalOperationId.make(call.operation),
-                Option.getOrNull(call.input)
-              ),
-            }).pipe(Effect.orElseSucceed(unavailable)),
-        });
+    return browseDashboard({
+      ...request,
+      operation,
+      runMutation: (call) =>
+        sendToCoordinator({
+          environment: input.environment,
+          subject: input.subject,
+          work: ownerCall(CanonicalOperationId.make(call.operation), Option.getOrNull(call.input)),
+        }).pipe(Effect.orElseSucceed(unavailable)),
+    });
   });
-
-const primaryCanonicalOwner = (
-  input: Parameters<typeof insightResponse>[0]
-): Option.Option<Effect.Effect<Response>> => {
-  if (input.operation.id === "recurring.listRecurringSeries") {
-    return Option.some(
-      listRecurringSeries({
-        db: input.environment.DB,
-        subject: input.subject,
-        request: input.request,
-      }).pipe(Effect.withSpan(input.operation.id))
-    );
-  }
-  return Option.orElse(insightResponse(input), () => dashboardResponse(input));
-};
-const subscriptionQueryResponse = ({
-  environment,
-  subject,
-  operation: declaration,
-}: Readonly<{
-  environment: CoreHttpEnvironment;
-  subject: TransactionCaller;
-  operation: CatalogOperation;
-}>): Option.Option<Effect.Effect<Response>> => {
-  const operation = (
-    [
-      "subscription.listSubscriptionOffers",
-      "subscription.getSubscriptionStatus",
-      "subscription.getUpgradeUrl",
-    ] as const
-  ).find((id) => id === declaration.id);
-  if (operation === undefined) return Option.none();
-  const work =
-    operation === "subscription.getUpgradeUrl"
-      ? {
-          db: environment.DB,
-          subject,
-          operation,
-          browserOrigin: Option.some(environment.BROWSER_ORIGIN),
-        }
-      : { db: environment.DB, subject, operation };
-  return Option.some(
-    Effect.tryPromise({
-      try: () => executeProtectedSubscriptionQuery(work),
-      catch: () => undefined,
-    }).pipe(Effect.orElseSucceed(unavailable))
-  );
-};
 
 /** Once admitted, every credential executes through the same canonical operation dispatch. */
 const executeCanonicalWork = (
@@ -1438,13 +1247,19 @@ const executeCanonicalWork = (
   }>
 ): Effect.Effect<Response> => {
   const { request, environment, operation, subject } = input;
-  if (operation.id === "quota.getQuota") {
-    return executeProtectedQuotaQuery({ db: environment.DB, subject });
+  if (operation.policy.kind === "query") {
+    return executeCanonicalHttpQuery({
+      db: environment.DB,
+      subject,
+      operation: operation.id,
+      request,
+      bucket: Option.fromUndefinedOr(environment.STATEMENT_STAGING_BUCKET),
+      browserOrigin: environment.BROWSER_ORIGIN,
+      coordinate: (work) =>
+        sendToCoordinator({ environment, subject, work }).pipe(Effect.orElseSucceed(unavailable)),
+    });
   }
-  if (operation.id === "categories.listCategories") return categoriesResponse(environment, subject);
-  const subscription = subscriptionQueryResponse(input);
-  if (Option.isSome(subscription)) return subscription.value;
-  const primaryOwner = primaryCanonicalOwner(input);
+  const primaryOwner = Option.orElse(insightResponse(input), () => dashboardResponse(input));
   const otherOwner = Option.orElse(budgetResponse(input), () =>
     Option.orElse(keywordRuleResponse(input), () => memoryResponse(input))
   );
@@ -1454,12 +1269,6 @@ const executeCanonicalWork = (
   if (Option.isSome(transaction)) return transaction.value;
   const ingestion = ingestionCanonicalResponse({ environment, operation, request, subject });
   if (Option.isSome(ingestion)) return ingestion.value;
-  if (operation.id === "pats.listPATs") {
-    return Effect.tryPromise({
-      try: () => listPATs({ request, db: environment.DB }),
-      catch: () => undefined,
-    }).pipe(Effect.orElseSucceed(unavailable));
-  }
   return Effect.succeed(unavailableCanonicalAdapter());
 };
 

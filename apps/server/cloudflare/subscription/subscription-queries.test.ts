@@ -6,6 +6,11 @@ import { SubscriptionOffers, SubscriptionStatus } from "../../src/core/subscript
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
 import { executeProtectedSubscriptionQuery } from "./operations";
+import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
+import {
+  executeCanonicalHttpQuery,
+  executeCanonicalQuery,
+} from "../canonical-operations/operations";
 
 import coreWorker from "../core-worker";
 import { applyTestMigration } from "../d1-test-fixture";
@@ -91,6 +96,48 @@ const fixture = (): Promise<D1Database> =>
       return db;
     })
   );
+
+effectIt.effect(
+  "preserves configured HTTP upgrade guidance and the hosted production destination with shared Audit",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(() => fixture());
+      const subject = { id: sessionA, userId: userA, digest: token };
+      const operation = CanonicalOperationId.make("subscription.getUpgradeUrl");
+      const http = yield* executeCanonicalHttpQuery({
+        db,
+        subject,
+        operation,
+        request: new Request("https://core.internal/subscription/upgrade-url"),
+        bucket: Option.none(),
+        browserOrigin: "https://preview.fidyapp.test",
+        coordinate: () => Effect.die(new Error("Upgrade guidance must not submit Dashboard work")),
+      });
+      const hosted = Option.getOrThrow(
+        yield* executeCanonicalQuery({ db, subject, operation, input: {}, bucket: Option.none() })
+      );
+      expect(http.status).toBe(200);
+      expect(hosted.status).toBe(200);
+      expect(yield* fromTestPromise(() => http.json())).toEqual({
+        data: { url: "https://preview.fidyapp.test/upgrade" },
+        next: [],
+      });
+      expect(yield* fromTestPromise(() => hosted.json())).toEqual({
+        data: { url: "https://app.fidyapp.com/upgrade" },
+        next: [],
+      });
+      expect(
+        (yield* fromTestPromise(() =>
+          db
+            .prepare("SELECT user_id, session_id, operation, outcome FROM pat_audit ORDER BY rowid")
+            .all()
+        )).results
+      ).toEqual([
+        { user_id: userA, session_id: sessionA, operation, outcome: "accepted" },
+        { user_id: userA, session_id: sessionA, operation, outcome: "accepted" },
+      ]);
+    })
+);
 
 effectIt.effect(
   "returns only the authenticated User's expired trial and rejects a wrong bearer without an audit",

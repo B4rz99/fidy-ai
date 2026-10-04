@@ -1,4 +1,5 @@
 import type { PATSubject } from "../../src/shell/tokens/contract";
+import type { WebSessionSubject } from "../../src/shell/web-session/contract";
 
 /** Closed PAT admission outcomes; actual work must recheck the returned proof at commit. */
 export type PATAuthorizationDecision =
@@ -11,3 +12,9 @@ export type AuthorizedPAT = PATSubject;
 
 /** An incoming PAT request; the owner alone decodes proofs and accesses its persisted grants. */
 export type PATRequest = Readonly<{ request: Request; db: D1Database }>;
+
+/** Admitted query proof; Tokens rechecks the exact WebSession and refuses PAT self-management. */
+export type PATMetadataQuery = Readonly<{
+  db: D1Database;
+  subject: WebSessionSubject | AuthorizedPAT;
+}>;

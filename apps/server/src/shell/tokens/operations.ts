@@ -16,7 +16,7 @@ import {
   protectConsentStatement,
   protectPATRevocationStatement,
 } from "~/shell/consent/operations";
-import { type FreshSessionSubject } from "~/shell/web-session/contract";
+import { type FreshSessionSubject, type WebSessionAuthority } from "~/shell/web-session/contract";
 import { freshSessionExists, freshSessionParams } from "~/shell/web-session/operations";
 import {
   type PATAuthority,
@@ -454,12 +454,12 @@ export const listPATsResponse = (
   SqlClient.SqlClient
 > => readPATs(userId);
 
-/** Prepare safe User-owned metadata and its decoder; the caller commits its audit before disclosure. */
+/** Prepare safe User-owned metadata under the exact live caller proof; commit Audit in the same snapshot before disclosure. */
 export const preparePATMetadata = (
   input: Readonly<{
     userId: string;
     current: number;
-    session: Option.Option<FreshSessionSubject>;
+    authority: WebSessionAuthority;
   }>
 ): Readonly<{
   statement: OwnedStatement;
@@ -470,7 +470,16 @@ export const preparePATMetadata = (
     },
     Unavailable
   >;
-}> => ({ statement: patMetadataQuery(input), decode: (rows) => patMetadataResponseFromRows(rows) });
+}> => {
+  const metadata = patMetadataQuery({ ...input, session: Option.none() });
+  return {
+    statement: {
+      sql: `SELECT * FROM (${metadata.sql}) WHERE EXISTS (SELECT 1 FROM ${input.authority.table} WHERE ${input.authority.predicate})`,
+      params: [...metadata.params, ...input.authority.bindings],
+    },
+    decode: (rows) => patMetadataResponseFromRows(rows),
+  };
+};
 
 /** Final statement for a guarded PAT transition; a skipped prerequisite aborts the whole D1 batch. */
 export const patAtomicAssertion = `INSERT INTO pat_atomic_assertion (id, accepted)

@@ -1,0 +1,54 @@
+apps/server/.dependency-cruiser.mjs
+  s_99853caa398493::t_0fb861e8b1b113 180,1331
+apps/cli/src/canonical/operations.ts
+  s_99853caa398493::t_b645d8c5f24d95 156-157
+  s_99853caa398493::t_53522ce6895346 2,124,131-133,215-242,255-258,358
+apps/cli/ARCHITECTURE.md
+  s_99853caa398493::t_343dfe8332a713 146-159,231-237
+apps/cli/src/canonical/canonical.test-fixture.ts
+  s_99853caa398493::t_dab436d1388a71 16-18,23-25,58
+apps/cli/src/canonical/contract.ts
+  s_99853caa398493::t_c50315efc1a304 1,11,23
+apps/cli/src/canonical/operations.test.ts
+  s_99853caa398493::t_0491870f9419e8 113-297,464
+apps/cli/src/canonical/runtime.ts
+  s_99853caa398493::t_12eb9e0f07f6e5 19
+apps/cli/src/direct-client/runtime.ts
+  s_99853caa398493::t_024b9fde934617 2,8,38-40,96-111,120,142,175
+apps/cli/test/allowance-entry.ts
+  s_99853caa398493::t_5fca92bc0a4aea 1-69
+apps/server/cloudflare/canonical-admission/operations.test.ts
+  s_99853caa398493::t_7dde0dcaf80d5d 3,70-177,335-339,581,585-593,608-617
+apps/server/cloudflare/canonical-admission/operations.ts
+  s_99853caa398493::t_4a2131f1f3ae98 2,170,172-176,180
+apps/server/src/shell/quotas/contract.ts
+  s_99853caa398493::t_fc7f9fb3959929 1,7-42
+docs/operations/commercial-allowances.md
+  s_99853caa398493::t_4db081ae97437b 30-42
+docs/research/969-release-age-exception.md
+  s_99853caa398493::t_38c8cfd4888c1e 20-46
+package.json
+  s_99853caa398493::t_8b6333c34200de 76-77
+scripts/install-workspace.sh
+  s_99853caa398493::t_c553431351b0ee 2-3,17-18
+apps/server/src/client.ts
+  s_99853caa398493::t_575dde5174e40f 36
+bun.lock
+  s_99853caa398493::t_ff8a7662ca2b76 144-145,1555,1557
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f11793e2add4e6c14cc56682dec9f25cc8fed3e6",
+  "prompts": {},
+  "sessions": {
+    "s_99853caa398493": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a1072b-731e-76e6-be76-24b40cec8e56",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

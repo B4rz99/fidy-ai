@@ -1,0 +1,38 @@
+apps/server/package.json
+  s_49871fd774dd99::t_03a5b4f043a317 311
+apps/web/package.json
+  s_49871fd774dd99::t_2f33d11fd3f854 31,60
+infra/cloudflare/package.json
+  s_49871fd774dd99::t_157b1a9573049b 26
+scripts/install-workspace.sh
+  s_49871fd774dd99::t_ee19075ead4ba2 2,16-17
+docs/research/1004-dependency-admission.md
+  s_49871fd774dd99::t_d67aec5b2097ab 1-21,23-28,35-53
+  s_49871fd774dd99::t_93e21964613b79 22,29-34
+bun.lock
+  s_cfc2b176144667::t_b37c1e3372401c 65,80,93,109,126,243,245,247,249,251,411-412,769,773,1553,1555,1701,1703,1927
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "defdb38ca6243278bb5459a3a146a6b3de657292",
+  "prompts": {},
+  "sessions": {
+    "s_49871fd774dd99": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10722-ee19-7681-bce9-c9de9ef2c1e3",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_cfc2b176144667": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10723-2418-73d5-8f2b-079f13ca3692",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

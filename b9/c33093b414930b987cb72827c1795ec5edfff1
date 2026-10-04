@@ -18,6 +18,8 @@ apps/server/cloudflare/canonical-operations/operations.ts
   s_f9f3f4c15bf648::t_dfe3614c999c03 386
   s_f9f3f4c15bf648::t_d122cd8008c366 286-288,316,365-368,372-376,411-416,418
   s_f9f3f4c15bf648::t_01f75f8227e715 152-155,157
+  s_f9f3f4c15bf648::t_383be721e307fc 380-383
+  s_f9f3f4c15bf648::t_3a3f5b54e59f61 156,298,305,320,347,379
 apps/server/cloudflare/tokens/pats.test.ts
   s_f9f3f4c15bf648::t_b2dbc99e51d359 1958-1959,2036-2038,2079
   s_f9f3f4c15bf648::t_a58a30ac2ab0b5 1927
@@ -40,6 +42,7 @@ apps/server/cloudflare/transactions/transactions.test.ts
 apps/server/cloudflare/canonical-operations/internal/query-registry.ts
   s_f9f3f4c15bf648::t_ec7e9f0d0ef997 90-91
   s_f9f3f4c15bf648::t_c263c2eda1ab21 13,88-89,92
+  s_f9f3f4c15bf648::t_7547ef87f541bc 25,78,84
 apps/server/ARCHITECTURE.md
   s_f9f3f4c15bf648::t_99d3395d8878c4 74-86,90-91
   s_f9f3f4c15bf648::t_75f97f204066ea 87-89
@@ -61,6 +64,7 @@ apps/server/src/shell/tokens/operations.ts
 apps/server/cloudflare/core-http/internal/http.ts
   s_f9f3f4c15bf648::t_d122cd8008c366 1258-1259
   s_f9f3f4c15bf648::t_13cb6625dc358c 37,56,65-66,323,1228-1237,1250-1256,1260,1262
+  s_f9f3f4c15bf648::t_a3c84d9b5fc8f1 64,1257
 apps/server/cloudflare/tokens/contract.ts
   s_f9f3f4c15bf648::t_52da4f9591cc07 2,15-17
   s_f9f3f4c15bf648::t_40e1b564e09427 18-20

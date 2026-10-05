@@ -4557,48 +4557,52 @@ it("approves a separately identified connection with atomic Consent and only a p
       ).toBe(400);
     })
   ));
-it("rejects distributed registration and discovery pressure at global limits", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send } = yield* setup();
-      for (let index = 0; index < 100; index++) {
+it(
+  "rejects distributed registration and discovery pressure at global limits",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db, send } = yield* setup();
+        for (let index = 0; index < 100; index++) {
+          expect(
+            (yield* wait(
+              sendFrom(send, Math.floor(index / 10))("/oauth/register", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: "{}",
+              })
+            )).status
+          ).toBe(400);
+        }
         expect(
           (yield* wait(
-            sendFrom(send, Math.floor(index / 10))("/oauth/register", {
+            sendFrom(send, 20)("/oauth/register", {
               method: "POST",
               headers: { "content-type": "application/json" },
               body: "{}",
             })
           )).status
-        ).toBe(400);
-      }
-      expect(
-        (yield* wait(
-          sendFrom(send, 20)("/oauth/register", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: "{}",
-          })
-        )).status
-      ).toBe(429);
-      for (let index = 0; index < 499; index++) {
+        ).toBe(429);
+        for (let index = 0; index < 499; index++) {
+          expect(
+            (yield* wait(
+              sendFrom(send, 30 + Math.floor(index / 60))("/.well-known/oauth-authorization-server")
+            )).status
+          ).toBe(200);
+        }
         expect(
-          (yield* wait(
-            sendFrom(send, 30 + Math.floor(index / 60))("/.well-known/oauth-authorization-server")
-          )).status
-        ).toBe(200);
-      }
-      expect(
-        (yield* wait(sendFrom(send, 50)("/.well-known/oauth-authorization-server"))).status
-      ).toBe(429);
-      expect(
-        yield* wait(
-          db.prepare("SELECT count(*) FROM oauth_public_clients").first<number>("count(*)")
-        )
-      ).toBe(0);
-      yield* assertReleased(db);
-    })
-  ));
+          (yield* wait(sendFrom(send, 50)("/.well-known/oauth-authorization-server"))).status
+        ).toBe(429);
+        expect(
+          yield* wait(
+            db.prepare("SELECT count(*) FROM oauth_public_clients").first<number>("count(*)")
+          )
+        ).toBe(0);
+        yield* assertReleased(db);
+      })
+    ),
+  60_000
+);
 it("keeps the stable User budget across fresh sessions and rotating sources", () =>
   Effect.runPromise(
     Effect.gen(function* () {

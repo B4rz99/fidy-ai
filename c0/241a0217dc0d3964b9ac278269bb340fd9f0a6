@@ -1,0 +1,21 @@
+apps/server/cloudflare/subscription/refunds.test.ts
+  s_e278ac208f4e8a::t_99545a72975477 143-167
+apps/server/cloudflare/subscription/internal/refund-workflow.ts
+  s_e278ac208f4e8a::t_3fde07f1ac808f 1,74-78,81-86,102-107,109-111,113-116,179,216
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c0241a0217dc0d3964b9ac278269bb340fd9f0a6",
+  "prompts": {},
+  "sessions": {
+    "s_e278ac208f4e8a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10731-a41d-7121-98b3-ec6e9e1e04de",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

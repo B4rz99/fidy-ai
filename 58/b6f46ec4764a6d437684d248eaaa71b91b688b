@@ -1,0 +1,20 @@
+apps/server/cloudflare/oauth-agents/oauth-ingress.test.ts
+  s_8e33e3c1782639::t_0f5d2833ff2e99 4560-4576,4579,4585-4592,4594-4603
+  s_8e33e3c1782639::t_19274be0f4d709 4604-4605
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "58b6f46ec4764a6d437684d248eaaa71b91b688b",
+  "prompts": {},
+  "sessions": {
+    "s_8e33e3c1782639": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a109c2-9276-7113-b270-d2078b93ecba",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

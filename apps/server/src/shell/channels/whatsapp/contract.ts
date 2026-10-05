@@ -156,8 +156,21 @@ export const WhatsAppCaller = Schema.Struct({
 }).annotate({ identifier: "WhatsAppCaller" });
 export type WhatsAppCaller = typeof WhatsAppCaller.Type;
 
+/** A direct document label is display metadata, never a locator or retrieval authority. */
+export const WhatsAppDocumentFileName = Schema.NonEmptyString.check(
+  Schema.isMaxLength(maximumProviderIdentifierLength)
+);
+/** A verified attachment reference; only the closed media transport may retrieve its bytes. */
+export const WhatsAppDocument = Schema.TaggedStruct("Document", {
+  mediaId: WhatsAppMediaId,
+  fileName: Schema.Option(WhatsAppDocumentFileName),
+  caption: Schema.Option(TranscriptText),
+});
+export type WhatsAppDocument = typeof WhatsAppDocument.Type;
+
 /** Validated text accepted by the WhatsApp slice after provider authentication and projection. */
 export type WhatsAppInboundContent =
+  | WhatsAppDocument
   | Readonly<{ readonly _tag: "Text"; readonly text: TranscriptText }>
   | Readonly<{
       readonly _tag: "VoiceTranscript";

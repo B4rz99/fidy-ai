@@ -15,6 +15,7 @@ const tables = [
   "dashboard_audit",
   "insight_audit",
   "statement_submission_audit",
+  "statement_clarification_audit",
   "statement_review_audit",
   "email_replacement_audit",
 ] as const;

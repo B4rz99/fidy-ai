@@ -18,6 +18,10 @@ const wompiSandboxOrigin = "https://sandbox.wompi.co";
 const wompiProductionOrigin = "https://production.wompi.co";
 const bytesPerKibibyte = 1_024;
 const maximumKapsoResponseKibibytes = 64;
+/** Application safety bound, not Kapso's maximum supported media size. */
+const maximumKapsoMediaMebibytes = 10;
+const maximumKapsoMediaResponseBytes =
+  maximumKapsoMediaMebibytes * bytesPerKibibyte * bytesPerKibibyte;
 const maximumWompiResponseKibibytes = 16;
 const maximumResendDeliveryResponseKibibytes = 4;
 const maximumKapsoResponseBytes = maximumKapsoResponseKibibytes * bytesPerKibibyte;
@@ -352,6 +356,29 @@ const prepareNonProviderGroup = (
 ): Effect.Effect<PreparedRequest, OutboundHttpFailure> => {
   const config = context.config;
   switch (request._tag) {
+    case "KapsoMediaMetadata":
+    case "KapsoMediaDownload":
+      return Option.match(config.kapsoApiKey, {
+        onNone: () => Effect.fail(unavailableTransport()),
+        onSome: (apiKey) =>
+          Effect.succeed({
+            http: context.kapsoHttp,
+            request:
+              request._tag === "KapsoMediaMetadata"
+                ? HttpClientRequest.get(
+                    `${kapsoMessagesBaseUrl}/${encodeURIComponent(request.mediaId)}?phone_number_id=${encodeURIComponent(request.businessPhoneNumberId)}`,
+                    { headers: { "x-api-key": Redacted.value(apiKey) } }
+                  )
+                : HttpClientRequest.get(
+                    `https://api.kapso.ai/meta/whatsapp/media_download?token=${encodeURIComponent(Redacted.value(request.token))}`
+                  ),
+            maximumResponseBytes:
+              request._tag === "KapsoMediaMetadata"
+                ? maximumKapsoResponseBytes
+                : maximumKapsoMediaResponseBytes,
+            redirect: "manual" as const,
+          }),
+      });
     case "KapsoMessages":
       return Option.match(config.kapsoApiKey, {
         onNone: () => Effect.fail(unavailableTransport()),
@@ -379,6 +406,8 @@ const prepareRequest = (
 ): Effect.Effect<PreparedRequest, OutboundHttpFailure> =>
   Match.value(request).pipe(
     Match.tagsExhaustive({
+      KapsoMediaMetadata: (value) => prepareNonProviderGroup(value, context),
+      KapsoMediaDownload: (value) => prepareNonProviderGroup(value, context),
       KapsoMessages: (value) => prepareNonProviderGroup(value, context),
       CloudflareAccessSupportRecovery: (value) => prepareNonProviderGroup(value, context),
       CloudflareAccessSigningKeys: (value) => prepareNonProviderGroup(value, context),

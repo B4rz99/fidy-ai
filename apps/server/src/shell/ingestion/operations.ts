@@ -1,3 +1,4 @@
+import { readWhatsAppStatementMedia as readStatementMedia } from "~/shell/ingestion/internal/whatsapp-media";
 import { type StatementSourceFormat, maximumStatementBytes } from "~/core/ingestion/contract";
 import { Effect, Option, Schema } from "effect";
 
@@ -10,6 +11,10 @@ import {
 } from "./contract";
 import { parseCsv, parseXlsx } from "~/shell/ingestion/internal/parser";
 import { interpretNotificationEmail as interpretDecodedEmail } from "~/shell/ingestion/internal/email-interpretation/interpret";
+
+/** Retrieve only a bounded statement document through the closed provider media interface. */
+export const readWhatsAppStatementMedia: typeof readStatementMedia = (input) =>
+  readStatementMedia(input);
 
 const zipFirstByte = 0x50;
 const zipSecondByte = 0x4b;

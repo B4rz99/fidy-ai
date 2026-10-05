@@ -26,6 +26,9 @@ export type AuditCredentialOperation =
   | "ingestion.getStatementSubmission"
   | "ingestion.listNeedsReviewItems"
   | "ingestion.submitForExtraction"
+  | "ingestion.resolveNeedsReviewItem"
+  | "ingestion.skipNeedsReviewItem"
+  | "ingestion.abandonStatementSubmission"
   | "insights.listPendingInsights"
   | "insights.markInsightDelivered"
   | "insights.markInsightRead"
@@ -59,7 +62,7 @@ export const utcDayMilliseconds = 86400000;
 /** A live, User-scoped credential gate supplied by the credential owner; Audit never resolves identity. */
 export type AuditAuthority =
   | Readonly<{
-      table: "web_sessions" | "pats";
+      table: "web_sessions" | "pats" | "hosted_turns";
       predicate: string;
       bindings: ReadonlyArray<string | number | Uint8Array>;
     }>
@@ -100,7 +103,8 @@ export type AuthorizedAuditCall = Readonly<{
         operation: AuditCredentialOperation;
         outcome: AcceptedOutcome;
       }>
-    | (Readonly<{ authority: AuditAuthority & { table: "web_sessions" } }> & SessionDecision)
+    | (Readonly<{ authority: AuditAuthority & { table: "web_sessions" | "hosted_turns" } }> &
+        SessionDecision)
   );
 
 /** Metadata-only admission refusal under the credential owner's current canonical authority. */

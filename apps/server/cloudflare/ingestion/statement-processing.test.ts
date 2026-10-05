@@ -4,7 +4,11 @@ import { installTestSchema, isolatedTestStorage } from "../d1-test-fixture";
 import { afterAll, expect } from "vitest";
 import { it as effectIt } from "@effect/vitest";
 import { currentMillis } from "../runtime/operations";
-import { failStatementSubmission, processStatementSubmission } from "./operations";
+import {
+  failStatementSubmission,
+  prepareStatementSessionActivity,
+  processStatementSubmission,
+} from "./operations";
 import { expireStatementReviewEvidence } from "./runtime";
 import { StatementStaging, submissionProjection } from "./internal/statement-staging";
 
@@ -37,6 +41,9 @@ const migrations = [
   "0016_statement_processing",
   "0017_statement_dispatch",
   "0035_billing_corrections",
+  "0032_statement_capture_entitlement",
+  "0033_statement_clarification",
+  "0035_statement_hosted_origin",
 ];
 const storage = isolatedTestStorage();
 
@@ -108,6 +115,129 @@ const setup = (csv: string): Promise<{ db: D1Database; bucket: R2Bucket }> =>
   );
 
 afterAll(() => storage.dispose());
+
+effectIt.effect(
+  "extends clarification with session activity but never resumes an abandoned origin",
+  () =>
+    Effect.gen(function* () {
+      const { db, bucket } = yield* fromTestPromise(() =>
+        setup("date,amount,description\nunclear,unknown,Cafe\n")
+      );
+      const now = currentMillis();
+      const sessionId = "session-a";
+      const idleMs = 900_000;
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO statement_hosted_origins (submission_id,user_id,session_id,turn_id,expires_at_ms) VALUES (?,?,?,?,?)"
+          )
+          .bind(submissionId, userA, sessionId, "upload-turn", now + idleMs)
+          .run()
+      );
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO statement_backfill_entitlements (user_id,submission_id) VALUES (?,?)"
+          )
+          .bind(userA, submissionId)
+          .run()
+      );
+      yield* fromTestPromise(() =>
+        processStatementSubmission({
+          DB: db,
+          STATEMENT_STAGING_BUCKET: bucket,
+          userId: userA,
+          submissionId,
+        })
+      );
+      const activity = (at: number, expiry: number): Promise<unknown> =>
+        db.batch([
+          ...prepareStatementSessionActivity({
+            db,
+            userId: userA,
+            current: at,
+            source: {
+              sql: "SELECT ? AS session_id, ? AS user_id, ? AS expires_at_ms",
+              params: [sessionId, userA, expiry],
+            },
+          }),
+        ]);
+      yield* fromTestPromise(() => activity(now + 1000, now + idleMs + 1000));
+      expect(
+        yield* fromTestPromise(() =>
+          db
+            .prepare(
+              "SELECT state,expires_at_ms FROM statement_clarifications WHERE submission_id = ?"
+            )
+            .bind(submissionId)
+            .first()
+        )
+      ).toEqual({ state: "awaiting", expires_at_ms: now + idleMs + 1000 });
+      yield* fromTestPromise(() => activity(now + idleMs + 1000, now + 2 * idleMs));
+      yield* fromTestPromise(() => activity(now + idleMs + 1001, now + 3 * idleMs));
+      expect(
+        yield* fromTestPromise(() =>
+          db
+            .prepare("SELECT state FROM statement_clarifications WHERE submission_id = ?")
+            .bind(submissionId)
+            .first()
+        )
+      ).toEqual({ state: "abandoned" });
+      expect(
+        yield* fromTestPromise(() =>
+          db
+            .prepare(
+              "SELECT original_evidence,known_money FROM statement_needs_review WHERE submission_id = ?"
+            )
+            .bind(submissionId)
+            .first()
+        )
+      ).toEqual({ original_evidence: null, known_money: null });
+      expect(
+        yield* fromTestPromise(() =>
+          db
+            .prepare(
+              "SELECT submission_id,consumed_at_ms FROM statement_backfill_entitlements WHERE user_id = ?"
+            )
+            .bind(userA)
+            .first()
+        )
+      ).toEqual({ submission_id: null, consumed_at_ms: null });
+    })
+);
+
+effectIt.effect("holds a zero-capture Free reservation while rows await clarification", () =>
+  Effect.gen(function* () {
+    const { db, bucket } = yield* fromTestPromise(() =>
+      setup("date,amount,description\nunclear,unknown,Cafe\n")
+    );
+    yield* fromTestPromise(() =>
+      db
+        .prepare(
+          "INSERT INTO statement_backfill_entitlements (user_id, submission_id) VALUES (?, ?)"
+        )
+        .bind(userA, submissionId)
+        .run()
+    );
+    yield* fromTestPromise(() =>
+      processStatementSubmission({
+        DB: db,
+        STATEMENT_STAGING_BUCKET: bucket,
+        userId: userA,
+        submissionId,
+      })
+    );
+    const entitlement = yield* fromTestPromise(() =>
+      db
+        .prepare(
+          "SELECT submission_id, consumed_at_ms FROM statement_backfill_entitlements WHERE user_id = ?"
+        )
+        .bind(userA)
+        .first()
+    );
+    expect(entitlement).toEqual({ submission_id: submissionId, consumed_at_ms: null });
+  })
+);
 
 effectIt.effect(
   "clears all expired raw review evidence even when more than a hundred rows expire together",
@@ -239,6 +369,151 @@ effectIt.effect(
         needs_review_rows: 0,
         attestations: 1,
       });
+    })
+);
+
+effectIt.effect(
+  "retains the Free reservation when extraction finishes with clarification pending",
+  () =>
+    Effect.gen(function* () {
+      const { db, bucket } = yield* fromTestPromise(() =>
+        setup("fecha,valor,descripcion\n2026-08-01,-45000,Cafe\n")
+      );
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO statement_backfill_entitlements (user_id,submission_id) VALUES (?,?)"
+          )
+          .bind(userA, submissionId)
+          .run()
+      );
+      yield* fromTestPromise(() =>
+        processStatementSubmission({
+          DB: db,
+          STATEMENT_STAGING_BUCKET: bucket,
+          userId: userA,
+          submissionId,
+        })
+      );
+      const grant = yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "SELECT consumed_at_ms,submission_id FROM statement_backfill_entitlements WHERE user_id = ?"
+          )
+          .bind(userA)
+          .first<{ consumed_at_ms: unknown; submission_id: unknown }>()
+      );
+      expect(grant).toMatchObject({ consumed_at_ms: null, submission_id: submissionId });
+    })
+);
+
+effectIt.effect(
+  "consumes the Free grant on first capture before extraction completes and preserves it after failure",
+  () =>
+    Effect.gen(function* () {
+      const csv =
+        "fecha,valor,moneda,contraparte\n" +
+        Array.from({ length: 33 }, () => "2026-08-01,-45000,COP,Cafe").join("\n") +
+        "\n";
+      const { db, bucket } = yield* fromTestPromise(() => setup(csv));
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO statement_backfill_entitlements (user_id,submission_id) VALUES (?,?)"
+          )
+          .bind(userA, submissionId)
+          .run()
+      );
+      expect(
+        yield* fromTestPromise(() =>
+          processStatementSubmission({
+            DB: db,
+            STATEMENT_STAGING_BUCKET: bucket,
+            userId: userA,
+            submissionId,
+          })
+        )
+      ).toBe("continue");
+      const readGrant = (): Promise<{
+        consumed_at_ms: unknown;
+        submission_id: unknown;
+      }> =>
+        db
+          .prepare(
+            "SELECT consumed_at_ms,submission_id FROM statement_backfill_entitlements WHERE user_id = ?"
+          )
+          .bind(userA)
+          .first<{ consumed_at_ms: unknown; submission_id: unknown }>()
+          .then((row) => Option.getOrThrow(Option.fromNullishOr(row)));
+      const captured = yield* fromTestPromise(readGrant);
+      expect(captured.consumed_at_ms).toEqual(expect.any(Number));
+      expect(captured.submission_id).toBe(submissionId);
+      yield* fromTestPromise(() =>
+        failStatementSubmission({
+          DB: db,
+          userId: userA,
+          submissionId,
+          reason: "resource-limit",
+        })
+      );
+      expect(yield* fromTestPromise(readGrant)).toEqual(captured);
+    })
+);
+
+effectIt.effect(
+  "a rolled-back capture leaves the Free grant reserved and creates no financial effects",
+  () =>
+    Effect.gen(function* () {
+      const { db, bucket } = yield* fromTestPromise(() =>
+        setup("fecha,valor,moneda,contraparte\n2026-08-01,-45000,COP,Cafe\n")
+      );
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO statement_backfill_entitlements (user_id,submission_id) VALUES (?,?)"
+          )
+          .bind(userA, submissionId)
+          .run()
+      );
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`CREATE TRIGGER reject_capture_commit
+        BEFORE INSERT ON statement_submission_assertion
+        BEGIN SELECT RAISE(ABORT, 'capture unavailable'); END`)
+          .run()
+      );
+      yield* fromTestPromise(() =>
+        expect(
+          processStatementSubmission({
+            DB: db,
+            STATEMENT_STAGING_BUCKET: bucket,
+            userId: userA,
+            submissionId,
+          })
+        ).rejects.toThrow()
+      );
+      const grant = yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "SELECT consumed_at_ms,submission_id FROM statement_backfill_entitlements WHERE user_id = ?"
+          )
+          .bind(userA)
+          .first<{ consumed_at_ms: unknown; submission_id: unknown }>()
+      );
+      expect(grant).toMatchObject({ consumed_at_ms: null, submission_id: submissionId });
+      const counts = yield* fromTestPromise(() =>
+        db
+          .prepare(`SELECT
+        (SELECT count(*) FROM transactions) AS transactions,
+        (SELECT count(*) FROM source_attestations) AS attestations,
+        (SELECT count(*) FROM statement_record_outcomes) AS outcomes`)
+          .first<{
+            transactions: number;
+            attestations: number;
+            outcomes: number;
+          }>()
+      );
+      expect(counts).toEqual({ transactions: 0, attestations: 0, outcomes: 0 });
     })
 );
 
@@ -551,9 +826,29 @@ effectIt.effect(
           Option.isSome(projected) &&
             projected.value.status === "failed" &&
             projected.value.accounting
-        ).toMatchObject({ inputRows: 32, acceptedRows: 0, needsReviewRows: 32 });
+        ).toMatchObject({ inputRows: 32, acceptedRows: 0, needsReviewRows: 0, abandonedRows: 32 });
       }
-      expect(entitlement?.consumed_at_ms).not.toBeNull();
+      expect(entitlement?.consumed_at_ms).toBeNull();
+      expect(
+        yield* fromTestPromise(() =>
+          db
+            .prepare(
+              "SELECT count(*) AS count FROM statement_needs_review WHERE submission_id = ? AND (status='pending' OR original_evidence IS NOT NULL OR known_money IS NOT NULL)"
+            )
+            .bind(submissionId)
+            .first()
+        )
+      ).toEqual({ count: 0 });
+      expect(
+        yield* fromTestPromise(() =>
+          db
+            .prepare(
+              "SELECT count(*) AS count FROM statement_review_decisions WHERE submission_id = ? AND decision='abandoned'"
+            )
+            .bind(submissionId)
+            .first()
+        )
+      ).toEqual({ count: 32 });
     })
 );
 
@@ -656,7 +951,7 @@ effectIt.effect("fails above the parser row ceiling without creating partial eff
 );
 
 effectIt.effect(
-  "retention failure preserves visible partial accounting and does not refund useful Free work",
+  "retention failure preserves partial review accounting without consuming the Free grant",
   () =>
     Effect.gen(function* () {
       const csv =
@@ -703,6 +998,6 @@ effectIt.effect(
           .first<{ consumed_at_ms: unknown }>()
       );
       expect(state).toMatchObject({ status: "failed", input_rows: 32, needs_review_rows: 32 });
-      expect(entitlement?.consumed_at_ms).not.toBeNull();
+      expect(entitlement?.consumed_at_ms).toBeNull();
     })
 );

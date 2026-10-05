@@ -4,10 +4,10 @@ import {
   type TranscriptTurnId,
 } from "../../../src/core/agent/contract";
 import { type UserId } from "../../../src/core/identity/contract";
-import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
+import { type HostedSubject, hostedAuthority, isWhatsAppHosted } from "./hosted-authority";
 import { type Cause, Effect, Option, Schema } from "effect";
+import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
-import type { TransactionSubject } from "../../canonical-work/operations";
 import { newId } from "../../secret-material/operations";
 
 const lifetimeMs = 600_000;
@@ -91,11 +91,13 @@ export const findHostedConfirmation = ({
   userId,
   command,
   now,
+  recoveringTurn,
 }: Readonly<{
   db: D1Database;
   userId: UserId;
   command: TranscriptText;
   now: number;
+  recoveringTurn: Option.Option<TranscriptTurnId>;
 }>): Effect.Effect<Option.Option<ConfirmationRow>, Cause.UnknownError | Schema.SchemaError> =>
   Effect.gen(function* () {
     if (!isHostedConfirmationAttempt(command)) return Option.none();
@@ -103,10 +105,11 @@ export const findHostedConfirmation = ({
       db
         .prepare(`SELECT c.id, c.operation, c.input_json, c.command
     FROM hosted_confirmations AS c JOIN hosted_turns AS t ON t.id = c.issued_turn_id
-    WHERE c.user_id = ? AND c.consumed_turn_id IS NULL AND c.expires_at_ms > ?
+    WHERE c.user_id = ? AND ((c.consumed_turn_id IS NULL AND c.expires_at_ms > ?)
+      OR (c.consumed_turn_id = ? AND c.consumed_at_ms < c.expires_at_ms))
       AND t.status = 'completed'
     ORDER BY c.issued_at_ms DESC, c.rowid DESC LIMIT 1`)
-        .bind(userId, now)
+        .bind(userId, now, Option.getOrNull(recoveringTurn))
         .first()
     );
     return Option.flatMap(
@@ -115,7 +118,51 @@ export const findHostedConfirmation = ({
     ).pipe(Option.filter((candidate) => candidate.command === command));
   });
 
-/** Consume exactly one approved challenge only while the new Turn and live WebSession match. */
+const confirmationChannel = ({
+  subject,
+  turnId,
+}: Readonly<{ subject: HostedSubject; turnId: TranscriptTurnId }>): OwnedStatement =>
+  isWhatsAppHosted(subject)
+    ? {
+        sql: `EXISTS (SELECT 1 FROM hosted_whatsapp_inbound prior JOIN hosted_whatsapp_inbound active
+        ON active.turn_id = ? AND active.user_id = prior.user_id WHERE prior.turn_id = issued_turn_id
+        AND prior.portfolio_id = active.portfolio_id AND prior.bsuid = active.bsuid
+        AND prior.business_phone_number_id = active.business_phone_number_id)`,
+        params: [turnId],
+      }
+    : {
+        sql: "NOT EXISTS (SELECT 1 FROM hosted_whatsapp_inbound WHERE turn_id = issued_turn_id)",
+        params: [],
+      };
+
+const confirmationTurnGuard = ({
+  subject,
+  turnId,
+  now,
+}: Readonly<{ subject: HostedSubject; turnId: TranscriptTurnId; now: number }>): OwnedStatement => {
+  const authority = hostedAuthority({ subject, current: now });
+  const channel = confirmationChannel({ subject, turnId });
+  return {
+    sql: `EXISTS (SELECT 1 FROM hosted_turns AS prior
+    WHERE prior.id = issued_turn_id AND prior.user_id = ? AND prior.status = 'completed'
+      AND prior.hosted_session_id = (SELECT hosted_session_id FROM hosted_turns WHERE id = ? AND user_id = ?))
+    AND EXISTS (SELECT 1 FROM hosted_turns AS active WHERE active.id = ? AND active.user_id = ? AND active.status = 'pending')
+    AND (${channel.sql}) AND EXISTS (${authority.sql})`,
+    params: [
+      subject.userId,
+      turnId,
+      subject.userId,
+      turnId,
+      subject.userId,
+      ...channel.params,
+      ...authority.params,
+    ],
+  };
+};
+
+/** Consume once, or recover consumption by this exact live Pending Turn in the same channel.
+ * Recovery rechecks authority without rewriting or lending another Turn's consumed challenge.
+ */
 export const consumeHostedConfirmation = ({
   db,
   subject,
@@ -124,7 +171,7 @@ export const consumeHostedConfirmation = ({
   now,
 }: Readonly<{
   db: D1Database;
-  subject: TransactionSubject;
+  subject: HostedSubject;
   turnId: TranscriptTurnId;
   challenge: ConfirmationRow;
   now: number;
@@ -137,31 +184,34 @@ export const consumeHostedConfirmation = ({
       challenge.input_json
     );
     if (Option.isNone(decoded)) return Option.none();
-    const authority = liveWebSessionAuthority({ subject, current: now });
+    const guard = confirmationTurnGuard({ subject, turnId, now });
     const updated = yield* Effect.tryPromise(() =>
       db
         .prepare(`UPDATE hosted_confirmations SET consumed_turn_id = ?, consumed_at_ms = ?
     WHERE id = ? AND user_id = ? AND command = ? AND consumed_turn_id IS NULL
-      AND expires_at_ms > ? AND EXISTS (SELECT 1 FROM hosted_turns AS prior
-        WHERE prior.id = issued_turn_id AND prior.user_id = ? AND prior.status = 'completed')
-      AND EXISTS (SELECT 1 FROM hosted_turns AS active
-        WHERE active.id = ? AND active.user_id = ? AND active.status = 'pending')
-      AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
-        .bind(
-          turnId,
-          now,
-          challenge.id,
-          subject.userId,
-          challenge.command,
-          now,
-          subject.userId,
-          turnId,
-          subject.userId,
-          ...authority.bindings
-        )
+      AND expires_at_ms > ? AND (${guard.sql})`)
+        .bind(turnId, now, challenge.id, subject.userId, challenge.command, now, ...guard.params)
         .run()
     );
-    return updated.meta.changes === 1
+    const consumed =
+      updated.meta.changes === 1 ||
+      (yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            `SELECT 1 FROM hosted_confirmations WHERE id=? AND user_id=? AND command=? AND operation=? AND input_json=? AND consumed_turn_id=? AND consumed_at_ms < expires_at_ms AND (${guard.sql})`
+          )
+          .bind(
+            challenge.id,
+            subject.userId,
+            challenge.command,
+            challenge.operation,
+            challenge.input_json,
+            turnId,
+            ...guard.params
+          )
+          .first()
+      )) !== null;
+    return consumed
       ? Option.some({ operation: challenge.operation, input: decoded.value })
       : Option.none();
   });

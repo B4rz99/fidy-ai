@@ -5,6 +5,11 @@ import {
   prepareWeeklyPauseNotice,
   prepareWeeklyPauseNoticeCompletion,
 } from "../../insights/operations";
+import type { WhatsAppDocument } from "../../../src/shell/channels/whatsapp/contract";
+import {
+  prepareStatementDocumentAdmission,
+  prepareStatementSessionActivity,
+} from "../../ingestion/operations";
 import { readMemoryContext } from "../../memory/operations";
 import {
   AssistantTranscriptEntry,
@@ -26,7 +31,11 @@ import {
 } from "../../../src/core/agent/contract";
 import { type SessionTranscriptEntry } from "./working-context";
 import { type UserContext, UserId } from "../../../src/core/identity/contract";
-import { decideHostedAdmission, terminalPrefixCursor } from "../../../src/core/agent/operations";
+import {
+  decideHostedAdmission,
+  hostedSessionIdleMilliseconds,
+  terminalPrefixCursor,
+} from "../../../src/core/agent/operations";
 
 import { webSessionCredentialAuthority } from "../../../src/shell/web-session/operations";
 import { Cause, DateTime, Effect, Option, Schema } from "effect";
@@ -254,6 +263,7 @@ export const recoverHostedTurn = ({
           .prepare(`UPDATE hosted_agent_sessions SET last_activity_at_ms = ? WHERE user_id = ?
       AND id = (SELECT hosted_session_id FROM hosted_turns WHERE id = ? AND user_id = ?)`)
           .bind(turn.started_at_ms, userId, turn.id, userId),
+        ...statementSessionActivity({ db, userId, turnId: turn.id, current: now }),
       ])
     );
     return results[1]?.meta.changes === 1 && results[2]?.meta.changes === 1;
@@ -701,6 +711,12 @@ export type HostedAdmissionChannel =
       _tag: "WhatsApp";
       subject: WhatsAppHostedSubject;
       inbound: WhatsAppInboundEvidence;
+    }>
+  | Readonly<{
+      _tag: "WhatsAppDocument";
+      subject: WhatsAppHostedSubject;
+      inbound: WhatsAppInboundEvidence;
+      document: WhatsAppDocument;
     }>;
 
 const prepareChannelAdmission = ({
@@ -714,9 +730,53 @@ const prepareChannelAdmission = ({
   id: TranscriptTurnId;
   now: number;
 }>): ReadonlyArray<D1PreparedStatement> =>
-  channel._tag === "WhatsApp"
-    ? prepareWhatsAppInbound({ db, subject: channel.subject, inbound: channel.inbound, id, now })
-    : [];
+  channel._tag === "Browser"
+    ? []
+    : [
+        ...prepareWhatsAppInbound({
+          db,
+          subject: channel.subject,
+          inbound: channel.inbound,
+          id,
+          now,
+        }),
+        ...(channel._tag === "WhatsAppDocument"
+          ? prepareStatementDocumentAdmission({
+              db,
+              mediaId: channel.document.mediaId,
+              current: now,
+              source: {
+                sql: `SELECT id AS turn_id,user_id FROM hosted_turns WHERE id=? AND user_id=? AND status='pending'`,
+                params: [id, channel.subject.userId],
+              },
+            })
+          : []),
+      ];
+
+/** Agent alone projects its live Session and bounded Pending activity into the peer lifecycle unit. */
+const statementSessionActivity = ({
+  db,
+  userId,
+  turnId,
+  current,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  turnId: string;
+  current: number;
+}>): ReadonlyArray<D1PreparedStatement> =>
+  prepareStatementSessionActivity({
+    db,
+    userId,
+    current,
+    source: {
+      sql: `SELECT s.id AS session_id,s.user_id,
+      max(coalesce(s.last_activity_at_ms,s.started_at_ms), CASE WHEN t.status = 'pending' THEN t.started_at_ms ELSE 0 END) + ? AS expires_at_ms
+      FROM hosted_agent_sessions s JOIN hosted_turns t ON t.hosted_session_id = s.id AND t.user_id = s.user_id
+      WHERE t.id = ? AND t.user_id = ? AND s.status = 'active'`,
+      params: [hostedSessionIdleMilliseconds, turnId, userId],
+    },
+  });
 
 /** Append the exact User entry and Pending Turn atomically after the complete model preflight. */
 export const admitHostedTurn = ({
@@ -785,6 +845,7 @@ export const admitHostedTurn = ({
           .prepare(`UPDATE hosted_agent_sessions SET status = 'idle-ended'
       WHERE user_id = ? AND id <> ? AND status = 'active'`)
           .bind(subject.userId, selection.id),
+        ...statementSessionActivity({ db, userId: subject.userId, turnId: id, current: now }),
       ])
     );
     return results[0]?.meta.changes === 1 &&
@@ -1179,6 +1240,7 @@ const hostedFinishStatements = ({
       AND id = (SELECT hosted_session_id FROM hosted_turns WHERE id = ? AND user_id = ?
         AND status <> 'pending')`)
       .bind(result._tag === "Interrupted" ? startedAtMs : time, userId, turnId, userId),
+    ...statementSessionActivity({ db, userId, turnId, current: time }),
   ];
 };
 

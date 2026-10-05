@@ -1,3 +1,4 @@
+import { TranscriptText } from "../../../src/core/agent/contract";
 import { Sha256Digest } from "../../../src/shell/consent/contract";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import {
@@ -240,7 +241,9 @@ const routeHostedInbound = (
     if (input.event.content._tag === "UnusableVoiceTranscript") {
       return Option.some(yield* refuseVoice(environment, input, known.value));
     }
-    const text = input.event.content.text;
+    const content = input.event.content;
+    const text =
+      content._tag === "Document" ? TranscriptText.make("Adjunté un extracto.") : content.text;
     const response = yield* attempt(() =>
       environment.onHostedText({
         userId: known.value,
@@ -252,6 +255,7 @@ const routeHostedInbound = (
         receivedAtMs: input.receivedAtMs,
         text,
         replyToMessageId: input.event.replyToMessageId,
+        ...(content._tag === "Document" ? { document: content } : {}),
       })
     );
     return Option.some(response);

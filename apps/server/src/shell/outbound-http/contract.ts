@@ -1,6 +1,9 @@
 import { Data, type Option, type Redacted } from "effect";
 import { type EnrollmentMethod } from "~/core/subscription/contract";
-import { type WhatsAppBusinessPhoneNumberId } from "~/shell/channels/whatsapp/contract";
+import {
+  type WhatsAppBusinessPhoneNumberId,
+  type WhatsAppMediaId,
+} from "~/shell/channels/whatsapp/contract";
 
 /** Closed coordinate-free reason reported by the Outbound HTTP interface. */
 export type OutboundHttpFailureReason =
@@ -46,6 +49,12 @@ export type WompiTransactionBody = Readonly<{
  * provider request bodies remain encoded by their owning adapter.
  */
 export type OutboundHttpRequest =
+  | Readonly<{
+      readonly _tag: "KapsoMediaMetadata";
+      readonly mediaId: WhatsAppMediaId;
+      readonly businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
+    }>
+  | Readonly<{ readonly _tag: "KapsoMediaDownload"; readonly token: Redacted.Redacted<string> }>
   | Readonly<{
       readonly _tag: "KapsoMessages";
       readonly businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;

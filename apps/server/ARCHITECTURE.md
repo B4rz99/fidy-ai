@@ -253,6 +253,28 @@ Durable Object alarms recover abandoned work and enforce retention; an independe
 recovers missed alarms without waiting for another User request. Retention removes private content
 under owner policy while preserving permitted lifecycle metadata, never extending expired authority.
 
+### Statement upload conversation
+
+Verified WhatsApp document attachments use Agent's per-User Turn admission. Ingestion applies
+stable-User, global, attempt, spend and outstanding upload budgets before bounded Kapso retrieval,
+digest verification and private R2 staging. Held canonical publication atomically records the
+submission, direct-attachment/session origin, Free-backfill reservation, Audit, commit fence and
+identity-only extraction outbox. Public browser/PAT submission routes and atomic-batch children
+refuse statement publication; a staged reference supplies no attachment authority.
+
+The original upload Turn remains Pending while the installed Queue/Workflow extracts the document.
+Recovery reuses retained staging and publication identities without downloading or charging again,
+then asks for clarification in that conversation. Canonical resolution, skipping and abandonment
+settle capture, SourceAttestation, evidence erasure, entitlement and Audit atomically. The lifetime
+Free grant is consumed by the first captured Transaction; zero-capture terminal extraction releases
+the reservation. Partial capture preserves consumption.
+
+Clarification requires live same-session, same-channel authority and exact confirmation. Expired or
+abandoned origins cannot resume. Public review queries retain metadata only; purpose-bound row
+evidence, known Money and field messages stay out of immutable tool results. Terminal extraction
+failure abandons remaining review rows and erases their evidence. Confirmation recovery reconciles
+retained outcomes or commit fences under the original call identity without repeating the mutation.
+
 ## 7. Background execution and availability
 
 Queue and Workflow payloads carry bounded, versioned identities/facts rather than credentials,

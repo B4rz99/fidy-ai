@@ -32,10 +32,9 @@ it("keeps mailbox-proof replacement out of atomic batches", () => {
   ).toBe("None");
 });
 
-it("keeps statement submission inside the derived atomic-batch child union", () => {
-  // #788 decided that statement bytes are staged before the canonical submission; the derived
-  // child union must keep carrying the submission itself rather than exempting ingestion from
-  // batching through an eligibility flag. The fixture mirrors the staged-reference declaration.
+it("keeps held-only statement publication out of the public atomic-batch child union", () => {
+  // Statement publication remains an atomic owner mutation, but public HTTP batches cannot
+  // supply its verified WhatsApp attachment and live original-Turn authority.
   const ingestion = operationCatalog.byId.get("ingestion.submitForExtraction");
   expect(ingestion?.atomicBatchEligible).toBe(true);
   expect(ingestion?.policy.kind).toBe("mutation");
@@ -56,5 +55,5 @@ it("keeps statement submission inside the derived atomic-batch child union", () 
         },
       },
     })._tag
-  ).toBe("Some");
+  ).toBe("None");
 });

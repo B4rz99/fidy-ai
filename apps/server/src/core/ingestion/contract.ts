@@ -282,9 +282,15 @@ const StatementAccountingFields = Schema.Struct({
   inputRows: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   acceptedRows: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   needsReviewRows: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  skippedRows: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+  abandonedRows: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
 });
 const conservedStatementRows = Schema.makeFilter<typeof StatementAccountingFields.Type>((counts) =>
-  counts.inputRows === counts.acceptedRows + counts.needsReviewRows
+  counts.inputRows ===
+  counts.acceptedRows +
+    counts.needsReviewRows +
+    (counts.skippedRows ?? 0) +
+    (counts.abandonedRows ?? 0)
     ? undefined
     : { path: ["inputRows"], issue: "Expected acceptedRows plus needsReviewRows" }
 );
@@ -300,7 +306,9 @@ export type StatementAccounting = typeof StatementAccounting.Type;
 export const StatementSubmissionStatus = Schema.Literals([
   "queued",
   "processing",
+  "awaiting-clarification",
   "completed",
+  "abandoned",
   "failed",
 ]);
 /** Safe terminal classifications that never expose parser or provider internals. */
@@ -326,6 +334,19 @@ export const StatementSubmission = Schema.Union([
     ...StatementSubmissionBase.fields,
     status: Schema.Literal("processing"),
     startedAt: UtcTimestamp,
+  }),
+  Schema.Struct({
+    ...StatementSubmissionBase.fields,
+    status: Schema.Literal("awaiting-clarification"),
+    startedAt: UtcTimestamp,
+    accounting: StatementAccounting,
+  }),
+  Schema.Struct({
+    ...StatementSubmissionBase.fields,
+    status: Schema.Literal("abandoned"),
+    startedAt: UtcTimestamp,
+    completedAt: UtcTimestamp,
+    accounting: StatementAccounting,
   }),
   Schema.Struct({
     ...StatementSubmissionBase.fields,
@@ -446,14 +467,24 @@ const NeedsReviewBase = Schema.Struct({
   createdAt: UtcTimestamp,
 });
 
-/** Review lifecycle: actionable with evidence, evidence-expired, or canonically resolved. */
-export const NeedsReviewStatus = Schema.Literals(["pending", "expired", "resolved"]);
+/** Review lifecycle: actionable against live owner evidence, expired, or canonically settled.
+ * Metadata-only canonical reads omit raw evidence so immutable tool results cannot outlive its purpose.
+ */
+export const NeedsReviewStatus = Schema.Literals([
+  "pending",
+  "expired",
+  "resolved",
+  "skipped",
+  "abandoned",
+]);
 
 const NeedsReviewItemVariants = Schema.Union([
+  Schema.Struct({ ...NeedsReviewBase.fields, status: Schema.Literal("skipped") }),
+  Schema.Struct({ ...NeedsReviewBase.fields, status: Schema.Literal("abandoned") }),
   Schema.Struct({
     ...NeedsReviewBase.fields,
     status: Schema.Literal("pending"),
-    originalEvidence: StatementRowEvidence,
+    originalEvidence: Schema.OptionFromOptionalKey(StatementRowEvidence),
   }),
   Schema.Struct({
     ...NeedsReviewBase.fields,
@@ -468,7 +499,9 @@ const NeedsReviewItemVariants = Schema.Union([
 ]);
 const matchingReviewEvidenceFormat = Schema.makeFilter<typeof NeedsReviewItemVariants.Type>(
   (item) =>
-    item.status !== "pending" || item.sourceFormat === item.originalEvidence.sourceFormat
+    item.status !== "pending" ||
+    Option.isNone(item.originalEvidence) ||
+    item.sourceFormat === item.originalEvidence.value.sourceFormat
       ? undefined
       : { path: ["sourceFormat"], issue: "Expected the original evidence format" }
 );

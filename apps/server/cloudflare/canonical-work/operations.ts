@@ -1,3 +1,4 @@
+import type { WebSessionAuthority } from "../../src/shell/web-session/contract";
 import type { OAuthAuthority, OAuthCaller } from "../../src/shell/oauth-agents/contract";
 import { liveOAuthAuthority } from "../../src/shell/oauth-agents/operations";
 import type {
@@ -463,10 +464,10 @@ export function callerAuthority(
 ): OAuthAuthority;
 export function callerAuthority(
   input: Readonly<{ subject: TransactionCaller; current: number }>
-): TransactionAuthority;
+): PATAuthority | WebSessionAuthority;
 export function callerAuthority(
   input: Readonly<{ subject: QueryCaller; current: number }>
-): QueryAuthority;
+): PATAuthority | WebSessionAuthority | OAuthAuthority;
 export function callerAuthority({
   subject,
   current,

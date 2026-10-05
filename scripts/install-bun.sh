@@ -4,15 +4,15 @@ set -euo pipefail
 platform="$(uname -s)"
 architecture="$(uname -m)"
 case "$platform/$architecture" in
-  Darwin/arm64) asset=610083042; archive=bun-darwin-aarch64; digest=e148ba743787aba0afae1a6685bbb649da886d526bdd838905dd15689dbae2ee ;;
-  Darwin/x86_64) asset=610083046; archive=bun-darwin-x64; digest=5d05948f69151937798518dcebf856f2b0b77f6f2b51fcb3245c773203d7c3d5 ;;
-  Linux/aarch64) asset=610083051; archive=bun-linux-aarch64; digest=21af51b3b6f7eb2877008e3b591bc46695f7b6df4a5a4e5a0af2dd556a864118 ;;
-  Linux/x86_64) asset=610083118; archive=bun-linux-x64; digest=9eabb84e884fbd663d8c6f1afb10e0c8635472d95aa9abfc471eed84c3f292ab ;;
-  MINGW*/aarch64|MSYS*/aarch64) asset=610083572; archive=bun-windows-aarch64; digest=56dc03b6beb0eb93776b8a0bfbccb680bc79e037eef58832b061c03c7448148f ;;
-  MINGW*/x86_64|MSYS*/x86_64) asset=610083534; archive=bun-windows-x64; digest=f71491f083b481ea5ba5440042db64a3f65e77ccb58db979d9c228828dfff35b ;;
+  Darwin/arm64) asset=610995354; archive=bun-darwin-aarch64; digest=66e08df554433266c0bdbe38ad8eec9eb0d57b2d71dd24559293269b52963ee7 ;;
+  Darwin/x86_64) asset=610995358; archive=bun-darwin-x64; digest=4b1f81ac65fb043ec8518179f899a079372a1d8280ba9ec342a64d85a4989c80 ;;
+  Linux/aarch64) asset=610995353; archive=bun-linux-aarch64; digest=125bddbcae7a04b6ec078e75b13a307c997908335342d90cd0c24202bd304dc6 ;;
+  Linux/x86_64) asset=610995400; archive=bun-linux-x64; digest=b6d3d84e9fa690fd43a4d36b67b406d8fcff9f24d0aad62c115a2751b1fcf669 ;;
+  MINGW*/aarch64|MSYS*/aarch64) asset=610995708; archive=bun-windows-aarch64; digest=5906a7546d9a958411d767a6a2e662c39d618e0ee9868672414752074a143a6e ;;
+  MINGW*/x86_64|MSYS*/x86_64) asset=610995660; archive=bun-windows-x64; digest=208d1856f107d5b104a679d867f92857e4af381f29d211bd74ac3d621f74f0c6 ;;
   *) printf 'Unsupported Bun installation platform. See apps/cli/ARCHITECTURE.md.\n' >&2; exit 1 ;;
 esac
-install_directory="${1:-$HOME/.fidy/bun-b73ae471a}"
+install_directory="${1:-$HOME/.fidy/bun-c7b06d94b}"
 temporary_directory="$(mktemp -d)"
 trap 'rm -rf "$temporary_directory"' EXIT
 authorization=()
@@ -48,7 +48,7 @@ if [[ "$executable" == bun.exe ]]; then
 else
   ln -sf bun "$install_directory/bunx"
 fi
-if [[ "$("$install_directory/$executable" --revision)" != '1.4.3-canary.1+b73ae471a' ]]; then
+if [[ "$("$install_directory/$executable" --revision)" != '1.4.3-canary.1+c7b06d94b' ]]; then
   printf 'Pinned Bun revision mismatch; refusing installation.\n' >&2
   exit 1
 fi

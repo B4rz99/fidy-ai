@@ -14,17 +14,24 @@ import {
   installTestSchema,
   isolatedTestStorage,
 } from "../d1-test-fixture";
+import { BatchEnvelope, batchCallId, competingWriteDb } from "./statement-batch.test-fixture";
+import { getCanonicalOperationInput } from "../../src/shell/canonical-operations/operations";
+import { CanonicalToolEvidence, ToolCallId, TranscriptTurnId } from "../../src/core/agent/contract";
 import {
-  BatchEnvelope,
-  batchCallId,
-  competingWriteDb,
-  concurrentCorrection,
-  correctionCall,
-  defectiveBatchDb,
-  seedTransaction,
-} from "./statement-batch.test-fixture";
+  UserId,
+  WhatsAppBusinessPortfolioId,
+  WhatsAppBusinessScopedUserId,
+} from "../../src/core/identity/contract";
+import { WhatsAppHostedSubject } from "../whatsapp/contract";
+import { mintHostedStatementCaller } from "../agent/operations";
+import { whatsAppIdentityQuery } from "../identity/operations";
+import { protectConsentStatement } from "../../src/shell/consent/operations";
+import {
+  executeHostedStatementCall,
+  executeHostedStatementQuery,
+} from "../canonical-operations/operations";
 import { UserTransactionCoordinator } from "../transactions/runtime";
-import { statementConflictMessage } from "./internal/statement-staging";
+import { prepareHeldStatementReviewDecision } from "./operations";
 import {
   dispatchStatementExtraction,
   executeStatementExtraction,
@@ -32,6 +39,9 @@ import {
   reconcileStatementExtraction,
   sweepExpiredUploadAdmission,
 } from "./runtime";
+import { publishOwnedStatement, stageOwnedStatement } from "./statement-publication.test-fixture";
+import { makeAudit } from "../../src/shell/audit/runtime";
+import { newId } from "../secret-material/operations";
 import coreWorker from "../core-worker";
 import { observeOperationalHealth } from "../runtime/operational-health/operations";
 import publicWorker from "../public-worker";
@@ -53,6 +63,44 @@ const sessionB = "10000000-0000-4000-8000-000000000202";
 const dayMilliseconds = 86_400_000;
 const secretSentinel = "password=hunter2-statement-secret";
 const statementCsv = `fecha,valor,descripcion\n2026-08-01,-45000,Cafe\n${secretSentinel}\n`;
+it(
+  "observes all statement Audit projections with bounded ordering and User isolation",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const projections = [
+          { table: "statement_submission_audit", operation: "ingestion.submitForExtraction" },
+          { table: "statement_review_audit", operation: "ingestion.listNeedsReviewItems" },
+          { table: "statement_clarification_audit", operation: "ingestion.skipNeedsReviewItem" },
+        ];
+        for (const userId of [userA, userB]) {
+          for (const [index, projection] of projections.entries()) {
+            yield* fromTestPromise(() =>
+              runtime.db
+                .prepare(
+                  `INSERT INTO ${projection.table} (id,user_id,operation,outcome,occurred_at_ms) VALUES (?,?,?,'success',?)`
+                )
+                .bind(newId(), userId, projection.operation, index + 1)
+                .run()
+            );
+          }
+        }
+        const audit = makeAudit({ database: runtime.db });
+        const rows = yield* audit.publications({ userId: UserId.make(userA), limit: 3 });
+        expect(rows.map(({ operation }) => operation)).toEqual(
+          projections.map(({ operation }) => operation)
+        );
+        expect(rows.every(({ subjectUserId }) => subjectUserId === userA)).toBe(true);
+        const bounded = yield* audit.publications({ userId: UserId.make(userA), limit: 2 });
+        expect(bounded.map(({ id }) => id)).toEqual(rows.slice(0, 2).map(({ id }) => id));
+        const foreign = yield* audit.publications({ userId: UserId.make(userB), limit: 3 });
+        expect(foreign.every(({ subjectUserId }) => subjectUserId === userB)).toBe(true);
+      })
+    ),
+  30_000
+);
+
 const statementBytes = (text = statementCsv): Uint8Array<ArrayBuffer> =>
   new Uint8Array(new TextEncoder().encode(text));
 
@@ -99,6 +147,11 @@ const migrationNames = [
   "0028_recurring_audit_budget",
   "0029_audit_owner_retention",
   "0035_billing_corrections",
+  "0032_statement_capture_entitlement",
+  "0033_statement_clarification",
+  "0034_statement_clarification_audit",
+  "0035_statement_hosted_origin",
+  "0036_statement_whatsapp_documents",
 ] as const;
 
 const digest = (text: string): Promise<Uint8Array> =>
@@ -458,7 +511,19 @@ it(
   30_000
 );
 
-const upload = (
+const stageFixture = (
+  runtime: Runtime,
+  input: Readonly<{ index: number; body: BodyInit }>
+): Promise<Response> =>
+  stageOwnedStatement({
+    storage: runtime,
+    index: input.index,
+    request: new Request("https://owner-fixture.internal/bytes", {
+      body: input.body,
+      method: "POST",
+    }),
+  });
+const browserUpload = (
   runtime: Runtime,
   input: Readonly<{ index: number; body: BodyInit }>
 ): Promise<Response> =>
@@ -466,8 +531,8 @@ const upload = (
     runtime,
     new Request("https://api.fidyapp.com/ingestion/statements/bytes", {
       body: input.body,
-      headers: sessionHeaders(input.index),
       method: "POST",
+      headers: sessionHeaders(input.index),
     })
   );
 
@@ -484,7 +549,7 @@ const uploadWithBearer = (
     })
   );
 
-const submit = (
+const browserSubmit = (
   runtime: Runtime,
   input: Readonly<{
     index: number;
@@ -503,6 +568,47 @@ const submit = (
       method: "POST",
     })
   );
+
+const publishFixture = (
+  runtime: Runtime,
+  input: Readonly<{
+    index: number;
+    idempotencyKey: string;
+    reference: Readonly<{ stagingId: string; byteLength: number; sha256: string }>;
+  }>
+): Promise<Response> => publishOwnedStatement({ storage: runtime, input });
+it("refuses direct browser statement staging and publication without a WhatsApp attachment", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const staging = yield* fromTestPromise(() =>
+        browserUpload(runtime, { body: statementBytes(), index: 0 })
+      );
+      expect(staging.ok).toBe(false);
+      const published = yield* fromTestPromise(() =>
+        browserSubmit(runtime, {
+          index: 0,
+          idempotencyKey: "20000000-0000-4000-8000-000000000819",
+          reference: {
+            stagingId: "20000000-0000-4000-8000-000000000818",
+            byteLength: 1,
+            sha256: "0".repeat(64),
+          },
+        })
+      );
+      expect(published.status).toBe(403);
+      expect(
+        (yield* fromTestPromise(() =>
+          runtime.db.prepare("SELECT id FROM statement_submissions").all()
+        )).results
+      ).toHaveLength(0);
+      expect(
+        (yield* fromTestPromise(() =>
+          runtime.db.prepare("SELECT id FROM statement_staging_objects").all()
+        )).results
+      ).toHaveLength(0);
+    })
+  ));
 
 const submitWithBearer = (
   runtime: Runtime,
@@ -537,15 +643,6 @@ const getSubmission = (runtime: Runtime, index: number, id: string): Promise<Res
     })
   );
 
-const getSubmissionWithBearer = (runtime: Runtime, id: string, token: string): Promise<Response> =>
-  send(
-    runtime,
-    new Request(`https://api.fidyapp.com/ingestion/statements/${id}`, {
-      headers: { authorization: `Bearer ${token}`, origin: browserOrigin },
-      method: "GET",
-    })
-  );
-
 const ReviewListResponse = Schema.Struct({
   data: Schema.Array(
     Schema.Struct({
@@ -553,15 +650,12 @@ const ReviewListResponse = Schema.Struct({
       submissionId: Schema.String,
       recordNumber: Schema.Int,
       reason: Schema.String,
-      status: Schema.Literals(["pending", "expired", "resolved"]),
+      status: Schema.Literals(["pending", "expired", "resolved", "skipped", "abandoned"]),
       originalEvidence: Schema.optional(Schema.Unknown),
     })
   ),
 });
-
 const batchCategory = "10000000-0000-4000-8000-000000000016";
-
-/** The capture payload every manual-capture child in this file starts from. */
 const capturePayload = (
   extra: Readonly<Record<string, unknown>> = {}
 ): Readonly<Record<string, unknown>> => ({
@@ -571,15 +665,11 @@ const capturePayload = (
   occurredAt: "2026-08-01T12:00:00.000Z",
   ...extra,
 });
-
-/** One canonical manual capture child, exactly as an atomic batch call carries it. */
 const captureCall = (suffix: number): object => ({
   callId: batchCallId(suffix),
   operation: "transactions.createTransaction",
   input: { payload: capturePayload() },
 });
-
-/** One canonical statement child citing an already-staged reference, never raw bytes. */
 const statementCall = (
   suffix: number,
   input: Readonly<{
@@ -610,72 +700,6 @@ const batch = (runtime: Runtime, index: number, calls: ReadonlyArray<object>): P
       method: "POST",
     })
   );
-
-const batchWithBearer = (
-  runtime: Runtime,
-  token: string,
-  calls: ReadonlyArray<object>
-): Promise<Response> =>
-  send(
-    runtime,
-    new Request("https://api.fidyapp.com/operations/atomic-batch", {
-      body: JSON.stringify({ calls }),
-      headers: {
-        authorization: `Bearer ${token}`,
-        "content-type": "application/json",
-        origin: browserOrigin,
-      },
-      method: "POST",
-    })
-  );
-
-/**
- * A D1 binding whose first row read after the unit batch fails once, then recovers: the committed
- * readback must retry a transient read defect instead of reporting an unreadable published unit.
- */
-const flakyReadbackDb = (db: D1Database): D1Database => {
-  let batched = false;
-  let publicationPrepared = false;
-  let failed = false;
-  const wrapStatement = (statement: unknown): object => {
-    if (typeof statement !== "object" || statement === null) {
-      throw new Error("Expected a D1 prepared statement");
-    }
-    return new Proxy(statement, {
-      get: (target, property): unknown => {
-        if (property === "first" && batched && !failed) {
-          failed = true;
-          return (): Promise<never> => Promise.reject(new Error("transient readback defect"));
-        }
-        const value: unknown = Reflect.get(target, property, target);
-        if (property === "bind" && typeof value === "function") {
-          return (...args: ReadonlyArray<unknown>): object => {
-            const bound: unknown = value.apply(target, args);
-            return wrapStatement(bound);
-          };
-        }
-        return typeof value === "function" ? value.bind(target) : value;
-      },
-    });
-  };
-  return new Proxy(db, {
-    get: (target, property): unknown => {
-      if (property === "batch") {
-        return (...args: Parameters<D1Database["batch"]>): ReturnType<D1Database["batch"]> => {
-          batched ||= publicationPrepared;
-          return target.batch(...args);
-        };
-      }
-      if (property === "prepare") {
-        return (query: string): unknown => {
-          publicationPrepared ||= /INSERT INTO statement_submissions/iu.test(query);
-          return wrapStatement(target.prepare(query));
-        };
-      }
-      return Reflect.get(target, property, target);
-    },
-  });
-};
 
 /** The bearer token one agent credential is issued with. */
 const agentToken = (fill: string): string => `fin_${fill.repeat(8)}_${fill.repeat(43)}`;
@@ -769,7 +793,7 @@ const stageOne = (
   index = 0,
   body: BodyInit = statementBytes()
 ): Promise<Readonly<{ response: Response; staged: StagedData }>> =>
-  upload(runtime, { body, index }).then((response) =>
+  stageFixture(runtime, { body, index }).then((response) =>
     response.json().then((decoded) => ({
       response,
       staged: Schema.decodeUnknownSync(StagedResponse)(decoded).data,
@@ -785,14 +809,6 @@ const submissionOf = (response: Response): Promise<SubmissionData> =>
 /** One committed batch body decoded through its exact envelope; child outputs stay unknown. */
 const batchEnvelopeOf = (response: Response): Promise<typeof BatchEnvelope.Type> =>
   response.json().then((body) => Schema.decodeUnknownSync(BatchEnvelope)(body));
-
-/** One already-read batch body decoded through its exact envelope, preserving it for messages. */
-const batchEnvelopeFrom = (body: string): typeof BatchEnvelope.Type =>
-  Schema.decodeSync(Schema.fromJsonString(BatchEnvelope))(body);
-
-/** One committed statement child output decoded into the canonical submission projection. */
-const batchSubmissionOf = (output: unknown): SubmissionData =>
-  Schema.decodeUnknownSync(SubmissionResponse)(output).data;
 
 /** One rejected batch body decoded into its child-specific failure details. */
 const batchRejectionOf = (response: Response): Promise<typeof BatchRejection.Type> =>
@@ -836,18 +852,6 @@ const expectCanonicalState = (
       if (rows !== undefined) {
         expect(yield* fromTestPromise(() => count(db, table)), table).toBe(rows);
       }
-    }
-  });
-
-/**
- * The assertion for a turn that committed nothing: every table a turn writes, at zero. This walks
- * the whole list, so a stray audit, domain, entitlement, or outbox row written outside the aborted
- * unit's own batch still fails the claim.
- */
-const expectNothingCommitted = (db: D1Database): Effect.Effect<void> =>
-  Effect.gen(function* () {
-    for (const table of canonicalStateTables) {
-      expect(yield* fromTestPromise(() => count(db, table)), table).toBe(0);
     }
   });
 
@@ -895,7 +899,6 @@ const reclaimedStagingRow = Schema.Struct({
   object_key: Schema.String,
   status: Schema.String,
 });
-const patActivityRow = Schema.Struct({ last_used_at_ms: Schema.OptionFromNullOr(Schema.Int) });
 
 /** One query's raw rows as a JSON string, for content-leak scans of every stored column. */
 const rowsJson = (result: D1Result<unknown>): string =>
@@ -1044,7 +1047,7 @@ it(
 
         const idempotencyKey = "20000000-0000-4000-8000-000000000901";
         const first = yield* fromTestPromise(() =>
-          submit(runtime, { idempotencyKey, index: 0, reference: staged })
+          publishFixture(runtime, { idempotencyKey, index: 0, reference: staged })
         );
         expect(first.status).toBe(202);
         const published = yield* fromTestPromise(() => submissionOf(first));
@@ -1055,7 +1058,7 @@ it(
         });
 
         const replayed = yield* fromTestPromise(() =>
-          submit(runtime, { idempotencyKey, index: 0, reference: staged })
+          publishFixture(runtime, { idempotencyKey, index: 0, reference: staged })
         );
         expect(replayed.status).toBe(202);
         expect(yield* fromTestPromise(() => submissionOf(replayed))).toEqual(published);
@@ -1099,7 +1102,7 @@ it(
 );
 
 it(
-  "refuses publication without the coordinator R2 binding while other mutations remain usable",
+  "refuses browser and batch publication while unrelated mutations remain usable without R2",
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -1107,10 +1110,10 @@ it(
         const { staged } = yield* fromTestPromise(() => stageOne(runtime));
         const idempotencyKey = "20000000-0000-4000-8000-000000000950";
         const individual = yield* fromTestPromise(() =>
-          submit(runtime, { idempotencyKey, index: 0, reference: staged })
+          browserSubmit(runtime, { idempotencyKey, index: 0, reference: staged })
         );
-        expect(individual.status).toBe(503);
-        expect(yield* fromTestPromise(() => failureCode(individual))).toBe("unavailable");
+        expect(individual.status).toBe(403);
+        expect(yield* fromTestPromise(() => failureCode(individual))).toBe("user_action_required");
 
         const mixed = yield* fromTestPromise(() =>
           batch(runtime, 0, [
@@ -1118,8 +1121,13 @@ it(
             statementCall(2, { idempotencyKey, reference: staged }),
           ])
         );
-        expect(mixed.status).toBe(503);
-        expect(yield* fromTestPromise(() => mixed.json())).toEqual({ status: "unavailable" });
+        expect(mixed.status).toBe(400);
+        const rejection = yield* fromTestPromise(() => batchRejectionOf(mixed));
+        expect(rejection.error).toMatchObject({
+          code: "unavailable",
+          failedCallIndex: 1,
+          operation: "ingestion.submitForExtraction",
+        });
         yield* expectCanonicalState(runtime.db, {
           statement_submissions: 0,
           statement_ingestion_outbox: 0,
@@ -1154,7 +1162,7 @@ it(
         const runtime = yield* fromTestPromise(() => setup());
         const staged = yield* fromTestPromise(() => stageOne(runtime));
         const submitted = yield* fromTestPromise(() =>
-          submit(runtime, {
+          publishFixture(runtime, {
             idempotencyKey: "20000000-0000-4000-8000-000000000990",
             index: 0,
             reference: staged.staged,
@@ -1216,7 +1224,7 @@ it.each([false, true])(
         const runtime = yield* fromTestPromise(() => setup());
         const staged = yield* fromTestPromise(() => stageOne(runtime));
         const submitted = yield* fromTestPromise(() =>
-          submit(runtime, {
+          publishFixture(runtime, {
             idempotencyKey: "20000000-0000-4000-8000-000000000993",
             index: 0,
             reference: staged.staged,
@@ -1275,7 +1283,7 @@ it(
         const runtime = yield* fromTestPromise(() => setup());
         const staged = yield* fromTestPromise(() => stageOne(runtime));
         const submitted = yield* fromTestPromise(() =>
-          submit(runtime, {
+          publishFixture(runtime, {
             idempotencyKey: "20000000-0000-4000-8000-000000000992",
             index: 0,
             reference: staged.staged,
@@ -1323,7 +1331,7 @@ it(
         const runtime = yield* fromTestPromise(() => setup());
         const staged = yield* fromTestPromise(() => stageOne(runtime));
         const submitted = yield* fromTestPromise(() =>
-          submit(runtime, {
+          publishFixture(runtime, {
             idempotencyKey: "20000000-0000-4000-8000-000000000991",
             index: 0,
             reference: staged.staged,
@@ -1404,6 +1412,654 @@ it("carries only an identity through Workflow history and delegates to the User 
     })
   ));
 
+const clarifyStatement = (
+  runtime: Runtime,
+  csv: string
+): Promise<Readonly<{ submissionId: string; reviewIds: ReadonlyArray<string> }>> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(`INSERT INTO onboarding_consent_records
+    (id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms)
+    VALUES ('30000000-0000-4000-8000-000000000198', ?, '{}', 'fixture', 'fixture', 1, 1)`)
+          .bind(userA)
+          .run()
+      );
+      const { staged } = yield* fromTestPromise(() => stageOne(runtime, 0, statementBytes(csv)));
+      const accepted = yield* fromTestPromise(() =>
+        publishFixture(runtime, {
+          index: 0,
+          idempotencyKey: "20000000-0000-4000-8000-000000000698",
+          reference: staged,
+        })
+      );
+      expect(accepted.status).toBe(202);
+      const submission = yield* fromTestPromise(() => submissionOf(accepted));
+      const coordinator = new UserTransactionCoordinator(
+        { id: { name: userA }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+        {
+          DB: runtime.db,
+          STATEMENT_STAGING_BUCKET: runtime.bucket,
+          AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+          HOSTED_AI_MODEL: approvedWorkersAiModel,
+        }
+      );
+      const extracted = yield* fromTestPromise(() =>
+        coordinator.fetch(
+          new Request("https://coordinator.internal/statement-work", {
+            method: "POST",
+            body: JSON.stringify({
+              _tag: "StatementWork",
+              version: 1,
+              userId: userA,
+              submissionId: submission.id,
+            }),
+          })
+        )
+      );
+      expect(extracted.status).toBe(200);
+      const rows = yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(
+            "SELECT id FROM statement_needs_review WHERE submission_id = ? ORDER BY record_number"
+          )
+          .bind(submission.id)
+          .all()
+      );
+      const decoded = yield* Schema.decodeUnknownEffect(
+        Schema.Array(Schema.Struct({ id: Schema.String }))
+      )(rows.results);
+      return { submissionId: submission.id, reviewIds: decoded.map(({ id }) => id) };
+    })
+  );
+
+const reviewDecision = (
+  runtime: Runtime,
+  input: Readonly<{ id: string; action: "resolve" | "skip" }>,
+  index = 0
+): Promise<Response> =>
+  send(
+    runtime,
+    new Request(`https://api.fidyapp.com/ingestion/needs-review/${input.id}/${input.action}`, {
+      method: "POST",
+      headers: { ...sessionHeaders(index), "content-type": "application/json" },
+      ...(input.action === "resolve"
+        ? {
+            body: JSON.stringify({
+              extraction: {
+                money: { amount: "13000.00", currency: "COP" },
+                counterparty: "Tienda",
+                direction: "outflow",
+                occurredAt: "2026-08-02T12:00:00.000Z",
+              },
+            }),
+          }
+        : {}),
+    })
+  );
+
+it("publishes a staged statement under held WhatsApp authority and atomically binds its upload session", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const { staged } = yield* fromTestPromise(() => stageOne(runtime));
+      const current = yield* Clock.currentTimeMillis;
+      const sessionId = "40000000-0000-4000-8000-000000000991";
+      const turnId = TranscriptTurnId.make("40000000-0000-4000-8000-000000000992");
+      const subject = WhatsAppHostedSubject.make({
+        userId: UserId.make(userA),
+        portfolioId: WhatsAppBusinessPortfolioId.make("portfolio-1"),
+        bsuid: WhatsAppBusinessScopedUserId.make("CO.13491208655302741918"),
+      });
+      yield* fromTestPromise(() =>
+        runtime.db.batch([
+          runtime.db
+            .prepare(
+              "INSERT INTO onboarding_consent_records (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES ('30000000-0000-4000-8000-000000000199',?,'{}','fixture','fixture',1,1)"
+            )
+            .bind(userA),
+          runtime.db
+            .prepare(
+              "INSERT INTO whatsapp_identities (user_id,portfolio_id,bsuid,verified_at_ms) VALUES (?,?,?,?)"
+            )
+            .bind(userA, subject.portfolioId, subject.bsuid, current),
+          runtime.db
+            .prepare(
+              "INSERT INTO hosted_agent_sessions (id,user_id,consent_basis_json,started_at_ms,status) VALUES (?,?,'{}',?,'active')"
+            )
+            .bind(sessionId, userA, current),
+          runtime.db
+            .prepare(
+              "INSERT INTO hosted_turns (id,user_id,hosted_session_id,started_at_ms,status) VALUES (?,?,?,?,'pending')"
+            )
+            .bind(turnId, userA, sessionId, current),
+          runtime.db
+            .prepare(
+              "INSERT INTO hosted_whatsapp_inbound (turn_id,user_id,portfolio_id,bsuid,message_id,business_phone_number_id,occurred_at_ms,received_at_ms) VALUES (?,?,?,?,?,?,?,?)"
+            )
+            .bind(
+              turnId,
+              userA,
+              subject.portfolioId,
+              subject.bsuid,
+              "wamid.direct-upload",
+              "123456789",
+              current,
+              current
+            ),
+          runtime.db
+            .prepare("UPDATE web_sessions SET revoked_at_ms=? WHERE user_id=?")
+            .bind(current, userA),
+        ])
+      );
+      const caller = yield* mintHostedStatementCaller({
+        db: runtime.db,
+        subject,
+        turnId,
+        current,
+        approval: Option.none(),
+        live: protectConsentStatement({
+          statement: whatsAppIdentityQuery(subject),
+          subject: { _tag: "User", userId: userA },
+          requirement: "active",
+        }),
+      });
+      if (Option.isNone(caller)) return yield* Effect.die("Missing held caller");
+      const missingAttachment = yield* executeHostedStatementCall({
+        db: runtime.db,
+        bucket: Option.some(runtime.bucket),
+        caller: caller.value,
+        current,
+        operation: "ingestion.submitForExtraction",
+        input: {
+          payload: { idempotencyKey: "20000000-0000-4000-8000-000000000798", reference: staged },
+        },
+        fence: { turnId, toolCallId: ToolCallId.make("not-direct-upload") },
+      });
+      expect(missingAttachment.ok).toBe(false);
+      expect(
+        (yield* fromTestPromise(() =>
+          runtime.db
+            .prepare("SELECT id FROM statement_submissions WHERE user_id=?")
+            .bind(userA)
+            .all()
+        )).results
+      ).toHaveLength(0);
+      yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(
+            "INSERT INTO statement_whatsapp_documents (turn_id,user_id,media_id,staging_id,reference_json,created_at_ms) VALUES (?,?,?,?,?,?)"
+          )
+          .bind(turnId, userA, "direct-document", staged.stagingId, JSON.stringify(staged), current)
+          .run()
+      );
+      const response = yield* executeHostedStatementCall({
+        db: runtime.db,
+        bucket: Option.some(runtime.bucket),
+        caller: caller.value,
+        current,
+        operation: "ingestion.submitForExtraction",
+        input: {
+          payload: { idempotencyKey: "20000000-0000-4000-8000-000000000799", reference: staged },
+        },
+        fence: { turnId, toolCallId: ToolCallId.make("direct-upload") },
+      });
+      expect(response.status).toBe(202);
+      const submission = yield* Schema.decodeUnknownEffect(SubmissionResponse)(
+        yield* fromTestPromise(() => response.json())
+      );
+      expect(
+        yield* fromTestPromise(() =>
+          runtime.db
+            .prepare(
+              "SELECT session_id,turn_id FROM statement_hosted_origins WHERE submission_id=? AND user_id=?"
+            )
+            .bind(submission.data.id, userA)
+            .first()
+        )
+      ).toEqual({ session_id: sessionId, turn_id: turnId });
+    })
+  ));
+
+it("captures a same-session exact-confirmed hosted row without a browser credential or duplicate capture", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const statement = yield* fromTestPromise(() =>
+        clarifyStatement(runtime, "date,amount,description\nunclear,unknown,Cafe\n")
+      );
+      const id = statement.reviewIds[0];
+      if (id === undefined) return yield* Effect.die("Missing review");
+      const current = yield* Clock.currentTimeMillis;
+      const sessionId = "40000000-0000-4000-8000-000000000981";
+      const priorId = "40000000-0000-4000-8000-000000000982";
+      const turnId = TranscriptTurnId.make("40000000-0000-4000-8000-000000000983");
+      const subject = yield* Schema.decodeEffect(WhatsAppHostedSubject)({
+        _tag: "WhatsAppHosted",
+        userId: userA,
+        portfolioId: "portfolio-1",
+        bsuid: "CO.13491208655302741918",
+      });
+      const operation = "ingestion.resolveNeedsReviewItem";
+      const input = yield* Schema.decodeEffect(CanonicalToolEvidence)({
+        params: { id },
+        payload: {
+          extraction: {
+            money: { amount: "13000.00", currency: "COP" },
+            counterparty: "Tienda",
+            direction: "outflow",
+            occurredAt: "2026-08-02T12:00:00.000Z",
+          },
+        },
+      });
+      const inputJson = yield* Schema.encodeEffect(Schema.fromJsonString(CanonicalToolEvidence))(
+        input
+      );
+      const idleMs = 900_000;
+      yield* fromTestPromise(() =>
+        runtime.db.batch([
+          runtime.db
+            .prepare(
+              "INSERT INTO whatsapp_identities (user_id,portfolio_id,bsuid,verified_at_ms) VALUES (?,?,?,?)"
+            )
+            .bind(userA, subject.portfolioId, subject.bsuid, current),
+          runtime.db
+            .prepare(
+              "INSERT INTO hosted_agent_sessions (id,user_id,consent_basis_json,started_at_ms,status) VALUES (?,?,'{}',?,'active')"
+            )
+            .bind(sessionId, userA, current),
+          runtime.db
+            .prepare(
+              "INSERT INTO hosted_turns (id,user_id,hosted_session_id,started_at_ms,status) VALUES (?,?,?,?,'pending')"
+            )
+            .bind(priorId, userA, sessionId, current),
+          runtime.db
+            .prepare(
+              "INSERT INTO transcript_entries (id,user_id,hosted_session_id,turn_id,kind,occurred_at_ms,text) VALUES (?,?,?,?,'assistant',?,'Responde exactamente: CONFIRMAR fixture')"
+            )
+            .bind("40000000-0000-4000-8000-000000000985", userA, sessionId, priorId, current),
+          runtime.db
+            .prepare(
+              "INSERT INTO hosted_whatsapp_inbound (turn_id,user_id,portfolio_id,bsuid,message_id,business_phone_number_id,occurred_at_ms,received_at_ms) VALUES (?,?,?,?,?,?,?,?)"
+            )
+            .bind(
+              priorId,
+              userA,
+              subject.portfolioId,
+              subject.bsuid,
+              "wamid.upload-statement",
+              "123456789",
+              current,
+              current
+            ),
+          runtime.db
+            .prepare(
+              "INSERT INTO hosted_whatsapp_delivery (turn_id,user_id,text,correlation_token,business_phone_number_id,proposed_at_ms,state,provider_message_id,delivered_at_ms) VALUES (?,?,'Responde exactamente: CONFIRMAR fixture','statement-challenge','123456789',?,'delivered','wamid.challenge-delivered',?)"
+            )
+            .bind(priorId, userA, current, current),
+          runtime.db
+            .prepare("UPDATE hosted_turns SET status='completed',terminal_at_ms=? WHERE id=?")
+            .bind(current, priorId),
+          runtime.db
+            .prepare(
+              "INSERT INTO hosted_turns (id,user_id,hosted_session_id,started_at_ms,status) VALUES (?,?,?,?,'pending')"
+            )
+            .bind(turnId, userA, sessionId, current),
+          runtime.db
+            .prepare(
+              "INSERT INTO hosted_whatsapp_inbound (turn_id,user_id,portfolio_id,bsuid,message_id,business_phone_number_id,occurred_at_ms,received_at_ms) VALUES (?,?,?,?,?,?,?,?)"
+            )
+            .bind(
+              turnId,
+              userA,
+              subject.portfolioId,
+              subject.bsuid,
+              "wamid.confirm-statement",
+              "123456789",
+              current,
+              current
+            ),
+          runtime.db
+            .prepare(
+              "INSERT INTO statement_hosted_origins (submission_id,user_id,session_id,turn_id,expires_at_ms) VALUES (?,?,?,?,?)"
+            )
+            .bind(statement.submissionId, userA, sessionId, priorId, current + idleMs),
+          runtime.db
+            .prepare(
+              "INSERT INTO hosted_confirmations (id,user_id,issued_turn_id,operation,input_json,command,issued_at_ms,expires_at_ms,consumed_turn_id,consumed_at_ms) VALUES (?,?,?,?,?,?,?,?,?,?)"
+            )
+            .bind(
+              "40000000-0000-4000-8000-000000000984",
+              userA,
+              priorId,
+              operation,
+              inputJson,
+              "CONFIRMAR fixture",
+              current,
+              current + idleMs,
+              turnId,
+              current
+            ),
+        ])
+      );
+      const live = protectConsentStatement({
+        statement: whatsAppIdentityQuery(subject),
+        subject: { _tag: "User", userId: userA },
+        requirement: "active",
+      });
+      const unapproved = yield* mintHostedStatementCaller({
+        db: runtime.db,
+        subject,
+        turnId,
+        current,
+        live,
+        approval: Option.none(),
+      });
+      if (Option.isNone(unapproved)) return yield* Effect.die("Missing live hosted caller");
+      const query = (): Effect.Effect<Response> =>
+        executeHostedStatementQuery({
+          db: runtime.db,
+          bucket: Option.some(runtime.bucket),
+          caller: unapproved.value,
+          current,
+          operation: "ingestion.listNeedsReviewItems",
+          input: { query: { status: "pending", limit: "1" } },
+        });
+      const firstPage = yield* query();
+      const responseText = yield* fromTestPromise(() => firstPage.clone().text());
+      expect(responseText).not.toContain('"originalEvidence"');
+      expect(responseText).not.toContain('"knownMoney"');
+      expect(responseText).not.toContain('"message"');
+      expect(yield* fromTestPromise(() => firstPage.json())).toMatchObject({
+        data: [{ id, status: "pending" }],
+      });
+      const browserAttempt = yield* fromTestPromise(() =>
+        reviewDecision(runtime, { id, action: "resolve" })
+      );
+      expect(browserAttempt.ok).toBe(false);
+      const token = agentToken("H");
+      yield* fromTestPromise(() =>
+        issuePat({
+          current,
+          db: runtime.db,
+          label: "Hosted-resumption-negative",
+          scopes: '["write"]',
+          seed: 1984,
+          token,
+        })
+      );
+      const patAttempt = yield* fromTestPromise(() =>
+        send(
+          runtime,
+          new Request(`https://api.fidyapp.com/ingestion/needs-review/${id}/resolve`, {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${token}`,
+              origin: browserOrigin,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              extraction: {
+                money: { amount: "13000.00", currency: "COP" },
+                counterparty: "Tienda",
+                direction: "outflow",
+                occurredAt: "2026-08-02T12:00:00.000Z",
+              },
+            }),
+          })
+        )
+      );
+      expect(patAttempt.ok).toBe(false);
+      expect(
+        (yield* fromTestPromise(() =>
+          runtime.db
+            .prepare("SELECT review_id FROM statement_review_decisions WHERE review_id=?")
+            .bind(id)
+            .all()
+        )).results
+      ).toHaveLength(0);
+      yield* fromTestPromise(() =>
+        runtime.db
+          .prepare("UPDATE web_sessions SET revoked_at_ms=? WHERE user_id=?")
+          .bind(current, userA)
+          .run()
+      );
+      const fence = { turnId, toolCallId: ToolCallId.make("statement-resolution") };
+      expect(
+        (yield* executeHostedStatementCall({
+          db: runtime.db,
+          bucket: Option.some(runtime.bucket),
+          caller: unapproved.value,
+          current,
+          operation,
+          input,
+          fence,
+        })).status
+      ).toBe(503);
+      const approved = yield* mintHostedStatementCaller({
+        db: runtime.db,
+        subject,
+        turnId,
+        current,
+        live,
+        approval: Option.some({ operation, input }),
+      });
+      if (Option.isNone(approved)) return yield* Effect.die("Missing approved caller");
+      const decoded = yield* Schema.decodeEffect(getCanonicalOperationInput(operation))(input);
+      const prepared = yield* prepareHeldStatementReviewDecision({
+        operation,
+        work: {
+          db: runtime.db,
+          bucket: Option.some(runtime.bucket),
+          userId: userA,
+          authority: approved.value.authority,
+          originSessionId: Option.some(sessionId),
+          originTurns: Option.some(approved.value.originTurns),
+          publicationOrigin: Option.some(approved.value.publicationOrigin),
+          requiredScope: Option.none(),
+          current,
+          input: decoded,
+        },
+      });
+      expect(prepared._tag).toBe("Prepared");
+      if (prepared._tag !== "Prepared") return yield* Effect.die("Missing prepared decision");
+      yield* fromTestPromise(() =>
+        expect(
+          runtime.db.batch([
+            ...prepared.mutation.statements,
+            runtime.db.prepare(
+              "INSERT INTO canonical_child_guard (child_index,operation,accepted) VALUES (1,'rollback',0)"
+            ),
+          ])
+        ).rejects.toThrow("canonical_child_guard_1")
+      );
+      expect(
+        (yield* executeHostedStatementCall({
+          db: runtime.db,
+          bucket: Option.some(runtime.bucket),
+          caller: approved.value,
+          current,
+          operation,
+          input,
+          fence,
+        })).status
+      ).toBe(200);
+      expect(
+        (yield* executeHostedStatementCall({
+          db: runtime.db,
+          bucket: Option.some(runtime.bucket),
+          caller: approved.value,
+          current,
+          operation,
+          input,
+          fence,
+        })).status
+      ).toBe(404);
+      const completedPage = yield* query();
+      expect(yield* fromTestPromise(() => completedPage.json())).toMatchObject({ data: [] });
+      expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(1);
+      expect(yield* fromTestPromise(() => count(runtime.db, "source_attestations"))).toBe(1);
+      expect(
+        yield* fromTestPromise(() =>
+          runtime.db
+            .prepare("SELECT count(*) AS count FROM hosted_mutation_commits WHERE turn_id=?")
+            .bind(turnId)
+            .first()
+        )
+      ).toEqual({ count: 1 });
+    })
+  ));
+
+it("clarifies a mixed statement through canonical capture and erases evidence without losing clean Transactions", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const statement = yield* fromTestPromise(() =>
+        clarifyStatement(
+          runtime,
+          "fecha,valor,moneda,contraparte\n2026-08-01,-45000,COP,Cafe\n2026-08-02,uncertain,COP,Tienda\n"
+        )
+      );
+      expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(1);
+      expect(statement.reviewIds).toHaveLength(1);
+      const id = statement.reviewIds[0];
+      if (id === undefined) return yield* Effect.die("Missing review");
+      const foreign = yield* fromTestPromise(() =>
+        reviewDecision(runtime, { id, action: "resolve" }, 1)
+      );
+      expect(foreign.status).toBe(404);
+      const resolved = yield* fromTestPromise(() =>
+        reviewDecision(runtime, { id, action: "resolve" })
+      );
+      expect(resolved.status).toBe(200);
+      expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(2);
+      expect(yield* fromTestPromise(() => count(runtime.db, "source_attestations"))).toBe(2);
+      const retained = yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(
+            "SELECT status, original_evidence, known_money FROM statement_needs_review WHERE id = ?"
+          )
+          .bind(id)
+          .first()
+      );
+      expect(retained).toEqual({ status: "resolved", original_evidence: null, known_money: null });
+      const replay = yield* fromTestPromise(() =>
+        reviewDecision(runtime, { id, action: "resolve" })
+      );
+      expect(replay.status).toBe(404);
+      expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(2);
+      const read = yield* fromTestPromise(() =>
+        send(
+          runtime,
+          new Request(`https://api.fidyapp.com/ingestion/statements/${statement.submissionId}`, {
+            headers: sessionHeaders(0),
+          })
+        )
+      );
+      expect(yield* fromTestPromise(() => read.json())).toMatchObject({
+        data: {
+          status: "completed",
+          accounting: { inputRows: 2, acceptedRows: 2, needsReviewRows: 0 },
+        },
+      });
+    })
+  ));
+
+it("all-skipped clarification completes without consuming the Free grant", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const statement = yield* fromTestPromise(() =>
+        clarifyStatement(
+          runtime,
+          "fecha,valor,descripcion\n2026-08-01,-45000,Cafe\n2026-08-02,-13000,Tienda\n"
+        )
+      );
+      const grantBefore = yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(
+            "SELECT submission_id, consumed_at_ms FROM statement_backfill_entitlements WHERE user_id = ?"
+          )
+          .bind(userA)
+          .first()
+      );
+      expect(grantBefore).toEqual({ submission_id: statement.submissionId, consumed_at_ms: null });
+      for (const id of statement.reviewIds) {
+        const result = yield* fromTestPromise(() =>
+          reviewDecision(runtime, { id, action: "skip" })
+        );
+        expect(result.status).toBe(200);
+      }
+      expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(0);
+      const grantAfter = yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(
+            "SELECT submission_id, consumed_at_ms FROM statement_backfill_entitlements WHERE user_id = ?"
+          )
+          .bind(userA)
+          .first()
+      );
+      expect(grantAfter).toEqual({ submission_id: null, consumed_at_ms: null });
+      const read = yield* fromTestPromise(() =>
+        send(
+          runtime,
+          new Request(`https://api.fidyapp.com/ingestion/statements/${statement.submissionId}`, {
+            headers: sessionHeaders(0),
+          })
+        )
+      );
+      expect(yield* fromTestPromise(() => read.json())).toMatchObject({
+        data: {
+          status: "completed",
+          accounting: { inputRows: 2, acceptedRows: 0, needsReviewRows: 0, skippedRows: 2 },
+        },
+      });
+    })
+  ));
+
+it("explicit abandonment is permanent and retains captured Transactions", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const statement = yield* fromTestPromise(() =>
+        clarifyStatement(
+          runtime,
+          "fecha,valor,moneda,contraparte\n2026-08-01,-45000,COP,Cafe\n2026-08-02,uncertain,COP,Tienda\n"
+        )
+      );
+      const abandoned = yield* fromTestPromise(() =>
+        send(
+          runtime,
+          new Request(
+            `https://api.fidyapp.com/ingestion/statements/${statement.submissionId}/abandon`,
+            { method: "POST", headers: sessionHeaders(0) }
+          )
+        )
+      );
+      expect(abandoned.status).toBe(200);
+      expect(yield* fromTestPromise(() => abandoned.json())).toMatchObject({
+        data: {
+          status: "abandoned",
+          accounting: { acceptedRows: 1, abandonedRows: 1, needsReviewRows: 0 },
+        },
+      });
+      const id = statement.reviewIds[0];
+      if (id === undefined) return yield* Effect.die("Missing review");
+      expect(
+        (yield* fromTestPromise(() => reviewDecision(runtime, { id, action: "resolve" }))).status
+      ).toBe(404);
+      expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(1);
+      const retained = yield* fromTestPromise(() =>
+        runtime.db
+          .prepare("SELECT original_evidence, known_money FROM statement_needs_review WHERE id = ?")
+          .bind(id)
+          .first()
+      );
+      expect(retained).toEqual({ original_evidence: null, known_money: null });
+    })
+  ));
+
 it("shows committed review rows only to their User through the canonical read", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -1412,7 +2068,7 @@ it("shows committed review rows only to their User through the canonical read", 
         stageOne(runtime, 0, statementBytes("fecha,valor,descripcion\n2026-08-01,-45000,Cafe\n"))
       );
       const accepted = yield* fromTestPromise(() =>
-        submit(runtime, {
+        publishFixture(runtime, {
           index: 0,
           idempotencyKey: "20000000-0000-4000-8000-000000000699",
           reference: staged,
@@ -1462,7 +2118,17 @@ it("shows committed review rows only to their User through the canonical read", 
         submissionId: submission.id,
         reason: "mapping-unavailable",
       });
-      expect(ownBody.data[0]?.originalEvidence).toBeDefined();
+      expect(ownBody.data[0]?.originalEvidence).toBeUndefined();
+      expect(
+        yield* fromTestPromise(() =>
+          runtime.db
+            .prepare(
+              "SELECT count(*) AS count FROM statement_needs_review WHERE user_id=? AND status='pending' AND original_evidence IS NOT NULL"
+            )
+            .bind(userA)
+            .first()
+        )
+      ).toEqual({ count: 1 });
       // The cron can be delayed; a read must still suppress overdue raw evidence without
       // relying on a successful storage sweep. Clone the valid row with an expired deadline.
       const overdueDeadline = (yield* Clock.currentTimeMillis) - 1_000;
@@ -1652,7 +2318,7 @@ it("marks an accepted unsupported XLSX payload terminal without inventing Transa
         stageOne(runtime, 0, new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00, 0x00]))
       );
       const accepted = yield* fromTestPromise(() =>
-        submit(runtime, {
+        publishFixture(runtime, {
           index: 0,
           idempotencyKey: "20000000-0000-4000-8000-000000000682",
           reference: staged,
@@ -1703,7 +2369,7 @@ it("settles an errored Workflow when its final failure-report activity also exha
       const runtime = yield* fromTestPromise(() => setup());
       const staged = yield* fromTestPromise(() => stageOne(runtime));
       const accepted = yield* fromTestPromise(() =>
-        submit(runtime, {
+        publishFixture(runtime, {
           index: 0,
           idempotencyKey: "20000000-0000-4000-8000-000000000681",
           reference: staged.staged,
@@ -1766,13 +2432,15 @@ it(
           },
         });
         const tooLarge = yield* fromTestPromise(() =>
-          upload(runtime, { body: oversized, index: 0 })
+          stageFixture(runtime, { body: oversized, index: 0 })
         );
         expect(tooLarge.status).toBe(413);
 
         // A PDF claim is refused because of its actual signature, not a declared media type.
         const pdf = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37]);
-        const unsupported = yield* fromTestPromise(() => upload(runtime, { body: pdf, index: 0 }));
+        const unsupported = yield* fromTestPromise(() =>
+          stageFixture(runtime, { body: pdf, index: 0 })
+        );
         expect(unsupported.status).toBe(400);
         expect(yield* fromTestPromise(() => failureCode(unsupported))).toBe("validation_failed");
 
@@ -1780,7 +2448,7 @@ it(
         // them before staging: this path never accepts or persists a decryption password.
         const protectedOffice = new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
         const protectedResult = yield* fromTestPromise(() =>
-          upload(runtime, { body: protectedOffice, index: 0 })
+          stageFixture(runtime, { body: protectedOffice, index: 0 })
         );
         expect(protectedResult.status).toBe(400);
         expect(yield* fromTestPromise(() => failureCode(protectedResult))).toBe(
@@ -1788,7 +2456,7 @@ it(
         );
 
         const empty = yield* fromTestPromise(() =>
-          upload(runtime, { body: new Uint8Array(), index: 0 })
+          stageFixture(runtime, { body: new Uint8Array(), index: 0 })
         );
         expect(empty.status).toBe(400);
 
@@ -1803,7 +2471,7 @@ it(
 );
 
 it(
-  "stages bytes only for a live browser session, never for a bearer or an anonymous caller",
+  "refuses public byte uploads from anonymous, PAT and unknown browser callers",
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -1818,7 +2486,7 @@ it(
             })
           )
         );
-        // A PAT bearer performs for the API, but byte staging stays a browser-session capability.
+        // Byte staging is private to verified WhatsApp document admission.
         const withBearer = yield* fromTestPromise(() =>
           uploadWithBearer(runtime, {
             body: statementBytes(),
@@ -1839,9 +2507,9 @@ it(
           )
         );
 
-        expect(anonymous.status).toBe(401);
-        expect(withBearer.status).toBe(401);
-        expect(unknownSession.status).toBe(401);
+        expect(anonymous.status).toBe(403);
+        expect(withBearer.status).toBe(403);
+        expect(unknownSession.status).toBe(403);
         expect(yield* fromTestPromise(() => count(runtime.db, "statement_staging_objects"))).toBe(
           0
         );
@@ -1858,20 +2526,20 @@ it(
       Effect.gen(function* () {
         const runtime = yield* fromTestPromise(() => setup());
         const uploaded = yield* fromTestPromise(() =>
-          upload(runtime, { body: statementBytes(), index: 0 })
+          stageFixture(runtime, { body: statementBytes(), index: 0 })
             .then(stagedBodyOf)
             .then(stagedWithBody)
         );
         const { body: uploadBody, staged } = uploaded;
         const submitResponse = yield* fromTestPromise(() =>
-          submit(runtime, {
+          publishFixture(runtime, {
             idempotencyKey: "20000000-0000-4000-8000-000000000902",
             index: 0,
             reference: staged,
           })
         );
         const mismatched = yield* fromTestPromise(() =>
-          submit(runtime, {
+          publishFixture(runtime, {
             idempotencyKey: "20000000-0000-4000-8000-000000000903",
             index: 0,
             reference: { ...staged, sha256: "0".repeat(64) },
@@ -1918,7 +2586,7 @@ it(
         const { staged } = yield* fromTestPromise(() => stageOne(runtime));
 
         const foreign = yield* fromTestPromise(() =>
-          submit(runtime, {
+          publishFixture(runtime, {
             idempotencyKey: "20000000-0000-4000-8000-000000000904",
             index: 1,
             reference: staged,
@@ -1926,7 +2594,7 @@ it(
         );
         expect(foreign.status).toBe(400);
         const tampered = yield* fromTestPromise(() =>
-          submit(runtime, {
+          publishFixture(runtime, {
             idempotencyKey: "20000000-0000-4000-8000-000000000905",
             index: 0,
             reference: { ...staged, byteLength: staged.byteLength + 1 },
@@ -1962,7 +2630,7 @@ it(
         ]);
         // The real owner can still publish the untouched material.
         const owned = yield* fromTestPromise(() =>
-          submit(runtime, {
+          publishFixture(runtime, {
             idempotencyKey: "20000000-0000-4000-8000-000000000906",
             index: 0,
             reference: staged,
@@ -1985,7 +2653,7 @@ it(
         if (missingKey === undefined) throw new Error("Expected a staged object");
         yield* fromTestPromise(() => runtime.bucket.delete(missingKey));
         const absent = yield* fromTestPromise(() =>
-          submit(runtime, {
+          publishFixture(runtime, {
             idempotencyKey: "20000000-0000-4000-8000-000000000910",
             index: 0,
             reference: missing.staged,
@@ -2002,7 +2670,7 @@ it(
         yield* fromTestPromise(() => runtime.bucket.delete(alteredKey));
         yield* fromTestPromise(() => runtime.bucket.put(alteredKey, bytes, { sha256: digest }));
         const altered = yield* fromTestPromise(() =>
-          submit(runtime, {
+          publishFixture(runtime, {
             idempotencyKey: "20000000-0000-4000-8000-000000000911",
             index: 0,
             reference: changed.staged,
@@ -2025,7 +2693,7 @@ it("removes expired upload attempt and work claims without clearing live admissi
       const runtime = yield* fromTestPromise(() => setup());
       const before = yield* Clock.currentTimeMillis;
       const uploaded = yield* fromTestPromise(() =>
-        upload(runtime, { body: statementBytes(), index: 0 })
+        stageFixture(runtime, { body: statementBytes(), index: 0 })
       );
       expect(uploaded.status).toBe(201);
       yield* sweepExpiredUploadAdmission({ db: runtime.db, now: before + 1_000 });
@@ -2067,7 +2735,7 @@ it(
                 .catch(() => undefined);
             },
           });
-          return upload(runtime, { body: stream, index: 0 });
+          return stageFixture(runtime, { body: stream, index: 0 });
         };
         const first = openUpload();
         const second = openUpload();
@@ -2084,7 +2752,7 @@ it(
         expect(yield* fromTestPromise(outstanding)).toBe(2);
 
         const refused = yield* fromTestPromise(() =>
-          upload(runtime, { body: statementBytes(), index: 0 })
+          stageFixture(runtime, { body: statementBytes(), index: 0 })
         );
         expect(refused.status).toBe(429);
         expect(yield* fromTestPromise(() => failureCode(refused))).toBe("rate_limited");
@@ -2092,12 +2760,12 @@ it(
         // A flood of refused uploads consumes attempt pressure, not R2 work capacity.
         for (let attempted = 3; attempted < 40; attempted += 1) {
           const denied = yield* fromTestPromise(() =>
-            upload(runtime, { body: statementBytes(), index: 0 })
+            stageFixture(runtime, { body: statementBytes(), index: 0 })
           );
           expect(denied.status).toBe(429);
         }
         const exhausted = yield* fromTestPromise(() =>
-          upload(runtime, { body: statementBytes(), index: 0 })
+          stageFixture(runtime, { body: statementBytes(), index: 0 })
         );
         expect(exhausted.status).toBe(429);
         expect(yield* fromTestPromise(() => failureCode(exhausted))).toBe("rate_limited");
@@ -2139,7 +2807,7 @@ it(
         const runtime = yield* fromTestPromise(() => setup());
         const first = yield* fromTestPromise(() => stageOne(runtime));
         const queued = yield* fromTestPromise(() =>
-          submit(runtime, {
+          publishFixture(runtime, {
             idempotencyKey: "20000000-0000-4000-8000-000000000907",
             index: 0,
             reference: first.staged,
@@ -2149,7 +2817,7 @@ it(
 
         const second = yield* fromTestPromise(() => stageOne(runtime));
         const paywalled = yield* fromTestPromise(() =>
-          submit(runtime, {
+          publishFixture(runtime, {
             idempotencyKey: "20000000-0000-4000-8000-000000000908",
             index: 0,
             reference: second.staged,
@@ -2218,7 +2886,7 @@ it(
         expect(yield* fromTestPromise(() => stagedObjectKeys(runtime))).toHaveLength(1);
 
         const restored = yield* fromTestPromise(() =>
-          submit(runtime, {
+          publishFixture(runtime, {
             idempotencyKey: "20000000-0000-4000-8000-000000000909",
             index: 0,
             reference: second.staged,
@@ -2298,7 +2966,7 @@ it(
         );
         const staged = yield* fromTestPromise(() => stageOne(runtime));
         const outstanding = yield* fromTestPromise(() =>
-          submit(runtime, {
+          publishFixture(runtime, {
             idempotencyKey: "20000000-0000-4000-8000-000000000910",
             index: 0,
             reference: staged.staged,
@@ -2328,7 +2996,7 @@ it(
         );
         const proStaged = yield* fromTestPromise(() => stageOne(runtime, 1));
         const hourly = yield* fromTestPromise(() =>
-          submit(runtime, {
+          publishFixture(runtime, {
             idempotencyKey: "20000000-0000-4000-8000-000000000911",
             index: 1,
             reference: proStaged.staged,
@@ -2342,7 +3010,7 @@ it(
 );
 
 it(
-  "accounts for an agent submission through the same canonical publication",
+  "refuses PAT publication even with read and write scopes",
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -2359,63 +3027,27 @@ it(
             token,
           })
         );
-        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
-        const submitted = yield* fromTestPromise(() =>
-          submitWithBearer(runtime, {
-            idempotencyKey: "20000000-0000-4000-8000-000000000912",
-            reference: staged,
-            token,
-          })
-        );
-
-        const submittedBody = yield* fromTestPromise(() => submitted.clone().text());
-        expect(submitted.status, submittedBody).toBe(202);
-        const published = yield* fromTestPromise(() => submissionOf(submitted));
-        const readBack = yield* fromTestPromise(() =>
-          getSubmissionWithBearer(runtime, published.id, token)
-        );
-        expect(readBack.status).toBe(200);
-        expect(yield* fromTestPromise(() => submissionOf(readBack))).toEqual(published);
-
-        // A refused PAT submission is attributable as one rejected canonical audit row, and still
-        // leaves no statement audit row and no authoritative submission behind.
+        const owned = yield* fromTestPromise(() => stageOne(runtime));
         const foreign = yield* fromTestPromise(() => stageOne(runtime, 1));
-        const refused = yield* fromTestPromise(() =>
-          submitWithBearer(runtime, {
-            idempotencyKey: "20000000-0000-4000-8000-000000000914",
-            reference: foreign.staged,
-            token,
-          })
-        );
-        expect(refused.status).toBe(400);
-
-        const audit = yield* fromTestPromise(() =>
-          runtime.db
-            .prepare(
-              "SELECT operation, outcome FROM pat_audit WHERE pat_id IS NOT NULL ORDER BY rowid"
-            )
-            .all<{ operation: string; outcome: string }>()
-        );
-        expect(audit.results).toEqual([
-          { operation: "ingestion.submitForExtraction", outcome: "accepted" },
-          { operation: "ingestion.getStatementSubmission", outcome: "accepted" },
-          { operation: "ingestion.submitForExtraction", outcome: "rejected" },
-        ]);
-        // A PAT call is audited once, in pat_audit: the statement audit keeps only the publication.
-        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submission_audit"))).toBe(
-          1
-        );
-        expect(
-          yield* fromTestPromise(() =>
-            firstRow(
-              runtime.db,
-              patActivityRow,
-              "SELECT last_used_at_ms FROM pats WHERE id = ?",
-              "40000000-0000-4000-8000-000000000001"
-            )
-          )
-        ).toMatchObject({ last_used_at_ms: Option.some(expect.any(Number)) });
-        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(1);
+        for (const reference of [owned.staged, foreign.staged]) {
+          const refused = yield* fromTestPromise(() =>
+            submitWithBearer(runtime, {
+              idempotencyKey: "20000000-0000-4000-8000-000000000912",
+              reference,
+              token,
+            })
+          );
+          expect(refused.status).toBe(403);
+        }
+        yield* expectCanonicalState(runtime.db, {
+          statement_submissions: 0,
+          statement_ingestion_outbox: 0,
+          statement_submission_audit: 0,
+          statement_backfill_entitlements: 0,
+          transactions: 0,
+          transaction_audit: 0,
+        });
+        expect(yield* fromTestPromise(() => stagedObjectKeys(runtime))).toHaveLength(2);
       })
     ),
   30_000
@@ -2503,7 +3135,7 @@ it(
         // the budget bounds canonical work, not the non-authoritative transport that feeds it.
         const { staged } = yield* fromTestPromise(() => stageOne(runtime));
         const submitted = yield* fromTestPromise(() =>
-          submit(runtime, {
+          publishFixture(runtime, {
             idempotencyKey: "20000000-0000-4000-8000-000000000913",
             index: 0,
             reference: staged,
@@ -2535,12 +3167,15 @@ it(
         // its own conditional D1 unit runs, so only that unit can attribute the loss. One canonical
         // call remains one refusal: the unit's recorded refusal is answered without a second write.
         const database = competingWriteDb(runtime.db, () =>
-          submit(runtime, { index: 0, idempotencyKey, reference: winner }).then((response) =>
-            response.text()
+          publishFixture(runtime, { index: 0, idempotencyKey, reference: winner }).then(
+            (response) => response.text()
           )
         );
         const refused = yield* fromTestPromise(() =>
-          submit({ ...runtime, db: database }, { index: 0, idempotencyKey, reference: loser })
+          publishFixture(
+            { ...runtime, db: database },
+            { index: 0, idempotencyKey, reference: loser }
+          )
         );
         expect(refused.status).toBe(400);
         expect(yield* fromTestPromise(() => failureCode(refused))).toBe("validation_failed");
@@ -2561,7 +3196,7 @@ it(
 );
 
 it(
-  "refuses an unparseable canonical submission input before any staging lookup",
+  "refuses browser publication before parsing hostile staged references",
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -2582,312 +3217,9 @@ it(
             })
           )
         );
-        expect(malformed.status).toBe(400);
-        expect(yield* fromTestPromise(() => failureCode(malformed))).toBe("validation_failed");
+        expect(malformed.status).toBe(403);
+        expect(yield* fromTestPromise(() => failureCode(malformed))).toBe("user_action_required");
         expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(0);
-      })
-    ),
-  30_000
-);
-
-it(
-  "publishes a staged statement and another canonical mutation in one atomic batch",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => setup("bound"));
-        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
-        const idempotencyKey = "20000000-0000-4000-8000-000000000920";
-
-        const committed = yield* fromTestPromise(() =>
-          batch(runtime, 0, [
-            captureCall(1),
-            statementCall(2, { idempotencyKey, reference: staged }),
-          ])
-        );
-        const body = yield* fromTestPromise(() => committed.text());
-        expect(committed.status, body).toBe(200);
-        const envelope = batchEnvelopeFrom(body);
-        expect(envelope.data.results.map(({ callId }) => callId)).toEqual([
-          batchCallId(1),
-          batchCallId(2),
-        ]);
-        expect(envelope.data.results.map(({ operation }) => operation)).toEqual([
-          "transactions.createTransaction",
-          "ingestion.submitForExtraction",
-        ]);
-        expect(batchSubmissionOf(envelope.data.results[1]?.output).status).toBe("queued");
-
-        // One D1 unit committed both children, both metadata-only success audits, and the bounded
-        // extraction identity; the staging row is promoted only because the submission exists.
-        yield* expectCanonicalState(runtime.db, {
-          statement_submissions: 1,
-          statement_ingestion_outbox: 1,
-          transactions: 1,
-          transaction_audit: 1,
-          statement_submission_audit: 1,
-        });
-        expect(
-          yield* fromTestPromise(() =>
-            firstRow(
-              runtime.db,
-              Schema.Struct({ matches: Schema.Int, status: Schema.String }),
-              `SELECT staging.status AS status,
-                      (staging.published_submission_id = submission.id
-                        AND outbox.submission_id = submission.id) AS matches
-               FROM statement_staging_objects AS staging
-               JOIN statement_submissions AS submission ON submission.staging_id = staging.id
-               JOIN statement_ingestion_outbox AS outbox ON outbox.submission_id = submission.id`
-            )
-          )
-        ).toEqual({ matches: 1, status: "published" });
-      })
-    ),
-  30_000
-);
-
-it(
-  "retries a mixed batch as a replay when the same statement publishes during its unit",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => setup());
-        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
-        const idempotencyKey = "20000000-0000-4000-8000-000000000958";
-        const raced = {
-          ...runtime,
-          db: competingWriteDb(runtime.db, () =>
-            submit(runtime, { index: 0, idempotencyKey, reference: staged }).then((response) =>
-              response.text()
-            )
-          ),
-        };
-        const committed = yield* fromTestPromise(() =>
-          batch(raced, 0, [captureCall(1), statementCall(2, { idempotencyKey, reference: staged })])
-        );
-        expect(committed.status, yield* fromTestPromise(() => committed.clone().text())).toBe(200);
-        yield* expectCanonicalState(runtime.db, {
-          statement_submissions: 1,
-          statement_ingestion_outbox: 1,
-          transactions: 1,
-          transaction_audit: 1,
-          statement_submission_audit: 2,
-        });
-      })
-    ),
-  30_000
-);
-
-it(
-  "rolls back a mixed batch when the statement child refuses at commit time",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => setup());
-        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
-        const current = yield* Clock.currentTimeMillis;
-        // The staged material expires after its child was admitted but before the unit commits.
-        const raced = {
-          ...runtime,
-          db: competingWriteDb(runtime.db, () =>
-            runtime.db
-              .prepare("UPDATE statement_staging_objects SET expires_at_ms = ? WHERE id = ?")
-              .bind(current - 1, staged.stagingId)
-              .run()
-          ),
-        };
-        const refused = yield* fromTestPromise(() =>
-          batch(raced, 0, [
-            captureCall(1),
-            statementCall(2, {
-              idempotencyKey: "20000000-0000-4000-8000-000000000921",
-              reference: staged,
-            }),
-          ])
-        );
-        expect(refused.status).toBe(400);
-        const rejection = yield* fromTestPromise(() => batchRejectionOf(refused));
-        expect(rejection.error).toMatchObject({
-          code: "validation_failed",
-          failedCallIndex: 1,
-          operation: "ingestion.submitForExtraction",
-        });
-
-        // The earlier capture child and the statement success audit both rolled back; only the
-        // statement child's own refusal audit remains, and the staged row was never promoted.
-        yield* expectCanonicalState(runtime.db, {
-          transactions: 0,
-          transaction_audit: 0,
-          statement_submissions: 0,
-          statement_ingestion_outbox: 0,
-        });
-        expect(
-          yield* fromTestPromise(() => count(runtime.db, "statement_backfill_entitlements"))
-        ).toBe(0);
-        expect(
-          yield* fromTestPromise(() =>
-            firstRow(
-              runtime.db,
-              Schema.Struct({ outcome: Schema.String }),
-              "SELECT outcome FROM statement_submission_audit"
-            )
-          )
-        ).toEqual({ outcome: "validation_failed" });
-        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submission_audit"))).toBe(
-          1
-        );
-        expect(
-          yield* fromTestPromise(() =>
-            scalar<{ status: string }>(runtime.db, "SELECT status FROM statement_staging_objects")
-          )
-        ).toEqual({ status: "available" });
-      })
-    ),
-  30_000
-);
-
-it(
-  "rolls back a staged statement when a later batch child refuses at commit time",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => setup());
-        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
-        const seededId = "30000000-0000-4000-8000-000000000790";
-        yield* fromTestPromise(() =>
-          seedTransaction({
-            categoryId: batchCategory,
-            db: runtime.db,
-            id: seededId,
-            occurredAt: "2026-08-01T12:00:00.000Z",
-            userId: userA,
-          })
-        );
-        // The correction's observed revision moves after it was admitted but before the unit.
-        const raced = {
-          ...runtime,
-          db: competingWriteDb(runtime.db, () =>
-            concurrentCorrection({
-              correctedAt: "2026-08-01T12:00:00.000Z",
-              db: runtime.db,
-              evidenceId: "30000000-0000-4000-8000-000000000791",
-              transactionId: seededId,
-              userId: userA,
-            })
-          ),
-        };
-        const refused = yield* fromTestPromise(() =>
-          batch(raced, 0, [
-            statementCall(1, {
-              idempotencyKey: "20000000-0000-4000-8000-000000000922",
-              reference: staged,
-            }),
-            correctionCall(2, seededId, { expectedRevision: 0, changes: { notes: "late" } }),
-          ])
-        );
-        expect(refused.status).toBe(400);
-        const rejection = yield* fromTestPromise(() => batchRejectionOf(refused));
-        expect(rejection.error).toMatchObject({
-          code: "validation_failed",
-          failedCallIndex: 1,
-          operation: "transactions.updateTransaction",
-        });
-
-        // The refused sibling rolls back the whole unit: no submission, no outbox, no statement
-        // audit, and only the correction's own refusal audit remains.
-        yield* expectCanonicalState(runtime.db, {
-          statement_submissions: 0,
-          statement_ingestion_outbox: 0,
-          statement_submission_audit: 0,
-        });
-        expect(yield* fromTestPromise(() => count(runtime.db, "transactions"))).toBe(1);
-        expect(
-          yield* fromTestPromise(() =>
-            firstRow(
-              runtime.db,
-              Schema.Struct({ outcome: Schema.String }),
-              "SELECT outcome FROM transaction_audit WHERE operation = 'transactions.updateTransaction'"
-            )
-          )
-        ).toEqual({ outcome: "validation_failed" });
-        expect(
-          yield* fromTestPromise(() =>
-            scalar<{ status: string }>(runtime.db, "SELECT status FROM statement_staging_objects")
-          )
-        ).toEqual({ status: "available" });
-      })
-    ),
-  30_000
-);
-
-it(
-  "maps an atomic batch unit D1 defect to the closed unavailable failure without partial state",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => setup());
-        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
-        const defective = { ...runtime, db: defectiveBatchDb(runtime.db) };
-
-        const individual = yield* fromTestPromise(() =>
-          submit(defective, {
-            idempotencyKey: "20000000-0000-4000-8000-000000000923",
-            index: 0,
-            reference: staged,
-          })
-        );
-        expect(individual.status).toBe(503);
-        expect(yield* fromTestPromise(() => failureCode(individual))).toBe("unavailable");
-        const batched = yield* fromTestPromise(() =>
-          batch(defective, 0, [
-            statementCall(1, {
-              idempotencyKey: "20000000-0000-4000-8000-000000000924",
-              reference: staged,
-            }),
-            captureCall(2),
-          ])
-        );
-        expect(batched.status).toBe(503);
-
-        // A defect is never an invented refusal: nothing authoritative, audited, or promoted.
-        yield* expectNothingCommitted(runtime.db);
-        expect(
-          yield* fromTestPromise(() =>
-            scalar<{ status: string }>(runtime.db, "SELECT status FROM statement_staging_objects")
-          )
-        ).toEqual({ status: "available" });
-      })
-    ),
-  30_000
-);
-
-it(
-  "replays an idempotent statement retry inside a later atomic batch",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => setup());
-        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
-        const idempotencyKey = "20000000-0000-4000-8000-000000000925";
-        const calls = [statementCall(1, { idempotencyKey, reference: staged }), captureCall(2)];
-
-        const first = yield* fromTestPromise(() => batch(runtime, 0, calls));
-        expect(first.status).toBe(200);
-        const firstBody = yield* fromTestPromise(() => batchEnvelopeOf(first));
-        const published = batchSubmissionOf(firstBody.data.results[0]?.output);
-        const replayed = yield* fromTestPromise(() => batch(runtime, 0, calls));
-        expect(replayed.status).toBe(200);
-        const replayBody = yield* fromTestPromise(() => batchEnvelopeOf(replayed));
-        // The retry still commits its sibling child, but the statement is the same submission and
-        // a second canonical call is attributable as one replay audit row.
-        expect(batchSubmissionOf(replayBody.data.results[0]?.output)).toEqual(published);
-        yield* expectCanonicalState(runtime.db, {
-          statement_submissions: 1,
-          statement_ingestion_outbox: 1,
-          transactions: 2,
-          transaction_audit: 2,
-          statement_submission_audit: 2,
-        });
       })
     ),
   30_000
@@ -2938,171 +3270,6 @@ it(
 );
 
 it(
-  "refuses a cross-User staged reference inside a batch without creating authoritative state",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => setup());
-        const { staged } = yield* fromTestPromise(() => stageOne(runtime, 0));
-        const refused = yield* fromTestPromise(() =>
-          batch(runtime, 1, [
-            statementCall(1, {
-              idempotencyKey: "20000000-0000-4000-8000-000000000926",
-              reference: staged,
-            }),
-            captureCall(2),
-          ])
-        );
-        expect(refused.status).toBe(400);
-        const rejection = yield* fromTestPromise(() => batchRejectionOf(refused));
-        expect(rejection.error).toMatchObject({
-          code: "validation_failed",
-          failedCallIndex: 0,
-          operation: "ingestion.submitForExtraction",
-        });
-
-        // Ownership is a child decision the batch cannot bypass: the stranger's sibling child and
-        // the success audit roll back, and only the stranger's bounded refusal audit remains.
-        yield* expectCanonicalState(runtime.db, {
-          statement_submissions: 0,
-          statement_ingestion_outbox: 0,
-          transactions: 0,
-          transaction_audit: 0,
-        });
-        expect(
-          yield* fromTestPromise(() =>
-            firstRow(
-              runtime.db,
-              Schema.Struct({ outcome: Schema.String, user_id: Schema.String }),
-              "SELECT user_id, outcome FROM statement_submission_audit"
-            )
-          )
-        ).toEqual({ outcome: "validation_failed", user_id: userB });
-        expect(
-          yield* fromTestPromise(() =>
-            scalar<{ status: string }>(runtime.db, "SELECT status FROM statement_staging_objects")
-          )
-        ).toEqual({ status: "available" });
-      })
-    ),
-  30_000
-);
-
-it(
-  "refuses a second staged statement child before any batch child is admitted",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => setup());
-        // The first reference belongs to another User. Counting two statement children must
-        // refuse the envelope before preparing that first child or recording its refusal Audit.
-        const first = yield* fromTestPromise(() => stageOne(runtime, 1));
-        const second = yield* fromTestPromise(() => stageOne(runtime));
-        const refused = yield* fromTestPromise(() =>
-          batch(runtime, 0, [
-            statementCall(1, {
-              idempotencyKey: "20000000-0000-4000-8000-000000000927",
-              reference: first.staged,
-            }),
-            statementCall(2, {
-              idempotencyKey: "20000000-0000-4000-8000-000000000928",
-              reference: second.staged,
-            }),
-          ])
-        );
-        expect(refused.status).toBe(400);
-        const rejection = yield* fromTestPromise(() => batchRejectionOf(refused));
-        expect(rejection.error).toMatchObject({
-          code: "validation_failed",
-          failedCallIndex: 1,
-          operation: "ingestion.submitForExtraction",
-        });
-
-        // Several files cannot multiply staging admission in one coordination turn.
-        yield* expectCanonicalState(runtime.db, {
-          statement_submissions: 0,
-          statement_ingestion_outbox: 0,
-          statement_submission_audit: 0,
-        });
-        expect(
-          yield* fromTestPromise(() =>
-            count(runtime.db, "statement_staging_objects WHERE status = 'available'")
-          )
-        ).toBe(2);
-      })
-    ),
-  30_000
-);
-
-it(
-  "enforces a statement child's PAT scope inside an atomic batch",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => setup());
-        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
-        const current = yield* Clock.currentTimeMillis;
-        const readToken = agentToken("r");
-        const writeToken = agentToken("w");
-        for (const [token, scopes, seed] of [
-          [readToken, '["read"]', 1],
-          [writeToken, '["read","write"]', 2],
-        ] as const) {
-          yield* fromTestPromise(() =>
-            issuePat({
-              current,
-              db: runtime.db,
-              label: "Statement batch agent",
-              scopes,
-              seed,
-              token,
-            })
-          );
-        }
-
-        const outOfScope = yield* fromTestPromise(() =>
-          batchWithBearer(runtime, readToken, [
-            statementCall(1, {
-              idempotencyKey: "20000000-0000-4000-8000-000000000929",
-              reference: staged,
-            }),
-          ])
-        );
-        expect(outOfScope.status).toBe(403);
-        const rejection = yield* Schema.decodeUnknownEffect(FailureResponse)(
-          yield* fromTestPromise(() => outOfScope.json())
-        );
-        expect(rejection.error.code).toBe("scope_missing");
-        expect(outOfScope.headers.get("Fidy-Canonical-Remaining")).toBe("50");
-        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(0);
-        expect(
-          yield* fromTestPromise(() => count(runtime.db, "pat_audit WHERE outcome = 'accepted'"))
-        ).toBe(0);
-        expect(
-          yield* fromTestPromise(() => count(runtime.db, "pat_audit WHERE outcome = 'rejected'"))
-        ).toBe(1);
-
-        const committed = yield* fromTestPromise(() =>
-          batchWithBearer(runtime, writeToken, [
-            statementCall(1, {
-              idempotencyKey: "20000000-0000-4000-8000-000000000930",
-              reference: staged,
-            }),
-            captureCall(2),
-          ])
-        );
-        expect(committed.status).toBe(200);
-        // A scoped agent commits under the same unit, with one accepted PAT audit per child.
-        yield* expectCanonicalState(runtime.db, { statement_submissions: 1, transactions: 1 });
-        expect(
-          yield* fromTestPromise(() => count(runtime.db, "pat_audit WHERE outcome = 'accepted'"))
-        ).toBe(2);
-      })
-    ),
-  30_000
-);
-
-it(
   "refuses a submission whose credential died between dispatch and its unit commit",
   () =>
     Effect.runPromise(
@@ -3119,7 +3286,7 @@ it(
             .run()
         );
         const refused = yield* fromTestPromise(() =>
-          submit(
+          publishFixture(
             { ...runtime, db: database },
             { index: 0, idempotencyKey: revokedAtCommitIdempotencyKey, reference: staged }
           )
@@ -3134,49 +3301,6 @@ it(
           statement_ingestion_outbox: 0,
           statement_submission_audit: 0,
         });
-        expect(
-          yield* fromTestPromise(() =>
-            scalar<{ status: string }>(runtime.db, "SELECT status FROM statement_staging_objects")
-          )
-        ).toEqual({ status: "available" });
-      })
-    ),
-  30_000
-);
-
-it(
-  "rolls back a mixed batch when the caller's credential dies at commit time",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => setup());
-        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
-        const current = yield* Clock.currentTimeMillis;
-        // Both children were admitted under a live session; it is revoked only before the unit.
-        const raced = {
-          ...runtime,
-          db: competingWriteDb(runtime.db, () =>
-            runtime.db
-              .prepare("UPDATE web_sessions SET revoked_at_ms = ? WHERE user_id = ?")
-              .bind(current, userA)
-              .run()
-          ),
-        };
-        const refused = yield* fromTestPromise(() =>
-          batch(raced, 0, [
-            captureCall(1),
-            statementCall(2, {
-              idempotencyKey: "20000000-0000-4000-8000-000000000942",
-              reference: staged,
-            }),
-          ])
-        );
-        expect(refused.status).toBe(401);
-        expect(yield* fromTestPromise(() => failureCode(refused))).toBe("unauthenticated");
-
-        // A credential death at commit time refuses the whole coordination turn: neither child's
-        // state or success audit survives, and no refusal row is invented for a dead credential.
-        yield* expectNothingCommitted(runtime.db);
         expect(
           yield* fromTestPromise(() =>
             scalar<{ status: string }>(runtime.db, "SELECT status FROM statement_staging_objects")
@@ -3220,446 +3344,6 @@ it(
   30_000
 );
 
-it(
-  "retries a transient committed readback and answers the committed batch",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => setup());
-        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
-        const flaky = { ...runtime, db: flakyReadbackDb(runtime.db) };
-
-        const committed = yield* fromTestPromise(() =>
-          batch(flaky, 0, [
-            captureCall(1),
-            statementCall(2, {
-              idempotencyKey: "20000000-0000-4000-8000-000000000943",
-              reference: staged,
-            }),
-          ])
-        );
-        const body = yield* fromTestPromise(() => committed.text());
-        expect(committed.status, body).toBe(200);
-
-        // The unit committed before the read failed, so the bounded retry reports the committed
-        // records instead of answering an unreadable 503 a client retry would re-commit.
-        yield* expectCanonicalState(runtime.db, {
-          statement_submissions: 1,
-          statement_ingestion_outbox: 1,
-          transactions: 1,
-          transaction_audit: 1,
-          statement_submission_audit: 1,
-        });
-      })
-    ),
-  30_000
-);
-
-it(
-  "enforces the Free backfill for a statement child inside an atomic batch",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => setup());
-        const first = yield* fromTestPromise(() => stageOne(runtime));
-        const queued = yield* fromTestPromise(() =>
-          submit(runtime, {
-            idempotencyKey: "20000000-0000-4000-8000-000000000944",
-            index: 0,
-            reference: first.staged,
-          })
-        );
-        expect(queued.status).toBe(202);
-        const second = yield* fromTestPromise(() => stageOne(runtime));
-
-        const paywalled = yield* fromTestPromise(() =>
-          batch(runtime, 0, [
-            captureCall(1),
-            statementCall(2, {
-              idempotencyKey: "20000000-0000-4000-8000-000000000945",
-              reference: second.staged,
-            }),
-          ])
-        );
-        expect(paywalled.status).toBe(400);
-        const rejection = yield* fromTestPromise(() => batchRejectionOf(paywalled));
-        // The Free-backfill decision is a child decision: the batch answers it with the same code
-        // the individual submission answers, naming the statement child that met it.
-        expect(rejection.error).toMatchObject({
-          code: "paywall_required",
-          failedCallIndex: 1,
-          operation: "ingestion.submitForExtraction",
-        });
-        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(1);
-        yield* expectCanonicalState(runtime.db, { transactions: 0, transaction_audit: 0 });
-        expect(
-          yield* fromTestPromise(() =>
-            count(runtime.db, "statement_submission_audit WHERE outcome = 'resource_limit'")
-          )
-        ).toBe(1);
-        expect(
-          yield* fromTestPromise(() =>
-            count(runtime.db, "statement_staging_objects WHERE status = 'available'")
-          )
-        ).toBe(1);
-      })
-    ),
-  30_000
-);
-
-it(
-  "refuses a statement child beyond the submission pressure limits inside an atomic batch",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => setup());
-        const current = yield* Clock.currentTimeMillis;
-        yield* fromTestPromise(() =>
-          seedSubmissions(runtime, {
-            first: 1,
-            last: 5,
-            status: "queued",
-            submittedAtMs: current - 1_000,
-            userId: userA,
-          })
-        );
-        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
-
-        const refused = yield* fromTestPromise(() =>
-          batch(runtime, 0, [
-            captureCall(1),
-            statementCall(2, {
-              idempotencyKey: "20000000-0000-4000-8000-000000000946",
-              reference: staged,
-            }),
-          ])
-        );
-        expect(refused.status).toBe(400);
-        const rejection = yield* fromTestPromise(() => batchRejectionOf(refused));
-        expect(rejection.error).toMatchObject({
-          code: "validation_failed",
-          failedCallIndex: 1,
-          operation: "ingestion.submitForExtraction",
-        });
-
-        // Submission pressure is the same child decision inside a batch: no sixth submission, no
-        // sibling capture, and one bounded refusal audit under the caller's authority.
-        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(5);
-        yield* expectCanonicalState(runtime.db, { transactions: 0, transaction_audit: 0 });
-        expect(
-          yield* fromTestPromise(() =>
-            count(runtime.db, "statement_submission_audit WHERE outcome = 'resource_limit'")
-          )
-        ).toBe(1);
-        expect(
-          yield* fromTestPromise(() =>
-            count(runtime.db, "statement_staging_objects WHERE status = 'available'")
-          )
-        ).toBe(1);
-      })
-    ),
-  30_000
-);
-
-it(
-  "refuses a statement child whose Free backfill is spent after it was admitted",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => setup());
-        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
-        const current = yield* Clock.currentTimeMillis;
-        // The grant holds through preparation and is spent only as the unit is about to run, so
-        // only the unit's own entitlement guard plus the post-rollback premise re-check can see it.
-        const raced = {
-          ...runtime,
-          db: competingWriteDb(runtime.db, () =>
-            runtime.db
-              .prepare(
-                "INSERT INTO statement_backfill_entitlements (user_id, consumed_at_ms) VALUES (?, ?)"
-              )
-              .bind(userA, current)
-              .run()
-          ),
-        };
-        const refused = yield* fromTestPromise(() =>
-          batch(raced, 0, [
-            captureCall(1),
-            statementCall(2, {
-              idempotencyKey: "20000000-0000-4000-8000-000000000951",
-              reference: staged,
-            }),
-          ])
-        );
-        expect(refused.status).toBe(400);
-        const rejection = yield* fromTestPromise(() => batchRejectionOf(refused));
-        expect(rejection.error).toMatchObject({
-          code: "paywall_required",
-          failedCallIndex: 1,
-          operation: "ingestion.submitForExtraction",
-        });
-
-        // The unit re-decides the paywall it admitted against: the sibling capture rolls back, no
-        // submission publishes, and one bounded refusal audit names the child that met it.
-        yield* expectCanonicalState(runtime.db, {
-          transactions: 0,
-          transaction_audit: 0,
-          statement_submissions: 0,
-          statement_ingestion_outbox: 0,
-        });
-        expect(
-          yield* fromTestPromise(() =>
-            count(runtime.db, "statement_submission_audit WHERE outcome = 'resource_limit'")
-          )
-        ).toBe(1);
-        expect(
-          yield* fromTestPromise(() =>
-            count(runtime.db, "statement_staging_objects WHERE status = 'available'")
-          )
-        ).toBe(1);
-      })
-    ),
-  30_000
-);
-
-it(
-  "refuses a statement child whose submission pressure moves after it was admitted",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => setup());
-        const current = yield* Clock.currentTimeMillis;
-        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
-        // Five outstanding submissions appear only as the unit is about to run, so the in-unit
-        // outstanding guard is the one that refuses this child.
-        const raced = {
-          ...runtime,
-          db: competingWriteDb(runtime.db, () =>
-            seedSubmissions(runtime, {
-              first: 1,
-              last: 5,
-              status: "queued",
-              submittedAtMs: current - 1_000,
-              userId: userA,
-            })
-          ),
-        };
-        const refused = yield* fromTestPromise(() =>
-          batch(raced, 0, [
-            captureCall(1),
-            statementCall(2, {
-              idempotencyKey: "20000000-0000-4000-8000-000000000952",
-              reference: staged,
-            }),
-          ])
-        );
-        expect(refused.status).toBe(400);
-        const rejection = yield* fromTestPromise(() => batchRejectionOf(refused));
-        expect(rejection.error).toMatchObject({
-          code: "validation_failed",
-          failedCallIndex: 1,
-          operation: "ingestion.submitForExtraction",
-        });
-
-        // No sixth submission publishes, the sibling capture rolls back, and the pressure decision
-        // is recorded once against the child that met it.
-        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submissions"))).toBe(5);
-        yield* expectCanonicalState(runtime.db, { transactions: 0, transaction_audit: 0 });
-        expect(
-          yield* fromTestPromise(() =>
-            count(runtime.db, "statement_submission_audit WHERE outcome = 'resource_limit'")
-          )
-        ).toBe(1);
-      })
-    ),
-  30_000
-);
-
-it(
-  "answers a conflicting idempotency key and a mismatched reference for a batch child",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => setup());
-        const { staged: first } = yield* fromTestPromise(() => stageOne(runtime));
-        const committed = yield* fromTestPromise(() =>
-          submit(runtime, {
-            idempotencyKey: "20000000-0000-4000-8000-000000000955",
-            index: 0,
-            reference: first,
-          })
-        );
-        expect(committed.status).toBe(202);
-
-        // A key already bound to different material is the same conflict an individual call answers.
-        const { staged: other } = yield* fromTestPromise(() => stageOne(runtime));
-        const conflicted = yield* fromTestPromise(() =>
-          batch(runtime, 0, [
-            captureCall(1),
-            statementCall(2, {
-              idempotencyKey: "20000000-0000-4000-8000-000000000955",
-              reference: other,
-            }),
-          ])
-        );
-        expect(conflicted.status).toBe(400);
-        const conflict = yield* fromTestPromise(() => batchRejectionOf(conflicted));
-        expect(conflict.error).toMatchObject({
-          code: "validation_failed",
-          failedCallIndex: 1,
-          message: statementConflictMessage,
-          operation: "ingestion.submitForExtraction",
-        });
-
-        // A reference no staged object matches is the same closed staged-material refusal.
-        const { staged: third } = yield* fromTestPromise(() => stageOne(runtime));
-        const mismatched = yield* fromTestPromise(() =>
-          batch(runtime, 0, [
-            captureCall(1),
-            statementCall(2, {
-              idempotencyKey: "20000000-0000-4000-8000-000000000956",
-              reference: { ...third, sha256: "0".repeat(64) },
-            }),
-          ])
-        );
-        expect(mismatched.status).toBe(400);
-        const mismatch = yield* fromTestPromise(() => batchRejectionOf(mismatched));
-        expect(mismatch.error).toMatchObject({
-          code: "validation_failed",
-          failedCallIndex: 1,
-          operation: "ingestion.submitForExtraction",
-        });
-
-        // Neither batch published anything: the one committed submission stands, both siblings
-        // rolled back, and each refusal was audited once under the caller's authority.
-        yield* expectCanonicalState(runtime.db, {
-          statement_submissions: 1,
-          statement_ingestion_outbox: 1,
-        });
-        yield* expectCanonicalState(runtime.db, { transactions: 0, transaction_audit: 0 });
-        expect(
-          yield* fromTestPromise(() =>
-            count(runtime.db, "statement_submission_audit WHERE outcome = 'validation_failed'")
-          )
-        ).toBe(2);
-      })
-    ),
-  30_000
-);
-
-it(
-  "attributes a statement audit-trigger abort to its sole batch child",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => setup());
-        const current = yield* Clock.currentTimeMillis;
-        yield* fromTestPromise(() =>
-          runtime.db
-            .prepare(
-              `WITH RECURSIVE budget(value) AS (
-                 SELECT 1 UNION ALL SELECT value + 1 FROM budget WHERE value < 255
-               )
-               INSERT INTO statement_submission_audit (id, user_id, operation, outcome, occurred_at_ms)
-               SELECT '92000000-0000-4000-8000-' || substr('000000000000' || value, -12),
-                      ?, 'ingestion.getStatementSubmission', 'success', ?
-               FROM budget`
-            )
-            .bind(userA, current)
-            .run()
-        );
-        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
-        const competing = competingWriteDb(runtime.db, () =>
-          runtime.db
-            .prepare(
-              `INSERT INTO statement_submission_audit
-               (id, user_id, operation, outcome, occurred_at_ms)
-               VALUES ('92000000-0000-4000-8000-000000000256', ?,
-                       'ingestion.getStatementSubmission', 'success', ?)`
-            )
-            .bind(userA, current)
-            .run()
-        );
-        const refused = yield* fromTestPromise(() =>
-          batch({ ...runtime, db: competing }, 0, [
-            statementCall(1, {
-              idempotencyKey: "20000000-0000-4000-8000-000000000958",
-              reference: staged,
-            }),
-          ])
-        );
-        expect(refused.status).toBe(400);
-        const rejection = yield* fromTestPromise(() => batchRejectionOf(refused));
-        expect(rejection.error).toMatchObject({
-          code: "rate_limited",
-          failedCallIndex: 0,
-          operation: "ingestion.submitForExtraction",
-        });
-        yield* expectCanonicalState(runtime.db, {
-          statement_submissions: 0,
-          statement_ingestion_outbox: 0,
-        });
-        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submission_audit"))).toBe(
-          256
-        );
-      })
-    ),
-  30_000
-);
-
-it(
-  "attributes the shared daily budget to its indexed child in a mixed batch",
-  () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const runtime = yield* fromTestPromise(() => setup());
-        const current = yield* Clock.currentTimeMillis;
-        // 255 audit rows leave one slot. The indexed guard identifies the second child's
-        // refusal without relying on a post-rollback recount.
-        yield* fromTestPromise(() =>
-          runtime.db
-            .prepare(
-              `WITH RECURSIVE budget(value) AS (
-                 SELECT 1 UNION ALL SELECT value + 1 FROM budget WHERE value < 255
-               )
-               INSERT INTO statement_submission_audit (id, user_id, operation, outcome, occurred_at_ms)
-               SELECT '91000000-0000-4000-8000-' || substr('000000000000' || value, -12),
-                      ?, 'ingestion.getStatementSubmission', 'success', ?
-               FROM budget`
-            )
-            .bind(userA, current)
-            .run()
-        );
-        const { staged } = yield* fromTestPromise(() => stageOne(runtime));
-        const limited = yield* fromTestPromise(() =>
-          batch(runtime, 0, [
-            captureCall(1),
-            statementCall(2, {
-              idempotencyKey: "20000000-0000-4000-8000-000000000957",
-              reference: staged,
-            }),
-          ])
-        );
-        expect(limited.status).toBe(400);
-        const refusal = yield* fromTestPromise(() => batchRejectionOf(limited));
-        expect(refusal.error.failedCallIndex).toBe(1);
-        expect(refusal.error.operation).toBe("ingestion.submitForExtraction");
-
-        // Neither child's state survives rollback; the refusal is metadata-only.
-        expect(yield* fromTestPromise(() => count(runtime.db, "statement_submission_audit"))).toBe(
-          255
-        );
-        yield* expectCanonicalState(runtime.db, {
-          statement_submissions: 0,
-          statement_ingestion_outbox: 0,
-          transactions: 0,
-          transaction_audit: 0,
-        });
-      })
-    ),
-  30_000
-);
-
 it("reclaims expired statement material even when an unrelated email dispatcher fails", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -3672,7 +3356,7 @@ it("reclaims expired statement material even when an unrelated email dispatcher 
       );
       const current = yield* fromTestPromise(() => stageOne(runtime, 1));
       const rejectExpired = (): Promise<Response> =>
-        submit(runtime, {
+        publishFixture(runtime, {
           index: 0,
           idempotencyKey: "20000000-0000-4000-8000-000000000614",
           reference: expired.staged,
@@ -3730,7 +3414,7 @@ it("reclaims expired statement material even when an unrelated email dispatcher 
         statement_backfill_entitlements: 0,
       });
       const accepted = yield* fromTestPromise(() =>
-        submit(runtime, {
+        publishFixture(runtime, {
           index: 1,
           idempotencyKey: "20000000-0000-4000-8000-000000000615",
           reference: current.staged,
@@ -3759,7 +3443,7 @@ it(
         const runtime = yield* fromTestPromise(() => setup());
         const staged = yield* fromTestPromise(() => stageOne(runtime));
         yield* fromTestPromise(() =>
-          submit(runtime, {
+          publishFixture(runtime, {
             index: 0,
             idempotencyKey: "20000000-0000-4000-8000-000000000998",
             reference: staged.staged,

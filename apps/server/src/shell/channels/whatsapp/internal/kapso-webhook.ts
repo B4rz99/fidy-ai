@@ -19,6 +19,7 @@ import {
   WhatsAppBusinessPhoneNumberId,
   WhatsAppDeliveryKey,
   type WhatsAppDisclosureLifecycleEvidence,
+  WhatsAppDocumentFileName,
   type WhatsAppHostedLifecycleEvidence,
   type WhatsAppIdentityChangeEvent,
   type WhatsAppInboundContent,
@@ -70,8 +71,17 @@ const RawImageMessage = Schema.Struct({
     caption: Model.optionalOption(TranscriptText),
   }),
 });
+const RawDocumentMessage = Schema.Struct({
+  ...rawMessageFields,
+  type: Schema.Literal("document"),
+  document: Schema.Struct({
+    id: WhatsAppMediaId,
+    filename: Model.optionalOption(WhatsAppDocumentFileName),
+    caption: Model.optionalOption(TranscriptText),
+  }),
+});
 const RawKapsoEvent = Schema.Struct({
-  message: Schema.Union([RawTextMessage, RawVoiceMessage, RawImageMessage]),
+  message: Schema.Union([RawTextMessage, RawVoiceMessage, RawImageMessage, RawDocumentMessage]),
   conversation: Schema.Struct({
     phone_number: Model.optionalOption(Schema.String),
     business_scoped_user_id: Model.optionalOption(WhatsAppBusinessScopedUserId),
@@ -215,6 +225,14 @@ const projectInboundContent = (
   if (message.type === "text") return { _tag: "Text", text: message.text.body };
   if (message.type === "image") {
     return { _tag: "Image", mediaId: message.image.id, caption: message.image.caption };
+  }
+  if (message.type === "document") {
+    return {
+      _tag: "Document",
+      mediaId: message.document.id,
+      fileName: message.document.filename,
+      caption: message.document.caption,
+    };
   }
   const kapso = Schema.decodeUnknownOption(Schema.Struct({ transcript: Schema.Unknown }))(
     message.kapso

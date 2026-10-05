@@ -1,0 +1,32 @@
+apps/server/cloudflare/migrations/0032_statement_capture_entitlement.sql
+  s_27635c550e78df::t_9b8667e0213fbf 1-19
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_27635c550e78df::t_b29f3437b8d6b2 92
+apps/server/cloudflare/ingestion/statement-processing.test.ts
+  s_27635c550e78df::t_303482b7c50b0c 40
+  s_27635c550e78df::t_a66844e12bbcac 320-321
+  s_27635c550e78df::t_ea338d7f02c430 311,317-318
+  s_27635c550e78df::t_c57b23ce7ea224 246-253,277-284,289,319,330-334
+  s_27635c550e78df::t_ed73a6458a01c3 702,805,852
+  s_27635c550e78df::t_77e8e948aa23d3 254-276,285-288,290-307,312-316,322-329,341-351,353-373,375-377,380-386
+  s_27635c550e78df::t_c9950a28be20ec 335-340,352,374,378-379,387-390
+  s_27635c550e78df::t_174b94539ee3ae 308-310
+apps/server/cloudflare/ingestion/internal/statement-processing.ts
+  s_27635c550e78df::t_84bf85dc9958c4 132,134,552-553
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "4dcc961544514269a8c1623483de45c735685c2e",
+  "prompts": {},
+  "sessions": {
+    "s_27635c550e78df": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a103f7-dbf1-77a4-9a23-299cef121b80",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

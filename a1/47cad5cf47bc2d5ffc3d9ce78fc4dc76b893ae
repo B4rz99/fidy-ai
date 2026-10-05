@@ -197,6 +197,7 @@ apps/server/cloudflare/agent/internal/service.ts
   s_27635c550e78df::t_c7adf6c4da4ccd 25-26,28,125,144,163-164,172-183,186-191,193-204
   s_27635c550e78df::t_aee724f1bc12f4 482
   s_27635c550e78df::t_6a0e86ec2b4e4d 145-147
+  s_27635c550e78df::t_edc20485c8985d 184,192,290,485,518
 apps/server/cloudflare/categories/keyword-rules.test.ts
   s_27635c550e78df::t_aee724f1bc12f4 113,123-124
   s_27635c550e78df::t_5dd9ba4d314c12 6
@@ -263,6 +264,7 @@ apps/server/cloudflare/agent/internal/hosted-turn.ts
   s_27635c550e78df::t_781023fe20e865 262,406,581,591,622
   s_27635c550e78df::t_fbe7d98ac0db2b 259
   s_27635c550e78df::t_461a97046a13c2 261
+  s_27635c550e78df::t_d8322e16b77a5b 1661,1684
 apps/server/cloudflare/ingestion/operations.ts
   s_27635c550e78df::t_8a6e44abcb9ad6 83-87
   s_27635c550e78df::t_cf71371aeaf1b1 12,75
@@ -446,6 +448,7 @@ apps/server/cloudflare/ingestion/internal/statement-review.ts
 apps/server/src/shell/audit/contract.ts
   s_27635c550e78df::t_aee724f1bc12f4 106-107
   s_27635c550e78df::t_fb1977dc0577d1 29-31
+  s_27635c550e78df::t_ee5421c18982b9 65
 apps/server/cloudflare/ingestion/internal/statement-session.ts
   s_27635c550e78df::t_fd411937f66203 2-6,17,20-27,43-45,49-53,55
   s_27635c550e78df::t_aee724f1bc12f4 1,7-16,18-19,28-42,46-48,54
@@ -478,6 +481,7 @@ apps/server/src/shell/ingestion/contract.ts
   s_27635c550e78df::t_492d26bd367b1c 142-147,154-159
   s_27635c550e78df::t_48917c1ce3f125 31-32,34-35,54-59
   s_27635c550e78df::t_d0cd82fab25856 97,99
+  s_27635c550e78df::t_cc1b17794f2d3f 33
 apps/server/cloudflare/agent/hosted-turn.test.ts
   s_27635c550e78df::t_f4d9e2cabfbc92 51
   s_27635c550e78df::t_32e9427fb8f6cf 1868-1869
@@ -519,6 +523,8 @@ apps/server/cloudflare/agent/hosted-turn.test.ts
   s_27635c550e78df::t_d53cddd4ba8693 1924-1936
   s_27635c550e78df::t_821a2e09bb13e5 2336,2376-2378,2385-2386,2421-2422
   s_27635c550e78df::t_0e196b62de8dc9 2834
+apps/server/src/shell/categories/internal/query.ts
+  s_27635c550e78df::t_21c575bc14d84d 9
 ---
 {
   "schema_version": "authorship/3.0.0",

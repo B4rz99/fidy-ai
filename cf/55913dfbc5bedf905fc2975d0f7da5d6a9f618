@@ -1,0 +1,32 @@
+apps/server/cloudflare/agent/hosted-turn.test.ts
+  s_e278ac208f4e8a::t_587b0c5bb3665e 31-40,42,6174-6205,6207-6210,6212,6214-6215,6217-6222,6225-6227,6231,6233,6235-6239,6241-6245,6247-6267
+  s_e278ac208f4e8a::t_ce45cc57ac23d6 6224,6228-6230,6232
+  s_e278ac208f4e8a::t_1df117602b92a7 6206,6211,6213,6216,6223,6234,6240,6246
+  s_e278ac208f4e8a::t_1e692bb6c32ab9 41,6268
+apps/server/cloudflare/runtime/operational-health/alert-delivery.test.ts
+  s_e278ac208f4e8a::t_bbb1436d4f14ef 73-89,91-93,96,101-102,105-109,118-129
+  s_e278ac208f4e8a::t_5d9ac9912bf386 3,90,94-95,97-100,110-117
+  s_e278ac208f4e8a::t_ebe45aecc0028c 103-104
+infra/cloudflare/smoke-work.test.ts
+  s_e278ac208f4e8a::t_3f3bfc2a8de197 2,32-41,46-52,54-56,59-60,65-74,76-97,105-108,113-118
+  s_e278ac208f4e8a::t_c4e18fb89c8cd5 98-104,109-112
+  s_e278ac208f4e8a::t_d0277e9d333e28 42-45
+  s_e278ac208f4e8a::t_4bd57aaa3669d1 53,57-58,61-64
+  s_e278ac208f4e8a::t_3c43f5a87bc574 75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cf55913dfbc5bedf905fc2975d0f7da5d6a9f618",
+  "prompts": {},
+  "sessions": {
+    "s_e278ac208f4e8a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10731-a41d-7121-98b3-ec6e9e1e04de",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

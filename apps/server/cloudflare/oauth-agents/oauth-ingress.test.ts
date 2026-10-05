@@ -656,6 +656,69 @@ it("commits an authorized OAuth atomic batch with exact correlated results and o
       ).toBe(2);
     })
   ));
+it("preserves the canonical owner's invalid ordinary OAuth mutation refusal", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* approvedFixture(["write"]);
+      const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
+        yield* wait((yield* wait(exchangeFixture(fixture))).json())
+      );
+      const response = yield* wait(
+        mcpFixture({
+          send: fixture.send,
+          bearer: token.access_token,
+          method: "tools/call",
+          name: "transactions.createTransaction",
+          args: { payload: { money: { amount: "-1", currency: "COP" } } },
+        })
+      );
+      expect(yield* wait(response.json())).toMatchObject({
+        result: {
+          isError: true,
+          structuredContent: {
+            error: { code: "validation_failed", message: "Invalid Transaction input." },
+            next: [],
+          },
+        },
+      });
+      expect(
+        yield* wait(fixture.db.prepare("SELECT operation, outcome FROM pat_audit").all())
+      ).toMatchObject({
+        results: [{ operation: "transactions.createTransaction", outcome: "rejected" }],
+      });
+      expect(
+        yield* wait(
+          fixture.db.prepare("SELECT count(*) FROM transactions").first<number>("count(*)")
+        )
+      ).toBe(0);
+    })
+  ));
+
+const assertAttributedBatchRefusal = (
+  db: D1Database,
+  value: unknown,
+  failure: string
+): Effect.Effect<void, TestFailure> =>
+  Effect.gen(function* () {
+    if (failure !== "invalid" && failure !== "sensitive") return;
+    const operation =
+      failure === "invalid" ? "transactions.createTransaction" : "budgets.deleteBudget";
+    expect(value).toMatchObject({
+      result: {
+        structuredContent: {
+          error: {
+            code: failure === "invalid" ? "validation_failed" : "user_action_required",
+            failedCallIndex: 1,
+            operation,
+          },
+        },
+      },
+    });
+    expect(yield* wait(db.prepare("SELECT operation, outcome FROM pat_audit").all())).toMatchObject(
+      { results: [{ operation, outcome: "rejected" }] }
+    );
+  });
+
 it.each(["invalid", "collision", "owner-collision", "hidden", "sensitive", "audit"])(
   "refuses an OAuth batch with %s work without partial domain effects or successful accounting",
   (failure) =>
@@ -719,9 +782,11 @@ it.each(["invalid", "collision", "owner-collision", "hidden", "sensitive", "audi
             },
           })
         );
-        expect(yield* wait(response.json())).toMatchObject({
+        const value = yield* wait(response.json());
+        expect(value).toMatchObject({
           result: { isError: true, structuredContent: { next: [] } },
         });
+        yield* assertAttributedBatchRefusal(fixture.db, value, failure);
         expect(
           yield* wait(
             fixture.db.prepare("SELECT count(*) FROM transactions").first<number>("count(*)")
@@ -742,6 +807,47 @@ it.each(["invalid", "collision", "owner-collision", "hidden", "sensitive", "audi
             fixture.db
               .prepare("SELECT count(*) FROM pat_audit WHERE outcome = 'accepted'")
               .first<number>("count(*)")
+          )
+        ).toBe(0);
+      })
+    )
+);
+it.each(["empty", "oversized", "unattributed"])(
+  "keeps %s OAuth batch failures at the canonical envelope boundary",
+  (shape) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = yield* approvedFixture(["write"]);
+        const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
+          yield* wait((yield* wait(exchangeFixture(fixture))).json())
+        );
+        let calls: ReadonlyArray<Schema.Json> = [];
+        if (shape === "oversized") calls = Array.from({ length: 13 }, () => transactionChildren[0]);
+        if (shape === "unattributed") calls = [{}];
+        const response = yield* wait(
+          mcpFixture({
+            send: fixture.send,
+            bearer: token.access_token,
+            method: "tools/call",
+            name: "operations.executeAtomicBatch",
+            args: { payload: { calls } },
+          })
+        );
+        const value = yield* wait(response.json());
+        expect(value).toMatchObject({
+          result: {
+            isError: true,
+            structuredContent: { error: { code: "validation_failed" }, next: [] },
+          },
+        });
+        expect(
+          yield* wait(fixture.db.prepare("SELECT operation, outcome FROM pat_audit").all())
+        ).toMatchObject({
+          results: [{ operation: "operations.executeAtomicBatch", outcome: "rejected" }],
+        });
+        expect(
+          yield* wait(
+            fixture.db.prepare("SELECT count(*) FROM transactions").first<number>("count(*)")
           )
         ).toBe(0);
       })
@@ -970,6 +1076,37 @@ it("fails Memory batches closed when owner inference construction is unavailable
       expect(
         yield* wait(fixture.db.prepare("SELECT count(*) FROM memories").first<number>("count(*)"))
       ).toBe(0);
+      const sensitive = yield* wait(
+        mcpFixture({
+          send: fixture.send,
+          bearer: token.access_token,
+          method: "tools/call",
+          name: "operations.executeAtomicBatch",
+          args: {
+            payload: {
+              calls: [
+                transactionChildren[0],
+                {
+                  ...transactionChildren[1],
+                  operation: "memory.forget",
+                  input: { params: { id: "30000000-0000-4000-8000-000000000001" } },
+                },
+              ],
+            },
+          },
+        })
+      );
+      expect(yield* wait(sensitive.json())).toMatchObject({
+        result: {
+          isError: true,
+          structuredContent: {
+            error: { code: "user_action_required", failedCallIndex: 1, operation: "memory.forget" },
+          },
+        },
+      });
+      expect(
+        yield* wait(fixture.db.prepare("SELECT operation, outcome FROM pat_audit").all())
+      ).toMatchObject({ results: [{ operation: "memory.forget", outcome: "rejected" }] });
       const ordinary = yield* wait(
         mcpFixture({
           send: fixture.send,

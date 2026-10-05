@@ -4,19 +4,13 @@ import {
 } from "./internal/hosted-statement";
 import { Cause, Effect, Exit, Option, Schema } from "effect";
 import type { OAuthCaller } from "../../src/shell/oauth-agents/contract";
-import { recordOAuthCall } from "../../src/shell/audit/operations";
-import { liveOAuthAuthority } from "../../src/shell/oauth-agents/operations";
-import { prepareOwnedStatement } from "../database/operations";
+
 import { currentMillis } from "../runtime/operations";
-import { newId } from "../secret-material/operations";
 import { HostedInference } from "../../src/shell/hosted-inference/operations";
 import { type HostedInferenceService } from "../../src/shell/hosted-inference/contract";
 import { type CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import type { CatalogOperation } from "../../src/shell/canonical-catalog/contract";
-import {
-  atomicBatchOperation,
-  getAtomicBatchInputSchema,
-} from "../../src/shell/operations/contract";
+import { AtomicBatchAdmission, atomicBatchOperation } from "../../src/shell/operations/contract";
 import { operationCatalog } from "../../src/shell/api";
 import { decideOperationAccess } from "../../src/shell/canonical-policy/operations";
 import {
@@ -24,7 +18,6 @@ import {
   grantsRequiredTier,
 } from "../../src/shell/canonical-operations/operations";
 import { userOwnedAgentCapability } from "../../src/shell/canonical-policy/contract";
-import { memoryOperationIds } from "../../src/shell/memory/contract";
 import type { HostedCommitFence } from "../agent/contract";
 import type { CanonicalMutationPreparation, CanonicalWork } from "./contract";
 import { executeCanonicalBatch, executeHostedCanonicalBatch, rawOperation } from "./internal/batch";
@@ -34,8 +27,10 @@ import {
   canonicalMutationAdapter,
 } from "./internal/mutation-registry";
 import { executeSingleCanonicalMutation } from "./internal/mutation-unit";
-import { checkpointOAuthResponse } from "./internal/oauth-response";
+import { checkpointOAuthResponse, recordOAuthRefusal } from "./internal/oauth-response";
+import { oauthConfirmationRefusal, requiresOAuthConfirmation } from "./internal/oauth-confirmation";
 import { withCanonicalLifetime } from "./internal/canonical-lifetime";
+import { canonicalOperationRequiresInference } from "./internal/inference-requirement";
 import { resolveOAuthQueryCaller } from "../oauth-agents/operations";
 import { canonicalHostedStatementQueryOwner, canonicalQueryOwner } from "./internal/query-registry";
 import { matchesRoute } from "../routing/operations";
@@ -48,6 +43,7 @@ import {
   isOAuthCaller,
   refusedCredentialResponse,
   refusedPreparation,
+  rejectBatchEnvelope,
   transactionUnavailable,
 } from "../canonical-work/operations";
 import { transactionNoStore } from "../canonical-work/contract";
@@ -72,23 +68,20 @@ const refuseOAuthCall = (
     response: Response;
   }>
 ): Effect.Effect<Response> =>
-  Effect.tryPromise(() =>
-    prepareOwnedStatement({
-      db: input.db,
-      statement: recordOAuthCall({
-        authority: liveOAuthAuthority(input),
-        id: newId(),
-        current: input.current,
-        operation: input.operation.id,
-        outcome: "rejected",
-      }),
-    }).run()
-  ).pipe(
-    Effect.map((recorded) =>
-      recorded.meta.changes === 1 ? input.response : transactionUnavailable()
-    ),
-    Effect.orElseSucceed(transactionUnavailable)
+  recordOAuthRefusal({ ...input, operation: input.operation.id }).pipe(
+    Effect.map((disposition) =>
+      disposition === "recorded" ? input.response : transactionUnavailable()
+    )
   );
+
+const refuseOAuthInvalidInput = (
+  input: Parameters<typeof refuseOAuthCall>[0]
+): Effect.Effect<Response> =>
+  input.operation.id === atomicBatchOperation
+    ? Effect.tryPromise(() => rejectBatchEnvelope(input)).pipe(
+        Effect.orElseSucceed(transactionUnavailable)
+      )
+    : refuseOAuthCall(input);
 
 const operationRefusal = (code: string, message: string, status: number): Response =>
   Response.json(
@@ -125,8 +118,17 @@ const operationPolicyRefusal = (
 const operationValidationRefusal = (
   operation: CatalogOperation,
   input: Schema.Json
-): Option.Option<Response> =>
-  Option.isSome(Schema.decodeOption(operation.input, { onExcessProperty: "error" })(input))
+): Option.Option<Response> => {
+  // Mutation owners classify their own invalid material; only the batch envelope is admitted here.
+  if (operation.policy.kind === "mutation" && operation.id !== atomicBatchOperation) {
+    return Option.none();
+  }
+  return Option.isSome(
+    Schema.decodeOption(
+      operation.id === atomicBatchOperation ? AtomicBatchAdmission : operation.input,
+      { onExcessProperty: "error" }
+    )(input)
+  )
     ? Option.none()
     : Option.some(
         Response.json(
@@ -141,6 +143,7 @@ const operationValidationRefusal = (
           { status: 400, headers: { "cache-control": "no-store" } }
         )
       );
+};
 
 type OAuthCanonicalWork = Readonly<{
   bucket: Option.Option<R2Bucket>;
@@ -157,25 +160,15 @@ type OAuthCanonicalWork = Readonly<{
 export const executeOAuthCanonicalWork = (input: OAuthCanonicalWork): Effect.Effect<Response> =>
   withCanonicalLifetime({ ...input, execute: (db) => executeOAuthWork({ ...input, db }) });
 
-const confirmationRequiredStatus = 403;
 const oauthMutationWork = (
   operation: CatalogOperation,
   input: Schema.Json
 ): Effect.Effect<CanonicalWork, Schema.SchemaError> =>
   operation.id === atomicBatchOperation
-    ? Schema.decodeUnknownEffect(
-        Schema.Struct({ payload: Schema.toEncoded(getAtomicBatchInputSchema()) })
-      )(input).pipe(Effect.map(({ payload }) => ({ _tag: "Batch" as const, calls: payload.calls })))
-    : Effect.succeed({ _tag: "Call", operation: operation.id, input });
-const requiresOAuthConfirmation = (operation: CatalogOperation, work: CanonicalWork): boolean =>
-  work._tag === "Batch"
-    ? work.calls.some((child) =>
-        Option.exists(
-          rawOperation(child),
-          (id) => operationCatalog.byId.get(id)?.policy.agentConfirmation === "required"
-        )
+    ? Schema.decodeUnknownEffect(AtomicBatchAdmission)(input).pipe(
+        Effect.map(({ payload }) => ({ _tag: "Batch" as const, calls: payload.calls }))
       )
-    : operation.policy.agentConfirmation === "required";
+    : Effect.succeed({ _tag: "Call", operation: operation.id, input });
 const executeOAuthMutation = ({
   input,
   operation,
@@ -230,7 +223,7 @@ const executeOAuthWork = (input: OAuthCanonicalWork): Effect.Effect<Response> =>
     const subject = { ...input.subject, requiredScope: scope };
     const validationRefusal = operationValidationRefusal(operation, input.input);
     if (Option.isSome(validationRefusal)) {
-      return yield* refuseOAuthCall({ ...refusal, response: validationRefusal.value });
+      return yield* refuseOAuthInvalidInput({ ...refusal, response: validationRefusal.value });
     }
     if (operation.policy.kind === "mutation") {
       return yield* executeOAuthMutation({
@@ -385,7 +378,9 @@ const executeRequestQuery = (
     );
   });
 
-const executeWork = (input: WorkInput): Effect.Effect<Response, never, HostedInference> =>
+const executeWork = (
+  input: WorkInput & Readonly<{ inference: Option.Option<HostedInferenceService> }>
+): Effect.Effect<Response, never, HostedInference> =>
   Effect.gen(function* () {
     if (input.work._tag === "Query") {
       return yield* executeRequestQuery({ ...input, work: input.work });
@@ -411,6 +406,7 @@ const executeWork = (input: WorkInput): Effect.Effect<Response, never, HostedInf
               calls: work.calls,
               current: input.current,
               bucket: input.bucket,
+              inference: input.inference,
             }),
           onSome: (hostedFence) =>
             executeHostedCanonicalBatch({
@@ -420,6 +416,7 @@ const executeWork = (input: WorkInput): Effect.Effect<Response, never, HostedInf
               current: input.current,
               bucket: input.bucket,
               hostedFence,
+              inference: input.inference,
             }),
         })
       : executeCall({ ...input, work });
@@ -430,10 +427,6 @@ const executeWork = (input: WorkInput): Effect.Effect<Response, never, HostedInf
     return result;
   });
 
-/** True for an operation id the Memory group declares, so a new one needs no second derivation. */
-const isMemoryOperation = (operation: CanonicalOperationId): boolean =>
-  memoryOperationIds.some((declared) => declared === operation);
-
 /**
  * True when the work can reach the Memory capacity policy, the only consumer of hosted
  * inference. Every other owner decides without it, so a missing AI binding must not deny
@@ -442,9 +435,11 @@ const isMemoryOperation = (operation: CanonicalOperationId): boolean =>
 export const canonicalWorkRequiresInference = (work: CanonicalWork): boolean => {
   if (work._tag === "Query") return false;
   if (work._tag === "Batch") {
-    return work.calls.some((call) => Option.exists(rawOperation(call), isMemoryOperation));
+    return work.calls.some((call) =>
+      Option.exists(rawOperation(call), canonicalOperationRequiresInference)
+    );
   }
-  return isMemoryOperation(work.operation);
+  return canonicalOperationRequiresInference(work.operation);
 };
 
 const canonicalWorkSubject = (input: WorkInput): TransactionCaller => {
@@ -458,6 +453,19 @@ const canonicalWorkSubject = (input: WorkInput): TransactionCaller => {
       });
 };
 
+const oauthWorkRefusal = (input: WorkInput): Option.Option<Effect.Effect<Response>> => {
+  if (!isOAuthCaller(input.subject)) return Option.none();
+  const operation = operationCatalog.byId.get(
+    input.work._tag === "Batch" ? atomicBatchOperation : input.work.operation
+  );
+  if (operation?.policy.access._tag !== "UserOwnedAgentScoped") {
+    return Option.some(Effect.succeed(transactionUnavailable()));
+  }
+  if (input.work._tag === "Batch" || !requiresOAuthConfirmation(operation)) return Option.none();
+  const refusal = oauthConfirmationRefusal({ ...input, subject: input.subject, operation });
+  return Option.some(refusal.record().pipe(Effect.flatMap(refusal.respond)));
+};
+
 /**
  * Execute one named call or ordered batch inside the caller's existing User coordination turn.
  * Owner preparation, live authority, refusal Audit, atomic commit and canonical presentation stay
@@ -467,28 +475,13 @@ const canonicalWorkSubject = (input: WorkInput): TransactionCaller => {
 export const executeCanonicalWork = (
   input: WorkInput & Readonly<{ inference: Option.Option<HostedInferenceService> }>
 ): Effect.Effect<Response> => {
-  if (isOAuthCaller(input.subject)) {
-    const operation = operationCatalog.byId.get(
-      input.work._tag === "Batch" ? atomicBatchOperation : input.work.operation
-    );
-    if (operation?.policy.access._tag !== "UserOwnedAgentScoped") {
-      return Effect.succeed(transactionUnavailable());
-    }
-    if (requiresOAuthConfirmation(operation, input.work)) {
-      return refuseOAuthCall({
-        db: input.db,
-        subject: input.subject,
-        current: input.current,
-        operation,
-        response: operationRefusal(
-          "user_action_required",
-          "Verified User confirmation is required for this operation.",
-          confirmationRequiredStatus
-        ),
-      });
-    }
-  }
-  if (canonicalWorkRequiresInference(input.work) && Option.isNone(input.inference)) {
+  const refusal = oauthWorkRefusal(input);
+  if (Option.isSome(refusal)) return refusal.value;
+  if (
+    input.work._tag !== "Batch" &&
+    canonicalWorkRequiresInference(input.work) &&
+    Option.isNone(input.inference)
+  ) {
     return Effect.succeed(transactionUnavailable());
   }
   return executeWork({ ...input, subject: canonicalWorkSubject(input) }).pipe(

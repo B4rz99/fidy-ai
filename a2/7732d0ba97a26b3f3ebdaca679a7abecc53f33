@@ -1,0 +1,27 @@
+.oxlintrc.json
+  s_e278ac208f4e8a::t_6c9f46da81d47c 431
+apps/server/scripts/check-lint-guards.ts
+  s_e278ac208f4e8a::t_dc003d7f1253f6 43-49
+apps/server/.dependency-cruiser.mjs
+  s_e278ac208f4e8a::t_193a844456177a 674
+apps/server/scripts/check-dependency-guards.ts
+  s_e278ac208f4e8a::t_1e3a7c191fec52 2746,2749
+  s_e278ac208f4e8a::t_9f56f399dc70f6 2742-2745,2747-2748,2750-2751
+  s_e278ac208f4e8a::t_ee248160aa1550 2752-2753
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a27732d0ba97a26b3f3ebdaca679a7abecc53f33",
+  "prompts": {},
+  "sessions": {
+    "s_e278ac208f4e8a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10731-a41d-7121-98b3-ec6e9e1e04de",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

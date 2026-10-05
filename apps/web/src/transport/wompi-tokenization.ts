@@ -21,7 +21,7 @@ const WompiCardRequest = Schema.Struct({
   exp_year: Schema.String,
   card_holder: Schema.String,
 });
-const encodeCardRequest = Schema.encodeSync(jsonStringSchema(WompiCardRequest));
+const encodeCardRequest = Schema.encodeEffect(jsonStringSchema(WompiCardRequest));
 const WompiTokenResponse = Schema.Struct({
   data: Schema.Struct({
     id: Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(maximumTokenCharacters)),
@@ -31,12 +31,6 @@ const WompiTokenResponse = Schema.Struct({
 const decodeTokenResponse = Schema.decodeUnknownResult(WompiTokenResponse);
 const decodeJson = Schema.decodeUnknownResult(UnknownJsonString);
 const maximumResponseBytes = 16_384;
-
-const cancelReader = (reader: ReadableStreamDefaultReader<Uint8Array>): Effect.Effect<void> =>
-  Effect.tryPromise({
-    try: () => reader.cancel(),
-    catch: () => new CardTokenizationFailed(),
-  }).pipe(Effect.ignore);
 
 const decodeChunks = (chunks: ReadonlyArray<Uint8Array>, byteLength: number): string => {
   const bytes = new Uint8Array(byteLength);
@@ -69,7 +63,8 @@ export const readBoundedWompiResponse = (
       }
     };
     const cancelAndRelease = (): void => {
-      reader.cancel().then(releaseReader, releaseReader);
+      reader.cancel().catch(() => undefined);
+      releaseReader();
     };
     const fail = (): void => {
       if (settled) return;
@@ -83,8 +78,8 @@ export const readBoundedWompiResponse = (
     } else {
       const readNext = (): void => {
         reader.read().then((next) => {
+          if (settled) return;
           if (next.done) {
-            if (settled) return;
             settled = true;
             releaseReader();
             resume(Effect.succeed(decodeChunks(chunks, total)));
@@ -101,7 +96,10 @@ export const readBoundedWompiResponse = (
       };
       readNext();
     }
-    return cancelReader(reader).pipe(Effect.ensuring(Effect.sync(releaseReader)));
+    return Effect.sync(() => {
+      settled = true;
+      cancelAndRelease();
+    });
   });
 
 /** Selects only the fixed tokenization origin corresponding to the merchant public key. */
@@ -131,21 +129,27 @@ export const tokenizeCardWithWompi: {
 } = Function.dual(3, (publicKey: string, card: CardFields, fetchImplementation: WompiFetch) =>
   Effect.gen(function* () {
     const origin = yield* wompiTokenizationOrigin(publicKey);
+    const signal = yield* Effect.abortSignal;
+    const body = yield* encodeCardRequest({
+      number: card.number.replaceAll(/\s|-/gu, ""),
+      cvc: card.cvc,
+      exp_month: card.expirationMonth.padStart(2, "0"),
+      exp_year: card.expirationYear.slice(-wompiExpirationYearCharacters),
+      card_holder: card.cardholderName,
+    });
     const response = yield* Effect.tryPromise({
       try: () =>
         fetchImplementation(`${origin}/v1/tokens/cards`, {
           method: "POST",
+          signal,
+          redirect: "manual",
+          credentials: "omit",
+          cache: "no-store",
           headers: {
             authorization: `Bearer ${publicKey}`,
             "content-type": "application/json",
           },
-          body: encodeCardRequest({
-            number: card.number.replaceAll(/\s|-/gu, ""),
-            cvc: card.cvc,
-            exp_month: card.expirationMonth.padStart(2, "0"),
-            exp_year: card.expirationYear.slice(-wompiExpirationYearCharacters),
-            card_holder: card.cardholderName,
-          }),
+          body,
         }),
       catch: () => new CardTokenizationFailed(),
     });
@@ -156,5 +160,9 @@ export const tokenizeCardWithWompi: {
     const decoded = decodeTokenResponse(json.success);
     if (Result.isFailure(decoded)) return yield* new CardTokenizationFailed();
     return decoded.success.data.id;
-  })
+  }).pipe(
+    Effect.scoped,
+    Effect.timeout("15 seconds"),
+    Effect.mapError(() => new CardTokenizationFailed())
+  )
 );

@@ -62,7 +62,9 @@ export const transactionSession = ({
   authenticateCanonicalWebSession({ request, db, current: now() });
 
 /** Decode bounded canonical input before dispatching a mutation to the User coordinator. */
-export const transactionInput = (request: Request): Promise<Option.Option<typeof Input.Type>> =>
+export const transactionInput = (
+  request: Request
+): Effect.Effect<Option.Option<typeof Input.Type>> =>
   boundedJsonBody({ request, policy, schema: Input });
 
 const captureAudit = (

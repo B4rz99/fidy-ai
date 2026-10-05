@@ -9,7 +9,7 @@ import {
   statementAuditTestMigrations,
 } from "../d1-test-fixture";
 import { it as effectIt } from "@effect/vitest";
-import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
+import { Clock, Data, DateTime, Effect, Exit, Option, Schema } from "effect";
 import {
   CreateTransactionInput,
   RestoredTransactionPair,
@@ -957,6 +957,7 @@ const hostedNegativeFixture = (
   Readonly<{
     db: D1Database;
     coordinator: Readonly<{ getByName: () => Pick<Fetcher, "fetch"> }>;
+    settle: () => Promise<void>;
   }>
 > =>
   Effect.runPromise(
@@ -979,6 +980,7 @@ const hostedNegativeFixture = (
       );
       return {
         db,
+        settle: () => instance.alarm(),
         coordinator: {
           getByName: (): Pick<Fetcher, "fetch"> => ({
             fetch: (request): Promise<Response> => instance.fetch(new Request(request)),
@@ -1082,7 +1084,7 @@ effectIt.effect(
   () =>
     Effect.gen(function* () {
       const controller = abortedTurnController();
-      const { db, coordinator } = yield* fromTestPromise(() =>
+      const { db, coordinator, settle } = yield* fromTestPromise(() =>
         hostedNegativeFixture(() => {
           controller.abort();
           return Promise.resolve(
@@ -1099,8 +1101,13 @@ effectIt.effect(
         })
       );
       const request = new Request(hostedBrowserRequest(0, "Hola"), { signal: controller.signal });
-      const response = yield* fromTestPromise(() => sendPublicRequest(db, request, coordinator));
-      expect(response.status).not.toBe(200);
+      const exit = yield* Effect.tryPromise(() => sendPublicRequest(db, request, coordinator)).pipe(
+        Effect.exit
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      // Request cancellation rejects the public reply before the independently owned User work
+      // settles. The public alarm joins that serialized work before checking its durable outcome.
+      yield* fromTestPromise(settle);
       expect(
         (yield* fromTestPromise(() => db.prepare("SELECT status FROM hosted_turns").all())).results
       ).toEqual([{ status: "interrupted" }]);
@@ -3398,17 +3405,15 @@ it("continues the canonical history beyond its first bounded page without losing
       const subject = Option.getOrThrow(
         yield* fromTestPromise(() => transactionSession({ request: request(0), db }))
       );
-      const first = yield* fromTestPromise(() =>
-        browseTransactions({
-          db,
-          selection: {
-            request: request(0, "/transactions?direction=outflow"),
-            subject,
-            search: false,
-            id: Option.none(),
-          },
-        })
-      );
+      const first = yield* browseTransactions({
+        db,
+        selection: {
+          request: request(0, "/transactions?direction=outflow"),
+          subject,
+          search: false,
+          id: Option.none(),
+        },
+      });
       const Page = Schema.Struct({
         data: Schema.Array(Schema.toCodecJson(Transaction)),
         next: Schema.Array(
@@ -3430,20 +3435,18 @@ it("continues the canonical history beyond its first bounded page without losing
       const cursor = page.next[0]?.args.query.cursor;
       if (cursor === undefined) throw new Error("Missing continuation");
       expect(page.next[0]?.args.query.direction).toBe("outflow");
-      const second = yield* fromTestPromise(() =>
-        browseTransactions({
-          db,
-          selection: {
-            request: request(
-              0,
-              `/transactions?direction=outflow&cursor=${encodeURIComponent(cursor)}`
-            ),
-            subject,
-            search: false,
-            id: Option.none(),
-          },
-        })
-      );
+      const second = yield* browseTransactions({
+        db,
+        selection: {
+          request: request(
+            0,
+            `/transactions?direction=outflow&cursor=${encodeURIComponent(cursor)}`
+          ),
+          subject,
+          search: false,
+          id: Option.none(),
+        },
+      });
       const remainder = yield* Schema.decodeUnknownEffect(Page)(
         yield* fromTestPromise(() => second.json())
       ).pipe(Effect.orDie);
@@ -3451,17 +3454,15 @@ it("continues the canonical history beyond its first bounded page without losing
       expect(remainder.next).toEqual([]);
       expect(new Set([...page.data, ...remainder.data].map(({ id }) => id)).size).toBe(101);
 
-      const search = yield* fromTestPromise(() =>
-        browseTransactions({
-          db,
-          selection: {
-            request: request(0, "/transactions/search?q=Pago%20literal"),
-            subject,
-            id: Option.none(),
-            search: true,
-          },
-        })
-      );
+      const search = yield* browseTransactions({
+        db,
+        selection: {
+          request: request(0, "/transactions/search?q=Pago%20literal"),
+          subject,
+          id: Option.none(),
+          search: true,
+        },
+      });
       const SearchPage = Schema.Struct({
         data: Schema.Array(Schema.toCodecJson(Transaction)),
         next: Schema.Array(
@@ -3482,20 +3483,18 @@ it("continues the canonical history beyond its first bounded page without losing
       const searchCursor = Option.getOrThrow(
         Option.fromUndefinedOr(matches.next[0]?.args.query.cursor)
       );
-      const nextSearch = yield* fromTestPromise(() =>
-        browseTransactions({
-          db,
-          selection: {
-            request: request(
-              0,
-              `/transactions/search?q=Pago%20literal&cursor=${encodeURIComponent(searchCursor)}`
-            ),
-            subject,
-            id: Option.none(),
-            search: true,
-          },
-        })
-      );
+      const nextSearch = yield* browseTransactions({
+        db,
+        selection: {
+          request: request(
+            0,
+            `/transactions/search?q=Pago%20literal&cursor=${encodeURIComponent(searchCursor)}`
+          ),
+          subject,
+          id: Option.none(),
+          search: true,
+        },
+      });
       const lastPage = yield* Schema.decodeUnknownEffect(SearchPage)(
         yield* fromTestPromise(() => nextSearch.json())
       );
@@ -3510,8 +3509,8 @@ it("commits exact manual Money, immutable capture context, and audit before cano
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
       const owner = yield* fromTestPromise(() => transactionSession({ request: request(0), db }));
-      const parsed = yield* fromTestPromise(() =>
-        transactionInput(request(0, "/transactions", input({ counterparty: "Acme" })))
+      const parsed = yield* transactionInput(
+        request(0, "/transactions", input({ counterparty: "Acme" }))
       );
       if (Option.isNone(owner) || Option.isNone(parsed)) throw new Error("fixture invalid");
       const response = yield* fromTestPromise(() =>
@@ -3524,17 +3523,10 @@ it("commits exact manual Money, immutable capture context, and audit before cano
 
       expect(encodeMoneyAmount(created.data.money.amount)).toBe("9007199254740993.15");
       expect(Option.getOrNull(created.data.counterparty)).toBe("Acme");
-      const listed = yield* fromTestPromise(() =>
-        browseTransactions({
-          db,
-          selection: {
-            request: request(0),
-            subject: owner.value,
-            search: false,
-            id: Option.none(),
-          },
-        })
-      );
+      const listed = yield* browseTransactions({
+        db,
+        selection: { request: request(0), subject: owner.value, search: false, id: Option.none() },
+      });
       expect(
         (yield* Schema.decodeUnknownEffect(Listed)(
           yield* fromTestPromise(() => listed.json())
@@ -3579,9 +3571,7 @@ it("neither a foreign opaque id nor another session can observe a Transaction", 
       const db = yield* fromTestPromise(() => setup());
       const owner = yield* fromTestPromise(() => transactionSession({ request: request(0), db }));
       const other = yield* fromTestPromise(() => transactionSession({ request: request(1), db }));
-      const parsed = yield* fromTestPromise(() =>
-        transactionInput(request(0, "/transactions", input()))
-      );
+      const parsed = yield* transactionInput(request(0, "/transactions", input()));
       const tokenOnly = new Request("https://core.internal/transactions", {
         headers: { authorization: `Bearer ${bearer(0)}`, "x-provider-id": users[0] ?? "" },
       });
@@ -3598,34 +3588,25 @@ it("neither a foreign opaque id nor another session can observe a Transaction", 
         yield* fromTestPromise(() => ownerLookupResponse.json())
       ).pipe(Effect.orDie);
 
-      const foreignLookupResponse = yield* fromTestPromise(() =>
-        browseTransactions({
-          db,
-          selection: {
-            request: request(1),
-            subject: other.value,
-            search: false,
-            id: Option.none(),
-          },
-        })
-      );
+      const foreignLookupResponse = yield* browseTransactions({
+        db,
+        selection: { request: request(1), subject: other.value, search: false, id: Option.none() },
+      });
       expect(
         (yield* Schema.decodeUnknownEffect(Listed)(
           yield* fromTestPromise(() => foreignLookupResponse.json())
         ).pipe(Effect.orDie)).data
       ).toEqual([]);
       expect(
-        (yield* fromTestPromise(() =>
-          browseTransactions({
-            db,
-            selection: {
-              request: request(1, `/transactions/${created.data.id}`),
-              subject: other.value,
-              search: false,
-              id: Option.some(created.data.id),
-            },
-          })
-        )).status
+        (yield* browseTransactions({
+          db,
+          selection: {
+            request: request(1, `/transactions/${created.data.id}`),
+            subject: other.value,
+            search: false,
+            id: Option.some(created.data.id),
+          },
+        })).status
       ).toBe(404);
       yield* fromTestPromise(() =>
         db
@@ -3640,29 +3621,20 @@ it("neither a foreign opaque id nor another session can observe a Transaction", 
         (yield* fromTestPromise(() => sendPublicRequest(db, postTransaction(0, input())))).status
       ).toBe(401);
       expect(
-        (yield* fromTestPromise(() =>
-          browseTransactions({
-            db,
-            selection: {
-              request: request(0),
-              subject: owner.value,
-              search: false,
-              id: Option.none(),
-            },
-          })
-        )).status
-      ).toBe(401);
-      const otherSessionLookupResponse = yield* fromTestPromise(() =>
-        browseTransactions({
+        (yield* browseTransactions({
           db,
           selection: {
-            request: request(1),
-            subject: other.value,
+            request: request(0),
+            subject: owner.value,
             search: false,
             id: Option.none(),
           },
-        })
-      );
+        })).status
+      ).toBe(401);
+      const otherSessionLookupResponse = yield* browseTransactions({
+        db,
+        selection: { request: request(1), subject: other.value, search: false, id: Option.none() },
+      });
       expect(
         (yield* Schema.decodeUnknownEffect(Listed)(
           yield* fromTestPromise(() => otherSessionLookupResponse.json())
@@ -3682,9 +3654,7 @@ it("serializes concurrent mutations for one User without mixing another User's r
       const db = yield* fromTestPromise(() => setup());
       const first = yield* fromTestPromise(() => transactionSession({ request: request(0), db }));
       const second = yield* fromTestPromise(() => transactionSession({ request: request(1), db }));
-      const parsed = yield* fromTestPromise(() =>
-        transactionInput(request(0, "/transactions", input()))
-      );
+      const parsed = yield* transactionInput(request(0, "/transactions", input()));
       if (Option.isNone(first) || Option.isNone(second) || Option.isNone(parsed)) {
         throw new Error("fixture invalid");
       }
@@ -3732,28 +3702,14 @@ it("serializes concurrent mutations for one User without mixing another User's r
       expect(
         (yield* fromTestPromise(() => coordinatorB.fetch(command(first.value)))).status
       ).not.toBe(201);
-      const firstList = yield* fromTestPromise(() =>
-        browseTransactions({
-          db,
-          selection: {
-            request: request(0),
-            subject: first.value,
-            search: false,
-            id: Option.none(),
-          },
-        })
-      );
-      const secondList = yield* fromTestPromise(() =>
-        browseTransactions({
-          db,
-          selection: {
-            request: request(1),
-            subject: second.value,
-            search: false,
-            id: Option.none(),
-          },
-        })
-      );
+      const firstList = yield* browseTransactions({
+        db,
+        selection: { request: request(0), subject: first.value, search: false, id: Option.none() },
+      });
+      const secondList = yield* browseTransactions({
+        db,
+        selection: { request: request(1), subject: second.value, search: false, id: Option.none() },
+      });
       expect(
         (yield* Schema.decodeUnknownEffect(Listed)(
           yield* fromTestPromise(() => firstList.json())
@@ -3772,9 +3728,7 @@ it("executes non-Memory work when hosted inference is unusable and refuses Memor
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
       const session = yield* fromTestPromise(() => transactionSession({ request: request(0), db }));
-      const parsed = yield* fromTestPromise(() =>
-        transactionInput(request(0, "/transactions", input()))
-      );
+      const parsed = yield* transactionInput(request(0, "/transactions", input()));
       if (Option.isNone(session) || Option.isNone(parsed)) throw new Error("fixture invalid");
       // The hosted-inference configuration cannot build a service; only Memory work may miss it.
       const coordinator = new UserTransactionCoordinator(
@@ -3850,9 +3804,7 @@ it("leaves an unindexed atomic resource abort unattributed", () =>
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
       const owner = yield* fromTestPromise(() => transactionSession({ request: request(0), db }));
-      const parsed = yield* fromTestPromise(() =>
-        transactionInput(request(0, "/transactions", input()))
-      );
+      const parsed = yield* transactionInput(request(0, "/transactions", input()));
       if (Option.isNone(owner) || Option.isNone(parsed)) throw new Error("fixture invalid");
       const limitedDb: D1Database = {
         prepare: (sql) => db.prepare(sql),
@@ -3881,10 +3833,8 @@ it("rejects an unknown Category without retaining partial Transaction, attestati
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
       const owner = yield* fromTestPromise(() => transactionSession({ request: request(0), db }));
-      const parsed = yield* fromTestPromise(() =>
-        transactionInput(
-          request(0, "/transactions", input({ categoryId: "10000000-0000-4000-8000-000000009999" }))
-        )
+      const parsed = yield* transactionInput(
+        request(0, "/transactions", input({ categoryId: "10000000-0000-4000-8000-000000009999" }))
       );
       if (Option.isNone(owner) || Option.isNone(parsed)) {
         throw new Error("fixture invalid");
@@ -3950,12 +3900,10 @@ it("commits an ordered two-child batch in one D1 unit and agrees with immediate 
       const session = Option.getOrThrow(
         yield* fromTestPromise(() => transactionSession({ request: request(0), db }))
       );
-      const listed = yield* fromTestPromise(() =>
-        browseTransactions({
-          db,
-          selection: { request: request(0), subject: session, search: false, id: Option.none() },
-        })
-      );
+      const listed = yield* browseTransactions({
+        db,
+        selection: { request: request(0), subject: session, search: false, id: Option.none() },
+      });
       const page = yield* Schema.decodeUnknownEffect(Listed)(
         yield* fromTestPromise(() => listed.json())
       ).pipe(Effect.orDie);

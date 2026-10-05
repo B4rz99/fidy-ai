@@ -1,4 +1,10 @@
-import { evaluateBudgetAlerts, readBudgetCaps, readBudgetSpending } from "./operations";
+import {
+  evaluateBudgetAlerts,
+  prepareDeleteBudget,
+  prepareUpdateBudget,
+  readBudgetCaps,
+  readBudgetSpending,
+} from "./operations";
 import { executeCanonicalWork } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import {
@@ -9,7 +15,12 @@ import {
 } from "../d1-test-fixture";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
-import { Budget, BudgetStatusReport } from "../../src/core/budgets/contract";
+import {
+  Budget,
+  BudgetId,
+  BudgetStatusReport,
+  UpdateBudgetInput,
+} from "../../src/core/budgets/contract";
 import { IanaTimeZone } from "../../src/core/_shared/context";
 import { deriveCurrentBudgetMonth } from "../../src/core/budgets/operations";
 import { Transaction } from "../../src/core/transactions/contract";
@@ -25,7 +36,10 @@ const users = [
   "10000000-0000-4000-8000-000000000052",
 ] as const;
 const category = "10000000-0000-4000-8000-000000000016";
-const sessions = ["10000000-0000-4000-8000-000000000061", "10000000-0000-4000-8000-000000000062"];
+const sessions = [
+  "10000000-0000-4000-8000-000000000061",
+  "10000000-0000-4000-8000-000000000062",
+] as const;
 const databases = isolatedTestDatabases();
 const bearer = (index: number): string => String(index + 1).repeat(43);
 const digest = (text: string): Promise<Uint8Array> =>
@@ -305,6 +319,80 @@ const Captured = Schema.Struct({
   data: Schema.toCodecJson(Transaction),
   next: Schema.Array(Schema.Unknown),
 });
+
+it("reports corrupt retained Budget state as unavailable without false caller refusal or mutation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const created = yield* Schema.decodeUnknownEffect(Created)(
+        yield* Effect.tryPromise(() =>
+          send(db, request(0, "/budgets", "POST", payload())).then((response) => response.json())
+        )
+      );
+      const id = created.data.id;
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE budgets SET cap='1e2' WHERE user_id=? AND id=?").bind(users[0], id).run()
+      );
+      const subject = {
+        id: sessions[0],
+        userId: users[0],
+        digest: yield* Effect.tryPromise(() => digest(bearer(0))),
+      };
+      const current = DateTime.nowUnsafe().epochMilliseconds;
+      expect(
+        yield* prepareUpdateBudget({
+          db,
+          subject,
+          id,
+          current,
+          payload: yield* Schema.decodeUnknownEffect(Schema.toCodecJson(UpdateBudgetInput))(
+            payload()
+          ),
+        })
+      ).toEqual({ _tag: "Failed" });
+      expect(yield* prepareDeleteBudget({ db, subject, id, current })).toEqual({ _tag: "Failed" });
+      for (const method of ["PUT", "DELETE"] as const) {
+        const response = yield* Effect.tryPromise(() =>
+          send(db, request(0, `/budgets/${id}`, method, method === "PUT" ? payload() : undefined))
+        );
+        expect(response.status).toBe(503);
+      }
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT cap FROM budgets WHERE user_id=? AND id=?").bind(users[0], id).first()
+        )
+      ).toEqual({ cap: "1e2" });
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT operation FROM budget_audit WHERE user_id=? AND outcome='rejected'")
+            .bind(users[0])
+            .all()
+        )).results
+      ).toEqual([]);
+      expect(
+        (yield* Effect.tryPromise(() => send(db, request(1, `/budgets/${id}`, "DELETE")))).status
+      ).toBe(404);
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE budgets SET cap='100' WHERE user_id=? AND id=?").bind(users[0], id).run()
+      );
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("UPDATE budgets SET created_at='not-a-date' WHERE user_id=? AND id=?")
+          .bind(users[0], id)
+          .run()
+      );
+      expect(yield* prepareDeleteBudget({ db, subject, id, current })).toEqual({ _tag: "Failed" });
+      const missing = yield* prepareDeleteBudget({
+        db,
+        subject,
+        current,
+        id: BudgetId.make("11111111-1111-4111-8111-111111111111"),
+      });
+      expect(missing._tag).toBe("Refused");
+      if (missing._tag === "Refused") expect(missing.refusal.code).toBe("not_found");
+    })
+  ));
 
 it("attributes a mixed-child Budget Audit limit before the owner's trigger and rolls back", () =>
   Effect.runPromise(

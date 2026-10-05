@@ -1,6 +1,6 @@
 import { it } from "@effect/vitest";
 import { Effect, Option } from "effect";
-import { afterEach, expect } from "vitest";
+import { afterEach, expect, vi } from "vitest";
 import { requestWorkerd } from "./local-workerd-http";
 import { inspectorTarget } from "./workerd-inspector";
 
@@ -53,15 +53,14 @@ it.live("rejects a response that exceeds the streamed proof budget", () =>
   Effect.gen(function* () {
     const huge = new Uint8Array(Number("1048577"));
     const port = serve(() => new Response(huge));
-    const response = yield* Effect.tryPromise(() =>
+    const failure = yield* Effect.tryPromise(() =>
       requestWorkerd({
         method: "GET",
         port,
         path: "/json",
         signal: new AbortController().signal,
       })
-    );
-    const failure = yield* Effect.tryPromise(() => response.arrayBuffer()).pipe(Effect.flip);
+    ).pipe(Effect.flip);
     expect(String(failure.cause)).toContain("WorkerdResponseTooLarge");
   })
 );
@@ -70,27 +69,80 @@ it.live("aborts an in-flight request after response headers arrive", () => {
   const controller = new AbortController();
   return Effect.gen(function* () {
     const cancelled = Promise.withResolvers<void>();
-    const port = serve(
-      () =>
-        new Response(
-          new ReadableStream({
-            start(stream): void {
-              stream.enqueue(new TextEncoder().encode("partial"));
-            },
-            cancel: (): void => cancelled.resolve(),
-          })
-        )
-    );
-    const response = yield* Effect.tryPromise(() =>
-      requestWorkerd({ method: "GET", port, path: "/json", signal: controller.signal })
-    );
-    const reading = response.text();
+    const requested = Promise.withResolvers<void>();
+    const port = serve(() => {
+      requested.resolve();
+      return new Response(
+        new ReadableStream({
+          start(stream): void {
+            stream.enqueue(new TextEncoder().encode("partial"));
+          },
+          cancel: (): void => cancelled.resolve(),
+        })
+      );
+    });
+    const request = requestWorkerd({
+      method: "GET",
+      port,
+      path: "/json",
+      signal: controller.signal,
+    });
+    yield* Effect.tryPromise(() => requested.promise);
     controller.abort();
-    const failure = yield* Effect.tryPromise(() => reading).pipe(Effect.flip);
+    const failure = yield* Effect.tryPromise(() => request).pipe(Effect.flip);
     expect(failure).toBeDefined();
     yield* Effect.tryPromise(() => cancelled.promise);
   });
 });
+
+it.each(["headers", "body"] as const)(
+  "bounds full local HTTP %s lifetime without caller abort",
+  (stall) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        const pending = Promise.withResolvers<Response>();
+        try {
+          const requested = Promise.withResolvers<void>();
+          const cancelled = Promise.withResolvers<void>();
+          const port = serve(() => {
+            requested.resolve();
+            return stall === "headers"
+              ? pending.promise
+              : new Response(
+                  new ReadableStream({
+                    start(stream): void {
+                      stream.enqueue(new TextEncoder().encode("partial"));
+                    },
+                    cancel(): void {
+                      cancelled.resolve();
+                    },
+                  })
+                );
+          });
+          const signal = yield* Effect.abortSignal;
+          const outcome = requestWorkerd({
+            method: "GET",
+            port,
+            path: "/json",
+            signal,
+          }).then(
+            () => "unexpected success",
+            (failure: unknown) => failure
+          );
+          yield* Effect.tryPromise(() => requested.promise);
+          yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(30_001));
+          expect(yield* Effect.tryPromise(() => outcome)).toMatchObject({ _tag: "TimeoutError" });
+          if (stall === "body") {
+            yield* Effect.tryPromise(() => cancelled.promise);
+          }
+        } finally {
+          pending.resolve(Response.json([]));
+          vi.useRealTimers();
+        }
+      }).pipe(Effect.scoped)
+    )
+);
 
 it.live("aborts an in-flight request before response headers arrive", () => {
   const controller = new AbortController();

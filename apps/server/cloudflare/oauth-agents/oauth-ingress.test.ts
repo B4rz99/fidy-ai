@@ -5,15 +5,25 @@ import {
   readDiscovery,
   sensitiveDiscovery,
 } from "./discovery.test-fixture";
-import { installedCanonicalOperations } from "../canonical-operations/operations";
+import {
+  executeOAuthCanonicalWork,
+  installedCanonicalOperations,
+} from "../canonical-operations/operations";
 import { categoryIds } from "../../src/core/categories/contract";
 import { PATScopes } from "../../src/core/tokens/contract";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
-import { Clock, Data, DateTime, Effect, Option, Predicate, Schema } from "effect";
+import { Clock, Data, DateTime, Effect, Exit, Fiber, Option, Predicate, Schema } from "effect";
+import { deepStrictEqual } from "node:assert";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { OAuthCanonicalAdmission } from "../../src/shell/mcp/contract";
-import { authenticateOAuth } from "./operations";
+import { authenticateOAuth, executeOAuthRefresh } from "./operations";
+import { OAuthRefreshAdmission } from "./contract";
+import { handleMcpRequest } from "../mcp/runtime";
+import { handleOAuthRequest } from "./runtime";
+import { reviewRequest } from "./internal/review";
+import { manageConnections } from "./internal/management";
+import { BootstrapUnavailable } from "./internal/bootstrap";
 import { makeMutationCommitGate } from "./mutation-commit.test-fixture";
 import { OAuthReviewChoice } from "../../src/shell/oauth-agents/contract";
 import { makeAudit } from "../../src/shell/audit/runtime";
@@ -200,7 +210,7 @@ const setup = (): Effect.Effect<Harness, TestFailure> =>
         }
       );
     return {
-      db,
+      db: queryDb,
       send,
       holdMutationCommit: mutationCommit.hold,
       disableInference: () => {
@@ -347,6 +357,15 @@ const sendFrom =
     headers.set("cf-connecting-ip", `198.51.100.${index + 1}`);
     return send(path, { ...init, headers });
   };
+const clockAt = (live: Clock.Clock, current: number): Clock.Clock => ({
+  currentTimeMillisUnsafe: () => current,
+  currentTimeMillis: Effect.succeed(current),
+  currentTimeNanosUnsafe: () => BigInt(current) * 1000000n,
+  currentTimeNanos: Effect.succeed(BigInt(current) * 1000000n),
+  monotonicTimeNanosUnsafe: () => live.monotonicTimeNanosUnsafe(),
+  monotonicTimeNanos: live.monotonicTimeNanos,
+  sleep: (duration) => live.sleep(duration),
+});
 const assertReleased = (db: D1Database): Effect.Effect<void, TestFailure> =>
   Effect.gen(function* () {
     expect(
@@ -2069,6 +2088,91 @@ it("does not revoke any agent when append-only revocation evidence is unavailabl
       ).toBe(200);
     })
   ));
+it("keeps corrupt retained OAuth review and connection dates in the typed failure channel", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const reviewed = yield* reviewedFixture();
+      const choice = yield* Schema.decodeEffect(Schema.fromJsonString(OAuthReviewChoice))(
+        reviewed.choice
+      );
+      yield* wait(
+        reviewed.db
+          .prepare("UPDATE oauth_review_requests SET created_at_ms=?,expires_at_ms=? WHERE id=?")
+          .bind(8_640_000_000_000_001 - 600_000, 8_640_000_000_000_001, choice.requestId)
+          .run()
+      );
+      const typedCorruption = new BootstrapUnavailable();
+      deepStrictEqual(
+        yield* Effect.exit(
+          reviewRequest({
+            db: reviewed.db,
+            request: new Request(
+              `https://api.fidyapp.com/web/oauth/review?requestId=${choice.requestId}`,
+              { headers: reviewed.headers }
+            ),
+            browserOrigin: "https://app.fidyapp.com",
+            current: DateTime.nowUnsafe().epochMilliseconds,
+            admitUser: () => Effect.void,
+          })
+        ),
+        Exit.fail(typedCorruption)
+      );
+      expect(
+        (yield* wait(
+          reviewed.send(`/web/oauth/review?requestId=${choice.requestId}`, {
+            headers: reviewed.headers,
+          })
+        )).status
+      ).toBe(503);
+      expect(
+        (yield* wait(reviewed.db.prepare("SELECT id FROM oauth_connections").all())).results
+      ).toEqual([]);
+      const approved = yield* approvedFixture();
+      // Inject retained corruption without changing the production grant immutability fence.
+      yield* wait(approved.db.exec("DROP TRIGGER oauth_connection_immutable"));
+      for (const dates of [
+        { expiry: -8_640_000_000_000_001, revokedAt: null },
+        { expiry: 8_640_000_000_000_001, revokedAt: null },
+        {
+          expiry: DateTime.add(DateTime.nowUnsafe(), { days: 7 }).epochMilliseconds,
+          revokedAt: 8_640_000_000_000_001,
+        },
+      ]) {
+        yield* wait(
+          approved.db
+            .prepare(
+              "UPDATE oauth_connections SET approved_at_ms=?,expires_at_ms=?,revoked_at_ms=? WHERE id=?"
+            )
+            .bind(dates.expiry - 1, dates.expiry, dates.revokedAt, approved.connectionId)
+            .run()
+        );
+        deepStrictEqual(
+          yield* Effect.exit(
+            manageConnections({
+              db: approved.db,
+              request: new Request("https://api.fidyapp.com/web/oauth/connections", {
+                headers: approved.headers,
+              }),
+              browserOrigin: "https://app.fidyapp.com",
+              current: DateTime.nowUnsafe().epochMilliseconds,
+              admitUser: () => Effect.void,
+              coordinator: {
+                getByName: () => {
+                  throw new Error("Connection listing must not revoke work");
+                },
+              },
+            })
+          ),
+          Exit.fail(typedCorruption)
+        );
+        expect(
+          (yield* wait(approved.send("/web/oauth/connections", { headers: approved.headers })))
+            .status
+        ).toBe(503);
+      }
+    })
+  ));
+
 it("reports malformed connection metadata and unavailable canonical activity rather than a false empty list", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -2658,6 +2762,282 @@ it("allows one concurrent refresh winner but the recognized loser revokes its en
       yield* assertReleased(fixture.db);
     })
   ));
+it("uses the supplied Clock for OAuth ingress admission, issuance and outstanding lease release", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* setup();
+      const current = 1700000000000;
+      const clock = clockAt(yield* Clock.Clock, current);
+      const response = yield* handleOAuthRequest({
+        db: fixture.db,
+        browserOrigin: "https://app.fidyapp.com",
+        request: new Request("https://api.fidyapp.com/oauth/register", {
+          method: "POST",
+          headers: { "x-oauth-source": "a".repeat(64), "content-type": "application/json" },
+          body: '{"client_name":"Agente","redirect_uris":["http://127.0.0.1/callback"]}',
+        }),
+        coordinator: {
+          getByName: () => ({
+            fetch: (): Promise<Response> =>
+              Promise.reject(new Error("Registration cannot coordinate User work")),
+          }),
+        },
+      }).pipe(Effect.provideService(Clock.Clock, clock));
+      expect(response.status).toBe(201);
+      expect(yield* wait(response.json())).toMatchObject({ client_id_issued_at: 1700000000 });
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare(
+              "SELECT admitted_at_epoch_ms,released_at_epoch_ms FROM resource_admission_events WHERE policy_key='oauth.concurrent.v1'"
+            )
+            .first()
+        )
+      ).toEqual({ admitted_at_epoch_ms: current, released_at_epoch_ms: current });
+    })
+  ));
+
+it("clips refresh publication to the supplied Clock without extending absolute authority", () => {
+  const signal = new AbortController().signal;
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* approvedFixture();
+      const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
+        yield* wait((yield* wait(exchangeFixture(fixture))).json())
+      );
+      const row = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ id: Schema.String, user_id: Schema.String })
+      )(
+        yield* wait(fixture.db.prepare("SELECT id,user_id FROM oauth_refresh_credentials").first())
+      );
+      const expiry = yield* Schema.decodeUnknownEffect(Schema.Int)(
+        yield* wait(
+          fixture.db.prepare("SELECT expires_at_ms FROM oauth_connections").first("expires_at_ms")
+        )
+      );
+      const current = expiry - 1000;
+      const liveClock = yield* Clock.Clock;
+      const clock = clockAt(liveClock, current);
+      const admission = yield* Schema.decodeUnknownEffect(OAuthRefreshAdmission)({
+        credentialId: row.id,
+        userId: row.user_id,
+        connectionId: fixture.connectionId,
+        clientId: fixture.body.get("client_id"),
+        resource: "https://api.fidyapp.com/mcp",
+        deadlineAtMs: expiry,
+        digest: Array.from(
+          new Uint8Array(
+            yield* wait(
+              crypto.subtle.digest(
+                "SHA-256",
+                new TextEncoder().encode(`oauth-refresh:${token.refresh_token}`)
+              )
+            )
+          )
+        ),
+      });
+      const response = yield* executeOAuthRefresh({
+        db: fixture.db,
+        admission,
+        signal,
+      }).pipe(Effect.provideService(Clock.Clock, clock));
+      expect(response.status).toBe(200);
+      expect(yield* wait(response.json())).toMatchObject({ expires_in: 1 });
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare("SELECT occurred_at_ms FROM oauth_refresh_events")
+            .first("occurred_at_ms")
+        )
+      ).toBe(current);
+    })
+  );
+});
+
+it("inherits the supplied Clock through MCP protocol callbacks when bounding canonical admission", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* approvedFixture();
+      const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
+        yield* wait((yield* wait(exchangeFixture(fixture))).json())
+      );
+      const current = (yield* Clock.currentTimeMillis) + 120000;
+      const liveClock = yield* Clock.Clock;
+      const clock = clockAt(liveClock, current);
+      let deadline = 0;
+      const runNative = Effect.runPromiseWith(yield* Effect.context<never>());
+      const response = yield* handleMcpRequest({
+        db: fixture.db,
+        request: new Request("https://api.fidyapp.com/mcp", {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${token.access_token}`,
+            "content-type": "application/json",
+            accept: "application/json, text/event-stream",
+            "mcp-protocol-version": "2026-07-28",
+            "mcp-method": "tools/call",
+            "mcp-name": "categories.listCategories",
+          },
+          body: yield* Schema.encodeEffect(
+            Schema.fromJsonString(
+              Schema.Struct({
+                jsonrpc: Schema.Literal("2.0"),
+                id: Schema.Int,
+                method: Schema.Literal("tools/call"),
+                params: Schema.Struct({
+                  name: Schema.Literal("categories.listCategories"),
+                  arguments: Schema.Struct({}),
+                  _meta: Schema.Struct({
+                    "io.modelcontextprotocol/protocolVersion": Schema.Literal("2026-07-28"),
+                    "io.modelcontextprotocol/clientCapabilities": Schema.Struct({}),
+                  }),
+                }),
+              })
+            )
+          )({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: {
+              name: "categories.listCategories",
+              arguments: {},
+              _meta: {
+                "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                "io.modelcontextprotocol/clientCapabilities": {},
+              },
+            },
+          }),
+        }),
+        coordinator: {
+          getByName: (userId) => ({
+            fetch: (incoming): Promise<Response> =>
+              runNative(
+                Effect.gen(function* () {
+                  const request = incoming instanceof Request ? incoming : new Request(incoming);
+                  const admission = yield* Schema.decodeUnknownEffect(OAuthCanonicalAdmission)(
+                    yield* wait(request.json())
+                  );
+                  deadline = admission.deadlineMilliseconds;
+                  const payload = yield* Schema.encodeEffect(OAuthCanonicalAdmission)(admission);
+                  return yield* wait(fixture.coordinate(userId, payload));
+                })
+              ),
+          }),
+        },
+      }).pipe(Effect.provideService(Clock.Clock, clock));
+      expect(yield* wait(response.json())).toMatchObject({ result: { isError: false } });
+      expect(deadline).toBe(current + 3000);
+    })
+  ));
+
+it("refuses exact OAuth credential expiry under a supplied Clock without canonical Audit", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* approvedFixture();
+      const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
+        yield* wait((yield* wait(exchangeFixture(fixture))).json())
+      );
+      const request = new Request("https://api.fidyapp.com/mcp", {
+        headers: { authorization: `Bearer ${token.access_token}` },
+      });
+      const caller = yield* authenticateOAuth({
+        db: fixture.db,
+        request,
+        current: yield* Clock.currentTimeMillis,
+      });
+      if (Option.isNone(caller)) return yield* new TestFailure({ cause: "Missing caller" });
+      const current = yield* Schema.decodeUnknownEffect(Schema.Int)(
+        yield* wait(
+          fixture.db
+            .prepare("SELECT expires_at_ms FROM oauth_access_credentials")
+            .first("expires_at_ms")
+        )
+      );
+      const liveClock = yield* Clock.Clock;
+      const clock = clockAt(liveClock, current);
+      const response = yield* executeOAuthCanonicalWork({
+        bucket: Option.none(),
+        inference: Option.none(),
+        db: fixture.db,
+        subject: caller.value.subject,
+        operation: "categories.listCategories",
+        input: { unexpected: true },
+        signal: request.signal,
+        deadlineMilliseconds: current + 3000,
+      }).pipe(Effect.provideService(Clock.Clock, clock));
+      expect(response.status).toBe(401);
+      expect(
+        yield* makeAudit({ database: fixture.db }).query({
+          userId: caller.value.subject.userId,
+          limit: 10,
+        })
+      ).toEqual([]);
+    })
+  ));
+
+it("fences later Promise-owned query units at the supplied Clock deadline while settling the started read", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* approvedFixture();
+      const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
+        yield* wait((yield* wait(exchangeFixture(fixture))).json())
+      );
+      let current = yield* Clock.currentTimeMillis;
+      const request = new Request("https://api.fidyapp.com/mcp", {
+        headers: { authorization: `Bearer ${token.access_token}` },
+      });
+      const caller = yield* authenticateOAuth({ db: fixture.db, request, current });
+      if (Option.isNone(caller)) return yield* new TestFailure({ cause: "Missing caller" });
+      const time = DateTime.formatIso(DateTime.makeUnsafe(current));
+      yield* wait(
+        fixture.db
+          .prepare("INSERT INTO budgets VALUES (?, ?, ?, 'COP', '1000', ?, ?)")
+          .bind(
+            "30000000-0000-4000-8000-000000000001",
+            caller.value.subject.userId,
+            "10000000-0000-4000-8000-000000000001",
+            time,
+            time
+          )
+          .run()
+      );
+      const gate = fixture.holdBudgetRead();
+      const deadlineMilliseconds = current + 3000;
+      const live = yield* Clock.Clock;
+      const clock: Clock.Clock = {
+        currentTimeMillisUnsafe: () => current,
+        currentTimeMillis: Effect.sync(() => current),
+        currentTimeNanosUnsafe: () => BigInt(current) * 1_000_000n,
+        currentTimeNanos: Effect.sync(() => BigInt(current) * 1_000_000n),
+        monotonicTimeNanosUnsafe: () => live.monotonicTimeNanosUnsafe(),
+        monotonicTimeNanos: live.monotonicTimeNanos,
+        sleep: (duration) => live.sleep(duration),
+      };
+      const running = yield* executeOAuthCanonicalWork({
+        bucket: Option.none(),
+        inference: Option.none(),
+        db: fixture.db,
+        subject: caller.value.subject,
+        operation: "budgets.getBudgetStatus",
+        input: { query: { timeZone: "America/Bogota" } },
+        signal: request.signal,
+        deadlineMilliseconds,
+      }).pipe(Effect.provideService(Clock.Clock, clock), Effect.forkChild);
+      yield* wait(gate.waiting);
+      current = deadlineMilliseconds;
+      gate.release();
+      expect((yield* Fiber.join(running)).status).toBe(503);
+      expect(gate.scheduled()).toEqual([]);
+      const audit = yield* makeAudit({ database: fixture.db }).query({
+        userId: caller.value.subject.userId,
+        limit: 10,
+      });
+      expect(audit.map(({ operation, outcome }) => ({ operation, outcome }))).toEqual([
+        { operation: "budgets.getBudgetStatus", outcome: "succeeded" },
+      ]);
+    })
+  ));
+
 const assertRefreshUnchanged = (
   fixture: Readonly<{ db: D1Database; connectionId: string }>
 ): Effect.Effect<void, TestFailure> =>
@@ -3130,10 +3510,19 @@ it("cancels a streamed refresh body, releases admission and exposes no proof in 
       });
       yield* wait(reading.promise);
       abort.abort();
-      const refused = yield* wait(pending);
-      expect(refused.status).not.toBe(200);
+      const refused = yield* Effect.exit(wait(pending));
+      deepStrictEqual(
+        refused,
+        Exit.fail(
+          new TestFailure({
+            cause: new Error("All fibers interrupted without error"),
+          })
+        )
+      );
       expect(cancelled).toBe(true);
-      expect(yield* wait(refused.text())).not.toContain(token.refresh_token);
+      expect(
+        yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(refused)
+      ).not.toContain(token.refresh_token);
       yield* assertRefreshUnchanged(fixture);
       yield* assertReleased(fixture.db);
     })
@@ -3525,8 +3914,19 @@ it.each(["abort", "deadline"])(
           args: { query: { timeZone: "America/Bogota" } },
         });
         yield* wait(gate.waiting);
-        if (fault === "abort") abort.abort();
-        yield* wait(response);
+        if (fault === "abort") {
+          abort.abort();
+          deepStrictEqual(
+            yield* Effect.exit(wait(response)),
+            Exit.fail(
+              new TestFailure({
+                cause: new Error("All fibers interrupted without error"),
+              })
+            )
+          );
+        } else {
+          yield* wait(response);
+        }
         gate.release();
         const next = yield* wait(
           mcpFixture({

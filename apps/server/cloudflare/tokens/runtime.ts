@@ -8,4 +8,4 @@ export class PATRetentionUnavailable extends Data.TaggedError("PATRetentionUnava
 export const sweepExpiredPATPairings = (
   db: D1Database
 ): Effect.Effect<void, PATRetentionUnavailable> =>
-  Effect.tryPromise({ try: () => expire(db), catch: () => new PATRetentionUnavailable() });
+  expire(db).pipe(Effect.mapError(() => new PATRetentionUnavailable()));

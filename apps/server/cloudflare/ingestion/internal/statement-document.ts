@@ -1,4 +1,4 @@
-import { Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
 import { WhatsAppMediaId } from "../../../src/shell/channels/whatsapp/contract";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import type { HostedCanonicalCaller } from "../../canonical-work/contract";
@@ -24,7 +24,6 @@ import {
   ResourceAdmissionUnavailable,
 } from "../../resource-admission/contract";
 import { releaseOutstandingResource } from "../../resource-admission/operations";
-import { currentMillis } from "../../runtime/operations";
 
 /** Compose verified attachment identity with admission; the supplied source is Agent-owned proof. */
 export const prepareStatementDocumentAdmission = ({
@@ -108,10 +107,14 @@ const retireDocumentUpload = ({
     catch: () => new ResourceAdmissionUnavailable({ reason: "authority_unavailable" }),
   }).pipe(
     Effect.flatMap((statement) =>
-      releaseOutstandingResource(statementUploadAuthority({ db, current: currentMillis() }), {
-        grantId,
-        statements: [statement],
-      })
+      Clock.currentTimeMillis.pipe(
+        Effect.flatMap((current) =>
+          releaseOutstandingResource(statementUploadAuthority({ db, current }), {
+            grantId,
+            statements: [statement],
+          })
+        )
+      )
     )
   );
 
@@ -211,10 +214,12 @@ export const stageHeldStatementDocument = ({
 > =>
   Effect.gen(function* () {
     const document = yield* findDocument({ db, caller });
+    const clock = yield* Clock.Clock;
+    const checkedAt = clock.currentTimeMillisUnsafe();
     if (
       Option.isNone(document) ||
       !Option.contains(document.value.upload_grant_id, grant.grantId) ||
-      !Option.exists(document.value.upload_expires_at_ms, (expires) => expires > currentMillis())
+      !Option.exists(document.value.upload_expires_at_ms, (expires) => expires > checkedAt)
     ) {
       return yield* unavailable();
     }
@@ -246,7 +251,7 @@ export const stageHeldStatementDocument = ({
             caller.turnId,
             caller.userId,
             grant.grantId,
-            currentMillis(),
+            clock.currentTimeMillisUnsafe(),
             ...caller.authority.bindings
           )
           .run(),

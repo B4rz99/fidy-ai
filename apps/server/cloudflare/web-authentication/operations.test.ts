@@ -1,4 +1,5 @@
-import { Clock, Effect, Option } from "effect";
+import { deepStrictEqual } from "node:assert";
+import { Clock, Effect, Exit, Option } from "effect";
 import { afterAll, expect, it } from "vitest";
 import {
   DisabledTelemetryResource,
@@ -8,6 +9,7 @@ import {
 import { isolatedTestDatabases } from "../d1-test-fixture";
 import { authenticateWebSession } from "../web-session/operations";
 import { handleWebAuthentication } from "./operations";
+import { withSessionTime } from "./session.test-fixture";
 
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
@@ -145,5 +147,56 @@ it("never turns a foreign or duplicate cookie into another User's logout authori
           user.token === tokenA ? Option.none() : Option.some(user.user)
         );
       }
+    })
+  ));
+
+it("retains the composing caller's Clock when revoking the presented session", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => databases.acquire());
+      const token = "c".repeat(43);
+      const digest = new Uint8Array(
+        yield* Effect.tryPromise(() =>
+          crypto.subtle.digest("SHA-256", new TextEncoder().encode(token))
+        )
+      );
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db.prepare("CREATE TABLE web_sessions (token_digest BLOB, revoked_at_ms INTEGER)"),
+          db.prepare("INSERT INTO web_sessions VALUES (?, NULL)").bind(digest),
+        ])
+      );
+      const outcome = yield* Effect.exit(
+        withSessionTime(
+          handleWebAuthentication({
+            request: new Request("https://api.fidyapp.com/web/session/logout", {
+              method: "POST",
+              headers: { cookie: `__Host-fidy_session=${token}` },
+            }),
+            db,
+            support,
+            telemetry,
+            publish: () => {},
+          }).pipe(
+            Effect.map((response) => ({
+              status: response.status,
+              cookie: response.headers.get("set-cookie"),
+              cache: response.headers.get("cache-control"),
+            }))
+          ),
+          4102444800000
+        )
+      );
+      deepStrictEqual(
+        outcome,
+        Exit.succeed({
+          status: 204,
+          cookie: "__Host-fidy_session=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0",
+          cache: "no-store",
+        })
+      );
+      expect(
+        yield* Effect.tryPromise(() => db.prepare("SELECT revoked_at_ms FROM web_sessions").first())
+      ).toEqual({ revoked_at_ms: 4102444800000 });
     })
   ));

@@ -223,11 +223,7 @@ const statementActivities = (
     "ingestion.reviewEvidenceExpiry",
     Option.match(environment.STATEMENT_STAGING_BUCKET, {
       onNone: () => Effect.void,
-      onSome: () =>
-        Effect.tryPromise({
-          try: () => expireStatementReviewEvidence({ DB: environment.DB }),
-          catch: () => undefined,
-        }),
+      onSome: () => expireStatementReviewEvidence({ DB: environment.DB }),
     })
   ),
   activity(

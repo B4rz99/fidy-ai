@@ -11,7 +11,7 @@ const forbiddenDependencies = [
   /(^|\/)node_modules\/resend\//u,
 ] as const;
 
-const forbiddenNodeModules = /(^|\/)node_modules\/effect\/dist\/unstable\/sql(?:\/|$)/u;
+const forbiddenNodeModules = /(^|\/)node_modules\/effect\/dist\/sql(?:\/|$)/u;
 const forbiddenNodeBuiltin =
   /^(?:node:|bun:)[^/]+(?:\/|$)|^(?:assert|child_process|cluster|crypto|dgram|dns|fs|http|https|module|net|os|path|perf_hooks|process|stream|timers|tls|tty|util|v8|vm|worker_threads)(?:\/|$)/u;
 

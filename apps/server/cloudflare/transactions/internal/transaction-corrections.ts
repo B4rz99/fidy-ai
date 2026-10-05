@@ -58,7 +58,9 @@ type Change = Readonly<{
 }>;
 
 /** Decode a bounded correction without treating omitted facts as explicit decisions. */
-export const correctionInput = (request: Request): Promise<Option.Option<typeof Input.Type>> =>
+export const correctionInput = (
+  request: Request
+): Effect.Effect<Option.Option<typeof Input.Type>> =>
   boundedJsonBody({ request, policy, schema: Input });
 
 const retain = <A>(value: Option.Option<A>, previous: A): A =>

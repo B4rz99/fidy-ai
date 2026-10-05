@@ -103,13 +103,11 @@ const submit = (
   }>
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
-    const body = yield* Effect.tryPromise(() =>
-      boundedJsonBody({
-        request: input.request,
-        policy: bodyPolicy,
-        schema: StartRefundInput,
-      })
-    );
+    const body = yield* boundedJsonBody({
+      request: input.request,
+      policy: bodyPolicy,
+      schema: StartRefundInput,
+    });
     if (Option.isNone(body)) {
       return Response.json(
         { error: { code: "invalid-request" } },

@@ -1,4 +1,8 @@
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
+import { Data } from "effect";
+
+/** Pairing state or proof processing is unavailable; no private dependency evidence escapes. */
+export class BrowserPairingUnavailable extends Data.TaggedError("BrowserPairingUnavailable") {}
 
 /** Origin-qualified WhatsApp decision, authenticated by the channel before pairing approval. */
 export type BrowserPairingApproval = Readonly<{

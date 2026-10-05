@@ -1,4 +1,4 @@
-import { type Cause, DateTime, Effect, Option, Schema } from "effect";
+import { type Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
 import { Money } from "../../../src/core/_shared/money";
 import {
   RefundAttempt,
@@ -6,7 +6,6 @@ import {
   StartRefundInput,
 } from "../../../src/core/subscription/contract";
 import { refundMinorUnits } from "../../../src/core/subscription/operations";
-import { currentMillis } from "../../runtime/operations";
 import { newId } from "../../secret-material/operations";
 import {
   type RefundAuthority,
@@ -22,7 +21,7 @@ const RefundRow = Schema.Struct({
   snapshot_json: Schema.String,
   status: Schema.Literals(["pending", "succeeded", "failed"]),
   progress: Schema.Literals(["queued", "verifying", "outcome-unknown"]),
-  finalized_at_ms: Schema.NullOr(Schema.Int),
+  finalized_at_ms: Schema.NullOr(Schema.DateTimeUtcFromMillis),
   failure: Schema.NullOr(
     Schema.Literals(["provider-declined", "provider-cancelled", "provider-refused"])
   ),
@@ -47,9 +46,8 @@ const reject = (reason: RefundStartFailure): Effect.Effect<never, RefundStartFai
   Effect.fail(reason);
 const safeFailure = (error: unknown): RefundStartFailure =>
   Schema.is(RefundStartFailure)(error) ? error : "unavailable";
-export const liveRefundAuthority = (authority: RefundAuthority): boolean =>
-  Schema.is(RefundSupportAdmission.fields.authority)(authority) &&
-  authority.expiresAtMs > currentMillis();
+const liveRefundAuthority = (authority: RefundAuthority, current: number): boolean =>
+  Schema.is(RefundSupportAdmission.fields.authority)(authority) && authority.expiresAtMs > current;
 
 const lifecycle = (
   row: typeof RefundRow.Type
@@ -58,7 +56,7 @@ const lifecycle = (
     return Effect.succeed({ status: row.status, progress: row.progress });
   }
   if (row.finalized_at_ms === null) return reject("unavailable");
-  const finalized = DateTime.formatIso(DateTime.makeUnsafe(row.finalized_at_ms));
+  const finalized = DateTime.formatIso(row.finalized_at_ms);
   if (row.status === "succeeded") {
     return Effect.succeed({ status: row.status, verifiedAt: finalized });
   }
@@ -100,7 +98,8 @@ const replayView = (
 
 export const getRefund = (call: RefundReadCall): Effect.Effect<RefundAttempt, RefundStartFailure> =>
   Effect.gen(function* () {
-    if (!liveRefundAuthority(call.authority)) return yield* reject("unsupported");
+    const current = yield* Clock.currentTimeMillis;
+    if (!liveRefundAuthority(call.authority, current)) return yield* reject("unsupported");
     const row = yield* Effect.tryPromise(() =>
       call.db
         .prepare("SELECT * FROM refund_attempts WHERE user_id=? AND id=?")
@@ -159,7 +158,7 @@ const prepareRefund = (call: RefundStartCall): Effect.Effect<PreparedRefund, Nat
     const total = refundMinorUnits(original);
     const requested = refundMinorUnits(money);
     if (Option.isNone(total) || Option.isNone(requested)) return yield* reject("unsupported");
-    const now = currentMillis();
+    const now = yield* Clock.currentTimeMillis;
     const id = newId();
     const subscriptionId = newId();
     const snapshotValue = yield* Schema.decodeEffect(RefundAttempt)({
@@ -257,7 +256,8 @@ export const startRefund = (
   call: RefundStartCall
 ): Effect.Effect<RefundAttempt, RefundStartFailure> =>
   Effect.gen(function* () {
-    if (call.environment !== "sandbox" || !liveRefundAuthority(call.authority)) {
+    const current = yield* Clock.currentTimeMillis;
+    if (call.environment !== "sandbox" || !liveRefundAuthority(call.authority, current)) {
       return yield* reject("unsupported");
     }
     const input = yield* Schema.decodeEffect(StartRefundInput)(call.input).pipe(

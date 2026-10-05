@@ -9,9 +9,8 @@ import {
 } from "../../../src/shell/subscription/operations";
 import { type PreparedSubscriptionRead } from "../../../src/shell/subscription/contract";
 import { UserId } from "../../../src/core/identity/contract";
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 import { prepareOwnedStatement } from "../../database/operations";
-import { currentMillis } from "../../runtime/operations";
 import { newId } from "../../secret-material/operations";
 import { callerAuthority, isPATCaller } from "../../canonical-work/operations";
 import { type SubscriptionQueryInput as QueryInput } from "../contract";
@@ -96,16 +95,14 @@ const presentSubscription = ({
 };
 
 /** Commit one bounded query and its metadata-only AuditLogEntry under the same live User authority. */
-export const executeProtectedSubscriptionQuery = (input: QueryInput): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const current = currentMillis();
-      const prepared = subscriptionStatements(input, current);
-      const results = yield* Effect.tryPromise(() => input.db.batch([...prepared.statements]));
-      return presentSubscription({
-        results,
-        read: prepared.read,
-        pat: isPATCaller(input.subject),
-      });
-    }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
-  );
+export const executeProtectedSubscriptionQuery = (input: QueryInput): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const current = yield* Clock.currentTimeMillis;
+    const prepared = subscriptionStatements(input, current);
+    const results = yield* Effect.tryPromise(() => input.db.batch([...prepared.statements]));
+    return presentSubscription({
+      results,
+      read: prepared.read,
+      pat: isPATCaller(input.subject),
+    });
+  }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())));

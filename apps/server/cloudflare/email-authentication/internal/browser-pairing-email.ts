@@ -169,13 +169,11 @@ export const startBrowserPairingEmail = (input: {
       const { request, db } = input;
       const proof = yield* attempt(() => readProof(request, Start));
       if (Option.isNone(proof)) return invalid();
-      const expiresAt = yield* attempt(() =>
-        provePendingBrowserPairing({
-          db,
-          pairingId: proof.value.pairingId,
-          privateVerifier: proof.value.privateVerifier,
-        })
-      );
+      const expiresAt = yield* provePendingBrowserPairing({
+        db,
+        pairingId: proof.value.pairingId,
+        privateVerifier: proof.value.privateVerifier,
+      }).pipe(Effect.mapError(() => undefined));
       if (Option.isNone(expiresAt)) return invalid();
       const current = yield* Clock.currentTimeMillis;
       const workId = newId();
@@ -257,13 +255,11 @@ export const completeBrowserPairingEmail = (input: {
       const proof = yield* attempt(() => readProof(request, Complete));
       if (Option.isNone(proof)) return invalid();
       {
-        const expiresAt = yield* attempt(() =>
-          provePendingBrowserPairing({
-            db,
-            pairingId: proof.value.pairingId,
-            privateVerifier: proof.value.privateVerifier,
-          })
-        );
+        const expiresAt = yield* provePendingBrowserPairing({
+          db,
+          pairingId: proof.value.pairingId,
+          privateVerifier: proof.value.privateVerifier,
+        }).pipe(Effect.mapError(() => undefined));
         if (Option.isNone(expiresAt)) return invalid();
         const current = yield* Clock.currentTimeMillis;
         const publicCode = proof.value.combinedCode.slice(0, publicCodeLength);

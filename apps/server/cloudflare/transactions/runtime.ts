@@ -11,22 +11,17 @@ import {
   executeCanonicalWork,
   executeOAuthCanonicalWork,
 } from "../canonical-operations/operations";
-import { currentMillis } from "../runtime/operations";
 import { OAuthCanonicalAdmission } from "../../src/shell/mcp/contract";
 import { OAuthRefreshAdmission, OAuthRevocationAdmission } from "../oauth-agents/contract";
 import { executeOAuthRefresh, executeOAuthRevocation } from "../oauth-agents/operations";
 import type { HostedCommitFence } from "../agent/contract";
 import { UserId } from "../../src/core/identity/contract";
 
-import { Data, DateTime, Effect, Exit, Option, Schema, type Scope } from "effect";
+import { Clock, Data, DateTime, Effect, Exit, Option, Schema, type Scope } from "effect";
 
 import { optionalHostedInference } from "../ai/runtime";
 import type { WorkersAiEnvironment } from "../ai/contract";
-import {
-  type TransactionCaller,
-  transactionNow,
-  transactionUnavailable,
-} from "../canonical-work/operations";
+import { type TransactionCaller, transactionUnavailable } from "../canonical-work/operations";
 import { ForwardedEmailWork, StatementCoordinatorActivity } from "../ingestion/contract";
 import {
   failStatementSubmission,
@@ -45,9 +40,6 @@ import {
 const digestBytes = 32;
 const HTTP_OK = 200;
 const HTTP_ACCEPTED = 202;
-class StatementActivityUnavailable extends Data.TaggedError("StatementActivityUnavailable")<{
-  cause: unknown;
-}> {}
 class EmailActivityUnavailable extends Data.TaggedError("EmailActivityUnavailable") {}
 const httpServiceUnavailable = 503;
 /** Rebuild the exact live subject the work admission was issued for. */
@@ -91,30 +83,26 @@ const executeStatementActivity = (
   userId: string
 ): Effect.Effect<Response> => {
   const { submissionId } = activity;
-  const request =
-    activity._tag === "StatementFailed"
-      ? (): Promise<number> =>
-          failStatementSubmission({
-            DB: environment.DB,
-            userId,
-            submissionId,
-            // The Workflow's bounded retry budget is exhausted; preserve partial outcomes.
-            reason: "resource-limit",
-          }).then(() => HTTP_OK)
-      : (): Promise<number> => {
-          const bucket = environment.STATEMENT_STAGING_BUCKET;
-          if (bucket === undefined) return Promise.resolve(httpServiceUnavailable);
-          return processStatementSubmission({
-            DB: environment.DB,
-            STATEMENT_STAGING_BUCKET: bucket,
-            userId,
-            submissionId,
-          }).then((progress) => (progress === "continue" ? HTTP_ACCEPTED : HTTP_OK));
-        };
-  return Effect.tryPromise({
-    try: request,
-    catch: (cause) => new StatementActivityUnavailable({ cause }),
-  }).pipe(
+  const request = Effect.gen(function* () {
+    if (activity._tag === "StatementFailed") {
+      yield* failStatementSubmission({
+        DB: environment.DB,
+        userId,
+        submissionId,
+        reason: "resource-limit",
+      });
+      return HTTP_OK;
+    }
+    if (environment.STATEMENT_STAGING_BUCKET === undefined) return httpServiceUnavailable;
+    const progress = yield* processStatementSubmission({
+      DB: environment.DB,
+      STATEMENT_STAGING_BUCKET: environment.STATEMENT_STAGING_BUCKET,
+      userId,
+      submissionId,
+    });
+    return progress === "continue" ? HTTP_ACCEPTED : HTTP_OK;
+  });
+  return request.pipe(
     Effect.map((status) => new Response(null, { status })),
     Effect.orElseSucceed(transactionUnavailable)
   );
@@ -146,7 +134,7 @@ const executeCanonicalAdmission = (
       db: environment.DB,
       work: admission.work,
       subject: admissionSubject(admission),
-      current: transactionNow(),
+      current: yield* Clock.currentTimeMillis,
       bucket: Option.fromUndefinedOr(environment.STATEMENT_STAGING_BUCKET),
       hostedFence,
       inference,
@@ -278,10 +266,13 @@ const privateOAuthCanonicalWork = (
     return Effect.succeed(transactionUnavailable());
   }
   const admitted = oauth.value;
-  if (input.request.signal.aborted || currentMillis() >= admitted.deadlineMilliseconds) {
-    return Effect.succeed(transactionUnavailable());
-  }
   return Effect.gen(function* () {
+    if (
+      input.request.signal.aborted ||
+      (yield* Clock.currentTimeMillis) >= admitted.deadlineMilliseconds
+    ) {
+      return transactionUnavailable();
+    }
     const inference = yield* optionalHostedInference({
       environment: input.environment,
       db: input.environment.DB,
@@ -324,12 +315,15 @@ const privateWeeklyActivity = (
     return Option.some(Effect.succeed(transactionUnavailable()));
   }
   return Option.some(
-    executeWeeklyWork({
-      environment: input.environment,
-      userId: UserId.make(input.userId),
-      work: work.value,
-      now: DateTime.makeUnsafe(transactionNow()),
-    }).pipe(
+    DateTime.now.pipe(
+      Effect.flatMap((now) =>
+        executeWeeklyWork({
+          environment: input.environment,
+          userId: UserId.make(input.userId),
+          work: work.value,
+          now,
+        })
+      ),
       Effect.map((result) => Response.json(result, { headers: { "cache-control": "no-store" } })),
       Effect.orElseSucceed(transactionUnavailable)
     )

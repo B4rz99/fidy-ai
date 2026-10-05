@@ -560,7 +560,9 @@ const seedWebSession = (db: D1Database, token: string): Promise<number> =>
       const pairing: { pairingId: string } = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ pairingId: Schema.String })
       )(
-        yield* Effect.tryPromise(() => startBrowserPairing(db).then((awaited1) => awaited1.json()))
+        yield* startBrowserPairing(db).pipe(
+          Effect.flatMap((response) => Effect.tryPromise(() => response.json()))
+        )
       );
 
       const started = yield* Clock.currentTimeMillis;
@@ -1381,7 +1383,9 @@ it("rejects unproved support recovery without creating a case or approving a pai
       const pairing: { pairingId: string; publicCode: string } = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ pairingId: Schema.String, publicCode: Schema.String })
       )(
-        yield* Effect.tryPromise(() => startBrowserPairing(db).then((awaited0) => awaited0.json()))
+        yield* startBrowserPairing(db).pipe(
+          Effect.flatMap((response) => Effect.tryPromise(() => response.json()))
+        )
       );
       const response = yield* Effect.tryPromise(() =>
         sendRequest(
@@ -1429,8 +1433,8 @@ it("binds an Access-approved recovery case to one stable User, consumes its code
             privateVerifier: Schema.String,
           })
         )(
-          yield* Effect.tryPromise(() =>
-            startBrowserPairing(db).then((awaited1) => awaited1.json())
+          yield* startBrowserPairing(db).pipe(
+            Effect.flatMap((response) => Effect.tryPromise(() => response.json()))
           )
         );
       const { publicKey, privateKey } = yield* Effect.tryPromise(() => generateKeyPair("RS256"));
@@ -1478,8 +1482,8 @@ it("binds an Access-approved recovery case to one stable User, consumes its code
         yield* Schema.decodeUnknownEffect(
           Schema.Struct({ pairingId: Schema.String, publicCode: Schema.String })
         )(
-          yield* Effect.tryPromise(() =>
-            startBrowserPairing(db).then((awaited0) => awaited0.json())
+          yield* startBrowserPairing(db).pipe(
+            Effect.flatMap((response) => Effect.tryPromise(() => response.json()))
           )
         );
       expect(
@@ -1542,7 +1546,11 @@ it("binds an Access-approved recovery case to one stable User, consumes its code
       ).toBe(0);
       const expiredPairing = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ pairingId: Schema.String, publicCode: Schema.String })
-      )(yield* Effect.tryPromise(() => startBrowserPairing(db).then((result) => result.json())));
+      )(
+        yield* startBrowserPairing(db).pipe(
+          Effect.flatMap((response) => Effect.tryPromise(() => response.json()))
+        )
+      );
       yield* Effect.tryPromise(() =>
         db
           .prepare(
@@ -1728,7 +1736,11 @@ it("keeps unexpected recovery defects out of operational failures and observes o
       )(yield* Effect.tryPromise(() => send(code).then((result) => result.json())));
       const pairing: { publicCode: string } = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ publicCode: Schema.String })
-      )(yield* Effect.tryPromise(() => startBrowserPairing(db).then((result) => result.json())));
+      )(
+        yield* startBrowserPairing(db).pipe(
+          Effect.flatMap((response) => Effect.tryPromise(() => response.json()))
+        )
+      );
       const { publicKey, privateKey } = yield* Effect.tryPromise(() => generateKeyPair("RS256"));
       const jwk = {
         ...(yield* Effect.tryPromise(() => exportJWK(publicKey))),
@@ -1801,11 +1813,12 @@ it("does not impose a shared login lockout after concurrent pairing starts", () 
   Effect.runPromise(
     Effect.gen(function* () {
       const { db } = yield* Effect.tryPromise(() => setup());
-      const starts = yield* Effect.tryPromise(() =>
-        Promise.all(Array.from({ length: 101 }, () => startBrowserPairing(db)))
+      const starts = yield* Effect.all(
+        Array.from({ length: 101 }, () => startBrowserPairing(db)),
+        { concurrency: 101 }
       );
       expect(starts.every((response) => response.status === 200)).toBe(true);
-      expect((yield* Effect.tryPromise(() => startBrowserPairing(db))).status).toBe(200);
+      expect((yield* startBrowserPairing(db)).status).toBe(200);
     })
   ));
 
@@ -1859,7 +1872,9 @@ it("invalidates a browser pairing after five incorrect private verifiers", () =>
       const ready: typeof pairing = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
       )(
-        yield* Effect.tryPromise(() => startBrowserPairing(db).then((awaited0) => awaited0.json()))
+        yield* startBrowserPairing(db).pipe(
+          Effect.flatMap((response) => Effect.tryPromise(() => response.json()))
+        )
       );
       yield* Effect.tryPromise(() =>
         db
@@ -2155,8 +2170,8 @@ it(
         const pairing = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
         )(
-          yield* Effect.tryPromise(() =>
-            startBrowserPairing(db).then((response) => response.json())
+          yield* startBrowserPairing(db).pipe(
+            Effect.flatMap((response) => Effect.tryPromise(() => response.json()))
           )
         );
         const accepted = yield* Effect.tryPromise(() =>
@@ -2240,7 +2255,9 @@ it("redeems one approved pairing under concurrent replay without accepting a fix
       const pairing = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
       )(
-        yield* Effect.tryPromise(() => startBrowserPairing(db).then((response) => response.json()))
+        yield* startBrowserPairing(db).pipe(
+          Effect.flatMap((response) => Effect.tryPromise(() => response.json()))
+        )
       );
       yield* Effect.tryPromise(() =>
         db

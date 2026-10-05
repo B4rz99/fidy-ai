@@ -14,7 +14,7 @@ import {
 import { UserActionRequired, ValidationFailed } from "../../../src/shell/public-http/contract";
 import { buildPATDisclosure } from "../../../src/core/tokens/operations";
 import { issueManualPAT } from "../../../src/shell/tokens/operations";
-import { type Cause, DateTime, Effect, Option, Redacted, Result, Schema } from "effect";
+import { type Cause, Clock, DateTime, Effect, Option, Redacted, Result, Schema } from "effect";
 import { grantManualPATConsent } from "../../../src/shell/consent/operations";
 import {
   type SessionRow,
@@ -38,7 +38,6 @@ import {
   webSession,
 } from "./pat-shared";
 import { newId } from "../../secret-material/operations";
-import { currentMillis } from "../../runtime/operations";
 import { commitPATUnit } from "./pat-unit";
 import { prepareOwnedStatement } from "../../database/operations";
 
@@ -212,10 +211,11 @@ const failedIssuance = (
     if (prior !== null) return consumed();
     const standing = yield* readConsentStatus({ db, userId });
     if (standing === "Revoked") return consentActionRequired();
+    const current = yield* Clock.currentTimeMillis;
     const issued = yield* Effect.tryPromise(() =>
       db
         .prepare("SELECT count(*) AS total FROM pats WHERE user_id = ? AND issued_at_ms > ?")
-        .bind(userId, currentMillis() - issuanceWindowMilliseconds)
+        .bind(userId, current - issuanceWindowMilliseconds)
         .first<{ total: number }>()
     );
     return issued !== null && issued.total >= maxIssuancesPerUserWindow
@@ -227,33 +227,35 @@ const failedIssuance = (
 export const createManualPAT = ({
   request,
   db,
-}: Readonly<{ request: Request; db: D1Database }>): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const session = yield* Effect.tryPromise(() => webSession({ request, db, fresh: true }));
-      if (Option.isNone(session)) return unauthorized();
-      const input = yield* Effect.tryPromise(() =>
-        decodeBody({ request, schema: Schema.toCodecJson(CreateManualPATPayload) })
-      );
-      if (Option.isNone(input)) return invalidReview();
-      const current = currentMillis();
-      const expiry = expiryFor(input.value.grant, current);
-      if (Option.isNone(expiry)) return expiredReview();
-      const shortId = newShortId();
-      const issue = {
-        input: input.value,
-        session: session.value,
-        current,
-        expires: expiry.value,
-        shortId,
-        patId: newId(),
-        bearer: newBearer(shortId),
-      };
-      const committed = yield* commitIssuance(db, issue).pipe(Effect.result);
-      if (Result.isSuccess(committed) && committed.success) {
-        const issued = yield* Effect.try(() => issuedResponse(issue)).pipe(Effect.result);
-        if (Result.isSuccess(issued)) return issued.success;
-      }
-      return yield* failedIssuance(db, input.value.requestId, session.value.user_id);
-    })
-  );
+}: Readonly<{ request: Request; db: D1Database }>): Effect.Effect<
+  Response,
+  Cause.UnknownError | ConsentUnavailable
+> =>
+  Effect.gen(function* () {
+    const session = yield* webSession({ request, db, fresh: true });
+    if (Option.isNone(session)) return unauthorized();
+    const input = yield* decodeBody({
+      request,
+      schema: Schema.toCodecJson(CreateManualPATPayload),
+    });
+    if (Option.isNone(input)) return invalidReview();
+    const current = yield* Clock.currentTimeMillis;
+    const expiry = expiryFor(input.value.grant, current);
+    if (Option.isNone(expiry)) return expiredReview();
+    const shortId = newShortId();
+    const issue = {
+      input: input.value,
+      session: session.value,
+      current,
+      expires: expiry.value,
+      shortId,
+      patId: newId(),
+      bearer: newBearer(shortId),
+    };
+    const committed = yield* commitIssuance(db, issue).pipe(Effect.result);
+    if (Result.isSuccess(committed) && committed.success) {
+      const issued = yield* Effect.try(() => issuedResponse(issue)).pipe(Effect.result);
+      if (Result.isSuccess(issued)) return issued.success;
+    }
+    return yield* failedIssuance(db, input.value.requestId, session.value.user_id);
+  });

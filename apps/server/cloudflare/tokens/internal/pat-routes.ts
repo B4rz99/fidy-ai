@@ -4,10 +4,14 @@ import { claimPATPairing } from "./pat-claim";
 import { approvePATPairing, inspectPATPairing, startPATPairing } from "./pat-pairing";
 import { createManualPAT, listPATs, revokeAllPATs, revokePAT } from "./pat-management";
 import { matchesRoute } from "../../routing/operations";
+import { type Cause, Effect, type Schema } from "effect";
+import type { ConsentUnavailable } from "../../consent/contract";
+
+type PATHandlerFailure = Cause.UnknownError | Schema.SchemaError | ConsentUnavailable;
 
 type PATHandler = (
   input: Readonly<{ request: Request; db: D1Database; path: string }>
-) => Promise<Response>;
+) => Effect.Effect<Response, PATHandlerFailure>;
 type OperationName =
   | keyof typeof PATPairingDirectGroup.endpoints
   | keyof typeof PATsGroup.endpoints;
@@ -19,7 +23,7 @@ const handlers = {
   listPATs,
   createManualPAT,
   revokeAllPATs,
-  revokePAT: ({ request, db, path }): Promise<Response> =>
+  revokePAT: ({ request, db, path }): Effect.Effect<Response, PATHandlerFailure> =>
     revokePAT({ request, db, shortId: path.split("/").at(-1) ?? "" }),
 } satisfies Record<OperationName, PATHandler>;
 const handlersByName: ReadonlyMap<string, PATHandler> = new Map(Object.entries(handlers));
@@ -58,11 +62,11 @@ export const patMethods = (path: string): ReadonlyArray<string> =>
 export const handlePATRequest = ({
   request,
   db,
-}: Readonly<{ request: Request; db: D1Database }>): Promise<Response> => {
+}: Readonly<{ request: Request; db: D1Database }>): Effect.Effect<Response, PATHandlerFailure> => {
   const path = new URL(request.url).pathname;
   const route = forPath(path).find((candidate) => candidate.method === request.method);
   const handler = route === undefined ? undefined : handlersByName.get(route.name);
   return handler === undefined
-    ? Promise.resolve(Response.json({ status: "method_not_allowed" }, { status: 405 }))
+    ? Effect.succeed(Response.json({ status: "method_not_allowed" }, { status: 405 }))
     : handler({ request, db, path });
 };

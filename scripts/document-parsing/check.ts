@@ -213,7 +213,7 @@ try {
         if (ready) return;
       }
       throw new Error("Document parser workerd did not start");
-    })
+    }).pipe(Effect.timeout("15 seconds"))
   );
 
   const debuggerUrl = await inspectorTarget({ port: inspectorPort, signal: Option.none() });

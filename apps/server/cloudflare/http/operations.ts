@@ -1,4 +1,4 @@
-import { Cause, Effect, Option, Schema, Stream } from "effect";
+import { Cause, Effect, Option, Schema } from "effect";
 import {
   BoundedBodyReadFailed,
   RequestBodyCapacityExceeded,
@@ -10,10 +10,14 @@ import {
 /** Fails when the request aborts and removes its listener when the waiting fiber is interrupted. */
 export const awaitRequestAbort = (request: Request): Effect.Effect<never, BoundedBodyReadFailed> =>
   Effect.callback((resume, fiberSignal) => {
-    const onAbort = (): void =>
+    const onAbort = (): void => {
+      // A synchronous resume bypasses callback's returned finalizer in installed Effect 4.
+      cleanup();
       resume(Effect.fail(new BoundedBodyReadFailed({ reason: "cancelled" })));
+    };
     const cleanup = (): void => request.signal.removeEventListener("abort", onAbort);
     request.signal.addEventListener("abort", onAbort, { once: true });
+    if (request.signal.aborted) onAbort();
     fiberSignal.addEventListener("abort", cleanup, { once: true });
     return Effect.sync(cleanup);
   });
@@ -36,35 +40,22 @@ export const collectBoundedRequestBody = Effect.fn(function* (
   if (request.body === null) return new Uint8Array();
 
   const body = request.body;
-  const chunks: Array<Uint8Array> = [];
-  let totalBytes = 0;
-  yield* Effect.raceFirst(
-    Stream.fromReadableStream<Uint8Array, BoundedBodyReadFailed>({
-      evaluate: () => body,
-      onError: () => new BoundedBodyReadFailed({ reason: "malformed-file" }),
-    }).pipe(
-      Stream.runForEachWhile((chunk) =>
-        Effect.sync(() => {
-          totalBytes += chunk.byteLength;
-          if (totalBytes > maximumBytes) return false;
-          chunks.push(chunk);
-          return true;
-        })
+  return yield* Effect.raceFirst(
+    Effect.acquireUseRelease(
+      Effect.try({ try: () => body.getReader(), catch: () => new RequestBodyUnreadable() }),
+      (reader) => collectBody(reader, maximumBytes),
+      releaseReader
+    ).pipe(
+      Effect.mapError(
+        (failure) =>
+          new BoundedBodyReadFailed({
+            reason:
+              failure._tag === "RequestBodyCapacityExceeded" ? "resource-limit" : "malformed-file",
+          })
       )
     ),
     awaitRequestAbort(request)
   );
-  if (totalBytes > maximumBytes) {
-    return yield* new BoundedBodyReadFailed({ reason: "resource-limit" });
-  }
-
-  const collected = new Uint8Array(totalBytes);
-  let offset = 0;
-  for (const chunk of chunks) {
-    collected.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return collected;
 });
 
 const releaseLock = (reader: ReadableStreamDefaultReader<unknown>): Effect.Effect<void> =>
@@ -129,6 +120,7 @@ export const readBoundedRequestBody = Effect.fn(function* (
   request: Request,
   policy: RequestBodyPolicy
 ) {
+  if (request.signal.aborted) return yield* Effect.failCause(Cause.interrupt());
   const stream = request.body;
   if (stream === null) return new Uint8Array();
 
@@ -145,36 +137,47 @@ export const readBoundedRequestBody = Effect.fn(function* (
     releaseReader
   );
 
-  return yield* read.pipe(
-    Effect.timeout(policy.deadlineMilliseconds),
-    Effect.mapError((failure) =>
-      Cause.isTimeoutError(failure) ? new RequestBodyDeadlineExceeded() : failure
-    )
+  return yield* Effect.raceFirst(
+    read.pipe(
+      Effect.timeout(policy.deadlineMilliseconds),
+      Effect.mapError((failure) =>
+        Cause.isTimeoutError(failure) ? new RequestBodyDeadlineExceeded() : failure
+      )
+    ),
+    awaitRequestAbort(request).pipe(Effect.catch(() => Effect.failCause(Cause.interrupt())))
   );
 });
 
 /**
  * Decode one bounded JSON request body against a route schema. A non-JSON content type and any
  * unreadable, oversized, late, malformed, or schema-invalid body are all refused as `Option.none`
- * without retaining any body detail.
+ * without retaining any body detail. Request cancellation and caller interruption remain interruption,
+ * never malformed-input absence.
  */
 export const boundedJsonBody = <A extends Schema.ConstraintDecoder<unknown>>({
   request,
   policy,
   schema,
-}: Readonly<{ request: Request; policy: RequestBodyPolicy; schema: A }>): Promise<
+}: Readonly<{ request: Request; policy: RequestBodyPolicy; schema: A }>): Effect.Effect<
   Option.Option<A["Type"]>
-> => {
-  if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
-    return Promise.resolve(Option.none());
-  }
-  return Effect.runPromise(readBoundedRequestBody(request, policy))
-    .then((bytes) => {
-      const parsed: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-      return Schema.decodeUnknownOption(schema)(parsed);
-    })
-    .catch(() => Option.none());
-};
+> =>
+  Effect.gen(function* () {
+    if (request.signal.aborted) return yield* Effect.failCause(Cause.interrupt());
+    if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
+      return Option.none();
+    }
+    return yield* readBoundedRequestBody(request, policy).pipe(
+      Effect.flatMap((bytes) =>
+        Effect.try({
+          try: () => new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+          catch: () => new RequestBodyUnreadable(),
+        })
+      ),
+      Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))),
+      Effect.flatMap(Schema.decodeUnknownEffect(schema)),
+      Effect.option
+    );
+  });
 
 /**
  * The stable id the final segment of this request's path addresses, decoded by that id's own

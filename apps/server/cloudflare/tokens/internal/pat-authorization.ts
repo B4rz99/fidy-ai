@@ -1,11 +1,11 @@
+import type { ConsentUnavailable } from "../../consent/contract";
 import { patBearerPrefix } from "../../../src/core/tokens/contract";
 import { readConsentStatus } from "../../consent/operations";
 import { type CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
 import { decideOperationAccess } from "../../../src/shell/canonical-policy/operations";
 import { userOwnedAgentCapability } from "../../../src/shell/canonical-policy/contract";
-import { type Cause, Effect, Option, Schema } from "effect";
+import { type Cause, Clock, Effect, Option, Schema } from "effect";
 import { PATRow, digest, equalsDigest, scopesFrom, shortLength, validBearer } from "./pat-shared";
-import { currentMillis } from "../../runtime/operations";
 import { type AuthorizedPAT, type PATAuthorizationDecision } from "../contract";
 
 const StoredPAT = Schema.Struct({ ...PATRow.fields, bearer_digest: Schema.Array(Schema.Int) });
@@ -28,7 +28,10 @@ const authenticate = (
     );
     const pat = Schema.decodeUnknownOption(StoredPAT)(raw);
     if (Option.isNone(pat)) return Option.none();
-    if (pat.value.revoked_at_ms !== null || pat.value.expires_at_ms <= currentMillis()) {
+    if (
+      pat.value.revoked_at_ms !== null ||
+      pat.value.expires_at_ms <= (yield* Clock.currentTimeMillis)
+    ) {
       return Option.none();
     }
     const candidate = yield* Effect.tryPromise(() => digest(bearer));
@@ -51,50 +54,48 @@ export const resolveCanonicalPATCredential = ({
   request,
   db,
   operation,
-}: Readonly<{ request: Request; db: D1Database; operation: CatalogOperation }>): Promise<
-  AuthorizedPAT | "unauthenticated" | "user_action_required"
+}: Readonly<{ request: Request; db: D1Database; operation: CatalogOperation }>): Effect.Effect<
+  AuthorizedPAT | "unauthenticated" | "user_action_required",
+  Cause.UnknownError | ConsentUnavailable
 > =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const pat = yield* authenticate(request, db);
-      if (Option.isNone(pat) || Option.isNone(scopesFrom(pat.value.scopes_json))) {
-        return "unauthenticated";
-      }
-      if ((yield* readConsentStatus({ db, userId: pat.value.user_id })) === "Revoked") {
-        return "user_action_required";
-      }
-      return {
-        patId: pat.value.id,
-        userId: pat.value.user_id,
-        digest: new Uint8Array(pat.value.bearer_digest),
-        requiredScope: userOwnedAgentCapability(operation.policy.access),
-      };
-    })
-  );
+  Effect.gen(function* () {
+    const pat = yield* authenticate(request, db);
+    if (Option.isNone(pat) || Option.isNone(scopesFrom(pat.value.scopes_json))) {
+      return "unauthenticated";
+    }
+    if ((yield* readConsentStatus({ db, userId: pat.value.user_id })) === "Revoked") {
+      return "user_action_required";
+    }
+    return {
+      patId: pat.value.id,
+      userId: pat.value.user_id,
+      digest: new Uint8Array(pat.value.bearer_digest),
+      requiredScope: userOwnedAgentCapability(operation.policy.access),
+    };
+  });
 
 /** Every declared operation uses the same bearer, subject, expiry and policy decision. */
 export const authorizeCanonicalPAT = ({
   request,
   db,
   operation,
-}: Readonly<{ request: Request; db: D1Database; operation: CatalogOperation }>): Promise<
-  AuthorizedPAT | Exclude<PATAuthorizationDecision, "accepted">
+}: Readonly<{ request: Request; db: D1Database; operation: CatalogOperation }>): Effect.Effect<
+  AuthorizedPAT | Exclude<PATAuthorizationDecision, "accepted">,
+  Cause.UnknownError | ConsentUnavailable
 > =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const pat = yield* authenticate(request, db);
-      if (Option.isNone(pat)) return "unauthenticated";
-      if ((yield* readConsentStatus({ db, userId: pat.value.user_id })) === "Revoked") {
-        return "user_action_required";
-      }
-      const decision = scopeDecision(scopesFrom(pat.value.scopes_json), operation);
-      return decision === "accepted"
-        ? {
-            patId: pat.value.id,
-            userId: pat.value.user_id,
-            digest: new Uint8Array(pat.value.bearer_digest),
-            requiredScope: userOwnedAgentCapability(operation.policy.access),
-          }
-        : decision;
-    })
-  );
+  Effect.gen(function* () {
+    const pat = yield* authenticate(request, db);
+    if (Option.isNone(pat)) return "unauthenticated";
+    if ((yield* readConsentStatus({ db, userId: pat.value.user_id })) === "Revoked") {
+      return "user_action_required";
+    }
+    const decision = scopeDecision(scopesFrom(pat.value.scopes_json), operation);
+    return decision === "accepted"
+      ? {
+          patId: pat.value.id,
+          userId: pat.value.user_id,
+          digest: new Uint8Array(pat.value.bearer_digest),
+          requiredScope: userOwnedAgentCapability(operation.policy.access),
+        }
+      : decision;
+  });

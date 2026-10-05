@@ -11,7 +11,7 @@ import {
   StatementFailureReason,
   type StatementStagingFailureReason,
   StatementStagingId,
-  type StatementSubmission,
+  StatementSubmission,
   StatementSubmissionId,
   maximumOutstandingStatementSubmissions,
   maximumStatementBytes,
@@ -139,13 +139,13 @@ export type ExpiredStatementSubmissions = Readonly<{
 
 /** Stored lifecycle of one submission, exactly as the public projection needs it. */
 export type StoredStatementSubmission = Readonly<{
-  readonly id: string;
+  readonly id: StatementSubmissionId;
   readonly sourceFormat: "csv" | "xlsx";
   readonly parserRevision: string;
   readonly status: typeof StatementSubmissionStatus.Type;
-  readonly submittedAtMs: number;
-  readonly startedAtMs: Option.Option<number>;
-  readonly completedAtMs: Option.Option<number>;
+  readonly submittedAt: DateTime.Utc;
+  readonly startedAt: Option.Option<DateTime.Utc>;
+  readonly completedAt: Option.Option<DateTime.Utc>;
   readonly failureReason: Option.Option<typeof StatementFailureReason.Type>;
   readonly inputRows: Option.Option<number>;
   readonly acceptedRows: Option.Option<number>;
@@ -217,18 +217,18 @@ type SubmissionRow = typeof SubmissionRow.Type;
 /** One owned submission's stored lifecycle, read as the public projection's exact fields. */
 const StoredSubmissionRow = Schema.Struct({
   accepted_rows: Schema.OptionFromNullOr(Schema.Int),
-  completed_at_ms: Schema.OptionFromNullOr(Schema.Int),
+  completed_at_ms: Schema.OptionFromNullOr(Schema.DateTimeUtcFromMillis),
   failure_reason: Schema.OptionFromNullOr(StatementFailureReason),
-  id: Schema.String,
+  id: StatementSubmissionId,
   input_rows: Schema.OptionFromNullOr(Schema.Int),
   needs_review_rows: Schema.OptionFromNullOr(Schema.Int),
   parser_revision: Schema.String,
   source_format: Schema.Literals(["csv", "xlsx"]),
-  started_at_ms: Schema.OptionFromNullOr(Schema.Int),
+  started_at_ms: Schema.OptionFromNullOr(Schema.DateTimeUtcFromMillis),
   status: StatementSubmissionStatus,
   skipped_rows: Schema.Int,
   abandoned_rows: Schema.Int,
-  submitted_at_ms: Schema.Int,
+  submitted_at_ms: Schema.DateTimeUtcFromMillis,
 });
 
 /** Bounded publication-admission facts read in one D1 statement under the same binding. */
@@ -316,7 +316,16 @@ const findOwnedStagingRow = (
       )
       .bind(stagingId, userId)
       .first()
-  ).pipe(Effect.map((value) => Schema.decodeUnknownOption(StagingRow)(value)));
+  ).pipe(
+    Effect.flatMap((value) =>
+      value === null
+        ? Effect.succeedNone
+        : Schema.decodeUnknownEffect(StagingRow)(value).pipe(
+            Effect.asSome,
+            Effect.mapError(() => unavailable())
+          )
+    )
+  );
 
 const findSubmissionByKey = (
   database: D1Database,
@@ -331,7 +340,16 @@ const findSubmissionByKey = (
       )
       .bind(userId, idempotencyKey)
       .first()
-  ).pipe(Effect.map((value) => Schema.decodeUnknownOption(SubmissionRow)(value)));
+  ).pipe(
+    Effect.flatMap((value) =>
+      value === null
+        ? Effect.succeedNone
+        : Schema.decodeUnknownEffect(SubmissionRow)(value).pipe(
+            Effect.asSome,
+            Effect.mapError(() => unavailable())
+          )
+    )
+  );
 
 /** Marks one abandoned upload's row deleting before any object delete, so the bounded sweep can
  * always find the object again from durable state. */
@@ -939,10 +957,10 @@ type SubmissionBase = Readonly<{
 }>;
 
 const submissionBase = (stored: StoredStatementSubmission): SubmissionBase => ({
-  id: StatementSubmissionId.make(stored.id),
+  id: stored.id,
   parserRevision: stored.parserRevision,
   sourceFormat: stored.sourceFormat,
-  submittedAt: DateTime.makeUnsafe(stored.submittedAtMs),
+  submittedAt: stored.submittedAt,
 });
 
 /** A failed submission can only project when it kept its timestamps and its closed failure reason. */
@@ -951,15 +969,15 @@ const failedProjection = (
   stored: StoredStatementSubmission
 ): Option.Option<StatementSubmission> => {
   if (
-    Option.isNone(stored.startedAtMs) ||
-    Option.isNone(stored.completedAtMs) ||
+    Option.isNone(stored.startedAt) ||
+    Option.isNone(stored.completedAt) ||
     Option.isNone(stored.failureReason)
   ) {
     return Option.none();
   }
   return Option.some({
     ...base,
-    completedAt: DateTime.makeUnsafe(stored.completedAtMs.value),
+    completedAt: stored.completedAt.value,
     failureReason: stored.failureReason.value,
     ...(Option.isSome(stored.inputRows) &&
     Option.isSome(stored.acceptedRows) &&
@@ -973,7 +991,7 @@ const failedProjection = (
           },
         }
       : {}),
-    startedAt: DateTime.makeUnsafe(stored.startedAtMs.value),
+    startedAt: stored.startedAt.value,
     status: "failed",
   });
 };
@@ -991,8 +1009,8 @@ const completedProjection = (
   stored: StoredStatementSubmission
 ): Option.Option<StatementSubmission> => {
   if (
-    Option.isNone(stored.startedAtMs) ||
-    Option.isNone(stored.completedAtMs) ||
+    Option.isNone(stored.startedAt) ||
+    Option.isNone(stored.completedAt) ||
     Option.isNone(stored.inputRows) ||
     Option.isNone(stored.acceptedRows) ||
     Option.isNone(stored.needsReviewRows)
@@ -1007,19 +1025,19 @@ const completedProjection = (
       needsReviewRows: stored.needsReviewRows.value,
       ...decisionAccounting(stored),
     },
-    startedAt: DateTime.makeUnsafe(stored.startedAtMs.value),
+    startedAt: stored.startedAt.value,
   };
   if (stored.status === "awaiting-clarification") {
     return Option.some({ ...settled, status: "awaiting-clarification" });
   }
   return Option.some({
     ...settled,
-    completedAt: DateTime.makeUnsafe(stored.completedAtMs.value),
+    completedAt: stored.completedAt.value,
     status: stored.status === "abandoned" ? "abandoned" : "completed",
   });
 };
 
-/** One stored submission rebuilt into the canonical projection; an impossible row is absent. */
+/** Rebuilds retained lifecycle fields; None signals corrupt state, never a missing submission. */
 export const submissionProjection = (
   stored: StoredStatementSubmission
 ): Option.Option<StatementSubmission> => {
@@ -1033,9 +1051,9 @@ export const submissionProjection = (
   ) {
     return completedProjection(base, stored);
   }
-  return Option.map(stored.startedAtMs, (startedAtMs) => ({
+  return Option.map(stored.startedAt, (startedAt) => ({
     ...base,
-    startedAt: DateTime.makeUnsafe(startedAtMs),
+    startedAt,
     status: "processing",
   }));
 };
@@ -1492,25 +1510,36 @@ export const readOwnedStatementSubmission: {
         .bind(input.submissionId, input.userId)
         .first()
     ).pipe(
-      Effect.map((value) =>
-        Option.map(
-          Schema.decodeUnknownOption(StoredSubmissionRow)(value),
-          (row): StoredStatementSubmission => ({
-            acceptedRows: row.accepted_rows,
-            skippedRows: row.skipped_rows,
-            abandonedRows: row.abandoned_rows,
-            completedAtMs: row.completed_at_ms,
-            failureReason: row.failure_reason,
-            id: row.id,
-            inputRows: row.input_rows,
-            needsReviewRows: row.needs_review_rows,
-            parserRevision: row.parser_revision,
-            sourceFormat: row.source_format,
-            startedAtMs: row.started_at_ms,
-            status: row.status,
-            submittedAtMs: row.submitted_at_ms,
-          })
-        )
+      Effect.flatMap((value) =>
+        value === null
+          ? Effect.succeedNone
+          : Schema.decodeUnknownEffect(StoredSubmissionRow)(value).pipe(
+              Effect.flatMap((row) => {
+                const stored: StoredStatementSubmission = {
+                  acceptedRows: row.accepted_rows,
+                  skippedRows: row.skipped_rows,
+                  abandonedRows: row.abandoned_rows,
+                  completedAt: row.completed_at_ms,
+                  failureReason: row.failure_reason,
+                  id: row.id,
+                  inputRows: row.input_rows,
+                  needsReviewRows: row.needs_review_rows,
+                  parserRevision: row.parser_revision,
+                  sourceFormat: row.source_format,
+                  startedAt: row.started_at_ms,
+                  status: row.status,
+                  submittedAt: row.submitted_at_ms,
+                };
+                const projection = submissionProjection(stored);
+                return Option.isNone(projection)
+                  ? Effect.fail(unavailable())
+                  : Schema.decodeEffect(Schema.toType(StatementSubmission))(projection.value).pipe(
+                      Effect.as(Option.some(stored)),
+                      Effect.mapError(unavailable)
+                    );
+              }),
+              Effect.mapError(() => unavailable())
+            )
       )
     )
 );

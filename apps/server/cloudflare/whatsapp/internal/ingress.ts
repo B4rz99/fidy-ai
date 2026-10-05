@@ -90,8 +90,18 @@ const boundedBody = (request: Request): Effect.Effect<Option.Option<Uint8Array>,
         return Option.some(body);
       }),
     (reader) =>
-      Effect.exit(attempt(() => reader.cancel())).pipe(
-        Effect.andThen(Effect.sync(() => reader.releaseLock()))
+      Effect.sync(() => {
+        try {
+          reader.cancel().catch(() => undefined);
+        } catch {
+          // Foreign cancellation must not prevent releasing the owned reader lock.
+        }
+      }).pipe(
+        Effect.ensuring(
+          Effect.try({ try: () => reader.releaseLock(), catch: () => undefined }).pipe(
+            Effect.ignore
+          )
+        )
       )
   );
 };
@@ -273,19 +283,17 @@ const routeTextInbound = (
     if (approval !== null) {
       const code = approval[1];
       if (code === undefined) return answer(HTTP_CONFLICT);
-      return yield* attempt(() =>
-        approveBrowserPairing({
-          db: environment.DB,
-          input: {
-            portfolioId: environment.WHATSAPP_BUSINESS_PORTFOLIO_ID,
-            bsuid: input.event.caller.businessScopedUserId,
-            messageId: input.event.messageEvidence.providerMessageId,
-            publicCode: code,
-            occurredAtMs: DateTime.toEpochMillis(input.event.occurredAt),
-            receivedAtMs: input.receivedAtMs,
-          },
-        })
-      );
+      return yield* approveBrowserPairing({
+        db: environment.DB,
+        input: {
+          portfolioId: environment.WHATSAPP_BUSINESS_PORTFOLIO_ID,
+          bsuid: input.event.caller.businessScopedUserId,
+          messageId: input.event.messageEvidence.providerMessageId,
+          publicCode: code,
+          occurredAtMs: DateTime.toEpochMillis(input.event.occurredAt),
+          receivedAtMs: input.receivedAtMs,
+        },
+      });
     }
     const hosted = yield* routeHostedInbound(environment, input);
     if (Option.isSome(hosted)) return hosted.value;

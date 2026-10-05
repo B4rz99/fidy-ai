@@ -56,13 +56,11 @@ const standing = (
   scopedUserId = userId,
   sessionId = requestId
 ): Effect.Effect<unknown, Cause.UnknownError> =>
-  Effect.tryPromise(() =>
-    executeProtectedSubscriptionQuery({
-      db,
-      subject: { id: sessionId, userId: scopedUserId, digest: new Uint8Array(32) },
-      operation: "subscription.getSubscriptionStatus",
-    })
-  ).pipe(Effect.flatMap((response) => Effect.tryPromise(() => response.json())));
+  executeProtectedSubscriptionQuery({
+    db,
+    subject: { id: sessionId, userId: scopedUserId, digest: new Uint8Array(32) },
+    operation: "subscription.getSubscriptionStatus",
+  }).pipe(Effect.flatMap((response) => Effect.tryPromise(() => response.json())));
 
 const workflowFor = (db: D1Database, id: string): Parameters<typeof runRefundWorkflow>[0] => ({
   environment: {
@@ -123,6 +121,61 @@ const call = (db: D1Database, amount = "4000", identity = requestId): RefundStar
     reason: "user-request" as const,
   },
 });
+it("uses the inherited Clock for Refund authority admission and retained acceptance time", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fixture();
+      const clock = yield* Clock.Clock;
+      const atTime = (millis: number): Clock.Clock => ({
+        currentTimeMillisUnsafe: () => millis,
+        currentTimeMillis: Effect.succeed(millis),
+        currentTimeNanosUnsafe: () => BigInt(millis) * 1_000_000n,
+        currentTimeNanos: Effect.succeed(BigInt(millis) * 1_000_000n),
+        monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
+        monotonicTimeNanos: clock.monotonicTimeNanos,
+        sleep: (duration) => clock.sleep(duration),
+      });
+      const input = { ...call(db), authority: { ...call(db).authority, expiresAtMs: 100 } };
+      const accepted = yield* startRefund(input).pipe(
+        Effect.provideService(Clock.Clock, atTime(50))
+      );
+      expect(accepted.createdAt.epochMilliseconds).toBe(50);
+      const publications: unknown[] = [];
+      const dispatch = {
+        DB: db,
+        BILLING_COLLECTION_QUEUE: {
+          send: (body: unknown): Promise<void> => {
+            publications.push(body);
+            return Promise.resolve();
+          },
+        },
+      };
+      yield* dispatchRefunds(dispatch).pipe(Effect.provideService(Clock.Clock, atTime(75)));
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT last_attempt_at_ms,published_at_ms FROM refund_outbox WHERE refund_id=?"
+            )
+            .bind(accepted.id)
+            .first()
+        )
+      ).toEqual({ last_attempt_at_ms: 75, published_at_ms: 75 });
+      yield* dispatchRefunds(dispatch).pipe(Effect.provideService(Clock.Clock, atTime(60_074)));
+      expect(publications).toHaveLength(1);
+      yield* dispatchRefunds(dispatch).pipe(Effect.provideService(Clock.Clock, atTime(60_075)));
+      expect(publications).toHaveLength(2);
+      const query = { db, authority: input.authority, userId, refundAttemptId: accepted.id };
+      expect(yield* getRefund(query).pipe(Effect.provideService(Clock.Clock, atTime(99)))).toEqual(
+        accepted
+      );
+      assert.deepStrictEqual(
+        yield* getRefund(query).pipe(Effect.provideService(Clock.Clock, atTime(100)), Effect.exit),
+        Exit.fail("unsupported")
+      );
+    })
+  ));
+
 const assertPendingIntegrity = Effect.fnUntraced(function* (
   db: D1Database,
   id: string,
@@ -145,6 +198,37 @@ const assertPendingIntegrity = Effect.fnUntraced(function* (
   );
   expect(retained).toEqual({ outcomes: 0, adjustments: 0, stops: 0, reserved, claims: 1 });
 });
+
+it.each(["succeeded", "failed"] as const)(
+  "keeps corrupt retained %s Refund timestamps in the typed unavailable channel",
+  (status) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* fixture();
+        const accepted = yield* startRefund(call(db));
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "UPDATE refund_attempts SET status = ?, finalized_at_ms = ?, failure = ? WHERE id = ?"
+            )
+            .bind(
+              status,
+              9000000000000000,
+              status === "failed" ? "provider-declined" : null,
+              accepted.id
+            )
+            .run()
+        );
+        assert.deepStrictEqual(
+          yield* Effect.exit(
+            getRefund({ db, authority: call(db).authority, userId, refundAttemptId: accepted.id })
+          ),
+          Exit.fail("unavailable")
+        );
+        assert.deepStrictEqual(yield* Effect.exit(startRefund(call(db))), Exit.fail("unavailable"));
+      })
+    )
+);
 
 it("isolates mismatched coordinator Users and foreign charge identities before any financial acceptance", () =>
   Effect.runPromise(

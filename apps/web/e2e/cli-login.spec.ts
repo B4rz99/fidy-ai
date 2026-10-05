@@ -8,6 +8,7 @@ import {
   type TestProcess,
   scopedProcess,
 } from "../../cli/test/process.test-fixture";
+import { cleanupJourney, scopedJourney } from "./cli-scope.test-fixture";
 import { playwright } from "./playwright-runtime";
 import { signInThroughCore } from "./real-core-fixture";
 
@@ -23,6 +24,15 @@ const wait = <A>(promise: Promise<A>): Effect.Effect<A, CliJourneyFailed> =>
 const entry = Bun.fileURLToPath(new URL("../../cli/test/journey-entry.ts", import.meta.url));
 const outputCodec = Schema.fromJsonString(Schema.toCodecJson(PublicOutput));
 const maximumOutputBytes = 16_384;
+// Playwright does not cancel a timed-out callback. Interrupt the body while its Scope is
+// still owned here; reserve 20s for child escalation and two bounded native cleanup runs.
+const playwrightTimeout = 90_000;
+const journeyBudget = 40_000;
+const cleanupBudget = 5_000;
+const teardownReserve = 20_000;
+// This single-test file is evaluated before fixture setup: charging all time since load
+// conservatively includes setup without using Playwright's private timeout manager.
+const loadedAt = performance.now();
 type Complete = (
   args: ReadonlyArray<string>
 ) => Effect.Effect<string, CliJourneyFailed | ProcessUnavailable>;
@@ -228,10 +238,7 @@ const cliJourney = Effect.fn(function* ({
   });
   // Registered before children: their kill-and-await finalizers run before native cleanup.
   yield* Effect.addFinalizer(() =>
-    Effect.gen(function* () {
-      yield* (yield* spawn(["logout"])).exited;
-      expect(yield* (yield* spawn(["cleanup"])).exited).toBe(0);
-    }).pipe(Effect.scoped, Effect.orDie)
+    cleanupJourney(complete(["logout"]), complete(["cleanup"]), cleanupBudget)
   );
   const child = yield* spawn([
     "login",
@@ -256,10 +263,17 @@ const cliJourney = Effect.fn(function* ({
   yield* auditJourney(request);
 });
 
+test.setTimeout(playwrightTimeout);
+
 test("a web-approved native CLI login queries, mutates and batches through real public/Core with attributable Audit", ({
   page,
   request,
-}) =>
-  Effect.runPromise(
-    cliJourney({ page, request }).pipe(Effect.scoped, Effect.provide(BunFileSystem.layer))
-  ));
+}) => {
+  const remaining = playwrightTimeout - (performance.now() - loadedAt) - teardownReserve;
+  if (remaining <= 0) throw new CliJourneyFailed();
+  return Effect.runPromise(
+    scopedJourney(cliJourney({ page, request }), Math.min(journeyBudget, remaining)).pipe(
+      Effect.provide(BunFileSystem.layer)
+    )
+  );
+});

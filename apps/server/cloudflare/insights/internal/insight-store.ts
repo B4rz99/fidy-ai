@@ -28,7 +28,6 @@ import {
   refusedPreparation,
   transactionFailure,
   transactionId,
-  transactionNow,
   transactionUnavailable,
 } from "../../canonical-work/operations";
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
@@ -345,7 +344,7 @@ export const listPendingInsights = ({
       subject,
       operation: "insights.listPendingInsights",
       outcome: "accepted",
-      current: transactionNow(),
+      current: DateTime.toEpochMillis(yield* DateTime.now),
     };
     const url = new URL(request.url);
     const cursor = pendingCursor(url);

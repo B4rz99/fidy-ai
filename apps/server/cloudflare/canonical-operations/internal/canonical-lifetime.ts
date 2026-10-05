@@ -1,5 +1,4 @@
-import { Data, Effect } from "effect";
-import { currentMillis } from "../../runtime/operations";
+import { Clock, Data, Effect } from "effect";
 import { transactionUnavailable } from "../../canonical-work/operations";
 
 class CanonicalLifetimeExpired extends Data.TaggedError("CanonicalLifetimeExpired") {}
@@ -56,13 +55,18 @@ const fencedSession = (
 /** D1 cannot abort an atomic unit. Fence new units and retain the coordination turn until started units settle. */
 const boundedDatabase = (
   database: D1Database,
-  lifetime: Lifetime
+  lifetime: Lifetime,
+  clock: Clock.Clock
 ): Readonly<{ db: D1Database; close: () => Promise<void> }> => {
   let closed = false;
   const pending = new Set<Promise<unknown>>();
   const originals: Statements = new WeakMap();
   const schedule: Schedule = (run) => {
-    if (closed || lifetime.signal.aborted || currentMillis() >= lifetime.deadlineMilliseconds) {
+    if (
+      closed ||
+      lifetime.signal.aborted ||
+      clock.currentTimeMillisUnsafe() >= lifetime.deadlineMilliseconds
+    ) {
       throw new CanonicalLifetimeExpired();
     }
     const unit = run();
@@ -107,9 +111,10 @@ export const withCanonicalLifetime = (
 ): Effect.Effect<Response> =>
   Effect.scoped(
     Effect.gen(function* () {
-      const remaining = input.deadlineMilliseconds - currentMillis();
+      const clock = yield* Clock.Clock;
+      const remaining = input.deadlineMilliseconds - clock.currentTimeMillisUnsafe();
       if (input.signal.aborted || remaining <= 0) return transactionUnavailable();
-      const scope = boundedDatabase(input.db, input);
+      const scope = boundedDatabase(input.db, input, clock);
       yield* Effect.addFinalizer(() =>
         Effect.tryPromise({ try: scope.close, catch: () => new CanonicalLifetimeExpired() }).pipe(
           Effect.ignore

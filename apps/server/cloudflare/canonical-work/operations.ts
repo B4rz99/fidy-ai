@@ -347,16 +347,18 @@ export const rejectInvalidTransactionInput = ({
   db,
   subject,
   operation,
+  current,
 }: Readonly<{
   db: D1Database;
   subject: TransactionCaller;
   operation: TransactionMutationOperation;
+  current: number;
 }>): Promise<Response> =>
   rejectTransactionMutation({
     db,
     subject,
     operation,
-    current: transactionNow(),
+    current,
     refusal: { outcome: "validation_failed", message: invalidTransactionMessage },
   });
 

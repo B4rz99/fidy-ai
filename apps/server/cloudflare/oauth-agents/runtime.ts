@@ -1,4 +1,4 @@
-import { Effect, Option, type PlatformError, Schema } from "effect";
+import { Clock, Effect, Option, type PlatformError, Schema } from "effect";
 import {
   OAuthSource,
   oauthIssuer,
@@ -16,7 +16,6 @@ import {
   type ResourceAdmissionUnavailable,
 } from "../resource-admission/contract";
 import { admitResource, releaseOutstandingResource } from "../resource-admission/operations";
-import { currentMillis } from "../runtime/operations";
 import { awaitRequestAbort } from "../http/operations";
 import { newId } from "../secret-material/operations";
 import { oauthResponse as response } from "./internal/response";
@@ -95,10 +94,10 @@ const policies = Schema.decodeSync(ResourceAdmissionPolicies)([
     limit: 32,
   },
 ]);
-const authority = (db: D1Database): ResourceAdmissionAuthorityConfig => ({
+const authority = (db: D1Database, clock: Clock.Clock): ResourceAdmissionAuthorityConfig => ({
   database: db,
   policies,
-  nowEpochMs: () => ResourceAdmissionEpochMs.make(currentMillis()),
+  nowEpochMs: () => ResourceAdmissionEpochMs.make(clock.currentTimeMillisUnsafe()),
 });
 const charge = (
   input: Readonly<{ db: D1Database; source: string; kind: "bootstrap" | "registration" | "user" }>
@@ -116,7 +115,7 @@ const charge = (
             scopeKey: index === 0 ? input.source : "oauth",
             units: 1,
           }));
-    return yield* admitResource(authority(input.db), {
+    return yield* admitResource(authority(input.db, yield* Clock.Clock), {
       grantId: ResourceAdmissionGrantId.make(newId()),
       charges: yield* Schema.decodeUnknownEffect(ResourceAdmissionCharges)(claims),
       statements: [],
@@ -187,7 +186,7 @@ const executeBootstrap = (
 ): Effect.Effect<Response, BootstrapFailure> =>
   Effect.gen(function* () {
     const path = new URL(input.request.url).pathname;
-    const current = currentMillis();
+    const current = yield* Clock.currentTimeMillis;
     if (path === oauthPaths.register) {
       yield* charge({ ...input, kind: "registration" });
       return yield* registerClient({ ...input, current });
@@ -244,11 +243,12 @@ export const handleOAuthRequest = (input: BootstrapInput): Effect.Effect<Respons
     if (Option.isNone(source)) {
       return response({ body: { error: "temporarily_unavailable" }, status: unavailableStatus });
     }
+    const clock = yield* Clock.Clock;
     return yield* Effect.acquireUseRelease(
       charge({ db: input.db, source: source.value, kind: "bootstrap" }),
       () => executeBootstrap({ ...input, source: source.value }),
       (grant) =>
-        releaseOutstandingResource(authority(input.db), {
+        releaseOutstandingResource(authority(input.db, clock), {
           grantId: grant.grantId,
           statements: [],
         }).pipe(Effect.ignore)

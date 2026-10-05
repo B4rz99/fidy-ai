@@ -1,5 +1,9 @@
 import type { PATSubject } from "../../src/shell/tokens/contract";
 import type { WebSessionSubject } from "../../src/shell/web-session/contract";
+import { Data } from "effect";
+
+/** A PAT operation could not decide or commit; no dependency details cross the boundary. */
+export class PATUnavailable extends Data.TaggedError("PATUnavailable") {}
 
 /** Closed PAT admission outcomes; actual work must recheck the returned proof at commit. */
 export type PATAuthorizationDecision =

@@ -195,13 +195,17 @@ const boundedJson = Effect.fn(function* (response: HttpClientResponse.HttpClient
   }
   return yield* decodeJson(new TextDecoder().decode(bytes));
 });
-const providerJson = Effect.fn(function* (request: HttpClientRequest.HttpClientRequest) {
-  const client = yield* HttpClient.HttpClient;
-  const response = yield* client
-    .execute(request)
-    .pipe(Effect.mapError(() => Error("Provider request failed; inspect traffic state")));
-  return yield* boundedJson(response);
-}, Effect.timeout("10 seconds"));
+const providerJson = Effect.fn(
+  function* (request: HttpClientRequest.HttpClientRequest) {
+    const client = yield* HttpClient.HttpClient;
+    const response = yield* HttpClient.withScope(client)
+      .execute(request)
+      .pipe(Effect.mapError(() => Error("Provider request failed; inspect traffic state")));
+    return yield* boundedJson(response);
+  },
+  Effect.scoped,
+  Effect.timeout("10 seconds")
+);
 const shell = Effect.fn(function* (args: ReadonlyArray<string>) {
   const child = Bun.spawn([...args], {
     cwd: import.meta.dir,

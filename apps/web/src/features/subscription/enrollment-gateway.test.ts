@@ -1,4 +1,4 @@
-import { BigDecimal, Clock, DateTime, Effect, Layer, Redacted, Schema } from "effect";
+import { BigDecimal, Clock, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { HttpClient, type HttpClientError, HttpClientResponse } from "effect/http";
 import { afterEach, expect, it, vi } from "vitest";
 import {
@@ -158,18 +158,18 @@ it.each(["missing-fields", "nequi-fields"] as const)(
         try {
           const result = yield* Effect.exit(
             Effect.tryPromise(() =>
-              makeEnrollmentGateway(client).submit(
-                enrollment,
-                "synthetic@example.invalid",
-                fieldsKind === "missing-fields"
-                  ? undefined
-                  : {
-                      method: "nequi",
-                      phoneNumber: Redacted.make("3991111111"),
-                      signal: mountedSignal(),
-                      onAwaiting: (): void => {},
-                    }
-              )
+              makeEnrollmentGateway(client).submit(enrollment, "synthetic@example.invalid", {
+                fields:
+                  fieldsKind === "missing-fields"
+                    ? Option.none()
+                    : Option.some({
+                        method: "nequi",
+                        phoneNumber: Redacted.make("3991111111"),
+                        signal: mountedSignal(),
+                        onAwaiting: (): void => {},
+                      }),
+                signal: Option.none(),
+              })
             )
           );
           expect(result._tag).toBe("Failure");
@@ -338,3 +338,60 @@ it("submits only approved authority and reuses one PaymentRequestId after an amb
       yield* Effect.tryPromise(() => client.dispose());
     })
   ));
+
+it("aborts card tokenization and prevents Fidy submission when its caller cancels", () => {
+  const controller = new AbortController();
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const started = Promise.withResolvers<void>();
+      const pending = Promise.withResolvers<Response>();
+      let nativeSignal = Option.none<AbortSignal>();
+      let submissions = 0;
+      vi.stubGlobal("fetch", (_url: RequestInfo | URL, options?: RequestInit) => {
+        nativeSignal = Option.fromNullishOr(options?.signal);
+        started.resolve();
+        return pending.promise;
+      });
+      const client = makeSubscriptionEnrollmentClient({
+        apiOrigin: "https://api.test.fidyapp.com",
+        httpClient: Layer.succeed(
+          HttpClient.HttpClient,
+          HttpClient.make(() => {
+            submissions += 1;
+            return Effect.never;
+          })
+        ),
+      });
+      const request = makeEnrollmentGateway(client).submit(
+        { ...prepared(yield* Clock.currentTimeMillis), method: "card" },
+        "synthetic@example.invalid",
+        {
+          fields: Option.some({
+            number: "4242424242424242",
+            cvc: "123",
+            expirationMonth: "12",
+            expirationYear: "2030",
+            cardholderName: "Synthetic",
+          }),
+          signal: Option.some(controller.signal),
+        }
+      );
+      const outcome = request.then(
+        () => "submitted",
+        () => "interrupted"
+      );
+      try {
+        yield* Effect.tryPromise(() => started.promise);
+        controller.abort();
+        yield* Effect.yieldNow;
+        expect(Option.exists(nativeSignal, (signal) => signal.aborted)).toBe(true);
+        expect(yield* Effect.tryPromise(() => outcome)).toBe("interrupted");
+        pending.resolve(Response.json({ data: { id: "tok_test_synthetic", brand: "VISA" } }));
+        yield* Effect.yieldNow;
+        expect(submissions).toBe(0);
+      } finally {
+        yield* Effect.tryPromise(() => client.dispose());
+      }
+    })
+  );
+});

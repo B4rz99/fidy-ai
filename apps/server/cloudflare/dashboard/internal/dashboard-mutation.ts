@@ -403,7 +403,7 @@ export const findDashboardValue = ({
         encode: () => Schema.encodeEffect(Schema.toCodecJson(DashboardDocument))(document),
       });
     }
-    const now = DateTime.nowUnsafe();
+    const now = yield* DateTime.now;
     const facts = yield* loadDashboardFacts({ db, userId, document: found.value.document, now });
     if (Option.isNone(facts)) return Option.none();
     const view = yield* renderDashboardView({

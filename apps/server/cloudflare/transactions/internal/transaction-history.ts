@@ -32,7 +32,6 @@ import {
   isPATCaller,
   missingTransactionMessage,
   transactionNoStore as noStore,
-  transactionNow as now,
   refusedPATWork,
   transactionFailure,
   transactionUnavailable as unavailable,
@@ -627,16 +626,20 @@ export const browseTransactions = ({
 }: {
   db: D1Database;
   selection: Selection;
-}): Promise<Response> => {
-  const query = parseQuery(selection);
-  const current = now();
-  const { subject } = selection;
-  if (Option.isNone(query) && !isPATCaller(subject) && !isOAuthCaller(subject)) {
-    return invalidQueryAudit(db, { ...selection, subject }, current);
-  }
-  return dailyAuditExhausted({ db, userId: subject.userId, current })
-    .then((exhausted) =>
-      exhausted ? rateLimited() : readAuthorizedHistory(db, { selection, query, current })
-    )
-    .catch(failedAudit);
-};
+}): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const query = parseQuery(selection);
+    const current = DateTime.toEpochMillis(yield* DateTime.now);
+    const { subject } = selection;
+    if (Option.isNone(query) && !isPATCaller(subject) && !isOAuthCaller(subject)) {
+      return yield* Effect.tryPromise(() =>
+        invalidQueryAudit(db, { ...selection, subject }, current)
+      );
+    }
+    const exhausted = yield* Effect.tryPromise(() =>
+      dailyAuditExhausted({ db, userId: subject.userId, current })
+    );
+    return exhausted
+      ? rateLimited()
+      : yield* Effect.tryPromise(() => readAuthorizedHistory(db, { selection, query, current }));
+  }).pipe(Effect.catch((error) => Effect.succeed(failedAudit(error.cause))));

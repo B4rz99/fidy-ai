@@ -101,6 +101,20 @@ const ProofForm = ({
   );
 };
 
+const ReplacementUnavailable = (): JSX.Element => (
+  <Alert>
+    <AlertTitle>No pudimos confirmar el cambio de correo</AlertTitle>
+    <AlertDescription>
+      El cambio podría haberse completado. Comprueba tu correo al iniciar sesión antes de solicitar
+      otro cambio.{" "}
+      <Link className="underline" to="/auth/pair">
+        Ir a vinculación
+      </Link>
+      .
+    </AlertDescription>
+  </Alert>
+);
+
 const replacementContent = ({
   complete,
   request,
@@ -139,6 +153,9 @@ const replacementContent = ({
         </AlertDescription>
       </Alert>
     );
+  }
+  if (state._tag === "Unavailable") {
+    return <ReplacementUnavailable />;
   }
   state satisfies Extract<EmailReplacementViewState, { _tag: "Replaced" }>;
   return (

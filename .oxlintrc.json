@@ -428,12 +428,7 @@
                 "message": "core may not import shell. Shell may import core; the arrow only points one way (ARCHITECTURE.md §1). Take what you need as a plain parameter and let the shell supply it."
               },
               {
-                "group": [
-                  "effect/unstable/httpapi",
-                  "effect/unstable/httpapi/**",
-                  "effect/unstable/http",
-                  "effect/unstable/http/**"
-                ],
+                "group": ["effect/http-api", "effect/http-api/**", "effect/http", "effect/http/**"],
                 "message": "core may not import the HTTP modules. A canonical operation's declaration — path, status code, required scope, cost class — is a delivery concern and belongs in the slice's shell contract; core holds the canonical schema and has no knowledge it is served over HTTP (ARCHITECTURE.md §4)."
               }
             ]

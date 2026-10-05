@@ -70,7 +70,9 @@ type PairWork = Readonly<{
 }>;
 
 /** Decode one bounded canonical pair without treating either id as authority. */
-export const transactionPairInput = (request: Request): Promise<Option.Option<typeof Input.Type>> =>
+export const transactionPairInput = (
+  request: Request
+): Effect.Effect<Option.Option<typeof Input.Type>> =>
   boundedJsonBody({ request, policy, schema: Input });
 
 const candidateQuery = `SELECT retained.id, retained.amount, retained.currency,

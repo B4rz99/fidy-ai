@@ -52,28 +52,33 @@ export const completePairing = ({
   });
 
 /** Revoke the exact cookie's session without disclosing whether it existed. */
-export const logout = ({ request, db }: { request: Request; db: D1Database }): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const token = sessionCookie(request);
-      if (Option.isSome(token)) {
-        const current = yield* Clock.currentTimeMillis;
-        const tokenDigest = yield* attempt(() => sessionDigest(token.value));
-        yield* attempt(() =>
-          db
-            .prepare(
-              `UPDATE web_sessions SET revoked_at_ms = ? WHERE token_digest = ? AND revoked_at_ms IS NULL`
-            )
-            .bind(current, tokenDigest)
-            .run()
-        );
-      }
-      return new Response(null, {
-        status: 204,
-        headers: {
-          "set-cookie": "__Host-fidy_session=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0",
-          "cache-control": "no-store",
-        },
-      });
-    })
-  );
+export const logout = ({
+  request,
+  db,
+}: {
+  request: Request;
+  db: D1Database;
+}): Effect.Effect<Response, void> =>
+  Effect.gen(function* () {
+    const token = sessionCookie(request);
+    if (Option.isSome(token)) {
+      const current = yield* Clock.currentTimeMillis;
+      const tokenDigest = yield* attempt(() => sessionDigest(token.value));
+      // D1 does not abort a submitted revocation; retain ownership of its callback only.
+      yield* attempt(() =>
+        db
+          .prepare(
+            `UPDATE web_sessions SET revoked_at_ms = ? WHERE token_digest = ? AND revoked_at_ms IS NULL`
+          )
+          .bind(current, tokenDigest)
+          .run()
+      ).pipe(Effect.uninterruptible);
+    }
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "set-cookie": "__Host-fidy_session=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0",
+        "cache-control": "no-store",
+      },
+    });
+  });

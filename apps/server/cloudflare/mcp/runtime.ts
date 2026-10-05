@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Option, Schema } from "effect";
+import { Clock, Context, Effect, Layer, Option, Schema } from "effect";
 import { McpProtocol, McpSchema, McpServer } from "effect/ai";
 import { HttpRouter } from "effect/http";
 import { operationCatalog } from "../../src/shell/api";
@@ -13,7 +13,6 @@ import { decideOperationAccess } from "../../src/shell/canonical-policy/operatio
 import { RequestBodyPolicy } from "../http/contract";
 import { awaitRequestAbort, readBoundedRequestBody } from "../http/operations";
 import { authenticateOAuth } from "../oauth-agents/operations";
-import { currentMillis } from "../runtime/operations";
 import { protectCanonicalPressure } from "../canonical-admission/operations";
 
 const queryLifetimeMilliseconds = 3000;
@@ -90,7 +89,7 @@ const executeAdmittedTool = (
       clientId: input.subject.clientId,
       resource: input.subject.resource,
       digest: Array.from(input.subject.digest),
-      deadlineMilliseconds: currentMillis() + queryLifetimeMilliseconds,
+      deadlineMilliseconds: (yield* Clock.currentTimeMillis) + queryLifetimeMilliseconds,
       operation: operation.id,
       input: encodedInput,
     });
@@ -206,7 +205,7 @@ export const handleMcpRequest = (
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
     if (input.request.signal.aborted) return unavailable();
-    const caller = yield* authenticateOAuth({ ...input, current: currentMillis() });
+    const caller = yield* authenticateOAuth({ ...input, current: yield* Clock.currentTimeMillis });
     if (Option.isNone(caller)) return denied();
     const body = yield* readBoundedRequestBody(input.request, bodyPolicy);
     const server = McpServer.layerHttp({
@@ -222,16 +221,20 @@ export const handleMcpRequest = (
         registration({ ...caller.value, db: input.db, coordinator: input.coordinator })
       ).pipe(Layer.provide(server))
     );
-    const handler = HttpRouter.toWebHandler(routes, { disableLogger: true });
+    const clock = yield* Clock.Clock;
+    const handler = HttpRouter.toWebHandler(
+      routes.pipe(Layer.provide(Layer.succeed(Clock.Clock, clock))),
+      { disableLogger: true }
+    );
     const request = new Request(input.request.url, {
       method: input.request.method,
       headers: input.request.headers,
       ...(input.request.method === "POST" ? { body } : {}),
       signal: input.request.signal,
     });
-    const response = yield* Effect.tryPromise(() => handler.handler(request)).pipe(
-      Effect.ensuring(Effect.tryPromise(() => handler.dispose()).pipe(Effect.ignore))
-    );
+    const response = yield* Effect.tryPromise(() =>
+      handler.handler(request, Context.make(Clock.Clock, clock))
+    ).pipe(Effect.ensuring(Effect.tryPromise(() => handler.dispose()).pipe(Effect.ignore)));
     const headers = new Headers(response.headers);
     headers.set("cache-control", "no-store");
     return new Response(response.body, { status: response.status, headers });

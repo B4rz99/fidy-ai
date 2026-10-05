@@ -1,5 +1,5 @@
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
-import { Effect, Exit, Option, Result } from "effect";
+import { Cause, Effect, Exit, Option, Predicate, Result } from "effect";
 import type { AsyncResult } from "effect/reactivity";
 import { type JSX, useRef, useState } from "react";
 import { Button } from "@/ui/components/button";
@@ -38,14 +38,23 @@ const settledEditQueue = Promise.resolve();
 const rejectedEditError: DashboardEditorError = {
   title: "No pudimos guardar el cambio",
   message: "El cambio fue rechazado. Revisa los valores e intenta de nuevo.",
+  onRefresh: Option.none(),
+};
+const uncertainEditError: DashboardEditorError = {
+  title: "No pudimos confirmar el cambio",
+  message:
+    "El cambio podría haberse guardado. Actualiza el tablero y revísalo antes de intentar otro cambio.",
+  onRefresh: Option.none(),
 };
 const unavailableCatalogError: DashboardEditorError = {
   title: "No pudimos cargar el catálogo",
   message: "Los demás controles siguen disponibles.",
+  onRefresh: Option.none(),
 };
 const staleDashboardError: DashboardEditorError = {
   title: "El cambio se guardó, pero no pudimos actualizar el tablero",
   message: "Mostramos el último tablero disponible. Intenta actualizarlo de nuevo.",
+  onRefresh: Option.none(),
 };
 
 type CanonicalDashboardEdit = DashboardEdit;
@@ -76,7 +85,8 @@ const canonicalEditEffect = Effect.fn("dashboard.applyCanonicalEdit")(function* 
 });
 
 const useQueuedDashboardEdits = (
-  apiClient: FidyClient
+  apiClient: FidyClient,
+  onRefresh: () => void
 ): Readonly<{
   editError: Option.Option<DashboardEditorError>;
   onGesture: (gesture: DashboardGesture) => void;
@@ -103,9 +113,27 @@ const useQueuedDashboardEdits = (
       setEditError(Option.none());
       return applyEdit(compiled.success).then(
         (outcome) => {
-          if (Exit.isFailure(outcome)) setEditError(Option.some(rejectedEditError));
+          if (Exit.isFailure(outcome) && !Cause.hasInterruptsOnly(outcome.cause)) {
+            const refused =
+              !Cause.hasDies(outcome.cause) &&
+              !Cause.hasInterrupts(outcome.cause) &&
+              Option.exists(
+                Cause.findErrorOption(outcome.cause),
+                (failure) =>
+                  Predicate.isTagged(failure, "NotFound") ||
+                  Predicate.isTagged(failure, "ValidationFailed")
+              );
+            setEditError(
+              Option.some(
+                refused
+                  ? rejectedEditError
+                  : { ...uncertainEditError, onRefresh: Option.some(onRefresh) }
+              )
+            );
+          }
         },
-        () => setEditError(Option.some(rejectedEditError))
+        () =>
+          setEditError(Option.some({ ...uncertainEditError, onRefresh: Option.some(onRefresh) }))
       );
     };
     editQueue.current = editQueue.current
@@ -246,7 +274,7 @@ export const DashboardRouteContent = ({
   const [catalogAtom] = useState(() => apiClient.query("dashboard", "listDashboardCatalog", {}));
   const catalogResult = useAtomValue(catalogAtom);
   const refreshCatalog = useAtomRefresh(catalogAtom);
-  const { editError, onGesture, submitting } = useQueuedDashboardEdits(apiClient);
+  const { editError, onGesture, submitting } = useQueuedDashboardEdits(apiClient, onRefresh);
   const dashboardState = presentCanonicalQuery(result);
   if (dashboardState._tag !== "Ready") {
     return (

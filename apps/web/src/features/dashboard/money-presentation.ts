@@ -1,18 +1,15 @@
 import { BigDecimal, Option, Schema } from "effect";
 import type { CanonicalSuccess } from "@/transport/client";
 
-const NumericText = Schema.TemplateLiteral([Schema.Finite]);
+export { formatCurrencyAmount, formatMoney } from "@/ui/money";
 
 type DashboardView = CanonicalSuccess<"dashboard.getDashboardView">["data"];
 type DashboardWidget = Extract<DashboardView["layout"], { readonly kind: "leaf" }>["widget"];
 type MetricResult = Extract<DashboardWidget["result"], { readonly moneyGroups: unknown }>;
 type PresentableMoney = MetricResult["moneyGroups"][number]["inflow"];
-type DashboardLocale = DashboardView["context"]["locale"];
 
-const ExactChartPayload = Schema.Struct({
-  inflowExact: Schema.String,
-  outflowExact: Schema.String,
-});
+const InflowChartPayload = Schema.Struct({ inflowExact: Schema.String });
+const OutflowChartPayload = Schema.Struct({ outflowExact: Schema.String });
 
 /** Reads authoritative tooltip text only from the exact row payload; malformed payloads stay absent. */
 export const exactChartAmount = ({
@@ -22,36 +19,16 @@ export const exactChartAmount = ({
   payload: unknown;
   series: "inflow" | "outflow";
 }>): Option.Option<string> =>
-  Schema.is(ExactChartPayload)(payload)
-    ? Option.some(series === "inflow" ? payload.inflowExact : payload.outflowExact)
-    : Option.none();
+  series === "inflow"
+    ? Option.map(Schema.decodeUnknownOption(InflowChartPayload)(payload), (row) => row.inflowExact)
+    : Option.map(
+        Schema.decodeUnknownOption(OutflowChartPayload)(payload),
+        (row) => row.outflowExact
+      );
 
 /** Preserves canonical decimal text without passing through a binary number. */
 export const moneyDecimalText = (money: PresentableMoney): string =>
-  Schema.decodeUnknownSync(NumericText)(BigDecimal.format(money.amount));
-
-/** Applies only the current User Locale and the Money value's explicit Currency. */
-export const formatCurrencyAmount = ({
-  amount,
-  currency,
-  locale,
-}: Readonly<{
-  amount: string;
-  currency: PresentableMoney["currency"];
-  locale: DashboardLocale;
-}>): string =>
-  new Intl.NumberFormat(locale, {
-    currency,
-    currencyDisplay: "code",
-    style: "currency",
-  }).format(Schema.decodeUnknownSync(NumericText)(amount));
-
-/** Formats authoritative Money text without binary-number rounding. */
-export const formatMoney = ({
-  money,
-  locale,
-}: Readonly<{ money: PresentableMoney; locale: DashboardLocale }>): string =>
-  formatCurrencyAmount({ amount: moneyDecimalText(money), currency: money.currency, locale });
+  BigDecimal.format(money.amount);
 
 const boundedRatio = (
   numerator: Readonly<BigDecimal.BigDecimal>,

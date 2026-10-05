@@ -209,10 +209,7 @@ const identityFailure = (probe: SmokeRequestType, environment: SmokeEnvironment)
 
 const startProbe = Effect.fn(function* (request: Request, environment: SmokeEnvironment) {
   if (Number(request.headers.get("content-length")) > maxBodyBytes) return refused();
-  const decoded = yield* platform({
-    stage: "platform",
-    tryWork: () => boundedJsonBody({ request, policy: bodyPolicy, schema: SmokeRequest }),
-  });
+  const decoded = yield* boundedJsonBody({ request, policy: bodyPolicy, schema: SmokeRequest });
   if (Option.isNone(decoded)) return refused();
   const probe = decoded.value;
   if (probe.expectedGitRevision === smokeDiagnosticRevision || !matchesCore(probe, environment)) {
@@ -319,7 +316,7 @@ export const receiveSmoke = ({
       }
       yield* Effect.forEach(batch.messages, (message) => receiveMessage(message, environment), {
         discard: true,
-        concurrency: "unbounded",
+        concurrency: 4,
       });
     })
   );

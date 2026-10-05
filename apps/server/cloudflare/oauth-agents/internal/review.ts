@@ -16,8 +16,8 @@ import type { FreshSessionSubject } from "../../../src/shell/web-session/contrac
 import { freshSessionConditions } from "../../../src/shell/web-session/operations";
 import { freshBrowserSession } from "../../web-session/operations";
 import {
-  type BootstrapInvalid,
-  type BootstrapUnavailable,
+  BootstrapInvalid,
+  BootstrapUnavailable,
   dbWork,
   decodePayload,
   invalidRequest,
@@ -54,7 +54,7 @@ const forbiddenStatus = 403;
 const Row = Schema.Struct({
   request_json: Schema.String,
   metadata_json: Schema.String,
-  expires_at_ms: Schema.Int,
+  expires_at_ms: Schema.DateTimeUtcFromMillis,
 });
 const Reference = Schema.Struct({ requestId: OAuthRequestId });
 const readReference = (
@@ -97,7 +97,11 @@ const bindPending = (
           .bind(input.requestId, input.session.user_id, input.current, ...guard.params),
       ])
     );
-    return yield* Schema.decodeUnknownEffect(Row)(bound[1]?.results[0]);
+    const raw = bound[1]?.results[0];
+    if (raw === undefined) return yield* new BootstrapInvalid();
+    return yield* Schema.decodeUnknownEffect(Row)(raw).pipe(
+      Effect.mapError(() => new BootstrapUnavailable())
+    );
   });
 const projectReview = (
   input: Readonly<{ row: typeof Row.Type; requestId: string; scopes: PATScopes; current: number }>
@@ -115,7 +119,7 @@ const projectReview = (
         label: oauthScopeCopy[scope].label,
         description: oauthScopeCopy[scope].description,
       })),
-      requestExpiresAt: DateTime.formatIso(DateTime.makeUnsafe(input.row.expires_at_ms)),
+      requestExpiresAt: DateTime.formatIso(input.row.expires_at_ms),
       reviewedAt: DateTime.formatIso(DateTime.makeUnsafe(input.current)),
       connectAvailable: true,
     });

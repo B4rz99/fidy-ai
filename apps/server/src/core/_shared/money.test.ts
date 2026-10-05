@@ -120,6 +120,23 @@ it("adds and compares Money with equal Currency exactly", () => {
   expect(Effect.runSync(compareMoney({ left: money("3"), right: money("2") }))).toBe(1);
 });
 
+it("returns typed CurrencyMismatch before constructing an invalid cross-Currency sum", () => {
+  const jpy = money("1", Currency.make("JPY"));
+  const usd = money("0.01", Currency.make("USD"));
+  for (const operands of [
+    { left: jpy, right: usd },
+    { left: usd, right: jpy },
+  ]) {
+    expect(() => addMoney(operands)).not.toThrow();
+    assert.deepStrictEqual(
+      Effect.runSync(Effect.exit(addMoney(operands))),
+      Exit.fail(
+        new CurrencyMismatch({ left: operands.left.currency, right: operands.right.currency })
+      )
+    );
+  }
+});
+
 it("fails same-Currency operations with the exact CurrencyMismatch class", () => {
   const usd = money("1", Currency.make("USD"));
   const cop = money("1", Currency.make("COP"));

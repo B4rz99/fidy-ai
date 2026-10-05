@@ -107,7 +107,7 @@ const isExpectedResponse = (response: EdgeResponse, status: number): boolean =>
     "referrer-policy": "no-referrer",
   }).every(([name, expected]) => response.headers.get(name) === expected);
 
-const productionProbe = ({
+export const productionProbe = ({
   method,
   path,
   headers,
@@ -125,9 +125,9 @@ const productionProbe = ({
             headers: { "content-type": "application/json", ...headers },
             body: HttpBody.text("{}", "application/json"),
           });
-    const response = yield* client.execute(request);
+    const response = yield* HttpClient.withScope(client).execute(request);
     return { status: response.status, headers: new Headers(response.headers) };
-  }).pipe(Effect.timeout("8 seconds"));
+  }).pipe(Effect.scoped, Effect.timeout("8 seconds"));
 
 if (import.meta.main) {
   const result = await Effect.runPromiseExit(

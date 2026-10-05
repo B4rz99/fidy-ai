@@ -780,6 +780,7 @@ describe("Dashboard edit rejection", () => {
       Option.some({
         title: "No pudimos guardar el cambio",
         message: "El cambio fue rechazado. Revisa los valores e intenta de nuevo.",
+        onRefresh: Option.none(),
       })
     );
 
@@ -794,6 +795,7 @@ describe("Dashboard edit rejection", () => {
       Option.some({
         title: "El cambio se guardó, pero no pudimos actualizar el tablero",
         message: "Mostramos el último tablero disponible. Intenta actualizarlo de nuevo.",
+        onRefresh: Option.none(),
       })
     );
 

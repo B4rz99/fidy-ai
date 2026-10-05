@@ -12,7 +12,7 @@ import {
 } from "../src/shell/transactions/runtime";
 import { ownsMemoryPath as memoryPath } from "../src/shell/memory/runtime";
 import type { TelemetryService } from "../src/shell/observability/contract";
-import { Effect, Option, Schema } from "effect";
+import { Cause, Effect, Option, Schema } from "effect";
 import { type WorkerTelemetryEnvironment } from "./runtime/telemetry/contract";
 import { cloudflareWorkerTelemetry, observeWorkerRequest } from "./runtime/telemetry/operations";
 import { browserOrigins } from "./runtime/contract";
@@ -615,10 +615,10 @@ const routeOwnedRequest = (
   request: Request,
   environment: PublicEnvironment,
   origin: Option.Option<string>
-): Promise<Response> => {
+): Effect.Effect<Response> => {
   const rejection = gateOwnedRequest(request, environment, origin);
   if (Option.isSome(rejection)) {
-    return Promise.resolve(rejection.value);
+    return Effect.succeed(rejection.value);
   }
   return Effect.gen(function* () {
     const forwarded = yield* coreRequest(request, environment);
@@ -659,46 +659,43 @@ const routeOwnedRequest = (
       onFailure: () => smokeUnavailable(request, environment, "public_forwarding"),
       onSuccess: (response) => response,
     }),
-    Effect.map((response) => applyApiPolicy(response, environment.BROWSER_ORIGIN, origin)),
-    Effect.runPromise
+    Effect.map((response) => applyApiPolicy(response, environment.BROWSER_ORIGIN, origin))
   );
 };
 
 const fetchEffect = (request: Request, environment: PublicEnvironment): Effect.Effect<Response> =>
-  Effect.tryPromise({
-    try: () => {
-      const browserOrigin = resolveBrowserOrigin(environment.BROWSER_ORIGIN);
-      if (Option.isNone(browserOrigin)) {
-        return Promise.resolve(
+  Effect.gen(function* () {
+    // The pinned runner evaluates synchronously before registering its external abort signal.
+    if (request.signal.aborted) return yield* Effect.interrupt;
+    const browserOrigin = resolveBrowserOrigin(environment.BROWSER_ORIGIN);
+    if (Option.isNone(browserOrigin)) {
+      return applyApiPolicy(
+        smokeUnavailable(request, environment, "configuration"),
+        browserOrigins.production,
+        Option.none()
+      );
+    }
+    const origin = Option.fromNullishOr(request.headers.get("origin"));
+    if (Option.exists(origin, (value) => value !== browserOrigin.value)) {
+      return applyApiPolicy(forbiddenOrigin(), browserOrigin.value, origin);
+    }
+    return yield* routeOwnedRequest(
+      request,
+      { ...environment, BROWSER_ORIGIN: browserOrigin.value },
+      origin
+    );
+  }).pipe(
+    Effect.catchCauseIf(
+      (cause) => !Cause.hasInterrupts(cause),
+      () =>
+        Effect.succeed(
           applyApiPolicy(
-            smokeUnavailable(request, environment, "configuration"),
+            smokeUnavailable(request, environment, "public_forwarding"),
             browserOrigins.production,
             Option.none()
           )
-        );
-      }
-
-      const origin = Option.fromNullishOr(request.headers.get("origin"));
-      if (Option.exists(origin, (value) => value !== browserOrigin.value)) {
-        return Promise.resolve(applyApiPolicy(forbiddenOrigin(), browserOrigin.value, origin));
-      }
-      return routeOwnedRequest(
-        request,
-        { ...environment, BROWSER_ORIGIN: browserOrigin.value },
-        origin
-      );
-    },
-    catch: () => undefined,
-  }).pipe(
-    Effect.match({
-      onFailure: () =>
-        applyApiPolicy(
-          smokeUnavailable(request, environment, "public_forwarding"),
-          browserOrigins.production,
-          Option.none()
-        ),
-      onSuccess: (response) => response,
-    }),
+        )
+    ),
     Effect.map((response) => {
       if (!smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })) return response;
       const version = environment.CF_VERSION_METADATA?.id;
@@ -712,13 +709,15 @@ const fetchEffect = (request: Request, environment: PublicEnvironment): Effect.E
 /** Builds the internet-facing ingress with one telemetry service for each request Work span. */
 export const makePublicWorker = (telemetry: TelemetryService): PublicWorker => ({
   fetch: (request, environment) =>
-    fetchEffect(request, environment).pipe(
-      observeWorkerRequest({
-        environment,
-        telemetry,
-        operation: "worker.public.fetch",
-      }),
-      Effect.runPromise
+    Effect.runPromise(
+      fetchEffect(request, environment).pipe(
+        observeWorkerRequest({
+          environment,
+          telemetry,
+          operation: "worker.public.fetch",
+        })
+      ),
+      { signal: request.signal }
     ),
 });
 

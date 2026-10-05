@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { DateTime, Effect, Schema } from "effect";
+import { DateTime, Deferred, Effect, Schema } from "effect";
 import { describe, expect } from "vitest";
 import {
   SyntheticBindings,
@@ -29,6 +29,93 @@ const body = JSON.stringify({
 });
 
 describe("private release smoke", () => {
+  it.effect("bounds Workflow handoffs at four and leaves only failed work unacknowledged", () =>
+    Effect.gen(function* () {
+      const filled = yield* Deferred.make<void>();
+      const release = Promise.withResolvers<void>();
+      let active = 0;
+      let maximum = 0;
+      let started = 0;
+      const acknowledged: string[] = [];
+      const retried: string[] = [];
+      const database = {
+        prepare: (): { bind: () => { first: () => Promise<unknown> } } => ({
+          bind: (): { first: () => Promise<unknown> } => ({
+            first: (): Promise<unknown> =>
+              Promise.resolve({ expires_at_ms: Number.MAX_SAFE_INTEGER }),
+          }),
+        }),
+      };
+      const environment = smokeEnvironment({
+        DB: withMethods(unavailableDatabase, { prepare: database.prepare }),
+        SMOKE_QUEUE_NAME: "reserved-smoke",
+        SMOKE_WORKFLOW: withMethods(unavailableWorkflow, {
+          create: (): Promise<object> => {
+            const ordinal = ++started;
+            maximum = Math.max(maximum, ++active);
+            if (active === 4) Deferred.doneUnsafe(filled, Effect.void);
+            return release.promise
+              .then(() => {
+                if (ordinal === 9) throw new Error("handoff unavailable");
+                return {};
+              })
+              .finally(() => {
+                active--;
+              });
+          },
+          get: (): Promise<object> => Promise.reject(new Error("handoff unavailable")),
+        }),
+      });
+      const messages = Array.from({ length: 9 }, (_, index) => ({
+        id: `smoke-${index}`,
+        timestamp: DateTime.toDate(DateTime.makeUnsafe(0)),
+        body: {
+          protocolVersion: 1,
+          probeId: (index + 1).toString(16).repeat(32),
+          gitRevision: revision,
+        },
+        attempts: 1,
+        ack: (): void => {
+          acknowledged.push(`smoke-${index}`);
+        },
+        retry: (): void => {
+          retried.push(`smoke-${index}`);
+        },
+      }));
+      const completed = receiveSmoke({
+        environment,
+        batch: {
+          queue: "reserved-smoke",
+          messages,
+          metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } },
+          ackAll: (): void => {
+            acknowledged.push("all");
+          },
+          retryAll: (): void => {
+            retried.push("all");
+          },
+        },
+      }).then(
+        () => ({ _tag: "UnexpectedSuccess" }),
+        (failure: unknown) =>
+          Schema.decodeUnknownSync(
+            Schema.TaggedStruct("SmokeBindingFailed", { stage: Schema.Literal("platform") })
+          )(failure)
+      );
+      yield* Deferred.await(filled);
+      yield* Effect.yieldNow;
+      const held = { active, started, maximum };
+      release.resolve();
+      expect(yield* Effect.tryPromise(() => completed)).toEqual({
+        _tag: "SmokeBindingFailed",
+        stage: "platform",
+      });
+      expect(held).toEqual({ active: 4, started: 4, maximum: 4 });
+      expect({ active, started, maximum }).toEqual({ active: 0, started: 9, maximum: 4 });
+      expect(acknowledged.sort()).toEqual(messages.slice(0, 8).map(({ id }) => id));
+      expect(retried).toEqual([]);
+    })
+  );
   it.effect(
     "rejects missing authority, oversized input, and wrong Core version without touching any binding",
     () =>

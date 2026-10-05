@@ -277,39 +277,45 @@ const makePolicyClient = (
   boundary: BrowserHttpBoundary
 ): HttpClient.HttpClient => {
   const policy = browserHttpPolicies[boundary];
-  return HttpClient.transform(client, (responseEffect, request) => {
-    let destination: URL;
-    try {
-      destination = new URL(request.url);
-    } catch {
-      return Effect.fail(requestFailure(request, "request destination invalid"));
-    }
-    if (destination.origin !== apiOrigin) {
-      return Effect.fail(requestFailure(request, "request destination origin refused"));
-    }
+  const scopedClient = HttpClient.withScope(client);
+  return HttpClient.makeWith(
+    (requestEffect) =>
+      Effect.flatMap(requestEffect, (request) => {
+        let destination: URL;
+        try {
+          destination = new URL(request.url);
+        } catch {
+          return Effect.fail(requestFailure(request, "request destination invalid"));
+        }
+        if (destination.origin !== apiOrigin) {
+          return Effect.fail(requestFailure(request, "request destination origin refused"));
+        }
 
-    const attempt = responseEffect.pipe(
-      Effect.mapError(sanitizeHttpClientError),
-      Effect.flatMap((response) =>
-        materializeResponse(request, response, policy.maximumResponseBytes)
-      )
-    );
-    const boundedRetries = isSafeRetryRequest(request)
-      ? attempt.pipe(Effect.retry({ times: 1, while: isRetryableTransportFailure }))
-      : attempt;
-    const admittedResponse =
-      boundary === "canonical" ? retryResourceRefusals(boundedRetries) : boundedRetries;
-    return admittedResponse.pipe(
-      Effect.timeoutOrElse({
-        duration: policy.deadline,
-        orElse: () => Effect.fail(requestFailure(request, "browser request deadline exceeded")),
+        const attempt = scopedClient.postprocess(Effect.succeed(request)).pipe(
+          Effect.mapError(sanitizeHttpClientError),
+          Effect.flatMap((response) =>
+            materializeResponse(request, response, policy.maximumResponseBytes)
+          ),
+          Effect.scoped
+        );
+        const boundedRetries = isSafeRetryRequest(request)
+          ? attempt.pipe(Effect.retry({ times: 1, while: isRetryableTransportFailure }))
+          : attempt;
+        const admittedResponse =
+          boundary === "canonical" ? retryResourceRefusals(boundedRetries) : boundedRetries;
+        return admittedResponse.pipe(
+          Effect.timeoutOrElse({
+            duration: policy.deadline,
+            orElse: () => Effect.fail(requestFailure(request, "browser request deadline exceeded")),
+          }),
+          // The browser has no telemetry exporter; AsyncResult owns safe defect presentation. Suppress
+          // Effect's URL/header span instead of creating a second, credential-bearing diagnostic path.
+          Effect.provideService(HttpClient.TracerDisabledWhen, disableAutomaticHttpSpan),
+          Effect.provideService(HttpClient.TracerPropagationEnabled, false)
+        );
       }),
-      // The browser has no telemetry exporter; AsyncResult owns safe defect presentation. Suppress
-      // Effect's URL/header span instead of creating a second, credential-bearing diagnostic path.
-      Effect.provideService(HttpClient.TracerDisabledWhen, disableAutomaticHttpSpan),
-      Effect.provideService(HttpClient.TracerPropagationEnabled, false)
-    );
-  });
+    client.preprocess
+  );
 };
 
 /**

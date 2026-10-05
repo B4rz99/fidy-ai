@@ -1,6 +1,8 @@
 import { ForwardedEmailWork } from "../contract";
 import { Data, Effect, Exit, Option, Schema } from "effect";
 
+const coordinatorDeliveryConcurrency = 4;
+
 class ForwardedEmailDeliveryUnavailable extends Data.TaggedError(
   "ForwardedEmailDeliveryUnavailable"
 )<{
@@ -53,7 +55,7 @@ export const receiveForwardedEmailWork = ({
               message.ack();
             })
           ),
-        { concurrency: "unbounded" }
+        { concurrency: coordinatorDeliveryConcurrency }
       );
       for (const outcome of outcomes) {
         if (Exit.isFailure(outcome)) return yield* Effect.failCause(outcome.cause);

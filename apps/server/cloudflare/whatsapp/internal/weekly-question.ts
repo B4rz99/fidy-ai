@@ -1,4 +1,4 @@
-import { DateTime, Effect, Option, Schema } from "effect";
+import { type DateTime, Effect, Option, Schema } from "effect";
 import { ConsentRecordId } from "../../../src/core/consent/contract";
 import { UserId } from "../../../src/core/identity/contract";
 import { IanaTimeZone } from "../../../src/core/_shared/context";
@@ -31,8 +31,8 @@ const QuestionRow = Schema.Struct({
   bsuid: InsightRecipient.fields.bsuid,
   business_phone_number_id: InsightRecipient.fields.businessPhoneNumberId,
   offer_json: Schema.OptionFromNullOr(Schema.fromJsonString(WeeklyQuestionOffer)),
-  created_at_ms: Schema.Int,
-  expires_at_ms: Schema.Int,
+  created_at_ms: Schema.DateTimeUtcFromMillis,
+  expires_at_ms: Schema.DateTimeUtcFromMillis,
   time_zone: IanaTimeZone,
   state: Schema.String,
 });
@@ -136,8 +136,8 @@ export const startWeeklyQuestion = (
     const row = yield* Schema.decodeUnknownEffect(QuestionRow)(raw);
     const decision = decideInsightDelivery({
       now: input.now,
-      scheduledAt: DateTime.makeUnsafe(row.created_at_ms),
-      expiresAt: DateTime.makeUnsafe(row.expires_at_ms),
+      scheduledAt: row.created_at_ms,
+      expiresAt: row.expires_at_ms,
       timeZone: row.time_zone,
     });
     if (decision._tag === "Deferred") {

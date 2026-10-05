@@ -1,5 +1,5 @@
 import { useAtomSet } from "@effect/atom-react";
-import { BigDecimal, DateTime, Effect, Option } from "effect";
+import { BigDecimal, DateTime, Effect, Option, Predicate } from "effect";
 import type * as Atom from "effect/reactivity/Atom";
 import { useState } from "react";
 import type { FormEvent, JSX } from "react";
@@ -18,6 +18,7 @@ type CaptureCommand = Readonly<{
   timeZone: string;
   onSaved: (transaction: CapturedTransaction) => void;
   onFailed: () => void;
+  onUncertain: () => void;
 }>;
 
 const makeCapture = (apiClient: FidyClient): Atom.AtomResultFn<CaptureCommand, void, never> =>
@@ -48,7 +49,17 @@ const makeCapture = (apiClient: FidyClient): Atom.AtomResultFn<CaptureCommand, v
           },
         });
         yield* Effect.sync(() => command.onSaved(created.data));
-      }).pipe(Effect.catch(() => Effect.sync(command.onFailed)));
+      }).pipe(
+        Effect.catch((failure) =>
+          Effect.sync(
+            Predicate.isTagged(failure, "ValidationFailed") ||
+              Predicate.isTagged(failure, "NotFound") ||
+              Predicate.isTagged(failure, "ResourceLimited")
+              ? command.onFailed
+              : command.onUncertain
+          )
+        )
+      );
     },
     { concurrent: false }
   );
@@ -127,15 +138,41 @@ const currentLocalDay = (timeZone: string): string =>
     DateTime.setZone(Effect.runSync(DateTime.now), DateTime.zoneMakeNamedUnsafe(timeZone))
   );
 
+type CaptureStatus = "idle" | "saving" | "saved" | "failed" | "uncertain";
+const CaptureFeedback = ({
+  status,
+  onCheckHistory,
+}: Readonly<{ status: CaptureStatus; onCheckHistory: () => void }>): JSX.Element => (
+  <>
+    {status === "saved" ? <output>Transacción guardada. Actualizando el historial…</output> : null}
+    {status === "uncertain" ? (
+      <div>
+        <p role="alert">
+          No pudimos confirmar el registro de la transacción. Revisa el historial antes de registrar
+          otro movimiento.
+        </p>
+        <Button type="button" onClick={onCheckHistory} variant="outline">
+          Actualizar historial
+        </Button>
+      </div>
+    ) : null}
+    {status === "failed" ? (
+      <p role="alert">No se pudo guardar la transacción. Intenta de nuevo.</p>
+    ) : null}
+  </>
+);
+
 /** Captures one browser-initiated Transaction through the generated canonical client. */
 export const ManualTransactionCapture = ({
   apiClient,
   onCreated,
   timeZone,
+  onCheckHistory,
 }: Readonly<{
   apiClient: FidyClient;
   onCreated: (transaction: CapturedTransaction) => void;
   timeZone: string;
+  onCheckHistory: () => void;
 }>): JSX.Element => {
   const [capture] = useState(() => makeCapture(apiClient));
   const submit = useAtomSet(capture);
@@ -143,10 +180,10 @@ export const ManualTransactionCapture = ({
   const [counterparty, setCounterparty] = useState("");
   const [occurredOn, setOccurredOn] = useState(() => currentLocalDay(timeZone));
   const [direction, setDirection] = useState<"inflow" | "outflow">("outflow");
-  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "failed">("idle");
+  const [status, setStatus] = useState<CaptureStatus>("idle");
   const onSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
-    if (status === "saving") return;
+    if (status === "saving" || status === "uncertain") return;
     setStatus("saving");
     submit({
       amount,
@@ -161,6 +198,7 @@ export const ManualTransactionCapture = ({
         onCreated(transaction);
       },
       onFailed: () => setStatus("failed"),
+      onUncertain: () => setStatus("uncertain"),
     });
   };
   return (
@@ -175,15 +213,10 @@ export const ManualTransactionCapture = ({
           onOccurredOn={setOccurredOn}
         />
         <CaptureDirection value={direction} onChange={setDirection} />
-        <Button type="submit" disabled={status === "saving"}>
+        <Button type="submit" disabled={status === "saving" || status === "uncertain"}>
           {status === "saving" ? "Guardando…" : "Registrar transacción"}
         </Button>
-        {status === "saved" ? (
-          <output>Transacción guardada. Actualizando el historial…</output>
-        ) : null}
-        {status === "failed" ? (
-          <p role="alert">No se pudo guardar la transacción. Intenta de nuevo.</p>
-        ) : null}
+        <CaptureFeedback status={status} onCheckHistory={onCheckHistory} />
       </div>
     </form>
   );

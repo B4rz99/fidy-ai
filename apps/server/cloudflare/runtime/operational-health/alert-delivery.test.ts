@@ -1,7 +1,7 @@
 import { Miniflare } from "miniflare";
 import { it } from "@effect/vitest";
-import { type Cause, Effect } from "effect";
-import { afterEach, describe, expect } from "vitest";
+import { Cause, Deferred, Effect, Exit, Option } from "effect";
+import { afterEach, describe, expect, vi } from "vitest";
 import { runOperationalAlerts as deliverAlerts } from "./operations";
 import type { OperationalAlert } from "./contract";
 
@@ -70,6 +70,81 @@ const rejects = (promise: Promise<unknown>): Effect.Effect<void, Cause.UnknownEr
 const accepted = (): Promise<void> => Promise.resolve();
 
 describe("operator email notification", () => {
+  it.effect("bounds independent sends at two and preserves confirmations when one send fails", () =>
+    Effect.gen(function* () {
+      const db = yield* database();
+      const filled = yield* Deferred.make<void>();
+      const release = Promise.withResolvers<void>();
+      const alerts: ReadonlyArray<OperationalAlert> = [
+        deadLetter,
+        { kind: "worker_exception", owner: "workerExceptions", severity: "critical" },
+        { kind: "resource_limit", owner: "resourceLimits", severity: "critical" },
+        { kind: "callback_rejection", owner: "callbackRejections", severity: "warning" },
+        { kind: "retention_lag", owner: "retention", severity: "warning" },
+        { kind: "whatsapp_delivery", owner: "whatsapp", severity: "warning" },
+        { kind: "capability_unusable", owner: "queueExecution", severity: "critical" },
+      ];
+      let active = 0;
+      let maximum = 0;
+      let started = 0;
+      const send = (): Promise<void> => {
+        const ordinal = ++started;
+        maximum = Math.max(maximum, ++active);
+        if (active === 2) Deferred.doneUnsafe(filled, Effect.void);
+        return release.promise
+          .then(() => {
+            if (ordinal === alerts.length) throw new Error("notification unavailable");
+          })
+          .finally(() => {
+            active--;
+          });
+      };
+      const completed = runOperationalAlerts({ db, now: 1_000_000, alerts, send }).then(
+        () => Exit.succeed(undefined),
+        (failure: unknown) => Exit.fail(failure)
+      );
+      yield* Deferred.await(filled);
+      yield* Effect.yieldNow;
+      const held = { active, started, maximum };
+      release.resolve();
+      const result = yield* Effect.tryPromise(() => completed);
+      expect(Exit.isFailure(result)).toBe(true);
+      if (Exit.isFailure(result)) {
+        expect(result.cause.reasons).toHaveLength(1);
+        expect(Cause.findErrorOption(result.cause)).toEqual(
+          Option.some(new Error("Operator alert email unavailable"))
+        );
+      }
+      expect(held).toEqual({ active: 2, started: 2, maximum: 2 });
+      expect({ active, started, maximum }).toEqual({ active: 0, started: 7, maximum: 2 });
+      const retained = yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "SELECT count(*) AS total, sum(delivery_confirmed) AS confirmed FROM operational_alerts"
+          )
+          .first()
+      );
+      expect(retained).toMatchObject({ total: 7, confirmed: 6 });
+    })
+  );
+  it.effect(
+    "performs no resolution persistence or send when the root signal is already aborted",
+    () => {
+      const controller = new AbortController();
+      controller.abort();
+      return Effect.gen(function* () {
+        const db = yield* database();
+        const prepare = vi.spyOn(db, "prepare");
+        const send = vi.fn(accepted);
+        const exit = yield* Effect.tryPromise(() =>
+          deliverAlerts({ db, now: 1_000_000, alerts: [], send, signal: controller.signal })
+        ).pipe(Effect.exit);
+        expect(Exit.isFailure(exit)).toBe(true);
+        expect(prepare).not.toHaveBeenCalled();
+        expect(send).not.toHaveBeenCalled();
+      });
+    }
+  );
   it.effect(
     "delivers a new critical alert once and repeats after thirty minutes without changing work state",
     () =>

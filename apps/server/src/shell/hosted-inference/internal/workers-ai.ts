@@ -14,8 +14,8 @@ import {
   type HostedInvalidOutputDescription,
   type HostedTextResult,
   type HostedTextToolPolicy,
-  type WorkersAiBindingRun,
   type WorkersAiRequest,
+  type WorkersAiRun,
 } from "~/shell/hosted-inference/contract";
 import type {
   HostedInferenceAdapter,
@@ -287,19 +287,24 @@ type ResponseBodyCollection = Readonly<{
   size: number;
 }>;
 
-type ByteReader = Readonly<{
-  cancel: () => Promise<void>;
-  read: () => Promise<Readonly<{ done: boolean; value: Uint8Array }>>;
-}>;
+const cancelBody = (body: Readonly<{ cancel: () => Promise<void> }>): Effect.Effect<void> =>
+  Effect.sync(() => {
+    try {
+      body.cancel().catch(() => undefined);
+    } catch {
+      // Hostile cancellation cannot prevent the response owner from settling.
+    }
+  });
 
-const cancelReader = (reader: ByteReader): Effect.Effect<void> =>
-  Effect.tryPromise({
-    try: () => reader.cancel(),
-    catch: () => undefined,
-  }).pipe(Effect.ignore);
+const releaseReader = (reader: ReadableStreamDefaultReader<unknown>): Effect.Effect<void> =>
+  cancelBody(reader).pipe(
+    Effect.ensuring(
+      Effect.try({ try: () => reader.releaseLock(), catch: () => undefined }).pipe(Effect.ignore)
+    )
+  );
 
 const collectResponseBody = (
-  reader: ByteReader,
+  reader: ReadableStreamDefaultReader<unknown>,
   collection: ResponseBodyCollection,
   overflow: () => HostedInferenceError
 ): Effect.Effect<string, HostedInferenceError> =>
@@ -307,20 +312,21 @@ const collectResponseBody = (
     try: () => reader.read(),
     catch: () => invalidProviderOutput("Hosted provider response was invalid"),
   }).pipe(
-    Effect.flatMap((chunk) => {
-      if (chunk.done) {
-        return Effect.succeed(decodeChunks(collection.chunks, collection.size));
-      }
-      const nextSize = collection.size + chunk.value.byteLength;
-      if (nextSize > providerResponseMaximumBytes) {
-        return cancelReader(reader).pipe(Effect.andThen(Effect.fail(overflow())));
-      }
-      return collectResponseBody(
-        reader,
-        { chunks: [...collection.chunks, chunk.value], size: nextSize },
-        overflow
-      );
-    })
+    Effect.flatMap((chunk) =>
+      Effect.gen(function* () {
+        if (chunk.done) return decodeChunks(collection.chunks, collection.size);
+        const bytes = yield* Schema.decodeUnknownEffect(Schema.Uint8Array)(chunk.value).pipe(
+          Effect.mapError(() => invalidProviderOutput("Hosted provider response was invalid"))
+        );
+        const nextSize = collection.size + bytes.byteLength;
+        if (nextSize > providerResponseMaximumBytes) return yield* overflow();
+        return yield* collectResponseBody(
+          reader,
+          { chunks: [...collection.chunks, bytes], size: nextSize },
+          overflow
+        );
+      })
+    )
   );
 
 const readBoundedBody = (
@@ -330,16 +336,14 @@ const readBoundedBody = (
   if (response.body === null) {
     return Effect.fail(invalidProviderOutput("Hosted provider response was invalid"));
   }
-  const responseReader = response.body.getReader();
-  const reader: ByteReader = {
-    cancel: () => responseReader.cancel(),
-    read: () =>
-      responseReader
-        .read()
-        .then((result) => (result.done ? { done: true, value: new Uint8Array() } : result)),
-  };
-  return collectResponseBody(reader, { chunks: [], size: 0 }, overflow).pipe(
-    Effect.onInterrupt(() => cancelReader(reader))
+  const body = response.body;
+  return Effect.acquireUseRelease(
+    Effect.try({
+      try: (): ReadableStreamDefaultReader<unknown> => body.getReader(),
+      catch: () => invalidProviderOutput("Hosted provider response was invalid"),
+    }),
+    (reader) => collectResponseBody(reader, { chunks: [], size: 0 }, overflow),
+    releaseReader
   );
 };
 
@@ -347,7 +351,7 @@ type InvokeInput = Readonly<{
   model: ApprovedWorkersAiModel;
   overflow: () => HostedInferenceError;
   request: WorkersAiRequest;
-  run: WorkersAiBindingRun;
+  run: WorkersAiRun;
   timeout: Duration.Input;
   timeoutFailure: () => HostedInferenceError;
 }>;
@@ -389,19 +393,22 @@ const invoke = ({
   timeout,
   timeoutFailure,
 }: InvokeInput): Effect.Effect<ProviderResponse, HostedInferenceError> =>
-  Effect.tryPromise({
-    try: (signal) => run(model, request, { returnRawResponse: true, signal }),
-    catch: (failure) =>
-      failure instanceof HostedInferenceError ? failure : providerUnavailable(true),
-  }).pipe(
+  run(model, request).pipe(
+    Effect.mapError((failure) =>
+      failure instanceof HostedInferenceError ? failure : providerUnavailable(true)
+    ),
     Effect.flatMap((response) =>
       response.status >= HTTP_OK_MINIMUM && response.status < HTTP_REDIRECTION_MINIMUM
         ? readBoundedBody(response, overflow)
-        : Effect.fail(
-            providerUnavailable(
-              response.status === HTTP_REQUEST_TIMEOUT ||
-                response.status === HTTP_TOO_MANY_REQUESTS ||
-                response.status >= HTTP_SERVER_ERROR_MINIMUM
+        : (response.body === null ? Effect.void : cancelBody(response.body)).pipe(
+            Effect.andThen(
+              Effect.fail(
+                providerUnavailable(
+                  response.status === HTTP_REQUEST_TIMEOUT ||
+                    response.status === HTTP_TOO_MANY_REQUESTS ||
+                    response.status >= HTTP_SERVER_ERROR_MINIMUM
+                )
+              )
             )
           )
     ),
@@ -482,7 +489,7 @@ const decodeResult = (
   });
 
 const makeStructuredAdapter = (
-  run: WorkersAiBindingRun,
+  run: WorkersAiRun,
   model: ApprovedWorkersAiModel
 ): HostedStructuredAdapter => ({
   prepare: (input) =>
@@ -548,7 +555,7 @@ const continuationItems = (response: ProviderResponse): ReadonlyArray<WorkersAiI
 };
 
 type ConfiguredWorkersAi = Readonly<{
-  run: WorkersAiBindingRun;
+  run: WorkersAiRun;
   model: ApprovedWorkersAiModel;
 }>;
 

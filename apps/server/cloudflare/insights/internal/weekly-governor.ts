@@ -1,4 +1,4 @@
-import { DateTime, Effect, Option, Schema } from "effect";
+import { type DateTime, Effect, Option, Schema } from "effect";
 import { type UserId } from "../../../src/core/identity/contract";
 import { type InsightEventId, ProactivityThresholds } from "../../../src/core/insights/contract";
 import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
@@ -29,7 +29,7 @@ export const findGovernor = (
         unanswered: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 200 })),
         question_needed: Schema.Literals([0, 1]),
         question_delivered: Schema.Literals([0, 1]),
-        paused_at_ms: Schema.NullOr(Schema.Int),
+        paused_at_ms: Schema.NullOr(Schema.DateTimeUtcFromMillis),
       })
     )(raw);
     if (row.question_delivered === 1 && row.question_needed === 0) {
@@ -40,7 +40,7 @@ export const findGovernor = (
         WeeklyGovernor.make({
           _tag: "Paused",
           unanswered: row.unanswered,
-          pausedAt: DateTime.makeUnsafe(row.paused_at_ms),
+          pausedAt: row.paused_at_ms,
         })
       );
     }

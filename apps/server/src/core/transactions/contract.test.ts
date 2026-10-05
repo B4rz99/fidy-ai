@@ -5,8 +5,10 @@ import { CapturedInterpretationContext } from "~/core/interpretation-evidence/co
 import {
   CreateTransactionInput,
   Direction,
+  RestoredTransactionPair,
   Transaction,
   TransactionExtraction,
+  TransactionPresentation,
   TransactionQueryValues,
   UpdateTransactionInput,
 } from "./contract";
@@ -32,6 +34,18 @@ const apiTransaction = (overrides: Partial<TransactionInput> = {}): TransactionI
   createdAt: "2026-07-21T08:00:00Z",
   revision: 0,
   ...overrides,
+});
+
+it("preserves agent-facing timestamp meanings through calendar refinement JSON Schema derivation", () => {
+  const definitions = Schema.toJsonSchemaDocument(Transaction).definitions;
+  expect(definitions.TransactionOccurredAt).toHaveProperty(
+    "description",
+    expect.stringContaining("When the money actually moved")
+  );
+  expect(definitions.TransactionCreatedAt).toHaveProperty(
+    "description",
+    expect.stringContaining("When fidy learned of it")
+  );
 });
 
 it("accepts both of the two ways money can move", () => {
@@ -77,6 +91,40 @@ it("rejects zero Transaction Money at the nested amount field", () => {
   const decoded = decodeTransaction(apiTransaction({ money: { amount: "0", currency: "COP" } }));
 
   expect(Result.isFailure(decoded) ? String(decoded.failure) : "").toContain('["money"]["amount"]');
+});
+
+it("preserves positive Money checks in independent and linked Transaction presentations", () => {
+  const decode = Schema.decodeUnknownResult(TransactionPresentation);
+  for (const presentation of [
+    { kind: "independent" },
+    { kind: "visible-member" },
+    { kind: "suppressed-member", requestedId: "f1d1a000-0000-4000-8000-0000000000bb" },
+  ]) {
+    expect(Result.isSuccess(decode({ ...apiTransaction(), presentation }))).toBe(true);
+    expect(
+      Result.isFailure(
+        decode({ ...apiTransaction({ money: { amount: "0", currency: "COP" } }), presentation })
+      )
+    ).toBe(true);
+  }
+});
+
+it("rejects restored pairs with zero Money in either independent Transaction", () => {
+  const decode = Schema.decodeUnknownResult(RestoredTransactionPair);
+  const positive = { ...apiTransaction(), presentation: { kind: "independent" } };
+  const zero = {
+    ...apiTransaction({ money: { amount: "0", currency: "COP" } }),
+    presentation: { kind: "independent" },
+  };
+  expect(
+    Result.isSuccess(decode({ firstTransaction: positive, secondTransaction: positive }))
+  ).toBe(true);
+  expect(Result.isFailure(decode({ firstTransaction: zero, secondTransaction: positive }))).toBe(
+    true
+  );
+  expect(Result.isFailure(decode({ firstTransaction: positive, secondTransaction: zero }))).toBe(
+    true
+  );
 });
 
 it("rejects the legacy top-level amount and currency shape", () => {

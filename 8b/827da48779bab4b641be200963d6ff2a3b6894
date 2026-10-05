@@ -1,0 +1,26 @@
+apps/cli/src/command/processes.test.ts
+  s_357968f79b8420::t_df179661ca7aa5 2,12,26
+apps/cli/test/process.test-fixture.ts
+  s_357968f79b8420::t_c2628ea52725d6 60-63
+apps/web/e2e/cli-scope.test-fixture.ts
+  s_357968f79b8420::t_29486c0a41cd8d 2,5,9-22,25-48
+  s_357968f79b8420::t_c2628ea52725d6 6-8
+apps/web/scripts/cli-scope.test.ts
+  s_357968f79b8420::t_d5a9ba37667997 2,41,71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8b827da48779bab4b641be200963d6ff2a3b6894",
+  "prompts": {},
+  "sessions": {
+    "s_357968f79b8420": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10c2d-46e8-756b-b2e8-609f7ee6ab7c",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

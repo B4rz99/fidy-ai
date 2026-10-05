@@ -1,0 +1,26 @@
+apps/server/cloudflare/recovery/internal/support-recovery.ts
+  s_82ce4d1c184826::t_fb1f411d2514cc 13,94
+  s_82ce4d1c184826::t_51a98e28886c24 61,71,76,92-93,95,100,300,306
+apps/server/cloudflare/recovery/support-recovery.test.ts
+  s_82ce4d1c184826::t_5d93031e10d765 91,268
+  s_82ce4d1c184826::t_0264517ddc2e4a 185,220-221,256
+  s_82ce4d1c184826::t_08734c952ba75b 2-18,25-42,122-123
+  s_82ce4d1c184826::t_b1f2f96136199d 1
+  s_82ce4d1c184826::t_17e110c642af42 19-24,43-90,92-121,124-184,186-219,222-255,257-267,269-288
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dd11c34a23cc55ccf7e9515add3b649e131b1444",
+  "prompts": {},
+  "sessions": {
+    "s_82ce4d1c184826": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10c32-3b5b-773d-a257-ba4375f1df9d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

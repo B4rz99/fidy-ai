@@ -1,0 +1,21 @@
+apps/server/cloudflare/web-authentication/session.test-fixture.ts
+  s_a93d3fae2817a6::t_65924e1226196f 89-91,96-97,100-101
+  s_a93d3fae2817a6::t_1c67ef96dfeddb 40,47,52,69-71,73-88,92-95,98-99,102-107,130-131,137-139,142-146
+  s_a93d3fae2817a6::t_b01626be8e1feb 72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3e2c910b6e4a60ef72efb7fd455e2d3e2920bf4d",
+  "prompts": {},
+  "sessions": {
+    "s_a93d3fae2817a6": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10c94-154a-7133-8207-337b9a3aa954",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

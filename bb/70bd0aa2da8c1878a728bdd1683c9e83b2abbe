@@ -1,0 +1,39 @@
+apps/server/cloudflare/whatsapp/webhook-body.test.ts
+  s_e278ac208f4e8a::t_ba9cd6bffc85c5 1-9,56-59,65
+  s_e278ac208f4e8a::t_86e1ca450c5516 34-37,66
+  s_e278ac208f4e8a::t_65120872d5aae2 21,45,51
+  s_2de77ce6515a45::t_ede963cbd47663 30,46-48,53
+  s_e278ac208f4e8a::t_c5ad32238d228b 10-20,22-29,31-33,38-44,49-50,52,54-55,60-64
+apps/server/cloudflare/whatsapp/internal/ingress.ts
+  s_e278ac208f4e8a::t_b3a0f425ba6169 93-104
+apps/server/cloudflare/whatsapp/webhook-abort.test.ts
+  s_e278ac208f4e8a::t_6bdff366512a6a 9-16,19,22-37,39-58,63,66-80
+  s_e278ac208f4e8a::t_da204b1d60da5a 20-21,59,65
+  s_e278ac208f4e8a::t_f91df6579a34d7 1-8,64
+  s_2de77ce6515a45::t_ede963cbd47663 60-62
+  s_e278ac208f4e8a::t_9d06ea2e34254e 17-18,38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bb70bd0aa2da8c1878a728bdd1683c9e83b2abbe",
+  "prompts": {},
+  "sessions": {
+    "s_2de77ce6515a45": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a109ec-3a20-76d5-8e4f-32841e2baef2",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_e278ac208f4e8a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10731-a41d-7121-98b3-ec6e9e1e04de",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

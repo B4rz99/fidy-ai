@@ -1,0 +1,34 @@
+apps/server/cloudflare/ingestion/internal/statement-review.ts
+  s_e278ac208f4e8a::t_ad8446f7877cc6 85-88
+apps/server/cloudflare/ingestion/forwarded-email.test.ts
+  s_e278ac208f4e8a::t_7bef6e1f995f7c 647,726-727,731-740
+  s_e278ac208f4e8a::t_062ce20d248152 8
+  s_e278ac208f4e8a::t_f64c980ce59750 662-669,741-746,748-750
+  s_02b1e447beef90::t_daa364bc2d9931 728-730,751-753
+apps/server/cloudflare/oauth-agents/oauth-ingress.test.ts
+  s_e278ac208f4e8a::t_27832a7f829f98 6-7,1932-1940,1942-1944,2322-2334
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "13bf2519b2822257d3b424cc01471bb9c93ffeed",
+  "prompts": {},
+  "sessions": {
+    "s_02b1e447beef90": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a109ec-3a31-73b1-bc5e-c5489473c608",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_e278ac208f4e8a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10731-a41d-7121-98b3-ec6e9e1e04de",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

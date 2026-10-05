@@ -1,5 +1,10 @@
 import { operationCatalog } from "../../src/shell/api";
-import { decideOperationAccess } from "../../src/shell/canonical-policy/operations";
+import {
+  discoveryCases,
+  excludedAccountSecurityDiscovery,
+  readDiscovery,
+  sensitiveDiscovery,
+} from "./discovery.test-fixture";
 import { installedCanonicalOperations } from "../canonical-operations/operations";
 import { categoryIds } from "../../src/core/categories/contract";
 import { PATScopes } from "../../src/core/tokens/contract";
@@ -3623,15 +3628,7 @@ const ListedTools = Schema.Struct({
 it("derives exact private canonical discovery for every non-empty capability combination without leaking nested unauthorized identities", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      for (const scopes of [
-        ["read"],
-        ["write"],
-        ["dashboard"],
-        ["read", "write"],
-        ["read", "dashboard"],
-        ["write", "dashboard"],
-        ["read", "write", "dashboard"],
-      ]) {
+      for (const { scopes, tools, additionalDeclarations } of discoveryCases) {
         const capabilities = yield* Schema.decodeUnknownEffect(PATScopes)(scopes);
         const fixture = yield* approvedFixture(capabilities);
         const token = yield* Schema.decodeUnknownEffect(
@@ -3644,21 +3641,16 @@ it("derives exact private canonical discovery for every non-empty capability com
             )).json()
           )
         );
-        const expected = installedCanonicalOperations()
-          .filter(
-            ({ policy }) =>
-              decideOperationAccess(policy.access, { _tag: "OAuthAgent", capabilities })._tag ===
-              "Allowed"
-          )
-          .map(({ id }) => id)
-          .sort();
-        expect(listed.result.tools.map(({ name }) => name)).toEqual(expected);
-        expect(listed.result.tools.map(({ name }) => name)).not.toContain("pats.listPATs");
+        const expected = [...tools].sort();
+        const names = listed.result.tools.map(({ name }) => name);
+        expect(names, scopes.join(" ")).toEqual(expected);
+        for (const excluded of excludedAccountSecurityDiscovery) {
+          expect(names).not.toContain(excluded);
+        }
         for (const tool of listed.result.tools) {
-          const declared = operationCatalog.byId.get(tool.name);
           expect(tool.annotations).toEqual({
-            readOnlyHint: declared?.policy.kind === "query",
-            destructiveHint: declared?.policy.agentConfirmation === "required",
+            readOnlyHint: readDiscovery.includes(tool.name),
+            destructiveHint: sensitiveDiscovery.has(tool.name),
           });
         }
         const schemas = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(
@@ -3667,10 +3659,9 @@ it("derives exact private canonical discovery for every non-empty capability com
             outputSchema,
           }))
         );
+        const allowedDeclarations = new Set([...tools, ...additionalDeclarations]);
         for (const operation of operationCatalog.operations.filter(
-          ({ policy }) =>
-            decideOperationAccess(policy.access, { _tag: "OAuthAgent", capabilities })._tag !==
-            "Allowed"
+          ({ id }) => !allowedDeclarations.has(id)
         )) {
           expect(schemas).not.toContain(`"${operation.id}"`);
         }

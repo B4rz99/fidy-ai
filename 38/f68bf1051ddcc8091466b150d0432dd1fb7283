@@ -1,0 +1,58 @@
+apps/server/cloudflare/oauth-agents/operations.ts
+  s_82ce4d1c184826::t_a70871dcfbc17a 1,35,55-56,59,70,72,76
+apps/server/cloudflare/oauth-agents/internal/revocation.ts
+  s_82ce4d1c184826::t_c71ba3f51878d0 1,76
+apps/server/cloudflare/ingestion/statement-document.test.ts
+  s_82ce4d1c184826::t_b438ecd2473f8b 16-122
+  s_82ce4d1c184826::t_8c5198f0e7379d 1-15
+apps/server/cloudflare/canonical-work/operations.ts
+  s_82ce4d1c184826::t_6ccb811027e004 317,322,328
+apps/server/cloudflare/oauth-agents/internal/refresh.ts
+  s_82ce4d1c184826::t_e1e528f0597034 1,311-312
+  s_82ce4d1c184826::t_b438ecd2473f8b 281-289,292-309
+apps/server/cloudflare/oauth-agents/oauth-ingress.test.ts
+  s_82ce4d1c184826::t_5143e146cd2400 342-350,1624
+  s_82ce4d1c184826::t_2dcd815287ef67 1597,1601
+  s_82ce4d1c184826::t_c8cd481c6e6da4 9,1755-1756
+  s_82ce4d1c184826::t_eaef0b60cb69f1 1660,1712-1713,1812
+  s_82ce4d1c184826::t_b293ac5a0bbdac 14-16,1605-1613,1622-1623,1625,1631,1642,1648-1649,1657-1659
+  s_82ce4d1c184826::t_b438ecd2473f8b 3-6,1614-1621,1626-1630,1632-1641,1643-1647,1650-1656,1661-1698,1700-1711,1714-1754,1757-1811
+  s_82ce4d1c184826::t_08781d901e4355 1587,1699
+  s_82ce4d1c184826::t_ae2a50ca9a3444 1572-1586,1588-1596,1598-1600,1602-1603
+  s_82ce4d1c184826::t_21652c724c081f 17,1571,1604
+  s_82ce4d1c184826::t_2731afac2dc52d 199
+  s_82ce4d1c184826::t_d485e165c03781 1813
+apps/server/cloudflare/ingestion/internal/statement-document.ts
+  s_82ce4d1c184826::t_133f2b1f52eb00 1,217-218,222,254
+  s_82ce4d1c184826::t_b438ecd2473f8b 110-117
+apps/server/cloudflare/core-http/internal/http.ts
+  s_82ce4d1c184826::t_d8019913b0e066 803
+  s_82ce4d1c184826::t_bf68011c713f5c 395,410,417,437,444,467,477,479,491,1178
+  s_82ce4d1c184826::t_b438ecd2473f8b 396-403,405-409,411,418-436,438,445-466,468,480-490,492,1161-1164,1169-1172,1179-1182,1188-1191
+apps/server/cloudflare/mcp/runtime.ts
+  s_82ce4d1c184826::t_d9aece27892171 1,90,187,203
+  s_82ce4d1c184826::t_b438ecd2473f8b 204-207,214-216
+apps/server/cloudflare/canonical-operations/internal/query-lifetime.ts
+  s_82ce4d1c184826::t_3d639d0f0ac299 1,58-59,114-115,117
+  s_82ce4d1c184826::t_b438ecd2473f8b 65-69
+apps/server/cloudflare/canonical-operations/operations.ts
+  s_82ce4d1c184826::t_8a9e5d6404cb7f 5,162,165
+apps/server/cloudflare/oauth-agents/runtime.ts
+  s_82ce4d1c184826::t_df098f41e36a69 1,97,100,118,189,246,251
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "38f68bf1051ddcc8091466b150d0432dd1fb7283",
+  "prompts": {},
+  "sessions": {
+    "s_82ce4d1c184826": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10c32-3b5b-773d-a257-ba4375f1df9d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

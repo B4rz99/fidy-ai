@@ -26,7 +26,6 @@ import { liveOAuthCommitAuthority } from "../../../src/shell/oauth-agents/operat
 import {
   type CanonicalRefusalDisposition,
   type TransactionCaller,
-  callerAuthority,
   childCaller,
   isOAuthCaller,
   liveTransactionAuthority,
@@ -70,8 +69,10 @@ type TriggerKind = "movement" | "audit";
 /** A child's canonical identity is fixed by its owner's prepared outcome, never by D1's error. */
 const mutationOperation = (mutation: PreparedCanonicalMutation): string =>
   mutation.outcome.operation;
-const commitInstant = (subject: TransactionCaller, admitted: number): number =>
-  isOAuthCaller(subject) ? currentMillis() : admitted;
+const commitInstant = (
+  subject: TransactionCaller | HostedCanonicalCaller,
+  admitted: number
+): number => (!isHostedUnitCaller(subject) && isOAuthCaller(subject) ? currentMillis() : admitted);
 
 /** Reuse the owner's changes() completion premise while binding each child's identity to its slot. */
 const childCompletion = (db: D1Database, index: number, operation: string): D1PreparedStatement =>
@@ -401,6 +402,34 @@ const findCommittedValue = ({
   }
 };
 
+/** OAuth rechecks execution-time grant authority without changing the hosted Turn's owner guards. */
+const oauthChildStatements = ({
+  db,
+  subject,
+  current,
+  mutation,
+  index,
+}: Readonly<{
+  db: D1Database;
+  subject: TransactionCaller | HostedCanonicalCaller;
+  current: number;
+  mutation: PreparedCanonicalMutation;
+  index: number;
+}>): ReadonlyArray<D1PreparedStatement> => {
+  if (isHostedUnitCaller(subject) || !isOAuthCaller(subject)) return [];
+  const authority = liveOAuthCommitAuthority({
+    subject: childCaller({ subject, requiredScope: mutation.requiredScope }),
+    current,
+  });
+  return [
+    db
+      .prepare(`INSERT INTO canonical_child_guard (child_index, operation, accepted)
+    SELECT ?, ?, CASE WHEN EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}) THEN 1 ELSE 0 END
+    ON CONFLICT(child_index) DO UPDATE SET operation = excluded.operation, accepted = excluded.accepted`)
+      .bind(index, mutationOperation(mutation), ...authority.bindings),
+  ];
+};
+
 /** Guard every owner's known commit-time trigger before its write, then assert completion. */
 const childStatements = ({
   db,
@@ -410,32 +439,15 @@ const childStatements = ({
   index,
 }: Readonly<{
   db: D1Database;
-  subject: Readonly<{ userId: string }>;
+  subject: TransactionCaller | HostedCanonicalCaller;
   current: number;
   mutation: PreparedCanonicalMutation;
   index: number;
 }>): ReadonlyArray<D1PreparedStatement> => {
   const userId = subject.userId;
   const operation = mutationOperation(mutation);
-  const authority = isOAuthCaller(subject)
-    ? liveOAuthCommitAuthority({
-        subject: childCaller({ subject, requiredScope: mutation.requiredScope }),
-        current,
-      })
-    : callerAuthority({
-        subject: childCaller({ subject, requiredScope: mutation.requiredScope }),
-        current,
-      });
   return [
-    ...(isOAuthCaller(subject)
-      ? [
-          db
-            .prepare(`INSERT INTO canonical_child_guard (child_index, operation, accepted)
-      SELECT ?, ?, CASE WHEN EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}) THEN 1 ELSE 0 END
-      ON CONFLICT(child_index) DO UPDATE SET operation = excluded.operation, accepted = excluded.accepted`)
-            .bind(index, operation, ...authority.bindings),
-        ]
-      : []),
+    ...oauthChildStatements({ db, subject, current, mutation, index }),
     ...(mutation.auditBudget === "shared"
       ? [childBudget({ db, userId, current, index, operation })]
       : []),

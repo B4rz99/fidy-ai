@@ -508,7 +508,7 @@ export function callerAuthority(
   input: Readonly<{ subject: OAuthCaller; current: number }>
 ): OAuthAuthority;
 export function callerAuthority(
-  input: Readonly<{ subject: TransactionCaller; current: number }>
+  input: Readonly<{ subject: Exclude<TransactionCaller, OAuthCaller>; current: number }>
 ): PATAuthority | WebSessionAuthority;
 export function callerAuthority(
   input: Readonly<{ subject: QueryCaller; current: number }>

@@ -748,7 +748,7 @@ const statementSubmissionRefusalAudit = ({
   id,
   outcome,
 }: Readonly<{
-  authority: Exclude<TransactionAuthority, { table: "pats" }>;
+  authority: Exclude<TransactionAuthority, { table: "pats" | "oauth_access_credentials" }>;
   current: number;
   database: D1Database;
   id: string;
@@ -773,7 +773,7 @@ const statementSubmissionReplayAudit = ({
   database,
   id,
 }: Readonly<{
-  authority: Exclude<TransactionAuthority, { table: "pats" }>;
+  authority: Exclude<TransactionAuthority, { table: "pats" | "oauth_access_credentials" }>;
   current: number;
   database: D1Database;
   id: string;

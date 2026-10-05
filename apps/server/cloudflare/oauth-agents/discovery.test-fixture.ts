@@ -26,7 +26,6 @@ const ordinaryWriteDiscovery = [
   "budgets.createBudget",
   "categories.createKeywordRule",
   "ingestion.enableEmailForwarding",
-  "ingestion.submitForExtraction",
   "memory.remember",
   "transactions.createTransaction",
   "transactions.linkTransactions",
@@ -37,6 +36,9 @@ const sensitiveWriteDiscovery = [
   "budgets.updateBudget",
   "categories.deleteKeywordRule",
   "categories.updateKeywordRule",
+  "ingestion.abandonStatementSubmission",
+  "ingestion.resolveNeedsReviewItem",
+  "ingestion.skipNeedsReviewItem",
   "insights.dismissInsight",
   "insights.markInsightDelivered",
   "insights.markInsightRead",
@@ -62,7 +64,6 @@ const additionalReadDeclarations = [
 ];
 const additionalWriteDeclarations = [
   "identity.updateUserPreferences",
-  "ingestion.resolveNeedsReviewItem",
   "transactions.deleteTransaction",
 ];
 

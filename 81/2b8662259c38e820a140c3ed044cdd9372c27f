@@ -1,0 +1,27 @@
+scripts/install-workspace.sh
+  s_8e33e3c1782639::t_45933ba5ccb58d 2-3,17-18
+apps/web/package.json
+  s_8e33e3c1782639::t_fa89524cfdff7d 60
+infra/cloudflare/package.json
+  s_8e33e3c1782639::t_7e65c4b946b7b5 26
+apps/server/package.json
+  s_8e33e3c1782639::t_f2b120d6da5a3e 311
+bun.lock
+  s_8e33e3c1782639::t_c7ccff710eca7e 65,109,126,1705
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "812b8662259c38e820a140c3ed044cdd9372c27f",
+  "prompts": {},
+  "sessions": {
+    "s_8e33e3c1782639": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a109c2-9276-7113-b270-d2078b93ecba",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

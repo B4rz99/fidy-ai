@@ -1,0 +1,24 @@
+apps/server/cloudflare/oauth-agents/oauth-ingress.test.ts
+  s_8e33e3c1782639::t_038ac3dbe4988a 2-7
+  s_8e33e3c1782639::t_c4312000395e3c 3631,3644-3649,3652-3653,3662,3664
+apps/server/cloudflare/oauth-agents/discovery.test-fixture.ts
+  s_8e33e3c1782639::t_c056c6300a831c 1-48,50-58,63-71,73-118
+  s_8e33e3c1782639::t_038ac3dbe4988a 59-62
+  s_8e33e3c1782639::t_c8693798be90f1 49,72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c403f98569b8e8b0467cf3b802914e8c542ab333",
+  "prompts": {},
+  "sessions": {
+    "s_8e33e3c1782639": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a109c2-9276-7113-b270-d2078b93ecba",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

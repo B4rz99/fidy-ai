@@ -153,6 +153,7 @@ const migrationNames = [
   "0034_statement_clarification_audit",
   "0035_statement_hosted_origin",
   "0036_statement_whatsapp_documents",
+  "0038_proactivity_consent",
 ] as const;
 
 const digest = (text: string): Promise<Uint8Array> =>

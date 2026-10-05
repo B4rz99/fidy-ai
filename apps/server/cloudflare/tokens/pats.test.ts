@@ -127,6 +127,7 @@ const setup = (
         "0028_recurring_audit_budget",
         "0029_audit_owner_retention",
         ...statementClarificationTestMigrations,
+        "0038_proactivity_consent",
       ];
       yield* awaitPromise(
         installTestSchema({

@@ -110,6 +110,35 @@ it("does not reset reminder standing for unrelated activity or count replayed qu
   ).toEqual(paused);
 });
 
+it("starts the second ignore counter only after verified question delivery, not while its evidence is delayed", () => {
+  const now = DateTime.makeUnsafe("2026-10-05T23:00:00Z");
+  const pending = ReminderStanding.make({ _tag: "QuestionPending", unanswered: 3 });
+  const earlierDelivery = decideReminderAttention({
+    standing: pending,
+    activity: "reminder-delivered",
+    now,
+  });
+  expect(earlierDelivery).toEqual(pending);
+  expect(
+    decideReminderAttention({ standing: earlierDelivery, activity: "reminder-delivered", now })
+  ).toEqual(pending);
+  const confirmedQuestion = decideReminderAttention({
+    standing: earlierDelivery,
+    activity: "question-delivered",
+    now,
+  });
+  expect(confirmedQuestion).toEqual({ _tag: "QuestionDelivered", unanswered: 3 });
+  const firstAfterQuestion = decideReminderAttention({
+    standing: confirmedQuestion,
+    activity: "reminder-delivered",
+    now,
+  });
+  expect(firstAfterQuestion).toEqual({ _tag: "QuestionDelivered", unanswered: 4 });
+  expect(
+    decideReminderAttention({ standing: firstAfterQuestion, activity: "reminder-delivered", now })
+  ).toEqual({ _tag: "Paused", unanswered: 5, pausedAt: now });
+});
+
 it("rejects malformed cadence instructions and impossible reminder attention states", () => {
   for (const anchorDate of ["2026-02-30", "2026-1-28", "not-a-date"]) {
     expect(

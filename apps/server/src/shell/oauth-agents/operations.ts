@@ -44,3 +44,21 @@ export const liveOAuthAuthority = (
     }),
   });
 };
+
+const databaseCurrentMillis = `CAST(strftime('%s', 'now') AS INTEGER) * 1000
+  + CAST(substr(strftime('%f', 'now'), 4, 3) AS INTEGER)`;
+
+/** Require queued protected work to retain unexpired authority when it actually executes, not merely when prepared. */
+export const liveOAuthCommitAuthority = (
+  input: Readonly<{ subject: OAuthCaller; current: number }>
+): OAuthAuthority => {
+  const authority = liveOAuthAuthority(input);
+  return {
+    ...authority,
+    predicate: `${authority.predicate}
+      AND expires_at_ms > (${databaseCurrentMillis})
+      AND EXISTS (SELECT 1 FROM oauth_connections g
+        WHERE g.id = oauth_access_credentials.connection_id
+          AND g.expires_at_ms > (${databaseCurrentMillis}))`,
+  };
+};

@@ -9,6 +9,7 @@ import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { OAuthCanonicalAdmission } from "../../src/shell/mcp/contract";
 import { authenticateOAuth } from "./operations";
+import { makeMutationCommitGate } from "./mutation-commit.test-fixture";
 import { OAuthReviewChoice } from "../../src/shell/oauth-agents/contract";
 import { makeAudit } from "../../src/shell/audit/runtime";
 import { UserTransactionCoordinator } from "../transactions/runtime";
@@ -57,6 +58,11 @@ const pauseBudgetRead = (
   });
 type Harness = Readonly<{
   disableInference: () => void;
+  holdMutationCommit: () => Readonly<{
+    waiting: Promise<void>;
+    settled: Promise<void>;
+    release: () => void;
+  }>;
   holdBudgetRead: () => Readonly<{
     waiting: Promise<void>;
     release: () => void;
@@ -92,7 +98,8 @@ const setup = (): Effect.Effect<Harness, TestFailure> =>
     );
     const coordinators = new Map<string, UserTransactionCoordinator>();
     let queryGate: Option.Option<QueryGate> = Option.none();
-    const queryDb = new Proxy(db, {
+    const mutationCommit = makeMutationCommitGate(db);
+    const queryDb = new Proxy(mutationCommit.db, {
       get: (target, key): unknown => {
         if (key === "prepare") {
           return (sql: string): D1PreparedStatement =>
@@ -190,6 +197,7 @@ const setup = (): Effect.Effect<Harness, TestFailure> =>
     return {
       db,
       send,
+      holdMutationCommit: mutationCommit.hold,
       disableInference: () => {
         environment.HOSTED_AI_MODEL = "";
       },
@@ -1345,6 +1353,218 @@ it("links and unlinks exact owned Transactions through ordinary OAuth mutations 
             .first<number>("count(*)")
         )
       ).toBe(4);
+    })
+  ));
+it.each(["single", "mixed"])(
+  "rechecks credential expiration when an OAuth %s unit is prepared but its native commit has not executed",
+  (unit) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = yield* approvedFixture(["write", "dashboard"]);
+        const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
+          yield* wait((yield* wait(exchangeFixture(fixture))).json())
+        );
+        const held = fixture.holdMutationCommit();
+        const pending =
+          unit === "single"
+            ? mcpFixture({
+                send: fixture.send,
+                bearer: token.access_token,
+                method: "tools/call",
+                name: "transactions.createTransaction",
+                args: transactionArguments,
+              })
+            : mcpFixture({
+                send: fixture.send,
+                bearer: token.access_token,
+                method: "tools/call",
+                name: "operations.executeAtomicBatch",
+                args: {
+                  payload: {
+                    calls: [
+                      transactionChildren[0],
+                      {
+                        ...transactionChildren[1],
+                        operation: "dashboard.initializeDashboard",
+                        input: {},
+                      },
+                    ],
+                  },
+                },
+              });
+        yield* wait(held.waiting);
+        const expiresAt = (yield* Clock.currentTimeMillis) + 20;
+        yield* wait(
+          fixture.db
+            .prepare("UPDATE oauth_access_credentials SET expires_at_ms = ?")
+            .bind(expiresAt)
+            .run()
+        );
+        yield* Effect.sleep("30 millis");
+        held.release();
+        const response = yield* wait(pending);
+        expect(yield* wait(response.json())).toMatchObject({ result: { isError: true } });
+        expect(
+          yield* wait(
+            fixture.db.prepare("SELECT count(*) FROM transactions").first<number>("count(*)")
+          )
+        ).toBe(0);
+        expect(
+          yield* wait(
+            fixture.db.prepare("SELECT count(*) FROM source_attestations").first<number>("count(*)")
+          )
+        ).toBe(0);
+        expect(
+          yield* wait(
+            fixture.db.prepare("SELECT count(*) FROM dashboard_documents").first<number>("count(*)")
+          )
+        ).toBe(0);
+        expect(
+          yield* wait(
+            fixture.db
+              .prepare("SELECT count(*) FROM pat_audit WHERE outcome = 'accepted'")
+              .first<number>("count(*)")
+          )
+        ).toBe(0);
+      })
+    )
+);
+it.each(["single", "mixed"])(
+  "rechecks a prepared OAuth %s unit after grant revocation, Consent withdrawal and child-scope narrowing",
+  (unit) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        for (const withdrawn of ["grant", "consent", "scope"]) {
+          const fixture = yield* approvedFixture(["write", "dashboard"]);
+          const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
+            yield* wait((yield* wait(exchangeFixture(fixture))).json())
+          );
+          const held = fixture.holdMutationCommit();
+          const calls = [
+            transactionChildren[0],
+            { ...transactionChildren[1], operation: "dashboard.initializeDashboard", input: {} },
+          ];
+          const pending =
+            unit === "single"
+              ? mcpFixture({
+                  send: fixture.send,
+                  bearer: token.access_token,
+                  method: "tools/call",
+                  name: "transactions.createTransaction",
+                  args: transactionArguments,
+                })
+              : mcpFixture({
+                  send: fixture.send,
+                  bearer: token.access_token,
+                  method: "tools/call",
+                  name: "operations.executeAtomicBatch",
+                  args: { payload: { calls } },
+                });
+          yield* wait(held.waiting);
+          if (withdrawn === "grant") {
+            yield* wait(
+              fixture.db
+                .prepare("UPDATE oauth_connections SET revoked_at_ms = ? WHERE id = ?")
+                .bind(yield* Clock.currentTimeMillis, fixture.connectionId)
+                .run()
+            );
+          }
+          if (withdrawn === "consent") yield* revokeFixtureConsent(fixture.db);
+          if (withdrawn === "scope") {
+            yield* wait(
+              fixture.db
+                .prepare("UPDATE oauth_access_credentials SET scopes_json = ?")
+                .bind(unit === "single" ? '["dashboard"]' : '["write"]')
+                .run()
+            );
+          }
+          held.release();
+          const response = yield* wait(pending);
+          yield* wait(held.settled);
+          expect(yield* wait(response.json()), `${unit}: ${withdrawn}`).toMatchObject({
+            result: { isError: true },
+          });
+          for (const table of ["transactions", "source_attestations", "dashboard_documents"]) {
+            expect(
+              yield* wait(
+                fixture.db.prepare(`SELECT count(*) FROM ${table}`).first<number>("count(*)")
+              ),
+              table
+            ).toBe(0);
+          }
+          expect(
+            yield* wait(
+              fixture.db
+                .prepare("SELECT count(*) FROM pat_audit WHERE outcome = 'accepted'")
+                .first<number>("count(*)")
+            )
+          ).toBe(0);
+        }
+      })
+    )
+);
+it("rechecks immutable OAuth grant expiration at the protected mixed-batch commit even with an unexpired credential", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const expiresAt = (yield* Clock.currentTimeMillis) + 5000;
+      const approvalClock = vi
+        .spyOn(Date, "now")
+        .mockReturnValue(expiresAt - 7 * 24 * 60 * 60 * 1000);
+      const fixture = yield* approvedFixture(["write", "dashboard"]);
+      const original = yield* Schema.decodeUnknownEffect(TokenFixture)(
+        yield* wait((yield* wait(exchangeFixture(fixture))).json())
+      );
+      approvalClock.mockRestore();
+      const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
+        yield* wait(
+          (yield* wait(
+            refreshFixture({ ...fixture, refresh: original.refresh_token, scope: Option.none() })
+          )).json()
+        )
+      );
+      // Retained credentials are untrusted authority facts: a longer credential cannot extend its grant.
+      yield* wait(
+        fixture.db
+          .prepare("UPDATE oauth_access_credentials SET expires_at_ms = ?")
+          .bind(expiresAt + 60000)
+          .run()
+      );
+      const held = fixture.holdMutationCommit();
+      const pending = mcpFixture({
+        send: fixture.send,
+        bearer: token.access_token,
+        method: "tools/call",
+        name: "operations.executeAtomicBatch",
+        args: {
+          payload: {
+            calls: [
+              transactionChildren[0],
+              { ...transactionChildren[1], operation: "dashboard.initializeDashboard", input: {} },
+            ],
+          },
+        },
+      });
+      yield* wait(held.waiting);
+      yield* Effect.sleep(Math.max(0, expiresAt - (yield* Clock.currentTimeMillis)) + 20);
+      held.release();
+      const response = yield* wait(pending);
+      yield* wait(held.settled);
+      expect(yield* wait(response.json())).toMatchObject({ result: { isError: true } });
+      for (const table of ["transactions", "source_attestations", "dashboard_documents"]) {
+        expect(
+          yield* wait(
+            fixture.db.prepare(`SELECT count(*) FROM ${table}`).first<number>("count(*)")
+          ),
+          table
+        ).toBe(0);
+      }
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare("SELECT count(*) FROM pat_audit WHERE outcome = 'accepted'")
+            .first<number>("count(*)")
+        )
+      ).toBe(0);
     })
   ));
 it("lists distinct owned agent connections with canonical activity and no credential material", () =>

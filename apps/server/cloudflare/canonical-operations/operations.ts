@@ -13,7 +13,10 @@ import { HostedInference } from "../../src/shell/hosted-inference/operations";
 import { type HostedInferenceService } from "../../src/shell/hosted-inference/contract";
 import { type CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import type { CatalogOperation } from "../../src/shell/canonical-catalog/contract";
-import { atomicBatchOperation } from "../../src/shell/operations/contract";
+import {
+  atomicBatchOperation,
+  getAtomicBatchInputSchema,
+} from "../../src/shell/operations/contract";
 import { operationCatalog } from "../../src/shell/api";
 import { decideOperationAccess } from "../../src/shell/canonical-policy/operations";
 import {
@@ -161,7 +164,7 @@ const oauthMutationWork = (
 ): Effect.Effect<CanonicalWork, Schema.SchemaError> =>
   operation.id === atomicBatchOperation
     ? Schema.decodeUnknownEffect(
-        Schema.Struct({ payload: Schema.Struct({ calls: Schema.NonEmptyArray(Schema.Unknown) }) })
+        Schema.Struct({ payload: Schema.toEncoded(getAtomicBatchInputSchema()) })
       )(input).pipe(Effect.map(({ payload }) => ({ _tag: "Batch" as const, calls: payload.calls })))
     : Effect.succeed({ _tag: "Call", operation: operation.id, input });
 const requiresOAuthConfirmation = (operation: CatalogOperation, work: CanonicalWork): boolean =>

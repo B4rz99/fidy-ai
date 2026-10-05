@@ -21,6 +21,7 @@ import {
 } from "../../../src/core/transactions/contract";
 import { canonicalTriggerOf } from "./triggers";
 import { currentMillis } from "../../runtime/operations";
+import { liveOAuthCommitAuthority } from "../../../src/shell/oauth-agents/operations";
 
 import {
   type CanonicalRefusalDisposition,
@@ -416,10 +417,15 @@ const childStatements = ({
 }>): ReadonlyArray<D1PreparedStatement> => {
   const userId = subject.userId;
   const operation = mutationOperation(mutation);
-  const authority = callerAuthority({
-    subject: childCaller({ subject, requiredScope: mutation.requiredScope }),
-    current,
-  });
+  const authority = isOAuthCaller(subject)
+    ? liveOAuthCommitAuthority({
+        subject: childCaller({ subject, requiredScope: mutation.requiredScope }),
+        current,
+      })
+    : callerAuthority({
+        subject: childCaller({ subject, requiredScope: mutation.requiredScope }),
+        current,
+      });
   return [
     ...(isOAuthCaller(subject)
       ? [
@@ -490,7 +496,7 @@ export const executeCanonicalMutationUnit = ({
         return yield* classifyUnitCallerAbort({
           db,
           subject,
-          current: commitCurrent,
+          current: commitInstant(subject, commitCurrent),
           mutations,
           cause: attempt.cause,
         });

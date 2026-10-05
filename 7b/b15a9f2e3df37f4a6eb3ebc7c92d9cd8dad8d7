@@ -1,0 +1,27 @@
+apps/cli/ARCHITECTURE.md
+  s_8e33e3c1782639::t_10de57fabfda23 12,90
+apps/cli/src/credential/runtime.ts
+  s_8e33e3c1782639::t_9406c70c119bad 13
+apps/cli/src/command/internal/presentation.ts
+  s_8e33e3c1782639::t_a7b150bb39a64f 18
+scripts/install-bun.sh
+  s_8e33e3c1782639::t_b2d8323fc4b899 7-12,15,51
+.github/actions/bun-runtime/action.yml
+  s_8e33e3c1782639::t_b747ef3160c58b 10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7bb15a9f2e3df37f4a6eb3ebc7c92d9cd8dad8d7",
+  "prompts": {},
+  "sessions": {
+    "s_8e33e3c1782639": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a109c2-9276-7113-b270-d2078b93ecba",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

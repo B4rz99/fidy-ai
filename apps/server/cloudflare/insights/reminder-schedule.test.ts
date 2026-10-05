@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterAll, expect, it } from "vitest";
-import { DateTime, Effect, Exit, Option } from "effect";
+import { type Cause, DateTime, Effect, Exit, Option } from "effect";
 import {
   activateTestReminder,
   proactivityDatabase,
@@ -8,9 +8,12 @@ import {
   proactivityTestDatabases,
   proactivityTestNow,
   proactivityTestUsers,
+  withdrawTestProcessingConsent,
 } from "../proactivity.test-fixture";
 import {
   createProactivityConsentOffer,
+  findProactivityConsentGrant,
+  readConsentStatus,
   recordProactivityConsentDisclosure,
 } from "../consent/operations";
 import { ReminderRevisionConflict } from "./contract";
@@ -23,6 +26,140 @@ import {
 } from "./operations";
 
 afterAll(() => proactivityTestDatabases.dispose());
+
+const reminderPersistence = (
+  db: D1Database
+): Effect.Effect<Option.Option<Readonly<Record<string, unknown>>>, Cause.UnknownError> =>
+  Effect.tryPromise(() =>
+    db
+      .prepare(`
+  SELECT s.*,
+    (SELECT count(*) FROM insight_events WHERE user_id=s.user_id) AS events,
+    (SELECT count(*) FROM reminder_occurrence_reports WHERE user_id=s.user_id) AS reports,
+    (SELECT count(*) FROM reminder_outbox WHERE user_id=s.user_id) AS outbox,
+    (SELECT count(*) FROM reminder_schedule_executions WHERE user_id=s.user_id) AS executions,
+    (SELECT count(*) FROM reminder_schedule_revisions WHERE user_id=s.user_id) AS revisions,
+    (SELECT standing_json FROM reminder_governors WHERE user_id=s.user_id) AS standing_json
+  FROM reminder_schedules s WHERE user_id=?`)
+      .bind(proactivityTestUsers[0])
+      .first()
+  ).pipe(Effect.map(Option.fromNullOr));
+
+it("refuses due reminder materialization after processing withdrawal without disabling or advancing the enabled schedule", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* proactivityDatabase;
+      const schedule = yield* activateTestReminder(db);
+      const before = yield* reminderPersistence(db);
+      expect(Option.getOrThrow(before)).toMatchObject({
+        enabled: 1,
+        version: 1,
+        events: 0,
+        reports: 0,
+        outbox: 0,
+        executions: 0,
+        revisions: 1,
+      });
+      yield* withdrawTestProcessingConsent(db);
+      expect(yield* readConsentStatus({ db, userId: proactivityTestUsers[0] })).toBe("Revoked");
+      expect(
+        (yield* materializeReminder({
+          db,
+          userId: proactivityTestUsers[0],
+          id: schedule.id,
+          now: DateTime.makeUnsafe("2026-10-06T23:00:00Z"),
+        }))._tag
+      ).toBe("NoWork");
+      expect(yield* reminderPersistence(db)).toEqual(before);
+    })
+  ));
+
+it("rolls back a prepared reminder revision when processing Consent is withdrawn before its atomic commit", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* proactivityDatabase;
+      const schedule = yield* activateTestReminder(db);
+      const before = yield* reminderPersistence(db);
+      const revision = yield* prepareReminderRevision({
+        db,
+        userId: proactivityTestUsers[0],
+        now: proactivityTestNow,
+        input: {
+          expectedVersion: schedule.version,
+          cadence: { kind: "weekdays" },
+          timing: { hour: 9, minute: 0 },
+          timeZone: schedule.timeZone,
+        },
+      });
+      yield* withdrawTestProcessingConsent(db);
+      expect(yield* readConsentStatus({ db, userId: proactivityTestUsers[0] })).toBe("Revoked");
+      expect((yield* Effect.exit(Effect.tryPromise(() => db.batch([...revision]))))._tag).toBe(
+        "Failure"
+      );
+      expect(yield* reminderPersistence(db)).toEqual(before);
+    })
+  ));
+
+it.each(["budget-threshold", "manual-entry-reminder"] as const)(
+  "refuses %s acceptance exactly at and after expiry without receipts, authority or reminder activation",
+  (kind) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* proactivityDatabase;
+        const input = {
+          db,
+          userId: proactivityTestUsers[0],
+          caller: proactivityTestCallers[0],
+          kind,
+          now: proactivityTestNow,
+        };
+        const offer = Option.getOrThrow(yield* createProactivityConsentOffer(input));
+        expect(
+          yield* recordProactivityConsentDisclosure({
+            ...input,
+            offerId: offer.id,
+            disclosureMessageId: "expiry-disclosure",
+          })
+        ).toBe(true);
+        for (const elapsedMs of [600000, 600001]) {
+          expect(
+            yield* recordProactivityDecision({
+              ...input,
+              now: DateTime.makeUnsafe(proactivityTestNow.epochMilliseconds + elapsedMs),
+              choice: offer.acceptChoice,
+              decisionMessageId: `expired-${elapsedMs}`,
+            })
+          ).toBe(false);
+          expect(Option.isNone(yield* findProactivityConsentGrant(input))).toBe(true);
+          expect(Option.isNone(yield* findReminderSchedule(input))).toBe(true);
+        }
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                `SELECT decision_message_id,decision FROM proactivity_consent_offers WHERE id=?`
+              )
+              .bind(offer.id)
+              .first()
+          )
+        ).toEqual({ decision_message_id: null, decision: null });
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(`SELECT
+    (SELECT count(*) FROM proactivity_consent_records WHERE user_id=u.id) AS consent_records,
+    (SELECT count(*) FROM reminder_schedules WHERE user_id=u.id) AS schedules,
+    (SELECT count(*) FROM reminder_governors WHERE user_id=u.id) AS governors,
+    (SELECT count(*) FROM insight_events WHERE user_id=u.id) AS events,
+    (SELECT count(*) FROM reminder_outbox WHERE user_id=u.id) AS outbox
+    FROM users u WHERE id=?`)
+              .bind(input.userId)
+              .first()
+          )
+        ).toEqual({ consent_records: 0, schedules: 0, governors: 0, events: 0, outbox: 0 });
+      })
+    )
+);
 
 it("activates the disclosed daily 18:00 Bogotá reminder atomically with legal evidence and recovers only the latest occurrence", () =>
   Effect.runPromise(

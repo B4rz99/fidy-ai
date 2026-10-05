@@ -7,10 +7,12 @@ import type { InsightUnavailable } from "./insights/contract";
 import type { ReminderSchedule } from "../src/core/insights/contract";
 import {
   createProactivityConsentOffer,
+  recordConsentRevocation,
   recordProactivityConsentDisclosure,
 } from "./consent/operations";
 import { findReminderSchedule, recordProactivityDecision } from "./insights/operations";
 import { installTestSchema, isolatedTestDatabases } from "./d1-test-fixture";
+import { newId } from "./secret-material/operations";
 
 /** Broad native proactivity integration fixture: real D1 schema and established identities, never substituted owner persistence. Each call acquires an independent database. */
 export const proactivityTestDatabases = isolatedTestDatabases();
@@ -49,6 +51,51 @@ export const activateTestReminder = (
       decisionMessageId: "reminder-accepted",
     });
     return Option.getOrThrow(yield* findReminderSchedule(context));
+  });
+
+const credentialDigestBytes = 32;
+const browserFreshLifetimeMs = 600000;
+const browserHardLifetimeMs = 7776000000;
+
+/** Seed an established browser proof, then append processing withdrawal through the real Consent owner; do not disable or rewrite the reminder schedule. */
+export const withdrawTestProcessingConsent = (
+  db: D1Database
+): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const pairingId = newId();
+    const id = newId();
+    const userId = proactivityTestUsers[0];
+    const digest = crypto.getRandomValues(new Uint8Array(credentialDigestBytes));
+    const current = proactivityTestNow.epochMilliseconds;
+    yield* Effect.tryPromise(() =>
+      db.batch([
+        db
+          .prepare(`INSERT INTO browser_login_pairings
+        (id,public_code,verifier_digest,user_id,state,created_at_ms,expires_at_ms)
+        VALUES (?,'123456789',?,?,'consumed',?,?)`)
+          .bind(pairingId, digest, userId, current, current + browserFreshLifetimeMs),
+        db
+          .prepare(`INSERT INTO web_sessions
+        (id,pairing_id,user_id,token_digest,created_at_ms,fresh_until_ms,idle_expires_at_ms,hard_expires_at_ms)
+        VALUES (?,?,?,?,?,?,?,?)`)
+          .bind(
+            id,
+            pairingId,
+            userId,
+            digest,
+            current,
+            current + browserFreshLifetimeMs,
+            current + browserFreshLifetimeMs,
+            current + browserHardLifetimeMs
+          ),
+        recordConsentRevocation({
+          db,
+          subject: { id, userId, digest },
+          evidenceId: newId(),
+          current,
+        }),
+      ])
+    );
   });
 
 export const proactivityDatabase: Effect.Effect<

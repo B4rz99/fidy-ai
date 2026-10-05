@@ -1,0 +1,35 @@
+apps/server/cloudflare/budgets/internal/budget-row.ts
+  s_e278ac208f4e8a::t_47bdb31565360c 2,4-7,16-24
+apps/server/cloudflare/budgets/internal/budgets.ts
+  s_e278ac208f4e8a::t_c992985d635c43 140-144,214-217,277,401,454
+  s_e278ac208f4e8a::t_f77c03881d9089 210-213
+apps/server/cloudflare/budgets/internal/budget-queries.ts
+  s_e278ac208f4e8a::t_fa19fb7d08bfc1 63,244-245
+apps/server/cloudflare/budgets/internal/budget-outcome.ts
+  s_e278ac208f4e8a::t_a78992b175b9c1 27-37,88
+  s_e278ac208f4e8a::t_65776432eb4231 3,26
+apps/server/cloudflare/budgets/budgets.test.ts
+  s_e278ac208f4e8a::t_d0e73d6ac915d5 323-335,358-375,394-396
+  s_e278ac208f4e8a::t_fa0a56e3a49034 354-357
+  s_e278ac208f4e8a::t_82974230ce6852 1-5,7,336-338,340-349,351-353,376-378
+  s_e278ac208f4e8a::t_f7c9aa8a14ec34 18-21,23,386-393
+  s_e278ac208f4e8a::t_68d8221a44d77f 379-385
+  s_e278ac208f4e8a::t_df98c743f93030 39-40,42
+  s_e278ac208f4e8a::t_db1e57f22fe91c 6,22,41,339,350
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e6b1453a8994860239cb2ed2eaa876de7f051a9a",
+  "prompts": {},
+  "sessions": {
+    "s_e278ac208f4e8a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10731-a41d-7121-98b3-ec6e9e1e04de",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

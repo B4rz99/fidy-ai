@@ -1,0 +1,111 @@
+.github/actions/bun-runtime/action.yml
+  s_e278ac208f4e8a::t_0b574f55f77e62 10
+apps/server/src/shell/mcp/contract.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 10,23
+apps/server/cloudflare/memory/operations.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 27,152-164,185
+apps/server/cloudflare/canonical-work/operations.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 27,133-151,164-177,192,402-413,513,549-552
+apps/server/cloudflare/categories/internal/keyword-rules.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 13
+apps/server/cloudflare/oauth-agents/mutation-commit.test-fixture.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 1-78
+ARCHITECTURE.md
+  s_e278ac208f4e8a::t_0b574f55f77e62 100-101
+infra/cloudflare/package.json
+  s_e278ac208f4e8a::t_0b574f55f77e62 26
+apps/server/cloudflare/categories/internal/canonical-keyword-rules.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 156-171
+apps/server/cloudflare/transactions/runtime.ts
+  s_e278ac208f4e8a::t_24e84db6eadb8a 270-275
+  s_e278ac208f4e8a::t_0b574f55f77e62 12,14,240,257-259,261-264,269,276-278,280-299
+apps/server/cloudflare/transactions/internal/transaction-reconciliation.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 22,30,174
+package.json
+  s_e278ac208f4e8a::t_0b574f55f77e62 60-61
+apps/server/cloudflare/canonical-operations/internal/oauth-response.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 1-77
+apps/cli/src/command/internal/presentation.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 18
+apps/server/ARCHITECTURE.md
+  s_e278ac208f4e8a::t_0b574f55f77e62 110-111,114-117,125
+apps/server/package.json
+  s_e278ac208f4e8a::t_0b574f55f77e62 311
+apps/server/cloudflare/canonical-work/contract.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 44-46,91,93
+apps/server/cloudflare/ingestion/internal/statement-clarification-mutation.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 94-106
+apps/server/cloudflare/memory/internal/outcome.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 12-16,27-28,115-125
+apps/server/cloudflare/canonical-operations/internal/canonical-lifetime.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 1-116,118-127
+  s_e278ac208f4e8a::t_5c4fa0d773f2f4 117
+apps/server/cloudflare/ingestion/internal/statement-staging.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 769,794,1089-1103,1112,1128-1142,1151,1357-1392,1402
+apps/server/src/shell/oauth-agents/operations.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 47-64
+apps/server/cloudflare/canonical-operations/internal/mutation-unit.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 23-24,30,72-75,405-432,442,450,488,503,511
+apps/server/src/shell/operations/contract.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 31-37
+apps/server/cloudflare/canonical-operations/internal/inference-requirement.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 1-6
+GLOSSARY.md
+  s_e278ac208f4e8a::t_0b574f55f77e62 238
+apps/server/cloudflare/categories/internal/keyword-rule-outcome.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 42,44,113-130
+apps/server/cloudflare/insights/internal/insight-store.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 26,571-575
+apps/server/cloudflare/canonical-operations/operations.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 11,28-31,41,44,60,69-72,75-84,89,95,97,108-112,116,119-129,136,144,146-148,157-195,197,199-203,217,219,222,224-233,240,245,379-381,407,417,436-460,462-464,476-482,485
+apps/server/cloudflare/canonical-operations/internal/oauth-confirmation.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 1-36
+apps/server/cloudflare/oauth-agents/discovery.test-fixture.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 1-119
+apps/server/cloudflare/core-http/internal/http.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 43,307
+apps/server/cloudflare/transactions/internal/transactions.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 20,26,125-145,160
+apps/server/cloudflare/mcp/runtime.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 8,16,30,68,75,78,85,98,138-154,190-193,202,220-222
+apps/server/cloudflare/oauth-agents/oauth-ingress.test.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 3-7,9,12,19,27,75-80,116-117,145,166,215-218,267,421-1686,1688-1705,1707-1730,2917,2921,2958-2960,3016-3018,3380-3388,3681-3687,3695-3696,3704,3718,3728,3754-3758,4021-4022,4028,4031,4044-4055,4062,4064,4164-4165,4254,4531,4543-4544,4548,4960-4976,4979,4985-4992,4994-5002,5004-5005
+  s_e278ac208f4e8a::t_e32ff3331fcd20 8
+  s_e278ac208f4e8a::t_ef802bf00899bc 5003
+apps/server/cloudflare/ingestion/internal/forwarding-address.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 153-163
+scripts/install-workspace.sh
+  s_e278ac208f4e8a::t_0b574f55f77e62 2-3,17-18
+apps/server/cloudflare/canonical-admission/operations.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 85,107-134
+apps/server/cloudflare/transactions/internal/transaction-corrections.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 16,24,169-175,198
+apps/cli/ARCHITECTURE.md
+  s_e278ac208f4e8a::t_0b574f55f77e62 12,90
+apps/cli/src/credential/runtime.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 13
+apps/server/cloudflare/canonical-operations/internal/batch.ts
+  s_e278ac208f4e8a::t_0b574f55f77e62 18-19,25,42,153,345-346,359-361,365-384,478-487,495-496,503-509,526-528,622,626,635,751,764,773,790
+apps/web/package.json
+  s_e278ac208f4e8a::t_0b574f55f77e62 60
+scripts/install-bun.sh
+  s_e278ac208f4e8a::t_0b574f55f77e62 7-12,15,51
+bun.lock
+  s_e278ac208f4e8a::t_823d56ee6a2c75 17-18,65,109,126,573,575,577,579,581,583,585,587,589,591,593,595,597,599,601,603,605,607,609,623,625,627,629,631,633,635,637,639,641,643,645,647,649,651,653,655,657,659,1423,1425,1629,1705
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e6bef7337a3ba34e5562855aeebebc060700036b",
+  "prompts": {},
+  "sessions": {
+    "s_e278ac208f4e8a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10731-a41d-7121-98b3-ec6e9e1e04de",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

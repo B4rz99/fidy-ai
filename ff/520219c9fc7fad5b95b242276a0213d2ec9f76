@@ -1,0 +1,412 @@
+apps/server/cloudflare/recurring/operations.ts
+  s_b245bbeae995cc::t_1f712ebdc1473e 11,26
+  s_b245bbeae995cc::t_aff1f369a8934c 4-10,12-14,35-38,40-42
+  s_b245bbeae995cc::t_da550dd20b75c7 27-29
+  s_b245bbeae995cc::t_860376afdf9ff2 34,39,43
+apps/server/src/shell/consent/operations.ts
+  s_b245bbeae995cc::t_2875657f2a3a2d 4,48-49
+apps/server/cloudflare/insights/internal/insight-send-outcome.ts
+  s_b245bbeae995cc::t_1798ce2f4c22b1 1-34
+apps/server/cloudflare/migrations/0037_recurring_digest.sql
+  s_b245bbeae995cc::t_3b95ab44129265 1-3
+apps/server/cloudflare/whatsapp/contract.ts
+  s_b245bbeae995cc::t_a794d72205a99b 37,53
+apps/server/cloudflare/insights/internal/recurring-execution.ts
+  s_b245bbeae995cc::t_417370e1a171cc 3,44,48-49,57-58
+  s_b245bbeae995cc::t_1027bb41769164 2
+  s_b245bbeae995cc::t_511aefba0052e2 6,18,47
+  s_b245bbeae995cc::t_775ffa15ea25d0 9,17,46
+  s_b245bbeae995cc::t_660aef77e11cc7 1,5,33,35
+  s_b245bbeae995cc::t_aff1f369a8934c 10-16,19-32,34,36-43,45,50-56
+  s_b245bbeae995cc::t_e5ce2576091e3f 4,7-8
+apps/server/cloudflare/transactions/runtime.ts
+  s_b245bbeae995cc::t_775ffa15ea25d0 2-3,86,322,327
+apps/server/ARCHITECTURE.md
+  s_b245bbeae995cc::t_cc42a5306cb9d2 223-227,231-233,236
+  s_b245bbeae995cc::t_39d10f1068d39d 221,228-230,237-241,246-254
+  s_b245bbeae995cc::t_868eca734c79d2 234-235,242
+  s_b245bbeae995cc::t_3ad7b3d3b6a868 222,243-245
+apps/server/cloudflare/agent/contract.ts
+  s_b245bbeae995cc::t_775ffa15ea25d0 7,58
+apps/server/cloudflare/whatsapp/internal/turn-evidence.ts
+  s_b245bbeae995cc::t_8e4835ee838a7e 235,242
+  s_b245bbeae995cc::t_aff1f369a8934c 236-241,243-248
+  s_b245bbeae995cc::t_4dbf882f923c60 249-255
+apps/server/src/core/insights/recurring-digest/operations.ts
+  s_b245bbeae995cc::t_18c7d71641ab90 2,9,12,20-29,35-37,39,96
+  s_b245bbeae995cc::t_865faa338726b2 45,64,91
+  s_b245bbeae995cc::t_1798ce2f4c22b1 46-48
+  s_b245bbeae995cc::t_e073368a87bb01 10-11,38
+  s_b245bbeae995cc::t_e6a515af1849c0 1,19,40-42,51,88,95
+  s_b245bbeae995cc::t_1a8e92920fc3a0 53-58,61-62
+  s_b245bbeae995cc::t_19e5f2dfc1acee 3
+  s_b245bbeae995cc::t_b9c316cbf5edb8 30-34,52,59-60,63
+  s_b245bbeae995cc::t_aff1f369a8934c 4-8,13-18,43-44,49-50,65-87,89-90,92-94
+apps/server/cloudflare/insights/operations.ts
+  s_b245bbeae995cc::t_3567b4a56cbadb 69-71
+  s_b245bbeae995cc::t_f40fd016a211a7 68
+  s_b245bbeae995cc::t_511aefba0052e2 9
+  s_b245bbeae995cc::t_97fcde17f54707 11,83,87,91,96,100
+  s_b245bbeae995cc::t_27bab4b148dbbb 127
+  s_b245bbeae995cc::t_319379f02dfaaa 62
+  s_b245bbeae995cc::t_aff1f369a8934c 1-8,10,23-26,72,74,76-78,80-82,84-86,88,90,92-95,97-99,101-103,128-129
+  s_b245bbeae995cc::t_b4916c262480a5 27-28
+  s_b245bbeae995cc::t_ebcbc223bbccd9 75
+  s_b245bbeae995cc::t_ed30fe52e96fed 79
+  s_b245bbeae995cc::t_775ffa15ea25d0 32,73,89,150
+  s_b245bbeae995cc::t_e1055e65252eb3 104
+apps/server/cloudflare/whatsapp/operations.ts
+  s_b245bbeae995cc::t_ebc34f80dcd8f5 125-127
+  s_b245bbeae995cc::t_5b22152d779e41 123,130
+  s_b245bbeae995cc::t_edb2c2c8518dc1 128-129
+  s_b245bbeae995cc::t_aff1f369a8934c 256-257,259-260
+  s_b245bbeae995cc::t_319379f02dfaaa 16-17
+  s_b245bbeae995cc::t_7b21d7d4f46620 255,258
+  s_b245bbeae995cc::t_bd500c9d0ed6ed 18,261-263
+  s_b245bbeae995cc::t_1798ce2f4c22b1 131
+  s_e278ac208f4e8a::t_af7b69972ca128 124
+apps/server/cloudflare/agent/internal/recurring-channel.ts
+  s_b245bbeae995cc::t_0669542428dfc0 52-53,65-66
+  s_b245bbeae995cc::t_1dd659d52b326e 10,19,25-26,28,34,40-46
+  s_b245bbeae995cc::t_aff1f369a8934c 3-7,15-18,20-24,29-33,35-39,47-51,54-64,67-68
+  s_b245bbeae995cc::t_2cc4d4260e69e6 1-2,8-9,11-14
+  s_b245bbeae995cc::t_ccda690a63a2ab 27
+apps/server/cloudflare/canonical-operations/internal/query-registry.ts
+  s_b245bbeae995cc::t_c1d4e8f67b6e71 16
+  s_b245bbeae995cc::t_aff1f369a8934c 161-165
+apps/server/cloudflare/recurring/contract.ts
+  s_b245bbeae995cc::t_21c58c17f214cf 20,22-23,27-29
+  s_b245bbeae995cc::t_aff1f369a8934c 24-26
+  s_b245bbeae995cc::t_28148d7162be24 21
+apps/server/cloudflare/agent/proactive-transcript.test.ts
+  s_b245bbeae995cc::t_19a213dbe3a985 84
+apps/server/cloudflare/migrations/0039_recurring_digest_audit.sql
+  s_b245bbeae995cc::t_f665ff45d35cd9 1-26
+apps/server/cloudflare/consent/operations.ts
+  s_b245bbeae995cc::t_775ffa15ea25d0 34-37,46,58-59,68-69,74-75,81-82,92-94,98-99,115-116,145-146,151-152,156
+  s_b245bbeae995cc::t_b0fd101b755bdf 8
+  s_b245bbeae995cc::t_220b71cf55cb37 105,111-112
+  s_b245bbeae995cc::t_f9218c735ef4a4 108-110
+  s_b245bbeae995cc::t_f7c184f8b05f2d 113
+  s_b245bbeae995cc::t_08dfd35677cf95 126-142
+  s_b245bbeae995cc::t_f3f8b9a0c94b9a 122-125
+  s_b245bbeae995cc::t_aff1f369a8934c 45,47-48,51-54,60-64,70,76-77,88-89,97,100-104,106-107,114,117-121,144,147-148,150,153,155,157-158,160-163,165
+  s_b245bbeae995cc::t_511aefba0052e2 38
+  s_b245bbeae995cc::t_bf054b96229f8b 1-5
+  s_b245bbeae995cc::t_ce6612ac090882 31
+  s_b245bbeae995cc::t_f7daee3ca0dc17 33,83,95-96,143,149,154,159,164
+apps/server/cloudflare/core-worker.ts
+  s_b245bbeae995cc::t_775ffa15ea25d0 1,36,83-84
+apps/server/cloudflare/insights/contract.ts
+  s_b245bbeae995cc::t_aff1f369a8934c 90-93,97-100,104-108,153-158,160,164-168
+  s_b245bbeae995cc::t_4739620bbe7c2d 159
+  s_b245bbeae995cc::t_1798ce2f4c22b1 11-14
+  s_b245bbeae995cc::t_96012653d4249f 7
+  s_b245bbeae995cc::t_775ffa15ea25d0 96,101-103,113,122,131
+  s_b245bbeae995cc::t_bc88b2ba64737d 10,88-89,94-95,134-135,150-152,161-163,169
+  s_b245bbeae995cc::t_511aefba0052e2 124,129
+  s_b245bbeae995cc::t_ccda690a63a2ab 170
+apps/server/cloudflare/recurring/recurring.test.ts
+  s_b245bbeae995cc::t_fee8d34d5d13ce 256-258
+apps/server/cloudflare/agent/internal/weekly-channel.ts
+  s_b245bbeae995cc::t_aff1f369a8934c 84-88,90-100,133-136,140-142,160-167,170-172
+  s_b245bbeae995cc::t_0669542428dfc0 137-139,144-151
+  s_b245bbeae995cc::t_2ba2a73e293bb8 4,6,16,169,173
+  s_b245bbeae995cc::t_7cfe2d554f9eea 152,159
+  s_b245bbeae995cc::t_c4d17a614038d9 10-11,89,103
+  s_b245bbeae995cc::t_3f525f16f3a767 143
+  s_b245bbeae995cc::t_ea5f5020f75dcf 77,154
+apps/server/cloudflare/maintenance/runtime.ts
+  s_b245bbeae995cc::t_775ffa15ea25d0 45,280
+apps/server/cloudflare/consent/internal/insight-consent.ts
+  s_b245bbeae995cc::t_600cceaf653d27 256,258
+  s_b245bbeae995cc::t_511aefba0052e2 1-18,20-42,44-46,48-55,59-75,77-154,156-247,252-255,257,259-425,429-624
+  s_b245bbeae995cc::t_2f68b15742220e 19,43,47,56-58,76,155,426-428
+  s_b245bbeae995cc::t_bf054b96229f8b 248-251
+apps/server/src/shell/consent/internal/recurring-disclosure.ts
+  s_b245bbeae995cc::t_aff1f369a8934c 11-26
+  s_b245bbeae995cc::t_692271c4a3756f 1-10
+apps/server/cloudflare/maintenance/contract.ts
+  s_b245bbeae995cc::t_775ffa15ea25d0 1,73,76-77
+apps/server/cloudflare/queue/contract.ts
+  s_b245bbeae995cc::t_775ffa15ea25d0 1,22
+apps/server/cloudflare/insights/runtime.ts
+  s_b245bbeae995cc::t_ea5f5020f75dcf 131,173,191,207,217-218,245,262,272,280,326,339
+  s_b245bbeae995cc::t_aff1f369a8934c 18-21,40-44,47-53,57-71,74,77-79,222-224,234-240,244,246-256
+  s_b245bbeae995cc::t_511aefba0052e2 25,46,75,83,142,154,177
+  s_b245bbeae995cc::t_eccdd97d4de749 7,15,243,271,291
+  s_b245bbeae995cc::t_775ffa15ea25d0 24,26-27,38-39,45,73,82,135-136,141,144,209,261,283,290,316,319,340,342,346
+  s_b245bbeae995cc::t_0669542428dfc0 54-56,225-227
+  s_b245bbeae995cc::t_358f18b1f15bf7 72,76,80-81
+  s_b245bbeae995cc::t_61cafa8b579380 17,241-242
+apps/server/cloudflare/recurring/internal/confirmations.ts
+  s_b245bbeae995cc::t_49a44ac734d083 12,15,122,150-154,161-174,177-179
+  s_b245bbeae995cc::t_f5ecf634e29076 142
+  s_b245bbeae995cc::t_da550dd20b75c7 123-141
+  s_b245bbeae995cc::t_317c874e687dd7 85
+  s_b245bbeae995cc::t_aff1f369a8934c 143-149,155-160,175-176
+  s_b245bbeae995cc::t_ccda690a63a2ab 180
+apps/server/src/core/insights/recurring-digest/contract.ts
+  s_b245bbeae995cc::t_b5d259ac386a07 7,13-18
+  s_b245bbeae995cc::t_8122ae491d2a45 34,42
+  s_b245bbeae995cc::t_83ab0ea988b4d8 51-63
+  s_b245bbeae995cc::t_a6573e186f9405 4-5,68-74
+  s_b245bbeae995cc::t_3fd245dedd0ffa 1
+  s_b245bbeae995cc::t_aff1f369a8934c 36-37,43-46
+  s_b245bbeae995cc::t_f307fd321fbd33 2-3,6,8-12,22-33,38-41,47-48,67
+  s_b245bbeae995cc::t_6dcd2d90b9f5d7 35
+  s_b245bbeae995cc::t_1a8e92920fc3a0 19-21,49-50,64-66
+apps/server/cloudflare/insights/internal/recurring-digest.ts
+  s_b245bbeae995cc::t_ff6ca75e92b10a 222,295,422,435
+  s_b245bbeae995cc::t_ebc34f80dcd8f5 382
+  s_b245bbeae995cc::t_bf054b96229f8b 386-390,392-394
+  s_b245bbeae995cc::t_262363816b9458 294
+  s_b245bbeae995cc::t_ccda690a63a2ab 203
+  s_b245bbeae995cc::t_319379f02dfaaa 2
+  s_b245bbeae995cc::t_be0059e973c4b7 17,22,197-202,204-206,215
+  s_b245bbeae995cc::t_e9a0d296437ccf 46,161-163,178,247,254,291,364,391,427
+  s_b245bbeae995cc::t_f08a3b1d996d76 306,311,329-331,340-343,354-355,372-375
+  s_b245bbeae995cc::t_8ccc9e7dfef41a 196
+  s_b245bbeae995cc::t_0669542428dfc0 113-114,119-120,296-305,307-310,312-328,332-339,344-353,356-357,359-363,367-371,411-414,444-446
+  s_b245bbeae995cc::t_1798ce2f4c22b1 269-271,273-285,400-403
+  s_b245bbeae995cc::t_b1e569376d85d3 98
+  s_b245bbeae995cc::t_66958da310d5f6 272,358,365-366,423,426,428,430
+  s_b245bbeae995cc::t_775ffa15ea25d0 144,208
+  s_b245bbeae995cc::t_26732b596d0c7f 406
+  s_b245bbeae995cc::t_aff1f369a8934c 5-12,15-16,18-21,24,26-28,31-35,41-45,47,50-61,63-78,80-97,99-112,115-118,121-122,124-141,143,145-160,164-177,179-195,207,209-210,212-214,216-217,219-221,225-238,241-246,251-252,257-268,287-290,292-293,376-381,383-385,395-399,404-405,407-410,415-416,418-420,424-425,432-434,436-443,447-464,466-502
+  s_b245bbeae995cc::t_178ec19084cd03 25,211
+  s_b245bbeae995cc::t_9bc68fb140ffa3 37
+  s_b245bbeae995cc::t_8d3e2cb7494f7b 1,3-4,13-14,23,29-30,36,38-40,48-49,62,79,123,142,218,223-224,239-240,248-250,253,255-256,286,417,421,429,431,465
+apps/web/src/transport/client.ts
+  s_b245bbeae995cc::t_431bce3795e5ea 35-36
+GLOSSARY.md
+  s_b245bbeae995cc::t_e0db7ea471a81a 119,123-130
+  s_b245bbeae995cc::t_b03665ea27960f 120-122
+apps/server/cloudflare/insights/internal/insight-store.ts
+  s_b245bbeae995cc::t_772f2728b9aa1c 373
+  s_b245bbeae995cc::t_43e9aa149da708 194,374
+  s_b245bbeae995cc::t_0669542428dfc0 390-392,410-411,415-416
+  s_b245bbeae995cc::t_aff1f369a8934c 1-4,198-201,375-389,393-409,412-414,417-431
+  s_b245bbeae995cc::t_4a6fb394c22017 432
+apps/server/cloudflare/whatsapp/insight-delivery.test.ts
+  s_b245bbeae995cc::t_40152c4b7d0bd8 66
+apps/web/src/features/recurring-digest/feature.test.tsx
+  s_b245bbeae995cc::t_2e8181c332ed3e 1-7,46-59
+  s_b245bbeae995cc::t_aff1f369a8934c 8-21,27-45
+  s_b245bbeae995cc::t_bc01db21387d06 22-26
+apps/server/cloudflare/consent/contract.ts
+  s_b245bbeae995cc::t_aff1f369a8934c 48-50
+  s_b245bbeae995cc::t_775ffa15ea25d0 9,22,29,32,40,51-53,55
+  s_b245bbeae995cc::t_7e86eb26db1928 47
+apps/server/src/core/insights/recurring-digest/operations.test.ts
+  s_b245bbeae995cc::t_8a16f6f03e8b6a 1,3,13-18,20-23,106
+  s_b245bbeae995cc::t_c918116505f4d1 2,4,7,24-25,38,44-49,53,99
+  s_b245bbeae995cc::t_1a8e92920fc3a0 5
+  s_b245bbeae995cc::t_1798ce2f4c22b1 64,71-76,81-93
+  s_b245bbeae995cc::t_3aa6f70653b7f6 94-95
+  s_b245bbeae995cc::t_708652e5aa0e39 98
+  s_b245bbeae995cc::t_6f861bf82c3204 19,56-59,77-80
+  s_b245bbeae995cc::t_976fd44e0b477a 96-97
+  s_b245bbeae995cc::t_da550dd20b75c7 27-30,33-35
+  s_b245bbeae995cc::t_0ab4c663cd71c6 26,31-32,36-37
+  s_b245bbeae995cc::t_319379f02dfaaa 6
+  s_b245bbeae995cc::t_aff1f369a8934c 8-12,39-43,50-52,54-55,60-63,65-70,100-105
+apps/server/.dependency-cruiser.mjs
+  s_b245bbeae995cc::t_d5b3ecf546c462 176-178
+tools/depcruise/publication.mjs
+  s_b245bbeae995cc::t_75a78244284097 33-34
+apps/server/cloudflare/insights/internal/insight-delivery-execution.ts
+  s_b245bbeae995cc::t_77bf2954904ab3 1-14,19-26,31-46
+  s_b245bbeae995cc::t_1a8e92920fc3a0 15-18,27-30
+infra/cloudflare/verify-edge-policy.test.ts
+  s_b245bbeae995cc::t_fc5dad6dc0fcc5 7
+apps/server/src/shell/canonical-operations/internal/operation-registry.ts
+  s_b245bbeae995cc::t_2b1b2cb913bd97 48
+apps/server/contracts/openapi.json
+  s_b245bbeae995cc::t_0669542428dfc0 4096-4168,4197,4213,4217,4229,4233,4245,4248-4252,4256-4257,4261,4264-4265,4269,4273,4289,4301,4317,4333,4345,4361,4815-4838,4858-4878,4925,4948,8093-8125,9859,9895,9959,10444,10467,10490,10513,10536,10559,10582,10605,10628,14797,14933,15069,15186-15334,15632,15768,15912,16491,16782,16904,16915
+  s_b245bbeae995cc::t_c2bea170a5b990 4839-4857
+apps/server/cloudflare/insights/internal/weekly-work.ts
+  s_b245bbeae995cc::t_0669542428dfc0 14-15,20-21
+  s_b245bbeae995cc::t_775ffa15ea25d0 12,65,89,104,109,169
+  s_b245bbeae995cc::t_ef68c885f7410a 32,69,111-112,117,173-174,181
+  s_b245bbeae995cc::t_aa99d18ea4d271 94
+  s_b245bbeae995cc::t_511aefba0052e2 8
+  s_b245bbeae995cc::t_aff1f369a8934c 11,13,16-19,22-31,50-52,95-99,113-116,175-180
+  s_b245bbeae995cc::t_95336de256d2a9 48-49
+apps/server/cloudflare/whatsapp/internal/insight-delivery.ts
+  s_b245bbeae995cc::t_775ffa15ea25d0 16,128,166,222
+  s_b245bbeae995cc::t_c91d5da14d60e8 132,170,226
+  s_b245bbeae995cc::t_b31f0a0b430968 217,219
+  s_b245bbeae995cc::t_a9e98e43b1ed2f 218,261
+  s_b245bbeae995cc::t_9fb064a859e6c5 9,39,112,114
+  s_b245bbeae995cc::t_aff1f369a8934c 113
+  s_b245bbeae995cc::t_35b4df5d18c503 186-215,260
+apps/server/cloudflare/migrations/0037_recurring_consent.sql
+  s_b245bbeae995cc::t_8b090e6f9bddfe 1-20,28-52
+  s_b245bbeae995cc::t_94d53045cc320d 21-27
+apps/server/src/shell/channels/whatsapp/contract.ts
+  s_b245bbeae995cc::t_356d6f7266d270 45
+  s_b245bbeae995cc::t_40adb9deaa5989 38-40,43-44,46,111-113
+  s_b245bbeae995cc::t_aff1f369a8934c 41-42,47-54
+apps/server/src/client.ts
+  s_b245bbeae995cc::t_e94e0a897f136a 36-37
+apps/server/cloudflare/oauth-agents/oauth-ingress.test.ts
+  s_b245bbeae995cc::t_b13a08216c2557 3673-3674
+apps/web/src/features/recurring-digest/feature.tsx
+  s_b245bbeae995cc::t_5880f83adeffb8 16,44,67
+  s_b245bbeae995cc::t_fdeaa38baa8b23 39-40
+  s_b245bbeae995cc::t_0318b0b6e7f142 1-3,5-14,21,30-33,41,81
+  s_b245bbeae995cc::t_5cff5610ce31a9 4,38
+  s_b245bbeae995cc::t_aff1f369a8934c 15,17-20,22-29,34-37,45-56,61-63,66,68-80
+  s_b245bbeae995cc::t_0669542428dfc0 42-43,57-60,64-65
+apps/server/cloudflare/weekly-summary.test-fixture.ts
+  s_b245bbeae995cc::t_775ffa15ea25d0 8,23,37,139,152,179,181
+apps/server/cloudflare/insights/internal/weekly-execution.ts
+  s_b245bbeae995cc::t_aff1f369a8934c 43,45-46
+  s_b245bbeae995cc::t_249e3aa7a5a97c 1-2,79,81
+  s_b245bbeae995cc::t_672f41ac55e0a2 71
+  s_b245bbeae995cc::t_511aefba0052e2 27,60,139,143,202,225
+  s_b245bbeae995cc::t_775ffa15ea25d0 26,28,44,51,59,136,142,201
+  s_b245bbeae995cc::t_941f4ca30b43ea 3
+  s_b245bbeae995cc::t_9bc68fb140ffa3 7,206,230
+apps/server/cloudflare/d1-test-fixture.ts
+  s_b245bbeae995cc::t_2b3cf84c2dcf87 197
+apps/server/cloudflare/insights/internal/weekly-admission.ts
+  s_b245bbeae995cc::t_9bc68fb140ffa3 66
+apps/server/cloudflare/agent/internal/service.ts
+  s_b245bbeae995cc::t_2967649d9bb28f 152,163,194,490,561
+  s_b245bbeae995cc::t_c4b205bd28ff51 465
+  s_b245bbeae995cc::t_ea5f5020f75dcf 74,430,550
+apps/server/cloudflare/queue/internal/dispatch.ts
+  s_b245bbeae995cc::t_775ffa15ea25d0 1-2,145,147
+apps/server/cloudflare/insights/weekly-runtime.test.ts
+  s_b245bbeae995cc::t_775ffa15ea25d0 26,49,58,60-63,67
+  s_b245bbeae995cc::t_9bc68fb140ffa3 28,249,251
+apps/server/cloudflare/recurring/internal/evaluation.ts
+  s_b245bbeae995cc::t_adac3c4df1a38b 248,257
+apps/server/src/shell/channels/whatsapp/internal/insight-template.ts
+  s_b245bbeae995cc::t_5a1451d51cc5ad 7,35,38
+  s_b245bbeae995cc::t_319379f02dfaaa 11
+  s_b245bbeae995cc::t_aff1f369a8934c 29-31,42-43
+  s_b245bbeae995cc::t_b0ad0e5ee01f82 9,44
+  s_b245bbeae995cc::t_0669542428dfc0 15-19,39-41
+apps/server/cloudflare/migrations/0038_recurring_digest_state.sql
+  s_b245bbeae995cc::t_89bc65325cdf54 1-3,5-10,12-13,15-33
+  s_b245bbeae995cc::t_4e96545335e272 11,14
+  s_b245bbeae995cc::t_30eee69eb4a812 4
+apps/server/cloudflare/consent/internal/recurring-discovery.ts
+  s_b245bbeae995cc::t_775ffa15ea25d0 7,44
+  s_b245bbeae995cc::t_0669542428dfc0 49-54
+  s_b245bbeae995cc::t_bbe8fa6683e1b7 24-41
+  s_b245bbeae995cc::t_aff1f369a8934c 9-18,22,43,45-48,55-75
+  s_b245bbeae995cc::t_fdd925d6c2b87d 1-6,8,19-21,23,42
+apps/server/cloudflare/insights/internal/weekly-settlement.ts
+  s_b245bbeae995cc::t_aff1f369a8934c 11-16,19,22-23,25-31
+  s_b245bbeae995cc::t_b2ad3b8c6ed380 17,24,57
+apps/server/contracts/operation-policy.json
+  s_b245bbeae995cc::t_0669542428dfc0 438-451
+  s_b245bbeae995cc::t_52823332b1e5fb 437
+apps/server/cloudflare/oauth-agents/discovery.test-fixture.ts
+  s_b245bbeae995cc::t_8db3a7efd9960d 14
+apps/server/cloudflare/agent/internal/hosted-turn.ts
+  s_b245bbeae995cc::t_aff1f369a8934c 1850-1859
+  s_b245bbeae995cc::t_ecf34d012efe8e 184
+  s_b245bbeae995cc::t_b26328526a7b88 2
+apps/server/cloudflare/agent/hosted-turn.test.ts
+  s_b245bbeae995cc::t_18e7ff21263e9f 10-12,1343,1347,1355,1477,1549,1596,1598-1600,1603
+  s_b245bbeae995cc::t_511aefba0052e2 64,1321-1322,1324-1337,1339-1342,1344-1346,1348-1354,1356-1454,1458-1467,1473-1476,1478-1482,1513-1518,1520-1531,1533-1548,1550-1581,1583-1595,1597,1601-1602,1604-1623
+  s_b245bbeae995cc::t_a7b9cf4e048357 234-236
+  s_b245bbeae995cc::t_e7ef1a2dc3ce7e 1323,1338,1455-1457,1468-1472,1483-1512,1519,1532,1582
+  s_b245bbeae995cc::t_1d872c569f64ea 1671,2712,3100,3147,3530
+  s_b245bbeae995cc::t_aff1f369a8934c 2728-2733,2747-2752,2998-3003,3204-3209,3378-3383,3453-3458
+  s_b245bbeae995cc::t_dfe43895e5f07a 2851,2896
+  s_e278ac208f4e8a::t_28323fdd1c4386 1624
+apps/server/cloudflare/agent/internal/turn-store.ts
+  s_b245bbeae995cc::t_aff1f369a8934c 44-45,47-48,58,1235-1239,1247
+  s_b245bbeae995cc::t_9d44f26fdb1d72 46,59,1240-1246
+apps/web/ARCHITECTURE.md
+  s_b245bbeae995cc::t_67ca272f720f71 69-77
+apps/server/src/shell/insights/contract.ts
+  s_b245bbeae995cc::t_0f5ed971bed153 2,51-52
+  s_b245bbeae995cc::t_aff1f369a8934c 53-68
+  s_b245bbeae995cc::t_6af34fd4349ab9 69
+apps/server/cloudflare/insights/recurring-digest.test.ts
+  s_b245bbeae995cc::t_e86ad0f9db9a50 206,270,428
+  s_b245bbeae995cc::t_ccda690a63a2ab 249
+  s_b245bbeae995cc::t_0e2fc317d22c38 663,716,739,750
+  s_b245bbeae995cc::t_8dc29f3acd7b71 4,64
+  s_b245bbeae995cc::t_511aefba0052e2 567,575
+  s_b245bbeae995cc::t_bd01d81b569490 42-47,765-769,771-784,786-791,794-801,803-810
+  s_b245bbeae995cc::t_498c9527708c77 467-566,568-574,576-582
+  s_b245bbeae995cc::t_89e7c837cf0a9a 3,7,31,38,174,195,199,212,232,277,281,410,414
+  s_b245bbeae995cc::t_c04fde1d90c76f 26,785,792-793,802
+  s_b245bbeae995cc::t_d94f9de58a97d7 82,88
+  s_b245bbeae995cc::t_351cc90f5af294 458-459
+  s_b245bbeae995cc::t_3a3f589deb2c31 2,41,348,391-392,396-399
+  s_b245bbeae995cc::t_976fd44e0b477a 638-644
+  s_b245bbeae995cc::t_ebd92de3351088 636-637,645-647
+  s_b245bbeae995cc::t_1cc5345d58b7e3 439
+  s_b245bbeae995cc::t_0669542428dfc0 128,130,884-886
+  s_b245bbeae995cc::t_ebc34f80dcd8f5 1,30,94-102,105-107,117,120,132-144
+  s_b245bbeae995cc::t_ce37d0168ec947 8
+  s_b245bbeae995cc::t_10fd5e04a6b6ca 175-194,196-198,200-205,207,209-211,213-219,233-240,242-248,251-253,266-269,271-276,278-280,282-314,334-347,370-390,400-409,411-413,415-427
+  s_b245bbeae995cc::t_685a72ed1c3531 6,10,127
+  s_b245bbeae995cc::t_02952e4ff0fa5b 315-333
+  s_b245bbeae995cc::t_296758a7e1e442 349-360,362-365,367-369,394-395
+  s_b245bbeae995cc::t_ad8d6a943cb3f4 14,18,22
+  s_b245bbeae995cc::t_d70a97808b39de 5,61-63
+  s_b245bbeae995cc::t_da550dd20b75c7 49-55,57-59,460-463,583-620,622-635,648-662,664-715,717-738,740-749,751-764,811-812
+  s_b245bbeae995cc::t_aff1f369a8934c 11-13,15-17,19-21,23-25,28-29,32-37,39,67-75,77-81,83-87,89-92,103-104,108-116,118-119,121-126,131,145-168,429-438,440-457,813-883,887-1172
+  s_b245bbeae995cc::t_40ff27bd5f90d6 56
+  s_b245bbeae995cc::t_775ffa15ea25d0 60,621
+  s_b245bbeae995cc::t_60c3a9d31ad366 76,93
+  s_b245bbeae995cc::t_b3a7515f8e543e 129
+  s_b245bbeae995cc::t_c9b2e5744563b5 361,366,393
+  s_b245bbeae995cc::t_ffa441638cbb7e 170-173
+  s_b245bbeae995cc::t_8f957ac5c41ab5 9,40,48,65-66,169,465-466,1173
+  s_b245bbeae995cc::t_faae4fe4b62b56 27,770
+  s_b245bbeae995cc::t_3c037cb0f013fa 254-255
+  s_b245bbeae995cc::t_bdedd9460ec708 208,220-231,241,250,256-265
+  s_b245bbeae995cc::t_58bb42700e4d15 464
+apps/server/cloudflare/weekly-workflow.test.ts
+  s_b245bbeae995cc::t_775ffa15ea25d0 5-6,43,89,146,148,151,153,159,242,300,302,314,376-377,443,449,489,496,547,661-662
+infra/cloudflare/alchemy.run.ts
+  s_b245bbeae995cc::t_3c980d781eb4ea 261-266
+infra/cloudflare/verify-edge-policy.ts
+  s_b245bbeae995cc::t_baf17eedd79c4c 9-10
+apps/server/src/shell/audit/contract.ts
+  s_b245bbeae995cc::t_59867b2cb26e11 32
+apps/server/src/core/recurring/contract.ts
+  s_b245bbeae995cc::t_aff1f369a8934c 60-68
+  s_b245bbeae995cc::t_12c90f1ac5c129 52
+  s_b245bbeae995cc::t_4430bb7fa27cfa 59
+apps/web/src/app/routes.ts
+  s_b245bbeae995cc::t_c73adea1b2961c 85
+  s_b245bbeae995cc::t_aff1f369a8934c 89-95
+  s_b245bbeae995cc::t_13713b7713cfce 2,13,82-84,86,88,96-97,150
+  s_b245bbeae995cc::t_a8961a13303862 87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ff520219c9fc7fad5b95b242276a0213d2ec9f76",
+  "prompts": {},
+  "sessions": {
+    "s_b245bbeae995cc": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a109cb-0cae-7543-ae2e-6d0b87550328",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_e278ac208f4e8a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10731-a41d-7121-98b3-ec6e9e1e04de",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

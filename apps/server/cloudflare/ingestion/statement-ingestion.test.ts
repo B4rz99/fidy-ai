@@ -3037,7 +3037,7 @@ it(
               token,
             })
           );
-          expect(refused.status).toBe(401);
+          expect(refused.status).toBe(403);
         }
         yield* expectCanonicalState(runtime.db, {
           statement_submissions: 0,

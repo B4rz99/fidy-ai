@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { afterAll, expect, it } from "vitest";
 import { DateTime, Effect, Option } from "effect";
 import { proactivityDisclosureFor } from "../../src/shell/consent/operations";
@@ -86,6 +87,37 @@ it("keeps Budget and reminder grants independent and refuses undisclosed, foreig
           })
         )
       ).toBe(true);
+    })
+  ));
+
+it("prepares a grant-free decline without publishing a fictitious grant identity", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup;
+      const input = {
+        db,
+        userId: users[0],
+        caller: callers[0],
+        kind: "budget-threshold" as const,
+        now,
+      };
+      const offer = Option.getOrThrow(yield* createProactivityConsentOffer(input));
+      yield* recordProactivityConsentDisclosure({
+        ...input,
+        offerId: offer.id,
+        disclosureMessageId: "decline-disclosure",
+      });
+      const prepared = Option.getOrThrow(
+        yield* prepareProactivityConsentDecision({
+          ...input,
+          choice: offer.declineChoice,
+          decisionMessageId: "decline-no-grant",
+        })
+      );
+      expect(prepared.decision).toBe("decline");
+      expect("grantId" in prepared).toBe(false);
+      yield* Effect.tryPromise(() => db.batch([...prepared.statements]));
+      expect(Option.isNone(yield* findProactivityConsentGrant(input))).toBe(true);
     })
   ));
 
@@ -223,7 +255,8 @@ it("allows only one concurrent prepared decision to commit its immutable legal e
         (yield* Effect.exit(Effect.tryPromise(() => db.batch([...second.statements]))))._tag
       ).toBe("Failure");
       const grant = Option.getOrThrow(yield* findProactivityConsentGrant(input));
-      expect(grant.id).toBe(Option.getOrThrow(first.grantId));
+      assert(first.decision === "accept");
+      expect(grant.id).toBe(first.grantId);
       expect(grant.evidence._tag).toBe("ProviderQualifiedMessages");
     })
   ));

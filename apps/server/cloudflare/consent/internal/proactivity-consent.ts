@@ -331,7 +331,7 @@ const authorizeChoice = (input: DecisionInput, evidence: PreparedChoice): D1Prep
 const prepareRecord = (
   input: DecisionInput,
   evidence: PreparedChoice,
-  revoked: boolean
+  event: ConsentRecord["event"]
 ): Effect.Effect<
   Readonly<{ id: ConsentRecordId; statement: D1PreparedStatement }>,
   ConsentUnavailable
@@ -339,17 +339,14 @@ const prepareRecord = (
   Effect.gen(function* () {
     if (evidence.offer.disclosure_message_id === null) return yield* new ConsentUnavailable();
     const id = ConsentRecordId.make(newId());
-    const grantId = revoked
-      ? Option.map(evidence.grant, (record) => record.id)
-      : Option.none<ConsentRecordId>();
+    const grantId =
+      event._tag === "Revoked" ? Option.some(event.grantId) : Option.none<ConsentRecordId>();
     const record = ConsentRecord.make({
       id,
       subjectUserId: input.userId,
       disclosure: evidence.offer.disclosure_json,
       occurredAt: input.now,
-      event: Option.isSome(grantId)
-        ? { _tag: "Revoked", grantId: grantId.value }
-        : { _tag: "Granted", grant: { _tag: "InsightDelivery", insightKind: input.kind } },
+      event,
       evidence: {
         _tag: "ProviderQualifiedMessages",
         disclosureMessage: {
@@ -384,11 +381,6 @@ const prepareRecord = (
     return { id, statement };
   }).pipe(Effect.mapError(() => new ConsentUnavailable()));
 
-const appendsRecord = (
-  decision: PreparedProactivityConsentDecision["decision"],
-  grant: Option.Option<ConsentRecord>
-): boolean => decision !== "continue" && !(decision === "decline" && Option.isNone(grant));
-
 export const prepareDecision = (
   input: DecisionInput
 ): Effect.Effect<Option.Option<PreparedProactivityConsentDecision>, ConsentUnavailable> =>
@@ -396,24 +388,42 @@ export const prepareDecision = (
     const evidence = yield* readChoice(input);
     if (Option.isNone(evidence)) return Option.none();
     const { choice, grant } = evidence.value;
-    const decision = choice[3];
-    const effective: PreparedProactivityConsentDecision["decision"] =
-      decision === "accept" && Option.isSome(grant) ? "continue" : decision;
-    const statements = [authorizeChoice(input, evidence.value)];
-    if (!appendsRecord(effective, grant)) {
+    const common = { kind: input.kind, statements: [authorizeChoice(input, evidence.value)] };
+    if (choice[3] === "accept") {
+      if (Option.isSome(grant)) {
+        return Option.some<PreparedProactivityConsentDecision>({
+          ...common,
+          decision: "continue",
+          grantId: grant.value.id,
+          statements: [...common.statements, assertion(input.db)],
+        });
+      }
+      const record = yield* prepareRecord(input, evidence.value, {
+        _tag: "Granted",
+        grant: { _tag: "InsightDelivery", insightKind: input.kind },
+      });
       return Option.some<PreparedProactivityConsentDecision>({
-        decision: effective,
-        kind: input.kind,
-        grantId: Option.map(grant, (record) => record.id),
-        statements: [...statements, assertion(input.db)],
+        ...common,
+        decision: "accept",
+        grantId: record.id,
+        statements: [...common.statements, record.statement, assertion(input.db)],
       });
     }
-    const revoked = decision !== "accept";
-    const record = yield* prepareRecord(input, evidence.value, revoked);
+    if (Option.isNone(grant)) {
+      return Option.some<PreparedProactivityConsentDecision>({
+        ...common,
+        decision: "decline",
+        statements: [...common.statements, assertion(input.db)],
+      });
+    }
+    const record = yield* prepareRecord(input, evidence.value, {
+      _tag: "Revoked",
+      grantId: grant.value.id,
+    });
     return Option.some<PreparedProactivityConsentDecision>({
-      decision: revoked ? "revoke" : "accept",
-      kind: input.kind,
-      grantId: revoked ? Option.map(grant, (value) => value.id) : Option.some(record.id),
-      statements: [...statements, record.statement, assertion(input.db)],
+      ...common,
+      decision: "revoke",
+      grantId: grant.value.id,
+      statements: [...common.statements, record.statement, assertion(input.db)],
     });
   }).pipe(Effect.mapError(() => new ConsentUnavailable()));

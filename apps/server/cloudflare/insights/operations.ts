@@ -87,9 +87,8 @@ export const recordProactivityDecision = (
     const statements = [...decision.statements];
     if (input.kind === "manual-entry-reminder") {
       if (decision.decision === "accept" || decision.decision === "continue") {
-        if (Option.isNone(decision.grantId)) return yield* new InsightUnavailable();
         statements.push(
-          ...(yield* reminder.prepareActivation({ ...input, grantId: decision.grantId.value }))
+          ...(yield* reminder.prepareActivation({ ...input, grantId: decision.grantId }))
         );
       } else statements.push(reminder.prepareDisable(input));
     }

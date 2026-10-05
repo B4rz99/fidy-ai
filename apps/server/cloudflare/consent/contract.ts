@@ -28,11 +28,13 @@ export type ProactivityConsentOffer = Readonly<{
 
 /** Compose legal evidence with the same category's execution standing in one caller-owned User-coordinated atomic unit. */
 export type PreparedProactivityConsentDecision = Readonly<{
-  decision: "accept" | "continue" | "decline" | "revoke";
   kind: ProactivityOptInKind;
-  grantId: Option.Option<ConsentRecordId>;
   statements: ReadonlyArray<D1PreparedStatement>;
-}>;
+}> &
+  (
+    | Readonly<{ decision: "accept" | "continue" | "revoke"; grantId: ConsentRecordId }>
+    | Readonly<{ decision: "decline" }>
+  );
 
 /** Protect a caller-owned statement with the exact live category grant and processing Consent. */
 export type ProactivityConsentAction = Readonly<{

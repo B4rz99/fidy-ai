@@ -12,12 +12,41 @@ const deliveryDiscoveryLimit = 64;
 const requestWindowMs = 86400000;
 
 const maximumWorkflowRestarts = 3;
+const recoverProactivity = (
+  input: Readonly<{
+    db: D1Database;
+    userId: UserId;
+    work: Extract<WeeklyDeliveryWork, { kind: "proactivity-delivery" }>;
+    now: number;
+  }>
+): Effect.Effect<boolean, InsightUnavailable> =>
+  Effect.tryPromise(() =>
+    input.db
+      .prepare(
+        "UPDATE proactivity_outbox SET restart_attempts=restart_attempts+1 WHERE user_id=? AND delivery_id=? AND state IN ('ready','started') AND restart_attempts<3 AND EXISTS (SELECT 1 FROM proactivity_reports AS r WHERE r.user_id=proactivity_outbox.user_id AND r.delivery_id=proactivity_outbox.delivery_id AND (proactivity_outbox.state='started' OR r.expires_at_ms>?))"
+      )
+      .bind(input.userId, input.work.id, input.now)
+      .run()
+  ).pipe(
+    Effect.map((result) => result.meta.changes === 1),
+    Effect.mapError(() => new InsightUnavailable())
+  );
 /** Metadata-only cleanup does not require processing Consent or read any recipient/report body. */
 export const expireDeliveryWork = (
   input: Readonly<{ db: D1Database; now: number }>
 ): Effect.Effect<void, InsightUnavailable> =>
   Effect.tryPromise(() =>
     input.db.batch([
+      input.db
+        .prepare(
+          "UPDATE proactivity_outbox SET state='expired' WHERE delivery_id IN (SELECT o.delivery_id FROM proactivity_outbox AS o JOIN proactivity_reports AS r ON r.user_id=o.user_id AND r.delivery_id=o.delivery_id WHERE o.state='ready' AND r.expires_at_ms<=? LIMIT 64)"
+        )
+        .bind(input.now),
+      input.db
+        .prepare(
+          "UPDATE proactivity_reports SET text=NULL WHERE delivery_id IN (SELECT delivery_id FROM proactivity_reports WHERE text IS NOT NULL AND created_at_ms+2592000000<=? LIMIT 64)"
+        )
+        .bind(input.now),
       input.db
         .prepare(
           "UPDATE weekly_question_intents SET state='expired' WHERE id IN (SELECT id FROM weekly_question_intents WHERE state='ready' AND created_at_ms+?<=? LIMIT 64)"
@@ -39,6 +68,9 @@ export const recoverDeliveryWork = (
 ): Effect.Effect<boolean, InsightUnavailable> =>
   Effect.gen(function* () {
     if (input.userId !== input.work.userId) return yield* new InsightUnavailable();
+    if (input.work.kind === "proactivity-delivery") {
+      return yield* recoverProactivity({ ...input, work: input.work });
+    }
     const summary = input.work.kind === "weekly-summary";
     const table = summary ? "weekly_summary_outbox" : "weekly_question_intents";
     const key = summary ? "insight_event_id" : "id";
@@ -64,15 +96,27 @@ export const recoverDeliveryWork = (
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 
 export const discoverDeliveryWork = (
-  input: Readonly<{ db: D1Database; now: number }>
+  input: Readonly<{
+    db: D1Database;
+    now: number;
+    weeklyEnabled: boolean;
+    proactivityEnabled: boolean;
+  }>
 ): Effect.Effect<ReadonlyArray<WeeklyDeliveryWork>, InsightUnavailable> =>
   Effect.gen(function* () {
     const result = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          `SELECT 'weekly-summary' AS kind,1 AS version,user_id AS userId,insight_event_id AS insightEventId,NULL AS id,last_attempt_at_ms AS attempted,created_at_ms AS created FROM weekly_summary_outbox WHERE state='ready' AND last_attempt_at_ms<=? UNION ALL SELECT 'weekly-question',1,user_id,NULL,id,last_attempt_at_ms,created_at_ms FROM weekly_question_intents WHERE state='ready' AND last_attempt_at_ms<=? ORDER BY attempted,created LIMIT 64`
+          `SELECT 'weekly-summary' AS kind,1 AS version,user_id AS userId,insight_event_id AS insightEventId,NULL AS id,last_attempt_at_ms AS attempted,created_at_ms AS created FROM weekly_summary_outbox WHERE state='ready' AND last_attempt_at_ms<=? AND ?=1 UNION ALL SELECT 'weekly-question',1,user_id,NULL,id,last_attempt_at_ms,created_at_ms FROM weekly_question_intents WHERE state='ready' AND last_attempt_at_ms<=? AND ?=1 UNION ALL SELECT 'proactivity-delivery',1,user_id,NULL,delivery_id,last_attempt_at_ms,created_at_ms FROM proactivity_outbox WHERE state='ready' AND last_attempt_at_ms<=? AND ?=1 ORDER BY attempted,created LIMIT 64`
         )
-        .bind(input.now - redispatchIntervalMs, input.now - redispatchIntervalMs)
+        .bind(
+          input.now - redispatchIntervalMs,
+          Number(input.weeklyEnabled),
+          input.now - redispatchIntervalMs,
+          Number(input.weeklyEnabled),
+          input.now - redispatchIntervalMs,
+          Number(input.proactivityEnabled)
+        )
         .all()
     );
     return yield* Schema.decodeUnknownEffect(
@@ -80,24 +124,34 @@ export const discoverDeliveryWork = (
     )(result.results);
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 
+const deliveryLocation = (
+  work: WeeklyDeliveryWork
+): Readonly<{
+  table: "weekly_summary_outbox" | "weekly_question_intents" | "proactivity_outbox";
+  key: "insight_event_id" | "id" | "delivery_id";
+  id: string;
+}> => {
+  switch (work.kind) {
+    case "weekly-summary":
+      return { table: "weekly_summary_outbox", key: "insight_event_id", id: work.insightEventId };
+    case "weekly-question":
+      return { table: "weekly_question_intents", key: "id", id: work.id };
+    case "proactivity-delivery":
+      return { table: "proactivity_outbox", key: "delivery_id", id: work.id };
+  }
+};
 export const markOffered = (
   input: Readonly<{ db: D1Database; work: WeeklyDeliveryWork; now: number }>
 ): Effect.Effect<void, InsightUnavailable> =>
-  Effect.tryPromise(() =>
-    input.work.kind === "weekly-summary"
-      ? input.db
-          .prepare(
-            "UPDATE weekly_summary_outbox SET last_attempt_at_ms=? WHERE user_id=? AND insight_event_id=?"
-          )
-          .bind(input.now, input.work.userId, input.work.insightEventId)
-          .run()
-      : input.db
-          .prepare(
-            "UPDATE weekly_question_intents SET last_attempt_at_ms=? WHERE user_id=? AND id=?"
-          )
-          .bind(input.now, input.work.userId, input.work.id)
-          .run()
-  ).pipe(
+  Effect.tryPromise(() => {
+    const location = deliveryLocation(input.work);
+    return input.db
+      .prepare(
+        `UPDATE ${location.table} SET last_attempt_at_ms=? WHERE user_id=? AND ${location.key}=?`
+      )
+      .bind(input.now, input.work.userId, location.id)
+      .run();
+  }).pipe(
     Effect.asVoid,
     Effect.mapError(() => new InsightUnavailable())
   );
@@ -153,21 +207,19 @@ export const settleDeliveryWork = (
     state: "started" | "settled" | "expired" | "refused";
   }>
 ): Effect.Effect<void, InsightUnavailable> =>
-  Effect.tryPromise(() =>
-    input.work.kind === "weekly-summary"
-      ? input.db
-          .prepare(
-            "UPDATE weekly_summary_outbox SET state=? WHERE user_id=? AND insight_event_id=? AND state NOT IN ('settled','expired','refused')"
-          )
-          .bind(input.state, input.work.userId, input.work.insightEventId)
-          .run()
-      : input.db
-          .prepare(
-            "UPDATE weekly_question_intents SET state=? WHERE user_id=? AND id=? AND state='ready'"
-          )
-          .bind(input.state, input.work.userId, input.work.id)
-          .run()
-  ).pipe(
+  Effect.tryPromise(() => {
+    const location = deliveryLocation(input.work);
+    const eligible =
+      input.work.kind === "weekly-question"
+        ? "state='ready'"
+        : "state NOT IN ('settled','expired','refused')";
+    return input.db
+      .prepare(
+        `UPDATE ${location.table} SET state=? WHERE user_id=? AND ${location.key}=? AND ${eligible}`
+      )
+      .bind(input.state, input.work.userId, location.id)
+      .run();
+  }).pipe(
     Effect.asVoid,
     Effect.mapError(() => new InsightUnavailable())
   );

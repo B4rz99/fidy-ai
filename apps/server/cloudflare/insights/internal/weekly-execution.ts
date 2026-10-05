@@ -46,7 +46,10 @@ export type WeeklySenders = Readonly<{
 type Execution = Readonly<{
   db: D1Database;
   userId: UserId;
-  work: Exclude<WeeklyActivity, { kind: "weekly-recover" }>;
+  work: Exclude<
+    WeeklyActivity,
+    { kind: "weekly-recover" | "proactivity-generate" | "proactivity-delivery" }
+  >;
   now: DateTime.Utc;
   senders: WeeklySenders;
 }>;
@@ -62,7 +65,7 @@ type SendEvidence = Readonly<{
   certainty: "accepted" | "ambiguous" | "rejected";
   providerMessageId: Option.Option<WhatsAppProviderMessageId>;
 }>;
-const sendEvidence = (
+export const sendEvidence = (
   sent: Exit.Exit<WhatsAppSentMessage, InsightTemplateUnavailable | WhatsAppSendFailed>
 ): SendEvidence => {
   if (Exit.isSuccess(sent)) {

@@ -330,6 +330,28 @@ const occurrence = (
   input.db
     .prepare("INSERT INTO reminder_outbox(user_id,insight_event_id,created_at_ms) VALUES (?,?,?)")
     .bind(input.userId, input.id, input.now.epochMilliseconds),
+  input.db
+    .prepare(
+      "INSERT INTO proactivity_reports(delivery_id,user_id,role,consent_grant_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms) VALUES (?,?,'manual-entry-reminder',?,?,?,?,?,?)"
+    )
+    .bind(
+      input.id,
+      input.userId,
+      input.snapshot.consentGrantId,
+      "Recuerda registrar tus movimientos manuales en Fidy.",
+      input.scheduledAt.epochMilliseconds,
+      input.expiresAt.epochMilliseconds,
+      input.snapshot.timeZone,
+      input.now.epochMilliseconds
+    ),
+  input.db
+    .prepare(
+      "INSERT INTO proactivity_message_events(user_id,delivery_id,insight_event_id) VALUES (?,?,?)"
+    )
+    .bind(input.userId, input.id, input.id),
+  input.db
+    .prepare("INSERT INTO proactivity_outbox(user_id,delivery_id,created_at_ms) VALUES (?,?,?)")
+    .bind(input.userId, input.id, input.now.epochMilliseconds),
 ];
 
 const eligibleSchedule = (

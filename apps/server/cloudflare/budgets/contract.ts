@@ -1,6 +1,16 @@
-import { Data } from "effect";
+import { Data, Schema } from "effect";
+import { BudgetCrossing } from "../../src/core/budgets/contract";
+import { ConsentRecordId } from "../../src/core/consent/contract";
 import type { AppliedBudgetMonth, BudgetId } from "../../src/core/budgets/contract";
 import type { UserId } from "../../src/core/identity/contract";
+
+/** One mutation's frozen crossing set, with its immutable detection-time delivery eligibility. */
+export const BudgetCrossingGroup = Schema.Struct({
+  id: Schema.String.check(Schema.isUUID()),
+  grantId: Schema.OptionFromNullOr(ConsentRecordId),
+  crossings: Schema.NonEmptyArray(BudgetCrossing).check(Schema.isMaxLength(2)),
+});
+export type BudgetCrossingGroup = typeof BudgetCrossingGroup.Type;
 
 /** Explicit owned month whose historical crossing facts a coordinated peer may observe. */
 export type BudgetCrossingRead = Readonly<{

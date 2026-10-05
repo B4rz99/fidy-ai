@@ -1,5 +1,5 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
-import { Context, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
+import { Context, DateTime, Effect, Layer, Option, Redacted, Schema, type Scope } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { type UserId } from "../../src/core/identity/contract";
 import {
@@ -8,10 +8,16 @@ import {
 } from "../../src/shell/channels/whatsapp/contract";
 import {
   makeInsightTemplateSender,
+  makeProactivityTemplateSender,
   makeWeeklyQuestionSender,
 } from "../../src/shell/channels/whatsapp/runtime";
-import { makeKapsoOutboundHttp } from "../../src/shell/outbound-http/operations";
+import {
+  type OutboundHttpService,
+  makeKapsoOutboundHttp,
+} from "../../src/shell/outbound-http/operations";
 import { executeWeeklyActivity, weeklyThresholds } from "./internal/weekly-execution";
+import { deliverProactivity, generateProactivity } from "./internal/proactivity-execution";
+import { discoverProactivityUsers, noteProactivityEvaluation } from "./internal/proactivity-work";
 import { discoverDueWeeklySchedules, noteWeeklyScheduleEvaluation } from "./operations";
 import {
   type DueWeeklySchedule,
@@ -27,7 +33,77 @@ import {
   markOffered,
   recoverDeliveryWork,
 } from "./internal/weekly-work";
-import { expireWeeklyQuestions, sweepInsightChannelEvidence } from "../whatsapp/operations";
+import {
+  expireWeeklyQuestions,
+  sweepInsightChannelEvidence,
+  sweepProactivityChannelEvidence,
+} from "../whatsapp/operations";
+
+type NativeExecution = Readonly<{
+  environment: WeeklyEnvironment;
+  userId: UserId;
+  work: WeeklyActivity;
+  now: DateTime.Utc;
+}>;
+const nativeOutbound = (
+  environment: WeeklyEnvironment
+): Effect.Effect<OutboundHttpService, InsightUnavailable, Scope.Scope> =>
+  Effect.gen(function* () {
+    if (environment.KAPSO_API_KEY === undefined || environment.KAPSO_API_KEY.length === 0) {
+      return yield* new InsightUnavailable();
+    }
+    const services = yield* Layer.build(FetchHttpClient.layer);
+    return makeKapsoOutboundHttp({
+      apiKey: Redacted.make(environment.KAPSO_API_KEY),
+      httpClient: Context.get(services, HttpClient.HttpClient),
+    });
+  });
+const executeCategory = (
+  input: NativeExecution &
+    Readonly<{ work: Extract<WeeklyActivity, { kind: "proactivity-delivery" }> }>
+): Effect.Effect<WeeklyActivityResult, InsightUnavailable, Scope.Scope> =>
+  Effect.gen(function* () {
+    if (input.environment.PROACTIVITY_ENABLED !== "enabled") return yield* new InsightUnavailable();
+    const outboundHttp = yield* nativeOutbound(input.environment);
+    const configuration = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(
+      input.environment.PROACTIVITY_TEMPLATE_JSON ?? ""
+    );
+    return yield* deliverProactivity({
+      ...input,
+      db: input.environment.DB,
+      sender: makeProactivityTemplateSender({ configuration, outboundHttp }),
+    });
+  }).pipe(Effect.mapError(() => new InsightUnavailable()));
+
+const executeScheduledSummary = (
+  input: NativeExecution &
+    Readonly<{
+      work: Exclude<
+        WeeklyActivity,
+        { kind: "weekly-recover" | "proactivity-generate" | "proactivity-delivery" }
+      >;
+    }>
+): Effect.Effect<WeeklyActivityResult, InsightUnavailable, Scope.Scope> =>
+  Effect.gen(function* () {
+    const environment = input.environment;
+    if (environment.WEEKLY_SUMMARY_ENABLED !== "enabled") return yield* new InsightUnavailable();
+    yield* weeklyThresholds(environment);
+    const summaryConfiguration = yield* Schema.decodeEffect(
+      Schema.fromJsonString(InsightTemplateConfiguration)
+    )(environment.WEEKLY_SUMMARY_TEMPLATE_JSON ?? "");
+    const questionConfiguration = yield* Schema.decodeEffect(
+      Schema.fromJsonString(WeeklyQuestionTemplateConfiguration)
+    )(environment.WEEKLY_QUESTION_TEMPLATE_JSON ?? "");
+    const outboundHttp = yield* nativeOutbound(environment);
+    return yield* executeWeeklyActivity({
+      ...input,
+      db: environment.DB,
+      senders: {
+        summary: makeInsightTemplateSender({ configuration: summaryConfiguration, outboundHttp }),
+        question: makeWeeklyQuestionSender({ configuration: questionConfiguration, outboundHttp }),
+      },
+    });
+  }).pipe(Effect.mapError(() => new InsightUnavailable()));
 
 /** Construct approved senders only at the native composition publication. */
 export const executeWeeklyWork = (
@@ -50,37 +126,14 @@ export const executeWeeklyWork = (
         });
         return admitted ? ({ _tag: "RecoveryAdmitted" } as const) : ({ _tag: "Done" } as const);
       }
-      if (
-        environment.WEEKLY_SUMMARY_ENABLED !== "enabled" ||
-        environment.KAPSO_API_KEY === undefined ||
-        environment.KAPSO_API_KEY.length === 0
-      ) {
-        return yield* new InsightUnavailable();
+      if (input.work.kind === "proactivity-generate") {
+        if (environment.PROACTIVITY_ENABLED !== "enabled") return yield* new InsightUnavailable();
+        return yield* generateProactivity({ ...input, db: environment.DB, work: input.work });
       }
-      yield* weeklyThresholds(environment);
-      const summaryConfiguration = yield* Schema.decodeEffect(
-        Schema.fromJsonString(InsightTemplateConfiguration)
-      )(environment.WEEKLY_SUMMARY_TEMPLATE_JSON ?? "");
-      const questionConfiguration = yield* Schema.decodeEffect(
-        Schema.fromJsonString(WeeklyQuestionTemplateConfiguration)
-      )(environment.WEEKLY_QUESTION_TEMPLATE_JSON ?? "");
-      const services = yield* Layer.build(FetchHttpClient.layer);
-      const outboundHttp = makeKapsoOutboundHttp({
-        apiKey: Redacted.make(environment.KAPSO_API_KEY),
-        httpClient: Context.get(services, HttpClient.HttpClient),
-      });
-      return yield* executeWeeklyActivity({
-        ...input,
-        work: input.work,
-        db: environment.DB,
-        senders: {
-          summary: makeInsightTemplateSender({ configuration: summaryConfiguration, outboundHttp }),
-          question: makeWeeklyQuestionSender({
-            configuration: questionConfiguration,
-            outboundHttp,
-          }),
-        },
-      });
+      if (input.work.kind === "proactivity-delivery") {
+        return yield* executeCategory({ ...input, work: input.work });
+      }
+      return yield* executeScheduledSummary({ ...input, work: input.work });
     })
   ).pipe(Effect.mapError(() => new InsightUnavailable()));
 
@@ -159,6 +212,24 @@ const generateDueWeeklyWork = (
         .map((schedule) => attemptGeneration({ ...input, schedule }))
     );
   });
+const generateDueProactivity = (
+  input: Readonly<{ environment: WeeklyBackgroundEnvironment; now: DateTime.Utc }>
+): Effect.Effect<void, InsightUnavailable> =>
+  Effect.gen(function* () {
+    if (input.environment.PROACTIVITY_ENABLED !== "enabled") return;
+    const users = yield* discoverProactivityUsers({ db: input.environment.DB, now: input.now });
+    yield* attemptIndependent(
+      users.slice(0, maximumWeeklyGenerationsPerSweep).map((userId) =>
+        Effect.gen(function* () {
+          yield* noteProactivityEvaluation({ db: input.environment.DB, userId, now: input.now });
+          return yield* runActivity({
+            coordinator: input.environment.USER_TRANSACTION_COORDINATOR,
+            work: { kind: "proactivity-generate", version: 1, userId },
+          });
+        })
+      )
+    );
+  });
 const publishWeeklyItem = (
   input: Readonly<{
     queue: NonNullable<WeeklyBackgroundEnvironment["WEEKLY_DELIVERY_QUEUE"]>;
@@ -176,12 +247,22 @@ const publishWeeklyWork = (
 ): Effect.Effect<void, InsightUnavailable> =>
   Effect.gen(function* () {
     const { environment, now } = input;
-    if (environment.WEEKLY_SUMMARY_ENABLED !== "enabled") return;
+    if (
+      environment.WEEKLY_SUMMARY_ENABLED !== "enabled" &&
+      environment.PROACTIVITY_ENABLED !== "enabled"
+    ) {
+      return;
+    }
     const queue = environment.WEEKLY_DELIVERY_QUEUE;
     if (queue === undefined || environment.WEEKLY_DELIVERY_WORKFLOW === undefined) {
       return yield* new InsightUnavailable();
     }
-    const work = yield* discoverDeliveryWork({ db: environment.DB, now: now.epochMilliseconds });
+    const work = yield* discoverDeliveryWork({
+      db: environment.DB,
+      now: now.epochMilliseconds,
+      weeklyEnabled: environment.WEEKLY_SUMMARY_ENABLED === "enabled",
+      proactivityEnabled: environment.PROACTIVITY_ENABLED === "enabled",
+    });
     yield* attemptIndependent(
       work.map((item) => publishWeeklyItem({ queue, db: environment.DB, item, now }))
     );
@@ -195,9 +276,11 @@ export const advanceWeeklyWork = (
     const now = yield* DateTime.now;
     yield* attemptIndependent([
       sweepInsightChannelEvidence({ db: environment.DB, now: now.epochMilliseconds }),
+      sweepProactivityChannelEvidence({ db: environment.DB, now: now.epochMilliseconds }),
       expireWeeklyQuestions({ db: environment.DB, now: now.epochMilliseconds }),
       expireDeliveryWork({ db: environment.DB, now: now.epochMilliseconds }),
       generateDueWeeklyWork({ environment, now }),
+      generateDueProactivity({ environment, now }),
       publishWeeklyWork({ environment, now }),
     ]);
   }).pipe(

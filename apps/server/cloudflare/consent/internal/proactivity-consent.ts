@@ -94,6 +94,16 @@ const OfferRow = Schema.Struct({
 const liveGrant = `SELECT g.id FROM proactivity_consent_records AS g WHERE g.user_id=? AND g.kind=? AND g.grant_id IS NULL
  AND NOT EXISTS (SELECT 1 FROM proactivity_consent_records AS r WHERE r.user_id=g.user_id AND r.kind=g.kind AND r.grant_id=g.id)`;
 
+/** Atomic historical eligibility capture; the caller receives only the current grant identity. */
+export const currentGrantQuery = (
+  input: Readonly<{ userId: UserId; kind: ProactivityOptInKind }>
+): OwnedStatement =>
+  protectConsentStatement({
+    subject: { _tag: "User", userId: input.userId },
+    requirement: "active",
+    statement: { sql: liveGrant, params: [input.userId, input.kind] },
+  });
+
 export const guardedAction = (input: ProactivityConsentAction): D1PreparedStatement => {
   const guarded = protectConsentStatement({
     subject: { _tag: "User", userId: input.userId },

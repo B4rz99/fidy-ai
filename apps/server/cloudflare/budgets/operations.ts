@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { readGroups } from "./internal/budget-proactivity";
 import type { BudgetCrossing } from "../../src/core/budgets/contract";
 import { type BudgetCrossingRead, BudgetCrossingUnavailable } from "./contract";
 import { readCrossings } from "./internal/budget-crossings";
@@ -16,6 +17,9 @@ import {
 } from "./internal/budget-queries";
 import { reconcileBudgetLatches as evaluateAlerts } from "./internal/budget-latches";
 import { budgetRefusal as refuse } from "./internal/budget-outcome";
+
+/** Bounded pending same-User delivery groups retain the grant captured at detection, including explicit ineligibility. */
+export const readBudgetCrossingGroups: typeof readGroups = (input) => readGroups(input);
 
 const matchesCrossingMonth = (
   crossing: BudgetCrossing,

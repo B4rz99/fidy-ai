@@ -1,3 +1,5 @@
+import { prepareSettlement, transcriptOccurrenceQuery } from "./internal/proactivity-reports";
+
 import {
   prepareCanonicalReminderRevision as prepareCanonicalReminderRevisionOwned,
   prepareHeldReminderRevision as prepareHeldReminderRevisionOwned,
@@ -62,6 +64,13 @@ import {
   prepareInsightTransition as prepare,
   insightRefusal as refuse,
 } from "./internal/insight-store";
+
+/** Settle linked occurrences and outbox from authenticated channel evidence in the caller's atomic Transcript unit. */
+export const prepareProactivityDeliverySettlement: typeof prepareSettlement = (input) =>
+  prepareSettlement(input);
+/** Supply the primary retained occurrence and exact channel text without exposing Insights persistence. */
+export const proactivityTranscriptOccurrenceQuery: typeof transcriptOccurrenceQuery = (input) =>
+  transcriptOccurrenceQuery(input);
 
 /** Read instructions under the canonical caller's live authority and required Audit. */
 export const readCanonicalReminderSchedule: typeof readCanonicalReminderScheduleOwned = (input) =>

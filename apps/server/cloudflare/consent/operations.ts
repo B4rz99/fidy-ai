@@ -77,6 +77,10 @@ export const findProactivityConsentGrant = (
   input: Readonly<{ db: D1Database; userId: UserId; kind: ProactivityOptInKind }>
 ): Effect.Effect<Option.Option<ConsentRecord>, ConsentUnavailable> => proactivity.findGrant(input);
 
+/** Project only a current live grant identity for atomic detection-time eligibility capture. A later grant cannot alter the committed fact. */
+export const currentProactivityGrantQuery: typeof proactivity.currentGrantQuery = (input) =>
+  proactivity.currentGrantQuery(input);
+
 /** Recheck the exact live category grant and current processing Consent in a caller-owned atomic action. */
 export const prepareProactivityConsentAction = (
   input: ProactivityConsentAction

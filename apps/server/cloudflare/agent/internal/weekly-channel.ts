@@ -1,4 +1,5 @@
 import { DateTime, Effect, Option } from "effect";
+import { InsightEventId } from "../../../src/core/insights/contract";
 import { IanaTimeZone } from "../../../src/core/_shared/context";
 import { type UserId } from "../../../src/core/identity/contract";
 import type { WeeklyConsentContext } from "../../consent/contract";
@@ -9,9 +10,11 @@ import {
   recordWeeklyConsentDisclosure,
 } from "../../consent/operations";
 import {
+  prepareProactivityDeliverySettlement,
   prepareWeeklyDeliverySettlement,
   prepareWeeklyGovernorReply,
   prepareWeeklyQuestionDelivery,
+  proactivityTranscriptOccurrenceQuery,
   readWeeklyThresholds,
   recordProactivityDecision,
   recordWeeklySummaryDecision,
@@ -23,8 +26,11 @@ import {
   insightVerifiedDeliveryQuery,
   insightVerifiedTranscriptQuery,
   prepareInsightRecipient,
+  proactivityVerifiedDeliveryQuery,
+  proactivityVerifiedTranscriptQuery,
   readWeeklyReplyChoice,
   reconcileInsightStatus,
+  reconcileProactivityStatus,
   reconcileWeeklyQuestion,
   weeklyQuestionDeliveryQuery,
   weeklySummaryReplyQuery,
@@ -78,6 +84,31 @@ export const reconcileWeeklyChannel = (input: Status): Effect.Effect<boolean, Ag
   Effect.gen(function* () {
     const { environment, userId, status } = input;
     if (yield* reconcileQuestion(input)) return true;
+    const category = yield* reconcileProactivityStatus({ db: environment.DB, admission: status });
+    if (category._tag === "VerifiedDelivery") {
+      const scope = { db: environment.DB, userId, id: category.id };
+      const text = proactivityTranscriptOccurrenceQuery({
+        ...scope,
+        proof: proactivityVerifiedTranscriptQuery({ ...scope, now: status.receivedAtMs }),
+      });
+      yield* Effect.tryPromise(() =>
+        environment.DB.batch([
+          ...prepareProactivityDeliverySettlement({
+            ...scope,
+            proof: proactivityVerifiedDeliveryQuery(scope),
+          }),
+          ...prepareProactiveTranscript({
+            db: environment.DB,
+            userId,
+            insightEventId: InsightEventId.make(category.id),
+            now: status.receivedAtMs,
+            proof: text,
+          }),
+        ])
+      );
+      return true;
+    }
+    if (category._tag === "Recorded") return true;
     const proactive = yield* reconcileInsightStatus({ db: environment.DB, admission: status });
     if (proactive._tag === "VerifiedDelivery") {
       const scope = { db: environment.DB, userId, insightEventId: proactive.insightEventId };

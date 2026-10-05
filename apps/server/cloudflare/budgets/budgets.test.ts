@@ -1,11 +1,25 @@
 import {
   evaluateBudgetAlerts,
   readBudgetCaps,
+  readBudgetCrossingGroups,
   readBudgetCrossings,
   readBudgetSpending,
 } from "./operations";
-import { UserId } from "../../src/core/identity/contract";
-import { DisclosureSnapshot } from "../../src/core/consent/contract";
+import {
+  UserId,
+  WhatsAppBusinessPortfolioId,
+  WhatsAppBusinessScopedUserId,
+  WhatsAppCallerReference,
+} from "../../src/core/identity/contract";
+import { type ConsentUnavailable } from "../consent/contract";
+import { type InsightUnavailable } from "../insights/contract";
+import {
+  createProactivityConsentOffer,
+  findProactivityConsentGrant,
+  recordProactivityConsentDisclosure,
+} from "../consent/operations";
+import { recordProactivityDecision } from "../insights/operations";
+import { type ConsentRecordId, DisclosureSnapshot } from "../../src/core/consent/contract";
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import { executeCanonicalWork } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
@@ -16,7 +30,7 @@ import {
   statementAuditTestMigrations,
 } from "../d1-test-fixture";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
-import { type Cause, DateTime, Effect, Option, Schema } from "effect";
+import { type Cause, DateTime, Effect, Array as EffectArray, Option, Schema } from "effect";
 import { Budget, BudgetId, BudgetStatusReport } from "../../src/core/budgets/contract";
 import { IanaTimeZone } from "../../src/core/_shared/context";
 import { deriveCurrentBudgetMonth } from "../../src/core/budgets/operations";
@@ -107,6 +121,8 @@ const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
       "0015_statement_submission",
       "0016_budgets",
       "0037_budget_crossing_facts",
+      "0038_proactivity_consent",
+      "0042_budget_proactivity",
       "0016_statement_processing",
       "0017_forwarded_email",
       "0017_statement_dispatch",
@@ -1239,6 +1255,49 @@ const seedCrossingConsent = (
     );
   });
 
+const grantBudgetDelivery = (
+  db: D1Database
+): Effect.Effect<ConsentRecordId, ConsentUnavailable | InsightUnavailable | Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const userId = UserId.make(users[0]);
+    const now = yield* DateTime.now;
+    const caller = WhatsAppCallerReference.make({
+      businessPortfolioId: WhatsAppBusinessPortfolioId.make("123456789"),
+      businessScopedUserId: WhatsAppBusinessScopedUserId.make("CO.budgetuser"),
+    });
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(
+          "INSERT OR IGNORE INTO whatsapp_identities(user_id,portfolio_id,bsuid,verified_at_ms) VALUES(?,?,?,?)"
+        )
+        .bind(
+          userId,
+          caller.businessPortfolioId,
+          caller.businessScopedUserId,
+          now.epochMilliseconds
+        )
+        .run()
+    );
+    const context = { db, userId, caller, kind: "budget-threshold" as const, now };
+    const offer = Option.getOrThrow(yield* createProactivityConsentOffer(context));
+    expect(
+      yield* recordProactivityConsentDisclosure({
+        ...context,
+        offerId: offer.id,
+        disclosureMessageId: "budget-disclosure",
+      })
+    ).toBe(true);
+    expect(
+      yield* recordProactivityDecision({
+        ...context,
+        choice: offer.acceptChoice,
+        decisionMessageId: "budget-accept",
+      })
+    ).toBe(true);
+    const grant = yield* findProactivityConsentGrant(context);
+    return Option.getOrThrow(grant).id;
+  });
+
 it("freezes both crossing facts before later corrections and isolates them from a foreign User", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -1277,6 +1336,14 @@ it("freezes both crossing facts before later corrections and isolates them from 
         period,
       };
       const crossings = yield* readBudgetCrossings(input);
+      const groups = yield* readBudgetCrossingGroups({ db, userId: input.userId });
+      expect(groups).toHaveLength(1);
+      const group = Option.getOrThrow(EffectArray.head(groups));
+      expect(Option.isNone(group.grantId)).toBe(true);
+      expect(group.crossings.map((crossing) => crossing.threshold)).toEqual([80, 100]);
+      yield* grantBudgetDelivery(db);
+      expect(yield* readBudgetCrossingGroups({ db, userId: input.userId })).toEqual(groups);
+      expect(yield* readBudgetCrossingGroups({ db, userId: UserId.make(users[1]) })).toEqual([]);
       expect(crossings.map((crossing) => crossing.threshold)).toEqual([80, 100]);
       expect(crossings.map((crossing) => encodeMoneyAmount(crossing.spent.amount))).toEqual([
         "110",
@@ -1312,6 +1379,49 @@ it("freezes both crossing facts before later corrections and isolates them from 
       expect(frozen.map((crossing) => DateTime.formatIso(crossing.detectedAt))).toEqual(
         crossings.map((crossing) => DateTime.formatIso(crossing.detectedAt))
       );
+    })
+  ));
+
+it("captures the live Budget grant once for a both-threshold mutation without resetting monthly latches", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* seedCrossingConsent(db);
+      expect(
+        (yield* Effect.tryPromise(() => send(db, request(0, "/budgets", "POST", payload())))).status
+      ).toBe(201);
+      const grantId = yield* grantBudgetDelivery(db);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          send(
+            db,
+            request(0, "/transactions", "POST", {
+              money: { amount: "110", currency: "COP" },
+              direction: "outflow",
+              categoryId: category,
+              occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+            })
+          )
+        )).status
+      ).toBe(201);
+      const context = { db, userId: UserId.make(users[0]) };
+      const groups = yield* readBudgetCrossingGroups(context);
+      expect(groups).toHaveLength(1);
+      const group = Option.getOrThrow(EffectArray.head(groups));
+      expect(group.grantId).toEqual(Option.some(grantId));
+      expect(group.crossings.map((crossing) => crossing.threshold)).toEqual([80, 100]);
+      expect(yield* evaluateBudgetAlerts({ db, userId: users[0] })).toBe(true);
+      expect(yield* readBudgetCrossingGroups(context)).toEqual(groups);
+      const mutation = yield* Effect.exit(
+        Effect.tryPromise(() =>
+          db
+            .prepare("UPDATE budget_threshold_alerts SET consent_grant_id=NULL WHERE user_id=?")
+            .bind(users[0])
+            .run()
+        )
+      );
+      expect(mutation._tag).toBe("Failure");
+      expect(yield* readBudgetCrossingGroups(context)).toEqual(groups);
     })
   ));
 

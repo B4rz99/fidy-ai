@@ -38,6 +38,16 @@ export const ScheduleVersion = Schema.Int.check(Schema.isGreaterThan(0))
   .annotate({ identifier: "ScheduleVersion" });
 export type ScheduleVersion = typeof ScheduleVersion.Type;
 
+/** A category message may be an occurrence, a legal offer, or an operational question; offers/questions are not financial InsightEvents. */
+export const ProactivityMessageRole = Schema.Literals([
+  "budget-threshold",
+  "manual-entry-reminder",
+  "budget-offer",
+  "reminder-offer",
+  "reminder-question",
+]);
+export type ProactivityMessageRole = typeof ProactivityMessageRole.Type;
+
 /** The forward-only attention lifecycle shared by every InsightEvent consumer. */
 export const InsightLifecycleState = Schema.Literals(["pending", "delivered", "read", "dismissed"]);
 export type InsightLifecycleState = typeof InsightLifecycleState.Type;

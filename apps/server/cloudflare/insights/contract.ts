@@ -8,6 +8,8 @@ import {
   WeeklySchedule,
 } from "../../src/core/insights/contract";
 import { UserId } from "../../src/core/identity/contract";
+import { TranscriptText } from "../../src/core/agent/contract";
+import { IanaTimeZone } from "../../src/core/_shared/context";
 import { UtcTimestamp } from "../../src/core/_shared/time";
 import { WeeklySummaryPayload } from "../../src/core/insights/weekly-summary/contract";
 import { InsightTemplateSummary } from "../../src/shell/channels/whatsapp/contract";
@@ -15,6 +17,28 @@ import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import type { QueryAuthority } from "../canonical-work/contract";
 import type { CanonicalCapability } from "../../src/core/canonical-operations/contract";
 import type { Option } from "effect";
+
+const messageContext = {
+  id: Schema.String.check(Schema.isUUID()),
+  text: Schema.Option(TranscriptText),
+  scheduledAt: UtcTimestamp,
+  expiresAt: UtcTimestamp,
+  timeZone: IanaTimeZone,
+};
+/** Frozen category content distinguishes existing delivery permission from a pending legal decision. */
+export const ProactivityReport = Schema.Union([
+  Schema.TaggedStruct("GrantMessage", {
+    ...messageContext,
+    role: Schema.Literals(["budget-threshold", "manual-entry-reminder", "reminder-question"]),
+    grantId: ConsentRecordId,
+  }),
+  Schema.TaggedStruct("ConsentOfferMessage", {
+    ...messageContext,
+    role: Schema.Literals(["budget-offer", "reminder-offer"]),
+    offerId: ConsentRecordId,
+  }),
+]);
+export type ProactivityReport = typeof ProactivityReport.Type;
 
 /** A caller-owned live authority held inside User coordination. The User is re-correlated at each read/write; neither this snapshot nor a schedule identity authorizes a later effect. */
 export type ReminderCanonicalWork = Readonly<{
@@ -106,10 +130,27 @@ export const WeeklyQuestionWork = Schema.Struct({
   id: Schema.String.check(Schema.isUUID()),
 });
 export type WeeklyQuestionWork = typeof WeeklyQuestionWork.Type;
-export const WeeklyDeliveryWork = Schema.Union([WeeklySummaryWork, WeeklyQuestionWork]);
+/** Content-free continuation for one frozen category message; the report owns its role and live grant. */
+export const ProactivityDeliveryWork = Schema.Struct({
+  kind: Schema.Literal("proactivity-delivery"),
+  version: Schema.Literal(1),
+  userId: UserId,
+  id: Schema.String.check(Schema.isUUID()),
+});
+export type ProactivityDeliveryWork = typeof ProactivityDeliveryWork.Type;
+export const WeeklyDeliveryWork = Schema.Union([
+  WeeklySummaryWork,
+  WeeklyQuestionWork,
+  ProactivityDeliveryWork,
+]);
 export type WeeklyDeliveryWork = typeof WeeklyDeliveryWork.Type;
 export const WeeklyActivity = Schema.Union([
   WeeklyDeliveryWork,
+  Schema.Struct({
+    kind: Schema.Literal("proactivity-generate"),
+    version: Schema.Literal(1),
+    userId: UserId,
+  }),
   Schema.Struct({
     kind: Schema.Literal("weekly-recover"),
     version: Schema.Literal(1),
@@ -135,6 +176,8 @@ export type WeeklyActivityResult = typeof WeeklyActivityResult.Type;
 export type WeeklyEnvironment = Readonly<{ DB: D1Database }> &
   Partial<
     Readonly<{
+      PROACTIVITY_ENABLED: string;
+      PROACTIVITY_TEMPLATE_JSON: string;
       WEEKLY_SUMMARY_ENABLED: string;
       WEEKLY_SUMMARY_TEMPLATE_JSON: string;
       WEEKLY_QUESTION_TEMPLATE_JSON: string;

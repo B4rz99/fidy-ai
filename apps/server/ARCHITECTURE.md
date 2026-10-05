@@ -291,6 +291,12 @@ Operational Health observes bounded owner metadata and dead-letter signals separ
 reachability health. Unreadable measurements are unavailable, not zero. Operational procedures and
 limits belong in the [background-work runbook](../../docs/operations/cloudflare-background-work.md).
 
+Budget crossing snapshots, category-separated Budget/reminder Consent evidence, and guarded reminder
+instruction/revision/occurrence/outbox primitives are installed. Undecided expired offers have independent
+bounded Maintenance retention. These additional categories do not yet have canonical reminder routing,
+first-Budget contextual offers, due-work dispatch, provider delivery, or grouped proactive Transcript
+settlement. Their owner primitives are not an enabled end-to-end proactivity path.
+
 Installed code does not by itself enable a channel or provider. In particular, forwarded-email
 routing remains disabled until institution Connection admission and authenticated institutional
 sender proof exist. Receipt/image acceptance atomically publishes commercial consumption,

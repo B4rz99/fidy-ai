@@ -1,3 +1,9 @@
+import { Effect } from "effect";
+import type { BudgetCrossing } from "../../src/core/budgets/contract";
+import { type BudgetCrossingRead, BudgetCrossingUnavailable } from "./contract";
+import { readCrossings } from "./internal/budget-crossings";
+import { readConsentStatus } from "../consent/operations";
+
 import {
   prepareCreateBudget as createBudget,
   prepareDeleteBudget as deleteBudget,
@@ -10,6 +16,42 @@ import {
 } from "./internal/budget-queries";
 import { reconcileBudgetLatches as evaluateAlerts } from "./internal/budget-latches";
 import { budgetRefusal as refuse } from "./internal/budget-outcome";
+
+const matchesCrossingMonth = (
+  crossing: BudgetCrossing,
+  input: Pick<BudgetCrossingRead, "budgetId" | "period">
+): boolean =>
+  crossing.budgetId === input.budgetId &&
+  crossing.period.timeZone === input.period.timeZone &&
+  crossing.period.from.epochMilliseconds === input.period.from.epochMilliseconds &&
+  crossing.period.to.epochMilliseconds === input.period.to.epochMilliseconds;
+
+/** Read complete immutable threshold facts for one explicit User/month under live processing Consent and caller-owned coordination. Legacy rows without captured facts are unavailable, never rebuilt from current state. */
+export const readBudgetCrossings = (
+  input: BudgetCrossingRead
+): Effect.Effect<ReadonlyArray<BudgetCrossing>, BudgetCrossingUnavailable> =>
+  Effect.gen(function* () {
+    const standing = yield* readConsentStatus(input).pipe(
+      Effect.mapError(() => new BudgetCrossingUnavailable())
+    );
+    if (standing !== "Granted") return yield* new BudgetCrossingUnavailable();
+    const rows = yield* readCrossings(input);
+    const thresholds = new Set<number>();
+    for (const row of rows) {
+      const crossing = row.crossing_json;
+      if (
+        thresholds.has(row.threshold) ||
+        crossing.threshold !== row.threshold ||
+        !matchesCrossingMonth(crossing, input)
+      ) {
+        return yield* new BudgetCrossingUnavailable();
+      }
+      thresholds.add(row.threshold);
+    }
+    return rows
+      .map((row) => row.crossing_json)
+      .sort((left, right) => left.threshold - right.threshold);
+  });
 
 /**
  * Prepare one positive cap for a known Category under live caller authority. The canonical User

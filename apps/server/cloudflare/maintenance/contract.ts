@@ -22,6 +22,7 @@ export type ScheduledOperation =
   | "billing.collection.reconcile"
   | "billing.cardPreparationAdmissionSweep"
   | "consent.sweep"
+  | "consent.proactivityOfferRetention"
   | "consent.disclosureRecovery"
   | "hostedTurn.whatsapp.dispatch"
   | "hostedTurn.whatsapp.windowSweep"

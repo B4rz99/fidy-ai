@@ -11,12 +11,20 @@ import {
 } from "./internal/weekly-governor";
 import { prepareWeeklyDeliverySettlement as prepareWeeklyDeliverySettlementOwned } from "./internal/weekly-settlement";
 import { type DateTime, Effect, Option } from "effect";
+import * as reminder from "./internal/reminder-schedule";
+import type { ReminderSchedule, ReminderScheduleEdit } from "../../src/core/insights/contract";
+import type { ProactivityConsentContext } from "../consent/contract";
 import { type InsightEventId, type ScheduleId } from "../../src/core/insights/contract";
-import { prepareWeeklyConsentDecision } from "../consent/operations";
+import {
+  prepareProactivityConsentDecision,
+  prepareWeeklyConsentDecision,
+} from "../consent/operations";
 import { type WeeklyConsentContext } from "../consent/contract";
 import {
   type DueWeeklySchedule,
   InsightUnavailable,
+  type ReminderMaterialization,
+  type ReminderRevisionConflict,
   type WeeklyMaterialization,
   type WeeklyOccurrenceGuard,
   type WeeklyScheduleAdvance,
@@ -47,6 +55,65 @@ import {
   prepareInsightTransition as prepare,
   insightRefusal as refuse,
 } from "./internal/insight-store";
+
+/** Observe one User's reminder instructions under current processing Consent; grant and storage details stay private. */
+export const findReminderSchedule = (
+  input: Readonly<{ db: D1Database; userId: UserId }>
+): Effect.Effect<Option.Option<ReminderSchedule>, InsightUnavailable> =>
+  reminder.findSchedule(input).pipe(
+    Effect.map(
+      Option.map((schedule) => ({
+        id: schedule.id,
+        version: schedule.version,
+        enabled: schedule.enabled,
+        cadence: schedule.cadence,
+        timing: schedule.timing,
+        timeZone: schedule.timeZone,
+        serviceMarket: schedule.serviceMarket,
+        locale: schedule.locale,
+        nextScheduledAt: schedule.nextScheduledAt,
+      }))
+    )
+  );
+
+/** Commit an exact authenticated category choice with reminder activation/disablement in one User-coordinated D1 unit. Legal standing is never inferred from a canonical/model call. */
+export const recordProactivityDecision = (
+  input: ProactivityConsentContext & Readonly<{ choice: string; decisionMessageId: string }>
+): Effect.Effect<boolean, InsightUnavailable> =>
+  Effect.gen(function* () {
+    const prepared = yield* prepareProactivityConsentDecision(input);
+    if (Option.isNone(prepared)) return false;
+    const decision = prepared.value;
+    const statements = [...decision.statements];
+    if (input.kind === "manual-entry-reminder") {
+      if (decision.decision === "accept" || decision.decision === "continue") {
+        if (Option.isNone(decision.grantId)) return yield* new InsightUnavailable();
+        statements.push(
+          ...(yield* reminder.prepareActivation({ ...input, grantId: decision.grantId.value }))
+        );
+      } else statements.push(reminder.prepareDisable(input));
+    }
+    yield* Effect.tryPromise(() => input.db.batch(statements));
+    return true;
+  }).pipe(Effect.mapError(() => new InsightUnavailable()));
+
+/** Prepare a complete reminder instruction edit under the caller's User coordination. Compose these revision/grant/Consent guards with canonical credential authority and Audit in the caller's atomic unit; this operation never grants opt-in. */
+export const prepareReminderRevision = (
+  input: Readonly<{
+    db: D1Database;
+    userId: UserId;
+    input: ReminderScheduleEdit;
+    now: DateTime.Utc;
+  }>
+): Effect.Effect<
+  ReadonlyArray<D1PreparedStatement>,
+  InsightUnavailable | ReminderRevisionConflict
+> => reminder.prepareRevision(input);
+
+/** Materialize only the latest still-fresh reminder with an exact enabled instruction/grant guard. Event, immutable deadline, outbox and advancement commit together; replay cannot create a backlog. */
+export const materializeReminder = (
+  input: Readonly<{ db: D1Database; userId: UserId; id: ScheduleId; now: DateTime.Utc }>
+): Effect.Effect<ReminderMaterialization, InsightUnavailable> => reminder.materialize(input);
 
 /** Reject invalid governor knobs before production execution or delivery settlement. */
 export const readWeeklyThresholds: typeof weeklyThresholds = (input) => weeklyThresholds(input);

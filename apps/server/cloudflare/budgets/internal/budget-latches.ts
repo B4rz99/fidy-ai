@@ -1,11 +1,11 @@
-import { UserId } from "../../../src/core/identity/contract";
+import { type UserContext, UserId } from "../../../src/core/identity/contract";
 import { readUserContext } from "../../identity/user-context/operations";
 import {
+  BudgetCrossing,
   BudgetId,
   type BudgetMonthLatch,
   type BudgetStatus,
 } from "../../../src/core/budgets/contract";
-import { type IanaTimeZone } from "../../../src/core/_shared/context";
 import { advanceBudgetLatch } from "../../../src/core/budgets/operations";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { currentBudgetReport } from "./budget-queries";
@@ -14,8 +14,6 @@ const Marks = Schema.Struct({
   reached_80: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1 })),
   reached_100: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1 })),
 });
-const eighty = 80;
-const hundred = 100;
 // One period per request keeps the aggregate report and latch work independent of backlog size.
 const maximumPendingWork = 1;
 const PendingWork = Schema.Struct({ occurred_at: Schema.String, version: Schema.Int });
@@ -32,19 +30,47 @@ const latchFor = (status: BudgetStatus, marks: typeof Marks.Type): BudgetMonthLa
   return { budgetId, period, reached80: false as const, reached100: false as const };
 };
 
+const encodeCrossings = (
+  input: Readonly<{
+    status: BudgetStatus;
+    context: UserContext;
+    thresholds: ReadonlyArray<BudgetCrossing["threshold"]>;
+    detectedAt: DateTime.Utc;
+  }>
+): Effect.Effect<
+  ReadonlyArray<Readonly<{ threshold: BudgetCrossing["threshold"]; json: string }>>,
+  Schema.SchemaError
+> =>
+  Effect.forEach(input.thresholds, (threshold) =>
+    Schema.encodeEffect(Schema.fromJsonString(Schema.toCodecJson(BudgetCrossing)))(
+      BudgetCrossing.make({
+        budgetId: input.status.budget.id,
+        categoryId: input.status.budget.categoryId,
+        cap: input.status.budget.cap,
+        spent: input.status.spent,
+        period: input.status.period,
+        threshold,
+        detectedAt: input.detectedAt,
+        serviceMarket: input.context.serviceMarket,
+        locale: input.context.locale,
+      })
+    ).pipe(Effect.map((json) => ({ threshold, json })))
+  );
+
 /** Commit monotone threshold evidence and at most one pending occurrence for each threshold. */
 const reconcileStatus = ({
   db,
   userId,
-  timeZone,
+  context,
   status,
 }: Readonly<{
   db: D1Database;
   userId: string;
-  timeZone: IanaTimeZone;
+  context: UserContext;
   status: BudgetStatus;
 }>): Effect.Effect<boolean> =>
   Effect.gen(function* () {
+    const timeZone = context.timeZone;
     const budgetId = status.budget.id;
     const from = DateTime.formatIso(status.period.from);
     const row = yield* Effect.tryPromise(() =>
@@ -65,6 +91,12 @@ const reconcileStatus = ({
       latch: latchFor(status, marks.value),
     });
     const next = advanced.latch;
+    const crossings = yield* encodeCrossings({
+      status,
+      context,
+      thresholds: advanced.newlyReached,
+      detectedAt: yield* DateTime.now,
+    });
     const writes = [
       db
         .prepare(`INSERT INTO budget_month_latches
@@ -74,16 +106,14 @@ const reconcileStatus = ({
         reached_80 = max(reached_80, excluded.reached_80),
         reached_100 = max(reached_100, excluded.reached_100)`)
         .bind(userId, budgetId, from, timeZone, Number(next.reached80), Number(next.reached100)),
-      ...([eighty, hundred] as const)
-        .filter((threshold) => (threshold === eighty ? next.reached80 : next.reached100))
-        .map((threshold) =>
-          db
-            .prepare(`INSERT OR IGNORE INTO budget_threshold_alerts
-        (user_id, budget_id, from_utc, time_zone, threshold)
-        SELECT user_id, budget_id, from_utc, time_zone, ? FROM budget_month_latches
+      ...crossings.map(({ threshold, json }) =>
+        db
+          .prepare(`INSERT OR IGNORE INTO budget_threshold_alerts
+        (user_id, budget_id, from_utc, time_zone, threshold, crossing_json)
+        SELECT user_id, budget_id, from_utc, time_zone, ?, ? FROM budget_month_latches
         WHERE user_id = ? AND budget_id = ? AND from_utc = ? AND time_zone = ?`)
-            .bind(threshold, userId, budgetId, from, timeZone)
-        ),
+          .bind(threshold, json, userId, budgetId, from, timeZone)
+      ),
     ];
     yield* Effect.tryPromise(() => db.batch(writes));
     return true;
@@ -92,19 +122,24 @@ const reconcileStatus = ({
 const reconcilePendingPeriod = ({
   db,
   userId,
-  timeZone,
+  context,
   now,
 }: Readonly<{
   db: D1Database;
   userId: string;
-  timeZone: IanaTimeZone;
+  context: UserContext;
   now: DateTime.Utc;
 }>): Effect.Effect<boolean> =>
   Effect.gen(function* () {
-    const report = yield* currentBudgetReport({ db, userId, query: { timeZone }, now });
+    const report = yield* currentBudgetReport({
+      db,
+      userId,
+      query: { timeZone: context.timeZone },
+      now,
+    });
     if (Option.isNone(report)) return false;
     for (const status of report.value.statuses) {
-      if (!(yield* reconcileStatus({ db, userId, timeZone, status }))) return false;
+      if (!(yield* reconcileStatus({ db, userId, context, status }))) return false;
     }
     return true;
   });
@@ -125,7 +160,6 @@ export const reconcileBudgetLatches = ({
     const subject = yield* Schema.decodeEffect(UserId)(userId);
     const context = yield* readUserContext({ db, userId: subject, authority: Option.none() });
     if (Option.isNone(context)) return false;
-    const timeZone = context.value.timeZone;
     const pending = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT occurred_at, version
@@ -138,7 +172,9 @@ export const reconcileBudgetLatches = ({
       if (Option.isNone(item)) return false;
       const instant = DateTime.make(item.value.occurred_at);
       if (Option.isNone(instant)) return false;
-      if (!(yield* reconcilePendingPeriod({ db, userId, timeZone, now: instant.value }))) {
+      if (
+        !(yield* reconcilePendingPeriod({ db, userId, context: context.value, now: instant.value }))
+      ) {
         return false;
       }
       yield* Effect.tryPromise(() =>

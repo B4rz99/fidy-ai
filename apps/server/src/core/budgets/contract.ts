@@ -1,5 +1,5 @@
 import { BigDecimal, Data, DateTime, Schema, Struct } from "effect";
-import { IanaTimeZone } from "~/core/_shared/context";
+import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
 import { type Currency, Money, type ReadonlyMoney } from "~/core/_shared/money";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { CategoryId } from "~/core/categories/contract";
@@ -73,6 +73,46 @@ export const AppliedBudgetMonth = Schema.Struct({
   .check(calendarMonth)
   .annotate({ identifier: "AppliedBudgetMonth" });
 export type AppliedBudgetMonth = typeof AppliedBudgetMonth.Type;
+
+const budgetThreshold80 = 80;
+
+/** Historical same-Currency financial facts captured when a monthly threshold first latches, never recomputed from later Budget or Transaction edits. */
+export const BudgetCrossing = Schema.Struct({
+  budgetId: BudgetId,
+  categoryId: CategoryId,
+  cap: Money,
+  spent: Money,
+  period: AppliedBudgetMonth,
+  threshold: Schema.Literals([budgetThreshold80, 100]),
+  detectedAt: UtcTimestamp,
+  serviceMarket: ServiceMarket,
+  locale: Locale,
+})
+  .check(
+    positiveBudgetCap,
+    Schema.makeFilter(
+      (
+        crossing: Readonly<{
+          cap: ReadonlyMoney;
+          spent: ReadonlyMoney;
+          threshold: typeof budgetThreshold80 | 100;
+        }>
+      ) => {
+        if (crossing.cap.currency !== crossing.spent.currency) {
+          return "Crossing Currency must match the Budget";
+        }
+        const boundary =
+          crossing.threshold === budgetThreshold80
+            ? BigDecimal.multiply(crossing.cap.amount, BigDecimal.make(8n, 1))
+            : crossing.cap.amount;
+        return BigDecimal.Order(crossing.spent.amount, boundary) >= 0
+          ? undefined
+          : "Crossing must reach its threshold";
+      }
+    )
+  )
+  .annotate({ identifier: "BudgetCrossing" });
+export type BudgetCrossing = typeof BudgetCrossing.Type;
 
 const BudgetStatusCommon = {
   budget: Budget,

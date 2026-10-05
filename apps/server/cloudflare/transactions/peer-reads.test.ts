@@ -50,6 +50,7 @@ const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
           "0014_memory",
           "0015_statement_submission",
           "0016_budgets",
+          "0037_budget_crossing_facts",
           "0017_statement_dispatch",
           "0018_dashboard",
           "0019_canonical_child_guards",

@@ -3,6 +3,7 @@ import { ConsentRecordId } from "../../src/core/consent/contract";
 import {
   InsightEventId,
   ProactivityThresholds,
+  ReminderSchedule,
   ScheduleId,
   WeeklySchedule,
 } from "../../src/core/insights/contract";
@@ -32,6 +33,19 @@ export const WeeklyScheduleSnapshot = Schema.Struct({
   consentGrantId: ConsentRecordId,
 });
 export type WeeklyScheduleSnapshot = typeof WeeklyScheduleSnapshot.Type;
+
+/** Captured reminder instruction and exact legal grant, not reusable execution authority. */
+export const ReminderScheduleSnapshot = Schema.Struct({
+  ...ReminderSchedule.fields,
+  userId: UserId,
+  consentGrantId: ConsentRecordId,
+});
+export type ReminderScheduleSnapshot = typeof ReminderScheduleSnapshot.Type;
+
+/** Reminder generation distinguishes no due work from expired unstarted delivery. */
+export type ReminderMaterialization =
+  | Readonly<{ _tag: "NoWork" | "Expired" }>
+  | Readonly<{ _tag: "Created"; id: InsightEventId }>;
 
 /** A bounded due identity is a coordination hint, not content or authority. */
 export const DueWeeklySchedule = Schema.Struct({ userId: UserId, id: ScheduleId });
@@ -122,6 +136,9 @@ export const WeeklyThresholdConfiguration = Schema.toCodecStringTree(Proactivity
 /** A coordination hint only; processing must re-read the event inside this User's boundary. */
 export const DueInsight = Schema.Struct({ userId: UserId, id: InsightEventId });
 export type DueInsight = typeof DueInsight.Type;
+
+/** Another instruction edit has already replaced the revision this caller read. */
+export class ReminderRevisionConflict extends Data.TaggedError("ReminderRevisionConflict") {}
 
 /** Insight state could not be read or retained completely; it is not an absent occurrence. */
 export class InsightUnavailable extends Data.TaggedError("InsightUnavailable") {}

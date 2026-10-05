@@ -33,6 +33,9 @@ const compositionRoots = new Set([
   // WeeklySummary integration composes real Consent, Identity, Transactions, Insights,
   // channel claims and Agent Transcript owners; no production module imports this fixture.
   "cloudflare/weekly-summary.test-fixture.ts",
+  // Budget/reminder integration composes real migrated Identity/Consent/Insights standing;
+  // each run owns an isolated database, and production cannot import this fixture.
+  "cloudflare/proactivity.test-fixture.ts",
   "cloudflare/agent/proactive-transcript.test.ts",
   "cloudflare/whatsapp/insight-delivery.test.ts",
   "cloudflare/recurring/recurring.test-fixture.ts",

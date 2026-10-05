@@ -1,4 +1,4 @@
-import { Data, Schema, Struct } from "effect";
+import { Data, DateTime, Option, Schema, Struct } from "effect";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
 import { MoneyGroups } from "~/core/_shared/money";
 import { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
@@ -152,6 +152,80 @@ export const WeeklySchedule = Schema.Struct({
   nextScheduledAt: UtcTimestamp,
 }).annotate({ identifier: "WeeklySchedule" });
 export type WeeklySchedule = typeof WeeklySchedule.Type;
+
+/** A real ISO local calendar date; it carries no instant or implicit time zone. */
+export const ReminderAnchorDate = Schema.String.check(
+  Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u),
+  Schema.makeFilter((value) => {
+    const date = DateTime.make(value);
+    return Option.isSome(date) && DateTime.formatIsoDateUtc(date.value) === value
+      ? undefined
+      : "Expected a real local calendar date";
+  })
+).annotate({ identifier: "ReminderAnchorDate" });
+export type ReminderAnchorDate = typeof ReminderAnchorDate.Type;
+
+/** Direct launch presets. Three-day intervals count calendar dates from the retained anchor. */
+export const ReminderCadence = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("daily") }),
+  Schema.Struct({ kind: Schema.Literal("weekdays") }),
+  Schema.Struct({ kind: Schema.Literal("every-three-days"), anchorDate: ReminderAnchorDate }),
+  Schema.Struct({ kind: Schema.Literal("weekly"), weekday: WeeklyTiming.fields.weekday }),
+]).annotate({ identifier: "ReminderCadence" });
+export type ReminderCadence = typeof ReminderCadence.Type;
+
+/** Wall-clock reminder time, interpreted only in the explicitly captured schedule zone. */
+export const ReminderTiming = Schema.Struct({
+  hour: WeeklyTiming.fields.hour,
+  minute: WeeklyTiming.fields.minute,
+}).annotate({ identifier: "ReminderTiming" });
+export type ReminderTiming = typeof ReminderTiming.Type;
+
+/** One User-owned reminder instruction. Execution advancement keeps its revision; later edits never reinterpret captured occurrences. */
+export const ReminderSchedule = Schema.Struct({
+  id: ScheduleId,
+  version: ScheduleVersion,
+  enabled: Schema.Boolean,
+  cadence: ReminderCadence,
+  timing: ReminderTiming,
+  timeZone: IanaTimeZone,
+  serviceMarket: ServiceMarket,
+  locale: Locale,
+  nextScheduledAt: UtcTimestamp,
+}).annotate({ identifier: "ReminderSchedule" });
+export type ReminderSchedule = typeof ReminderSchedule.Type;
+
+/** Complete conversational timing edit; the expected instruction revision prevents silently overwriting another edit. */
+export const ReminderScheduleEdit = Schema.Struct({
+  expectedVersion: ScheduleVersion,
+  cadence: ReminderCadence,
+  timing: ReminderTiming,
+  timeZone: IanaTimeZone,
+}).annotate({ identifier: "ReminderScheduleEdit" });
+export type ReminderScheduleEdit = typeof ReminderScheduleEdit.Type;
+
+const reminderPauseAfter = 5;
+
+/** Reminder-only ignored-delivery standing. A pending question blocks further reminders; pausing does not revoke legal Consent. */
+export const ReminderStanding = Schema.Union([
+  Schema.TaggedStruct("Attentive", { unanswered: Schema.Literals([0, 1, 2]) }),
+  Schema.TaggedStruct("QuestionPending", { unanswered: Schema.Literal(3) }),
+  Schema.TaggedStruct("QuestionDelivered", { unanswered: Schema.Literals([3, 4]) }),
+  Schema.TaggedStruct("Paused", {
+    unanswered: Schema.Literal(reminderPauseAfter),
+    pausedAt: UtcTimestamp,
+  }),
+]).annotate({ identifier: "ReminderStanding" });
+export type ReminderStanding = typeof ReminderStanding.Type;
+
+/** Trusted correlated activity; delivery acceptance or attempted sends are not delivery evidence. */
+export const ReminderActivity = Schema.Literals([
+  "reminder-delivered",
+  "question-delivered",
+  "correlated-reply",
+  "unrelated-activity",
+]);
+export type ReminderActivity = typeof ReminderActivity.Type;
 
 /** Temporal eligibility only; every Ready attempt still needs live Consent, identity and admission. */
 export const InsightDeliveryDecision = Schema.Union([

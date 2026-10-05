@@ -1,4 +1,12 @@
-import { evaluateBudgetAlerts, readBudgetCaps, readBudgetSpending } from "./operations";
+import {
+  evaluateBudgetAlerts,
+  readBudgetCaps,
+  readBudgetCrossings,
+  readBudgetSpending,
+} from "./operations";
+import { UserId } from "../../src/core/identity/contract";
+import { DisclosureSnapshot } from "../../src/core/consent/contract";
+import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import { executeCanonicalWork } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import {
@@ -9,7 +17,7 @@ import {
 } from "../d1-test-fixture";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
-import { Budget, BudgetStatusReport } from "../../src/core/budgets/contract";
+import { Budget, BudgetId, BudgetStatusReport } from "../../src/core/budgets/contract";
 import { IanaTimeZone } from "../../src/core/_shared/context";
 import { deriveCurrentBudgetMonth } from "../../src/core/budgets/operations";
 import { Transaction } from "../../src/core/transactions/contract";
@@ -98,6 +106,7 @@ const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
       "0014_memory",
       "0015_statement_submission",
       "0016_budgets",
+      "0037_budget_crossing_facts",
       "0016_statement_processing",
       "0017_forwarded_email",
       "0017_statement_dispatch",
@@ -1207,6 +1216,178 @@ it("latches 80% and 100% only once across concurrent capture and correction", ()
           .all<{ threshold: number }>()
       );
       expect(after.results.map((row) => row.threshold)).toEqual([80, 100]);
+    })
+  ));
+
+const seedCrossingConsent = (
+  db: D1Database
+): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const disclosure = yield* Schema.encodeEffect(
+      Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot))
+    )(currentDisclosureFor());
+    yield* Effect.tryPromise(() =>
+      db.batch(
+        users.map((user) =>
+          db
+            .prepare(
+              "INSERT INTO onboarding_consent_records (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES (?,?,?,'disclosed','accepted',0,0)"
+            )
+            .bind(user, user, disclosure)
+        )
+      )
+    );
+  });
+
+it("freezes both crossing facts before later corrections and isolates them from a foreign User", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* seedCrossingConsent(db);
+      const created = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/budgets", "POST", payload()))
+      );
+      expect(created.status).toBe(201);
+      const body = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ data: Schema.toCodecJson(Budget) })
+      )(yield* Effect.tryPromise(() => created.json()));
+      const period = deriveCurrentBudgetMonth({
+        now: DateTime.nowUnsafe(),
+        timeZone: IanaTimeZone.make("America/Bogota"),
+      });
+      const captured = yield* Effect.tryPromise(() =>
+        send(
+          db,
+          request(0, "/transactions", "POST", {
+            money: { amount: "110", currency: "COP" },
+            direction: "outflow",
+            categoryId: category,
+            occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+          })
+        )
+      );
+      expect(captured.status).toBe(201);
+      const movement = yield* Schema.decodeUnknownEffect(Captured)(
+        yield* Effect.tryPromise(() => captured.json())
+      );
+      const input = {
+        db,
+        userId: UserId.make(users[0]),
+        budgetId: BudgetId.make(body.data.id),
+        period,
+      };
+      const crossings = yield* readBudgetCrossings(input);
+      expect(crossings.map((crossing) => crossing.threshold)).toEqual([80, 100]);
+      expect(crossings.map((crossing) => encodeMoneyAmount(crossing.spent.amount))).toEqual([
+        "110",
+        "110",
+      ]);
+      expect(crossings.map((crossing) => crossing.spent.currency)).toEqual(["COP", "COP"]);
+      expect(yield* readBudgetCrossings({ ...input, userId: UserId.make(users[1]) })).toEqual([]);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          send(
+            db,
+            request(0, `/transactions/${movement.data.id}`, "PUT", {
+              expectedRevision: 0,
+              changes: { money: { amount: "1", currency: "COP" } },
+            })
+          )
+        )).status
+      ).toBe(200);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          send(db, request(0, `/budgets/${body.data.id}`, "PUT", payload("200")))
+        )).status
+      ).toBe(200);
+      const frozen = yield* readBudgetCrossings(input);
+      expect(frozen.map((crossing) => encodeMoneyAmount(crossing.cap.amount))).toEqual([
+        "100",
+        "100",
+      ]);
+      expect(frozen.map((crossing) => encodeMoneyAmount(crossing.spent.amount))).toEqual([
+        "110",
+        "110",
+      ]);
+      expect(frozen.map((crossing) => DateTime.formatIso(crossing.detectedAt))).toEqual(
+        crossings.map((crossing) => DateTime.formatIso(crossing.detectedAt))
+      );
+    })
+  ));
+
+it("rolls back both threshold marks and frozen facts if one crossing cannot commit, then recovers without losing the peak", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* seedCrossingConsent(db);
+      const created = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/budgets", "POST", payload()))
+      );
+      expect(created.status).toBe(201);
+      const body = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ data: Schema.toCodecJson(Budget) })
+      )(yield* Effect.tryPromise(() => created.json()));
+      const period = deriveCurrentBudgetMonth({
+        now: DateTime.nowUnsafe(),
+        timeZone: IanaTimeZone.make("America/Bogota"),
+      });
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TRIGGER reject_crossing BEFORE INSERT ON budget_threshold_alerts WHEN NEW.threshold=100 BEGIN SELECT RAISE(ABORT,'test_crossing_refusal'); END"
+          )
+          .run()
+      );
+      expect(
+        (yield* Effect.tryPromise(() =>
+          send(
+            db,
+            request(0, "/transactions", "POST", {
+              money: { amount: "110", currency: "COP" },
+              direction: "outflow",
+              categoryId: category,
+              occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+            })
+          )
+        )).status
+      ).toBe(201);
+      const input = {
+        db,
+        userId: UserId.make(users[0]),
+        budgetId: BudgetId.make(body.data.id),
+        period,
+      };
+      expect(yield* readBudgetCrossings(input)).toEqual([]);
+      const marks = yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "SELECT reached_80,reached_100 FROM budget_month_latches WHERE user_id=? AND budget_id=?"
+          )
+          .bind(users[0], body.data.id)
+          .first()
+      );
+      expect(marks).toEqual({ reached_80: 0, reached_100: 0 });
+      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER reject_crossing").run());
+      expect(yield* evaluateBudgetAlerts({ db, userId: users[0] })).toBe(true);
+      expect((yield* readBudgetCrossings(input)).map((crossing) => crossing.threshold)).toEqual([
+        80, 100,
+      ]);
+      const overwrite = yield* Effect.exit(
+        Effect.tryPromise(() =>
+          db
+            .prepare(
+              "UPDATE budget_threshold_alerts SET crossing_json='{}' WHERE user_id=? AND budget_id=?"
+            )
+            .bind(users[0], body.data.id)
+            .run()
+        )
+      );
+      expect(overwrite._tag).toBe("Failure");
+      expect(
+        (yield* readBudgetCrossings(input)).map((crossing) =>
+          encodeMoneyAmount(crossing.spent.amount)
+        )
+      ).toEqual(["110", "110"]);
     })
   ));
 

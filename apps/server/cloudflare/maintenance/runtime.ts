@@ -41,6 +41,7 @@ import {
   sweepForwardedEmail,
   sweepMediaSubmissions,
 } from "../ingestion/runtime";
+import { sweepProactivityConsentOffers } from "../consent/runtime";
 import { sweepExpiredPATPairings } from "../tokens/runtime";
 import { advanceWeeklyWork } from "../insights/runtime";
 import { advanceRecurringWork } from "../recurring/runtime";
@@ -137,6 +138,7 @@ const channelActivities = (
   nowEpochMs: number
 ): ReadonlyArray<ScheduledActivity> => [
   activity("consent.sweep", sweepExpiredConsent(environment.DB)()),
+  activity("consent.proactivityOfferRetention", sweepProactivityConsentOffers(environment.DB)),
   activity(
     "consent.disclosureRecovery",
     recoverPendingDisclosures({ db: environment.DB, apiKey: environment.KAPSO_API_KEY })

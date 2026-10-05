@@ -1,19 +1,28 @@
 import { deepStrictEqual } from "node:assert";
-import { Cause, Effect, Exit } from "effect";
-import { afterAll, expect, it } from "vitest";
+import { afterAll, expect, it } from "@effect/vitest";
+import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { isolatedTestDatabases } from "../d1-test-fixture";
 import { handleWebAuthentication } from "./operations";
-import {
-  holdSessionCallback,
-  seedSession,
-  sessionRequest,
-  withSessionTime,
-} from "./session.test-fixture";
+import { holdSessionCallback, seedSession, sessionRequest } from "./session.test-fixture";
 
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
 
-it.each([
+/** Observe the real native abort event without starting another Effect runtime. */
+const awaitAbort = (signal: AbortSignal): Effect.Effect<void> =>
+  Effect.callback((resume) => {
+    const cleanup = (): void => signal.removeEventListener("abort", onAbort);
+    const onAbort = (): void => {
+      cleanup();
+      resume(Effect.void);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) onAbort();
+    return Effect.sync(cleanup);
+  });
+
+it.effect.each([
   {
     stage: "idle renewal",
     sql: "UPDATE web_sessions SET idle_expires_at_ms",
@@ -37,78 +46,119 @@ it.each([
   },
 ])(
   "settles the started $stage callback before releasing cancelled authentication work",
-  async ({ sql, method, logout, audits }) => {
+  ({ sql, method, logout, audits }) => {
     const controller = new AbortController();
-    const db = await databases.acquire();
-    await seedSession(db);
-    const held = holdSessionCallback(db, sql, method);
-    let settled = false;
-    const running = Effect.runPromiseExit(
-      withSessionTime(handleWebAuthentication(sessionRequest(held.db, logout)), 4102444800000),
-      {
-        signal: controller.signal,
-      }
-    ).then((outcome) => {
-      settled = true;
-      return outcome;
-    });
-    try {
-      await Promise.race([
-        held.entered,
-        running.then((outcome) => {
-          throw new Error("Authentication exited before D1 callback readiness", { cause: outcome });
-        }),
-      ]);
-      controller.abort();
-      // Drain scheduled Effect/native continuations without a wall-clock timing assertion.
-      await new Promise<void>((resolve) => setImmediate(resolve));
-      expect(settled).toBe(false);
-    } finally {
-      held.release();
-      controller.abort();
-      const outcome = await running;
-      deepStrictEqual(outcome, Exit.failCause(Cause.interrupt()));
-    }
-    expect(
-      await db.prepare("SELECT revoked_at_ms, idle_expires_at_ms FROM web_sessions").first()
-    ).toEqual({
-      revoked_at_ms: logout ? 4102444800000 : null,
-      idle_expires_at_ms: logout ? 4102444801000 : 4105036800000,
-    });
-    expect(await db.prepare("SELECT count(*) AS count FROM canonical_user_reads").first()).toEqual({
-      count: audits,
+    return Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => databases.acquire());
+      yield* seedSession({ db, idle: 4102444801000, hard: 4110220800000 });
+      yield* TestClock.setTime(4102444800000);
+      const held = yield* holdSessionCallback({ db, sqlPrefix: sql, method });
+      const completed = yield* Deferred.make<Exit.Exit<Response>>();
+      const requested = yield* Deferred.make<void>();
+      const running = yield* Effect.forkChild(
+        handleWebAuthentication(sessionRequest({ db: held.db, logout })).pipe(
+          Effect.onExit((outcome) => Deferred.succeed(completed, outcome))
+        )
+      );
+      const interrupting = yield* Effect.forkChild(
+        awaitAbort(controller.signal).pipe(
+          Effect.andThen(Deferred.succeed(requested, undefined)),
+          Effect.andThen(Fiber.interruptAs(running, undefined))
+        ),
+        { startImmediately: true }
+      );
+      yield* Effect.gen(function* () {
+        yield* Effect.raceFirst(
+          Deferred.await(held.entered),
+          Fiber.await(running).pipe(
+            Effect.flatMap((outcome) =>
+              Effect.die(
+                new Error("Authentication exited before D1 callback readiness", { cause: outcome })
+              )
+            )
+          )
+        );
+        controller.abort();
+        yield* Deferred.await(requested);
+        yield* Effect.yieldNow;
+        expect(yield* Deferred.isDone(completed)).toBe(false);
+        yield* held.release;
+        deepStrictEqual(yield* Fiber.await(running), Exit.failCause(Cause.interrupt()));
+        yield* Fiber.join(interrupting);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT revoked_at_ms, idle_expires_at_ms FROM web_sessions").first()
+          )
+        ).toEqual({
+          revoked_at_ms: logout ? 4102444800000 : null,
+          idle_expires_at_ms: logout ? 4102444801000 : 4105036800000,
+        });
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT count(*) AS count FROM canonical_user_reads").first()
+          )
+        ).toEqual({ count: audits });
+      }).pipe(
+        Effect.ensuring(
+          Effect.gen(function* () {
+            yield* held.release;
+            controller.abort();
+            yield* Fiber.await(running);
+            if (yield* Deferred.isDone(held.entered)) yield* Deferred.await(held.settled);
+          })
+        )
+      );
     });
   }
 );
 
-it("cancels a held User projection without shielding the whole workflow or starting Audit", async () => {
-  const controller = new AbortController();
-  const db = await databases.acquire();
-  await seedSession(db);
-  const held = holdSessionCallback(db, "SELECT u.id", "all");
-  const running = Effect.runPromiseExit(
-    withSessionTime(handleWebAuthentication(sessionRequest(held.db)), 4102444800000),
-    {
-      signal: controller.signal,
-    }
-  );
-  try {
-    await Promise.race([
-      held.entered,
-      running.then((outcome) => {
-        throw new Error("Authentication exited before User projection readiness", {
-          cause: outcome,
-        });
-      }),
-    ]);
-    controller.abort();
-    deepStrictEqual(await running, Exit.failCause(Cause.interrupt()));
-    expect(await db.prepare("SELECT count(*) AS count FROM canonical_user_reads").first()).toEqual({
-      count: 0,
+it.effect(
+  "cancels a held User projection without shielding the whole workflow or starting Audit",
+  () => {
+    const controller = new AbortController();
+    return Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => databases.acquire());
+      yield* seedSession({ db, idle: 4102444801000, hard: 4110220800000 });
+      yield* TestClock.setTime(4102444800000);
+      const held = yield* holdSessionCallback({ db, sqlPrefix: "SELECT u.id", method: "all" });
+      const running = yield* Effect.forkChild(
+        handleWebAuthentication(sessionRequest({ db: held.db, logout: false }))
+      );
+      const interrupting = yield* Effect.forkChild(
+        awaitAbort(controller.signal).pipe(Effect.andThen(Fiber.interruptAs(running, undefined))),
+        { startImmediately: true }
+      );
+      yield* Effect.gen(function* () {
+        yield* Effect.raceFirst(
+          Deferred.await(held.entered),
+          Fiber.await(running).pipe(
+            Effect.flatMap((outcome) =>
+              Effect.die(
+                new Error("Authentication exited before User projection readiness", {
+                  cause: outcome,
+                })
+              )
+            )
+          )
+        );
+        controller.abort();
+        deepStrictEqual(yield* Fiber.await(running), Exit.failCause(Cause.interrupt()));
+        yield* Fiber.join(interrupting);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT count(*) AS count FROM canonical_user_reads").first()
+          )
+        ).toEqual({ count: 0 });
+      }).pipe(
+        Effect.ensuring(
+          Effect.gen(function* () {
+            yield* held.release;
+            controller.abort();
+            yield* Fiber.await(running);
+            if (yield* Deferred.isDone(held.entered)) yield* Deferred.await(held.settled);
+          })
+        )
+      );
     });
-  } finally {
-    held.release();
-    controller.abort();
-    await running;
   }
-});
+);

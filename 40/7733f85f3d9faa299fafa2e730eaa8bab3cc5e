@@ -1,0 +1,42 @@
+apps/server/src/core/audit/contract.ts
+  s_306ab925389860::t_867304f926de5e 7,29
+apps/server/cloudflare/proactivity.test-fixture.ts
+  s_306ab925389860::t_01780d2239e74a 20,191-192
+  s_306ab925389860::t_88d465fc37d4e9 21,156-157,159,187-189,212,281-285
+  s_306ab925389860::t_779f518f31a150 190,193-210,213-219,222,224,230-237,239-244,246-280
+  s_306ab925389860::t_617ca65db9264d 211
+apps/server/cloudflare/audit/internal/reminder-audit-migration.test.ts
+  s_306ab925389860::t_4cb377f8015a1d 1-7,18-22,28,131
+  s_306ab925389860::t_779f518f31a150 8-16,23-27,29-130,132-167
+  s_306ab925389860::t_643ccb2c9d04ee 17
+apps/server/src/shell/audit/internal/query.ts
+  s_306ab925389860::t_779f518f31a150 32-36,90
+  s_306ab925389860::t_00734196a6c928 2,24,38,75,78
+  s_306ab925389860::t_dd27f9813561b4 89,91
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_306ab925389860::t_ff539ccd3f8028 157
+tools/depcruise/publication.mjs
+  s_306ab925389860::t_29364b3fb39b9f 56-59
+apps/server/src/core/audit/internal/model.test.ts
+  s_306ab925389860::t_a4f05078eee784 24-32,34
+  s_306ab925389860::t_0a61a29ea4d6e8 33
+apps/server/cloudflare/insights/reminder-canonical.test.ts
+  s_306ab925389860::t_901ec89c18f7e2 3
+  s_306ab925389860::t_779f518f31a150 255-265
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "407733f85f3d9faa299fafa2e730eaa8bab3cc5e",
+  "prompts": {},
+  "sessions": {
+    "s_306ab925389860": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a109c8-df42-7697-afe7-6376e97c8760",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

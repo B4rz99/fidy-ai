@@ -4,7 +4,7 @@ import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { UserId } from "~/core/identity/contract";
 import { PATId } from "~/core/tokens/contract";
-import { HostedAgentSessionId } from "~/core/agent/contract";
+import { HostedAgentSessionId, TranscriptTurnId } from "~/core/agent/contract";
 import { WebSessionId } from "~/core/web-session/contract";
 
 /** A stable UUID naming one append-only AuditLogEntry. */
@@ -26,6 +26,7 @@ export const AuditCaller = Schema.Union([
   }),
   Schema.TaggedStruct("WebSession", { webSessionId: WebSessionId }),
   Schema.TaggedStruct("HostedAgentSession", { hostedAgentSessionId: HostedAgentSessionId }),
+  Schema.TaggedStruct("HostedTurn", { turnId: TranscriptTurnId }),
 ]).annotate({ identifier: "AuditCaller" });
 export type AuditCaller = typeof AuditCaller.Type;
 

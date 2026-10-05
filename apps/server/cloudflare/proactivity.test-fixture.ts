@@ -17,7 +17,8 @@ import { newId } from "./secret-material/operations";
 import { HostedAgentSessionConsentBasis, TranscriptTurnId } from "../src/core/agent/contract";
 import { mintHostedStatementCaller } from "./agent/operations";
 import type { WhatsAppHostedSubject } from "./whatsapp/contract";
-import type { HostedCanonicalCaller } from "./canonical-work/contract";
+import type { AuthorizedPAT } from "./tokens/contract";
+import type { HostedCanonicalCaller, TransactionSubject } from "./canonical-work/contract";
 import { whatsAppAssociationQuery } from "../src/shell/identity/operations";
 
 /** Remove the seeded Session's active authority without fabricating delivery/terminal evidence. */
@@ -152,10 +153,10 @@ const credentialDigestBytes = 32;
 const browserFreshLifetimeMs = 600000;
 const browserHardLifetimeMs = 7776000000;
 
-/** Seed an established browser proof, then append processing withdrawal through the real Consent owner; do not disable or rewrite the reminder schedule. */
-export const withdrawTestProcessingConsent = (
+/** Established browser proof for real owner operations in broad native integration evidence. */
+export const proactivityTestBrowser = (
   db: D1Database
-): Effect.Effect<void, Cause.UnknownError> =>
+): Effect.Effect<TransactionSubject, Cause.UnknownError> =>
   Effect.gen(function* () {
     const pairingId = newId();
     const id = newId();
@@ -183,62 +184,102 @@ export const withdrawTestProcessingConsent = (
             current + browserFreshLifetimeMs,
             current + browserHardLifetimeMs
           ),
+      ])
+    );
+    return { id, userId, digest };
+  });
+
+/** Same-User read/write PAT proof; canonical operations still recheck its digest and declared capability. */
+export const proactivityTestPAT = (
+  db: D1Database
+): Effect.Effect<AuthorizedPAT, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const patId = newId();
+    const userId = proactivityTestUsers[0];
+    const digest = crypto.getRandomValues(new Uint8Array(credentialDigestBytes));
+    const current = proactivityTestNow.epochMilliseconds;
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(
+          "INSERT INTO pats(id,user_id,short_id,bearer_digest,recipient_label,scopes_json,lifetime_days,created_at_ms,issued_at_ms,expires_at_ms,request_id) VALUES (?,?,'12345678',?,'fixture','[\"read\",\"write\"]',7,?,?,?,?)"
+        )
+        .bind(patId, userId, digest, current, current, current + browserFreshLifetimeMs, newId())
+        .run()
+    );
+    return { patId, userId, digest, requiredScope: Option.some("read") };
+  });
+
+/** Append processing withdrawal through real Consent; leave reminder execution state untouched. */
+export const withdrawTestProcessingConsent = (
+  db: D1Database
+): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const subject = yield* proactivityTestBrowser(db);
+    yield* Effect.tryPromise(() =>
+      db.batch([
         recordConsentRevocation({
           db,
-          subject: { id, userId, digest },
+          subject,
           evidenceId: newId(),
-          current,
+          current: proactivityTestNow.epochMilliseconds,
         }),
       ])
     );
   });
 
-export const proactivityDatabase: Effect.Effect<
-  D1Database,
-  Cause.UnknownError | Schema.SchemaError
-> = Effect.gen(function* () {
-  const db = yield* Effect.tryPromise(() => proactivityTestDatabases.acquire());
-  const names = Array.from(
-    new Bun.Glob("*.sql").scanSync(new URL("./migrations/", import.meta.url).pathname)
-  ).sort();
-  yield* Effect.tryPromise(() =>
-    installTestSchema({
-      db,
-      sources: names.map((name) => new URL(`./migrations/${name}`, import.meta.url)),
-    })
-  );
-  const disclosure = yield* Schema.encodeEffect(
-    Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot))
-  )(currentDisclosureFor());
-  for (const subject of [
-    { userId: proactivityTestUsers[0], caller: proactivityTestCallers[0] },
-    { userId: proactivityTestUsers[1], caller: proactivityTestCallers[1] },
-  ]) {
-    const { userId, caller } = subject;
+const databaseThrough = (
+  boundary: "BeforeCanonicalAudit" | "Current"
+): Effect.Effect<D1Database, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const db = yield* Effect.tryPromise(() => proactivityTestDatabases.acquire());
+    const names = Array.from(
+      new Bun.Glob("*.sql").scanSync(new URL("./migrations/", import.meta.url).pathname)
+    ).sort();
     yield* Effect.tryPromise(() =>
-      db.batch([
-        db
-          .prepare(
-            "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',?)"
-          )
-          .bind(userId, proactivityTestNow.epochMilliseconds),
-        db
-          .prepare(
-            "INSERT INTO whatsapp_identities(user_id,portfolio_id,bsuid,verified_at_ms) VALUES (?,?,?,?)"
-          )
-          .bind(
-            userId,
-            caller.businessPortfolioId,
-            caller.businessScopedUserId,
-            proactivityTestNow.epochMilliseconds
-          ),
-        db
-          .prepare(
-            "INSERT INTO onboarding_consent_records(id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES (?,?,?,'disclosed','accepted',0,0)"
-          )
-          .bind(userId, userId, disclosure),
-      ])
+      installTestSchema({
+        db,
+        sources: names
+          .filter((name) => boundary === "Current" || name < "0040")
+          .map((name) => new URL(`./migrations/${name}`, import.meta.url)),
+      })
     );
-  }
-  return db;
-});
+    const disclosure = yield* Schema.encodeEffect(
+      Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot))
+    )(currentDisclosureFor());
+    for (const subject of [
+      { userId: proactivityTestUsers[0], caller: proactivityTestCallers[0] },
+      { userId: proactivityTestUsers[1], caller: proactivityTestCallers[1] },
+    ]) {
+      const { userId, caller } = subject;
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db
+            .prepare(
+              "INSERT INTO users(id,service_market,locale,time_zone,created_at_ms) VALUES (?,'CO','es-CO','America/Bogota',?)"
+            )
+            .bind(userId, proactivityTestNow.epochMilliseconds),
+          db
+            .prepare(
+              "INSERT INTO whatsapp_identities(user_id,portfolio_id,bsuid,verified_at_ms) VALUES (?,?,?,?)"
+            )
+            .bind(
+              userId,
+              caller.businessPortfolioId,
+              caller.businessScopedUserId,
+              proactivityTestNow.epochMilliseconds
+            ),
+          db
+            .prepare(
+              "INSERT INTO onboarding_consent_records(id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES (?,?,?,'disclosed','accepted',0,0)"
+            )
+            .bind(userId, userId, disclosure),
+        ])
+      );
+    }
+    return db;
+  });
+
+/** Independent latest-schema database for owner behavior. */
+export const proactivityDatabase = databaseThrough("Current");
+/** Independent populated-upgrade baseline; 0040 must be applied separately by the migration test. */
+export const proactivityDatabaseBeforeCanonicalAudit = databaseThrough("BeforeCanonicalAudit");

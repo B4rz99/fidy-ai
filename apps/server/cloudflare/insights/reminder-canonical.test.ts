@@ -1,5 +1,6 @@
 import { afterAll, expect, it } from "vitest";
 import { type Cause, DateTime, Effect, Option } from "effect";
+import { makeAudit } from "../../src/shell/audit/runtime";
 import { ToolCallId, TranscriptTurnId } from "../../src/core/agent/contract";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import {
@@ -251,6 +252,17 @@ it("shares canonical reads with live hosted authority, attributes Audit to the T
         session_id: null,
         operation: "insights.getReminderSchedule",
       });
+      const evidence = yield* makeAudit({ database: db }).query({
+        userId: caller.userId,
+        limit: 10,
+      });
+      expect(evidence).toMatchObject([
+        {
+          caller: { _tag: "HostedTurn", turnId: caller.turnId },
+          operation: "insights.getReminderSchedule",
+          outcome: "succeeded",
+        },
+      ]);
       const rejected = yield* executeHostedStatementCall({
         ...work,
         operation: "insights.updateReminderSchedule",

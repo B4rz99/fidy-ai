@@ -1,4 +1,5 @@
 import { DateTime, Effect, Option, Schema } from "effect";
+import { TranscriptTurnId } from "~/core/agent/contract";
 import { type AuditCaller, AuditLogEntry } from "~/core/audit/contract";
 
 import { OAuthConnectionId, OAuthCredentialId } from "~/core/oauth-agents/contract";
@@ -20,6 +21,7 @@ const Row = Schema.Struct({
   subjectUserId: AuditLogEntry.fields.subjectUserId,
   sessionId: Schema.OptionFromNullOr(WebSessionId),
   patId: Schema.OptionFromNullOr(PATId),
+  hostedTurnId: Schema.OptionFromNullOr(TranscriptTurnId),
   oauthConnectionId: Schema.OptionFromOptionalKey(Schema.NullOr(OAuthConnectionId)),
   oauthCredentialId: Schema.OptionFromOptionalKey(Schema.NullOr(OAuthCredentialId)),
   operation: AuditLogEntry.fields.operation,
@@ -27,8 +29,13 @@ const Row = Schema.Struct({
   occurredAt: Schema.Int,
 });
 
-const projection = (table: string, caller: "session" | "pat", outcome: string): string =>
+const projection = (
+  table: string,
+  caller: "session" | "pat" | "insight",
+  outcome: string
+): string =>
   `SELECT id, user_id AS subjectUserId, session_id AS sessionId, ${caller === "pat" ? "pat_id" : "NULL"} AS patId,
+    ${caller === "insight" ? "hosted_turn_id" : "NULL"} AS hostedTurnId,
     ${caller === "pat" ? "oauth_connection_id AS oauthConnectionId, oauth_credential_id AS oauthCredentialId," : ""}
     operation, ${outcome} AS outcome, occurred_at_ms AS occurredAt FROM ${table} WHERE user_id = ?
     ORDER BY occurred_at_ms, id LIMIT ?`;
@@ -65,10 +72,10 @@ const evidenceQueries = [
   ),
   projection(
     "insight_audit",
-    "session",
+    "insight",
     "CASE WHEN outcome = 'accepted' THEN 'succeeded' ELSE 'rejected' END"
   ),
-  `SELECT id, user_id AS subjectUserId, session_id AS sessionId, NULL AS patId,
+  `SELECT id, user_id AS subjectUserId, session_id AS sessionId, NULL AS patId, NULL AS hostedTurnId,
     'emailAuthentication.' || operation AS operation,
     CASE WHEN outcome IN ('accepted', 'replaced') THEN 'succeeded' ELSE 'rejected' END AS outcome,
     occurred_at_ms AS occurredAt FROM email_replacement_audit WHERE user_id = ? ORDER BY occurred_at_ms, id LIMIT ?`,
@@ -78,6 +85,9 @@ const callerOf = (row: typeof Row.Type): AuditCaller => {
   // A lifecycle transition may identify a target PAT as well as its acting session.
   if (Option.isSome(row.sessionId)) {
     return { _tag: "WebSession", webSessionId: row.sessionId.value };
+  }
+  if (Option.isSome(row.hostedTurnId)) {
+    return { _tag: "HostedTurn", turnId: row.hostedTurnId.value };
   }
   if (Option.isSome(row.patId)) return { _tag: "PAT", patId: row.patId.value };
   if (

@@ -53,6 +53,10 @@ const compositionRoots = new Set([
   "cloudflare/oauth-agents/oauth-ingress.test.ts",
   "cloudflare/transactions/transactions.test.ts",
   "cloudflare/audit/internal/audit.test.ts",
+  // Real predecessor upgrade and mixed browser/PAT/hosted Audit observation.
+  "cloudflare/audit/internal/reminder-audit-migration.test.ts",
+  // Installed canonical/hosted reminder calls plus published attributable Audit observation.
+  "cloudflare/insights/reminder-canonical.test.ts",
 ]);
 const testRunner = new Set([
   "cloudflare/vitest.config.ts",

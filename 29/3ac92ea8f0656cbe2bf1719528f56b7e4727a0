@@ -1,0 +1,108 @@
+apps/web/src/features/email-onboarding/controller.test.tsx
+  s_e278ac208f4e8a::t_179aba03cfa0a7 3,11,13-40
+  s_5bc1f3a4d7f879::t_98137040b3ad9a 1-2,4-10,12,41
+  s_e278ac208f4e8a::t_9ff9cab830596e 42-99
+apps/web/src/features/email-replacement/controller.test.tsx
+  s_e278ac208f4e8a::t_4e6a364c83388d 3-63
+  s_e278ac208f4e8a::t_e4eee431a44923 1-2,64-148
+apps/web/src/features/subscription/feature.test.tsx
+  s_e278ac208f4e8a::t_d409cdef19265b 1266-1273,1324
+  s_e278ac208f4e8a::t_adfc8ffeab96a9 1258
+  s_e278ac208f4e8a::t_3e01316bcd988d 1416
+  s_e278ac208f4e8a::t_183c874b03ad98 755,757-758,761-762
+  s_e278ac208f4e8a::t_14223b7287aaf8 1402-1411,1421
+  s_e278ac208f4e8a::t_2f9d2d50692c51 1325,1362-1364,1393-1396
+  s_e278ac208f4e8a::t_ff84652de7e031 644-647,851-852,1026-1027,1140,1259,1401,1412-1415,1417-1420,1422-1433
+apps/web/src/transport/client.test.ts
+  s_e278ac208f4e8a::t_fb4961febaf9b4 381,384
+  s_5bc1f3a4d7f879::t_6bf05b25a08662 377,380,382
+  s_e278ac208f4e8a::t_089e23509fb32a 383,386,390,402
+apps/web/scripts/check-browser-bundle.test.ts
+  s_5bc1f3a4d7f879::t_541921ec4f98bf 10-41
+apps/web/src/features/email-replacement/controller.ts
+  s_e278ac208f4e8a::t_699b1b79c3e4e9 33-42,46-53,57-66,68-96
+  s_e278ac208f4e8a::t_cc63cc83de8ca1 45
+  s_e278ac208f4e8a::t_f49d7988165fb6 3-4,10,23-24,43-44,97-98,115,117-119,121,137-138,141-155
+apps/web/src/features/email-onboarding/controller.ts
+  s_e278ac208f4e8a::t_28dee8b62faed3 26-53,56-59,79
+  s_e278ac208f4e8a::t_a359c2f0fdce54 3-4,6,12,60-66,70-78,91-94,97-105
+apps/web/scripts/check-browser-bundle.ts
+  s_5bc1f3a4d7f879::t_54288dd60be460 14
+apps/web/src/features/email-replacement/feature.tsx
+  s_e278ac208f4e8a::t_11c73cbfe6fb8a 104-113
+  s_e278ac208f4e8a::t_a14e7f2c298235 114-117,157-159
+apps/web/src/transport/client.ts
+  s_5bc1f3a4d7f879::t_b225c2813c8dea 40
+  s_e278ac208f4e8a::t_c1e42b8fed24b8 218
+apps/web/src/features/transactions/manual-capture.test.tsx
+  s_e278ac208f4e8a::t_2014c66bf1a0a0 39
+  s_8e33e3c1782639::t_26bc2ebdd3a9d1 1-38,40-50
+apps/web/src/features/subscription/enrollment-gateway.ts
+  s_e278ac208f4e8a::t_1065a80217e62e 62-66,68,74-78,82,86-87,91-92,94-101,111-112,204,236-248,257-258
+  s_e278ac208f4e8a::t_afbec6c98b6529 174-183,206-212
+  s_e278ac208f4e8a::t_9997a29fc46167 113,184-203,205,213-215,217-224,229-235,265-270,274,280-286,295,300-315,387-391,394,406,410,415-418,426-429,431-434
+scripts/oxlint/lint-rules.test.js
+  s_e278ac208f4e8a::t_83d259515519bf 3-11,189
+apps/web/src/features/subscription/feature.tsx
+  s_e278ac208f4e8a::t_848accc0b04f61 946
+  s_e278ac208f4e8a::t_cdb4dad7862397 517,524,567,571-572,574,932,945,947-949,1021
+apps/web/src/features/transactions/manual-capture.tsx
+  s_e278ac208f4e8a::t_a5caa6220e84f6 141-154
+  s_e278ac208f4e8a::t_9a4d1f9c7ef6b2 2,21,52-62,155-164,170,175,183,186,201,216,219
+apps/web/src/transport/browser-http-policy.ts
+  s_5bc1f3a4d7f879::t_d313318e67c0e9 295-296
+  s_5bc1f3a4d7f879::t_20adfb001309fe 280-292,298,313
+  s_5bc1f3a4d7f879::t_6154eb2f97574b 294,297,299-312,314-315,317-318
+apps/web/src/features/email-onboarding/feature.tsx
+  s_e278ac208f4e8a::t_ffca0483874b07 60-71
+  s_e278ac208f4e8a::t_bf1ddbdb5a19a9 72-83,107,109-116,119-121
+apps/web/src/features/subscription/enrollment-gateway.test.ts
+  s_e278ac208f4e8a::t_cf611168818892 351
+  s_e278ac208f4e8a::t_b3f347862f9aed 161-172,369-377
+  s_e278ac208f4e8a::t_2fc318d4691e13 348,384-393
+  s_e278ac208f4e8a::t_88d940594f3632 1
+  s_e278ac208f4e8a::t_49a1cdd8632e37 342-345,395-397
+  s_e278ac208f4e8a::t_ccb284fa57e93c 341
+  s_e278ac208f4e8a::t_56fefb2cd81002 346-347
+  s_e278ac208f4e8a::t_adc09f7e9e76e9 349-350
+  s_e278ac208f4e8a::t_4654545d9cd060 352-354,366-368
+  s_e278ac208f4e8a::t_52aec136c53786 378-383
+  s_e278ac208f4e8a::t_3da9f4affb53aa 394
+  s_e278ac208f4e8a::t_128f8cf707b774 355-365
+apps/web/src/features/transactions/feature.test.tsx
+  s_5bc1f3a4d7f879::t_661224f6c0e566 95
+apps/web/src/features/transactions/feature.tsx
+  s_5bc1f3a4d7f879::t_cf476a0c64baf7 448
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "293ac92ea8f0656cbe2bf1719528f56b7e4727a0",
+  "prompts": {},
+  "sessions": {
+    "s_5bc1f3a4d7f879": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a109a5-6bcd-7b81-acf7-c5b19f467797",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_8e33e3c1782639": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a109c2-9276-7113-b270-d2078b93ecba",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_e278ac208f4e8a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10731-a41d-7121-98b3-ec6e9e1e04de",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

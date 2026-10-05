@@ -4668,7 +4668,7 @@ it("raw PAT batches cannot turn query, recursive, browser-only or under-scoped c
       yield* fromTestPromise(() =>
         installTestSchema({
           db,
-          sources: ["0018_dashboard", "0030_dashboard_initialization"].map(
+          sources: ["0030_dashboard_initialization"].map(
             (name) => new URL(`../migrations/${name}.sql`, import.meta.url)
           ),
         })

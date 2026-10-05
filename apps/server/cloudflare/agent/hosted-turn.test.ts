@@ -298,7 +298,7 @@ const setup = (seedLegacyTurn = false): Promise<D1Database> =>
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => databases.acquire());
       if (seedLegacyTurn) {
-        for (const migration of migrationNames) {
+        for (const migration of canonicalAdmissionMigrationNames(migrationNames)) {
           yield* applySeededMigration({ db, migration, seedLegacyTurn });
         }
       } else {

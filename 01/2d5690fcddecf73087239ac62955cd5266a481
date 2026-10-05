@@ -1,0 +1,36 @@
+apps/server/cloudflare/insights/internal/weekly-work.ts
+  s_e278ac208f4e8a::t_cf248ed2bd52db 1
+  s_e278ac208f4e8a::t_ab1b3a2a3e4393 138,144
+apps/server/cloudflare/insights/internal/weekly-governor.ts
+  s_e278ac208f4e8a::t_adf2a6cb734c6e 1
+  s_e278ac208f4e8a::t_797a29c38d2478 32,43
+apps/server/cloudflare/whatsapp/internal/weekly-question.ts
+  s_e278ac208f4e8a::t_3ae589c5fbcc2c 1
+  s_e278ac208f4e8a::t_a2003c5c07382c 34-35,139-140
+apps/server/cloudflare/whatsapp/insight-delivery.test.ts
+  s_e278ac208f4e8a::t_9065af1f9c2fee 35,171-197,199-223
+  s_e278ac208f4e8a::t_3422258d579ab4 198,224-225
+apps/server/cloudflare/insights/governor.test.ts
+  s_e278ac208f4e8a::t_d1ed0312e9fabe 8-9,13,28-61,121-122
+  s_e278ac208f4e8a::t_e4c31ffce5e8d5 10,62-86,90-92,94,98-100,102-120
+  s_e278ac208f4e8a::t_7b959c5f53e1fc 87,95
+  s_e278ac208f4e8a::t_c0c57c43cf0d3c 3-7,88-89,96-97
+  s_e278ac208f4e8a::t_07afcd2e921441 93
+  s_e278ac208f4e8a::t_f2da7eac56e23e 101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "012d5690fcddecf73087239ac62955cd5266a481",
+  "prompts": {},
+  "sessions": {
+    "s_e278ac208f4e8a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10731-a41d-7121-98b3-ec6e9e1e04de",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

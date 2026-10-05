@@ -1,0 +1,22 @@
+apps/server/cloudflare/subscription/payment-enrollment.test.ts
+  s_d6a0dd3199fa41::t_741374149166c9 2340,2375,2396-2407
+apps/server/cloudflare/subscription/internal/payment-enrollment.ts
+  s_d6a0dd3199fa41::t_e5780122a7042a 386-387,398-400
+  s_d6a0dd3199fa41::t_f9c99d045693e5 401
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d05a0fd97a4f936a710ff3537c76e2cfa6260643",
+  "prompts": {},
+  "sessions": {
+    "s_d6a0dd3199fa41": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10c1e-ca05-7310-8203-e7cc63366ce6",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

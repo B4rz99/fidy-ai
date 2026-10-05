@@ -1,0 +1,45 @@
+.github/actions/bun-runtime/action.yml
+  s_5bc1f3a4d7f879::t_2453568a0496e5 10
+apps/cli/ARCHITECTURE.md
+  s_5bc1f3a4d7f879::t_b26e15b8eb5ec6 12,90
+apps/cli/src/command/internal/presentation.ts
+  s_5bc1f3a4d7f879::t_93087b678c4272 18
+apps/cli/src/credential/runtime.ts
+  s_5bc1f3a4d7f879::t_5a3f50fe01f3ed 13
+apps/server/cloudflare/agent/hosted-turn.test.ts
+  s_5bc1f3a4d7f879::t_0f6d28b4ded713 301
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_5bc1f3a4d7f879::t_0954b63f0b305a 4671
+apps/server/package.json
+  s_cb5c1f975cdd67::t_932abb9a0a64ed 300
+bun.lock
+  s_5bc1f3a4d7f879::t_97bdc87c19eced 54,120,255
+infra/cloudflare/package.json
+  s_cb5c1f975cdd67::t_fb4e7cf29a9b31 20
+scripts/install-bun.sh
+  s_5bc1f3a4d7f879::t_dae3770550ca51 7-12,15,51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d60ca3ce486007ed4771b2a2df2bad5c2c71c071",
+  "prompts": {},
+  "sessions": {
+    "s_5bc1f3a4d7f879": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a109a5-6bcd-7b81-acf7-c5b19f467797",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_cb5c1f975cdd67": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a109a6-2072-72e2-a84d-c1f188211cc2",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

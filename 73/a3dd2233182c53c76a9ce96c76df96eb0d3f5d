@@ -1,0 +1,19 @@
+apps/server/cloudflare/migrations/0041_proactivity_messages.sql
+  s_2a2197da974ca8::t_a6d7bd359ef9a3 1-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "73a3dd2233182c53c76a9ce96c76df96eb0d3f5d",
+  "prompts": {},
+  "sessions": {
+    "s_2a2197da974ca8": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10d47-87b7-73e6-86fa-2a04a4e28760",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

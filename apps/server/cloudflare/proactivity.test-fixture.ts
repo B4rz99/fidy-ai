@@ -1,18 +1,113 @@
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { DisclosureSnapshot } from "../src/core/consent/contract";
 import { UserId, WhatsAppCallerReference } from "../src/core/identity/contract";
-import { currentDisclosureFor } from "../src/shell/consent/operations";
+import { currentDisclosureFor, protectConsentStatement } from "../src/shell/consent/operations";
 import type { ConsentUnavailable } from "./consent/contract";
 import type { InsightUnavailable } from "./insights/contract";
 import type { ReminderSchedule } from "../src/core/insights/contract";
 import {
   createProactivityConsentOffer,
+  readConsentStanding,
   recordConsentRevocation,
   recordProactivityConsentDisclosure,
 } from "./consent/operations";
 import { findReminderSchedule, recordProactivityDecision } from "./insights/operations";
 import { installTestSchema, isolatedTestDatabases } from "./d1-test-fixture";
 import { newId } from "./secret-material/operations";
+import { HostedAgentSessionConsentBasis, TranscriptTurnId } from "../src/core/agent/contract";
+import { mintHostedStatementCaller } from "./agent/operations";
+import type { WhatsAppHostedSubject } from "./whatsapp/contract";
+import type { HostedCanonicalCaller } from "./canonical-work/contract";
+import { whatsAppAssociationQuery } from "../src/shell/identity/operations";
+
+/** Remove the seeded Session's active authority without fabricating delivery/terminal evidence. */
+export const endTestHostedAuthority = (
+  input: Readonly<{ db: D1Database; caller: HostedCanonicalCaller }>
+): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.tryPromise(() =>
+    input.db
+      .prepare("UPDATE hosted_agent_sessions SET status='idle-ended' WHERE id=? AND user_id=?")
+      .bind(input.caller.sessionId, input.caller.userId)
+      .run()
+  ).pipe(Effect.asVoid);
+
+const testHostedConsentBasis = (
+  db: D1Database
+): Effect.Effect<string, ConsentUnavailable | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const standing = yield* readConsentStanding({ db, userId: proactivityTestUsers[0] });
+    if (standing._tag === "Missing") return yield* Effect.die("Fixture needs processing Consent");
+    return yield* Schema.encodeEffect(
+      Schema.fromJsonString(Schema.toCodecJson(HostedAgentSessionConsentBasis))
+    )(standing.basis);
+  });
+
+const fixtureHostedSubject = (): WhatsAppHostedSubject => ({
+  _tag: "WhatsAppHosted",
+  userId: proactivityTestUsers[0],
+  portfolioId: proactivityTestCallers[0].businessPortfolioId,
+  bsuid: proactivityTestCallers[0].businessScopedUserId,
+});
+
+/** Establish real held Turn/channel rows, then mint through Agent's live authority seam. No browser credential substitutes for the hosted caller. */
+export const proactivityHostedCaller = (
+  db: D1Database
+): Effect.Effect<
+  HostedCanonicalCaller,
+  Cause.UnknownError | Schema.SchemaError | ConsentUnavailable
+> =>
+  Effect.gen(function* () {
+    const userId = proactivityTestUsers[0];
+    const caller = proactivityTestCallers[0];
+    const sessionId = newId();
+    const turnId = TranscriptTurnId.make(newId());
+    const current = proactivityTestNow.epochMilliseconds;
+    const basis = yield* testHostedConsentBasis(db);
+    yield* Effect.tryPromise(() =>
+      db.batch([
+        db
+          .prepare(
+            "INSERT INTO hosted_agent_sessions(id,user_id,consent_basis_json,started_at_ms,status) VALUES (?,?,?,?,'active')"
+          )
+          .bind(sessionId, userId, basis, current),
+        db
+          .prepare(
+            "INSERT INTO hosted_turns(id,user_id,hosted_session_id,started_at_ms,status) VALUES (?,?,?,?,'pending')"
+          )
+          .bind(turnId, userId, sessionId, current),
+        db
+          .prepare(
+            "INSERT INTO hosted_whatsapp_inbound(turn_id,user_id,portfolio_id,bsuid,message_id,business_phone_number_id,occurred_at_ms,received_at_ms) VALUES (?,?,?,?,'held-reminder-read','123456789',?,?)"
+          )
+          .bind(
+            turnId,
+            userId,
+            caller.businessPortfolioId,
+            caller.businessScopedUserId,
+            current,
+            current
+          ),
+      ])
+    );
+    const association = whatsAppAssociationQuery({ userId, caller });
+    return Option.getOrThrow(
+      yield* mintHostedStatementCaller({
+        db,
+        subject: fixtureHostedSubject(),
+        turnId,
+        current,
+        approval: Option.none(),
+        live: protectConsentStatement({
+          subject: { _tag: "User", userId },
+          requirement: "active",
+          statement: {
+            sql: `SELECT 1 WHERE EXISTS (${association.sql})`,
+            params: association.params,
+          },
+        }),
+      })
+    );
+  });
 
 /** Broad native proactivity integration fixture: real D1 schema and established identities, never substituted owner persistence. Each call acquires an independent database. */
 export const proactivityTestDatabases = isolatedTestDatabases();

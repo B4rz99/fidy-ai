@@ -41,6 +41,27 @@ const assertion = (db: D1Database): D1PreparedStatement =>
     "INSERT INTO reminder_schedule_assertion(id,accepted) VALUES (1,CASE WHEN changes()=1 THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted=excluded.accepted"
   );
 
+export const decodeScheduleSnapshot = ({
+  raw,
+  userId,
+}: Readonly<{ raw: unknown; userId: UserId }>): Effect.Effect<
+  ReminderScheduleSnapshot,
+  InsightUnavailable | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    const row = yield* Schema.decodeUnknownEffect(ScheduleRow)(raw);
+    if (row.id !== row.snapshot_json.id || row.version !== row.snapshot_json.version) {
+      return yield* new InsightUnavailable();
+    }
+    return ReminderScheduleSnapshot.make({
+      ...row.snapshot_json,
+      enabled: row.enabled === 1,
+      nextScheduledAt: row.next_scheduled_at,
+      userId,
+      consentGrantId: row.consent_grant_id,
+    });
+  });
+
 export const findSchedule = (
   input: Scope
 ): Effect.Effect<Option.Option<ReminderScheduleSnapshot>, InsightUnavailable> =>
@@ -57,19 +78,7 @@ export const findSchedule = (
       }).first()
     );
     if (raw === null) return Option.none();
-    const row = yield* Schema.decodeUnknownEffect(ScheduleRow)(raw);
-    if (row.id !== row.snapshot_json.id || row.version !== row.snapshot_json.version) {
-      return yield* new InsightUnavailable();
-    }
-    return Option.some(
-      ReminderScheduleSnapshot.make({
-        ...row.snapshot_json,
-        enabled: row.enabled === 1,
-        nextScheduledAt: row.next_scheduled_at,
-        userId: input.userId,
-        consentGrantId: row.consent_grant_id,
-      })
-    );
+    return Option.some(yield* decodeScheduleSnapshot({ raw, userId: input.userId }));
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 
 export const findStanding = (input: Scope): Effect.Effect<ReminderStanding, InsightUnavailable> =>
@@ -175,8 +184,13 @@ export const prepareActivation = (
     ];
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 
-export const prepareRevision = (
-  input: Scope & Readonly<{ input: ReminderScheduleEdit; now: DateTime.Utc }>
+export const prepareRevisionWrites = (
+  input: Scope &
+    Readonly<{
+      input: ReminderScheduleEdit;
+      now: DateTime.Utc;
+      authority: Option.Option<OwnedStatement>;
+    }>
 ): Effect.Effect<
   ReadonlyArray<D1PreparedStatement>,
   InsightUnavailable | ReminderRevisionConflict
@@ -206,7 +220,7 @@ export const prepareRevision = (
       kind: "manual-entry-reminder",
       grantId: old.consentGrantId,
       statement: {
-        sql: "UPDATE reminder_schedules SET version=?,snapshot_json=?,next_scheduled_at=? WHERE user_id=? AND id=? AND version=? AND consent_grant_id=?",
+        sql: `UPDATE reminder_schedules SET version=?,snapshot_json=?,next_scheduled_at=? WHERE user_id=? AND id=? AND version=? AND consent_grant_id=?${Option.isSome(input.authority) ? ` AND EXISTS (${input.authority.value.sql})` : ""}`,
         params: [
           schedule.version,
           json,
@@ -215,20 +229,29 @@ export const prepareRevision = (
           old.id,
           old.version,
           old.consentGrantId,
+          ...Option.toArray(input.authority).flatMap((authority) => authority.params),
         ],
       },
     });
     return [
       update,
-      assertion(input.db),
       input.db
         .prepare(
-          "INSERT INTO reminder_schedule_revisions(user_id,schedule_id,version,snapshot_json) VALUES (?,?,?,?)"
+          "INSERT INTO reminder_schedule_revisions(user_id,schedule_id,version,snapshot_json) SELECT ?,?,?,? WHERE changes()=1"
         )
         .bind(input.userId, schedule.id, schedule.version, json),
-      assertion(input.db),
     ];
   });
+
+export const prepareRevision = (
+  input: Scope & Readonly<{ input: ReminderScheduleEdit; now: DateTime.Utc }>
+): Effect.Effect<
+  ReadonlyArray<D1PreparedStatement>,
+  InsightUnavailable | ReminderRevisionConflict
+> =>
+  prepareRevisionWrites({ ...input, authority: Option.none() }).pipe(
+    Effect.map((statements) => statements.flatMap((statement) => [statement, assertion(input.db)]))
+  );
 
 export const prepareDisable = (input: Scope): D1PreparedStatement =>
   input.db.prepare("UPDATE reminder_schedules SET enabled=0 WHERE user_id=?").bind(input.userId);

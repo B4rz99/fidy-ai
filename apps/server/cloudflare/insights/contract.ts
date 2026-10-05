@@ -12,6 +12,18 @@ import { UtcTimestamp } from "../../src/core/_shared/time";
 import { WeeklySummaryPayload } from "../../src/core/insights/weekly-summary/contract";
 import { InsightTemplateSummary } from "../../src/shell/channels/whatsapp/contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
+import type { QueryAuthority } from "../canonical-work/contract";
+import type { CanonicalCapability } from "../../src/core/canonical-operations/contract";
+import type { Option } from "effect";
+
+/** A caller-owned live authority held inside User coordination. The User is re-correlated at each read/write; neither this snapshot nor a schedule identity authorizes a later effect. */
+export type ReminderCanonicalWork = Readonly<{
+  db: D1Database;
+  userId: string;
+  authority: QueryAuthority;
+  requiredScope: Option.Option<CanonicalCapability>;
+  current: number;
+}>;
 
 const unansweredDeliveries = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 200 }));
 /** Governor standing is separate from legal permission. Paused execution has no pending question. */

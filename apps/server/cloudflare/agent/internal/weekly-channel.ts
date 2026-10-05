@@ -1,8 +1,11 @@
 import { DateTime, Effect, Option } from "effect";
 import { IanaTimeZone } from "../../../src/core/_shared/context";
 import { type UserId } from "../../../src/core/identity/contract";
+import type { WeeklyConsentContext } from "../../consent/contract";
 import {
+  hasProactivityConsentChoiceReceipt,
   hasWeeklyConsentChoiceReceipt,
+  readProactivityConsentChoiceKind,
   recordWeeklyConsentDisclosure,
 } from "../../consent/operations";
 import {
@@ -10,6 +13,7 @@ import {
   prepareWeeklyGovernorReply,
   prepareWeeklyQuestionDelivery,
   readWeeklyThresholds,
+  recordProactivityDecision,
   recordWeeklySummaryDecision,
   requestWeeklySummaryConsent,
 } from "../../insights/operations";
@@ -114,6 +118,25 @@ export const recordWeeklyReply = (
     Effect.mapError(() => new AgentUnavailable())
   );
 
+const handleProactivityChoice = (
+  input: Readonly<{ context: WeeklyConsentContext; choice: string; decisionMessageId: string }>
+): Effect.Effect<Response, AgentUnavailable> =>
+  Effect.gen(function* () {
+    const kind = readProactivityConsentChoiceKind(input.choice);
+    if (Option.isNone(kind)) return new Response(null, { status: refused });
+    const decision = {
+      ...input.context,
+      kind: kind.value,
+      choice: input.choice,
+      decisionMessageId: input.decisionMessageId,
+    };
+    if (yield* hasProactivityConsentChoiceReceipt(decision)) {
+      return new Response(null, { status: success });
+    }
+    const saved = yield* recordProactivityDecision(decision);
+    return new Response(null, { status: saved ? success : refused });
+  }).pipe(Effect.mapError(() => new AgentUnavailable()));
+
 /** Explicit commands and exact disclosure-qualified choices never become inferred Consent or invented Turns. */
 export const handleWeeklyChoice = (
   input: Readonly<{ environment: AgentEnvironment; proof: WhatsAppTurnAdmission; now: number }>
@@ -129,6 +152,11 @@ export const handleWeeklyChoice = (
     };
     const replyChoice = yield* readWeeklyReplyChoice({ db: environment.DB, proof, now });
     const choice = Option.getOrElse(replyChoice, () => proof.text);
+    if (choice.startsWith("proactivity:")) {
+      return Option.some(
+        yield* handleProactivityChoice({ context, choice, decisionMessageId: proof.messageId })
+      );
+    }
     if (choice.startsWith("weekly:")) {
       if (
         yield* hasWeeklyConsentChoiceReceipt({

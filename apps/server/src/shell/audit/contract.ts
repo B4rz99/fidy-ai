@@ -29,6 +29,8 @@ export type AuditCredentialOperation =
   | "ingestion.resolveNeedsReviewItem"
   | "ingestion.skipNeedsReviewItem"
   | "ingestion.abandonStatementSubmission"
+  | "insights.getReminderSchedule"
+  | "insights.updateReminderSchedule"
   | "insights.listPendingInsights"
   | "insights.markInsightDelivered"
   | "insights.markInsightRead"

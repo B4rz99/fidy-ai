@@ -42,6 +42,13 @@ import type { ConsentRecord, ConsentRecordId } from "../../src/core/consent/cont
 import type { UserId } from "../../src/core/identity/contract";
 import type { Option } from "effect";
 
+/** Decode only a complete qualified category choice; a category identity carries no decision authority. */
+export const readProactivityConsentChoiceKind: typeof proactivity.choiceKind = (choice) =>
+  proactivity.choiceKind(choice);
+/** Recognize exact same-User authenticated privacy-choice retries without granting permission or relying on provider/model availability. */
+export const hasProactivityConsentChoiceReceipt: typeof proactivity.hasChoiceReceipt = (input) =>
+  proactivity.hasChoiceReceipt(input);
+
 /** Independently erase at most 64 undecided expired offers after one further day. Accepted/rejected decisions and referenced legal evidence are not erased by operational cleanup. */
 export const sweepProactivityConsentOffers = (
   input: Readonly<{ db: D1Database; nowEpochMs: number }>

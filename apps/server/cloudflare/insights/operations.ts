@@ -1,3 +1,10 @@
+import {
+  prepareCanonicalReminderRevision as prepareCanonicalReminderRevisionOwned,
+  prepareHeldReminderRevision as prepareHeldReminderRevisionOwned,
+  readCanonicalReminderSchedule as readCanonicalReminderScheduleOwned,
+  readHeldReminderSchedule as readHeldReminderScheduleOwned,
+  reminderRevisionRefusal as reminderRevisionRefusalOwned,
+} from "./internal/reminder-canonical";
 import { weeklyThresholds } from "./internal/weekly-execution";
 import { requestQuestion } from "./internal/weekly-work";
 import {
@@ -55,6 +62,23 @@ import {
   prepareInsightTransition as prepare,
   insightRefusal as refuse,
 } from "./internal/insight-store";
+
+/** Read instructions under the canonical caller's live authority and required Audit. */
+export const readCanonicalReminderSchedule: typeof readCanonicalReminderScheduleOwned = (input) =>
+  readCanonicalReminderScheduleOwned(input);
+/** Compose instruction revisions, current credential/Consent, optimistic version and required Audit in canonical execution. Never grants opt-in. */
+export const prepareCanonicalReminderRevision: typeof prepareCanonicalReminderRevisionOwned = (
+  input
+) => prepareCanonicalReminderRevisionOwned(input);
+/** The same read under Agent's published current Turn authority. */
+export const readHeldReminderSchedule: typeof readHeldReminderScheduleOwned = (input) =>
+  readHeldReminderScheduleOwned(input);
+/** The same revision under Agent's current Turn authority and confirmation fence. */
+export const prepareHeldReminderRevision: typeof prepareHeldReminderRevisionOwned = (input) =>
+  prepareHeldReminderRevisionOwned(input);
+/** A malformed canonical instruction edit is an accountable owner refusal. */
+export const reminderRevisionRefusal: typeof reminderRevisionRefusalOwned = (input) =>
+  reminderRevisionRefusalOwned(input);
 
 /** Observe one User's reminder instructions under current processing Consent; grant and storage details stay private. */
 export const findReminderSchedule = (

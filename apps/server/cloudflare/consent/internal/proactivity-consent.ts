@@ -54,6 +54,36 @@ const Choice = Schema.Tuple([
   ConsentRecordId,
   Schema.Literals(["accept", "decline", "revoke"]),
 ]);
+export const choiceKind = (choice: string): Option.Option<ProactivityOptInKind> =>
+  Option.map(Schema.decodeUnknownOption(Choice)(choice.split(":")), (decoded) => decoded[1]);
+
+export const hasChoiceReceipt = (
+  input: ProactivityConsentContext & Readonly<{ choice: string; decisionMessageId: string }>
+): Effect.Effect<boolean, ConsentUnavailable> =>
+  Effect.gen(function* () {
+    const choice = Schema.decodeUnknownOption(Choice)(input.choice.split(":"));
+    if (Option.isNone(choice) || choice.value[1] !== input.kind) return false;
+    const raw = yield* Effect.tryPromise(() =>
+      channelAction(
+        input,
+        {
+          sql: `SELECT 1 FROM proactivity_consent_offers AS o WHERE o.user_id=? AND o.kind=? AND o.id=? AND o.disclosure_message_id IS NOT NULL AND ((o.decision_message_id=? AND o.decision=?) OR (?='revoke' AND EXISTS (SELECT 1 FROM proactivity_consent_records AS r WHERE r.user_id=o.user_id AND r.kind=o.kind AND r.offer_id=o.id AND r.decision_message_id=? AND r.grant_id IS NOT NULL)))`,
+          params: [
+            input.userId,
+            input.kind,
+            choice.value[2],
+            input.decisionMessageId,
+            choice.value[3],
+            choice.value[3],
+            input.decisionMessageId,
+          ],
+        },
+        true
+      ).first()
+    );
+    return raw !== null;
+  }).pipe(Effect.mapError(() => new ConsentUnavailable()));
+
 const OfferRow = Schema.Struct({
   id: ConsentRecordId,
   disclosure_json: Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot)),

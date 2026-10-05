@@ -293,9 +293,13 @@ limits belong in the [background-work runbook](../../docs/operations/cloudflare-
 
 Budget crossing snapshots, category-separated Budget/reminder Consent evidence, and guarded reminder
 instruction/revision/occurrence/outbox primitives are installed. Undecided expired offers have independent
-bounded Maintenance retention. These additional categories do not yet have canonical reminder routing,
-first-Budget contextual offers, due-work dispatch, provider delivery, or grouped proactive Transcript
-settlement. Their owner primitives are not an enabled end-to-end proactivity path.
+bounded Maintenance retention. Canonical reminder reads/edits now share installed HTTP/hosted owner
+selection, live credential/capability guards, optimistic revisions and Audit. Exact authenticated
+category-qualified channel decisions bypass inference and replay against immutable Consent receipts;
+privacy revocation remains reachable after processing withdrawal. These categories still lack
+first-Budget contextual offers, due-work dispatch, provider delivery, operational reminder governor
+integration, and grouped proactive Transcript settlement. They are not an enabled end-to-end
+proactivity path.
 
 Installed code does not by itself enable a channel or provider. In particular, forwarded-email
 routing remains disabled until institution Connection admission and authenticated institutional

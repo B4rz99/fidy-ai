@@ -3,6 +3,7 @@ import { type Cause, Effect, Option } from "effect";
 import {
   type QueryCaller,
   isOAuthCaller,
+  transactionNow,
   transactionUnavailable,
 } from "../../canonical-work/operations";
 import { executeProtectedCategories, listOwnKeywordRules } from "../../categories/operations";
@@ -13,7 +14,11 @@ import { browseTransactions } from "../../transactions/operations";
 import { browseDashboard } from "../../dashboard/operations";
 import { recallMemories } from "../../memory/operations";
 import { listRecurringSeries } from "../../recurring/operations";
-import { listPendingInsights } from "../../insights/operations";
+import {
+  listPendingInsights,
+  readCanonicalReminderSchedule,
+  readHeldReminderSchedule,
+} from "../../insights/operations";
 import { listPATs } from "../../tokens/operations";
 import type { StatementDecisionWork } from "../../ingestion/contract";
 import {
@@ -159,6 +164,11 @@ const queryOwners = new Map<string, QueryOwner>([
       listRecurringSeries({ db, subject, request }),
   ],
   [
+    "insights.getReminderSchedule",
+    ({ db, subject }): Effect.Effect<Response> =>
+      readCanonicalReminderSchedule({ db, subject, current: transactionNow() }),
+  ],
+  [
     "insights.listPendingInsights",
     ({ db, subject, request }): Effect.Effect<Response, Cause.UnknownError> =>
       listPendingInsights({ db, subject, request }),
@@ -207,6 +217,9 @@ export const canonicalHostedStatementQueryOwner = (
   id: string
 ): Option.Option<(work: StatementDecisionWork) => Effect.Effect<Response>> => {
   if (Option.isNone(canonicalQueryOwner(id))) return Option.none();
+  if (id === "insights.getReminderSchedule") {
+    return Option.some((work) => readHeldReminderSchedule(work));
+  }
   if (id === "ingestion.listNeedsReviewItems" || id === "ingestion.getStatementSubmission") {
     return Option.some((work) => readHeldStatementQuery({ operation: id, work }));
   }

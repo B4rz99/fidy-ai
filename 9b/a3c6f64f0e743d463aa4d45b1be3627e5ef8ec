@@ -1,0 +1,55 @@
+apps/server/cloudflare/web-authentication/session-clock.test.ts
+  s_a93d3fae2817a6::t_f73df4538bc107 6-13,23-32,34-36,38-63,67-87,89-92,94-138
+  s_a93d3fae2817a6::t_84c7c2b079b378 20-22
+  s_a93d3fae2817a6::t_0cdffc68ae6649 1-5,14-19,64
+  s_a93d3fae2817a6::t_7b410fd648f0a4 65-66
+  s_a93d3fae2817a6::t_2063abf26276f5 33,37,88,93
+apps/server/cloudflare/web-authentication/operations.test.ts
+  s_a93d3fae2817a6::t_9db45b3e2afa9f 12
+  s_a93d3fae2817a6::t_f73df4538bc107 159-200
+  s_a93d3fae2817a6::t_8d3feb1d94616d 1-2
+  s_a93d3fae2817a6::t_a32586412b9105 152-158,201-202
+apps/server/cloudflare/web-authentication/operations.ts
+  s_a93d3fae2817a6::t_1e31ce938c87a3 42
+  s_a93d3fae2817a6::t_f3986fb0fa6cb5 20,25
+apps/server/cloudflare/web-session/operations.test.ts
+  s_a93d3fae2817a6::t_f73df4538bc107 91-94
+apps/server/cloudflare/web-authentication/session-lifetime.test.ts
+  s_a93d3fae2817a6::t_434ccbf51c8130 1-5,12-16,81,114
+  s_a93d3fae2817a6::t_f73df4538bc107 6-11,17-80,82,89-94,98-102,106-108
+  s_a93d3fae2817a6::t_550bbce8699e08 83-88,95-97,103-105,109-113
+apps/server/cloudflare/web-authentication/session.test-fixture.ts
+  s_a93d3fae2817a6::t_fd2522d212fb05 48,54-56,79,87-90,92-93
+  s_a93d3fae2817a6::t_54247d17b3cd26 28-29,53,59-60,63,65-66,75,80-82,86,91
+  s_a93d3fae2817a6::t_f73df4538bc107 8-24,39-45,49-52,57-58,64,67-74,76-78,83-85,95-102,104-118,122-124
+  s_a93d3fae2817a6::t_c4e6a607f961d8 61-62
+  s_a93d3fae2817a6::t_6e59fb4dd9c7b5 1-7,25-27,30-38,46-47,94,103,119-121,125-126
+apps/server/cloudflare/web-session/internal/current-user.ts
+  s_a93d3fae2817a6::t_7f7bfa32eeca46 20
+  s_a93d3fae2817a6::t_3ed5931577f871 84
+  s_a93d3fae2817a6::t_239ec9547ef12e 75
+  s_a93d3fae2817a6::t_f73df4538bc107 21-32,35-52
+apps/server/cloudflare/web-session/internal/lifecycle.ts
+  s_a93d3fae2817a6::t_f73df4538bc107 55-82,84
+  s_a93d3fae2817a6::t_c6e33be3b63b4f 83
+apps/server/cloudflare/web-session/operations.ts
+  s_a93d3fae2817a6::t_cdfa19ef90f91d 23-26,39-42
+  s_a93d3fae2817a6::t_e4bdd1062cbd9b 43
+  s_a93d3fae2817a6::t_f73df4538bc107 27-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9ba3c6f64f0e743d463aa4d45b1be3627e5ef8ec",
+  "prompts": {},
+  "sessions": {
+    "s_a93d3fae2817a6": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10c94-154a-7133-8207-337b9a3aa954",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

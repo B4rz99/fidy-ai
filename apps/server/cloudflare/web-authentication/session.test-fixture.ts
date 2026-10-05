@@ -37,19 +37,19 @@ class SessionCallbackFailed extends Data.TaggedError("SessionCallbackFailed")<{
   readonly cause: unknown;
 }> {}
 
-const runHeldCallback = ({
+const runHeldCallback = <A>({
   run,
   entered,
   released,
   settled,
   state,
 }: Readonly<{
-  run: () => PromiseLike<unknown>;
+  run: () => PromiseLike<A>;
   entered: Deferred.Deferred<void>;
   released: Deferred.Deferred<void>;
   settled: Deferred.Deferred<void>;
   state: { held: boolean };
-}>): Promise<unknown> =>
+}>): Promise<A> =>
   // Genuine foreign D1 Promise ingress: retain the result and the original rejection as its cause.
   Effect.runPromise(
     Effect.gen(function* () {
@@ -65,6 +65,45 @@ const runHeldCallback = ({
       return result;
     }).pipe(Effect.ensuring(Deferred.succeed(settled, undefined)))
   );
+
+const heldStatement = ({
+  statement,
+  method,
+  complete,
+}: Readonly<{
+  statement: D1PreparedStatement;
+  method: "first" | "run" | "all";
+  complete: <A>(run: () => PromiseLike<A>) => Promise<A>;
+}>): D1PreparedStatement =>
+  new Proxy(statement, {
+    get(target, key): unknown {
+      if (key === "bind") {
+        return (...values: ReadonlyArray<unknown>): D1PreparedStatement =>
+          heldStatement({
+            statement: target.bind(...values),
+            method,
+            complete,
+          });
+      }
+      if (key === "first") {
+        return <Value = unknown>(column?: string): ReturnType<typeof target.first<Value>> => {
+          const run = (): ReturnType<typeof target.first<Value>> =>
+            column === undefined ? target.first<Value>() : target.first<Value>(column);
+          return method === "first" ? complete(run) : run();
+        };
+      }
+      if (key === "run") {
+        return <Row = Record<string, unknown>>(): Promise<D1Result<Row>> =>
+          method === "run" ? complete(() => target.run<Row>()) : target.run<Row>();
+      }
+      if (key === "all") {
+        return <Row = Record<string, unknown>>(): Promise<D1Result<Row>> =>
+          method === "all" ? complete(() => target.all<Row>()) : target.all<Row>();
+      }
+      if (key === "raw") return target.raw.bind(target);
+      return Reflect.get(target, key, target);
+    },
+  });
 
 /** Hold one real D1 completion callback after the platform has settled its statement. */
 export const holdSessionCallback = ({
@@ -88,37 +127,23 @@ export const holdSessionCallback = ({
     const released = yield* Deferred.make<void>();
     const settled = yield* Deferred.make<void>();
     const state = { held: false };
-    const wrap = (statement: D1PreparedStatement): D1PreparedStatement =>
-      new Proxy(statement, {
-        get(target, key): unknown {
-          if (key === "bind") {
-            return (...values: ReadonlyArray<unknown>): D1PreparedStatement =>
-              wrap(target.bind(...values));
-          }
-          const member = Reflect.get(target, key, target);
-          if (key === method) {
-            return (...args: ReadonlyArray<unknown>): Promise<unknown> =>
-              runHeldCallback({
-                run: () => Reflect.apply(member, target, args),
-                entered,
-                released,
-                settled,
-                state,
-              });
-          }
-          return typeof member === "function" ? member.bind(target) : member;
-        },
-      });
+    const complete = <A>(run: () => PromiseLike<A>): Promise<A> =>
+      runHeldCallback({ run, entered, released, settled, state });
     const binding = new Proxy(db, {
       get(target, key): unknown {
         if (key === "prepare") {
           return (sql: string): D1PreparedStatement => {
             const statement = target.prepare(sql);
-            return sql.startsWith(sqlPrefix) ? wrap(statement) : statement;
+            return sql.startsWith(sqlPrefix)
+              ? heldStatement({ statement, method, complete })
+              : statement;
           };
         }
-        const member = Reflect.get(target, key, target);
-        return typeof member === "function" ? member.bind(target) : member;
+        if (key === "batch") return target.batch.bind(target);
+        if (key === "exec") return target.exec.bind(target);
+        if (key === "dump") return target.dump.bind(target);
+        if (key === "withSession") return target.withSession.bind(target);
+        return Reflect.get(target, key, target);
       },
     });
     const release = Deferred.succeed(released, undefined).pipe(Effect.asVoid);

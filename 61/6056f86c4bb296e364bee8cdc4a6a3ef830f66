@@ -1,0 +1,23 @@
+apps/server/cloudflare/whatsapp/insight-delivery.test.ts
+  s_e278ac208f4e8a::t_4726ac739cb3bd 128-130,133-134,146,155-156,159-160
+  s_e278ac208f4e8a::t_f5edebef714dd1 124-127,131-132,135-139,144-145,148,153-154,157-158,161-163,165-169
+  s_e278ac208f4e8a::t_9cfe157cefbaa2 140-143,147,149-152,164
+apps/server/cloudflare/whatsapp/internal/insight-delivery.ts
+  s_e278ac208f4e8a::t_e5a8d4f6ed08b3 41-42,205-206
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "616056f86c4bb296e364bee8cdc4a6a3ef830f66",
+  "prompts": {},
+  "sessions": {
+    "s_e278ac208f4e8a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10731-a41d-7121-98b3-ec6e9e1e04de",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

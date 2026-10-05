@@ -1,0 +1,68 @@
+apps/server/cloudflare/oauth-agents/oauth-ingress.test.ts
+  s_8e33e3c1782639::t_e2570dc36931f7 659-671,673-679,683-686,688-696
+  s_8e33e3c1782639::t_d6017da23be056 697,701-702,704-712,716-721
+  s_8e33e3c1782639::t_1e6f19dca8c145 785-786,836-837
+  s_8e33e3c1782639::t_ba2518a9d64443 841,1079-1091,1096-1102,1106-1109
+  s_8e33e3c1782639::t_44bb98661f2e81 698-700,703,789
+  s_8e33e3c1782639::t_0f16f0d86273dd 824-826
+  s_8e33e3c1782639::t_99e7de919f0ea7 672
+  s_8e33e3c1782639::t_2784d85822f019 680-682
+  s_8e33e3c1782639::t_d7e503510c7198 687
+  s_8e33e3c1782639::t_b65a755034c221 713-715
+  s_8e33e3c1782639::t_2660d434db6e4f 821-823
+  s_8e33e3c1782639::t_dcce2110c073de 827-829,833-835
+  s_8e33e3c1782639::t_21f78bc55aedec 838-840
+  s_8e33e3c1782639::t_bd882d75f048c0 842-844
+  s_8e33e3c1782639::t_0cc3df8c65d590 1092-1095
+  s_8e33e3c1782639::t_e8f6ca3eca7b4f 1103-1105
+  s_8e33e3c1782639::t_e244956ab0dffe 815-820,830-832,845-855
+apps/server/cloudflare/canonical-operations/internal/oauth-confirmation.ts
+  s_8e33e3c1782639::t_248c1f749faca1 6,21-28
+  s_8e33e3c1782639::t_2c92ddfe31e215 1-5,7-20,29
+  s_8e33e3c1782639::t_1a97823296d991 30-36
+apps/server/cloudflare/canonical-operations/internal/batch.ts
+  s_8e33e3c1782639::t_9d3c5261f18bcd 42
+  s_8e33e3c1782639::t_d10b290761be77 478-487,496
+  s_8e33e3c1782639::t_1350dea6ea01b5 345-346,366-380,382-384,503-507,509
+  s_8e33e3c1782639::t_77c7661a398c19 365
+  s_8e33e3c1782639::t_3c2b5fd652b6b1 18-19,495,526-528,622,626,635,751,764,773,790
+  s_9c91e38cebd5c6::t_1a9ae66e8aaeef 381,508
+apps/server/cloudflare/canonical-operations/operations.ts
+  s_8e33e3c1782639::t_6cd8ac211e025b 7,13,30-31,46,71-74,168-169,171
+  s_8e33e3c1782639::t_a3d9c3f2322697 33,409,419,438-440,442,480-484
+  s_8e33e3c1782639::t_544f1e195e0888 77-85,226,456-468,478-479
+  s_8e33e3c1782639::t_d73ac0f2659216 121-122,124,126-131,146
+  s_8e33e3c1782639::t_304bc218bc292e 123,125
+  s_8e33e3c1782639::t_d6e95f67f42c31 381-383
+apps/server/cloudflare/canonical-operations/internal/inference-requirement.ts
+  s_8e33e3c1782639::t_3eec311aef9825 1-6
+apps/server/src/shell/operations/contract.ts
+  s_8e33e3c1782639::t_10da489eab1af5 31-37
+apps/server/cloudflare/canonical-operations/internal/oauth-response.ts
+  s_8e33e3c1782639::t_fb4d5e175aec4f 2-8,17-27
+  s_8e33e3c1782639::t_69ba176536f17a 28-43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "42bccc0d91783ec073ee966938b3dfa4a12fac39",
+  "prompts": {},
+  "sessions": {
+    "s_8e33e3c1782639": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a109c2-9276-7113-b270-d2078b93ecba",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_9c91e38cebd5c6": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a109cb-8ddb-73cf-b4b8-8f9f08ec960b",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

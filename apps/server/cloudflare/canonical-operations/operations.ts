@@ -31,8 +31,8 @@ import {
   canonicalMutationAdapter,
 } from "./internal/mutation-registry";
 import { executeSingleCanonicalMutation } from "./internal/mutation-unit";
-import { checkpointQueryResponse } from "./internal/oauth-query";
-import { withQueryLifetime } from "./internal/query-lifetime";
+import { checkpointOAuthResponse } from "./internal/oauth-response";
+import { withCanonicalLifetime } from "./internal/canonical-lifetime";
 import { resolveOAuthQueryCaller } from "../oauth-agents/operations";
 import { canonicalHostedStatementQueryOwner, canonicalQueryOwner } from "./internal/query-registry";
 import { matchesRoute } from "../routing/operations";
@@ -42,6 +42,7 @@ import {
   type QueryCaller,
   type TransactionCaller,
   childCaller,
+  isOAuthCaller,
   refusedCredentialResponse,
   refusedPreparation,
   transactionUnavailable,
@@ -59,7 +60,7 @@ export const executeHostedStatementCall: typeof heldStatementCall = (input) =>
 const httpServiceUnavailable = 503;
 const scopeMissingStatus = 403;
 const paywallRequiredStatus = 402;
-const refuseOAuthQuery = (
+const refuseOAuthCall = (
   input: Readonly<{
     db: D1Database;
     subject: OAuthCaller;
@@ -86,26 +87,20 @@ const refuseOAuthQuery = (
     Effect.orElseSucceed(transactionUnavailable)
   );
 
-const installedOAuthQuery = (id: string): Option.Option<CatalogOperation> => {
-  const operation = operationCatalog.byId.get(id);
-  return operation?.policy.kind === "query" && Option.isSome(canonicalQueryOwner(operation.id))
-    ? Option.some(operation)
-    : Option.none();
-};
-const queryRefusal = (code: string, message: string, status: number): Response =>
+const operationRefusal = (code: string, message: string, status: number): Response =>
   Response.json(
     { error: { code, message }, next: [] },
     { status, headers: { "cache-control": "no-store" } }
   );
-const queryPolicyRefusal = (
+const operationPolicyRefusal = (
   operation: CatalogOperation,
   caller: SuggestedOperationCaller
 ): Option.Option<Response> => {
   if (decideOperationAccess(operation.policy.access, caller.accessCaller)._tag === "Denied") {
     return Option.some(
-      queryRefusal(
+      operationRefusal(
         "scope_missing",
-        "The credential does not grant this query's scope.",
+        "The credential does not grant this operation's scope.",
         scopeMissingStatus
       )
     );
@@ -116,11 +111,15 @@ const queryPolicyRefusal = (
   })
     ? Option.none()
     : Option.some(
-        queryRefusal("paywall_required", "This query requires Pro access.", paywallRequiredStatus)
+        operationRefusal(
+          "paywall_required",
+          "This operation requires Pro access.",
+          paywallRequiredStatus
+        )
       );
 };
 
-const queryValidationRefusal = (
+const operationValidationRefusal = (
   operation: CatalogOperation,
   input: Schema.Json
 ): Option.Option<Response> =>
@@ -131,7 +130,7 @@ const queryValidationRefusal = (
           {
             error: {
               code: "validation_failed",
-              message: "Invalid canonical query input.",
+              message: "Invalid canonical operation input.",
               fields: [],
             },
             next: [],
@@ -140,7 +139,9 @@ const queryValidationRefusal = (
         )
       );
 
-type OAuthQueryWork = Readonly<{
+type OAuthCanonicalWork = Readonly<{
+  bucket: Option.Option<R2Bucket>;
+  inference: Option.Option<HostedInferenceService>;
   db: D1Database;
   subject: OAuthCaller;
   operation: string;
@@ -149,17 +150,66 @@ type OAuthQueryWork = Readonly<{
   deadlineMilliseconds: number;
 }>;
 
-/** Execute an installed query under its exact OAuth capability, bounded lifetime, and canonical owner. */
-export const executeOAuthQuery = (input: OAuthQueryWork): Effect.Effect<Response> =>
-  withQueryLifetime({ ...input, execute: (db) => executeOAuthQueryWork({ ...input, db }) });
+/** Execute an installed canonical operation under live OAuth authority and the bounded User coordination turn. */
+export const executeOAuthCanonicalWork = (input: OAuthCanonicalWork): Effect.Effect<Response> =>
+  withCanonicalLifetime({ ...input, execute: (db) => executeOAuthWork({ ...input, db }) });
 
-const executeOAuthQueryWork = (input: OAuthQueryWork): Effect.Effect<Response> =>
+const confirmationRequiredStatus = 403;
+const oauthMutationWork = (
+  operation: CatalogOperation,
+  input: Schema.Json
+): Effect.Effect<CanonicalWork, Schema.SchemaError> =>
+  operation.id === atomicBatchOperation
+    ? Schema.decodeUnknownEffect(
+        Schema.Struct({ payload: Schema.Struct({ calls: Schema.NonEmptyArray(Schema.Unknown) }) })
+      )(input).pipe(Effect.map(({ payload }) => ({ _tag: "Batch" as const, calls: payload.calls })))
+    : Effect.succeed({ _tag: "Call", operation: operation.id, input });
+const requiresOAuthConfirmation = (operation: CatalogOperation, work: CanonicalWork): boolean =>
+  work._tag === "Batch"
+    ? work.calls.some((child) =>
+        Option.exists(
+          rawOperation(child),
+          (id) => operationCatalog.byId.get(id)?.policy.agentConfirmation === "required"
+        )
+      )
+    : operation.policy.agentConfirmation === "required";
+const executeOAuthMutation = ({
+  input,
+  operation,
+  caller,
+  subject,
+  current,
+}: Readonly<{
+  input: OAuthCanonicalWork;
+  operation: CatalogOperation;
+  caller: SuggestedOperationCaller;
+  subject: OAuthCaller;
+  current: number;
+}>): Effect.Effect<Response> =>
   Effect.gen(function* () {
-    const installed = installedOAuthQuery(input.operation);
+    const work = yield* oauthMutationWork(operation, input.input);
+    const response = yield* executeCanonicalWork({
+      db: input.db,
+      subject,
+      current,
+      work,
+      bucket: input.bucket,
+      inference: input.inference,
+      hostedFence: Option.none(),
+    });
+    return yield* checkpointOAuthResponse({ response, caller });
+  }).pipe(Effect.orElseSucceed(transactionUnavailable));
+
+const executeOAuthWork = (input: OAuthCanonicalWork): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const installed = Option.fromUndefinedOr(
+      installedCanonicalOperations().find(
+        ({ id, policy }) => id === input.operation && policy.access._tag === "UserOwnedAgentScoped"
+      )
+    );
     if (Option.isNone(installed)) return transactionUnavailable();
     const operation = installed.value;
     const scope = userOwnedAgentCapability(operation.policy.access);
-    if (Option.isNone(scope)) return transactionUnavailable();
     const current = currentMillis();
     const admission = { ...input.subject, requiredScope: Option.none() };
     const caller = yield* resolveOAuthQueryCaller({ db: input.db, subject: admission, current });
@@ -170,26 +220,35 @@ const executeOAuthQueryWork = (input: OAuthQueryWork): Effect.Effect<Response> =
       return yield* refusedCredentialResponse({ db: input.db, subject: admission });
     }
     const refusal = { db: input.db, subject: admission, current, operation };
-    const policyRefusal = queryPolicyRefusal(operation, caller.value);
+    const policyRefusal = operationPolicyRefusal(operation, caller.value);
     if (Option.isSome(policyRefusal)) {
-      return yield* refuseOAuthQuery({ ...refusal, response: policyRefusal.value });
+      return yield* refuseOAuthCall({ ...refusal, response: policyRefusal.value });
     }
     const subject = { ...input.subject, requiredScope: scope };
-    const validationRefusal = queryValidationRefusal(operation, input.input);
+    const validationRefusal = operationValidationRefusal(operation, input.input);
     if (Option.isSome(validationRefusal)) {
-      return yield* refuseOAuthQuery({ ...refusal, response: validationRefusal.value });
+      return yield* refuseOAuthCall({ ...refusal, response: validationRefusal.value });
+    }
+    if (operation.policy.kind === "mutation") {
+      return yield* executeOAuthMutation({
+        input,
+        operation,
+        caller: caller.value,
+        subject,
+        current,
+      });
     }
     const response = yield* executeCanonicalQuery({
       db: input.db,
       subject,
       operation: operation.id,
       input: input.input,
-      bucket: Option.none(),
+      bucket: input.bucket,
     }).pipe(
       Effect.map((response) => Option.getOrElse(response, transactionUnavailable)),
       Effect.orElseSucceed(transactionUnavailable)
     );
-    return yield* checkpointQueryResponse({ response, caller: caller.value });
+    return yield* checkpointOAuthResponse({ response, caller: caller.value });
   }).pipe(Effect.orElseSucceed(transactionUnavailable));
 
 /**
@@ -385,6 +444,17 @@ export const canonicalWorkRequiresInference = (work: CanonicalWork): boolean => 
   return isMemoryOperation(work.operation);
 };
 
+const canonicalWorkSubject = (input: WorkInput): TransactionCaller => {
+  if (input.work._tag === "Batch") return input.subject;
+  const operation = operationCatalog.byId.get(input.work.operation);
+  return operation === undefined
+    ? input.subject
+    : childCaller({
+        subject: input.subject,
+        requiredScope: userOwnedAgentCapability(operation.policy.access),
+      });
+};
+
 /**
  * Execute one named call or ordered batch inside the caller's existing User coordination turn.
  * Owner preparation, live authority, refusal Audit, atomic commit and canonical presentation stay
@@ -394,10 +464,31 @@ export const canonicalWorkRequiresInference = (work: CanonicalWork): boolean => 
 export const executeCanonicalWork = (
   input: WorkInput & Readonly<{ inference: Option.Option<HostedInferenceService> }>
 ): Effect.Effect<Response> => {
+  if (isOAuthCaller(input.subject)) {
+    const operation = operationCatalog.byId.get(
+      input.work._tag === "Batch" ? atomicBatchOperation : input.work.operation
+    );
+    if (operation?.policy.access._tag !== "UserOwnedAgentScoped") {
+      return Effect.succeed(transactionUnavailable());
+    }
+    if (requiresOAuthConfirmation(operation, input.work)) {
+      return refuseOAuthCall({
+        db: input.db,
+        subject: input.subject,
+        current: input.current,
+        operation,
+        response: operationRefusal(
+          "user_action_required",
+          "Verified User confirmation is required for this operation.",
+          confirmationRequiredStatus
+        ),
+      });
+    }
+  }
   if (canonicalWorkRequiresInference(input.work) && Option.isNone(input.inference)) {
     return Effect.succeed(transactionUnavailable());
   }
-  return executeWork(input).pipe(
+  return executeWork({ ...input, subject: canonicalWorkSubject(input) }).pipe(
     Effect.provideService(
       HostedInference,
       Option.getOrElse(input.inference, () => unreachableHostedInference)

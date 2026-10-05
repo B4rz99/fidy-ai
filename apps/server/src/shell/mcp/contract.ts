@@ -7,7 +7,7 @@ import type { CatalogOperation, OperationCatalog } from "~/shell/canonical-catal
 
 const digestLength = 32;
 /** Private admission facts, not a reusable authorization grant; Core rechecks them at execution. */
-export const OAuthQueryAdmission = Schema.Struct({
+export const OAuthCanonicalAdmission = Schema.Struct({
   userId: UserId,
   clientId: OAuthClientId,
   connectionId: OAuthConnectionId,
@@ -20,7 +20,7 @@ export const OAuthQueryAdmission = Schema.Struct({
   operation: CanonicalOperationId,
   input: Schema.Json,
 });
-export type OAuthQueryAdmission = typeof OAuthQueryAdmission.Type;
+export type OAuthCanonicalAdmission = typeof OAuthCanonicalAdmission.Type;
 
 type ProjectAst = (ast: SchemaAST.AST) => SchemaAST.AST;
 const projectChildren = (ast: SchemaAST.AST, project: ProjectAst): SchemaAST.AST => {

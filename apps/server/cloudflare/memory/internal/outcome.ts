@@ -9,7 +9,11 @@ import {
 import { mapMemoryFailure, recordBrowserMemoryWork } from "../../../src/shell/memory/operations";
 import { Unavailable } from "../../../src/shell/public-http/contract";
 import { memoriesFromRows, memoryRowQuery } from "./storage";
-import { recordCanonicalPATWork, refusedByAuditBudget } from "../../../src/shell/audit/operations";
+import {
+  prepareAuthorizedAuditCall,
+  recordCanonicalPATWork,
+  refusedByAuditBudget,
+} from "../../../src/shell/audit/operations";
 import type {
   CanonicalMutationRefusal,
   CommittedMutationValue,
@@ -20,6 +24,8 @@ import { newId } from "../../secret-material/operations";
 import { prepareOwnedStatement } from "../../database/operations";
 import {
   type TransactionCaller,
+  callerAuthority,
+  isOAuthCaller,
   isPATCaller,
   refusedCredentialResponse,
   transactionFailure,
@@ -106,6 +112,17 @@ const rejectionStatement = ({
   current: number;
 }>): D1PreparedStatement => {
   const id = newId();
+  if (isOAuthCaller(subject)) {
+    return prepareAuthorizedAuditCall({
+      db,
+      authority: callerAuthority({ subject, current }),
+      id,
+      operation,
+      outcome: "rejected",
+      current,
+      afterOwnerWrite: false,
+    });
+  }
   return isPATCaller(subject)
     ? prepareOwnedStatement({
         db,

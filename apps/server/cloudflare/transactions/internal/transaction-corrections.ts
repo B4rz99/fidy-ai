@@ -13,6 +13,7 @@ import {
   type TransactionBoundaryFailure,
   type TransactionCaller,
   type TransactionRefusal,
+  acceptedOAuthStatement,
   acceptedPATStatements,
   boundaryFailure,
   callerAuthority,
@@ -20,6 +21,7 @@ import {
   credentialRefusedPreparation,
   failedPreparation,
   invalidTransactionMessage,
+  isOAuthCaller,
   isPATCaller,
   liveTransactionAuthority,
   maximumTransactionInputBytes,
@@ -164,8 +166,13 @@ const auditStatements = ({
   subject: TransactionCaller;
   current: number;
   correctionId: string;
-}>): ReadonlyArray<D1PreparedStatement> =>
-  isPATCaller(subject)
+}>): ReadonlyArray<D1PreparedStatement> => {
+  if (isOAuthCaller(subject)) {
+    return [
+      acceptedOAuthStatement({ db, subject, operation: "transactions.updateTransaction", current }),
+    ];
+  }
+  return isPATCaller(subject)
     ? acceptedPATStatements({
         db,
         subject,
@@ -188,6 +195,7 @@ const auditStatements = ({
           },
         }),
       ];
+};
 
 const emptyChangeMessage =
   "The correction must change at least one fact and cannot occur in the future.";

@@ -154,6 +154,22 @@ const writeStatements = ({
   statement: D1PreparedStatement;
   current: number;
 }>): ReadonlyArray<D1PreparedStatement> => {
+  if (isOAuthCaller(subject)) {
+    return [
+      statement,
+      prepareOwnedStatement({
+        db,
+        statement: recordAuthorizedCall({
+          authority: callerAuthority({ subject, current }),
+          operation,
+          id: uuid(),
+          current,
+          outcome: "accepted",
+          afterOwnerWrite: true,
+        }),
+      }),
+    ];
+  }
   const pat = isPATCaller(subject);
   return [
     ...(pat

@@ -1,12 +1,13 @@
 import { operationCatalog } from "../../src/shell/api";
 import { decideOperationAccess } from "../../src/shell/canonical-policy/operations";
 import { installedCanonicalOperations } from "../canonical-operations/operations";
+import { categoryIds } from "../../src/core/categories/contract";
 import { PATScopes } from "../../src/core/tokens/contract";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import { Clock, Data, DateTime, Effect, Option, Predicate, Schema } from "effect";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
-import { OAuthQueryAdmission } from "../../src/shell/mcp/contract";
+import { OAuthCanonicalAdmission } from "../../src/shell/mcp/contract";
 import { authenticateOAuth } from "./operations";
 import { OAuthReviewChoice } from "../../src/shell/oauth-agents/contract";
 import { makeAudit } from "../../src/shell/audit/runtime";
@@ -55,6 +56,7 @@ const pauseBudgetRead = (
     },
   });
 type Harness = Readonly<{
+  disableInference: () => void;
   holdBudgetRead: () => Readonly<{
     waiting: Promise<void>;
     release: () => void;
@@ -118,7 +120,7 @@ const setup = (): Effect.Effect<Harness, TestFailure> =>
       RELEASE_GIT_SHA: "a".repeat(40),
       CONTRACT_DIGEST: "a".repeat(64),
       BROWSER_ORIGIN: "https://app.fidyapp.com",
-      HOSTED_AI_MODEL: approvedWorkersAiModel,
+      HOSTED_AI_MODEL: String(approvedWorkersAiModel),
       AI: {
         run: (): Promise<never> =>
           Promise.reject(new Error("Bootstrap must not purchase inference")),
@@ -139,7 +141,7 @@ const setup = (): Effect.Effect<Harness, TestFailure> =>
               return coordinator.fetch(request);
             };
             const intercept = queryResponseIntercept;
-            if (new URL(request.url).pathname === "/oauth-query" && Option.isSome(intercept)) {
+            if (new URL(request.url).pathname === "/oauth-canonical" && Option.isSome(intercept)) {
               return run().then((response) => intercept.value({ request, response }));
             }
             const gate = refreshGate;
@@ -188,6 +190,9 @@ const setup = (): Effect.Effect<Harness, TestFailure> =>
     return {
       db,
       send,
+      disableInference: () => {
+        environment.HOSTED_AI_MODEL = "";
+      },
       restartCoordinators: () => coordinators.clear(),
       holdBudgetRead: () => {
         const gate: QueryGate = {
@@ -236,7 +241,7 @@ const setup = (): Effect.Effect<Harness, TestFailure> =>
         ),
       coordinate: (userId, payload) =>
         environment.USER_TRANSACTION_COORDINATOR.getByName(userId).fetch(
-          new Request("https://coordinator.internal/oauth-query", {
+          new Request("https://coordinator.internal/oauth-canonical", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: Schema.encodeSync(Schema.fromJsonString(Schema.Json))(payload),
@@ -515,6 +520,833 @@ const approveAgain = (
     body.set("code", new URL(replacement.callback).searchParams.get("code") ?? "");
     return { connectionId: replacement.connectionId, body };
   });
+it("creates a Transaction through the ordinary OAuth mutation with one protected Audit and no PAT accounting", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* approvedFixture(["write"]);
+      const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
+        yield* wait((yield* wait(exchangeFixture(fixture))).json())
+      );
+      const response = yield* wait(
+        mcpFixture({
+          send: fixture.send,
+          bearer: token.access_token,
+          method: "tools/call",
+          name: "transactions.createTransaction",
+          args: {
+            payload: {
+              money: { amount: "15000", currency: "COP" },
+              direction: "outflow",
+              occurredAt: "2026-10-03T12:00:00.000Z",
+            },
+          },
+        })
+      );
+      const body = yield* wait(response.json());
+      expect(body).toMatchObject({
+        result: {
+          isError: false,
+          structuredContent: { data: { money: { amount: "15000", currency: "COP" } }, next: [] },
+        },
+      });
+      expect(
+        yield* wait(
+          fixture.db.prepare("SELECT count(*) FROM transactions").first<number>("count(*)")
+        )
+      ).toBe(1);
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare(
+              "SELECT count(*) FROM pat_audit WHERE oauth_connection_id = ? AND operation = 'transactions.createTransaction' AND outcome = 'accepted'"
+            )
+            .bind(fixture.connectionId)
+            .first<number>("count(*)")
+        )
+      ).toBe(1);
+      expect(
+        yield* wait(fixture.db.prepare("SELECT count(*) FROM pats").first<number>("count(*)"))
+      ).toBe(0);
+    })
+  ));
+const transactionArguments = {
+  payload: {
+    money: { amount: "15000", currency: "COP" },
+    direction: "outflow",
+    occurredAt: "2026-10-03T12:00:00.000Z",
+  },
+};
+const transactionChildren = [
+  {
+    callId: "20000000-0000-4000-8000-000000000001",
+    operation: "transactions.createTransaction",
+    input: transactionArguments,
+  },
+  {
+    callId: "20000000-0000-4000-8000-000000000002",
+    operation: "transactions.createTransaction",
+    input: transactionArguments,
+  },
+] as const;
+it("commits an authorized OAuth atomic batch with exact correlated results and one Audit per child", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* approvedFixture(["write"]);
+      const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
+        yield* wait((yield* wait(exchangeFixture(fixture))).json())
+      );
+      const response = yield* wait(
+        mcpFixture({
+          send: fixture.send,
+          bearer: token.access_token,
+          method: "tools/call",
+          name: "operations.executeAtomicBatch",
+          args: { payload: { calls: transactionChildren } },
+        })
+      );
+      const result = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          result: Schema.Struct({
+            isError: Schema.Boolean,
+            structuredContent: Schema.Json,
+            content: Schema.Array(
+              Schema.Struct({ type: Schema.Literal("text"), text: Schema.String })
+            ),
+          }),
+        })
+      )(yield* wait(response.json()));
+      expect(result.result.isError).toBe(false);
+      expect(result.result.structuredContent).toMatchObject({
+        data: {
+          results: transactionChildren.map(({ callId, operation }) => ({
+            callId,
+            operation,
+            output: { data: { money: { amount: "15000", currency: "COP" } }, next: [] },
+          })),
+        },
+        next: [],
+      });
+      expect(
+        yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Json))(
+          result.result.content[0]?.text ?? "null"
+        )
+      ).toEqual(result.result.structuredContent);
+      expect(
+        yield* wait(
+          fixture.db.prepare("SELECT count(*) FROM transactions").first<number>("count(*)")
+        )
+      ).toBe(2);
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare(
+              "SELECT count(*) FROM pat_audit WHERE oauth_connection_id = ? AND outcome = 'accepted'"
+            )
+            .bind(fixture.connectionId)
+            .first<number>("count(*)")
+        )
+      ).toBe(2);
+    })
+  ));
+it.each(["invalid", "collision", "owner-collision", "hidden", "sensitive", "audit"])(
+  "refuses an OAuth batch with %s work without partial domain effects or successful accounting",
+  (failure) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const scopes = failure === "owner-collision" ? ["write", "dashboard"] : ["write"];
+        const fixture = yield* approvedFixture(scopes);
+        const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
+          yield* wait((yield* wait(exchangeFixture(fixture))).json())
+        );
+        let second: Schema.Json = transactionChildren[1];
+        if (failure === "invalid") {
+          second = {
+            ...transactionChildren[1],
+            input: { payload: { money: { amount: "-1", currency: "COP" } } },
+          };
+        }
+        if (failure === "collision") {
+          second = { ...transactionChildren[1], callId: transactionChildren[0].callId };
+        }
+        if (failure === "hidden") {
+          second = {
+            ...transactionChildren[1],
+            operation: "dashboard.initializeDashboard",
+            input: {},
+          };
+        }
+        if (failure === "sensitive") {
+          second = {
+            ...transactionChildren[1],
+            operation: "budgets.deleteBudget",
+            input: { params: { id: "30000000-0000-4000-8000-000000000001" } },
+          };
+        }
+        if (failure === "audit") {
+          yield* wait(
+            fixture.db
+              .prepare(
+                "CREATE TRIGGER skip_oauth_mutation_audit BEFORE INSERT ON pat_audit WHEN NEW.outcome = 'accepted' BEGIN SELECT RAISE(IGNORE); END"
+              )
+              .run()
+          );
+        }
+        const response = yield* wait(
+          mcpFixture({
+            send: fixture.send,
+            bearer: token.access_token,
+            method: "tools/call",
+            name: "operations.executeAtomicBatch",
+            args: {
+              payload: {
+                calls:
+                  failure === "owner-collision"
+                    ? transactionChildren.map((child) => ({
+                        ...child,
+                        operation: "dashboard.initializeDashboard",
+                        input: {},
+                      }))
+                    : [transactionChildren[0], second],
+              },
+            },
+          })
+        );
+        expect(yield* wait(response.json())).toMatchObject({
+          result: { isError: true, structuredContent: { next: [] } },
+        });
+        expect(
+          yield* wait(
+            fixture.db.prepare("SELECT count(*) FROM transactions").first<number>("count(*)")
+          )
+        ).toBe(0);
+        expect(
+          yield* wait(
+            fixture.db.prepare("SELECT count(*) FROM source_attestations").first<number>("count(*)")
+          )
+        ).toBe(0);
+        expect(
+          yield* wait(
+            fixture.db.prepare("SELECT count(*) FROM dashboard_documents").first<number>("count(*)")
+          )
+        ).toBe(0);
+        expect(
+          yield* wait(
+            fixture.db
+              .prepare("SELECT count(*) FROM pat_audit WHERE outcome = 'accepted'")
+              .first<number>("count(*)")
+          )
+        ).toBe(0);
+      })
+    )
+);
+it("rejects read-only and cross-User mutation admissions at the authoritative coordinator without domain effects", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* approvedFixture(["read"]);
+      const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
+        yield* wait((yield* wait(exchangeFixture(fixture))).json())
+      );
+      const admitted = yield* authenticateOAuth({
+        db: fixture.db,
+        current: yield* Clock.currentTimeMillis,
+        request: new Request("https://api.fidyapp.com/mcp", {
+          headers: { authorization: `Bearer ${token.access_token}` },
+        }),
+      });
+      if (Option.isNone(admitted)) return yield* Effect.die("Expected live fixture authority");
+      const caller = admitted.value.subject;
+      const admission = yield* Schema.encodeEffect(OAuthCanonicalAdmission)({
+        userId: caller.userId,
+        connectionId: caller.oauthConnectionId,
+        credentialId: caller.credentialId,
+        clientId: caller.clientId,
+        resource: caller.resource,
+        digest: Array.from(caller.digest),
+        deadlineMilliseconds: (yield* Clock.currentTimeMillis) + 5000,
+        operation: CanonicalOperationId.make("transactions.createTransaction"),
+        input: transactionArguments,
+      });
+      const denied = yield* wait(fixture.coordinate(caller.userId, admission));
+      expect(denied.status).toBe(403);
+      expect(yield* wait(denied.json())).toMatchObject({ error: { code: "scope_missing" } });
+      const peer = "10000000-0000-4000-8000-000000000002";
+      expect((yield* wait(fixture.coordinate(peer, admission))).status).toBe(503);
+      expect((yield* wait(fixture.coordinate(peer, { ...admission, userId: peer }))).status).toBe(
+        401
+      );
+      const batch = yield* wait(
+        mcpFixture({
+          send: fixture.send,
+          bearer: token.access_token,
+          method: "tools/call",
+          name: "operations.executeAtomicBatch",
+          args: { payload: { calls: transactionChildren } },
+        })
+      );
+      expect(yield* wait(batch.json())).toMatchObject({
+        result: { isError: true, structuredContent: { error: { code: "scope_missing" } } },
+      });
+      expect(
+        yield* wait(
+          fixture.db.prepare("SELECT count(*) FROM transactions").first<number>("count(*)")
+        )
+      ).toBe(0);
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare("SELECT count(*) FROM pat_audit WHERE outcome = 'accepted'")
+            .first<number>("count(*)")
+        )
+      ).toBe(0);
+    })
+  ));
+it("settles concurrent OAuth batches once per child and never retries ambiguous mutation delivery", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* approvedFixture(["write"]);
+      const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
+        yield* wait((yield* wait(exchangeFixture(fixture))).json())
+      );
+      fixture.interceptQueryResponse(() =>
+        Promise.resolve(new Response("undecodable-delivery", { status: 200 }))
+      );
+      const responses = yield* wait(
+        Promise.all(
+          [1, 2].map(() =>
+            mcpFixture({
+              send: fixture.send,
+              bearer: token.access_token,
+              method: "tools/call",
+              name: "operations.executeAtomicBatch",
+              args: { payload: { calls: transactionChildren } },
+            })
+          )
+        )
+      );
+      for (const response of responses) {
+        expect(yield* wait(response.json())).toMatchObject({
+          result: {
+            isError: true,
+            structuredContent: { error: { code: "unavailable" }, next: [] },
+          },
+        });
+      }
+      expect(
+        yield* wait(
+          fixture.db.prepare("SELECT count(*) FROM transactions").first<number>("count(*)")
+        )
+      ).toBe(4);
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare(
+              "SELECT count(*) FROM pat_audit WHERE outcome = 'accepted' AND oauth_connection_id = ?"
+            )
+            .bind(fixture.connectionId)
+            .first<number>("count(*)")
+        )
+      ).toBe(4);
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare("SELECT count(*) FROM canonical_request_leases")
+            .first<number>("count(*)")
+        )
+      ).toBe(0);
+    })
+  ));
+it("keeps Memory and Dashboard owner construction independent of read scope and refuses unverified sensitive effects", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* approvedFixture(["write", "dashboard"]);
+      const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
+        yield* wait((yield* wait(exchangeFixture(fixture))).json())
+      );
+      const response = yield* wait(
+        mcpFixture({
+          send: fixture.send,
+          bearer: token.access_token,
+          method: "tools/call",
+          name: "operations.executeAtomicBatch",
+          args: {
+            payload: {
+              calls: [
+                {
+                  callId: "20000000-0000-4000-8000-000000000001",
+                  operation: "memory.remember",
+                  input: { payload: { text: "I plan my monthly spending in COP." } },
+                },
+                {
+                  callId: "20000000-0000-4000-8000-000000000002",
+                  operation: "dashboard.initializeDashboard",
+                  input: {},
+                },
+              ],
+            },
+          },
+        })
+      );
+      expect(yield* wait(response.json())).toMatchObject({ result: { isError: false } });
+      const memoryId = yield* wait(
+        fixture.db.prepare("SELECT id FROM memories").first<string>("id")
+      );
+      expect(memoryId).not.toBeNull();
+      const refused = yield* wait(
+        mcpFixture({
+          send: fixture.send,
+          bearer: token.access_token,
+          method: "tools/call",
+          name: "memory.forget",
+          args: { params: { id: memoryId ?? "" } },
+        })
+      );
+      expect(yield* wait(refused.json())).toMatchObject({
+        result: { isError: true, structuredContent: { error: { code: "user_action_required" } } },
+      });
+      expect(
+        yield* wait(fixture.db.prepare("SELECT count(*) FROM memories").first<number>("count(*)"))
+      ).toBe(1);
+      expect(
+        yield* wait(
+          fixture.db.prepare("SELECT count(*) FROM dashboard_documents").first<number>("count(*)")
+        )
+      ).toBe(1);
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare(
+              "SELECT count(*) FROM pat_audit WHERE outcome = 'accepted' AND oauth_connection_id = ?"
+            )
+            .bind(fixture.connectionId)
+            .first<number>("count(*)")
+        )
+      ).toBe(2);
+    })
+  ));
+it("fails Memory batches closed when owner inference construction is unavailable without denying unrelated mutations", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* approvedFixture(["write"]);
+      const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
+        yield* wait((yield* wait(exchangeFixture(fixture))).json())
+      );
+      fixture.disableInference();
+      const response = yield* wait(
+        mcpFixture({
+          send: fixture.send,
+          bearer: token.access_token,
+          method: "tools/call",
+          name: "operations.executeAtomicBatch",
+          args: {
+            payload: {
+              calls: [
+                transactionChildren[0],
+                {
+                  ...transactionChildren[1],
+                  operation: "memory.remember",
+                  input: { payload: { text: "I plan monthly spending." } },
+                },
+              ],
+            },
+          },
+        })
+      );
+      expect(yield* wait(response.json())).toMatchObject({
+        result: { isError: true, structuredContent: { error: { code: "unavailable" } } },
+      });
+      expect(
+        yield* wait(
+          fixture.db.prepare("SELECT count(*) FROM transactions").first<number>("count(*)")
+        )
+      ).toBe(0);
+      expect(
+        yield* wait(fixture.db.prepare("SELECT count(*) FROM memories").first<number>("count(*)"))
+      ).toBe(0);
+      const ordinary = yield* wait(
+        mcpFixture({
+          send: fixture.send,
+          bearer: token.access_token,
+          method: "tools/call",
+          name: "transactions.createTransaction",
+          args: transactionArguments,
+        })
+      );
+      expect(yield* wait(ordinary.json())).toMatchObject({ result: { isError: false } });
+    })
+  ));
+it("reports interruption after a committed OAuth mutation without undoing or retrying its protected effects", () => {
+  const controller = new AbortController();
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* approvedFixture(["write"]);
+      const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
+        yield* wait((yield* wait(exchangeFixture(fixture))).json())
+      );
+      const committed = Promise.withResolvers<void>();
+      fixture.interceptQueryResponse(() => {
+        committed.resolve();
+        controller.abort();
+        return Promise.resolve(new Response("interrupted-delivery", { status: 200 }));
+      });
+      const response = yield* wait(
+        mcpFixture({
+          send: (path, init) => fixture.send(path, { ...init, signal: controller.signal }),
+          bearer: token.access_token,
+          method: "tools/call",
+          name: "transactions.createTransaction",
+          args: transactionArguments,
+        })
+      );
+      yield* wait(committed.promise);
+      expect(response.status).toBe(503);
+      expect(yield* wait(response.text())).not.toContain("rolled back");
+      expect(
+        yield* wait(
+          fixture.db.prepare("SELECT count(*) FROM transactions").first<number>("count(*)")
+        )
+      ).toBe(1);
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare(
+              "SELECT count(*) FROM pat_audit WHERE outcome = 'accepted' AND oauth_connection_id = ?"
+            )
+            .bind(fixture.connectionId)
+            .first<number>("count(*)")
+        )
+      ).toBe(1);
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare("SELECT count(*) FROM canonical_request_leases")
+            .first<number>("count(*)")
+        )
+      ).toBe(0);
+    })
+  );
+});
+it("shares bounded mutation concurrency across OAuth credentials for the same User before scheduling another coordinator unit", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* approvedFixture(["write"]);
+      const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
+        yield* wait((yield* wait(exchangeFixture(fixture))).json())
+      );
+      const rotated = yield* Schema.decodeUnknownEffect(TokenFixture)(
+        yield* wait(
+          (yield* wait(
+            refreshFixture({ ...fixture, refresh: token.refresh_token, scope: Option.none() })
+          )).json()
+        )
+      );
+      const ready = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      let admitted = 0;
+      fixture.interceptQueryResponse(({ response }) => {
+        admitted += 1;
+        if (admitted === 2) ready.resolve();
+        return release.promise.then(() => response);
+      });
+      const invoke = (bearer: string): Promise<Response> =>
+        mcpFixture({
+          send: fixture.send,
+          bearer,
+          method: "tools/call",
+          name: "transactions.createTransaction",
+          args: transactionArguments,
+        });
+      const pending = [invoke(token.access_token), invoke(rotated.access_token)];
+      yield* wait(ready.promise);
+      const denied = yield* wait(invoke(rotated.access_token));
+      expect(yield* wait(denied.json())).toMatchObject({
+        result: {
+          isError: true,
+          structuredContent: { error: { code: "rate_limited", retryAfterSeconds: 1 } },
+        },
+      });
+      expect(admitted).toBe(2);
+      release.resolve();
+      for (const response of yield* wait(Promise.all(pending))) {
+        expect(yield* wait(response.json())).toMatchObject({ result: { isError: false } });
+      }
+      expect(
+        yield* wait(
+          fixture.db.prepare("SELECT count(*) FROM transactions").first<number>("count(*)")
+        )
+      ).toBe(2);
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare("SELECT count(*) FROM canonical_request_leases")
+            .first<number>("count(*)")
+        )
+      ).toBe(0);
+    })
+  ));
+it("reuses Category and Budget owner behavior in one OAuth mutation unit with exact Money and independent accounting", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* approvedFixture(["write"]);
+      const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
+        yield* wait((yield* wait(exchangeFixture(fixture))).json())
+      );
+      const response = yield* wait(
+        mcpFixture({
+          send: fixture.send,
+          bearer: token.access_token,
+          method: "tools/call",
+          name: "operations.executeAtomicBatch",
+          args: {
+            payload: {
+              calls: [
+                {
+                  ...transactionChildren[0],
+                  operation: "categories.createKeywordRule",
+                  input: { payload: { keyword: "Lunch", categoryId: categoryIds.restaurantes } },
+                },
+                {
+                  ...transactionChildren[1],
+                  operation: "budgets.createBudget",
+                  input: {
+                    payload: {
+                      categoryId: categoryIds.restaurantes,
+                      cap: { amount: "9007199254740993", currency: "COP" },
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        })
+      );
+      expect(yield* wait(response.json())).toMatchObject({
+        result: {
+          isError: false,
+          structuredContent: {
+            data: {
+              results: [
+                { operation: "categories.createKeywordRule" },
+                {
+                  operation: "budgets.createBudget",
+                  output: { data: { cap: { amount: "9007199254740993", currency: "COP" } } },
+                },
+              ],
+            },
+          },
+        },
+      });
+      expect(
+        yield* wait(
+          fixture.db.prepare("SELECT count(*) FROM keyword_rules").first<number>("count(*)")
+        )
+      ).toBe(1);
+      expect(
+        yield* wait(fixture.db.prepare("SELECT count(*) FROM budgets").first<number>("count(*)"))
+      ).toBe(1);
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare(
+              "SELECT count(*) FROM pat_audit WHERE oauth_connection_id = ? AND outcome = 'accepted'"
+            )
+            .bind(fixture.connectionId)
+            .first<number>("count(*)")
+        )
+      ).toBe(2);
+    })
+  ));
+it("refuses a foreign Transaction child after preparing an owned child without committing either transition", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* approvedFixture(["write"]);
+      const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
+        yield* wait((yield* wait(exchangeFixture(fixture))).json())
+      );
+      const created = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          result: Schema.Struct({
+            structuredContent: Schema.Struct({
+              data: Schema.Struct({ id: Schema.String, categoryId: Schema.String }),
+            }),
+          }),
+        })
+      )(
+        yield* wait(
+          (yield* wait(
+            mcpFixture({
+              send: fixture.send,
+              bearer: token.access_token,
+              method: "tools/call",
+              name: "transactions.createTransaction",
+              args: transactionArguments,
+            })
+          )).json()
+        )
+      );
+      yield* sessionFor({ db: fixture.db, index: 2 });
+      const foreignId = "30000000-0000-4000-8000-000000000001";
+      const current = DateTime.formatIso(yield* DateTime.now);
+      yield* wait(
+        fixture.db
+          .prepare(
+            "INSERT INTO transactions (id,user_id,amount,currency,direction,category_id,occurred_at,created_at) VALUES (?,?,'15000','COP','outflow',?,?,?)"
+          )
+          .bind(
+            foreignId,
+            "20000000-0000-4000-8000-000000000001",
+            created.result.structuredContent.data.categoryId,
+            current,
+            current
+          )
+          .run()
+      );
+      const response = yield* wait(
+        mcpFixture({
+          send: fixture.send,
+          bearer: token.access_token,
+          method: "tools/call",
+          name: "operations.executeAtomicBatch",
+          args: {
+            payload: {
+              calls: [
+                transactionChildren[0],
+                {
+                  ...transactionChildren[1],
+                  operation: "transactions.linkTransactions",
+                  input: {
+                    payload: {
+                      firstTransactionId: created.result.structuredContent.data.id,
+                      secondTransactionId: foreignId,
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        })
+      );
+      expect(yield* wait(response.json())).toMatchObject({
+        result: {
+          isError: true,
+          structuredContent: {
+            error: {
+              code: "not_found",
+              failedCallIndex: 1,
+              operation: "transactions.linkTransactions",
+            },
+            next: [],
+          },
+        },
+      });
+      expect(
+        yield* wait(
+          fixture.db.prepare("SELECT count(*) FROM transactions").first<number>("count(*)")
+        )
+      ).toBe(2);
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare("SELECT count(*) FROM transaction_reconciliation_members")
+            .first<number>("count(*)")
+        )
+      ).toBe(0);
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare(
+              "SELECT count(*) FROM pat_audit WHERE oauth_connection_id = ? AND outcome = 'accepted'"
+            )
+            .bind(fixture.connectionId)
+            .first<number>("count(*)")
+        )
+      ).toBe(1);
+    })
+  ));
+it("links and unlinks exact owned Transactions through ordinary OAuth mutations without deleting originals or repeating accounting", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* approvedFixture(["write"]);
+      const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
+        yield* wait((yield* wait(exchangeFixture(fixture))).json())
+      );
+      const created = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          result: Schema.Struct({
+            structuredContent: Schema.Struct({
+              data: Schema.Struct({
+                results: Schema.Tuple([
+                  Schema.Struct({
+                    output: Schema.Struct({ data: Schema.Struct({ id: Schema.String }) }),
+                  }),
+                  Schema.Struct({
+                    output: Schema.Struct({ data: Schema.Struct({ id: Schema.String }) }),
+                  }),
+                ]),
+              }),
+            }),
+          }),
+        })
+      )(
+        yield* wait(
+          (yield* wait(
+            mcpFixture({
+              send: fixture.send,
+              bearer: token.access_token,
+              method: "tools/call",
+              name: "operations.executeAtomicBatch",
+              args: { payload: { calls: transactionChildren } },
+            })
+          )).json()
+        )
+      );
+      const [first, second] = created.result.structuredContent.data.results;
+      const args = {
+        payload: {
+          firstTransactionId: first.output.data.id,
+          secondTransactionId: second.output.data.id,
+        },
+      };
+      for (const name of ["transactions.linkTransactions", "transactions.unlinkTransactions"]) {
+        const response = yield* wait(
+          mcpFixture({
+            send: fixture.send,
+            bearer: token.access_token,
+            method: "tools/call",
+            name,
+            args,
+          })
+        );
+        expect(yield* wait(response.json())).toMatchObject({ result: { isError: false } });
+        expect(
+          yield* wait(
+            fixture.db
+              .prepare("SELECT count(*) FROM transaction_reconciliation_members")
+              .first<number>("count(*)")
+          )
+        ).toBe(name === "transactions.linkTransactions" ? 2 : 0);
+      }
+      expect(
+        yield* wait(
+          fixture.db.prepare("SELECT count(*) FROM transactions").first<number>("count(*)")
+        )
+      ).toBe(2);
+      expect(
+        yield* wait(
+          fixture.db.prepare("SELECT count(*) FROM source_attestations").first<number>("count(*)")
+        )
+      ).toBe(2);
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare(
+              "SELECT count(*) FROM pat_audit WHERE oauth_connection_id = ? AND outcome = 'accepted'"
+            )
+            .bind(fixture.connectionId)
+            .first<number>("count(*)")
+        )
+      ).toBe(4);
+    })
+  ));
 it("lists distinct owned agent connections with canonical activity and no credential material", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -1803,7 +2635,15 @@ it("retains narrowed credential scopes across reconnect and never escalates back
       const listed = yield* wait(
         mcpFixture({ send: fixture.send, bearer: narrowed.access_token, method: "tools/list" })
       );
-      expect(yield* wait(listed.text())).toContain('"tools":[]');
+      const narrowedTools = yield* Schema.decodeUnknownEffect(ListedTools)(
+        yield* wait(listed.json())
+      );
+      expect(narrowedTools.result.tools.map(({ name }) => name)).toContain(
+        "transactions.createTransaction"
+      );
+      expect(narrowedTools.result.tools.map(({ name }) => name)).not.toContain(
+        "categories.listCategories"
+      );
       expect(
         (yield* wait(
           refreshFixture({
@@ -2087,6 +2927,13 @@ it("refuses an otherwise valid code after current Consent withdrawal without con
       }
     })
   ));
+const authorityTestInput = (operation: string): Schema.Json => {
+  if (operation === "transactions.createTransaction") return transactionArguments;
+  if (operation === "operations.executeAtomicBatch") {
+    return { payload: { calls: transactionChildren } };
+  }
+  return {};
+};
 it.each(
   ["grant", "consent", "credential", "deadline"].flatMap((withdrawn) =>
     [
@@ -2094,6 +2941,8 @@ it.each(
       "memory.recall",
       "dashboard.getDashboard",
       "subscription.getSubscriptionStatus",
+      "transactions.createTransaction",
+      "operations.executeAtomicBatch",
     ].map((operation) => ({ withdrawn, operation }))
   )
 )(
@@ -2101,7 +2950,7 @@ it.each(
   ({ withdrawn, operation }) =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const fixture = yield* approvedFixture();
+        const fixture = yield* approvedFixture(["read", "write"]);
         const token = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ access_token: Schema.String })
         )(yield* wait((yield* wait(exchangeFixture(fixture))).json()));
@@ -2115,7 +2964,7 @@ it.each(
         expect(Option.isSome(admitted)).toBe(true);
         if (Option.isNone(admitted)) return;
         const caller = admitted.value.subject;
-        const payload = yield* Schema.encodeEffect(OAuthQueryAdmission)({
+        const payload = yield* Schema.encodeEffect(OAuthCanonicalAdmission)({
           userId: caller.userId,
           connectionId: caller.oauthConnectionId,
           credentialId: caller.credentialId,
@@ -2125,7 +2974,7 @@ it.each(
           deadlineMilliseconds:
             (yield* Clock.currentTimeMillis) + (withdrawn === "deadline" ? -1 : 5000),
           operation: CanonicalOperationId.make(operation),
-          input: {},
+          input: authorityTestInput(operation),
         });
         if (withdrawn === "grant") {
           yield* wait(
@@ -2151,6 +3000,11 @@ it.each(
         const text = yield* wait(refused.text());
         expect(text).not.toContain("Restaurantes");
         expect(text).not.toContain(token.access_token);
+        expect(
+          yield* wait(
+            fixture.db.prepare("SELECT count(*) FROM transactions").first<number>("count(*)")
+          )
+        ).toBe(0);
         expect(
           yield* wait(
             fixture.db
@@ -2402,14 +3256,14 @@ const ListedTools = Schema.Struct({
         inputSchema: Schema.Json,
         outputSchema: Schema.Json,
         annotations: Schema.Struct({
-          readOnlyHint: Schema.Literal(true),
-          destructiveHint: Schema.Literal(false),
+          readOnlyHint: Schema.Boolean,
+          destructiveHint: Schema.Boolean,
         }),
       })
     ),
   }),
 });
-it("derives exact private query discovery for every non-empty capability combination without leaking nested unauthorized identities", () =>
+it("derives exact private canonical discovery for every non-empty capability combination without leaking nested unauthorized identities", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       for (const scopes of [
@@ -2433,12 +3287,23 @@ it("derives exact private query discovery for every non-empty capability combina
             )).json()
           )
         );
-        const expected = capabilities.includes("read") ? queryTools.map(({ id }) => id).sort() : [];
+        const expected = installedCanonicalOperations()
+          .filter(
+            ({ policy }) =>
+              decideOperationAccess(policy.access, { _tag: "OAuthAgent", capabilities })._tag ===
+              "Allowed"
+          )
+          .map(({ id }) => id)
+          .sort();
         expect(listed.result.tools.map(({ name }) => name)).toEqual(expected);
         expect(listed.result.tools.map(({ name }) => name)).not.toContain("pats.listPATs");
-        expect(listed.result.tools.map(({ name }) => name)).not.toContain(
-          "dashboard.updateDashboard"
-        );
+        for (const tool of listed.result.tools) {
+          const declared = operationCatalog.byId.get(tool.name);
+          expect(tool.annotations).toEqual({
+            readOnlyHint: declared?.policy.kind === "query",
+            destructiveHint: declared?.policy.agentConfirmation === "required",
+          });
+        }
         const schemas = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))(
           listed.result.tools.map(({ inputSchema, outputSchema }) => ({
             inputSchema,
@@ -2548,6 +3413,8 @@ it("executes every installed declaration-derived query through Core for two User
           )
         );
         for (const operation of queryTools) {
+          // Catalog cases exercise owner behavior, not burst admission.
+          vi.spyOn(Date, "now").mockReturnValue((yield* Clock.currentTimeMillis) + 1000);
           const args = examples.find((example) =>
             Option.isSome(
               Schema.decodeOption(operation.input, { onExcessProperty: "error" })(example)
@@ -2636,6 +3503,7 @@ it("validates malformed structured inputs for every eligible query without echoi
         Schema.Struct({ access_token: Schema.String })
       )(yield* wait((yield* wait(exchangeFixture(fixture))).json()));
       for (const operation of queryTools) {
+        vi.spyOn(Date, "now").mockReturnValue((yield* Clock.currentTimeMillis) + 1000);
         const result = yield* Schema.decodeUnknownEffect(
           Schema.Struct({
             result: Schema.Struct({
@@ -2912,7 +3780,7 @@ it("returns the canonical uninitialized Dashboard outcome without creating domai
       ).toBe(0);
     })
   ));
-it("keeps a write-only connection queryless and every ordinary or sensitive mutation uncallable", () =>
+it("keeps read and account-security tools uncallable by a write-only connection", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const fixture = yield* approvedFixture(["write"]);
@@ -2924,13 +3792,12 @@ it("keeps a write-only connection queryless and every ordinary or sensitive muta
       const listed = yield* wait(
         mcpFixture({ send: fixture.send, bearer: token.access_token, method: "tools/list" })
       );
-      expect(yield* wait(listed.text())).toContain('"tools":[]');
+      const tools = yield* Schema.decodeUnknownEffect(ListedTools)(yield* wait(listed.json()));
+      expect(tools.result.tools.map(({ name }) => name)).toContain("operations.executeAtomicBatch");
       for (const name of [
         "categories.listCategories",
-        "categories.createKeywordRule",
-        "categories.deleteKeywordRule",
-        "operations.executeAtomicBatch",
         "pats.createPAT",
+        "browserLogin.approvePairing",
       ]) {
         const refused = yield* wait(
           mcpFixture({

@@ -20,6 +20,7 @@ import {
   type TransactionCaller,
   childCaller,
   dailyAuditMessage,
+  isOAuthCaller,
   isPATCaller,
   liveTransactionAuthority,
   liveTransactionCredential,
@@ -146,7 +147,7 @@ const childAccess = ({
   const scoped = childCaller({ subject, requiredScope: capability });
   return liveTransactionAuthority({ db, subject: scoped, current }).then((allowed) => {
     if (allowed) return "allowed" as const;
-    if (!isPATCaller(subject)) return "credential_refused" as const;
+    if (!isPATCaller(subject) && !isOAuthCaller(subject)) return "credential_refused" as const;
     return liveTransactionCredential({ db, subject, current }).then((live) =>
       live ? ("scope_missing" as const) : ("credential_refused" as const)
     );
@@ -352,6 +353,9 @@ const childAccessStep = ({
   catalogOperation: CatalogOperation;
   index: number;
 }>): Effect.Effect<Option.Option<CallStep>> => {
+  if (isOAuthCaller(subject) && catalogOperation.policy.access._tag !== "UserOwnedAgentScoped") {
+    return Effect.succeed(scopeStep("scope_missing", catalogOperation, index));
+  }
   const capability = userOwnedAgentCapability(catalogOperation.policy.access);
   return Effect.tryPromise(() => childAccess({ db, subject, current, capability })).pipe(
     Effect.orElseSucceed(() => "credential_refused" as const),

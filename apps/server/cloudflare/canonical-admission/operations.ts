@@ -82,6 +82,7 @@ const rateLimited = (): Response =>
       error: {
         code: "rate_limited",
         message: "Too many concurrent or recent requests. Retry later.",
+        retryAfterSeconds: canonicalRequestProtection.retryAfterSeconds,
       },
       next: [],
     },
@@ -103,6 +104,34 @@ const exhausted = (current: number): Response =>
     },
     { status: 429 }
   );
+/** Bound shared User request pressure without consuming a commercial allowance or adding canonical accounting. */
+export const protectCanonicalPressure = <A, E, R>(
+  input: Readonly<{
+    db: D1Database;
+    userId: string;
+    work: Effect.Effect<A, E, R>;
+    refused: (response: Response) => Effect.Effect<A, E, R>;
+  }>
+): Effect.Effect<A, E, R> =>
+  Effect.acquireUseRelease(
+    Effect.gen(function* () {
+      const id = newId();
+      const admitted = yield* acquireRequest({
+        db: input.db,
+        userId: input.userId,
+        id,
+        current: yield* Clock.currentTimeMillis,
+      });
+      return { id, admitted };
+    }),
+    ({ admitted }) =>
+      admitted === "accepted"
+        ? input.work
+        : input.refused(admitted === "rate_limited" ? rateLimited() : unavailable()),
+    ({ id, admitted }) =>
+      admitted === "accepted" ? releaseRequest({ db: input.db, id }) : Effect.void
+  );
+
 const patAuthority = (
   caller: Extract<AuthorizedCanonicalCaller, { _tag: "PAT" }>,
   current: number,

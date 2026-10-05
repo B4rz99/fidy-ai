@@ -23,6 +23,7 @@ import {
   callerAuthority,
   callerScope,
   failedPreparation,
+  isOAuthCaller,
   isPATCaller,
   refusedPreparation,
   transactionFailure,
@@ -568,8 +569,11 @@ const transitionStatements = (
       requiredScope: callerScope(subject),
       outcome: insightOutcome({ operation, insightEventId: id, attemptId }),
       guardRefusal: insightGuardRefusal(input),
-      auditBudget: isPATCaller(subject) ? "shared" : "owner",
-      commitGuards: isPATCaller(subject) ? Option.none() : Option.some(insightCommitGuards),
+      auditBudget: isPATCaller(subject) || isOAuthCaller(subject) ? "shared" : "owner",
+      commitGuards:
+        isPATCaller(subject) || isOAuthCaller(subject)
+          ? Option.none()
+          : Option.some(insightCommitGuards),
       statements: [
         ...(isPATCaller(subject)
           ? [prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) })]

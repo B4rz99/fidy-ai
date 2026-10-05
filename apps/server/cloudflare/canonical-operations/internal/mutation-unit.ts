@@ -20,11 +20,14 @@ import {
   TransactionPresentation,
 } from "../../../src/core/transactions/contract";
 import { canonicalTriggerOf } from "./triggers";
+import { currentMillis } from "../../runtime/operations";
 
 import {
   type CanonicalRefusalDisposition,
   type TransactionCaller,
+  callerAuthority,
   childCaller,
+  isOAuthCaller,
   liveTransactionAuthority,
   liveTransactionCredential,
   refusedCredentialResponse,
@@ -66,6 +69,8 @@ type TriggerKind = "movement" | "audit";
 /** A child's canonical identity is fixed by its owner's prepared outcome, never by D1's error. */
 const mutationOperation = (mutation: PreparedCanonicalMutation): string =>
   mutation.outcome.operation;
+const commitInstant = (subject: TransactionCaller, admitted: number): number =>
+  isOAuthCaller(subject) ? currentMillis() : admitted;
 
 /** Reuse the owner's changes() completion premise while binding each child's identity to its slot. */
 const childCompletion = (db: D1Database, index: number, operation: string): D1PreparedStatement =>
@@ -411,7 +416,20 @@ const childStatements = ({
 }>): ReadonlyArray<D1PreparedStatement> => {
   const userId = subject.userId;
   const operation = mutationOperation(mutation);
+  const authority = callerAuthority({
+    subject: childCaller({ subject, requiredScope: mutation.requiredScope }),
+    current,
+  });
   return [
+    ...(isOAuthCaller(subject)
+      ? [
+          db
+            .prepare(`INSERT INTO canonical_child_guard (child_index, operation, accepted)
+      SELECT ?, ?, CASE WHEN EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}) THEN 1 ELSE 0 END
+      ON CONFLICT(child_index) DO UPDATE SET operation = excluded.operation, accepted = excluded.accepted`)
+            .bind(index, operation, ...authority.bindings),
+        ]
+      : []),
     ...(mutation.auditBudget === "shared"
       ? [childBudget({ db, userId, current, index, operation })]
       : []),
@@ -449,6 +467,7 @@ export const executeCanonicalMutationUnit = ({
     Effect.gen(function* () {
       if (mutations.length === 0) return { _tag: "Unavailable" } as const;
       if (mutations.length > maximumAtomicBatchCalls) return { _tag: "Unavailable" } as const;
+      const commitCurrent = commitInstant(subject, current);
       const statements = [
         ...Option.match(hostedFence, {
           onNone: (): ReadonlyArray<D1PreparedStatement> => [],
@@ -463,7 +482,7 @@ export const executeCanonicalMutationUnit = ({
           ],
         }),
         ...mutations.flatMap((mutation, index) =>
-          childStatements({ db, subject, current, mutation, index })
+          childStatements({ db, subject, current: commitCurrent, mutation, index })
         ),
       ];
       const attempt = yield* Effect.exit(Effect.tryPromise(() => db.batch(statements)));
@@ -471,7 +490,7 @@ export const executeCanonicalMutationUnit = ({
         return yield* classifyUnitCallerAbort({
           db,
           subject,
-          current,
+          current: commitCurrent,
           mutations,
           cause: attempt.cause,
         });

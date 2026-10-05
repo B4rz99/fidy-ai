@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -178,6 +186,7 @@ try {
 // racing the repository's other static checks.
 const isolatedRoot = mkdtempSync(join(tmpdir(), "fidy-symbol-guidance-"));
 try {
+  symlinkSync(join(workspaceRoot, "node_modules"), join(isolatedRoot, "node_modules"), "dir");
   for (const directory of [
     "apps/server/scripts",
     "apps/server/src",

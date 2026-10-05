@@ -10,7 +10,7 @@ import { NextOperations } from "../../../src/shell/public-http/contract";
 const Success = Schema.Struct({ data: Schema.Json, next: NextOperations });
 const Failure = Schema.Struct({ error: Schema.Json, next: NextOperations });
 /** Retain the canonical envelope while checkpointing continuations against current OAuth capability and tier facts. */
-export const checkpointQueryResponse = (
+export const checkpointOAuthResponse = (
   input: Readonly<{ response: Response; caller: SuggestedOperationCaller }>
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
@@ -26,12 +26,17 @@ export const checkpointQueryResponse = (
     });
     return Response.json(encoded, {
       status: input.response.status,
-      headers: { "cache-control": "no-store" },
+      headers: {
+        "cache-control": "no-store",
+        ...(input.response.headers.has("retry-after")
+          ? { "retry-after": input.response.headers.get("retry-after") ?? "" }
+          : {}),
+      },
     });
   }).pipe(
     Effect.orElseSucceed(() =>
       Response.json(
-        { error: { code: "unavailable", message: "Canonical query unavailable." }, next: [] },
+        { error: { code: "unavailable", message: "Canonical operation unavailable." }, next: [] },
         { status: 503, headers: { "cache-control": "no-store" } }
       )
     )

@@ -1068,8 +1068,21 @@ const statementPublicationAccountability = ({
   authority: TransactionAuthority;
   current: number;
   database: D1Database;
-}>): ReadonlyArray<D1PreparedStatement> =>
-  isPATAuthority(authority)
+}>): ReadonlyArray<D1PreparedStatement> => {
+  if (authority.table === "oauth_access_credentials") {
+    return [
+      prepareAuthorizedAuditCall({
+        db: database,
+        authority,
+        id: newId(),
+        operation: "ingestion.submitForExtraction",
+        current,
+        outcome: "accepted",
+        afterOwnerWrite: true,
+      }),
+    ];
+  }
+  return isPATAuthority(authority)
     ? acceptedPATAccountability({
         afterOwnerWrite: true,
         authority,
@@ -1078,6 +1091,7 @@ const statementPublicationAccountability = ({
         operation: "ingestion.submitForExtraction",
       })
     : [];
+};
 
 /**
  * Credential-specific accountability a replayed statement call must commit instead of publishing
@@ -1093,8 +1107,21 @@ const statementReplayAccountability = ({
   authority: TransactionAuthority;
   current: number;
   database: D1Database;
-}>): ReadonlyArray<D1PreparedStatement> =>
-  isPATAuthority(authority)
+}>): ReadonlyArray<D1PreparedStatement> => {
+  if (authority.table === "oauth_access_credentials") {
+    return [
+      prepareAuthorizedAuditCall({
+        db: database,
+        authority,
+        id: newId(),
+        operation: "ingestion.submitForExtraction",
+        current,
+        outcome: "accepted",
+        afterOwnerWrite: false,
+      }),
+    ];
+  }
+  return isPATAuthority(authority)
     ? acceptedPATAccountability({
         afterOwnerWrite: false,
         authority,
@@ -1103,6 +1130,7 @@ const statementReplayAccountability = ({
         operation: "ingestion.submitForExtraction",
       })
     : [statementSubmissionReplayAudit({ authority, current, database, id: newId() })];
+};
 
 /**
  * One existing submission as the exact replay this call must commit instead of publishing again.
@@ -1308,6 +1336,42 @@ export const prepareStagedStatementPublication: {
  * `statement_submission_audit` refusal. A refusal whose audit cannot commit for a dead credential, a
  * spent shared daily budget, or an unavailable authority is classified instead of answered.
  */
+const statementRefusalEvidence = (
+  input: Readonly<{
+    authority: TransactionAuthority;
+    current: number;
+    database: D1Database;
+    refusal: StatementPublicationRefusal;
+  }>
+): D1PreparedStatement => {
+  if (input.authority.table === "oauth_access_credentials") {
+    return prepareAuthorizedAuditCall({
+      db: input.database,
+      authority: input.authority,
+      id: newId(),
+      operation: "ingestion.submitForExtraction",
+      current: input.current,
+      outcome: "rejected",
+      afterOwnerWrite: false,
+    });
+  }
+  if (isPATAuthority(input.authority)) {
+    return prepareOwnedStatement({
+      db: input.database,
+      statement: recordRejectedPATWork({
+        authority: input.authority,
+        input: { current: input.current, id: newId(), operation: "ingestion.submitForExtraction" },
+      }),
+    });
+  }
+  return statementSubmissionRefusalAudit({
+    authority: input.authority,
+    current: input.current,
+    database: input.database,
+    id: newId(),
+    outcome: refusalAuditOutcome(input.refusal.auditOutcome),
+  });
+};
 export const recordStatementRefusal = (
   input: Readonly<{
     readonly authority: TransactionAuthority;
@@ -1317,27 +1381,7 @@ export const recordStatementRefusal = (
   }>
 ): Promise<RefusalRecord> =>
   input.database
-    .batch([
-      isPATAuthority(input.authority)
-        ? prepareOwnedStatement({
-            db: input.database,
-            statement: recordRejectedPATWork({
-              authority: input.authority,
-              input: {
-                current: input.current,
-                id: newId(),
-                operation: "ingestion.submitForExtraction",
-              },
-            }),
-          })
-        : statementSubmissionRefusalAudit({
-            authority: input.authority,
-            current: input.current,
-            database: input.database,
-            id: newId(),
-            outcome: refusalAuditOutcome(input.refusal.auditOutcome),
-          }),
-    ])
+    .batch([statementRefusalEvidence(input)])
     .then((results): RefusalRecord =>
       results[0]?.meta.changes === 1 ? "recorded" : "credential_refused"
     )

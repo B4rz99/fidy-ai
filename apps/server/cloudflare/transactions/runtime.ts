@@ -9,10 +9,10 @@ import { CanonicalWorkAdmission } from "../canonical-operations/contract";
 import {
   canonicalWorkRequiresInference,
   executeCanonicalWork,
-  executeOAuthQuery,
+  executeOAuthCanonicalWork,
 } from "../canonical-operations/operations";
 import { currentMillis } from "../runtime/operations";
-import { OAuthQueryAdmission } from "../../src/shell/mcp/contract";
+import { OAuthCanonicalAdmission } from "../../src/shell/mcp/contract";
 import { OAuthRefreshAdmission, OAuthRevocationAdmission } from "../oauth-agents/contract";
 import { executeOAuthRefresh, executeOAuthRevocation } from "../oauth-agents/operations";
 import type { HostedCommitFence } from "../agent/contract";
@@ -249,7 +249,7 @@ const privateOAuthRevocation = (input: OAuthActivityInput): Effect.Effect<Respon
 };
 const privateOAuthActivity = (
   input: OAuthActivityInput
-): Option.Option<Effect.Effect<Response>> => {
+): Option.Option<Effect.Effect<Response, never, Scope.Scope>> => {
   const path = new URL(input.request.url).pathname;
   if (path === "/oauth-revoke") {
     return Option.some(privateOAuthRevocation(input));
@@ -266,10 +266,14 @@ const privateOAuthActivity = (
           })
     );
   }
-  return path === "/oauth-query" ? Option.some(privateOAuthQuery(input)) : Option.none();
+  return path === "/oauth-canonical"
+    ? Option.some(privateOAuthCanonicalWork(input))
+    : Option.none();
 };
-const privateOAuthQuery = (input: OAuthActivityInput): Effect.Effect<Response> => {
-  const oauth = Schema.decodeUnknownOption(OAuthQueryAdmission)(input.candidate);
+const privateOAuthCanonicalWork = (
+  input: OAuthActivityInput
+): Effect.Effect<Response, never, Scope.Scope> => {
+  const oauth = Schema.decodeUnknownOption(OAuthCanonicalAdmission)(input.candidate);
   if (Option.isNone(oauth) || oauth.value.userId !== input.userId) {
     return Effect.succeed(transactionUnavailable());
   }
@@ -277,21 +281,31 @@ const privateOAuthQuery = (input: OAuthActivityInput): Effect.Effect<Response> =
   if (input.request.signal.aborted || currentMillis() >= admitted.deadlineMilliseconds) {
     return Effect.succeed(transactionUnavailable());
   }
-  return executeOAuthQuery({
-    db: input.environment.DB,
-    signal: input.request.signal,
-    deadlineMilliseconds: admitted.deadlineMilliseconds,
-    operation: admitted.operation,
-    input: admitted.input,
-    subject: {
+  return Effect.gen(function* () {
+    const inference = yield* optionalHostedInference({
+      environment: input.environment,
+      db: input.environment.DB,
       userId: admitted.userId,
-      oauthConnectionId: admitted.connectionId,
-      credentialId: admitted.credentialId,
-      clientId: admitted.clientId,
-      resource: admitted.resource,
-      digest: new Uint8Array(admitted.digest),
-      requiredScope: Option.none(),
-    },
+      admittedTurnId: () => Option.none(),
+    });
+    return yield* executeOAuthCanonicalWork({
+      db: input.environment.DB,
+      signal: input.request.signal,
+      deadlineMilliseconds: admitted.deadlineMilliseconds,
+      operation: admitted.operation,
+      input: admitted.input,
+      bucket: Option.fromUndefinedOr(input.environment.STATEMENT_STAGING_BUCKET),
+      inference,
+      subject: {
+        userId: admitted.userId,
+        oauthConnectionId: admitted.connectionId,
+        credentialId: admitted.credentialId,
+        clientId: admitted.clientId,
+        resource: admitted.resource,
+        digest: new Uint8Array(admitted.digest),
+        requiredScope: Option.none(),
+      },
+    });
   });
 };
 const privateWeeklyActivity = (

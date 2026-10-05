@@ -24,6 +24,7 @@ import {
 } from "./internal/storage";
 import {
   dailyAuditExhausted,
+  prepareAuthorizedAuditCall,
   recordCanonicalPATWork,
   recordOAuthCall,
 } from "../../src/shell/audit/operations";
@@ -150,8 +151,19 @@ const acceptedAudit = ({
   subject: TransactionCaller;
   operation: MemoryOperationId;
   current: number;
-}>): D1PreparedStatement =>
-  isPATCaller(subject)
+}>): D1PreparedStatement => {
+  if (isOAuthCaller(subject)) {
+    return prepareAuthorizedAuditCall({
+      db,
+      authority: callerAuthority({ subject, current }),
+      id: memoryId(),
+      operation,
+      outcome: "accepted",
+      current,
+      afterOwnerWrite: true,
+    });
+  }
+  return isPATCaller(subject)
     ? prepareOwnedStatement({
         db,
         statement: recordCanonicalPATWork({
@@ -172,6 +184,7 @@ const acceptedAudit = ({
           input: { id: memoryId(), operation, outcome: "success", afterMutation: true, current },
         }),
       });
+};
 
 /** The guarded writes one accepted Memory mutation commits, in order, before its assertion. */
 const acceptedStatements = ({

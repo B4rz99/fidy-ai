@@ -5,7 +5,7 @@ import { operationCatalog } from "../../src/shell/api";
 import { checkpointResponseSuggestions } from "../../src/shell/canonical-operations/operations";
 import { installedCanonicalOperations } from "../canonical-operations/operations";
 import type { CatalogOperation } from "../../src/shell/canonical-catalog/contract";
-import { OAuthQueryAdmission, projectMcpSchemas } from "../../src/shell/mcp/contract";
+import { OAuthCanonicalAdmission, projectMcpSchemas } from "../../src/shell/mcp/contract";
 import { type OAuthCaller } from "../../src/shell/oauth-agents/contract";
 import { Unavailable } from "../../src/shell/public-http/contract";
 import { type PATScopes } from "../../src/core/tokens/contract";
@@ -14,6 +14,7 @@ import { RequestBodyPolicy } from "../http/contract";
 import { awaitRequestAbort, readBoundedRequestBody } from "../http/operations";
 import { authenticateOAuth } from "../oauth-agents/operations";
 import { currentMillis } from "../runtime/operations";
+import { protectCanonicalPressure } from "../canonical-admission/operations";
 
 const queryLifetimeMilliseconds = 3000;
 const bodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
@@ -27,6 +28,7 @@ const responsePolicy = Schema.decodeSync(RequestBodyPolicy)({
 const noStore = { "cache-control": "no-store" };
 type Coordinator = Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
 type ToolAdmission = Readonly<{
+  db: D1Database;
   subject: OAuthCaller;
   scopes: PATScopes;
   coordinator: Coordinator;
@@ -64,24 +66,24 @@ const toolFailure = (
   Effect.gen(function* () {
     const raw = yield* Schema.encodeEffect(Unavailable)(
       Unavailable.make({
-        error: { code: "unavailable", message: "Canonical query unavailable." },
+        error: { code: "unavailable", message: "Canonical operation unavailable." },
         next: [],
       })
     );
     return yield* canonicalToolResult({ codec: operation.failure, raw, isError: true });
   }).pipe(
     Effect.catchCause(() =>
-      Effect.fail(McpSchema.InternalError.make({ message: "Canonical query unavailable." }))
+      Effect.fail(McpSchema.InternalError.make({ message: "Canonical operation unavailable." }))
     )
   );
-const executeTool = (
+const executeAdmittedTool = (
   input: ToolAdmission,
   operation: CatalogOperation,
   payload: unknown
 ): Effect.Effect<McpSchema.CallToolResult, McpSchema.InternalError> =>
   Effect.gen(function* () {
     const encodedInput = yield* Schema.decodeUnknownEffect(Schema.Json)(payload);
-    const admission = yield* Schema.encodeEffect(Schema.fromJsonString(OAuthQueryAdmission))({
+    const admission = yield* Schema.encodeEffect(Schema.fromJsonString(OAuthCanonicalAdmission))({
       userId: input.subject.userId,
       connectionId: input.subject.oauthConnectionId,
       credentialId: input.subject.credentialId,
@@ -94,7 +96,7 @@ const executeTool = (
     });
     const response = yield* Effect.tryPromise((signal) =>
       input.coordinator.getByName(input.subject.userId).fetch(
-        new Request("https://coordinator.internal/oauth-query", {
+        new Request("https://coordinator.internal/oauth-canonical", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: admission,
@@ -134,6 +136,23 @@ const executeTool = (
     }),
     Effect.catchCause(() => toolFailure(operation))
   );
+const executeTool = (
+  input: ToolAdmission,
+  operation: CatalogOperation,
+  payload: unknown
+): Effect.Effect<McpSchema.CallToolResult, McpSchema.InternalError> =>
+  protectCanonicalPressure({
+    db: input.db,
+    userId: input.subject.userId,
+    work: executeAdmittedTool(input, operation, payload),
+    refused: (response) =>
+      Effect.tryPromise(() => response.json()).pipe(
+        Effect.flatMap((raw) =>
+          canonicalToolResult({ codec: operation.failure, raw, isError: true })
+        ),
+        Effect.catchCause(() => toolFailure(operation))
+      ),
+  });
 const schemaDocument = (schema: Schema.Top): Schema.Json => {
   const document = Schema.toJsonSchemaDocument(schema);
   return Schema.decodeUnknownSync(Schema.Json)({ ...document.schema, $defs: document.definitions });
@@ -146,7 +165,6 @@ const registration = (
     for (const operation of installedCanonicalOperations()
       .filter(
         ({ policy }) =>
-          policy.kind === "query" &&
           decideOperationAccess(policy.access, {
             _tag: "OAuthAgent",
             capabilities: input.scopes,
@@ -170,7 +188,10 @@ const registration = (
         description: operation.description,
         inputSchema: schemaDocument(projected.input),
         outputSchema: schemaDocument(projected.output),
-        annotations: { readOnlyHint: operation.policy.kind === "query", destructiveHint: false },
+        annotations: {
+          readOnlyHint: operation.policy.kind === "query",
+          destructiveHint: operation.policy.agentConfirmation === "required",
+        },
       });
       yield* server.addTool({
         tool,
@@ -179,7 +200,7 @@ const registration = (
       });
     }
   });
-/** Request-private Effect protocol execution projects installed authorized queries with bounded lifetime and cleanup. */
+/** Request-private protocol execution projects installed authorized canonical operations with bounded lifetime and cleanup. */
 export const handleMcpRequest = (
   input: Readonly<{ request: Request; db: D1Database; coordinator: Coordinator }>
 ): Effect.Effect<Response> =>
@@ -197,9 +218,9 @@ export const handleMcpRequest = (
     });
     const routes = Layer.merge(
       server,
-      Layer.effectDiscard(registration({ ...caller.value, coordinator: input.coordinator })).pipe(
-        Layer.provide(server)
-      )
+      Layer.effectDiscard(
+        registration({ ...caller.value, db: input.db, coordinator: input.coordinator })
+      ).pipe(Layer.provide(server))
     );
     const handler = HttpRouter.toWebHandler(routes, { disableLogger: true });
     const request = new Request(input.request.url, {

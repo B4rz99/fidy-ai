@@ -10,7 +10,7 @@ import type { CategoryAuditOperation } from "../contract";
 
 /** A live credential re-evaluated inside the same D1 unit as the rule write. */
 type Authority = Readonly<{
-  table: "pats" | "web_sessions";
+  table: "pats" | "web_sessions" | "oauth_access_credentials";
   predicate: string;
   bindings: ReadonlyArray<string | number | Uint8Array>;
 }>;

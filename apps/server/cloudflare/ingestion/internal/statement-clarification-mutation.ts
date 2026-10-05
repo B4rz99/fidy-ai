@@ -91,6 +91,19 @@ const accountability = (
   accepted: boolean
 ): ReadonlyArray<D1PreparedStatement> => {
   const authority = work.authority;
+  if (authority.table === "oauth_access_credentials") {
+    return [
+      prepareAuthorizedAuditCall({
+        db: work.db,
+        authority,
+        id: newId(),
+        current: work.current,
+        operation,
+        outcome: accepted ? "accepted" : "rejected",
+        afterOwnerWrite: accepted,
+      }),
+    ];
+  }
   if (isPATAuthority(authority)) {
     return accepted
       ? acceptedPATAccountability({

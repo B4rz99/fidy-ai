@@ -41,10 +41,9 @@ export type HostedCanonicalCaller = Readonly<{
   }>;
 }>;
 
-/** Canonical callers keep channel authority distinct from browser and PAT credentials. */
-export type TransactionCaller = TransactionSubject | AuthorizedPAT;
-/** Canonical queries additionally accept distinct OAuth User-owned-agent authority. */
-export type QueryCaller = TransactionCaller | OAuthCaller;
+/** Live canonical callers retain their distinct browser, PAT, or OAuth authority. */
+export type TransactionCaller = TransactionSubject | AuthorizedPAT | OAuthCaller;
+export type QueryCaller = TransactionCaller;
 
 export const transactionNoStore = { "cache-control": "no-store" };
 
@@ -89,9 +88,9 @@ export type TransactionRefusal = Readonly<{
 export type TransactionAuthority =
   | PATAuthority
   | WebSessionAuthority
+  | OAuthAuthority
   | HostedCanonicalCaller["authority"];
-/** A live query gate keeps OAuth attribution distinct from other credentials. */
-export type QueryAuthority = TransactionAuthority | OAuthAuthority;
+export type QueryAuthority = TransactionAuthority;
 
 /** The canonical shared daily-write-budget refusal every owner reports. */
 export const dailyAuditMessage = "The caller's daily canonical write budget is exhausted.";

@@ -107,12 +107,14 @@ atomically rotates credentials under the original User coordinator; recognized r
 entire credential family, including a concurrent winner. Lost delivery requires new browser approval,
 with no grace window or recoverable replacement cache.
 
-`mcp` projects installed eligible canonical queries from the assembled declarations through Effect's
-protocol runtime. Discovery is deterministic and authorization-private, including nested
+`mcp` projects installed eligible canonical queries and mutations from the assembled declarations through Effect's
+protocol runtime. Discovery is deterministic and authorization-private, including nested batch children and
 SuggestedOperations. Calls use the shared canonical owner invocation under live OAuth credential,
 grant, User, Consent and capability guards, with distinct Audit attribution and exact Money codecs.
-Account-security operations and every mutation remain refused; OAuth callers never inherit PAT,
-WebSession or Hosted Agent Session lifecycle authority.
+Ordinary mutations and authorized atomic batches reuse the canonical one-User mutation unit, owner preparation,
+collision policy, live authority, accounting and Audit. Sensitive operations remain refused from canonical confirmation
+metadata, including batch children, until verified OAuth confirmation is implemented. Account-security operations
+remain unavailable; OAuth callers never inherit PAT, WebSession or Hosted Agent Session lifecycle authority.
 
 Fresh first-party browser settings list bounded connection metadata and at most three attributable
 canonical activity entries, then revoke one or all owned connections atomically with append-only
@@ -120,7 +122,7 @@ Consent evidence. Safety controls remain reachable after processing Consent with
 stops later calls and refresh without undoing committed work or affecting PATs, browser logout or
 Hosted Agent Sessions. Malformed or unavailable metadata fails closed, never as an empty list.
 
-Public bounds, deadlines and cancellation fence queued query/refresh work. Already-started D1 batches
+Public bounds, shared User request pressure, deadlines and cancellation fence queued canonical/refresh work. Already-started D1 batches
 settle atomically even when delivery is lost; cancellation is not rollback or retry authority.
 Existing bounded public/Core/coordinator Work observations export metadata only, never arguments,
 financial results, credentials, URLs or raw causes. Sensitive confirmation and exact-host/operator

@@ -28,6 +28,13 @@ export const atomicBatchOperation = Schema.Literal(
 /** Maximum child mutations accepted by one atomic batch request. */
 export const maximumAtomicBatchCalls = 12;
 
+/** Admit only the bounded batch envelope; canonical preparation attributes and decodes each raw child. */
+export const AtomicBatchAdmission = Schema.Struct({
+  payload: Schema.Struct({
+    calls: Schema.NonEmptyArray(Schema.Unknown).check(Schema.isMaxLength(maximumAtomicBatchCalls)),
+  }),
+});
+
 /** Stable caller-chosen correlation id for one child mutation and its result. */
 export const AtomicBatchCallId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("AtomicBatchCallId"))

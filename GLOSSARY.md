@@ -235,7 +235,7 @@ MCP resource with a non-empty approved subset of `read`, `write`, and `dashboard
 7/30/90/365-day expiration is fixed at browser approval (90 days by default); short-lived access
 and rotating refresh credentials cannot extend it. Client names are unverified display claims.
 Revocation stops subsequent work and refresh, independently of browser logout and PAT revocation.
-This authority is installed for the bounded development query and management slices in ADR 0033; it is not launch-enabled.
+This authority is installed for the bounded development canonical query, ordinary mutation, atomic-batch and management slices in ADR 0033; it is not launch-enabled.
 _Avoid_: Institution Connection, PAT, WebSession, Hosted Agent Session, OAuth session.
 
 **OAuth User-owned-agent caller**:

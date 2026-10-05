@@ -40,7 +40,7 @@ import { budgetRefusal } from "../../budgets/operations";
 import { browseDashboard } from "../../dashboard/operations";
 import { ownsTransactionPath as transactionPath } from "../../../src/shell/transactions/runtime";
 import {
-  type TransactionCaller,
+  type TransactionCaller as CanonicalCaller,
   isPATCaller,
   maximumTransactionInputBytes,
   rejectBatchEnvelope,
@@ -305,6 +305,7 @@ const sessionAdmission = (
  * Bind one admitted caller to the exact admission variant for this canonical work. The
  * coordinator's own published schema types every field here, so the Worker cannot drift from it.
  */
+type TransactionCaller = Exclude<CanonicalCaller, { oauthConnectionId: string }>;
 const coordinatorAdmission = (
   subject: TransactionCaller,
   work: CanonicalWork

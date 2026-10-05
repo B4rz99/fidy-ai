@@ -39,7 +39,9 @@ import type {
 } from "../../canonical-operations/contract";
 import {
   type TransactionCaller,
+  callerAuthority,
   dailyAuditMessage,
+  isOAuthCaller,
   isPATCaller,
 } from "../../canonical-work/operations";
 
@@ -108,6 +110,24 @@ const recordKeywordRuleGuard = ({
   current: number;
   operation: KeywordRuleOutcome["operation"];
 }>): Effect.Effect<"recorded" | "credential_refused" | "rate_limited" | "unavailable"> => {
+  if (isOAuthCaller(subject)) {
+    return Effect.tryPromise(() =>
+      prepareAuthorizedAuditCall({
+        db,
+        authority: callerAuthority({ subject, current }),
+        id: newId(),
+        operation,
+        outcome: "rejected",
+        current,
+        afterOwnerWrite: false,
+      }).run()
+    ).pipe(
+      Effect.map((result) =>
+        result.meta.changes === 1 ? ("recorded" as const) : ("credential_refused" as const)
+      ),
+      Effect.orElseSucceed(() => "unavailable" as const)
+    );
+  }
   const statement = isPATCaller(subject)
     ? prepareOwnedStatement({
         db,

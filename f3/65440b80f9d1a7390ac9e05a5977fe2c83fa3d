@@ -1,0 +1,37 @@
+apps/server/cloudflare/proactivity.test-fixture.ts
+  s_306ab925389860::t_178735349759f6 56-58,68,76,87-89
+  s_306ab925389860::t_61c8cd9611921a 10,59-64,67,69-75,77-86,90-93,96-98
+  s_306ab925389860::t_10702cdda72a55 15,65-66,94
+  s_306ab925389860::t_3a22af2f228fea 95
+  s_306ab925389860::t_9303a842872482 99-100
+apps/server/cloudflare/insights/reminder-schedule.test.ts
+  s_306ab925389860::t_2c184a558a6e42 3,30-31
+  s_306ab925389860::t_3ce26abe3846ea 11,15-16,33-42,47-53,55-60,62-69,71-90,93-113,115-120,122-129,131-154,157-158
+  s_306ab925389860::t_fca74735cabaaa 32,46,54
+  s_306ab925389860::t_a84fd263141e32 43-45
+  s_306ab925389860::t_ebd413135bc915 61
+  s_306ab925389860::t_4340281a0b0420 70
+  s_306ab925389860::t_2020512ed03905 91-92
+  s_306ab925389860::t_0e18b3a8604eb0 114
+  s_306ab925389860::t_18e9d4f4b15126 121
+  s_306ab925389860::t_fe1dfa0f078832 130
+  s_306ab925389860::t_8537b4cf39a3c7 155-156
+  s_306ab925389860::t_1a798b128aa95c 159-161
+  s_306ab925389860::t_53aa56f059eee6 162-163
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f365440b80f9d1a7390ac9e05a5977fe2c83fa3d",
+  "prompts": {},
+  "sessions": {
+    "s_306ab925389860": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a109c8-df42-7697-afe7-6376e97c8760",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

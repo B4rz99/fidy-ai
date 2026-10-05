@@ -1,0 +1,33 @@
+apps/server/cloudflare/oauth-agents/oauth-ingress.test.ts
+  s_e278ac208f4e8a::t_beadd5b607af52 889-894,922-923
+  s_e278ac208f4e8a::t_f7016eb53a3852 918-920,924-928,930-939
+  s_e278ac208f4e8a::t_0d7e934e944bd1 14,895,907,955
+  s_e278ac208f4e8a::t_412f6ac461b32f 908-910,956-958
+  s_e278ac208f4e8a::t_3080c40398e10f 12-13,882-888,896-906,911-913,915-917,921,940-944,946-952,954,959-966
+  s_e278ac208f4e8a::t_2f3882f4892201 914
+  s_e278ac208f4e8a::t_99156bfe791ae6 929
+  s_e278ac208f4e8a::t_eed6fc84af4253 945
+  s_e278ac208f4e8a::t_6276ea7e74e59d 953
+apps/server/cloudflare/oauth-agents/internal/review.ts
+  s_e278ac208f4e8a::t_7cdff11c9c914b 57,122
+  s_e278ac208f4e8a::t_e03cb534d506ce 19,100-102
+  s_e278ac208f4e8a::t_44d225684853bd 20,103-104
+apps/server/cloudflare/oauth-agents/internal/management.ts
+  s_e278ac208f4e8a::t_9738d70b6bf346 37-38,51,70,105
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2cc6bf28788a9d171c5f6091bb70fa4c35ac1029",
+  "prompts": {},
+  "sessions": {
+    "s_e278ac208f4e8a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10731-a41d-7121-98b3-ec6e9e1e04de",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

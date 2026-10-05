@@ -1,0 +1,55 @@
+apps/server/cloudflare/http/operations.ts
+  s_82ce4d1c184826::t_563c483f246a03 13-15,17
+  s_306ab925389860::t_06c9b9029f0ab1 123,140-147,154-155,161,163-180
+apps/server/cloudflare/recovery/support-recovery.test.ts
+  s_82ce4d1c184826::t_19f9437e6adec7 261-266
+  s_82ce4d1c184826::t_d135eefa4d1b21 260
+  s_82ce4d1c184826::t_dee793d17bb576 1-2,192-259,267-292
+apps/server/cloudflare/core-http/internal/http.ts
+  s_82ce4d1c184826::t_9834466e09ebba 790-795,814-816
+  s_82ce4d1c184826::t_bb164b3744728d 397,417,444,478,683,704-708,817-818,835,941-945,978-982,1015-1019,1111-1115,1229-1233
+apps/server/cloudflare/dashboard/internal/dashboard.ts
+  s_82ce4d1c184826::t_231625c42eae7c 166-170
+apps/server/cloudflare/http/request-body.test.ts
+  s_82ce4d1c184826::t_8296c2430ba699 1,11-16,21-169
+apps/server/cloudflare/ingestion/internal/statement-ingestion.ts
+  s_82ce4d1c184826::t_34a4c8705b3498 312
+apps/server/cloudflare/recovery/internal/support-recovery.ts
+  s_82ce4d1c184826::t_98c97e76688e97 16,300
+apps/server/cloudflare/runtime/release-smoke/operations.ts
+  s_82ce4d1c184826::t_a7e81ffe106b96 212
+apps/server/cloudflare/subscription/internal/refund-support.ts
+  s_82ce4d1c184826::t_e96c619f0bc11b 106-110
+apps/server/cloudflare/transactions/internal/transaction-corrections.ts
+  s_82ce4d1c184826::t_2d1b363296037e 59-61
+apps/server/cloudflare/transactions/internal/transaction-reconciliation.ts
+  s_82ce4d1c184826::t_218827070b3195 71-73
+apps/server/cloudflare/transactions/internal/transactions.ts
+  s_82ce4d1c184826::t_5f512c853a501e 63-65
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_82ce4d1c184826::t_52e103a09978c0 3512-3513,3574,3657,3731,3807,3836-3837
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "256e06c42aa7a54bbc0fa1f6040a274e400a1cba",
+  "prompts": {},
+  "sessions": {
+    "s_306ab925389860": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a109c8-df42-7697-afe7-6376e97c8760",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_82ce4d1c184826": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10c32-3b5b-773d-a257-ba4375f1df9d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

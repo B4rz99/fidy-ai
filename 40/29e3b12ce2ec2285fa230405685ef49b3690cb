@@ -1,0 +1,26 @@
+apps/server/cloudflare/ingestion/forwarded-email.test.ts
+  s_306ab925389860::t_12bb31cf52cc5a 229
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_306ab925389860::t_2aef918909c65e 156
+apps/server/src/core/insights/reminder-policy.test.ts
+  s_306ab925389860::t_94295106f6b542 116-120,122-129,131-135,137-139
+  s_306ab925389860::t_d041c6659054f7 113-115,121,130,136,140-141
+apps/server/cloudflare/tokens/pats.test.ts
+  s_306ab925389860::t_c870790b68fae9 130
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4029e3b12ce2ec2285fa230405685ef49b3690cb",
+  "prompts": {},
+  "sessions": {
+    "s_306ab925389860": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a109c8-df42-7697-afe7-6376e97c8760",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

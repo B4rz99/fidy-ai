@@ -1,4 +1,6 @@
 import type { HostedCommitFence } from "../../agent/contract";
+import type { OAuthConfirmationWork } from "../../oauth-confirmation/contract";
+import { oauthReviewResponse } from "../../oauth-confirmation/operations";
 import {
   type AtomicBatchCall,
   AtomicBatchRejected,
@@ -349,12 +351,14 @@ const childAuthorizationStep = ({
   current,
   catalogOperation,
   index,
+  oauthConfirmation,
 }: Readonly<{
   db: D1Database;
   subject: TransactionCaller;
   current: number;
   catalogOperation: CatalogOperation;
   index: number;
+  oauthConfirmation: Option.Option<OAuthConfirmationWork>;
 }>): Effect.Effect<Option.Option<CallStep>> => {
   if (isOAuthCaller(subject) && catalogOperation.policy.access._tag !== "UserOwnedAgentScoped") {
     return Effect.succeed(scopeStep("scope_missing", catalogOperation, index));
@@ -366,7 +370,11 @@ const childAuthorizationStep = ({
       const step = scopeStep(access, catalogOperation, index);
       if (Option.isSome(step)) return Effect.succeed(step);
       const scopedSubject = childCaller({ subject, requiredScope: capability });
-      if (!isOAuthCaller(scopedSubject) || !requiresOAuthConfirmation(catalogOperation)) {
+      if (
+        !isOAuthCaller(scopedSubject) ||
+        !requiresOAuthConfirmation(catalogOperation) ||
+        Option.isSome(oauthConfirmation)
+      ) {
         return Effect.succeedNone;
       }
       return rejectChild({
@@ -483,33 +491,23 @@ type BatchChildWork = Readonly<{
   call: CanonicalBatchCall;
   index: number;
   current: number;
+  oauthConfirmation: Option.Option<OAuthConfirmationWork>;
 }>;
 
-const prepareCall = ({
-  db,
-  subject,
-  call,
-  index,
-  current,
-  bucket,
-  inference,
-}: BatchChildWork): Effect.Effect<CallStep, never, HostedInference> => {
+const prepareCall = (work: BatchChildWork): Effect.Effect<CallStep, never, HostedInference> => {
+  const { db, subject, call, index, current, bucket, inference } = work;
   const decision = decodedDecision(call, index);
   if (decision._tag === "Response") {
     return Effect.succeed(decision);
   }
   const catalogOperation = decision.operation;
   return Effect.gen(function* () {
-    const accessStep = yield* childAuthorizationStep({
-      db,
-      subject,
-      current,
-      catalogOperation,
-      index,
-    });
+    const accessStep = yield* childAuthorizationStep({ ...work, catalogOperation });
     if (Option.isSome(accessStep)) return accessStep.value;
-    const capability = userOwnedAgentCapability(catalogOperation.policy.access);
-    const scopedSubject = childCaller({ subject, requiredScope: capability });
+    const scopedSubject = childCaller({
+      subject,
+      requiredScope: userOwnedAgentCapability(catalogOperation.policy.access),
+    });
     const decodedCall = Schema.decodeUnknownOption(getAtomicBatchCallSchema())(call);
     if (Option.isNone(decodedCall)) {
       return yield* rejectInvalidChild({
@@ -613,26 +611,13 @@ const childTarget = (mutation: PreparedCanonicalMutation): Option.Option<string>
   return Option.none();
 };
 
-const prepareBatch = ({
-  db,
-  subject,
-  calls,
-  current,
-  bucket,
-  inference,
-}: Readonly<{
-  db: D1Database;
-  bucket: Option.Option<R2Bucket>;
-  inference: Option.Option<HostedInferenceService>;
-  subject: TransactionCaller;
-  calls: ReadonlyArray<CanonicalBatchCall>;
-  current: number;
-}>): Effect.Effect<BatchPreparation, never, HostedInference> =>
+const prepareBatch = (work: BatchWork): Effect.Effect<BatchPreparation, never, HostedInference> =>
   Effect.gen(function* () {
+    const { db, subject, calls, current } = work;
     const children: Array<PreparedCall> = [];
     const targets = new Set<string>();
     for (const [index, call] of calls.entries()) {
-      const step = yield* prepareCall({ db, subject, call, index, current, bucket, inference });
+      const step = yield* prepareCall({ ...work, call, index });
       if (step._tag === "Response") {
         return {
           _tag: "Response",
@@ -727,6 +712,8 @@ const executionResponse = ({
   execution: CanonicalMutationUnitExecution;
 }>): Effect.Effect<Response> => {
   switch (execution._tag) {
+    case "ConfirmationReview":
+      return Effect.succeed(oauthReviewResponse(execution.review));
     case "Committed":
       return presentCommitted({ children, execution });
     case "CredentialRefused":
@@ -752,25 +739,17 @@ type BatchWork = Readonly<{
   subject: TransactionCaller;
   calls: ReadonlyArray<CanonicalBatchCall>;
   current: number;
+  oauthConfirmation: Option.Option<OAuthConfirmationWork>;
 }>;
 
-const executeBatch = ({
-  db,
-  subject,
-  calls,
-  current,
-  bucket,
-  hostedFence,
-  inference,
-}: BatchWork & Readonly<{ hostedFence: Option.Option<HostedCommitFence> }>): Effect.Effect<
-  Response,
-  never,
-  HostedInference
-> =>
+const executeBatch = (
+  work: BatchWork & Readonly<{ hostedFence: Option.Option<HostedCommitFence> }>
+): Effect.Effect<Response, never, HostedInference> =>
   Effect.gen(function* () {
-    const invalidShape = batchShapeRefusal(calls);
+    const { db, subject, current, hostedFence, oauthConfirmation } = work;
+    const invalidShape = batchShapeRefusal(work.calls);
     if (Option.isSome(invalidShape)) return invalidShape.value;
-    const batch = yield* prepareBatch({ db, subject, calls, current, bucket, inference });
+    const batch = yield* prepareBatch(work);
     if (batch._tag === "Response") return batch.response;
     const execution = yield* executeCanonicalMutationUnit({
       db,
@@ -778,6 +757,7 @@ const executeBatch = ({
       current,
       mutations: batch.children.map((child) => child.mutation),
       hostedFence,
+      oauthConfirmation,
     });
     if (execution._tag === "Aborted") {
       const statement = batch.children.find(
@@ -787,7 +767,7 @@ const executeBatch = ({
         statement?.mutation.outcome._tag === "StatementSubmission" &&
         (yield* statement.mutation.outcome.publication.lostReplay)
       ) {
-        const replay = yield* prepareBatch({ db, subject, calls, current, bucket, inference });
+        const replay = yield* prepareBatch(work);
         if (replay._tag === "Response") return replay.response;
         const retried = yield* executeCanonicalMutationUnit({
           db,
@@ -795,6 +775,7 @@ const executeBatch = ({
           current,
           mutations: replay.children.map((child) => child.mutation),
           hostedFence,
+          oauthConfirmation,
         });
         return yield* executionResponse({
           db,

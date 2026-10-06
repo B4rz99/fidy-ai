@@ -1613,6 +1613,7 @@ it("keeps read-only HTTP and hosted queries observational even with pending or i
           current: DateTime.nowUnsafe().epochMilliseconds,
           bucket: Option.none(),
           hostedFence: Option.none(),
+          oauthConfirmation: Option.none(),
           inference: Option.none(),
           work: {
             _tag: "Call",
@@ -1647,6 +1648,7 @@ it("keeps read-only HTTP and hosted queries observational even with pending or i
         current: DateTime.nowUnsafe().epochMilliseconds,
         bucket: Option.none(),
         hostedFence: Option.none(),
+        oauthConfirmation: Option.none(),
         inference: Option.none(),
         work: {
           _tag: "Call",

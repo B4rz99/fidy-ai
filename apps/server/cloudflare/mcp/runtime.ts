@@ -6,7 +6,12 @@ import { operationCatalog } from "../../src/shell/api";
 import { checkpointResponseSuggestions } from "../../src/shell/canonical-operations/operations";
 import { installedCanonicalOperations } from "../canonical-operations/operations";
 import type { CatalogOperation } from "../../src/shell/canonical-catalog/contract";
-import { OAuthCanonicalAdmission, projectMcpSchemas } from "../../src/shell/mcp/contract";
+import {
+  OAuthCanonicalAdmission,
+  type OAuthConfirmationAttempt,
+  projectMcpSchemas,
+} from "../../src/shell/mcp/contract";
+import { readNativeConfirmation, requestNativeConfirmation } from "./native-confirmation";
 import { OAuthMcpAdmission, maximumMcpRequestBytes } from "./contract";
 import { type OAuthCaller } from "../../src/shell/oauth-agents/contract";
 import { Unavailable } from "../../src/shell/public-http/contract";
@@ -116,28 +121,25 @@ const dispatchCanonicalTool = (
           })
         )
       );
-const executeAdmittedTool = (
+const canonicalDeadline = (
+  input: Readonly<{ admission: ToolAdmission; current: number; continuation: boolean }>
+): number => {
+  const boundedExecution = input.current + queryLifetimeMilliseconds;
+  if (input.continuation) return boundedExecution;
+  return "transportDeadlineMilliseconds" in input.admission
+    ? Math.min(boundedExecution, input.admission.transportDeadlineMilliseconds)
+    : boundedExecution;
+};
+
+const decodeToolResponse = (
   input: ToolAdmission,
   operation: CatalogOperation,
-  payload: unknown
-): Effect.Effect<McpSchema.CallToolResult, McpSchema.InternalError> =>
+  response: Response
+): Effect.Effect<
+  McpSchema.CallToolResult,
+  Effect.Error<ReturnType<typeof readBoundedRequestBody>> | Schema.SchemaError
+> =>
   Effect.gen(function* () {
-    const encodedInput = yield* Schema.decodeUnknownEffect(Schema.Json)(payload);
-    const admission = yield* Schema.encodeEffect(Schema.fromJsonString(OAuthCanonicalAdmission))({
-      userId: input.subject.userId,
-      connectionId: input.subject.oauthConnectionId,
-      credentialId: input.subject.credentialId,
-      clientId: input.subject.clientId,
-      resource: input.subject.resource,
-      digest: Array.from(input.subject.digest),
-      deadlineMilliseconds: Math.min(
-        (yield* Clock.currentTimeMillis) + queryLifetimeMilliseconds,
-        "transportDeadlineMilliseconds" in input ? input.transportDeadlineMilliseconds : Infinity
-      ),
-      operation: operation.id,
-      input: encodedInput,
-    });
-    const response = yield* dispatchCanonicalTool(input, admission);
     const bytes = yield* readBoundedRequestBody(
       new Request("https://coordinator.internal/result", {
         method: "POST",
@@ -163,22 +165,75 @@ const executeAdmittedTool = (
     const projected = projectMcpSchemas({ operation, catalog: operationCatalog, allowedIds });
     yield* Schema.decodeEffect(projected.output)(result.structuredContent ?? null);
     return result;
+  });
+
+const executeAdmittedTool = (
+  input: ToolAdmission,
+  work: Readonly<{
+    operation: CatalogOperation;
+    payload: unknown;
+    confirmation: Option.Option<OAuthConfirmationAttempt>;
+  }>
+): Effect.Effect<
+  McpSchema.CallToolResult | McpSchema.InputRequired,
+  McpSchema.InternalError,
+  McpSchema.McpRequestContext
+> =>
+  Effect.gen(function* () {
+    const { operation, payload } = work;
+    const context = yield* McpSchema.McpRequestContext;
+    const confirmation = readNativeConfirmation({ context, supplied: work.confirmation });
+    if (confirmation._tag === "Invalid") return yield* toolFailure(operation);
+    const encodedInput = yield* Schema.decodeUnknownEffect(Schema.Json)(payload);
+    const admission = yield* Schema.encodeEffect(Schema.fromJsonString(OAuthCanonicalAdmission))({
+      userId: input.subject.userId,
+      connectionId: input.subject.oauthConnectionId,
+      credentialId: input.subject.credentialId,
+      clientId: input.subject.clientId,
+      resource: input.subject.resource,
+      digest: Array.from(input.subject.digest),
+      deadlineMilliseconds: canonicalDeadline({
+        admission: input,
+        current: yield* Clock.currentTimeMillis,
+        continuation: Option.isSome(work.confirmation),
+      }),
+      operation: operation.id,
+      input: encodedInput,
+      ...Option.match(confirmation.attempt, {
+        onNone: () => ({}),
+        onSome: (confirmation) => ({ confirmation }),
+      }),
+    });
+    const response = yield* dispatchCanonicalTool(input, admission).pipe(
+      Effect.timeout(queryLifetimeMilliseconds)
+    );
+    if (response.headers.get("fidy-oauth-review") === "1") {
+      const requested = yield* requestNativeConfirmation({ response, context, responsePolicy });
+      if (requested._tag === "InputRequired") return requested.result;
+      if (requested._tag === "Unavailable") return yield* toolFailure(operation);
+      return yield* executeAdmittedTool(input, {
+        ...work,
+        confirmation: Option.some(requested.attempt),
+      });
+    }
+    return yield* decodeToolResponse(input, operation, response);
   }).pipe(
-    Effect.timeoutOrElse({
-      duration: queryLifetimeMilliseconds,
-      orElse: () => toolFailure(operation),
-    }),
-    Effect.catchCause(() => toolFailure(operation))
+    Effect.scoped,
+    Effect.catchCause(() => toolFailure(work.operation))
   );
 const executeTool = (
   input: ToolAdmission,
   operation: CatalogOperation,
   payload: unknown
-): Effect.Effect<McpSchema.CallToolResult, McpSchema.InternalError> =>
+): Effect.Effect<
+  McpSchema.CallToolResult | McpSchema.InputRequired,
+  McpSchema.InternalError,
+  McpSchema.McpRequestContext
+> =>
   protectCanonicalPressure({
     db: input.db,
     userId: input.subject.userId,
-    work: executeAdmittedTool(input, operation, payload),
+    work: executeAdmittedTool(input, { operation, payload, confirmation: Option.none() }),
     refused: (response) =>
       Effect.tryPromise(() => response.json()).pipe(
         Effect.flatMap((raw) =>
@@ -351,7 +406,10 @@ const statefulRequest = (request: Request, body: Uint8Array): boolean => {
       Option.isSome(
         Schema.decodeUnknownOption(
           Schema.Struct({
-            protocolVersion: Schema.Literal(McpProtocol.v2025_11_25.protocolVersion),
+            // Effect negotiates the supported stateful version even when a client offers an
+            // older version. Its resulting session must live in the resident owner, not
+            // a one-request handler that is immediately disposed after initialization.
+            protocolVersion: Schema.String,
           })
         )(payload)
       )
@@ -596,7 +654,11 @@ const executeResidentTool = (
   target: ResidentTool,
   current: ToolAdmission,
   payload: unknown
-): Effect.Effect<McpSchema.CallToolResult, McpSchema.InternalError> =>
+): Effect.Effect<
+  McpSchema.CallToolResult | McpSchema.InputRequired,
+  McpSchema.InternalError,
+  McpSchema.McpRequestContext
+> =>
   Effect.gen(function* () {
     const live = yield* resolveOAuthMcpCaller({
       db: target.registry.config.db,
@@ -621,7 +683,11 @@ const executeResidentTool = (
 const residentToolCallback = (
   target: ResidentTool,
   payload: unknown
-): Effect.Effect<McpSchema.CallToolResult, McpSchema.InternalError> =>
+): Effect.Effect<
+  McpSchema.CallToolResult | McpSchema.InputRequired,
+  McpSchema.InternalError,
+  McpSchema.McpRequestContext
+> =>
   Effect.gen(function* () {
     const invocation = yield* Effect.serviceOption(NativeToolAdmissionContext);
     if (Option.isNone(invocation) || target.owner.retiring) {

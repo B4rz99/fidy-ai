@@ -37,6 +37,8 @@ import {
   unlinkedPairMessage,
 } from "../../canonical-work/operations";
 import { ReconciliationDecisionRow } from "./reconciliation-state";
+import { discloseTransactions, observeOAuthTransactions } from "./oauth-review";
+import type { OAuthMutationReview } from "../../oauth-confirmation/contract";
 import { type CanonicalMutationPreparation } from "../../canonical-operations/contract";
 
 import { refusedTransactionMutation, transactionGuardRefusal } from "./transaction-outcome";
@@ -339,6 +341,7 @@ export const prepareLink = (work: PairWork): Effect.Effect<CanonicalMutationPrep
         auditBudget: "shared",
         commitGuards: Option.none(),
         outcome,
+        oauthReview: Option.none(),
         statements: linkStatements({
           ...work,
           pair: decision.pair,
@@ -348,6 +351,48 @@ export const prepareLink = (work: PairWork): Effect.Effect<CanonicalMutationPrep
       },
     } as const;
   }).pipe(Effect.orElseSucceed(failedPreparation));
+
+const reviewUnlink = (
+  work: PairWork
+): Effect.Effect<
+  Option.Option<OAuthMutationReview>,
+  TransactionBoundaryFailure | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    if (!isOAuthCaller(work.subject)) return Option.none();
+    const pair = work.pair;
+    const snapshot = yield* observeOAuthTransactions({
+      db: work.db,
+      userId: work.subject.userId,
+      firstId: pair.firstTransactionId,
+      secondId: pair.secondTransactionId,
+    });
+    const linked = snapshot.decisions.find(
+      (decision) =>
+        decision.first_transaction_id === pair.firstTransactionId &&
+        decision.second_transaction_id === pair.secondTransactionId &&
+        decision.state === "linked"
+    );
+    const members = snapshot.members.filter(
+      (member) =>
+        member.first_transaction_id === pair.firstTransactionId &&
+        member.second_transaction_id === pair.secondTransactionId
+    );
+    if (
+      linked === undefined ||
+      members.length !== 2 ||
+      snapshot.retained.length !== 2 ||
+      snapshot.effective.length !== 1
+    ) {
+      return yield* boundaryFailure("changed_reconciliation_snapshot");
+    }
+    return snapshot.review(
+      `Desvincular la Reconciliación entre ${pair.firstTransactionId} y ${pair.secondTransactionId}. ` +
+        `Transacción efectiva antes: ${discloseTransactions(snapshot.effective)}. ` +
+        `Transacciones independientes después: ${discloseTransactions(snapshot.retained)}. ` +
+        "Se conservan ambos originales y sus SourceAttestations; la decisión cambia a mantener separadas."
+    );
+  });
 
 /** Decide one canonical unlink against live authority and the pair's current decision state. */
 export const prepareUnlink = (work: PairWork): Effect.Effect<CanonicalMutationPreparation> =>
@@ -384,6 +429,7 @@ export const prepareUnlink = (work: PairWork): Effect.Effect<CanonicalMutationPr
     if (Option.isNone(state) || state.value.state !== "linked") {
       return refuse({ outcome: "validation_failed", message: unlinkedPairMessage });
     }
+    const oauthReview = yield* reviewUnlink({ ...work, pair });
     const outcome: TransactionOutcome = {
       _tag: "Transaction",
       operation: "transactions.unlinkTransactions",
@@ -399,6 +445,7 @@ export const prepareUnlink = (work: PairWork): Effect.Effect<CanonicalMutationPr
         auditBudget: "shared",
         commitGuards: Option.none(),
         outcome,
+        oauthReview,
         statements: unlinkStatements({ ...work, pair, authority: authority.value }),
       },
     } as const;

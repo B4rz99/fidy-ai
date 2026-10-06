@@ -97,6 +97,7 @@ export const prepareForwardingAddress = Effect.fn(function* (work: CanonicalPrep
   return {
     _tag: "Prepared",
     mutation: {
+      oauthReview: Option.none(),
       requiredScope: callerScope(work.subject),
       guardRefusal: forwardingAddressGuardRefusal,
       auditBudget: "shared",

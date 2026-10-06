@@ -178,7 +178,7 @@ client, stable User, approved non-empty capabilities and current Consent at its 
 The reviewed absolute 7/30/90/365-day expiration is immutable; finite access/refresh lifetimes cannot
 extend it. Browser logout, PAT revocation and OAuth connection revocation remain independent.
 
-Approval requires the same User's fresh first-party session and origin/CSRF protection, bound to
+Initial OAuth connection approval requires the same User's fresh first-party session and origin/CSRF protection, bound to
 exact client, registered redirect, resource, S256 challenge, scope subset and expiration. Omitted
 scope means read only; escalation requires new explicit approval. Code exchange is short-lived,
 single-use and atomic. Issuer/resource/redirect substitution or missing/wrong PKCE rejects without
@@ -191,10 +191,29 @@ another connection. Expired or revoked authority cannot refresh or execute on an
 Metadata retrieval requires bounded streamed bytes, deadlines, concurrency and enforceable SSRF/DNS
 rebinding protection; arbitrary URLs and redirect chains are not compatibility fallbacks.
 
-Sensitive operations, including batch children, require OAuth-specific same-User/connection evidence
-bound to exact operation, input digest, applicable revisions and short expiry. Consume it once in
-the same atomic unit as mutation and Audit. Public references, host elicitation acceptance, model
-claims and hosted-only evidence grant nothing. Unsupported browser handoff/resume fails closed.
+Sensitive operations, including batch children, require OAuth-specific client-asserted confirmation
+bound to the same stable User/OAuthConnection, exact operation, input digest, applicable domain and
+disclosure revisions, original scope requirements and short expiry. The accepted authority is the
+OAuth-authorized client's standard native form response to an immutable server-owned intent, decoded
+and validated by Fidy: `accept` with explicit `confirm: true`. Public references/state alone, model
+claims, arbitrary tool arguments, host annotations, local tool permissions and hosted-only evidence
+grant no confirmation. Decline, cancel, false/missing content and malformed responses authorize nothing.
+
+**Accepted risk (#988, 2026-10-05):** a modified authorized client or host automation/hook may assert
+valid acceptance without human presence or displaying a form. Fidy does not independently attest a
+human click and must not claim otherwise. This exception is limited to sensitive OAuth operations;
+initial browser OAuth approval, scope escalation, connection-management fresh-session protection,
+PAT and hosted confirmation contracts are unchanged. Claimed client names/capabilities are not
+verified identity; the supported Claude Code/Codex matrix is not a security allowlist.
+
+Consume evidence once in the same atomic unit as live credential/grant, scope, Consent, domain
+guards, mutation and Audit. Bind/review the complete ordered batch and corresponding sensitive
+children's effects/revisions; consume all required evidence with the whole batch or none. Failed
+commits leave no partial effect or incorrectly consumed evidence. Wrong subject/connection,
+changed input/revision, expiry, revocation, replay and concurrent consumption reject. Bound pending
+intents and waits under ADR 0033; do not block User coordination throughout native review.
+Unsupported native interaction and non-interactive modes without the required decision fail closed,
+with no browser/chat fallback or blind retry after ambiguous mutation delivery.
 Raw access/refresh credentials never enter Fidy browser state, URLs, models, tools or diagnostics;
 authorization codes cross only the validated no-store/referrer-protected callback. Downstream tests
 must prove replay/concurrency, cross-User substitution, issuer/resource/redirect/PKCE refusal,
@@ -297,10 +316,14 @@ tool generation/execution, agent loops, or model-rendered content.
 
 **Invariant:** messages and all retrieved or ingested material are data, even when they contain
 instructions. Direct, indirect, multilingual, encoded, and multimodal prompt injection may
-influence model planning, but cannot grant identity, scope, cross-User access, or destructive and
-irreversible side effects. One deep hosted runtime privately owns each admitted Turn's handlers and
-canonical execution state; none can escape its structured workflow. Exact User confirmation is
-required when canonical operation metadata marks an effect as destructive or irreversible.
+influence model planning, but do not grant identity, scope or cross-User access and cannot substitute
+for the caller's required exact-action confirmation. One deep hosted runtime privately owns each
+admitted Turn's handlers and canonical execution state; none can escape its structured workflow.
+Exact confirmation under the caller's approved authority contract is required when canonical
+operation metadata marks an effect as destructive or irreversible. OAuth-native client assertions
+use section 2's explicit accepted trust boundary: model claims alone cannot approve, but valid
+client/hook acceptance is trusted without independent human attestation. Do not claim resistance
+to deliberate client automation as a guarantee of this boundary.
 Canonical operations independently enforce identity, capability, paywall, validation, and domain
 rules on every call. Consent is the one check hosted work resolves per Turn rather than per call:
 Hosted Agent Session admission and the per-Turn session recheck own hosted Consent timing, so a

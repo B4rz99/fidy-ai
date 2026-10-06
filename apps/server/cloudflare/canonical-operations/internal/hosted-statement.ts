@@ -78,6 +78,7 @@ export const executeHostedStatementCall = ({
       current,
       mutations: [preparation.mutation],
       hostedFence: Option.some(fence),
+      oauthConfirmation: Option.none(),
     });
     if (committed._tag !== "Committed") return transactionUnavailable();
     const value = committed.values[0];

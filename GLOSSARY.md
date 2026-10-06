@@ -245,9 +245,10 @@ other User-owned agents, without becoming a PAT or inheriting WebSession or host
 _Avoid_: Hosted agent, web caller, PAT caller (for OAuth authority).
 
 **OAuthOperationConfirmation**:
-Single-use first-party User evidence bound to one OAuthConnection, exact canonical operation and
-inputs, applicable revisions and a short expiry. It is consumed with the protected mutation in its
-atomic unit. A public handoff reference, model claim or host annotation is not confirmation authority.
+Single-use client-asserted approval bound to one OAuthConnection, exact canonical operation and
+inputs, applicable revisions and a short expiry, consumed with the protected mutation in its atomic
+unit. It trusts the authorized client's native response, not independent human presence, a public
+reference, model claim or host annotation.
 _Avoid_: Hosted confirmation, approval link (as a credential), model confirmation.
 
 **PATPairing**:

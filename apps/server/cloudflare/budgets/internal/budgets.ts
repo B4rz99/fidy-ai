@@ -2,12 +2,15 @@ import type { BudgetOutcome } from "../contract";
 import { CategoryId } from "../../../src/core/categories/contract";
 import { prepareCategoryReference, requireCategory } from "../../categories/operations";
 import {
+  Budget,
   BudgetId,
   type CreateBudgetInput,
   type UpdateBudgetInput,
 } from "../../../src/core/budgets/contract";
 import { encodeMoneyAmount } from "../../../src/core/_shared/money";
-import { DateTime, Effect, Option } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
+import type { OAuthMutationReview } from "../../oauth-confirmation/contract";
+import { oauthMutationReview } from "../../oauth-confirmation/operations";
 import {
   prepareAuthorizedAuditCall,
   prepareBrowserAuditBudgetGuard,
@@ -153,15 +156,18 @@ const statements = ({
   outcome,
   write,
   current,
+  oauthReview,
 }: Readonly<{
   db: D1Database;
   subject: TransactionCaller;
   outcome: BudgetOutcome;
   write: D1PreparedStatement;
   current: number;
+  oauthReview: Option.Option<OAuthMutationReview>;
 }>): CanonicalMutationPreparation => ({
   _tag: "Prepared",
   mutation: {
+    oauthReview,
     requiredScope: callerScope(subject),
     outcome: budgetOutcome(outcome),
     auditBudget: isPATCaller(subject) ? "shared" : "owner",
@@ -326,6 +332,7 @@ export const prepareCreateBudget = ({
       subject,
       current,
       outcome: { _tag: "Budget", operation: "budgets.createBudget", budgetId: id },
+      oauthReview: Option.none(),
       write: prepareCategoryReference({
         db,
         categoryId: payload.categoryId,
@@ -433,9 +440,47 @@ export const prepareUpdateBudget = ({
       subject,
       current,
       outcome: { _tag: "Budget", operation: "budgets.updateBudget", budgetId: id },
+      oauthReview: yield* reviewBudget({
+        db,
+        userId: subject.userId,
+        budget: existing.value,
+        action: "Cambiar",
+      }),
       write: updateBudgetStatement({ db, subject, current, id, payload }),
     });
   }).pipe(Effect.orElseSucceed(failedPreparation));
+
+const reviewBudget = (
+  input: Readonly<{
+    db: D1Database;
+    userId: string;
+    budget: Budget;
+    action: "Cambiar" | "Eliminar";
+  }>
+): Effect.Effect<Option.Option<OAuthMutationReview>, Schema.SchemaError> =>
+  Schema.encodeEffect(Schema.fromJsonString(Schema.toCodecJson(Budget)))(input.budget).pipe(
+    Effect.map((revision) =>
+      Option.some(
+        oauthMutationReview({
+          db: input.db,
+          effect: `${input.action} el presupuesto ${input.budget.id}, categoría ${input.budget.categoryId}, límite actual ${encodeMoneyAmount(input.budget.cap.amount)} ${input.budget.cap.currency}.`,
+          revision,
+          guard: {
+            sql: "SELECT 1 FROM budgets WHERE user_id = ? AND id = ? AND category_id = ? AND currency = ? AND cap = ? AND created_at = ? AND updated_at = ?",
+            params: [
+              input.userId,
+              input.budget.id,
+              input.budget.categoryId,
+              input.budget.cap.currency,
+              encodeMoneyAmount(input.budget.cap.amount),
+              DateTime.formatIso(input.budget.createdAt),
+              DateTime.formatIso(input.budget.updatedAt),
+            ],
+          },
+        })
+      )
+    )
+  );
 
 /** Prepare removal of only a caller-owned Budget and its operational monthly marks. */
 export const prepareDeleteBudget = ({
@@ -469,6 +514,12 @@ export const prepareDeleteBudget = ({
       subject,
       current,
       outcome: { _tag: "Budget", operation: "budgets.deleteBudget", budgetId: id },
+      oauthReview: yield* reviewBudget({
+        db,
+        userId: subject.userId,
+        budget: existing.value,
+        action: "Eliminar",
+      }),
       write: db
         .prepare(`DELETE FROM budgets WHERE user_id = ? AND id = ?
         AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)

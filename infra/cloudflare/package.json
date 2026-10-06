@@ -23,6 +23,6 @@
     "alchemy": "2.0.0-beta.80",
     "typescript": "7.0.2",
     "vitest": "5.0.2",
-    "wrangler": "4.143.0"
+    "wrangler": "4.143.1"
   }
 }

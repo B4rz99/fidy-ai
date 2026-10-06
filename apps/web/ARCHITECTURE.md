@@ -105,12 +105,15 @@ to restart from the agent.
 
 `/settings/agents` lists server-derived connection identity, unverified name, approved Spanish permissions, absolute expiration, status and up to three retained canonical activity entries. Duplicate names remain separate; pagination belongs to the router and server resources/commands belong to the authentication registry. One/all agent revocation controls are distinct from Tokens personales (PAT) and Cerrar sesión. They explain that committed work is not undone and expired/revoked agents require new approval. Successful commands invalidate the list; unavailable or malformed reads never become empty state, and uncertain commands never report success. Previously loaded data is visibly stale and controls are disabled when refresh fails.
 
-Future sensitive-operation handoff shows a server-owned exact operation/input/revision projection,
-requires same-User fresh authority and origin/CSRF-protected approval, and carries no credential in
-URLs, browser state or model content. A public reference conveys no permission. The server owns
-single-use consumption and resume policy; unsupported host interaction fails closed. Browser-safe
-contracts must derive from the server declaration seam, not a copied OAuth/domain model. The
-compatibility report's synthetic approval is not evidence that this UI or authority exists.
+Sensitive-operation confirmation under #988 uses a server-owned native MCP form in **Claude Code and
+Codex only**, not a web feature or browser handoff. The server owns the exact effect disclosure,
+intent binding and atomic single-use consumption; it trusts the authorized client's response
+without independently attesting human presence, as explicitly accepted in ADR 0033. Unsupported
+native interaction fails closed with no browser/chat fallback. The web continues to own fresh-session
+initial OAuth connection approval and connection settings/revocation; their origin/CSRF protection
+is unchanged. Browser-safe contracts derive from the server declaration seam, not a copied
+OAuth/domain model. Loopback ingress/Core/D1 host evidence does not authorize production
+onboarding, deployment or launch.
 
 ## 4. Static production artifact
 

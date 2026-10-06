@@ -59,6 +59,9 @@ import {
   keywordRuleUnavailable,
 } from "./keyword-rule-outcome";
 
+import { ruleOAuthReview } from "./oauth-review";
+import type { OAuthMutationReview } from "../../oauth-confirmation/contract";
+
 const HTTP_OK = 200;
 // The audit closes the list unit, so the rule rows sit one before it.
 const auditFromEnd = -2;
@@ -139,6 +142,26 @@ export const keywordRuleIdFromPath = (request: Request): Option.Option<KeywordRu
 /** One keyword-rule dependency failure the owner's prepare seams classify as unavailable. */
 class KeywordRuleBoundaryFailure extends Data.TaggedError("KeywordRuleBoundaryFailure")<{}> {}
 
+const oauthWriteAudit = (
+  input: Readonly<{
+    db: D1Database;
+    subject: OAuthCaller;
+    operation: KeywordRuleOperation;
+    current: number;
+  }>
+): D1PreparedStatement =>
+  prepareOwnedStatement({
+    db: input.db,
+    statement: recordAuthorizedCall({
+      authority: callerAuthority(input),
+      operation: input.operation,
+      id: uuid(),
+      current: input.current,
+      outcome: "accepted",
+      afterOwnerWrite: true,
+    }),
+  });
+
 /** The guarded rule change and its live-authority validation Audit, in the unit's own order. */
 const writeStatements = ({
   db,
@@ -154,25 +177,17 @@ const writeStatements = ({
   current: number;
 }>): ReadonlyArray<D1PreparedStatement> => {
   if (isOAuthCaller(subject)) {
-    return [
-      statement,
-      prepareOwnedStatement({
-        db,
-        statement: recordAuthorizedCall({
-          authority: callerAuthority({ subject, current }),
-          operation,
-          id: uuid(),
-          current,
-          outcome: "accepted",
-          afterOwnerWrite: true,
-        }),
-      }),
-    ];
+    return [statement, oauthWriteAudit({ db, subject, operation, current })];
   }
   const pat = isPATCaller(subject);
   return [
     ...(pat
-      ? [prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) })]
+      ? [
+          prepareOwnedStatement({
+            db,
+            statement: recordLivePATUse({ subject, current }),
+          }),
+        ]
       : []),
     statement,
     prepareOwnedStatement({
@@ -188,7 +203,12 @@ const writeStatements = ({
               afterOwnerWrite: true,
             },
           })
-        : recordBrowserKeywordRuleWork({ subject, operation, id: uuid(), current }),
+        : recordBrowserKeywordRuleWork({
+            subject,
+            operation,
+            id: uuid(),
+            current,
+          }),
     }),
   ];
 };
@@ -202,9 +222,13 @@ type RuleWrite = Readonly<{
 }>;
 
 /** The guarded rule change and its live-authority audit as one prepared canonical mutation. */
-const preparedRuleWrite = (write: RuleWrite): CanonicalMutationPreparation => ({
+const preparedRuleWrite = (
+  write: RuleWrite,
+  oauthReview: Option.Option<OAuthMutationReview>
+): CanonicalMutationPreparation => ({
   _tag: "Prepared",
   mutation: {
+    oauthReview,
     requiredScope: callerScope(write.subject),
     guardRefusal: keywordRuleGuardFor(write.outcome),
     outcome: keywordRuleOutcome(write.outcome),
@@ -213,12 +237,14 @@ const preparedRuleWrite = (write: RuleWrite): CanonicalMutationPreparation => ({
       write.outcome.operation === "categories.createKeywordRule"
         ? Option.some(({ db, userId, index, operation }) => [
             db
-              .prepare(`INSERT INTO canonical_child_guard
+              .prepare(
+                `INSERT INTO canonical_child_guard
           (child_index,operation,accepted,capacity_ok)
           SELECT ?,?,1,CASE WHEN (SELECT count(*) FROM keyword_rules WHERE user_id = ?) < ?
             THEN 1 ELSE 0 END
           ON CONFLICT(child_index) DO UPDATE SET operation = excluded.operation,
-            accepted = excluded.accepted, capacity_ok = excluded.capacity_ok`)
+            accepted = excluded.accepted, capacity_ok = excluded.capacity_ok`
+              )
               .bind(index, operation, userId, maximumKeywordRulesPerUser),
           ])
         : Option.none(),
@@ -279,7 +305,11 @@ const prepareRuleWrite = (
         keywordRuleRefusal({ failure: conflict.value, subject: write.subject })
       );
     }
-    return preparedRuleWrite(write);
+    const review = yield* ruleOAuthReview(write).pipe(Effect.option);
+    return Option.match(review, {
+      onNone: unavailablePreparation,
+      onSome: (value) => preparedRuleWrite(write, value),
+    });
   });
 
 const isoTimestamp = (current: number): string => DateTime.formatIso(DateTime.makeUnsafe(current));
@@ -381,10 +411,18 @@ export const prepareDeleteKeywordRule = ({
   return prepareRuleWrite({
     db,
     subject,
-    outcome: { _tag: "KeywordRule", operation: "categories.deleteKeywordRule", ruleId },
+    outcome: {
+      _tag: "KeywordRule",
+      operation: "categories.deleteKeywordRule",
+      ruleId,
+    },
     statement: prepareOwnedStatement({
       db,
-      statement: removeKeywordRule({ id: ruleId, userId: subject.userId, authority }),
+      statement: removeKeywordRule({
+        id: ruleId,
+        userId: subject.userId,
+        authority,
+      }),
     }),
     current,
   }).pipe(Effect.orElseSucceed(failedPreparation));
@@ -403,7 +441,12 @@ const listStatements = ({
   const pat = isPATCaller(subject);
   return [
     ...(pat
-      ? [prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) })]
+      ? [
+          prepareOwnedStatement({
+            db,
+            statement: recordLivePATUse({ subject, current }),
+          }),
+        ]
       : []),
     prepareOwnedStatement({
       db,
@@ -460,7 +503,10 @@ const listAudit = (
 const refusedWork = ({
   db,
   subject,
-}: Readonly<{ db: D1Database; subject: QueryCaller }>): Effect.Effect<Response> =>
+}: Readonly<{
+  db: D1Database;
+  subject: QueryCaller;
+}>): Effect.Effect<Response> =>
   Effect.tryPromise(() => refusedTransactionWork({ db, subject })).pipe(
     Effect.orElseSucceed(keywordRuleUnavailable)
   );
@@ -469,7 +515,10 @@ const refusedWork = ({
 export const listOwnKeywordRules = ({
   db,
   subject,
-}: Readonly<{ db: D1Database; subject: QueryCaller }>): Effect.Effect<Response> =>
+}: Readonly<{
+  db: D1Database;
+  subject: QueryCaller;
+}>): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const current = DateTime.toEpochMillis(yield* DateTime.now);
     const statements = listStatements({ db, subject, current });

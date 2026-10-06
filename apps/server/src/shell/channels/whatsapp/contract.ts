@@ -4,6 +4,7 @@ import {
   type Effect,
   type Array as EffectArray,
   type Option,
+  type Redacted,
   Schema,
   Struct,
 } from "effect";
@@ -364,3 +365,12 @@ export type WhatsAppHostedLifecycleEvidence = Readonly<{
     | Readonly<{ outcome: "sent" | "delivered" }>
     | Readonly<{ outcome: "failed"; reason: DisclosureDeliveryFailureReason }>
   );
+
+/** Exact provider bytes and receipt context for authenticated delivery evidence. */
+export type WhatsAppLifecycleAuthentication = Readonly<{
+  rawBody: Uint8Array;
+  secret: Redacted.Redacted<string>;
+  signature: string;
+  eventName: string;
+  receivedAt: DateTime.Utc;
+}>;

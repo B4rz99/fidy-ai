@@ -1,26 +1,14 @@
-import type { BudgetQueryOperation } from "../contract";
+import { type BudgetQueryOperation } from "../contract";
 import {
-  Budget,
+  type Budget,
   BudgetId,
   BudgetStatusQueryParameters,
-  BudgetStatusReport,
+  type BudgetStatusReport,
 } from "../../../src/core/budgets/contract";
 import { Money } from "../../../src/core/_shared/money";
-import {
-  calculateBudgetStatus,
-  deriveCurrentBudgetMonth,
-  sumBudgetContributions,
-} from "../../../src/core/budgets/operations";
+import { sumBudgetContributions } from "../../../src/core/budgets/operations";
 import { BigDecimal, DateTime, Effect, Option, Ref, Schema } from "effect";
-import {
-  type QueryCaller,
-  transactionFailure,
-  transactionNoStore,
-  transactionUnavailable,
-} from "../../canonical-work/operations";
 import { readBudgetContributions } from "../../transactions/operations";
-import { budgetFromRow } from "./budget-row";
-import { recordBudgetCall } from "./budget-audit";
 import {
   type BudgetProgress,
   type BudgetProgressKey,
@@ -29,43 +17,7 @@ import {
   findBudgetRevision,
 } from "./budget-progress";
 
-const maximumBudgetCount = 128;
-const maximumReportPages = 8;
-
-const respond = <A>(schema: Schema.Codec<A, Schema.Json>, data: A): Response =>
-  Response.json(
-    { data: Schema.encodeSync(schema)(data), next: [] },
-    { headers: transactionNoStore }
-  );
-const invalid = (): Response =>
-  transactionFailure({ code: "validation_failed", status: 400, message: "Invalid Budget query." });
-const missing = (): Response =>
-  transactionFailure({ code: "not_found", status: 404, message: "Budget unavailable." });
-
-/** Read a bounded deterministic list; an undecodable or excess row fails closed. */
-export const listOwnedBudgets = ({
-  db,
-  userId,
-}: Readonly<{ db: D1Database; userId: string }>): Effect.Effect<
-  Option.Option<ReadonlyArray<Budget>>
-> =>
-  Effect.gen(function* () {
-    const result = yield* Effect.tryPromise(() =>
-      db
-        .prepare(`SELECT id, category_id, currency, cap, created_at, updated_at
-      FROM budgets WHERE user_id = ? ORDER BY currency, category_id LIMIT ${maximumBudgetCount + 1}`)
-        .bind(userId)
-        .all()
-    );
-    if (result.results.length > maximumBudgetCount) return Option.none<ReadonlyArray<Budget>>();
-    const budgets: Array<Budget> = [];
-    for (const raw of result.results) {
-      budgets.push(yield* budgetFromRow(raw));
-    }
-    return Option.some(budgets);
-  }).pipe(Effect.orElseSucceed(() => Option.none()));
-
-const monthlySpent = ({
+export const monthlySpent = ({
   db,
   userId,
   budget,
@@ -145,41 +97,6 @@ const advanceMonthlyPage = ({
       : Option.none<BudgetProgress>();
   });
 
-/** The same exact effective-Transaction totals every caller and latch decision uses. */
-export const currentBudgetReport = ({
-  db,
-  userId,
-  query,
-  now,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  query: typeof BudgetStatusQueryParameters.Type;
-  now: DateTime.Utc;
-}>): Effect.Effect<Option.Option<BudgetStatusReport>> =>
-  Effect.gen(function* () {
-    const period = deriveCurrentBudgetMonth({
-      now,
-      timeZone: query.timeZone,
-    });
-    const budgets = yield* listOwnedBudgets({ db, userId });
-    if (Option.isNone(budgets)) return Option.none<BudgetStatusReport>();
-    const selected = budgets.value.filter(
-      (budget) =>
-        (query.categoryId === undefined || budget.categoryId === query.categoryId) &&
-        (query.currency === undefined || budget.cap.currency === query.currency)
-    );
-    if (selected.length === 0) return Option.some({ period, statuses: [] });
-    const pageQuota = yield* Ref.make(maximumReportPages);
-    const statuses: Array<BudgetStatusReport["statuses"][number]> = [];
-    for (const budget of selected) {
-      const spent = yield* monthlySpent({ db, userId, budget, period, pageQuota });
-      if (Option.isNone(spent)) return Option.none<BudgetStatusReport>();
-      statuses.push(yield* calculateBudgetStatus({ budget, spent: spent.value, period }));
-    }
-    return Option.some({ period, statuses });
-  }).pipe(Effect.orElseSucceed(() => Option.none()));
-
 const statusParameters = (url: URL): Option.Option<typeof BudgetStatusQueryParameters.Type> => {
   const keys = [...url.searchParams.keys()];
   if (
@@ -193,10 +110,10 @@ const statusParameters = (url: URL): Option.Option<typeof BudgetStatusQueryParam
   );
 };
 
-const budgetParameters = (
-  operation: BudgetQueryOperation,
-  url: URL
-): Option.Option<{
+export const budgetParameters = ({
+  operation,
+  url,
+}: Readonly<{ operation: BudgetQueryOperation; url: URL }>): Option.Option<{
   id: Option.Option<BudgetId>;
   query: Option.Option<typeof BudgetStatusQueryParameters.Type>;
 }> => {
@@ -215,79 +132,3 @@ const budgetParameters = (
     query: Option.some(query),
   }));
 };
-
-const readAuthorizedBudget = ({
-  db,
-  subject,
-  operation,
-  id,
-  query,
-  now,
-}: Readonly<{
-  db: D1Database;
-  subject: QueryCaller;
-  operation: BudgetQueryOperation;
-  id: Option.Option<BudgetId>;
-  query: Option.Option<typeof BudgetStatusQueryParameters.Type>;
-  now: DateTime.Utc;
-}>): Effect.Effect<Response> =>
-  Effect.gen(function* () {
-    if (operation === "budgets.getBudget") {
-      const raw = yield* Effect.tryPromise(() =>
-        db
-          .prepare(`SELECT id, category_id, currency, cap, created_at, updated_at
-      FROM budgets WHERE user_id = ? AND id = ?`)
-          .bind(subject.userId, Option.getOrThrow(id))
-          .first()
-      );
-      if (raw === null) return missing();
-      const found = yield* budgetFromRow(raw);
-      return respond(Schema.toCodecJson(Budget), found);
-    }
-    if (operation === "budgets.listBudgets") {
-      const all = yield* listOwnedBudgets({ db, userId: subject.userId });
-      return Option.isSome(all)
-        ? respond(Schema.toCodecJson(Schema.Array(Budget)), all.value)
-        : transactionUnavailable();
-    }
-    const report = yield* currentBudgetReport({
-      db,
-      userId: subject.userId,
-      query: Option.getOrThrow(query),
-      now,
-    });
-    return Option.isSome(report)
-      ? respond(Schema.toCodecJson(BudgetStatusReport), report.value)
-      : transactionUnavailable();
-  }).pipe(Effect.orElseSucceed(transactionUnavailable));
-
-/** Execute the three canonical Budget queries with one explicit stable User and live authority. */
-export const browseBudgets = ({
-  db,
-  subject,
-  request,
-  operation,
-}: Readonly<{
-  db: D1Database;
-  subject: QueryCaller;
-  request: Request;
-  operation: BudgetQueryOperation;
-}>): Effect.Effect<Response> =>
-  Effect.gen(function* () {
-    const now = yield* DateTime.now;
-    const parsed = budgetParameters(operation, new URL(request.url));
-    const outcome = Option.isSome(parsed) ? "accepted" : "rejected";
-    if (
-      (yield* recordBudgetCall({
-        db,
-        subject,
-        operation,
-        outcome,
-        current: DateTime.toEpochMillis(now),
-      })) !== "recorded"
-    ) {
-      return transactionUnavailable();
-    }
-    if (Option.isNone(parsed)) return operation === "budgets.getBudget" ? missing() : invalid();
-    return yield* readAuthorizedBudget({ db, subject, operation, now, ...parsed.value });
-  }).pipe(Effect.orElseSucceed(transactionUnavailable));

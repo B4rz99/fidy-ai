@@ -1,5 +1,4 @@
 import { type UserContext, UserId } from "../../../src/core/identity/contract";
-import { readUserContext } from "../../identity/user-context/operations";
 import {
   BudgetCrossing,
   BudgetId,
@@ -8,7 +7,6 @@ import {
 } from "../../../src/core/budgets/contract";
 import { advanceBudgetLatch } from "../../../src/core/budgets/operations";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
-import { currentBudgetReport } from "./budget-queries";
 import { currentProactivityGrantQuery } from "../../consent/operations";
 import { newId } from "../../secret-material/operations";
 
@@ -26,9 +24,6 @@ const Marks = Schema.Struct({
   reached_80: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1 })),
   reached_100: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1 })),
 });
-// One period per request keeps the aggregate report and latch work independent of backlog size.
-const maximumPendingWork = 1;
-const PendingWork = Schema.Struct({ occurred_at: Schema.String, version: Schema.Int });
 
 const latchFor = (status: BudgetStatus, marks: typeof Marks.Type): BudgetMonthLatch => {
   const budgetId = BudgetId.make(status.budget.id);
@@ -94,7 +89,7 @@ const encodeCrossings = (
   );
 
 /** Commit monotone threshold evidence and at most one pending occurrence for each threshold. */
-const reconcileStatus = ({
+export const reconcileStatus = ({
   db,
   userId,
   context,
@@ -153,80 +148,4 @@ const reconcileStatus = ({
         .bind(userId, groupId, detectedAt.epochMilliseconds, userId, groupId),
     ];
     return yield* Effect.tryPromise(() => db.batch(writes)).pipe(Effect.as(true));
-  }).pipe(Effect.orElseSucceed(() => false));
-
-const reconcilePendingPeriod = ({
-  db,
-  userId,
-  context,
-  now,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  context: UserContext;
-  now: DateTime.Utc;
-}>): Effect.Effect<boolean> =>
-  Effect.gen(function* () {
-    const report = yield* currentBudgetReport({
-      db,
-      userId,
-      query: { timeZone: context.timeZone },
-      now,
-    });
-    if (Option.isNone(report)) return false;
-    for (const status of report.value.statuses) {
-      if (!(yield* reconcileStatus({ db, userId, context, status }))) return false;
-    }
-    return true;
-  });
-
-/**
- * Consume durable work written atomically by D1 movement/Budget triggers. Work for a backdated
- * correction uses its own zoned month, not the request's current month. The versioned removal
- * leaves a concurrent writer's work pending even if it arrives during an earlier drain.
- */
-export const reconcileBudgetLatches = ({
-  db,
-  userId,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-}>): Effect.Effect<boolean> =>
-  Effect.gen(function* () {
-    const subject = yield* Schema.decodeEffect(UserId)(userId);
-    const context = yield* readUserContext({ db, userId: subject, authority: Option.none() });
-    if (Option.isNone(context)) return false;
-    const pending = yield* Effect.tryPromise(() =>
-      db
-        .prepare(`SELECT occurred_at, version
-    FROM budget_reconciliation_work WHERE user_id = ? ORDER BY occurred_at LIMIT ${maximumPendingWork}`)
-        .bind(userId)
-        .all()
-    );
-    for (const row of pending.results) {
-      const item = Schema.decodeUnknownOption(PendingWork)(row);
-      if (Option.isNone(item)) return false;
-      const instant = DateTime.make(item.value.occurred_at);
-      if (Option.isNone(instant)) return false;
-      if (
-        !(yield* reconcilePendingPeriod({ db, userId, context: context.value, now: instant.value }))
-      ) {
-        return false;
-      }
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(`DELETE FROM budget_reconciliation_work
-      WHERE user_id = ? AND occurred_at = ? AND version = ?`)
-          .bind(userId, item.value.occurred_at, item.value.version)
-          .run()
-      );
-    }
-    // A partially drained backlog must not allow a later correction to erase an unobserved peak.
-    const remaining = yield* Effect.tryPromise(() =>
-      db
-        .prepare("SELECT 1 FROM budget_reconciliation_work WHERE user_id = ? LIMIT 1")
-        .bind(userId)
-        .first()
-    );
-    return remaining === null;
   }).pipe(Effect.orElseSucceed(() => false));

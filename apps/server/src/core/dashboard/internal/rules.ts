@@ -1,4 +1,4 @@
-import { collectLayoutWidgets } from "./layout";
+import { layoutLeaves } from "./layout";
 import { Effect, BigInt as EffectBigInt, Option, Schema, SchemaIssue } from "effect";
 import {
   type Axis,
@@ -53,7 +53,8 @@ const toInvalidDashboardResult = (error: Schema.SchemaError): InvalidDashboardRe
 // Only Type-side checks need re-proving after an edit, so this decodes the Type
 // schema rather than round-tripping through the encoded form. `errors: "all"`
 // is what makes the API's "correct every reported field" instruction true.
-const revalidateDocument = (
+/** Re-prove all decoded document invariants and return field issues for the complete invalid result. */
+export const revalidateDocument = (
   candidate: Readonly<DashboardDocument>
 ): Effect.Effect<DashboardDocument, InvalidDashboardResult> =>
   Schema.decodeEffect(Schema.toType(DashboardDocument), { errors: "all" })(candidate).pipe(
@@ -316,7 +317,8 @@ const removeSplitWidget = (
   return Option.none();
 };
 
-const applyRemove = (
+/** Remove one existing Widget and collapse its empty region; reject removing the final Widget. */
+export const applyRemove = (
   input: Readonly<{
     readonly document: DashboardDocument;
     readonly widgetId: WidgetId;
@@ -337,11 +339,16 @@ type DuplicatePolicy = "reject" | "allow";
 
 const duplicatePolicies = new Set<DuplicatePolicy>(Array.of("reject"));
 
-const applyAdd = (
-  document: Readonly<DashboardDocument>,
-  edit: Readonly<Extract<DashboardEdit, { readonly op: "add-widget" }>>,
-  duplicatePolicy: DuplicatePolicy = "reject"
-): Effect.Effect<DashboardDocument, DashboardFailure> => {
+/** Add a validated Widget at the decoded placement; reject duplicate identity unless moving the same Widget. */
+export const applyAdd = ({
+  document,
+  edit,
+  duplicatePolicy,
+}: Readonly<{
+  document: Readonly<DashboardDocument>;
+  edit: Readonly<Extract<DashboardEdit, { readonly op: "add-widget" }>>;
+  duplicatePolicy: DuplicatePolicy;
+}>): Effect.Effect<DashboardDocument, DashboardFailure> => {
   const shouldRejectDuplicate = duplicatePolicies.has(duplicatePolicy);
   if (typeof edit.at === "string") {
     if (shouldRejectDuplicate && hasLayoutWidget(document.layout, edit.widget.id)) {
@@ -391,10 +398,14 @@ const replaceWidget = (
   return Option.none();
 };
 
-const applyUpdate = (
-  document: Readonly<DashboardDocument>,
-  widget: Readonly<Widget>
-): Effect.Effect<DashboardDocument, DashboardFailure> => {
+/** Replace one existing Widget while preserving its position; reject absence or an invalid complete document. */
+export const applyUpdate = ({
+  document,
+  widget,
+}: Readonly<{ document: Readonly<DashboardDocument>; widget: Readonly<Widget> }>): Effect.Effect<
+  DashboardDocument,
+  DashboardFailure
+> => {
   const layout = replaceWidget(document.layout, widget);
   return Option.isSome(layout)
     ? revalidateDocument({ ...document, layout: layout.value })
@@ -405,7 +416,7 @@ const regionMatches = (
   node: Readonly<LayoutNode>,
   widgetIds: Readonly<LayoutRegionSelector>
 ): boolean => {
-  const regionWidgetIds = collectLayoutWidgets(node).map(({ id }) => id);
+  const regionWidgetIds = layoutLeaves(node).map(({ widget }) => widget.id);
   return (
     regionWidgetIds.length === widgetIds.length &&
     regionWidgetIds.every((widgetId, index) => widgetId === widgetIds[index])
@@ -493,10 +504,14 @@ const resizeResult = (
     onSome: (layout) => revalidateDocument({ ...document, layout }),
   });
 
-const applyResize = (
-  document: Readonly<DashboardDocument>,
-  edit: Readonly<Extract<DashboardEdit, { readonly op: "resize-region" }>>
-): Effect.Effect<DashboardDocument, DashboardFailure> =>
+/** Resize an exact child region with validated weights; reject the root or an absent selector. */
+export const applyResize = ({
+  document,
+  edit,
+}: Readonly<{
+  document: Readonly<DashboardDocument>;
+  edit: Readonly<Extract<DashboardEdit, { readonly op: "resize-region" }>>;
+}>): Effect.Effect<DashboardDocument, DashboardFailure> =>
   regionMatches(document.layout, edit.widgetIds)
     ? Effect.fail(new RootRegionResize({ widgetIds: edit.widgetIds }))
     : resizeResult(document, edit);
@@ -507,10 +522,14 @@ const besideWidgetId = (at: Readonly<Placement>): Option.Option<WidgetId> =>
     Option.map((beside: Readonly<BesidePlacement>) => beside.besideWidget)
   );
 
-const applyMove = (
-  document: Readonly<DashboardDocument>,
-  edit: Readonly<Extract<DashboardEdit, { readonly op: "move-widget" }>>
-): Effect.Effect<DashboardDocument, DashboardFailure> => {
+/** Move one existing Widget without changing its identity; reject self placement and invalid complete layouts. */
+export const applyMove = ({
+  document,
+  edit,
+}: Readonly<{
+  document: Readonly<DashboardDocument>;
+  edit: Readonly<Extract<DashboardEdit, { readonly op: "move-widget" }>>;
+}>): Effect.Effect<DashboardDocument, DashboardFailure> => {
   const removal = removeWidget({ node: document.layout, widgetId: edit.widgetId });
   if (Option.isNone(removal)) {
     return Effect.fail(new WidgetNotFound({ widgetId: edit.widgetId, role: "edit-target" }));
@@ -521,15 +540,15 @@ const applyMove = (
   if (Option.isNone(removal.value.layout)) {
     return revalidateDocument(document);
   }
-  return applyAdd(
-    { ...document, layout: removal.value.layout.value },
-    { op: "add-widget", widget: removal.value.widget, at: edit.at },
-    "allow"
-  );
+  return applyAdd({
+    document: { ...document, layout: removal.value.layout.value },
+    edit: { op: "add-widget", widget: removal.value.widget, at: edit.at },
+    duplicatePolicy: "allow",
+  });
 };
 
 const widgetById = (layout: Readonly<LayoutNode>, widgetId: WidgetId): Option.Option<Widget> =>
-  Option.fromUndefinedOr(collectLayoutWidgets(layout).find(({ id }) => id === widgetId));
+  Option.fromUndefinedOr(layoutLeaves(layout).find(({ widget }) => widget.id === widgetId)?.widget);
 
 const replaceSwappedWidgets = (
   layout: Readonly<LayoutNode>,
@@ -555,10 +574,14 @@ const replaceSwappedWidgets = (
   };
 };
 
-const applySwap = (
-  document: Readonly<DashboardDocument>,
-  edit: Readonly<Extract<DashboardEdit, { readonly op: "swap-widgets" }>>
-): Effect.Effect<DashboardDocument, DashboardFailure> => {
+/** Exchange two distinct existing Widgets in place; reject absent targets or an invalid complete document. */
+export const applySwap = ({
+  document,
+  edit,
+}: Readonly<{
+  document: Readonly<DashboardDocument>;
+  edit: Readonly<Extract<DashboardEdit, { readonly op: "swap-widgets" }>>;
+}>): Effect.Effect<DashboardDocument, DashboardFailure> => {
   if (edit.widgetId === edit.withWidgetId) {
     return Effect.fail(new SelfPlacement({ widgetId: edit.widgetId }));
   }
@@ -577,33 +600,3 @@ const applySwap = (
     layout: replaceSwappedWidgets(document.layout, first.value, second.value),
   });
 };
-
-/**
- * Applies one decoded UI-or-agent edit and re-proves the complete result.
- * Fails for absent targets, duplicate or self placement, removing the last Widget, resizing the
- * root region, or any edit whose complete result violates Dashboard invariants.
- */
-export const applyDashboardEdit = (
-  input: Readonly<{
-    readonly document: DashboardDocument;
-    readonly edit: DashboardEdit;
-  }>
-): Effect.Effect<DashboardDocument, DashboardFailure> =>
-  Effect.suspend(() => {
-    switch (input.edit.op) {
-      case "set-title":
-        return revalidateDocument({ ...input.document, title: input.edit.title });
-      case "add-widget":
-        return applyAdd(input.document, input.edit);
-      case "remove-widget":
-        return applyRemove({ document: input.document, widgetId: input.edit.widgetId });
-      case "move-widget":
-        return applyMove(input.document, input.edit);
-      case "swap-widgets":
-        return applySwap(input.document, input.edit);
-      case "resize-region":
-        return applyResize(input.document, input.edit);
-      case "update-widget":
-        return applyUpdate(input.document, input.edit.widget);
-    }
-  });

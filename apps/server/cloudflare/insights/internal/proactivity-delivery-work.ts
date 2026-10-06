@@ -5,7 +5,7 @@ import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { whatsAppAssociationQuery } from "../../../src/shell/identity/operations";
 import { latestWeeklyConsentRejection, prepareConsentAction } from "../../consent/operations";
 import { newId } from "../../secret-material/operations";
-import { InsightUnavailable, WeeklyDeliveryWork, type WeeklyQuestionWork } from "../contract";
+import { InsightUnavailable, ProactivityDeliveryWork, type WeeklyQuestionWork } from "../contract";
 
 import { proactivityStartedDeliveryQuery } from "../../whatsapp/operations";
 
@@ -19,7 +19,7 @@ const recoverProactivity = (
   input: Readonly<{
     db: D1Database;
     userId: UserId;
-    work: Extract<WeeklyDeliveryWork, { kind: "proactivity-delivery" }>;
+    work: Extract<ProactivityDeliveryWork, { kind: "proactivity-delivery" }>;
     now: number;
   }>
 ): Effect.Effect<boolean, InsightUnavailable> =>
@@ -40,6 +40,9 @@ export const expireDeliveryWork = (
 ): Effect.Effect<void, InsightUnavailable> =>
   Effect.tryPromise(() =>
     input.db.batch([
+      input.db.prepare(
+        `UPDATE proactivity_outbox SET state='started' WHERE delivery_id IN (SELECT o.delivery_id FROM proactivity_outbox AS o WHERE o.state='ready' AND EXISTS (SELECT 1 FROM (${startedProactivity.sql}) AS c WHERE c.user_id=o.user_id AND c.delivery_id=o.delivery_id) LIMIT 64)`
+      ),
       input.db
         .prepare(
           `UPDATE proactivity_outbox SET state='expired' WHERE delivery_id IN (SELECT o.delivery_id FROM proactivity_outbox AS o JOIN proactivity_reports AS r ON r.user_id=o.user_id AND r.delivery_id=o.delivery_id WHERE o.state='ready' AND r.expires_at_ms<=? AND NOT EXISTS (SELECT 1 FROM (${startedProactivity.sql}) AS c WHERE c.user_id=o.user_id AND c.delivery_id=o.delivery_id) LIMIT 64)`
@@ -67,7 +70,7 @@ export const expireDeliveryWork = (
   );
 /** Persist a cumulative restart budget under the existing User coordinator; terminalization cannot authorize or repeat a provider send. */
 export const recoverDeliveryWork = (
-  input: Readonly<{ db: D1Database; userId: UserId; work: WeeklyDeliveryWork; now: number }>
+  input: Readonly<{ db: D1Database; userId: UserId; work: ProactivityDeliveryWork; now: number }>
 ): Effect.Effect<boolean, InsightUnavailable> =>
   Effect.gen(function* () {
     if (input.userId !== input.work.userId) return yield* new InsightUnavailable();
@@ -105,7 +108,7 @@ export const discoverDeliveryWork = (
     weeklyEnabled: boolean;
     proactivityEnabled: boolean;
   }>
-): Effect.Effect<ReadonlyArray<WeeklyDeliveryWork>, InsightUnavailable> =>
+): Effect.Effect<ReadonlyArray<ProactivityDeliveryWork>, InsightUnavailable> =>
   Effect.gen(function* () {
     const result = yield* Effect.tryPromise(() =>
       input.db
@@ -123,12 +126,12 @@ export const discoverDeliveryWork = (
         .all()
     );
     return yield* Schema.decodeUnknownEffect(
-      Schema.Array(WeeklyDeliveryWork).check(Schema.isMaxLength(deliveryDiscoveryLimit))
+      Schema.Array(ProactivityDeliveryWork).check(Schema.isMaxLength(deliveryDiscoveryLimit))
     )(result.results);
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 
 const deliveryLocation = (
-  work: WeeklyDeliveryWork
+  work: ProactivityDeliveryWork
 ): Readonly<{
   table: "weekly_summary_outbox" | "weekly_question_intents" | "proactivity_outbox";
   key: "insight_event_id" | "id" | "delivery_id";
@@ -144,7 +147,7 @@ const deliveryLocation = (
   }
 };
 export const markOffered = (
-  input: Readonly<{ db: D1Database; work: WeeklyDeliveryWork; now: number }>
+  input: Readonly<{ db: D1Database; work: ProactivityDeliveryWork; now: number }>
 ): Effect.Effect<void, InsightUnavailable> =>
   Effect.tryPromise(() => {
     const location = deliveryLocation(input.work);
@@ -206,7 +209,7 @@ export const findQuestionOrigin = (
 export const settleDeliveryWork = (
   input: Readonly<{
     db: D1Database;
-    work: WeeklyDeliveryWork;
+    work: ProactivityDeliveryWork;
     state: "started" | "settled" | "expired" | "refused";
   }>
 ): Effect.Effect<void, InsightUnavailable> =>

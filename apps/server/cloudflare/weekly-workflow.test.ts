@@ -2,8 +2,8 @@ import { type WorkflowStep } from "cloudflare:workers";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import {
-  type WeeklyDeliveryWork,
-  type WeeklyEnvironment,
+  type ProactivityDeliveryWork,
+  type ProactivityEnvironment,
   type WeeklyScheduleSnapshot,
 } from "./insights/contract";
 import { UserId, WhatsAppCallerReference } from "../src/core/identity/contract";
@@ -12,6 +12,7 @@ import {
   activateWeeklySummary,
   activateWeeklySummaryForUser,
   makeExecutingWeeklyFixtureStep,
+  proactivityWorkflowHarness,
   seedWeeklySummaryActivity,
   weeklySummaryDatabaseAt,
   weeklySummaryOtherUser,
@@ -19,7 +20,6 @@ import {
   weeklySummaryTestDatabases,
   weeklySummaryTestNow,
   weeklySummaryTestUser,
-  weeklyWorkflowHarness,
   withdrawWeeklyFixtureConsent,
 } from "./weekly-summary.test-fixture";
 
@@ -40,7 +40,7 @@ const workflowInstance: WorkflowInstance = {
   status: (): ReturnType<WorkflowInstance["status"]> => Promise.resolve({ status: "running" }),
 };
 const encode = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
-const configuration = (DB: D1Database): WeeklyEnvironment => ({
+const configuration = (DB: D1Database): ProactivityEnvironment => ({
   DB,
   WEEKLY_SUMMARY_ENABLED: "enabled",
   KAPSO_API_KEY: "test",
@@ -86,7 +86,7 @@ const seedOtherSchedule = (db: D1Database): Effect.Effect<WeeklyScheduleSnapshot
       caller: otherCaller,
     });
   });
-const workflowBinding: Workflow<WeeklyDeliveryWork> = {
+const workflowBinding: Workflow<ProactivityDeliveryWork> = {
   create: unexpected,
   get: unexpected,
   createBatch: unexpected,
@@ -143,20 +143,20 @@ it("Maintenance publishes identity-only work and Queue acknowledgment follows du
       const schedule = yield* activateWeeklySummary({ db, now: weeklySummaryTestNow });
       yield* seedWeeklySummaryActivity({ db, at: "2026-08-04T12:00:00.000Z" });
       vi.spyOn(Date, "now").mockReturnValue(schedule.nextScheduledAt.epochMilliseconds);
-      const work: Array<WeeklyDeliveryWork> = [];
+      const work: Array<ProactivityDeliveryWork> = [];
       const create = vi
-        .fn<Workflow<WeeklyDeliveryWork>["create"]>()
+        .fn<Workflow<ProactivityDeliveryWork>["create"]>()
         .mockResolvedValue(workflowInstance);
       const get = vi
-        .fn<Workflow<WeeklyDeliveryWork>["get"]>()
+        .fn<Workflow<ProactivityDeliveryWork>["get"]>()
         .mockRejectedValue(new Error("No durable instance"));
-      const binding: Workflow<WeeklyDeliveryWork> = {
+      const binding: Workflow<ProactivityDeliveryWork> = {
         create,
         get,
         createBatch: unexpected,
         deleteBatch: unexpected,
       };
-      const send = (message: WeeklyDeliveryWork): Promise<QueueSendResponse> => {
+      const send = (message: ProactivityDeliveryWork): Promise<QueueSendResponse> => {
         work.push(message);
         return Promise.resolve({
           metadata: { metrics: { backlogCount: work.length, backlogBytes: 0 } },
@@ -183,7 +183,7 @@ it("Maintenance publishes identity-only work and Queue acknowledgment follows du
         WEEKLY_DELIVERY_QUEUE: { send },
         WEEKLY_DELIVERY_WORKFLOW: binding,
       };
-      const harness = weeklyWorkflowHarness({
+      const harness = proactivityWorkflowHarness({
         environment,
         userId,
         otherUserIds: [],
@@ -223,7 +223,7 @@ it("native Workflow persists only eligibility results and stops after four defer
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* weeklySummaryDatabaseAt(weeklySummaryTestNow);
-      const harness = weeklyWorkflowHarness({
+      const harness = proactivityWorkflowHarness({
         environment: { DB: db },
         userId,
         otherUserIds: [],
@@ -239,7 +239,7 @@ it("native Workflow persists only eligibility results and stops after four defer
         waitForEvent: unexpected,
       };
       const execute = vi.spyOn(step, "do").mockResolvedValue(deferred);
-      const work: WeeklyDeliveryWork = {
+      const work: ProactivityDeliveryWork = {
         kind: "weekly-question",
         version: 1,
         userId,
@@ -297,21 +297,21 @@ it.each(["weekly-summary", "weekly-question"] as const)(
           .mockRejectedValue(new Error("Forbidden provider IO"));
         vi.stubGlobal("fetch", provider);
         const create = vi
-          .fn<Workflow<WeeklyDeliveryWork>["create"]>()
+          .fn<Workflow<ProactivityDeliveryWork>["create"]>()
           .mockResolvedValue(workflowInstance);
-        const binding: Workflow<WeeklyDeliveryWork> = {
+        const binding: Workflow<ProactivityDeliveryWork> = {
           create,
           get: unexpected,
           createBatch: unexpected,
           deleteBatch: unexpected,
         };
-        const harness = weeklyWorkflowHarness({
+        const harness = proactivityWorkflowHarness({
           environment: configuration(db),
           userId,
           otherUserIds: [weeklySummaryOtherUser],
           unavailableUserIds: [],
         });
-        const work: WeeklyDeliveryWork =
+        const work: ProactivityDeliveryWork =
           kind === "weekly-summary"
             ? {
                 kind,
@@ -373,14 +373,14 @@ it.each(["retention", "generation"])(
         if (failure === "retention") {
           yield* promise(() => db.prepare("DROP TABLE insight_whatsapp_claims").run());
         }
-        const work: Array<WeeklyDeliveryWork> = [];
-        const send = (message: WeeklyDeliveryWork): Promise<QueueSendResponse> => {
+        const work: Array<ProactivityDeliveryWork> = [];
+        const send = (message: ProactivityDeliveryWork): Promise<QueueSendResponse> => {
           work.push(message);
           return Promise.resolve({
             metadata: { metrics: { backlogCount: work.length, backlogBytes: 0 } },
           });
         };
-        const harness = weeklyWorkflowHarness({
+        const harness = proactivityWorkflowHarness({
           environment: {
             ...configuration(db),
             WEEKLY_DELIVERY_QUEUE: { send },
@@ -412,7 +412,7 @@ it.each(["errored", "terminated", "complete"] as const)(
     Effect.runPromise(
       Effect.gen(function* () {
         const db = yield* weeklySummaryDatabaseAt(weeklySummaryTestNow);
-        const harness = weeklyWorkflowHarness({
+        const harness = proactivityWorkflowHarness({
           environment: { DB: db },
           userId,
           otherUserIds: [],
@@ -440,13 +440,13 @@ it.each(["errored", "terminated", "complete"] as const)(
           restart,
           status: () => Promise.resolve({ status }),
         };
-        const binding: Workflow<WeeklyDeliveryWork> = {
+        const binding: Workflow<ProactivityDeliveryWork> = {
           createBatch: unexpected,
           deleteBatch: unexpected,
           create: () => Promise.reject(new Error("Existing Workflow")),
           get: () => Promise.resolve(instance),
         };
-        const work: WeeklyDeliveryWork = {
+        const work: ProactivityDeliveryWork = {
           kind: "weekly-question",
           version: 1,
           userId,
@@ -486,16 +486,16 @@ it("cumulative Workflow restarts terminalize ready work and stop future Maintena
         restart,
         status: () => Promise.resolve({ status: "errored" }),
       };
-      const binding: Workflow<WeeklyDeliveryWork> = {
+      const binding: Workflow<ProactivityDeliveryWork> = {
         create: unexpected,
         get: () => Promise.resolve(instance),
         createBatch: unexpected,
         deleteBatch: unexpected,
       };
       const send = vi
-        .fn<Queue<WeeklyDeliveryWork>["send"]>()
+        .fn<Queue<ProactivityDeliveryWork>["send"]>()
         .mockResolvedValue({ metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } } });
-      const harness = weeklyWorkflowHarness({
+      const harness = proactivityWorkflowHarness({
         environment: {
           ...configuration(db),
           WEEKLY_DELIVERY_QUEUE: { send },
@@ -544,9 +544,9 @@ it("withdrawn expired question purposes terminate without content reads or furth
         DateTime.add(weeklySummaryTestNow, { days: 2 }).epochMilliseconds
       );
       const send = vi
-        .fn<Queue<WeeklyDeliveryWork>["send"]>()
+        .fn<Queue<ProactivityDeliveryWork>["send"]>()
         .mockResolvedValue({ metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } } });
-      const harness = weeklyWorkflowHarness({
+      const harness = proactivityWorkflowHarness({
         environment: {
           ...configuration(db),
           WEEKLY_DELIVERY_QUEUE: { send },
@@ -658,14 +658,14 @@ it("four unavailable due Users do not starve a healthy fifth User's generation",
           .run()
       );
       const clock = vi.spyOn(Date, "now").mockReturnValue(at.epochMilliseconds);
-      const work: Array<WeeklyDeliveryWork> = [];
-      const send = (message: WeeklyDeliveryWork): Promise<QueueSendResponse> => {
+      const work: Array<ProactivityDeliveryWork> = [];
+      const send = (message: ProactivityDeliveryWork): Promise<QueueSendResponse> => {
         work.push(message);
         return Promise.resolve({
           metadata: { metrics: { backlogCount: work.length, backlogBytes: 0 } },
         });
       };
-      const harness = weeklyWorkflowHarness({
+      const harness = proactivityWorkflowHarness({
         environment: {
           ...configuration(db),
           WEEKLY_DELIVERY_QUEUE: { send },

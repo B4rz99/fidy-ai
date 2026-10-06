@@ -22,17 +22,17 @@ import { discoverDueWeeklySchedules, noteWeeklyScheduleEvaluation } from "./oper
 import {
   type DueWeeklySchedule,
   InsightUnavailable,
-  WeeklyActivity,
-  WeeklyActivityResult,
-  WeeklyDeliveryWork,
-  type WeeklyEnvironment,
+  ProactivityActivity,
+  ProactivityActivityResult,
+  ProactivityDeliveryWork,
+  type ProactivityEnvironment,
 } from "./contract";
 import {
   discoverDeliveryWork,
   expireDeliveryWork,
   markOffered,
   recoverDeliveryWork,
-} from "./internal/weekly-work";
+} from "./internal/proactivity-delivery-work";
 import {
   expireWeeklyQuestions,
   sweepInsightChannelEvidence,
@@ -40,13 +40,13 @@ import {
 } from "../whatsapp/operations";
 
 type NativeExecution = Readonly<{
-  environment: WeeklyEnvironment;
+  environment: ProactivityEnvironment;
   userId: UserId;
-  work: WeeklyActivity;
+  work: ProactivityActivity;
   now: DateTime.Utc;
 }>;
 const nativeOutbound = (
-  environment: WeeklyEnvironment
+  environment: ProactivityEnvironment
 ): Effect.Effect<OutboundHttpService, InsightUnavailable, Scope.Scope> =>
   Effect.gen(function* () {
     if (environment.KAPSO_API_KEY === undefined || environment.KAPSO_API_KEY.length === 0) {
@@ -60,8 +60,8 @@ const nativeOutbound = (
   });
 const executeCategory = (
   input: NativeExecution &
-    Readonly<{ work: Extract<WeeklyActivity, { kind: "proactivity-delivery" }> }>
-): Effect.Effect<WeeklyActivityResult, InsightUnavailable, Scope.Scope> =>
+    Readonly<{ work: Extract<ProactivityActivity, { kind: "proactivity-delivery" }> }>
+): Effect.Effect<ProactivityActivityResult, InsightUnavailable, Scope.Scope> =>
   Effect.gen(function* () {
     if (input.environment.PROACTIVITY_ENABLED !== "enabled") return yield* new InsightUnavailable();
     const outboundHttp = yield* nativeOutbound(input.environment);
@@ -79,11 +79,11 @@ const executeScheduledSummary = (
   input: NativeExecution &
     Readonly<{
       work: Exclude<
-        WeeklyActivity,
-        { kind: "weekly-recover" | "proactivity-generate" | "proactivity-delivery" }
+        ProactivityActivity,
+        { kind: "proactivity-recover" | "proactivity-generate" | "proactivity-delivery" }
       >;
     }>
-): Effect.Effect<WeeklyActivityResult, InsightUnavailable, Scope.Scope> =>
+): Effect.Effect<ProactivityActivityResult, InsightUnavailable, Scope.Scope> =>
   Effect.gen(function* () {
     const environment = input.environment;
     if (environment.WEEKLY_SUMMARY_ENABLED !== "enabled") return yield* new InsightUnavailable();
@@ -106,18 +106,18 @@ const executeScheduledSummary = (
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 
 /** Construct approved senders only at the native composition publication. */
-export const executeWeeklyWork = (
+export const executeProactivityWork = (
   input: Readonly<{
-    environment: WeeklyEnvironment;
+    environment: ProactivityEnvironment;
     userId: UserId;
-    work: WeeklyActivity;
+    work: ProactivityActivity;
     now: DateTime.Utc;
   }>
-): Effect.Effect<WeeklyActivityResult, InsightUnavailable> =>
+): Effect.Effect<ProactivityActivityResult, InsightUnavailable> =>
   Effect.scoped(
     Effect.gen(function* () {
       const environment = input.environment;
-      if (input.work.kind === "weekly-recover") {
+      if (input.work.kind === "proactivity-recover") {
         const admitted = yield* recoverDeliveryWork({
           db: environment.DB,
           userId: input.userId,
@@ -138,22 +138,22 @@ export const executeWeeklyWork = (
   ).pipe(Effect.mapError(() => new InsightUnavailable()));
 
 type Coordinator = Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
-type WeeklyBackgroundEnvironment = WeeklyEnvironment &
+type ProactivityBackgroundEnvironment = ProactivityEnvironment &
   Readonly<{ USER_TRANSACTION_COORDINATOR: Coordinator }> &
   Partial<
     Readonly<{
-      WEEKLY_DELIVERY_QUEUE: Pick<Queue<WeeklyDeliveryWork>, "send">;
-      WEEKLY_DELIVERY_WORKFLOW: Workflow<WeeklyDeliveryWork>;
+      WEEKLY_DELIVERY_QUEUE: Pick<Queue<ProactivityDeliveryWork>, "send">;
+      WEEKLY_DELIVERY_WORKFLOW: Workflow<ProactivityDeliveryWork>;
     }>
   >;
 
 const runActivity = (
-  input: Readonly<{ coordinator: Coordinator; work: WeeklyActivity }>
-): Effect.Effect<WeeklyActivityResult, InsightUnavailable> =>
+  input: Readonly<{ coordinator: Coordinator; work: ProactivityActivity }>
+): Effect.Effect<ProactivityActivityResult, InsightUnavailable> =>
   Effect.gen(function* () {
-    const body = yield* Schema.encodeEffect(Schema.fromJsonString(WeeklyActivity))(input.work);
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(ProactivityActivity))(input.work);
     const response = yield* Effect.tryPromise((signal) =>
-      input.coordinator.getByName(input.work.userId).fetch("https://coordinator/weekly-work", {
+      input.coordinator.getByName(input.work.userId).fetch("https://coordinator/proactivity-work", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body,
@@ -161,7 +161,7 @@ const runActivity = (
       })
     );
     if (!response.ok) return yield* new InsightUnavailable();
-    return yield* Schema.decodeUnknownEffect(WeeklyActivityResult)(
+    return yield* Schema.decodeUnknownEffect(ProactivityActivityResult)(
       yield* Effect.tryPromise(() => response.json())
     );
   }).pipe(
@@ -180,11 +180,11 @@ const attemptIndependent = (
 const maximumWeeklyGenerationsPerSweep = 4;
 const attemptGeneration = (
   input: Readonly<{
-    environment: WeeklyBackgroundEnvironment;
+    environment: ProactivityBackgroundEnvironment;
     now: DateTime.Utc;
     schedule: DueWeeklySchedule;
   }>
-): Effect.Effect<WeeklyActivityResult, InsightUnavailable> =>
+): Effect.Effect<ProactivityActivityResult, InsightUnavailable> =>
   Effect.gen(function* () {
     // Discovery-attempt metadata rotates even when the User coordinator or resource admission is unavailable.
     yield* noteWeeklyScheduleEvaluation({
@@ -198,7 +198,7 @@ const attemptGeneration = (
     });
   });
 const generateDueWeeklyWork = (
-  input: Readonly<{ environment: WeeklyBackgroundEnvironment; now: DateTime.Utc }>
+  input: Readonly<{ environment: ProactivityBackgroundEnvironment; now: DateTime.Utc }>
 ): Effect.Effect<void, InsightUnavailable> =>
   Effect.gen(function* () {
     if (input.environment.WEEKLY_SUMMARY_ENABLED !== "enabled") return;
@@ -213,7 +213,7 @@ const generateDueWeeklyWork = (
     );
   });
 const generateDueProactivity = (
-  input: Readonly<{ environment: WeeklyBackgroundEnvironment; now: DateTime.Utc }>
+  input: Readonly<{ environment: ProactivityBackgroundEnvironment; now: DateTime.Utc }>
 ): Effect.Effect<void, InsightUnavailable> =>
   Effect.gen(function* () {
     if (input.environment.PROACTIVITY_ENABLED !== "enabled") return;
@@ -230,11 +230,11 @@ const generateDueProactivity = (
       )
     );
   });
-const publishWeeklyItem = (
+const publishProactivityItem = (
   input: Readonly<{
-    queue: NonNullable<WeeklyBackgroundEnvironment["WEEKLY_DELIVERY_QUEUE"]>;
+    queue: NonNullable<ProactivityBackgroundEnvironment["WEEKLY_DELIVERY_QUEUE"]>;
     db: D1Database;
-    item: WeeklyDeliveryWork;
+    item: ProactivityDeliveryWork;
     now: DateTime.Utc;
   }>
 ): Effect.Effect<void, InsightUnavailable> =>
@@ -242,8 +242,8 @@ const publishWeeklyItem = (
     yield* Effect.tryPromise(() => input.queue.send(input.item, { contentType: "json" }));
     yield* markOffered({ db: input.db, work: input.item, now: input.now.epochMilliseconds });
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
-const publishWeeklyWork = (
-  input: Readonly<{ environment: WeeklyBackgroundEnvironment; now: DateTime.Utc }>
+const publishProactivityWork = (
+  input: Readonly<{ environment: ProactivityBackgroundEnvironment; now: DateTime.Utc }>
 ): Effect.Effect<void, InsightUnavailable> =>
   Effect.gen(function* () {
     const { environment, now } = input;
@@ -264,13 +264,13 @@ const publishWeeklyWork = (
       proactivityEnabled: environment.PROACTIVITY_ENABLED === "enabled",
     });
     yield* attemptIndependent(
-      work.map((item) => publishWeeklyItem({ queue, db: environment.DB, item, now }))
+      work.map((item) => publishProactivityItem({ queue, db: environment.DB, item, now }))
     );
   });
 
 /** Maintenance discovers only bounded identities. All generation and delivery run in the User coordinator; failures never skip unrelated cleanup or publication. */
-export const advanceWeeklyWork = (
-  environment: WeeklyBackgroundEnvironment
+export const advanceProactivityWork = (
+  environment: ProactivityBackgroundEnvironment
 ): Effect.Effect<void, InsightUnavailable> =>
   Effect.gen(function* () {
     const now = yield* DateTime.now;
@@ -281,7 +281,7 @@ export const advanceWeeklyWork = (
       expireDeliveryWork({ db: environment.DB, now: now.epochMilliseconds }),
       generateDueWeeklyWork({ environment, now }),
       generateDueProactivity({ environment, now }),
-      publishWeeklyWork({ environment, now }),
+      publishProactivityWork({ environment, now }),
     ]);
   }).pipe(
     Effect.mapError(() => new InsightUnavailable()),
@@ -289,17 +289,17 @@ export const advanceWeeklyWork = (
   );
 
 /** Queue contents are untrusted hints; Workflow identity deduplication never replaces User-owned guards. */
-export const startWeeklyWorkflow = (
+export const startProactivityWorkflow = (
   input: Readonly<{
     body: unknown;
-    workflow: Option.Option<Workflow<WeeklyDeliveryWork>>;
+    workflow: Option.Option<Workflow<ProactivityDeliveryWork>>;
     coordinator: Coordinator;
   }>
 ): Effect.Effect<void, InsightUnavailable> =>
   Effect.gen(function* () {
     if (Option.isNone(input.workflow)) return yield* new InsightUnavailable();
     const workflow = input.workflow.value;
-    const work = yield* Schema.decodeUnknownEffect(WeeklyDeliveryWork)(input.body);
+    const work = yield* Schema.decodeUnknownEffect(ProactivityDeliveryWork)(input.body);
     const id = `weekly-${work.userId}-${work.kind}-${work.kind === "weekly-summary" ? work.insightEventId : work.id}`;
     const created = yield* Effect.exit(
       Effect.tryPromise(() => workflow.create({ id, params: work }))
@@ -315,7 +315,7 @@ export const startWeeklyWorkflow = (
         // Domain one-shot claims survive Workflow restart: started sends reconcile, never resend.
         const recovery = yield* runActivity({
           coordinator: input.coordinator,
-          work: { kind: "weekly-recover", version: 1, userId: work.userId, work },
+          work: { kind: "proactivity-recover", version: 1, userId: work.userId, work },
         });
         if (recovery._tag === "RecoveryAdmitted") {
           yield* Effect.tryPromise(() => instance.restart());
@@ -325,17 +325,17 @@ export const startWeeklyWorkflow = (
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 
 /** Per-message acknowledgment follows durable Workflow handoff; failures remain eligible for bounded native retries. */
-export const receiveWeeklyWork = (
+export const receiveProactivityWork = (
   input: Readonly<{
     messages: ReadonlyArray<Pick<Message<unknown>, "body" | "ack" | "retry">>;
-    workflow: Option.Option<Workflow<WeeklyDeliveryWork>>;
+    workflow: Option.Option<Workflow<ProactivityDeliveryWork>>;
     coordinator: Coordinator;
   }>
 ): Effect.Effect<void> =>
   Effect.gen(function* () {
     for (const message of input.messages) {
       const outcome = yield* Effect.exit(
-        startWeeklyWorkflow({
+        startProactivityWorkflow({
           body: message.body,
           workflow: input.workflow,
           coordinator: input.coordinator,
@@ -347,15 +347,15 @@ export const receiveWeeklyWork = (
   });
 
 /** Native Workflow persists identities and wake-up instants only; every wake rechecks live User authority. */
-export class WeeklyDeliveryWorkflow extends WorkflowEntrypoint<
-  WeeklyBackgroundEnvironment,
-  WeeklyDeliveryWork
+export class ProactivityDeliveryWorkflow extends WorkflowEntrypoint<
+  ProactivityBackgroundEnvironment,
+  ProactivityDeliveryWork
 > {
-  run(event: WorkflowEvent<WeeklyDeliveryWork>, step: WorkflowStep): Promise<void> {
+  run(event: WorkflowEvent<ProactivityDeliveryWork>, step: WorkflowStep): Promise<void> {
     const coordinator = this.env.USER_TRANSACTION_COORDINATOR;
     return Effect.runPromise(
       Effect.gen(function* () {
-        const work = yield* Schema.decodeEffect(WeeklyDeliveryWork)(event.payload);
+        const work = yield* Schema.decodeEffect(ProactivityDeliveryWork)(event.payload);
         const context = yield* Effect.context<never>();
         const run = Effect.runPromiseWith(context);
         for (let wake = 0; wake < 4; wake += 1) {

@@ -11,8 +11,10 @@ import {
   findProactivityConsentGrant,
   prepareConsentAction,
 } from "../../consent/operations";
-import type { ProactivityConsentContext } from "../../consent/contract";
-import { findInsightRecipient } from "../../whatsapp/operations";
+import type { ProactivityConsentContext, ProactivityConsentOffer } from "../../consent/contract";
+import { findInsightRecipient, proactivityStartedDeliveryQuery } from "../../whatsapp/operations";
+import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
+import type { InsightRecipient } from "../../whatsapp/contract";
 import { newId } from "../../secret-material/operations";
 import { findFirstBudgetOffer, prepareFirstBudgetOffer } from "../../budgets/operations";
 import { InsightUnavailable } from "../contract";
@@ -51,7 +53,7 @@ const RequestRow = Schema.Struct({
   kind: ProactivityOptInKind,
 });
 const offerZone = IanaTimeZone.make("America/Bogota");
-const offerWindowOpen = (now: DateTime.Utc): boolean =>
+export const offerWindowOpen = (now: DateTime.Utc): boolean =>
   decideInsightDelivery({
     now,
     scheduledAt: now,
@@ -59,30 +61,43 @@ const offerWindowOpen = (now: DateTime.Utc): boolean =>
     timeZone: offerZone,
   })._tag === "Ready";
 
+export const recoverableOfferRequests = (now: DateTime.Utc): OwnedStatement => {
+  const started = proactivityStartedDeliveryQuery();
+  return {
+    sql: `SELECT q.id,q.user_id,q.kind,q.created_at_ms,q.last_evaluated_at_ms FROM proactivity_offer_requests AS q WHERE (q.materialized_at_ms IS NULL OR EXISTS (SELECT 1 FROM proactivity_reports AS r WHERE r.user_id=q.user_id AND r.delivery_id=q.delivery_id AND r.expires_at_ms<=? AND NOT EXISTS (SELECT 1 FROM (${started.sql}) AS c WHERE c.user_id=r.user_id AND c.delivery_id=r.delivery_id)))`,
+    params: [now.epochMilliseconds],
+  };
+};
+
+const offerText = (offer: ProactivityConsentOffer, hasGrant: boolean): string =>
+  hasGrant
+    ? `${offer.disclosure.text}\n${offer.revokeChoice}`
+    : `${offer.disclosure.text}\n${offer.acceptChoice}\n${offer.declineChoice}`;
+
+const consentContext = (
+  input: Readonly<{ db: D1Database; userId: UserId; now: DateTime.Utc }>,
+  kind: ProactivityOptInKind,
+  recipient: InsightRecipient
+): ProactivityConsentContext => ({
+  ...input,
+  kind,
+  caller: { businessPortfolioId: recipient.portfolioId, businessScopedUserId: recipient.bsuid },
+});
+
 const materializeOffer = (
   input: Readonly<{ db: D1Database; userId: UserId; now: DateTime.Utc }>,
   request: typeof RequestRow.Type
 ): Effect.Effect<void, InsightUnavailable> =>
   Effect.gen(function* () {
-    if (!offerWindowOpen(input.now)) return;
     const recipient = yield* findInsightRecipient(input);
     if (Option.isNone(recipient)) return;
-    const context = {
-      ...input,
-      kind: request.kind,
-      caller: {
-        businessPortfolioId: recipient.value.portfolioId,
-        businessScopedUserId: recipient.value.bsuid,
-      },
-    };
+    const context = consentContext(input, request.kind, recipient.value);
     const prior = yield* findCurrentProactivityOffer(context);
     const offer = Option.isSome(prior) ? prior : yield* createProactivityConsentOffer(context);
     if (Option.isNone(offer)) return;
     const value = offer.value;
     const grant = yield* findProactivityConsentGrant({ ...input, kind: request.kind });
-    const text = Option.isSome(grant)
-      ? `${value.disclosure.text}\n${value.revokeChoice}`
-      : `${value.disclosure.text}\n${value.acceptChoice}\n${value.declineChoice}`;
+    const text = offerText(value, Option.isSome(grant));
     yield* Effect.tryPromise(() =>
       input.db.batch([
         prepareConsentAction({
@@ -113,9 +128,16 @@ const materializeOffer = (
           .bind(input.userId, value.id),
         input.db
           .prepare(
-            "UPDATE proactivity_offer_requests SET materialized_at_ms=? WHERE user_id=? AND id=? AND EXISTS (SELECT 1 FROM proactivity_reports WHERE user_id=? AND delivery_id=?)"
+            "UPDATE proactivity_offer_requests SET materialized_at_ms=?,delivery_id=? WHERE user_id=? AND id=? AND EXISTS (SELECT 1 FROM proactivity_reports WHERE user_id=? AND delivery_id=?)"
           )
-          .bind(input.now.epochMilliseconds, input.userId, request.id, input.userId, value.id),
+          .bind(
+            input.now.epochMilliseconds,
+            value.id,
+            input.userId,
+            request.id,
+            input.userId,
+            value.id
+          ),
       ])
     );
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
@@ -170,6 +192,19 @@ export const generateOffers = (
 ): Effect.Effect<void, InsightUnavailable> =>
   Effect.gen(function* () {
     yield* requestFirstBudget(input);
+    if (!offerWindowOpen(input.now)) return;
+    const pending = recoverableOfferRequests(input.now);
+    yield* Effect.tryPromise(() =>
+      prepareConsentAction({
+        db: input.db,
+        subject: { _tag: "User", userId: input.userId },
+        requirement: "active",
+        statement: {
+          sql: `UPDATE proactivity_offer_requests SET materialized_at_ms=NULL,delivery_id=NULL WHERE user_id=? AND id IN (SELECT id FROM (${pending.sql}) WHERE user_id=? ORDER BY created_at_ms,id LIMIT ?)`,
+          params: [input.userId, ...pending.params, input.userId, maximumRequests],
+        },
+      }).run()
+    );
     const raw = yield* Effect.tryPromise(() =>
       prepareConsentAction({
         db: input.db,

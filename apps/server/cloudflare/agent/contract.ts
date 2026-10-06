@@ -4,7 +4,7 @@ import {
   HostedTurnReceipt,
   HostedTurnRequest,
 } from "../../src/shell/agent/contract";
-import type { WeeklyEnvironment } from "../insights/contract";
+import type { ProactivityEnvironment } from "../insights/contract";
 import type { WorkersAiEnvironment } from "../ai/contract";
 import {
   type ProactiveTranscriptEntry,
@@ -58,7 +58,7 @@ export class AgentUnavailable extends Data.TaggedError("AgentUnavailable")<{}> {
 export type AgentEnvironment = Readonly<{ DB: D1Database }> &
   Partial<Readonly<{ STATEMENT_STAGING_BUCKET: R2Bucket; KAPSO_API_KEY: string }>> &
   WorkersAiEnvironment &
-  WeeklyEnvironment;
+  ProactivityEnvironment;
 /** Construct a hosted workflow for one explicit User; scheduleRecovery sets the coordinator's durable alarm. */
 export type AgentServiceInput = Readonly<{
   environment: AgentEnvironment;

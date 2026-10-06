@@ -215,7 +215,7 @@ export default Alchemy.Stack(
     const hostedWhatsAppQueue = yield* Cloudflare.Queues.Queue("HostedWhatsAppQueue");
     const weeklyDeliveryQueue = yield* Cloudflare.Queues.Queue("WeeklyDeliveryQueue");
     const weeklyDeliveryWorkflow = Cloudflare.Workflow("WeeklyDeliveryWorkflow", {
-      className: "WeeklyDeliveryWorkflow",
+      className: "ProactivityDeliveryWorkflow",
     });
     const onboardingEmailQueue = yield* Cloudflare.Queues.Queue("OnboardingEmailQueue");
     const onboardingEmailWorkflow = Cloudflare.Workflow("OnboardingEmailWorkflowV1", {

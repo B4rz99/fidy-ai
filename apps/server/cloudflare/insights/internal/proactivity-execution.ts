@@ -1,6 +1,10 @@
 import { DateTime, Effect, Option } from "effect";
 import { type UserId } from "../../../src/core/identity/contract";
-import { InsightUnavailable, type WeeklyActivity, type WeeklyActivityResult } from "../contract";
+import {
+  InsightUnavailable,
+  type ProactivityActivity,
+  type ProactivityActivityResult,
+} from "../contract";
 import { findSchedule, materialize } from "./reminder-schedule";
 import { admitWeeklyResource } from "./weekly-admission";
 import { deliveryQuery, findReport } from "./proactivity-reports";
@@ -24,9 +28,9 @@ export const generateProactivity = (
     db: D1Database;
     userId: UserId;
     now: DateTime.Utc;
-    work: Extract<WeeklyActivity, { kind: "proactivity-generate" }>;
+    work: Extract<ProactivityActivity, { kind: "proactivity-generate" }>;
   }>
-): Effect.Effect<WeeklyActivityResult, InsightUnavailable> =>
+): Effect.Effect<ProactivityActivityResult, InsightUnavailable> =>
   Effect.gen(function* () {
     if (input.userId !== input.work.userId) return yield* new InsightUnavailable();
     if ((yield* readConsentStatus(input)) !== "Granted") return { _tag: "Done" } as const;
@@ -43,7 +47,7 @@ const noteDeliveryState = (
   input: Readonly<{
     db: D1Database;
     userId: UserId;
-    work: Extract<WeeklyActivity, { kind: "proactivity-delivery" }>;
+    work: Extract<ProactivityActivity, { kind: "proactivity-delivery" }>;
   }>,
   state: "started" | "expired"
 ): Effect.Effect<void, InsightUnavailable> =>
@@ -62,11 +66,11 @@ const noteDeliveryState = (
 const finishSend = (
   input: ProactivityChannelScope &
     Readonly<{
-      work: Extract<WeeklyActivity, { kind: "proactivity-delivery" }>;
+      work: Extract<ProactivityActivity, { kind: "proactivity-delivery" }>;
       sender: ProactivityTemplateSender;
     }>,
   claim: ProactivityChannelClaim
-): Effect.Effect<WeeklyActivityResult, InsightUnavailable> =>
+): Effect.Effect<ProactivityActivityResult, InsightUnavailable> =>
   Effect.gen(function* () {
     if (claim._tag === "Ready") {
       const sent = sendEvidence(yield* Effect.exit(input.sender.send(claim.request)));
@@ -88,10 +92,10 @@ export const deliverProactivity = (
     db: D1Database;
     userId: UserId;
     now: DateTime.Utc;
-    work: Extract<WeeklyActivity, { kind: "proactivity-delivery" }>;
+    work: Extract<ProactivityActivity, { kind: "proactivity-delivery" }>;
     sender: ProactivityTemplateSender;
   }>
-): Effect.Effect<WeeklyActivityResult, InsightUnavailable> =>
+): Effect.Effect<ProactivityActivityResult, InsightUnavailable> =>
   Effect.gen(function* () {
     if (input.userId !== input.work.userId) return yield* new InsightUnavailable();
     const report = yield* findReport({ ...input, id: input.work.id });

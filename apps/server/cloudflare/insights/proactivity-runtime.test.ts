@@ -10,8 +10,8 @@ import {
   withdrawTestProcessingConsent,
 } from "../proactivity.test-fixture";
 import {
-  makeWeeklySummaryCoordinator,
-  weeklyWorkflowHarness,
+  makeProactivityCoordinator,
+  proactivityWorkflowHarness,
 } from "../weekly-summary.test-fixture";
 import {
   controlManualReminders,
@@ -29,22 +29,27 @@ import {
   WhatsAppBusinessPhoneNumberId,
   WhatsAppProviderMessageId,
 } from "../../src/shell/channels/whatsapp/contract";
-import { type InsightUnavailable, WeeklyActivity, type WeeklyEnvironment } from "./contract";
+import {
+  type InsightUnavailable,
+  ProactivityActivity,
+  type ProactivityDeliveryWork,
+  type ProactivityEnvironment,
+} from "./contract";
 import { WhatsAppStatusAdmission, WhatsAppTurnAdmission } from "../whatsapp/contract";
 import { IanaTimeZone } from "../../src/core/_shared/context";
 import { newId } from "../secret-material/operations";
 import { UserId } from "../../src/core/identity/contract";
 import { findCurrentProactivityOffer } from "../consent/operations";
 import { FetchHttpClient } from "effect/http";
-import { executeWeeklyWork } from "./runtime";
-import { expireDeliveryWork, recoverDeliveryWork } from "./internal/weekly-work";
+import { executeProactivityWork } from "./runtime";
+import { expireDeliveryWork, recoverDeliveryWork } from "./internal/proactivity-delivery-work";
 import {
   readContextualProactiveReply,
   readProactiveMessageTranscript,
   readProactiveTranscript,
 } from "../agent/operations";
 
-const configuration = (db: D1Database): WeeklyEnvironment => ({
+const configuration = (db: D1Database): ProactivityEnvironment => ({
   DB: db,
   PROACTIVITY_ENABLED: "enabled",
   KAPSO_API_KEY: "test-only",
@@ -52,10 +57,10 @@ const configuration = (db: D1Database): WeeklyEnvironment => ({
     Schema.fromJsonString(ProactivityTemplateConfiguration)
   )({ name: "fidy_proactivity", language: "es", approval: "approved", body: "Fidy: {{1}}" }),
 });
-const workRequest = (work: WeeklyActivity): Request =>
-  new Request("https://coordinator/weekly-work", {
+const workRequest = (work: ProactivityActivity): Request =>
+  new Request("https://coordinator/proactivity-work", {
     method: "POST",
-    body: Schema.encodeSync(Schema.fromJsonString(WeeklyActivity))(work),
+    body: Schema.encodeSync(Schema.fromJsonString(ProactivityActivity))(work),
   });
 afterAll(() => proactivityTestDatabases.dispose());
 afterEach(() => {
@@ -70,7 +75,7 @@ it("the installed User coordinator generates the latest reminder and frozen mess
       const schedule = yield* activateTestReminder(db);
       const now = DateTime.makeUnsafe("2026-10-06T23:00:00Z");
       vi.spyOn(Date, "now").mockReturnValue(now.epochMilliseconds);
-      const coordinator = makeWeeklySummaryCoordinator({
+      const coordinator = makeProactivityCoordinator({
         environment: configuration(db),
         userId: proactivityTestUsers[0],
       });
@@ -148,7 +153,7 @@ it("a category send is one-shot, provider acceptance is not delivery, and verifi
         )
       );
       vi.stubGlobal("fetch", provider);
-      const coordinator = makeWeeklySummaryCoordinator({
+      const coordinator = makeProactivityCoordinator({
         environment: configuration(db),
         userId: proactivityTestUsers[0],
       });
@@ -431,11 +436,11 @@ it("refuses approved-template drift between a deferred staging and the irreversi
           }),
         ])
       );
-      const first = makeWeeklySummaryCoordinator({
+      const first = makeProactivityCoordinator({
         environment: configuration(db),
         userId: proactivityTestUsers[0],
       });
-      const work: WeeklyActivity = {
+      const work: ProactivityActivity = {
         kind: "proactivity-delivery",
         version: 1,
         userId: proactivityTestUsers[0],
@@ -446,7 +451,7 @@ it("refuses approved-template drift between a deferred staging and the irreversi
       );
       expect((yield* Effect.tryPromise(() => first.fetch(workRequest(work)))).status).toBe(200);
       vi.mocked(Date.now).mockReturnValue(now.epochMilliseconds);
-      const changed = makeWeeklySummaryCoordinator({
+      const changed = makeProactivityCoordinator({
         environment: {
           ...configuration(db),
           PROACTIVITY_TEMPLATE_JSON:
@@ -473,7 +478,7 @@ type RefusalCase = Readonly<{
   withdraw: boolean;
   reassociate: boolean;
   at: Option.Option<number>;
-  environment: Partial<WeeklyEnvironment>;
+  environment: Partial<ProactivityEnvironment>;
   coordinatorUser: (typeof proactivityTestUsers)[number];
   workUser: (typeof proactivityTestUsers)[number];
   expectedStatus: 200 | 503;
@@ -558,7 +563,7 @@ it.each(refusalCases)(
         );
         vi.stubGlobal("fetch", provider);
         const environment = { ...configuration(db), ...scenario.environment };
-        const coordinator = makeWeeklySummaryCoordinator({
+        const coordinator = makeProactivityCoordinator({
           environment,
           userId: scenario.coordinatorUser,
         });
@@ -623,7 +628,7 @@ it.each(["budget-threshold", "manual-entry-reminder"] as const)(
         const context = { db, userId, caller, kind, now };
         yield* requestProactivityConsent({ ...context, messageId: "request-contextual-category" });
         const environment = configuration(db);
-        yield* executeWeeklyWork({
+        yield* executeProactivityWork({
           environment,
           userId,
           now,
@@ -640,12 +645,31 @@ it.each(["budget-threshold", "manual-entry-reminder"] as const)(
           )
         );
         vi.stubGlobal("fetch", provider);
-        yield* executeWeeklyWork({
+        yield* executeProactivityWork({
           environment,
           userId,
           now,
           work: { kind: "proactivity-delivery", version: 1, userId, id: offer.id },
         }).pipe(Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch));
+        const afterExpiry = DateTime.makeUnsafe(now.epochMilliseconds + 660000);
+        vi.spyOn(Date, "now").mockReturnValue(afterExpiry.epochMilliseconds);
+        yield* executeProactivityWork({
+          environment,
+          userId,
+          now: afterExpiry,
+          work: { kind: "proactivity-generate", version: 1, userId },
+        });
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT count(*) AS n FROM proactivity_reports WHERE user_id=? AND role IN ('budget-offer','reminder-offer')"
+              )
+              .bind(userId)
+              .first()
+          )
+        ).toEqual({ n: 1 });
+        vi.spyOn(Date, "now").mockReturnValue(now.epochMilliseconds);
         expect(
           Option.isNone(
             yield* readProactiveMessageTranscript({
@@ -668,7 +692,7 @@ it.each(["budget-threshold", "manual-entry-reminder"] as const)(
               .first()
           )
         );
-        const coordinator = makeWeeklySummaryCoordinator({ environment, userId });
+        const coordinator = makeProactivityCoordinator({ environment, userId });
         const status = (): Request =>
           new Request("https://coordinator/hosted-turn/whatsapp/status", {
             method: "POST",
@@ -797,7 +821,7 @@ it("sixteen unserviceable contextual offers cannot starve an eligible reminder d
           ])
         )
       );
-      const harness = weeklyWorkflowHarness({
+      const harness = proactivityWorkflowHarness({
         environment: { DB: db, PROACTIVITY_ENABLED: "enabled" },
         userId: proactivityTestUsers[0],
         otherUserIds: others,
@@ -826,7 +850,7 @@ it("a crash after question acceptance cannot authorize an expiry replacement or 
       const caller = proactivityTestCallers[0];
       const phone = WhatsAppBusinessPhoneNumberId.make("123456789");
       const environment = configuration(db);
-      const coordinator = makeWeeklySummaryCoordinator({ environment, userId });
+      const coordinator = makeProactivityCoordinator({ environment, userId });
       yield* Effect.tryPromise(() =>
         db.batch([
           prepareInsightRecipient({
@@ -848,8 +872,8 @@ it("a crash after question acceptance cannot authorize an expiry replacement or 
         )
       );
       vi.stubGlobal("fetch", provider);
-      const send = (id: string, now: DateTime.Utc): ReturnType<typeof executeWeeklyWork> =>
-        executeWeeklyWork({
+      const send = (id: string, now: DateTime.Utc): ReturnType<typeof executeProactivityWork> =>
+        executeProactivityWork({
           environment,
           userId,
           now,
@@ -901,7 +925,7 @@ it("a crash after question acceptance cannot authorize an expiry replacement or 
         yield* verify(occurrence.id, now);
       }
       const now = DateTime.makeUnsafe("2026-10-08T23:00:00Z");
-      yield* executeWeeklyWork({
+      yield* executeProactivityWork({
         environment,
         userId,
         now,
@@ -953,6 +977,49 @@ it("a crash after question acceptance cannot authorize an expiry replacement or 
       vi.spyOn(Date, "now").mockReturnValue(later.epochMilliseconds);
       yield* expireDeliveryWork({ db, now: later.epochMilliseconds });
       expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT state FROM proactivity_outbox WHERE user_id=? AND delivery_id=?")
+            .bind(userId, question.delivery_id)
+            .first()
+        )
+      ).toEqual({ state: "started" });
+      const published: Array<ProactivityDeliveryWork> = [];
+      const unexpected = (): Promise<never> =>
+        Promise.reject(new Error("No Workflow creation expected during Maintenance"));
+      const harness = proactivityWorkflowHarness({
+        environment: {
+          ...environment,
+          WEEKLY_DELIVERY_QUEUE: {
+            send: (message: ProactivityDeliveryWork): Promise<QueueSendResponse> => {
+              published.push(message);
+              return Promise.resolve({
+                metadata: { metrics: { backlogCount: published.length, backlogBytes: 0 } },
+              });
+            },
+          },
+          WEEKLY_DELIVERY_WORKFLOW: {
+            create: unexpected,
+            get: unexpected,
+            createBatch: unexpected,
+            deleteBatch: unexpected,
+          },
+        },
+        userId,
+        otherUserIds: [],
+        unavailableUserIds: [],
+      });
+      for (const attempt of [0, 1, 2, 3]) {
+        vi.spyOn(Date, "now").mockReturnValue(later.epochMilliseconds + attempt * 60000);
+        yield* harness.sweep();
+      }
+      expect(
+        published.some(
+          (work) => work.kind === "proactivity-delivery" && work.id === question.delivery_id
+        )
+      ).toBe(false);
+      vi.spyOn(Date, "now").mockReturnValue(later.epochMilliseconds);
+      expect(
         yield* recoverDeliveryWork({
           db,
           userId,
@@ -960,7 +1027,7 @@ it("a crash after question acceptance cannot authorize an expiry replacement or 
           work: { kind: "proactivity-delivery", version: 1, userId, id: question.delivery_id },
         })
       ).toBe(true);
-      yield* executeWeeklyWork({
+      yield* executeProactivityWork({
         environment,
         userId,
         now: later,
@@ -1032,14 +1099,14 @@ it("three verified ignored reminders ask once; only the verified question opens 
           )
         )
       );
-      const coordinator = makeWeeklySummaryCoordinator({ environment, userId });
+      const coordinator = makeProactivityCoordinator({ environment, userId });
       const deliver = (
         id: string,
         now: DateTime.Utc,
         outcome: "delivered" | "failed" = "delivered"
       ): Effect.Effect<void, InsightUnavailable | Schema.SchemaError | Cause.UnknownError> =>
         Effect.gen(function* () {
-          yield* executeWeeklyWork({
+          yield* executeProactivityWork({
             environment,
             userId,
             now,
@@ -1057,7 +1124,7 @@ it("three verified ignored reminders ask once; only the verified question opens 
             Schema.Struct({ correlation_token: HostedDeliveryCorrelationToken })
           )(raw);
           if (outcome === "failed") {
-            yield* executeWeeklyWork({
+            yield* executeProactivityWork({
               environment,
               userId,
               now,
@@ -1109,7 +1176,7 @@ it("three verified ignored reminders ask once; only the verified question opens 
             unanswered: 3,
           });
           if (day === 8) continue;
-          yield* executeWeeklyWork({
+          yield* executeProactivityWork({
             environment,
             userId,
             now,
@@ -1161,7 +1228,7 @@ it("three verified ignored reminders ask once; only the verified question opens 
             _tag: "QuestionPending",
             unanswered: 3,
           });
-          yield* executeWeeklyWork({
+          yield* executeProactivityWork({
             environment,
             userId,
             now,

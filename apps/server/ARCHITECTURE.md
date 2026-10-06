@@ -305,7 +305,13 @@ financial events or requested Turns; same-User replies recover retained message 
 uncertain questions do not suspend scheduled reminders; only definitive failure or expiry before any
 channel send begins permits a fresh question identity. Channel-owned started identities guard expiry
 and recovery even if an outbox checkpoint was lost. First-Budget and contextual requests remain
-pending outside delivery hours; their short-lived disclosure choices are created only in an open window. Retained report identities do not restrict ephemeral offer deletion.
+pending outside delivery hours without repeatedly charging generation admission. Their short-lived
+choices are created in an open window; exact request/report links recover expired never-started
+disclosures after Queue delay or window closing, without replacing started or ambiguous sends.
+Maintenance repairs lost outbox started checkpoints from channel-owned metadata before discovery.
+The shared content-free protocol and runtime are named Proactivity; Weekly identities retain only
+weekly-specific meaning, and the existing Queue/Workflow resource bindings remain unchanged.
+Retained report identities do not restrict ephemeral offer deletion.
 Installed implementation and test evidence do not constitute issue acceptance, template approval,
 or production enablement.
 

@@ -23,7 +23,7 @@ import {
   reminderRevisionRefusal as reminderRevisionRefusalOwned,
 } from "./internal/reminder-canonical";
 import { weeklyThresholds } from "./internal/weekly-execution";
-import { requestQuestion } from "./internal/weekly-work";
+import { requestQuestion } from "./internal/proactivity-delivery-work";
 import {
   findGovernor,
   prepareNotice,

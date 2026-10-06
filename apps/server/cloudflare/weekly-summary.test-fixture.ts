@@ -5,7 +5,11 @@ import {
   type WorkflowStepContext,
   type WorkflowStepRollbackOptions,
 } from "cloudflare:workers";
-import { WeeklyDeliveryWorkflow, advanceWeeklyWork, receiveWeeklyWork } from "./insights/runtime";
+import {
+  ProactivityDeliveryWorkflow,
+  advanceProactivityWork,
+  receiveProactivityWork,
+} from "./insights/runtime";
 import { DisclosureSnapshot } from "../src/core/consent/contract";
 import { UserId, WhatsAppCallerReference } from "../src/core/identity/contract";
 import { currentDisclosureFor } from "../src/shell/consent/operations";
@@ -21,7 +25,7 @@ import {
 } from "./insights/operations";
 import {
   type InsightUnavailable,
-  type WeeklyEnvironment,
+  type ProactivityEnvironment,
   type WeeklyScheduleSnapshot,
 } from "./insights/contract";
 import { UserTransactionCoordinator } from "./transactions/runtime";
@@ -29,12 +33,12 @@ import { type InsightEventId, InsightGenerationInput } from "../src/core/insight
 import { categoryIds } from "../src/core/categories/contract";
 import { installTestSchema, isolatedTestDatabases } from "./d1-test-fixture";
 
-export type WeeklySummaryCoordinator = Pick<UserTransactionCoordinator, "fetch">;
+export type ProactivityCoordinator = Pick<UserTransactionCoordinator, "fetch">;
 /** Compose the real coordinator with deliberately unavailable inference. */
-export const makeWeeklySummaryCoordinator = ({
+export const makeProactivityCoordinator = ({
   environment,
   userId,
-}: Readonly<{ environment: WeeklyEnvironment; userId: UserId }>): WeeklySummaryCoordinator =>
+}: Readonly<{ environment: ProactivityEnvironment; userId: UserId }>): ProactivityCoordinator =>
   new UserTransactionCoordinator(
     { id: { name: userId }, storage: { setAlarm: () => Promise.resolve() } },
     {
@@ -136,12 +140,12 @@ const weeklyWorkflowFixtureContext = {
   },
 };
 
-type WeeklyBackgroundFixtureEnvironment = Parameters<typeof advanceWeeklyWork>[0];
-type WeeklyFixtureWork = Parameters<WeeklyDeliveryWorkflow["run"]>[0]["payload"];
+type ProactivityBackgroundFixtureEnvironment = Parameters<typeof advanceProactivityWork>[0];
+type ProactivityFixtureWork = Parameters<ProactivityDeliveryWorkflow["run"]>[0]["payload"];
 /** Broad composition: Maintenance, durable Queue handoff, native Workflow and real User coordinator. */
-export const weeklyWorkflowHarness = (
+export const proactivityWorkflowHarness = (
   input: Readonly<{
-    environment: Omit<WeeklyBackgroundFixtureEnvironment, "USER_TRANSACTION_COORDINATOR">;
+    environment: Omit<ProactivityBackgroundFixtureEnvironment, "USER_TRANSACTION_COORDINATOR">;
     userId: UserId;
     otherUserIds: ReadonlyArray<UserId>;
     unavailableUserIds: ReadonlyArray<UserId>;
@@ -149,18 +153,18 @@ export const weeklyWorkflowHarness = (
 ): Readonly<{
   sweep: () => Effect.Effect<void, InsightUnavailable>;
   receive: (
-    input: Omit<Parameters<typeof receiveWeeklyWork>[0], "coordinator">
+    input: Omit<Parameters<typeof receiveProactivityWork>[0], "coordinator">
   ) => Effect.Effect<void>;
-  execute: (input: Readonly<{ work: WeeklyFixtureWork; step: WorkflowStep }>) => Promise<void>;
+  execute: (input: Readonly<{ work: ProactivityFixtureWork; step: WorkflowStep }>) => Promise<void>;
 }> => {
-  const coordinators = new Map<string, WeeklySummaryCoordinator>();
+  const coordinators = new Map<string, ProactivityCoordinator>();
   for (const userId of [input.userId, ...input.otherUserIds]) {
     coordinators.set(
       userId,
-      makeWeeklySummaryCoordinator({ environment: input.environment, userId })
+      makeProactivityCoordinator({ environment: input.environment, userId })
     );
   }
-  const environment: WeeklyBackgroundFixtureEnvironment = {
+  const environment: ProactivityBackgroundFixtureEnvironment = {
     ...input.environment,
     USER_TRANSACTION_COORDINATOR: {
       getByName: (name) => ({
@@ -174,11 +178,11 @@ export const weeklyWorkflowHarness = (
       }),
     },
   };
-  const workflow = new WeeklyDeliveryWorkflow(weeklyWorkflowFixtureContext, environment);
+  const workflow = new ProactivityDeliveryWorkflow(weeklyWorkflowFixtureContext, environment);
   return {
-    sweep: () => advanceWeeklyWork(environment),
+    sweep: () => advanceProactivityWork(environment),
     receive: (input) =>
-      receiveWeeklyWork({ ...input, coordinator: environment.USER_TRANSACTION_COORDINATOR }),
+      receiveProactivityWork({ ...input, coordinator: environment.USER_TRANSACTION_COORDINATOR }),
     execute: ({ work, step }) =>
       workflow.run(
         {

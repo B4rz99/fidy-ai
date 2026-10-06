@@ -11,9 +11,9 @@ import { createWeeklyConsentOffer, findWeeklyConsentGrant } from "../consent/ope
 import { prepareInsightRecipient } from "../whatsapp/operations";
 import { WhatsAppStatusAdmission, WhatsAppTurnAdmission } from "../whatsapp/contract";
 import {
-  type WeeklySummaryCoordinator,
+  type ProactivityCoordinator,
   activateWeeklySummary,
-  makeWeeklySummaryCoordinator,
+  makeProactivityCoordinator,
   seedWeeklySummaryActivity,
   weeklySummaryDatabaseAt,
   weeklySummaryOtherUser,
@@ -23,7 +23,7 @@ import {
   weeklySummaryTestUser,
   withdrawWeeklyFixtureConsent,
 } from "../weekly-summary.test-fixture";
-import { WeeklyActivity, type WeeklyEnvironment } from "./contract";
+import { ProactivityActivity, type ProactivityEnvironment } from "./contract";
 import { findWeeklyGovernor, findWeeklySchedule } from "./operations";
 import { admitWeeklyResource } from "./internal/weekly-admission";
 
@@ -46,7 +46,7 @@ const questionTemplate = {
   approval: "approved",
   body: "Fidy: {{1}}",
 };
-const configuration = (db: D1Database): WeeklyEnvironment => ({
+const configuration = (db: D1Database): ProactivityEnvironment => ({
   DB: db,
   KAPSO_API_KEY: "provider-test-key",
   WEEKLY_SUMMARY_ENABLED: "enabled",
@@ -55,13 +55,16 @@ const configuration = (db: D1Database): WeeklyEnvironment => ({
   PROACTIVITY_ASK_AFTER: "1",
   PROACTIVITY_PAUSE_AFTER: "1",
 });
-const makeCoordinator = (environment: WeeklyEnvironment): WeeklySummaryCoordinator =>
-  makeWeeklySummaryCoordinator({ environment, userId });
-const activity = (coordinator: WeeklySummaryCoordinator, work: WeeklyActivity): Promise<Response> =>
+const makeCoordinator = (environment: ProactivityEnvironment): ProactivityCoordinator =>
+  makeProactivityCoordinator({ environment, userId });
+const activity = (
+  coordinator: ProactivityCoordinator,
+  work: ProactivityActivity
+): Promise<Response> =>
   coordinator.fetch(
-    new Request("https://coordinator/weekly-work", {
+    new Request("https://coordinator/proactivity-work", {
       method: "POST",
-      body: Schema.encodeSync(Schema.fromJsonString(WeeklyActivity))(work),
+      body: Schema.encodeSync(Schema.fromJsonString(ProactivityActivity))(work),
     })
   );
 const proofRow = Schema.Struct({
@@ -69,7 +72,7 @@ const proofRow = Schema.Struct({
   provider_message_id: WhatsAppProviderMessageId,
 });
 const delivered = (
-  coordinator: WeeklySummaryCoordinator,
+  coordinator: ProactivityCoordinator,
   row: typeof proofRow.Type,
   now: number
 ): Promise<Response> =>
@@ -88,7 +91,7 @@ const delivered = (
     })
   );
 const inbound = (
-  coordinator: WeeklySummaryCoordinator,
+  coordinator: ProactivityCoordinator,
   input: Readonly<{
     text: string;
     messageId: string;

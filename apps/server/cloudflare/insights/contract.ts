@@ -131,31 +131,32 @@ export const WeeklyQuestionWork = Schema.Struct({
 });
 export type WeeklyQuestionWork = typeof WeeklyQuestionWork.Type;
 /** Content-free continuation for one frozen category message; the report owns its role and live grant. */
-export const ProactivityDeliveryWork = Schema.Struct({
+export const CategoryDeliveryWork = Schema.Struct({
   kind: Schema.Literal("proactivity-delivery"),
   version: Schema.Literal(1),
   userId: UserId,
   id: Schema.String.check(Schema.isUUID()),
 });
-export type ProactivityDeliveryWork = typeof ProactivityDeliveryWork.Type;
-export const WeeklyDeliveryWork = Schema.Union([
+export type CategoryDeliveryWork = typeof CategoryDeliveryWork.Type;
+/** Shared content-free delivery protocol for weekly summaries/questions and category messages. */
+export const ProactivityDeliveryWork = Schema.Union([
   WeeklySummaryWork,
   WeeklyQuestionWork,
-  ProactivityDeliveryWork,
+  CategoryDeliveryWork,
 ]);
-export type WeeklyDeliveryWork = typeof WeeklyDeliveryWork.Type;
-export const WeeklyActivity = Schema.Union([
-  WeeklyDeliveryWork,
+export type ProactivityDeliveryWork = typeof ProactivityDeliveryWork.Type;
+export const ProactivityActivity = Schema.Union([
+  ProactivityDeliveryWork,
   Schema.Struct({
     kind: Schema.Literal("proactivity-generate"),
     version: Schema.Literal(1),
     userId: UserId,
   }),
   Schema.Struct({
-    kind: Schema.Literal("weekly-recover"),
+    kind: Schema.Literal("proactivity-recover"),
     version: Schema.Literal(1),
     userId: UserId,
-    work: WeeklyDeliveryWork,
+    work: ProactivityDeliveryWork,
   }),
   Schema.Struct({
     kind: Schema.Literal("weekly-generate"),
@@ -164,16 +165,16 @@ export const WeeklyActivity = Schema.Union([
     id: ScheduleId,
   }),
 ]);
-export type WeeklyActivity = typeof WeeklyActivity.Type;
+export type ProactivityActivity = typeof ProactivityActivity.Type;
 /** Workflow history retains only the next permissible instant, never provider/report/recipient text. */
-export const WeeklyActivityResult = Schema.Union([
+export const ProactivityActivityResult = Schema.Union([
   Schema.TaggedStruct("Done", {}),
   Schema.TaggedStruct("RecoveryAdmitted", {}),
   Schema.TaggedStruct("Deferred", { nextEligibleAtMs: Schema.Int }),
 ]);
-export type WeeklyActivityResult = typeof WeeklyActivityResult.Type;
+export type ProactivityActivityResult = typeof ProactivityActivityResult.Type;
 /** Both approved templates and an explicit enablement gate are required before native execution. */
-export type WeeklyEnvironment = Readonly<{ DB: D1Database }> &
+export type ProactivityEnvironment = Readonly<{ DB: D1Database }> &
   Partial<
     Readonly<{
       PROACTIVITY_ENABLED: string;

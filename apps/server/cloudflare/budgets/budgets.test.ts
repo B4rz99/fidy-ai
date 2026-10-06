@@ -20,8 +20,8 @@ import {
   recordProactivityConsentDisclosure,
 } from "../consent/operations";
 import {
-  makeWeeklySummaryCoordinator,
-  weeklyWorkflowHarness,
+  makeProactivityCoordinator,
+  proactivityWorkflowHarness,
 } from "../weekly-summary.test-fixture";
 import { WhatsAppStatusAdmission } from "../whatsapp/contract";
 import { findInsightRecipient, prepareInsightRecipient } from "../whatsapp/operations";
@@ -34,7 +34,7 @@ import {
 import { readProactiveMessageTranscript, readProactiveTranscript } from "../agent/operations";
 import { InsightEventId } from "../../src/core/insights/contract";
 import { FetchHttpClient } from "effect/http";
-import { executeWeeklyWork } from "../insights/runtime";
+import { executeProactivityWork } from "../insights/runtime";
 import { findProactivityReport, recordProactivityDecision } from "../insights/operations";
 import { type ConsentRecordId, DisclosureSnapshot } from "../../src/core/consent/contract";
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
@@ -361,158 +361,188 @@ const Captured = Schema.Struct({
   next: Schema.Array(Schema.Unknown),
 });
 
-it("a first Budget created after delivery hours retains its opt-in request until the next window without expiring unseen", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const night = DateTime.makeUnsafe("2026-10-07T01:00:00Z");
-      vi.setSystemTime(night.epochMilliseconds);
-      const db = yield* setup();
-      expect(
-        (yield* Effect.tryPromise(() => send(db, request(0, "/budgets", "POST", payload())))).status
-      ).toBe(201);
-      const userId = UserId.make(users[0]);
-      const caller = WhatsAppCallerReference.make({
-        businessPortfolioId: WhatsAppBusinessPortfolioId.make("123456789"),
-        businessScopedUserId: WhatsAppBusinessScopedUserId.make("CO.budgetuser"),
-      });
-      yield* seedCrossingConsent(db);
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "INSERT INTO whatsapp_identities(user_id,portfolio_id,bsuid,verified_at_ms) VALUES(?,?,?,?)"
-          )
-          .bind(
-            userId,
-            caller.businessPortfolioId,
-            caller.businessScopedUserId,
-            night.epochMilliseconds
-          )
-          .run()
-      );
-      const phone = WhatsAppBusinessPhoneNumberId.make("123456789");
-      yield* Effect.tryPromise(() =>
-        db.batch([
-          prepareInsightRecipient({
-            db,
-            userId,
-            recipient: {
-              portfolioId: caller.businessPortfolioId,
-              bsuid: caller.businessScopedUserId,
-              businessPhoneNumberId: phone,
-            },
-            receivedAtMs: night.epochMilliseconds,
+it.each([
+  { label: "after hours", createdAt: "2026-10-07T01:00:00Z", unstarted: false },
+  { label: "near closing", createdAt: "2026-10-06T23:59:00Z", unstarted: true },
+  { label: "before a delayed Queue execution", createdAt: "2026-10-06T17:00:00Z", unstarted: true },
+])(
+  "a first Budget created $label retains a recoverable opt-in request until visible disclosure",
+  (scenario) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const night = DateTime.makeUnsafe(scenario.createdAt);
+        vi.setSystemTime(night.epochMilliseconds);
+        const db = yield* setup();
+        expect(
+          (yield* Effect.tryPromise(() => send(db, request(0, "/budgets", "POST", payload()))))
+            .status
+        ).toBe(201);
+        const userId = UserId.make(users[0]);
+        const caller = WhatsAppCallerReference.make({
+          businessPortfolioId: WhatsAppBusinessPortfolioId.make("123456789"),
+          businessScopedUserId: WhatsAppBusinessScopedUserId.make("CO.budgetuser"),
+        });
+        yield* seedCrossingConsent(db);
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "INSERT INTO whatsapp_identities(user_id,portfolio_id,bsuid,verified_at_ms) VALUES(?,?,?,?)"
+            )
+            .bind(
+              userId,
+              caller.businessPortfolioId,
+              caller.businessScopedUserId,
+              night.epochMilliseconds
+            )
+            .run()
+        );
+        const phone = WhatsAppBusinessPhoneNumberId.make("123456789");
+        yield* Effect.tryPromise(() =>
+          db.batch([
+            prepareInsightRecipient({
+              db,
+              userId,
+              recipient: {
+                portfolioId: caller.businessPortfolioId,
+                bsuid: caller.businessScopedUserId,
+                businessPhoneNumberId: phone,
+              },
+              receivedAtMs: night.epochMilliseconds,
+            }),
+          ])
+        );
+        const environment = {
+          DB: db,
+          PROACTIVITY_ENABLED: "enabled",
+          KAPSO_API_KEY: "test-only",
+          PROACTIVITY_TEMPLATE_JSON: yield* Schema.encodeEffect(
+            Schema.fromJsonString(ProactivityTemplateConfiguration)
+          )({
+            name: "fidy_proactivity",
+            language: "es",
+            approval: "approved",
+            body: "Fidy: {{1}}",
           }),
-        ])
-      );
-      const environment = {
-        DB: db,
-        PROACTIVITY_ENABLED: "enabled",
-        KAPSO_API_KEY: "test-only",
-        PROACTIVITY_TEMPLATE_JSON: yield* Schema.encodeEffect(
-          Schema.fromJsonString(ProactivityTemplateConfiguration)
-        )({ name: "fidy_proactivity", language: "es", approval: "approved", body: "Fidy: {{1}}" }),
-      };
-      const harness = weeklyWorkflowHarness({
-        environment,
-        userId,
-        otherUserIds: [],
-        unavailableUserIds: [],
-      });
-      yield* Effect.exit(harness.sweep());
-      expect(
-        Option.isNone(
+        };
+        const harness = proactivityWorkflowHarness({
+          environment,
+          userId,
+          otherUserIds: [],
+          unavailableUserIds: [],
+        });
+        yield* Effect.exit(harness.sweep());
+        const prior = yield* findCurrentProactivityOffer({
+          db,
+          userId,
+          caller,
+          kind: "budget-threshold",
+          now: night,
+        });
+        expect(Option.isSome(prior)).toBe(scenario.unstarted);
+        if (Option.isSome(prior)) {
+          const delayed = DateTime.makeUnsafe(night.epochMilliseconds + 660000);
+          vi.setSystemTime(delayed.epochMilliseconds);
+          yield* executeProactivityWork({
+            environment,
+            userId,
+            now: delayed,
+            work: { kind: "proactivity-delivery", version: 1, userId, id: prior.value.id },
+          });
+          expect(
+            yield* Effect.tryPromise(() =>
+              db
+                .prepare("SELECT state FROM proactivity_outbox WHERE user_id=? AND delivery_id=?")
+                .bind(userId, prior.value.id)
+                .first()
+            )
+          ).toEqual({ state: "expired" });
+        }
+        if (!scenario.unstarted) {
+          for (let attempt = 1; attempt <= 36; attempt += 1) {
+            vi.setSystemTime(night.epochMilliseconds + attempt * 60000);
+            yield* Effect.exit(harness.sweep());
+          }
+        }
+        const morning = DateTime.makeUnsafe("2026-10-07T14:00:00Z");
+        vi.setSystemTime(morning.epochMilliseconds);
+        yield* Effect.exit(harness.sweep());
+        const offer = Option.getOrThrow(
           yield* findCurrentProactivityOffer({
             db,
             userId,
             caller,
             kind: "budget-threshold",
-            now: night,
+            now: morning,
           })
-        )
-      ).toBe(true);
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT count(*) AS n FROM proactivity_offer_requests WHERE user_id=? AND materialized_at_ms IS NULL"
-            )
-            .bind(userId)
-            .first()
-        )
-      ).toEqual({ n: 1 });
-      const morning = DateTime.makeUnsafe("2026-10-07T14:00:00Z");
-      vi.setSystemTime(morning.epochMilliseconds);
-      yield* Effect.exit(harness.sweep());
-      const offer = Option.getOrThrow(
-        yield* findCurrentProactivityOffer({
-          db,
-          userId,
-          caller,
-          kind: "budget-threshold",
-          now: morning,
-        })
-      );
-      expect(offer.expiresAt.epochMilliseconds).toBe(morning.epochMilliseconds + 600000);
-      expect(
-        Option.isNone(yield* findProactivityConsentGrant({ db, userId, kind: "budget-threshold" }))
-      ).toBe(true);
-      const coordinator = makeWeeklySummaryCoordinator({ environment, userId });
-      const provider = vi.fn(() =>
-        Promise.resolve(
-          Response.json({
-            messaging_product: "whatsapp",
-            messages: [{ id: "morning-budget-offer" }],
-          })
-        )
-      );
-      vi.stubGlobal("fetch", provider);
-      yield* executeWeeklyWork({
-        environment,
-        userId,
-        now: morning,
-        work: { kind: "proactivity-delivery", version: 1, userId, id: offer.id },
-      }).pipe(Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch));
-      const claim = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({ correlation_token: HostedDeliveryCorrelationToken })
-      )(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT correlation_token FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
-            )
-            .bind(userId, offer.id)
-            .first()
-        )
-      );
-      const body = yield* Schema.encodeEffect(Schema.fromJsonString(WhatsAppStatusAdmission))({
-        userId,
-        correlationToken: claim.correlation_token,
-        businessPhoneNumberId: phone,
-        providerMessageId: WhatsAppProviderMessageId.make("morning-budget-offer"),
-        outcome: "delivered",
-        occurredAtMs: morning.epochMilliseconds,
-        receivedAtMs: morning.epochMilliseconds,
-      });
-      expect(
-        (yield* Effect.tryPromise(() =>
-          coordinator.fetch(
-            new Request("https://coordinator/hosted-turn/whatsapp/status", { method: "POST", body })
+        );
+        expect(offer.expiresAt.epochMilliseconds).toBe(morning.epochMilliseconds + 600000);
+        if (Option.isSome(prior)) expect(offer.id).not.toBe(prior.value.id);
+        expect(
+          Option.isNone(
+            yield* findProactivityConsentGrant({ db, userId, kind: "budget-threshold" })
           )
-        )).status
-      ).toBe(200);
-      expect(
-        Option.getOrThrow(
-          yield* readProactiveMessageTranscript({
-            db,
-            userId,
-            id: offer.id,
-            now: morning.epochMilliseconds,
-          })
-        ).text
-      ).toBe(`Fidy: ${offer.disclosure.text}\n${offer.acceptChoice}\n${offer.declineChoice}`);
-      expect(provider).toHaveBeenCalledOnce();
-    })
-  ));
+        ).toBe(true);
+        const coordinator = makeProactivityCoordinator({ environment, userId });
+        const provider = vi.fn(() =>
+          Promise.resolve(
+            Response.json({
+              messaging_product: "whatsapp",
+              messages: [{ id: "morning-budget-offer" }],
+            })
+          )
+        );
+        vi.stubGlobal("fetch", provider);
+        yield* executeProactivityWork({
+          environment,
+          userId,
+          now: morning,
+          work: { kind: "proactivity-delivery", version: 1, userId, id: offer.id },
+        }).pipe(Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch));
+        const claim = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ correlation_token: HostedDeliveryCorrelationToken })
+        )(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT correlation_token FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
+              )
+              .bind(userId, offer.id)
+              .first()
+          )
+        );
+        const body = yield* Schema.encodeEffect(Schema.fromJsonString(WhatsAppStatusAdmission))({
+          userId,
+          correlationToken: claim.correlation_token,
+          businessPhoneNumberId: phone,
+          providerMessageId: WhatsAppProviderMessageId.make("morning-budget-offer"),
+          outcome: "delivered",
+          occurredAtMs: morning.epochMilliseconds,
+          receivedAtMs: morning.epochMilliseconds,
+        });
+        expect(
+          (yield* Effect.tryPromise(() =>
+            coordinator.fetch(
+              new Request("https://coordinator/hosted-turn/whatsapp/status", {
+                method: "POST",
+                body,
+              })
+            )
+          )).status
+        ).toBe(200);
+        expect(
+          Option.getOrThrow(
+            yield* readProactiveMessageTranscript({
+              db,
+              userId,
+              id: offer.id,
+              now: morning.epochMilliseconds,
+            })
+          ).text
+        ).toBe(`Fidy: ${offer.disclosure.text}\n${offer.acceptChoice}\n${offer.declineChoice}`);
+        expect(provider).toHaveBeenCalledOnce();
+      })
+    )
+);
 
 it("attributes a mixed-child Budget Audit limit before the owner's trigger and rolls back", () =>
   Effect.runPromise(
@@ -1640,7 +1670,7 @@ it("installed category generation atomically materializes two Budget events and 
           EffectArray.head(yield* readBudgetCrossingGroups({ db, userId }))
         );
         const work = { kind: "proactivity-generate" as const, version: 1 as const, userId };
-        yield* executeWeeklyWork({
+        yield* executeProactivityWork({
           environment: { DB: db, PROACTIVITY_ENABLED: "enabled" },
           userId,
           now: yield* DateTime.now,
@@ -1698,7 +1728,7 @@ it("installed category generation atomically materializes two Budget events and 
           PROACTIVITY_TEMPLATE_JSON:
             '{"name":"fidy_proactivity","language":"es","body":"Fidy: {{1}}","approval":"approved"}',
         };
-        yield* executeWeeklyWork({
+        yield* executeProactivityWork({
           environment,
           userId,
           now,
@@ -1717,7 +1747,7 @@ it("installed category generation atomically materializes two Budget events and 
               .first()
           )
         );
-        const coordinator = makeWeeklySummaryCoordinator({ environment, userId });
+        const coordinator = makeProactivityCoordinator({ environment, userId });
         const status = (): Request =>
           new Request("https://coordinator/hosted-turn/whatsapp/status", {
             method: "POST",
@@ -1763,7 +1793,7 @@ it("installed category generation atomically materializes two Budget events and 
         expect(first.text).toContain("80% y 100%");
         expect(first.text).toContain("110 COP");
         expect(provider).toHaveBeenCalledOnce();
-        yield* executeWeeklyWork({
+        yield* executeProactivityWork({
           environment: { DB: db, PROACTIVITY_ENABLED: "enabled" },
           userId,
           now: yield* DateTime.now,

@@ -6,6 +6,8 @@ import {
 import { UserId } from "../../../src/core/identity/contract";
 import { InsightUnavailable } from "../contract";
 
+import { offerWindowOpen, recoverableOfferRequests } from "./proactivity-offers";
+
 const maximumGenerationUsers = 16;
 /** Bounded identities only; discovery does not read content or grant execution authority. */
 export const discoverProactivityUsers = (
@@ -26,14 +28,17 @@ export const discoverProactivityUsers = (
       )
     )(rows.results)).map((row) => row.user_id);
     const budgets = yield* discoverBudgetCrossingUsers(input);
-    const offersRaw = yield* Effect.tryPromise(() =>
-      input.db
-        .prepare(
-          "SELECT user_id FROM proactivity_offer_requests WHERE materialized_at_ms IS NULL GROUP BY user_id ORDER BY min(last_evaluated_at_ms),min(created_at_ms) LIMIT ?"
+    const pending = recoverableOfferRequests(input.now);
+    const offersRaw = offerWindowOpen(input.now)
+      ? yield* Effect.tryPromise(() =>
+          input.db
+            .prepare(
+              `SELECT user_id FROM (${pending.sql}) GROUP BY user_id ORDER BY min(last_evaluated_at_ms),min(created_at_ms) LIMIT ?`
+            )
+            .bind(...pending.params, maximumGenerationUsers)
+            .all()
         )
-        .bind(maximumGenerationUsers)
-        .all()
-    );
+      : { results: [] };
     const offers = (yield* Schema.decodeUnknownEffect(
       Schema.Array(Schema.Struct({ user_id: UserId })).check(
         Schema.isMaxLength(maximumGenerationUsers)
@@ -52,12 +57,13 @@ export const noteProactivityEvaluation = (
 ): Effect.Effect<void, InsightUnavailable> =>
   Effect.gen(function* () {
     yield* noteBudgetCrossingEvaluation({ ...input, now: input.now.epochMilliseconds });
+    const pending = recoverableOfferRequests(input.now);
     yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          "UPDATE proactivity_offer_requests SET last_evaluated_at_ms=? WHERE user_id=? AND materialized_at_ms IS NULL"
+          `UPDATE proactivity_offer_requests SET last_evaluated_at_ms=? WHERE user_id=? AND id IN (SELECT id FROM (${pending.sql}) WHERE user_id=?)`
         )
-        .bind(input.now.epochMilliseconds, input.userId)
+        .bind(input.now.epochMilliseconds, input.userId, ...pending.params, input.userId)
         .run()
     );
     yield* Effect.tryPromise(() =>

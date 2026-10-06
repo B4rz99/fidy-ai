@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: Review the changes since a fixed point (commit, branch, tag, or merge-base) along three axes — Standards (does the code follow this repo's documented coding and architecture standards?), Security (does it satisfy the repo's documented security policy?), and Spec (does the code match what the originating issue/spec asked for?). Runs read-only reviews as parallel Herdr-managed Pi workers using the invoking session's model and reasoning level, then reports them side by side. Use when the user wants to review a branch, a PR, work-in-progress changes, or asks to "review since X".
+description: Review the changes since a fixed point (commit, branch, tag, or merge-base) along three axes — Standards (does the code follow this repo's documented coding and architecture standards?), Security (does it satisfy the repo's documented security policy?), and Spec (does the code match what the originating issue/spec asked for?). Runs read-only reviews as parallel native Codex subagents, then reports them side by side. Use when the user wants to review a branch, a PR, work-in-progress changes, or asks to "review since X".
 ---
 
 Three-axis review of the diff between `HEAD` and a fixed point the user supplies:
@@ -9,9 +9,9 @@ Three-axis review of the diff between `HEAD` and a fixed point the user supplies
 - **Security** — does the code satisfy this repo's documented security policy?
 - **Spec** — does the code faithfully implement the originating issue / spec?
 
-Each active axis runs as a **parallel Herdr-managed Pi worker** so the reviews don't pollute each other's context, then this skill aggregates their findings. The workers are read-only and share the caller's checkout.
+Each active axis runs as a **parallel native Codex subagent** so the reviews don't pollute each other's context, then this skill aggregates their findings. The workers are read-only and share the caller's checkout.
 
-The issue tracker should have been provided to you — run `/setup-matt-pocock-skills` if `docs/agents/issue-tracker.md` is missing.
+The issue tracker should have been provided to you — read `docs/agents/issue-tracker.md` for the configured tracker. If it is missing, ask which tracker to use.
 
 ## Process
 
@@ -21,7 +21,7 @@ Whatever the user said is the fixed point — a commit SHA, branch name, tag, `m
 
 Capture the diff command once: `git diff <fixed-point>...HEAD` (three-dot, so the comparison is against the merge-base). Also note the list of commits via `git log <fixed-point>..HEAD --oneline`.
 
-Before going further, confirm the fixed point resolves (`git rev-parse <fixed-point>`) and the diff is non-empty. A bad ref or empty diff should fail here — not inside the Herdr workers.
+Before going further, confirm the fixed point resolves (`git rev-parse <fixed-point>`) and the diff is non-empty. A bad ref or empty diff should fail here — not inside the subagents.
 
 Run the existing mechanical gates (`bun run lint`, `bun run lint:type-aware`, `bun run format:check`, `bun run typecheck`) before dispatching reviewers, and again after each round of fixes. If a gate fails, report its failure and stop that iteration until it is fixed; do not ask a reviewer to rediscover it. CI still runs the full `bun run verify` gate.
 
@@ -64,32 +64,15 @@ Each smell reads _what it is_ → _how to fix_; match it against the diff:
 - **Middle Man** — a class or function that mostly just delegates onward. → cut it, call the real target direct.
 - **Refused Bequest** — a subclass or implementer that ignores or overrides most of what it inherits. → drop the inheritance, use composition.
 
-### 4. Spawn the active reviewers as Herdr Pi workers
+### 4. Spawn the active reviewers as native Codex subagents
 
-Delegation requires a Herdr-managed pane. Check this before creating any worker:
+Spawn one independent, read-only Codex subagent per active axis in parallel, using the native subagent tools. They share the caller's checkout and inherit the current model and reasoning effort.
 
-```bash
-test "${HERDR_ENV:-}" = 1
-```
+Give each subagent a self-contained task with the full diff command, commit list, named source paths or excerpts, and its axis brief below. Include the smell baseline in full in the Standards task, plus a literal `Standards sources` block. The Security task carries a literal `Security sources` block with `SECURITY_STANDARDS.md` and asks the subagent to read it before reviewing. Include the spec path or fetched contents in the Spec task.
 
-If the check fails, stop and report that this review requires Herdr. Do not fall back to an API call, an in-process sub-agent, or a different agent CLI.
+Tell each subagent to perform its assigned review itself, at one delegation level only. Keep it read-only: do not edit files, create worktrees, commit, spawn or prompt other agents, or invoke another review skill.
 
-All active reviewers are read-only, so keep them in the caller's current checkout. Follow `/herdr`'s **Spawn skill-driven Pi workers** procedure exactly:
-
-1. Inspect the current layout and create one sibling pane per active axis with `--no-focus`. Parse the returned pane IDs; never construct them.
-2. Start every worker before sending any task. Launch each with the invoking session's exact `PI_PROVIDER`, `PI_MODEL`, and `PI_REASONING_LEVEL`:
-
-   ```bash
-   herdr pane run <pane-id> "pi --model ${PI_PROVIDER:?PI_PROVIDER must be set}/${PI_MODEL:?PI_MODEL must be set} --thinking ${PI_REASONING_LEVEL:?PI_REASONING_LEVEL must be set} --exclude-tools edit,write"
-   ```
-
-   This launches Pi through the current Codex-backed auth/model selection. Do not use `herdr agent start --kind codex`, `--provider openai`, an API key, `-p`, or `--no-session`.
-
-3. Wait for every worker to reach `idle` with `herdr agent wait <pane-id> --until idle --timeout 30000`.
-4. Submit every self-contained task with `herdr agent prompt`. Tell each worker to perform its assigned review itself in that worker, at one delegation level only. Keep it read-only: do not edit files, create worktrees, commit, spawn or prompt other agents, or invoke another review skill. Include the full diff command, commit list, named source paths or excerpts, and the axis brief below. The Standards prompt carries a literal `Standards sources` block. The Security prompt carries a literal `Security sources` block with `SECURITY_STANDARDS.md` and asks the worker to read it before reviewing.
-5. Confirm every worker reaches `working` before collecting any result.
-6. Wait for each worker to reach `idle` or `done` with `herdr agent wait <pane-id> --until idle --until done --timeout 120000`, then read it with `herdr agent read <pane-id> --source recent-unwrapped --lines 160`.
-7. Treat a missing, blocked, unknown, or failed report as unresolved. Close only the panes created for this iteration after reading their reports.
+Start all active reviewers before waiting for results. Collect their completed reports through the native subagent tools. A missing, blocked, or failed report remains unresolved; it does not count as a passing axis.
 
 **Standards worker brief** — first read every path in the prompt's `Standards sources` block. Review documented coding and architecture standards and the smell baseline only. Report per file/hunk where relevant (a) every place the diff violates a documented standard, citing the source file and rule; and (b) any baseline smell, naming it and quoting the hunk. Distinguish hard documented-standard breaches from judgement calls. A documented repo standard overrides the baseline. Skip tooling-enforced issues. Report exactly "No standards findings." when none qualify. Stay under 400 words.
 
@@ -107,7 +90,7 @@ End with a one-line summary: total findings per axis, and the worst issue _withi
 
 ### 6. Iterate
 
-Run the review as `review → fix → review`. After aggregation, close that iteration's panes, apply the findings, refresh the diff against the same fixed point, and rerun every active axis in fresh panes. Finish when every active axis reports its no-findings result.
+Run the review as `review → fix → review`. After aggregation, apply the findings, refresh the diff against the same fixed point, and rerun every active axis in fresh independent subagents. Finish when every active axis reports its no-findings result.
 
 ## Why three axes
 

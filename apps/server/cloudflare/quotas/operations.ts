@@ -83,6 +83,23 @@ const consumptionStatements = (
 export const prepareConsumption = (input: ConsumptionInput): ReadonlyArray<D1PreparedStatement> =>
   consumptionStatements(input, "required");
 
+/** Attach a server-created continuation to its already admitted unit without changing the amount or period. */
+export const bindConsumptionRetry = (
+  input: ConsumptionInput & Readonly<{ retryIdentity: string }>
+): D1PreparedStatement =>
+  input.db
+    .prepare(`UPDATE commercial_allowance_consumptions SET identity = ?
+    WHERE user_id = ? AND allowance = ? AND identity = ?
+      AND EXISTS (SELECT 1 FROM (${input.authority.sql}) WHERE userId = ?)`)
+    .bind(
+      input.retryIdentity,
+      input.userId,
+      input.allowance,
+      input.identity,
+      ...input.authority.params,
+      input.userId
+    );
+
 /** Email may branch to bounded deferral in the same D1 batch if no processing unit is available. */
 export const prepareAvailableConsumption = (
   input: ConsumptionInput

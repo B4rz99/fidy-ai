@@ -9,18 +9,23 @@ import type { CatalogOperation } from "../../src/shell/canonical-catalog/contrac
 import {
   OAuthCanonicalAdmission,
   type OAuthConfirmationAttempt,
+  mcpCanonicalMetadata,
   projectMcpSchemas,
 } from "../../src/shell/mcp/contract";
 import { readNativeConfirmation, requestNativeConfirmation } from "./native-confirmation";
 import { OAuthMcpAdmission, maximumMcpRequestBytes } from "./contract";
 import { type OAuthCaller } from "../../src/shell/oauth-agents/contract";
+import { CanonicalAllowance, canonicalAllowanceHeaders } from "../../src/shell/quotas/contract";
 import { Unavailable } from "../../src/shell/public-http/contract";
 import { type PATScopes } from "../../src/core/tokens/contract";
 import { decideOperationAccess } from "../../src/shell/canonical-policy/operations";
 import { RequestBodyPolicy } from "../http/contract";
 import { awaitRequestAbort, readBoundedRequestBody } from "../http/operations";
 import { authenticateOAuth, resolveOAuthMcpCaller } from "../oauth-agents/operations";
-import { protectCanonicalPressure } from "../canonical-admission/operations";
+import {
+  discloseCanonicalAllowance,
+  protectCanonicalPressure,
+} from "../canonical-admission/operations";
 
 const queryLifetimeMilliseconds = 3000;
 const transportLifetimeMilliseconds = 5000;
@@ -164,7 +169,25 @@ const decodeToolResponse = (
     const allowedIds = new Set(operationCatalog.operations.filter(available).map(({ id }) => id));
     const projected = projectMcpSchemas({ operation, catalog: operationCatalog, allowedIds });
     yield* Schema.decodeEffect(projected.output)(result.structuredContent ?? null);
-    return result;
+    const allowance = Schema.decodeOption(Schema.toCodecJson(CanonicalAllowance))({
+      allowance: response.headers.get(canonicalAllowanceHeaders.allowance),
+      limit: response.headers.get(canonicalAllowanceHeaders.limit),
+      remaining: response.headers.get(canonicalAllowanceHeaders.remaining),
+      resetsAt: response.headers.get(canonicalAllowanceHeaders.resetsAt),
+    });
+    if (Option.isNone(allowance)) return result;
+    const encoded = yield* Schema.encodeEffect(Schema.toCodecJson(CanonicalAllowance))(
+      allowance.value
+    );
+    const metadata = yield* Schema.decodeEffect(Schema.JsonObject)({
+      [mcpCanonicalMetadata.allowance]: encoded,
+    });
+    return McpSchema.CallToolResult.make({
+      isError: result.isError,
+      structuredContent: result.structuredContent,
+      content: result.content,
+      _meta: metadata,
+    });
   });
 
 const executeAdmittedTool = (
@@ -199,6 +222,11 @@ const executeAdmittedTool = (
       }),
       operation: operation.id,
       input: encodedInput,
+      ...(context.requestMetadata?.[mcpCanonicalMetadata.retryKey] === undefined
+        ? {}
+        : {
+            retryKey: context.requestMetadata[mcpCanonicalMetadata.retryKey],
+          }),
       ...Option.match(confirmation.attempt, {
         onNone: () => ({}),
         onSome: (confirmation) => ({ confirmation }),
@@ -235,10 +263,12 @@ const executeTool = (
     userId: input.subject.userId,
     work: executeAdmittedTool(input, { operation, payload, confirmation: Option.none() }),
     refused: (response) =>
-      Effect.tryPromise(() => response.json()).pipe(
-        Effect.flatMap((raw) =>
-          canonicalToolResult({ codec: operation.failure, raw, isError: true })
-        ),
+      discloseCanonicalAllowance({
+        db: input.db,
+        caller: { _tag: "OAuth", value: input.subject },
+        response,
+      }).pipe(
+        Effect.flatMap((response) => decodeToolResponse(input, operation, response)),
         Effect.catchCause(() => toolFailure(operation))
       ),
   });

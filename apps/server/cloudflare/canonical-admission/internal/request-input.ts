@@ -122,20 +122,25 @@ const requiredScopes = (
 };
 
 /** Validate reflected HTTP input before spending a commercial unit; canonicalized JSON lives only in memory. */
-export const validatedCanonicalInput = ({
-  request,
-  operation,
-}: Readonly<{ request: Request; operation: CatalogOperation }>): Effect.Effect<
+export const validatedCanonicalInput = (
+  input: Readonly<{ operation: CatalogOperation }> &
+    (Readonly<{ request: Request }> | Readonly<{ canonicalInput: Schema.Json }>)
+): Effect.Effect<
   Option.Option<Readonly<{ inputHash: string; scopes: ReadonlyArray<CanonicalCapability> }>>
 > =>
   Effect.gen(function* () {
+    const { operation } = input;
     if (
-      operation.method !== request.method ||
-      operation.route.split("/").length !== new URL(request.url).pathname.split("/").length
+      "request" in input &&
+      (operation.method !== input.request.method ||
+        operation.route.split("/").length !== new URL(input.request.url).pathname.split("/").length)
     ) {
       return Option.none();
     }
-    const decoded = yield* rawInput({ request, operation });
+    const decoded =
+      "request" in input
+        ? yield* rawInput({ request: input.request, operation })
+        : Schema.decodeOption(operation.input, { onExcessProperty: "error" })(input.canonicalInput);
     if (Option.isNone(decoded)) return Option.none();
     const scopes = requiredScopes(operation, decoded.value);
     if (Option.isNone(scopes)) return Option.none();

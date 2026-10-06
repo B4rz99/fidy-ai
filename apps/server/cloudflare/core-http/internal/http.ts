@@ -1325,7 +1325,6 @@ const executeProtectedCanonicalWork = (
     request: input.request,
     operation: input.operation,
     current: input.current,
-    browserOrigin: input.environment.BROWSER_ORIGIN,
     caller: isPATCaller(input.subject)
       ? { _tag: "PAT", value: input.subject }
       : { _tag: "WebSession", value: input.subject },

@@ -114,7 +114,6 @@ it("displays post-admission Free standing on a successful metered canonical call
         ...fixture,
         caller,
         operation: operation("categories.listCategories"),
-        browserOrigin: "http://localhost:3000",
         request: new Request("https://core.internal/categories"),
         work: Effect.succeed(Response.json({ data: [], next: [] })),
       });
@@ -325,7 +324,6 @@ it("attributes completed replay disclosure to the current PAT without reexecutin
         ...fixture,
         caller: { _tag: "PAT", value: { ...caller.value, patId: otherId, digest: otherDigest } },
         operation: operation("transactions.getTransaction"),
-        browserOrigin: "http://localhost:3000",
         request: new Request(`https://core.internal/transactions/${targetId}`, {
           headers: { "Fidy-Retry-Key": key },
         }),
@@ -383,7 +381,6 @@ const read = (
     ...fixture,
     caller,
     operation: operation("transactions.getTransaction"),
-    browserOrigin: "http://localhost:3000",
     request: new Request(`https://core.internal/transactions/${id}`, {
       headers: Option.isSome(key) ? { "Fidy-Retry-Key": key.value } : {},
     }),
@@ -397,7 +394,6 @@ const inspect = (
     ...fixture,
     caller,
     operation: operation(op),
-    browserOrigin: "http://localhost:3000",
     request: new Request(
       `https://core.internal${op === "quota.getQuota" ? "/quota" : "/subscription/upgrade-url"}`
     ),
@@ -418,7 +414,6 @@ const batchRequest = (fixture: Fixture, retryKey: string): Effect.Effect<Respons
     ...fixture,
     caller: { _tag: "PAT", value: { userId, patId, digest, requiredScope: Option.none() } },
     operation: envelope,
-    browserOrigin: "http://localhost:3000",
     request: new Request(`https://core.internal${envelope.route}`, {
       method: "POST",
       headers: { "content-type": "application/json", "Fidy-Retry-Key": retryKey },

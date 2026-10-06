@@ -289,6 +289,7 @@ const privateOAuthCanonicalWork = (
       operation: admitted.operation,
       input: admitted.input,
       confirmation: Option.fromUndefinedOr(admitted.confirmation),
+      retryKey: Option.fromUndefinedOr(admitted.retryKey),
       bucket: Option.fromUndefinedOr(input.environment.STATEMENT_STAGING_BUCKET),
       inference,
       subject: {

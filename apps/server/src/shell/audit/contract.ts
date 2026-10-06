@@ -120,7 +120,7 @@ export type CanonicalAdmissionRefusal = Readonly<{
 /** Record a completed retained-response disclosure only with the original snapshot's exact live proof. It grants no permission beyond the coordinator's current authority. */
 export type CanonicalReplayAccess = CanonicalAdmissionRefusal &
   Readonly<{
-    authority: AuditAuthority & Readonly<{ table: "pats" }>;
+    authority: AuditAuthority & Readonly<{ table: "pats" | "oauth_access_credentials" }>;
     retainedResponseProof: OwnedStatement;
     outcome: "accepted" | "rejected";
   }>;

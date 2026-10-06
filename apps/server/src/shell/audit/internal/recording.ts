@@ -64,16 +64,44 @@ const callerOwnership = (input: OwnerAuditCall): OwnedStatement => {
 };
 const authorityCaller = (authority: AuditAuthority): boolean => authority.table === "pats";
 
+const oauthAdmissionStatement = ({
+  authority,
+  id,
+  operation,
+  current,
+  outcome,
+}: CanonicalAdmissionRefusal &
+  Readonly<{
+    authority: AuditAuthority & { table: "oauth_access_credentials" };
+    outcome: "accepted" | "rejected";
+  }>): OwnedStatement => ({
+  sql: `INSERT INTO pat_audit (id,user_id,oauth_connection_id,oauth_credential_id,operation,outcome,occurred_at_ms)
+    SELECT ?,?,?,?,?,?,? FROM ${authority.table} WHERE ${authority.predicate}`,
+  params: [
+    id,
+    authority.attribution.userId,
+    authority.attribution.connectionId,
+    authority.attribution.credentialId,
+    operation,
+    outcome,
+    current,
+    ...authority.bindings,
+  ],
+});
+
 /** Admission refusals are canonical metadata, not allowance counters or retained request bodies. */
 export const admissionRefusalStatement = ({
   authority,
   id,
   operation,
   current,
-}: CanonicalAdmissionRefusal): OwnedStatement => ({
-  sql: `INSERT INTO pat_audit (id,user_id,${authority.table === "pats" ? "pat_id" : "session_id"},operation,outcome,occurred_at_ms) SELECT ?,user_id,id,?,'rejected',? FROM ${authority.table} WHERE ${authority.predicate}`,
-  params: [id, operation, current, ...authority.bindings],
-});
+}: CanonicalAdmissionRefusal): OwnedStatement =>
+  authority.table === "oauth_access_credentials"
+    ? oauthAdmissionStatement({ authority, id, operation, current, outcome: "rejected" })
+    : {
+        sql: `INSERT INTO pat_audit (id,user_id,${authority.table === "pats" ? "pat_id" : "session_id"},operation,outcome,occurred_at_ms) SELECT ?,user_id,id,?,'rejected',? FROM ${authority.table} WHERE ${authority.predicate}`,
+        params: [id, operation, current, ...authority.bindings],
+      };
 
 /** Records fixed metadata after an owner-scoped existence proof, retaining the owner's atomic guard. */
 export const ownerCallStatement = (input: OwnerAuditCall): OwnedStatement => {
@@ -146,10 +174,30 @@ export const replayAccessStatement = ({
   current,
   outcome,
   retainedResponseProof,
-}: CanonicalReplayAccess): OwnedStatement => ({
-  sql: `INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms) SELECT ?,user_id,id,?,?,? FROM pats WHERE ${authority.predicate} AND EXISTS (${retainedResponseProof.sql})`,
-  params: [id, operation, outcome, current, ...authority.bindings, ...retainedResponseProof.params],
-});
+}: CanonicalReplayAccess): OwnedStatement =>
+  authority.table === "oauth_access_credentials"
+    ? oauthAdmissionStatement({
+        authority: {
+          ...authority,
+          predicate: `${authority.predicate} AND EXISTS (${retainedResponseProof.sql})`,
+          bindings: [...authority.bindings, ...retainedResponseProof.params],
+        },
+        id,
+        operation,
+        current,
+        outcome,
+      })
+    : {
+        sql: `INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms) SELECT ?,user_id,id,?,?,? FROM pats WHERE ${authority.predicate} AND EXISTS (${retainedResponseProof.sql})`,
+        params: [
+          id,
+          operation,
+          outcome,
+          current,
+          ...authority.bindings,
+          ...retainedResponseProof.params,
+        ],
+      };
 
 /** Builds evidence under the exact credential gate held by the coordinator. */
 export const authorizedCallStatement = (input: AuthorizedAuditCall): OwnedStatement => {

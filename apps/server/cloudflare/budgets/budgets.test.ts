@@ -1924,7 +1924,14 @@ it("category Queue-to-Workflow redelivery rejects another User's frozen Budget m
       const userId = UserId.make(users[0]);
       const group = (yield* readBudgetCrossingGroups({ db, userId }))[0];
       if (group === undefined) return yield* Effect.die("Expected Budget crossings");
-      const environment = { DB: db, PROACTIVITY_ENABLED: "enabled" };
+      const environment = {
+        DB: db,
+        PROACTIVITY_ENABLED: "enabled",
+        KAPSO_API_KEY: "test-only",
+        PROACTIVITY_TEMPLATE_JSON: yield* Schema.encodeEffect(
+          Schema.fromJsonString(ProactivityTemplateConfiguration)
+        )({ name: "fidy_proactivity", language: "es", approval: "approved", body: "Fidy: {{1}}" }),
+      };
       yield* executeProactivityWork({
         environment,
         userId,
@@ -1933,6 +1940,20 @@ it("category Queue-to-Workflow redelivery rejects another User's frozen Budget m
       });
       const report = Option.getOrThrow(yield* findProactivityReport({ db, userId, id: group.id }));
       expect(Option.getOrThrow(report.text)).toContain("110 COP");
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          prepareInsightRecipient({
+            db,
+            userId,
+            recipient: {
+              portfolioId: WhatsAppBusinessPortfolioId.make("123456789"),
+              bsuid: WhatsAppBusinessScopedUserId.make("CO.budgetuser"),
+              businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+            },
+            receivedAtMs: DateTime.nowUnsafe().epochMilliseconds,
+          }),
+        ])
+      );
       const snapshot = (): Effect.Effect<
         ReadonlyArray<ReadonlyArray<unknown>>,
         Cause.UnknownError
@@ -2010,6 +2031,20 @@ it("category Queue-to-Workflow redelivery rejects another User's frozen Budget m
         expect(provider).not.toHaveBeenCalled();
         expect(yield* snapshot()).toEqual(before);
       }
+      provider.mockResolvedValueOnce(
+        Response.json({
+          messaging_product: "whatsapp",
+          messages: [{ id: "same-user-category-control" }],
+        })
+      );
+      const ownWork = { ...work, userId };
+      const message = { body: ownWork, ack: vi.fn(), retry: vi.fn() };
+      yield* harness.receive({ messages: [message], workflow: Option.some(binding) });
+      expect(message.ack).toHaveBeenCalledOnce();
+      expect(
+        (yield* Effect.exit(Effect.tryPromise(() => harness.execute({ work: ownWork, step }))))._tag
+      ).toBe("Success");
+      expect(provider).toHaveBeenCalledOnce();
     })
   ));
 

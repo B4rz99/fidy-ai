@@ -34,9 +34,9 @@ export const observeTestHostedContext = (
       db.batch([
         db
           .prepare(
-            "INSERT INTO verified_email_credentials(user_id,email_address,verified_at_ms) SELECT id,'reminder-context@example.com',created_at_ms FROM users WHERE id=?"
+            "INSERT INTO verified_email_credentials(user_id,email_address,verified_at_ms) SELECT id,?,created_at_ms FROM users WHERE id=?"
           )
-          .bind(proof.userId),
+          .bind(`context-${proof.userId}@example.com`, proof.userId),
         db
           .prepare(
             "INSERT INTO trial_periods(user_id,started_at_ms,ends_at_ms) SELECT id,created_at_ms,created_at_ms+604800000 FROM users WHERE id=?"

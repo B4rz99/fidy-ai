@@ -315,7 +315,10 @@ Retained report identities do not restrict ephemeral offer deletion. Retained Bu
 work participates in fair bounded Maintenance discovery and drains under the same User coordinator
 before crossing publication. Budget opt-in first drains pre-opt-in work under its previous
 eligibility and atomically fences the new grant against any remaining reconciliation, so a delayed
-post-commit evaluation cannot turn earlier financial changes into retroactive delivery.
+post-commit evaluation cannot turn earlier financial changes into retroactive delivery. Fresh reminder
+offers under an existing grant expose authenticated continuation as well as revocation; continuation
+reactivates stopped or paused schedules without replacing legal Consent. Cross-User standalone
+message context is denied at both the contextual owner and actual hosted inference boundaries.
 Installed implementation and test evidence do not constitute issue acceptance, template approval,
 or production enablement.
 

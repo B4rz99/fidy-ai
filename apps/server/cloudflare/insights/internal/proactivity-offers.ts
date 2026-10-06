@@ -69,10 +69,18 @@ export const recoverableOfferRequests = (now: DateTime.Utc): OwnedStatement => {
   };
 };
 
-const offerText = (offer: ProactivityConsentOffer, hasGrant: boolean): string =>
-  hasGrant
-    ? `${offer.disclosure.text}\n${offer.revokeChoice}`
-    : `${offer.disclosure.text}\n${offer.acceptChoice}\n${offer.declineChoice}`;
+const offerText = (
+  offer: ProactivityConsentOffer,
+  kind: ProactivityOptInKind,
+  hasGrant: boolean
+): string => {
+  if (!hasGrant) return `${offer.disclosure.text}\n${offer.acceptChoice}\n${offer.declineChoice}`;
+  const choices =
+    kind === "manual-entry-reminder"
+      ? `${offer.acceptChoice}\n${offer.revokeChoice}`
+      : offer.revokeChoice;
+  return `${offer.disclosure.text}\n${choices}`;
+};
 
 const consentContext = (
   input: Readonly<{ db: D1Database; userId: UserId; now: DateTime.Utc }>,
@@ -97,7 +105,7 @@ const materializeOffer = (
     if (Option.isNone(offer)) return;
     const value = offer.value;
     const grant = yield* findProactivityConsentGrant({ ...input, kind: request.kind });
-    const text = offerText(value, Option.isSome(grant));
+    const text = offerText(value, request.kind, Option.isSome(grant));
     yield* Effect.tryPromise(() =>
       input.db.batch([
         prepareConsentAction({

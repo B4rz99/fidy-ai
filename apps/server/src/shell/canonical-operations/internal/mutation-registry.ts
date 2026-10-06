@@ -63,6 +63,7 @@ export const canonicalMutationImplementations = {
   "insights.markInsightDelivered": unavailableMutation,
   "insights.markInsightRead": unavailableMutation,
   "insights.dismissInsight": unavailableMutation,
+  "insights.updateReminderSchedule": unavailableMutation,
   "pats.inspectPATPairing": unavailableMutation,
   "pats.revokePAT": unavailableMutation,
   "pats.revokeAllPATs": unavailableMutation,

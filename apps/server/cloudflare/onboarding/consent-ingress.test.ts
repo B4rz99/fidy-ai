@@ -186,6 +186,9 @@ const setup = (
           db.prepare(
             "CREATE TABLE weekly_governor_questions (user_id TEXT, correlation_token TEXT, business_phone_number_id TEXT, send_started_at_ms INTEGER)"
           ),
+          db.prepare(
+            "CREATE TABLE proactivity_whatsapp_claims (user_id TEXT, correlation_token TEXT, business_phone_number_id TEXT, send_started_at_ms INTEGER)"
+          ),
         ])
       );
       yield* Effect.tryPromise(() =>

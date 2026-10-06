@@ -1,12 +1,11 @@
 ---
 name: implement-spec
-description: "Implement the result of /to-spec and /to-tickets in code."
-disable-model-invocation: true
+description: "Implement the result of $to-spec and $to-tickets in code."
 ---
 
 You have been provided a spec. This spec should have tickets associated with it, describing how to implement the spec.
 
-The issue tracker should have been provided to you. If not, tell the user to run `/setup-matt-pocock-skills`.
+The issue tracker should have been provided to you. Read `docs/agents/issue-tracker.md` for the configured tracker, labels, and publication conventions.
 
 The goal is the entire spec implemented on a single **integration branch**, with every ticket resolved the way the issue tracker closes work.
 
@@ -14,23 +13,7 @@ The tickets are not a list of steps. They are a **task graph** with blocking rel
 
 Communication to and from subagents should be sparse. Communicate primarily through **context pointers**: to the spec, tickets, research notes, and previous commits. Don't duplicate information already available via pointers.
 
-**Implementer subagents** should be run in the background where possible for maximum concurrency.
-
-## Agent runtime
-
-Use Herdr-managed interactive Pi agents for every subagent, following
-`.agents/skills/herdr/SKILL.md`.
-
-Every worker inherits the invoking session's current provider, model,
-and reasoning effort. Expand these values when launching each worker:
-
-```bash
-herdr pane run <pane-id> "pi --model ${PI_PROVIDER:?PI_PROVIDER must be set}/${PI_MODEL:?PI_MODEL must be set} --thinking ${PI_REASONING_LEVEL:?PI_REASONING_LEVEL must be set}"
-```
-
-Use Herdr worktrees for workers that create or edit files, including
-implementers and mergers. Submit tasks and collect results through
-Herdr. Communicate through the context pointers described above.
+**Implementer subagents** should be run in the background where possible for maximum concurrency. Use native Codex subagent tools; create and assign each writing worker its worktree path explicitly, since subagents otherwise share the caller's checkout. Merge completed work into the integration branch one at a time.
 
 ## Steps
 
@@ -42,14 +25,14 @@ Herdr. Communicate through the context pointers described above.
 
 4. Use **implementer subagents** to implement each ticket, each in its own worktree on its own branch. Each implementer subagent:
    - confirms its worktree is based on the integration branch before starting, and resets onto it if not;
-   - reads `.agents/skills/tdd/SKILL.md` and follows it to build the ticket;
+   - reads and follows the `tdd` skill to build the ticket;
    - merges the integration branch tip into its own branch before reporting done
 
 5. Once an **implementer subagent** completes, merge its work to the integration branch with a **merger subagent**.
 
 6. If this changes the **frontier** of available tickets, kick off more **implementer subagents** to work on the new tickets. This allows for maximum concurrency.
 
-7. Once all tickets are complete, read `.agents/skills/code-review/SKILL.md` and follow it on the integration branch. Fix all issues raised by the code review in a single **implementer subagent**.
+7. Once all tickets are complete, read and follow the `code-review` skill on the integration branch. Fix all issues raised by the code review in a single **implementer subagent**.
 
 8. If a draft PR exists, mark it ready for review. Otherwise, resolve each ticket the way the issue tracker closes work, and report the integration branch.
 

@@ -172,7 +172,7 @@ const setup = Effect.fn(function* () {
     CREATE TABLE web_sessions (id TEXT PRIMARY KEY, user_id TEXT, token_digest BLOB, revoked_at_ms INTEGER, idle_expires_at_ms INTEGER, hard_expires_at_ms INTEGER);
     CREATE TABLE statement_submission_audit (id TEXT PRIMARY KEY, user_id TEXT, operation TEXT, outcome TEXT, occurred_at_ms INTEGER);
     CREATE TABLE transaction_audit (user_id TEXT, occurred_at_ms INTEGER);
-    CREATE TABLE pat_audit (user_id TEXT, pat_id TEXT, operation TEXT, occurred_at_ms INTEGER);
+    CREATE TABLE pat_audit (user_id TEXT, pat_id TEXT, oauth_connection_id TEXT, oauth_credential_id TEXT, operation TEXT, occurred_at_ms INTEGER);
     CREATE TABLE category_audit (user_id TEXT, occurred_at_ms INTEGER);
     CREATE TABLE memory_audit (user_id TEXT, occurred_at_ms INTEGER);
     CREATE TABLE categories (id TEXT PRIMARY KEY);

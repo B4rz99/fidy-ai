@@ -104,7 +104,7 @@ the whole connection family, including a concurrent winner; lost delivery requir
 approval, with no grace window or recoverable replacement cache. Fresh first-party settings list separately identifiable connections with bounded canonical activity and can atomically revoke one or all owned grants under the original User coordinator. Activity is metadata-only Audit evidence, never credential material or financial content. Browser logout, PAT revocation and OAuth revocation remain independent. Discovery is scope-private and catalog-derived; sensitive confirmation remains a later slice; OAuth callers never become PATs, WebSessions or Hosted Agent Sessions.
 
 The [compatibility report](docs/research/hosted-mcp-interoperability-977.md) records passing synthetic
-exchange/discovery/refresh evidence for exact Claude Code, Codex and Pi versions, their registration
+exchange/discovery/refresh evidence for exact Claude Code and Codex versions, their registration
 selection and explicit unsupported sensitive interactions. No production route, grant authority, client setup promise or
 launch enablement follows from accepting the design. Exact-host interoperability, real Core/D1
 security evidence, #35's shared User allowance and operator approval remain separate gates.

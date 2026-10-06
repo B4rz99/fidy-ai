@@ -41,12 +41,6 @@
   { "event": "issuer-discovery" },
   {
     "event": "registration",
-    "name": "pi",
-    "redirects": ["http://127.0.0.1:61083/callback"],
-    "grantTypes": ["authorization_code", "refresh_token"]
-  },
-  {
-    "event": "registration",
     "name": "Claude Code (spike)",
     "redirects": ["http://localhost:54081/callback"],
     "grantTypes": ["authorization_code", "refresh_token"]

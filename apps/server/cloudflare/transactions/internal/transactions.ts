@@ -26,7 +26,6 @@ import {
   isOAuthCaller,
   isPATCaller,
   maximumTransactionInputBytes,
-  transactionNow as now,
   transactionId,
   transactionUnavailable,
   unauthenticatedTransaction,
@@ -58,8 +57,10 @@ type Capture = Readonly<{
 export const transactionSession = ({
   request,
   db,
-}: Readonly<{ request: Request; db: D1Database }>): Promise<Option.Option<TransactionSubject>> =>
-  authenticateCanonicalWebSession({ request, db, current: now() });
+  current,
+}: Readonly<{ request: Request; db: D1Database; current: number }>): Promise<
+  Option.Option<TransactionSubject>
+> => authenticateCanonicalWebSession({ request, db, current });
 
 /** Decode bounded canonical input before dispatching a mutation to the User coordinator. */
 export const transactionInput = (

@@ -1,4 +1,4 @@
-import { Effect, Exit, Option, Schema } from "effect";
+import { Clock, Effect, Exit, Option, Schema } from "effect";
 import { maximumAtomicBatchCalls } from "../../../src/shell/operations/contract";
 import type { HostedCanonicalCaller } from "../../canonical-work/contract";
 import type { HostedCommitFence } from "../../agent/contract";
@@ -20,7 +20,6 @@ import {
   TransactionPresentation,
 } from "../../../src/core/transactions/contract";
 import { canonicalTriggerOf } from "./triggers";
-import { currentMillis } from "../../runtime/operations";
 import { liveOAuthCommitAuthority } from "../../../src/shell/oauth-agents/operations";
 
 import {
@@ -72,7 +71,10 @@ const mutationOperation = (mutation: PreparedCanonicalMutation): string =>
 const commitInstant = (
   subject: TransactionCaller | HostedCanonicalCaller,
   admitted: number
-): number => (!isHostedUnitCaller(subject) && isOAuthCaller(subject) ? currentMillis() : admitted);
+): Effect.Effect<number> =>
+  !isHostedUnitCaller(subject) && isOAuthCaller(subject)
+    ? Clock.currentTimeMillis
+    : Effect.succeed(admitted);
 
 /** Reuse the owner's changes() completion premise while binding each child's identity to its slot. */
 const childCompletion = (db: D1Database, index: number, operation: string): D1PreparedStatement =>
@@ -485,7 +487,7 @@ export const executeCanonicalMutationUnit = ({
     Effect.gen(function* () {
       if (mutations.length === 0) return { _tag: "Unavailable" } as const;
       if (mutations.length > maximumAtomicBatchCalls) return { _tag: "Unavailable" } as const;
-      const commitCurrent = commitInstant(subject, current);
+      const commitCurrent = yield* commitInstant(subject, current);
       const statements = [
         ...Option.match(hostedFence, {
           onNone: (): ReadonlyArray<D1PreparedStatement> => [],
@@ -508,7 +510,7 @@ export const executeCanonicalMutationUnit = ({
         return yield* classifyUnitCallerAbort({
           db,
           subject,
-          current: commitInstant(subject, commitCurrent),
+          current: yield* commitInstant(subject, commitCurrent),
           mutations,
           cause: attempt.cause,
         });

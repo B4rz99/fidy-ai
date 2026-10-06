@@ -41,6 +41,12 @@
       "manifest": "tools/mutation/package.json",
       "reason": "With TypeScript 7.0.2, Stryker's tsconfig rewrite crashes because parseConfigFileTextToJson is missing. Revisit after TypeScript 7.1 ships the replacement compiler API and Stryker adopts it.",
       "until": "2026-12-20T00:00:00Z"
+    },
+    {
+      "name": "@effect/tsgo",
+      "manifest": "package.json",
+      "reason": "0.47.0 introduces 1,148 unstableApiUsage warnings for required Effect v4 HTTP, MCP, runtime and test APIs; the warning-failing project-reference build exits nonzero although no type errors occur. Its patch CLI also requires an otherwise unused --force flag. Retain verified 0.46.1 without suppressing compiler diagnostics. Revisit the upstream default severity and supported stable replacements before updating, then rerun the normal installer, typecheck and unit verification.",
+      "until": "2026-10-10T00:00:00Z"
     }
   ],
   "acceptedVulnerabilities": [

@@ -516,6 +516,7 @@ const ownedCorePath = (path: string): boolean =>
     statementStagingPath,
     "/web/hosted-turns",
     "/web/hosted-turns/delivery",
+    "/web/hosted-turns/progress",
   ].includes(path) ||
   transactionPath(path) ||
   ownsWebAuthenticationPath(path) ||
@@ -935,8 +936,9 @@ const hostedTurnResponse = (
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
     if (request.method !== "POST") return methodNotAllowed();
+    const current = yield* Clock.currentTimeMillis;
     const subject = yield* Effect.tryPromise(() =>
-      transactionSession({ request, db: environment.DB })
+      transactionSession({ request, db: environment.DB, current })
     );
     if (Option.isNone(subject)) return unauthenticatedTransaction();
     const input = yield* boundedJsonBody({
@@ -972,8 +974,9 @@ const hostedProgressResponse = (
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
     if (request.method !== "POST") return methodNotAllowed();
+    const current = yield* Clock.currentTimeMillis;
     const subject = yield* Effect.tryPromise(() =>
-      transactionSession({ request, db: environment.DB })
+      transactionSession({ request, db: environment.DB, current })
     );
     if (Option.isNone(subject)) return unauthenticatedTransaction();
     const input = yield* boundedJsonBody({
@@ -1009,8 +1012,9 @@ const hostedReceiptResponse = (
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
     if (request.method !== "POST") return methodNotAllowed();
+    const current = yield* Clock.currentTimeMillis;
     const subject = yield* Effect.tryPromise(() =>
-      transactionSession({ request, db: environment.DB })
+      transactionSession({ request, db: environment.DB, current })
     );
     if (Option.isNone(subject)) return unauthenticatedTransaction();
     const input = yield* boundedJsonBody({
@@ -1337,7 +1341,7 @@ const authorizedCanonicalResponse = (
     const current = yield* Clock.currentTimeMillis;
     if (!request.headers.has("authorization")) {
       return yield* Effect.tryPromise({
-        try: () => transactionSession({ request, db: environment.DB }),
+        try: () => transactionSession({ request, db: environment.DB, current }),
         catch: () => undefined,
       }).pipe(
         Effect.flatMap((session) => {

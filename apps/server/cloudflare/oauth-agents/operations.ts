@@ -22,10 +22,13 @@ import {
 } from "./internal/refresh";
 import { oauthResponse } from "./internal/response";
 import { queryCallerSnapshot } from "./internal/query-caller";
+import { mcpCallerSnapshot } from "./internal/mcp-caller";
 
 /** Resolve live query capabilities and derived tier without publishing OAuth storage or changing accounting. Canonical owners still recheck authority in protected work. */
 export const resolveOAuthQueryCaller: typeof queryCallerSnapshot = (input) =>
   queryCallerSnapshot(input);
+/** Current native protocol admission; canonical execution retains its independent live rechecks. */
+export const resolveOAuthMcpCaller: typeof mcpCallerSnapshot = (input) => mcpCallerSnapshot(input);
 
 /** Commits a still-live first-party decision under the original User coordinator. Cancelled or expired queued decisions cannot revoke later; a started atomic unit settles even if its response is lost. */
 export const executeOAuthRevocation = (

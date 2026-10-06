@@ -3176,7 +3176,9 @@ it("retains the Transaction owner's not-found refusal and Audit for malformed ca
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
       const subject = Option.getOrThrow(
-        yield* fromTestPromise(() => transactionSession({ request: request(0), db }))
+        yield* fromTestPromise(() =>
+          transactionSession({ request: request(0), db, current: transactionNow() })
+        )
       );
       const response = yield* executeCanonicalQuery({
         db,
@@ -3403,7 +3405,9 @@ it("continues the canonical history beyond its first bounded page without losing
           .run()
       );
       const subject = Option.getOrThrow(
-        yield* fromTestPromise(() => transactionSession({ request: request(0), db }))
+        yield* fromTestPromise(() =>
+          transactionSession({ request: request(0), db, current: transactionNow() })
+        )
       );
       const first = yield* browseTransactions({
         db,
@@ -3508,7 +3512,9 @@ it("commits exact manual Money, immutable capture context, and audit before cano
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
-      const owner = yield* fromTestPromise(() => transactionSession({ request: request(0), db }));
+      const owner = yield* fromTestPromise(() =>
+        transactionSession({ request: request(0), db, current: transactionNow() })
+      );
       const parsed = yield* transactionInput(
         request(0, "/transactions", input({ counterparty: "Acme" }))
       );
@@ -3569,14 +3575,22 @@ it("neither a foreign opaque id nor another session can observe a Transaction", 
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
-      const owner = yield* fromTestPromise(() => transactionSession({ request: request(0), db }));
-      const other = yield* fromTestPromise(() => transactionSession({ request: request(1), db }));
+      const owner = yield* fromTestPromise(() =>
+        transactionSession({ request: request(0), db, current: transactionNow() })
+      );
+      const other = yield* fromTestPromise(() =>
+        transactionSession({ request: request(1), db, current: transactionNow() })
+      );
       const parsed = yield* transactionInput(request(0, "/transactions", input()));
       const tokenOnly = new Request("https://core.internal/transactions", {
         headers: { authorization: `Bearer ${bearer(0)}`, "x-provider-id": users[0] ?? "" },
       });
       expect(
-        Option.isNone(yield* fromTestPromise(() => transactionSession({ request: tokenOnly, db })))
+        Option.isNone(
+          yield* fromTestPromise(() =>
+            transactionSession({ request: tokenOnly, db, current: transactionNow() })
+          )
+        )
       ).toBe(true);
       if (Option.isNone(owner) || Option.isNone(other) || Option.isNone(parsed)) {
         throw new Error("fixture invalid");
@@ -3615,7 +3629,11 @@ it("neither a foreign opaque id nor another session can observe a Transaction", 
           .run()
       );
       expect(
-        Option.isNone(yield* fromTestPromise(() => transactionSession({ request: request(0), db })))
+        Option.isNone(
+          yield* fromTestPromise(() =>
+            transactionSession({ request: request(0), db, current: transactionNow() })
+          )
+        )
       ).toBe(true);
       expect(
         (yield* fromTestPromise(() => sendPublicRequest(db, postTransaction(0, input())))).status
@@ -3652,8 +3670,12 @@ it("serializes concurrent mutations for one User without mixing another User's r
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
-      const first = yield* fromTestPromise(() => transactionSession({ request: request(0), db }));
-      const second = yield* fromTestPromise(() => transactionSession({ request: request(1), db }));
+      const first = yield* fromTestPromise(() =>
+        transactionSession({ request: request(0), db, current: transactionNow() })
+      );
+      const second = yield* fromTestPromise(() =>
+        transactionSession({ request: request(1), db, current: transactionNow() })
+      );
       const parsed = yield* transactionInput(request(0, "/transactions", input()));
       if (Option.isNone(first) || Option.isNone(second) || Option.isNone(parsed)) {
         throw new Error("fixture invalid");
@@ -3727,7 +3749,9 @@ it("executes non-Memory work when hosted inference is unusable and refuses Memor
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
-      const session = yield* fromTestPromise(() => transactionSession({ request: request(0), db }));
+      const session = yield* fromTestPromise(() =>
+        transactionSession({ request: request(0), db, current: transactionNow() })
+      );
       const parsed = yield* transactionInput(request(0, "/transactions", input()));
       if (Option.isNone(session) || Option.isNone(parsed)) throw new Error("fixture invalid");
       // The hosted-inference configuration cannot build a service; only Memory work may miss it.
@@ -3803,7 +3827,9 @@ it("leaves an unindexed atomic resource abort unattributed", () =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
-      const owner = yield* fromTestPromise(() => transactionSession({ request: request(0), db }));
+      const owner = yield* fromTestPromise(() =>
+        transactionSession({ request: request(0), db, current: transactionNow() })
+      );
       const parsed = yield* transactionInput(request(0, "/transactions", input()));
       if (Option.isNone(owner) || Option.isNone(parsed)) throw new Error("fixture invalid");
       const limitedDb: D1Database = {
@@ -3832,7 +3858,9 @@ it("rejects an unknown Category without retaining partial Transaction, attestati
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => setup());
-      const owner = yield* fromTestPromise(() => transactionSession({ request: request(0), db }));
+      const owner = yield* fromTestPromise(() =>
+        transactionSession({ request: request(0), db, current: transactionNow() })
+      );
       const parsed = yield* transactionInput(
         request(0, "/transactions", input({ categoryId: "10000000-0000-4000-8000-000000009999" }))
       );
@@ -3898,7 +3926,9 @@ it("commits an ordered two-child batch in one D1 unit and agrees with immediate 
       expect(counted.batches()).toBe(1);
 
       const session = Option.getOrThrow(
-        yield* fromTestPromise(() => transactionSession({ request: request(0), db }))
+        yield* fromTestPromise(() =>
+          transactionSession({ request: request(0), db, current: transactionNow() })
+        )
       );
       const listed = yield* browseTransactions({
         db,

@@ -397,13 +397,16 @@ export const insightRefusal = ({
         result === "recorded" ? ("recorded" as const) : ("unavailable" as const)
       )
     ),
-  respond: () =>
+  respond: (disposition) =>
     Effect.succeed(
-      transactionFailure({
-        code,
-        status: code === "not_found" ? HTTP_NOT_FOUND : HTTP_BAD_REQUEST,
-        message: code === "not_found" ? "Insight unavailable." : "Insight transition unavailable.",
-      })
+      disposition === "unavailable"
+        ? transactionUnavailable()
+        : transactionFailure({
+            code,
+            status: code === "not_found" ? HTTP_NOT_FOUND : HTTP_BAD_REQUEST,
+            message:
+              code === "not_found" ? "Insight unavailable." : "Insight transition unavailable.",
+          })
     ),
 });
 

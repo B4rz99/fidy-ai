@@ -48,7 +48,7 @@
     "prepare": "lefthook install"
   },
   "devDependencies": {
-    "@babel/parser": "8.0.5",
+    "@babel/parser": "8.0.6",
     "@babel/traverse": "8.0.6",
     "@babel/types": "8.0.6",
     "@effect/tsgo": "0.46.1",

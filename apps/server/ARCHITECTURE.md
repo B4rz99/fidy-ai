@@ -112,9 +112,20 @@ protocol runtime. Discovery is deterministic and authorization-private, includin
 SuggestedOperations. Calls use the shared canonical owner invocation under live OAuth credential,
 grant, User, Consent and capability guards, with distinct Audit attribution and exact Money codecs.
 Ordinary mutations and authorized atomic batches reuse the canonical one-User mutation unit, owner preparation,
-collision policy, live authority, accounting and Audit. Sensitive operations remain refused from canonical confirmation
-metadata, including batch children, until verified OAuth confirmation is implemented. Account-security operations
+collision policy, live authority, accounting and Audit. Sensitive operations require exact OAuth-native confirmation
+from canonical confirmation metadata, including batch children. Account-security operations
 remain unavailable; OAuth callers never inherit PAT, WebSession or Hosted Agent Session lifecycle authority.
+
+The installed #988 implementation uses native MCP form confirmation in **Claude Code and Codex only**,
+not a browser approval detour or a model-callable approval operation. MCP projects the server-owned
+exact effect and standard continuation; the confirmation owner validates the authorized client's
+assertion and lends single-use consumption to the canonical mutation unit. Review waits must not
+hold User coordination throughout the native UI interaction. The same User/connection, immutable
+inputs and revisions, expiry and all live authority/domain guards remain mandatory. This is client
+approval, not independent human attestation; ADR 0033 records the explicitly accepted automation
+risk. Missing capability, unsupported interaction or invalid acceptance refuses safely. Pinned-host
+accept/cancel/headless evidence exercises the public ingress, coordinator, Core and native D1;
+it does not authorize deployment or onboarding.
 
 Fresh first-party browser settings list bounded connection metadata and at most three attributable
 canonical activity entries, then revoke one or all owned connections atomically with append-only
@@ -125,7 +136,7 @@ Hosted Agent Sessions. Malformed or unavailable metadata fails closed, never as 
 Public bounds, shared User request pressure, deadlines and cancellation fence queued canonical/refresh work. Already-started D1 batches
 settle atomically even when delivery is lost; cancellation is not rollback or retry authority.
 Existing bounded public/Core/coordinator Work observations export metadata only, never arguments,
-financial results, credentials, URLs or raw causes. Sensitive confirmation and exact-host/operator
+financial results, credentials, URLs or raw causes. Exact-host onboarding and operator
 launch gates remain separate work.
 
 ## 4. Subject, proof, and provider boundaries

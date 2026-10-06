@@ -1,0 +1,79 @@
+{
+  "checkedAtUtc": "2026-10-05T15:51:29Z",
+  "scope": "Normalized observations from disposable loopback probes. No real Fidy identity, credential, mutation, model inference or human-operated acceptance was tested. Actual native CLI dialogs were driven by scripted operator keystrokes, not elicitation hooks.",
+  "serverLibrary": "effect@4.0.0",
+  "form": {
+    "mode": "form",
+    "message": "Fidy: eliminar el presupuesto Mercado de este ejemplo. Esta prueba no modifica datos reales. ¿Confirmas?",
+    "requestedSchema": {
+      "type": "object",
+      "properties": {
+        "confirm": {
+          "type": "boolean",
+          "title": "Confirmar la acción",
+          "description": "Eliminar el presupuesto Mercado de este ejemplo.",
+          "default": false
+        }
+      },
+      "required": ["confirm"]
+    }
+  },
+  "nativeCliRuns": [
+    {
+      "host": "Claude Code",
+      "version": "2.1.289",
+      "protocolAtHandler": "2026-07-28",
+      "acceptance": {
+        "toolsCallCount": 2,
+        "resumedParams": {
+          "name": "confirmation_probe",
+          "arguments": {},
+          "inputResponses": { "review": { "action": "accept", "content": { "confirm": true } } },
+          "requestState": "public-native-probe"
+        },
+        "syntheticCompletions": 1
+      },
+      "cancellation": { "response": { "action": "cancel" }, "syntheticCompletions": 0 }
+    },
+    {
+      "host": "Codex",
+      "version": "0.160.0",
+      "initializeRequestedVersion": "2025-06-18",
+      "protocolAtHandler": "2025-11-25",
+      "acceptance": {
+        "toolsCallCount": 1,
+        "response": { "action": "accept", "content": { "confirm": true } },
+        "syntheticCompletions": 1
+      },
+      "cancellation": { "response": { "action": "cancel" }, "syntheticCompletions": 0 }
+    }
+  ],
+  "piBuiltinRun": {
+    "version": "1.0.3",
+    "clientCapabilities": { "roots": {} },
+    "protocolAtHandler": "2025-11-25",
+    "nativeFormDelivered": false,
+    "syntheticCompletions": 0
+  },
+  "codexAppServerSupplement": [
+    { "mode": "default", "action": "decline", "syntheticCompletions": 0 },
+    { "mode": "default", "action": "cancel", "syntheticCompletions": 0 },
+    { "mode": "experimental-2026-07-28", "action": "accept", "syntheticCompletions": 1 },
+    { "mode": "experimental-2026-07-28", "action": "decline", "syntheticCompletions": 0 },
+    { "mode": "experimental-2026-07-28", "action": "cancel", "syntheticCompletions": 0 }
+  ],
+  "fabricatedClientContinuation": {
+    "uiShown": false,
+    "humanApproved": false,
+    "clientNameClaim": "claude-code",
+    "initialResultType": "input_required",
+    "echoedPublicRequestState": "public-native-probe",
+    "fabricatedInputResponses": {
+      "review": { "action": "accept", "content": { "confirm": true } }
+    },
+    "finalResultType": "complete",
+    "finalIsError": false,
+    "syntheticCompletions": 1,
+    "limitation": "The deliberately inert fixture accepts client assertions. This demonstrates the protocol trust boundary, not a vulnerability or completed confirmation implementation in Fidy. No real OAuth authentication was involved."
+  }
+}

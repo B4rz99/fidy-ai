@@ -1,8 +1,9 @@
 # Hosted MCP and OAuth User-owned agents
 
-- **Status:** Accepted (design only; interoperability and implementation gates remain open)
+- **Status:** Accepted (OAuth and native confirmation implemented; production onboarding and launch gates remain open)
 - **Date:** 2026-10-03
-- **Issues:** [#33](https://github.com/B4rz99/fidy-ai/issues/33), [#977](https://github.com/B4rz99/fidy-ai/issues/977)
+- **Amended:** 2026-10-05 — Claude Code/Codex-only support and accepted client-native confirmation authority; supersedes this ADR's original browser confirmation contract, not browser OAuth connection approval.
+- **Issues:** [#33](https://github.com/B4rz99/fidy-ai/issues/33), [#977](https://github.com/B4rz99/fidy-ai/issues/977), [#988](https://github.com/B4rz99/fidy-ai/issues/988)
 - **Supersedes:** only ADR 0016's exclusion of remote MCP and an OAuth authorization server.
 
 ## Context and evidence
@@ -20,13 +21,23 @@ validation. Claude's earlier reconnect failure was a local profile-path mismatch
 authority, deployment, onboarding, provider
 work or launch enablement is authorized by this ADR.
 
+The User subsequently selected **Claude Code and Codex only**. Pi and OpenCode are no longer
+supported targets; no adapter extension is required or approved for this slice. Earlier Pi findings
+remain historical evidence, not current scope. The
+[native confirmation report](../research/oauth-native-confirmation-988.md) records synthetic native
+form accept/cancel journeys for Claude Code **2.1.289** and Codex **0.160.0**. Real canonical/Core/D1
+confirmation is now implemented by #988. The [pinned-host implementation evidence](../../scripts/mcp/native-confirmation-hosts.evidence.json)
+records real public ingress/coordinator/Core/native D1 accept, cancel and headless refusal for both
+hosts, with Codex CLI and daemon pinned to **0.160.0**. Canned loopback model responses and
+a disposable grant isolate confirmation; they do not verify production onboarding or human presence.
+
 ## Ownership and execution
 
 The proposed resource is exactly `https://api.fidyapp.com/mcp`; the authorization issuer is
 `https://api.fidyapp.com`. Deployment must publish those exact identifiers consistently; neither
 request Host nor forwarded headers choose them.
 
-Future owner publications follow ADR 0031:
+Owner publications follow ADR 0031:
 
 - `core/oauth-agents/contract.ts` owns OAuthConnection, grant/credential identities, lifetimes and
   state declarations; `operations.ts` owns pure scope, expiration and rotation decisions.
@@ -38,11 +49,13 @@ Future owner publications follow ADR 0031:
 - `shell/mcp` owns the catalog-derived protocol projection, not domain behavior. Its native runtime
   uses Effect's HTTP/protocol implementation and invokes published Canonical Operations under the
   existing User coordinator. OAuth browser and token transports are neither tools nor batch children.
-- `cloudflare/oauth-confirmation` owns first-party pending/approved/consumed confirmation evidence.
-  It lends a guarded, transaction-composable consumption to Canonical Operations, never a reusable
-  permission. Hosted Agent confirmation remains privately hosted and cannot authorize OAuth work.
-- Web `oauth-connections` owns approval, confirmation and settings presentation, deriving types
-  from the browser-safe server declarations. It neither parses nor stores OAuth credentials.
+- `cloudflare/oauth-confirmation` owns server-validated pending/approved/consumed client-asserted
+  confirmation evidence. It lends guarded, transaction-composable consumption to Canonical
+  Operations, never a reusable permission. Hosted Agent confirmation remains privately hosted
+  and cannot authorize OAuth work. MCP owns native protocol/UI projection, not approval persistence.
+- Web `oauth-connections` owns initial connection approval and settings presentation, deriving types
+  from the browser-safe server declarations. It neither parses nor stores OAuth credentials and
+  does not own the native sensitive-operation review.
 
 Ingress retains no D1 binding. Private Core/D1 is authoritative, and the existing per-User Durable
 Object serializes canonical work, refresh, confirmation and revocation. All protected D1 work
@@ -75,7 +88,11 @@ capabilities but must not silently request or grant them. Omitted scope means re
 scopes reject.
 
 Prefer Client ID Metadata Documents (CIMD): Claude Code 2.1.288 and Codex 0.160.0 selected their
-host-owned documents when both mechanisms were advertised. DCR is not a client identity verification service and needs no client secret for native public
+host-owned documents when both mechanisms were advertised. Bounded RFC 7591 public
+Dynamic Client Registration (DCR) was necessary compatibility for the historically tested Pi 1.0.1,
+which selected DCR under the same advertisement; Pi is now outside the supported matrix. Existing
+DCR contracts are not removed by this confirmation decision and do not imply Pi support.
+DCR is not a client identity verification service and needs no client secret for native public
 clients. Each registration binds exact redirect URIs and allowed code/refresh grants. Registration
 never creates a User grant. CIMD selection is actual host evidence; production metadata retrieval
 and authority security remain unimplemented and unproved. Pre-registration is a standards-compliant troubleshooting option, not the
@@ -151,38 +168,60 @@ OAuth-wide revocation are distinct controls and independent lifecycles.
 ## Sensitive-operation handoff and resume
 
 Ordinary authorized mutations need no repeated approval. Destructive/irreversible policy is derived
-from canonical metadata, including each batch child. A host annotation, model assertion or an
-elicitation `accept` response is never confirmation evidence.
+from canonical metadata, including each batch child. Sensitive confirmation uses a server-requested
+native MCP form in Claude Code or Codex, separate from initial browser OAuth connection approval
+and local tool permissions. There is no browser detour, URL/repeat fallback, chat “yes”, extension,
+private approval tool or host-name-based authority.
 
-1. An authorized sensitive invocation validates its canonical input and creates one pending intent
-   for that User/connection. Store canonical encoded input privately, its cryptographic digest,
-   canonical operation identity, applicable domain revision(s), disclosure revision, creation/expiry,
-   original scope requirement and an unpredictable public reference. Maximum lifetime **five minutes**;
-   maximum five outstanding intents per User; input bytes remain within canonical request bounds.
-2. A supported host receives a protocol URL-elicitation/input-required continuation pointing only to
-   `https://app.fidyapp.com/agent-confirmation/<public-reference>`. The reference identifies an intent,
-   not a bearer or permission. Neither operation input nor credential is in the URL. The browser
-   requires the same User's fresh WebSession. A different User receives no intent details.
-3. The browser loads the server-owned exact operation/input/revision projection and explicit effect
-   disclosure. An origin/CSRF-protected **Confirmar / Cancelar** POST approves only that immutable
-   intent under live connection, scope and Consent. Browser approval does not execute the mutation.
-4. The host resumes by explicitly repeating the same canonical operation and input under the same
-   OAuthConnection with the public continuation reference in protocol metadata, not tool arguments.
-   The owner checks exact decoded input digest and revisions, User, connection, expiry and approved
-   single-use evidence. Consume evidence with all domain guards, mutation and Audit in the same D1
-   atomic unit. A stale revision requires a new visible review; failure leaves no partial mutation.
-   For a batch, bind the complete ordered batch and every sensitive child's revision; consume all
-   required evidence with the whole batch or none. Never match merely by operation name.
-5. Denial, missing/changed inputs, foreign subject/connection, expiration, replay or concurrent
-   consumption refuses safely. A completed intent cannot execute again. An ambiguous response is
-   reported as outcome unknown; do not automatically resume/retry a mutation. Reading committed
-   outcome must use an owner-defined read, not cached authority.
+**Accepted trust boundary (User-approved 2026-10-05):** Fidy trusts the OAuth-authorized client's
+native confirmation response as client-asserted approval for the exact server-owned intent. This
+replaces the previous fresh same-User WebSession requirement for sensitive-operation confirmation
+only. A modified client or host hook can fabricate/automate a valid acceptance without showing a
+form or obtaining a human click; this risk is explicitly accepted. Neither protocol state, signatures,
+capability advertisement nor a claimed host name independently attests human presence. Model
+claims, arbitrary tool arguments, annotations and local tool permission still grant no confirmation.
+Initial OAuth grants, scope escalation and connection management retain fresh first-party browser
+authority and their existing origin/CSRF requirements; PAT and hosted confirmation are unchanged.
 
-This is a **planned** protocol projection, not an implemented Effect/host interaction. Capability
-advertisement alone is insufficient: launch evidence must prove the exact host's browser handoff
-and resume semantics, including secret-free model/transport boundaries. Until then sensitive
-interactions for that host fail closed without retaining a executable approved intent. No custom
-MCP method, parallel tool registry, form-collected secret, or hosted confirmation shortcut is allowed.
+1. An authorized sensitive invocation validates its canonical input and creates one immutable
+   pending intent for that User/connection. Store canonical encoded input privately, its cryptographic
+   digest, canonical operation identity, applicable domain revision(s), disclosure revision,
+   creation/expiry, original scope requirement and an unpredictable public continuation reference.
+   Maximum lifetime **five minutes**; maximum five outstanding intents per User; input bytes remain
+   within canonical request bounds. A reference alone grants no authority.
+2. MCP projects the server-owned exact effect into one concise Spanish native form with a required
+   affirmative confirmation and safe false default. The host owns native controls; identical Spanish
+   button labels across hosts are not promised. No Secret enters model context, form fields or URLs.
+   Waiting for the decision is bounded by the intent deadline and must not hold User coordination
+   so as to block credential refresh, revocation or unrelated work throughout human review.
+3. Decode the standard native form response and bind it to the issuing intent, same stable User and
+   OAuthConnection under current authority. Only `accept` with explicit `confirm: true` may approve;
+   decline, cancel, false/missing content, malformed responses or expiry authorize nothing. Retain
+   only bounded, purpose-needed approval evidence; it records client assertion, not human attestation.
+4. Resume through Effect's standard host/protocol semantics, not invented model arguments. Claude
+   Code repeats unchanged arguments with top-level keyed `inputResponses` and `requestState`;
+   default Codex answers native elicitation within the original legacy-protocol invocation. These
+   pre-mutation continuations are not retries after uncertain execution. The owner checks exact
+   decoded input digest and revisions, User, connection, expiry and approved single-use evidence.
+   Consume evidence with live credential/grant, scope, Consent, domain guards, mutation and Audit
+   in the same D1 atomic unit. A stale revision requires a new visible review; failure leaves no
+   partial mutation or incorrectly consumed evidence. For a batch, review/bind the complete ordered
+   batch and every sensitive child's effect/revision; consume all required evidence with the whole
+   batch or none. Never match merely by operation name.
+5. Denial, missing/changed inputs, foreign subject/connection, expiration, revocation, replay or
+   concurrent consumption refuses safely. A completed intent cannot execute again. Cancellation
+   cleans up pending work but cannot undo a committed mutation. An ambiguous response is reported
+   as outcome unknown; do not blindly resume/retry a mutation. Reading committed outcome must use
+   an owner-defined read, not cached authority.
+
+This is an **accepted, implemented** protocol projection. Capability advertisement and synthetic
+form success alone are insufficient: #988's pinned-host evidence exercises native accept/resume,
+cancel and headless refusal through real canonical/Core/D1 execution. Ingress regressions cover
+negative/malformed acceptance, exact binding, expiry, replay, concurrency, authority races, rollback
+and bounded native waits. Tests distinguish untrusted model claims from valid client assertions,
+including the accepted automation risk, without claiming independent human proof. Unsupported
+native interactions remain refused. Production onboarding and operator launch approval remain open. No custom MCP method, parallel tool
+registry, form-collected secret, hosted confirmation shortcut or browser fallback is allowed.
 
 ## Approved Spanish UX
 
@@ -203,8 +242,8 @@ required of the User. This ADR specifies copy, not a shipped UI.
 ## Gates and consequences
 
 Pin Effect stable exactly; upgrade the workspace family coherently only in downstream work. Use
-Effect's stateless 2026-07-28 adapter; the observed Codex 0.160.0 handshakes and
-2026-only refusals justify only 2025-11-25 compatibility.
+Effect's stateless 2026-07-28 adapter; the observed supported Codex 0.160.0 handshake and
+2026-only refusal justify 2025-11-25 compatibility. The earlier Pi evidence does not expand scope.
 Remove unneeded older adapters; no second MCP SDK or hand-written wire implementation is approved.
 
 Before production authority: implement and verify the new caller/access algebra, D1 atomicity,

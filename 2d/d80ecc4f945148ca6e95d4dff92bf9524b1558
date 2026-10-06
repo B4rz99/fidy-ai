@@ -1,0 +1,91 @@
+apps/server/cloudflare/transactions/runtime.ts
+  s_306ab925389860::t_147c8c76a69e40 2-3,86,297,311,316,329,344
+  s_306ab925389860::t_34039cffb813c7 305-308
+apps/server/cloudflare/insights/runtime.ts
+  s_306ab925389860::t_287cde1b98b826 83,120,156,318
+  s_306ab925389860::t_fd5d74cd832337 35
+  s_306ab925389860::t_147c8c76a69e40 25-28,43,45,49,63-64,82,86,109,111,113,116,141,145-146,151-152,154,164,183,187,201,216,233,235,237,245-246,267,272-273,284,292,295,302,328,331,338,350-352,354,358
+apps/server/cloudflare/insights/internal/proactivity-work.ts
+  s_306ab925389860::t_b2635095538e61 9-10,31-33,41
+  s_306ab925389860::t_147c8c76a69e40 34-39
+  s_306ab925389860::t_7fd540361ca79b 60,64,66
+apps/server/cloudflare/insights/internal/weekly-execution.ts
+  s_306ab925389860::t_287cde1b98b826 55
+  s_306ab925389860::t_34039cffb813c7 40-44
+  s_306ab925389860::t_147c8c76a69e40 33-35,54,61,95-96,192,195,198-199,257-258,281
+apps/server/cloudflare/migrations/0050_proactivity_offer_recovery.sql
+  s_306ab925389860::t_1b7c313013bc8d 1-9
+apps/server/cloudflare/weekly-workflow.test.ts
+  s_306ab925389860::t_287cde1b98b826 186,226,308,383,415,498,549,668
+  s_306ab925389860::t_147c8c76a69e40 5-6,43,89,146,148,151,153,159,242,300,302,314,376-377,443,449,489,496,547,661-662
+  s_306ab925389860::t_055ef0561a74a3 15
+apps/server/cloudflare/maintenance/contract.ts
+  s_306ab925389860::t_147c8c76a69e40 1,74,77-78
+infra/cloudflare/alchemy.run.ts
+  s_306ab925389860::t_147c8c76a69e40 218
+apps/server/cloudflare/d1-test-fixture.ts
+  s_306ab925389860::t_1b9f53605c3b85 210
+apps/server/cloudflare/queue/internal/dispatch.ts
+  s_306ab925389860::t_147c8c76a69e40 1-2,145,147
+apps/server/cloudflare/insights/internal/proactivity-offers.ts
+  s_306ab925389860::t_377a6f200d05ec 14,72-76,100
+  s_306ab925389860::t_2d5d41a893ce74 15-16,56,64-71,131,195-198,202-207
+  s_306ab925389860::t_3cda3340181a5c 17,77-81,84-86,94
+  s_306ab925389860::t_147c8c76a69e40 133-140,199-201
+  s_306ab925389860::t_71287f6cfecc37 82-83
+apps/server/cloudflare/maintenance/runtime.ts
+  s_306ab925389860::t_147c8c76a69e40 46,282
+apps/server/cloudflare/queue/contract.ts
+  s_306ab925389860::t_147c8c76a69e40 1,22
+apps/server/cloudflare/insights/operations.ts
+  s_306ab925389860::t_83c77f3eb0359f 26
+apps/server/cloudflare/insights/proactivity-runtime.test.ts
+  s_306ab925389860::t_5d775fb58a7be8 1011-1015,1021
+  s_306ab925389860::t_83dc3f5c6f19e6 45
+  s_306ab925389860::t_147c8c76a69e40 32-37,44,52,60,63,443,481,631,648,875-876,928,979-989,991-1010,1016-1020,1030,1109,1127,1179,1231
+  s_306ab925389860::t_71287f6cfecc37 656-671
+  s_306ab925389860::t_287cde1b98b826 13-14,61,78,156,439,454,566,695,824,853,990,1102
+  s_306ab925389860::t_326246f393c63e 654-655,672
+apps/server/cloudflare/core-worker.ts
+  s_306ab925389860::t_147c8c76a69e40 1,30,36,83-84
+apps/server/cloudflare/insights/weekly-runtime.test.ts
+  s_306ab925389860::t_147c8c76a69e40 26,49,60,62-63,67
+  s_306ab925389860::t_287cde1b98b826 14,16,58-59,61,65,75,94
+apps/server/cloudflare/agent/contract.ts
+  s_306ab925389860::t_147c8c76a69e40 7,61
+apps/server/ARCHITECTURE.md
+  s_306ab925389860::t_f1354a949142b3 308-314
+apps/server/cloudflare/insights/internal/proactivity-execution.ts
+  s_306ab925389860::t_147c8c76a69e40 3-7,31,33,50,69,73,95,98
+apps/server/cloudflare/weekly-summary.test-fixture.ts
+  s_306ab925389860::t_287cde1b98b826 36,38,41,146,160,164
+  s_306ab925389860::t_8db4b4eb8de2e2 143-144,148,158,167
+  s_306ab925389860::t_147c8c76a69e40 8-12,28,156,181,183,185
+apps/server/cloudflare/budgets/budgets.test.ts
+  s_306ab925389860::t_147c8c76a69e40 37,368-385,389,391-426,428-434,439-456,458-459,466-470,473-475,477-484,486-545,1673,1731,1796
+  s_306ab925389860::t_792d15b8d5235a 364-367
+  s_306ab925389860::t_287cde1b98b826 23-24,427,485,1750
+  s_306ab925389860::t_e7a1ebe5f609d0 460-465
+apps/server/cloudflare/insights/contract.ts
+  s_306ab925389860::t_287cde1b98b826 156
+  s_306ab925389860::t_36514a01b02f5f 134,140-141,145
+  s_306ab925389860::t_147c8c76a69e40 142,147-149,159,168,170,175,177
+apps/server/cloudflare/insights/internal/proactivity-delivery-work.ts
+  s_306ab925389860::t_9be9d4da88c911 8,22,43-45,73,111,129,134,150,212
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2dd80ecc4f945148ca6e95d4dff92bf9524b1558",
+  "prompts": {},
+  "sessions": {
+    "s_306ab925389860": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a109c8-df42-7697-afe7-6376e97c8760",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

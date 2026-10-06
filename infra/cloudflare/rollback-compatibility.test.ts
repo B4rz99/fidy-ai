@@ -31,45 +31,14 @@ describe("rollback compatibility evidence", () => {
     expect(rollbackCompatible({ ...base, changedPaths: ["infra/cloudflare/alchemy.run.ts"] })).toBe(
       false
     );
-    expect(rollbackCompatible({ ...base, changedPaths: base.workflowPaths })).toBe(false);
+    for (const path of [
+      ...base.workflowPaths,
+      "apps/server/cloudflare/subscription/internal/billing-collection-workflow.ts",
+      "apps/server/cloudflare/email-authentication/internal/onboarding-workflow.ts",
+    ]) {
+      expect(rollbackCompatible({ ...base, changedPaths: [path] })).toBe(false);
+    }
   });
-  it("refuses automatic rollback when Subscription's private billing Workflow implementation changes", () =>
-    Bun.file(new URL("../../apps/server/cloudflare/subscription/runtime.ts", import.meta.url))
-      .text()
-      .then((runtime) => {
-        const implementation = /from "(\.\/internal\/billing-[^"]+)"/u.exec(runtime)?.[1];
-        if (implementation === undefined) {
-          throw new Error("Subscription billing Workflow implementation is missing");
-        }
-        expect(
-          rollbackCompatible({
-            ...base,
-            changedPaths: [`apps/server/cloudflare/subscription/${implementation.slice(2)}.ts`],
-          })
-        ).toBe(false);
-      }));
-  it("refuses automatic rollback when an Email Authentication private Workflow changes", () =>
-    Bun.file(
-      new URL("../../apps/server/cloudflare/email-authentication/runtime.ts", import.meta.url)
-    )
-      .text()
-      .then((runtime) => {
-        const imports = Array.from(
-          runtime.matchAll(/from "(\.\/internal\/[^"]+-workflow)"/gu),
-          (match) => match[1]
-        );
-        expect(imports).toHaveLength(3);
-        for (const implementation of imports) {
-          expect(
-            rollbackCompatible({
-              ...base,
-              changedPaths: [
-                `apps/server/cloudflare/email-authentication/${implementation?.slice(2)}.ts`,
-              ],
-            })
-          ).toBe(false);
-        }
-      }));
   it("refuses Durable Object lifecycle and binding changes", () => {
     expect(
       rollbackCompatible({

@@ -6,7 +6,15 @@ model="${HOSTED_AI_MODEL:?HOSTED_AI_MODEL must select the approval candidate}"
 
 # Client availability bounds, not proof that remote inference was cancelled or safe to replay.
 readonly readiness_connect_seconds=2 readiness_total_seconds=10
-readonly conformance_connect_seconds=5 conformance_total_seconds=180
+readonly conformance_connect_seconds=5
+# Operators and local protocol tests may tighten the client deadline, never raise it.
+conformance_total_seconds="${WORKERS_AI_CONFORMANCE_TIMEOUT_SECONDS:-180}"
+if [[ ! "$conformance_total_seconds" =~ ^[1-9][0-9]{0,2}$ ]] ||
+  (( conformance_total_seconds > 180 )); then
+  echo "Workers AI conformance timeout must be an integer from 1 to 180 seconds." >&2
+  exit 1
+fi
+readonly conformance_total_seconds
 
 # The promotion gate combines deterministic malformed-output/recovery evidence with the live model.
 bun run --cwd ../../apps/server test:hosted-inference

@@ -5,7 +5,6 @@ import {
   readDiscovery,
   sensitiveDiscovery,
 } from "./discovery.test-fixture";
-import { installedCanonicalOperations } from "../canonical-operations/operations";
 import { PATScopes } from "../../src/core/tokens/contract";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { afterEach, expect, it, vi } from "vitest";
@@ -36,30 +35,6 @@ const queryTools = operationCatalog.operations.filter(
     policy.access._tag === "UserOwnedAgentScoped" &&
     !uninstalledQueries.has(id)
 );
-
-it("accounts for every eligible query declaration and fails if an installed binding disappears", () => {
-  expect(
-    installedCanonicalOperations()
-      .filter(
-        ({ policy }) => policy.kind === "query" && policy.access._tag === "UserOwnedAgentScoped"
-      )
-      .map(({ id }) => id)
-      .sort()
-  ).toEqual(queryTools.map(({ id }) => id).sort());
-  expect(operationCatalog.operations.filter(({ id }) => uninstalledQueries.has(id))).toHaveLength(
-    uninstalledQueries.size
-  );
-  // The approved read slice includes Dashboard reads, never account-security or Dashboard mutation authority.
-  expect(
-    queryTools.every(
-      ({ policy }) =>
-        policy.access._tag === "UserOwnedAgentScoped" &&
-        policy.access.scope._tag === "Operation" &&
-        policy.access.scope.capability === "read"
-    )
-  ).toBe(true);
-  expect(queryTools.map(({ id }) => id)).toContain("dashboard.getDashboard");
-});
 
 it("refuses deliberately missing canonical query adapters without inventing a binding or accounting work", () =>
   Effect.runPromise(

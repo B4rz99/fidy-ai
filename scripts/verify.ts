@@ -153,6 +153,9 @@ const checks: Array<Check> = [
     "--cwd",
     "infra/cloudflare",
     "test",
+    ...(Bun.env.CLOUDFLARE_TEST_REPORT === "true"
+      ? ["--reporter=default", "--reporter=json", "--outputFile=test-results/cloudflare-infra.json"]
+      : []),
   ]),
   rootCheck("unit", "WhatsApp provider boundary tests", [
     "bun",

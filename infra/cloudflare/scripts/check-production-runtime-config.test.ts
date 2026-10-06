@@ -82,25 +82,15 @@ describe("Production runtime configuration gate", () => {
   });
 
   it("rejects missing configuration with only a closed category", () => {
-    const result = runConfigurationGate("KAPSO_API_KEY");
-
-    expect(result.exitCode).toBe(1);
-    expect(result.output).toContain(
-      "check=production_runtime_configuration category=required_configuration_missing"
-    );
-    expect(result.output).not.toContain("KAPSO_API_KEY");
-    expect(result.output).not.toContain(testValue);
-  });
-
-  it("rejects a missing PAT admission key without disclosing its name", () => {
-    const result = runConfigurationGate("PAT_ADMISSION_KEY");
-
-    expect(result.exitCode).toBe(1);
-    expect(result.output).toContain(
-      "check=production_runtime_configuration category=required_configuration_missing"
-    );
-    expect(result.output).not.toContain("PAT_ADMISSION_KEY");
-    expect(result.output).not.toContain(testValue);
+    for (const name of requiredConfiguration) {
+      const result = runConfigurationGate(name);
+      expect(result.exitCode, name).toBe(1);
+      expect(result.output).toContain(
+        "check=production_runtime_configuration category=required_configuration_missing"
+      );
+      expect(result.output).not.toContain(name);
+      expect(result.output).not.toContain(testValue);
+    }
   });
 
   it("passes the Wompi event secret to both Production planning and deployment", async () => {

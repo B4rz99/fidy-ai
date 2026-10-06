@@ -1,3 +1,5 @@
+import { spawnSync } from "node:child_process";
+import { it } from "vitest";
 import { BunFileSystem } from "@effect/platform-bun";
 import { expect, layer } from "@effect/vitest";
 import { Config, Data, Effect, FileSystem, Schema } from "effect";
@@ -31,7 +33,7 @@ const exercise = Effect.fn(function* (scenario: Scenario) {
     new URL("./scripts/check-workers-ai-conformance.sh", import.meta.url).pathname
   );
   yield* fs.writeFileString(`${directory}/check.sh`, source);
-  // Only the prerequisite and launcher are fixtures. curl, jq and all production budgets stay real.
+  // Only the prerequisite and launcher are fixtures. curl, jq and deadline enforcement stay real.
   yield* fs.writeFileString(`${directory}/bin/bun`, "#!/bin/sh\nexit 0\n");
   yield* fs.writeFileString(
     `${directory}/bin/wrangler`,
@@ -101,6 +103,7 @@ const exercise = Effect.fn(function* (scenario: Scenario) {
           PATH: `${directory}/bin:${path}`,
           TMPDIR: `${directory}/tmp`,
           HOSTED_AI_MODEL: "fixture-model",
+          WORKERS_AI_CONFORMANCE_TIMEOUT_SECONDS: "1",
           WORKERS_AI_CONFORMANCE_PORT: String(server.port),
         },
         stdout: "pipe",
@@ -123,7 +126,7 @@ const exercise = Effect.fn(function* (scenario: Scenario) {
   );
   const { child, stdout, stderr } = owned;
 
-  const result = yield* wait(() => child.exited).pipe(Effect.timeout("195 seconds"));
+  const result = yield* wait(() => child.exited).pipe(Effect.timeout("20 seconds"));
   const output = yield* wait(() => stdout);
   const diagnostic = yield* wait(() => stderr);
   expect(result).toBe(scenario === "healthy" ? 0 : 1);
@@ -149,7 +152,29 @@ layer(BunFileSystem.layer, { excludeTestServices: true })((it) => {
     it.effect(
       `settles the native conformance script and owned resources for ${scenario}`,
       () => exercise(scenario),
-      210_000
+      25_000
     );
+  }
+});
+
+it("refuses invalid or raised client deadlines before starting conformance work", () => {
+  for (const timeout of ["0", "181", "9999", "1.5", "-1", "invalid"]) {
+    const result = spawnSync(
+      "bash",
+      [new URL("./scripts/check-workers-ai-conformance.sh", import.meta.url).pathname],
+      {
+        encoding: "utf8",
+        env: {
+          ...Bun.env,
+          HOSTED_AI_MODEL: "fixture-model",
+          WORKERS_AI_CONFORMANCE_TIMEOUT_SECONDS: timeout,
+        },
+      }
+    );
+    expect(result.status, timeout).toBe(1);
+    expect(result.stderr).toBe(
+      "Workers AI conformance timeout must be an integer from 1 to 180 seconds.\n"
+    );
+    expect(result.stdout).toBe("");
   }
 });

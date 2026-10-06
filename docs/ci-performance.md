@@ -44,15 +44,41 @@ The benchmark excludes acquisition and disposal; warmed binding acquisition tota
 
 Recurring pagination/scan arrangements replace 228 sequential fixture INSERT requests with two
 real D1 batches. Payment enrollment arranges the elapsed retained verification cooldown instead
-of sleeping four seconds and also proves a premature retry stays pending. No behavioral tests
-were deleted: the inspected expensive cases protect distinct isolation, atomicity, recovery,
-resource or protocol failures. The focused fixture/Recurring/payment run passed all 87 tests.
+of sleeping four seconds and also proves a premature retry stays pending. The initial pass preserved all cases: the inspected expensive cases protect distinct isolation,
+atomicity, recovery, resource or protocol failures. The focused fixture/Recurring/payment run passed all 87 tests.
 [First Linux PR run 37545947947](https://github.com/B4rz99/fidy-ai/actions/runs/37545947947)
 passed all four shards: 1,343 executed cases and nine existing environment-gated cases. The native
 host and provider Sandbox gates retain their original conditions. Suite elapsed times were
 254.0/161.8/267.4/310.3s, so the historical weights left a 148.5s spread after the uneven fixture gains.
 The follow-up scheduling estimates use those actual split-file timings. The final PR-head run must
 validate the updated assignment before merge; these two revisions must not be pooled into a median.
+
+### Three-minute target audit
+
+The next [Linux run 37546743993](https://github.com/B4rz99/fidy-ai/actions/runs/37546743993)
+passed, but adapter jobs still took 304/212/311/300s and infrastructure took 424s. Adapter file
+execution summed to 931.2s; even ideal packing at that observed cost takes 232.8s across the
+existing four runners, before dependency installation and module loading. Three-minute jobs
+with about 30s of setup require at most 600s of aggregate validation, roughly 36% less work.
+This is a measured limit for the current implementation, not proof that further optimization
+is impossible. Runner variance means weights alone cannot guarantee a three-minute deadline.
+
+The infrastructure conformance script tests accounted for at least 370s of deliberate waiting:
+two stalled POSTs each used the production 180s deadline and readiness used 10s. A validated
+`WORKERS_AI_CONFORMANCE_TIMEOUT_SECONDS` can now tighten, but never raise, the production
+180s default. Tests use 1s for stalled POSTs and retain real curl, incomplete streaming bodies,
+Worker termination and temporary-file cleanup. The five native protocol cases passed in 14.4s
+locally; invalid deadlines are rejected before launching any work. CI now retains infrastructure
+file timings so the remaining bottlenecks are observable.
+
+The standards audit removes the OAuth installed-query inventory assertion because the existing
+public ingress test already executes every eligible declaration for two Users and checks exact
+private outcomes. Two rollback source-import inventory checks are merged into representative
+behavioral path refusal checks, and duplicate missing-configuration tests become one exhaustive
+behavioral check. Hosted-turn fixtures seed eight ordered writes in one native D1 batch instead
+of eight requests; the tests still receive fresh independent bindings and unchanged seed facts.
+These removals do not justify deleting distinct credential, atomicity or recovery failures merely
+to meet a runtime target. The final Linux run must establish actual post-change job durations.
 
 ## Linux CI confirmation
 

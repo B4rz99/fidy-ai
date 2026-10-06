@@ -334,7 +334,7 @@ export const sendFrom =
 export const clockAt = ({
   live,
   current,
-  read = () => current,
+  read,
 }: Readonly<{ live: Clock.Clock; current: number; read: () => number }>): Clock.Clock => ({
   currentTimeMillisUnsafe: read,
   currentTimeMillis: Effect.sync(read),
@@ -362,9 +362,9 @@ type FixtureHeaders = Readonly<{ origin: string; cookie: string; "content-type":
 
 export const reviewedFixture = (
   {
-    scopes = ["read"],
-    lifetimeDays = 7,
-    auditMigration = true,
+    scopes,
+    lifetimeDays,
+    auditMigration,
   }: Readonly<{
     scopes: ReadonlyArray<string>;
     lifetimeDays: number;
@@ -414,9 +414,9 @@ export const reviewedFixture = (
 
 export const approvedFixture = (
   {
-    scopes = ["read"],
-    lifetimeDays = 7,
-    auditMigration = true,
+    scopes,
+    lifetimeDays,
+    auditMigration,
   }: Readonly<{
     scopes: ReadonlyArray<string>;
     lifetimeDays: number;
@@ -495,7 +495,7 @@ export const mcpFixture = (
 export const nativeConfirmationCall = ({
   fixture,
   params,
-  name = "budgets.deleteBudget",
+  name,
 }: Readonly<{
   fixture: Readonly<{ send: Harness["send"]; bearer: string }>;
   params: Schema.Json;

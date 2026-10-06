@@ -1,0 +1,47 @@
+apps/server/cloudflare/insights/internal/proactivity-offers.ts
+  s_306ab925389860::t_b788a676c25d16 1-2
+  s_306ab925389860::t_93e78cdba1e6ab 53-61,67,102
+apps/server/src/core/insights/contract.ts
+  s_306ab925389860::t_48d7ee9c57df89 219
+apps/server/ARCHITECTURE.md
+  s_306ab925389860::t_5d2928be5fdd75 305-308
+apps/server/cloudflare/budgets/budgets.test.ts
+  s_306ab925389860::t_fbda32e45faba2 22-25,370-372,374-377,379-391,393-410,412-420,422-442,446-454,456-458,460-467,469-485,487-494,496-512
+  s_306ab925389860::t_741fd466a342a7 411
+  s_306ab925389860::t_39d8fbcdb6e17f 18,364-369,373,392,443-444,455,468,486,495,513-515
+  s_306ab925389860::t_9ccc490b768c3e 30,421,445,459
+  s_306ab925389860::t_b271d8298d9fda 34
+  s_306ab925389860::t_56661be6ba80d3 378
+  s_306ab925389860::t_74c3df05ba4ab1 516
+apps/server/cloudflare/whatsapp/internal/proactivity-delivery.ts
+  s_306ab925389860::t_a3e27bf32659c8 283-288
+apps/server/cloudflare/insights/internal/reminder-question.ts
+  s_306ab925389860::t_fbda32e45faba2 4-7
+  s_306ab925389860::t_d2f2522e498d6d 35,39
+apps/server/cloudflare/insights/proactivity-runtime.test.ts
+  s_306ab925389860::t_fbda32e45faba2 830-843,845-849,852-857,862-893,904-920,922-928,931-951,955-978,982-993
+  s_306ab925389860::t_9d844b0ccf6cdb 40,820-829,844,850,894-903,921,929-930,952-954,979-981,994-997
+  s_306ab925389860::t_ed1c1660d1bbb6 851
+  s_306ab925389860::t_2c392b4e9329e4 858-861
+  s_306ab925389860::t_0d72deb9cc02db 998-1000
+apps/server/cloudflare/whatsapp/operations.ts
+  s_306ab925389860::t_b579d8a5c8c447 77-79
+apps/server/cloudflare/insights/internal/weekly-work.ts
+  s_306ab925389860::t_5484c4c65863a5 10-12,29,45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "abd27b68c76bb0f594c3418fef767703dd2fa355",
+  "prompts": {},
+  "sessions": {
+    "s_306ab925389860": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a109c8-df42-7697-afe7-6376e97c8760",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

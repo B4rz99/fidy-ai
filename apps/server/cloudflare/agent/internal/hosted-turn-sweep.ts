@@ -6,6 +6,7 @@ import { whatsAppRecoveryPriority } from "../../whatsapp/operations";
 import { expireHostedPending, hostedTranscriptRetentionMs } from "./turn-store";
 
 const maximumUsersPerSweep = 100;
+const retentionConcurrency = 4;
 
 /** Independent Core cron fallback for lost DO alarms and expired personal Transcript evidence.
  * The query is bounded and prioritizes the oldest due work; failed batches retry next minute.
@@ -52,6 +53,6 @@ export const sweepHostedTurns = ({
     yield* Effect.forEach(
       due.results,
       (row) => expireHostedPending({ db, userId: UserId.make(row.user_id), now }),
-      { concurrency: "unbounded", discard: true }
+      { concurrency: retentionConcurrency, discard: true }
     );
   });

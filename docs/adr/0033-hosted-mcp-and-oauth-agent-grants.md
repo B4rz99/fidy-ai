@@ -14,7 +14,7 @@ Sessions retain their existing meanings, scopes, expiration and Consent timing.
 The [compatibility report](../research/hosted-mcp-interoperability-977.md) records exact versions,
 source references, reproducible fixtures, successful synthetic exchanges and failures. This decision
 accepts the architecture, **not** security or launch certification. The revised compatibility slice
-passes for Claude Code 2.1.288, Codex 0.160.0 and Pi 1.0.1. Codex 0.144.1 is unsupported because its
+passes for Claude Code 2.1.288 and Codex 0.160.0. Codex 0.144.1 is unsupported because its
 callback drops issuer evidence; upgrading the tested host resolves this without weakening issuer
 validation. Claude's earlier reconnect failure was a local profile-path mismatch. No production
 authority, deployment, onboarding, provider
@@ -75,10 +75,7 @@ capabilities but must not silently request or grant them. Omitted scope means re
 scopes reject.
 
 Prefer Client ID Metadata Documents (CIMD): Claude Code 2.1.288 and Codex 0.160.0 selected their
-host-owned documents when both mechanisms were advertised. Bounded RFC 7591 public
-Dynamic Client Registration (DCR) is necessary compatibility for Pi 1.0.1, which selected DCR under
-the same advertisement.
-DCR is not a client identity verification service and needs no client secret for native public
+host-owned documents when both mechanisms were advertised. DCR is not a client identity verification service and needs no client secret for native public
 clients. Each registration binds exact redirect URIs and allowed code/refresh grants. Registration
 never creates a User grant. CIMD selection is actual host evidence; production metadata retrieval
 and authority security remain unimplemented and unproved. Pre-registration is a standards-compliant troubleshooting option, not the
@@ -206,7 +203,7 @@ required of the User. This ADR specifies copy, not a shipped UI.
 ## Gates and consequences
 
 Pin Effect stable exactly; upgrade the workspace family coherently only in downstream work. Use
-Effect's stateless 2026-07-28 adapter; the observed Codex 0.160.0 and Pi 1.0.1 handshakes and
+Effect's stateless 2026-07-28 adapter; the observed Codex 0.160.0 handshakes and
 2026-only refusals justify only 2025-11-25 compatibility.
 Remove unneeded older adapters; no second MCP SDK or hand-written wire implementation is approved.
 

@@ -1,4 +1,4 @@
-import { Effect, Option, Redacted, Schema } from "effect";
+import { Clock, Effect, Option, Redacted, Schema } from "effect";
 import { UserId } from "../../src/core/identity/contract";
 import {
   OAuthClientId,
@@ -20,20 +20,22 @@ import {
   refreshCancelled,
   revokeReplay,
 } from "./internal/refresh";
-import { currentMillis } from "../runtime/operations";
 import { oauthResponse } from "./internal/response";
 import { queryCallerSnapshot } from "./internal/query-caller";
+import { mcpCallerSnapshot } from "./internal/mcp-caller";
 
 /** Resolve live query capabilities and derived tier without publishing OAuth storage or changing accounting. Canonical owners still recheck authority in protected work. */
 export const resolveOAuthQueryCaller: typeof queryCallerSnapshot = (input) =>
   queryCallerSnapshot(input);
+/** Current native protocol admission; canonical execution retains its independent live rechecks. */
+export const resolveOAuthMcpCaller: typeof mcpCallerSnapshot = (input) => mcpCallerSnapshot(input);
 
 /** Commits a still-live first-party decision under the original User coordinator. Cancelled or expired queued decisions cannot revoke later; a started atomic unit settles even if its response is lost. */
 export const executeOAuthRevocation = (
   input: Readonly<{ db: D1Database; admission: OAuthRevocationAdmission; signal: AbortSignal }>
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
-    const current = currentMillis();
+    const current = yield* Clock.currentTimeMillis;
     if (input.signal.aborted || input.admission.deadlineAtMs <= current) {
       return oauthResponse({ body: { error: "temporarily_unavailable" }, status: 503 });
     }
@@ -53,11 +55,11 @@ export const executeOAuthRefresh = (
   input: Readonly<{ db: D1Database; admission: OAuthRefreshAdmission; signal: AbortSignal }>
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
-    const admittedAt = currentMillis();
-    if (refreshCancelled(input)) return invalidGrant();
+    const admittedAt = yield* Clock.currentTimeMillis;
+    if (refreshCancelled({ input, current: admittedAt })) return invalidGrant();
     const grant = yield* findGrant({ input, current: admittedAt });
     if (Option.isSome(grant.consumed_at_ms)) {
-      yield* revokeReplay({ input, current: currentMillis() });
+      yield* revokeReplay({ input, current: yield* Clock.currentTimeMillis });
       return invalidGrant();
     }
     const approved = yield* Schema.decodeEffect(Schema.fromJsonString(PATScopes))(
@@ -68,13 +70,13 @@ export const executeOAuthRefresh = (
       onSome: (scope) => Schema.decodeUnknownEffect(PATScopes)(scope.split(" ")),
     });
     if (!scopes.every((scope) => approved.includes(scope))) return invalidGrant();
-    const current = currentMillis();
+    const current = yield* Clock.currentTimeMillis;
     const issuance = yield* prepareIssuance({ current, grant, scopes });
-    if (refreshCancelled(input)) return invalidGrant();
+    if (refreshCancelled({ input, current: yield* Clock.currentTimeMillis })) return invalidGrant();
     const committed = yield* Effect.option(commitRotation({ input, grant, issuance }));
     if (Option.isNone(committed)) {
       // A failed CAS may be another instance's winner. Only a recognized consumed proof can revoke.
-      yield* revokeReplay({ input, current: currentMillis() }).pipe(Effect.ignore);
+      yield* revokeReplay({ input, current: yield* Clock.currentTimeMillis }).pipe(Effect.ignore);
       return invalidGrant();
     }
     return oauthResponse({ body: issuance.body, status: 200 });

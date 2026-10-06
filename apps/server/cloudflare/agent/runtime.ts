@@ -15,9 +15,9 @@ export const makeAgentService = (input: AgentServiceInput): AgentService => {
   return {
     accept: (request) => service.accept(request),
     recover: () =>
-      Effect.runPromise(
-        Effect.tryPromise({ try: service.recover, catch: () => new AgentUnavailable() })
-      ),
+      service.recover().catch(() => {
+        throw new AgentUnavailable();
+      }),
   };
 };
 /** Construct only fixed-policy, bounded recovery and retention, without model, channel or admission authority. */

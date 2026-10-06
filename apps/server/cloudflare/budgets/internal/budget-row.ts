@@ -1,10 +1,10 @@
 import { Budget, BudgetId } from "../../../src/core/budgets/contract";
-import { Option, Schema } from "effect";
+import { Effect, Schema } from "effect";
 
-/** Decode a retained Budget through its public Money and UTC timestamp contract. */
-export const budgetFromRow = (raw: unknown): Option.Option<Budget> =>
-  Option.flatMap(
-    Schema.decodeUnknownOption(
+/** Decode a present retained Budget; corrupt storage is not row absence. */
+export const budgetFromRow = (raw: unknown): Effect.Effect<Budget, Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const row = yield* Schema.decodeUnknownEffect(
       Schema.Struct({
         id: BudgetId,
         category_id: Budget.fields.categoryId,
@@ -13,13 +13,12 @@ export const budgetFromRow = (raw: unknown): Option.Option<Budget> =>
         created_at: Schema.String,
         updated_at: Schema.String,
       })
-    )(raw),
-    (row) =>
-      Schema.decodeOption(Schema.toCodecJson(Budget))({
-        id: row.id,
-        categoryId: row.category_id,
-        cap: { amount: row.cap, currency: row.currency },
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      })
-  );
+    )(raw);
+    return yield* Schema.decodeEffect(Schema.toCodecJson(Budget))({
+      id: row.id,
+      categoryId: row.category_id,
+      cap: { amount: row.cap, currency: row.currency },
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    });
+  });

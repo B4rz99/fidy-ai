@@ -1,6 +1,7 @@
-import { useAtomSet } from "@effect/atom-react";
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { Link, Outlet, useRouter } from "@tanstack/react-router";
-import { Effect } from "effect";
+import { Cause, Effect } from "effect";
+import { AsyncResult } from "effect/reactivity";
 import { useState } from "react";
 import type { JSX } from "react";
 import { useSession } from "@/session/session-context";
@@ -18,7 +19,13 @@ export const AuthenticationExpired = (): JSX.Element => (
   </main>
 );
 
-const SignedInNavigation = ({ onLogout }: { readonly onLogout: () => void }): JSX.Element => (
+const SignedInNavigation = ({
+  onLogout,
+  loggingOut,
+}: {
+  readonly onLogout: () => void;
+  readonly loggingOut: boolean;
+}): JSX.Element => (
   <nav
     aria-label="Aplicación"
     className="flex flex-1 flex-wrap items-center gap-1 px-3 pb-3 md:flex-col md:items-stretch"
@@ -48,8 +55,14 @@ const SignedInNavigation = ({ onLogout }: { readonly onLogout: () => void }): JS
     <Button className="justify-start" render={<Link to="/settings/recovery" />} variant="ghost">
       Recuperación
     </Button>
-    <Button className="justify-start md:mt-auto" onClick={onLogout} type="button" variant="outline">
-      Cerrar sesión
+    <Button
+      className="justify-start md:mt-auto"
+      disabled={loggingOut}
+      onClick={onLogout}
+      type="button"
+      variant="outline"
+    >
+      {loggingOut ? "Cerrando sesión…" : "Cerrar sesión"}
     </Button>
   </nav>
 );
@@ -65,12 +78,17 @@ const SignedInShell = (): JSX.Element => {
       logoutRequest.pipe(makeLogoutOperation)
     )
   );
+  const status = useAtomValue(logout);
+  const failed = AsyncResult.isFailure(status) && !Cause.hasInterruptsOnly(status.cause);
   const runLogout = useAtomSet(logout);
-  const onLogout = completeLogoutNavigation.bind(undefined, {
-    completeLogout,
-    navigate: () => router.navigate({ to: "/auth/pair" }),
-    runLogout,
-  });
+  const onLogout = (): void => {
+    if (status.waiting) return;
+    completeLogoutNavigation({
+      completeLogout,
+      navigate: () => router.navigate({ to: "/auth/pair" }),
+      runLogout,
+    });
+  };
 
   return (
     <div className="min-h-svh bg-muted/30 md:flex">
@@ -78,7 +96,15 @@ const SignedInShell = (): JSX.Element => {
         <Link className="px-5 py-5 font-heading text-xl font-semibold" to="/app/dashboard">
           Fidy
         </Link>
-        <SignedInNavigation onLogout={onLogout} />
+        <SignedInNavigation loggingOut={status.waiting} onLogout={onLogout} />
+        {failed ? (
+          <Alert className="m-3" variant="destructive" role="alert">
+            <AlertTitle>No pudimos confirmar el cierre de sesión</AlertTitle>
+            <AlertDescription>
+              Revisa tu conexión e intenta cerrar sesión de nuevo.
+            </AlertDescription>
+          </Alert>
+        ) : null}
       </aside>
       <div className="min-w-0 flex-1">
         <Outlet />

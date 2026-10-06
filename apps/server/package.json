@@ -297,7 +297,7 @@
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260928.1",
+    "@cloudflare/workers-types": "5.20260929.1",
     "@effect/platform-bun": "4.0.0",
     "@effect/platform-node": "4.0.0",
     "@effect/vitest": "4.0.0",
@@ -308,6 +308,6 @@
     "rolldown": "1.2.11",
     "typescript": "7.0.2",
     "vitest": "5.0.2",
-    "wrangler": "4.142.0"
+    "wrangler": "4.143.0"
   }
 }

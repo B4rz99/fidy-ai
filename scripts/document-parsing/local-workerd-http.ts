@@ -1,15 +1,17 @@
 import { Data, Effect, ManagedRuntime, Stream } from "effect";
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientRequest } from "effect/http";
 
-const maximumResponseBytes = Number("1048576");
-const noBodyStatuses = new Set([Number("204"), Number("205"), Number("304")]);
+const maximumResponseBytes = 1_048_576;
+const noContentStatus = 204;
+const resetContentStatus = 205;
+const notModifiedStatus = 304;
+const noBodyStatuses = new Set([noContentStatus, resetContentStatus, notModifiedStatus]);
 const runtime = ManagedRuntime.make(FetchHttpClient.layer);
 
 class WorkerdResponseTooLarge extends Data.TaggedError("WorkerdResponseTooLarge")<{
   readonly maximumBytes: number;
 }> {}
 
-class WorkerdRequestInterrupted extends Data.TaggedError("WorkerdRequestInterrupted") {}
 type WorkerdRequest = Readonly<
   { readonly port: number; readonly path: string; readonly signal: AbortSignal } & (
     | { readonly method: "GET" }
@@ -22,9 +24,9 @@ type WorkerdRequest = Readonly<
 >;
 
 /**
- * Sends a loopback proof request without tracing its potentially secret headers. The caller
- * owns the returned response body and must consume or cancel it; streaming is capped at 1 MiB,
- * and the supplied signal aborts both the pending request and any later body read.
+ * Materializes a loopback proof response within one owned 30-second HTTP lifetime. At most
+ * 1 MiB is retained; the supplied signal and deadline abort headers and unfinished bodies.
+ * The returned response contains only buffered bytes and no live transport resource.
  */
 export const requestWorkerd = (options: WorkerdRequest): Promise<Response> =>
   runtime.runPromise(
@@ -38,31 +40,33 @@ export const requestWorkerd = (options: WorkerdRequest): Promise<Response> =>
               HttpClientRequest.setHeaders(options.headers)
             );
       const client = yield* HttpClient.HttpClient;
-      const response = yield* client.execute(request);
+      const response = yield* HttpClient.withScope(client).execute(request);
       if (noBodyStatuses.has(response.status)) {
         return new Response(null, { status: response.status, headers: response.headers });
       }
-      const interrupted = Effect.callback<never, WorkerdRequestInterrupted>((resume) => {
-        const abort = (): void => resume(Effect.fail(new WorkerdRequestInterrupted()));
-        options.signal.addEventListener("abort", abort, { once: true });
-        if (options.signal.aborted) abort();
-        return Effect.sync(() => options.signal.removeEventListener("abort", abort));
-      });
       let bytes = 0;
-      const stream = response.stream.pipe(
-        Stream.interruptWhen(interrupted),
-        Stream.mapEffect((chunk) => {
-          bytes += chunk.byteLength;
-          return bytes <= maximumResponseBytes
-            ? Effect.succeed(chunk)
-            : Effect.fail(new WorkerdResponseTooLarge({ maximumBytes: maximumResponseBytes }));
-        })
+      const chunks = yield* Stream.runCollect(
+        response.stream.pipe(
+          Stream.mapEffect((chunk) => {
+            bytes += chunk.byteLength;
+            return bytes <= maximumResponseBytes
+              ? Effect.succeed(chunk)
+              : Effect.fail(new WorkerdResponseTooLarge({ maximumBytes: maximumResponseBytes }));
+          })
+        )
       );
-      return new Response(Stream.toReadableStream(stream, { strategy: { highWaterMark: 0 } }), {
-        status: response.status,
-        headers: response.headers,
-      });
-    }).pipe(Effect.provideService(HttpClient.TracerDisabledWhen, () => true)),
+      const body = new Uint8Array(bytes);
+      let offset = 0;
+      for (const chunk of chunks) {
+        body.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+      return new Response(body, { status: response.status, headers: response.headers });
+    }).pipe(
+      Effect.scoped,
+      Effect.timeout("30 seconds"),
+      Effect.provideService(HttpClient.TracerDisabledWhen, () => true)
+    ),
     { signal: options.signal }
   );
 

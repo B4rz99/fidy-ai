@@ -1,4 +1,4 @@
-import { Data, DateTime, Effect, Option, Result, Schema } from "effect";
+import { Clock, Data, DateTime, Effect, Option, Result, Schema } from "effect";
 import {
   CapturedFieldIssue,
   EmailNeedsReviewItem,
@@ -8,7 +8,6 @@ import {
   StatementRowEvidence,
 } from "../../../src/core/ingestion/contract";
 import { loadMediaItems } from "./media-review";
-import { currentMillis } from "../../runtime/operations";
 import type { QueryCaller } from "../../canonical-work/operations";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { commitReadAudit, unavailableStatement, validationFailed } from "./statement-ingestion";
@@ -16,7 +15,7 @@ import { commitReadAudit, unavailableStatement, validationFailed } from "./state
 class ReviewReadUnavailable extends Data.TaggedError("ReviewReadUnavailable")<{}> {}
 
 const noStore = { "cache-control": "no-store" };
-const evidenceJson = Schema.fromJsonString(StatementRowEvidence);
+const evidenceJson = Schema.fromJsonString(Schema.toEncoded(StatementRowEvidence));
 const issuesJson = Schema.fromJsonString(Schema.Array(CapturedFieldIssue));
 const output = Schema.toCodecJson(Schema.Array(NeedsReviewItem));
 export const pageSize = 50;
@@ -41,8 +40,8 @@ const reviewRow = Schema.Struct({
   issues: Schema.String,
   status: Schema.String,
   transaction_id: Schema.OptionFromNullOr(Schema.String),
-  decided_at_ms: Schema.OptionFromNullOr(Schema.Int),
-  created_at_ms: Schema.Int,
+  decided_at_ms: Schema.OptionFromNullOr(Schema.DateTimeUtcFromMillis),
+  created_at_ms: Schema.DateTimeUtcFromMillis,
   service_market: Schema.String,
   locale: Schema.String,
   time_zone: Schema.String,
@@ -55,8 +54,8 @@ const emailReviewRow = Schema.Struct({
   id: Schema.String,
   receipt_id: Schema.String,
   reason: Schema.String,
-  created_at_ms: Schema.Int,
-  evidence_expires_at_ms: Schema.Int,
+  created_at_ms: Schema.DateTimeUtcFromMillis,
+  evidence_expires_at_ms: Schema.DateTimeUtcFromMillis,
   time_zone: Schema.String,
 });
 type EmailReviewRow = typeof emailReviewRow.Type;
@@ -73,7 +72,7 @@ const resolutionMetadata = (
   }
   return Option.some({
     transactionId: row.transaction_id.value,
-    resolvedAt: DateTime.formatIso(DateTime.makeUnsafe(row.decided_at_ms.value)),
+    resolvedAt: DateTime.formatIso(row.decided_at_ms.value),
   });
 };
 
@@ -83,7 +82,10 @@ const projectReviewRow = (row: ReviewRow): Option.Option<StatementNeedsReviewIte
     typeof row.original_evidence !== "string"
       ? undefined
       : Option.getOrUndefined(Schema.decodeOption(evidenceJson)(row.original_evidence));
-  if (issues === undefined || (row.status === "pending" && evidence === undefined)) {
+  if (
+    issues === undefined ||
+    (typeof row.original_evidence === "string" && evidence === undefined)
+  ) {
     return Option.none();
   }
   return Schema.decodeUnknownOption(StatementNeedsReviewItem)({
@@ -99,7 +101,7 @@ const projectReviewRow = (row: ReviewRow): Option.Option<StatementNeedsReviewIte
     parserRevision: row.parser_revision,
     extractorRevision: row.extractor_revision,
     issues,
-    createdAt: DateTime.formatIso(DateTime.makeUnsafe(row.created_at_ms)),
+    createdAt: DateTime.formatIso(row.created_at_ms),
     status: row.status,
     ...Option.getOrElse(resolutionMetadata(row), () => ({})),
     ...(evidence === undefined ? {} : { originalEvidence: evidence }),
@@ -110,7 +112,7 @@ const projectEmailRow = (
   row: EmailReviewRow,
   asOf: number
 ): Option.Option<EmailNeedsReviewItem> => {
-  const expired = row.evidence_expires_at_ms <= asOf;
+  const expired = row.evidence_expires_at_ms.epochMilliseconds <= asOf;
   return Schema.decodeUnknownOption(EmailNeedsReviewItem)({
     id: row.id,
     receivedEmailId: row.receipt_id,
@@ -129,7 +131,7 @@ const projectEmailRow = (
     parserRevision: "cloudflare-mime-v1",
     extractorRevision: "forwarded-email-deterministic-v1",
     issues: [],
-    createdAt: DateTime.formatIso(DateTime.makeUnsafe(row.created_at_ms)),
+    createdAt: DateTime.formatIso(row.created_at_ms),
     status: expired ? "expired" : "pending",
     ...(expired || row.reason === "processing-interrupted" || row.reason === "consent-revoked"
       ? {}
@@ -258,7 +260,7 @@ export const listNeedsReviewItems = (
     return yield* readCanonicalReviewPage({
       database: input.database,
       userId: input.subject.userId,
-      asOf: currentMillis(),
+      asOf: yield* Clock.currentTimeMillis,
       scope: Option.none(),
       includeEmail: true,
       page: page.value,

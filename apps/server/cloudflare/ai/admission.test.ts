@@ -3,7 +3,7 @@ import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contrac
 import { Data, Effect, Exit, Option } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
-import { makeAdmittedWorkersAiRun } from "./internal/admitted-run";
+import { makeAdmittedWorkersAiRun } from "./admitted-run.test-fixture";
 import { sweepExpiredWorkersAiAdmission } from "./runtime";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure") {}

@@ -1,4 +1,4 @@
-import { Data, Effect, Option, Schema, Stream } from "effect";
+import { Cause, Data, Effect, Option, Schema, Stream } from "effect";
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientRequest } from "effect/http";
 import {
   SmokeFailureStage,
@@ -81,7 +81,7 @@ export const exchangeSmoke = Effect.fn(
       size += chunk.byteLength;
       if (size > responseLimit) {
         return Effect.fail(
-          new ReleaseSmokeFailed({ reason: "Smoke response exceeded byte limit" })
+          new ReleaseSmokeFailed({ reason: "Smoke response exceeded its byte budget" })
         );
       }
       chunks.push(chunk);
@@ -115,7 +115,15 @@ export const exchangeSmoke = Effect.fn(
   },
   Effect.scoped,
   Effect.timeout("8 seconds"),
-  Effect.mapError(() => new ReleaseSmokeFailed({ reason: "Smoke exchange unavailable" })),
+  Effect.mapError((failure) =>
+    failure instanceof ReleaseSmokeFailed || failure instanceof CandidateRoutingPending
+      ? failure
+      : new ReleaseSmokeFailed({
+          reason: Cause.isTimeoutError(failure)
+            ? "Smoke request exceeded its total deadline"
+            : "Smoke exchange unavailable",
+        })
+  ),
   Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
   Effect.provideService(HttpClient.TracerDisabledWhen, () => true)
 );

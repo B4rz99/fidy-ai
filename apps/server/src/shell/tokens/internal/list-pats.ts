@@ -1,4 +1,4 @@
-import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import {
   type ActivePATList,
@@ -19,9 +19,9 @@ const PATMetadataRow = Schema.Struct({
   short_id: TokenShortId,
   recipient_label: PATRecipientLabel,
   scopes_json: Schema.String,
-  created_at_ms: Schema.Finite,
-  last_used_at_ms: Schema.NullOr(Schema.Finite),
-  expires_at_ms: Schema.Finite,
+  created_at_ms: Schema.DateTimeUtcFromMillis,
+  last_used_at_ms: Schema.NullOr(Schema.DateTimeUtcFromMillis),
+  expires_at_ms: Schema.DateTimeUtcFromMillis,
 });
 const queryUnavailable = (): Unavailable =>
   Unavailable.make({
@@ -74,9 +74,9 @@ const decodeMetadata = (
       shortId: row.short_id,
       recipientLabel: row.recipient_label,
       scopes,
-      createdAt: DateTime.makeUnsafe(row.created_at_ms),
-      lastUsedAt: Option.map(Option.fromNullishOr(row.last_used_at_ms), DateTime.makeUnsafe),
-      expiresAt: DateTime.makeUnsafe(row.expires_at_ms),
+      createdAt: row.created_at_ms,
+      lastUsedAt: Option.fromNullishOr(row.last_used_at_ms),
+      expiresAt: row.expires_at_ms,
     });
   });
 

@@ -4,12 +4,6 @@
   { "event": "protected-resource-discovery" },
   { "event": "issuer-discovery" },
   {
-    "event": "registration",
-    "name": "pi",
-    "redirects": ["http://127.0.0.1:61100/callback"],
-    "grantTypes": ["authorization_code", "refresh_token"]
-  },
-  {
     "event": "authorization",
     "pkce": "S256",
     "resourceBound": true,

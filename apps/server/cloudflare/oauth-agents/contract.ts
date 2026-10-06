@@ -7,9 +7,21 @@ import {
   OAuthCredentialId,
 } from "../../src/core/oauth-agents/contract";
 import { oauthResource } from "../../src/shell/oauth-agents/contract";
+import { PATScopes } from "../../src/core/tokens/contract";
 
 /** OAuth-owned live caller facts could not be read; this is unavailable, not a dead credential. */
 export class OAuthQueryCallerUnavailable extends Data.TaggedError("OAuthQueryCallerUnavailable") {}
+
+/** Current native MCP projection failed; unavailable is distinct from an absent live credential. */
+export class OAuthMcpCallerUnavailable extends Data.TaggedError("OAuthMcpCallerUnavailable") {}
+/** Current capability facts and retained lifetime ceilings, not reusable execution authority. */
+export const OAuthMcpCallerFacts = Schema.Struct({
+  scopes: PATScopes,
+  tier: Schema.Literals(["free", "pro"]),
+  credentialExpiresAt: Schema.DateTimeUtc,
+  grantExpiresAt: Schema.DateTimeUtc,
+});
+export type OAuthMcpCallerFacts = typeof OAuthMcpCallerFacts.Type;
 
 /** Private first-party decision admission; only the original User coordinator may execute its live recheck. */
 export const OAuthRevocationAdmission = Schema.Struct({

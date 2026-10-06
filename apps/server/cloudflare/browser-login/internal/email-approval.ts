@@ -12,7 +12,7 @@ const Pairing = Schema.Struct({
   state: Schema.Literals(["pending_approval", "ready", "consumed", "invalidated"]),
   verifier_digest: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))),
   wrong_attempts: Schema.Int,
-  expires_at_ms: Schema.Finite,
+  expires_at_ms: Schema.DateTimeUtcFromMillis,
 });
 const sha256 = (value: string): Promise<Uint8Array> =>
   crypto.subtle
@@ -34,48 +34,46 @@ export const provePendingPairing = ({
   db,
   pairingId,
   privateVerifier: verifier,
-}: PendingBrowserPairingRequest): Promise<Option.Option<number>> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const raw = yield* attempt(() =>
-        db
-          .prepare(`SELECT state, verifier_digest, wrong_attempts, expires_at_ms
+}: PendingBrowserPairingRequest): Effect.Effect<Option.Option<number>, void> =>
+  Effect.gen(function* () {
+    const raw = yield* attempt(() =>
+      db
+        .prepare(`SELECT state, verifier_digest, wrong_attempts, expires_at_ms
     FROM browser_login_pairings WHERE id = ?`)
-          .bind(pairingId)
-          .first()
-      );
-      if (raw === null) return Option.none();
-      const pairing = Schema.decodeUnknownOption(Pairing)(raw);
-      if (Option.isNone(pairing)) return Option.none();
-      const current = yield* Clock.currentTimeMillis;
-      const decision = decidePendingBrowserLoginProof({
-        lifecycle: pairing.value.state,
-        verifierMatches: sameDigest(
-          pairing.value.verifier_digest,
-          yield* attempt(() => sha256(verifier))
-        ),
-        wrongVerifierAttempts: pairing.value.wrong_attempts,
-        expiresAt: DateTime.makeUnsafe(pairing.value.expires_at_ms),
-        attemptedAt: DateTime.makeUnsafe(current),
-      });
-      if (decision._tag === "WrongVerifier") {
-        yield* attempt(() =>
-          db
-            .prepare(`UPDATE browser_login_pairings SET wrong_attempts = ?, state = ?
+        .bind(pairingId)
+        .first()
+    );
+    if (raw === null) return Option.none();
+    const pairing = yield* Schema.decodeUnknownEffect(Pairing)(raw).pipe(
+      Effect.mapError(() => undefined)
+    );
+    const current = yield* Clock.currentTimeMillis;
+    const decision = decidePendingBrowserLoginProof({
+      lifecycle: pairing.state,
+      verifierMatches: sameDigest(pairing.verifier_digest, yield* attempt(() => sha256(verifier))),
+      wrongVerifierAttempts: pairing.wrong_attempts,
+      expiresAt: pairing.expires_at_ms,
+      attemptedAt: DateTime.makeUnsafe(current),
+    });
+    if (decision._tag === "WrongVerifier") {
+      yield* attempt(() =>
+        db
+          .prepare(`UPDATE browser_login_pairings SET wrong_attempts = ?, state = ?
       WHERE id = ? AND state = 'pending_approval' AND wrong_attempts = ? AND expires_at_ms > ?`)
-            .bind(
-              decision.wrongVerifierAttempts,
-              decision.lifecycle,
-              pairingId,
-              pairing.value.wrong_attempts,
-              current
-            )
-            .run()
-        );
-      }
-      return decision._tag === "Accept" ? Option.some(pairing.value.expires_at_ms) : Option.none();
-    })
-  );
+          .bind(
+            decision.wrongVerifierAttempts,
+            decision.lifecycle,
+            pairingId,
+            pairing.wrong_attempts,
+            current
+          )
+          .run()
+      );
+    }
+    return decision._tag === "Accept"
+      ? Option.some(DateTime.toEpochMillis(pairing.expires_at_ms))
+      : Option.none();
+  });
 
 export const pendingPairingQuery = ({
   subject,

@@ -1,6 +1,6 @@
 import type { BudgetOutcome } from "../contract";
 import { Budget, BudgetId } from "../../../src/core/budgets/contract";
-import { Effect, Option, Schema } from "effect";
+import { type Cause, Effect, Option, Schema } from "effect";
 import {
   type TransactionCaller,
   auditLimitRefusal,
@@ -23,14 +23,18 @@ export const findOwnedBudget = ({
   db: D1Database;
   userId: string;
   id: BudgetId;
-}>): Promise<Option.Option<Budget>> =>
-  db
-    .prepare(
-      "SELECT id, category_id, currency, cap, created_at, updated_at FROM budgets WHERE user_id = ? AND id = ?"
-    )
-    .bind(userId, id)
-    .first()
-    .then(budgetFromRow);
+}>): Effect.Effect<Option.Option<Budget>, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const raw = yield* Effect.tryPromise(() =>
+      db
+        .prepare(
+          "SELECT id, category_id, currency, cap, created_at, updated_at FROM budgets WHERE user_id = ? AND id = ?"
+        )
+        .bind(userId, id)
+        .first()
+    );
+    return raw === null ? Option.none<Budget>() : Option.some(yield* budgetFromRow(raw));
+  });
 
 const HTTP_NOT_FOUND = 404;
 const HTTP_BAD_REQUEST = 400;
@@ -81,7 +85,7 @@ export const findBudgetValue = ({
         payload: outcome.budgetId,
         encode: () => Schema.encodeEffect(Schema.toCodecJson(BudgetId))(outcome.budgetId),
       })
-    : Effect.tryPromise(() => findOwnedBudget({ db, userId, id: outcome.budgetId })).pipe(
+    : findOwnedBudget({ db, userId, id: outcome.budgetId }).pipe(
         Effect.map(
           Option.map((budget) => ({
             _tag: "Owner" as const,

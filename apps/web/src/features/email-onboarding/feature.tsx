@@ -57,6 +57,30 @@ const VerificationForm = ({ invalid, restart, verify }: VerificationFormProps): 
   );
 };
 
+const RecoveryState = ({
+  state,
+  acknowledge,
+}: Readonly<{
+  state: Extract<EmailOnboardingViewState, { _tag: "Recovery" }>;
+  acknowledge: () => void;
+}>): JSX.Element => (
+  <div className="flex flex-col gap-4">
+    <Alert>
+      <HugeiconsIcon aria-hidden="true" icon={ShieldCheckIcon} strokeWidth={2} />
+      <AlertTitle>Guarda tu código de recuperación</AlertTitle>
+      <AlertDescription>
+        Se muestra una sola vez. Guárdalo fuera de Fidy; no lo compartas por WhatsApp ni soporte.
+      </AlertDescription>
+    </Alert>
+    <p className="rounded-lg border bg-background px-3 py-4 text-center font-mono text-lg font-semibold tracking-wider">
+      {state.backupRecoveryCode}
+    </p>
+    <Button className="w-full" onClick={acknowledge} type="button">
+      Lo guardé
+    </Button>
+  </div>
+);
+
 const OnboardingState = ({
   acknowledge,
   restart,
@@ -80,25 +104,20 @@ const OnboardingState = ({
       </Button>
     );
   }
-  if (state._tag === "Recovery") {
+  if (state._tag === "Unavailable") {
     return (
-      <div className="flex flex-col gap-4">
-        <Alert>
-          <HugeiconsIcon aria-hidden="true" icon={ShieldCheckIcon} strokeWidth={2} />
-          <AlertTitle>Guarda tu código de recuperación</AlertTitle>
-          <AlertDescription>
-            Se muestra una sola vez. Guárdalo fuera de Fidy; no lo compartas por WhatsApp ni
-            soporte.
-          </AlertDescription>
-        </Alert>
-        <p className="rounded-lg border bg-background px-3 py-4 text-center font-mono text-lg font-semibold tracking-wider">
-          {state.backupRecoveryCode}
-        </p>
-        <Button className="w-full" onClick={acknowledge} type="button">
-          Lo guardé
-        </Button>
-      </div>
+      <Alert>
+        <AlertTitle>No pudimos confirmar la verificación</AlertTitle>
+        <AlertDescription>
+          La cuenta podría haberse creado. Inicia sesión para comprobarlo antes de solicitar otro
+          código.
+        </AlertDescription>
+        <Button render={<a href="/auth/pair">Ir a iniciar sesión</a>} />
+      </Alert>
     );
+  }
+  if (state._tag === "Recovery") {
+    return <RecoveryState state={state} acknowledge={acknowledge} />;
   }
   return (
     <div className="flex flex-col gap-4">

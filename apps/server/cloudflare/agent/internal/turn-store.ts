@@ -42,7 +42,7 @@ import {
 import { webSessionCredentialAuthority } from "../../../src/shell/web-session/operations";
 import { Cause, DateTime, Effect, Option, Schema } from "effect";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
-import { type TransactionSubject, transactionNow } from "../../canonical-work/operations";
+import { type TransactionSubject } from "../../canonical-work/operations";
 import { readConsentStanding } from "../../consent/operations";
 import { readUserContext } from "../../identity/user-context/operations";
 import { newId } from "../../secret-material/operations";
@@ -80,18 +80,24 @@ const receiptBytes = 32;
 const hexRadix = 16;
 export { deliveryAcknowledgmentWindowMs } from "../contract";
 
+const RetainedMillis = Schema.Int.check(
+  Schema.makeFilter<number>(
+    (millis) => Option.isSome(DateTime.make(millis)) || "Expected valid retained UTC milliseconds"
+  )
+);
+
 const SessionRow = Schema.Struct({
   id: HostedAgentSessionId,
   user_id: UserId,
-  consent_basis_json: Schema.String,
-  started_at_ms: Schema.Int,
-  last_activity_at_ms: Schema.NullOr(Schema.Int),
+  consent_basis_json: Schema.fromJsonString(HostedAgentSessionConsentBasis),
+  started_at_ms: RetainedMillis,
+  last_activity_at_ms: Schema.NullOr(RetainedMillis),
   status: Schema.Literals(["active", "idle-ended", "revoked"]),
 });
 const TurnRow = Schema.Struct({
   id: TranscriptTurnId,
-  started_at_ms: Schema.Int,
-  proposed_at_ms: Schema.NullOr(Schema.Int),
+  started_at_ms: RetainedMillis,
+  proposed_at_ms: Schema.NullOr(RetainedMillis),
 });
 const CompactRow = Schema.Struct({
   text: Schema.String.check(Schema.isMinLength(1)),
@@ -103,7 +109,7 @@ const EntryRow = Schema.Struct({
   status: Schema.Literals(["pending", "completed", "failed", "interrupted"]),
   id: TranscriptEntryId,
   turn_id: TranscriptTurnId,
-  occurred_at_ms: Schema.Int,
+  occurred_at_ms: Schema.DateTimeUtcFromMillis,
   kind: Schema.Literals(["user", "assistant", "tool_call", "tool_result", "failed", "interrupted"]),
   text: Schema.NullOr(Schema.String),
   failure_reason: Schema.NullOr(TurnFailureReason),
@@ -275,9 +281,7 @@ const admissionState = (snapshot: HostedTurnSnapshot): HostedAdmissionState => (
   session: Option.map(snapshot.session, (session) => ({
     id: session.id,
     userId: session.user_id,
-    consentBasis: Schema.decodeSync(Schema.fromJsonString(HostedAgentSessionConsentBasis))(
-      session.consent_basis_json
-    ),
+    consentBasis: session.consent_basis_json,
     startedAtMs: session.started_at_ms,
     lastActivityAtMs: Option.fromNullishOr(session.last_activity_at_ms),
     status: session.status,
@@ -385,6 +389,16 @@ export const readHostedContinuity = ({
       throw new Error("Hosted Transcript capacity exceeded");
     }
     const entries = yield* Schema.decodeUnknownEffect(Schema.Array(EntryRow))(raw.results);
+    const transcript = yield* Effect.forEach(entries, (row) =>
+      decodeEntry(row).pipe(
+        Effect.map((entry) => ({
+          userId: UserId.make(subject.userId),
+          sessionId,
+          sequence: BigInt(row.sequence),
+          entry,
+        }))
+      )
+    );
     return {
       memories,
       compactedConversation: Option.map(
@@ -398,12 +412,7 @@ export const readHostedContinuity = ({
         })
       ),
       terminalThroughSequence: terminalPrefixCursor(entries),
-      transcript: entries.map((row) => ({
-        userId: UserId.make(subject.userId),
-        sessionId,
-        sequence: BigInt(row.sequence),
-        entry: decodeEntry(row),
-      })),
+      transcript,
     };
   });
 
@@ -466,7 +475,10 @@ const writeToolEntry = (
             yield* Schema.encodeEffect(Schema.fromJsonString(CanonicalToolOutcome))(entry.outcome)
           )
         : Option.none<string>();
-    const authority = hostedAuthority({ subject: input.subject, current: transactionNow() });
+    const authority = hostedAuthority({
+      subject: input.subject,
+      current: DateTime.toEpochMillis(yield* DateTime.now),
+    });
     const statement = prepareToolEntry({ ...input, authority, inputJson, outcomeJson });
     const changed =
       participants.length === 0
@@ -491,7 +503,7 @@ export const appendHostedToolEntry = (
     if (entry._tag !== "CanonicalToolResultEntry" || !loadsSavedHistory(entry)) {
       return yield* writeToolEntry(input, []);
     }
-    const current = transactionNow();
+    const current = DateTime.toEpochMillis(yield* DateTime.now);
     const live = hostedAuthority({ subject, current });
     const authority = {
       sql: `SELECT user_id AS userId FROM hosted_turns WHERE id = ? AND user_id = ? AND status = 'pending' AND EXISTS (${live.sql})`,
@@ -538,7 +550,7 @@ export const reserveHostedCompaction = ({
   sessionId: HostedAgentSessionId;
 }>): Effect.Effect<boolean, Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable> =>
   Effect.gen(function* () {
-    const current = transactionNow();
+    const current = DateTime.toEpochMillis(yield* DateTime.now);
     const authority = hostedAuthority({ subject, current });
     const day = Math.floor(current / millisecondsPerDay) * millisecondsPerDay;
     const reserved = yield* Effect.tryPromise(() =>
@@ -575,7 +587,7 @@ export const commitHostedCompaction = ({
 }>): Effect.Effect<boolean, Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable> =>
   Effect.gen(function* () {
     const userId = UserId.make(subject.userId);
-    const current = transactionNow();
+    const current = DateTime.toEpochMillis(yield* DateTime.now);
     const authority = hostedAuthority({ subject, current });
     const selected = continuity.transcript.filter(
       (entry) => entry.sequence <= BigInt(throughSequence)
@@ -595,7 +607,7 @@ export const commitHostedCompaction = ({
     // There is no suspension between this check and dispatching the atomic batch. Once dispatched,
     // the replacement has entered its non-interruptible commit point; an abort cannot undo success.
     if (signal.aborted) return false;
-    const results = yield* Effect.tryPromise(() =>
+    return yield* Effect.tryPromise(() =>
       db.batch([
         db
           .prepare(`INSERT INTO hosted_compacted_conversations
@@ -640,51 +652,56 @@ export const commitHostedCompaction = ({
         WHERE user_id = ? AND hosted_session_id = ? AND nonce = ? AND revision = ?)`)
           .bind(userId, sessionId, throughSequence, userId, sessionId, nonce, nextRevision),
       ])
+    ).pipe(
+      Effect.map(
+        (results) => results[0]?.meta.changes === 1 && results[1]?.meta.changes === selected.length
+      ),
+      Effect.uninterruptible
     );
-    return results[0]?.meta.changes === 1 && results[1]?.meta.changes === selected.length;
   });
 
 const decodeToolEntry = (
   row: EntryRow,
-  identity: Readonly<{ id: TranscriptEntryId; turnId: TranscriptTurnId; occurredAt: string }>
-): CanonicalToolCallEntry | CanonicalToolResultEntry => {
-  if (row.kind === "tool_call") {
-    return Schema.decodeUnknownSync(CanonicalToolCallEntry)({
-      _tag: "CanonicalToolCallEntry",
+  identity: Readonly<{ id: TranscriptEntryId; turnId: TranscriptTurnId; occurredAt: DateTime.Utc }>
+): Effect.Effect<CanonicalToolCallEntry | CanonicalToolResultEntry, Schema.SchemaError> =>
+  Effect.gen(function* () {
+    if (row.kind === "tool_call") {
+      const input = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(CanonicalToolEvidence))(
+        row.input_json
+      );
+      return yield* Schema.decodeUnknownEffect(Schema.toType(CanonicalToolCallEntry))({
+        _tag: "CanonicalToolCallEntry",
+        ...identity,
+        iteration: row.iteration,
+        toolCallId: row.tool_call_id,
+        operation: row.operation,
+        input,
+      });
+    }
+    const outcome = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(CanonicalToolOutcome))(
+      row.outcome_json
+    );
+    return yield* Schema.decodeUnknownEffect(Schema.toType(CanonicalToolResultEntry))({
+      _tag: "CanonicalToolResultEntry",
       ...identity,
       iteration: row.iteration,
       toolCallId: row.tool_call_id,
       operation: row.operation,
-      input: Schema.decodeUnknownSync(Schema.fromJsonString(CanonicalToolEvidence))(row.input_json),
+      outcome,
     });
-  }
-  return Schema.decodeUnknownSync(CanonicalToolResultEntry)({
-    _tag: "CanonicalToolResultEntry",
-    ...identity,
-    iteration: row.iteration,
-    toolCallId: row.tool_call_id,
-    operation: row.operation,
-    outcome: Schema.decodeUnknownSync(Schema.fromJsonString(CanonicalToolOutcome))(
-      row.outcome_json
-    ),
   });
-};
 
-const decodeEntry = (row: EntryRow): TranscriptEntry => {
-  const identity = {
-    id: row.id,
-    turnId: row.turn_id,
-    occurredAt: DateTime.formatIso(DateTime.makeUnsafe(row.occurred_at_ms)),
-  };
+const decodeEntry = (row: EntryRow): Effect.Effect<TranscriptEntry, Schema.SchemaError> => {
+  const identity = { id: row.id, turnId: row.turn_id, occurredAt: row.occurred_at_ms };
   switch (row.kind) {
     case "user":
-      return Schema.decodeUnknownSync(UserTranscriptEntry)({
+      return Schema.decodeUnknownEffect(Schema.toType(UserTranscriptEntry))({
         _tag: "UserTranscriptEntry",
         ...identity,
         text: row.text,
       });
     case "assistant":
-      return Schema.decodeUnknownSync(AssistantTranscriptEntry)({
+      return Schema.decodeUnknownEffect(Schema.toType(AssistantTranscriptEntry))({
         _tag: "AssistantTranscriptEntry",
         ...identity,
         iteration: 1,
@@ -694,13 +711,13 @@ const decodeEntry = (row: EntryRow): TranscriptEntry => {
     case "tool_result":
       return decodeToolEntry(row, identity);
     case "failed":
-      return Schema.decodeUnknownSync(FailedTurnTranscriptEntry)({
+      return Schema.decodeUnknownEffect(Schema.toType(FailedTurnTranscriptEntry))({
         _tag: "FailedTurnTranscriptEntry",
         ...identity,
         reason: row.failure_reason,
       });
     case "interrupted":
-      return Schema.decodeSync(TranscriptEntry)({
+      return Schema.decodeEffect(Schema.toType(TranscriptEntry))({
         _tag: "InterruptedTurnTranscriptEntry",
         ...identity,
       });
@@ -890,13 +907,14 @@ export const stageHostedDelivery = ({
       byte.toString(hexRadix).padStart(2, "0")
     ).join("");
     const digest = yield* receiptHash(receipt);
+    const current = DateTime.toEpochMillis(yield* DateTime.now);
     const write = yield* Effect.tryPromise(() =>
       db
         .prepare(`INSERT INTO hosted_delivery_proposals
     (turn_id, user_id, receipt_digest, proposed_at_ms, text)
     SELECT id, user_id, ?, ?, ? FROM hosted_turns
     WHERE id = ? AND user_id = ? AND status = 'pending'`)
-        .bind(digest, transactionNow(), text, turnId, userId)
+        .bind(digest, current, text, turnId, userId)
         .run()
     );
     if (write.meta.changes !== 1) {
@@ -919,7 +937,11 @@ export const refreshHostedDelivery = ({
   Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable
 > =>
   Effect.gen(function* () {
-    const snapshot = yield* readHostedSnapshot({ db, subject, now: transactionNow() });
+    const snapshot = yield* readHostedSnapshot({
+      db,
+      subject,
+      now: DateTime.toEpochMillis(yield* DateTime.now),
+    });
     if (
       Option.isNone(snapshot) ||
       !Option.exists(snapshot.value.pending, (pending) => pending.id === turnId)
@@ -940,6 +962,7 @@ export const refreshHostedDelivery = ({
       byte.toString(hexRadix).padStart(2, "0")
     ).join("");
     const digest = yield* receiptHash(receipt);
+    const current = DateTime.toEpochMillis(yield* DateTime.now);
     const written = yield* Effect.tryPromise(() =>
       db
         .prepare(`UPDATE hosted_delivery_proposals
@@ -950,7 +973,7 @@ export const refreshHostedDelivery = ({
           digest,
           turnId,
           subject.userId,
-          transactionNow() - deliveryAcknowledgmentWindowMs,
+          current - deliveryAcknowledgmentWindowMs,
           turnId,
           subject.userId
         )
@@ -961,8 +984,8 @@ export const refreshHostedDelivery = ({
 
 const ProposalRow = Schema.Struct({
   text: TranscriptText,
-  started_at_ms: Schema.Int,
-  proposed_at_ms: Schema.Int,
+  started_at_ms: RetainedMillis,
+  proposed_at_ms: RetainedMillis,
 });
 /** Acknowledgment promotes only an exact staged provider reply with a fresh User-owned WebSession. */
 export const acknowledgeHostedDelivery = ({
@@ -980,7 +1003,7 @@ export const acknowledgeHostedDelivery = ({
   Cause.UnknownError | Schema.SchemaError | WhatsAppUnavailable
 > =>
   Effect.gen(function* () {
-    const current = transactionNow();
+    const current = DateTime.toEpochMillis(yield* DateTime.now);
     const digest = yield* receiptHash(receipt);
     const authority = webSessionCredentialAuthority({ subject, current });
     const raw = yield* Effect.tryPromise(() =>

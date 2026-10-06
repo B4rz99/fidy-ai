@@ -17,40 +17,39 @@ export const currentUser = ({
 }: {
   request: Request;
   db: D1Database;
-}): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const token = sessionCookie(request);
-      if (Option.isNone(token)) return noSession();
-      {
-        const digest = yield* attempt(() => sessionDigest(token.value));
-        const usedAt = yield* Clock.currentTimeMillis;
-        const candidate = webSessionIdleRenewalCandidate(DateTime.makeUnsafe(usedAt));
-        const rawSession = yield* attempt(() =>
-          db
-            .prepare(
-              `UPDATE web_sessions SET idle_expires_at_ms = min(hard_expires_at_ms,
+}): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const token = sessionCookie(request);
+    if (Option.isNone(token)) return noSession();
+    {
+      const digest = yield* attempt(() => sessionDigest(token.value));
+      const usedAt = yield* Clock.currentTimeMillis;
+      const candidate = webSessionIdleRenewalCandidate(DateTime.makeUnsafe(usedAt));
+      // D1 cannot abort a submitted write; keep only its completion callback owned until settlement.
+      const rawSession = yield* attempt(() =>
+        db
+          .prepare(
+            `UPDATE web_sessions SET idle_expires_at_ms = min(hard_expires_at_ms,
         max(idle_expires_at_ms, ?)) WHERE token_digest = ? AND revoked_at_ms IS NULL
         AND idle_expires_at_ms > ? AND hard_expires_at_ms > ? RETURNING id, user_id`
-            )
-            .bind(DateTime.toEpochMillis(candidate), digest, usedAt, usedAt)
-            .first()
-        );
-        if (rawSession === null) return noSession();
-        const session = Schema.decodeUnknownOption(Session)(rawSession);
-        if (Option.isNone(session)) return unavailable();
-        const subject = Schema.decodeOption(UserId)(session.value.user_id);
-        if (Option.isNone(subject)) return unavailable();
-        return yield* projectCurrentUser({
-          db,
-          subject: subject.value,
-          session: session.value,
-          token: token.value,
-          digest,
-        });
-      }
-    }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
-  );
+          )
+          .bind(DateTime.toEpochMillis(candidate), digest, usedAt, usedAt)
+          .first()
+      ).pipe(Effect.uninterruptible);
+      if (rawSession === null) return noSession();
+      const session = Schema.decodeUnknownOption(Session)(rawSession);
+      if (Option.isNone(session)) return unavailable();
+      const subject = Schema.decodeOption(UserId)(session.value.user_id);
+      if (Option.isNone(subject)) return unavailable();
+      return yield* projectCurrentUser({
+        db,
+        subject: subject.value,
+        session: session.value,
+        token: token.value,
+        digest,
+      });
+    }
+  }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())));
 
 const projectCurrentUser = ({
   db,
@@ -73,6 +72,7 @@ const projectCurrentUser = ({
       subject: { id: session.id, userId: subject, digest },
       current: observedAt,
     });
+    // Settle the started Audit before cancellation can release this workflow.
     const recorded = yield* attempt(() =>
       db
         .prepare(
@@ -81,7 +81,7 @@ const projectCurrentUser = ({
         )
         .bind(uuid(), session.user_id, session.id, observedAt, ...authority.bindings)
         .run()
-    );
+    ).pipe(Effect.uninterruptible);
     if (recorded.meta.changes !== 1) return noSession();
     const data = yield* Schema.encodeEffect(Schema.toCodecJson(User))(loaded.value.data).pipe(
       Effect.orDie

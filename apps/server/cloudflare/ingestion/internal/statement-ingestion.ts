@@ -16,7 +16,7 @@ import {
 import type { OAuthCaller } from "../../../src/shell/oauth-agents/contract";
 import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
-import { Data, Effect, Function, Option, Result, Schema } from "effect";
+import { Clock, Data, Effect, Function, Option, Result, Schema } from "effect";
 import {
   type StatementPublicationRefusal,
   StatementStaging,
@@ -31,7 +31,6 @@ import {
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { RequestBodyPolicy } from "../../http/contract";
 import { boundedJsonBody } from "../../http/operations";
-import { currentMillis } from "../../runtime/operations";
 import { prepareOwnedStatement } from "../../database/operations";
 import { ResourceAdmissionRefused } from "../../resource-admission/contract";
 import {
@@ -222,7 +221,7 @@ export const uploadStagedStatement = ({
   subject: TransactionSubject;
 }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
-    const nowEpochMs = currentMillis();
+    const nowEpochMs = yield* Clock.currentTimeMillis;
     const staging = stagingService(environment, nowEpochMs);
     if (Option.isNone(staging)) return unavailable();
     const admission = statementUploadAuthority({ db: environment.DB, current: nowEpochMs });
@@ -310,7 +309,7 @@ const refusedCredential = ({
 /** Decodes one bounded canonical submission input before it reaches the User coordination turn. */
 export const submitForExtractionInput = (
   request: Request
-): Promise<Option.Option<SubmitForExtractionInput>> =>
+): Effect.Effect<Option.Option<SubmitForExtractionInput>> =>
   boundedJsonBody({ request, policy: submissionInputPolicy, schema: SubmitForExtractionInput });
 
 /**
@@ -412,12 +411,13 @@ export const commitReadAudit: {
   (environment: StatementIngestionEnvironment, subject: QueryCaller, read: StatementAuditRead) =>
     Effect.gen(function* () {
       const isPAT = isPATCaller(subject);
+      const current = yield* Clock.currentTimeMillis;
       const outcome = yield* Effect.result(
         Effect.tryPromise({
           try: () =>
             environment.DB.batch([
               ...readStatements({
-                current: currentMillis(),
+                current,
                 database: environment.DB,
                 subject,
                 submissionId: read.submissionId,
@@ -485,26 +485,24 @@ export const readStatementSubmission = ({
   request: Request;
   environment: StatementIngestionEnvironment;
   subject: QueryCaller;
-}>): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const current = currentMillis();
-      if (yield* budgetSpent(environment.DB, subject.userId, current)) {
-        return statementDailyBudgetResponse();
-      }
-      const pathId = new URL(request.url).pathname.split("/").at(-1) ?? "";
-      const submissionId = Schema.decodeOption(StatementSubmissionId)(pathId);
-      const refused = yield* commitReadAudit(environment, subject, {
-        submissionId: Option.getOrElse(submissionId, () => ""),
-        operation: "ingestion.getStatementSubmission",
-      });
-      if (Option.isSome(refused)) return refused.value;
-      if (Option.isNone(submissionId)) return submissionNotFound();
-      return yield* readCanonicalSubmission({
-        config: { database: environment.DB },
-        userId: subject.userId,
-        submissionId: submissionId.value,
-        scope: Option.none(),
-      });
-    }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
-  );
+}>): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const current = yield* Clock.currentTimeMillis;
+    if (yield* budgetSpent(environment.DB, subject.userId, current)) {
+      return statementDailyBudgetResponse();
+    }
+    const pathId = new URL(request.url).pathname.split("/").at(-1) ?? "";
+    const submissionId = Schema.decodeOption(StatementSubmissionId)(pathId);
+    const refused = yield* commitReadAudit(environment, subject, {
+      submissionId: Option.getOrElse(submissionId, () => ""),
+      operation: "ingestion.getStatementSubmission",
+    });
+    if (Option.isSome(refused)) return refused.value;
+    if (Option.isNone(submissionId)) return submissionNotFound();
+    return yield* readCanonicalSubmission({
+      config: { database: environment.DB },
+      userId: subject.userId,
+      submissionId: submissionId.value,
+      scope: Option.none(),
+    });
+  }).pipe(Effect.orElseSucceed(unavailable));

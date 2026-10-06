@@ -32,7 +32,7 @@ import {
   isPATCaller,
   missingTransactionMessage,
   transactionNoStore as noStore,
-  transactionNow as now,
+  refusedCredentialResponse,
   refusedPATWork,
   transactionFailure,
   transactionUnavailable as unavailable,
@@ -545,7 +545,7 @@ const presentPATHistory = (
   return Promise.resolve(rows === undefined ? unavailable() : presentHistory(rows, selection));
 };
 
-const readOAuthHistory = ({
+const readOAuthHistory = Effect.fn(function* ({
   db,
   selection,
   query,
@@ -555,38 +555,35 @@ const readOAuthHistory = ({
   selection: Selection;
   query: Option.Option<typeof Query.Type>;
   current: number;
-}>): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      if (!isOAuthCaller(selection.subject)) return unavailable();
-      const authority = callerAuthority({ subject: selection.subject, current });
-      const results = yield* Effect.tryPromise(() =>
-        db.batch([
-          ...(Option.isSome(query)
-            ? [historyStatement({ db, selection, query: query.value, authority })]
-            : []),
-          prepareOwnedStatement({
-            db,
-            statement: recordOAuthCall({
-              authority,
-              id: uuid(),
-              current,
-              operation: historyOperation(selection),
-              outcome: Option.isSome(query) ? "accepted" : "rejected",
-            }),
+}>) {
+  if (!isOAuthCaller(selection.subject)) return unavailable();
+  const authority = callerAuthority({ subject: selection.subject, current });
+  const results = yield* Effect.uninterruptible(
+    Effect.tryPromise(() =>
+      db.batch([
+        ...(Option.isSome(query)
+          ? [historyStatement({ db, selection, query: query.value, authority })]
+          : []),
+        prepareOwnedStatement({
+          db,
+          statement: recordOAuthCall({
+            authority,
+            id: uuid(),
+            current,
+            operation: historyOperation(selection),
+            outcome: Option.isSome(query) ? "accepted" : "rejected",
           }),
-        ])
-      );
-      if (results.at(-1)?.meta.changes !== 1) {
-        return yield* Effect.tryPromise(() =>
-          refusedPATWork({ db, userId: selection.subject.userId })
-        );
-      }
-      if (Option.isNone(query)) return invalid();
-      const rows = results[0];
-      return rows === undefined ? unavailable() : presentHistory(rows, selection);
-    })
+        }),
+      ])
+    )
   );
+  if (results.at(-1)?.meta.changes !== 1) {
+    return yield* refusedCredentialResponse({ db, subject: selection.subject });
+  }
+  if (Option.isNone(query)) return invalid();
+  const rows = results[0];
+  return rows === undefined ? unavailable() : presentHistory(rows, selection);
+});
 
 const readAuthorizedHistory = (
   db: D1Database,
@@ -598,7 +595,7 @@ const readAuthorizedHistory = (
 ): Promise<Response> => {
   const { selection, query, current } = input;
   const { subject } = selection;
-  if (isOAuthCaller(subject)) return readOAuthHistory({ db, selection, query, current });
+  if (isOAuthCaller(subject)) return Promise.resolve(unavailable());
   if (isPATCaller(subject)) {
     const patSelection = { ...selection, subject };
     return db
@@ -627,16 +624,20 @@ export const browseTransactions = ({
 }: {
   db: D1Database;
   selection: Selection;
-}): Promise<Response> => {
-  const query = parseQuery(selection);
-  const current = now();
-  const { subject } = selection;
-  if (Option.isNone(query) && !isPATCaller(subject) && !isOAuthCaller(subject)) {
-    return invalidQueryAudit(db, { ...selection, subject }, current);
-  }
-  return dailyAuditExhausted({ db, userId: subject.userId, current })
-    .then((exhausted) =>
-      exhausted ? rateLimited() : readAuthorizedHistory(db, { selection, query, current })
-    )
-    .catch(failedAudit);
-};
+}): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const query = parseQuery(selection);
+    const current = DateTime.toEpochMillis(yield* DateTime.now);
+    const { subject } = selection;
+    if (Option.isNone(query) && !isPATCaller(subject) && !isOAuthCaller(subject)) {
+      return yield* Effect.tryPromise(() =>
+        invalidQueryAudit(db, { ...selection, subject }, current)
+      );
+    }
+    const exhausted = yield* Effect.tryPromise(() =>
+      dailyAuditExhausted({ db, userId: subject.userId, current })
+    );
+    if (exhausted) return rateLimited();
+    if (isOAuthCaller(subject)) return yield* readOAuthHistory({ db, selection, query, current });
+    return yield* Effect.tryPromise(() => readAuthorizedHistory(db, { selection, query, current }));
+  }).pipe(Effect.catch((error) => Effect.succeed(failedAudit(error.cause))));

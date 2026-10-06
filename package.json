@@ -32,7 +32,7 @@
     "email-formats:check": "bun run --cwd apps/server email-formats:check",
     "contracts:check:freshness": "bun run --cwd apps/server contracts:generate --check",
     "test:contracts": "bun run --cwd apps/server test:contracts",
-    "test:ci-tools": "bun node_modules/vitest/vitest.mjs run scripts/check-effect-family.test.ts scripts/check-lint-suppressions.test.ts scripts/ci-changes.test.ts scripts/adapter-timings.test.ts scripts/install-workspace.test.ts scripts/verify.test.ts --environment node",
+    "test:ci-tools": "bun node_modules/vitest/vitest.mjs run scripts/check-effect-family.test.ts scripts/check-dependency-updates.test.ts scripts/document-parsing/local-workerd-http.test.ts scripts/document-parsing/workerd-inspector.test.ts scripts/check-lint-suppressions.test.ts scripts/ci-changes.test.ts scripts/adapter-timings.test.ts scripts/install-workspace.test.ts scripts/verify.test.ts --environment node",
     "test": "bun run --cwd apps/cli test && bun run --cwd apps/server test:core && bun run --cwd apps/server test:email-interpretation && bun run --cwd apps/server test:cloudflare && bun run --cwd apps/web test && bun run --cwd infra/cloudflare test",
     "test:production-adapters": "bun run --cwd apps/web test -- scripts/production-workflow.test.ts scripts/cloudflare-adapter.test.ts && bun run --cwd infra/cloudflare test -- production-preflight.test.ts",
     "check:document-parsing": "bun run --cwd infra/cloudflare check:document-parsing",
@@ -48,7 +48,7 @@
     "prepare": "lefthook install"
   },
   "devDependencies": {
-    "@babel/parser": "8.0.5",
+    "@babel/parser": "8.0.6",
     "@babel/traverse": "8.0.6",
     "@babel/types": "8.0.6",
     "@effect/tsgo": "0.46.1",
@@ -57,8 +57,8 @@
     "effect": "4.0.0",
     "istanbul-lib-coverage": "3.2.2",
     "lefthook": "2.1.14",
-    "oxfmt": "0.70.0",
-    "oxlint": "1.85.0",
+    "oxfmt": "0.71.0",
+    "oxlint": "1.86.0",
     "oxlint-tsgolint": "7.0.2003",
     "typescript": "7.0.2"
   },
@@ -72,10 +72,12 @@
     "js-yaml": "4.3.2",
     "lodash": "4.18.1",
     "postcss": "8.5.26",
+    "postcss-selector-parser": "7.1.6",
+    "proxy-addr": "2.0.8",
     "qs": "6.16.0",
     "seroval": "1.6.7",
     "seroval-plugins": "1.6.7",
-    "sharp": "0.35.4",
+    "sharp": "0.35.5",
     "undici@^7": "7.29.1",
     "valibot": "1.5.0"
   },

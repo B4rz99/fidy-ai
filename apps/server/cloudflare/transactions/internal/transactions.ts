@@ -17,14 +17,15 @@ import {
   type TransactionCaller,
   type TransactionRefusal,
   type TransactionSubject,
+  acceptedOAuthStatement,
   acceptedPATStatements,
   boundaryFailure,
   callerAuthority,
   callerScope,
   failedPreparation,
+  isOAuthCaller,
   isPATCaller,
   maximumTransactionInputBytes,
-  transactionNow as now,
   transactionId,
   transactionUnavailable,
   unauthenticatedTransaction,
@@ -56,11 +57,15 @@ type Capture = Readonly<{
 export const transactionSession = ({
   request,
   db,
-}: Readonly<{ request: Request; db: D1Database }>): Promise<Option.Option<TransactionSubject>> =>
-  authenticateCanonicalWebSession({ request, db, current: now() });
+  current,
+}: Readonly<{ request: Request; db: D1Database; current: number }>): Promise<
+  Option.Option<TransactionSubject>
+> => authenticateCanonicalWebSession({ request, db, current });
 
 /** Decode bounded canonical input before dispatching a mutation to the User coordinator. */
-export const transactionInput = (request: Request): Promise<Option.Option<typeof Input.Type>> =>
+export const transactionInput = (
+  request: Request
+): Effect.Effect<Option.Option<typeof Input.Type>> =>
   boundedJsonBody({ request, policy, schema: Input });
 
 const captureAudit = (
@@ -120,6 +125,27 @@ const captureInsert = (db: D1Database, capture: Capture): D1PreparedStatement =>
 const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedStatement> => {
   const { subject, context, id, current } = capture;
   const createdAt = DateTime.formatIso(DateTime.makeUnsafe(current));
+  const accountability = (): ReadonlyArray<D1PreparedStatement> => {
+    if (isPATCaller(subject)) {
+      return acceptedPATStatements({
+        db,
+        subject,
+        operation: "transactions.createTransaction",
+        current,
+      });
+    }
+    if (isOAuthCaller(subject)) {
+      return [
+        acceptedOAuthStatement({
+          db,
+          subject,
+          operation: "transactions.createTransaction",
+          current,
+        }),
+      ];
+    }
+    return [captureAudit(db, { ...capture, subject })];
+  };
   return [
     captureInsert(db, capture),
     db
@@ -134,14 +160,7 @@ const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedSt
         subject.userId,
         id
       ),
-    ...(isPATCaller(subject)
-      ? acceptedPATStatements({
-          db,
-          subject,
-          operation: "transactions.createTransaction",
-          current,
-        })
-      : [captureAudit(db, { ...capture, subject })]),
+    ...accountability(),
   ];
 };
 

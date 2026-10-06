@@ -1,4 +1,4 @@
-import { Effect, Option, type PlatformError, Redacted, Schema } from "effect";
+import { Clock, Effect, Option, type PlatformError, Redacted, Schema } from "effect";
 import { OAuthRefreshAdmission } from "../contract";
 import { PATScopes } from "../../../src/core/tokens/contract";
 import { decideOAuthCredentialExpirations } from "../../../src/core/oauth-agents/operations";
@@ -9,7 +9,6 @@ import {
   revokeOAuthReplayConsent,
 } from "../../../src/shell/consent/operations";
 import { prepareOwnedStatement } from "../../database/operations";
-import { currentMillis } from "../../runtime/operations";
 import { newId, newSecret, secretDigest } from "../../secret-material/operations";
 import { BootstrapUnavailable, dbWork } from "./bootstrap";
 import { oauthResponse } from "./response";
@@ -279,34 +278,38 @@ export const commitRotation = ({
   input: RefreshInput;
   grant: GrantRow;
   issuance: Issuance;
-}>): Effect.Effect<void, BootstrapUnavailable> => {
-  const current = currentMillis();
-  const bound = boundCredential(input.admission);
-  const consumption = protectConsentStatement({
-    subject: { _tag: "User", userId: input.admission.userId },
-    requirement: "active",
-    statement: {
-      sql: `UPDATE oauth_refresh_credentials SET consumed_at_ms = ? WHERE ${bound.sql} AND consumed_at_ms IS NULL AND expires_at_ms > ?
+}>): Effect.Effect<void, BootstrapUnavailable> =>
+  Effect.gen(function* () {
+    const current = yield* Clock.currentTimeMillis;
+    const bound = boundCredential(input.admission);
+    const consumption = protectConsentStatement({
+      subject: { _tag: "User", userId: input.admission.userId },
+      requirement: "active",
+      statement: {
+        sql: `UPDATE oauth_refresh_credentials SET consumed_at_ms = ? WHERE ${bound.sql} AND consumed_at_ms IS NULL AND expires_at_ms > ?
       AND scopes_json = ? AND EXISTS (SELECT 1 FROM oauth_connections g WHERE g.id = ? AND g.revoked_at_ms IS NULL AND g.expires_at_ms > ?
         AND NOT EXISTS (SELECT 1 FROM json_each(?) s WHERE NOT EXISTS (SELECT 1 FROM json_each(g.scopes_json) a WHERE a.value = s.value)))`,
-      params: [
-        current,
-        ...bound.params,
-        current,
-        grant.scopes_json,
-        input.admission.connectionId,
-        current,
-        issuance.scopesJson,
-      ],
-    },
+        params: [
+          current,
+          ...bound.params,
+          current,
+          grant.scopes_json,
+          input.admission.connectionId,
+          current,
+          issuance.scopesJson,
+        ],
+      },
+    });
+    return yield* dbWork(() =>
+      input.db.batch([
+        prepareOwnedStatement({ db: input.db, statement: consumption }),
+        assertion(input.db),
+        ...issuanceStatements(input, current, issuance),
+      ])
+    ).pipe(Effect.asVoid);
   });
-  return dbWork(() =>
-    input.db.batch([
-      prepareOwnedStatement({ db: input.db, statement: consumption }),
-      assertion(input.db),
-      ...issuanceStatements(input, current, issuance),
-    ])
-  ).pipe(Effect.asVoid);
-};
-export const refreshCancelled = (input: RefreshInput): boolean =>
-  input.signal.aborted || currentMillis() >= input.admission.deadlineAtMs;
+export const refreshCancelled = ({
+  input,
+  current,
+}: Readonly<{ input: RefreshInput; current: number }>): boolean =>
+  input.signal.aborted || current >= input.admission.deadlineAtMs;

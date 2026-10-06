@@ -152,10 +152,15 @@ const decodeGroups = (
     if (sum === undefined || Option.isNone(maximum) || !Number.isSafeInteger(group.count)) {
       return Option.none();
     }
+    const total = Schema.decodeOption(Schema.toType(Money))({
+      currency: group.currency,
+      amount: BigDecimal.make(sum, minorScale),
+    });
+    if (Option.isNone(total)) return Option.none();
     result.push({
       categoryId: group.category_id,
       direction: group.direction,
-      sum: Money.make({ currency: group.currency, amount: BigDecimal.make(sum, minorScale) }),
+      sum: total.value,
       maximum: maximum.value,
       count: BigInt(group.count),
     });

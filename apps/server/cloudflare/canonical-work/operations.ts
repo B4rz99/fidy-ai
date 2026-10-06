@@ -24,6 +24,7 @@ import { Clock, Effect, Option } from "effect";
 import {
   prepareAuthorizedAuditCall,
   recordCanonicalPATWork,
+  recordOAuthCall,
   recordedPATCallProof,
   refusedByAuditBudget,
 } from "../../src/shell/audit/operations";
@@ -129,6 +130,25 @@ export const acceptedPATStatements = ({
     operation,
   });
 
+/** Append OAuth mutation evidence after a completed owner write in the same protected unit. */
+export const acceptedOAuthStatement = (
+  input: Readonly<{
+    db: D1Database;
+    subject: OAuthCaller;
+    current: number;
+    operation: TransactionMutationOperation;
+  }>
+): D1PreparedStatement =>
+  prepareAuthorizedAuditCall({
+    db: input.db,
+    authority: liveOAuthAuthority(input),
+    id: newId(),
+    current: input.current,
+    operation: input.operation,
+    outcome: "accepted",
+    afterOwnerWrite: true,
+  });
+
 const refusalStatement = ({
   db,
   subject,
@@ -141,8 +161,20 @@ const refusalStatement = ({
   outcome: TransactionRefusal["outcome"];
   operation: TransactionMutationOperation;
   current: number;
-}>): D1PreparedStatement =>
-  isPATCaller(subject)
+}>): D1PreparedStatement => {
+  if (isOAuthCaller(subject)) {
+    return prepareOwnedStatement({
+      db,
+      statement: recordOAuthCall({
+        authority: liveOAuthAuthority({ subject, current }),
+        id: newId(),
+        operation,
+        outcome: "rejected",
+        current,
+      }),
+    });
+  }
+  return isPATCaller(subject)
     ? prepareOwnedStatement({
         db,
         statement: recordCanonicalPATWork({
@@ -157,6 +189,7 @@ const refusalStatement = ({
         }),
       })
     : sessionRefusalStatement({ db, subject, outcome, operation, current });
+};
 
 const sessionRefusalStatement = ({
   db,
@@ -314,16 +347,18 @@ export const rejectInvalidTransactionInput = ({
   db,
   subject,
   operation,
+  current,
 }: Readonly<{
   db: D1Database;
   subject: TransactionCaller;
   operation: TransactionMutationOperation;
+  current: number;
 }>): Promise<Response> =>
   rejectTransactionMutation({
     db,
     subject,
     operation,
-    current: transactionNow(),
+    current,
     refusal: { outcome: "validation_failed", message: invalidTransactionMessage },
   });
 
@@ -362,6 +397,18 @@ const batchEnvelopeStatement = ({
       outcome: "rejected",
       current,
       afterOwnerWrite: false,
+    });
+  }
+  if (isOAuthCaller(subject)) {
+    return prepareOwnedStatement({
+      db,
+      statement: recordOAuthCall({
+        authority: liveOAuthAuthority({ subject, current }),
+        id: newId(),
+        operation: atomicBatchOperation,
+        outcome: "rejected",
+        current,
+      }),
     });
   }
   const authority = liveWebSessionAuthority({ subject, current });
@@ -407,12 +454,11 @@ export const rejectBatchEnvelope = (
     );
 };
 
-/** Classify a PAT protected-work refusal after re-reading the current User Consent decision. */
-export const refusedPATWork = ({
+const refusedBearerWork = Effect.fn(function* ({
   db,
   userId,
-}: Readonly<{ db: D1Database; userId: string }>): Promise<Response> =>
-  readConsentStatus({ db, userId }).pipe(
+}: Readonly<{ db: D1Database; userId: string }>) {
+  return yield* readConsentStatus({ db, userId }).pipe(
     Effect.map((standing) =>
       standing !== "Revoked"
         ? transactionFailure({
@@ -425,9 +471,14 @@ export const refusedPATWork = ({
             status: 403,
             message: "Return to Fidy to review your withdrawn Consent.",
           })
-    ),
-    Effect.runPromise
+    )
   );
+});
+
+/** Native Promise admission adapter; Effect owners compose refusedCredentialResponse instead. */
+export const refusedPATWork = (
+  input: Readonly<{ db: D1Database; userId: string }>
+): Promise<Response> => Effect.runPromise(refusedBearerWork(input));
 
 /** The canonical unauthenticated response every Transaction entry point shares. */
 export const unauthenticatedTransaction = (): Response =>
@@ -451,9 +502,10 @@ export const refusedCredentialResponse = ({
   db,
   subject,
 }: Readonly<{ db: D1Database; subject: QueryCaller }>): Effect.Effect<Response> =>
-  Effect.tryPromise(() => refusedTransactionWork({ db, subject })).pipe(
-    Effect.orElseSucceed(transactionUnavailable)
-  );
+  (isPATCaller(subject) || isOAuthCaller(subject)
+    ? refusedBearerWork({ db, userId: subject.userId })
+    : Effect.succeed(unauthenticatedTransaction())
+  ).pipe(Effect.orElseSucceed(transactionUnavailable));
 
 /** Narrow a live authority to its PAT credential for statement accountability. */
 export const isPATAuthority = (authority: TransactionAuthority): authority is PATAuthority =>
@@ -463,7 +515,7 @@ export function callerAuthority(
   input: Readonly<{ subject: OAuthCaller; current: number }>
 ): OAuthAuthority;
 export function callerAuthority(
-  input: Readonly<{ subject: TransactionCaller; current: number }>
+  input: Readonly<{ subject: Exclude<TransactionCaller, OAuthCaller>; current: number }>
 ): PATAuthority | WebSessionAuthority;
 export function callerAuthority(
   input: Readonly<{ subject: QueryCaller; current: number }>
@@ -499,7 +551,10 @@ export const liveTransactionCredential = ({
     db,
     isPATCaller(subject)
       ? livePATCredential({ subject, current })
-      : callerAuthority({ subject, current })
+      : callerAuthority({
+          subject: isOAuthCaller(subject) ? { ...subject, requiredScope: Option.none() } : subject,
+          current,
+        })
   );
 
 /** True while the caller's authority for the exact scope it presented is still live. */

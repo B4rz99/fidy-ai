@@ -45,7 +45,6 @@ import {
   isOAuthCaller,
   isPATCaller,
   liveTransactionAuthority,
-  transactionNow as now,
   refusedPreparation,
   refusedTransactionWork,
   unavailablePreparation,
@@ -154,6 +153,22 @@ const writeStatements = ({
   statement: D1PreparedStatement;
   current: number;
 }>): ReadonlyArray<D1PreparedStatement> => {
+  if (isOAuthCaller(subject)) {
+    return [
+      statement,
+      prepareOwnedStatement({
+        db,
+        statement: recordAuthorizedCall({
+          authority: callerAuthority({ subject, current }),
+          operation,
+          id: uuid(),
+          current,
+          outcome: "accepted",
+          afterOwnerWrite: true,
+        }),
+      }),
+    ];
+  }
   const pat = isPATCaller(subject);
   return [
     ...(pat
@@ -379,8 +394,12 @@ export const prepareDeleteKeywordRule = ({
 const listStatements = ({
   db,
   subject,
-}: Readonly<{ db: D1Database; subject: QueryCaller }>): Array<D1PreparedStatement> => {
-  const current = now();
+  current,
+}: Readonly<{
+  db: D1Database;
+  subject: QueryCaller;
+  current: number;
+}>): Array<D1PreparedStatement> => {
   const pat = isPATCaller(subject);
   return [
     ...(pat
@@ -450,9 +469,10 @@ const refusedWork = ({
 export const listOwnKeywordRules = ({
   db,
   subject,
-}: Readonly<{ db: D1Database; subject: QueryCaller }>): Promise<Response> =>
+}: Readonly<{ db: D1Database; subject: QueryCaller }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
-    const statements = listStatements({ db, subject });
+    const current = DateTime.toEpochMillis(yield* DateTime.now);
+    const statements = listStatements({ db, subject, current });
     const results = yield* Effect.tryPromise(() => db.batch(statements));
     const auditAccepted =
       results.at(-1)?.meta.changes === 1 &&
@@ -465,4 +485,4 @@ export const listOwnKeywordRules = ({
       next: [],
     });
     return jsonResponse(body, HTTP_OK);
-  }).pipe(Effect.orElseSucceed(keywordRuleUnavailable), Effect.runPromise);
+  }).pipe(Effect.orElseSucceed(keywordRuleUnavailable));

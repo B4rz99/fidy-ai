@@ -13,21 +13,33 @@ import { handleSupportRecovery, rotateBackupRecoveryCode } from "../recovery/ope
 import { handlePATRequest, patRoute } from "../tokens/operations";
 import { currentWebSessionUser, logoutWebSession } from "../web-session/operations";
 import type { WebAuthenticationRequest } from "./contract";
+import type { BrowserPairingUnavailable } from "../browser-login/contract";
 
-type AuthenticationHandler = (input: WebAuthenticationRequest) => Promise<Response>;
+type AuthenticationHandler = (
+  input: WebAuthenticationRequest
+) => Effect.Effect<Response, Cause.UnknownError | BrowserPairingUnavailable | void>;
 const handlers = {
-  startPairing: ({ db }): Promise<Response> => startBrowserPairing(db),
+  startPairing: ({ db }): Effect.Effect<Response, BrowserPairingUnavailable> =>
+    startBrowserPairing(db),
   redeemPairing: redeemBrowserPairing,
-  logout: logoutWebSession,
-  verifyEmail: completeOnboarding,
-  startEmail: ({ request, db, publish }): Promise<Response> =>
-    startBrowserPairingEmail({ request, db, onAccepted: (id) => publish("browserPairing", id) }),
-  completeEmail: completeBrowserPairingEmail,
-  requestReplacement: ({ request, db, publish }): Promise<Response> =>
-    requestEmailReplacement({ request, db, onAccepted: (id) => publish("emailReplacement", id) }),
-  completeReplacement: completeEmailReplacement,
-  rotateRecovery: rotateBackupRecoveryCode,
-  currentUser: currentWebSessionUser,
+  logout: (input): Effect.Effect<Response, void> => logoutWebSession(input),
+  verifyEmail: (input): Effect.Effect<Response, Cause.UnknownError> =>
+    Effect.tryPromise(() => completeOnboarding(input)),
+  startEmail: ({ request, db, publish }): Effect.Effect<Response, Cause.UnknownError> =>
+    Effect.tryPromise(() =>
+      startBrowserPairingEmail({ request, db, onAccepted: (id) => publish("browserPairing", id) })
+    ),
+  completeEmail: (input): Effect.Effect<Response, Cause.UnknownError> =>
+    Effect.tryPromise(() => completeBrowserPairingEmail(input)),
+  requestReplacement: ({ request, db, publish }): Effect.Effect<Response, Cause.UnknownError> =>
+    Effect.tryPromise(() =>
+      requestEmailReplacement({ request, db, onAccepted: (id) => publish("emailReplacement", id) })
+    ),
+  completeReplacement: (input): Effect.Effect<Response, Cause.UnknownError> =>
+    Effect.tryPromise(() => completeEmailReplacement(input)),
+  rotateRecovery: (input): Effect.Effect<Response, Cause.UnknownError> =>
+    Effect.tryPromise(() => rotateBackupRecoveryCode(input)),
+  currentUser: (input): Effect.Effect<Response> => currentWebSessionUser(input),
 } satisfies Record<keyof typeof webAuthenticationEndpoints, AuthenticationHandler>;
 const handlersByName: ReadonlyMap<string, AuthenticationHandler> = new Map(
   Object.entries(handlers)
@@ -106,9 +118,7 @@ export const handleWebAuthentication = (
   const path = new URL(input.request.url).pathname;
   if (path === supportRecoveryPath) return supportResponse(input);
   if (patRoute(path)) {
-    return Effect.tryPromise({ try: () => handlePATRequest(input), catch: () => undefined }).pipe(
-      Effect.orElseSucceed(unavailable)
-    );
+    return handlePATRequest(input).pipe(Effect.orElseSucceed(unavailable));
   }
   const route = routes.find((candidate) => candidate.path === path);
   if (route === undefined) {
@@ -126,9 +136,7 @@ export const handleWebAuthentication = (
     );
   }
   if (input.request.method !== route.method) return Effect.succeed(methodNotAllowed());
-  const work = Effect.tryPromise({ try: () => route.handle(input), catch: () => undefined }).pipe(
-    Effect.orElseSucceed(unavailable)
-  );
+  const work = route.handle(input).pipe(Effect.orElseSucceed(unavailable));
   return path === webAuthenticationEndpoints.requestReplacement.path ||
     path === webAuthenticationEndpoints.completeReplacement.path
     ? work.pipe(Effect.withSpan("emailReplacement.browser"))

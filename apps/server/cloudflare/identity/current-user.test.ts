@@ -1,7 +1,7 @@
 import { prepareCurrentUser } from "../../src/shell/identity/operations";
 import { Unavailable } from "../../src/shell/public-http/contract";
 import { User, UserId } from "../../src/core/identity/contract";
-import { Effect, Exit, Schema } from "effect";
+import { Cause, Effect, Exit, Option, Schema } from "effect";
 import assert from "node:assert/strict";
 import { afterAll, expect, it } from "vitest";
 import { isolatedTestDatabases } from "../d1-test-fixture";
@@ -135,6 +135,32 @@ it("closes inaccessible persistence into IdentityUnavailable without database di
       );
     })
   ));
+
+it.each(["created_at_ms", "started_at_ms", "ends_at_ms"])(
+  "closes an out-of-range retained %s into a typed unavailable result",
+  (field) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const read = yield* prepareCurrentUser(userA);
+        const row = {
+          id: userA,
+          service_market: "CO",
+          locale: "es-CO",
+          time_zone: "America/Bogota",
+          created_at_ms: 1000,
+          started_at_ms: 1000,
+          ends_at_ms: 604801000,
+        };
+        expect((yield* read.decode([row])).data.id).toBe(userA);
+        const exit = yield* read.decode([{ ...row, [field]: 1e20 }]).pipe(Effect.exit);
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+          expect(Cause.hasDies(exit.cause)).toBe(false);
+          expect(Option.getOrThrow(Cause.findErrorOption(exit.cause))).toBeInstanceOf(Unavailable);
+        }
+      })
+    )
+);
 
 it("refuses another User's valid result at the prepared canonical read boundary", () =>
   Effect.runPromise(

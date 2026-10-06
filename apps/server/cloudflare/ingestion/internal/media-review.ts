@@ -5,8 +5,8 @@ class MediaReviewUnavailable extends Data.TaggedError("MediaReviewUnavailable")<
 const MediaReviewRow = Schema.Struct({
   id: Schema.String,
   reason: Schema.String,
-  created_at_ms: Schema.Int,
-  expires_at_ms: Schema.Int,
+  created_at_ms: Schema.DateTimeUtcFromMillis,
+  expires_at_ms: Schema.DateTimeUtcFromMillis,
   service_market: Schema.String,
   locale: Schema.String,
   time_zone: Schema.String,
@@ -40,13 +40,13 @@ export const loadMediaItems = ({
         id: row.value.id,
         mediaSubmissionId: row.value.id,
         reason: row.value.reason,
-        createdAt: DateTime.formatIso(DateTime.makeUnsafe(row.value.created_at_ms)),
+        createdAt: DateTime.formatIso(row.value.created_at_ms),
         serviceMarket: row.value.service_market,
         locale: row.value.locale,
         timeZone: row.value.time_zone,
         sourceChannel: "whatsapp",
         sourceFormat: "image",
-        status: row.value.expires_at_ms > asOf ? "pending" : "expired",
+        status: row.value.expires_at_ms.epochMilliseconds > asOf ? "pending" : "expired",
       });
       if (Option.isNone(item)) return Option.none();
       items.push(item.value);

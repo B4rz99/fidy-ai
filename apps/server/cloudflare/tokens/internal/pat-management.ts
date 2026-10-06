@@ -14,7 +14,7 @@ import {
   refusedByAuditBudget,
 } from "../../../src/shell/audit/operations";
 import { ActivePATList } from "../../../src/core/tokens/contract";
-import { type Cause, Effect, Option, Schema } from "effect";
+import { type Cause, Clock, Effect, Option, Schema } from "effect";
 import { freshSessionParams } from "../../../src/shell/web-session/operations";
 import {
   revokeAllPATConsents,
@@ -34,7 +34,6 @@ import {
   webSession,
 } from "./pat-shared";
 import { newId } from "../../secret-material/operations";
-import { currentMillis } from "../../runtime/operations";
 import { commitPATUnit } from "./pat-unit";
 import { prepareOwnedStatement } from "../../database/operations";
 import { authenticateCanonicalWebSession } from "../../web-session/operations";
@@ -46,73 +45,68 @@ export { createManualPAT } from "./pat-manual";
 /** Decode the browser transport only; listing below owns the live proof, snapshot and Audit. */
 export const listPATs = (
   input: Readonly<{ request: Request; db: D1Database }>
-): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const subject = yield* Effect.tryPromise(() =>
-        authenticateCanonicalWebSession({ ...input, current: currentMillis() })
-      );
-      if (Option.isNone(subject)) return unauthorized();
-      return yield* Effect.tryPromise(() =>
-        listPATsForCaller({ db: input.db, subject: subject.value })
-      );
-    })
-  );
+): Effect.Effect<Response, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const current = yield* Clock.currentTimeMillis;
+    const subject = yield* Effect.tryPromise(() =>
+      authenticateCanonicalWebSession({ ...input, current })
+    );
+    if (Option.isNone(subject)) return unauthorized();
+    return yield* listPATsForCaller({ db: input.db, subject: subject.value });
+  });
 
 /** List only active, same-User safe metadata while rechecking the exact caller proof in D1. */
-export const listPATsForCaller = ({ db, subject }: PATMetadataQuery): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      if ("patId" in subject) return unauthorized();
-      const current = currentMillis();
-      const authority = liveWebSessionAuthority({ subject, current });
-      const session = { id: subject.id, user_id: subject.userId };
-      const metadata = preparePATMetadata({ userId: subject.userId, current, authority });
-      return yield* Effect.gen(function* () {
-        const [rows, recorded] = yield* Effect.tryPromise({
-          try: () =>
-            db.batch([
-              prepareOwnedStatement({
-                db,
-                statement: metadata.statement,
+export const listPATsForCaller = ({ db, subject }: PATMetadataQuery): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    if ("patId" in subject) return unauthorized();
+    const current = yield* Clock.currentTimeMillis;
+    const authority = liveWebSessionAuthority({ subject, current });
+    const session = { id: subject.id, user_id: subject.userId };
+    const metadata = preparePATMetadata({ userId: subject.userId, current, authority });
+    return yield* Effect.gen(function* () {
+      const [rows, recorded] = yield* Effect.tryPromise({
+        try: () =>
+          db.batch([
+            prepareOwnedStatement({
+              db,
+              statement: metadata.statement,
+            }),
+            prepareOwnedStatement({
+              db,
+              statement: recordPATList({
+                session,
+                authority,
+                input: { id: newId(), current },
               }),
-              prepareOwnedStatement({
-                db,
-                statement: recordPATList({
-                  session,
-                  authority,
-                  input: { id: newId(), current },
-                }),
-              }),
-            ]),
-          catch: (error) =>
-            refusedByAuditBudget(error) ? ("rate_limited" as const) : ("unavailable" as const),
-        });
-        if (recorded?.meta.changes !== 1) return unauthorized();
-        if (rows === undefined) return unavailable();
-        const listed = yield* metadata.decode(rows.results).pipe(Effect.option);
-        return Option.isSome(listed)
-          ? canonical(
-              yield* Schema.encodeEffect(Schema.toCodecJson(ActivePATList))(listed.value.data)
-            )
-          : unavailable();
-      }).pipe(
-        Effect.catch((error) =>
-          Effect.succeed(
-            error === "rate_limited"
-              ? response({
-                  body: {
-                    error: { code: "rate_limited", message: "PAT metadata budget exhausted." },
-                    next: [],
-                  },
-                  status: httpRateLimited,
-                })
-              : unavailable()
+            }),
+          ]),
+        catch: (error) =>
+          refusedByAuditBudget(error) ? ("rate_limited" as const) : ("unavailable" as const),
+      });
+      if (recorded?.meta.changes !== 1) return unauthorized();
+      if (rows === undefined) return unavailable();
+      const listed = yield* metadata.decode(rows.results).pipe(Effect.option);
+      return Option.isSome(listed)
+        ? canonical(
+            yield* Schema.encodeEffect(Schema.toCodecJson(ActivePATList))(listed.value.data)
           )
+        : unavailable();
+    }).pipe(
+      Effect.catch((error) =>
+        Effect.succeed(
+          error === "rate_limited"
+            ? response({
+                body: {
+                  error: { code: "rate_limited", message: "PAT metadata budget exhausted." },
+                  next: [],
+                },
+                status: httpRateLimited,
+              })
+            : unavailable()
         )
-      );
-    })
-  );
+      )
+    );
+  });
 
 const revokedPATResponse = (
   db: D1Database,
@@ -141,105 +135,104 @@ export const revokePAT = ({
   request,
   db,
   shortId,
-}: Readonly<{ request: Request; db: D1Database; shortId: string }>): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const session = yield* Effect.tryPromise(() => webSession({ request, db, fresh: true }));
-      if (Option.isNone(session)) return unauthorized();
-      if (!shortIdIsValid(shortId)) return notFound();
-      const current = currentMillis();
-      return yield* Effect.tryPromise(() =>
-        commitPATUnit({
-          db,
-          statements: [
-            prepareOwnedStatement({
-              db,
-              statement: revokeOnePATConsent({
-                session: session.value,
-                input: { id: newId(), shortId, current },
-                candidates: revocablePATGrants({
-                  userId: session.value.user_id,
-                  shortId: Option.some(shortId),
-                  current,
-                }),
+}: Readonly<{ request: Request; db: D1Database; shortId: string }>): Effect.Effect<
+  Response,
+  Cause.UnknownError
+> =>
+  Effect.gen(function* () {
+    const session = yield* webSession({ request, db, fresh: true });
+    if (Option.isNone(session)) return unauthorized();
+    if (!shortIdIsValid(shortId)) return notFound();
+    const current = yield* Clock.currentTimeMillis;
+    return yield* Effect.tryPromise(() =>
+      commitPATUnit({
+        db,
+        statements: [
+          prepareOwnedStatement({
+            db,
+            statement: revokeOnePATConsent({
+              session: session.value,
+              input: { id: newId(), shortId, current },
+              candidates: revocablePATGrants({
+                userId: session.value.user_id,
+                shortId: Option.some(shortId),
+                current,
               }),
             }),
-            prepareOwnedStatement({
-              db,
-              statement: revokeOnePAT({ session: session.value, input: { shortId, current } }),
+          }),
+          prepareOwnedStatement({
+            db,
+            statement: revokeOnePAT({ session: session.value, input: { shortId, current } }),
+          }),
+          prepareOwnedStatement({
+            db,
+            statement: recordOnePATRevocation({
+              session: session.value,
+              input: { id: newId(), shortId, current },
             }),
-            prepareOwnedStatement({
-              db,
-              statement: recordOnePATRevocation({
-                session: session.value,
-                input: { id: newId(), shortId, current },
-              }),
-            }),
-          ],
-        })
-      ).pipe(
-        Effect.map(() => canonical({ shortId })),
-        Effect.catch(() => revokedPATResponse(db, session.value, { shortId, current }))
-      );
-    })
-  );
+          }),
+        ],
+      })
+    ).pipe(
+      Effect.map(() => canonical({ shortId })),
+      Effect.catch(() => revokedPATResponse(db, session.value, { shortId, current }))
+    );
+  });
 
 /** Revoke all active grants and close every unclaimed approval under one WebSession check. */
 export const revokeAllPATs = ({
   request,
   db,
-}: Readonly<{ request: Request; db: D1Database }>): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const session = yield* Effect.tryPromise(() => webSession({ request, db, fresh: true }));
-      if (Option.isNone(session)) return unauthorized();
-      const current = currentMillis();
-      const committed = yield* Effect.tryPromise(() =>
-        commitPATUnit({
-          db,
-          statements: [
-            prepareOwnedStatement({
-              db,
-              statement: revokeAllPATConsents({
-                session: session.value,
+}: Readonly<{ request: Request; db: D1Database }>): Effect.Effect<Response, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const session = yield* webSession({ request, db, fresh: true });
+    if (Option.isNone(session)) return unauthorized();
+    const current = yield* Clock.currentTimeMillis;
+    const committed = yield* Effect.tryPromise(() =>
+      commitPATUnit({
+        db,
+        statements: [
+          prepareOwnedStatement({
+            db,
+            statement: revokeAllPATConsents({
+              session: session.value,
+              current,
+              candidates: revocablePATGrants({
+                userId: session.value.user_id,
                 current,
-                candidates: revocablePATGrants({
-                  userId: session.value.user_id,
-                  current,
-                  shortId: Option.none(),
-                }),
+                shortId: Option.none(),
               }),
             }),
-            prepareOwnedStatement({
-              db,
-              statement: revokeEveryPAT({ session: session.value, current }),
+          }),
+          prepareOwnedStatement({
+            db,
+            statement: revokeEveryPAT({ session: session.value, current }),
+          }),
+          prepareOwnedStatement({
+            db,
+            statement: revokeAllPairingConsents({
+              session: session.value,
+              current,
+              candidates: revocablePairingGrants(session.value.user_id),
             }),
-            prepareOwnedStatement({
-              db,
-              statement: revokeAllPairingConsents({
-                session: session.value,
-                current,
-                candidates: revocablePairingGrants(session.value.user_id),
-              }),
+          }),
+          prepareOwnedStatement({
+            db,
+            statement: revokeEveryPairing({ session: session.value, current }),
+          }),
+          db
+            .prepare(patRevokeAllCompletion)
+            .bind(session.value.user_id, current, session.value.user_id),
+          prepareOwnedStatement({
+            db,
+            statement: recordAllPATRevocations({
+              session: session.value,
+              input: { id: newId(), current },
             }),
-            prepareOwnedStatement({
-              db,
-              statement: revokeEveryPairing({ session: session.value, current }),
-            }),
-            db
-              .prepare(patRevokeAllCompletion)
-              .bind(session.value.user_id, current, session.value.user_id),
-            prepareOwnedStatement({
-              db,
-              statement: recordAllPATRevocations({
-                session: session.value,
-                input: { id: newId(), current },
-              }),
-            }),
-          ],
-        })
-      );
-      if (committed[5]?.meta.changes !== 1) return unauthorized();
-      return canonical({ revokedCount: committed[1]?.meta.changes ?? 0 });
-    })
-  );
+          }),
+        ],
+      })
+    );
+    if (committed[5]?.meta.changes !== 1) return unauthorized();
+    return canonical({ revokedCount: committed[1]?.meta.changes ?? 0 });
+  });

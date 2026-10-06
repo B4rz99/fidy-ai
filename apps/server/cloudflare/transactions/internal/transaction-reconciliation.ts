@@ -19,6 +19,7 @@ import {
   type TransactionBoundaryFailure,
   type TransactionCaller,
   type TransactionRefusal,
+  acceptedOAuthStatement,
   acceptedPATStatements,
   alreadyLinkedMessage,
   boundaryFailure,
@@ -26,6 +27,7 @@ import {
   callerScope,
   credentialRefusedPreparation,
   failedPreparation,
+  isOAuthCaller,
   isPATCaller,
   liveTransactionAuthority,
   maximumTransactionInputBytes,
@@ -68,7 +70,9 @@ type PairWork = Readonly<{
 }>;
 
 /** Decode one bounded canonical pair without treating either id as authority. */
-export const transactionPairInput = (request: Request): Promise<Option.Option<typeof Input.Type>> =>
+export const transactionPairInput = (
+  request: Request
+): Effect.Effect<Option.Option<typeof Input.Type>> =>
   boundedJsonBody({ request, policy, schema: Input });
 
 const candidateQuery = `SELECT retained.id, retained.amount, retained.currency,
@@ -169,6 +173,7 @@ const successStatements = ({
   if (isPATCaller(subject)) {
     return acceptedPATStatements({ db, subject, operation, current });
   }
+  if (isOAuthCaller(subject)) return [acceptedOAuthStatement({ db, subject, operation, current })];
   return [
     prepareOwnerAuditCall({
       db,

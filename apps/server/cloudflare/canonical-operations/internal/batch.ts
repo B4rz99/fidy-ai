@@ -15,11 +15,14 @@ import { Effect, Option, Schema } from "effect";
 import { maximumSubmissionInputBytes } from "../../ingestion/contract";
 
 import type { HostedInference } from "../../../src/shell/hosted-inference/operations";
+import type { HostedInferenceService } from "../../../src/shell/hosted-inference/contract";
+import { canonicalOperationRequiresInference } from "./inference-requirement";
 import {
   type CanonicalRefusalDisposition,
   type TransactionCaller,
   childCaller,
   dailyAuditMessage,
+  isOAuthCaller,
   isPATCaller,
   liveTransactionAuthority,
   liveTransactionCredential,
@@ -36,6 +39,7 @@ import {
   executeCanonicalMutationUnit,
 } from "./mutation-unit";
 import { type CanonicalMutationAdapter, canonicalMutationAdapter } from "./mutation-registry";
+import { oauthConfirmationRefusal, requiresOAuthConfirmation } from "./oauth-confirmation";
 import type {
   CanonicalMutationPreparation,
   CanonicalMutationRefusal,
@@ -146,7 +150,7 @@ const childAccess = ({
   const scoped = childCaller({ subject, requiredScope: capability });
   return liveTransactionAuthority({ db, subject: scoped, current }).then((allowed) => {
     if (allowed) return "allowed" as const;
-    if (!isPATCaller(subject)) return "credential_refused" as const;
+    if (!isPATCaller(subject) && !isOAuthCaller(subject)) return "credential_refused" as const;
     return liveTransactionCredential({ db, subject, current }).then((live) =>
       live ? ("scope_missing" as const) : ("credential_refused" as const)
     );
@@ -338,8 +342,8 @@ const failedCallStep = ({
     )
   );
 
-/** Recheck one child's live authority and report the refusal reason when it is not allowed. */
-const childAccessStep = ({
+/** Recheck one child's scope and confirmation authority before decoding or preparing its material. */
+const childAuthorizationStep = ({
   db,
   subject,
   current,
@@ -352,10 +356,32 @@ const childAccessStep = ({
   catalogOperation: CatalogOperation;
   index: number;
 }>): Effect.Effect<Option.Option<CallStep>> => {
+  if (isOAuthCaller(subject) && catalogOperation.policy.access._tag !== "UserOwnedAgentScoped") {
+    return Effect.succeed(scopeStep("scope_missing", catalogOperation, index));
+  }
   const capability = userOwnedAgentCapability(catalogOperation.policy.access);
   return Effect.tryPromise(() => childAccess({ db, subject, current, capability })).pipe(
     Effect.orElseSucceed(() => "credential_refused" as const),
-    Effect.map((access) => scopeStep(access, catalogOperation, index))
+    Effect.flatMap((access): Effect.Effect<Option.Option<CallStep>> => {
+      const step = scopeStep(access, catalogOperation, index);
+      if (Option.isSome(step)) return Effect.succeed(step);
+      const scopedSubject = childCaller({ subject, requiredScope: capability });
+      if (!isOAuthCaller(scopedSubject) || !requiresOAuthConfirmation(catalogOperation)) {
+        return Effect.succeedNone;
+      }
+      return rejectChild({
+        db,
+        subject: scopedSubject,
+        index,
+        operation: catalogOperation.id,
+        refusal: oauthConfirmationRefusal({
+          db,
+          subject: scopedSubject,
+          current,
+          operation: catalogOperation,
+        }),
+      }).pipe(Effect.map((response) => Option.some({ _tag: "Response" as const, response })));
+    })
   );
 };
 
@@ -449,6 +475,16 @@ const rejectUnattributed = ({
     Effect.orElseSucceed(transactionUnavailable)
   );
 
+type BatchChildWork = Readonly<{
+  db: D1Database;
+  bucket: Option.Option<R2Bucket>;
+  inference: Option.Option<HostedInferenceService>;
+  subject: TransactionCaller;
+  call: CanonicalBatchCall;
+  index: number;
+  current: number;
+}>;
+
 const prepareCall = ({
   db,
   subject,
@@ -456,28 +492,26 @@ const prepareCall = ({
   index,
   current,
   bucket,
-}: Readonly<{
-  db: D1Database;
-  bucket: Option.Option<R2Bucket>;
-  subject: TransactionCaller;
-  call: CanonicalBatchCall;
-  index: number;
-  current: number;
-}>): Effect.Effect<CallStep, never, HostedInference> => {
+  inference,
+}: BatchChildWork): Effect.Effect<CallStep, never, HostedInference> => {
   const decision = decodedDecision(call, index);
   if (decision._tag === "Response") {
     return Effect.succeed(decision);
   }
   const catalogOperation = decision.operation;
   return Effect.gen(function* () {
-    const accessStep = yield* childAccessStep({ db, subject, current, catalogOperation, index });
+    const accessStep = yield* childAuthorizationStep({
+      db,
+      subject,
+      current,
+      catalogOperation,
+      index,
+    });
     if (Option.isSome(accessStep)) return accessStep.value;
     const capability = userOwnedAgentCapability(catalogOperation.policy.access);
     const scopedSubject = childCaller({ subject, requiredScope: capability });
     const decodedCall = Schema.decodeUnknownOption(getAtomicBatchCallSchema())(call);
     if (Option.isNone(decodedCall)) {
-      // The child names an executable mutation, so its own callId or input failed the published
-      // schema: refuse and audit that child instead of failing the whole request unattributed.
       return yield* rejectInvalidChild({
         db,
         subject: scopedSubject,
@@ -488,6 +522,9 @@ const prepareCall = ({
         operation: decision.operation.id,
         input: rawChildInput(call),
       });
+    }
+    if (canonicalOperationRequiresInference(catalogOperation.id) && Option.isNone(inference)) {
+      return { _tag: "Response", response: transactionUnavailable() };
     }
     const preparation = yield* decision.adapter.prepare({
       db,
@@ -582,9 +619,11 @@ const prepareBatch = ({
   calls,
   current,
   bucket,
+  inference,
 }: Readonly<{
   db: D1Database;
   bucket: Option.Option<R2Bucket>;
+  inference: Option.Option<HostedInferenceService>;
   subject: TransactionCaller;
   calls: ReadonlyArray<CanonicalBatchCall>;
   current: number;
@@ -593,7 +632,7 @@ const prepareBatch = ({
     const children: Array<PreparedCall> = [];
     const targets = new Set<string>();
     for (const [index, call] of calls.entries()) {
-      const step = yield* prepareCall({ db, subject, call, index, current, bucket });
+      const step = yield* prepareCall({ db, subject, call, index, current, bucket, inference });
       if (step._tag === "Response") {
         return {
           _tag: "Response",
@@ -709,6 +748,7 @@ const executionResponse = ({
 type BatchWork = Readonly<{
   db: D1Database;
   bucket: Option.Option<R2Bucket>;
+  inference: Option.Option<HostedInferenceService>;
   subject: TransactionCaller;
   calls: ReadonlyArray<CanonicalBatchCall>;
   current: number;
@@ -721,6 +761,7 @@ const executeBatch = ({
   current,
   bucket,
   hostedFence,
+  inference,
 }: BatchWork & Readonly<{ hostedFence: Option.Option<HostedCommitFence> }>): Effect.Effect<
   Response,
   never,
@@ -729,7 +770,7 @@ const executeBatch = ({
   Effect.gen(function* () {
     const invalidShape = batchShapeRefusal(calls);
     if (Option.isSome(invalidShape)) return invalidShape.value;
-    const batch = yield* prepareBatch({ db, subject, calls, current, bucket });
+    const batch = yield* prepareBatch({ db, subject, calls, current, bucket, inference });
     if (batch._tag === "Response") return batch.response;
     const execution = yield* executeCanonicalMutationUnit({
       db,
@@ -746,7 +787,7 @@ const executeBatch = ({
         statement?.mutation.outcome._tag === "StatementSubmission" &&
         (yield* statement.mutation.outcome.publication.lostReplay)
       ) {
-        const replay = yield* prepareBatch({ db, subject, calls, current, bucket });
+        const replay = yield* prepareBatch({ db, subject, calls, current, bucket, inference });
         if (replay._tag === "Response") return replay.response;
         const retried = yield* executeCanonicalMutationUnit({
           db,

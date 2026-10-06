@@ -23,11 +23,11 @@ import {
   callerAuthority,
   callerScope,
   failedPreparation,
+  isOAuthCaller,
   isPATCaller,
   refusedPreparation,
   transactionFailure,
   transactionId,
-  transactionNow,
   transactionUnavailable,
 } from "../../canonical-work/operations";
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
@@ -344,7 +344,7 @@ export const listPendingInsights = ({
       subject,
       operation: "insights.listPendingInsights",
       outcome: "accepted",
-      current: transactionNow(),
+      current: DateTime.toEpochMillis(yield* DateTime.now),
     };
     const url = new URL(request.url);
     const cursor = pendingCursor(url);
@@ -397,13 +397,16 @@ export const insightRefusal = ({
         result === "recorded" ? ("recorded" as const) : ("unavailable" as const)
       )
     ),
-  respond: () =>
+  respond: (disposition) =>
     Effect.succeed(
-      transactionFailure({
-        code,
-        status: code === "not_found" ? HTTP_NOT_FOUND : HTTP_BAD_REQUEST,
-        message: code === "not_found" ? "Insight unavailable." : "Insight transition unavailable.",
-      })
+      disposition === "unavailable"
+        ? transactionUnavailable()
+        : transactionFailure({
+            code,
+            status: code === "not_found" ? HTTP_NOT_FOUND : HTTP_BAD_REQUEST,
+            message:
+              code === "not_found" ? "Insight unavailable." : "Insight transition unavailable.",
+          })
     ),
 });
 
@@ -568,8 +571,11 @@ const transitionStatements = (
       requiredScope: callerScope(subject),
       outcome: insightOutcome({ operation, insightEventId: id, attemptId }),
       guardRefusal: insightGuardRefusal(input),
-      auditBudget: isPATCaller(subject) ? "shared" : "owner",
-      commitGuards: isPATCaller(subject) ? Option.none() : Option.some(insightCommitGuards),
+      auditBudget: isPATCaller(subject) || isOAuthCaller(subject) ? "shared" : "owner",
+      commitGuards:
+        isPATCaller(subject) || isOAuthCaller(subject)
+          ? Option.none()
+          : Option.some(insightCommitGuards),
       statements: [
         ...(isPATCaller(subject)
           ? [prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) })]

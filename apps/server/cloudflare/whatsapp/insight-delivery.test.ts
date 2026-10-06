@@ -1,6 +1,7 @@
 import { afterAll } from "vitest";
 import { expect, it } from "@effect/vitest";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Exit, Option, Schema } from "effect";
+import assert from "node:assert/strict";
 import { makeInsightTemplateSender } from "../../src/shell/channels/whatsapp/runtime";
 import {
   WhatsAppBusinessPhoneNumberId,
@@ -24,12 +25,14 @@ import {
   weeklySummaryTestUser,
 } from "../weekly-summary.test-fixture";
 import { type InsightUnavailable } from "../insights/contract";
-import { InsightRecipient, type InsightWhatsAppStage } from "./contract";
+import { InsightRecipient, type InsightWhatsAppStage, WhatsAppUnavailable } from "./contract";
 import {
+  readInsightDeliveryEvidence,
   reconcileInsightStatus,
   recordInsightSend,
   stageInsightDelivery,
   startInsightSend,
+  startWeeklyQuestion,
 } from "./operations";
 
 const sender = makeInsightTemplateSender({
@@ -81,6 +84,145 @@ const prepare = (db: D1Database): Effect.Effect<InsightWhatsAppStage, InsightUna
     };
   });
 afterAll(() => weeklySummaryTestDatabases.dispose());
+
+it.live(
+  "rejects corrupt retained verified-delivery timestamps through the closed channel failure",
+  () =>
+    Effect.gen(function* () {
+      const input = yield* prepare(yield* weeklySummaryTestDatabase);
+      yield* Effect.tryPromise(() =>
+        input.db
+          .prepare(`INSERT INTO insight_whatsapp_claims
+      (user_id,insight_event_id,correlation_token,portfolio_id,bsuid,business_phone_number_id,
+       summary_json,text,scheduled_at_ms,expires_at_ms,time_zone,state,send_started_at_ms,provider_message_id,delivered_at_ms)
+      VALUES (?,?,?,?,?,?,NULL,NULL,?,?,?,'delivered',?,'wamid.corrupt',?)`)
+          .bind(
+            input.userId,
+            input.insightEventId,
+            "11111111-1111-4111-8111-111111111111",
+            recipient.portfolioId,
+            recipient.bsuid,
+            recipient.businessPhoneNumberId,
+            input.scheduledAt.epochMilliseconds,
+            input.expiresAt.epochMilliseconds,
+            input.timeZone,
+            8_640_000_000_000_001,
+            8_640_000_000_000_001
+          )
+          .run()
+      );
+      const result = yield* Effect.exit(
+        readInsightDeliveryEvidence({
+          db: input.db,
+          userId: input.userId,
+          insightEventId: input.insightEventId,
+          now: input.now.epochMilliseconds,
+        })
+      );
+      assert.deepStrictEqual(result, Exit.fail(new WhatsAppUnavailable()));
+    })
+);
+it.live("refuses corrupt staged claim dates without consuming send authority", () =>
+  Effect.gen(function* () {
+    const input = yield* prepare(yield* weeklySummaryTestDatabase);
+    yield* stageInsightDelivery(input);
+    // Inject retained corruption without weakening the production write fence.
+    yield* Effect.tryPromise(() => input.db.exec("DROP TRIGGER insight_whatsapp_claim_identity"));
+    for (const scheduledAt of [-8_640_000_000_000_001, 8_640_000_000_000_000]) {
+      yield* Effect.tryPromise(() =>
+        input.db
+          .prepare(
+            "UPDATE insight_whatsapp_claims SET scheduled_at_ms=?,expires_at_ms=? WHERE user_id=? AND insight_event_id=?"
+          )
+          .bind(scheduledAt, scheduledAt + 1, input.userId, input.insightEventId)
+          .run()
+      );
+      assert.deepStrictEqual(
+        yield* Effect.exit(startInsightSend(input)),
+        Exit.fail(new WhatsAppUnavailable())
+      );
+      expect(
+        yield* Effect.tryPromise(() =>
+          input.db
+            .prepare(
+              "SELECT state,send_started_at_ms FROM insight_whatsapp_claims WHERE user_id=? AND insight_event_id=?"
+            )
+            .bind(input.userId, input.insightEventId)
+            .first()
+        )
+      ).toEqual({ state: "staged", send_started_at_ms: null });
+      yield* Effect.tryPromise(() =>
+        input.db
+          .prepare(
+            "UPDATE insight_whatsapp_claims SET scheduled_at_ms=?,expires_at_ms=? WHERE user_id=? AND insight_event_id=?"
+          )
+          .bind(
+            DateTime.toEpochMillis(input.scheduledAt),
+            DateTime.toEpochMillis(input.expiresAt),
+            input.userId,
+            input.insightEventId
+          )
+          .run()
+      );
+    }
+    expect((yield* startInsightSend(input))._tag).toBe("Ready");
+  })
+);
+it.live("refuses corrupt weekly question dates before consuming send authority", () =>
+  Effect.gen(function* () {
+    const input = yield* prepare(yield* weeklySummaryTestDatabase);
+    const id = "11111111-1111-4111-8111-111111111112";
+    yield* Effect.tryPromise(() =>
+      input.db
+        .prepare(`INSERT INTO weekly_governor_questions
+        (id,user_id,offer_id,created_at_ms,expires_at_ms,correlation_token,portfolio_id,bsuid,business_phone_number_id,time_zone)
+        SELECT ?,user_id,id,?,?,?, ?,?,?,? FROM weekly_consent_offers WHERE user_id=? LIMIT 1`)
+        .bind(
+          id,
+          8_640_000_000_000_000,
+          8_640_000_000_000_001,
+          "11111111-1111-4111-8111-111111111113",
+          recipient.portfolioId,
+          recipient.bsuid,
+          recipient.businessPhoneNumberId,
+          input.timeZone,
+          input.userId
+        )
+        .run()
+    );
+    const claim = {
+      db: input.db,
+      userId: input.userId,
+      id,
+      now: input.now,
+      guard: { sql: "SELECT 1", params: [] },
+    };
+    for (const createdAt of [8_640_000_000_000_000, -8_640_000_000_000_001]) {
+      yield* Effect.tryPromise(() =>
+        input.db
+          .prepare(
+            "UPDATE weekly_governor_questions SET created_at_ms=?,expires_at_ms=? WHERE user_id=? AND id=?"
+          )
+          .bind(createdAt, createdAt + 1, input.userId, id)
+          .run()
+      );
+      assert.deepStrictEqual(
+        yield* Effect.exit(startWeeklyQuestion(claim)),
+        Exit.fail(new WhatsAppUnavailable())
+      );
+      expect(
+        yield* Effect.tryPromise(() =>
+          input.db
+            .prepare(
+              "SELECT state,send_started_at_ms FROM weekly_governor_questions WHERE user_id=? AND id=?"
+            )
+            .bind(input.userId, id)
+            .first()
+        )
+      ).toEqual({ state: "ready", send_started_at_ms: null });
+    }
+  })
+);
 it.live(
   "claims at most one provider initiation and reconciles only exact authenticated evidence without lifecycle regression",
   () =>

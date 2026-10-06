@@ -34,59 +34,55 @@ const refused = (): Response =>
 /** Recovery guidance is guarded and audited but has no commercial consumption. */
 export const queryUpgrade = (
   input: Extract<SubscriptionQueryInput, { operation: "subscription.getUpgradeUrl" }>
-): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, subject } = input;
-      const current = yield* Clock.currentTimeMillis;
-      const authority = callerAuthority({ subject, current });
-      const auditId = newId();
-      const rows = yield* Effect.tryPromise(() =>
-        db.batch([
-          prepareAuthorizedAuditCall({
-            db,
-            authority,
-            id: auditId,
-            operation: "subscription.getUpgradeUrl",
-            outcome: "accepted",
-            current,
-            afterOwnerWrite: false,
-          }),
-          ...(isPATCaller(subject)
-            ? [
-                prepareOwnedStatement({
-                  db,
-                  statement: recordAuditedPATUseFromAuthority({
-                    authority: livePATAuthority({ subject, current }),
-                    current,
-                    evidence: recordedPATCallProof({
-                      auditId,
-                      operation: "subscription.getUpgradeUrl",
-                    }),
+): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const { db, subject } = input;
+    const current = yield* Clock.currentTimeMillis;
+    const authority = callerAuthority({ subject, current });
+    const auditId = newId();
+    const rows = yield* Effect.tryPromise(() =>
+      db.batch([
+        prepareAuthorizedAuditCall({
+          db,
+          authority,
+          id: auditId,
+          operation: "subscription.getUpgradeUrl",
+          outcome: "accepted",
+          current,
+          afterOwnerWrite: false,
+        }),
+        ...(isPATCaller(subject)
+          ? [
+              prepareOwnedStatement({
+                db,
+                statement: recordAuditedPATUseFromAuthority({
+                  authority: livePATAuthority({ subject, current }),
+                  current,
+                  evidence: recordedPATCallProof({
+                    auditId,
+                    operation: "subscription.getUpgradeUrl",
                   }),
                 }),
-              ]
-            : []),
-        ])
-      );
-      if (rows[0]?.meta.changes !== 1) return refused();
-      return Response.json(
-        {
-          data: {
-            url: new URL(
-              "/upgrade",
-              Option.getOrElse(input.browserOrigin, () => "https://app.fidyapp.com")
-            ).href,
-          },
-          next: [],
+              }),
+            ]
+          : []),
+      ])
+    );
+    if (rows[0]?.meta.changes !== 1) return refused();
+    return Response.json(
+      {
+        data: {
+          url: new URL(
+            "/upgrade",
+            Option.getOrElse(input.browserOrigin, () => "https://app.fidyapp.com")
+          ).href,
         },
-        { headers: { "cache-control": "no-store" } }
-      );
-    }).pipe(
-      Effect.catchCause((cause) =>
-        Effect.succeed(
-          refusedByAuditBudget(cause) ? rateLimitedTransactionResponse() : unavailable()
-        )
-      )
+        next: [],
+      },
+      { headers: { "cache-control": "no-store" } }
+    );
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.succeed(refusedByAuditBudget(cause) ? rateLimitedTransactionResponse() : unavailable())
     )
   );

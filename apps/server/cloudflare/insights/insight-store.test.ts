@@ -561,6 +561,51 @@ effectIt.effect(
 );
 
 effectIt.effect(
+  "returns unavailable when recording a missing InsightEvent refusal cannot retain Audit evidence",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* fromTestPromise(() => authorizeBrowser(db));
+      const event = Option.getOrThrow(yield* generated(db));
+      const missingId = InsightEventId.make("30000000-0000-4000-8000-000000000099");
+      const request = {
+        db,
+        index: 0,
+        path: `/insights/${missingId}/read`,
+        method: "POST" as const,
+        body: Option.none<object>(),
+      };
+      expect(Option.isNone(yield* findInsight({ db, userId: users[0], id: missingId }))).toBe(true);
+      const healthy = yield* fromTestPromise(() => send(request));
+      expect(healthy.status).toBe(404);
+      const snapshot = (): Promise<ReadonlyArray<ReadonlyArray<Record<string, unknown>>>> =>
+        Promise.all([
+          db.prepare("SELECT * FROM insight_events ORDER BY user_id, id").all(),
+          db.prepare("SELECT * FROM insight_delivery_attempts ORDER BY user_id, id").all(),
+          db.prepare("SELECT * FROM insight_audit ORDER BY user_id, id").all(),
+        ]).then((results) => results.map((result) => result.results));
+      const before = yield* fromTestPromise(snapshot);
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            `CREATE TRIGGER refuse_missing_insight_audit BEFORE INSERT ON insight_audit
+             WHEN NEW.operation = 'insights.markInsightRead' AND NEW.outcome = 'rejected'
+             BEGIN SELECT RAISE(ABORT, 'test_refusal_audit_unavailable'); END`
+          )
+          .run()
+      );
+      const response = yield* fromTestPromise(() => send(request));
+      expect(response.status).toBe(503);
+      const canonicalError = yield* fromTestPromise(() => response.json());
+      expect(canonicalError).toEqual({ status: "unavailable" });
+      expect(yield* fromTestPromise(snapshot)).toEqual(before);
+      expect(
+        Option.getOrThrow(yield* findInsight({ db, userId: users[0], id: event.id })).lifecycleState
+      ).toBe("pending");
+    })
+);
+
+effectIt.effect(
   "returns unavailable rather than not_found when an owned InsightEvent cannot be read",
   () =>
     Effect.gen(function* () {

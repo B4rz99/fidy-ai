@@ -1,7 +1,8 @@
-import { Effect, Option } from "effect";
+import { Context, Effect, Exit, Layer, Option } from "effect";
+import { FetchHttpClient, HttpClient } from "effect/http";
 import { it } from "@effect/vitest";
 import { describe, expect } from "vitest";
-import { verifyEdgeSmoke } from "./verify-edge-smoke";
+import { productionProbe, verifyEdgeSmoke } from "./verify-edge-smoke";
 
 const safeHeaders = {
   "cache-control": "no-store",
@@ -11,6 +12,9 @@ const safeHeaders = {
   "x-frame-options": "DENY",
 };
 
+const requestPath = (input: Parameters<typeof globalThis.fetch>[0]): string =>
+  input instanceof Request ? new URL(input.url).pathname : new URL(input).pathname;
+
 const respond = (
   status: number,
   headers: HeadersInit = safeHeaders
@@ -18,6 +22,58 @@ const respond = (
   status,
   headers: new Headers(headers),
 });
+
+it.effect("aborts every unconsumed native edge response on success and mismatch", () =>
+  Effect.gen(function* () {
+    const services = yield* Layer.build(FetchHttpClient.layer);
+    for (const mismatch of [false, true]) {
+      const signals: AbortSignal[] = [];
+      let pulled = 0;
+      const statuses = new Map([
+        ["/health", 200],
+        ["/categories", 401],
+        ["/providers/kapso/callback", 401],
+        ["/providers/wompi/billing-events", 400],
+        ["/web/hosted-turns", 403],
+      ]);
+      const fetch: typeof globalThis.fetch = Object.assign(
+        (
+          input: Parameters<typeof globalThis.fetch>[0],
+          init?: Parameters<typeof globalThis.fetch>[1]
+        ): Promise<Response> => {
+          if (init?.signal !== undefined && init.signal !== null) signals.push(init.signal);
+          const path = requestPath(input);
+          return Promise.resolve(
+            new Response(
+              new ReadableStream<Uint8Array>(
+                {
+                  pull() {
+                    pulled += 1;
+                  },
+                },
+                { highWaterMark: 0 }
+              ),
+              { status: mismatch ? 503 : statuses.get(path), headers: safeHeaders }
+            )
+          );
+        },
+        { preconnect: globalThis.fetch.preconnect }
+      );
+      const outcome = yield* verifyEdgeSmoke({
+        probe: productionProbe,
+        candidate: Option.none(),
+      }).pipe(
+        Effect.provideService(HttpClient.HttpClient, Context.get(services, HttpClient.HttpClient)),
+        Effect.provideService(FetchHttpClient.Fetch, fetch),
+        Effect.exit
+      );
+      expect(Exit.isSuccess(outcome)).toBe(!mismatch);
+      expect(signals).toHaveLength(mismatch ? 1 : 5);
+      expect(signals.every((signal) => signal.aborted)).toBe(true);
+      expect(pulled).toBe(0);
+    }
+  }).pipe(Effect.scoped)
+);
 
 describe("production edge smoke", () => {
   it.effect(

@@ -40,12 +40,11 @@ import { budgetRefusal } from "../../budgets/operations";
 import { browseDashboard } from "../../dashboard/operations";
 import { ownsTransactionPath as transactionPath } from "../../../src/shell/transactions/runtime";
 import {
-  type TransactionCaller,
+  type TransactionCaller as CanonicalCaller,
   isPATCaller,
   maximumTransactionInputBytes,
   rejectBatchEnvelope,
   rejectInvalidTransactionInput,
-  transactionNow,
   unauthenticatedTransaction,
 } from "../../canonical-work/operations";
 import { RequestBodyPolicy } from "../../http/contract";
@@ -305,6 +304,7 @@ const sessionAdmission = (
  * Bind one admitted caller to the exact admission variant for this canonical work. The
  * coordinator's own published schema types every field here, so the Worker cannot drift from it.
  */
+type TransactionCaller = Exclude<CanonicalCaller, { oauthConnectionId: string }>;
 const coordinatorAdmission = (
   subject: TransactionCaller,
   work: CanonicalWork
@@ -393,81 +393,78 @@ const dispatchCanonicalBatch = (
   request: Request,
   environment: CoreHttpEnvironment,
   subject: TransactionCaller
-): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const parsed = yield* Effect.tryPromise(() =>
-        boundedJsonBody({ request, policy: batchPolicy, schema: BatchInput })
+): Effect.Effect<Response, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const parsed = yield* boundedJsonBody({ request, policy: batchPolicy, schema: BatchInput });
+    if (Option.isNone(parsed)) {
+      const current = yield* Clock.currentTimeMillis;
+      return yield* Effect.tryPromise(() =>
+        rejectBatchEnvelope({ db: environment.DB, subject, current })
       );
-      if (Option.isNone(parsed)) {
-        return yield* Effect.tryPromise(() =>
-          rejectBatchEnvelope({ db: environment.DB, subject, current: transactionNow() })
-        );
-      }
-      return yield* sendToCoordinator({
-        environment,
-        subject,
-        work: { _tag: "Batch", calls: parsed.value.calls },
-      });
-    })
-  );
+    }
+    return yield* sendToCoordinator({
+      environment,
+      subject,
+      work: { _tag: "Batch", calls: parsed.value.calls },
+    });
+  });
 
 const dispatchCanonicalCapture = (
   request: Request,
   environment: CoreHttpEnvironment,
   subject: TransactionCaller
-): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const input = yield* Effect.tryPromise(() => transactionInput(request));
-      if (Option.isNone(input)) {
-        return yield* Effect.tryPromise(() =>
-          rejectInvalidTransactionInput({
-            db: environment.DB,
-            subject,
-            operation: "transactions.createTransaction",
-          })
-        );
-      }
-      return yield* sendToCoordinator({
-        environment,
-        subject,
-        work: canonicalCall(CanonicalOperationId.make("transactions.createTransaction"), {
-          payload: input.value,
-        }),
-      });
-    })
-  );
+): Effect.Effect<Response, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const input = yield* transactionInput(request);
+    if (Option.isNone(input)) {
+      const current = yield* Clock.currentTimeMillis;
+      return yield* Effect.tryPromise(() =>
+        rejectInvalidTransactionInput({
+          db: environment.DB,
+          subject,
+          operation: "transactions.createTransaction",
+          current,
+        })
+      );
+    }
+    return yield* sendToCoordinator({
+      environment,
+      subject,
+      work: canonicalCall(CanonicalOperationId.make("transactions.createTransaction"), {
+        payload: input.value,
+      }),
+    });
+  });
 
 const dispatchCanonicalCorrection = (
   request: Request,
   environment: CoreHttpEnvironment,
   subject: TransactionCaller
-): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const input = yield* Effect.tryPromise(() => correctionInput(request));
-      if (Option.isNone(input)) {
-        return yield* Effect.tryPromise(() =>
-          rejectInvalidTransactionInput({
-            db: environment.DB,
-            subject,
-            operation: "transactions.updateTransaction",
-          })
-        );
-      }
-      return yield* sendToCoordinator({
-        environment,
-        subject,
-        work: canonicalCall(CanonicalOperationId.make("transactions.updateTransaction"), {
-          // The correction owner classifies the addressed Transaction, so an id that is not a
-          // stable identity is forwarded verbatim instead of being answered here.
-          params: { id: rawPathId({ request }) },
-          payload: input.value,
-        }),
-      });
-    })
-  );
+): Effect.Effect<Response, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const input = yield* correctionInput(request);
+    if (Option.isNone(input)) {
+      const current = yield* Clock.currentTimeMillis;
+      return yield* Effect.tryPromise(() =>
+        rejectInvalidTransactionInput({
+          db: environment.DB,
+          subject,
+          operation: "transactions.updateTransaction",
+          current,
+        })
+      );
+    }
+    return yield* sendToCoordinator({
+      environment,
+      subject,
+      work: canonicalCall(CanonicalOperationId.make("transactions.updateTransaction"), {
+        // The correction owner classifies the addressed Transaction, so an id that is not a
+        // stable identity is forwarded verbatim instead of being answered here.
+        params: { id: rawPathId({ request }) },
+        payload: input.value,
+      }),
+    });
+  });
 
 const dispatchCanonicalPair = (
   input: Readonly<{
@@ -476,23 +473,22 @@ const dispatchCanonicalPair = (
     subject: TransactionCaller;
     operation: "transactions.linkTransactions" | "transactions.unlinkTransactions";
   }>
-): Promise<Response> => {
+): Effect.Effect<Response, Cause.UnknownError | Schema.SchemaError> => {
   const { request, environment, subject, operation } = input;
-  return Effect.runPromise(
-    Effect.gen(function* () {
-      const pair = yield* Effect.tryPromise(() => transactionPairInput(request));
-      if (Option.isNone(pair)) {
-        return yield* Effect.tryPromise(() =>
-          rejectInvalidTransactionInput({ db: environment.DB, subject, operation })
-        );
-      }
-      return yield* sendToCoordinator({
-        environment,
-        subject,
-        work: canonicalCall(CanonicalOperationId.make(operation), { payload: pair.value }),
-      });
-    })
-  );
+  return Effect.gen(function* () {
+    const pair = yield* transactionPairInput(request);
+    if (Option.isNone(pair)) {
+      const current = yield* Clock.currentTimeMillis;
+      return yield* Effect.tryPromise(() =>
+        rejectInvalidTransactionInput({ db: environment.DB, subject, operation, current })
+      );
+    }
+    return yield* sendToCoordinator({
+      environment,
+      subject,
+      work: canonicalCall(CanonicalOperationId.make(operation), { payload: pair.value }),
+    });
+  });
 };
 
 /** The Reconciliation mutation an admitted operation names, when it names one. */
@@ -520,6 +516,7 @@ const ownedCorePath = (path: string): boolean =>
     statementStagingPath,
     "/web/hosted-turns",
     "/web/hosted-turns/delivery",
+    "/web/hosted-turns/progress",
   ].includes(path) ||
   transactionPath(path) ||
   ownsWebAuthenticationPath(path) ||
@@ -685,9 +682,7 @@ const rememberMemoryResponse = ({
     environment,
     subject,
     operation: "memory.remember",
-    decode: Effect.tryPromise(() =>
-      boundedJsonBody({ request, policy: memoryBodyPolicy, schema: RememberInput })
-    ).pipe(
+    decode: boundedJsonBody({ request, policy: memoryBodyPolicy, schema: RememberInput }).pipe(
       Effect.map(Option.map((payload) => ({ payload }))),
       Effect.orElseSucceed(() => Option.none<{ payload: RememberInput }>())
     ),
@@ -708,9 +703,11 @@ const reviseMemoryResponse = ({
     subject,
     operation: "memory.revise",
     decode: Effect.gen(function* () {
-      const payload = yield* Effect.tryPromise(() =>
-        boundedJsonBody({ request, policy: memoryBodyPolicy, schema: ReviseInput })
-      ).pipe(Effect.orElseSucceed(() => Option.none<ReviseInput>()));
+      const payload = yield* boundedJsonBody({
+        request,
+        policy: memoryBodyPolicy,
+        schema: ReviseInput,
+      }).pipe(Effect.orElseSucceed(() => Option.none<ReviseInput>()));
       return Option.zipWith(memoryIdFromPath(request), payload, (id, value) => ({
         params: { id },
         payload: value,
@@ -792,8 +789,12 @@ const budgetMutationResponse = ({
   environment: CoreHttpEnvironment;
   subject: TransactionCaller;
   operation: "budgets.createBudget" | "budgets.updateBudget" | "budgets.deleteBudget";
-}>): Effect.Effect<Response> =>
-  Effect.gen(function* () {
+}>): Effect.Effect<Response> => {
+  const bodySchema =
+    operation === "budgets.createBudget"
+      ? Schema.toCodecJson(CreateBudgetInput)
+      : Schema.toCodecJson(UpdateBudgetInput);
+  return Effect.gen(function* () {
     const id =
       operation === "budgets.createBudget"
         ? Option.none<BudgetId>()
@@ -803,7 +804,7 @@ const budgetMutationResponse = ({
         db: environment.DB,
         subject,
         operation,
-        current: transactionNow(),
+        current: yield* Clock.currentTimeMillis,
         code: "not_found",
       });
       const disposition = yield* refusal.record();
@@ -812,16 +813,11 @@ const budgetMutationResponse = ({
     const payload =
       operation === "budgets.deleteBudget"
         ? Option.none<CreateBudgetInput>()
-        : yield* Effect.tryPromise(() =>
-            boundedJsonBody({
-              request,
-              policy: budgetBodyPolicy,
-              schema:
-                operation === "budgets.createBudget"
-                  ? Schema.toCodecJson(CreateBudgetInput)
-                  : Schema.toCodecJson(UpdateBudgetInput),
-            })
-          ).pipe(Effect.orElseSucceed(() => Option.none<CreateBudgetInput>()));
+        : yield* boundedJsonBody({
+            request,
+            policy: budgetBodyPolicy,
+            schema: bodySchema,
+          }).pipe(Effect.orElseSucceed(() => Option.none<CreateBudgetInput>()));
     if (operation !== "budgets.deleteBudget" && Option.isNone(payload)) {
       return yield* sendToCoordinator({
         environment,
@@ -838,6 +834,7 @@ const budgetMutationResponse = ({
       ),
     });
   }).pipe(Effect.orElseSucceed(unavailable));
+};
 
 /** The Budget owner's canonical query or mutation, never a parallel path declaration. */
 const BudgetOperation = Schema.Literals([
@@ -939,13 +936,16 @@ const hostedTurnResponse = (
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
     if (request.method !== "POST") return methodNotAllowed();
+    const current = yield* Clock.currentTimeMillis;
     const subject = yield* Effect.tryPromise(() =>
-      transactionSession({ request, db: environment.DB })
+      transactionSession({ request, db: environment.DB, current })
     );
     if (Option.isNone(subject)) return unauthenticatedTransaction();
-    const input = yield* Effect.tryPromise(() =>
-      boundedJsonBody({ request, policy: hostedTurnPolicy, schema: hostedTurnInput })
-    );
+    const input = yield* boundedJsonBody({
+      request,
+      policy: hostedTurnPolicy,
+      schema: hostedTurnInput,
+    });
     if (Option.isNone(input)) {
       return Response.json({ status: "validation_failed" }, { status: 400, headers: jsonHeaders });
     }
@@ -974,13 +974,16 @@ const hostedProgressResponse = (
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
     if (request.method !== "POST") return methodNotAllowed();
+    const current = yield* Clock.currentTimeMillis;
     const subject = yield* Effect.tryPromise(() =>
-      transactionSession({ request, db: environment.DB })
+      transactionSession({ request, db: environment.DB, current })
     );
     if (Option.isNone(subject)) return unauthenticatedTransaction();
-    const input = yield* Effect.tryPromise(() =>
-      boundedJsonBody({ request, policy: hostedReceiptPolicy, schema: HostedTurnProgressRequest })
-    );
+    const input = yield* boundedJsonBody({
+      request,
+      policy: hostedReceiptPolicy,
+      schema: HostedTurnProgressRequest,
+    });
     if (Option.isNone(input)) {
       return Response.json({ status: "validation_failed" }, { status: 400, headers: jsonHeaders });
     }
@@ -1009,13 +1012,16 @@ const hostedReceiptResponse = (
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
     if (request.method !== "POST") return methodNotAllowed();
+    const current = yield* Clock.currentTimeMillis;
     const subject = yield* Effect.tryPromise(() =>
-      transactionSession({ request, db: environment.DB })
+      transactionSession({ request, db: environment.DB, current })
     );
     if (Option.isNone(subject)) return unauthenticatedTransaction();
-    const input = yield* Effect.tryPromise(() =>
-      boundedJsonBody({ request, policy: hostedReceiptPolicy, schema: hostedDeliveryReceipt })
-    );
+    const input = yield* boundedJsonBody({
+      request,
+      policy: hostedReceiptPolicy,
+      schema: hostedDeliveryReceipt,
+    });
     if (Option.isNone(input)) {
       return Response.json({ status: "validation_failed" }, { status: 400, headers: jsonHeaders });
     }
@@ -1107,13 +1113,11 @@ const clarificationCanonicalResponse = ({
     Effect.gen(function* () {
       const id = new URL(request.url).pathname.split("/").at(clarificationIdPosition) ?? "";
       if (operation.id === "ingestion.resolveNeedsReviewItem") {
-        const payload = yield* Effect.tryPromise(() =>
-          boundedJsonBody({
-            request,
-            policy: clarificationBodyPolicy,
-            schema: Schema.toCodecJson(ResolveNeedsReviewItemInput),
-          })
-        );
+        const payload = yield* boundedJsonBody({
+          request,
+          policy: clarificationBodyPolicy,
+          schema: Schema.toCodecJson(ResolveNeedsReviewItemInput),
+        });
         if (Option.isNone(payload)) {
           return validationFailed("Invalid statement clarification input.");
         }
@@ -1161,41 +1165,37 @@ const transactionResponse = (
   const { request, environment, operation, subject } = input;
   if (operation.id === "transactions.createTransaction") {
     return Option.some(
-      Effect.tryPromise({
-        try: () => dispatchCanonicalCapture(request, environment, subject),
-        catch: () => undefined,
-      }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("transactions.createTransaction"))
+      dispatchCanonicalCapture(request, environment, subject).pipe(
+        Effect.orElseSucceed(unavailable),
+        Effect.withSpan("transactions.createTransaction")
+      )
     );
   }
   if (operation.id === "transactions.updateTransaction") {
     return Option.some(
-      Effect.tryPromise({
-        try: () => dispatchCanonicalCorrection(request, environment, subject),
-        catch: () => undefined,
-      }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("transactions.updateTransaction"))
+      dispatchCanonicalCorrection(request, environment, subject).pipe(
+        Effect.orElseSucceed(unavailable),
+        Effect.withSpan("transactions.updateTransaction")
+      )
     );
   }
   const reconciliation = reconciliationOperation(operation);
   if (Option.isSome(reconciliation)) {
     return Option.some(
-      Effect.tryPromise({
-        try: () =>
-          dispatchCanonicalPair({
-            request,
-            environment,
-            subject,
-            operation: reconciliation.value,
-          }),
-        catch: () => undefined,
+      dispatchCanonicalPair({
+        request,
+        environment,
+        subject,
+        operation: reconciliation.value,
       }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan(reconciliation.value))
     );
   }
   if (operation.id === atomicBatchOperation) {
     return Option.some(
-      Effect.tryPromise({
-        try: () => dispatchCanonicalBatch(request, environment, subject),
-        catch: () => undefined,
-      }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan(atomicBatchOperation))
+      dispatchCanonicalBatch(request, environment, subject).pipe(
+        Effect.orElseSucceed(unavailable),
+        Effect.withSpan(atomicBatchOperation)
+      )
     );
   }
   return Option.none();
@@ -1231,13 +1231,11 @@ const insightResponse = (
         });
       }
       if (operation.id === "insights.markInsightDelivered") {
-        const payload = yield* Effect.tryPromise(() =>
-          boundedJsonBody({
-            request,
-            policy: insightBodyPolicy,
-            schema: Schema.toCodecJson(DeliveryEvidenceInput),
-          })
-        );
+        const payload = yield* boundedJsonBody({
+          request,
+          policy: insightBodyPolicy,
+          schema: Schema.toCodecJson(DeliveryEvidenceInput),
+        });
         return yield* sendToCoordinator({
           environment,
           subject,
@@ -1343,7 +1341,7 @@ const authorizedCanonicalResponse = (
     const current = yield* Clock.currentTimeMillis;
     if (!request.headers.has("authorization")) {
       return yield* Effect.tryPromise({
-        try: () => transactionSession({ request, db: environment.DB }),
+        try: () => transactionSession({ request, db: environment.DB, current }),
         catch: () => undefined,
       }).pipe(
         Effect.flatMap((session) => {
@@ -1359,10 +1357,7 @@ const authorizedCanonicalResponse = (
         Effect.orElseSucceed(unavailable)
       );
     }
-    return yield* Effect.tryPromise({
-      try: () => resolveCanonicalPATCredential({ request, db: environment.DB, operation }),
-      catch: () => undefined,
-    }).pipe(
+    return yield* resolveCanonicalPATCredential({ request, db: environment.DB, operation }).pipe(
       Effect.match({
         onFailure: () =>
           jsonResponse(

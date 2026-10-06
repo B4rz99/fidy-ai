@@ -1,4 +1,5 @@
-import { Cause, Effect, Exit, Fiber } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, Option } from "effect";
+import { TestClock } from "effect/testing";
 import { it as effectIt } from "@effect/vitest";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -6,6 +7,10 @@ import {
   type WompiFetch,
   tokenizeCardWithWompi,
 } from "./wompi-tokenization";
+
+const holdFetch = (signal: AbortSignal): Promise<Response> =>
+  Effect.runPromise(Effect.never, { signal });
+const neverCancellation = Promise.withResolvers<void>().promise;
 
 const card = {
   number: "4242 4242 4242 4242",
@@ -220,5 +225,76 @@ describe("Wompi browser tokenization", () => {
       expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
       expect(Exit.isFailure(exit) && Cause.hasDies(exit.cause)).toBe(false);
     })
+  );
+
+  effectIt.effect("bounds stalled tokenization headers and aborts the native request", () =>
+    Effect.gen(function* () {
+      const ready = yield* Deferred.make<void>();
+      let signal = Option.none<AbortSignal>();
+      const fetchStub: WompiFetch = (_input, init) => {
+        signal = Option.fromNullishOr(init?.signal);
+        Deferred.doneUnsafe(ready, Effect.void);
+        return holdFetch(Option.getOrThrow(signal));
+      };
+      const fiber = yield* tokenizeCardWithWompi("pub_test_12345678", card, fetchStub).pipe(
+        Effect.exit,
+        Effect.forkScoped
+      );
+      yield* Deferred.await(ready);
+      yield* TestClock.adjust("15 seconds");
+      const exit = yield* Fiber.join(fiber);
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        expect(Option.getOrThrow(Cause.findErrorOption(exit.cause))).toBeInstanceOf(
+          CardTokenizationFailed
+        );
+      }
+      expect(Option.getOrThrow(signal).aborted).toBe(true);
+    }).pipe(Effect.scoped)
+  );
+
+  effectIt.effect(
+    "bounds body consumption and unlocks its reader even when cancellation never settles",
+    () =>
+      Effect.gen(function* () {
+        const ready = yield* Deferred.make<void>();
+        let signal = Option.none<AbortSignal>();
+        let cancelled = false;
+        const response = new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller): void {
+              controller.enqueue(new Uint8Array([123]));
+            },
+            pull(): Promise<void> {
+              Deferred.doneUnsafe(ready, Effect.void);
+              return neverCancellation;
+            },
+            cancel(): Promise<void> {
+              cancelled = true;
+              return neverCancellation;
+            },
+          })
+        );
+        const fetchStub: WompiFetch = (_input, init) => {
+          signal = Option.fromNullishOr(init?.signal);
+          return Promise.resolve(response);
+        };
+        const fiber = yield* tokenizeCardWithWompi("pub_test_12345678", card, fetchStub).pipe(
+          Effect.exit,
+          Effect.forkScoped
+        );
+        yield* Deferred.await(ready);
+        yield* TestClock.adjust("15 seconds");
+        const exit = yield* Fiber.join(fiber);
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+          expect(Option.getOrThrow(Cause.findErrorOption(exit.cause))).toBeInstanceOf(
+            CardTokenizationFailed
+          );
+        }
+        expect(cancelled).toBe(true);
+        expect(response.body?.locked).toBe(false);
+        expect(Option.getOrThrow(signal).aborted).toBe(true);
+      }).pipe(Effect.scoped)
   );
 });

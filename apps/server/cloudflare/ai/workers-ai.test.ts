@@ -1,4 +1,6 @@
 import { deepStrictEqual } from "node:assert";
+import { it as effectIt } from "@effect/vitest";
+import { TestClock } from "effect/testing";
 import { TranscriptTurnId } from "../../src/core/agent/contract";
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import {
@@ -6,10 +8,11 @@ import {
   type WorkersAiBindingRun,
   approvedWorkersAiModel,
 } from "../../src/shell/hosted-inference/contract";
-import { Data, Effect, Exit, Option, Schema } from "effect";
+import { Cause, Data, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
-import { makeAdmittedWorkersAiRun } from "./internal/admitted-run";
+import { hostedInitialTextContext, makeAdmittedWorkersAiRun } from "./admitted-run.test-fixture";
+import { makeUserCloudflareHostedInference } from "./runtime";
 
 class TestInvocationFailure extends Data.TaggedError("TestInvocationFailure") {}
 const encodeJson = (value: unknown): string =>
@@ -130,6 +133,96 @@ const admissionUnavailable = (): HostedInferenceError =>
     retryable: false,
     retryAfter: Option.none(),
   });
+
+effectIt.effect("samples AI spend admission from the executing owner's Clock", () =>
+  Effect.gen(function* () {
+    const db = yield* Effect.tryPromise(setup);
+    yield* Effect.tryPromise(() => seedGrant(db));
+    yield* TestClock.setTime(now);
+    const inference = yield* makeUserCloudflareHostedInference({
+      environment: {
+        AI: { run: () => Promise.resolve(Response.json({})) },
+        HOSTED_AI_MODEL: approvedWorkersAiModel,
+      },
+      db,
+      userId: userA,
+      admittedTurnId: Option.none,
+    });
+    const prepared = yield* inference.prepareText({
+      context: hostedInitialTextContext("Hola"),
+      availableOperations: [],
+      toolChoice: "none",
+    });
+    yield* TestClock.adjust("5 seconds");
+    yield* Effect.exit(prepared.execute);
+    const rows = yield* Effect.tryPromise(() =>
+      db.prepare("SELECT admitted_at_epoch_ms FROM resource_admission_events").all()
+    );
+    expect(rows.results).toHaveLength(4);
+    expect(rows.results).toEqual(
+      Array.from({ length: 4 }, () => ({
+        admitted_at_epoch_ms: now + 5_000,
+      }))
+    );
+  })
+);
+
+effectIt.effect(
+  "settles dispatched AI admission without starting provider work after interruption",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(setup);
+      yield* Effect.tryPromise(() => seedGrant(db));
+      const dispatched = yield* Deferred.make<void>();
+      const settle = yield* Deferred.make<void>();
+      let calls = 0;
+      const runWithServices = Effect.runPromiseWith(yield* Effect.context<never>());
+      const guardedDatabase = new Proxy(db, {
+        get: (target, key): unknown =>
+          key === "batch"
+            ? (statements: ReadonlyArray<D1PreparedStatement>): Promise<unknown> =>
+                runWithServices(
+                  Deferred.succeed(dispatched, undefined).pipe(
+                    Effect.andThen(Deferred.await(settle)),
+                    Effect.andThen(Effect.tryPromise(() => target.batch([...statements])))
+                  )
+                )
+            : Reflect.get(target, key, target),
+      });
+      const inference = yield* makeUserCloudflareHostedInference({
+        environment: {
+          AI: {
+            run: () => {
+              calls += 1;
+              return Promise.resolve(Response.json({}));
+            },
+          },
+          HOSTED_AI_MODEL: approvedWorkersAiModel,
+        },
+        db: guardedDatabase,
+        userId: userA,
+        admittedTurnId: Option.none,
+      });
+      const prepared = yield* inference.prepareText({
+        context: hostedInitialTextContext("Hola"),
+        availableOperations: [],
+        toolChoice: "none",
+      });
+      const execution = yield* Effect.forkChild(prepared.execute);
+      yield* Deferred.await(dispatched);
+      const interrupting = yield* Effect.forkChild(Fiber.interrupt(execution));
+      yield* Effect.yieldNow;
+      yield* Deferred.succeed(settle, undefined);
+      yield* Fiber.join(interrupting);
+      const exit = yield* Fiber.await(execution);
+      expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
+      expect(calls).toBe(0);
+      const rows = yield* Effect.tryPromise(() =>
+        db.prepare("SELECT * FROM resource_admission_events").all()
+      );
+      expect(rows.results).toHaveLength(2);
+    })
+);
 
 it("does not send another User's content to Workers AI using a different User's Consent", () =>
   Effect.runPromise(

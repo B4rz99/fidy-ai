@@ -9,7 +9,7 @@ import {
   slowPairingPoll,
 } from "../../../src/shell/tokens/operations";
 import { decidePATPairingClaim } from "../../../src/core/tokens/operations";
-import { type Cause, DateTime, Effect, Option, Schema } from "effect";
+import { type Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
 import { PairingRow } from "./pat-pairing";
 import {
   decodeBody,
@@ -25,7 +25,6 @@ import {
   unavailable,
 } from "./pat-shared";
 import { newId } from "../../secret-material/operations";
-import { currentMillis } from "../../runtime/operations";
 import { commitPATUnit } from "./pat-unit";
 import { prepareOwnedStatement } from "../../database/operations";
 
@@ -38,9 +37,7 @@ const decodeProof = (
   request: Request
 ): Effect.Effect<Option.Option<typeof Proof.Type>, Cause.UnknownError> =>
   Effect.gen(function* () {
-    const input = yield* Effect.tryPromise(() =>
-      decodeBody({ request, schema: ClaimPATPairingPayload })
-    );
+    const input = yield* decodeBody({ request, schema: ClaimPATPairingPayload });
     return Option.flatMap(input, (value) => Schema.decodeUnknownOption(Proof)(value));
   });
 
@@ -216,42 +213,43 @@ const mint = (
 export const claimPATPairing = ({
   request,
   db,
-}: Readonly<{ request: Request; db: D1Database }>): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const proof = yield* decodeProof(request);
-      if (Option.isNone(proof)) return invalid();
-      const raw = yield* Effect.tryPromise(() =>
-        db.prepare(`SELECT * FROM pat_pairings WHERE id = ?`).bind(proof.value.pairingId).first()
-      );
-      const pairing = Schema.decodeUnknownOption(PairingRow)(raw);
-      if (Option.isNone(pairing)) return invalid();
-      const current = currentMillis();
-      const proofDigest = yield* Effect.tryPromise(() => digest(proof.value.privateDeviceCode));
-      const decision = yield* decidePATPairingClaim({
-        lifecycle: pairing.value.state,
-        proofMatches: equalsDigest({ stored: pairing.value.proof_digest, candidate: proofDigest }),
-        wrongProofAttempts: pairing.value.wrong_attempts,
-        minimumPollIntervalSeconds: pairing.value.minimum_poll_seconds,
-        lastAcceptedPollAt: Option.map(
-          Option.fromNullishOr(pairing.value.last_poll_at_ms),
-          DateTime.makeUnsafe
-        ),
-        expiresAt: DateTime.makeUnsafe(pairing.value.expires_at_ms),
-        attemptedAt: DateTime.makeUnsafe(current),
+}: Readonly<{ request: Request; db: D1Database }>): Effect.Effect<
+  Response,
+  Cause.UnknownError | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    const proof = yield* decodeProof(request);
+    if (Option.isNone(proof)) return invalid();
+    const raw = yield* Effect.tryPromise(() =>
+      db.prepare(`SELECT * FROM pat_pairings WHERE id = ?`).bind(proof.value.pairingId).first()
+    );
+    const pairing = Schema.decodeUnknownOption(PairingRow)(raw);
+    if (Option.isNone(pairing)) return raw === null ? invalid() : unavailable();
+    const current = yield* Clock.currentTimeMillis;
+    const proofDigest = yield* Effect.tryPromise(() => digest(proof.value.privateDeviceCode));
+    const decision = yield* decidePATPairingClaim({
+      lifecycle: pairing.value.state,
+      proofMatches: equalsDigest({ stored: pairing.value.proof_digest, candidate: proofDigest }),
+      wrongProofAttempts: pairing.value.wrong_attempts,
+      minimumPollIntervalSeconds: pairing.value.minimum_poll_seconds,
+      lastAcceptedPollAt: Option.map(
+        Option.fromNullishOr(pairing.value.last_poll_at_ms),
+        DateTime.makeUnsafe
+      ),
+      expiresAt: DateTime.makeUnsafe(pairing.value.expires_at_ms),
+      attemptedAt: DateTime.makeUnsafe(current),
+    });
+    if (decision._tag === "WrongProof") {
+      return yield* recordWrongProof(db, pairing.value, decision.wrongProofAttempts);
+    }
+    if (decision._tag === "SlowDown") {
+      return yield* slowPoll(db, {
+        pairing: pairing.value,
+        seconds: decision.minimumPollIntervalSeconds,
+        retryAfter: decision.retryAfterSeconds,
       });
-      if (decision._tag === "WrongProof") {
-        return yield* recordWrongProof(db, pairing.value, decision.wrongProofAttempts);
-      }
-      if (decision._tag === "SlowDown") {
-        return yield* slowPoll(db, {
-          pairing: pairing.value,
-          seconds: decision.minimumPollIntervalSeconds,
-          retryAfter: decision.retryAfterSeconds,
-        });
-      }
-      if (decision._tag === "Pending") return yield* pending(db, pairing.value, current);
-      if (decision._tag !== "Claim") return invalid();
-      return yield* mint(db, pairing.value, current);
-    })
-  );
+    }
+    if (decision._tag === "Pending") return yield* pending(db, pairing.value, current);
+    if (decision._tag !== "Claim") return invalid();
+    return yield* mint(db, pairing.value, current);
+  });

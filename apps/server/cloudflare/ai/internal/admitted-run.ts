@@ -1,8 +1,8 @@
 import { admitResourceWithAttemptPressure } from "../../resource-admission/operations";
-import { Data, Effect, Option } from "effect";
+import { Cause, Clock, Effect, Option, Schema } from "effect";
 import {
   HostedInferenceError,
-  type WorkersAiBindingRun,
+  type WorkersAiRun,
 } from "../../../src/shell/hosted-inference/contract";
 import type { TranscriptTurnId } from "../../../src/core/agent/contract";
 import { withConsentEgress } from "../../consent/operations";
@@ -12,10 +12,6 @@ import {
   ResourceAdmissionRefused,
   ResourceAdmissionUnits,
 } from "../../resource-admission/contract";
-
-class WorkersAiBindingFailure extends Data.TaggedError("WorkersAiBindingFailure")<{
-  readonly cause: unknown;
-}> {}
 
 const inferenceAdmissionFailure = (failure: unknown): HostedInferenceError =>
   new HostedInferenceError({
@@ -36,47 +32,45 @@ export const makeAdmittedWorkersAiRun =
     db,
     userId,
     run,
-    nowEpochMs,
     admittedTurnId,
   }: Readonly<{
     db: D1Database;
     userId: string;
-    run: WorkersAiBindingRun;
-    nowEpochMs: () => number;
+    run: WorkersAiRun;
     admittedTurnId: () => Option.Option<TranscriptTurnId>;
-  }>): WorkersAiBindingRun =>
-  (model, request, options) => {
-    const current = ResourceAdmissionEpochMs.make(nowEpochMs());
-    const authority = {
-      database: db,
-      nowEpochMs: (): ResourceAdmissionEpochMs => current,
-      policies: workersAiPolicies,
-    };
-    const cost = ResourceAdmissionUnits.make(
-      new TextEncoder().encode(JSON.stringify(request)).length + request.max_tokens
-    );
-    return Effect.runPromise(
-      admitResourceWithAttemptPressure(authority, spendRequest({ userId, cost })).pipe(
+  }>): WorkersAiRun =>
+  (model, request) =>
+    Effect.gen(function* () {
+      const current = ResourceAdmissionEpochMs.make(yield* Clock.currentTimeMillis);
+      const authority = {
+        database: db,
+        nowEpochMs: (): ResourceAdmissionEpochMs => current,
+        policies: workersAiPolicies,
+      };
+      const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+        request
+      ).pipe(Effect.mapError(inferenceAdmissionFailure));
+      const cost = ResourceAdmissionUnits.make(
+        new TextEncoder().encode(encoded).length + request.max_tokens
+      );
+      return yield* admitResourceWithAttemptPressure(
+        authority,
+        spendRequest({ userId, cost })
+      ).pipe(
         Effect.mapError(inferenceAdmissionFailure),
         Effect.flatMap(() =>
           withConsentEgress({
             db,
             userId,
             admittedTurnId: admittedTurnId(),
-            action: Effect.tryPromise({
-              try: () => run(model, request, options),
-              catch: (cause) => new WorkersAiBindingFailure({ cause }),
-            }),
+            action: run(model, request),
           }).pipe(
             Effect.mapError((failure) =>
-              failure instanceof WorkersAiBindingFailure
+              failure instanceof HostedInferenceError || failure instanceof Cause.UnknownError
                 ? failure
                 : inferenceAdmissionFailure(failure)
             )
           )
         )
-      )
-    ).catch((failure: unknown) => {
-      throw failure instanceof WorkersAiBindingFailure ? failure.cause : failure;
+      );
     });
-  };

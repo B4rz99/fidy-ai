@@ -5,6 +5,4 @@ runs:
   steps:
     - name: Install checksum-verified Bun
       shell: bash
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: bash scripts/install-bun.sh "$RUNNER_TEMP/fidy-bun-c7b06d94b"
+      run: bash scripts/install-bun.sh "$RUNNER_TEMP/fidy-bun-13a98b0db"

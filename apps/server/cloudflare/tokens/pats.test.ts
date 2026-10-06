@@ -7,7 +7,18 @@ import {
 } from "../d1-test-fixture";
 import * as D1Client from "@effect/sql-d1/D1Client";
 import { listCategoriesResponse } from "../../src/shell/categories/operations";
-import { Clock, Context, Data, DateTime, Effect, Layer, Option, Schema } from "effect";
+import {
+  Clock,
+  Context,
+  Data,
+  DateTime,
+  Deferred,
+  Effect,
+  Fiber,
+  Layer,
+  Option,
+  Schema,
+} from "effect";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import { executeCanonicalQuery } from "../canonical-operations/operations";
 import { SqlClient } from "effect/sql";
@@ -16,6 +27,8 @@ import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contrac
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { UserTransactionCoordinator } from "../transactions/runtime";
+import { sweepExpiredPATPairings } from "./runtime";
+import { handlePATRequest } from "./operations";
 
 const databases = isolatedTestDatabases();
 const userA = "10000000-0000-4000-8000-000000000001";
@@ -55,6 +68,126 @@ const awaitPromise = <A>(
   });
 const runTest = <A, E>(work: Effect.Effect<A, E>): Promise<A> => Effect.runPromise(work);
 const clock = (): number => Effect.runSync(Clock.currentTimeMillis);
+
+it("releases a stalled PAT pairing request body when its owner is interrupted", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { db } = yield* awaitPromise(setup());
+      const reading = yield* Deferred.make<void>();
+      const cancel = vi.fn();
+      const body = new ReadableStream<Uint8Array>(
+        {
+          pull: (): void => {
+            Deferred.doneUnsafe(reading, Effect.void);
+          },
+          cancel,
+        },
+        { highWaterMark: 0 }
+      );
+      const request = new Request("https://api.fidyapp.com/pat-pairings", {
+        method: "POST",
+        body,
+        headers: { "content-type": "application/json", "x-pat-source": "0".repeat(64) },
+      });
+      const fiber = yield* Effect.forkChild(handlePATRequest({ request, db }));
+      yield* Deferred.await(reading);
+      yield* Fiber.interrupt(fiber);
+      expect(body.locked).toBe(false);
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(
+        yield* awaitPromise(db.prepare("SELECT count(*) AS total FROM pat_pairings").first())
+      ).toEqual({ total: 0 });
+    })
+  ));
+
+it("expires anonymous PAT pairing metadata using the retention caller's Clock", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { db, send } = yield* awaitPromise(setup());
+      const started = yield* Schema.decodeUnknownEffect(Started)(
+        yield* awaitPromise(
+          (yield* awaitPromise(
+            send({
+              path: "/pat-pairings",
+              method: "POST",
+              payload: { recipientLabel: "Agent", scopes: ["read"], lifetimeDays: 7 },
+            })
+          )).json()
+        )
+      );
+      const row = yield* awaitPromise(
+        db
+          .prepare("SELECT expires_at_ms FROM pat_pairings WHERE id = ?")
+          .bind(started.pairingId)
+          .first<{ expires_at_ms: number }>()
+      );
+      if (row === null) return yield* Effect.die(new Error("Missing test pairing"));
+      const clockService = yield* Clock.Clock;
+      const now = row.expires_at_ms;
+      yield* sweepExpiredPATPairings(db).pipe(
+        Effect.provideService(Clock.Clock, {
+          currentTimeMillisUnsafe: () => now,
+          currentTimeMillis: Effect.succeed(now),
+          currentTimeNanos: Effect.succeed(BigInt(now) * 1_000_000n),
+          currentTimeNanosUnsafe: () => BigInt(now) * 1_000_000n,
+          monotonicTimeNanos: clockService.monotonicTimeNanos,
+          monotonicTimeNanosUnsafe: () => clockService.monotonicTimeNanosUnsafe(),
+          sleep: (duration) => clockService.sleep(duration),
+        })
+      );
+      expect(
+        yield* awaitPromise(
+          db.prepare("SELECT state FROM pat_pairings WHERE id = ?").bind(started.pairingId).first()
+        )
+      ).toBeNull();
+    })
+  ));
+
+it("refuses corrupt retained pairing expiry before approving a grant or recording Consent", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { db, send, sessions } = yield* awaitPromise(setup());
+      const started = yield* Schema.decodeUnknownEffect(Started)(
+        yield* awaitPromise(
+          (yield* awaitPromise(
+            send({
+              path: "/pat-pairings",
+              method: "POST",
+              payload: { recipientLabel: "Agent", scopes: ["read"], lifetimeDays: 7 },
+            })
+          )).json()
+        )
+      );
+      yield* awaitPromise(
+        db
+          .prepare("UPDATE pat_pairings SET created_at_ms = ?, expires_at_ms = ? WHERE id = ?")
+          .bind(8_640_000_000_000_001 - 600_000, 8_640_000_000_000_001, started.pairingId)
+          .run()
+      );
+      const approved = yield* awaitPromise(
+        send({
+          path: "/pats/pairings/approve",
+          method: "POST",
+          session: sessions[0],
+          payload: { pairingId: started.pairingId },
+        })
+      );
+      expect(approved.status).toBe(503);
+      expect(
+        yield* awaitPromise(
+          db.prepare("SELECT state FROM pat_pairings WHERE id = ?").bind(started.pairingId).first()
+        )
+      ).toEqual({ state: "pending_approval" });
+      expect(
+        yield* awaitPromise(
+          db
+            .prepare("SELECT count(*) AS total FROM pat_grant_consents WHERE pairing_id = ?")
+            .bind(started.pairingId)
+            .first()
+        )
+      ).toEqual({ total: 0 });
+    })
+  ));
 type ManualGrant = Readonly<{
   recipientLabel: string;
   scopes: ReadonlyArray<string>;
@@ -1901,6 +2034,58 @@ it("does not commit a PAT when its ConsentRecord is silently refused", () =>
       ).toBe(0);
     })
   ));
+it("inherits the canonical PAT metadata owner's Clock for authority expiry and Audit", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { db } = yield* awaitPromise(setup());
+      const sessionId = "40000000-0000-4000-8000-000000000001";
+      const clockService = yield* Clock.Clock;
+      const session = yield* awaitPromise(
+        db
+          .prepare(
+            "SELECT MIN(idle_expires_at_ms, hard_expires_at_ms) AS expires_at_ms FROM web_sessions WHERE id = ?"
+          )
+          .bind(sessionId)
+          .first<{ expires_at_ms: number }>()
+      );
+      if (session === null) return yield* Effect.die(new Error("Missing test WebSession"));
+      const atTime = (millis: number): Clock.Clock => ({
+        currentTimeMillisUnsafe: () => millis,
+        currentTimeMillis: Effect.succeed(millis),
+        currentTimeNanosUnsafe: () => BigInt(millis) * 1_000_000n,
+        currentTimeNanos: Effect.succeed(BigInt(millis) * 1_000_000n),
+        monotonicTimeNanosUnsafe: () => clockService.monotonicTimeNanosUnsafe(),
+        monotonicTimeNanos: clockService.monotonicTimeNanos,
+        sleep: (duration) => clockService.sleep(duration),
+      });
+      const query = {
+        db,
+        operation: CanonicalOperationId.make("pats.listPATs"),
+        input: {},
+        subject: { id: sessionId, userId: userA, digest: yield* awaitPromise(dig("1".repeat(43))) },
+        bucket: Option.none(),
+      };
+      const acceptedAt = session.expires_at_ms - 1;
+      const accepted = Option.getOrThrow(
+        yield* executeCanonicalQuery(query).pipe(
+          Effect.provideService(Clock.Clock, atTime(acceptedAt))
+        )
+      );
+      expect(accepted.status).toBe(200);
+      const expired = Option.getOrThrow(
+        yield* executeCanonicalQuery(query).pipe(
+          Effect.provideService(Clock.Clock, atTime(session.expires_at_ms))
+        )
+      );
+      expect(expired.status).toBe(401);
+      expect(
+        (yield* awaitPromise(
+          db.prepare("SELECT occurred_at_ms FROM pat_audit WHERE operation = 'pats.listPATs'").all()
+        )).results
+      ).toEqual([{ occurred_at_ms: acceptedAt }]);
+    })
+  ));
+
 it("shares subject-owned PAT metadata and Audit between HTTP and headerless hosted queries", () =>
   runTest(
     Effect.gen(function* () {

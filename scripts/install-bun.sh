@@ -1,28 +1,22 @@
 #!/usr/bin/env bash
-# Exact asset identities and archive digests pin the approved experimental Secrets runtime.
+# Retained release archives and digests pin the approved experimental Secrets runtime.
 set -euo pipefail
 platform="$(uname -s)"
 architecture="$(uname -m)"
 case "$platform/$architecture" in
-  Darwin/arm64) asset=610995354; archive=bun-darwin-aarch64; digest=66e08df554433266c0bdbe38ad8eec9eb0d57b2d71dd24559293269b52963ee7 ;;
-  Darwin/x86_64) asset=610995358; archive=bun-darwin-x64; digest=4b1f81ac65fb043ec8518179f899a079372a1d8280ba9ec342a64d85a4989c80 ;;
-  Linux/aarch64) asset=610995353; archive=bun-linux-aarch64; digest=125bddbcae7a04b6ec078e75b13a307c997908335342d90cd0c24202bd304dc6 ;;
-  Linux/x86_64) asset=610995400; archive=bun-linux-x64; digest=b6d3d84e9fa690fd43a4d36b67b406d8fcff9f24d0aad62c115a2751b1fcf669 ;;
-  MINGW*/aarch64|MSYS*/aarch64) asset=610995708; archive=bun-windows-aarch64; digest=5906a7546d9a958411d767a6a2e662c39d618e0ee9868672414752074a143a6e ;;
-  MINGW*/x86_64|MSYS*/x86_64) asset=610995660; archive=bun-windows-x64; digest=208d1856f107d5b104a679d867f92857e4af381f29d211bd74ac3d621f74f0c6 ;;
+  Darwin/arm64) archive=bun-darwin-aarch64; digest=a51c03e0abe19b706f310f33feed5724a9b32b5c2279cf41751910307a60d792 ;;
+  Darwin/x86_64) archive=bun-darwin-x64; digest=55c0d5851d9297e64329e798065f8fa19da8a86dc2ca37f9f539bfa2ef33f4be ;;
+  Linux/aarch64) archive=bun-linux-aarch64; digest=d82163414c1a1d0918bb5804f86c1843b7050b763ca11fda212b5a9965cc1c33 ;;
+  Linux/x86_64) archive=bun-linux-x64; digest=dd32f30cc152ca915ccf9adfee7313b1d578ee9c407d235f64dc9d1be1087951 ;;
+  MINGW*/aarch64|MSYS*/aarch64) archive=bun-windows-aarch64; digest=0852178fc218b1c3276857b0d7a1020a4fccfe2297a12a69ef990deb9eac589d ;;
+  MINGW*/x86_64|MSYS*/x86_64) archive=bun-windows-x64; digest=dd81403369b1435ae419e3d16137ec136614c882212e54961a47a2eb39f5b3e7 ;;
   *) printf 'Unsupported Bun installation platform. See apps/cli/ARCHITECTURE.md.\n' >&2; exit 1 ;;
 esac
-install_directory="${1:-$HOME/.fidy/bun-c7b06d94b}"
+install_directory="${1:-$HOME/.fidy/bun-13a98b0db}"
 temporary_directory="$(mktemp -d)"
 trap 'rm -rf "$temporary_directory"' EXIT
-authorization=()
-if [[ -n "${GH_TOKEN:-}" ]]; then
-  authorization=(-H "Authorization: Bearer $GH_TOKEN")
-fi
-curl --fail --silent --show-error --location --max-time 120 \
-  "${authorization[@]}" \
-  -H 'Accept: application/octet-stream' \
-  "https://api.github.com/repos/oven-sh/bun/releases/assets/$asset" \
+curl --fail --silent --show-error --location --retry 2 --connect-timeout 15 --max-time 600 \
+  "https://github.com/B4rz99/fidy-ai/releases/download/runtime-bun-13a98b0db/$archive.zip" \
   -o "$temporary_directory/bun.zip"
 if command -v sha256sum >/dev/null; then
   actual="$(sha256sum "$temporary_directory/bun.zip" | cut -d ' ' -f 1)"
@@ -48,7 +42,7 @@ if [[ "$executable" == bun.exe ]]; then
 else
   ln -sf bun "$install_directory/bunx"
 fi
-if [[ "$("$install_directory/$executable" --revision)" != '1.4.3-canary.1+c7b06d94b' ]]; then
+if [[ "$("$install_directory/$executable" --revision)" != '1.4.3-canary.1+13a98b0db' ]]; then
   printf 'Pinned Bun revision mismatch; refusing installation.\n' >&2
   exit 1
 fi

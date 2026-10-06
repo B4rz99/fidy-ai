@@ -641,7 +641,10 @@ it.each(enrollmentStatuses)("renders the %s enrollment status action", (status) 
           screen.findByRole("button", { name: "Consultar estado" })
         );
         fireEvent.click(refresh);
-        expect(gateway.status).toHaveBeenCalledWith(preparedEnrollment.enrollmentId);
+        expect(gateway.status).toHaveBeenCalledWith(
+          preparedEnrollment.enrollmentId,
+          expect.any(AbortSignal)
+        );
       }
     })
   )
@@ -749,13 +752,14 @@ it("clears Nequi authorization input, locks method changes, and cancels approval
         submit: (
           _enrollment: PreparedEnrollment,
           _email: string,
-          fields?: PaymentFields
+          options?: Parameters<EnrollmentGateway["submit"]>[2]
         ): Promise<PaymentSubmission> => {
-          if (fields === undefined || !("method" in fields)) {
+          const fields = options?.fields ?? Option.none();
+          if (Option.isNone(fields) || !("method" in fields.value)) {
             throw new Error("Expected Nequi fields");
           }
-          approvalSignal = Option.some(fields.signal);
-          fields.onAwaiting();
+          approvalSignal = Option.some(fields.value.signal);
+          fields.value.onAwaiting();
           return pending.promise;
         },
       };
@@ -844,7 +848,8 @@ it("disables Activar Pro immediately until submission handling completes", () =>
       );
       expect(continuePayment).toHaveBeenCalledWith(
         preparedEnrollment.enrollmentId,
-        "verified@example.com"
+        "verified@example.com",
+        expect.any(AbortSignal)
       );
       expect(yield* fromPromise(screen.findByRole("alert"))).toHaveTextContent(
         "No pudimos iniciar el pago. Puedes intentarlo de nuevo."
@@ -1018,7 +1023,8 @@ it("automatically refreshes a visible pending payment without resubmitting it", 
 
       expect(observePayment).toHaveBeenCalledWith(
         preparedEnrollment.enrollmentId,
-        pendingSubmission.billingAttempt.id
+        pendingSubmission.billingAttempt.id,
+        expect.any(AbortSignal)
       );
       expect(continuePayment).not.toHaveBeenCalled();
       expect(submit).toHaveBeenCalledTimes(1);
@@ -1131,7 +1137,7 @@ it("keeps a late refresh from replacing a newly selected payment flow", () =>
       expect(
         yield* fromPromise(screen.findByRole("button", { name: "Oferta semanal seleccionada" }))
       ).toBeVisible();
-      expect(prepare).toHaveBeenLastCalledWith(offers[0].id, "card");
+      expect(prepare).toHaveBeenLastCalledWith(offers[0].id, "card", expect.any(AbortSignal));
 
       yield* fromPromise(
         resolveInAct(lateRefresh, paymentSubmissionFixture({ status: "succeeded" }))
@@ -1249,16 +1255,21 @@ it("submits normalized billing data and card fields after both Wompi checks", ()
       yield* fromPromise(
         vi.waitFor(() => {
           expect(submit).toHaveBeenCalledWith(preparedEnrollment, "billing@example.net", {
-            number: "4111111111111111",
-            expirationMonth: "12",
-            expirationYear: "2030",
-            cvc: "123",
-            cardholderName: "Ana López",
+            fields: Option.some(syntheticCardFields),
+            signal: Option.some(expect.any(AbortSignal)),
           });
         })
       );
     })
   ));
+
+const syntheticCardFields: PaymentFields = {
+  number: "4111111111111111",
+  expirationMonth: "12",
+  expirationYear: "2030",
+  cvc: "123",
+  cardholderName: "Ana López",
+};
 
 it("derives enrollment operations from the browser enrollment client", () =>
   Effect.runPromise(
@@ -1310,11 +1321,8 @@ it("derives enrollment operations from the browser enrollment client", () =>
       yield* fromPromise(
         expect(
           gateway.submit(preparedEnrollment, "payer@example.com", {
-            number: "4111111111111111",
-            expirationMonth: "12",
-            expirationYear: "2030",
-            cvc: "123",
-            cardholderName: "Ana López",
+            fields: Option.some(syntheticCardFields),
+            signal: Option.none(),
           })
         ).rejects.toBeDefined()
       );
@@ -1351,7 +1359,9 @@ it("resumes a verifying enrollment after choosing its offer without tokenizing t
       );
       fireEvent.click(screen.getByRole("button", { name: "Elegir mensual" }));
       yield* fromPromise(
-        vi.waitFor(() => expect(resume).toHaveBeenCalledWith(verifying.enrollmentId))
+        vi.waitFor(() =>
+          expect(resume).toHaveBeenCalledWith(verifying.enrollmentId, expect.any(AbortSignal))
+        )
       );
       expect(screen.queryByLabelText("Número de tarjeta")).not.toBeInTheDocument();
       expect(screen.getByText(/verificando tu fuente de pago/iu)).toBeVisible();
@@ -1380,8 +1390,44 @@ it("reuses a saved payment source without asking for card fields", () =>
 
       yield* fromPromise(
         vi.waitFor(() => {
-          expect(submit).toHaveBeenCalledWith(reuseEnrollment, "verified@example.com", undefined);
+          expect(submit).toHaveBeenCalledWith(reuseEnrollment, "verified@example.com", {
+            fields: Option.none(),
+            signal: Option.some(expect.any(AbortSignal)),
+          });
         })
       );
+    })
+  ));
+
+const pendingUntilAbort = (
+  signal?: AbortSignal
+): Effect.Effect<PreparedEnrollment, TestPromiseFailure> =>
+  Effect.callback((resume) => {
+    const onAbort = (): void => resume(Effect.fail(new TestPromiseFailure({ cause: "cancelled" })));
+    if (signal?.aborted === true) onAbort();
+    else signal?.addEventListener("abort", onAbort, { once: true });
+    return Effect.sync(() => signal?.removeEventListener("abort", onAbort));
+  });
+
+it("aborts pending enrollment preparation when its mounted interaction ends", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let requestSignal = Option.none<AbortSignal>();
+      const runWithServices = Effect.runPromiseWith(yield* Effect.context<never>());
+      const gateway: EnrollmentGateway = {
+        ...enrollmentGateway,
+        prepare: (_price, _method, signal?: AbortSignal) => {
+          requestSignal = Option.fromUndefinedOr(signal);
+          return runWithServices(pendingUntilAbort(signal));
+        },
+      };
+      const view = render(
+        <SubscriptionOffersView gateway={Option.some(gateway)} state={{ _tag: "Ready", offers }} />
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Elegir mensual" }));
+      yield* fromPromise(act(() => Promise.resolve()));
+      expect(Option.isSome(requestSignal)).toBe(true);
+      view.unmount();
+      expect(Option.exists(requestSignal, (signal) => signal.aborted)).toBe(true);
     })
   ));

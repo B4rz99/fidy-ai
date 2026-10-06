@@ -1,4 +1,4 @@
-import { Effect, Option } from "effect";
+import { Clock, Effect, Option } from "effect";
 import type { OAuthConnectionId } from "../../../src/core/oauth-agents/contract";
 import type { FreshSessionSubject } from "../../../src/shell/web-session/contract";
 import { freshSessionConditions } from "../../../src/shell/web-session/operations";
@@ -6,7 +6,6 @@ import {
   oauthUserRevocationProof,
   revokeOAuthUserConsent,
 } from "../../../src/shell/consent/operations";
-import { currentMillis } from "../../runtime/operations";
 import { prepareOwnedStatement } from "../../database/operations";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { type BootstrapUnavailable, dbWork, invalidRequest } from "./bootstrap";
@@ -74,7 +73,7 @@ export const revokeConnections = (
   Effect.gen(function* () {
     const connectionId = admitted.connectionId;
     const all = Option.isNone(connectionId);
-    const input = { ...admitted, current: currentMillis() };
+    const input = { ...admitted, current: yield* Clock.currentTimeMillis };
     const reason = all ? "user_all" : "user_one";
     const guard = freshSessionConditions(input);
     const identity = Option.match(connectionId, {

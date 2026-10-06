@@ -11,6 +11,7 @@ import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contrac
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { UserTransactionCoordinator } from "../transactions/runtime";
+import { executeProtectedCategories } from "./operations";
 
 const databases = isolatedTestDatabases();
 const userA = "10000000-0000-4000-8000-000000000001";
@@ -825,5 +826,53 @@ it("refuses cookie-admitted keyword-rule work without the matching browser Origi
         })
       );
       expect(machineCreate.status).toBe(201);
+    })
+  ));
+
+it("reads Categories only while the caller's Clock keeps its WebSession live", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { db } = yield* awaitPromise(setup());
+      const session = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          id: Schema.String,
+          created_at_ms: Schema.Finite,
+          idle_expires_at_ms: Schema.Finite,
+        })
+      )(
+        yield* awaitPromise(
+          db
+            .prepare(
+              "SELECT id,created_at_ms,idle_expires_at_ms FROM web_sessions WHERE user_id = ?"
+            )
+            .bind(userA)
+            .first()
+        )
+      );
+      const liveClock = yield* Clock.Clock;
+      const atTime = (time: number): Clock.Clock => ({
+        currentTimeMillis: Effect.succeed(time),
+        currentTimeMillisUnsafe: () => time,
+        currentTimeNanos: liveClock.currentTimeNanos,
+        currentTimeNanosUnsafe: () => liveClock.currentTimeNanosUnsafe(),
+        monotonicTimeNanos: liveClock.monotonicTimeNanos,
+        monotonicTimeNanosUnsafe: () => liveClock.monotonicTimeNanosUnsafe(),
+        sleep: (duration) => liveClock.sleep(duration),
+      });
+      const work = executeProtectedCategories({
+        db,
+        subject: {
+          userId: userA,
+          id: session.id,
+          digest: yield* awaitPromise(dig("1".repeat(43))),
+        },
+      });
+      expect(
+        (yield* work.pipe(Effect.provideService(Clock.Clock, atTime(session.created_at_ms)))).status
+      ).toBe(200);
+      expect(
+        (yield* work.pipe(Effect.provideService(Clock.Clock, atTime(session.idle_expires_at_ms))))
+          .status
+      ).toBe(503);
     })
   ));

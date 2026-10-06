@@ -12,8 +12,7 @@ import { ListCategoriesResponse } from "../../../src/shell/categories/contract";
 import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
 import { recordCanonicalPATWork, recordOAuthCall } from "../../../src/shell/audit/operations";
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
-import { Effect, Option, Schema } from "effect";
-import { currentMillis } from "../../runtime/operations";
+import { Clock, Effect, Option, Schema } from "effect";
 import { newId } from "../../secret-material/operations";
 import { commitPATUnit } from "../../tokens/operations";
 import { prepareOwnedStatement } from "../../database/operations";
@@ -137,29 +136,27 @@ const presentCategoryWork = (
 export const executeProtectedCategories = ({
   db,
   subject,
-}: Readonly<{ db: D1Database; subject: CategoryCaller }>): Promise<Response> =>
+}: Readonly<{ db: D1Database; subject: CategoryCaller }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
+    const current = yield* Clock.currentTimeMillis;
     const results = yield* Effect.tryPromise({
-      try: () =>
-        commitPATUnit({ db, statements: categoryStatements(db, subject, currentMillis()) }),
+      try: () => commitPATUnit({ db, statements: categoryStatements(db, subject, current) }),
       catch: () => undefined,
     });
     return yield* presentCategoryWork(db, subject, results);
   }).pipe(
-    Effect.catchCause(() => {
-      if (!oauthCaller(subject)) return Effect.succeed(unavailable());
-      const authority = liveOAuthAuthority({ subject, current: currentMillis() });
-      return Effect.tryPromise(() =>
-        db
-          .prepare(`SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}`)
-          .bind(...authority.bindings)
-          .first()
-      ).pipe(
-        Effect.flatMap((row) =>
-          row === null ? refusedCategoryWork(db, subject) : Effect.succeed(unavailable())
-        ),
-        Effect.orElseSucceed(unavailable)
-      );
-    }),
-    Effect.runPromise
+    Effect.catch(() =>
+      Effect.gen(function* () {
+        if (!oauthCaller(subject)) return unavailable();
+        const current = yield* Clock.currentTimeMillis;
+        const authority = liveOAuthAuthority({ subject, current });
+        const row = yield* Effect.tryPromise(() =>
+          db
+            .prepare(`SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}`)
+            .bind(...authority.bindings)
+            .first()
+        );
+        return row === null ? yield* refusedCategoryWork(db, subject) : unavailable();
+      }).pipe(Effect.orElseSucceed(unavailable))
+    )
   );

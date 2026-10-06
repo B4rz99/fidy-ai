@@ -137,13 +137,11 @@ const budgetGuardRefusal =
     ) {
       return Effect.succeed(refusal("not_found"));
     }
-    return Effect.tryPromise(() =>
-      findOwnedBudget({
-        db,
-        userId: subject.userId,
-        id: outcome.budgetId,
-      })
-    ).pipe(
+    return findOwnedBudget({
+      db,
+      userId: subject.userId,
+      id: outcome.budgetId,
+    }).pipe(
       Effect.map((owned) => refusal(Option.isNone(owned) ? "not_found" : "validation_failed")),
       Effect.orElseSucceed(() => refusal("validation_failed"))
     );
@@ -209,12 +207,14 @@ const findConflict = ({
     .first()
     .then((row) => row !== null);
 
-const categoryExists = (db: D1Database, categoryId: string): Promise<boolean> =>
-  Effect.runPromise(
-    requireCategory({ db, categoryId: CategoryId.make(categoryId) }).pipe(
-      Effect.as(true),
-      Effect.catchTag("CategoryNotFound", () => Effect.succeed(false))
-    )
+const categoryExists = (
+  db: D1Database,
+  categoryId: string
+): Effect.Effect<boolean, TransactionBoundaryFailure> =>
+  requireCategory({ db, categoryId: CategoryId.make(categoryId) }).pipe(
+    Effect.as(true),
+    Effect.catchTag("CategoryNotFound", () => Effect.succeed(false)),
+    Effect.mapError(boundaryFailure)
   );
 
 const authorityReady = ({
@@ -274,12 +274,7 @@ const checkedBudgetWrite = ({
         refusedPreparation(budgetRefusal({ db, subject, operation, current, code: "not_found" }))
       );
     }
-    if (
-      !(yield* Effect.tryPromise({
-        try: () => categoryExists(db, categoryId),
-        catch: boundaryFailure,
-      }))
-    ) {
+    if (!(yield* categoryExists(db, categoryId))) {
       return Option.some(
         refusedPreparation(budgetRefusal({ db, subject, operation, current, code: "not_found" }))
       );
@@ -403,9 +398,7 @@ export const prepareUpdateBudget = ({
   current: number;
 }>): Effect.Effect<CanonicalMutationPreparation> =>
   Effect.gen(function* () {
-    const existing = yield* Effect.tryPromise(() =>
-      findOwnedBudget({ db, userId: subject.userId, id })
-    );
+    const existing = yield* findOwnedBudget({ db, userId: subject.userId, id });
     if (Option.isNone(existing)) {
       return refuseBudget({
         db,
@@ -458,9 +451,7 @@ export const prepareDeleteBudget = ({
 }>): Effect.Effect<CanonicalMutationPreparation> =>
   Effect.gen(function* () {
     if (!(yield* authorityReady({ db, subject, current }))) return credentialRefusedPreparation();
-    const existing = yield* Effect.tryPromise(() =>
-      findOwnedBudget({ db, userId: subject.userId, id })
-    );
+    const existing = yield* findOwnedBudget({ db, userId: subject.userId, id });
     if (Option.isNone(existing)) {
       return refusedPreparation(
         budgetRefusal({

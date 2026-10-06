@@ -80,6 +80,35 @@ const event = (id: string): WhatsAppInboundEvent => ({
   replyToMessageId: Option.none(),
   content: { _tag: "Image", mediaId: WhatsAppMediaId.make(`media-${id}`), caption: Option.none() },
 });
+const prepareVisibleReviewRead = Effect.fnUntraced(function* (db: D1Database) {
+  const digest = new Uint8Array(32).fill(7);
+  const sessionId = "10000000-0000-4000-8000-000000000099";
+  const now = DateTime.toEpochMillis(current);
+  yield* io(() =>
+    db.exec(`CREATE TABLE web_sessions(id TEXT PRIMARY KEY,user_id TEXT,token_digest BLOB,revoked_at_ms INTEGER,idle_expires_at_ms INTEGER,hard_expires_at_ms INTEGER);
+ CREATE TABLE statement_submission_audit(id TEXT PRIMARY KEY,user_id TEXT,operation TEXT,outcome TEXT,occurred_at_ms INTEGER);
+ CREATE TABLE statement_review_audit(id TEXT PRIMARY KEY,user_id TEXT,operation TEXT,outcome TEXT,occurred_at_ms INTEGER);
+ CREATE TABLE statement_submissions(id TEXT,user_id TEXT);
+ CREATE TABLE statement_clarifications(submission_id TEXT,user_id TEXT,state TEXT,expires_at_ms INTEGER);
+ CREATE TABLE statement_review_decisions(review_id TEXT,user_id TEXT,decision TEXT,transaction_id TEXT,decided_at_ms INTEGER);
+ CREATE TABLE statement_needs_review(id TEXT,submission_id TEXT,record_number INTEGER,reason TEXT,original_evidence TEXT,issues TEXT,status TEXT,created_at_ms INTEGER,service_market TEXT,locale TEXT,time_zone TEXT,source_format TEXT,parser_revision TEXT,extractor_revision TEXT,evidence_expires_at_ms INTEGER,user_id TEXT);
+ CREATE TABLE forwarded_email_needs_review(id TEXT,receipt_id TEXT,reason TEXT,created_at_ms INTEGER,evidence_expires_at_ms INTEGER,user_id TEXT);
+ CREATE TABLE forwarded_email_receipts(id TEXT,time_zone TEXT,user_id TEXT);`)
+  );
+  yield* io(() =>
+    db
+      .prepare("INSERT INTO web_sessions VALUES (?,?,?,NULL,?,?)")
+      .bind(sessionId, userId, digest, now + 60000, now + 60000)
+      .run()
+  );
+  return {
+    database: db,
+    environment: { DB: db },
+    subject: { id: sessionId, userId, digest },
+    url: new URL("https://api.test/ingestion/needs-review"),
+  };
+});
+
 it("atomically publishes only two unique Free images with visible review and uncharged delivery replay", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -127,35 +156,11 @@ it("publishes accepted unextractable images through the canonical visible-review
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* setup;
-      const digest = new Uint8Array(32).fill(7);
-      const sessionId = "10000000-0000-4000-8000-000000000099";
-      const now = DateTime.toEpochMillis(current);
-      yield* io(() =>
-        db.exec(`CREATE TABLE web_sessions(id TEXT PRIMARY KEY,user_id TEXT,token_digest BLOB,revoked_at_ms INTEGER,idle_expires_at_ms INTEGER,hard_expires_at_ms INTEGER);
- CREATE TABLE statement_submission_audit(id TEXT PRIMARY KEY,user_id TEXT,operation TEXT,outcome TEXT,occurred_at_ms INTEGER);
- CREATE TABLE statement_review_audit(id TEXT PRIMARY KEY,user_id TEXT,operation TEXT,outcome TEXT,occurred_at_ms INTEGER);
- CREATE TABLE statement_submissions(id TEXT,user_id TEXT);
- CREATE TABLE statement_clarifications(submission_id TEXT,user_id TEXT,state TEXT,expires_at_ms INTEGER);
- CREATE TABLE statement_review_decisions(review_id TEXT,user_id TEXT,decision TEXT,transaction_id TEXT,decided_at_ms INTEGER);
- CREATE TABLE statement_needs_review(id TEXT,submission_id TEXT,record_number INTEGER,reason TEXT,original_evidence TEXT,issues TEXT,status TEXT,created_at_ms INTEGER,service_market TEXT,locale TEXT,time_zone TEXT,source_format TEXT,parser_revision TEXT,extractor_revision TEXT,evidence_expires_at_ms INTEGER,user_id TEXT);
- CREATE TABLE forwarded_email_needs_review(id TEXT,receipt_id TEXT,reason TEXT,created_at_ms INTEGER,evidence_expires_at_ms INTEGER,user_id TEXT);
- CREATE TABLE forwarded_email_receipts(id TEXT,time_zone TEXT,user_id TEXT);`)
-      );
-      yield* io(() =>
-        db
-          .prepare("INSERT INTO web_sessions VALUES (?,?,?,NULL,?,?)")
-          .bind(sessionId, userId, digest, now + 60000, now + 60000)
-          .run()
-      );
+      const query = yield* prepareVisibleReviewRead(db);
       expect((yield* acceptWhatsAppMedia({ db, userId, event: event("unparseable") })).status).toBe(
         202
       );
-      const response = yield* listNeedsReviewItems({
-        database: db,
-        environment: { DB: db },
-        subject: { id: sessionId, userId, digest },
-        url: new URL("https://api.test/ingestion/needs-review"),
-      });
+      const response = yield* listNeedsReviewItems(query);
       expect(response.status).toBe(200);
       const serialized = yield* io(() => response.clone().text());
       const body = yield* io(() => response.json());
@@ -178,6 +183,76 @@ it("publishes accepted unextractable images through the canonical visible-review
       ).toEqual({ total: 1 });
     })
   ));
+
+it.each([
+  { table: "statement_needs_review", column: "created_at_ms" },
+  { table: "forwarded_email_needs_review", column: "created_at_ms" },
+  { table: "forwarded_email_needs_review", column: "evidence_expires_at_ms" },
+  { table: "media_needs_review", column: "created_at_ms" },
+  { table: "media_submissions", column: "expires_at_ms" },
+] as const)(
+  "returns safe unavailable for corrupt retained $table.$column without partial review output",
+  ({ table, column }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup;
+        const query = yield* prepareVisibleReviewRead(db);
+        const now = current.epochMilliseconds;
+        yield* io(() =>
+          db.batch([
+            db
+              .prepare(
+                "INSERT INTO statement_needs_review (id,submission_id,record_number,reason,issues,status,created_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision,evidence_expires_at_ms,user_id) VALUES (?,?,1,'malformed-source-row','[]','expired',?,'CO','es-CO','America/Bogota','csv','csv-v1','csv-v1',0,?)"
+              )
+              .bind(
+                "10000000-0000-4000-8000-000000000091",
+                "10000000-0000-4000-8000-000000000092",
+                now,
+                userId
+              ),
+            db
+              .prepare("INSERT INTO forwarded_email_receipts VALUES (?,'America/Bogota',?)")
+              .bind("10000000-0000-4000-8000-000000000093", userId),
+            db
+              .prepare(
+                "INSERT INTO forwarded_email_needs_review VALUES (?,?,'processing-interrupted',?,?,?)"
+              )
+              .bind(
+                "10000000-0000-4000-8000-000000000094",
+                "10000000-0000-4000-8000-000000000093",
+                now,
+                now + 60000,
+                userId
+              ),
+          ])
+        );
+        expect(
+          (yield* acceptWhatsAppMedia({ db, userId, event: event("retained-review") })).status
+        ).toBe(202);
+        const before = yield* listNeedsReviewItems(query);
+        expect(before.status).toBe(200);
+        expect(yield* io(() => before.json())).toMatchObject({ data: [{}, {}, {}] });
+        const corruptMillis = 9000000000000000;
+        const corruption =
+          table === "media_submissions"
+            ? db
+                .prepare(
+                  "UPDATE media_submissions SET expires_at_ms = ?, accepted_at_ms = ? - 2592000000 WHERE user_id = ?"
+                )
+                .bind(corruptMillis, corruptMillis, userId)
+            : db
+                .prepare(`UPDATE ${table} SET ${column} = ? WHERE user_id = ?`)
+                .bind(corruptMillis, userId);
+        yield* io(() => corruption.run());
+        const response = yield* listNeedsReviewItems(query);
+        expect(response.status).toBe(503);
+        const body = yield* io(() => response.text());
+        expect(body).not.toContain("Schema");
+        expect(body).not.toContain("9000000000000000");
+        expect(body).not.toContain('"data"');
+      })
+    )
+);
 
 it("rechecks current association and Consent before publication and exact replay disclosure", () =>
   Effect.runPromise(

@@ -41,6 +41,12 @@
       "manifest": "tools/mutation/package.json",
       "reason": "With TypeScript 7.0.2, Stryker's tsconfig rewrite crashes because parseConfigFileTextToJson is missing. Revisit after TypeScript 7.1 ships the replacement compiler API and Stryker adopts it.",
       "until": "2026-12-20T00:00:00Z"
+    },
+    {
+      "name": "@effect/tsgo",
+      "manifest": "package.json",
+      "reason": "0.47.0 introduces 1,148 unstableApiUsage warnings for required Effect v4 HTTP, MCP, runtime and test APIs; the warning-failing project-reference build exits nonzero although no type errors occur. Its patch CLI also requires an otherwise unused --force flag. Retain verified 0.46.1 without suppressing compiler diagnostics. Revisit the upstream default severity and supported stable replacements before updating, then rerun the normal installer, typecheck and unit verification.",
+      "until": "2026-10-10T00:00:00Z"
     }
   ],
   "acceptedVulnerabilities": [
@@ -49,6 +55,12 @@
       "path": "bun.lock",
       "reason": "Temporarily retain the required shadcn 4.21.0 development CLI, whose fast-glob and ts-morph dependencies bring in braces 3.0.3. GHSA-vfj7-8cjw-p6xm reports stack exhaustion from deeply nested brace patterns; no patched npm release exists as of 2026-10-03. This is risk acceptance, not remediation: the vulnerable package remains installed. Limit CLI use to reviewed component names, local paths and trusted registry inputs during this window. Recheck upstream before expiry; replace or upgrade the affected chain only after every new release meets the unchanged seven-day minimumReleaseAge, rerun CLI and application verification plus SCA, and remove both this record and the matching scanner exclusion once the finding is resolved.",
       "until": "2026-10-10T00:00:00Z"
+    },
+    {
+      "cve": "CVE-2026-93749",
+      "path": "bun.lock",
+      "reason": "Temporarily retain source-map-js 1.2.1 in the Vite/Tailwind, jsdom and related build/test tooling graph. GHSA-68fv-2mgg-jv7q reports event-loop denial of service from malicious indexed source-map section offsets. The 1.2.2 fix was published 2026-09-30T14:08:09.382Z and becomes eligible under the unchanged seven-day minimumReleaseAge on 2026-10-07T14:08:09.382Z. This is risk acceptance, not remediation: the vulnerable package remains installed. During this window, build and test only reviewed repository sources and trusted source maps; do not process externally supplied source maps or expose the development server to untrusted clients. Upgrade the transitive resolution to 1.2.2 after eligibility, rerun builds/browser tests/SCA, and remove this record and its matching scanner exclusion before expiry.",
+      "until": "2026-10-08T00:00:00Z"
     }
   ]
 }

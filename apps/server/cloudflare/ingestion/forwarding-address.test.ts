@@ -1,4 +1,4 @@
-import { Clock, Data, Effect, Option, Schema } from "effect";
+import { Clock, Data, Effect, Exit, Option, Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { applyTestMigration } from "../d1-test-fixture";
 import { afterEach, expect, it } from "vitest";
@@ -49,7 +49,7 @@ const setup = Effect.fn(function* () {
     CREATE TABLE statement_review_audit (id TEXT PRIMARY KEY, user_id TEXT, operation TEXT, occurred_at_ms INTEGER);
     CREATE TABLE statement_submission_assertion (id INTEGER PRIMARY KEY CHECK (id = 1), accepted INTEGER CHECK (accepted = 1));
     CREATE TABLE transaction_audit (user_id TEXT, operation TEXT, occurred_at_ms INTEGER);
-    CREATE TABLE pat_audit (user_id TEXT, pat_id TEXT, operation TEXT, occurred_at_ms INTEGER);
+    CREATE TABLE pat_audit (user_id TEXT, pat_id TEXT, oauth_connection_id TEXT, oauth_credential_id TEXT, operation TEXT, occurred_at_ms INTEGER);
     CREATE TABLE statement_clarification_audit (id TEXT PRIMARY KEY, user_id TEXT, operation TEXT, outcome TEXT, occurred_at_ms INTEGER);
     CREATE TABLE category_audit (user_id TEXT, occurred_at_ms INTEGER);
     CREATE TABLE memory_audit (user_id TEXT, occurred_at_ms INTEGER);
@@ -154,6 +154,30 @@ it("issues unpredictable User-specific addresses at verified Consent and returns
         { operation: "ingestion.enableEmailForwarding" },
         { operation: "ingestion.getEmailForwarding" },
       ]);
+    })
+  ));
+
+it("returns unavailable without a defect when a retained forwarding creation date exceeds the Date range", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* wait(() =>
+        db
+          .prepare("UPDATE email_forwarding_addresses SET created_at_ms = ? WHERE user_id = ?")
+          .bind(8_640_000_000_000_001, userA)
+          .run()
+      );
+      const outcome = yield* Effect.exit(
+        forwardingAddressResponse({
+          db,
+          subject: { id: sessionA, userId: userA, digest },
+          operation: "ingestion.getEmailForwarding",
+        })
+      );
+      expect(outcome).toMatchObject({ _tag: "Success" });
+      if (Exit.isFailure(outcome)) return;
+      expect(outcome.value.status).toBe(503);
+      expect(yield* wait(() => outcome.value.json())).toEqual({ status: "unavailable" });
     })
   ));
 

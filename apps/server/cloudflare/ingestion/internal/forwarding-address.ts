@@ -36,7 +36,9 @@ import { emailAllowancePeriod } from "../../../src/core/ingestion/operations";
 const AddressRow = Schema.Struct({
   id: EmailForwardingAddressId,
   local_part: EmailForwardingLocalPart,
-  created_at_ms: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  created_at_ms: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
+    Schema.decodeTo(Schema.DateTimeUtcFromMillis)
+  ),
   consumed: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   deferred: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   pro: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1 })),
@@ -150,6 +152,17 @@ export const forwardingAddressGuardAudit = ({
       }),
     });
   }
+  if (isOAuthCaller(subject)) {
+    return prepareAuthorizedAuditCall({
+      db,
+      authority: callerAuthority({ subject, current }),
+      id: transactionId(),
+      operation: "ingestion.enableEmailForwarding",
+      outcome: "rejected",
+      current,
+      afterOwnerWrite: false,
+    });
+  }
   const authority = liveWebSessionAuthority({ subject, current });
   return prepareAuthorizedAuditCall({
     db,
@@ -182,7 +195,7 @@ const rateLimited = (): Response =>
 const projectAddress = (row: typeof AddressRow.Type): EmailForwardingAddress => ({
   id: row.id,
   address: `${row.local_part}@${domain}`,
-  createdAt: DateTime.makeUnsafe(row.created_at_ms),
+  createdAt: row.created_at_ms,
 });
 
 /** Committed readback for the composable enable mutation, never a caller-supplied address. */

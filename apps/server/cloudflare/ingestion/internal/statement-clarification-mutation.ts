@@ -91,6 +91,19 @@ const accountability = (
   accepted: boolean
 ): ReadonlyArray<D1PreparedStatement> => {
   const authority = work.authority;
+  if (authority.table === "oauth_access_credentials") {
+    return [
+      prepareAuthorizedAuditCall({
+        db: work.db,
+        authority,
+        id: newId(),
+        current: work.current,
+        operation,
+        outcome: accepted ? "accepted" : "rejected",
+        afterOwnerWrite: accepted,
+      }),
+    ];
+  }
   if (isPATAuthority(authority)) {
     return accepted
       ? acceptedPATAccountability({
@@ -318,7 +331,16 @@ const loadEligibleReview = ({
         .bind(id, work.userId, ...source.params)
         .first(),
     catch: () => new ReviewCaptureUnavailable(),
-  }).pipe(Effect.map(Schema.decodeUnknownOption(Review)));
+  }).pipe(
+    Effect.flatMap((value) =>
+      value === null
+        ? Effect.succeedNone
+        : Schema.decodeUnknownEffect(Review)(value).pipe(
+            Effect.asSome,
+            Effect.mapError(() => new ReviewCaptureUnavailable())
+          )
+    )
+  );
 
 /** One atomic row decision, independent of the caller's credential kind. The caller commits its unit. */
 export const prepareHeldStatementReviewDecision = ({

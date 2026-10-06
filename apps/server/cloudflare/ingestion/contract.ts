@@ -1,6 +1,6 @@
 import type { UserId } from "../../src/core/identity/contract";
 import type { WhatsAppInboundEvent } from "../../src/shell/channels/whatsapp/contract";
-import { type Effect, type Option, Schema } from "effect";
+import { Data, type Effect, type Option, Schema } from "effect";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import type { TransactionAuthority } from "../canonical-work/contract";
 import type { CanonicalCapability } from "../../src/core/canonical-operations/contract";
@@ -80,3 +80,8 @@ export type StatementDecisionWork = Readonly<{
 
 /** Maximum encoded input bytes accepted by one canonical statement submission. */
 export const maximumSubmissionInputBytes = 4096;
+
+/** Closed infrastructure failure; durable processing may retry without exposing storage details. */
+export class StatementProcessingUnavailable extends Data.TaggedError(
+  "StatementProcessingUnavailable"
+) {}

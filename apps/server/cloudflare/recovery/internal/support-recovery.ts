@@ -10,10 +10,10 @@ import { BackupRecoveryCode } from "../../../src/core/recovery/contract";
 import { recoveryCodeDigest } from "./material";
 import { type JWTVerifyGetKey, createRemoteJWKSet, jwtVerify } from "jose";
 
-import { Clock, Data, Effect, Option, Schema } from "effect";
+import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
 import { newId } from "../../secret-material/operations";
 import { RequestBodyPolicy } from "../../http/contract";
-import { readBoundedRequestBody } from "../../http/operations";
+import { boundedJsonBody } from "../../http/operations";
 
 const Payload = Schema.Struct({
   pairingCode: Schema.String.check(Schema.isPattern(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/u)),
@@ -58,6 +58,7 @@ const eligibleAssertion = (
 const currentClaims = (claims: Option.Option<typeof Claims.Type>, now: number): boolean =>
   Option.isSome(claims) &&
   claims.value.iat <= now &&
+  claims.value.exp > now &&
   claims.value.exp > claims.value.iat &&
   claims.value.exp - claims.value.iat <= maximumAssertionLifetimeSeconds &&
   claims.value.exp - now <= maximumAssertionLifetimeSeconds;
@@ -67,10 +68,12 @@ const verifySupportAccess = ({
   assertion,
   issuer,
   audience,
+  clock,
 }: {
   assertion: Option.Option<string>;
   issuer: string;
   audience: string;
+  clock: Clock.Clock;
 }): Promise<Option.Option<{ issuer: string; subject: string }>> => {
   if (!eligibleAssertion(assertion, issuer, audience) || Option.isNone(assertion)) {
     return Promise.resolve(Option.none());
@@ -86,29 +89,20 @@ const verifySupportAccess = ({
         issuer,
         audience,
         algorithms: ["RS256"],
+        // Jose reads this after key retrieval and signature verification, not at request entry.
+        get currentDate(): Date {
+          return DateTime.toDateUtc(DateTime.makeUnsafe(clock.currentTimeMillisUnsafe()));
+        },
       });
     })
     .then(({ payload }) => {
       const claims = Schema.decodeUnknownOption(Claims)(payload);
-      const now = Math.floor(Effect.runSync(Clock.currentTimeMillis) / millisecondsPerSecond);
+      const now = Math.floor(clock.currentTimeMillisUnsafe() / millisecondsPerSecond);
       if (!currentClaims(claims, now) || Option.isNone(claims)) {
         return Option.none<{ issuer: string; subject: string }>();
       }
       return Option.some({ issuer, subject: claims.value.sub });
     })
-    .catch(() => Option.none());
-};
-
-const readPayload = (request: Request): Promise<Option.Option<typeof Payload.Type>> => {
-  if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
-    return Promise.resolve(Option.none());
-  }
-  return Effect.runPromise(readBoundedRequestBody(request, policy))
-    .then((bytes) =>
-      Schema.decodeUnknownOption(Payload)(
-        JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes))
-      )
-    )
     .catch(() => Option.none());
 };
 
@@ -290,18 +284,20 @@ export const handleSupportRecovery = ({
 }): Effect.Effect<Response> => {
   if (!configuredAccess(config)) return Effect.succeed(unavailable());
   return Effect.gen(function* () {
+    const clock = yield* Clock.Clock;
     const operator = yield* waitFor(() =>
       verifySupportAccess({
         assertion: Option.fromNullishOr(request.headers.get("cf-access-jwt-assertion")),
         issuer: config.CLOUDFLARE_ACCESS_ISSUER,
         audience: config.CLOUDFLARE_ACCESS_AUDIENCE,
+        clock,
       })
     );
     if (Option.isNone(operator)) return response(httpUnauthorized, { status: "unauthorized" });
     const now = yield* Clock.currentTimeMillis;
     const admission = yield* waitFor(() => admitOperator(db, operator.value, now));
     if (admission !== "allowed") return admissionResponse(admission);
-    const payload = yield* waitFor(() => readPayload(request));
+    const payload = yield* boundedJsonBody({ request, policy, schema: Payload });
     if (Option.isNone(payload)) return notApproved();
     const codeDigest = yield* waitFor(() => recoveryCodeDigest(payload.value.backupRecoveryCode));
     const decision = {

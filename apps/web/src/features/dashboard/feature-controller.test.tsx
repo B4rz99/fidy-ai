@@ -117,19 +117,23 @@ describe("Dashboard route resources", () => {
   });
 });
 
+const renderEditableDashboard = (): void => {
+  render(
+    <DashboardRouteContent
+      apiClient={apiClient}
+      onRefresh={vi.fn()}
+      result={successResult}
+      phase="reading"
+    />
+  );
+};
+
 describe("Dashboard route edits", () => {
   effectIt.effect("queues a canonical edit and clears its pending state after success", () =>
     Effect.gen(function* () {
       const deferredEdit = Promise.withResolvers<Exit.Exit<unknown, unknown>>();
       atomHarness.applyEdit.mockReturnValueOnce(deferredEdit.promise);
-      render(
-        <DashboardRouteContent
-          apiClient={apiClient}
-          onRefresh={vi.fn()}
-          result={successResult}
-          phase="reading"
-        />
-      );
+      renderEditableDashboard();
 
       triggerGesture({ kind: "remove-widget", widgetId });
       expect(currentEditor().submitting).toBe(true);
@@ -140,32 +144,34 @@ describe("Dashboard route edits", () => {
     })
   );
 
-  effectIt.effect("reports schema rejection, canonical failure, and promise rejection safely", () =>
-    Effect.gen(function* () {
-      render(
-        <DashboardRouteContent
-          apiClient={apiClient}
-          onRefresh={vi.fn()}
-          result={successResult}
-          phase="reading"
-        />
-      );
-      triggerGesture({
-        kind: "resize-region",
-        widgetIds: [widgetId],
-        weight: Number.NaN,
-      });
-      yield* waitForAssertion(expectEditRejected);
+  effectIt.effect(
+    "distinguishes local validation and declared refusals from an uncertain promise rejection",
+    () =>
+      Effect.gen(function* () {
+        renderEditableDashboard();
+        triggerGesture({
+          kind: "resize-region",
+          widgetIds: [widgetId],
+          weight: Number.NaN,
+        });
+        yield* waitForAssertion(expectEditRejected);
 
-      atomHarness.applyEdit.mockResolvedValueOnce(Exit.fail(Cause.fail("rejected")));
-      triggerGesture({ kind: "remove-widget", widgetId });
-      yield* waitForAssertion(expectEditSettled);
-      expectEditRejected();
+        atomHarness.applyEdit.mockResolvedValueOnce(
+          Exit.fail({
+            _tag: "ValidationFailed",
+            error: { code: "validation_failed", message: "Refused", fields: [] },
+            next: [],
+          })
+        );
+        triggerGesture({ kind: "remove-widget", widgetId });
+        yield* waitForAssertion(expectEditSettled);
+        expectEditRejected();
 
-      atomHarness.applyEdit.mockRejectedValueOnce(new Error("transport failed"));
-      triggerGesture({ kind: "remove-widget", widgetId });
-      yield* waitForAssertion(expectEditSettled);
-      expectEditRejected();
-    })
+        atomHarness.applyEdit.mockRejectedValueOnce(new Error("transport failed"));
+        triggerGesture({ kind: "remove-widget", widgetId });
+        yield* waitForAssertion(expectEditSettled);
+        expect(Option.getOrThrow(currentError()).title).toBe("No pudimos confirmar el cambio");
+        expect(Option.getOrThrow(currentError()).message).not.toContain("transport failed");
+      })
   );
 });

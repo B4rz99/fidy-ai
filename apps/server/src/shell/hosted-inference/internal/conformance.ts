@@ -72,7 +72,7 @@ export const verifyCanonicalQuery = (
     }
   });
 
-const MutationArguments = Schema.Struct({ payload: Schema.toType(CreateTransactionInput) });
+const MutationArguments = Schema.Struct({ payload: CreateTransactionInput });
 type MutationArguments = typeof MutationArguments.Type;
 
 export const verifyCanonicalMutation = (
@@ -95,10 +95,9 @@ export const verifyCanonicalMutation = (
     ) {
       return yield* conformanceFailure();
     }
-    if (!Schema.is(MutationArguments)(mutationCall.params)) {
-      return yield* conformanceFailure();
-    }
-    return mutationCall.params;
+    return yield* Schema.decodeUnknownEffect(MutationArguments)(mutationCall.params).pipe(
+      Effect.mapError(() => conformanceFailure())
+    );
   });
 
 export const verifyMutationMoney = (

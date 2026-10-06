@@ -10,6 +10,7 @@ const unavailable = (): ProcessUnavailable => new ProcessUnavailable();
 type ProcessReader = ReturnType<Bun.Subprocess<"ignore", "pipe", "ignore">["stdout"]["getReader"]>;
 const releaseReader = (reader: ProcessReader): Effect.Effect<void, ProcessUnavailable> =>
   Effect.tryPromise({ try: () => reader.cancel(), catch: unavailable }).pipe(
+    Effect.timeoutOrElse({ duration: 500, orElse: () => Effect.fail(unavailable()) }),
     Effect.ensuring(Effect.sync(() => reader.releaseLock()))
   );
 const awaitExit = (
@@ -17,7 +18,26 @@ const awaitExit = (
 ): Effect.Effect<number, ProcessUnavailable> =>
   Effect.tryPromise({ try: () => child.exited, catch: unavailable });
 
-/** Every handle and reader settles inside its caller's Scope, including interruption. */
+const stopProcess = (
+  child: Bun.Subprocess<"ignore", "pipe", "ignore">
+): Effect.Effect<void, ProcessUnavailable> =>
+  Effect.gen(function* () {
+    yield* Effect.try({ try: () => child.kill("SIGTERM"), catch: unavailable });
+    yield* awaitExit(child).pipe(
+      Effect.timeoutOrElse({
+        duration: 300,
+        orElse: () =>
+          Effect.gen(function* () {
+            yield* Effect.try({ try: () => child.kill("SIGKILL"), catch: unavailable });
+            yield* awaitExit(child).pipe(
+              Effect.timeoutOrElse({ duration: 1000, orElse: () => Effect.fail(unavailable()) })
+            );
+          }),
+      })
+    );
+  });
+
+/** Scope teardown escalates after 300ms; exit/reader failure is a defect, never silent success. */
 export const scopedProcess = Effect.fn(function* (
   command: ReadonlyArray<string>,
   env?: Readonly<Record<string, string>>
@@ -37,11 +57,10 @@ export const scopedProcess = Effect.fn(function* (
       catch: unavailable,
     }),
     ({ child, reader }) =>
-      Effect.gen(function* () {
-        child.kill();
-        yield* awaitExit(child);
-        yield* releaseReader(reader);
-      }).pipe(Effect.orDie)
+      stopProcess(child).pipe(
+        Effect.ensuring(releaseReader(reader).pipe(Effect.orDie)),
+        Effect.orDie
+      )
   );
   return {
     read: Effect.tryPromise({ try: () => resource.reader.read(), catch: unavailable }).pipe(

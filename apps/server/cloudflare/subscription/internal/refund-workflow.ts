@@ -1,11 +1,10 @@
-import { type Cause, Effect, Option, Schema } from "effect";
+import { type Cause, Clock, Effect, Option, Schema } from "effect";
 import { RefundAttemptId } from "../../../src/core/subscription/contract";
 import {
   type RefundDispatchInput,
   type RefundReceiveInput,
   type RefundWorkflowExecution,
 } from "../contract";
-import { currentMillis } from "../../runtime/operations";
 import { WompiTransactionId } from "./wompi-model";
 import { wompiOutboundHttp } from "./wompi-runtime";
 import {
@@ -72,14 +71,19 @@ const settle = (
         .run()
     ).pipe(Effect.asVoid);
   }
-  return Effect.tryPromise(() =>
-    db
-      .prepare(`INSERT INTO refund_outcome_evidence(refund_id,provider_id,verified_status,observed_at_ms)
+  return Clock.currentTimeMillis.pipe(
+    Effect.flatMap((current) =>
+      Effect.tryPromise(() =>
+        db
+          .prepare(`INSERT INTO refund_outcome_evidence(refund_id,provider_id,verified_status,observed_at_ms)
     SELECT ?,?,?,? WHERE EXISTS (SELECT 1 FROM refund_attempts WHERE id=? AND status='pending')
     ON CONFLICT(refund_id) DO NOTHING`)
-      .bind(id, evidence.value.providerId, evidence.value.status, currentMillis(), id)
-      .run()
-  ).pipe(Effect.asVoid);
+          .bind(id, evidence.value.providerId, evidence.value.status, current, id)
+          .run()
+      )
+    ),
+    Effect.asVoid
+  );
 };
 const submissionClaim = (
   db: D1Database,
@@ -95,18 +99,21 @@ const submissionClaim = (
         .first()
     ).pipe(Effect.map((row) => (row === null ? ("absent" as const) : ("existing" as const))));
   }
-  return Effect.tryPromise(() =>
-    db.batch([
-      db
-        .prepare(`INSERT INTO refund_submission_claims(refund_id,claimed_at_ms) VALUES (?,?)
+  return Clock.currentTimeMillis.pipe(
+    Effect.flatMap((current) =>
+      Effect.tryPromise(() =>
+        db.batch([
+          db
+            .prepare(`INSERT INTO refund_submission_claims(refund_id,claimed_at_ms) VALUES (?,?)
       ON CONFLICT(refund_id) DO NOTHING RETURNING refund_id`)
-        .bind(id, currentMillis()),
-      db
-        .prepare(`UPDATE refund_attempts SET progress='verifying' WHERE id=? AND status='pending'
+            .bind(id, current),
+          db
+            .prepare(`UPDATE refund_attempts SET progress='verifying' WHERE id=? AND status='pending'
           AND EXISTS (SELECT 1 FROM refund_submission_claims WHERE refund_id=refund_attempts.id)`)
-        .bind(id),
-    ])
-  ).pipe(
+            .bind(id),
+        ])
+      )
+    ),
     Effect.flatMap((results) =>
       results[0]?.results.length === 1
         ? Effect.succeed("claimed" as const)
@@ -169,7 +176,7 @@ export const dispatchRefunds = (
   input: RefundDispatchInput
 ): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> =>
   Effect.gen(function* () {
-    const now = currentMillis();
+    const now = yield* Clock.currentTimeMillis;
     const rows = yield* Effect.tryPromise(() =>
       input.DB.prepare(`SELECT o.refund_id FROM refund_outbox o
       JOIN refund_attempts r ON r.id=o.refund_id WHERE r.status='pending' AND r.progress='queued'
@@ -206,7 +213,7 @@ export const dispatchVoidVerification = (
   input: RefundDispatchInput
 ): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> =>
   Effect.gen(function* () {
-    const now = currentMillis();
+    const now = yield* Clock.currentTimeMillis;
     const rows = yield* Effect.tryPromise(() =>
       input.DB.prepare(`SELECT r.id FROM refund_attempts r
     JOIN refund_outbox o ON o.refund_id=r.id JOIN refund_submission_claims c ON c.refund_id=r.id

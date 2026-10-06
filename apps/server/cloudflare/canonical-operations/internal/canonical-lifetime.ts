@@ -1,8 +1,7 @@
-import { Data, Effect } from "effect";
-import { currentMillis } from "../../runtime/operations";
+import { Clock, Data, Effect } from "effect";
 import { transactionUnavailable } from "../../canonical-work/operations";
 
-class QueryLifetimeExpired extends Data.TaggedError("QueryLifetimeExpired") {}
+class CanonicalLifetimeExpired extends Data.TaggedError("CanonicalLifetimeExpired") {}
 type Lifetime = Readonly<{ signal: AbortSignal; deadlineMilliseconds: number }>;
 type Schedule = <A>(run: () => Promise<A>) => Promise<A>;
 type Statements = WeakMap<D1PreparedStatement, D1PreparedStatement>;
@@ -54,16 +53,21 @@ const fencedSession = (
 });
 
 /** D1 cannot abort an atomic unit. Fence new units and retain the coordination turn until started units settle. */
-const queryDatabase = (
+const boundedDatabase = (
   database: D1Database,
-  lifetime: Lifetime
+  lifetime: Lifetime,
+  clock: Clock.Clock
 ): Readonly<{ db: D1Database; close: () => Promise<void> }> => {
   let closed = false;
   const pending = new Set<Promise<unknown>>();
   const originals: Statements = new WeakMap();
   const schedule: Schedule = (run) => {
-    if (closed || lifetime.signal.aborted || currentMillis() >= lifetime.deadlineMilliseconds) {
-      throw new QueryLifetimeExpired();
+    if (
+      closed ||
+      lifetime.signal.aborted ||
+      clock.currentTimeMillisUnsafe() >= lifetime.deadlineMilliseconds
+    ) {
+      throw new CanonicalLifetimeExpired();
     }
     const unit = run();
     pending.add(unit);
@@ -92,26 +96,27 @@ const queryDatabase = (
     },
   };
 };
-const aborted = (signal: AbortSignal): Effect.Effect<never, QueryLifetimeExpired> =>
+const aborted = (signal: AbortSignal): Effect.Effect<never, CanonicalLifetimeExpired> =>
   Effect.callback((resume) => {
-    const abort = (): void => resume(Effect.fail(new QueryLifetimeExpired()));
+    const abort = (): void => resume(Effect.fail(new CanonicalLifetimeExpired()));
     if (signal.aborted) abort();
     else signal.addEventListener("abort", abort, { once: true });
     return Effect.sync(() => signal.removeEventListener("abort", abort));
   });
 
 /** Bound orchestration, including detached Promise owners, without abandoning an in-flight accounting unit. */
-export const withQueryLifetime = (
+export const withCanonicalLifetime = (
   input: Lifetime &
     Readonly<{ db: D1Database; execute: (db: D1Database) => Effect.Effect<Response> }>
 ): Effect.Effect<Response> =>
   Effect.scoped(
     Effect.gen(function* () {
-      const remaining = input.deadlineMilliseconds - currentMillis();
+      const clock = yield* Clock.Clock;
+      const remaining = input.deadlineMilliseconds - clock.currentTimeMillisUnsafe();
       if (input.signal.aborted || remaining <= 0) return transactionUnavailable();
-      const scope = queryDatabase(input.db, input);
+      const scope = boundedDatabase(input.db, input, clock);
       yield* Effect.addFinalizer(() =>
-        Effect.tryPromise({ try: scope.close, catch: () => new QueryLifetimeExpired() }).pipe(
+        Effect.tryPromise({ try: scope.close, catch: () => new CanonicalLifetimeExpired() }).pipe(
           Effect.ignore
         )
       );

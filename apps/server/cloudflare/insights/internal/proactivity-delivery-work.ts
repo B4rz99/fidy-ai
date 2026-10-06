@@ -1,4 +1,4 @@
-import { DateTime, Effect, Option, Schema } from "effect";
+import { type DateTime, Effect, Option, Schema } from "effect";
 import { ConsentRecordId } from "../../../src/core/consent/contract";
 import { type UserId, type WhatsAppCallerReference } from "../../../src/core/identity/contract";
 import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
@@ -195,13 +195,13 @@ export const findQuestionOrigin = (
     const row = yield* Schema.decodeUnknownEffect(
       Schema.Struct({
         origin: Schema.Literals(["requested", "proactive"]),
-        created_at_ms: Schema.Int,
+        created_at_ms: Schema.DateTimeUtcFromMillis,
         rejection_offer_id: Schema.OptionFromNullOr(ConsentRecordId),
       })
     )(raw);
     return Option.some({
       origin: row.origin,
-      createdAt: DateTime.makeUnsafe(row.created_at_ms),
+      createdAt: row.created_at_ms,
       rejectionOfferId: row.rejection_offer_id,
     });
   }).pipe(Effect.mapError(() => new InsightUnavailable()));

@@ -57,7 +57,7 @@ export const executeRefundSupportAdmission = (
 /** Observe one User's safe billing-derived standing with live credential and Audit checks at commit. */
 export const executeProtectedSubscriptionQuery = (
   input: SubscriptionQueryInput
-): Promise<Response> =>
+): Effect.Effect<Response> =>
   input.operation === "subscription.getUpgradeUrl" ? queryUpgrade(input) : observe(input);
 
 /**

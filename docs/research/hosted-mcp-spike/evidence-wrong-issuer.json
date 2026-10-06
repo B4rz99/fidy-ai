@@ -29,20 +29,5 @@
   { "event": "callback", "issuerMatches": false },
   { "event": "protected-resource-discovery" },
   { "event": "issuer-discovery", "cimdAdvertised": true },
-  {
-    "event": "registration",
-    "mechanism": "DCR",
-    "name": "pi",
-    "redirects": ["http://127.0.0.1:61887/callback"],
-    "grantTypes": ["authorization_code", "refresh_token"]
-  },
-  {
-    "event": "authorization",
-    "mechanism": "DCR",
-    "pkce": "S256",
-    "resourceBound": true,
-    "redirectValid": true,
-    "scope": "read"
-  },
   { "event": "callback", "issuerMatches": false }
 ]

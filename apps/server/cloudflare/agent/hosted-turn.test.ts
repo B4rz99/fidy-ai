@@ -28,7 +28,18 @@ import {
 } from "../../src/shell/hosted-inference/contract";
 
 import { authenticateWhatsAppInbound } from "../../src/shell/channels/whatsapp/operations";
-import { type Cause, Clock, DateTime, Effect, Exit, Option, Redacted, Schema } from "effect";
+import {
+  Cause,
+  Clock,
+  DateTime,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Option,
+  Redacted,
+  Schema,
+} from "effect";
 import assert from "node:assert/strict";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 
@@ -103,12 +114,14 @@ const completeHostedTurn = (
     "scheduleRecovery" | "bucket" | "executeMutation"
   >
 ): Promise<Response> =>
-  completeHostedTurnWithAlarm({
-    ...input,
-    bucket: Option.none(),
-    executeMutation: Option.none(),
-    scheduleRecovery: () => Promise.resolve(),
-  });
+  Effect.runPromise(
+    completeHostedTurnWithAlarm({
+      ...input,
+      bucket: Option.none(),
+      executeMutation: Option.none(),
+      scheduleRecovery: () => Promise.resolve(),
+    })
+  );
 
 const users = [
   "10000000-0000-4000-8000-000000000071",
@@ -883,14 +896,12 @@ const acknowledgeVisibleReply = (
         yield* Effect.tryPromise(() => response.json())
       );
       const awaited3 = yield* Effect.tryPromise(() => subject(index));
-      const confirmation = yield* Effect.tryPromise(() =>
-        acknowledgeBrowserTurn({
-          db,
-          subject: awaited3,
-          turnId: visible.turnId,
-          receipt: visible.receipt,
-        })
-      );
+      const confirmation = yield* acknowledgeBrowserTurn({
+        db,
+        subject: awaited3,
+        turnId: visible.turnId,
+        receipt: visible.receipt,
+      });
       expect(confirmation.status).toBe(200);
       return visible.text;
     })
@@ -1345,35 +1356,34 @@ it("runs WhatsApp text through hosted inference but awaits signed delivery befor
       );
       const offered: Array<string> = [];
       const tokens: Array<string> = [];
-      const response = yield* Effect.tryPromise(() =>
-        completeWhatsAppTurnWithAdmission({
-          input: {
-            db,
-            subject: caller,
-            inbound,
-            text: TranscriptText.make("Hola"),
-            inference: model,
-            bucket: Option.none(),
-            executeMutation: Option.none(),
-            deliver: {
-              _tag: "WhatsApp",
-              contextualReplyQuery: Option.none(),
-              send: ({ correlationToken }) => {
+      const response = yield* completeWhatsAppTurnWithAdmission({
+        input: {
+          db,
+          subject: caller,
+          inbound,
+          text: TranscriptText.make("Hola"),
+          inference: model,
+          bucket: Option.none(),
+          executeMutation: Option.none(),
+          deliver: {
+            _tag: "WhatsApp",
+            contextualReplyQuery: Option.none(),
+            send: ({ correlationToken }) =>
+              Effect.sync(() => {
                 tokens.push(correlationToken);
-                return Promise.resolve({
-                  kind: "accepted",
+                return {
+                  kind: "accepted" as const,
                   messageId: WhatsAppProviderMessageId.make("wamid.answer"),
-                });
-              },
-            },
-            signal: makeAbortController().signal,
-            scheduleRecovery: () => Promise.resolve(),
+                };
+              }),
           },
-          onAdmitted: (turnId) => {
-            offered.push(turnId);
-          },
-        })
-      );
+          signal: makeAbortController().signal,
+          scheduleRecovery: () => Promise.resolve(),
+        },
+        onAdmitted: (turnId) => {
+          offered.push(turnId);
+        },
+      });
       expect(response.status).toBe(202);
       expect(offered).toHaveLength(1);
       expect(tokens).toHaveLength(1);
@@ -2024,7 +2034,7 @@ const assertExtractedStatement = ({
 
 const assertStatementQuestion = (
   work: StatementRecoveryFixture
-): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> =>
+): Effect.Effect<void, Effect.Error<ReturnType<typeof resumeWhatsAppTurn>>> =>
   Effect.gen(function* () {
     yield* assertExtractedStatement(work);
     expect((yield* resumeInterruptedStatement(work)).status).toBe(202);
@@ -2052,7 +2062,7 @@ const resumeInterruptedStatement = ({
   bucket,
   inference,
   deliver,
-}: StatementRecoveryFixture): Effect.Effect<Response, Cause.UnknownError | Schema.SchemaError> =>
+}: StatementRecoveryFixture): ReturnType<typeof resumeWhatsAppTurn> =>
   Effect.gen(function* () {
     const pending = yield* Schema.decodeUnknownEffect(Schema.Struct({ id: TranscriptTurnId }))(
       yield* Effect.tryPromise(() =>
@@ -2062,19 +2072,17 @@ const resumeInterruptedStatement = ({
           .first()
       )
     );
-    const resumed = yield* Effect.tryPromise(() =>
-      resumeWhatsAppTurn({
-        db,
-        userId: UserId.make(users[0]),
-        turnId: pending.id,
-        bucket: Option.some(bucket),
-        outbound: { execute: () => Effect.die(new Error("Statement recovery must not download")) },
-        inference,
-        deliver,
-        signal: makeAbortController().signal,
-        scheduleRecovery: () => Promise.resolve(),
-      })
-    );
+    const resumed = yield* resumeWhatsAppTurn({
+      db,
+      userId: UserId.make(users[0]),
+      turnId: pending.id,
+      bucket: Option.some(bucket),
+      outbound: { execute: () => Effect.die(new Error("Statement recovery must not download")) },
+      inference,
+      deliver,
+      signal: makeAbortController().signal,
+      scheduleRecovery: () => Promise.resolve(),
+    });
     expect(
       (yield* Effect.tryPromise(() =>
         db
@@ -2109,56 +2117,59 @@ const publishStatementWithRecovery = ({
   db: D1Database;
   bucket: R2Bucket;
   checkpoint: "none" | "stage" | "publication" | "outcome";
-  start: (database: D1Database) => Promise<Response>;
+  start: (database: D1Database) => ReturnType<typeof completeWhatsAppDocumentTurnWithAdmission>;
   inference: HostedInferenceService;
   deliver: Parameters<typeof resumeWhatsAppTurn>[0]["deliver"];
-}>): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      if (checkpoint === "none") return yield* Effect.tryPromise(() => start(db));
-      const interrupted = yield* Effect.exit(
-        Effect.tryPromise(() => start(publicationOutage({ db, checkpoint })))
-      );
-      // This owner seam rejects when the simulated connection loss also prevents delivery proposal.
-      expect(Exit.isFailure(interrupted)).toBe(true);
-      const resumed = yield* resumeInterruptedStatement({ db, bucket, inference, deliver });
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT id FROM statement_submissions WHERE user_id=?").bind(users[0]).all()
-        )).results
-      ).toHaveLength(1);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT submission_id FROM statement_ingestion_outbox WHERE user_id=?")
-            .bind(users[0])
-            .all()
-        )).results
-      ).toHaveLength(1);
-      expect((yield* Effect.tryPromise(() => bucket.list())).objects).toHaveLength(1);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT grant_id FROM resource_admission_events WHERE policy_key='ingestion.upload.user.v1' AND scope_key=?"
-            )
-            .bind(users[0])
-            .all()
-        )).results
-      ).toHaveLength(1);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db
-            .prepare(
-              "SELECT grant_id FROM resource_admission_events WHERE policy_key='ingestion.upload.outstanding.v1' AND scope_key=? AND released_at_epoch_ms IS NULL"
-            )
-            .bind(users[0])
-            .all()
-        )).results
-      ).toHaveLength(0);
-      return resumed;
-    })
+}>): ReturnType<typeof completeWhatsAppDocumentTurnWithAdmission> =>
+  Effect.gen(function* () {
+    if (checkpoint === "none") return yield* start(db);
+    const interrupted = yield* Effect.exit(start(publicationOutage({ db, checkpoint })));
+    // This owner seam rejects when the simulated connection loss also prevents delivery proposal.
+    expect(Exit.isFailure(interrupted)).toBe(true);
+    const resumed = yield* resumeInterruptedStatement({ db, bucket, inference, deliver });
+    expect(
+      (yield* Effect.tryPromise(() =>
+        db.prepare("SELECT id FROM statement_submissions WHERE user_id=?").bind(users[0]).all()
+      )).results
+    ).toHaveLength(1);
+    expect(
+      (yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT submission_id FROM statement_ingestion_outbox WHERE user_id=?")
+          .bind(users[0])
+          .all()
+      )).results
+    ).toHaveLength(1);
+    expect((yield* Effect.tryPromise(() => bucket.list())).objects).toHaveLength(1);
+    expect(
+      (yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "SELECT grant_id FROM resource_admission_events WHERE policy_key='ingestion.upload.user.v1' AND scope_key=?"
+          )
+          .bind(users[0])
+          .all()
+      )).results
+    ).toHaveLength(1);
+    expect(
+      (yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "SELECT grant_id FROM resource_admission_events WHERE policy_key='ingestion.upload.outstanding.v1' AND scope_key=? AND released_at_epoch_ms IS NULL"
+          )
+          .bind(users[0])
+          .all()
+      )).results
+    ).toHaveLength(0);
+    return resumed;
+  });
+const statementClarificationText = (decision: "resolve" | "skip" | "abandon"): TranscriptText =>
+  TranscriptText.make(
+    decision === "resolve"
+      ? "Fila 2: salida de 33000 COP a Tienda el 2 de agosto de 2026."
+      : `${decision === "skip" ? "Omitir la fila 2" : "Cancelar lo pendiente del extracto"}.`
   );
+
 const confirmStatementWithRecovery = ({
   db,
   bucket,
@@ -2170,26 +2181,22 @@ const confirmStatementWithRecovery = ({
   db: D1Database;
   bucket: R2Bucket;
   checkpoint: "none" | "consumed" | "committed" | "outcome";
-  confirm: (database: D1Database) => Promise<Response>;
+  confirm: (database: D1Database) => ReturnType<typeof completeWhatsAppTurnWithAdmission>;
   inference: HostedInferenceService;
   deliver: Parameters<typeof resumeWhatsAppTurn>[0]["deliver"];
-}>): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      if (checkpoint === "none") return yield* Effect.tryPromise(() => confirm(db));
-      const interrupted = yield* Effect.tryPromise(() =>
-        confirm(confirmationOutage({ db, checkpoint }))
-      );
-      expect(interrupted.status).toBe(503);
-      vi.useFakeTimers({ toFake: ["Date"] });
-      vi.setSystemTime(now() + 135_001);
-      try {
-        return yield* resumeInterruptedStatement({ db, bucket, inference, deliver });
-      } finally {
-        vi.useRealTimers();
-      }
-    })
-  );
+}>): ReturnType<typeof completeWhatsAppTurnWithAdmission> =>
+  Effect.gen(function* () {
+    if (checkpoint === "none") return yield* confirm(db);
+    const interrupted = yield* confirm(confirmationOutage({ db, checkpoint }));
+    expect(interrupted.status).toBe(503);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now() + 135_001);
+    try {
+      return yield* resumeInterruptedStatement({ db, bucket, inference, deliver });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 it.each([
   { decision: "resolve", expired: false, name: "resolve", checkpoint: "none", refusal: "none" },
   { decision: "skip", expired: false, name: "skip", checkpoint: "none", refusal: "none" },
@@ -2339,17 +2346,18 @@ it.each([
         let replySequence = 0;
         const sends = ({
           text,
-        }: Readonly<{ text: TranscriptText }>): Promise<{
+        }: Readonly<{ text: TranscriptText }>): Effect.Effect<{
           kind: "accepted";
           messageId: WhatsAppProviderMessageId;
-        }> => {
-          delivered = text;
-          replySequence += 1;
-          return Promise.resolve({
-            kind: "accepted",
-            messageId: WhatsAppProviderMessageId.make(`wamid.statement.reply.${replySequence}`),
+        }> =>
+          Effect.sync(() => {
+            delivered = text;
+            replySequence += 1;
+            return {
+              kind: "accepted",
+              messageId: WhatsAppProviderMessageId.make(`wamid.statement.reply.${replySequence}`),
+            };
           });
-        };
         const caller = WhatsAppHostedSubject.make({
           userId: UserId.make(users[0]),
           portfolioId: WhatsAppBusinessPortfolioId.make("portfolio-1"),
@@ -2358,7 +2366,9 @@ it.each([
         const inferenceModel = yield* Effect.tryPromise(() =>
           inference(() => Promise.resolve(reply("unused")))
         );
-        const startDocument = (database: D1Database): Promise<Response> =>
+        const startDocument = (
+          database: D1Database
+        ): ReturnType<typeof completeWhatsAppDocumentTurnWithAdmission> =>
           completeWhatsAppDocumentTurnWithAdmission({
             input: {
               db: database,
@@ -2406,16 +2416,14 @@ it.each([
             },
             onAdmitted: () => {},
           });
-        const response = yield* Effect.tryPromise(() =>
-          publishStatementWithRecovery({
-            db,
-            bucket,
-            checkpoint: publication,
-            start: startDocument,
-            inference: inferenceModel,
-            deliver: () => ({ _tag: "WhatsApp", contextualReplyQuery: Option.none(), send: sends }),
-          })
-        );
+        const response = yield* publishStatementWithRecovery({
+          db,
+          bucket,
+          checkpoint: publication,
+          start: startDocument,
+          inference: inferenceModel,
+          deliver: () => ({ _tag: "WhatsApp", contextualReplyQuery: Option.none(), send: sends }),
+        });
         expect(response.status).toBe(202);
         if (refusal !== "none") {
           yield* assertRefusedDocument({ db, bucket, refusal, mediaRequests, delivered });
@@ -2507,38 +2515,39 @@ it.each([
             );
           })
         );
-        const foreignResponse = yield* Effect.tryPromise(() =>
-          completeWhatsAppTurnWithAdmission({
-            input: {
-              db,
-              subject: foreignCaller,
-              bucket: Option.some(bucket),
-              inbound: WhatsAppInboundEvidence.make({
-                messageId: WhatsAppProviderMessageId.make("wamid.foreign-statement"),
-                businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
-                occurredAtMs: now(),
-                receivedAtMs: now(),
-                replyToMessageId: Option.none(),
-              }),
-              text: TranscriptText.make("Consulta el extracto."),
-              inference: foreignModel,
-              executeMutation: Option.none(),
-              deliver: {
-                _tag: "WhatsApp",
-                contextualReplyQuery: Option.none(),
-                send: () =>
-                  Promise.resolve({
-                    kind: "accepted",
-                    messageId: WhatsAppProviderMessageId.make("wamid.foreign-statement.reply"),
-                  }),
-              },
-              signal: makeAbortController().signal,
-              scheduleRecovery: () => Promise.resolve(),
+        const foreignResponse = yield* completeWhatsAppTurnWithAdmission({
+          input: {
+            db,
+            subject: foreignCaller,
+            bucket: Option.some(bucket),
+            inbound: WhatsAppInboundEvidence.make({
+              messageId: WhatsAppProviderMessageId.make("wamid.foreign-statement"),
+              businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+              occurredAtMs: now(),
+              receivedAtMs: now(),
+              replyToMessageId: Option.none(),
+            }),
+            text: TranscriptText.make("Consulta el extracto."),
+            inference: foreignModel,
+            executeMutation: Option.none(),
+            deliver: {
+              _tag: "WhatsApp",
+              contextualReplyQuery: Option.none(),
+              send: () =>
+                Effect.succeed({
+                  kind: "accepted" as const,
+                  messageId: WhatsAppProviderMessageId.make("wamid.foreign-statement.reply"),
+                }),
             },
-            onAdmitted: () => {},
-          })
-        );
-        expect(foreignResponse.status).toBe(202);
+            signal: makeAbortController().signal,
+            scheduleRecovery: () => Promise.resolve(),
+          },
+          onAdmitted: () => {},
+        });
+        expect({ status: foreignResponse.status, foreignRounds }).toEqual({
+          status: 202,
+          foreignRounds: 2,
+        });
         yield* finishLatestWhatsAppFixture({ db, subject: foreignCaller });
         yield* assertForeignStatementRead(db, users[1], submission.id);
         const foreignChallenge = yield* Schema.decodeUnknownEffect(
@@ -2551,37 +2560,35 @@ it.each([
               .first()
           )
         );
-        const foreignWrite = yield* Effect.tryPromise(() =>
-          completeWhatsAppTurnWithAdmission({
-            input: {
-              db,
-              subject: foreignCaller,
-              bucket: Option.some(bucket),
-              inbound: WhatsAppInboundEvidence.make({
-                messageId: WhatsAppProviderMessageId.make("wamid.foreign-statement.write"),
-                businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
-                occurredAtMs: now(),
-                receivedAtMs: now(),
-                replyToMessageId: Option.none(),
-              }),
-              text: foreignChallenge.command,
-              inference: inferenceModel,
-              executeMutation: Option.none(),
-              deliver: {
-                _tag: "WhatsApp",
-                contextualReplyQuery: Option.none(),
-                send: () =>
-                  Promise.resolve({
-                    kind: "accepted",
-                    messageId: WhatsAppProviderMessageId.make("wamid.foreign-write.reply"),
-                  }),
-              },
-              signal: makeAbortController().signal,
-              scheduleRecovery: () => Promise.resolve(),
+        const foreignWrite = yield* completeWhatsAppTurnWithAdmission({
+          input: {
+            db,
+            subject: foreignCaller,
+            bucket: Option.some(bucket),
+            inbound: WhatsAppInboundEvidence.make({
+              messageId: WhatsAppProviderMessageId.make("wamid.foreign-statement.write"),
+              businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+              occurredAtMs: now(),
+              receivedAtMs: now(),
+              replyToMessageId: Option.none(),
+            }),
+            text: foreignChallenge.command,
+            inference: inferenceModel,
+            executeMutation: Option.none(),
+            deliver: {
+              _tag: "WhatsApp",
+              contextualReplyQuery: Option.none(),
+              send: () =>
+                Effect.succeed({
+                  kind: "accepted" as const,
+                  messageId: WhatsAppProviderMessageId.make("wamid.foreign-write.reply"),
+                }),
             },
-            onAdmitted: () => {},
-          })
-        );
+            signal: makeAbortController().signal,
+            scheduleRecovery: () => Promise.resolve(),
+          },
+          onAdmitted: () => {},
+        });
         expect(foreignWrite.status).toBe(202);
         yield* finishLatestWhatsAppFixture({ db, subject: foreignCaller });
         const refusedWrite = yield* Schema.decodeUnknownEffect(
@@ -2655,7 +2662,7 @@ it.each([
           model: HostedInferenceService;
           phoneNumber: string;
           database: D1Database;
-        }>): Promise<Response> =>
+        }>): ReturnType<typeof completeWhatsAppTurnWithAdmission> =>
           completeWhatsAppTurnWithAdmission({
             input: {
               db: database,
@@ -2677,19 +2684,13 @@ it.each([
             },
             onAdmitted: () => {},
           });
-        const factsResponse = yield* Effect.tryPromise(() =>
-          followUp({
-            database: db,
-            text: TranscriptText.make(
-              decision === "resolve"
-                ? "Fila 2: salida de 33000 COP a Tienda el 2 de agosto de 2026."
-                : `${decision === "skip" ? "Omitir la fila 2" : "Cancelar lo pendiente del extracto"}.`
-            ),
-            messageId: "wamid.statement.facts",
-            model: clarifyModel,
-            phoneNumber: "123456789",
-          })
-        );
+        const factsResponse = yield* followUp({
+          database: db,
+          text: statementClarificationText(decision),
+          messageId: "wamid.statement.facts",
+          model: clarifyModel,
+          phoneNumber: "123456789",
+        });
         expect(factsResponse.status).toBe(202);
         expect(
           (yield* Effect.tryPromise(() =>
@@ -2716,15 +2717,13 @@ it.each([
               .bind(now() - 900_002, now() - 900_001, users[0])
               .run()
           );
-          const expiredResponse = yield* Effect.tryPromise(() =>
-            followUp({
-              database: db,
-              text: confirmation.command,
-              messageId: "wamid.expired-statement.confirmation",
-              model: inferenceModel,
-              phoneNumber: "123456789",
-            })
-          );
+          const expiredResponse = yield* followUp({
+            database: db,
+            text: confirmation.command,
+            messageId: "wamid.expired-statement.confirmation",
+            model: inferenceModel,
+            phoneNumber: "123456789",
+          });
           expect(expiredResponse.status).toBe(401);
           expect(
             yield* Effect.tryPromise(() =>
@@ -2749,48 +2748,44 @@ it.each([
           ).toEqual({ consumed_turn_id: null });
           return;
         }
-        const foreignConfirmation = yield* Effect.tryPromise(() =>
-          completeWhatsAppTurnWithAdmission({
-            input: {
-              db,
-              subject: foreignCaller,
-              bucket: Option.some(bucket),
-              inbound: WhatsAppInboundEvidence.make({
-                messageId: WhatsAppProviderMessageId.make("wamid.foreign-confirmation"),
-                businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
-                occurredAtMs: now(),
-                receivedAtMs: now(),
-                replyToMessageId: Option.none(),
-              }),
-              text: confirmation.command,
-              inference: inferenceModel,
-              executeMutation: Option.none(),
-              deliver: {
-                _tag: "WhatsApp",
-                contextualReplyQuery: Option.none(),
-                send: () => Promise.reject(new Error("Foreign confirmation must not deliver")),
-              },
-              signal: makeAbortController().signal,
-              scheduleRecovery: () => Promise.resolve(),
+        const foreignConfirmation = yield* completeWhatsAppTurnWithAdmission({
+          input: {
+            db,
+            subject: foreignCaller,
+            bucket: Option.some(bucket),
+            inbound: WhatsAppInboundEvidence.make({
+              messageId: WhatsAppProviderMessageId.make("wamid.foreign-confirmation"),
+              businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+              occurredAtMs: now(),
+              receivedAtMs: now(),
+              replyToMessageId: Option.none(),
+            }),
+            text: confirmation.command,
+            inference: inferenceModel,
+            executeMutation: Option.none(),
+            deliver: {
+              _tag: "WhatsApp",
+              contextualReplyQuery: Option.none(),
+              send: () => Effect.die(new Error("Foreign confirmation must not deliver")),
             },
-            onAdmitted: () => {},
-          })
-        );
+            signal: makeAbortController().signal,
+            scheduleRecovery: () => Promise.resolve(),
+          },
+          onAdmitted: () => {},
+        });
         expect(foreignConfirmation.status).toBe(401);
         expect(
           (yield* Effect.tryPromise(() =>
             db.prepare("SELECT id FROM transactions WHERE user_id=?").bind(users[1]).all()
           )).results
         ).toHaveLength(0);
-        const wrongPhone = yield* Effect.tryPromise(() =>
-          followUp({
-            database: db,
-            text: confirmation.command,
-            messageId: "wamid.statement.wrong-phone",
-            model: inferenceModel,
-            phoneNumber: "987654321",
-          })
-        );
+        const wrongPhone = yield* followUp({
+          database: db,
+          text: confirmation.command,
+          messageId: "wamid.statement.wrong-phone",
+          model: inferenceModel,
+          phoneNumber: "987654321",
+        });
         expect(wrongPhone.status).toBe(401);
         expect(
           yield* Effect.tryPromise(() =>
@@ -2806,27 +2801,25 @@ it.each([
           )).results
         ).toHaveLength(1);
         expect(
-          (yield* Effect.tryPromise(() =>
-            confirmStatementWithRecovery({
-              db,
-              bucket,
-              checkpoint,
-              inference: inferenceModel,
-              deliver: () => ({
-                _tag: "WhatsApp",
-                contextualReplyQuery: Option.none(),
-                send: sends,
+          (yield* confirmStatementWithRecovery({
+            db,
+            bucket,
+            checkpoint,
+            inference: inferenceModel,
+            deliver: () => ({
+              _tag: "WhatsApp",
+              contextualReplyQuery: Option.none(),
+              send: sends,
+            }),
+            confirm: (database) =>
+              followUp({
+                database,
+                text: confirmation.command,
+                messageId: "wamid.statement.confirm",
+                model: inferenceModel,
+                phoneNumber: "123456789",
               }),
-              confirm: (database) =>
-                followUp({
-                  database,
-                  text: confirmation.command,
-                  messageId: "wamid.statement.confirm",
-                  model: inferenceModel,
-                  phoneNumber: "123456789",
-                }),
-            })
-          )).status
+          })).status
         ).toBe(202);
         yield* assertSettledStatement({ db, decision, delivered });
       })
@@ -2854,29 +2847,31 @@ it("refuses a free-form reply when the verified inbound event is outside its 24-
         inference(() => Promise.resolve(reply("No enviar")))
       );
       const sends = vi.fn(() => Promise.resolve({ kind: "ambiguous" as const }));
-      const result = yield* Effect.tryPromise(() =>
-        completeWhatsAppTurnWithAdmission({
-          input: {
-            db,
-            subject: caller,
-            inbound: WhatsAppInboundEvidence.make({
-              messageId: WhatsAppProviderMessageId.make("wamid.old"),
-              replyToMessageId: Option.none(),
-              businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
-              occurredAtMs: now() - 86_400_001,
-              receivedAtMs: now(),
-            }),
-            text: TranscriptText.make("Hola"),
-            inference: inferenceModel,
-            bucket: Option.none(),
-            executeMutation: Option.none(),
-            deliver: { _tag: "WhatsApp", contextualReplyQuery: Option.none(), send: sends },
-            signal: makeAbortController().signal,
-            scheduleRecovery: () => Promise.resolve(),
+      const result = yield* completeWhatsAppTurnWithAdmission({
+        input: {
+          db,
+          subject: caller,
+          inbound: WhatsAppInboundEvidence.make({
+            messageId: WhatsAppProviderMessageId.make("wamid.old"),
+            replyToMessageId: Option.none(),
+            businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+            occurredAtMs: now() - 86_400_001,
+            receivedAtMs: now(),
+          }),
+          text: TranscriptText.make("Hola"),
+          inference: inferenceModel,
+          bucket: Option.none(),
+          executeMutation: Option.none(),
+          deliver: {
+            _tag: "WhatsApp",
+            contextualReplyQuery: Option.none(),
+            send: () => Effect.tryPromise(sends).pipe(Effect.orDie),
           },
-          onAdmitted: () => {},
-        })
-      );
+          signal: makeAbortController().signal,
+          scheduleRecovery: () => Promise.resolve(),
+        },
+        onAdmitted: () => {},
+      });
       expect(result.status).toBe(202);
       expect(sends).not.toHaveBeenCalled();
       expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
@@ -3019,51 +3014,53 @@ it("does not send when recovery interrupts a staged reply during scheduling", ()
       const model = yield* Effect.tryPromise(() =>
         inference(() => Promise.resolve(reply("Todavía aquí")))
       );
-      const result = yield* Effect.tryPromise(() =>
-        completeWhatsAppTurnWithAdmission({
-          input: {
-            db,
-            subject: WhatsAppHostedSubject.make({
-              userId: UserId.make(users[0]),
-              portfolioId: WhatsAppBusinessPortfolioId.make("portfolio-1"),
-              bsuid: WhatsAppBusinessScopedUserId.make("CO.13491208655302741918"),
-            }),
-            inbound: WhatsAppInboundEvidence.make({
-              messageId: WhatsAppProviderMessageId.make("wamid.recovery-race"),
-              replyToMessageId: Option.none(),
-              businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
-              occurredAtMs: now(),
-              receivedAtMs: now(),
-            }),
-            text: TranscriptText.make("Hola"),
-            inference: model,
-            bucket: Option.none(),
-            executeMutation: Option.none(),
-            deliver: { _tag: "WhatsApp", contextualReplyQuery: Option.none(), send: sends },
-            signal: makeAbortController().signal,
-            scheduleRecovery: () => {
-              const timestamp = now();
-              return db
-                .batch([
-                  db
-                    .prepare(`INSERT INTO transcript_entries
+      const result = yield* completeWhatsAppTurnWithAdmission({
+        input: {
+          db,
+          subject: WhatsAppHostedSubject.make({
+            userId: UserId.make(users[0]),
+            portfolioId: WhatsAppBusinessPortfolioId.make("portfolio-1"),
+            bsuid: WhatsAppBusinessScopedUserId.make("CO.13491208655302741918"),
+          }),
+          inbound: WhatsAppInboundEvidence.make({
+            messageId: WhatsAppProviderMessageId.make("wamid.recovery-race"),
+            replyToMessageId: Option.none(),
+            businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+            occurredAtMs: now(),
+            receivedAtMs: now(),
+          }),
+          text: TranscriptText.make("Hola"),
+          inference: model,
+          bucket: Option.none(),
+          executeMutation: Option.none(),
+          deliver: {
+            _tag: "WhatsApp",
+            contextualReplyQuery: Option.none(),
+            send: () => Effect.tryPromise(sends).pipe(Effect.orDie),
+          },
+          signal: makeAbortController().signal,
+          scheduleRecovery: () => {
+            const timestamp = now();
+            return db
+              .batch([
+                db
+                  .prepare(`INSERT INTO transcript_entries
                   (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms)
                   SELECT ?, t.user_id, t.hosted_session_id, t.id, 'interrupted', ?
                   FROM hosted_turns AS t JOIN hosted_whatsapp_delivery AS d ON d.turn_id = t.id
                   WHERE t.user_id = ? AND t.status = 'pending'`)
-                    .bind(newId(), timestamp, users[0]),
-                  db
-                    .prepare(`UPDATE hosted_turns SET status = 'interrupted', terminal_at_ms = ?
+                  .bind(newId(), timestamp, users[0]),
+                db
+                  .prepare(`UPDATE hosted_turns SET status = 'interrupted', terminal_at_ms = ?
                   WHERE user_id = ? AND status = 'pending' AND EXISTS
                     (SELECT 1 FROM hosted_whatsapp_delivery AS d WHERE d.turn_id = hosted_turns.id)`)
-                    .bind(timestamp, users[0]),
-                ])
-                .then(() => undefined);
-            },
+                  .bind(timestamp, users[0]),
+              ])
+              .then(() => undefined);
           },
-          onAdmitted: () => {},
-        })
-      );
+        },
+        onAdmitted: () => {},
+      });
       expect(result.status).toBe(202);
       expect(sends).not.toHaveBeenCalled();
       expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
@@ -3089,47 +3086,49 @@ it("does not send when a window closes while a prepared reply waits for recovery
       const model = yield* Effect.tryPromise(() =>
         inference(() => Promise.resolve(reply("Todavía aquí")))
       );
-      const response = yield* Effect.tryPromise(() =>
-        completeWhatsAppTurnWithAdmission({
-          input: {
-            db,
-            subject: WhatsAppHostedSubject.make({
-              userId: UserId.make(users[0]),
-              portfolioId: WhatsAppBusinessPortfolioId.make("portfolio-1"),
-              bsuid: WhatsAppBusinessScopedUserId.make("CO.13491208655302741918"),
-            }),
-            inbound: WhatsAppInboundEvidence.make({
-              messageId: WhatsAppProviderMessageId.make("wamid.window-race"),
-              replyToMessageId: Option.none(),
-              businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
-              occurredAtMs: now(),
-              receivedAtMs: now(),
-            }),
-            text: TranscriptText.make("Hola"),
-            inference: model,
-            bucket: Option.none(),
-            executeMutation: Option.none(),
-            deliver: { _tag: "WhatsApp", contextualReplyQuery: Option.none(), send: sends },
-            signal: makeAbortController().signal,
-            scheduleRecovery: () =>
-              db
-                .prepare("SELECT turn_id FROM hosted_whatsapp_delivery WHERE user_id = ?")
-                .bind(users[0])
-                .first()
-                .then((staged) => {
-                  if (staged === null) return;
-                  const last = now() - 86_400_001;
-                  return db
-                    .prepare(`UPDATE hosted_whatsapp_windows
-                    SET last_verified_inbound_at_ms = ?, closes_at_ms = ? WHERE user_id = ?`)
-                    .bind(last, last + 86_400_000, users[0])
-                    .run();
-                })
-                .then(() => undefined),
+      const response = yield* completeWhatsAppTurnWithAdmission({
+        input: {
+          db,
+          subject: WhatsAppHostedSubject.make({
+            userId: UserId.make(users[0]),
+            portfolioId: WhatsAppBusinessPortfolioId.make("portfolio-1"),
+            bsuid: WhatsAppBusinessScopedUserId.make("CO.13491208655302741918"),
+          }),
+          inbound: WhatsAppInboundEvidence.make({
+            messageId: WhatsAppProviderMessageId.make("wamid.window-race"),
+            replyToMessageId: Option.none(),
+            businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+            occurredAtMs: now(),
+            receivedAtMs: now(),
+          }),
+          text: TranscriptText.make("Hola"),
+          inference: model,
+          bucket: Option.none(),
+          executeMutation: Option.none(),
+          deliver: {
+            _tag: "WhatsApp",
+            contextualReplyQuery: Option.none(),
+            send: () => Effect.tryPromise(sends).pipe(Effect.orDie),
           },
-          onAdmitted: () => {},
-        })
-      );
+          signal: makeAbortController().signal,
+          scheduleRecovery: () =>
+            db
+              .prepare("SELECT turn_id FROM hosted_whatsapp_delivery WHERE user_id = ?")
+              .bind(users[0])
+              .first()
+              .then((staged) => {
+                if (staged === null) return;
+                const last = now() - 86_400_001;
+                return db
+                  .prepare(`UPDATE hosted_whatsapp_windows
+                    SET last_verified_inbound_at_ms = ?, closes_at_ms = ? WHERE user_id = ?`)
+                  .bind(last, last + 86_400_000, users[0])
+                  .run();
+              })
+              .then(() => undefined),
+        },
+        onAdmitted: () => {},
+      });
       expect(response.status).toBe(202);
       expect(sends).not.toHaveBeenCalled();
       expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
@@ -3168,32 +3167,31 @@ it("fails an ambiguous WhatsApp send as DeliveryUnconfirmed without replaying a 
       );
       const offered: Array<TranscriptTurnId> = [];
       const tokens: Array<HostedDeliveryCorrelationToken> = [];
-      const sent = yield* Effect.tryPromise(() =>
-        completeWhatsAppTurnWithAdmission({
-          input: {
-            db,
-            subject: caller,
-            inbound,
-            text: TranscriptText.make("Hola"),
-            inference: model,
-            bucket: Option.none(),
-            executeMutation: Option.none(),
-            deliver: {
-              _tag: "WhatsApp",
-              contextualReplyQuery: Option.none(),
-              send: ({ correlationToken }) => {
+      const sent = yield* completeWhatsAppTurnWithAdmission({
+        input: {
+          db,
+          subject: caller,
+          inbound,
+          text: TranscriptText.make("Hola"),
+          inference: model,
+          bucket: Option.none(),
+          executeMutation: Option.none(),
+          deliver: {
+            _tag: "WhatsApp",
+            contextualReplyQuery: Option.none(),
+            send: ({ correlationToken }) =>
+              Effect.sync(() => {
                 tokens.push(correlationToken);
-                return Promise.resolve({ kind: "ambiguous" });
-              },
-            },
-            signal: makeAbortController().signal,
-            scheduleRecovery: () => Promise.resolve(),
+                return { kind: "ambiguous" as const };
+              }),
           },
-          onAdmitted: (id) => {
-            offered.push(id);
-          },
-        })
-      );
+          signal: makeAbortController().signal,
+          scheduleRecovery: () => Promise.resolve(),
+        },
+        onAdmitted: (id) => {
+          offered.push(id);
+        },
+      });
       expect(sent.status).toBe(202);
       expect(tokens).toHaveLength(1);
       const id = offered[0];
@@ -6124,6 +6122,151 @@ it("refuses another User's complete live proof at the Agent service before model
     })
   ));
 
+it("cannot release queued hosted work before its ordinary predecessor settles", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const predecessor = Promise.withResolvers<void>();
+      const service = makeAgentService({
+        environment: {
+          DB: db,
+          HOSTED_AI_MODEL: approvedWorkersAiModel,
+          AI: { run: () => Promise.reject(new Error("No admitted work")) },
+        },
+        userId: UserId.make(users[0]),
+        scheduleRecovery: () => Promise.resolve(),
+      });
+      let released = false;
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
+      const accepted = Option.getOrThrow(
+        service.accept({
+          request: new Request("https://coordinator.internal/hosted-turn", {
+            method: "POST",
+            body: "{}",
+          }),
+          preceding: predecessor.promise,
+        })
+      );
+      accepted.settled.then(
+        () => {
+          released = true;
+        },
+        () => undefined
+      );
+      try {
+        yield* Effect.yieldNow;
+        expect(vi.getTimerCount()).toBeGreaterThan(0);
+        yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(160_001));
+        vi.useRealTimers();
+        yield* Effect.tryPromise(() => service.recover());
+        for (let barrier = 0; barrier < 10; barrier += 1) {
+          yield* Effect.tryPromise(() => db.prepare("SELECT 1").first());
+        }
+        expect(released).toBe(false);
+      } finally {
+        vi.useRealTimers();
+        predecessor.resolve();
+        yield* Effect.tryPromise(() => accepted.settled);
+      }
+      expect(released).toBe(true);
+    })
+  ));
+
+it("bounds independent User retention at four and expires every selected User", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const current = now();
+      const scopedUsers = Array.from(
+        { length: 9 },
+        (_, index) => `a2000000-0000-4000-8000-${(index + 1).toString().padStart(12, "0")}`
+      );
+      yield* Effect.tryPromise(() =>
+        db.batch(
+          scopedUsers.flatMap((userId) => [
+            db
+              .prepare(
+                "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)"
+              )
+              .bind(userId, current),
+            db
+              .prepare(
+                "INSERT INTO hosted_compaction_attempts (user_id,day_ms,used) VALUES (?,0,1)"
+              )
+              .bind(userId),
+          ])
+        )
+      );
+      const filled = yield* Deferred.make<void>();
+      const release = Promise.withResolvers<void>();
+      let active = 0;
+      let maximum = 0;
+      let started = 0;
+      const controlled = new Proxy(db, {
+        get(target, property): unknown {
+          if (property === "prepare") {
+            return (sql: string): D1PreparedStatement => {
+              const statement = target.prepare(sql);
+              if (
+                sql !== "DELETE FROM hosted_confirmations WHERE user_id = ? AND expires_at_ms < ?"
+              ) {
+                return statement;
+              }
+              return new Proxy(statement, {
+                get(prepared, method): unknown {
+                  if (method === "bind") {
+                    return (
+                      ...values: Parameters<D1PreparedStatement["bind"]>
+                    ): D1PreparedStatement => {
+                      const bound = prepared.bind(...values);
+                      return new Proxy(bound, {
+                        get(native, operation): unknown {
+                          if (operation === "run") {
+                            return (): ReturnType<D1PreparedStatement["run"]> => {
+                              started++;
+                              maximum = Math.max(maximum, ++active);
+                              if (active === 4) Deferred.doneUnsafe(filled, Effect.void);
+                              return release.promise
+                                .then(() => native.run())
+                                .finally(() => {
+                                  active--;
+                                });
+                            };
+                          }
+                          const value: unknown = Reflect.get(native, operation);
+                          return typeof value === "function" ? value.bind(native) : value;
+                        },
+                      });
+                    };
+                  }
+                  const value: unknown = Reflect.get(prepared, method);
+                  return typeof value === "function" ? value.bind(prepared) : value;
+                },
+              });
+            };
+          }
+          const value: unknown = Reflect.get(target, property);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      const owner = yield* makeAgentRetention({ db: controlled })
+        .sweep(current)
+        .pipe(Effect.forkChild);
+      yield* Deferred.await(filled);
+      yield* Effect.yieldNow;
+      const held = { active, started, maximum };
+      release.resolve();
+      yield* Fiber.join(owner);
+      expect(held).toEqual({ active: 4, started: 4, maximum: 4 });
+      expect({ active, started, maximum }).toEqual({ active: 0, started: 9, maximum: 4 });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT count(*) AS retained FROM hosted_compaction_attempts").first()
+        )
+      ).toEqual({ retained: 0 });
+    })
+  ));
+
 it("contains retention persistence failure behind the closed Agent failure", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -6133,6 +6276,198 @@ it("contains retention persistence failure behind the closed Agent failure", () 
       assert.deepStrictEqual(outcome, Exit.fail(new AgentUnavailable()));
     })
   ));
+
+const closedContinuityFixture = Effect.fn(function* (db: D1Database) {
+  const caller = yield* Effect.tryPromise(() => subject(0));
+  const current = now();
+  const snapshot = Option.getOrThrow(
+    yield* readHostedSnapshot({ db, subject: caller, now: current })
+  );
+  const userId = UserId.make(users[0]);
+  const selection = selectHostedSession({ snapshot, userId, now: current });
+  const turnId = TranscriptTurnId.make(newId());
+  yield* admitHostedTurn({
+    db,
+    channel: { _tag: "Browser", subject: caller },
+    selection,
+    text: TranscriptText.make("Retained evidence"),
+    now: current,
+    id: turnId,
+  });
+  yield* finishHostedTurn({
+    db,
+    userId,
+    turnId,
+    startedAtMs: current,
+    result: { _tag: "Interrupted" },
+    subject: caller,
+    now: current,
+  });
+  return { caller, sessionId: selection.id, current };
+});
+
+const gateCompactionBatch = (
+  db: D1Database
+): Readonly<{ db: D1Database; dispatched: Promise<void>; release: () => void }> => {
+  const dispatched = Promise.withResolvers<void>();
+  const released = Promise.withResolvers<void>();
+  const controlled = new Proxy(db, {
+    get(target, property): unknown {
+      if (property === "batch") {
+        return (
+          statements: Parameters<D1Database["batch"]>[0]
+        ): ReturnType<D1Database["batch"]> => {
+          dispatched.resolve();
+          return released.promise.then(() => target.batch(statements));
+        };
+      }
+      const value: unknown = Reflect.get(target, property);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  return { db: controlled, dispatched: dispatched.promise, release: () => released.resolve() };
+};
+
+it("awaits a dispatched compaction commit before releasing an interrupted owner", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const fixture = yield* closedContinuityFixture(db);
+      const continuity = yield* readHostedContinuity({
+        db,
+        subject: fixture.caller,
+        sessionId: fixture.sessionId,
+        now: fixture.current,
+        admittedWhatsAppTurn: Option.none(),
+      });
+      const throughSequence = Option.getOrThrow(continuity.terminalThroughSequence);
+      const gate = gateCompactionBatch(db);
+      const controller = makeAbortController();
+      let settled = false;
+      const owner = yield* commitHostedCompaction({
+        db: gate.db,
+        subject: fixture.caller,
+        sessionId: fixture.sessionId,
+        continuity,
+        throughSequence,
+        text: "Compacted exact evidence",
+        signal: controller.signal,
+      }).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            settled = true;
+          })
+        ),
+        Effect.forkScoped
+      );
+      yield* Effect.tryPromise(() => gate.dispatched);
+      controller.abort();
+      const interrupted = yield* Fiber.interrupt(owner).pipe(Effect.forkChild);
+      yield* Effect.yieldNow;
+      yield* Effect.sync(() => expect(settled).toBe(false)).pipe(
+        Effect.ensuring(Effect.sync(gate.release))
+      );
+      yield* Fiber.join(interrupted);
+      expect(settled).toBe(true);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db.prepare("SELECT text FROM hosted_compacted_conversations").all()
+        )).results
+      ).toEqual([{ text: "Compacted exact evidence" }]);
+      expect(
+        (yield* Effect.tryPromise(() => db.prepare("SELECT id FROM transcript_entries").all()))
+          .results
+      ).toEqual([]);
+    }).pipe(Effect.scoped)
+  ));
+
+const continuityCorruptions = [
+  {
+    name: "Consent JSON",
+    snapshot: true,
+    sql: "UPDATE hosted_agent_sessions SET consent_basis_json = '{'",
+  },
+  {
+    name: "tool input JSON",
+    snapshot: false,
+    sql: "UPDATE transcript_entries SET kind = 'tool_call', text = NULL, iteration = 1, tool_call_id = 'broken', operation = 'transactions.listTransactions', input_json = '{' WHERE kind = 'user'",
+  },
+  {
+    name: "tool outcome JSON",
+    snapshot: false,
+    sql: "UPDATE transcript_entries SET kind = 'tool_result', text = NULL, iteration = 1, tool_call_id = 'broken', operation = 'transactions.listTransactions', outcome_json = '{' WHERE kind = 'user'",
+  },
+  {
+    name: "out-of-range timestamp",
+    snapshot: false,
+    sql: "UPDATE transcript_entries SET occurred_at_ms = 9000000000000000 WHERE kind = 'user'",
+  },
+];
+
+it.each(continuityCorruptions)(
+  "closes corrupt retained $name into typed failure without partial continuity or inference",
+  ({ snapshot, sql }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Effect.tryPromise(() => setup());
+        const fixture = yield* closedContinuityFixture(db);
+        // Fault injection only: legitimate owner writes retain the append-only production guard.
+        if (!snapshot) {
+          yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER transcript_no_update").run());
+        }
+        yield* Effect.tryPromise(() => db.prepare(sql).run());
+        const work = snapshot
+          ? readHostedSnapshot({ db, subject: fixture.caller, now: fixture.current }).pipe(
+              Effect.asVoid
+            )
+          : readHostedContinuity({
+              db,
+              subject: fixture.caller,
+              sessionId: fixture.sessionId,
+              now: fixture.current,
+              admittedWhatsAppTurn: Option.none(),
+            }).pipe(Effect.asVoid);
+        const exit = yield* Effect.exit(work);
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+          expect(Cause.hasDies(exit.cause)).toBe(false);
+          expect(Option.getOrThrow(Cause.findErrorOption(exit.cause))).toBeInstanceOf(
+            Schema.SchemaError
+          );
+        }
+        const model = vi.fn(() => Promise.resolve(reply("Must not run")));
+        const service = makeAgentService({
+          environment: {
+            DB: db,
+            KAPSO_API_KEY: "test-kapso-api-key",
+            HOSTED_AI_MODEL: approvedWorkersAiModel,
+            AI: { run: model },
+          },
+          userId: UserId.make(users[0]),
+          scheduleRecovery: () => Promise.resolve(),
+        });
+        const accepted = Option.getOrThrow(
+          service.accept({
+            request: new Request("https://coordinator.internal/hosted-turn", {
+              method: "POST",
+              body: encodeJson({
+                userId: fixture.caller.userId,
+                sessionId: fixture.caller.id,
+                digest: Array.from(fixture.caller.digest),
+                text: "A new Turn",
+              }),
+            }),
+            preceding: Promise.resolve(),
+          })
+        );
+        const response = yield* Effect.tryPromise(() => accepted.response);
+        yield* Effect.tryPromise(() => accepted.settled);
+        expect(response.status).toBe(503);
+        expect(yield* Effect.tryPromise(() => response.json())).toEqual({ status: "unavailable" });
+        expect(model).not.toHaveBeenCalled();
+      })
+    )
+);
 
 it("releases an admitted Consent basis only for its exact User and still-Pending Turn", () =>
   Effect.runPromise(
@@ -6165,5 +6500,75 @@ it("releases an admitted Consent basis only for its exact User and still-Pending
       });
       expect(yield* readAdmittedHostedConsent({ db, userId, turnId })).toEqual(Option.none());
       expect((yield* Effect.tryPromise(() => retained(db, users[1]))).results).toEqual([]);
+    })
+  ));
+
+it("uses the owner's Clock throughout hosted preflight, inference and delivery scheduling", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const caller = yield* Effect.tryPromise(() => subject(0));
+      const model = yield* Effect.tryPromise(() =>
+        inference(() => Promise.resolve(reply("Clock-owned reply")))
+      );
+      const liveClock = yield* Clock.Clock;
+      let decisionTime = (yield* Clock.currentTimeMillis) + 1_000;
+      const admittedAt = decisionTime;
+      const observed: Array<number> = [];
+      const scheduled: Array<number> = [];
+      const clock: Clock.Clock = {
+        currentTimeNanos: liveClock.currentTimeNanos,
+        currentTimeNanosUnsafe: () => liveClock.currentTimeNanosUnsafe(),
+        monotonicTimeNanos: liveClock.monotonicTimeNanos,
+        monotonicTimeNanosUnsafe: () => liveClock.monotonicTimeNanosUnsafe(),
+        sleep: (duration) => liveClock.sleep(duration),
+        currentTimeMillis: Effect.sync(() => decisionTime),
+        currentTimeMillisUnsafe: () => decisionTime,
+      };
+      const inheritedModel: HostedInferenceService = {
+        ...model,
+        prepareText: (input) =>
+          model.prepareText(input).pipe(
+            Effect.map((prepared) => ({
+              ...prepared,
+              execute: Effect.gen(function* () {
+                observed.push(yield* Clock.currentTimeMillis);
+                decisionTime += 1_000;
+                return yield* prepared.execute;
+              }),
+            }))
+          ),
+      };
+      const response = yield* completeHostedTurnWithAlarm({
+        db,
+        subject: caller,
+        bucket: Option.none(),
+        executeMutation: Option.none(),
+        text: TranscriptText.make("Clock-owned request"),
+        inference: inheritedModel,
+        deliver: browserHostedDelivery,
+        signal: makeAbortController().signal,
+        scheduleRecovery: (due) => {
+          scheduled.push(due);
+          return Promise.resolve();
+        },
+      }).pipe(Effect.provideService(Clock.Clock, clock));
+      expect(response.status).toBe(202);
+      expect(observed).toEqual([admittedAt]);
+      expect(scheduled).toEqual([
+        admittedAt + 135_000,
+        admittedAt + 1_000 + deliveryAcknowledgmentWindowMs,
+      ]);
+      const visible = yield* Schema.decodeUnknownEffect(VisibleReply)(
+        yield* Effect.tryPromise(() => response.json())
+      );
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT started_at_ms FROM hosted_turns WHERE id = ?")
+            .bind(visible.turnId)
+            .first()
+        )
+      ).toEqual({ started_at_ms: admittedAt });
     })
   ));

@@ -1,8 +1,16 @@
 import { afterAll, expect } from "vitest";
 import { it } from "@effect/vitest";
-import { DateTime, Effect, Option } from "effect";
+import { DateTime, Effect, Exit, Option, Schema } from "effect";
+import {
+  InsightTemplateConfiguration,
+  WeeklyQuestionTemplateConfiguration,
+} from "../../src/shell/channels/whatsapp/contract";
+import assert from "node:assert/strict";
+import { InsightUnavailable } from "./contract";
+import { executeProactivityWork } from "./runtime";
 import {
   findWeeklyGovernor,
+  materializeWeeklySummary,
   prepareWeeklyDeliverySettlement,
   prepareWeeklyQuestionDelivery,
 } from "./operations";
@@ -17,6 +25,101 @@ import {
 } from "../weekly-summary.test-fixture";
 
 afterAll(() => weeklySummaryTestDatabases.dispose());
+it.live("rejects corrupt retained pause dates before materializing any report", () =>
+  Effect.gen(function* () {
+    const db = yield* weeklySummaryTestDatabase;
+    const userId = weeklySummaryTestUser;
+    const schedule = yield* activateWeeklySummary({ db, now: weeklySummaryTestNow });
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare("INSERT INTO weekly_governors(user_id,paused_at_ms) VALUES(?,?)")
+        .bind(userId, 8_640_000_000_000_001)
+        .run()
+    );
+    assert.deepStrictEqual(
+      yield* Effect.exit(findWeeklyGovernor({ db, userId })),
+      Exit.fail(new InsightUnavailable())
+    );
+    assert.deepStrictEqual(
+      yield* Effect.exit(
+        materializeWeeklySummary({ db, userId, id: schedule.id, now: schedule.nextScheduledAt })
+      ),
+      Exit.fail(new InsightUnavailable())
+    );
+    expect(
+      (yield* Effect.tryPromise(() =>
+        db.prepare("SELECT id FROM insight_events WHERE user_id=?").bind(userId).all()
+      )).results
+    ).toEqual([]);
+    expect(
+      (yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT insight_event_id FROM weekly_summary_outbox WHERE user_id=?")
+          .bind(userId)
+          .all()
+      )).results
+    ).toEqual([]);
+  })
+);
+it.live("rejects a corrupt retained question origin without staging or sending work", () =>
+  Effect.gen(function* () {
+    const db = yield* weeklySummaryTestDatabase;
+    const userId = weeklySummaryTestUser;
+    const id = "11111111-1111-4111-8111-111111111114";
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(
+          "INSERT INTO weekly_question_intents(id,user_id,origin,created_at_ms) VALUES(?,?,'requested',?)"
+        )
+        .bind(id, userId, 8_640_000_000_000_001)
+        .run()
+    );
+    assert.deepStrictEqual(
+      yield* Effect.exit(
+        executeProactivityWork({
+          userId,
+          work: { kind: "weekly-question", version: 1, userId, id },
+          now: weeklySummaryTestNow,
+          environment: {
+            DB: db,
+            KAPSO_API_KEY: "provider-test-key",
+            WEEKLY_SUMMARY_ENABLED: "enabled",
+            WEEKLY_SUMMARY_TEMPLATE_JSON: yield* Schema.encodeEffect(
+              Schema.fromJsonString(InsightTemplateConfiguration)
+            )({
+              name: "fidy_weekly_summary",
+              language: "es",
+              approval: "approved",
+              body: "Tu resumen semanal: {{1}} Consulta tus movimientos en Fidy.",
+            }),
+            WEEKLY_QUESTION_TEMPLATE_JSON: yield* Schema.encodeEffect(
+              Schema.fromJsonString(WeeklyQuestionTemplateConfiguration)
+            )({
+              name: "fidy_weekly_question",
+              language: "es",
+              approval: "approved",
+              body: "Fidy: {{1}}",
+            }),
+          },
+        })
+      ),
+      Exit.fail(new InsightUnavailable())
+    );
+    expect(
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("SELECT state FROM weekly_question_intents WHERE user_id=? AND id=?")
+          .bind(userId, id)
+          .first()
+      )
+    ).toEqual({ state: "ready" });
+    expect(
+      (yield* Effect.tryPromise(() =>
+        db.prepare("SELECT id FROM weekly_governor_questions WHERE user_id=?").bind(userId).all()
+      )).results
+    ).toEqual([]);
+  })
+);
 it.live(
   "a re-enabled User with permanent no history continues past the threshold without another question or unverified pause",
   () =>

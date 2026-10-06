@@ -29,13 +29,18 @@ class InspectorIoError extends Data.TaggedError("InspectorIoError")<{
   readonly cause: unknown;
 }> {}
 
-const fetchTargets = (
-  port: number,
-  signal?: AbortSignal
-): Effect.Effect<unknown, InspectorIoError> =>
+const withInspectorDeadline = <A, E, R>(
+  effect: Effect.Effect<A, E, R>
+): Effect.Effect<A, InspectorIoError, R> =>
+  effect.pipe(
+    Effect.timeout("30 seconds"),
+    Effect.mapError((cause) => new InspectorIoError({ cause }))
+  );
+
+const fetchTargets = (port: number): Effect.Effect<unknown, InspectorIoError> =>
   Effect.tryPromise({
     try: (requestSignal) =>
-      requestWorkerd({ method: "GET", port, path: "/json", signal: signal ?? requestSignal }),
+      requestWorkerd({ method: "GET", port, path: "/json", signal: requestSignal }),
     catch: (cause) => new InspectorIoError({ cause }),
   }).pipe(
     Effect.flatMap((response) =>
@@ -54,12 +59,15 @@ export const inspectorTarget = ({
   Effect.runPromise(
     Effect.gen(function* () {
       const targets = yield* Schema.decodeUnknownEffect(InspectorTargets)(
-        yield* fetchTargets(port, Option.getOrUndefined(signal))
+        yield* fetchTargets(port)
       );
       const target = targets[0];
-      if (target === undefined) throw new Error("Workerd inspector target is unavailable");
+      if (target === undefined) {
+        return yield* new InspectorIoError({ cause: "Workerd inspector target is unavailable" });
+      }
       return target.webSocketDebuggerUrl;
-    })
+    }).pipe(withInspectorDeadline),
+    { signal: Option.getOrUndefined(signal) }
   );
 
 type InspectorContext<A> = {
@@ -162,7 +170,7 @@ const inspectSocket = <A>(
         if (Option.isSome(options.onFailure)) options.onFailure.value();
       }
     });
-  });
+  }).pipe(withInspectorDeadline);
 
 const activeCpuMilliseconds = (message: string): number => {
   const result = Schema.decodeSync(Schema.fromJsonString(CpuProfileResponse))(message);

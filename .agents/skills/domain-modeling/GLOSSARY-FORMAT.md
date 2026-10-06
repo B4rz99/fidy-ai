@@ -40,9 +40,9 @@ _Avoid_: Client, buyer, account
 
 ## Contexts
 
-- [Ordering](./src/ordering/GLOSSARY.md) — receives and tracks customer orders
-- [Billing](./src/billing/GLOSSARY.md) — generates invoices and processes payments
-- [Fulfillment](./src/fulfillment/GLOSSARY.md) — manages warehouse picking and shipping
+- [Ordering](./src/ordering/GLOSSARY.md): receives and tracks customer orders
+- [Billing](./src/billing/GLOSSARY.md): generates invoices and processes payments
+- [Fulfillment](./src/fulfillment/GLOSSARY.md): manages warehouse picking and shipping
 
 ## Relationships
 

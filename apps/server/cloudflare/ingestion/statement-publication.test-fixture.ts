@@ -51,7 +51,11 @@ export const stageOwnedStatement = ({
   Effect.runPromise(
     Effect.gen(function* () {
       const subject = yield* Effect.tryPromise(() =>
-        transactionSession({ db: storage.db, request: requestForOwner(index) })
+        transactionSession({
+          db: storage.db,
+          request: requestForOwner(index),
+          current: currentMillis(),
+        })
       );
       if (Option.isNone(subject)) return unauthenticated();
       return yield* uploadStagedStatement({
@@ -100,7 +104,11 @@ const publicationAbort = ({
     if (
       Option.isNone(
         yield* Effect.tryPromise(() =>
-          transactionSession({ db: storage.db, request: requestForOwner(index) })
+          transactionSession({
+            db: storage.db,
+            request: requestForOwner(index),
+            current: currentMillis(),
+          })
         )
       )
     ) {
@@ -155,7 +163,11 @@ export const publishOwnedStatement = ({
   Effect.runPromise(
     Effect.gen(function* () {
       const subject = yield* Effect.tryPromise(() =>
-        transactionSession({ db: storage.db, request: requestForOwner(input.index) })
+        transactionSession({
+          db: storage.db,
+          request: requestForOwner(input.index),
+          current: currentMillis(),
+        })
       );
       if (Option.isNone(subject)) return unauthenticated();
       const current = currentMillis();

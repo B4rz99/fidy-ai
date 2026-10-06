@@ -445,6 +445,7 @@ const TransactionResources = ({
       <ManualTransactionCapture
         apiClient={router.options.context.apiClient}
         timeZone={currentUser.timeZone}
+        onCheckHistory={retry}
         onCreated={(transaction) => {
           setCaptured(Option.some(transaction));
           retry();

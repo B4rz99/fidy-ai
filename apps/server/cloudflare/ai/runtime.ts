@@ -9,7 +9,7 @@ import { sweepExpiredWorkersAiAdmission as expireAdmission } from "./internal/ad
 import {
   type HostedInferenceError,
   type HostedInferenceService,
-  type WorkersAiBindingRun,
+  type WorkersAiRun,
 } from "../../src/shell/hosted-inference/contract";
 
 /**
@@ -29,18 +29,14 @@ const constructInference = (
   return makeWorkersAiHostedInference({
     model: Option.fromNullishOr(environment.HOSTED_AI_MODEL),
     run: Option.map(binding, (ai) => {
-      const run: WorkersAiBindingRun = (model, request, options) =>
-        observeModelRun(
-          () =>
-            ai.run(model, request, {
-              returnRawResponse: options.returnRawResponse,
-              signal: options.signal,
-            }),
-          { environment, telemetry: cloudflareWorkerTelemetry }
+      const run: WorkersAiRun = (model, request) =>
+        Effect.tryPromise((signal) =>
+          observeModelRun(() => ai.run(model, request, { returnRawResponse: true, signal }), {
+            environment,
+            telemetry: cloudflareWorkerTelemetry,
+          })
         );
-      return admission === undefined
-        ? run
-        : makeAdmittedWorkersAiRun({ ...admission, run, nowEpochMs: Date.now });
+      return admission === undefined ? run : makeAdmittedWorkersAiRun({ ...admission, run });
     }),
   });
 };

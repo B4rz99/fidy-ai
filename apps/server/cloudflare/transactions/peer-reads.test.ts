@@ -1,5 +1,5 @@
 import { afterAll, expect, it } from "vitest";
-import { type Cause, DateTime, Effect, Option, Schema } from "effect";
+import { type Cause, DateTime, Effect, Exit, Option, Schema } from "effect";
 import { UserContext, UserId } from "../../src/core/identity/contract";
 
 import { Currency, encodeMoneyAmount } from "../../src/core/_shared/money";
@@ -7,7 +7,7 @@ import { CategoryId } from "../../src/core/categories/contract";
 import { prepareUserContext } from "../identity/user-context/operations";
 import { listCategories } from "../categories/operations";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
-import type { BudgetContributionQuery } from "./contract";
+import { type BudgetContributionQuery, TransactionAggregatesUnavailable } from "./contract";
 import {
   findRecurringSnapshot,
   preparePeriodAggregateGuard,
@@ -216,6 +216,33 @@ it("rolls back stale aggregate publication and distinguishes authorized empty hi
           .run()
       );
       expect(Option.isNone(yield* readCompletePeriodAggregates(query))).toBe(true);
+    })
+  ));
+
+it("fails malformed retained aggregate precision through the published typed channel", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() => movement(db, 1, { amount: "1" }).run());
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "UPDATE dashboard_projection_digit SET digit_sum = CASE WHEN position = 0 THEN 1 ELSE 0 END WHERE user_id = ?"
+          )
+          .bind(userId)
+          .run()
+      );
+      const outcome = yield* Effect.exit(
+        readCompletePeriodAggregates({
+          db,
+          userId: UserId.make(userId),
+          periods: [
+            { from, toExclusive: to },
+            { from: DateTime.makeUnsafe("2026-04-01T05:00:00.000Z"), toExclusive: from },
+          ],
+        })
+      );
+      expect(outcome).toEqual(Exit.fail(new TransactionAggregatesUnavailable()));
     })
   ));
 

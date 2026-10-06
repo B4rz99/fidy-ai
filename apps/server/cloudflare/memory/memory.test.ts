@@ -13,6 +13,7 @@ import { Memory, MemoryId, maximumAggregateMemoryTokens } from "../../src/core/m
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { UserTransactionCoordinator } from "../transactions/runtime";
+import { recallMemories } from "./operations";
 
 class TestPromiseFailure extends Data.TaggedError("TestPromiseFailure")<{ cause: unknown }> {}
 const fromTestPromise = <A>(promise: () => PromiseLike<A>): Effect.Effect<A> =>
@@ -892,5 +893,50 @@ it("keeps retained prose out of logs and bounded telemetry records", () =>
       // The captured records are the Worker's own telemetry, so containment is not vacuous.
       expect(captured.some((line) => line.includes("worker.core.fetch"))).toBe(true);
       expect(captured.some((line) => line.includes(canary))).toBe(false);
+    })
+  ));
+
+it("rechecks Memory recall under the caller's Clock at WebSession expiry", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromTestPromise(setup);
+      const session = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          created_at_ms: Schema.Finite,
+          idle_expires_at_ms: Schema.Finite,
+        })
+      )(
+        yield* fromTestPromise(() =>
+          db
+            .prepare("SELECT created_at_ms,idle_expires_at_ms FROM web_sessions WHERE id = ?")
+            .bind(sessions[0])
+            .first()
+        )
+      );
+      const liveClock = yield* Clock.Clock;
+      const atTime = (time: number): Clock.Clock => ({
+        currentTimeMillis: Effect.succeed(time),
+        currentTimeMillisUnsafe: () => time,
+        currentTimeNanos: liveClock.currentTimeNanos,
+        currentTimeNanosUnsafe: () => liveClock.currentTimeNanosUnsafe(),
+        monotonicTimeNanos: liveClock.monotonicTimeNanos,
+        monotonicTimeNanosUnsafe: () => liveClock.monotonicTimeNanosUnsafe(),
+        sleep: (duration) => liveClock.sleep(duration),
+      });
+      const work = recallMemories({
+        db,
+        subject: {
+          userId: users[0],
+          id: sessions[0],
+          digest: yield* fromTestPromise(() => digest(bearer(0))),
+        },
+      });
+      expect(
+        (yield* work.pipe(Effect.provideService(Clock.Clock, atTime(session.created_at_ms)))).status
+      ).toBe(200);
+      expect(
+        (yield* work.pipe(Effect.provideService(Clock.Clock, atTime(session.idle_expires_at_ms))))
+          .status
+      ).toBe(401);
     })
   ));

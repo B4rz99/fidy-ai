@@ -2,7 +2,6 @@ import { strict as assert } from "node:assert";
 import { it } from "@effect/vitest";
 import { Effect, Exit, Ref, Schema } from "effect";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
-import { CreateTransactionInput } from "~/core/transactions/contract";
 import { type HostedInferenceService, type HostedTextResult } from "./contract";
 import { makeHostedInferenceStub, verifyHostedInferenceConformanceChecks } from "./operations";
 
@@ -20,7 +19,7 @@ const result = (
 
 const conformanceStub = (
   firstText: string,
-  amount = representativeAmount,
+  amount: number | string = representativeAmount,
   occurredAt = "2026-09-22T12:00:00Z"
 ): Effect.Effect<HostedInferenceService> =>
   Effect.gen(function* () {
@@ -40,13 +39,13 @@ const conformanceStub = (
                   CanonicalOperationId.make("transactions.listTransactions"),
                 params:
                   policy.availableOperations[0] === "transactions.createTransaction"
-                    ? Schema.decodeSync(Schema.Struct({ payload: CreateTransactionInput }))({
+                    ? {
                         payload: {
                           money: { amount: String(amount), currency: "COP" },
                           direction: "outflow",
                           occurredAt,
                         },
-                      })
+                      }
                     : { query: {} },
               },
             ])
@@ -66,11 +65,24 @@ const conformanceStub = (
     });
   });
 
-it.effect("accepts canonical tools, corrected repeated rounds, structured output, and es-CO", () =>
-  Effect.gen(function* () {
-    const inference = yield* conformanceStub("inválido");
+it.effect(
+  "accepts wire tool arguments, corrected repeated rounds, structured output, and es-CO",
+  () =>
+    Effect.gen(function* () {
+      const inference = yield* conformanceStub("inválido");
 
-    yield* verifyHostedInferenceConformanceChecks(inference);
+      yield* verifyHostedInferenceConformanceChecks(inference);
+    })
+);
+
+it.effect("rejects malformed wire Money before checking the requested amount", () =>
+  Effect.gen(function* () {
+    const inference = yield* conformanceStub("inválido", "not-money");
+
+    assert.deepStrictEqual(
+      yield* Effect.exit(verifyHostedInferenceConformanceChecks(inference)),
+      Exit.fail({ check: "canonical_mutation", category: "InvalidOutput" })
+    );
   })
 );
 

@@ -59,29 +59,46 @@ export type NequiFields = Readonly<{
 }>;
 export type PaymentFields = CardFields | NequiFields;
 
+type SubmissionOptions = Readonly<{
+  fields: Option.Option<PaymentFields>;
+  signal: Option.Option<AbortSignal>;
+}>;
+
 export type EnrollmentGateway = Readonly<{
-  availability: () => Promise<EnrollmentAvailability>;
+  availability: (signal?: AbortSignal) => Promise<EnrollmentAvailability>;
   startDaviplata: (
     enrollment: PreparedEnrollment,
     billingEmail: string,
     fields: DaviplataFields & Readonly<{ signal: AbortSignal }>
   ) => Promise<DaviplataChallenge>;
-  prepare: (priceId: PriceId, method?: EnrollmentMethod) => Promise<Enrollment>;
+  prepare: (
+    priceId: PriceId,
+    method?: EnrollmentMethod,
+    signal?: AbortSignal
+  ) => Promise<Enrollment>;
   submit: (
     enrollment: PreparedEnrollment,
     billingEmail: string,
-    fields?: PaymentFields
+    options?: SubmissionOptions
   ) => Promise<PaymentSubmission>;
   continue: (
     enrollmentId: PreparedEnrollment["enrollmentId"],
-    billingEmail: string
+    billingEmail: string,
+    signal?: AbortSignal
   ) => Promise<PaymentSubmission>;
   observeBillingAttempt: (
     enrollmentId: PreparedEnrollment["enrollmentId"],
-    billingAttemptId: PendingPayment["billingAttempt"]["id"]
+    billingAttemptId: PendingPayment["billingAttempt"]["id"],
+    signal?: AbortSignal
   ) => Promise<PaymentSubmission>;
-  status: (enrollmentId: PreparedEnrollment["enrollmentId"]) => Promise<Enrollment>;
-  resume: (enrollmentId: PreparedEnrollment["enrollmentId"]) => Promise<
+  status: (
+    enrollmentId: PreparedEnrollment["enrollmentId"],
+    signal?: AbortSignal
+  ) => Promise<Enrollment>;
+  resume: (
+    enrollmentId: PreparedEnrollment["enrollmentId"],
+    signal?: AbortSignal
+  ) => Promise<
     Option.Option<
       Readonly<{
         submission: PaymentSubmission;
@@ -90,6 +107,9 @@ export type EnrollmentGateway = Readonly<{
     >
   >;
 }>;
+
+const executionOptions = (signal?: AbortSignal): Partial<Readonly<{ signal: AbortSignal }>> =>
+  signal === undefined ? {} : { signal };
 
 type PaymentRequestStore = Map<string, ReturnType<typeof PaymentRequestId.make>>;
 const paymentRequestStoragePrefix = "fidy.payment-request.";
@@ -151,64 +171,81 @@ const submissionFacts = (
     authorizedRecurringCharges: true,
   }),
 });
-const submitNewSource = (
-  input: Readonly<{
-    client: SubscriptionEnrollmentClient;
-    enrollment: PreparedEnrollment;
-    facts: SubmissionFacts;
-    fields: PaymentFields;
-  }>
-): Promise<PaymentSubmission> => {
-  const { client, enrollment, facts, fields } = input;
-  if (enrollment.method === "nequi") {
-    if (!("method" in fields)) {
-      return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
+type NewSourceInput = Readonly<{
+  client: SubscriptionEnrollmentClient;
+  enrollment: PreparedEnrollment;
+  facts: SubmissionFacts;
+  fields: PaymentFields;
+  signal: Option.Option<AbortSignal>;
+}>;
+
+const submitNequiSource = ({
+  client,
+  enrollment,
+  facts,
+  fields,
+  signal,
+}: Omit<NewSourceInput, "fields"> &
+  Readonly<{ fields: NequiFields }>): Promise<PaymentSubmission> =>
+  client.execute(
+    (transport) =>
+      authorizeNequiWithWompi({
+        publicKey: enrollment.wompiPublicKey,
+        phoneNumber: fields.phoneNumber,
+        fetchImplementation: globalThis.fetch.bind(globalThis),
+        onAwaiting: fields.onAwaiting,
+      }).pipe(
+        Effect.flatMap((nequiToken) =>
+          transport.subscriptionEnrollment
+            .submit({
+              payload: {
+                paymentSourceMode: "create",
+                method: "nequi",
+                ...facts,
+                nequiToken,
+              },
+            })
+            .pipe(Effect.ensuring(Effect.sync(() => Redacted.wipeUnsafe(nequiToken))))
+        )
+      ),
+    {
+      signal: Option.match(signal, {
+        onNone: () => fields.signal,
+        onSome: (signal) => AbortSignal.any([fields.signal, signal]),
+      }),
     }
-    return client.execute(
-      (transport) =>
-        authorizeNequiWithWompi({
-          publicKey: enrollment.wompiPublicKey,
-          phoneNumber: fields.phoneNumber,
-          fetchImplementation: globalThis.fetch.bind(globalThis),
-          onAwaiting: fields.onAwaiting,
-        }).pipe(
-          Effect.flatMap((nequiToken) =>
-            transport.subscriptionEnrollment
-              .submit({
-                payload: {
-                  paymentSourceMode: "create",
-                  method: "nequi",
-                  ...facts,
-                  nequiToken,
-                },
-              })
-              .pipe(Effect.ensuring(Effect.sync(() => Redacted.wipeUnsafe(nequiToken))))
-          )
-        ),
-      { signal: fields.signal }
-    );
+  );
+
+const submitNewSource = (input: NewSourceInput): Promise<PaymentSubmission> => {
+  const { client, enrollment, facts, fields, signal } = input;
+  if (enrollment.method === "nequi") {
+    return "method" in fields
+      ? submitNequiSource({ ...input, fields })
+      : Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
   }
   if (enrollment.method !== "card" || "method" in fields) {
     return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
   }
-  return client.execute((transport) =>
-    tokenizeCardWithWompi(
-      enrollment.wompiPublicKey,
-      fields,
-      globalThis.fetch.bind(globalThis)
-    ).pipe(
-      Effect.map(Redacted.make),
-      Effect.flatMap((cardToken) =>
-        transport.subscriptionEnrollment.submit({
-          payload: {
-            paymentSourceMode: "create",
-            method: "card",
-            ...facts,
-            cardToken,
-          },
-        })
-      )
-    )
+  return client.execute(
+    (transport) =>
+      tokenizeCardWithWompi(
+        enrollment.wompiPublicKey,
+        fields,
+        globalThis.fetch.bind(globalThis)
+      ).pipe(
+        Effect.map(Redacted.make),
+        Effect.flatMap((cardToken) =>
+          transport.subscriptionEnrollment.submit({
+            payload: {
+              paymentSourceMode: "create",
+              method: "card",
+              ...facts,
+              cardToken,
+            },
+          })
+        )
+      ),
+    executionOptions(Option.getOrUndefined(signal))
   );
 };
 
@@ -217,27 +254,36 @@ const makeSubmit =
     clientService: SubscriptionEnrollmentClient,
     paymentRequests: PaymentRequestStore
   ): EnrollmentGateway["submit"] =>
-  (enrollment, billingEmail, fields) => {
+  (enrollment, billingEmail, options = { fields: Option.none(), signal: Option.none() }) => {
+    const { fields, signal } = options;
     globalThis.sessionStorage.setItem(billingEmailStorageKey(enrollment), billingEmail);
     const common = submissionFacts(paymentRequests, enrollment, billingEmail);
     if (enrollment.paymentSourceMode === "reuse") {
       return completed(
         paymentRequests,
         enrollment,
-        clientService.execute((client) =>
-          client.subscriptionEnrollment.submit({
-            payload: { paymentSourceMode: "reuse", ...common },
-          })
+        clientService.execute(
+          (client) =>
+            client.subscriptionEnrollment.submit({
+              payload: { paymentSourceMode: "reuse", ...common },
+            }),
+          executionOptions(Option.getOrUndefined(signal))
         )
       );
     }
-    if (fields === undefined) {
+    if (Option.isNone(fields)) {
       return Effect.runPromise(Effect.fail(new EnrollmentSubmissionFailed()));
     }
     return completed(
       paymentRequests,
       enrollment,
-      submitNewSource({ client: clientService, enrollment, facts: common, fields })
+      submitNewSource({
+        client: clientService,
+        enrollment,
+        facts: common,
+        fields: fields.value,
+        signal,
+      })
     );
   };
 
@@ -246,25 +292,27 @@ const makeContinue =
     clientService: SubscriptionEnrollmentClient,
     paymentRequests: PaymentRequestStore
   ): EnrollmentGateway["continue"] =>
-  (enrollmentId, billingEmail) => {
+  (enrollmentId, billingEmail, signal) => {
     const enrollment = { enrollmentId };
     return completed(
       paymentRequests,
       enrollment,
-      clientService.execute((client) =>
-        client.subscriptionEnrollment.submit({
-          payload: {
-            paymentSourceMode: "reuse",
-            enrollmentId,
-            paymentRequestId: paymentRequestFor(paymentRequests, enrollment),
-            billingEmail: BillingEmail.make(billingEmail),
-            decisions: EnrollmentDecisions.make({
-              acceptedEndUserPolicy: true,
-              acceptedPersonalDataAuthorization: true,
-              authorizedRecurringCharges: true,
-            }),
-          },
-        })
+      clientService.execute(
+        (client) =>
+          client.subscriptionEnrollment.submit({
+            payload: {
+              paymentSourceMode: "reuse",
+              enrollmentId,
+              paymentRequestId: paymentRequestFor(paymentRequests, enrollment),
+              billingEmail: BillingEmail.make(billingEmail),
+              decisions: EnrollmentDecisions.make({
+                acceptedEndUserPolicy: true,
+                acceptedPersonalDataAuthorization: true,
+                authorizedRecurringCharges: true,
+              }),
+            },
+          }),
+        executionOptions(signal)
       )
     );
   };
@@ -336,11 +384,14 @@ export const makeEnrollmentGateway = (
 ): EnrollmentGateway => {
   const paymentRequests: PaymentRequestStore = new Map();
   return {
-    availability: () =>
-      clientService.execute((client) => client.subscriptionEnrollment.availability({})),
+    availability: (signal) =>
+      clientService.execute(
+        (client) => client.subscriptionEnrollment.availability({}),
+        executionOptions(signal)
+      ),
     startDaviplata: makeStartDaviplata(clientService, paymentRequests),
     continue: makeContinue(clientService, paymentRequests),
-    resume: (enrollmentId) => {
+    resume: (enrollmentId, signal) => {
       const enrollment = { enrollmentId };
       const paymentRequest = Schema.decodeUnknownOption(PaymentRequestId)(
         globalThis.sessionStorage.getItem(paymentRequestStorageKey(enrollment))
@@ -352,17 +403,19 @@ export const makeEnrollmentGateway = (
         return Promise.resolve(Option.none());
       }
       paymentRequests.set(enrollmentId, paymentRequest.value);
-      return makeContinue(clientService, paymentRequests)(enrollmentId, email.value).then(
+      return makeContinue(clientService, paymentRequests)(enrollmentId, email.value, signal).then(
         (submission) => Option.some({ submission, billingEmail: email.value })
       );
     },
-    observeBillingAttempt: (enrollmentId, billingAttemptId) =>
+    observeBillingAttempt: (enrollmentId, billingAttemptId, signal) =>
       completed(
         paymentRequests,
         { enrollmentId },
         clientService
-          .execute((client) =>
-            client.subscriptionEnrollment.billingAttempt({ params: { billingAttemptId } })
+          .execute(
+            (client) =>
+              client.subscriptionEnrollment.billingAttempt({ params: { billingAttemptId } }),
+            executionOptions(signal)
           )
           .then((billingAttempt) => ({
             status: "payment-pending" as const,
@@ -370,13 +423,15 @@ export const makeEnrollmentGateway = (
             billingAttempt,
           }))
       ),
-    prepare: (priceId, method = "card") =>
-      clientService.execute((client) =>
-        client.subscriptionEnrollment.prepare({ payload: { priceId, method } })
+    prepare: (priceId, method = "card", signal) =>
+      clientService.execute(
+        (client) => client.subscriptionEnrollment.prepare({ payload: { priceId, method } }),
+        executionOptions(signal)
       ),
-    status: (enrollmentId) =>
-      clientService.execute((client) =>
-        client.subscriptionEnrollment.status({ params: { enrollmentId } })
+    status: (enrollmentId, signal) =>
+      clientService.execute(
+        (client) => client.subscriptionEnrollment.status({ params: { enrollmentId } }),
+        executionOptions(signal)
       ),
     submit: makeSubmit(clientService, paymentRequests),
   };

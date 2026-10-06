@@ -1,5 +1,5 @@
 import { readFile, stat } from "node:fs/promises";
-import { Data, Effect, Option, Schema } from "effect";
+import { type Cause, Data, Effect, Option, Schema } from "effect";
 import { requestWorkerd } from "./local-workerd-http";
 import { heapUsage, inspectorTarget, profileWorkerRequest } from "./workerd-inspector";
 
@@ -71,7 +71,7 @@ export type ExtractionProof = BuiltProof &
 
 class ProofIoError extends Data.TaggedError("ProofIoError")<{ readonly cause: unknown }> {}
 
-type ProofError = ProofIoError | Schema.SchemaError;
+type ProofError = ProofIoError | Schema.SchemaError | Cause.TimeoutError;
 
 const fromPromise = <A>(run: (signal: AbortSignal) => Promise<A>): Effect.Effect<A, ProofIoError> =>
   Effect.tryPromise({ try: run, catch: (cause) => new ProofIoError({ cause }) });
@@ -157,7 +157,7 @@ const waitUntilReady = Effect.gen(function* () {
     if (ready) return;
   }
   throw new Error("Document extraction workerd did not start");
-});
+}).pipe(Effect.timeout("15 seconds"));
 
 const profileSuccessfulConversion = (
   debuggerUrl: string,

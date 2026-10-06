@@ -2,6 +2,8 @@ import { loadsSavedHistory } from "./history-allowance";
 import { prepareConsumption, quotaFailure } from "../../quotas/operations";
 import { allowancePeriod } from "../../../src/core/quotas/operations";
 import {
+  prepareReminderPauseNotice,
+  prepareReminderPauseNoticeCompletion,
   prepareWeeklyPauseNotice,
   prepareWeeklyPauseNoticeCompletion,
 } from "../../insights/operations";
@@ -847,6 +849,15 @@ export const admitHostedTurn = ({
       WHERE id = ? AND user_id = ? AND status = 'pending'`)
           .bind(entryId, now, text, id, subject.userId),
         ...channelStatements,
+        prepareReminderPauseNotice({
+          db,
+          userId: UserId.make(subject.userId),
+          turnId: id,
+          proof: {
+            sql: "SELECT 1 FROM hosted_turns WHERE user_id=? AND id=? AND status='pending'",
+            params: [subject.userId, id],
+          },
+        }),
         prepareWeeklyPauseNotice({
           db,
           userId: UserId.make(subject.userId),
@@ -1249,6 +1260,15 @@ const hostedFinishStatements = ({
       AND EXISTS (SELECT 1 FROM hosted_turns WHERE id = ? AND user_id = ? AND status <> 'pending')`)
       .bind(turnId, userId, turnId, userId),
     prepareWhatsAppWorkCleanup({ db, turnId, userId, requireTerminal: true }),
+    prepareReminderPauseNoticeCompletion({
+      db,
+      userId,
+      turnId,
+      proof: {
+        sql: "SELECT t.user_id,t.id AS turn_id,e.text FROM hosted_turns AS t JOIN transcript_entries AS e ON e.user_id=t.user_id AND e.turn_id=t.id WHERE t.user_id=? AND t.id=? AND t.status='completed' AND e.kind='assistant'",
+        params: [userId, turnId],
+      },
+    }),
     prepareWeeklyPauseNoticeCompletion({
       db,
       userId,

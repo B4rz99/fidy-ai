@@ -21,6 +21,17 @@ it("accepts exactly the canonical call outcome vocabulary", () => {
   expect(Result.isFailure(decodeOutcome("unknown"))).toBe(true);
 });
 
+it("attributes a held canonical call to its exact Turn without fabricating a WebSession", () => {
+  const decodeCaller = Schema.decodeUnknownResult(AuditCaller, { onExcessProperty: "error" });
+  const turnId = "f1d1a000-0000-4000-8000-000000000004";
+  expect(Result.isSuccess(decodeCaller({ _tag: "HostedTurn", turnId }))).toBe(true);
+  expect(Result.isFailure(decodeCaller({ _tag: "HostedTurn" }))).toBe(true);
+  expect(Result.isFailure(decodeCaller({ _tag: "HostedTurn", turnId: "not-a-uuid" }))).toBe(true);
+  expect(Result.isFailure(decodeCaller({ _tag: "HostedTurn", turnId, webSessionId: turnId }))).toBe(
+    true
+  );
+});
+
 it("attributes evidence to exactly one PAT, WebSession, or Hosted Agent Session caller", () => {
   const decodeCaller = Schema.decodeUnknownResult(AuditCaller, { onExcessProperty: "error" });
 

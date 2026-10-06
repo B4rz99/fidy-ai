@@ -1,6 +1,7 @@
 import { Config, Schema } from "effect";
 import { PATScopes } from "~/core/tokens/contract";
 import { weeklyDisclosure } from "~/shell/consent/internal/weekly-disclosure";
+import { proactivityDisclosure } from "~/shell/consent/internal/proactivity-disclosure";
 import { DisclosureSnapshot } from "~/core/consent/contract";
 import { decidePATRevocation } from "~/core/consent/operations";
 import { type OwnedStatement } from "~/shell/owner-write/contract";
@@ -37,10 +38,15 @@ import {
   type OAuthReplayConsentInput,
   type PATRevocationProtection,
   type PairedPATConsentInput,
+  type ProactivityOptInKind,
   type RevokeAllPATConsentsInput,
   type RevokeAllPairingConsentsInput,
   type RevokeOnePATConsentInput,
 } from "./contract";
+
+/** Exact category-specific disclosure. Neither returning it nor a model presenting its text establishes delivery or User agreement. */
+export const proactivityDisclosureFor = (kind: ProactivityOptInKind): DisclosureSnapshot =>
+  proactivityDisclosure(kind);
 
 /** Exact source-controlled contextual opt-in, independent of model-generated presentation. */
 export const weeklyDisclosureFor = (): DisclosureSnapshot => weeklyDisclosure();

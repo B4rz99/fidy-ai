@@ -1,3 +1,6 @@
+import * as proactivity from "./internal/proactivity-consent";
+import type { ProactivityOptInKind } from "../../src/shell/consent/contract";
+
 import { type ConsentProtectedStatement } from "../../src/shell/consent/contract";
 import { protectConsentStatement } from "../../src/shell/consent/operations";
 import { type Effect } from "effect";
@@ -25,7 +28,11 @@ import {
   prepareDecision,
 } from "./internal/weekly-consent";
 import type {
+  PreparedProactivityConsentDecision,
   PreparedWeeklyConsentDecision,
+  ProactivityConsentAction,
+  ProactivityConsentContext,
+  ProactivityConsentOffer,
   WeeklyConsentAction,
   WeeklyConsentContext,
   WeeklyConsentOffer,
@@ -34,6 +41,59 @@ import type {
 import type { ConsentRecord, ConsentRecordId } from "../../src/core/consent/contract";
 import type { UserId } from "../../src/core/identity/contract";
 import type { Option } from "effect";
+
+/** Decode only a complete qualified category choice; a category identity carries no decision authority. */
+export const readProactivityConsentChoiceKind: typeof proactivity.choiceKind = (choice) =>
+  proactivity.choiceKind(choice);
+/** Recognize exact same-User authenticated privacy-choice retries without granting permission or relying on provider/model availability. */
+export const hasProactivityConsentChoiceReceipt: typeof proactivity.hasChoiceReceipt = (input) =>
+  proactivity.hasChoiceReceipt(input);
+
+/** Independently erase at most 64 undecided expired offers after one further day. Accepted/rejected decisions and referenced legal evidence are not erased by operational cleanup. */
+export const sweepProactivityConsentOffers = (
+  input: Readonly<{ db: D1Database; nowEpochMs: number }>
+): Effect.Effect<void, ConsentUnavailable> => proactivity.sweepOffers(input);
+
+/** Create one bounded category-specific disclosure offer for an established authenticated WhatsAppIdentity under processing Consent. No delivery grant is inferred. */
+export const createProactivityConsentOffer = (
+  input: ProactivityConsentContext
+): Effect.Effect<Option.Option<ProactivityConsentOffer>, ConsentUnavailable> =>
+  proactivity.createOffer(input);
+
+/** Reuse one still-live authenticated category disclosure after interrupted contextual delivery preparation. */
+export const findCurrentProactivityOffer: typeof proactivity.findCurrentOffer = (input) =>
+  proactivity.findCurrentOffer(input);
+
+/** Compose authenticated exact offer delivery evidence with owner settlement; acceptance alone never establishes disclosure. */
+export const prepareVerifiedProactivityDisclosure: typeof proactivity.prepareVerifiedDisclosure = (
+  input
+) => proactivity.prepareVerifiedDisclosure(input);
+
+/** Retain the exact disclosure message id only from authenticated native channel send evidence, never a model or canonical caller. */
+export const recordProactivityConsentDisclosure = (
+  input: ProactivityConsentContext &
+    Readonly<{ offerId: ConsentRecordId; disclosureMessageId: string }>
+): Effect.Effect<boolean, ConsentUnavailable> => proactivity.discloseOffer(input);
+
+/** Prepare an exchange-qualified same-User choice. Commit legal evidence and execution standing together under the User coordinator; this is not a PAT or tool operation. */
+export const prepareProactivityConsentDecision = (
+  input: ProactivityConsentContext & Readonly<{ choice: string; decisionMessageId: string }>
+): Effect.Effect<Option.Option<PreparedProactivityConsentDecision>, ConsentUnavailable> =>
+  proactivity.prepareDecision(input);
+
+/** Observe category-specific historical legal standing, including for privacy controls after processing Consent withdrawal; returned evidence grants no later send authority. */
+export const findProactivityConsentGrant = (
+  input: Readonly<{ db: D1Database; userId: UserId; kind: ProactivityOptInKind }>
+): Effect.Effect<Option.Option<ConsentRecord>, ConsentUnavailable> => proactivity.findGrant(input);
+
+/** Project only a current live grant identity for atomic detection-time eligibility capture. A later grant cannot alter the committed fact. */
+export const currentProactivityGrantQuery: typeof proactivity.currentGrantQuery = (input) =>
+  proactivity.currentGrantQuery(input);
+
+/** Recheck the exact live category grant and current processing Consent in a caller-owned atomic action. */
+export const prepareProactivityConsentAction = (
+  input: ProactivityConsentAction
+): D1PreparedStatement => proactivity.guardedAction(input);
 
 /** Recognize an already applied qualified privacy choice without starting another operation. */
 export const hasWeeklyConsentChoiceReceipt: typeof hasChoiceReceipt = (input) =>

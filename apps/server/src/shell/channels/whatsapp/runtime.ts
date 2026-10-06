@@ -1,3 +1,5 @@
+import { buildProactivityTemplateSender } from "~/shell/channels/whatsapp/internal/proactivity-template";
+import type { ProactivityTemplateSender } from "./contract";
 import { buildWeeklyQuestionSender } from "~/shell/channels/whatsapp/internal/weekly-question";
 import { Option, type Redacted } from "effect";
 import { buildInsightTemplateSender } from "~/shell/channels/whatsapp/internal/insight-template";
@@ -22,6 +24,11 @@ export const makeInsightTemplateSender = (
     outboundHttp: OutboundHttpService;
   }>
 ): InsightTemplateSender => buildInsightTemplateSender(input);
+
+/** Freeze and send complete approved category content; stored template identity is checked again before provider egress. */
+export const makeProactivityTemplateSender = (
+  input: Readonly<{ configuration: unknown; outboundHttp: OutboundHttpService }>
+): ProactivityTemplateSender => buildProactivityTemplateSender(input);
 
 /** Build the separately approved full-disclosure sender at the bounded external-provider seam. */
 export const makeWeeklyQuestionSender = (

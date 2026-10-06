@@ -304,6 +304,37 @@ Operational Health observes bounded owner metadata and dead-letter signals separ
 reachability health. Unreadable measurements are unavailable, not zero. Operational procedures and
 limits belong in the [background-work runbook](../../docs/operations/cloudflare-background-work.md).
 
+Budget crossing snapshots, category-separated Budget/reminder Consent evidence, and guarded reminder
+instruction/revision/occurrence/outbox primitives are installed. Undecided expired offers have independent
+bounded Maintenance retention. Canonical reminder reads/edits now share installed HTTP/hosted owner
+selection, live credential/capability guards, optimistic revisions and Audit. Exact authenticated
+category-qualified channel decisions bypass inference and replay against immutable Consent receipts;
+privacy revocation remains reachable after processing withdrawal. Contextual offers, fair bounded
+category discovery, Queue/Workflow delivery and independent reminder attention now use the existing
+User coordinator and one executable category outbox. Authenticated verified channel evidence commits
+atomically with disclosure, governor, grouped InsightEvent lifecycle and exact Agent Transcript
+settlement. Questions and offers retain standalone message Transcript identities without invented
+financial events or requested Turns; same-User replies recover retained message context. Pending or
+uncertain questions do not suspend scheduled reminders; only definitive failure or expiry before any
+channel send begins permits a fresh question identity. Channel-owned started identities guard expiry
+and recovery even if an outbox checkpoint was lost. First-Budget and contextual requests remain
+pending outside delivery hours without repeatedly charging generation admission. Their short-lived
+choices are created in an open window; exact request/report links recover expired never-started
+disclosures after Queue delay or window closing, without replacing started or ambiguous sends.
+Maintenance repairs lost outbox started checkpoints from channel-owned metadata before discovery.
+The shared content-free protocol and runtime are named Proactivity; Weekly identities retain only
+weekly-specific meaning, and the existing Queue/Workflow resource bindings remain unchanged.
+Retained report identities do not restrict ephemeral offer deletion. Retained Budget reconciliation
+work participates in fair bounded Maintenance discovery and drains under the same User coordinator
+before crossing publication. Budget opt-in first drains pre-opt-in work under its previous
+eligibility and atomically fences the new grant against any remaining reconciliation, so a delayed
+post-commit evaluation cannot turn earlier financial changes into retroactive delivery. Fresh reminder
+offers under an existing grant expose authenticated continuation as well as revocation; continuation
+reactivates stopped or paused schedules without replacing legal Consent. Cross-User standalone
+message context is denied at both the contextual owner and actual hosted inference boundaries.
+Installed implementation and test evidence do not constitute issue acceptance, template approval,
+or production enablement.
+
 Installed code does not by itself enable a channel or provider. In particular, forwarded-email
 routing remains disabled until institution Connection admission and authenticated institutional
 sender proof exist. Receipt/image acceptance atomically publishes commercial consumption,

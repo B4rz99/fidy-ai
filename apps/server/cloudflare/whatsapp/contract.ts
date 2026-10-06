@@ -23,8 +23,44 @@ import { Data, type DateTime, type Option, Schema } from "effect";
 import { type ConsentRecordId } from "../../src/core/consent/contract";
 import { type IanaTimeZone } from "../../src/core/_shared/context";
 import { type InsightEventId } from "../../src/core/insights/contract";
+import type { ProactivityTemplateSender } from "../../src/shell/channels/whatsapp/contract";
 import { type OwnedStatement } from "../../src/shell/owner-write/contract";
 
+/** Owner-supplied live report guard and captured grant; never Queue or request authority. */
+export type ProactivityChannelScope = Readonly<{
+  db: D1Database;
+  userId: UserId;
+  id: string;
+  now: DateTime.Utc;
+  guard: OwnedStatement;
+}> &
+  (
+    | Readonly<{
+        role: "budget-threshold" | "manual-entry-reminder" | "reminder-question";
+        grantId: ConsentRecordId;
+      }>
+    | Readonly<{ role: "budget-offer" | "reminder-offer" }>
+  );
+export type ProactivityChannelStage = ProactivityChannelScope &
+  Readonly<{
+    recipient: InsightRecipient;
+    text: TranscriptText;
+    scheduledAt: DateTime.Utc;
+    expiresAt: DateTime.Utc;
+    timeZone: IanaTimeZone;
+    sender: ProactivityTemplateSender;
+  }>;
+export type ProactivityChannelClaim =
+  | Readonly<{ _tag: "NotClaimed" | "Expired" }>
+  | Readonly<{ _tag: "Deferred"; nextEligibleAt: DateTime.Utc }>
+  | Readonly<{
+      _tag: "Ready";
+      correlationToken: HostedDeliveryCorrelationToken;
+      request: Parameters<ProactivityTemplateSender["send"]>[0];
+    }>;
+export type ProactivityChannelReconciliation =
+  | Readonly<{ _tag: "Refused" | "Recorded" }>
+  | Readonly<{ _tag: "VerifiedDelivery"; userId: UserId; id: string }>;
 /** Exact provider-qualified route. Current Identity association must still be checked at egress. */
 export const InsightRecipient = Schema.Struct({
   portfolioId: WhatsAppBusinessPortfolioId,

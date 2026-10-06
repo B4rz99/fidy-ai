@@ -1,5 +1,5 @@
-import { WeeklyDeliveryWork } from "../../insights/contract";
-import { receiveWeeklyWork } from "../../insights/runtime";
+import { ProactivityDeliveryWork } from "../../insights/contract";
+import { receiveProactivityWork } from "../../insights/runtime";
 import { Clock, Data, Effect, Option, Schema } from "effect";
 import type { CoreQueueEnvironment } from "../contract";
 import {
@@ -144,9 +144,9 @@ const receiveIdentityOnlyQueue = ({
   batch,
   environment,
 }: QueueInput): Option.Option<Effect.Effect<void, QueueDeliveryUnavailable>> => {
-  if (batch.messages.some((message) => Schema.is(WeeklyDeliveryWork)(message.body))) {
+  if (batch.messages.some((message) => Schema.is(ProactivityDeliveryWork)(message.body))) {
     return Option.some(
-      receiveWeeklyWork({
+      receiveProactivityWork({
         messages: batch.messages,
         workflow: Option.fromUndefinedOr(environment.WEEKLY_DELIVERY_WORKFLOW),
         coordinator: environment.USER_TRANSACTION_COORDINATOR,

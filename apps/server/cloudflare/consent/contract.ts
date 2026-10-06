@@ -1,9 +1,50 @@
 import { type TranscriptTurnId } from "../../src/core/agent/contract";
-import { type OnboardingConsentBasis } from "../../src/shell/consent/contract";
+import {
+  type OnboardingConsentBasis,
+  type ProactivityOptInKind,
+} from "../../src/shell/consent/contract";
 import { Data, type DateTime, type Effect, type Option, Schema } from "effect";
 import { ConsentRecordId, DisclosureSnapshot } from "../../src/core/consent/contract";
 import type { UserId, WhatsAppCallerReference } from "../../src/core/identity/contract";
 import { type OwnedStatement } from "../../src/shell/owner-write/contract";
+
+/** Established authenticated native channel and explicit category, never model or PAT decision authority. */
+export type ProactivityConsentContext = Readonly<{
+  db: D1Database;
+  userId: UserId;
+  caller: WhatsAppCallerReference;
+  kind: ProactivityOptInKind;
+  now: DateTime.Utc;
+}>;
+
+/** Delivered exact disclosure with exchange-qualified explicit choices. */
+export type ProactivityConsentOffer = Readonly<{
+  id: ConsentRecordId;
+  expiresAt: DateTime.Utc;
+  disclosure: DisclosureSnapshot;
+  acceptChoice: string;
+  declineChoice: string;
+  revokeChoice: string;
+}>;
+
+/** Compose legal evidence with the same category's execution standing in one caller-owned User-coordinated atomic unit. */
+export type PreparedProactivityConsentDecision = Readonly<{
+  kind: ProactivityOptInKind;
+  statements: ReadonlyArray<D1PreparedStatement>;
+}> &
+  (
+    | Readonly<{ decision: "accept" | "continue" | "revoke"; grantId: ConsentRecordId }>
+    | Readonly<{ decision: "decline" }>
+  );
+
+/** Protect a caller-owned statement with the exact live category grant and processing Consent. */
+export type ProactivityConsentAction = Readonly<{
+  db: D1Database;
+  userId: UserId;
+  kind: ProactivityOptInKind;
+  grantId: ConsentRecordId;
+  statement: OwnedStatement;
+}>;
 
 /** Offer purpose and retry identity are explicit; short offers have no durable governor source. */
 export type WeeklyConsentOfferRequest =

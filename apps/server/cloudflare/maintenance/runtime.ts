@@ -41,9 +41,10 @@ import {
   sweepForwardedEmail,
   sweepMediaSubmissions,
 } from "../ingestion/runtime";
+import { sweepProactivityConsentOffers } from "../consent/runtime";
 import { sweepExpiredPATPairings } from "../tokens/runtime";
 import { sweepOAuthConfirmation } from "../oauth-confirmation/runtime";
-import { advanceWeeklyWork } from "../insights/runtime";
+import { advanceProactivityWork } from "../insights/runtime";
 import { advanceRecurringWork } from "../recurring/runtime";
 import { repairDashboardProjections } from "../transactions/runtime";
 import { dispatchWhatsAppWork, sweepExpiredWhatsAppWindows } from "../whatsapp/runtime";
@@ -138,6 +139,7 @@ const channelActivities = (
   nowEpochMs: number
 ): ReadonlyArray<ScheduledActivity> => [
   activity("consent.sweep", sweepExpiredConsent(environment.DB)()),
+  activity("consent.proactivityOfferRetention", sweepProactivityConsentOffers(environment.DB)),
   activity(
     "consent.disclosureRecovery",
     recoverPendingDisclosures({ db: environment.DB, apiKey: environment.KAPSO_API_KEY })
@@ -278,7 +280,7 @@ export const runCoreMaintenance = (
       activity("patPairing.sweep", sweepExpiredPATPairings(environment.DB)),
       activity("dashboard.projectionRepair", repairDashboardProjections(environment.DB)),
       activity("recurring.evaluate", advanceRecurringWork(environment)),
-      activity("insights.weekly.dispatch", advanceWeeklyWork(environment)),
+      activity("insights.weekly.dispatch", advanceProactivityWork(environment)),
       ...stagingActivities(environment, nowEpochMs),
       ...admissionActivities(environment, nowEpochMs, platform),
       ...statementActivities(environment),

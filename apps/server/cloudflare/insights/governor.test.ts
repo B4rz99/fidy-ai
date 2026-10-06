@@ -7,7 +7,7 @@ import {
 } from "../../src/shell/channels/whatsapp/contract";
 import assert from "node:assert/strict";
 import { InsightUnavailable } from "./contract";
-import { executeWeeklyWork } from "./runtime";
+import { executeProactivityWork } from "./runtime";
 import {
   findWeeklyGovernor,
   materializeWeeklySummary,
@@ -76,7 +76,7 @@ it.live("rejects a corrupt retained question origin without staging or sending w
     );
     assert.deepStrictEqual(
       yield* Effect.exit(
-        executeWeeklyWork({
+        executeProactivityWork({
           userId,
           work: { kind: "weekly-question", version: 1, userId, id },
           now: weeklySummaryTestNow,

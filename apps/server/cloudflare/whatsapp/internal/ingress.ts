@@ -41,6 +41,7 @@ import {
 } from "../contract";
 import { acceptWhatsAppMedia } from "../../ingestion/operations";
 import { findInsightDeliveryUser } from "./insight-delivery";
+import { findDeliveryUser } from "./proactivity-delivery";
 import { findWeeklyQuestionUser } from "./weekly-question";
 import { findWhatsAppDeliveryUser } from "./whatsapp-turn";
 
@@ -349,6 +350,7 @@ const findHostedStatusUser = (
 ): Effect.Effect<Option.Option<UserId>, void> =>
   Effect.gen(function* () {
     const candidates = [
+      findDeliveryUser(input).pipe(Effect.mapError(() => undefined)),
       findInsightDeliveryUser(input).pipe(Effect.mapError(() => undefined)),
       findWeeklyQuestionUser(input).pipe(Effect.mapError(() => undefined)),
       findWhatsAppDeliveryUser(input).pipe(Effect.mapError(() => undefined)),

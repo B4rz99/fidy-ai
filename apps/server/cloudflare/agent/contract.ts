@@ -4,14 +4,17 @@ import {
   HostedTurnReceipt,
   HostedTurnRequest,
 } from "../../src/shell/agent/contract";
-import type { WeeklyEnvironment } from "../insights/contract";
+import type { ProactivityEnvironment } from "../insights/contract";
 import type { WorkersAiEnvironment } from "../ai/contract";
 import {
+  type ProactiveTranscriptEntry,
   type ToolCallId,
   TranscriptText,
   type TranscriptTurnId,
 } from "../../src/core/agent/contract";
 import { UserId } from "../../src/core/identity/contract";
+/** Same-User verified proactive Transcript context; never a fabricated requested Turn or session. */
+export type ProactiveReplyContext = Readonly<{ userId: UserId; entry: ProactiveTranscriptEntry }>;
 /** Maximum time from a hosted reply proposal to authenticated visible delivery, in milliseconds. */
 export const deliveryAcknowledgmentWindowMs = 120_000;
 
@@ -55,7 +58,7 @@ export class AgentUnavailable extends Data.TaggedError("AgentUnavailable")<{}> {
 export type AgentEnvironment = Readonly<{ DB: D1Database }> &
   Partial<Readonly<{ STATEMENT_STAGING_BUCKET: R2Bucket; KAPSO_API_KEY: string }>> &
   WorkersAiEnvironment &
-  WeeklyEnvironment;
+  ProactivityEnvironment;
 /** Construct a hosted workflow for one explicit User; scheduleRecovery sets the coordinator's durable alarm. */
 export type AgentServiceInput = Readonly<{
   environment: AgentEnvironment;

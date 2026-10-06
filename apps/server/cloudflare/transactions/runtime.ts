@@ -1,6 +1,6 @@
 import { executeRefundSupportAdmission } from "../subscription/operations";
-import { WeeklyActivity, type WeeklyEnvironment } from "../insights/contract";
-import { executeWeeklyWork } from "../insights/runtime";
+import { ProactivityActivity, type ProactivityEnvironment } from "../insights/contract";
+import { executeProactivityWork } from "../insights/runtime";
 import { RecurringWork } from "../recurring/contract";
 import { evaluateRecurringSeries } from "../recurring/operations";
 import { makeAgentService } from "../agent/runtime";
@@ -77,7 +77,7 @@ type CoordinatorEnvironment = Readonly<{
     }>
   > &
   WorkersAiEnvironment &
-  WeeklyEnvironment;
+  ProactivityEnvironment;
 
 const executeStatementActivity = (
   activity: typeof StatementCoordinatorActivity.Type,
@@ -303,7 +303,7 @@ const privateOAuthCanonicalWork = (
     });
   });
 };
-const privateWeeklyActivity = (
+const privateProactivityActivity = (
   input: Readonly<{
     request: Request;
     candidate: unknown;
@@ -311,17 +311,20 @@ const privateWeeklyActivity = (
     userId: string;
   }>
 ): Option.Option<Effect.Effect<Response>> => {
-  if (input.request.method !== "POST" || new URL(input.request.url).pathname !== "/weekly-work") {
+  if (
+    input.request.method !== "POST" ||
+    new URL(input.request.url).pathname !== "/proactivity-work"
+  ) {
     return Option.none();
   }
-  const work = Schema.decodeUnknownOption(WeeklyActivity)(input.candidate);
+  const work = Schema.decodeUnknownOption(ProactivityActivity)(input.candidate);
   if (Option.isNone(work) || work.value.userId !== input.userId) {
     return Option.some(Effect.succeed(transactionUnavailable()));
   }
   return Option.some(
     DateTime.now.pipe(
       Effect.flatMap((now) =>
-        executeWeeklyWork({
+        executeProactivityWork({
           environment: input.environment,
           userId: UserId.make(input.userId),
           work: work.value,
@@ -335,7 +338,7 @@ const privateWeeklyActivity = (
 };
 
 const privateOwnerActivity = (
-  input: Parameters<typeof privateWeeklyActivity>[0]
+  input: Parameters<typeof privateProactivityActivity>[0]
 ): Option.Option<Effect.Effect<Response>> => {
   if (
     input.request.method === "POST" &&
@@ -350,7 +353,7 @@ const privateOwnerActivity = (
       })
     );
   }
-  return privateWeeklyActivity(input).pipe(
+  return privateProactivityActivity(input).pipe(
     Option.orElse(() => privateRecurringActivity(input)),
     Option.orElse(() => privateIngestionActivity(input))
   );

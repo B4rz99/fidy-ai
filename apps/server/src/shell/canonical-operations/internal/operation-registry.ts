@@ -45,6 +45,8 @@ export const canonicalOperationImplementations = {
   "ingestion.getEmailForwarding": unavailableOperation,
   "ingestion.getStatementSubmission": unavailableOperation,
   "ingestion.listNeedsReviewItems": unavailableOperation,
+  "insights.getReminderSchedule": unavailableOperation,
+  "insights.updateReminderSchedule": unavailableOperation,
   "insights.listPendingInsights": unavailableOperation,
   "recurring.listRecurringSeries": unavailableOperation,
   "memory.recall": unavailableOperation,

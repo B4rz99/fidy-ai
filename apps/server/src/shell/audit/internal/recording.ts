@@ -172,7 +172,10 @@ export const authorizedCallStatement = (input: AuthorizedAuditCall): OwnedStatem
   }
   const pat = authorityCaller(authority);
   const table = destination(operation, pat);
-  const credential = credentialColumn(table, pat);
+  const credential =
+    authority.table === "hosted_turns" && table === "insight_audit"
+      ? ["hosted_turn_id"]
+      : credentialColumn(table, pat);
   const recordedOutcome = outcomeColumns(table, outcome);
   const columns = [
     "id",

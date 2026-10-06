@@ -435,6 +435,21 @@
       }
     },
     {
+      "id": "insights.getReminderSchedule",
+      "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "user-owned-agent-scoped"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredTier": "free"
+      }
+    },
+    {
       "id": "insights.listPendingInsights",
       "policy": {
         "access": {
@@ -466,6 +481,21 @@
     },
     {
       "id": "insights.markInsightRead",
+      "policy": {
+        "access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "user-owned-agent-scoped"
+        },
+        "agentConfirmation": "required",
+        "kind": "mutation",
+        "requiredTier": "free"
+      }
+    },
+    {
+      "id": "insights.updateReminderSchedule",
       "policy": {
         "access": {
           "scope": {

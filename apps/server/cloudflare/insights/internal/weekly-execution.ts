@@ -30,14 +30,18 @@ import {
 } from "../../whatsapp/operations";
 import {
   InsightUnavailable,
-  type WeeklyActivity,
-  type WeeklyActivityResult,
-  type WeeklyEnvironment,
+  type ProactivityActivity,
+  type ProactivityActivityResult,
+  type ProactivityEnvironment,
   WeeklyThresholdConfiguration,
 } from "../contract";
 import { findReport, materialize, weeklyReportDeliveryQuery } from "./weekly-generation";
 import { findInsight } from "./insight-store";
-import { findQuestionOrigin, questionIntentQuery, settleDeliveryWork } from "./weekly-work";
+import {
+  findQuestionOrigin,
+  questionIntentQuery,
+  settleDeliveryWork,
+} from "./proactivity-delivery-work";
 
 export type WeeklySenders = Readonly<{
   summary: InsightTemplateSender;
@@ -46,12 +50,15 @@ export type WeeklySenders = Readonly<{
 type Execution = Readonly<{
   db: D1Database;
   userId: UserId;
-  work: Exclude<WeeklyActivity, { kind: "weekly-recover" }>;
+  work: Exclude<
+    ProactivityActivity,
+    { kind: "proactivity-recover" | "proactivity-generate" | "proactivity-delivery" }
+  >;
   now: DateTime.Utc;
   senders: WeeklySenders;
 }>;
 export const weeklyThresholds = (
-  environment: WeeklyEnvironment
+  environment: ProactivityEnvironment
 ): Effect.Effect<ProactivityThresholds, InsightUnavailable> =>
   Schema.decodeEffect(WeeklyThresholdConfiguration)({
     askAfter: environment.PROACTIVITY_ASK_AFTER ?? "4",
@@ -62,7 +69,7 @@ type SendEvidence = Readonly<{
   certainty: "accepted" | "ambiguous" | "rejected";
   providerMessageId: Option.Option<WhatsAppProviderMessageId>;
 }>;
-const sendEvidence = (
+export const sendEvidence = (
   sent: Exit.Exit<WhatsAppSentMessage, InsightTemplateUnavailable | WhatsAppSendFailed>
 ): SendEvidence => {
   if (Exit.isSuccess(sent)) {
@@ -85,8 +92,8 @@ const summaryOutcome = (sent: SendEvidence): InsightWhatsAppSendResult["outcome"
     : { kind: sent.certainty === "rejected" ? "rejected" : "ambiguous" };
 
 const deliverSummary = (
-  input: Execution & Readonly<{ work: Extract<WeeklyActivity, { kind: "weekly-summary" }> }>
-): Effect.Effect<WeeklyActivityResult, InsightUnavailable> =>
+  input: Execution & Readonly<{ work: Extract<ProactivityActivity, { kind: "weekly-summary" }> }>
+): Effect.Effect<ProactivityActivityResult, InsightUnavailable> =>
   Effect.gen(function* () {
     const { db, userId, work, now, senders } = input;
     const report = yield* findReport({ db, userId, id: work.insightEventId });
@@ -182,14 +189,14 @@ const questionRequest = (
 const finishQuestion = (
   input: Readonly<{
     db: D1Database;
-    work: Extract<WeeklyActivity, { kind: "weekly-question" }>;
+    work: Extract<ProactivityActivity, { kind: "weekly-question" }>;
     state: "refused" | "expired";
   }>
-): Effect.Effect<WeeklyActivityResult, InsightUnavailable> =>
+): Effect.Effect<ProactivityActivityResult, InsightUnavailable> =>
   settleDeliveryWork(input).pipe(Effect.as({ _tag: "Done" } as const));
 const deliverQuestion = (
-  input: Execution & Readonly<{ work: Extract<WeeklyActivity, { kind: "weekly-question" }> }>
-): Effect.Effect<WeeklyActivityResult, InsightUnavailable> =>
+  input: Execution & Readonly<{ work: Extract<ProactivityActivity, { kind: "weekly-question" }> }>
+): Effect.Effect<ProactivityActivityResult, InsightUnavailable> =>
   Effect.gen(function* () {
     const { db, userId, work, now, senders } = input;
     const origin = yield* findQuestionOrigin({ db, work });
@@ -247,8 +254,8 @@ const deliverQuestion = (
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 
 const sendQuestionClaim = (
-  input: Execution & Readonly<{ work: Extract<WeeklyActivity, { kind: "weekly-question" }> }>
-): Effect.Effect<WeeklyActivityResult, InsightUnavailable> =>
+  input: Execution & Readonly<{ work: Extract<ProactivityActivity, { kind: "weekly-question" }> }>
+): Effect.Effect<ProactivityActivityResult, InsightUnavailable> =>
   Effect.gen(function* () {
     const { db, userId, work, now, senders } = input;
     const guard = questionIntentQuery({ userId, id: work.id });
@@ -271,7 +278,7 @@ const sendQuestionClaim = (
 
 export const executeWeeklyActivity = (
   input: Execution
-): Effect.Effect<WeeklyActivityResult, InsightUnavailable> =>
+): Effect.Effect<ProactivityActivityResult, InsightUnavailable> =>
   Effect.gen(function* () {
     if (input.work.userId !== input.userId) return yield* new InsightUnavailable();
     switch (input.work.kind) {

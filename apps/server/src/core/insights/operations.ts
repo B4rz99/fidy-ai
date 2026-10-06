@@ -1,9 +1,80 @@
 import { Cron, DateTime, Effect } from "effect";
 import type { IanaTimeZone } from "~/core/_shared/context";
-import type { InsightDeliveryDecision, WeeklyPeriods, WeeklyTiming } from "./contract";
+import type {
+  InsightDeliveryDecision,
+  ReminderCadence,
+  ReminderTiming,
+  WeeklyPeriods,
+  WeeklyTiming,
+} from "./contract";
 import { type InsightLifecycleState, InvalidInsightTransition } from "./contract";
 
-const weeklyDeliveryFreshnessMs = 86_400_000;
+const elapsedDayMs = 86_400_000;
+const threeDayInterval = 3;
+const maximumCalendarCandidates = 7;
+
+type ReminderInstructions = Readonly<{
+  cadence: ReminderCadence;
+  timing: ReminderTiming;
+  timeZone: IanaTimeZone;
+}>;
+
+const reminderCron = (input: ReminderInstructions): Cron.Cron => {
+  let weekdays = "*";
+  if (input.cadence.kind === "weekdays") weekdays = "1-5";
+  if (input.cadence.kind === "weekly") weekdays = String(input.cadence.weekday);
+  return Cron.parseUnsafe(
+    `${input.timing.minute} ${input.timing.hour} * * ${weekdays}`,
+    input.timeZone
+  );
+};
+
+const selectReminderDate = (
+  input: ReminderInstructions,
+  candidate: DateTime.Utc,
+  advance: (instant: DateTime.Utc) => DateTime.Utc
+): DateTime.Utc => {
+  if (input.cadence.kind !== "every-three-days") return candidate;
+  const anchor = DateTime.makeUnsafe(input.cadence.anchorDate);
+  let next = candidate;
+  // Calendar selection remains bounded even for zones with skipped local dates or times.
+  for (let attempt = 0; attempt < maximumCalendarCandidates; attempt += 1) {
+    const localDate = DateTime.makeUnsafe(
+      DateTime.formatIsoDate(DateTime.setZoneNamedUnsafe(next, input.timeZone))
+    );
+    const days = Math.round(
+      (localDate.epochMilliseconds - anchor.epochMilliseconds) / elapsedDayMs
+    );
+    if (days % threeDayInterval === 0) return next;
+    next = advance(next);
+  }
+  throw new Error("Reminder calendar could not locate an anchored occurrence");
+};
+
+/** Find the next preset occurrence strictly after an instant; three-day cadence keeps its local-date anchor across months and DST. */
+export const nextReminderOccurrence = (
+  input: ReminderInstructions & Readonly<{ after: DateTime.Utc }>
+): DateTime.Utc => {
+  const cron = reminderCron(input);
+  const advance = (instant: DateTime.Utc): DateTime.Utc =>
+    DateTime.makeUnsafe(Cron.next(cron, instant));
+  return selectReminderDate(input, advance(input.after), advance);
+};
+
+/** Select only the latest due preset occurrence, including its exact cutoff, without reconstructing a missed backlog. */
+export const latestReminderOccurrence = (
+  input: ReminderInstructions & Readonly<{ atOrBefore: DateTime.Utc }>
+): DateTime.Utc => {
+  const cron = reminderCron(input);
+  const minute = DateTime.startOf(input.atOrBefore, "minute");
+  const retreat = (instant: DateTime.Utc): DateTime.Utc =>
+    DateTime.makeUnsafe(Cron.prev(cron, instant));
+  return selectReminderDate(
+    input,
+    Cron.match(cron, minute) ? minute : retreat(input.atOrBefore),
+    retreat
+  );
+};
 const deliveryOpeningHour = 9;
 const deliveryClosingHour = 19;
 
@@ -68,9 +139,17 @@ export const insightDeliveryDeadline = (
 ): DateTime.Utc =>
   DateTime.makeUnsafe(
     Math.min(
-      input.scheduledAt.epochMilliseconds + weeklyDeliveryFreshnessMs,
+      input.scheduledAt.epochMilliseconds + elapsedDayMs,
       input.nextScheduledAt.epochMilliseconds
     )
+  );
+
+/** Expire an unstarted Budget send after 24 elapsed hours or at its captured month-end, including already-ended backdated periods. */
+export const budgetAlertDeadline = (
+  input: Readonly<{ detectedAt: DateTime.Utc; monthEnd: DateTime.Utc }>
+): DateTime.Utc =>
+  DateTime.makeUnsafe(
+    Math.min(input.detectedAt.epochMilliseconds + elapsedDayMs, input.monthEnd.epochMilliseconds)
   );
 
 /** Decide freshness and the captured-zone [09:00,19:00) window without authorizing a send. */

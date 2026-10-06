@@ -15,8 +15,18 @@ import { getCanonicalOperationInput } from "../../../src/shell/canonical-operati
 import { TransactionId } from "../../../src/core/transactions/contract";
 import type { MemoryOperationId } from "../../../src/shell/memory/contract";
 import type { HostedInference } from "../../../src/shell/hosted-inference/operations";
-import { DeliveryEvidenceInput, InsightEventId } from "../../../src/core/insights/contract";
-import { insightRefusal, prepareInsightTransition } from "../../insights/operations";
+import {
+  DeliveryEvidenceInput,
+  InsightEventId,
+  ReminderScheduleEdit,
+} from "../../../src/core/insights/contract";
+import {
+  insightRefusal,
+  prepareCanonicalReminderRevision,
+  prepareHeldReminderRevision,
+  prepareInsightTransition,
+  reminderRevisionRefusal,
+} from "../../insights/operations";
 import { dashboardRefusal, prepareDashboard, presentDashboard } from "../../dashboard/operations";
 import {
   budgetRefusal,
@@ -86,6 +96,19 @@ export const canonicalHostedStatementAdapter = (
     present: CanonicalMutationAdapter["present"];
   }>
 > => {
+  if (operation === "insights.updateReminderSchedule") {
+    return Option.some({
+      prepare: (work) =>
+        Option.match(
+          Schema.decodeUnknownOption(Schema.Struct({ payload: ReminderScheduleEdit }))(work.input),
+          {
+            onNone: () => Effect.succeed(failedPreparation()),
+            onSome: ({ payload }) => prepareHeldReminderRevision({ ...work, input: payload }),
+          }
+        ),
+      present: present(HTTP_OK),
+    });
+  }
   if (operation === "ingestion.submitForExtraction") {
     return Option.some({
       prepare: prepareHeldStatementSubmission,
@@ -263,6 +286,23 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
         },
       ] as const
   ),
+  [
+    CanonicalOperationId.make("insights.updateReminderSchedule"),
+    {
+      prepare: decodeAndPrepare(
+        Schema.Struct({ payload: ReminderScheduleEdit }),
+        ({ payload }, work) =>
+          prepareCanonicalReminderRevision({
+            db: work.db,
+            subject: work.subject,
+            current: work.current,
+            input: payload,
+          })
+      ),
+      present: present(HTTP_OK),
+      invalidRefusal: reminderRevisionRefusal,
+    },
+  ],
   [
     CanonicalOperationId.make("insights.markInsightDelivered"),
     {

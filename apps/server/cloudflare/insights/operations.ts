@@ -1,5 +1,30 @@
+import {
+  controlReminder as controlReminderOwned,
+  findGovernor as findReminderGovernorOwned,
+  prepareDelivery as prepareReminderDeliveryOwned,
+  prepareNoticeCompletion as prepareReminderNoticeCompletionOwned,
+  prepareNotice as prepareReminderNoticeOwned,
+  prepareReply as prepareReminderReplyOwned,
+  readNotice as readReminderNoticeOwned,
+} from "./internal/reminder-governor";
+import { requestOffer } from "./internal/proactivity-offers";
+import { evaluateBudgetAlerts, prepareBudgetOptInFence } from "../budgets/operations";
+import {
+  findReport as findProactivityReportOwned,
+  prepareSettlement,
+  transcriptLinksQuery,
+  transcriptOccurrenceQuery,
+} from "./internal/proactivity-reports";
+
+import {
+  prepareCanonicalReminderRevision as prepareCanonicalReminderRevisionOwned,
+  prepareHeldReminderRevision as prepareHeldReminderRevisionOwned,
+  readCanonicalReminderSchedule as readCanonicalReminderScheduleOwned,
+  readHeldReminderSchedule as readHeldReminderScheduleOwned,
+  reminderRevisionRefusal as reminderRevisionRefusalOwned,
+} from "./internal/reminder-canonical";
 import { weeklyThresholds } from "./internal/weekly-execution";
-import { requestQuestion } from "./internal/weekly-work";
+import { requestQuestion } from "./internal/proactivity-delivery-work";
 import {
   findGovernor,
   prepareNotice,
@@ -11,12 +36,20 @@ import {
 } from "./internal/weekly-governor";
 import { prepareWeeklyDeliverySettlement as prepareWeeklyDeliverySettlementOwned } from "./internal/weekly-settlement";
 import { type DateTime, Effect, Option } from "effect";
+import * as reminder from "./internal/reminder-schedule";
+import type { ReminderSchedule, ReminderScheduleEdit } from "../../src/core/insights/contract";
+import type { ProactivityConsentContext } from "../consent/contract";
 import { type InsightEventId, type ScheduleId } from "../../src/core/insights/contract";
-import { prepareWeeklyConsentDecision } from "../consent/operations";
+import {
+  prepareProactivityConsentDecision,
+  prepareWeeklyConsentDecision,
+} from "../consent/operations";
 import { type WeeklyConsentContext } from "../consent/contract";
 import {
   type DueWeeklySchedule,
   InsightUnavailable,
+  type ReminderMaterialization,
+  type ReminderRevisionConflict,
   type WeeklyMaterialization,
   type WeeklyOccurrenceGuard,
   type WeeklyScheduleAdvance,
@@ -47,6 +80,127 @@ import {
   prepareInsightTransition as prepare,
   insightRefusal as refuse,
 } from "./internal/insight-store";
+
+/** Apply only an authenticated exact current-question continue/stop choice; operational state never grants or revokes legal Consent. */
+export const controlManualReminders: typeof controlReminderOwned = (input) =>
+  controlReminderOwned(input);
+
+/** Observe independent reminder-only attention under current processing Consent. */
+export const findReminderGovernor: typeof findReminderGovernorOwned = (input) =>
+  findReminderGovernorOwned(input);
+/** Compose one-shot verified reminder/question evidence with exact Transcript settlement. */
+export const prepareReminderDelivery: typeof prepareReminderDeliveryOwned = (input) =>
+  prepareReminderDeliveryOwned(input);
+/** Reset only from same-User channel-qualified reminder/question reply evidence. */
+export const prepareReminderReply: typeof prepareReminderReplyOwned = (input) =>
+  prepareReminderReplyOwned(input);
+/** Bind an operational pause mention to an admitted User request, never a scheduler Turn. */
+export const prepareReminderPauseNotice: typeof prepareReminderNoticeOwned = (input) =>
+  prepareReminderNoticeOwned(input);
+/** Observe only the notice bound to this admitted same-User Turn. */
+export const readReminderPauseNotice: typeof readReminderNoticeOwned = (input) =>
+  readReminderNoticeOwned(input);
+/** Mark the mention complete only from verified exact visible assistant evidence. */
+export const prepareReminderPauseNoticeCompletion: typeof prepareReminderNoticeCompletionOwned = (
+  input
+) => prepareReminderNoticeCompletionOwned(input);
+
+/** Record an authenticated exact category request for durable contextual disclosure, never a legal grant. */
+export const requestProactivityConsent: typeof requestOffer = (input) => requestOffer(input);
+
+/** Observe one same-User frozen category payload under current processing Consent; this snapshot grants no send authority. */
+export const findProactivityReport: typeof findProactivityReportOwned = (input) =>
+  findProactivityReportOwned(input);
+
+/** Settle linked occurrences and outbox from authenticated channel evidence in the caller's atomic Transcript unit. */
+export const prepareProactivityDeliverySettlement: typeof prepareSettlement = (input) =>
+  prepareSettlement(input);
+/** Supply the primary retained occurrence and exact channel text without exposing Insights persistence. */
+export const proactivityTranscriptOccurrenceQuery: typeof transcriptOccurrenceQuery = (input) =>
+  transcriptOccurrenceQuery(input);
+
+/** All same-User occurrence links for one verified message, for atomic Agent-owned Transcript linking. */
+export const proactivityTranscriptLinksQuery: typeof transcriptLinksQuery = (input) =>
+  transcriptLinksQuery(input);
+
+/** Read instructions under the canonical caller's live authority and required Audit. */
+export const readCanonicalReminderSchedule: typeof readCanonicalReminderScheduleOwned = (input) =>
+  readCanonicalReminderScheduleOwned(input);
+/** Compose instruction revisions, current credential/Consent, optimistic version and required Audit in canonical execution. Never grants opt-in. */
+export const prepareCanonicalReminderRevision: typeof prepareCanonicalReminderRevisionOwned = (
+  input
+) => prepareCanonicalReminderRevisionOwned(input);
+/** The same read under Agent's published current Turn authority. */
+export const readHeldReminderSchedule: typeof readHeldReminderScheduleOwned = (input) =>
+  readHeldReminderScheduleOwned(input);
+/** The same revision under Agent's current Turn authority and confirmation fence. */
+export const prepareHeldReminderRevision: typeof prepareHeldReminderRevisionOwned = (input) =>
+  prepareHeldReminderRevisionOwned(input);
+/** A malformed canonical instruction edit is an accountable owner refusal. */
+export const reminderRevisionRefusal: typeof reminderRevisionRefusalOwned = (input) =>
+  reminderRevisionRefusalOwned(input);
+
+/** Observe one User's reminder instructions under current processing Consent; grant and storage details stay private. */
+export const findReminderSchedule = (
+  input: Readonly<{ db: D1Database; userId: UserId }>
+): Effect.Effect<Option.Option<ReminderSchedule>, InsightUnavailable> =>
+  reminder.findSchedule(input).pipe(
+    Effect.map(
+      Option.map((schedule) => ({
+        id: schedule.id,
+        version: schedule.version,
+        enabled: schedule.enabled,
+        cadence: schedule.cadence,
+        timing: schedule.timing,
+        timeZone: schedule.timeZone,
+        serviceMarket: schedule.serviceMarket,
+        locale: schedule.locale,
+        nextScheduledAt: schedule.nextScheduledAt,
+      }))
+    )
+  );
+
+/** Commit an exact authenticated category choice with reminder activation/disablement in one User-coordinated D1 unit. Legal standing is never inferred from a canonical/model call. */
+export const recordProactivityDecision = (
+  input: ProactivityConsentContext & Readonly<{ choice: string; decisionMessageId: string }>
+): Effect.Effect<boolean, InsightUnavailable> =>
+  Effect.gen(function* () {
+    const prepared = yield* prepareProactivityConsentDecision(input);
+    if (Option.isNone(prepared)) return false;
+    const decision = prepared.value;
+    const statements = [...decision.statements];
+    if (input.kind === "budget-threshold" && decision.decision === "accept") {
+      if (!(yield* evaluateBudgetAlerts(input))) return false;
+      statements.unshift(prepareBudgetOptInFence(input));
+    }
+    if (input.kind === "manual-entry-reminder") {
+      if (decision.decision === "accept" || decision.decision === "continue") {
+        statements.push(
+          ...(yield* reminder.prepareActivation({ ...input, grantId: decision.grantId }))
+        );
+      } else statements.push(reminder.prepareDisable(input));
+    }
+    yield* Effect.tryPromise(() => input.db.batch(statements));
+    return true;
+  }).pipe(Effect.mapError(() => new InsightUnavailable()));
+
+/** Prepare a complete reminder instruction edit under the caller's User coordination. Compose these revision/grant/Consent guards with canonical credential authority and Audit in the caller's atomic unit; this operation never grants opt-in. */
+export const prepareReminderRevision = (
+  input: Readonly<{
+    db: D1Database;
+    userId: UserId;
+    input: ReminderScheduleEdit;
+    now: DateTime.Utc;
+  }>
+): Effect.Effect<
+  ReadonlyArray<D1PreparedStatement>,
+  InsightUnavailable | ReminderRevisionConflict
+> => reminder.prepareRevision(input);
+
+/** Materialize only the latest still-fresh reminder with an exact enabled instruction/grant guard. Event, immutable deadline, outbox and advancement commit together; replay cannot create a backlog. */
+export const materializeReminder = (
+  input: Readonly<{ db: D1Database; userId: UserId; id: ScheduleId; now: DateTime.Utc }>
+): Effect.Effect<ReminderMaterialization, InsightUnavailable> => reminder.materialize(input);
 
 /** Reject invalid governor knobs before production execution or delivery settlement. */
 export const readWeeklyThresholds: typeof weeklyThresholds = (input) => weeklyThresholds(input);

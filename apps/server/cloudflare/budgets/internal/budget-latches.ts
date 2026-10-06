@@ -1,21 +1,31 @@
-import { UserId } from "../../../src/core/identity/contract";
+import { type UserContext, UserId } from "../../../src/core/identity/contract";
 import { readUserContext } from "../../identity/user-context/operations";
 import {
+  BudgetCrossing,
   BudgetId,
   type BudgetMonthLatch,
   type BudgetStatus,
 } from "../../../src/core/budgets/contract";
-import { type IanaTimeZone } from "../../../src/core/_shared/context";
 import { advanceBudgetLatch } from "../../../src/core/budgets/operations";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { currentBudgetReport } from "./budget-queries";
+import { currentProactivityGrantQuery } from "../../consent/operations";
+import { newId } from "../../secret-material/operations";
+
+/** Compose this fence before a new category grant: every pre-opt-in financial revision must already be latched under its prior eligibility. */
+export const prepareOptInFence = (
+  input: Readonly<{ db: D1Database; userId: UserId }>
+): D1PreparedStatement =>
+  input.db
+    .prepare(
+      "INSERT INTO budget_mutation_assertion(id,accepted) SELECT 1,CASE WHEN NOT EXISTS (SELECT 1 FROM budget_reconciliation_work WHERE user_id=?) THEN 1 ELSE 0 END ON CONFLICT(id) DO UPDATE SET accepted=excluded.accepted"
+    )
+    .bind(input.userId);
 
 const Marks = Schema.Struct({
   reached_80: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1 })),
   reached_100: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1 })),
 });
-const eighty = 80;
-const hundred = 100;
 // One period per request keeps the aggregate report and latch work independent of backlog size.
 const maximumPendingWork = 1;
 const PendingWork = Schema.Struct({ occurred_at: Schema.String, version: Schema.Int });
@@ -32,39 +42,93 @@ const latchFor = (status: BudgetStatus, marks: typeof Marks.Type): BudgetMonthLa
   return { budgetId, period, reached80: false as const, reached100: false as const };
 };
 
-/** Commit monotone threshold evidence and at most one pending occurrence for each threshold. */
-const reconcileStatus = ({
-  db,
-  userId,
-  timeZone,
-  status,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  timeZone: IanaTimeZone;
-  status: BudgetStatus;
-}>): Effect.Effect<boolean> =>
+const findLatch = (
+  input: Readonly<{ db: D1Database; userId: string; status: BudgetStatus }>
+): Effect.Effect<Option.Option<BudgetMonthLatch>, Cause.UnknownError> =>
   Effect.gen(function* () {
-    const budgetId = status.budget.id;
-    const from = DateTime.formatIso(status.period.from);
     const row = yield* Effect.tryPromise(() =>
-      db
-        .prepare(`SELECT reached_80, reached_100 FROM budget_month_latches
-    WHERE user_id = ? AND budget_id = ? AND from_utc = ? AND time_zone = ?`)
-        .bind(userId, budgetId, from, timeZone)
+      input.db
+        .prepare(
+          "SELECT reached_80,reached_100 FROM budget_month_latches WHERE user_id=? AND budget_id=? AND from_utc=? AND time_zone=?"
+        )
+        .bind(
+          input.userId,
+          input.status.budget.id,
+          DateTime.formatIso(input.status.period.from),
+          input.status.period.timeZone
+        )
         .first()
     );
     const marks =
       row === null
         ? Option.some({ reached_80: 0, reached_100: 0 })
         : Schema.decodeUnknownOption(Marks)(row);
-    if (Option.isNone(marks)) return false;
+    return Option.map(marks, (value) => latchFor(input.status, value));
+  });
+
+const encodeCrossings = (
+  input: Readonly<{
+    status: BudgetStatus;
+    context: UserContext;
+    thresholds: ReadonlyArray<BudgetCrossing["threshold"]>;
+    detectedAt: DateTime.Utc;
+  }>
+): Effect.Effect<
+  ReadonlyArray<Readonly<{ threshold: BudgetCrossing["threshold"]; json: string }>>,
+  Schema.SchemaError
+> =>
+  Effect.forEach(input.thresholds, (threshold) =>
+    Schema.encodeEffect(Schema.fromJsonString(Schema.toCodecJson(BudgetCrossing)))(
+      BudgetCrossing.make({
+        budgetId: input.status.budget.id,
+        categoryId: input.status.budget.categoryId,
+        cap: input.status.budget.cap,
+        spent: input.status.spent,
+        period: input.status.period,
+        threshold,
+        detectedAt: input.detectedAt,
+        serviceMarket: input.context.serviceMarket,
+        locale: input.context.locale,
+      })
+    ).pipe(Effect.map((json) => ({ threshold, json })))
+  );
+
+/** Commit monotone threshold evidence and at most one pending occurrence for each threshold. */
+const reconcileStatus = ({
+  db,
+  userId,
+  context,
+  status,
+}: Readonly<{
+  db: D1Database;
+  userId: string;
+  context: UserContext;
+  status: BudgetStatus;
+}>): Effect.Effect<boolean> =>
+  Effect.gen(function* () {
+    const timeZone = context.timeZone;
+    const budgetId = status.budget.id;
+    const from = DateTime.formatIso(status.period.from);
+    const latch = yield* findLatch({ db, userId, status });
+    if (Option.isNone(latch)) return false;
     const advanced = yield* advanceBudgetLatch({
       budget: status.budget,
       spent: status.spent,
-      latch: latchFor(status, marks.value),
+      latch: latch.value,
     });
     const next = advanced.latch;
+    const detectedAt = yield* DateTime.now;
+    const groupId = newId();
+    const grant = currentProactivityGrantQuery({
+      userId: UserId.make(userId),
+      kind: "budget-threshold",
+    });
+    const crossings = yield* encodeCrossings({
+      status,
+      context,
+      thresholds: advanced.newlyReached,
+      detectedAt,
+    });
     const writes = [
       db
         .prepare(`INSERT INTO budget_month_latches
@@ -74,37 +138,44 @@ const reconcileStatus = ({
         reached_80 = max(reached_80, excluded.reached_80),
         reached_100 = max(reached_100, excluded.reached_100)`)
         .bind(userId, budgetId, from, timeZone, Number(next.reached80), Number(next.reached100)),
-      ...([eighty, hundred] as const)
-        .filter((threshold) => (threshold === eighty ? next.reached80 : next.reached100))
-        .map((threshold) =>
-          db
-            .prepare(`INSERT OR IGNORE INTO budget_threshold_alerts
-        (user_id, budget_id, from_utc, time_zone, threshold)
-        SELECT user_id, budget_id, from_utc, time_zone, ? FROM budget_month_latches
+      ...crossings.map(({ threshold, json }) =>
+        db
+          .prepare(`INSERT OR IGNORE INTO budget_threshold_alerts
+        (user_id, budget_id, from_utc, time_zone, threshold, crossing_json,delivery_group_id,consent_grant_id)
+        SELECT user_id, budget_id, from_utc, time_zone, ?, ?,?,(${grant.sql}) FROM budget_month_latches
         WHERE user_id = ? AND budget_id = ? AND from_utc = ? AND time_zone = ?`)
-            .bind(threshold, userId, budgetId, from, timeZone)
-        ),
+          .bind(threshold, json, groupId, ...grant.params, userId, budgetId, from, timeZone)
+      ),
+      db
+        .prepare(
+          "INSERT OR IGNORE INTO budget_crossing_publications(user_id,delivery_group_id,detected_at_ms) SELECT ?,?,? WHERE EXISTS (SELECT 1 FROM budget_threshold_alerts WHERE user_id=? AND delivery_group_id=?)"
+        )
+        .bind(userId, groupId, detectedAt.epochMilliseconds, userId, groupId),
     ];
-    yield* Effect.tryPromise(() => db.batch(writes));
-    return true;
+    return yield* Effect.tryPromise(() => db.batch(writes)).pipe(Effect.as(true));
   }).pipe(Effect.orElseSucceed(() => false));
 
 const reconcilePendingPeriod = ({
   db,
   userId,
-  timeZone,
+  context,
   now,
 }: Readonly<{
   db: D1Database;
   userId: string;
-  timeZone: IanaTimeZone;
+  context: UserContext;
   now: DateTime.Utc;
 }>): Effect.Effect<boolean> =>
   Effect.gen(function* () {
-    const report = yield* currentBudgetReport({ db, userId, query: { timeZone }, now });
+    const report = yield* currentBudgetReport({
+      db,
+      userId,
+      query: { timeZone: context.timeZone },
+      now,
+    });
     if (Option.isNone(report)) return false;
     for (const status of report.value.statuses) {
-      if (!(yield* reconcileStatus({ db, userId, timeZone, status }))) return false;
+      if (!(yield* reconcileStatus({ db, userId, context, status }))) return false;
     }
     return true;
   });
@@ -125,7 +196,6 @@ export const reconcileBudgetLatches = ({
     const subject = yield* Schema.decodeEffect(UserId)(userId);
     const context = yield* readUserContext({ db, userId: subject, authority: Option.none() });
     if (Option.isNone(context)) return false;
-    const timeZone = context.value.timeZone;
     const pending = yield* Effect.tryPromise(() =>
       db
         .prepare(`SELECT occurred_at, version
@@ -138,7 +208,9 @@ export const reconcileBudgetLatches = ({
       if (Option.isNone(item)) return false;
       const instant = DateTime.make(item.value.occurred_at);
       if (Option.isNone(instant)) return false;
-      if (!(yield* reconcilePendingPeriod({ db, userId, timeZone, now: instant.value }))) {
+      if (
+        !(yield* reconcilePendingPeriod({ db, userId, context: context.value, now: instant.value }))
+      ) {
         return false;
       }
       yield* Effect.tryPromise(() =>

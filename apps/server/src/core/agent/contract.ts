@@ -102,6 +102,30 @@ export const ProactiveInsightTranscriptEntry = Schema.TaggedStruct(
 );
 export type ProactiveInsightTranscriptEntry = typeof ProactiveInsightTranscriptEntry.Type;
 
+/** Identity of one frozen proactive delivery, independent of requested Turns or InsightEvent cardinality. */
+export const ProactiveDeliveryId = Schema.String.check(Schema.isUUID()).pipe(
+  Schema.brand("ProactiveDeliveryId")
+);
+export type ProactiveDeliveryId = typeof ProactiveDeliveryId.Type;
+/** Exact verified question or contextual disclosure retained without inventing a financial InsightEvent. */
+export const ProactiveMessageTranscriptEntry = Schema.TaggedStruct(
+  "ProactiveMessageTranscriptEntry",
+  {
+    id: TranscriptEntryId,
+    deliveryId: ProactiveDeliveryId,
+    role: Schema.Literals(["budget-offer", "reminder-offer", "reminder-question"]),
+    occurredAt: UtcTimestamp,
+    text: TranscriptText,
+  }
+);
+export type ProactiveMessageTranscriptEntry = typeof ProactiveMessageTranscriptEntry.Type;
+/** A retained proactive context is either Insight-linked evidence or a verified control/disclosure message. */
+export const ProactiveTranscriptEntry = Schema.Union([
+  ProactiveInsightTranscriptEntry,
+  ProactiveMessageTranscriptEntry,
+]);
+export type ProactiveTranscriptEntry = typeof ProactiveTranscriptEntry.Type;
+
 const TranscriptIdentity = {
   id: TranscriptEntryId,
   turnId: TranscriptTurnId,

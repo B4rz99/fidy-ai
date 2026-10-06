@@ -242,6 +242,7 @@ const migrationNames = [
   "0035_billing_corrections",
   "0009_email_replacement",
   "0016_budgets",
+  "0037_budget_crossing_facts",
   "0016_statement_processing",
   "0018_dashboard",
   "0018_insight_events",

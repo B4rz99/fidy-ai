@@ -36,6 +36,36 @@ export const InsightTemplateConfiguration = Schema.Struct({
 });
 export type InsightTemplateConfiguration = typeof InsightTemplateConfiguration.Type;
 
+/** Complete approved category messages use one positional parameter, never clipped financial facts. */
+export const ProactivityTemplateConfiguration = Schema.Struct({
+  name: InsightTemplateConfiguration.fields.name,
+  language: Schema.Literal("es"),
+  approval: Schema.Literal("approved"),
+  body: Schema.Literal("Fidy: {{1}}"),
+});
+const maximumProactivityParameterLength = 1018;
+/** Frozen template identity and complete visible body; a later configuration cannot re-render it. */
+export const PreparedProactivityTemplate = Schema.Struct({
+  name: ProactivityTemplateConfiguration.fields.name,
+  language: Schema.Literal("es"),
+  parameter: Schema.String.check(Schema.isMaxLength(maximumProactivityParameterLength)),
+  text: TranscriptText,
+}).check(Schema.makeFilter((value) => value.text === `Fidy: ${value.parameter}`));
+export type PreparedProactivityTemplate = typeof PreparedProactivityTemplate.Type;
+export type ProactivityTemplateSender = Readonly<{
+  prepare: (
+    text: unknown
+  ) => Effect.Effect<PreparedProactivityTemplate, InsightTemplateUnavailable>;
+  send: (
+    request: Readonly<{
+      recipient: WhatsAppBusinessScopedUserId;
+      businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
+      correlationToken: HostedDeliveryCorrelationToken;
+      template: PreparedProactivityTemplate;
+    }>
+  ) => Effect.Effect<WhatsAppSentMessage, InsightTemplateUnavailable | WhatsAppSendFailed>;
+}>;
+
 /** The operator must approve this complete disclosure template separately from the summary template. */
 export const WeeklyQuestionTemplateConfiguration = Schema.Struct({
   name: InsightTemplateConfiguration.fields.name,

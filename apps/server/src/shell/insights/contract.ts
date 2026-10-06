@@ -5,6 +5,8 @@ import {
   InsightDeliveryAttempt,
   InsightEvent,
   InsightEventId,
+  ReminderSchedule,
+  ReminderScheduleEdit,
 } from "~/core/insights/contract";
 import { NotFound, OperationResponse, ValidationFailed } from "~/shell/public-http/contract";
 import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
@@ -25,6 +27,42 @@ export const DeliveredInsight = Schema.Struct({
  * authenticated caller, never from request payloads or opaque event ids.
  */
 export const InsightsGroup = HttpApiGroup.make("insights")
+  .add(
+    HttpApiEndpoint.get("getReminderSchedule", "/insights/reminder", {
+      success: OperationResponse(Schema.NullOr(ReminderSchedule)),
+    })
+      .annotate(
+        OpenApi.Description,
+        "Read your manual-entry reminder instructions. Null means you have not opted in. This operation never grants delivery Consent."
+      )
+      .annotateMerge(
+        operationPolicy({
+          access: userOwnedAgentScoped("read"),
+          requiredTier: "free",
+          agentConfirmation: "not-required",
+          kind: "query",
+        })
+      )
+  )
+  .add(
+    HttpApiEndpoint.post("updateReminderSchedule", "/insights/reminder", {
+      payload: ReminderScheduleEdit,
+      success: OperationResponse(ReminderSchedule),
+      error: InsightOperationFailures,
+    })
+      .annotate(
+        OpenApi.Description,
+        "Revise your existing reminder cadence, local time and IANA zone with the version you read. A stale version is refused: read again before retrying. This does not activate reminders, change delivery Consent, or rewrite historical occurrences."
+      )
+      .annotateMerge(
+        operationPolicy({
+          access: userOwnedAgentScoped("write"),
+          requiredTier: "free",
+          agentConfirmation: "required",
+          kind: "mutation",
+        })
+      )
+  )
   .add(
     HttpApiEndpoint.get("listPendingInsights", "/insights/pending", {
       query: Schema.Struct({ cursor: Schema.optional(Schema.String) }),

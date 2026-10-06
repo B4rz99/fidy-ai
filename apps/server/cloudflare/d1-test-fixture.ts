@@ -151,6 +151,9 @@ export const canonicalAdmissionMigrationNames = (
   [
     ...new Set([
       ...names,
+      ...(names.includes("0016_budgets")
+        ? ["0037_budget_crossing_facts", "0038_proactivity_consent", "0042_budget_proactivity"]
+        : []),
       "0009_card_enrollment",
       "0012_billing_collection",
       "0016_subscription_standing",
@@ -197,4 +200,16 @@ export const hostedTurnTestMigrations = [
   "0033_weekly_dispatch",
   "0034_insight_provider_scope",
   "0035_proactivity_governor",
+  "0038_proactivity_consent",
+  "0039_reminder_schedules",
+  "0041_proactivity_messages",
+  "0043_reminder_governor",
+  "0044_proactivity_channel",
+  "0045_budget_messages_transcript",
+  "0046_contextual_offers",
+  "0047_proactivity_offer_retention",
+  "0048_retire_reminder_outbox",
+  "0049_proactive_message_transcript",
+  "0050_proactivity_offer_recovery",
+  "0051_budget_reconciliation_recovery",
 ] as const;

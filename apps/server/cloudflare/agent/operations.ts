@@ -2,7 +2,9 @@ import { Effect, type Option } from "effect";
 import { mintHostedStatementCaller as statementCaller } from "./internal/statement-authority";
 import {
   expireProactiveTranscript as expireProactiveTranscriptOwned,
+  findMessageTranscript,
   prepareProactiveTranscript as prepareProactiveTranscriptOwned,
+  readContextualProactiveReply as readContextualProactiveReplyOwned,
   readProactiveTranscript as readProactiveTranscriptOwned,
 } from "./internal/proactive-transcript";
 import type { OnboardingConsentBasis } from "../../src/shell/consent/contract";
@@ -29,6 +31,12 @@ export const readProactiveTranscript = (
   Effect.Success<ReturnType<typeof readProactiveTranscriptOwned>>,
   AgentUnavailable
 > => readProactiveTranscriptOwned(input).pipe(Effect.mapError(() => new AgentUnavailable()));
+/** Build same-User unexpired proactive reply context only from authenticated channel reference evidence. */
+export const readContextualProactiveReply: typeof readContextualProactiveReplyOwned = (input) =>
+  readContextualProactiveReplyOwned(input);
+/** Observe one same-User verified control/disclosure message under current processing purpose, without invented InsightEvent or Turn linkage. */
+export const readProactiveMessageTranscript: typeof findMessageTranscript = (input) =>
+  findMessageTranscript(input);
 /** Execute the fixed proactive Transcript retention policy independently of later User messages. */
 export const expireProactiveTranscript = (
   input: Parameters<typeof expireProactiveTranscriptOwned>[0]

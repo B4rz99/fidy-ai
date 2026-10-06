@@ -4,6 +4,7 @@ import { BigDecimal, Result, Schema } from "effect";
 import {
   AppliedBudgetMonth,
   Budget,
+  BudgetCrossing,
   BudgetMonthLatch,
   BudgetProgress,
   type BudgetProgressFact,
@@ -24,6 +25,36 @@ const budgetInput = {
   createdAt: "2026-07-01T12:00:00Z",
   updatedAt: "2026-07-01T12:00:00Z",
 } as const;
+
+it("rejects crossing snapshots with mixed Currency or spending below the exact latched threshold", () => {
+  const crossing = {
+    budgetId: budgetInput.id,
+    categoryId: budgetInput.categoryId,
+    cap: { amount: "100", currency: "COP" },
+    spent: { amount: "80", currency: "COP" },
+    period: {
+      from: "2026-07-01T05:00:00Z",
+      to: "2026-08-01T05:00:00Z",
+      timeZone: "America/Bogota",
+    },
+    threshold: 80,
+    detectedAt: "2026-07-02T23:00:00Z",
+    serviceMarket: "CO",
+    locale: "es-CO",
+  } as const;
+  const decode = Schema.decodeResult(BudgetCrossing);
+  expect(Result.isSuccess(decode(crossing))).toBe(true);
+  expect(Result.isFailure(decode({ ...crossing, spent: { amount: "80", currency: "USD" } }))).toBe(
+    true
+  );
+  expect(
+    Result.isFailure(decode({ ...crossing, spent: { amount: "79.99", currency: "COP" } }))
+  ).toBe(true);
+  expect(Result.isFailure(decode({ ...crossing, threshold: 100 }))).toBe(true);
+  expect(Result.isFailure(decode({ ...crossing, cap: { amount: "0", currency: "COP" } }))).toBe(
+    true
+  );
+});
 
 it("accepts a Budget with a positive nested Money cap", () => {
   expect(Result.isSuccess(Schema.decodeResult(Budget)(budgetInput))).toBe(true);

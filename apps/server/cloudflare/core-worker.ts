@@ -1,4 +1,4 @@
-import type { WeeklyDeliveryWork, WeeklyEnvironment } from "./insights/contract";
+import type { ProactivityDeliveryWork, ProactivityEnvironment } from "./insights/contract";
 import type { CoreMaintenanceInput } from "./maintenance/contract";
 import { runCoreMaintenance } from "./maintenance/runtime";
 import { makeCoreHttp } from "./core-http/runtime";
@@ -27,13 +27,13 @@ export {
   BillingRefundWorkflowV1,
   runBillingCollectionWorkflow,
 } from "./subscription/runtime";
-export { WeeklyDeliveryWorkflow } from "./insights/runtime";
+export { ProactivityDeliveryWorkflow } from "./insights/runtime";
 export { UserTransactionCoordinator } from "./transactions/runtime";
 export { ReleaseSmokeWorkflowV1 } from "./runtime/release-smoke/runtime";
 export { StatementExtractionWorkflowV1 } from "./ingestion/runtime";
 
 type CoreEnvironment = WorkerTelemetryEnvironment &
-  WeeklyEnvironment &
+  ProactivityEnvironment &
   Readonly<{ CONTRACT_DIGEST: string; RELEASE_GIT_SHA: string }> & {
     readonly AI: WorkersAiEnvironment["AI"];
     readonly DB: D1Database;
@@ -80,8 +80,8 @@ type CoreEnvironment = WorkerTelemetryEnvironment &
       STATEMENT_EXTRACTION_QUEUE: Queue;
       STATEMENT_EXTRACTION_WORKFLOW: Workflow;
       HOSTED_WHATSAPP_QUEUE: Queue;
-      WEEKLY_DELIVERY_QUEUE: Queue<WeeklyDeliveryWork>;
-      WEEKLY_DELIVERY_WORKFLOW: Workflow<WeeklyDeliveryWork>;
+      WEEKLY_DELIVERY_QUEUE: Queue<ProactivityDeliveryWork>;
+      WEEKLY_DELIVERY_WORKFLOW: Workflow<ProactivityDeliveryWork>;
     }>
   > &
   Partial<

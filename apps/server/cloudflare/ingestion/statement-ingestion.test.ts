@@ -149,6 +149,7 @@ const migrationNames = [
   "0016_statement_processing",
   "0016_subscription_standing",
   "0016_budgets",
+  "0037_budget_crossing_facts",
   "0017_hosted_compaction",
   "0017_forwarded_email",
   "0017_statement_dispatch",
@@ -167,6 +168,8 @@ const migrationNames = [
   "0034_statement_clarification_audit",
   "0035_statement_hosted_origin",
   "0036_statement_whatsapp_documents",
+  "0038_proactivity_consent",
+  "0040_reminder_canonical_audit",
   "0032_oauth_review",
   "0034_oauth_refresh",
 ] as const;

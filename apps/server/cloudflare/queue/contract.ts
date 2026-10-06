@@ -1,4 +1,4 @@
-import type { WeeklyDeliveryWork } from "../insights/contract";
+import type { ProactivityDeliveryWork } from "../insights/contract";
 import type { SmokeBindings } from "../runtime/release-smoke/contract";
 
 /** Queue composition receives only native handoff bindings and the existing smoke readiness inputs. */
@@ -19,7 +19,7 @@ export type CoreQueueEnvironment = Readonly<{
       BILLING_COLLECTION_WORKFLOW: Workflow;
       BILLING_REFUND_WORKFLOW: Workflow;
       STATEMENT_EXTRACTION_WORKFLOW: Workflow;
-      WEEKLY_DELIVERY_WORKFLOW: Workflow<WeeklyDeliveryWork>;
+      WEEKLY_DELIVERY_WORKFLOW: Workflow<ProactivityDeliveryWork>;
       OPERATIONAL_CANARY_QUEUE_NAME: string;
       OPERATIONAL_CANARY_WORKFLOW: Workflow;
     }>

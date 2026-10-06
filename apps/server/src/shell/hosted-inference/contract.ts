@@ -13,7 +13,7 @@ import type { Response } from "effect/ai";
 import type { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import type { User } from "~/core/identity/contract";
 import {
-  type ProactiveInsightTranscriptEntry,
+  type ProactiveTranscriptEntry,
   type TranscriptEntry,
   maximumToolCallsPerTurn,
 } from "~/core/agent/contract";
@@ -29,7 +29,7 @@ export type HostedContextSection =
   | Readonly<{ _tag: "Memory"; text: string }>
   | Readonly<{ _tag: "CompactedConversation"; text: string }>
   | Readonly<{ _tag: "Transcript"; entry: TranscriptEntry }>
-  | Readonly<{ _tag: "ProactiveReply"; entry: ProactiveInsightTranscriptEntry }>
+  | Readonly<{ _tag: "ProactiveReply"; entry: ProactiveTranscriptEntry }>
   | Readonly<{
       _tag: "ToolResult";
       toolCallId: Extract<

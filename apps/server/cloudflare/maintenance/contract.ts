@@ -1,4 +1,4 @@
-import type { WeeklyDeliveryWork, WeeklyEnvironment } from "../insights/contract";
+import type { ProactivityDeliveryWork, ProactivityEnvironment } from "../insights/contract";
 import { Data, type Effect, type Option } from "effect";
 import type { PlatformMaintenanceInput } from "../runtime/contract";
 
@@ -23,6 +23,7 @@ export type ScheduledOperation =
   | "billing.collection.reconcile"
   | "billing.cardPreparationAdmissionSweep"
   | "consent.sweep"
+  | "consent.proactivityOfferRetention"
   | "consent.disclosureRecovery"
   | "hostedTurn.whatsapp.dispatch"
   | "hostedTurn.whatsapp.windowSweep"
@@ -71,10 +72,10 @@ export type CoreMaintenanceInput = Omit<
     STATEMENT_EXTRACTION_QUEUE: Option.Option<Queue>;
     HOSTED_WHATSAPP_QUEUE: Option.Option<Queue>;
   }> &
-  WeeklyEnvironment &
+  ProactivityEnvironment &
   Partial<
     Readonly<{
-      WEEKLY_DELIVERY_QUEUE: Queue<WeeklyDeliveryWork>;
-      WEEKLY_DELIVERY_WORKFLOW: Workflow<WeeklyDeliveryWork>;
+      WEEKLY_DELIVERY_QUEUE: Queue<ProactivityDeliveryWork>;
+      WEEKLY_DELIVERY_WORKFLOW: Workflow<ProactivityDeliveryWork>;
     }>
   >;

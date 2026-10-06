@@ -3,18 +3,57 @@ import {
   prepareDeleteBudget,
   prepareUpdateBudget,
   readBudgetCaps,
+  readBudgetCrossingGroups,
+  readBudgetCrossings,
   readBudgetSpending,
 } from "./operations";
+import {
+  UserId,
+  WhatsAppBusinessPortfolioId,
+  WhatsAppBusinessScopedUserId,
+  WhatsAppCallerReference,
+} from "../../src/core/identity/contract";
+import { type ConsentUnavailable } from "../consent/contract";
+import { type InsightUnavailable } from "../insights/contract";
+import {
+  createProactivityConsentOffer,
+  findCurrentProactivityOffer,
+  findProactivityConsentGrant,
+  recordProactivityConsentDisclosure,
+} from "../consent/operations";
+import {
+  makeExecutingWeeklyFixtureStep,
+  makeProactivityCoordinator,
+  proactivityWorkflowHarness,
+} from "../weekly-summary.test-fixture";
+import type { WorkflowStep } from "cloudflare:workers";
+import type { ProactivityDeliveryWork } from "../insights/contract";
+import { WhatsAppStatusAdmission } from "../whatsapp/contract";
+import { findInsightRecipient, prepareInsightRecipient } from "../whatsapp/operations";
+import {
+  HostedDeliveryCorrelationToken,
+  ProactivityTemplateConfiguration,
+  WhatsAppBusinessPhoneNumberId,
+  WhatsAppProviderMessageId,
+} from "../../src/shell/channels/whatsapp/contract";
+import { readProactiveMessageTranscript, readProactiveTranscript } from "../agent/operations";
+import { InsightEventId } from "../../src/core/insights/contract";
+import { FetchHttpClient } from "effect/http";
+import { executeProactivityWork } from "../insights/runtime";
+import { findProactivityReport, recordProactivityDecision } from "../insights/operations";
+import { type ConsentRecordId, DisclosureSnapshot } from "../../src/core/consent/contract";
+import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import { executeCanonicalWork } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import {
   canonicalAdmissionMigrationNames,
+  hostedTurnTestMigrations,
   installTestSchema,
   isolatedTestDatabases,
   statementAuditTestMigrations,
 } from "../d1-test-fixture";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
-import { type Cause, DateTime, Effect, Option, Schema } from "effect";
+import { type Cause, DateTime, Effect, Array as EffectArray, Option, Schema } from "effect";
 import {
   Budget,
   BudgetId,
@@ -98,6 +137,7 @@ const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
     const db = yield* Effect.tryPromise(() => databases.acquire());
     const migrations = [
       "0001_categories",
+      "0002_resource_admission",
       "0003_pending_consent",
       "0004_onboarding_email",
       "0005_verified_onboarding",
@@ -112,6 +152,16 @@ const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
       "0014_memory",
       "0015_statement_submission",
       "0016_budgets",
+      "0016_hosted_turn",
+      "0017_hosted_compaction",
+      "0037_budget_crossing_facts",
+      "0038_proactivity_consent",
+      "0042_budget_proactivity",
+      "0039_reminder_schedules",
+      "0041_proactivity_messages",
+      "0044_proactivity_channel",
+      "0032_proactive_transcript",
+      "0045_budget_messages_transcript",
       "0016_statement_processing",
       "0017_forwarded_email",
       "0017_statement_dispatch",
@@ -122,6 +172,7 @@ const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
       "0018_dashboard",
       "0018_insight_events",
       ...statementAuditTestMigrations,
+      ...hostedTurnTestMigrations,
     ];
     yield* Effect.tryPromise(() =>
       installTestSchema({
@@ -139,7 +190,10 @@ const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
   });
 afterAll(() => databases.dispose());
 beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 const coordinatorByDatabase = new WeakMap<D1Database, Map<string, UserTransactionCoordinator>>();
 const send = (db: D1Database, request: Request): Promise<Response> => {
   vi.setSystemTime(DateTime.nowUnsafe().epochMilliseconds + 1000);
@@ -319,6 +373,189 @@ const Captured = Schema.Struct({
   data: Schema.toCodecJson(Transaction),
   next: Schema.Array(Schema.Unknown),
 });
+
+it.each([
+  { label: "after hours", createdAt: "2026-10-07T01:00:00Z", unstarted: false },
+  { label: "near closing", createdAt: "2026-10-06T23:59:00Z", unstarted: true },
+  { label: "before a delayed Queue execution", createdAt: "2026-10-06T17:00:00Z", unstarted: true },
+])(
+  "a first Budget created $label retains a recoverable opt-in request until visible disclosure",
+  (scenario) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const night = DateTime.makeUnsafe(scenario.createdAt);
+        vi.setSystemTime(night.epochMilliseconds);
+        const db = yield* setup();
+        expect(
+          (yield* Effect.tryPromise(() => send(db, request(0, "/budgets", "POST", payload()))))
+            .status
+        ).toBe(201);
+        const userId = UserId.make(users[0]);
+        const caller = WhatsAppCallerReference.make({
+          businessPortfolioId: WhatsAppBusinessPortfolioId.make("123456789"),
+          businessScopedUserId: WhatsAppBusinessScopedUserId.make("CO.budgetuser"),
+        });
+        yield* seedCrossingConsent(db);
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "INSERT INTO whatsapp_identities(user_id,portfolio_id,bsuid,verified_at_ms) VALUES(?,?,?,?)"
+            )
+            .bind(
+              userId,
+              caller.businessPortfolioId,
+              caller.businessScopedUserId,
+              night.epochMilliseconds
+            )
+            .run()
+        );
+        const phone = WhatsAppBusinessPhoneNumberId.make("123456789");
+        yield* Effect.tryPromise(() =>
+          db.batch([
+            prepareInsightRecipient({
+              db,
+              userId,
+              recipient: {
+                portfolioId: caller.businessPortfolioId,
+                bsuid: caller.businessScopedUserId,
+                businessPhoneNumberId: phone,
+              },
+              receivedAtMs: night.epochMilliseconds,
+            }),
+          ])
+        );
+        const environment = {
+          DB: db,
+          PROACTIVITY_ENABLED: "enabled",
+          KAPSO_API_KEY: "test-only",
+          PROACTIVITY_TEMPLATE_JSON: yield* Schema.encodeEffect(
+            Schema.fromJsonString(ProactivityTemplateConfiguration)
+          )({
+            name: "fidy_proactivity",
+            language: "es",
+            approval: "approved",
+            body: "Fidy: {{1}}",
+          }),
+        };
+        const harness = proactivityWorkflowHarness({
+          environment,
+          userId,
+          otherUserIds: [],
+          unavailableUserIds: [],
+        });
+        yield* Effect.exit(harness.sweep());
+        const prior = yield* findCurrentProactivityOffer({
+          db,
+          userId,
+          caller,
+          kind: "budget-threshold",
+          now: night,
+        });
+        expect(Option.isSome(prior)).toBe(scenario.unstarted);
+        if (Option.isSome(prior)) {
+          const delayed = DateTime.makeUnsafe(night.epochMilliseconds + 660000);
+          vi.setSystemTime(delayed.epochMilliseconds);
+          yield* executeProactivityWork({
+            environment,
+            userId,
+            now: delayed,
+            work: { kind: "proactivity-delivery", version: 1, userId, id: prior.value.id },
+          });
+          expect(
+            yield* Effect.tryPromise(() =>
+              db
+                .prepare("SELECT state FROM proactivity_outbox WHERE user_id=? AND delivery_id=?")
+                .bind(userId, prior.value.id)
+                .first()
+            )
+          ).toEqual({ state: "expired" });
+        }
+        if (!scenario.unstarted) {
+          for (let attempt = 1; attempt <= 36; attempt += 1) {
+            vi.setSystemTime(night.epochMilliseconds + attempt * 60000);
+            yield* Effect.exit(harness.sweep());
+          }
+        }
+        const morning = DateTime.makeUnsafe("2026-10-07T14:00:00Z");
+        vi.setSystemTime(morning.epochMilliseconds);
+        yield* Effect.exit(harness.sweep());
+        const offer = Option.getOrThrow(
+          yield* findCurrentProactivityOffer({
+            db,
+            userId,
+            caller,
+            kind: "budget-threshold",
+            now: morning,
+          })
+        );
+        expect(offer.expiresAt.epochMilliseconds).toBe(morning.epochMilliseconds + 600000);
+        if (Option.isSome(prior)) expect(offer.id).not.toBe(prior.value.id);
+        expect(
+          Option.isNone(
+            yield* findProactivityConsentGrant({ db, userId, kind: "budget-threshold" })
+          )
+        ).toBe(true);
+        const coordinator = makeProactivityCoordinator({ environment, userId });
+        const provider = vi.fn(() =>
+          Promise.resolve(
+            Response.json({
+              messaging_product: "whatsapp",
+              messages: [{ id: "morning-budget-offer" }],
+            })
+          )
+        );
+        vi.stubGlobal("fetch", provider);
+        yield* executeProactivityWork({
+          environment,
+          userId,
+          now: morning,
+          work: { kind: "proactivity-delivery", version: 1, userId, id: offer.id },
+        }).pipe(Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch));
+        const claim = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ correlation_token: HostedDeliveryCorrelationToken })
+        )(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT correlation_token FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
+              )
+              .bind(userId, offer.id)
+              .first()
+          )
+        );
+        const body = yield* Schema.encodeEffect(Schema.fromJsonString(WhatsAppStatusAdmission))({
+          userId,
+          correlationToken: claim.correlation_token,
+          businessPhoneNumberId: phone,
+          providerMessageId: WhatsAppProviderMessageId.make("morning-budget-offer"),
+          outcome: "delivered",
+          occurredAtMs: morning.epochMilliseconds,
+          receivedAtMs: morning.epochMilliseconds,
+        });
+        expect(
+          (yield* Effect.tryPromise(() =>
+            coordinator.fetch(
+              new Request("https://coordinator/hosted-turn/whatsapp/status", {
+                method: "POST",
+                body,
+              })
+            )
+          )).status
+        ).toBe(200);
+        expect(
+          Option.getOrThrow(
+            yield* readProactiveMessageTranscript({
+              db,
+              userId,
+              id: offer.id,
+              now: morning.epochMilliseconds,
+            })
+          ).text
+        ).toBe(`Fidy: ${offer.disclosure.text}\n${offer.acceptChoice}\n${offer.declineChoice}`);
+        expect(provider).toHaveBeenCalledOnce();
+      })
+    )
+);
 
 it("reports corrupt retained Budget state as unavailable without false caller refusal or mutation", () =>
   Effect.runPromise(
@@ -1295,6 +1532,693 @@ it("latches 80% and 100% only once across concurrent capture and correction", ()
           .all<{ threshold: number }>()
       );
       expect(after.results.map((row) => row.threshold)).toEqual([80, 100]);
+    })
+  ));
+
+const seedCrossingConsent = (
+  db: D1Database
+): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const disclosure = yield* Schema.encodeEffect(
+      Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot))
+    )(currentDisclosureFor());
+    yield* Effect.tryPromise(() =>
+      db.batch(
+        users.map((user) =>
+          db
+            .prepare(
+              "INSERT INTO onboarding_consent_records (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES (?,?,?,'disclosed','accepted',0,0)"
+            )
+            .bind(user, user, disclosure)
+        )
+      )
+    );
+  });
+
+const grantBudgetDelivery = (
+  db: D1Database
+): Effect.Effect<ConsentRecordId, ConsentUnavailable | InsightUnavailable | Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const userId = UserId.make(users[0]);
+    const now = yield* DateTime.now;
+    const caller = WhatsAppCallerReference.make({
+      businessPortfolioId: WhatsAppBusinessPortfolioId.make("123456789"),
+      businessScopedUserId: WhatsAppBusinessScopedUserId.make("CO.budgetuser"),
+    });
+    yield* Effect.tryPromise(() =>
+      db
+        .prepare(
+          "INSERT OR IGNORE INTO whatsapp_identities(user_id,portfolio_id,bsuid,verified_at_ms) VALUES(?,?,?,?)"
+        )
+        .bind(
+          userId,
+          caller.businessPortfolioId,
+          caller.businessScopedUserId,
+          now.epochMilliseconds
+        )
+        .run()
+    );
+    const context = { db, userId, caller, kind: "budget-threshold" as const, now };
+    const offer = Option.getOrThrow(yield* createProactivityConsentOffer(context));
+    expect(
+      yield* recordProactivityConsentDisclosure({
+        ...context,
+        offerId: offer.id,
+        disclosureMessageId: "budget-disclosure",
+      })
+    ).toBe(true);
+    expect(
+      yield* recordProactivityDecision({
+        ...context,
+        choice: offer.acceptChoice,
+        decisionMessageId: "budget-accept",
+      })
+    ).toBe(true);
+    const grant = yield* findProactivityConsentGrant(context);
+    return Option.getOrThrow(grant).id;
+  });
+
+it("freezes both crossing facts before later corrections and isolates them from a foreign User", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* seedCrossingConsent(db);
+      const created = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/budgets", "POST", payload()))
+      );
+      expect(created.status).toBe(201);
+      const body = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ data: Schema.toCodecJson(Budget) })
+      )(yield* Effect.tryPromise(() => created.json()));
+      const period = deriveCurrentBudgetMonth({
+        now: DateTime.nowUnsafe(),
+        timeZone: IanaTimeZone.make("America/Bogota"),
+      });
+      const captured = yield* Effect.tryPromise(() =>
+        send(
+          db,
+          request(0, "/transactions", "POST", {
+            money: { amount: "110", currency: "COP" },
+            direction: "outflow",
+            categoryId: category,
+            occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+          })
+        )
+      );
+      expect(captured.status).toBe(201);
+      const movement = yield* Schema.decodeUnknownEffect(Captured)(
+        yield* Effect.tryPromise(() => captured.json())
+      );
+      const input = {
+        db,
+        userId: UserId.make(users[0]),
+        budgetId: BudgetId.make(body.data.id),
+        period,
+      };
+      const crossings = yield* readBudgetCrossings(input);
+      const groups = yield* readBudgetCrossingGroups({ db, userId: input.userId });
+      expect(groups).toHaveLength(1);
+      const group = Option.getOrThrow(EffectArray.head(groups));
+      expect(Option.isNone(group.grantId)).toBe(true);
+      expect(group.crossings.map((crossing) => crossing.threshold)).toEqual([80, 100]);
+      yield* grantBudgetDelivery(db);
+      expect(yield* readBudgetCrossingGroups({ db, userId: input.userId })).toEqual(groups);
+      expect(yield* readBudgetCrossingGroups({ db, userId: UserId.make(users[1]) })).toEqual([]);
+      expect(crossings.map((crossing) => crossing.threshold)).toEqual([80, 100]);
+      expect(crossings.map((crossing) => encodeMoneyAmount(crossing.spent.amount))).toEqual([
+        "110",
+        "110",
+      ]);
+      expect(crossings.map((crossing) => crossing.spent.currency)).toEqual(["COP", "COP"]);
+      expect(yield* readBudgetCrossings({ ...input, userId: UserId.make(users[1]) })).toEqual([]);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          send(
+            db,
+            request(0, `/transactions/${movement.data.id}`, "PUT", {
+              expectedRevision: 0,
+              changes: { money: { amount: "1", currency: "COP" } },
+            })
+          )
+        )).status
+      ).toBe(200);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          send(db, request(0, `/budgets/${body.data.id}`, "PUT", payload("200")))
+        )).status
+      ).toBe(200);
+      const frozen = yield* readBudgetCrossings(input);
+      expect(frozen.map((crossing) => encodeMoneyAmount(crossing.cap.amount))).toEqual([
+        "100",
+        "100",
+      ]);
+      expect(frozen.map((crossing) => encodeMoneyAmount(crossing.spent.amount))).toEqual([
+        "110",
+        "110",
+      ]);
+      expect(frozen.map((crossing) => DateTime.formatIso(crossing.detectedAt))).toEqual(
+        crossings.map((crossing) => DateTime.formatIso(crossing.detectedAt))
+      );
+    })
+  ));
+
+it("captures the live Budget grant once for a both-threshold mutation without resetting monthly latches", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* seedCrossingConsent(db);
+      expect(
+        (yield* Effect.tryPromise(() => send(db, request(0, "/budgets", "POST", payload())))).status
+      ).toBe(201);
+      const grantId = yield* grantBudgetDelivery(db);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          send(
+            db,
+            request(0, "/transactions", "POST", {
+              money: { amount: "110", currency: "COP" },
+              direction: "outflow",
+              categoryId: category,
+              occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+            })
+          )
+        )).status
+      ).toBe(201);
+      const context = { db, userId: UserId.make(users[0]) };
+      const groups = yield* readBudgetCrossingGroups(context);
+      expect(groups).toHaveLength(1);
+      const group = Option.getOrThrow(EffectArray.head(groups));
+      expect(group.grantId).toEqual(Option.some(grantId));
+      expect(group.crossings.map((crossing) => crossing.threshold)).toEqual([80, 100]);
+      expect(yield* evaluateBudgetAlerts({ db, userId: users[0] })).toBe(true);
+      expect(yield* readBudgetCrossingGroups(context)).toEqual(groups);
+      const mutation = yield* Effect.exit(
+        Effect.tryPromise(() =>
+          db
+            .prepare("UPDATE budget_threshold_alerts SET consent_grant_id=NULL WHERE user_id=?")
+            .bind(users[0])
+            .run()
+        )
+      );
+      expect(mutation._tag).toBe("Failure");
+      expect(yield* readBudgetCrossingGroups(context)).toEqual(groups);
+    })
+  ));
+
+it("installed category generation atomically materializes two Budget events and one frozen delivery intent", () =>
+  Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        vi.spyOn(Date, "now").mockReturnValue(
+          DateTime.makeUnsafe("2026-10-06T17:00:00Z").epochMilliseconds
+        );
+        const db = yield* setup();
+        yield* seedCrossingConsent(db);
+        expect(
+          (yield* Effect.tryPromise(() => send(db, request(0, "/budgets", "POST", payload()))))
+            .status
+        ).toBe(201);
+        yield* grantBudgetDelivery(db);
+        expect(
+          (yield* Effect.tryPromise(() =>
+            send(
+              db,
+              request(0, "/transactions", "POST", {
+                money: { amount: "110", currency: "COP" },
+                direction: "outflow",
+                categoryId: category,
+                occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+              })
+            )
+          )).status
+        ).toBe(201);
+        const userId = UserId.make(users[0]);
+        const group = Option.getOrThrow(
+          EffectArray.head(yield* readBudgetCrossingGroups({ db, userId }))
+        );
+        const work = { kind: "proactivity-generate" as const, version: 1 as const, userId };
+        yield* executeProactivityWork({
+          environment: { DB: db, PROACTIVITY_ENABLED: "enabled" },
+          userId,
+          now: yield* DateTime.now,
+          work,
+        });
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT count(*) AS n FROM insight_events WHERE user_id=? AND kind='budget-threshold'"
+              )
+              .bind(userId)
+              .first()
+          )
+        ).toEqual({ n: 2 });
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT count(*) AS n FROM proactivity_outbox WHERE user_id=?")
+              .bind(userId)
+              .first()
+          )
+        ).toEqual({ n: 1 });
+        expect(yield* readBudgetCrossingGroups({ db, userId })).toEqual([]);
+        const now = yield* DateTime.now;
+        const phone = WhatsAppBusinessPhoneNumberId.make("123456789");
+        yield* Effect.tryPromise(() =>
+          db.batch([
+            prepareInsightRecipient({
+              db,
+              userId,
+              recipient: {
+                portfolioId: WhatsAppBusinessPortfolioId.make("123456789"),
+                bsuid: WhatsAppBusinessScopedUserId.make("CO.budgetuser"),
+                businessPhoneNumberId: phone,
+              },
+              receivedAtMs: now.epochMilliseconds,
+            }),
+          ])
+        );
+        expect(Option.isSome(yield* findInsightRecipient({ db, userId }))).toBe(true);
+        expect(Option.isSome(yield* findProactivityReport({ db, userId, id: group.id }))).toBe(
+          true
+        );
+        const provider = vi.fn(() =>
+          Promise.resolve(
+            Response.json({ messaging_product: "whatsapp", messages: [{ id: "budget-provider" }] })
+          )
+        );
+        vi.stubGlobal("fetch", provider);
+        const environment = {
+          DB: db,
+          PROACTIVITY_ENABLED: "enabled",
+          KAPSO_API_KEY: "test-key",
+          PROACTIVITY_TEMPLATE_JSON:
+            '{"name":"fidy_proactivity","language":"es","body":"Fidy: {{1}}","approval":"approved"}',
+        };
+        yield* executeProactivityWork({
+          environment,
+          userId,
+          now,
+          work: { kind: "proactivity-delivery", version: 1, userId, id: group.id },
+        }).pipe(Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch));
+        expect(provider).toHaveBeenCalledOnce();
+        const claim = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ correlation_token: HostedDeliveryCorrelationToken })
+        )(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT correlation_token FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
+              )
+              .bind(userId, group.id)
+              .first()
+          )
+        );
+        const coordinator = makeProactivityCoordinator({ environment, userId });
+        const status = (): Request =>
+          new Request("https://coordinator/hosted-turn/whatsapp/status", {
+            method: "POST",
+            body: Schema.encodeSync(Schema.fromJsonString(WhatsAppStatusAdmission))({
+              userId,
+              correlationToken: claim.correlation_token,
+              businessPhoneNumberId: phone,
+              providerMessageId: WhatsAppProviderMessageId.make("budget-provider"),
+              outcome: "delivered",
+              occurredAtMs: now.epochMilliseconds,
+              receivedAtMs: now.epochMilliseconds,
+            }),
+          });
+        expect((yield* Effect.tryPromise(() => coordinator.fetch(status()))).status).toBe(200);
+        expect((yield* Effect.tryPromise(() => coordinator.fetch(status()))).status).toBe(200);
+        const events = yield* Schema.decodeUnknownEffect(
+          Schema.Array(
+            Schema.Struct({ id: InsightEventId, lifecycle_state: Schema.Literal("delivered") })
+          )
+        )(
+          (yield* Effect.tryPromise(() =>
+            db
+              .prepare(
+                "SELECT id,lifecycle_state FROM insight_events WHERE user_id=? AND kind='budget-threshold'"
+              )
+              .bind(userId)
+              .all()
+          )).results
+        );
+        expect(events).toHaveLength(2);
+        const transcripts = yield* Effect.forEach(events, (event) =>
+          readProactiveTranscript({
+            db,
+            userId,
+            insightEventId: event.id,
+            now: now.epochMilliseconds,
+          })
+        );
+        const first = Option.getOrThrow(Option.getOrThrow(EffectArray.head(transcripts)));
+        expect(Option.getOrThrow(Option.getOrThrow(EffectArray.last(transcripts))).id).toBe(
+          first.id
+        );
+        expect(first.text).toContain("80% y 100%");
+        expect(first.text).toContain("110 COP");
+        expect(provider).toHaveBeenCalledOnce();
+        yield* executeProactivityWork({
+          environment: { DB: db, PROACTIVITY_ENABLED: "enabled" },
+          userId,
+          now: yield* DateTime.now,
+          work,
+        });
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT count(*) AS n FROM proactivity_outbox WHERE user_id=?")
+              .bind(userId)
+              .first()
+          )
+        ).toEqual({ n: 1 });
+      })
+    )
+  ));
+
+it("rolls back both threshold marks and frozen facts if one crossing cannot commit, then recovers without losing the peak", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* seedCrossingConsent(db);
+      const created = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/budgets", "POST", payload()))
+      );
+      expect(created.status).toBe(201);
+      const body = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ data: Schema.toCodecJson(Budget) })
+      )(yield* Effect.tryPromise(() => created.json()));
+      const period = deriveCurrentBudgetMonth({
+        now: DateTime.nowUnsafe(),
+        timeZone: IanaTimeZone.make("America/Bogota"),
+      });
+      yield* grantBudgetDelivery(db);
+      const recovery = proactivityWorkflowHarness({
+        environment: { DB: db, PROACTIVITY_ENABLED: "enabled" },
+        userId: UserId.make(users[0]),
+        otherUserIds: [],
+        unavailableUserIds: [],
+      });
+      yield* Effect.exit(recovery.sweep());
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TRIGGER reject_crossing BEFORE INSERT ON budget_threshold_alerts WHEN NEW.threshold=100 BEGIN SELECT RAISE(ABORT,'test_crossing_refusal'); END"
+          )
+          .run()
+      );
+      expect(
+        (yield* Effect.tryPromise(() =>
+          send(
+            db,
+            request(0, "/transactions", "POST", {
+              money: { amount: "110", currency: "COP" },
+              direction: "outflow",
+              categoryId: category,
+              occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+            })
+          )
+        )).status
+      ).toBe(201);
+      const input = {
+        db,
+        userId: UserId.make(users[0]),
+        budgetId: BudgetId.make(body.data.id),
+        period,
+      };
+      expect(yield* readBudgetCrossings(input)).toEqual([]);
+      const marks = yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "SELECT reached_80,reached_100 FROM budget_month_latches WHERE user_id=? AND budget_id=?"
+          )
+          .bind(users[0], body.data.id)
+          .first()
+      );
+      expect(marks).toEqual({ reached_80: 0, reached_100: 0 });
+      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER reject_crossing").run());
+      yield* Effect.exit(recovery.sweep());
+      expect((yield* readBudgetCrossings(input)).map((crossing) => crossing.threshold)).toEqual([
+        80, 100,
+      ]);
+      const overwrite = yield* Effect.exit(
+        Effect.tryPromise(() =>
+          db
+            .prepare(
+              "UPDATE budget_threshold_alerts SET crossing_json='{}' WHERE user_id=? AND budget_id=?"
+            )
+            .bind(users[0], body.data.id)
+            .run()
+        )
+      );
+      expect(overwrite._tag).toBe("Failure");
+      expect(
+        (yield* readBudgetCrossings(input)).map((crossing) =>
+          encodeMoneyAmount(crossing.spent.amount)
+        )
+      ).toEqual(["110", "110"]);
+    })
+  ));
+
+it("category Queue-to-Workflow redelivery rejects another User's frozen Budget message without provider effects or partial settlement", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      vi.setSystemTime(DateTime.makeUnsafe("2026-10-06T17:00:00Z").epochMilliseconds);
+      const db = yield* setup();
+      yield* seedCrossingConsent(db);
+      yield* grantBudgetDelivery(db);
+      expect(
+        (yield* Effect.tryPromise(() => send(db, request(0, "/budgets", "POST", payload())))).status
+      ).toBe(201);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          send(
+            db,
+            request(0, "/transactions", "POST", {
+              money: { amount: "110", currency: "COP" },
+              direction: "outflow",
+              categoryId: category,
+              occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+            })
+          )
+        )).status
+      ).toBe(201);
+      const userId = UserId.make(users[0]);
+      const group = (yield* readBudgetCrossingGroups({ db, userId }))[0];
+      if (group === undefined) return yield* Effect.die("Expected Budget crossings");
+      const environment = {
+        DB: db,
+        PROACTIVITY_ENABLED: "enabled",
+        KAPSO_API_KEY: "test-only",
+        PROACTIVITY_TEMPLATE_JSON: yield* Schema.encodeEffect(
+          Schema.fromJsonString(ProactivityTemplateConfiguration)
+        )({ name: "fidy_proactivity", language: "es", approval: "approved", body: "Fidy: {{1}}" }),
+      };
+      yield* executeProactivityWork({
+        environment,
+        userId,
+        now: yield* DateTime.now,
+        work: { kind: "proactivity-generate", version: 1, userId },
+      });
+      const report = Option.getOrThrow(yield* findProactivityReport({ db, userId, id: group.id }));
+      expect(Option.getOrThrow(report.text)).toContain("110 COP");
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          prepareInsightRecipient({
+            db,
+            userId,
+            recipient: {
+              portfolioId: WhatsAppBusinessPortfolioId.make("123456789"),
+              bsuid: WhatsAppBusinessScopedUserId.make("CO.budgetuser"),
+              businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
+            },
+            receivedAtMs: DateTime.nowUnsafe().epochMilliseconds,
+          }),
+        ])
+      );
+      const snapshot = (): Effect.Effect<
+        ReadonlyArray<ReadonlyArray<unknown>>,
+        Cause.UnknownError
+      > =>
+        Effect.forEach(
+          [
+            "proactivity_reports",
+            "proactivity_whatsapp_claims",
+            "proactivity_outbox",
+            "insight_events",
+            "reminder_governors",
+            "proactivity_consent_offers",
+            "proactivity_consent_records",
+            "proactive_transcript_entries",
+            "proactive_message_transcript_entries",
+          ],
+          (table) =>
+            Effect.tryPromise(() => db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()).pipe(
+              Effect.map((result) => result.results)
+            )
+        );
+      const before = yield* snapshot();
+      const provider = vi
+        .fn<typeof globalThis.fetch>()
+        .mockRejectedValue(new Error("Forbidden provider IO"));
+      vi.stubGlobal("fetch", provider);
+      const unexpected = (): Promise<never> =>
+        Promise.reject(new Error("Unexpected infrastructure authority"));
+      const instance: WorkflowInstance = {
+        id: "foreign-category",
+        pause: unexpected,
+        resume: unexpected,
+        terminate: unexpected,
+        restart: unexpected,
+        delete: unexpected,
+        sendEvent: unexpected,
+        subscribe: unexpected,
+        status: () => Promise.resolve({ status: "running" }),
+      };
+      const create = vi
+        .fn<Workflow<ProactivityDeliveryWork>["create"]>()
+        .mockResolvedValue(instance);
+      const binding: Workflow<ProactivityDeliveryWork> = {
+        create,
+        get: unexpected,
+        createBatch: unexpected,
+        deleteBatch: unexpected,
+      };
+      const harness = proactivityWorkflowHarness({
+        environment,
+        userId,
+        otherUserIds: [UserId.make(users[1])],
+        unavailableUserIds: [],
+      });
+      const work: ProactivityDeliveryWork = {
+        kind: "proactivity-delivery",
+        version: 1,
+        userId: UserId.make(users[1]),
+        id: group.id,
+      };
+      const step: WorkflowStep = {
+        do: makeExecutingWeeklyFixtureStep(),
+        sleep: unexpected,
+        sleepUntil: unexpected,
+        waitForEvent: unexpected,
+      };
+      for (const attempt of [1, 2]) {
+        const message = { body: work, ack: vi.fn(), retry: vi.fn() };
+        yield* harness.receive({ messages: [message], workflow: Option.some(binding) });
+        expect(message.ack).toHaveBeenCalledOnce();
+        expect(create).toHaveBeenCalledTimes(attempt);
+        expect(
+          (yield* Effect.exit(Effect.tryPromise(() => harness.execute({ work, step }))))._tag
+        ).toBe("Failure");
+        expect(provider).not.toHaveBeenCalled();
+        expect(yield* snapshot()).toEqual(before);
+      }
+      provider.mockResolvedValueOnce(
+        Response.json({
+          messaging_product: "whatsapp",
+          messages: [{ id: "same-user-category-control" }],
+        })
+      );
+      const ownWork = { ...work, userId };
+      const message = { body: ownWork, ack: vi.fn(), retry: vi.fn() };
+      yield* harness.receive({ messages: [message], workflow: Option.some(binding) });
+      expect(message.ack).toHaveBeenCalledOnce();
+      expect(
+        (yield* Effect.exit(Effect.tryPromise(() => harness.execute({ work: ownWork, step }))))._tag
+      ).toBe("Success");
+      expect(provider).toHaveBeenCalledOnce();
+    })
+  ));
+
+it("accepting Budget opt-in drains pre-opt-in reconciliation as ineligible even after the financial post-commit evaluation failed", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* seedCrossingConsent(db);
+      expect(
+        (yield* Effect.tryPromise(() => send(db, request(0, "/budgets", "POST", payload())))).status
+      ).toBe(201);
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TRIGGER reject_pre_opt_in_crossing BEFORE INSERT ON budget_threshold_alerts WHEN NEW.threshold=100 BEGIN SELECT RAISE(ABORT,'test_crossing_refusal'); END"
+          )
+          .run()
+      );
+      expect(
+        (yield* Effect.tryPromise(() =>
+          send(
+            db,
+            request(0, "/transactions", "POST", {
+              money: { amount: "110", currency: "COP" },
+              direction: "outflow",
+              categoryId: category,
+              occurredAt: DateTime.formatIso(DateTime.nowUnsafe()),
+            })
+          )
+        )).status
+      ).toBe(201);
+      const userId = UserId.make(users[0]);
+      expect(yield* readBudgetCrossingGroups({ db, userId })).toEqual([]);
+      const caller = WhatsAppCallerReference.make({
+        businessPortfolioId: WhatsAppBusinessPortfolioId.make("123456789"),
+        businessScopedUserId: WhatsAppBusinessScopedUserId.make("CO.budgetuser"),
+      });
+      const now = yield* DateTime.now;
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO whatsapp_identities(user_id,portfolio_id,bsuid,verified_at_ms) VALUES(?,?,?,?)"
+          )
+          .bind(
+            userId,
+            caller.businessPortfolioId,
+            caller.businessScopedUserId,
+            now.epochMilliseconds
+          )
+          .run()
+      );
+      const context = { db, userId, caller, kind: "budget-threshold" as const, now };
+      const offer = Option.getOrThrow(yield* createProactivityConsentOffer(context));
+      expect(
+        yield* recordProactivityConsentDisclosure({
+          ...context,
+          offerId: offer.id,
+          disclosureMessageId: "delayed-crossing-offer",
+        })
+      ).toBe(true);
+      const choice = {
+        ...context,
+        choice: offer.acceptChoice,
+        decisionMessageId: "delayed-crossing-accept",
+      };
+      expect(yield* recordProactivityDecision(choice)).toBe(false);
+      expect(Option.isNone(yield* findProactivityConsentGrant(context))).toBe(true);
+      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER reject_pre_opt_in_crossing").run());
+      expect(yield* recordProactivityDecision(choice)).toBe(true);
+      const groups = yield* readBudgetCrossingGroups({ db, userId });
+      expect(groups).toHaveLength(1);
+      expect(groups[0]?.grantId).toEqual(Option.none());
+      expect(groups[0]?.crossings.map((crossing) => crossing.threshold)).toEqual([80, 100]);
+      const recovery = proactivityWorkflowHarness({
+        environment: { DB: db, PROACTIVITY_ENABLED: "enabled" },
+        userId,
+        otherUserIds: [],
+        unavailableUserIds: [],
+      });
+      yield* Effect.exit(recovery.sweep());
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT count(*) AS n FROM proactivity_reports WHERE user_id=? AND role='budget-threshold'"
+            )
+            .bind(userId)
+            .first()
+        )
+      ).toEqual({ n: 0 });
     })
   ));
 

@@ -1,0 +1,28 @@
+apps/server/cloudflare/onboarding/consent-ingress.test.ts
+  s_306ab925389860::t_02fd6732ecf12f 189-190
+  s_306ab925389860::t_deb568f1fa550e 188
+infra/cloudflare/verify-edge-policy.ts
+  s_306ab925389860::t_fb883045633d22 9-11
+apps/server/src/shell/canonical-operations/internal/mutation-registry.ts
+  s_306ab925389860::t_81e73bc8ee1410 66
+apps/server/cloudflare/oauth-agents/discovery.test-fixture.ts
+  s_306ab925389860::t_bc69fe33e13c40 14,46
+infra/cloudflare/verify-edge-policy.test.ts
+  s_306ab925389860::t_f283044d9a1648 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5d06b2e71789e7d868967e1d7d7d3d81e6fb6e0d",
+  "prompts": {},
+  "sessions": {
+    "s_306ab925389860": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a109c8-df42-7697-afe7-6376e97c8760",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

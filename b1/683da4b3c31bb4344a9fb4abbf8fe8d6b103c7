@@ -1,0 +1,47 @@
+apps/server/cloudflare/budgets/operations.ts
+  s_306ab925389860::t_95a3c593377e94 25-28,32-33
+  s_306ab925389860::t_89fc8f404cb6de 31
+  s_306ab925389860::t_e2e041432f2387 34
+apps/server/cloudflare/insights/operations.ts
+  s_306ab925389860::t_af293d13078772 11,173-175
+  s_306ab925389860::t_1f35be9d3f3d2d 172
+apps/server/cloudflare/d1-test-fixture.ts
+  s_306ab925389860::t_1907ba51d9d3ea 211
+apps/server/cloudflare/budgets/internal/budget-proactivity.ts
+  s_306ab925389860::t_95a3c593377e94 117-119
+  s_306ab925389860::t_92d190bddf1de5 142
+apps/server/cloudflare/migrations/0051_budget_reconciliation_recovery.sql
+  s_306ab925389860::t_abf5fa7afadcdf 1-2
+apps/server/ARCHITECTURE.md
+  s_306ab925389860::t_57fde14938136f 314-318
+apps/server/cloudflare/budgets/budgets.test.ts
+  s_306ab925389860::t_95a3c593377e94 1834-1839,1908-1923,1928-1933,1936-1956,1958-1960,1962-2001,2007-2009,2021-2043,2046-2049,2051-2063,2066-2077,2086-2091,2093-2102
+  s_306ab925389860::t_d9c4ca0b9c9649 2050,2064-2065,2078-2079,2081
+  s_306ab925389860::t_cc7692953f3da8 2092
+  s_306ab925389860::t_e8eee2eac580ca 1833,1840,1878
+  s_306ab925389860::t_7c359db80cf140 23,27-28,1901-1907,1924-1927,1957,1961,2002-2006,2010-2012
+  s_306ab925389860::t_98a852d687dfc0 2013-2014,2016-2020,2044-2045,2080,2082-2085,2103-2105
+  s_306ab925389860::t_e34e6ecd05f0f1 1934-1935
+  s_306ab925389860::t_3e07a5e3459340 2015
+apps/server/cloudflare/insights/internal/proactivity-execution.ts
+  s_306ab925389860::t_f4a94199455edb 24,39
+apps/server/cloudflare/budgets/internal/budget-latches.ts
+  s_306ab925389860::t_95a3c593377e94 16-23
+  s_306ab925389860::t_d76c1afe2d6a22 15,24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b1683da4b3c31bb4344a9fb4abbf8fe8d6b103c7",
+  "prompts": {},
+  "sessions": {
+    "s_306ab925389860": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a109c8-df42-7697-afe7-6376e97c8760",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

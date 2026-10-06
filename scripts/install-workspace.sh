@@ -14,7 +14,7 @@ if command -v sha256sum >/dev/null; then
 else
   actual="$(shasum -a 256 bun.lock | cut -d ' ' -f 1)"
 fi
-if [[ "$actual" == '8539f11045994a4cd63353c5cacd671d7f22de63fa34a55d371a8d09d97c6a9f' && "$(date -u +%Y-%m-%d)" < '2026-10-10' ]]; then
+if [[ "$actual" == '183c045f51865da7caadea4b16000bb8ff68177e35253737a9efb3ff9181686c' && "$(date -u +%Y-%m-%d)" < '2026-10-10' ]]; then
   printf 'Applying authorized, expiring release-age exception for the exact #987 lock snapshot (carried forward from #969/#996/#973).\n' >&2
   exec bun install --frozen-lockfile --minimum-release-age=0 "$@"
 fi

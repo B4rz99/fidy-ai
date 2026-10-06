@@ -5,7 +5,15 @@ import { ScopeMissing } from "../../src/shell/public-http/contract";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { BigDecimal, type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { repairDashboardProjection } from "../transactions/operations";
-import { DashboardDocument } from "../../src/core/dashboard/contract";
+import { DashboardDocument, DashboardEdit } from "../../src/core/dashboard/contract";
+import { prepareDashboard } from "./operations";
+import { UserId } from "../../src/core/identity/contract";
+import {
+  OAuthClientId,
+  OAuthConnectionId,
+  OAuthCredentialId,
+} from "../../src/core/oauth-agents/contract";
+import { type OAuthCaller, oauthResource } from "../../src/shell/oauth-agents/contract";
 import { Transaction } from "../../src/core/transactions/contract";
 import { IanaTimeZone } from "../../src/core/_shared/context";
 import { resolveDashboardPeriod } from "../../src/core/dashboard/operations";
@@ -990,6 +998,7 @@ it(
               current: DateTime.nowUnsafe().epochMilliseconds,
               work,
               hostedFence: Option.none(),
+              oauthConfirmation: Option.none(),
               inference: Option.none(),
             });
             expect(response.status).not.toBe(200);
@@ -2594,6 +2603,248 @@ it.each(["/dashboard/view", "/dashboard/view?"])(
         expect(yield* chart(yield* Effect.tryPromise(() => send(delayed, 0, viewPath)))).toEqual([
           { date: localDate(second), amount: "10" },
         ]);
+      })
+    ),
+  30_000
+);
+
+const dashboardOAuthSubject = (db: D1Database): Effect.Effect<OAuthCaller, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const current = DateTime.nowUnsafe().epochMilliseconds;
+    const subject: OAuthCaller = {
+      userId: UserId.make(users[0] ?? ""),
+      oauthConnectionId: OAuthConnectionId.make("98800000-0000-4000-8000-000000000011"),
+      credentialId: OAuthCredentialId.make("98800000-0000-4000-8000-000000000012"),
+      clientId: OAuthClientId.make("98800000-0000-4000-8000-000000000013"),
+      resource: oauthResource,
+      digest: yield* Effect.tryPromise(() => digest("dashboard-oauth-fixture")),
+      requiredScope: Option.some("dashboard"),
+    };
+    yield* Effect.tryPromise(() =>
+      db.batch([
+        db
+          .prepare(`INSERT INTO onboarding_consent_records
+          (id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms)
+          VALUES ('dashboard-onboarding', ?, '{}', 'fixture-disclosure', 'fixture-decision', ?, ?)`)
+          .bind(subject.userId, current, current),
+        db
+          .prepare(`INSERT INTO oauth_connections
+        (id, request_id, user_id, client_id, claimed_client_name, redirect_uri, resource, scopes_json, approved_at_ms, expires_at_ms)
+        VALUES (?, ?, ?, ?, 'Dashboard fixture', 'https://client.example/callback', ?, '["dashboard"]', ?, ?)`)
+          .bind(
+            subject.oauthConnectionId,
+            "dashboard-request",
+            subject.userId,
+            subject.clientId,
+            subject.resource,
+            current,
+            current + 600000
+          ),
+        db
+          .prepare(`INSERT INTO oauth_grant_consents
+        (id, connection_id, user_id, session_id, disclosure_revision, disclosure_text, accepted_at_ms)
+        VALUES ('dashboard-consent', ?, ?, ?, 'fixture', 'fixture', ?)`)
+          .bind(subject.oauthConnectionId, subject.userId, sessions[0], current),
+        db
+          .prepare(`INSERT INTO oauth_access_credentials
+        (id, connection_id, user_id, digest, issued_at_ms, expires_at_ms, scopes_json)
+        VALUES (?, ?, ?, ?, ?, ?, '["dashboard"]')`)
+          .bind(
+            subject.credentialId,
+            subject.oauthConnectionId,
+            subject.userId,
+            subject.digest,
+            current,
+            current + 600000
+          ),
+      ])
+    );
+    return subject;
+  });
+
+const disclosureWidgetA = "98800000-0000-4000-8000-000000000021";
+const disclosureWidgetB = "98800000-0000-4000-8000-000000000022";
+const disclosureWidgetC = "98800000-0000-4000-8000-000000000023";
+const changedWidget = {
+  id: disclosureWidgetC,
+  type: "transaction-list",
+  limit: 7,
+  search: "Compra exacta",
+};
+const disclosureEdits = [
+  {
+    edit: { op: "set-title", title: "Mi nuevo tablero" },
+    effect: 'Cambiar el título del Dashboard a "Mi nuevo tablero".',
+  },
+  {
+    edit: { op: "remove-widget", widgetId: disclosureWidgetA },
+    effect: `Eliminar del Dashboard el widget ${disclosureWidgetA}.`,
+  },
+  {
+    edit: {
+      op: "move-widget",
+      widgetId: disclosureWidgetA,
+      at: { besideWidget: disclosureWidgetB, axis: "column", side: "after" },
+    },
+    effect: `Mover el widget ${disclosureWidgetA} después del widget ${disclosureWidgetB}, en columna, sin cambiar su configuración.`,
+  },
+  {
+    edit: { op: "swap-widgets", widgetId: disclosureWidgetA, withWidgetId: disclosureWidgetB },
+    effect: `Intercambiar las posiciones de los widgets ${disclosureWidgetA} y ${disclosureWidgetB}.`,
+  },
+  {
+    edit: {
+      op: "resize-region",
+      widgetIds: [disclosureWidgetA],
+      size: { kind: "ratio", ratio: "one-third" },
+    },
+    effect: `Cambiar el tamaño de la región con los widgets [${disclosureWidgetA}] a proporción 1/3 respecto a sus regiones hermanas.`,
+  },
+  {
+    edit: {
+      op: "resize-region",
+      widgetIds: [disclosureWidgetA],
+      size: { kind: "weight", weight: 2.5 },
+    },
+    effect: `Cambiar el tamaño de la región con los widgets [${disclosureWidgetA}] a peso relativo 2.5.`,
+  },
+  {
+    edit: { op: "add-widget", widget: changedWidget, at: "bottom" },
+    effect: `Añadir el widget {"id":"${disclosureWidgetC}","type":"transaction-list","limit":7,"search":"Compra exacta"} al final del Dashboard.`,
+  },
+  {
+    edit: { op: "update-widget", widget: { ...changedWidget, id: disclosureWidgetA } },
+    effect: `Reemplazar toda la configuración del widget ${disclosureWidgetA}, sin moverlo, por {"id":"${disclosureWidgetA}","type":"transaction-list","limit":7,"search":"Compra exacta"}.`,
+  },
+];
+
+it.each(disclosureEdits)(
+  "OAuth disclosure describes the exact $edit.op without unrelated Dashboard content",
+  ({ edit, effect }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const subject = yield* dashboardOAuthSubject(db);
+        const document = yield* Schema.decodeEffect(DashboardDocument)({
+          title: "Título privado no modificado",
+          layout: {
+            kind: "split",
+            axis: "row",
+            children: [
+              {
+                weight: 1,
+                node: {
+                  kind: "leaf",
+                  widget: { id: disclosureWidgetA, type: "transaction-list", limit: 10 },
+                },
+              },
+              {
+                weight: 1,
+                node: {
+                  kind: "leaf",
+                  widget: {
+                    id: disclosureWidgetB,
+                    type: "transaction-list",
+                    limit: 10,
+                    search: "Búsqueda privada no modificada",
+                  },
+                },
+              },
+            ],
+          },
+        });
+        const encoded = yield* Schema.encodeEffect(
+          Schema.fromJsonString(Schema.toCodecJson(DashboardDocument))
+        )(document);
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "INSERT INTO dashboard_documents (user_id, document_json, revision) VALUES (?, ?, 4)"
+            )
+            .bind(subject.userId, encoded)
+            .run()
+        );
+        const prepared = yield* prepareDashboard({
+          work: { db, subject, current: DateTime.nowUnsafe().epochMilliseconds },
+          operation: "dashboard.applyDashboardEdit",
+          edit: Option.some(yield* Schema.decodeUnknownEffect(DashboardEdit)(edit)),
+        });
+        expect(prepared._tag).toBe("Prepared");
+        if (prepared._tag !== "Prepared") throw new Error("Expected Dashboard preparation");
+        const review = Option.getOrThrow(prepared.mutation.oauthReview);
+        expect(review.effect).toBe(effect);
+        expect(review.effect).not.toContain(document.title);
+        expect(review.effect).not.toContain("Búsqueda privada no modificada");
+        expect(review.revision).toContain(encoded.replaceAll('"', '\\"'));
+        yield* Effect.tryPromise(() => db.batch([...review.guards]));
+        // A changed retained document at the same revision must still invalidate the exact snapshot.
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("UPDATE dashboard_documents SET document_json = ? WHERE user_id = ?")
+            .bind(encoded.replace("Título privado", "Título cambiado"), subject.userId)
+            .run()
+        );
+        expect(
+          Option.isNone(
+            yield* Effect.tryPromise(() =>
+              db.batch([...review.guards, ...prepared.mutation.statements])
+            ).pipe(Effect.option)
+          )
+        ).toBe(true);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT revision FROM dashboard_documents WHERE user_id = ?")
+              .bind(subject.userId)
+              .first()
+          )
+        ).toEqual({ revision: 4 });
+        expect(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT COUNT(*) AS count FROM pat_audit WHERE oauth_connection_id = ?")
+              .bind(subject.oauthConnectionId)
+              .first()
+          )
+        ).toEqual({ count: 0 });
+      })
+    ),
+  30_000
+);
+
+it(
+  "OAuth first-edit disclosure and revision remain stable across preparation without creating a document",
+  () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const subject = yield* dashboardOAuthSubject(db);
+        const reviews = [];
+        for (const elapsed of [0, 1000]) {
+          const prepared = yield* prepareDashboard({
+            work: { db, subject, current: DateTime.nowUnsafe().epochMilliseconds + elapsed },
+            operation: "dashboard.applyDashboardEdit",
+            edit: Option.some(
+              yield* Schema.decodeEffect(DashboardEdit)({ op: "set-title", title: "Primer cambio" })
+            ),
+          });
+          if (prepared._tag !== "Prepared") throw new Error("Expected Dashboard preparation");
+          const review = Option.getOrThrow(prepared.mutation.oauthReview);
+          reviews.push({ effect: review.effect, revision: review.revision });
+        }
+        expect(reviews).toEqual([
+          {
+            effect:
+              'Inicializar el Dashboard predeterminado y aplicar este cambio: Cambiar el título del Dashboard a "Primer cambio".',
+            revision: '{"_tag":"Absent"}',
+          },
+          {
+            effect:
+              'Inicializar el Dashboard predeterminado y aplicar este cambio: Cambiar el título del Dashboard a "Primer cambio".',
+            revision: '{"_tag":"Absent"}',
+          },
+        ]);
+        expect(yield* Effect.tryPromise(() => count(db, "dashboard_documents"))).toBe(0);
       })
     ),
   30_000

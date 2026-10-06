@@ -163,6 +163,7 @@ export const canonicalAdmissionMigrationNames = (
       "0035_media_submissions",
       "0033_oauth_authority",
       "0037_oauth_shared_audit_budget",
+      "0038_oauth_confirmation",
     ]),
   ].sort();
 /** Shared final clarification schema; processing and the shared Audit base must precede it. */

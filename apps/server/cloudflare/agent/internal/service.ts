@@ -403,6 +403,7 @@ const executeHostedMutation = (
         current: yield* Clock.currentTimeMillis,
         bucket: Option.fromUndefinedOr(env.STATEMENT_STAGING_BUCKET),
         hostedFence: Option.some(hostedFence),
+        oauthConfirmation: Option.none(),
         inference,
       });
     })

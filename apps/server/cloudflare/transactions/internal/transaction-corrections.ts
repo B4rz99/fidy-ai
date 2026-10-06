@@ -28,7 +28,15 @@ import {
   missingTransactionMessage,
   transactionId,
 } from "../../canonical-work/operations";
-import { type CanonicalMutationPreparation } from "../../canonical-operations/contract";
+import {
+  type CanonicalMutationPreparation,
+  type PreparedCanonicalMutation,
+} from "../../canonical-operations/contract";
+import {
+  type ObservedTransactions,
+  discloseTransactions,
+  observeOAuthTransactions,
+} from "./oauth-review";
 
 import {
   refusedTransactionMutation,
@@ -216,6 +224,32 @@ const findOwnedCorrection = ({
     catch: boundaryFailure,
   });
 
+const observeCorrection = (
+  correction: Correction
+): Effect.Effect<
+  Readonly<{
+    observed: Option.Option<ObservedTransactions>;
+    owned: Option.Option<StoredTransaction>;
+  }>,
+  TransactionBoundaryFailure | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    const { db, subject, id } = correction;
+    if (!isOAuthCaller(subject)) {
+      return { observed: Option.none(), owned: yield* findOwnedCorrection({ db, subject, id }) };
+    }
+    const observed = yield* observeOAuthTransactions({
+      db,
+      userId: subject.userId,
+      firstId: id,
+      secondId: id,
+    });
+    return {
+      observed: Option.some(observed),
+      owned: Option.fromUndefinedOr(observed.retained.find((transaction) => transaction.id === id)),
+    };
+  });
+
 const correctionEvidence = (
   previous: StoredTransaction,
   updated: StoredTransaction,
@@ -239,11 +273,13 @@ const preparedCorrection = ({
   previous,
   updated,
   evidence,
+  oauthReview,
 }: Readonly<{
   correction: Correction & { current: number };
   previous: StoredTransaction;
   updated: StoredTransaction;
   evidence: Evidence;
+  oauthReview: PreparedCanonicalMutation["oauthReview"];
 }>): CanonicalMutationPreparation => {
   const { db, subject, id, input, current } = correction;
   const outcome: TransactionOutcome = {
@@ -256,6 +292,7 @@ const preparedCorrection = ({
   return {
     _tag: "Prepared",
     mutation: {
+      oauthReview,
       requiredScope: callerScope(subject),
       guardRefusal: transactionGuardRefusal(outcome),
       auditBudget: "shared",
@@ -303,7 +340,7 @@ export const prepareCorrection = (
       catch: boundaryFailure,
     });
     if (!live) return credentialRefusedPreparation();
-    const owned = yield* findOwnedCorrection({ db, subject, id });
+    const { observed, owned } = yield* observeCorrection(correction);
     if (Option.isNone(owned)) {
       return refuse({ outcome: "not_found", message: missingTransactionMessage });
     }
@@ -320,5 +357,14 @@ export const prepareCorrection = (
       previous: owned.value,
       updated: updated.value,
       evidence,
+      oauthReview: Option.isSome(observed)
+        ? observed.value.review(
+            `Corregir la Transacción original ${id} en su revisión ${owned.value.revision}. ` +
+              `Hechos originales del conjunto antes: ${discloseTransactions(observed.value.retained)}. ` +
+              `Hechos originales después: ${discloseTransactions([updated.value])}. ` +
+              `Transacciones efectivas actuales: ${discloseTransactions(observed.value.effective)}. ` +
+              "Se conserva la Reconciliación; los hechos efectivos se recalculan con la política de Transacciones."
+          )
+        : Option.none(),
     });
   }).pipe(Effect.orElseSucceed(failedPreparation));

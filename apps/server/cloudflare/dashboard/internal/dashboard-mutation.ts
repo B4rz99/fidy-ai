@@ -28,6 +28,7 @@ import {
   callerScope,
   credentialRefusedPreparation,
   failedPreparation,
+  isOAuthCaller,
   isPATCaller,
   liveTransactionAuthority,
   refusedPreparation,
@@ -43,9 +44,15 @@ import {
   type OwnerOutcome,
 } from "../../canonical-operations/contract";
 
+import { dashboardOAuthReview, oauthDefaultDashboard } from "./oauth-review";
+import type { OAuthMutationReview } from "../../oauth-confirmation/contract";
+
 /** The persisted Dashboard is decoded before it is used to plan any mutation. */
 const DocumentJson = Schema.fromJsonString(Schema.toCodecJson(DashboardDocument));
-const StoredDocument = Schema.Struct({ document_json: Schema.String, revision: Schema.Int });
+const StoredDocument = Schema.Struct({
+  document_json: Schema.String,
+  revision: Schema.Int,
+});
 type MutationContext = Readonly<{
   db: D1Database;
   subject: TransactionCaller;
@@ -68,7 +75,13 @@ const audit = (
       db,
       statement: recordCanonicalPATWork({
         authority: livePATAuthority({ subject, current }),
-        input: { id: transactionId(), current, operation, outcome, afterOwnerWrite: false },
+        input: {
+          id: transactionId(),
+          current,
+          operation,
+          outcome,
+          afterOwnerWrite: false,
+        },
       }),
     });
   }
@@ -89,13 +102,20 @@ const credentialUse = (work: MutationContext): ReadonlyArray<D1PreparedStatement
     ? [
         prepareOwnedStatement({
           db: work.db,
-          statement: recordLivePATUse({ subject: work.subject, current: work.current }),
+          statement: recordLivePATUse({
+            subject: work.subject,
+            current: work.current,
+          }),
         }),
       ]
     : [];
 
 class InvalidStoredDashboard extends Data.TaggedError("InvalidStoredDashboard") {}
-type StoredDashboard = Readonly<{ document: DashboardDocument; revision: number }>;
+type StoredDashboard = Readonly<{
+  document: DashboardDocument;
+  revision: number;
+  encoded: string;
+}>;
 
 /** Fetch a decoded owned document; an invalid retained row fails closed rather than resetting it. */
 export const findDashboardDocument = ({
@@ -119,6 +139,7 @@ export const findDashboardDocument = ({
         Option.map(Schema.decodeOption(DocumentJson)(row.document_json), (document) => ({
           document,
           revision: row.revision,
+          encoded: row.document_json,
         }))
       );
       return Option.isSome(decoded)
@@ -146,9 +167,11 @@ const firstUse = (
     Effect.map((encoded) => {
       const authority = callerAuthority(work);
       return work.db
-        .prepare(`INSERT INTO dashboard_documents (user_id, document_json, revision)
+        .prepare(
+          `INSERT INTO dashboard_documents (user_id, document_json, revision)
         SELECT user_id, ?, 1 FROM ${authority.table} WHERE ${authority.predicate}
-        ON CONFLICT(user_id) DO NOTHING`)
+        ON CONFLICT(user_id) DO NOTHING`
+        )
         .bind(encoded, ...authority.bindings);
     })
   );
@@ -253,8 +276,10 @@ const editWrite = ({
   return Schema.encodeEffect(DocumentJson)(document).pipe(
     Effect.map((encoded) => [
       work.db
-        .prepare(`UPDATE dashboard_documents SET document_json = ?, revision = revision + 1
-      WHERE user_id = ? AND revision = ? AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`)
+        .prepare(
+          `UPDATE dashboard_documents SET document_json = ?, revision = revision + 1
+      WHERE user_id = ? AND revision = ? AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`
+        )
         .bind(encoded, work.subject.userId, revision, ...authority.bindings),
     ])
   );
@@ -265,14 +290,17 @@ const preparedDashboard = ({
   operation,
   initial,
   write,
+  oauthReview,
 }: Readonly<{
   work: MutationContext;
   operation: DashboardMutationOperation;
   initial: Option.Option<D1PreparedStatement>;
   write: ReadonlyArray<D1PreparedStatement>;
+  oauthReview: Option.Option<OAuthMutationReview>;
 }>): CanonicalMutationPreparation => ({
   _tag: "Prepared",
   mutation: {
+    oauthReview,
     requiredScope: callerScope(work.subject),
     auditBudget: "shared",
     commitGuards: Option.none(),
@@ -335,8 +363,14 @@ export const prepareDashboard = ({
   Effect.gen(function* () {
     const access = yield* dashboardAccess({ work, operation, edit });
     if (Option.isSome(access)) return access.value;
-    const existing = yield* findDashboardDocument({ db: work.db, userId: work.subject.userId });
-    const base = Option.isSome(existing) ? existing.value.document : defaultDocument();
+    const existing = yield* findDashboardDocument({
+      db: work.db,
+      userId: work.subject.userId,
+    });
+    const base = Option.getOrElse(
+      Option.map(existing, (stored) => stored.document),
+      () => (isOAuthCaller(work.subject) ? oauthDefaultDashboard() : defaultDocument())
+    );
     const decision = yield* decideDocument({ work, operation, edit, base });
     if (Result.isFailure(decision)) return decision.failure;
     const document = decision.success;
@@ -349,12 +383,14 @@ export const prepareDashboard = ({
       document,
       revision: Option.isSome(existing) ? existing.value.revision : 1,
     });
-    return preparedDashboard({
-      work,
+    const oauthReview = yield* dashboardOAuthReview({
+      ...work,
       operation,
-      initial,
-      write,
+      existing,
+      document,
+      edit,
     });
+    return preparedDashboard({ work, operation, initial, write, oauthReview });
   }).pipe(Effect.orElseSucceed(failedPreparation));
 
 /** Commit-time owner decisions stay with the Dashboard, not in the common mutation unit. */
@@ -404,7 +440,12 @@ export const findDashboardValue = ({
       });
     }
     const now = yield* DateTime.now;
-    const facts = yield* loadDashboardFacts({ db, userId, document: found.value.document, now });
+    const facts = yield* loadDashboardFacts({
+      db,
+      userId,
+      document: found.value.document,
+      now,
+    });
     if (Option.isNone(facts)) return Option.none();
     const view = yield* renderDashboardView({
       document: found.value.document,

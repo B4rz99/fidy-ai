@@ -1,4 +1,7 @@
 import { Clock, Effect, Exit, Option, Schema } from "effect";
+import type { OAuthConfirmationWork, OAuthNativeReview } from "../../oauth-confirmation/contract";
+import { oauthReviewResponse } from "../../oauth-confirmation/operations";
+import { prepareOAuthUnitConfirmation } from "./oauth-confirmation-unit";
 import { maximumAtomicBatchCalls } from "../../../src/shell/operations/contract";
 import type { HostedCanonicalCaller } from "../../canonical-work/contract";
 import type { HostedCommitFence } from "../../agent/contract";
@@ -60,7 +63,8 @@ export type CanonicalMutationUnitExecution =
     }>
   | Readonly<{ _tag: "CredentialRefused" }>
   | Readonly<{ _tag: "Unavailable" }>
-  | Readonly<{ _tag: "Aborted" }>;
+  | Readonly<{ _tag: "Aborted" }>
+  | Readonly<{ _tag: "ConfirmationReview"; review: OAuthNativeReview }>;
 
 /** The commit-time trigger classes one aborted unit can name by its own D1 constraint message. */
 type TriggerKind = "movement" | "audit";
@@ -470,37 +474,76 @@ const childStatements = ({
  * aborted unit is classified against the same live credential, budgets, and domain premises the
  * individual operations check.
  */
+const unitConfirmation = (
+  input: Readonly<{
+    db: D1Database;
+    subject: TransactionCaller | HostedCanonicalCaller;
+    current: number;
+    mutations: ReadonlyArray<PreparedCanonicalMutation>;
+    oauthConfirmation: Option.Option<OAuthConfirmationWork>;
+  }>
+): Effect.Effect<
+  | CanonicalMutationUnitExecution
+  | Readonly<{ _tag: "Continue"; statements: ReadonlyArray<D1PreparedStatement> }>
+> =>
+  Effect.gen(function* () {
+    if (isHostedUnitCaller(input.subject) || !isOAuthCaller(input.subject)) {
+      return { _tag: "Continue", statements: [] };
+    }
+    const prepared = yield* prepareOAuthUnitConfirmation({ ...input, subject: input.subject });
+    return prepared._tag === "Refused"
+      ? yield* rejectRecorded({ callIndex: prepared.index, refusal: prepared.refusal })
+      : prepared;
+  });
+
+const hostedFenceStatements = (
+  input: Readonly<{
+    db: D1Database;
+    userId: string;
+    current: number;
+    fence: Option.Option<HostedCommitFence>;
+  }>
+): ReadonlyArray<D1PreparedStatement> =>
+  Option.match(input.fence, {
+    onNone: () => [],
+    onSome: ({ turnId, toolCallId }) => [
+      prepareHostedMutationCommit({ ...input, turnId, toolCallId }),
+    ],
+  });
+
+const validUnitSize = (mutations: ReadonlyArray<PreparedCanonicalMutation>): boolean =>
+  mutations.length > 0 && mutations.length <= maximumAtomicBatchCalls;
+
 export const executeCanonicalMutationUnit = ({
   db,
   subject,
   current,
   mutations,
   hostedFence,
+  oauthConfirmation,
 }: Readonly<{
   db: D1Database;
   subject: TransactionCaller | HostedCanonicalCaller;
   current: number;
   mutations: ReadonlyArray<PreparedCanonicalMutation>;
   hostedFence: Option.Option<HostedCommitFence>;
+  oauthConfirmation: Option.Option<OAuthConfirmationWork>;
 }>): Effect.Effect<CanonicalMutationUnitExecution> =>
   Effect.uninterruptible(
     Effect.gen(function* () {
-      if (mutations.length === 0) return { _tag: "Unavailable" } as const;
-      if (mutations.length > maximumAtomicBatchCalls) return { _tag: "Unavailable" } as const;
+      if (!validUnitSize(mutations)) return { _tag: "Unavailable" } as const;
       const commitCurrent = yield* commitInstant(subject, current);
+      const confirmation = yield* unitConfirmation({
+        db,
+        subject,
+        current: commitCurrent,
+        mutations,
+        oauthConfirmation,
+      });
+      if (confirmation._tag !== "Continue") return confirmation;
       const statements = [
-        ...Option.match(hostedFence, {
-          onNone: (): ReadonlyArray<D1PreparedStatement> => [],
-          onSome: ({ turnId, toolCallId }): ReadonlyArray<D1PreparedStatement> => [
-            prepareHostedMutationCommit({
-              db,
-              userId: subject.userId,
-              turnId,
-              toolCallId,
-              current,
-            }),
-          ],
-        }),
+        ...confirmation.statements,
+        ...hostedFenceStatements({ db, userId: subject.userId, current, fence: hostedFence }),
         ...mutations.flatMap((mutation, index) =>
           childStatements({ db, subject, current: commitCurrent, mutation, index })
         ),
@@ -641,6 +684,8 @@ const singleResponse = ({
         ? Effect.die("A committed canonical unit reported no value")
         : present(value);
     }
+    case "ConfirmationReview":
+      return Effect.succeed(oauthReviewResponse(execution.review));
     case "Rejected":
       return execution.refusal.respond(execution.disposition);
     case "CredentialRefused":
@@ -659,6 +704,7 @@ type SingleWork = Readonly<{
   present: (value: CommittedMutationValue) => Effect.Effect<Response>;
   retryStatement: Option.Option<() => Effect.Effect<CanonicalMutationPreparation>>;
   hostedFence: Option.Option<HostedCommitFence>;
+  oauthConfirmation: Option.Option<OAuthConfirmationWork>;
 }>;
 
 /** Commit a prepared single mutation, retrying only a proven same-material statement race. */
@@ -670,6 +716,7 @@ const executePreparedSingle = ({
   present,
   retryStatement,
   hostedFence,
+  oauthConfirmation,
 }: SingleWork &
   Readonly<{
     preparation: Extract<CanonicalMutationPreparation, { _tag: "Prepared" }>;
@@ -680,6 +727,7 @@ const executePreparedSingle = ({
     current,
     mutations: [preparation.mutation],
     hostedFence,
+    oauthConfirmation,
   }).pipe(
     Effect.flatMap((execution) => {
       const outcome = preparation.mutation.outcome;
@@ -703,6 +751,7 @@ const executePreparedSingle = ({
                     present,
                     retryStatement: Option.none(),
                     hostedFence,
+                    oauthConfirmation,
                   })
                 )
               )
@@ -726,6 +775,7 @@ export const executeSingleCanonicalMutation = ({
   present,
   retryStatement,
   hostedFence,
+  oauthConfirmation,
 }: SingleWork): Effect.Effect<Response> => {
   switch (preparation._tag) {
     case "Refused":
@@ -746,6 +796,7 @@ export const executeSingleCanonicalMutation = ({
         present,
         retryStatement,
         hostedFence,
+        oauthConfirmation,
       });
   }
 };

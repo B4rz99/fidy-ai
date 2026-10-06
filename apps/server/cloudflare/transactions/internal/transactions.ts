@@ -255,6 +255,7 @@ const captureMutation = ({
     expectedRevision: Option.none(),
   };
   return {
+    oauthReview: Option.none(),
     requiredScope: callerScope(subject),
     guardRefusal: transactionGuardRefusal(outcome),
     outcome,

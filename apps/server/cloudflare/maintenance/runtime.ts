@@ -42,6 +42,7 @@ import {
   sweepMediaSubmissions,
 } from "../ingestion/runtime";
 import { sweepExpiredPATPairings } from "../tokens/runtime";
+import { sweepOAuthConfirmation } from "../oauth-confirmation/runtime";
 import { advanceWeeklyWork } from "../insights/runtime";
 import { advanceRecurringWork } from "../recurring/runtime";
 import { repairDashboardProjections } from "../transactions/runtime";
@@ -209,6 +210,10 @@ const admissionActivities = (
   activity(
     "canonical.admissionRetention",
     sweepCanonicalAdmission({ db: environment.DB, current: nowEpochMs })
+  ),
+  activity(
+    "oauth.confirmationRetention",
+    sweepOAuthConfirmation({ db: environment.DB, current: nowEpochMs })
   ),
   activity(
     "quota.consumptionRetention",

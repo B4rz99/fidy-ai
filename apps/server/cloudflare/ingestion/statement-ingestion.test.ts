@@ -31,7 +31,22 @@ import {
   executeHostedStatementQuery,
 } from "../canonical-operations/operations";
 import { UserTransactionCoordinator } from "../transactions/runtime";
-import { prepareHeldStatementReviewDecision, readStatementSubmission } from "./operations";
+import {
+  prepareHeldStatementReviewDecision,
+  prepareStatementAbandonment,
+  prepareStatementReviewDecision,
+  readStatementSubmission,
+} from "./operations";
+import type {
+  CanonicalMutationPreparation,
+  CanonicalPreparationWork,
+} from "../canonical-operations/contract";
+import {
+  OAuthClientId,
+  OAuthConnectionId,
+  OAuthCredentialId,
+} from "../../src/core/oauth-agents/contract";
+import type { OAuthCaller } from "../../src/shell/oauth-agents/contract";
 import {
   dispatchStatementExtraction,
   executeStatementExtraction,
@@ -152,6 +167,8 @@ const migrationNames = [
   "0034_statement_clarification_audit",
   "0035_statement_hosted_origin",
   "0036_statement_whatsapp_documents",
+  "0032_oauth_review",
+  "0034_oauth_refresh",
 ] as const;
 
 const digest = (text: string): Promise<Uint8Array> =>
@@ -1528,6 +1545,277 @@ const clarifyStatement = (
       return { submissionId: submission.id, reviewIds: decoded.map(({ id }) => id) };
     })
   );
+
+const oauthClarificationSubject = (db: D1Database, current: number): Effect.Effect<OAuthCaller> =>
+  Effect.gen(function* () {
+    const oauthConnectionId = OAuthConnectionId.make("80000000-0000-4000-8000-000000000101");
+    const credentialId = OAuthCredentialId.make("80000000-0000-4000-8000-000000000102");
+    const clientId = OAuthClientId.make("80000000-0000-4000-8000-000000000104");
+    const credentialDigest = new Uint8Array(32).fill(7);
+    yield* fromTestPromise(() =>
+      db.batch([
+        db
+          .prepare(`INSERT INTO oauth_connections (id,request_id,user_id,client_id,claimed_client_name,redirect_uri,resource,scopes_json,approved_at_ms,expires_at_ms)
+      VALUES (?,?,?,?,'fixture','http://127.0.0.1/callback','https://api.fidyapp.com/mcp','["write"]',?,?)`)
+          .bind(
+            oauthConnectionId,
+            "80000000-0000-4000-8000-000000000103",
+            userA,
+            clientId,
+            current,
+            current + dayMilliseconds
+          ),
+        db
+          .prepare(
+            `INSERT INTO oauth_grant_consents (id,connection_id,user_id,session_id,disclosure_revision,disclosure_text,accepted_at_ms) VALUES (?,?,?,?,'fixture','fixture',?)`
+          )
+          .bind(
+            "80000000-0000-4000-8000-000000000105",
+            oauthConnectionId,
+            userA,
+            sessionA,
+            current
+          ),
+        db
+          .prepare(
+            `INSERT INTO oauth_access_credentials (id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,scopes_json) VALUES (?,?,?,?,?,?,'["write"]')`
+          )
+          .bind(
+            credentialId,
+            oauthConnectionId,
+            userA,
+            credentialDigest,
+            current,
+            current + dayMilliseconds
+          ),
+      ])
+    );
+    return {
+      oauthConnectionId,
+      credentialId,
+      clientId,
+      userId: UserId.make(userA),
+      resource: "https://api.fidyapp.com/mcp",
+      digest: credentialDigest,
+      requiredScope: Option.some("write"),
+    };
+  });
+const prepareOAuthClarification = (
+  operation: "resolve" | "skip" | "abandon",
+  work: CanonicalPreparationWork
+): Effect.Effect<CanonicalMutationPreparation> =>
+  Effect.gen(function* () {
+    const id = {
+      abandon: "ingestion.abandonStatementSubmission",
+      resolve: "ingestion.resolveNeedsReviewItem",
+      skip: "ingestion.skipNeedsReviewItem",
+    } as const;
+    const input = yield* Schema.decodeUnknownEffect(getCanonicalOperationInput(id[operation]))(
+      work.input
+    ).pipe(Effect.orDie);
+    return yield* operation === "abandon"
+      ? prepareStatementAbandonment({ ...work, input })
+      : prepareStatementReviewDecision({
+          operation:
+            operation === "resolve"
+              ? "ingestion.resolveNeedsReviewItem"
+              : "ingestion.skipNeedsReviewItem",
+          work: { ...work, input },
+        });
+  });
+
+const commitFreshClarification = (
+  operation: "resolve" | "skip" | "abandon",
+  work: CanonicalPreparationWork,
+  previousRevision: string
+): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const prepared = yield* prepareOAuthClarification(operation, work);
+    expect(prepared._tag).toBe("Prepared");
+    if (prepared._tag !== "Prepared" || Option.isNone(prepared.mutation.oauthReview)) {
+      return yield* Effect.die("Missing fresh review");
+    }
+    const review = prepared.mutation.oauthReview.value;
+    expect(review.revision).not.toBe(previousRevision);
+    yield* fromTestPromise(() =>
+      work.db.batch([...review.guards, ...prepared.mutation.statements])
+    );
+    expect(
+      (yield* fromTestPromise(() => work.db.prepare("SELECT id FROM transactions").all())).results
+    ).toHaveLength(operation === "resolve" ? 1 : 0);
+    expect(
+      (yield* fromTestPromise(() =>
+        work.db.prepare("SELECT review_id FROM statement_review_decisions").all()
+      )).results
+    ).toHaveLength(2);
+    expect(
+      yield* fromTestPromise(() =>
+        work.db.prepare("SELECT state FROM statement_clarifications").first()
+      )
+    ).toEqual({ state: operation === "abandon" ? "abandoned" : "completed" });
+    expect(
+      (yield* fromTestPromise(() =>
+        work.db.prepare("SELECT outcome FROM pat_audit WHERE oauth_connection_id IS NOT NULL").all()
+      )).results
+    ).toEqual([{ outcome: "accepted" }]);
+  });
+
+it.each(["resolve", "skip", "abandon"] as const)(
+  "reviews eligible OAuth %s with a stable revision and atomic stale-snapshot refusal",
+  (operation) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const statement = yield* fromTestPromise(() =>
+          clarifyStatement(
+            runtime,
+            "date,amount,description\nunclear,unknown,Cafe\nunclear,unknown,Tienda\n"
+          )
+        );
+        const [id, sibling] = statement.reviewIds;
+        if (id === undefined || sibling === undefined) {
+          return yield* Effect.die("Missing review fixture");
+        }
+        const current = yield* Clock.currentTimeMillis;
+        const subject = yield* oauthClarificationSubject(runtime.db, current);
+        const work: CanonicalPreparationWork = {
+          db: runtime.db,
+          subject,
+          current,
+          bucket: Option.some(runtime.bucket),
+          input: {
+            params: { id: operation === "abandon" ? statement.submissionId : id },
+            ...(operation === "resolve"
+              ? {
+                  payload: {
+                    extraction: {
+                      money: { amount: "13000.00", currency: "COP" },
+                      counterparty: "Tienda",
+                      direction: "outflow",
+                      occurredAt: "2026-08-02T12:00:00.000Z",
+                    },
+                  },
+                }
+              : {}),
+          },
+        };
+        const first = yield* prepareOAuthClarification(operation, work);
+        const resumed = yield* prepareOAuthClarification(operation, {
+          ...work,
+          current: current + 1,
+        });
+        expect(first._tag).toBe("Prepared");
+        expect(resumed._tag).toBe("Prepared");
+        if (first._tag !== "Prepared" || resumed._tag !== "Prepared") return;
+        const review = first.mutation.oauthReview;
+        expect(Option.isSome(review)).toBe(true);
+        if (Option.isNone(review)) return;
+        expect(
+          Option.map(resumed.mutation.oauthReview, ({ revision, effect }) => ({ revision, effect }))
+        ).toEqual(Option.some({ revision: review.value.revision, effect: review.value.effect }));
+        expect(review.value.effect).toContain(statement.submissionId);
+        expect(review.value.effect).toContain("evidencia original");
+        expect(review.value.effect).not.toContain("unclear");
+        yield* fromTestPromise(() => runtime.db.batch([...review.value.guards]));
+        const skipped = yield* fromTestPromise(() =>
+          reviewDecision(runtime, { id: sibling, action: "skip" })
+        );
+        expect(skipped.status).toBe(200);
+        const commit = yield* Effect.exit(
+          fromTestPromise(() =>
+            runtime.db.batch([...review.value.guards, ...first.mutation.statements])
+          )
+        );
+        expect(commit._tag).toBe("Failure");
+        expect(
+          (yield* fromTestPromise(() =>
+            runtime.db.prepare("SELECT review_id FROM statement_review_decisions").all()
+          )).results
+        ).toEqual([{ review_id: sibling }]);
+        expect(
+          (yield* fromTestPromise(() => runtime.db.prepare("SELECT id FROM transactions").all()))
+            .results
+        ).toHaveLength(0);
+        expect(
+          (yield* fromTestPromise(() =>
+            runtime.db
+              .prepare("SELECT id FROM pat_audit WHERE oauth_connection_id=?")
+              .bind(subject.oauthConnectionId)
+              .all()
+          )).results
+        ).toHaveLength(0);
+        yield* commitFreshClarification(operation, work, review.value.revision);
+      })
+    ),
+  30_000
+);
+
+it.each(["resolve", "skip", "abandon"] as const)(
+  "refuses OAuth %s for hosted-origin submissions without borrowed conversation authority",
+  (operation) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(() => setup());
+        const statement = yield* fromTestPromise(() =>
+          clarifyStatement(runtime, "date,amount,description\nunclear,unknown,Cafe\n")
+        );
+        const id = statement.reviewIds[0];
+        if (id === undefined) return yield* Effect.die("Missing review fixture");
+        const current = yield* Clock.currentTimeMillis;
+        const subject = yield* oauthClarificationSubject(runtime.db, current);
+        yield* fromTestPromise(() =>
+          runtime.db
+            .prepare(
+              `INSERT INTO statement_hosted_origins (submission_id,user_id,session_id,turn_id,expires_at_ms) VALUES (?,?,?,?,?)`
+            )
+            .bind(
+              statement.submissionId,
+              userA,
+              "hosted-session",
+              "hosted-turn",
+              current + dayMilliseconds
+            )
+            .run()
+        );
+        const prepared = yield* prepareOAuthClarification(operation, {
+          db: runtime.db,
+          subject,
+          current,
+          bucket: Option.some(runtime.bucket),
+          input: {
+            params: { id: operation === "abandon" ? statement.submissionId : id },
+            ...(operation === "resolve"
+              ? {
+                  payload: {
+                    extraction: {
+                      money: { amount: "13000.00", currency: "COP" },
+                      direction: "outflow",
+                      occurredAt: "2026-08-02T12:00:00.000Z",
+                    },
+                  },
+                }
+              : {}),
+          },
+        });
+        expect(prepared._tag).toBe("Refused");
+        expect(
+          (yield* fromTestPromise(() =>
+            runtime.db.prepare("SELECT review_id FROM statement_review_decisions").all()
+          )).results
+        ).toHaveLength(0);
+        expect(
+          (yield* fromTestPromise(() => runtime.db.prepare("SELECT id FROM transactions").all()))
+            .results
+        ).toHaveLength(0);
+        expect(
+          yield* fromTestPromise(() =>
+            runtime.db.prepare("SELECT state FROM statement_clarifications").first()
+          )
+        ).toEqual({ state: "awaiting" });
+      })
+    ),
+  30_000
+);
 
 const reviewDecision = (
   runtime: Runtime,

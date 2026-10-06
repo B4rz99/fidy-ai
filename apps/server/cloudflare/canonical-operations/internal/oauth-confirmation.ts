@@ -6,9 +6,10 @@ import { recordOAuthRefusal } from "./oauth-response";
 import { refusedCredentialResponse, transactionUnavailable } from "../../canonical-work/operations";
 
 const confirmationRequiredStatus = 403;
-const confirmationMessage = "Verified User confirmation is required for this operation.";
+const confirmationMessage =
+  "Esta operación requiere una nueva confirmación nativa del cliente OAuth autorizado.";
 
-/** OAuth supplies no verified confirmation evidence in this slice; the canonical declaration decides sensitivity. */
+/** Canonical metadata decides sensitivity; native client acceptance is separate from hosted evidence. */
 export const requiresOAuthConfirmation = (operation: CatalogOperation): boolean =>
   operation.policy.agentConfirmation === "required";
 

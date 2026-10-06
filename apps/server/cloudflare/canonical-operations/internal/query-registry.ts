@@ -15,9 +15,11 @@ import { recallMemories } from "../../memory/operations";
 import { listRecurringSeries } from "../../recurring/operations";
 import { listPendingInsights } from "../../insights/operations";
 import { listPATs } from "../../tokens/operations";
+import type { StatementDecisionWork } from "../../ingestion/contract";
 import {
   forwardingAddressResponse,
   listNeedsReviewItems,
+  readHeldStatementQuery,
   readStatementSubmission,
 } from "../../ingestion/operations";
 
@@ -199,6 +201,17 @@ const queryOwners = new Map<string, QueryOwner>([
 /** Look up an installed query adapter only inside canonical dispatch. */
 export const canonicalQueryOwner = (id: string): Option.Option<QueryOwner> =>
   Option.fromUndefinedOr(queryOwners.get(id));
+
+/** The same installed statement queries also accept Agent's held conversation authority. */
+export const canonicalHostedStatementQueryOwner = (
+  id: string
+): Option.Option<(work: StatementDecisionWork) => Effect.Effect<Response>> => {
+  if (Option.isNone(canonicalQueryOwner(id))) return Option.none();
+  if (id === "ingestion.listNeedsReviewItems" || id === "ingestion.getStatementSubmission") {
+    return Option.some((work) => readHeldStatementQuery({ operation: id, work }));
+  }
+  return Option.none();
+};
 
 /** An installed query adapter may implement only an existing canonical query declaration. */
 const assertCanonicalQueryOwners = (): void => {

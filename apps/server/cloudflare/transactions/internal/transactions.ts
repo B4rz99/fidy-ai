@@ -17,11 +17,13 @@ import {
   type TransactionCaller,
   type TransactionRefusal,
   type TransactionSubject,
+  acceptedOAuthStatement,
   acceptedPATStatements,
   boundaryFailure,
   callerAuthority,
   callerScope,
   failedPreparation,
+  isOAuthCaller,
   isPATCaller,
   maximumTransactionInputBytes,
   transactionNow as now,
@@ -120,6 +122,27 @@ const captureInsert = (db: D1Database, capture: Capture): D1PreparedStatement =>
 const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedStatement> => {
   const { subject, context, id, current } = capture;
   const createdAt = DateTime.formatIso(DateTime.makeUnsafe(current));
+  const accountability = (): ReadonlyArray<D1PreparedStatement> => {
+    if (isPATCaller(subject)) {
+      return acceptedPATStatements({
+        db,
+        subject,
+        operation: "transactions.createTransaction",
+        current,
+      });
+    }
+    if (isOAuthCaller(subject)) {
+      return [
+        acceptedOAuthStatement({
+          db,
+          subject,
+          operation: "transactions.createTransaction",
+          current,
+        }),
+      ];
+    }
+    return [captureAudit(db, { ...capture, subject })];
+  };
   return [
     captureInsert(db, capture),
     db
@@ -134,14 +157,7 @@ const captureStatements = (db: D1Database, capture: Capture): Array<D1PreparedSt
         subject.userId,
         id
       ),
-    ...(isPATCaller(subject)
-      ? acceptedPATStatements({
-          db,
-          subject,
-          operation: "transactions.createTransaction",
-          current,
-        })
-      : [captureAudit(db, { ...capture, subject })]),
+    ...accountability(),
   ];
 };
 

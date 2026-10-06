@@ -1,4 +1,6 @@
 import { getCanonicalOperationInput } from "../../../src/shell/canonical-operations/operations";
+import type { StatementDecisionWork } from "../contract";
+import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { StatementSubmission } from "../../../src/shell/ingestion/contract";
 import { Effect, Exit, Option, Schema } from "effect";
 import { dailyAuditExhausted } from "../../../src/shell/audit/operations";
@@ -12,6 +14,7 @@ import {
   recordStatementRefusal,
   statementAbortRefusal,
   statementRefusal,
+  statementSubmissionCompletion,
   submissionProjection,
 } from "./statement-staging";
 import {
@@ -121,6 +124,123 @@ const committedSubmission =
         ? Option.none()
         : Option.flatMap(result.value, submissionProjection);
     });
+
+const heldPublicationRefusal = ({
+  work,
+  config,
+  refusal,
+}: Readonly<{
+  work: StatementDecisionWork;
+  config: StatementStagingConfig;
+  refusal: StatementPublicationRefusal;
+}>): CanonicalMutationRefusal => ({
+  code: refusal.code,
+  message: refusal.message,
+  record: () =>
+    Effect.tryPromise(() =>
+      recordStatementRefusal({
+        authority: work.authority,
+        current: work.current,
+        database: config.database,
+        refusal,
+      })
+    ).pipe(Effect.orElseSucceed(() => "unavailable" as const)),
+  respond: (disposition) => {
+    if (disposition === "recorded") return Effect.succeed(statementRefusalResponse(refusal));
+    if (disposition === "rate_limited") return Effect.succeed(statementDailyBudgetResponse());
+    return Effect.succeed(transactionUnavailable());
+  },
+});
+
+const bindPublicationOrigin = ({
+  work,
+  origin,
+  submissionId,
+  stagingId,
+}: Readonly<{
+  work: StatementDecisionWork;
+  origin: OwnedStatement;
+  submissionId: string;
+  stagingId: string;
+}>): ReadonlyArray<D1PreparedStatement> => [
+  work.db
+    .prepare(`INSERT INTO statement_hosted_origins (submission_id,user_id,session_id,turn_id,expires_at_ms)
+      SELECT ?,user_id,session_id,turn_id,expires_at_ms FROM (${origin.sql}) AS proof WHERE user_id = ? AND EXISTS (SELECT 1 FROM statement_whatsapp_documents d WHERE d.turn_id=proof.turn_id AND d.user_id=proof.user_id AND d.staging_id=?)
+      ON CONFLICT(submission_id) DO UPDATE SET expires_at_ms = statement_hosted_origins.expires_at_ms
+      WHERE statement_hosted_origins.user_id = excluded.user_id AND statement_hosted_origins.session_id = excluded.session_id AND statement_hosted_origins.turn_id = excluded.turn_id`)
+    .bind(submissionId, ...origin.params, work.userId, stagingId),
+  work.db.prepare(statementSubmissionCompletion),
+];
+
+const heldPublicationConfig = ({
+  work,
+  bucket,
+}: Readonly<{ work: StatementDecisionWork; bucket: R2Bucket }>): StatementStagingConfig => ({
+  database: work.db,
+  bucket,
+  nowEpochMs: () => work.current,
+});
+
+/** Publish using the same staging/entitlement unit and atomically bind verified upload provenance. */
+export const prepareHeldStatementSubmission = (
+  work: StatementDecisionWork
+): Effect.Effect<CanonicalMutationPreparation> =>
+  Effect.gen(function* () {
+    if (
+      Option.isNone(work.bucket) ||
+      Option.isNone(work.publicationOrigin) ||
+      work.authority.table !== "hosted_turns"
+    ) {
+      return unavailablePreparation();
+    }
+    const parsed = Schema.decodeUnknownOption(StatementInput)(work.input);
+    if (Option.isNone(parsed)) return failedPreparation();
+    const config = heldPublicationConfig({ work, bucket: work.bucket.value });
+    const prepared = yield* prepareStagedStatementPublication(config, {
+      authority: work.authority,
+      current: work.current,
+      idempotencyKey: parsed.value.payload.idempotencyKey,
+      reference: parsed.value.payload.reference,
+      userId: work.userId,
+    });
+    if (prepared._tag === "Unavailable") return unavailablePreparation();
+    if (prepared._tag === "Refused") {
+      return refusedPreparation(
+        heldPublicationRefusal({ work, config, refusal: statementRefusal(prepared.reason) })
+      );
+    }
+    const publication = prepared.publication;
+    const origin = work.publicationOrigin.value;
+    return {
+      _tag: "Prepared",
+      mutation: {
+        requiredScope: Option.none(),
+        auditBudget: "shared",
+        commitGuards: Option.none(),
+        statements: [
+          ...publication.statements,
+          ...bindPublicationOrigin({
+            work,
+            origin,
+            submissionId: publication.submissionId,
+            stagingId: parsed.value.payload.reference.stagingId,
+          }),
+        ],
+        guardRefusal: () =>
+          Effect.succeed(
+            heldPublicationRefusal({ work, config, refusal: statementRefusal("conflict") })
+          ),
+        outcome: {
+          _tag: "StatementSubmission",
+          operation: "ingestion.submitForExtraction",
+          publication: {
+            readCommitted: committedSubmission(config, publication),
+            lostReplay: lostStatementReplay(config, publication),
+          },
+        },
+      },
+    } satisfies CanonicalMutationPreparation;
+  }).pipe(Effect.orElseSucceed(unavailablePreparation));
 
 /** One staged reference prepared for the shared canonical mutation unit, never a nested commit. */
 export const statementMutationAdapter = {

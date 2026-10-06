@@ -9,8 +9,11 @@ afterEach(() => {
   for (const fixture of fixtures.splice(0)) Bun.spawnSync(["rm", "-rf", fixture]);
 });
 
-const installer = await Bun.file(new URL("./install-workspace.sh", import.meta.url)).text();
-const authorizedLock = await Bun.file(new URL("../bun.lock", import.meta.url)).text();
+const authorizedLock = "authorized frozen fixture\n";
+const fixtureDigest = new Bun.CryptoHasher("sha256").update(authorizedLock).digest("hex");
+const installer = (
+  await Bun.file(new URL("./install-workspace.sh", import.meta.url)).text()
+).replace(/actual" == '[0-9a-f]{64}'/u, `actual" == '${fixtureDigest}'`);
 
 const runInstaller = Effect.fnUntraced(function* (
   lock: string,

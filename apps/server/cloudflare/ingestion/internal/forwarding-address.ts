@@ -150,6 +150,17 @@ export const forwardingAddressGuardAudit = ({
       }),
     });
   }
+  if (isOAuthCaller(subject)) {
+    return prepareAuthorizedAuditCall({
+      db,
+      authority: callerAuthority({ subject, current }),
+      id: transactionId(),
+      operation: "ingestion.enableEmailForwarding",
+      outcome: "rejected",
+      current,
+      afterOwnerWrite: false,
+    });
+  }
   const authority = liveWebSessionAuthority({ subject, current });
   return prepareAuthorizedAuditCall({
     db,

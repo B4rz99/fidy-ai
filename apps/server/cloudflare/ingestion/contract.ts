@@ -1,6 +1,9 @@
 import type { UserId } from "../../src/core/identity/contract";
 import type { WhatsAppInboundEvent } from "../../src/shell/channels/whatsapp/contract";
 import { type Effect, type Option, Schema } from "effect";
+import type { OwnedStatement } from "../../src/shell/owner-write/contract";
+import type { TransactionAuthority } from "../canonical-work/contract";
+import type { CanonicalCapability } from "../../src/core/canonical-operations/contract";
 import {
   type StatementSubmission,
   StatementSubmissionId,
@@ -59,6 +62,20 @@ export const ForwardedEmailWork = Schema.Struct({
 export type StatementPublicationOutcome = Readonly<{
   readCommitted: (userId: string) => Effect.Effect<Option.Option<StatementSubmission>>;
   lostReplay: Effect.Effect<boolean>;
+}>;
+
+/** Held live authority shared by canonical credential and admitted hosted statement adapters. */
+export type StatementDecisionWork = Readonly<{
+  db: D1Database;
+  userId: string;
+  authority: TransactionAuthority;
+  originSessionId: Option.Option<string>;
+  originTurns: Option.Option<OwnedStatement>;
+  publicationOrigin: Option.Option<OwnedStatement>;
+  requiredScope: Option.Option<CanonicalCapability>;
+  current: number;
+  bucket: Option.Option<R2Bucket>;
+  input: unknown;
 }>;
 
 /** Maximum encoded input bytes accepted by one canonical statement submission. */

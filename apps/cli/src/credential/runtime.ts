@@ -10,7 +10,7 @@ import {
 import { checkLocalPath } from "./internal/local-path";
 
 /** Exact runtime whose experimental Secrets API supports local-only Windows persistence. */
-export const supportedBunRevision = "b73ae471a057b796b333a561ebc90e2e42050707";
+export const supportedBunRevision = "9bd19c98eacc01530a4e7609bc427abffa87d77e";
 const nativeService = "com.fidy.cli.api.fidyapp.com";
 const savedName = "login";
 const probeName = "storage-probe";

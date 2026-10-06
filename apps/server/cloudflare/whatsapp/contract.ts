@@ -14,6 +14,7 @@ import {
   type InsightTemplateSender,
   WhatsAppBusinessPhoneNumberId,
   type WhatsAppDeliveryKey,
+  WhatsAppDocument,
   type WhatsAppInboundEvent,
   WhatsAppProviderMessageId,
 } from "../../src/shell/channels/whatsapp/contract";
@@ -112,6 +113,16 @@ export const WhatsAppTurnAdmission = Schema.Struct({
   text: TranscriptText,
 });
 export type WhatsAppTurnAdmission = typeof WhatsAppTurnAdmission.Type;
+/** A directly attached provider document, never a caller URL or credential command. */
+export const WhatsAppDocumentAdmission = Schema.Struct({
+  ...WhatsAppTurnAdmission.fields,
+  document: WhatsAppDocument,
+});
+export type WhatsAppDocumentAdmission = typeof WhatsAppDocumentAdmission.Type;
+export const WhatsAppInboundAdmission = Schema.Union([
+  WhatsAppDocumentAdmission,
+  WhatsAppTurnAdmission,
+]);
 
 /** Internal, authenticated Core-to-User-coordinator status projection; no text or bearer. */
 export const WhatsAppStatusAdmission = Schema.Struct({
@@ -182,7 +193,9 @@ export type WhatsAppIngressEnvironment = Readonly<{
   readonly KAPSO_WEBHOOK_SECRET: string;
   readonly WHATSAPP_BUSINESS_PORTFOLIO_ID: string;
   readonly onAccepted: (id: string) => void;
-  readonly onHostedText: (admission: WhatsAppTurnAdmission) => Promise<Response>;
+  readonly onHostedText: (
+    admission: WhatsAppTurnAdmission | WhatsAppDocumentAdmission
+  ) => Promise<Response>;
   readonly onHostedStatus: (admission: WhatsAppStatusAdmission) => Promise<Response>;
 }>;
 

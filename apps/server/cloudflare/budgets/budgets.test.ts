@@ -5,6 +5,7 @@ import {
   canonicalAdmissionMigrationNames,
   installTestSchema,
   isolatedTestDatabases,
+  statementAuditTestMigrations,
 } from "../d1-test-fixture";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
@@ -103,6 +104,10 @@ const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
       "0018_batch_envelope_audit",
       "0019_canonical_child_guards",
       "0020_dashboard_projection",
+      "0009_email_replacement",
+      "0018_dashboard",
+      "0018_insight_events",
+      ...statementAuditTestMigrations,
     ];
     yield* Effect.tryPromise(() =>
       installTestSchema({

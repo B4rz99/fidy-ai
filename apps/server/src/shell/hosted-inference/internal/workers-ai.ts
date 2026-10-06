@@ -429,6 +429,8 @@ const decodeToolCall = (
     catch: () => invalidProviderOutput("Hosted tool arguments were invalid"),
   }).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(binding.operation.input)),
+    // Canonical Transcript/tool evidence is wire JSON, not decoded DateTime/Option values.
+    Effect.flatMap(Schema.encodeEffect(binding.operation.input)),
     Effect.mapError((error) =>
       error instanceof HostedInferenceError
         ? error

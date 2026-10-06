@@ -1,4 +1,5 @@
 import { Effect, type Option } from "effect";
+import { mintHostedStatementCaller as statementCaller } from "./internal/statement-authority";
 import {
   expireProactiveTranscript as expireProactiveTranscriptOwned,
   prepareProactiveTranscript as prepareProactiveTranscriptOwned,
@@ -33,6 +34,8 @@ export const expireProactiveTranscript = (
   input: Parameters<typeof expireProactiveTranscriptOwned>[0]
 ): Effect.Effect<void, AgentUnavailable> =>
   expireProactiveTranscriptOwned(input).pipe(Effect.mapError(() => new AgentUnavailable()));
+/** Mint only live same-User, same-channel Pending statement authority for the canonical adapter. */
+export const mintHostedStatementCaller: typeof statementCaller = (input) => statementCaller(input);
 
 /** Same-User Turn lifecycle metadata, with id, user_id, hosted_session_id, status, started_at_ms, terminal_at_ms and failure_reason; no Transcript content or credential. */
 export const hostedChannelTurnQuery = (userId: UserId): OwnedStatement => channelTurnQuery(userId);

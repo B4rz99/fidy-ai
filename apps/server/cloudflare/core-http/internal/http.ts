@@ -40,7 +40,7 @@ import { budgetRefusal } from "../../budgets/operations";
 import { browseDashboard } from "../../dashboard/operations";
 import { ownsTransactionPath as transactionPath } from "../../../src/shell/transactions/runtime";
 import {
-  type TransactionCaller,
+  type TransactionCaller as CanonicalCaller,
   isPATCaller,
   maximumTransactionInputBytes,
   rejectBatchEnvelope,
@@ -96,14 +96,18 @@ import {
   smokeReady,
 } from "../../runtime/release-smoke/operations";
 
-import { statementStagingPath } from "../../../src/shell/ingestion/contract";
 import {
-  submitForExtractionInput,
-  uploadStagedStatement,
-  validationFailed,
-} from "../../ingestion/operations";
+  ResolveNeedsReviewItemInput,
+  statementStagingPath,
+} from "../../../src/shell/ingestion/contract";
+import { validationFailed } from "../../ingestion/operations";
 
-import { WhatsAppStatusAdmission, WhatsAppTurnAdmission } from "../../whatsapp/contract";
+import {
+  type WhatsAppDocumentAdmission,
+  WhatsAppInboundAdmission,
+  WhatsAppStatusAdmission,
+  type WhatsAppTurnAdmission,
+} from "../../whatsapp/contract";
 import { dispatchWhatsAppWork, receiveWhatsAppWebhook } from "../../whatsapp/runtime";
 
 import type { CoreHttpEnvironment } from "../contract";
@@ -231,11 +235,11 @@ const methodNotAllowed = (): Response =>
 const forwardHostedWhatsApp = (
   environment: CoreHttpEnvironment,
   path: "whatsapp" | "whatsapp/status",
-  admission: WhatsAppTurnAdmission | WhatsAppStatusAdmission
+  admission: WhatsAppTurnAdmission | WhatsAppDocumentAdmission | WhatsAppStatusAdmission
 ): Promise<Response> =>
   Effect.runPromise(
     Schema.encodeEffect(
-      Schema.fromJsonString(Schema.Union([WhatsAppTurnAdmission, WhatsAppStatusAdmission]))
+      Schema.fromJsonString(Schema.Union([WhatsAppInboundAdmission, WhatsAppStatusAdmission]))
     )(admission)
   ).then((body) =>
     environment.USER_TRANSACTION_COORDINATOR.getByName(admission.userId).fetch(
@@ -301,6 +305,7 @@ const sessionAdmission = (
  * Bind one admitted caller to the exact admission variant for this canonical work. The
  * coordinator's own published schema types every field here, so the Worker cannot drift from it.
  */
+type TransactionCaller = Exclude<CanonicalCaller, { oauthConnectionId: string }>;
 const coordinatorAdmission = (
   subject: TransactionCaller,
   work: CanonicalWork
@@ -901,26 +906,22 @@ const memoryResponse = (
     )
   );
 };
-/** Session-authorized statement byte staging; neither a PAT nor an anonymous caller may stage. */
-const statementUploadResponse = (
-  request: Request,
-  environment: CoreHttpEnvironment
-): Effect.Effect<Response> => {
-  if (request.method !== "POST") return Effect.succeed(methodNotAllowed());
-  return Effect.tryPromise({
-    try: () => transactionSession({ request, db: environment.DB }),
-    catch: () => undefined,
-  }).pipe(
-    Effect.flatMap((session) =>
-      Option.isNone(session)
-        ? Effect.succeed(unauthenticatedTransaction())
-        : uploadStagedStatement({ environment, request, subject: session.value }).pipe(
-            Effect.withSpan("ingestion.stageStatement")
-          )
-    ),
-    Effect.orElseSucceed(unavailable)
+/** Statement bytes enter only through verified WhatsApp document admission. */
+const statementUploadResponse = (request: Request): Effect.Effect<Response> =>
+  Effect.succeed(
+    request.method === "POST"
+      ? Response.json(
+          {
+            error: {
+              code: "user_action_required",
+              message: "Attach a CSV or XLSX statement directly in WhatsApp.",
+            },
+            next: [],
+          },
+          { status: HTTP_FORBIDDEN, headers: { "cache-control": "no-store" } }
+        )
+      : methodNotAllowed()
   );
-};
 
 /** Direct Core paths that own their own admission and session resolution. */
 const hostedTurnPolicy = Schema.decodeSync(RequestBodyPolicy)({
@@ -1044,7 +1045,7 @@ const directPathResponse = (
 ): Option.Option<Effect.Effect<Response>> => {
   const path = new URL(request.url).pathname;
   if (path === statementStagingPath) {
-    return Option.some(statementUploadResponse(request, environment));
+    return Option.some(statementUploadResponse(request));
   }
   if (path === "/web/hosted-turns") {
     return Option.some(hostedTurnResponse(request, environment));
@@ -1083,25 +1084,66 @@ const forwardingCanonicalResponse = ({
   return Option.none();
 };
 
+const clarificationIdPosition = -2;
+const clarificationBodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
+  maximumBytes: 4096,
+  deadlineMilliseconds: 2000,
+});
+
+/** Clarification mutations share canonical preparation, authority, confirmation and Audit. */
+const clarificationCanonicalResponse = ({
+  operation,
+  request,
+  environment,
+  subject,
+}: IngestionResponseInput): Option.Option<Effect.Effect<Response>> => {
+  if (
+    operation.id !== "ingestion.resolveNeedsReviewItem" &&
+    operation.id !== "ingestion.skipNeedsReviewItem" &&
+    operation.id !== "ingestion.abandonStatementSubmission"
+  ) {
+    return Option.none();
+  }
+  return Option.some(
+    Effect.gen(function* () {
+      const id = new URL(request.url).pathname.split("/").at(clarificationIdPosition) ?? "";
+      if (operation.id === "ingestion.resolveNeedsReviewItem") {
+        const payload = yield* Effect.tryPromise(() =>
+          boundedJsonBody({
+            request,
+            policy: clarificationBodyPolicy,
+            schema: Schema.toCodecJson(ResolveNeedsReviewItemInput),
+          })
+        );
+        if (Option.isNone(payload)) {
+          return validationFailed("Invalid statement clarification input.");
+        }
+        return yield* sendToCoordinator({
+          environment,
+          subject,
+          work: ownerCall(operation.id, { params: { id }, payload: payload.value }),
+        });
+      }
+      return yield* sendToCoordinator({
+        environment,
+        subject,
+        work: ownerCall(operation.id, { params: { id } }),
+      });
+    }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan(operation.id))
+  );
+};
+
 /** Ingestion canonical work: route forwarding and supported statement projections. */
 const ingestionCanonicalResponse = (
   input: IngestionResponseInput
 ): Option.Option<Effect.Effect<Response>> => {
   const forwarding = forwardingCanonicalResponse(input);
   if (Option.isSome(forwarding)) return forwarding;
-  const { operation, request, environment, subject } = input;
+  const clarification = clarificationCanonicalResponse(input);
+  if (Option.isSome(clarification)) return clarification;
+  const { operation, request } = input;
   if (operation.id === "ingestion.submitForExtraction") {
-    return Option.some(
-      Effect.gen(function* () {
-        const input = yield* Effect.tryPromise(() => submitForExtractionInput(request));
-        if (Option.isNone(input)) return validationFailed("Invalid statement submission input.");
-        return yield* sendToCoordinator({
-          environment,
-          subject,
-          work: canonicalCall(operation.id, { payload: input.value }),
-        });
-      }).pipe(Effect.orElseSucceed(unavailable), Effect.withSpan("ingestion.submitForExtraction"))
-    );
+    return Option.some(statementUploadResponse(request));
   }
   return Option.none();
 };

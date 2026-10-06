@@ -304,6 +304,21 @@
       }
     },
     {
+      "id": "ingestion.abandonStatementSubmission",
+      "policy": {
+        "access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "user-owned-agent-scoped"
+        },
+        "agentConfirmation": "required",
+        "kind": "mutation",
+        "requiredTier": "free"
+      }
+    },
+    {
       "id": "ingestion.enableEmailForwarding",
       "policy": {
         "access": {
@@ -379,7 +394,7 @@
       }
     },
     {
-      "id": "ingestion.submitForExtraction",
+      "id": "ingestion.skipNeedsReviewItem",
       "policy": {
         "access": {
           "scope": {
@@ -387,6 +402,17 @@
             "evaluation": "operation"
           },
           "type": "user-owned-agent-scoped"
+        },
+        "agentConfirmation": "required",
+        "kind": "mutation",
+        "requiredTier": "free"
+      }
+    },
+    {
+      "id": "ingestion.submitForExtraction",
+      "policy": {
+        "access": {
+          "type": "verified-whatsapp-hosted-only"
         },
         "agentConfirmation": "not-required",
         "kind": "mutation",

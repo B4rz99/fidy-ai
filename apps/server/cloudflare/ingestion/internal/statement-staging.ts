@@ -1,4 +1,8 @@
 import { UserId } from "../../../src/core/identity/contract";
+import {
+  type StatementAccounting,
+  StatementSubmissionStatus,
+} from "../../../src/core/ingestion/contract";
 import { prepareUserContext } from "../../identity/user-context/operations";
 import {
   type StagedStatementBytes,
@@ -30,7 +34,6 @@ import {
   recordRejectedPATWork,
   refusedByAuditBudget,
 } from "../../../src/shell/audit/operations";
-import type { WebSessionAuthority } from "../../../src/shell/web-session/contract";
 import {
   Context,
   Crypto,
@@ -139,7 +142,7 @@ export type StoredStatementSubmission = Readonly<{
   readonly id: string;
   readonly sourceFormat: "csv" | "xlsx";
   readonly parserRevision: string;
-  readonly status: "queued" | "processing" | "completed" | "failed";
+  readonly status: typeof StatementSubmissionStatus.Type;
   readonly submittedAtMs: number;
   readonly startedAtMs: Option.Option<number>;
   readonly completedAtMs: Option.Option<number>;
@@ -147,6 +150,8 @@ export type StoredStatementSubmission = Readonly<{
   readonly inputRows: Option.Option<number>;
   readonly acceptedRows: Option.Option<number>;
   readonly needsReviewRows: Option.Option<number>;
+  readonly skippedRows: number;
+  readonly abandonedRows: number;
 }>;
 
 /**
@@ -220,7 +225,9 @@ const StoredSubmissionRow = Schema.Struct({
   parser_revision: Schema.String,
   source_format: Schema.Literals(["csv", "xlsx"]),
   started_at_ms: Schema.OptionFromNullOr(Schema.Int),
-  status: Schema.Literals(["queued", "processing", "completed", "failed"]),
+  status: StatementSubmissionStatus,
+  skipped_rows: Schema.Int,
+  abandoned_rows: Schema.Int,
   submitted_at_ms: Schema.Int,
 });
 
@@ -741,7 +748,7 @@ const statementSubmissionRefusalAudit = ({
   id,
   outcome,
 }: Readonly<{
-  authority: WebSessionAuthority;
+  authority: Exclude<TransactionAuthority, { table: "pats" | "oauth_access_credentials" }>;
   current: number;
   database: D1Database;
   id: string;
@@ -766,7 +773,7 @@ const statementSubmissionReplayAudit = ({
   database,
   id,
 }: Readonly<{
-  authority: WebSessionAuthority;
+  authority: Exclude<TransactionAuthority, { table: "pats" | "oauth_access_credentials" }>;
   current: number;
   database: D1Database;
   id: string;
@@ -962,6 +969,7 @@ const failedProjection = (
             inputRows: stored.inputRows.value,
             acceptedRows: stored.acceptedRows.value,
             needsReviewRows: stored.needsReviewRows.value,
+            ...decisionAccounting(stored),
           },
         }
       : {}),
@@ -969,6 +977,13 @@ const failedProjection = (
     status: "failed",
   });
 };
+
+const decisionAccounting = (
+  stored: StoredStatementSubmission
+): Pick<StatementAccounting, "skippedRows" | "abandonedRows"> => ({
+  ...(stored.skippedRows > 0 ? { skippedRows: stored.skippedRows } : {}),
+  ...(stored.abandonedRows > 0 ? { abandonedRows: stored.abandonedRows } : {}),
+});
 
 /** A completed submission can only project when its row accounting conserves input rows. */
 const completedProjection = (
@@ -984,16 +999,23 @@ const completedProjection = (
   ) {
     return Option.none();
   }
-  return Option.some({
+  const settled = {
     ...base,
     accounting: {
       acceptedRows: stored.acceptedRows.value,
       inputRows: stored.inputRows.value,
       needsReviewRows: stored.needsReviewRows.value,
+      ...decisionAccounting(stored),
     },
-    completedAt: DateTime.makeUnsafe(stored.completedAtMs.value),
     startedAt: DateTime.makeUnsafe(stored.startedAtMs.value),
-    status: "completed",
+  };
+  if (stored.status === "awaiting-clarification") {
+    return Option.some({ ...settled, status: "awaiting-clarification" });
+  }
+  return Option.some({
+    ...settled,
+    completedAt: DateTime.makeUnsafe(stored.completedAtMs.value),
+    status: stored.status === "abandoned" ? "abandoned" : "completed",
   });
 };
 
@@ -1004,7 +1026,13 @@ export const submissionProjection = (
   const base = submissionBase(stored);
   if (stored.status === "queued") return Option.some({ ...base, status: "queued" });
   if (stored.status === "failed") return failedProjection(base, stored);
-  if (stored.status === "completed") return completedProjection(base, stored);
+  if (
+    stored.status === "completed" ||
+    stored.status === "awaiting-clarification" ||
+    stored.status === "abandoned"
+  ) {
+    return completedProjection(base, stored);
+  }
   return Option.map(stored.startedAtMs, (startedAtMs) => ({
     ...base,
     startedAt: DateTime.makeUnsafe(startedAtMs),
@@ -1040,8 +1068,21 @@ const statementPublicationAccountability = ({
   authority: TransactionAuthority;
   current: number;
   database: D1Database;
-}>): ReadonlyArray<D1PreparedStatement> =>
-  isPATAuthority(authority)
+}>): ReadonlyArray<D1PreparedStatement> => {
+  if (authority.table === "oauth_access_credentials") {
+    return [
+      prepareAuthorizedAuditCall({
+        db: database,
+        authority,
+        id: newId(),
+        operation: "ingestion.submitForExtraction",
+        current,
+        outcome: "accepted",
+        afterOwnerWrite: true,
+      }),
+    ];
+  }
+  return isPATAuthority(authority)
     ? acceptedPATAccountability({
         afterOwnerWrite: true,
         authority,
@@ -1050,6 +1091,7 @@ const statementPublicationAccountability = ({
         operation: "ingestion.submitForExtraction",
       })
     : [];
+};
 
 /**
  * Credential-specific accountability a replayed statement call must commit instead of publishing
@@ -1065,8 +1107,21 @@ const statementReplayAccountability = ({
   authority: TransactionAuthority;
   current: number;
   database: D1Database;
-}>): ReadonlyArray<D1PreparedStatement> =>
-  isPATAuthority(authority)
+}>): ReadonlyArray<D1PreparedStatement> => {
+  if (authority.table === "oauth_access_credentials") {
+    return [
+      prepareAuthorizedAuditCall({
+        db: database,
+        authority,
+        id: newId(),
+        operation: "ingestion.submitForExtraction",
+        current,
+        outcome: "accepted",
+        afterOwnerWrite: false,
+      }),
+    ];
+  }
+  return isPATAuthority(authority)
     ? acceptedPATAccountability({
         afterOwnerWrite: false,
         authority,
@@ -1075,6 +1130,7 @@ const statementReplayAccountability = ({
         operation: "ingestion.submitForExtraction",
       })
     : [statementSubmissionReplayAudit({ authority, current, database, id: newId() })];
+};
 
 /**
  * One existing submission as the exact replay this call must commit instead of publishing again.
@@ -1280,6 +1336,42 @@ export const prepareStagedStatementPublication: {
  * `statement_submission_audit` refusal. A refusal whose audit cannot commit for a dead credential, a
  * spent shared daily budget, or an unavailable authority is classified instead of answered.
  */
+const statementRefusalEvidence = (
+  input: Readonly<{
+    authority: TransactionAuthority;
+    current: number;
+    database: D1Database;
+    refusal: StatementPublicationRefusal;
+  }>
+): D1PreparedStatement => {
+  if (input.authority.table === "oauth_access_credentials") {
+    return prepareAuthorizedAuditCall({
+      db: input.database,
+      authority: input.authority,
+      id: newId(),
+      operation: "ingestion.submitForExtraction",
+      current: input.current,
+      outcome: "rejected",
+      afterOwnerWrite: false,
+    });
+  }
+  if (isPATAuthority(input.authority)) {
+    return prepareOwnedStatement({
+      db: input.database,
+      statement: recordRejectedPATWork({
+        authority: input.authority,
+        input: { current: input.current, id: newId(), operation: "ingestion.submitForExtraction" },
+      }),
+    });
+  }
+  return statementSubmissionRefusalAudit({
+    authority: input.authority,
+    current: input.current,
+    database: input.database,
+    id: newId(),
+    outcome: refusalAuditOutcome(input.refusal.auditOutcome),
+  });
+};
 export const recordStatementRefusal = (
   input: Readonly<{
     readonly authority: TransactionAuthority;
@@ -1289,27 +1381,7 @@ export const recordStatementRefusal = (
   }>
 ): Promise<RefusalRecord> =>
   input.database
-    .batch([
-      isPATAuthority(input.authority)
-        ? prepareOwnedStatement({
-            db: input.database,
-            statement: recordRejectedPATWork({
-              authority: input.authority,
-              input: {
-                current: input.current,
-                id: newId(),
-                operation: "ingestion.submitForExtraction",
-              },
-            }),
-          })
-        : statementSubmissionRefusalAudit({
-            authority: input.authority,
-            current: input.current,
-            database: input.database,
-            id: newId(),
-            outcome: refusalAuditOutcome(input.refusal.auditOutcome),
-          }),
-    ])
+    .batch([statementRefusalEvidence(input)])
     .then((results): RefusalRecord =>
       results[0]?.meta.changes === 1 ? "recorded" : "credential_refused"
     )
@@ -1405,9 +1477,17 @@ export const readOwnedStatementSubmission: {
     platformUnavailable(() =>
       config.database
         .prepare(
-          `SELECT id, source_format, parser_revision, status, submitted_at_ms, started_at_ms,
-                completed_at_ms, failure_reason, input_rows, accepted_rows, needs_review_rows
-         FROM statement_submissions WHERE id = ? AND user_id = ?`
+          `SELECT s.id, s.source_format, s.parser_revision,
+           CASE WHEN s.status = 'failed' THEN s.status ELSE
+             CASE c.state WHEN 'awaiting' THEN 'awaiting-clarification' WHEN 'abandoned' THEN 'abandoned' ELSE s.status END END AS status,
+           s.submitted_at_ms, s.started_at_ms, coalesce(c.ended_at_ms, s.completed_at_ms) AS completed_at_ms,
+           s.failure_reason, s.input_rows,
+           s.accepted_rows + (SELECT count(*) FROM statement_review_decisions d WHERE d.submission_id = s.id AND d.decision = 'resolved') AS accepted_rows,
+           s.needs_review_rows - (SELECT count(*) FROM statement_review_decisions d WHERE d.submission_id = s.id) AS needs_review_rows,
+           (SELECT count(*) FROM statement_review_decisions d WHERE d.submission_id = s.id AND d.decision = 'skipped') AS skipped_rows,
+           (SELECT count(*) FROM statement_review_decisions d WHERE d.submission_id = s.id AND d.decision = 'abandoned') AS abandoned_rows
+         FROM statement_submissions s LEFT JOIN statement_clarifications c ON c.submission_id = s.id AND c.user_id = s.user_id
+         WHERE s.id = ? AND s.user_id = ?`
         )
         .bind(input.submissionId, input.userId)
         .first()
@@ -1417,6 +1497,8 @@ export const readOwnedStatementSubmission: {
           Schema.decodeUnknownOption(StoredSubmissionRow)(value),
           (row): StoredStatementSubmission => ({
             acceptedRows: row.accepted_rows,
+            skippedRows: row.skipped_rows,
+            abandonedRows: row.abandoned_rows,
             completedAtMs: row.completed_at_ms,
             failureReason: row.failure_reason,
             id: row.id,
@@ -1508,7 +1590,8 @@ const sweepExpiredStatementStaging = (
           `UPDATE statement_staging_objects SET status = 'deleting'
            WHERE id IN (
              SELECT id FROM statement_staging_objects
-             WHERE status != 'published' AND object_deleted_at_ms IS NULL AND expires_at_ms <= ?
+             WHERE status != 'published' AND object_deleted_at_ms IS NULL
+               AND (status = 'deleting' OR expires_at_ms <= ?)
              ORDER BY expires_at_ms
              LIMIT ?
            )

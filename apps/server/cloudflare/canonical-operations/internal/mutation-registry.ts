@@ -24,13 +24,18 @@ import {
   prepareDeleteBudget,
   prepareUpdateBudget,
 } from "../../budgets/operations";
+import type { StatementDecisionWork } from "../../ingestion/contract";
 import {
   invalidForwardingAddress,
-  invalidStatementSubmission,
   prepareForwardingAddress,
-  prepareStatementSubmission,
+  prepareHeldStatementAbandonment,
+  prepareHeldStatementReviewDecision,
+  prepareHeldStatementSubmission,
+  prepareStatementAbandonment,
+  prepareStatementReviewDecision,
   presentForwardingAddress,
   presentStatementSubmission,
+  statementClarificationRefusal,
 } from "../../ingestion/operations";
 import {
   prepareCapture,
@@ -71,6 +76,43 @@ export type CanonicalMutationAdapter = Readonly<{
   present: (value: CommittedMutationValue) => Effect.Effect<Response>;
   invalidRefusal: (work: CanonicalPreparationWork) => CanonicalMutationRefusal;
 }>;
+
+/** The installed statement operations' hosted adapter shares owner preparation and presentation. */
+export const canonicalHostedStatementAdapter = (
+  operation: string
+): Option.Option<
+  Readonly<{
+    prepare: (work: StatementDecisionWork) => Effect.Effect<CanonicalMutationPreparation>;
+    present: CanonicalMutationAdapter["present"];
+  }>
+> => {
+  if (operation === "ingestion.submitForExtraction") {
+    return Option.some({
+      prepare: prepareHeldStatementSubmission,
+      present: presentStatementSubmission,
+    });
+  }
+  const id = Schema.decodeOption(CanonicalOperationId)(operation);
+  if (Option.isNone(id)) return Option.none();
+  const installed = canonicalMutationAdapter(id.value);
+  if (Option.isNone(installed)) return Option.none();
+  if (
+    operation === "ingestion.resolveNeedsReviewItem" ||
+    operation === "ingestion.skipNeedsReviewItem"
+  ) {
+    return Option.some({
+      prepare: (work) => prepareHeldStatementReviewDecision({ operation, work }),
+      present: installed.value.present,
+    });
+  }
+  if (operation === "ingestion.abandonStatementSubmission") {
+    return Option.some({
+      prepare: prepareHeldStatementAbandonment,
+      present: installed.value.present,
+    });
+  }
+  return Option.none();
+};
 
 const HTTP_OK = 200;
 const HTTP_CREATED = 201;
@@ -323,12 +365,23 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
         }),
     },
   ],
+  ...(["ingestion.resolveNeedsReviewItem", "ingestion.skipNeedsReviewItem"] as const).map(
+    (operation): readonly [CanonicalOperationId, CanonicalMutationAdapter] => [
+      CanonicalOperationId.make(operation),
+      {
+        prepare: (work) => prepareStatementReviewDecision({ operation, work }),
+        present: present(HTTP_OK),
+        invalidRefusal: (work) => statementClarificationRefusal({ work, operation }),
+      },
+    ]
+  ),
   [
-    CanonicalOperationId.make("ingestion.submitForExtraction"),
+    CanonicalOperationId.make("ingestion.abandonStatementSubmission"),
     {
-      prepare: prepareStatementSubmission,
-      present: presentStatementSubmission,
-      invalidRefusal: invalidStatementSubmission,
+      prepare: prepareStatementAbandonment,
+      present: present(HTTP_OK),
+      invalidRefusal: (work) =>
+        statementClarificationRefusal({ work, operation: "ingestion.abandonStatementSubmission" }),
     },
   ],
   [

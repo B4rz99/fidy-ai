@@ -4,7 +4,8 @@ import type { HostedAdmissionDecision, HostedAdmissionRequest } from "./contract
 const millisecondsPerSecond = 1_000;
 const secondsPerMinute = 60;
 const idleMinutes = 15;
-const idleMilliseconds = idleMinutes * secondsPerMinute * millisecondsPerSecond;
+/** The authoritative bounded inactivity interval for a Hosted Agent Session. */
+export const hostedSessionIdleMilliseconds = idleMinutes * secondsPerMinute * millisecondsPerSecond;
 
 const invalidState = ({ userId, nowMs, state }: HostedAdmissionRequest): boolean => {
   if (!Number.isSafeInteger(nowMs) || nowMs < 0) return true;
@@ -34,7 +35,10 @@ export const decideHostedAdmission = (request: HostedAdmissionRequest): HostedAd
   if (Option.isSome(request.state.session)) {
     const session = request.state.session.value;
     const lastActivity = Option.getOrElse(session.lastActivityAtMs, () => session.startedAtMs);
-    if (session.status === "active" && request.nowMs - lastActivity < idleMilliseconds) {
+    if (
+      session.status === "active" &&
+      request.nowMs - lastActivity < hostedSessionIdleMilliseconds
+    ) {
       return { _tag: "ContinueSession", sessionId: session.id };
     }
   }

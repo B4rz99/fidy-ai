@@ -25,7 +25,10 @@ import type {
   CompletePeriodAggregates,
   TransactionPeriod,
 } from "../../src/core/transactions/contract";
-import { browseTransactions as ownerBrowseTransactions } from "./internal/transaction-history";
+import {
+  browseTransactions as ownerBrowseTransactions,
+  findTransaction as ownerFindCapturedTransaction,
+} from "./internal/transaction-history";
 import {
   correctionInput as ownerCorrectionInput,
   prepareCorrection as ownerPrepareCorrection,
@@ -69,6 +72,9 @@ export const readCompletePeriodAggregates = (
 export const preparePeriodAggregateGuard = (
   input: Readonly<{ db: D1Database; userId: UserId; revision: number }>
 ): D1PreparedStatement => periodAggregateGuard(input);
+/** Read one owned capture after a peer's atomic source decision commits. The caller owns authority. */
+export const findCapturedTransaction: typeof ownerFindCapturedTransaction = (input) =>
+  ownerFindCapturedTransaction(input);
 
 /** Read one User's effective-fact revision under current processing Consent; absence is no authorized history. */
 export const findRecurringSnapshot = (

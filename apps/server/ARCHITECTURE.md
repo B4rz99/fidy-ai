@@ -107,12 +107,14 @@ atomically rotates credentials under the original User coordinator; recognized r
 entire credential family, including a concurrent winner. Lost delivery requires new browser approval,
 with no grace window or recoverable replacement cache.
 
-`mcp` projects installed eligible canonical queries from the assembled declarations through Effect's
-protocol runtime. Discovery is deterministic and authorization-private, including nested
+`mcp` projects installed eligible canonical queries and mutations from the assembled declarations through Effect's
+protocol runtime. Discovery is deterministic and authorization-private, including nested batch children and
 SuggestedOperations. Calls use the shared canonical owner invocation under live OAuth credential,
 grant, User, Consent and capability guards, with distinct Audit attribution and exact Money codecs.
-Account-security operations and every mutation remain refused; OAuth callers never inherit PAT,
-WebSession or Hosted Agent Session lifecycle authority.
+Ordinary mutations and authorized atomic batches reuse the canonical one-User mutation unit, owner preparation,
+collision policy, live authority, accounting and Audit. Sensitive operations remain refused from canonical confirmation
+metadata, including batch children, until verified OAuth confirmation is implemented. Account-security operations
+remain unavailable; OAuth callers never inherit PAT, WebSession or Hosted Agent Session lifecycle authority.
 
 Fresh first-party browser settings list bounded connection metadata and at most three attributable
 canonical activity entries, then revoke one or all owned connections atomically with append-only
@@ -120,7 +122,7 @@ Consent evidence. Safety controls remain reachable after processing Consent with
 stops later calls and refresh without undoing committed work or affecting PATs, browser logout or
 Hosted Agent Sessions. Malformed or unavailable metadata fails closed, never as an empty list.
 
-Public bounds, deadlines and cancellation fence queued query/refresh work. Already-started D1 batches
+Public bounds, shared User request pressure, deadlines and cancellation fence queued canonical/refresh work. Already-started D1 batches
 settle atomically even when delivery is lost; cancellation is not rollback or retry authority.
 Existing bounded public/Core/coordinator Work observations export metadata only, never arguments,
 financial results, credentials, URLs or raw causes. Sensitive confirmation and exact-host/operator
@@ -252,6 +254,28 @@ Transcript storage, confirmation records, and Compaction replacement remain Agen
 Durable Object alarms recover abandoned work and enforce retention; an independent Core sweep
 recovers missed alarms without waiting for another User request. Retention removes private content
 under owner policy while preserving permitted lifecycle metadata, never extending expired authority.
+
+### Statement upload conversation
+
+Verified WhatsApp document attachments use Agent's per-User Turn admission. Ingestion applies
+stable-User, global, attempt, spend and outstanding upload budgets before bounded Kapso retrieval,
+digest verification and private R2 staging. Held canonical publication atomically records the
+submission, direct-attachment/session origin, Free-backfill reservation, Audit, commit fence and
+identity-only extraction outbox. Public browser/PAT submission routes and atomic-batch children
+refuse statement publication; a staged reference supplies no attachment authority.
+
+The original upload Turn remains Pending while the installed Queue/Workflow extracts the document.
+Recovery reuses retained staging and publication identities without downloading or charging again,
+then asks for clarification in that conversation. Canonical resolution, skipping and abandonment
+settle capture, SourceAttestation, evidence erasure, entitlement and Audit atomically. The lifetime
+Free grant is consumed by the first captured Transaction; zero-capture terminal extraction releases
+the reservation. Partial capture preserves consumption.
+
+Clarification requires live same-session, same-channel authority and exact confirmation. Expired or
+abandoned origins cannot resume. Public review queries retain metadata only; purpose-bound row
+evidence, known Money and field messages stay out of immutable tool results. Terminal extraction
+failure abandons remaining review rows and erases their evidence. Confirmation recovery reconciles
+retained outcomes or commit fences under the original call identity without repeating the mutation.
 
 ## 7. Background execution and availability
 

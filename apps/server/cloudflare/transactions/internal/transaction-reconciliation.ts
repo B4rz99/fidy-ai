@@ -19,6 +19,7 @@ import {
   type TransactionBoundaryFailure,
   type TransactionCaller,
   type TransactionRefusal,
+  acceptedOAuthStatement,
   acceptedPATStatements,
   alreadyLinkedMessage,
   boundaryFailure,
@@ -26,6 +27,7 @@ import {
   callerScope,
   credentialRefusedPreparation,
   failedPreparation,
+  isOAuthCaller,
   isPATCaller,
   liveTransactionAuthority,
   maximumTransactionInputBytes,
@@ -169,6 +171,7 @@ const successStatements = ({
   if (isPATCaller(subject)) {
     return acceptedPATStatements({ db, subject, operation, current });
   }
+  if (isOAuthCaller(subject)) return [acceptedOAuthStatement({ db, subject, operation, current })];
   return [
     prepareOwnerAuditCall({
       db,

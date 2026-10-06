@@ -3,6 +3,7 @@ import {
   hostedTurnTestMigrations,
   installTestSchema,
   isolatedTestDatabases,
+  statementClarificationTestMigrations,
 } from "../d1-test-fixture";
 import * as D1Client from "@effect/sql-d1/D1Client";
 import { listCategoriesResponse } from "../../src/shell/categories/operations";
@@ -110,6 +111,7 @@ const setup = (
         "0013_transaction_reconciliation",
         "0014_memory",
         "0015_statement_submission",
+        "0016_statement_processing",
         "0016_budgets",
         "0016_hosted_turn",
         "0017_hosted_compaction",
@@ -123,6 +125,7 @@ const setup = (
         "0027_recurring",
         "0028_recurring_audit_budget",
         "0029_audit_owner_retention",
+        ...statementClarificationTestMigrations,
       ];
       yield* awaitPromise(
         installTestSchema({

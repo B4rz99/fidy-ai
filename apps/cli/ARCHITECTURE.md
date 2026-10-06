@@ -9,7 +9,7 @@ from the canonical encoded input schema; structured file/stdin input remains the
 ## Runtime and execution
 
 The reviewed runtime is Bun `1.4.3-canary.1`, full revision
-`b73ae471a057b796b333a561ebc90e2e42050707`. Run `bash scripts/install-bun.sh`, then put the reported
+`9bd19c98eacc01530a4e7609bc427abffa87d77e`. Run `bash scripts/install-bun.sh`, then put the reported
 directory first on PATH. `bun run cli login` prompts for the exact recipient, non-empty unique
 scope set and fixed lifetime. Explicit non-secret arguments are also supported:
 
@@ -87,7 +87,7 @@ and Windows uses Credential Manager with explicit `persist: "local"`.
 Bun 1.4.1 and 1.4.2 hardcode Windows roaming-capable persistence. The pinned build includes upstream
 [1016a7a](https://github.com/oven-sh/bun/commit/1016a7afb04a24098e9530d9a95b91d482d17f20), which adds the
 local-only option. See the [official API](https://bun.sh/docs/runtime/secrets) and the pinned
-[Windows implementation](https://github.com/oven-sh/bun/blob/b73ae471a057b796b333a561ebc90e2e42050707/src/jsc/bindings/SecretsWindows.cpp).
+[Windows implementation](https://github.com/oven-sh/bun/blob/9bd19c98eacc01530a4e7609bc427abffa87d77e/src/jsc/bindings/SecretsWindows.cpp).
 This API is experimental; native-provider evidence is distinct from deterministic adapter fixtures.
 
 One fixed native service is qualified by `https://api.fidyapp.com`. Safe schema-validated grant

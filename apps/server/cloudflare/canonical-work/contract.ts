@@ -1,7 +1,8 @@
-import { Data } from "effect";
+import { Data, type Option } from "effect";
 import type { OAuthAuthority, OAuthCaller } from "../../src/shell/oauth-agents/contract";
 import type { PATAuthority } from "../../src/shell/tokens/contract";
 import type { WebSessionAuthority } from "../../src/shell/web-session/contract";
+import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import type { AuthorizedPAT } from "../tokens/contract";
 
 /**
@@ -24,10 +25,25 @@ export class TransactionBoundaryFailure extends Data.TaggedError("TransactionBou
 /** Shared, request-scoped identity and safe response vocabulary for the D1 Transaction adapters. */
 export type TransactionSubject = Readonly<{ id: string; userId: string; digest: Uint8Array }>;
 
-/** The two live caller subjects that may execute Transaction work. */
-export type TransactionCaller = TransactionSubject | AuthorizedPAT;
-/** Canonical queries additionally accept distinct OAuth User-owned-agent authority. */
-export type QueryCaller = TransactionCaller | OAuthCaller;
+/** A private, admitted hosted Turn's live guard, minted by Agent rather than a transport caller. */
+export type HostedCanonicalCaller = Readonly<{
+  _tag: "HostedCanonical";
+  userId: string;
+  turnId: string;
+  sessionId: string;
+  authorizedOperation: Option.Option<string>;
+  originTurns: OwnedStatement;
+  publicationOrigin: OwnedStatement;
+  authority: Readonly<{
+    table: "hosted_turns";
+    predicate: string;
+    bindings: ReadonlyArray<string | number | Uint8Array>;
+  }>;
+}>;
+
+/** Live canonical callers retain their distinct browser, PAT, or OAuth authority. */
+export type TransactionCaller = TransactionSubject | AuthorizedPAT | OAuthCaller;
+export type QueryCaller = TransactionCaller;
 
 export const transactionNoStore = { "cache-control": "no-store" };
 
@@ -69,9 +85,12 @@ export type TransactionRefusal = Readonly<{
 }>;
 
 /** One live-authority gate over a credential table: its table, predicate, and bindings. */
-export type TransactionAuthority = PATAuthority | WebSessionAuthority;
-/** A live query gate keeps OAuth attribution distinct from other credentials. */
-export type QueryAuthority = TransactionAuthority | OAuthAuthority;
+export type TransactionAuthority =
+  | PATAuthority
+  | WebSessionAuthority
+  | OAuthAuthority
+  | HostedCanonicalCaller["authority"];
+export type QueryAuthority = TransactionAuthority;
 
 /** The canonical shared daily-write-budget refusal every owner reports. */
 export const dailyAuditMessage = "The caller's daily canonical write budget is exhausted.";

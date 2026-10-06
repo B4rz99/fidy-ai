@@ -7,6 +7,9 @@ import { latestWeeklyConsentRejection, prepareConsentAction } from "../../consen
 import { newId } from "../../secret-material/operations";
 import { InsightUnavailable, WeeklyDeliveryWork, type WeeklyQuestionWork } from "../contract";
 
+import { proactivityStartedDeliveryQuery } from "../../whatsapp/operations";
+
+const startedProactivity = proactivityStartedDeliveryQuery();
 const redispatchIntervalMs = 60000;
 const deliveryDiscoveryLimit = 64;
 const requestWindowMs = 86400000;
@@ -23,7 +26,7 @@ const recoverProactivity = (
   Effect.tryPromise(() =>
     input.db
       .prepare(
-        "UPDATE proactivity_outbox SET restart_attempts=restart_attempts+1 WHERE user_id=? AND delivery_id=? AND state IN ('ready','started') AND restart_attempts<3 AND EXISTS (SELECT 1 FROM proactivity_reports AS r WHERE r.user_id=proactivity_outbox.user_id AND r.delivery_id=proactivity_outbox.delivery_id AND (proactivity_outbox.state='started' OR r.expires_at_ms>?))"
+        `UPDATE proactivity_outbox SET restart_attempts=restart_attempts+1 WHERE user_id=? AND delivery_id=? AND state IN ('ready','started') AND restart_attempts<3 AND EXISTS (SELECT 1 FROM proactivity_reports AS r WHERE r.user_id=proactivity_outbox.user_id AND r.delivery_id=proactivity_outbox.delivery_id AND (proactivity_outbox.state='started' OR r.expires_at_ms>? OR EXISTS (SELECT 1 FROM (${startedProactivity.sql}) AS c WHERE c.user_id=r.user_id AND c.delivery_id=r.delivery_id)))`
       )
       .bind(input.userId, input.work.id, input.now)
       .run()
@@ -39,7 +42,7 @@ export const expireDeliveryWork = (
     input.db.batch([
       input.db
         .prepare(
-          "UPDATE proactivity_outbox SET state='expired' WHERE delivery_id IN (SELECT o.delivery_id FROM proactivity_outbox AS o JOIN proactivity_reports AS r ON r.user_id=o.user_id AND r.delivery_id=o.delivery_id WHERE o.state='ready' AND r.expires_at_ms<=? LIMIT 64)"
+          `UPDATE proactivity_outbox SET state='expired' WHERE delivery_id IN (SELECT o.delivery_id FROM proactivity_outbox AS o JOIN proactivity_reports AS r ON r.user_id=o.user_id AND r.delivery_id=o.delivery_id WHERE o.state='ready' AND r.expires_at_ms<=? AND NOT EXISTS (SELECT 1 FROM (${startedProactivity.sql}) AS c WHERE c.user_id=o.user_id AND c.delivery_id=o.delivery_id) LIMIT 64)`
         )
         .bind(input.now),
       input.db

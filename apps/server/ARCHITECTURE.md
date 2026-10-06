@@ -302,8 +302,10 @@ User coordinator and one executable category outbox. Authenticated verified chan
 atomically with disclosure, governor, grouped InsightEvent lifecycle and exact Agent Transcript
 settlement. Questions and offers retain standalone message Transcript identities without invented
 financial events or requested Turns; same-User replies recover retained message context. Pending or
-uncertain questions do not suspend scheduled reminders, and only definitive failure or expiry permits
-a fresh question identity. Retained report identities do not restrict ephemeral offer deletion.
+uncertain questions do not suspend scheduled reminders; only definitive failure or expiry before any
+channel send begins permits a fresh question identity. Channel-owned started identities guard expiry
+and recovery even if an outbox checkpoint was lost. First-Budget and contextual requests remain
+pending outside delivery hours; their short-lived disclosure choices are created only in an open window. Retained report identities do not restrict ephemeral offer deletion.
 Installed implementation and test evidence do not constitute issue acceptance, template approval,
 or production enablement.
 

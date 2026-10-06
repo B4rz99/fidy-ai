@@ -280,6 +280,12 @@ export const findDeliveryUser = (
         );
   }).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
 
+/** Metadata-only no-resend identities for bounded expiry/recovery; a begun send remains begun regardless of provider outcome. */
+export const startedDeliveryQuery = (): OwnedStatement => ({
+  sql: "SELECT user_id,delivery_id FROM proactivity_whatsapp_claims WHERE send_started_at_ms IS NOT NULL",
+  params: [],
+});
+
 /** Definitive failure evidence for one captured delivery; unknown/accepted sends never authorize a replacement question. */
 export const rejectedDeliveryQuery = (
   input: Readonly<{ userId: UserId; id: string }>

@@ -2,9 +2,7 @@ import { Cron, DateTime, Effect } from "effect";
 import type { IanaTimeZone } from "~/core/_shared/context";
 import type {
   InsightDeliveryDecision,
-  ReminderActivity,
   ReminderCadence,
-  ReminderStanding,
   ReminderTiming,
   WeeklyPeriods,
   WeeklyTiming,
@@ -77,45 +75,6 @@ export const latestReminderOccurrence = (
     retreat
   );
 };
-const advanceAttentiveStanding = (unanswered: 0 | 1 | 2): ReminderStanding => {
-  switch (unanswered) {
-    case 0:
-      return { _tag: "Attentive", unanswered: 1 };
-    case 1:
-      return { _tag: "Attentive", unanswered: 2 };
-    case 2:
-      return { _tag: "QuestionPending", unanswered: 3 };
-  }
-};
-
-const countReminderDelivery = (standing: ReminderStanding, now: DateTime.Utc): ReminderStanding => {
-  switch (standing._tag) {
-    case "Attentive":
-      return advanceAttentiveStanding(standing.unanswered);
-    case "QuestionDelivered":
-      return standing.unanswered === 3
-        ? { _tag: "QuestionDelivered", unanswered: 4 }
-        : { _tag: "Paused", unanswered: 5, pausedAt: now };
-    case "QuestionPending":
-    case "Paused":
-      return standing;
-  }
-};
-
-/** Advance only from trusted verified delivery or a correlated User reply. No provider acceptance, unrelated activity or manual entry can reset this category's standing. */
-export const decideReminderAttention = (
-  input: Readonly<{ standing: ReminderStanding; activity: ReminderActivity; now: DateTime.Utc }>
-): ReminderStanding => {
-  const standing = input.standing;
-  if (input.activity === "correlated-reply") return { _tag: "Attentive", unanswered: 0 };
-  if (input.activity === "question-delivered" && standing._tag === "QuestionPending") {
-    return { _tag: "QuestionDelivered", unanswered: 3 };
-  }
-  return input.activity === "reminder-delivered"
-    ? countReminderDelivery(standing, input.now)
-    : standing;
-};
-
 const deliveryOpeningHour = 9;
 const deliveryClosingHour = 19;
 

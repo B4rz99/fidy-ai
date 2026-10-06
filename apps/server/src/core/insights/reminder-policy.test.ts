@@ -4,7 +4,6 @@ import { ReminderCadence, ReminderStanding } from "./contract";
 import { IanaTimeZone } from "~/core/_shared/context";
 import {
   budgetAlertDeadline,
-  decideReminderAttention,
   latestReminderOccurrence,
   nextReminderOccurrence,
 } from "./operations";
@@ -43,35 +42,6 @@ it("recovers only the latest anchored reminder after missed occurrences, includi
   ).toBe("2026-02-12T23:00:00.000Z");
 });
 
-it("asks after three verified reminders and pauses after two more, excluding question delivery", () => {
-  const now = DateTime.makeUnsafe("2026-10-05T23:00:00Z");
-  const question = decideReminderAttention({
-    standing: { _tag: "Attentive", unanswered: 2 },
-    activity: "reminder-delivered",
-    now,
-  });
-  expect(question).toEqual({ _tag: "QuestionPending", unanswered: 3 });
-  const delivered = decideReminderAttention({
-    standing: question,
-    activity: "question-delivered",
-    now,
-  });
-  expect(delivered).toEqual({ _tag: "QuestionDelivered", unanswered: 3 });
-  const fourth = decideReminderAttention({
-    standing: delivered,
-    activity: "reminder-delivered",
-    now,
-  });
-  expect(fourth).toEqual({ _tag: "QuestionDelivered", unanswered: 4 });
-  expect(
-    decideReminderAttention({ standing: fourth, activity: "reminder-delivered", now })
-  ).toEqual({
-    _tag: "Paused",
-    unanswered: 5,
-    pausedAt: now,
-  });
-});
-
 it("expires unstarted Budget alert sends at month-end even when detection was less than 24 hours earlier", () => {
   expect(
     DateTime.formatIso(
@@ -89,54 +59,6 @@ it("expires unstarted Budget alert sends at month-end even when detection was le
       })
     )
   ).toBe("2026-01-29T23:00:00.000Z");
-});
-
-it("does not reset reminder standing for unrelated activity or count replayed question delivery", () => {
-  const now = DateTime.makeUnsafe("2026-10-05T23:00:00Z");
-  const standing = ReminderStanding.make({ _tag: "QuestionDelivered", unanswered: 4 });
-  expect(decideReminderAttention({ standing, activity: "unrelated-activity", now })).toEqual(
-    standing
-  );
-  expect(decideReminderAttention({ standing, activity: "question-delivered", now })).toEqual(
-    standing
-  );
-  expect(decideReminderAttention({ standing, activity: "correlated-reply", now })).toEqual({
-    _tag: "Attentive",
-    unanswered: 0,
-  });
-  const paused = ReminderStanding.make({ _tag: "Paused", unanswered: 5, pausedAt: now });
-  expect(
-    decideReminderAttention({ standing: paused, activity: "reminder-delivered", now })
-  ).toEqual(paused);
-});
-
-it("starts the second ignore counter only after verified question delivery, not while its evidence is delayed", () => {
-  const now = DateTime.makeUnsafe("2026-10-05T23:00:00Z");
-  const pending = ReminderStanding.make({ _tag: "QuestionPending", unanswered: 3 });
-  const earlierDelivery = decideReminderAttention({
-    standing: pending,
-    activity: "reminder-delivered",
-    now,
-  });
-  expect(earlierDelivery).toEqual(pending);
-  expect(
-    decideReminderAttention({ standing: earlierDelivery, activity: "reminder-delivered", now })
-  ).toEqual(pending);
-  const confirmedQuestion = decideReminderAttention({
-    standing: earlierDelivery,
-    activity: "question-delivered",
-    now,
-  });
-  expect(confirmedQuestion).toEqual({ _tag: "QuestionDelivered", unanswered: 3 });
-  const firstAfterQuestion = decideReminderAttention({
-    standing: confirmedQuestion,
-    activity: "reminder-delivered",
-    now,
-  });
-  expect(firstAfterQuestion).toEqual({ _tag: "QuestionDelivered", unanswered: 4 });
-  expect(
-    decideReminderAttention({ standing: firstAfterQuestion, activity: "reminder-delivered", now })
-  ).toEqual({ _tag: "Paused", unanswered: 5, pausedAt: now });
 });
 
 it("rejects malformed cadence instructions and impossible reminder attention states", () => {

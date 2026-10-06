@@ -216,7 +216,7 @@ export type ReminderScheduleEdit = typeof ReminderScheduleEdit.Type;
 
 const reminderPauseAfter = 5;
 
-/** Reminder-only ignored-delivery standing. A pending question blocks further reminders; pausing does not revoke legal Consent. */
+/** Reminder-only ignored-delivery standing. Pending questions suspend the additional-ignore counter, not scheduled reminders; pausing does not revoke legal Consent. */
 export const ReminderStanding = Schema.Union([
   Schema.TaggedStruct("Attentive", { unanswered: Schema.Literals([0, 1, 2]) }),
   Schema.TaggedStruct("QuestionPending", { unanswered: Schema.Literal(3) }),
@@ -227,15 +227,6 @@ export const ReminderStanding = Schema.Union([
   }),
 ]).annotate({ identifier: "ReminderStanding" });
 export type ReminderStanding = typeof ReminderStanding.Type;
-
-/** Trusted correlated activity; delivery acceptance or attempted sends are not delivery evidence. */
-export const ReminderActivity = Schema.Literals([
-  "reminder-delivered",
-  "question-delivered",
-  "correlated-reply",
-  "unrelated-activity",
-]);
-export type ReminderActivity = typeof ReminderActivity.Type;
 
 /** Temporal eligibility only; every Ready attempt still needs live Consent, identity and admission. */
 export const InsightDeliveryDecision = Schema.Union([

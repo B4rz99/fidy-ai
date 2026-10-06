@@ -1,7 +1,10 @@
 import { type Cause, type DateTime, Effect, Option, Schema } from "effect";
 import type { UserId } from "../../../src/core/identity/contract";
 import { prepareProactivityConsentAction } from "../../consent/operations";
-import { proactivityRejectedDeliveryQuery } from "../../whatsapp/operations";
+import {
+  proactivityRejectedDeliveryQuery,
+  proactivityStartedDeliveryQuery,
+} from "../../whatsapp/operations";
 import { newId } from "../../secret-material/operations";
 import { findSchedule } from "./reminder-schedule";
 import { InsightUnavailable } from "../contract";
@@ -29,10 +32,11 @@ const findQuestionCandidate = (
       userId: input.userId,
       id: question.question_id.value,
     });
+    const started = proactivityStartedDeliveryQuery();
     const raw = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          `SELECT question_id FROM reminder_governors AS g WHERE user_id=? AND json_extract(standing_json,'$._tag')='QuestionPending' AND (EXISTS (SELECT 1 FROM proactivity_outbox AS o WHERE o.user_id=g.user_id AND o.delivery_id=g.question_id AND o.state IN ('expired','refused')) OR EXISTS (SELECT 1 FROM (${failureProof.sql}) AS f WHERE f.user_id=g.user_id AND f.delivery_id=g.question_id))`
+          `SELECT question_id FROM reminder_governors AS g WHERE user_id=? AND json_extract(standing_json,'$._tag')='QuestionPending' AND (EXISTS (SELECT 1 FROM proactivity_outbox AS o WHERE o.user_id=g.user_id AND o.delivery_id=g.question_id AND o.state IN ('expired','refused') AND NOT EXISTS (SELECT 1 FROM (${started.sql}) AS c WHERE c.user_id=g.user_id AND c.delivery_id=g.question_id)) OR EXISTS (SELECT 1 FROM (${failureProof.sql}) AS f WHERE f.user_id=g.user_id AND f.delivery_id=g.question_id))`
         )
         .bind(input.userId, ...failureProof.params)
         .first()

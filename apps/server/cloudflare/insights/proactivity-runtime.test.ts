@@ -37,6 +37,7 @@ import { UserId } from "../../src/core/identity/contract";
 import { findCurrentProactivityOffer } from "../consent/operations";
 import { FetchHttpClient } from "effect/http";
 import { executeWeeklyWork } from "./runtime";
+import { expireDeliveryWork, recoverDeliveryWork } from "./internal/weekly-work";
 import {
   readContextualProactiveReply,
   readProactiveMessageTranscript,
@@ -813,6 +814,187 @@ it("sixteen unserviceable contextual offers cannot starve an eligible reminder d
             .first()
         )
       ).toEqual({ n: 1 });
+    })
+  ));
+
+it("a crash after question acceptance cannot authorize an expiry replacement or invalidate its qualified controls", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* proactivityDatabase;
+      const schedule = yield* activateTestReminder(db);
+      const userId = proactivityTestUsers[0];
+      const caller = proactivityTestCallers[0];
+      const phone = WhatsAppBusinessPhoneNumberId.make("123456789");
+      const environment = configuration(db);
+      const coordinator = makeWeeklySummaryCoordinator({ environment, userId });
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          prepareInsightRecipient({
+            db,
+            userId,
+            recipient: {
+              portfolioId: caller.businessPortfolioId,
+              bsuid: caller.businessScopedUserId,
+              businessPhoneNumberId: phone,
+            },
+            receivedAtMs: DateTime.makeUnsafe("2026-10-06T23:00:00Z").epochMilliseconds,
+          }),
+        ])
+      );
+      let sent = 0;
+      const provider = vi.fn(() =>
+        Promise.resolve(
+          Response.json({ messaging_product: "whatsapp", messages: [{ id: `crash-${++sent}` }] })
+        )
+      );
+      vi.stubGlobal("fetch", provider);
+      const send = (id: string, now: DateTime.Utc): ReturnType<typeof executeWeeklyWork> =>
+        executeWeeklyWork({
+          environment,
+          userId,
+          now,
+          work: { kind: "proactivity-delivery", version: 1, userId, id },
+        }).pipe(Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch));
+      const verify = (
+        id: string,
+        now: DateTime.Utc
+      ): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> =>
+        Effect.gen(function* () {
+          const claim = yield* Schema.decodeUnknownEffect(
+            Schema.Struct({ correlation_token: HostedDeliveryCorrelationToken })
+          )(
+            yield* Effect.tryPromise(() =>
+              db
+                .prepare(
+                  "SELECT correlation_token FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
+                )
+                .bind(userId, id)
+                .first()
+            )
+          );
+          const body = yield* Schema.encodeEffect(Schema.fromJsonString(WhatsAppStatusAdmission))({
+            userId,
+            correlationToken: claim.correlation_token,
+            businessPhoneNumberId: phone,
+            providerMessageId: WhatsAppProviderMessageId.make(`crash-${sent}`),
+            outcome: "delivered",
+            occurredAtMs: now.epochMilliseconds,
+            receivedAtMs: now.epochMilliseconds,
+          });
+          expect(
+            (yield* Effect.tryPromise(() =>
+              coordinator.fetch(
+                new Request("https://coordinator/hosted-turn/whatsapp/status", {
+                  method: "POST",
+                  body,
+                })
+              )
+            )).status
+          ).toBe(200);
+        });
+      for (const day of [6, 7, 8]) {
+        const now = DateTime.makeUnsafe(`2026-10-${String(day).padStart(2, "0")}T23:00:00Z`);
+        vi.spyOn(Date, "now").mockReturnValue(now.epochMilliseconds);
+        const occurrence = yield* materializeReminder({ db, userId, id: schedule.id, now });
+        if (occurrence._tag !== "Created") return yield* Effect.die("Expected reminder");
+        yield* send(occurrence.id, now);
+        yield* verify(occurrence.id, now);
+      }
+      const now = DateTime.makeUnsafe("2026-10-08T23:00:00Z");
+      yield* executeWeeklyWork({
+        environment,
+        userId,
+        now,
+        work: { kind: "proactivity-generate", version: 1, userId },
+      });
+      const question = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ delivery_id: Schema.String.check(Schema.isUUID()) })
+      )(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT delivery_id FROM proactivity_reports WHERE user_id=? AND role='reminder-question'"
+            )
+            .bind(userId)
+            .first()
+        )
+      );
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TRIGGER crash_after_question_acceptance BEFORE UPDATE ON proactivity_outbox WHEN NEW.state='started' BEGIN SELECT RAISE(ABORT,'test_crash'); END"
+          )
+          .run()
+      );
+      expect((yield* Effect.exit(send(question.delivery_id, now)))._tag).toBe("Failure");
+      expect(sent).toBe(4);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT state FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=?"
+            )
+            .bind(userId, question.delivery_id)
+            .first()
+        )
+      ).toEqual({ state: "accepted" });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT state FROM proactivity_outbox WHERE user_id=? AND delivery_id=?")
+            .bind(userId, question.delivery_id)
+            .first()
+        )
+      ).toEqual({ state: "ready" });
+      yield* Effect.tryPromise(() =>
+        db.prepare("DROP TRIGGER crash_after_question_acceptance").run()
+      );
+      const later = DateTime.makeUnsafe("2026-10-10T14:00:00Z");
+      vi.spyOn(Date, "now").mockReturnValue(later.epochMilliseconds);
+      yield* expireDeliveryWork({ db, now: later.epochMilliseconds });
+      expect(
+        yield* recoverDeliveryWork({
+          db,
+          userId,
+          now: later.epochMilliseconds,
+          work: { kind: "proactivity-delivery", version: 1, userId, id: question.delivery_id },
+        })
+      ).toBe(true);
+      yield* executeWeeklyWork({
+        environment,
+        userId,
+        now: later,
+        work: { kind: "proactivity-generate", version: 1, userId },
+      });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT count(*) AS n FROM proactivity_reports WHERE user_id=? AND role='reminder-question'"
+            )
+            .bind(userId)
+            .first()
+        )
+      ).toEqual({ n: 1 });
+      yield* send(question.delivery_id, later);
+      expect(sent).toBe(4);
+      yield* verify(question.delivery_id, later);
+      expect(Option.getOrThrow(yield* findReminderGovernor({ db, userId }))).toEqual({
+        _tag: "QuestionDelivered",
+        unanswered: 3,
+      });
+      const proof = yield* Schema.decodeEffect(WhatsAppTurnAdmission)({
+        userId,
+        portfolioId: caller.businessPortfolioId,
+        bsuid: caller.businessScopedUserId,
+        businessPhoneNumberId: phone,
+        messageId: "stop-crashed-question",
+        occurredAtMs: later.epochMilliseconds,
+        receivedAtMs: later.epochMilliseconds,
+        text: `reminder:${question.delivery_id}:stop`,
+      });
+      expect(yield* controlManualReminders({ db, proof, now: later.epochMilliseconds })).toBe(true);
+      expect(Option.getOrThrow(yield* findReminderSchedule({ db, userId })).enabled).toBe(false);
     })
   ));
 

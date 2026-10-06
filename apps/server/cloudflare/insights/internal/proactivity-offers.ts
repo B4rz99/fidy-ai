@@ -1,4 +1,5 @@
-import { type DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
+import { decideInsightDelivery } from "../../../src/core/insights/operations";
 import type { UserId } from "../../../src/core/identity/contract";
 import { IanaTimeZone } from "../../../src/core/_shared/context";
 import { ProactivityOptInKind } from "../../../src/shell/consent/contract";
@@ -49,11 +50,21 @@ const RequestRow = Schema.Struct({
   id: Schema.String.check(Schema.isUUID()),
   kind: ProactivityOptInKind,
 });
+const offerZone = IanaTimeZone.make("America/Bogota");
+const offerWindowOpen = (now: DateTime.Utc): boolean =>
+  decideInsightDelivery({
+    now,
+    scheduledAt: now,
+    expiresAt: DateTime.makeUnsafe(now.epochMilliseconds + dayMs),
+    timeZone: offerZone,
+  })._tag === "Ready";
+
 const materializeOffer = (
   input: Readonly<{ db: D1Database; userId: UserId; now: DateTime.Utc }>,
   request: typeof RequestRow.Type
 ): Effect.Effect<void, InsightUnavailable> =>
   Effect.gen(function* () {
+    if (!offerWindowOpen(input.now)) return;
     const recipient = yield* findInsightRecipient(input);
     if (Option.isNone(recipient)) return;
     const context = {
@@ -72,7 +83,6 @@ const materializeOffer = (
     const text = Option.isSome(grant)
       ? `${value.disclosure.text}\n${value.revokeChoice}`
       : `${value.disclosure.text}\n${value.acceptChoice}\n${value.declineChoice}`;
-    const zone = IanaTimeZone.make("America/Bogota");
     yield* Effect.tryPromise(() =>
       input.db.batch([
         prepareConsentAction({
@@ -89,7 +99,7 @@ const materializeOffer = (
               text,
               input.now.epochMilliseconds,
               value.expiresAt.epochMilliseconds,
-              zone,
+              offerZone,
               input.now.epochMilliseconds,
               input.userId,
               request.id,

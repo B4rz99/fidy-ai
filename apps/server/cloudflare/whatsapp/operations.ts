@@ -74,6 +74,9 @@ export const reconcileProactivityStatus: typeof proactivity.reconcile = (input) 
 /** Metadata-only routing cannot authorize report content or a provider send. */
 export const findProactivityDeliveryUser: typeof proactivity.findDeliveryUser = (input) =>
   proactivity.findDeliveryUser(input);
+/** Metadata-only no-resend identities for bounded Maintenance expiry and same-User recovery, without recipient or content authority. */
+export const proactivityStartedDeliveryQuery: typeof proactivity.startedDeliveryQuery = () =>
+  proactivity.startedDeliveryQuery();
 /** Definitive one-delivery failure metadata, never unknown provider outcome, for a fresh question decision. */
 export const proactivityRejectedDeliveryQuery: typeof proactivity.rejectedDeliveryQuery = (input) =>
   proactivity.rejectedDeliveryQuery(input);

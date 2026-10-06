@@ -1,17 +1,11 @@
-import type { BudgetOutcome } from "../contract";
+import { type BudgetOutcome } from "../contract";
 import { Budget, BudgetId } from "../../../src/core/budgets/contract";
 import { type Cause, Effect, Option, Schema } from "effect";
-import {
-  type TransactionCaller,
-  auditLimitRefusal,
-  transactionFailure,
-} from "../../canonical-work/operations";
-import { recordBudgetCall } from "./budget-audit";
+import { auditLimitRefusal } from "../../canonical-work/operations";
 import { budgetFromRow } from "./budget-row";
-import type {
-  CanonicalMutationRefusal,
-  CommittedMutationValue,
-  OwnerOutcome,
+import {
+  type CommittedMutationValue,
+  type OwnerOutcome,
 } from "../../canonical-operations/contract";
 
 /** One retained Budget by id and stable User; a foreign id resolves to absence. */
@@ -35,39 +29,6 @@ export const findOwnedBudget = ({
     );
     return raw === null ? Option.none<Budget>() : Option.some(yield* budgetFromRow(raw));
   });
-
-const HTTP_NOT_FOUND = 404;
-const HTTP_BAD_REQUEST = 400;
-
-type BudgetMutationOperation = BudgetOutcome["operation"];
-
-/** A declared Budget refusal at the individual and atomic-batch seams. */
-export const budgetRefusal = ({
-  db,
-  subject,
-  operation,
-  current,
-  code,
-}: Readonly<{
-  db: D1Database;
-  subject: TransactionCaller;
-  operation: BudgetMutationOperation;
-  current: number;
-  code: "not_found" | "validation_failed";
-}>): CanonicalMutationRefusal => ({
-  code,
-  message: code === "not_found" ? "Budget or Category unavailable." : "Budget input unavailable.",
-  record: () => recordBudgetCall({ db, subject, operation, current, outcome: "rejected" }),
-  respond: () =>
-    Effect.succeed(
-      transactionFailure({
-        code,
-        status: code === "not_found" ? HTTP_NOT_FOUND : HTTP_BAD_REQUEST,
-        message:
-          code === "not_found" ? "Budget or Category unavailable." : "Budget input unavailable.",
-      })
-    ),
-});
 
 /** Read one Budget after its shared D1 unit committed; deletion returns only the removed id. */
 export const findBudgetValue = ({

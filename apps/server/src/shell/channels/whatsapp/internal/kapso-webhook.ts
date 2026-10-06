@@ -1,45 +1,44 @@
-import { DateTime, Effect, Array as EffectArray, Option, Redacted, Result, Schema } from "effect";
+import {
+  DisclosureDeliveryCorrelationToken,
+  type DisclosureDeliveryFailureReason,
+  InvalidWhatsAppPayload,
+  InvalidWhatsAppSignature,
+  WhatsAppBusinessPhoneNumberId,
+  type WhatsAppDisclosureLifecycleEvidence,
+  WhatsAppDocumentFileName,
+  type WhatsAppIdentityChangeEvent,
+  type WhatsAppInboundContent,
+  type WhatsAppInboundEvent,
+  type WhatsAppLifecycleAuthentication,
+  WhatsAppMediaId,
+  WhatsAppPayloadTooLarge,
+  WhatsAppProviderMessageId,
+  maxWhatsAppFutureTimestampMinutes,
+  maxWhatsAppWebhookBytes,
+} from "~/shell/channels/whatsapp/contract";
+import { DateTime, Effect, Option, Redacted, Result, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import { Model } from "effect/schema";
 import {
   E164PhoneNumber,
-  WhatsAppBusinessPortfolioId,
+  type WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
   WhatsAppParentBusinessScopedUserId,
   WhatsAppUsername,
 } from "~/core/identity/contract";
 import { TranscriptText } from "~/core/agent/contract";
-import {
-  DisclosureDeliveryCorrelationToken,
-  type DisclosureDeliveryFailureReason,
-  HostedDeliveryCorrelationToken,
-  InvalidWhatsAppPayload,
-  InvalidWhatsAppSignature,
-  WhatsAppBatchTooLarge,
-  WhatsAppBusinessPhoneNumberId,
-  WhatsAppDeliveryKey,
-  type WhatsAppDisclosureLifecycleEvidence,
-  WhatsAppDocumentFileName,
-  type WhatsAppHostedLifecycleEvidence,
-  type WhatsAppIdentityChangeEvent,
-  type WhatsAppInboundContent,
-  type WhatsAppInboundEvent,
-  WhatsAppMediaId,
-  WhatsAppPayloadTooLarge,
-  WhatsAppProviderMessageId,
-  type WhatsAppWebhookReceipt,
-  maxWhatsAppDeliveryEvents,
-  maxWhatsAppFutureTimestampMinutes,
-  maxWhatsAppWebhookBytes,
-} from "~/shell/channels/whatsapp/contract";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { classifyKapsoMetaFailureCode } from "./kapso-failure";
 
 const hmacSha256Bytes = 32;
+
 const minimumWebhookSecretLength = 16;
+
 const millisecondsPerSecond = 1_000;
-const invalidKapsoPayload = (_cause: unknown): InvalidWhatsAppPayload =>
+
+export const invalidKapsoPayload = (_cause: unknown): InvalidWhatsAppPayload =>
   new InvalidWhatsAppPayload();
+
 const invalidKapsoInvariant = (_reason: string): InvalidWhatsAppPayload =>
   new InvalidWhatsAppPayload();
 
@@ -52,17 +51,20 @@ const rawMessageFields = {
   from_parent_user_id: Model.optionalOption(WhatsAppParentBusinessScopedUserId),
   username: Model.optionalOption(WhatsAppUsername),
 };
+
 const RawTextMessage = Schema.Struct({
   ...rawMessageFields,
   type: Schema.Literal("text"),
   text: Schema.Struct({ body: TranscriptText }),
 });
+
 const RawVoiceMessage = Schema.Struct({
   ...rawMessageFields,
   type: Schema.Literal("audio"),
   audio: Schema.Struct({ id: WhatsAppMediaId }),
   kapso: Schema.optional(Schema.Unknown),
 });
+
 const RawImageMessage = Schema.Struct({
   ...rawMessageFields,
   type: Schema.Literal("image"),
@@ -71,6 +73,7 @@ const RawImageMessage = Schema.Struct({
     caption: Model.optionalOption(TranscriptText),
   }),
 });
+
 const RawDocumentMessage = Schema.Struct({
   ...rawMessageFields,
   type: Schema.Literal("document"),
@@ -80,6 +83,7 @@ const RawDocumentMessage = Schema.Struct({
     caption: Model.optionalOption(TranscriptText),
   }),
 });
+
 const RawKapsoEvent = Schema.Struct({
   message: Schema.Union([RawTextMessage, RawVoiceMessage, RawImageMessage, RawDocumentMessage]),
   conversation: Schema.Struct({
@@ -90,7 +94,8 @@ const RawKapsoEvent = Schema.Struct({
   }),
   phone_number_id: WhatsAppBusinessPhoneNumberId,
 });
-const RawKapsoEnvelope = Schema.Union([
+
+export const RawKapsoEnvelope = Schema.Union([
   RawKapsoEvent,
   Schema.Struct({
     batch: Schema.Literal(true),
@@ -105,6 +110,7 @@ const RawDisclosureStatus = Schema.Struct({
   biz_opaque_callback_data: Schema.String.check(Schema.isUUID()),
   errors: Model.optionalOption(Schema.Array(Schema.Struct({ code: Schema.Int }))),
 });
+
 const RawDisclosureLifecycleEvent = Schema.Struct({
   message: Schema.Struct({
     id: WhatsAppProviderMessageId,
@@ -113,7 +119,7 @@ const RawDisclosureLifecycleEvent = Schema.Struct({
   phone_number_id: WhatsAppBusinessPhoneNumberId,
 });
 
-const RawMetaEnvelope = Schema.Struct({
+export const RawMetaEnvelope = Schema.Struct({
   object: Schema.Literal("whatsapp_business_account"),
   entry: Schema.Array(
     Schema.Struct({
@@ -125,10 +131,12 @@ const RawMetaEnvelope = Schema.Struct({
     })
   ),
 });
+
 const RawMetaMessageType = Schema.Struct({
   type: Schema.optional(Schema.String),
   system: Schema.optional(Schema.Struct({ type: Schema.optional(Schema.String) })),
 });
+
 const RawIdentityChangeMessage = Schema.Struct({
   id: WhatsAppProviderMessageId,
   timestamp: Schema.String.check(Schema.isPattern(/^[0-9]{1,16}$/u)),
@@ -164,7 +172,7 @@ const normalizePhoneNumber = (
     phoneNumber.startsWith("+") ? phoneNumber : `+${phoneNumber}`
   );
 
-const authenticateAndDecodeKapsoBody = Effect.fn(function* (input: {
+export const authenticateAndDecodeKapsoBody = Effect.fn(function* (input: {
   readonly rawBody: Uint8Array;
   readonly secret: Redacted.Redacted<string>;
   readonly signature: string;
@@ -246,7 +254,7 @@ const projectInboundContent = (
   return { _tag: "VoiceTranscript", text: transcript.value.text, mediaId: message.audio.id };
 };
 
-const projectEvent = Effect.fn(function* (
+export const projectEvent = Effect.fn(function* (
   raw: typeof RawKapsoEvent.Type,
   businessPortfolioId: WhatsAppBusinessPortfolioId,
   receivedAt: DateTime.Utc
@@ -296,56 +304,13 @@ const projectEvent = Effect.fn(function* (
   } satisfies WhatsAppInboundEvent;
 });
 
-/**
- * Authenticates at most 1 MiB of exact raw bytes with a strictly decoded hexadecimal HMAC-SHA256
- * signature compared in constant time and a secret of at least 16 characters before parsing.
- * `deliveryKey` is the provider retry key; `businessPortfolioId` is trusted deployment context,
- * must satisfy the Business Portfolio schema, and is projected into every caller rather than read
- * from the payload.
- * `receivedAt` is Fidy's receipt clock used for the five-minute future-timestamp tolerance. Projects
- * at most 100 supported v2 events. Fails with InvalidWhatsAppSignature,
- * WhatsAppPayloadTooLarge, WhatsAppBatchTooLarge, or InvalidWhatsAppPayload and reveals no decoded content
- * when authentication fails.
- */
-export const decodeKapsoWebhook = Effect.fn(function* (input: {
-  readonly rawBody: Uint8Array;
-  readonly secret: Redacted.Redacted<string>;
-  readonly signature: string;
-  readonly deliveryKey: string;
-  readonly businessPortfolioId: string;
-  readonly receivedAt: DateTime.Utc;
-}) {
-  const unknown = yield* authenticateAndDecodeKapsoBody(input);
-  const deliveryKey = yield* Schema.decodeEffect(WhatsAppDeliveryKey)(input.deliveryKey).pipe(
-    Effect.mapError(invalidKapsoPayload)
-  );
-  const businessPortfolioId = yield* Schema.decodeEffect(WhatsAppBusinessPortfolioId)(
-    input.businessPortfolioId
-  ).pipe(Effect.mapError(invalidKapsoPayload));
-  const envelope = yield* Schema.decodeUnknownEffect(RawKapsoEnvelope)(unknown).pipe(
-    Effect.mapError(invalidKapsoPayload)
-  );
-  const rawEvents = "data" in envelope ? envelope.data : [envelope];
-  if (rawEvents.length > maxWhatsAppDeliveryEvents) {
-    return yield* new WhatsAppBatchTooLarge();
-  }
-  const events = yield* Effect.forEach(
-    rawEvents,
-    (event) => projectEvent(event, businessPortfolioId, input.receivedAt),
-    {
-      concurrency: 1,
-    }
-  ).pipe(Effect.mapError(invalidKapsoPayload));
-  const [first, ...rest] = events;
-  return { deliveryKey, events: [first, ...rest] } satisfies WhatsAppWebhookReceipt;
-});
-
 /** Kapso event names routed through disclosure lifecycle reconciliation. */
 export const DisclosureLifecycleEventName = Schema.Literals([
   "whatsapp.message.sent",
   "whatsapp.message.delivered",
   "whatsapp.message.failed",
 ]);
+
 const lifecycleFailure = (
   code: number
 ): Readonly<{ reason: DisclosureDeliveryFailureReason; automaticRetry: boolean }> => {
@@ -425,16 +390,8 @@ const latestDisclosureLifecycleStatus = Effect.fn(function* (
   );
 });
 
-type KapsoLifecycleInput = Readonly<{
-  rawBody: Uint8Array;
-  secret: Redacted.Redacted<string>;
-  signature: string;
-  eventName: string;
-  receivedAt: DateTime.Utc;
-}>;
-
 /** One authenticated event and its latest chronological status, shared across delivery purposes. */
-const decodeLifecycleStatus = Effect.fn(function* (input: KapsoLifecycleInput) {
+export const decodeLifecycleStatus = Effect.fn(function* (input: WhatsAppLifecycleAuthentication) {
   const unknown = yield* authenticateAndDecodeKapsoBody(input);
   const eventName = yield* Schema.decodeUnknownEffect(DisclosureLifecycleEventName)(
     input.eventName
@@ -456,48 +413,7 @@ const decodeLifecycleStatus = Effect.fn(function* (input: KapsoLifecycleInput) {
   return { ...latest.value, businessPhoneNumberId: raw.phone_number_id };
 });
 
-/**
- * Authenticates the exact raw Kapso status before projecting a hosted reply's provider evidence.
- * `sent` and `delivered` remain distinct; only `delivered` can prove channel delivery. A callback
- * must be correlated with an existing User-owned attempt before changing a Turn. No body or
- * recipient evidence escapes this projection.
- */
-export const decodeKapsoHostedLifecycleWebhook = Effect.fn(function* (input: KapsoLifecycleInput) {
-  const latest = yield* decodeLifecycleStatus(input);
-  const status = latest.status;
-  const evidence = {
-    correlationToken: HostedDeliveryCorrelationToken.make(status.biz_opaque_callback_data),
-    messageEvidence: latest.evidence.messageEvidence,
-    businessPhoneNumberId: latest.businessPhoneNumberId,
-    occurredAt: latest.evidence.occurredAt,
-  };
-  return status.status === "failed"
-    ? ({
-        ...evidence,
-        outcome: "failed",
-        reason: latest.evidence.outcome === "failed" ? latest.evidence.reason : "invalid_response",
-      } satisfies WhatsAppHostedLifecycleEvidence)
-    : ({ ...evidence, outcome: status.status } satisfies WhatsAppHostedLifecycleEvidence);
-});
-
-/**
- * Authenticates at most 1 MiB of exact raw bytes with the configured 16+-character secret and a
- * hexadecimal HMAC-SHA256 `signature` before parsing. `eventName` must be one supported disclosure
- * lifecycle event and must match the body's latest chronological status; `receivedAt` bounds future provider time.
- * Failed statuses are retryable only for the allowlisted transient Meta error codes; unknown or
- * absent failure codes fail terminally. Projects only opaque correlation and safe provider metadata.
- * Invalid proof, configuration, JSON,
- * event/status mismatch, timestamp, or body size fails with the corresponding Kapso boundary error
- * before any state change.
- */
-export const decodeKapsoDisclosureLifecycleWebhook = Effect.fn(function* (
-  input: KapsoLifecycleInput
-) {
-  const latest = yield* decodeLifecycleStatus(input);
-  return { ...latest.evidence, businessPhoneNumberId: latest.businessPhoneNumberId };
-});
-
-const projectIdentityChange = Effect.fn(function* (
+export const projectIdentityChange = Effect.fn(function* (
   message: unknown,
   businessPortfolioId: WhatsAppBusinessPortfolioId,
   receivedAt: DateTime.Utc
@@ -544,40 +460,4 @@ const projectIdentityChange = Effect.fn(function* (
     },
     occurredAt,
   } satisfies WhatsAppIdentityChangeEvent);
-});
-
-/**
- * Authenticates the exact raw Meta bytes forwarded by Kapso with a 64-character hexadecimal
- * HMAC-SHA256 signature and a secret of at least 16 characters. `businessPortfolioId` is trusted
- * deployment context; `receivedAt` bounds future provider timestamps. The body is limited to 1 MiB
- * and 100 events. Structured `user_changed_user_id` messages are returned as immutable events;
- * unrelated events are omitted. Invalid proof, configuration, JSON, identity fields, timestamps,
- * event count, or body size fail with the corresponding Kapso boundary error before any write.
- */
-export const decodeKapsoIdentityWebhook = Effect.fn(function* (input: {
-  readonly rawBody: Uint8Array;
-  readonly secret: Redacted.Redacted<string>;
-  readonly signature: string;
-  readonly businessPortfolioId: string;
-  readonly receivedAt: DateTime.Utc;
-}) {
-  const unknown = yield* authenticateAndDecodeKapsoBody(input);
-  const businessPortfolioId = yield* Schema.decodeEffect(WhatsAppBusinessPortfolioId)(
-    input.businessPortfolioId
-  ).pipe(Effect.mapError(invalidKapsoPayload));
-  const envelope = yield* Schema.decodeUnknownEffect(RawMetaEnvelope)(unknown).pipe(
-    Effect.mapError(invalidKapsoPayload)
-  );
-  const messages = envelope.entry.flatMap((entry) =>
-    entry.changes.flatMap((change) => change.value.messages ?? [])
-  );
-  if (messages.length > maxWhatsAppDeliveryEvents) return yield* new WhatsAppBatchTooLarge();
-
-  const projected = yield* Effect.forEach(
-    messages,
-    (message) => projectIdentityChange(message, businessPortfolioId, input.receivedAt),
-    { concurrency: 1 }
-  );
-  const changes: ReadonlyArray<WhatsAppIdentityChangeEvent> = EffectArray.getSomes(projected);
-  return changes;
 });

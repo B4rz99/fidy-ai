@@ -1,0 +1,158 @@
+apps/server/cloudflare/migrations/0043_reminder_governor.sql
+  s_306ab925389860::t_c4b91cf3a8d5fe 1-4,10-20
+  s_306ab925389860::t_b2311beb83d459 5-9
+apps/server/cloudflare/migrations/0045_budget_messages_transcript.sql
+  s_306ab925389860::t_c5dbfe759be43e 22-43
+  s_306ab925389860::t_b5a8684187027e 1-21
+apps/server/cloudflare/budgets/internal/budget-proactivity.ts
+  s_306ab925389860::t_d82263709ffeac 5,53-70,72-110,112-115,128-149
+  s_306ab925389860::t_ed0889d9da2f49 111
+  s_306ab925389860::t_a3dcbedd5ddf47 116,127
+  s_306ab925389860::t_7724fa34b8f4d8 117-126
+  s_306ab925389860::t_1e621a8ba9f2e2 6,71,150
+apps/server/cloudflare/insights/operations.ts
+  s_306ab925389860::t_d82263709ffeac 9-14,106,109-113,121
+  s_306ab925389860::t_d2d224537dedb5 8,104-105
+  s_306ab925389860::t_f03c3e8ca17a6e 84-85,88,91,94,97,100
+  s_306ab925389860::t_3776deed668f00 107-108
+  s_306ab925389860::t_997a438b532891 1-7,83,86-87,89-90,92-93,95-96,98-99,101-103
+  s_306ab925389860::t_2ccd25b16c77fb 15-16,122-124
+apps/server/cloudflare/insights/internal/reminder-question.ts
+  s_306ab925389860::t_997a438b532891 8-68
+  s_306ab925389860::t_8a20cd074cea72 1-7
+apps/server/cloudflare/agent/internal/proactive-transcript.ts
+  s_306ab925389860::t_d82263709ffeac 58-70,113
+  s_306ab925389860::t_fa2fce48008dc7 71
+apps/server/cloudflare/agent/internal/hosted-turn.ts
+  s_306ab925389860::t_454282194fc1c3 2
+  s_306ab925389860::t_997a438b532891 1848-1857
+apps/server/cloudflare/insights/internal/budget-generation.ts
+  s_306ab925389860::t_5ca8d7daa652c8 1-3,5-6,11-15,64,123
+  s_306ab925389860::t_d82263709ffeac 4,7-10,19-31,33-63,65-102,104-122,124-128
+  s_306ab925389860::t_7724fa34b8f4d8 16-18
+  s_306ab925389860::t_51f2c16f1ecab4 32,103
+apps/server/cloudflare/insights/internal/proactivity-execution.ts
+  s_306ab925389860::t_3469bc8cff534d 16,36
+  s_306ab925389860::t_1d9c4bbc21829e 17-18,34-35
+apps/server/cloudflare/migrations/0046_contextual_offers.sql
+  s_306ab925389860::t_d616dea5f92570 1-11
+apps/server/cloudflare/insights/internal/proactivity-reports.ts
+  s_306ab925389860::t_c8c247c045282b 72
+  s_306ab925389860::t_d82263709ffeac 101-106
+  s_306ab925389860::t_550849527df3a7 111
+apps/server/cloudflare/agent/internal/weekly-channel.ts
+  s_306ab925389860::t_0b2fb73d96cd4a 267
+  s_306ab925389860::t_430c881e8fb5fc 204
+  s_306ab925389860::t_22d785e885ebe2 17
+  s_306ab925389860::t_c01391e0eb05e2 244
+  s_306ab925389860::t_f5752da934cdcf 205-243,278-279
+  s_306ab925389860::t_8a706a02081d25 3
+  s_306ab925389860::t_d82263709ffeac 10,47-50,107-110,117-120
+  s_306ab925389860::t_01d627ddb37b31 18
+  s_306ab925389860::t_997a438b532891 111,161,163-165,260-262,264-266
+  s_306ab925389860::t_7724fa34b8f4d8 196-203,274-276
+  s_306ab925389860::t_86673d5e304843 22,116
+  s_306ab925389860::t_7fb8b22e5c8a82 27
+  s_306ab925389860::t_9fb228658d2b72 162,263
+  s_306ab925389860::t_64f0938ef94955 15,36
+apps/server/cloudflare/insights/internal/proactivity-work.ts
+  s_306ab925389860::t_56e385d1861d8c 18
+  s_306ab925389860::t_d82263709ffeac 2-5,23,28-42,49-64
+  s_306ab925389860::t_0c6b4bd3ae7aa3 48
+apps/server/cloudflare/d1-test-fixture.ts
+  s_306ab925389860::t_03708975230206 206
+  s_306ab925389860::t_f336959b7bee69 205
+  s_306ab925389860::t_3c13dbd73c6f15 203
+apps/server/cloudflare/consent/internal/proactivity-consent.ts
+  s_306ab925389860::t_baa7c45c4231a4 1
+  s_306ab925389860::t_24e9539a0fe210 192,231
+  s_306ab925389860::t_d82263709ffeac 185,193-230,232-248
+  s_306ab925389860::t_5eea8c4cc9dda2 249
+apps/server/cloudflare/insights/internal/reminder-governor.ts
+  s_306ab925389860::t_dfa69edabcee73 3-4
+  s_306ab925389860::t_997a438b532891 10-35,37-65,67-74,80-83,85-176
+  s_306ab925389860::t_2f98399673b445 1-2,5-9,36,66
+  s_306ab925389860::t_7724fa34b8f4d8 75-79
+  s_306ab925389860::t_7dcb8a68700b50 84
+apps/server/cloudflare/whatsapp/operations.ts
+  s_306ab925389860::t_997a438b532891 82-83
+  s_306ab925389860::t_1c6c284014a3ca 81
+apps/server/cloudflare/insights/proactivity-runtime.test.ts
+  s_306ab925389860::t_4cf67b9cbb4e7e 406-441,446-451,453-482,485-522,524-530,557-558
+  s_306ab925389860::t_febc9f532cd9ce 30
+  s_306ab925389860::t_997a438b532891 156-158,189-191
+  s_306ab925389860::t_8f01998b38f6b2 523,531-556
+  s_306ab925389860::t_bf4cd27f39e9d8 2,27
+  s_306ab925389860::t_6fc3521c5c93db 13,28
+  s_306ab925389860::t_c661c9133c81fa 31
+  s_306ab925389860::t_7724fa34b8f4d8 442-445,452,483-484
+  s_306ab925389860::t_554d0d516500ce 262
+  s_306ab925389860::t_b59614cf7dc7d3 15
+apps/server/cloudflare/agent/proactivity-choice.test.ts
+  s_306ab925389860::t_d82263709ffeac 21-44,52-76
+  s_306ab925389860::t_55cf518cb3a6f6 45-51
+  s_306ab925389860::t_d596ac94bfe199 77
+apps/server/cloudflare/budgets/budgets.test.ts
+  s_306ab925389860::t_c64abff73c4da4 31
+  s_306ab925389860::t_8f6832139617db 40,157
+  s_306ab925389860::t_f8034fe8185364 21-22,29-30
+  s_306ab925389860::t_cdb2709d65d1c4 1457,1459
+  s_306ab925389860::t_7724fa34b8f4d8 1563
+  s_306ab925389860::t_d82263709ffeac 23-28,33,175-178,1453-1456,1460-1547,1549-1562,1564-1624
+  s_306ab925389860::t_dfc07650c7573c 122
+  s_306ab925389860::t_e6b59914edaebe 138
+  s_306ab925389860::t_bd76e458dbca11 32
+  s_306ab925389860::t_025874a9245c4e 137
+  s_306ab925389860::t_356cf03e148cf2 145-146
+  s_306ab925389860::t_0b200314ea2e65 142-144
+  s_306ab925389860::t_96a94531077f3d 1458
+  s_306ab925389860::t_0d5acb9b72ad47 1548
+  s_e278ac208f4e8a::t_5964f98809ef4b 1625
+apps/server/cloudflare/consent/operations.ts
+  s_306ab925389860::t_5e0fee43aa3264 67,71
+  s_306ab925389860::t_4e53bcf827e98a 63,66
+  s_306ab925389860::t_d82263709ffeac 64-65,68-70
+apps/server/cloudflare/insights/internal/proactivity-offers.ts
+  s_306ab925389860::t_55cf518cb3a6f6 71-74
+  s_306ab925389860::t_d82263709ffeac 1,6-12,19-70,75-180
+  s_306ab925389860::t_3687c2de0b5987 2-5,13-15,17-18
+  s_306ab925389860::t_1638ef114876bc 16
+apps/server/cloudflare/budgets/operations.ts
+  s_306ab925389860::t_97401d9baf2a94 36-37
+  s_306ab925389860::t_d22c36042d0ba1 31,34
+  s_306ab925389860::t_ed84c6ccf0f32d 39-40,42
+  s_306ab925389860::t_d82263709ffeac 2-9,32-33,35,38,41,43-44
+  s_306ab925389860::t_162bf547d470aa 45
+apps/server/cloudflare/whatsapp/internal/proactivity-delivery.ts
+  s_306ab925389860::t_997a438b532891 273-290
+  s_306ab925389860::t_a0c9a0a9bc536e 21,291
+apps/server/cloudflare/agent/internal/turn-store.ts
+  s_306ab925389860::t_997a438b532891 835-843,1240-1248
+  s_306ab925389860::t_5e8ddbf9bffb27 5-6
+apps/server/cloudflare/consent/contract.ts
+  s_306ab925389860::t_d82263709ffeac 23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f1853c449d1575c2197e2a41faf3d876d947b664",
+  "prompts": {},
+  "sessions": {
+    "s_306ab925389860": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a109c8-df42-7697-afe7-6376e97c8760",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_e278ac208f4e8a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10731-a41d-7121-98b3-ec6e9e1e04de",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

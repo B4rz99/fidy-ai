@@ -7,6 +7,7 @@ export type ScheduledOperation =
   | "async.health"
   | "audit.retention"
   | "canonical.admissionRetention"
+  | "oauth.confirmationRetention"
   | "quota.consumptionRetention"
   | "operational.events.retention"
   | "operational.canary.publish"

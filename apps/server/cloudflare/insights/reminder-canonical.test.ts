@@ -64,6 +64,7 @@ it("requires exact live PAT capabilities and atomically accounts for activity wi
         db.prepare("UPDATE pats SET scopes_json='[\"read\"]' WHERE id=?").bind(pat.patId).run()
       );
       const deniedWrite = yield* executeCanonicalWork({
+        oauthConfirmation: Option.none(),
         db,
         subject: pat,
         current,
@@ -97,6 +98,7 @@ it("requires exact live PAT capabilities and atomically accounts for activity wi
         200
       );
       const result = yield* executeCanonicalWork({
+        oauthConfirmation: Option.none(),
         db,
         subject: pat,
         current,
@@ -351,6 +353,7 @@ it("reads and revises reminder instructions through live canonical authority wit
         "insights.updateReminderSchedule"
       );
       const committed = yield* executeCanonicalWork({
+        oauthConfirmation: Option.none(),
         db,
         subject,
         current: proactivityTestNow.epochMilliseconds,

@@ -1,4 +1,4 @@
-import { Data, DateTime, Effect, Option, Schema } from "effect";
+import { type Cause, Data, DateTime, Effect, Option, Schema } from "effect";
 import { getCanonicalOperationInput } from "../../../src/shell/canonical-operations/operations";
 import {
   prepareAuthorizedAuditCall,
@@ -29,13 +29,12 @@ import { prepareConsentAction } from "../../consent/operations";
 import { findCapturedTransaction, prepareStatementCapture } from "../../transactions/operations";
 import { newId } from "../../secret-material/operations";
 import type { StatementDecisionWork } from "../contract";
+import type { OAuthMutationReview } from "../../oauth-confirmation/contract";
+import { clarificationOAuthReview, needsOAuthReview } from "./oauth-review";
 import { statementOriginGuard as originGuard } from "./statement-scope";
 import { readOwnedStatementSubmission, submissionProjection } from "./statement-staging";
+import type { StatementClarificationOperation } from "./clarification-operation";
 
-export type StatementClarificationOperation =
-  | "ingestion.resolveNeedsReviewItem"
-  | "ingestion.skipNeedsReviewItem"
-  | "ingestion.abandonStatementSubmission";
 type ReviewOperation = Exclude<
   StatementClarificationOperation,
   "ingestion.abandonStatementSubmission"
@@ -206,9 +205,12 @@ const prepareCapture = ({
   source: OwnedStatement;
   transactionId: string;
   extraction: Option.Option<TransactionExtraction>;
-}>): Effect.Effect<ReadonlyArray<D1PreparedStatement>, ReviewCaptureUnavailable> =>
+}>): Effect.Effect<
+  Readonly<{ statements: ReadonlyArray<D1PreparedStatement>; categoryId: Option.Option<string> }>,
+  ReviewCaptureUnavailable
+> =>
   Effect.gen(function* () {
-    if (Option.isNone(extraction)) return [];
+    if (Option.isNone(extraction)) return { statements: [], categoryId: Option.none() };
     const categories = yield* categorizeCaptures({
       db: work.db,
       userId: work.userId,
@@ -222,7 +224,7 @@ const prepareCapture = ({
     }).pipe(Effect.mapError(() => new ReviewCaptureUnavailable()));
     const categoryId = categories[0];
     if (categoryId === undefined) return yield* new ReviewCaptureUnavailable();
-    return prepareStatementCapture({
+    const statements = prepareStatementCapture({
       db: work.db,
       userId: work.userId,
       transactionId,
@@ -242,6 +244,7 @@ const prepareCapture = ({
         sourceFormat: row.source_format,
       },
     });
+    return { statements, categoryId: Option.some(categoryId) };
   });
 
 const decisionStatement = ({
@@ -342,42 +345,104 @@ const loadEligibleReview = ({
     )
   );
 
+const observeReview = ({
+  work,
+  operation,
+  decision,
+  oauth,
+}: Readonly<{
+  work: StatementDecisionWork;
+  operation: ReviewOperation;
+  decision: Decision;
+  oauth: boolean;
+}>): Effect.Effect<
+  Option.Option<
+    Readonly<{
+      row: Review;
+      source: OwnedStatement;
+      observed: Option.Option<Effect.Success<ReturnType<typeof clarificationOAuthReview>>>;
+    }>
+  >,
+  ReviewCaptureUnavailable | Effect.Error<ReturnType<typeof clarificationOAuthReview>>
+> =>
+  Effect.gen(function* () {
+    let source = eligibleReview(work, decision.id);
+    let row = yield* loadEligibleReview({ work, id: decision.id, source });
+    if (Option.isNone(row)) return Option.none();
+    const observed = oauth
+      ? Option.some(
+          yield* clarificationOAuthReview({
+            db: work.db,
+            userId: work.userId,
+            submissionId: row.value.submission_id,
+            operation,
+            reviewId: Option.some(decision.id),
+            extraction: decision.extraction,
+          })
+        )
+      : Option.none();
+    if (Option.isSome(observed)) {
+      source = {
+        sql: `SELECT user_id FROM (${source.sql}) WHERE EXISTS (${observed.value.guard.sql})`,
+        params: [...source.params, ...observed.value.guard.params],
+      };
+      row = yield* loadEligibleReview({ work, id: decision.id, source });
+    }
+    return Option.map(row, (value) => ({ row: value, source, observed }));
+  });
+
+const discloseCaptureCategory = (
+  review: OAuthMutationReview,
+  category: Option.Option<string>
+): OAuthMutationReview =>
+  Option.match(category, {
+    onNone: () => review,
+    onSome: (categoryId) => ({
+      ...review,
+      effect: `${review.effect} Categoría de la nueva Transacción: ${categoryId}.`,
+      revision: `${review.revision}:${categoryId}`,
+    }),
+  });
+
 /** One atomic row decision, independent of the caller's credential kind. The caller commits its unit. */
-export const prepareHeldStatementReviewDecision = ({
+const prepareReviewDecision = ({
   operation,
   work,
+  oauth,
 }: Readonly<{
   operation: ReviewOperation;
   work: StatementDecisionWork;
+  oauth: boolean;
 }>): Effect.Effect<CanonicalMutationPreparation> =>
   Effect.gen(function* () {
     const decision = decodeDecision(operation, work.input);
     if (Option.isNone(decision)) return failedPreparation();
-    const source = eligibleReview(work, decision.value.id);
-    const row = yield* loadEligibleReview({ work, id: decision.value.id, source });
-    if (Option.isNone(row)) {
+    const eligible = yield* observeReview({ work, operation, decision: decision.value, oauth });
+    if (Option.isNone(eligible)) {
       return refusedPreparation(heldClarificationRefusal({ work, operation }));
     }
+    const { row, source, observed } = eligible.value;
     const transactionId = newId();
     const captures = yield* prepareCapture({
       work,
-      row: row.value,
+      row,
       source,
       transactionId,
       extraction: decision.value.extraction,
     });
-    const submissionId = row.value.submission_id;
-    const resolving = Option.isSome(decision.value.extraction);
     return {
       _tag: "Prepared",
       mutation: {
+        oauthReview: Option.map(observed, ({ review }) =>
+          discloseCaptureCategory(review, captures.categoryId)
+        ),
         requiredScope: work.requiredScope,
         statements: [
-          ...captures,
+          ...captures.statements,
           decisionStatement({
             work,
             decision: decision.value,
-            row: row.value,
+            row,
             source,
             transactionId,
           }),
@@ -393,13 +458,21 @@ export const prepareHeldStatementReviewDecision = ({
           guardFacts: Option.none(),
           triggerRefusal: () => Option.some(heldClarificationRefusal({ work, operation })),
           read: (db, userId) =>
-            resolving
+            Option.isSome(decision.value.extraction)
               ? readCapture(db, userId, transactionId)
-              : readSubmission({ work, submissionId, db, userId }),
+              : readSubmission({ work, submissionId: row.submission_id, db, userId }),
         },
       },
     } satisfies CanonicalMutationPreparation;
   }).pipe(Effect.orElseSucceed(failedPreparation));
+
+/** Held conversation authority preserves its existing confirmation and settlement semantics. */
+export const prepareHeldStatementReviewDecision = (
+  input: Readonly<{
+    operation: ReviewOperation;
+    work: StatementDecisionWork;
+  }>
+): Effect.Effect<CanonicalMutationPreparation> => prepareReviewDecision({ ...input, oauth: false });
 
 /** Canonical credential adapter uses precisely the same decision as the verified hosted adapter. */
 export const prepareStatementReviewDecision = ({
@@ -409,53 +482,85 @@ export const prepareStatementReviewDecision = ({
   operation: ReviewOperation;
   work: CanonicalPreparationWork;
 }>): Effect.Effect<CanonicalMutationPreparation> =>
-  prepareHeldStatementReviewDecision({ operation, work: credentialWork(work) });
+  prepareReviewDecision({
+    operation,
+    work: credentialWork(work),
+    oauth: needsOAuthReview({ subject: work.subject, operation }),
+  });
 
 /** Permanent cancellation preserves captures and erases all remaining clarification evidence. */
-export const prepareHeldStatementAbandonment = (
-  work: StatementDecisionWork
+const eligibleAbandonment = (
+  work: StatementDecisionWork,
+  id: string,
+  origin: OwnedStatement
+): Effect.Effect<boolean, Cause.UnknownError> =>
+  Effect.tryPromise(() =>
+    work.db
+      .prepare(
+        `SELECT 1 FROM statement_clarifications WHERE submission_id = ? AND user_id = ? AND state = 'awaiting' AND expires_at_ms > ? AND (${origin.sql}) AND EXISTS (SELECT 1 FROM ${work.authority.table} WHERE ${work.authority.predicate})`
+      )
+      .bind(id, work.userId, work.current, ...origin.params, ...work.authority.bindings)
+      .first()
+  ).pipe(Effect.map((row) => row !== null));
+
+const abandonmentStatement = (
+  work: StatementDecisionWork,
+  id: string,
+  origin: OwnedStatement
+): D1PreparedStatement =>
+  prepareConsentAction({
+    db: work.db,
+    subject: { _tag: "User", userId: work.userId },
+    requirement: "active",
+    statement: {
+      sql: `UPDATE statement_clarifications SET state = 'abandoned', ended_at_ms = ? WHERE submission_id = ? AND user_id = ? AND state = 'awaiting' AND expires_at_ms > ?
+        AND EXISTS (SELECT 1 FROM ${work.authority.table} WHERE ${work.authority.predicate}) AND (${origin.sql})`,
+      params: [
+        work.current,
+        id,
+        work.userId,
+        work.current,
+        ...work.authority.bindings,
+        ...origin.params,
+      ],
+    },
+  });
+
+const prepareAbandonment = (
+  work: StatementDecisionWork,
+  oauth: boolean
 ): Effect.Effect<CanonicalMutationPreparation> =>
   Effect.gen(function* () {
     const parsed = Schema.decodeUnknownOption(abandonInput)(work.input);
     if (Option.isNone(parsed)) return failedPreparation();
     const id = parsed.value.params.id;
     const operation = "ingestion.abandonStatementSubmission";
-    const authority = work.authority;
     const origin = originGuard({ work, submission: "statement_clarifications.submission_id" });
-    const existing = yield* Effect.tryPromise(() =>
-      work.db
-        .prepare(
-          `SELECT 1 FROM statement_clarifications WHERE submission_id = ? AND user_id = ? AND state = 'awaiting' AND expires_at_ms > ? AND (${origin.sql}) AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`
+    if (!(yield* eligibleAbandonment(work, id, origin))) {
+      return refusedPreparation(heldClarificationRefusal({ work, operation }));
+    }
+    const observed = oauth
+      ? Option.some(
+          yield* clarificationOAuthReview({
+            db: work.db,
+            userId: work.userId,
+            submissionId: id,
+            operation,
+            reviewId: Option.none(),
+            extraction: Option.none(),
+          })
         )
-        .bind(id, work.userId, work.current, ...origin.params, ...authority.bindings)
-        .first()
-    );
-    if (existing === null) return refusedPreparation(heldClarificationRefusal({ work, operation }));
+      : Option.none();
     return {
       _tag: "Prepared",
       mutation: {
+        oauthReview: Option.map(observed, ({ review }) => review),
         requiredScope: work.requiredScope,
         auditBudget: "shared",
         commitGuards: Option.none(),
         guardRefusal: () => Effect.succeed(heldClarificationRefusal({ work, operation })),
         statements: [
-          prepareConsentAction({
-            db: work.db,
-            subject: { _tag: "User", userId: work.userId },
-            requirement: "active",
-            statement: {
-              sql: `UPDATE statement_clarifications SET state = 'abandoned', ended_at_ms = ? WHERE submission_id = ? AND user_id = ? AND state = 'awaiting' AND expires_at_ms > ?
-        AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}) AND (${origin.sql})`,
-              params: [
-                work.current,
-                id,
-                work.userId,
-                work.current,
-                ...authority.bindings,
-                ...origin.params,
-              ],
-            },
-          }),
+          abandonmentStatement(work, id, origin),
           ...accountability(work, operation, true),
         ],
         outcome: {
@@ -470,8 +575,16 @@ export const prepareHeldStatementAbandonment = (
     } satisfies CanonicalMutationPreparation;
   }).pipe(Effect.orElseSucceed(failedPreparation));
 
+/** Held cancellation retains the original conversation authority and confirmation contract. */
+export const prepareHeldStatementAbandonment = (
+  work: StatementDecisionWork
+): Effect.Effect<CanonicalMutationPreparation> => prepareAbandonment(work, false);
+
 /** Canonical credential cancellation adapter; no nested commit or borrowed channel authority. */
 export const prepareStatementAbandonment = (
   work: CanonicalPreparationWork
 ): Effect.Effect<CanonicalMutationPreparation> =>
-  prepareHeldStatementAbandonment(credentialWork(work));
+  prepareAbandonment(
+    credentialWork(work),
+    needsOAuthReview({ subject: work.subject, operation: "ingestion.abandonStatementSubmission" })
+  );

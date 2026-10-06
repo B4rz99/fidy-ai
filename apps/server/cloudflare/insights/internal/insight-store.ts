@@ -9,7 +9,7 @@ import {
   recordCanonicalPATWork,
 } from "../../../src/shell/audit/operations";
 import {
-  type DeliveryEvidenceInput,
+  DeliveryEvidenceInput,
   InsightDeliveryAttempt,
   InsightEvent,
   InsightEventId,
@@ -39,6 +39,10 @@ import {
   type GuardRefusalWork,
   type OwnerOutcome,
 } from "../../canonical-operations/contract";
+
+import { getBoundOperationCatalog } from "../../../src/shell/canonical-catalog/contract";
+import { oauthMutationReview } from "../../oauth-confirmation/operations";
+import type { OAuthMutationReview } from "../../oauth-confirmation/contract";
 
 const maximumPendingInsights = 64;
 const HTTP_NOT_FOUND = 404;
@@ -545,7 +549,8 @@ const insightOutcome = ({
 });
 
 const transitionStatements = (
-  input: TransitionInput
+  input: TransitionInput,
+  oauthReview: Option.Option<OAuthMutationReview>
 ): Extract<CanonicalMutationPreparation, { _tag: "Prepared" }> => {
   const { db, subject, id, operation, current } = input;
   const target = targetOf(operation);
@@ -568,6 +573,7 @@ const transitionStatements = (
   return {
     _tag: "Prepared",
     mutation: {
+      oauthReview,
       requiredScope: callerScope(subject),
       outcome: insightOutcome({ operation, insightEventId: id, attemptId }),
       guardRefusal: insightGuardRefusal(input),
@@ -597,13 +603,155 @@ const transitionStatements = (
   };
 };
 
+const reviewAction = (operation: MutationOperation): string => {
+  switch (operation) {
+    case "insights.markInsightDelivered":
+      return "Registrar como entregado (sin enviar un mensaje)";
+    case "insights.markInsightRead":
+      return "Marcar como leído";
+    case "insights.dismissInsight":
+      return "Descartar";
+  }
+};
+
+const insightReview = ({
+  input,
+  row,
+  event,
+  attempts,
+}: Readonly<{
+  input: TransitionInput;
+  row: typeof EventRow.Type;
+  event: InsightEvent;
+  attempts: ReadonlyArray<typeof AttemptRow.Type>;
+}>): OAuthMutationReview => {
+  const { db, subject, id } = input;
+  const attempt = attempts[0];
+  const evidence =
+    input.operation === "insights.markInsightDelivered"
+      ? Schema.encodeSync(Schema.toCodecJson(DeliveryEvidenceInput))(input.evidence)
+      : null;
+  const columns = Object.keys(EventRow.fields);
+  const attemptColumns = Object.keys(AttemptRow.fields);
+  return oauthMutationReview({
+    db,
+    effect:
+      `${reviewAction(input.operation)} el InsightEvent exacto ${id}, desde ${row.lifecycle_state} hasta ${targetOf(input.operation)}. ` +
+      `Evento observado: ${JSON.stringify(Schema.encodeSync(Schema.toCodecJson(InsightEvent))(event))}. ` +
+      `Entrega retenida: ${JSON.stringify(attempts)}. Evidencia de entrega que se registrará: ${JSON.stringify(evidence)}.`,
+    revision: JSON.stringify({ event: row, attempts }),
+    guard: {
+      sql: `SELECT 1 FROM insight_events WHERE user_id = ? AND ${columns.map((column) => `${column} IS ?`).join(" AND ")}
+        AND (SELECT COUNT(*) FROM insight_delivery_attempts WHERE user_id = ? AND insight_event_id = ?) = ?
+        ${attempt === undefined ? "" : `AND EXISTS (SELECT 1 FROM insight_delivery_attempts WHERE user_id = ? AND ${attemptColumns.map((column) => `${column} IS ?`).join(" AND ")})`}`,
+      params: [
+        subject.userId,
+        row.id,
+        row.kind,
+        row.schedule_id,
+        row.schedule_version,
+        row.service_market,
+        row.locale,
+        row.time_zone,
+        row.scheduled_at,
+        row.money_groups_json,
+        row.lifecycle_state,
+        subject.userId,
+        id,
+        attempts.length,
+        ...(attempt === undefined
+          ? []
+          : [
+              subject.userId,
+              attempt.id,
+              attempt.insight_event_id,
+              attempt.sent_at,
+              attempt.channel,
+              attempt.provider,
+              attempt.provider_message_id,
+            ]),
+      ],
+    },
+  });
+};
+
+const validAttemptSnapshot = (attempt: typeof AttemptRow.Type): boolean =>
+  Option.isSome(
+    Schema.decodeOption(Schema.toCodecJson(InsightDeliveryAttempt))({
+      id: attempt.id,
+      insightEventId: attempt.insight_event_id,
+      sentAt: attempt.sent_at,
+      channel: attempt.channel,
+      provider: attempt.provider,
+      providerMessageId: attempt.provider_message_id,
+    })
+  );
+
+const observeOAuthInsight = (
+  input: TransitionInput
+): Effect.Effect<
+  Readonly<{
+    event: Option.Option<InsightEvent>;
+    review: Option.Option<OAuthMutationReview>;
+  }>,
+  InsightUnavailable | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    const { db, subject, id } = input;
+    const rows = yield* Effect.tryPromise({
+      try: () =>
+        db.batch([
+          db
+            .prepare(`SELECT id, kind, schedule_id, schedule_version, service_market,
+          locale, time_zone, scheduled_at, money_groups_json, lifecycle_state
+          FROM insight_events WHERE user_id = ? AND id = ?`)
+            .bind(subject.userId, id),
+          db
+            .prepare(`SELECT id, insight_event_id, sent_at, channel, provider, provider_message_id
+          FROM insight_delivery_attempts WHERE user_id = ? AND insight_event_id = ?`)
+            .bind(subject.userId, id),
+        ]),
+      catch: () => new InsightUnavailable(),
+    });
+    const events = yield* Schema.decodeUnknownEffect(Schema.Array(EventRow))(rows[0]?.results);
+    const attempts = yield* Schema.decodeUnknownEffect(Schema.Array(AttemptRow))(rows[1]?.results);
+    const row = events[0];
+    if (row === undefined) {
+      return { event: Option.none<InsightEvent>(), review: Option.none<OAuthMutationReview>() };
+    }
+    const event = decodeEvent(row);
+    if (Option.isNone(event) || events.length !== 1 || attempts.length > 1) {
+      return yield* new InsightUnavailable();
+    }
+    if (
+      !Option.match(Option.fromUndefinedOr(attempts[0]), {
+        onNone: () => true,
+        onSome: validAttemptSnapshot,
+      })
+    ) {
+      return yield* new InsightUnavailable();
+    }
+    return {
+      event,
+      review: Option.some(insightReview({ input, row, event: event.value, attempts })),
+    };
+  });
+
 /** Prepare a guarded transition, its immutable send evidence, and its success Audit as one unit. */
 export const prepareInsightTransition = (
   input: TransitionInput
 ): Effect.Effect<CanonicalMutationPreparation> =>
   Effect.gen(function* () {
     const { db, subject, operation, id, current } = input;
-    const event = yield* findInsight({ db, userId: subject.userId, id });
+    const observed =
+      isOAuthCaller(subject) &&
+      getBoundOperationCatalog().byId.get(operation)?.policy.agentConfirmation === "required"
+        ? yield* observeOAuthInsight(input)
+        : {
+            event: yield* findInsight({ db, userId: subject.userId, id }),
+            review: Option.none<OAuthMutationReview>(),
+          };
+    const event = observed.event;
     if (Option.isNone(event)) {
       return refusedPreparation(
         insightRefusal({ db, subject, operation, current, code: "not_found" })
@@ -614,7 +762,7 @@ export const prepareInsightTransition = (
         insightRefusal({ db, subject, operation, current, code: "validation_failed" })
       );
     }
-    return transitionStatements(input);
+    return transitionStatements(input, observed.review);
   }).pipe(Effect.orElseSucceed(failedPreparation));
 
 /** Read send evidence by User and event identity; never infer it from provider identity. */

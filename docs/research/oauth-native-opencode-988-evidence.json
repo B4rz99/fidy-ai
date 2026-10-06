@@ -1,0 +1,53 @@
+{
+  "checkedAtUtc": "2026-10-05T17:14:28Z",
+  "host": "OpenCode",
+  "version": "2.0.23",
+  "platform": "macOS arm64",
+  "package": "@opencode/cli-darwin-arm64@2.0.23",
+  "releaseSourceCommit": "63e33bc4dc7d93ccdfb008908e12e4762f8361b8",
+  "packageIntegrity": "sha512-5qZx8IqfCKdymb711qBxkjBtNJZ9H2JIkrqIUiLwsrxmIyDMKu8tPTxKKMH91sC5fElZbrBP9M8Jq6LckDnxUw==",
+  "scope": "Actual released TUI, scripted operator keystrokes, canned loopback Chat Completions API, Effect 4.0.0 inert tool. No real model inference, User, OAuth credential, first-party proof or mutation. No OpenCode plugin was installed.",
+  "immediateNativePrompt": {
+    "legacyDefault": false,
+    "modernAuto": false,
+    "backendFormCreated": true,
+    "backendFormSessionId": "global",
+    "backendFormTitle": "probe is requesting input",
+    "backendFormMetadata": { "kind": "mcp-elicitation", "server": "probe" },
+    "backendFormField": {
+      "key": "confirm",
+      "title": "Confirmar la acción",
+      "type": "boolean",
+      "required": true,
+      "default": false
+    },
+    "syntheticCompletionsBeforeDecision": 0
+  },
+  "afterTuiReattachment": {
+    "nativeFormVisible": true,
+    "nativeChoices": ["Yes", "No"],
+    "defaultChoice": "No",
+    "nativeDismissal": "Escape",
+    "modernAcceptance": {
+      "protocol": "2026-07-28",
+      "resumedParams": {
+        "name": "confirmation_probe",
+        "arguments": {},
+        "inputResponses": { "review": { "action": "accept", "content": { "confirm": true } } },
+        "requestState": "public-native-probe"
+      },
+      "syntheticCompletions": 1
+    },
+    "legacyCancellation": {
+      "protocol": "2025-11-25",
+      "response": { "action": "cancel" },
+      "syntheticCompletions": 0
+    }
+  },
+  "limitations": [
+    "Reattachment is diagnostic, not an approved end-user workaround.",
+    "No clean live prompt/accept/resume journey was established on this release.",
+    "Missing Effect location context is a source-backed probable cause, not a patched-and-verified root cause.",
+    "Desktop, browser, mini and ACP interfaces were not certified."
+  ]
+}

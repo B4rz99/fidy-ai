@@ -67,6 +67,9 @@ import {
   memoryUnavailable,
 } from "./internal/outcome";
 
+import { memoryOAuthReview } from "./internal/oauth-review";
+import type { OAuthMutationReview } from "../oauth-confirmation/contract";
+
 const HTTP_OK = 200;
 const MemoryCodec = Schema.toCodecJson(Memory);
 
@@ -179,7 +182,13 @@ const acceptedAudit = ({
         db,
         statement: recordBrowserMemoryWork({
           subject,
-          input: { id: memoryId(), operation, outcome: "success", afterMutation: true, current },
+          input: {
+            id: memoryId(),
+            operation,
+            outcome: "success",
+            afterMutation: true,
+            current,
+          },
         }),
       });
 };
@@ -200,7 +209,10 @@ const acceptedStatements = ({
 }>): ReadonlyArray<D1PreparedStatement> =>
   isPATCaller(subject)
     ? [
-        prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) }),
+        prepareOwnedStatement({
+          db,
+          statement: recordLivePATUse({ subject, current }),
+        }),
         mutation,
         acceptedAudit({ db, subject, operation, current }),
       ]
@@ -256,6 +268,7 @@ export const prepareRemember = ({
         requiredScope: callerScope(subject),
         guardRefusal: memoryGuardRefusal(outcome),
         auditBudget: "shared",
+        oauthReview: Option.none(),
         commitGuards: Option.some(memoryCapacityGuards(candidate)),
         outcome: memoryOutcome(outcome),
         statements: acceptedStatements({
@@ -275,17 +288,27 @@ const reviseMutation = ({
   subject,
   candidate,
   current,
+  stored,
 }: Readonly<{
   db: D1Database;
   subject: TransactionCaller;
   candidate: Memory;
   current: number;
+  stored: ReadonlyArray<Memory>;
 }>): PreparedCanonicalMutation => {
   const outcome: MemoryOutcome = {
     operation: "memory.revise",
     memoryId: candidate.id,
   };
   return {
+    oauthReview: memoryOAuthReview({
+      db,
+      subject,
+      operation: "revise",
+      memories: stored,
+      id: candidate.id,
+      text: candidate.text,
+    }),
     requiredScope: callerScope(subject),
     guardRefusal: memoryGuardRefusal(outcome),
     auditBudget: "shared",
@@ -327,7 +350,13 @@ export const prepareRevise = ({
     const previous = Option.fromUndefinedOr(stored.value.find((memory) => memory.id === id));
     if (Option.isNone(previous)) {
       return refusedPreparation(
-        memoryRefusal({ db, subject, operation: "memory.revise", outcome: "not_found", current })
+        memoryRefusal({
+          db,
+          subject,
+          operation: "memory.revise",
+          outcome: "not_found",
+          current,
+        })
       );
     }
     const candidate = Memory.make({
@@ -350,7 +379,13 @@ export const prepareRevise = ({
     }
     return {
       _tag: "Prepared",
-      mutation: reviseMutation({ db, subject, candidate, current }),
+      mutation: reviseMutation({
+        db,
+        subject,
+        candidate,
+        current,
+        stored: stored.value,
+      }),
     } as const;
   }).pipe(Effect.orElseSucceed(failedPreparation));
 
@@ -373,6 +408,29 @@ export const prepareForget = ({
     if (yield* budgetExhausted({ db, subject, current })) {
       return refusedPreparation(memoryBudgetRefusal());
     }
+    let oauthReview = Option.none<OAuthMutationReview>();
+    if (isOAuthCaller(subject)) {
+      const stored = yield* readMemories({ db, subject, current });
+      if (Option.isNone(stored)) return unavailablePreparation();
+      if (!stored.value.some((memory) => memory.id === id)) {
+        return refusedPreparation(
+          memoryRefusal({
+            db,
+            subject,
+            operation: "memory.forget",
+            outcome: "not_found",
+            current,
+          })
+        );
+      }
+      oauthReview = memoryOAuthReview({
+        db,
+        subject,
+        operation: "forget",
+        memories: stored.value,
+        id,
+      });
+    }
     const outcome: MemoryOutcome = { operation: "memory.forget", memoryId: id };
     return {
       _tag: "Prepared",
@@ -380,6 +438,7 @@ export const prepareForget = ({
         requiredScope: callerScope(subject),
         guardRefusal: memoryGuardRefusal(outcome),
         auditBudget: "shared",
+        oauthReview,
         commitGuards: Option.none(),
         outcome: memoryOutcome(outcome),
         statements: acceptedStatements({
@@ -485,7 +544,10 @@ const recallStatements = ({
   }
   return isPATCaller(subject)
     ? [
-        prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) }),
+        prepareOwnedStatement({
+          db,
+          statement: recordLivePATUse({ subject, current }),
+        }),
         statement,
         patRecallAudit({ db, subject, current }),
       ]
@@ -553,7 +615,10 @@ export const recallMemories = ({
     const memories = memoriesFromRows(records.value);
     if (Option.isNone(memories)) return memoryUnavailable();
     return jsonResponse(
-      { data: memories.value.map((memory) => Schema.encodeSync(MemoryCodec)(memory)), next: [] },
+      {
+        data: memories.value.map((memory) => Schema.encodeSync(MemoryCodec)(memory)),
+        next: [],
+      },
       HTTP_OK
     );
   }).pipe(Effect.orElseSucceed(memoryUnavailable));

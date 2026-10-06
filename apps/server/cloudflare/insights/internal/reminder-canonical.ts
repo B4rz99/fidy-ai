@@ -1,4 +1,4 @@
-import { DateTime, Effect, Option, Schema } from "effect";
+import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { UserId } from "../../../src/core/identity/contract";
 import { ReminderSchedule, type ReminderScheduleEdit } from "../../../src/core/insights/contract";
 import {
@@ -215,18 +215,23 @@ const readCommitted = (
     ),
     Effect.orElseSucceed(() => Option.none())
   );
+const readRevisionAuthority = (
+  work: ReturnType<typeof bindUser>
+): Effect.Effect<boolean, Cause.UnknownError> =>
+  Effect.tryPromise(() =>
+    work.db
+      .prepare(`SELECT 1 FROM ${work.authority.table} WHERE ${work.authority.predicate}`)
+      .bind(...work.authority.bindings)
+      .first()
+  ).pipe(Effect.map((row) => row !== null));
+
 export const prepareHeldReminderRevision = (
   input: Work & Readonly<{ input: ReminderScheduleEdit }>
 ): Effect.Effect<CanonicalMutationPreparation> =>
   Effect.gen(function* () {
     const work = { ...bindUser(input), input: input.input };
-    const authority = yield* Effect.tryPromise(() =>
-      work.db
-        .prepare(`SELECT 1 FROM ${work.authority.table} WHERE ${work.authority.predicate}`)
-        .bind(...work.authority.bindings)
-        .first()
-    );
-    if (authority === null) return { _tag: "CredentialRefused" } as const;
+    const authority = yield* readRevisionAuthority(work);
+    if (!authority) return { _tag: "CredentialRefused" } as const;
     const schedule = yield* findSchedule({ db: work.db, userId: UserId.make(work.userId) });
     if (Option.isNone(schedule)) {
       return { _tag: "Refused", refusal: refusal(work, "not_found") } as const;
@@ -244,36 +249,39 @@ export const prepareHeldReminderRevision = (
         params: work.authority.bindings,
       }),
     });
-    const mutation: PreparedCanonicalMutation = {
-      requiredScope: work.requiredScope,
-      outcome: {
-        _tag: "Owner",
-        operation: "insights.updateReminderSchedule",
-        collisionKey: Option.some(`reminder:${work.userId}`),
-        guardFacts: Option.none(),
-        read: readCommitted,
-        triggerRefusal: (_ownerWork, kind) =>
-          kind === "audit" ? Option.some(auditLimitRefusal()) : Option.none(),
-      },
-      statements: [
-        ...writes,
-        ...audit({
-          work,
+    return {
+      _tag: "Prepared",
+      mutation: {
+        oauthReview: Option.none(),
+        requiredScope: work.requiredScope,
+        outcome: {
+          _tag: "Owner",
           operation: "insights.updateReminderSchedule",
-          outcome: "accepted",
-          afterOwnerWrite: true,
-        }),
-      ],
-      auditBudget: work.authority.table === "pats" ? "shared" : "owner",
-      commitGuards:
-        work.authority.table === "pats"
-          ? Option.none()
-          : Option.some((input) => [
-              prepareBrowserAuditBudgetGuard({ ...input, owner: "insights" }),
-            ]),
-      guardRefusal: () => Effect.succeed(refusal(work, "validation_failed")),
-    };
-    return { _tag: "Prepared", mutation } as const;
+          collisionKey: Option.some(`reminder:${work.userId}`),
+          guardFacts: Option.none(),
+          read: readCommitted,
+          triggerRefusal: (_ownerWork, kind) =>
+            kind === "audit" ? Option.some(auditLimitRefusal()) : Option.none(),
+        },
+        statements: [
+          ...writes,
+          ...audit({
+            work,
+            operation: "insights.updateReminderSchedule",
+            outcome: "accepted",
+            afterOwnerWrite: true,
+          }),
+        ],
+        auditBudget: work.authority.table === "pats" ? "shared" : "owner",
+        commitGuards:
+          work.authority.table === "pats"
+            ? Option.none()
+            : Option.some((input) => [
+                prepareBrowserAuditBudgetGuard({ ...input, owner: "insights" }),
+              ]),
+        guardRefusal: () => Effect.succeed(refusal(work, "validation_failed")),
+      } satisfies PreparedCanonicalMutation,
+    } as const;
   }).pipe(Effect.orElseSucceed(() => ({ _tag: "Failed" }) as const));
 
 export const readCanonicalReminderSchedule = (

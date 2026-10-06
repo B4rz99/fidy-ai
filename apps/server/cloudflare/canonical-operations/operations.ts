@@ -17,6 +17,8 @@ import {
 } from "../../src/shell/canonical-operations/operations";
 import { userOwnedAgentCapability } from "../../src/shell/canonical-policy/contract";
 import type { HostedCommitFence } from "../agent/contract";
+import type { OAuthConfirmationAttempt } from "../../src/shell/mcp/contract";
+import type { OAuthConfirmationWork } from "../oauth-confirmation/contract";
 import type { CanonicalMutationPreparation, CanonicalWork } from "./contract";
 import { executeCanonicalBatch, executeHostedCanonicalBatch, rawOperation } from "./internal/batch";
 import {
@@ -152,6 +154,7 @@ type OAuthCanonicalWork = Readonly<{
   input: Schema.Json;
   signal: AbortSignal;
   deadlineMilliseconds: number;
+  confirmation: Option.Option<OAuthConfirmationAttempt>;
 }>;
 
 /** Execute an installed canonical operation under live OAuth authority and the bounded User coordination turn. */
@@ -190,8 +193,15 @@ const executeOAuthMutation = ({
       bucket: input.bucket,
       inference: input.inference,
       hostedFence: Option.none(),
+      oauthConfirmation: Option.map(input.confirmation, (attempt) => ({
+        operation: operation.id,
+        input: input.input,
+        attempt,
+      })),
     });
-    return yield* checkpointOAuthResponse({ response, caller });
+    return response.headers.get("fidy-oauth-review") === "1"
+      ? response
+      : yield* checkpointOAuthResponse({ response, caller });
   }).pipe(Effect.orElseSucceed(transactionUnavailable));
 
 const executeOAuthWork = (input: OAuthCanonicalWork): Effect.Effect<Response> =>
@@ -265,6 +275,7 @@ type WorkInput = Readonly<{
   subject: TransactionCaller;
   current: number;
   hostedFence: Option.Option<HostedCommitFence>;
+  oauthConfirmation: Option.Option<OAuthConfirmationWork>;
 }>;
 
 /** Reprepare only the statement whose identical material won a concurrent publication race. */
@@ -275,28 +286,21 @@ const retryStatementPreparation = (
   adapter.prepare(input).pipe(Effect.provideService(HostedInference, unreachableHostedInference));
 
 /** Execute one catalog call through its owner adapter and the shared mutation unit. */
-const executeCall = ({
-  db,
-  work,
-  subject,
-  current,
-  bucket,
-  hostedFence,
-}: WorkInput & Readonly<{ work: Extract<CanonicalWork, { _tag: "Call" }> }>): Effect.Effect<
-  Response,
-  never,
-  HostedInference
-> => {
+const executeCall = (
+  input: WorkInput & Readonly<{ work: Extract<CanonicalWork, { _tag: "Call" }> }>
+): Effect.Effect<Response, never, HostedInference> => {
+  const { work } = input;
   if (operationCatalog.byId.get(work.operation)?.policy.kind === "query") {
-    return executeQueryCall({ db, work, subject, current, bucket, hostedFence }, work);
+    return executeQueryCall(input, work);
   }
   return Effect.gen(function* () {
+    const { db, subject, current, bucket, hostedFence, oauthConfirmation } = input;
     const adapter = canonicalMutationAdapter(work.operation);
     if (Option.isNone(adapter)) return transactionUnavailable();
     const catalogOperation = operationCatalog.byId.get(work.operation);
     if (catalogOperation === undefined) return transactionUnavailable();
-    const input = Schema.decodeUnknownOption(catalogOperation.input)(work.input);
-    if (Option.isNone(input)) {
+    const decodedInput = Schema.decodeUnknownOption(catalogOperation.input)(work.input);
+    if (Option.isNone(decodedInput)) {
       // The call cannot be decoded against the operation it names, so the owner adapter answers for
       // it under its own input classification and no write is attempted.
       return yield* executeSingleCanonicalMutation({
@@ -309,12 +313,11 @@ const executeCall = ({
         present: adapter.value.present,
         retryStatement: Option.none(),
         hostedFence,
+        oauthConfirmation,
       });
     }
-    const ownerWork = { db, subject, current, input: input.value, bucket };
+    const ownerWork = { db, subject, current, input: decodedInput.value, bucket };
     const preparation = yield* adapter.value.prepare(ownerWork);
-    const retryStatement = (): Effect.Effect<CanonicalMutationPreparation> =>
-      retryStatementPreparation(adapter.value, ownerWork);
     const response = yield* executeSingleCanonicalMutation({
       db,
       subject,
@@ -323,9 +326,10 @@ const executeCall = ({
       present: adapter.value.present,
       retryStatement:
         work.operation === "ingestion.submitForExtraction"
-          ? Option.some(retryStatement)
+          ? Option.some(() => retryStatementPreparation(adapter.value, ownerWork))
           : Option.none(),
       hostedFence,
+      oauthConfirmation,
     });
     return work.operation === "ingestion.submitForExtraction" &&
       response.status === httpServiceUnavailable
@@ -405,6 +409,7 @@ const executeWork = (
               current: input.current,
               bucket: input.bucket,
               inference: input.inference,
+              oauthConfirmation: input.oauthConfirmation,
             }),
           onSome: (hostedFence) =>
             executeHostedCanonicalBatch({
@@ -415,6 +420,7 @@ const executeWork = (
               bucket: input.bucket,
               hostedFence,
               inference: input.inference,
+              oauthConfirmation: Option.none(),
             }),
         })
       : executeCall({ ...input, work });
@@ -459,7 +465,13 @@ const oauthWorkRefusal = (input: WorkInput): Option.Option<Effect.Effect<Respons
   if (operation?.policy.access._tag !== "UserOwnedAgentScoped") {
     return Option.some(Effect.succeed(transactionUnavailable()));
   }
-  if (input.work._tag === "Batch" || !requiresOAuthConfirmation(operation)) return Option.none();
+  if (
+    input.work._tag === "Batch" ||
+    !requiresOAuthConfirmation(operation) ||
+    Option.isSome(input.oauthConfirmation)
+  ) {
+    return Option.none();
+  }
   const refusal = oauthConfirmationRefusal({ ...input, subject: input.subject, operation });
   return Option.some(refusal.record().pipe(Effect.flatMap(refusal.respond)));
 };

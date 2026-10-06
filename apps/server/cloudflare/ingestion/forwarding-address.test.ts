@@ -111,6 +111,7 @@ it("issues unpredictable User-specific addresses at verified Consent and returns
       const subject = { id: sessionA, userId: userA, digest };
       const current = yield* Clock.currentTimeMillis;
       const enabled = yield* executeCanonicalWork({
+        oauthConfirmation: Option.none(),
         db,
         subject,
         current,
@@ -193,6 +194,7 @@ it("refuses a cross-User session subject and revoked Consent without disclosing 
       expect(wrong.status).not.toBe(200);
       const current = yield* Clock.currentTimeMillis;
       const wrongMutation = yield* executeCanonicalWork({
+        oauthConfirmation: Option.none(),
         db,
         subject: { id: sessionA, userId: userB, digest },
         current,
@@ -216,6 +218,7 @@ it("refuses a cross-User session subject and revoked Consent without disclosing 
       });
       expect(revoked.status).not.toBe(200);
       const revokedMutation = yield* executeCanonicalWork({
+        oauthConfirmation: Option.none(),
         db,
         subject: { id: sessionA, userId: userA, digest },
         current,

@@ -4,6 +4,7 @@ import {
 } from "../../src/core/canonical-operations/contract";
 import { maximumAtomicBatchCalls } from "../../src/shell/operations/contract";
 import type { BudgetOutcome } from "../budgets/contract";
+import type { OAuthMutationReview } from "../oauth-confirmation/contract";
 import type { TransactionOutcome } from "../transactions/contract";
 import type { KeywordRuleOutcome } from "../categories/contract";
 import type { ErrorCode } from "../../src/shell/public-http/contract";
@@ -71,6 +72,9 @@ export type GuardRefusalWork = Readonly<{
  * `outcome` drives committed readback, and `guardRefusal` decides a proved completion failure.
  */
 export type PreparedCanonicalMutation = Readonly<{
+  /** Absent until an owner supplies exact sensitive effect/revision guards. */
+  oauthReview: Option.Option<OAuthMutationReview>;
+
   /**
    * The exact PAT capability the owner prepared this child under, so an abort or refusal the child
    * owns is recorded and audited against that same child authority. None means the owner prepared

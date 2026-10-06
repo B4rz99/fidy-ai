@@ -6,6 +6,15 @@ import { OAuthClientId, OAuthConnectionId, OAuthCredentialId } from "~/core/oaut
 import type { CatalogOperation, OperationCatalog } from "~/shell/canonical-catalog/contract";
 
 const digestLength = 32;
+/** Standard native-client decision carried privately, separate from canonical arguments. */
+export const OAuthConfirmationAttempt = Schema.Union([
+  Schema.TaggedStruct("Review", {}),
+  Schema.TaggedStruct("Decision", {
+    reference: Schema.String.check(Schema.isUUID()),
+    response: Schema.Json,
+  }),
+]);
+export type OAuthConfirmationAttempt = typeof OAuthConfirmationAttempt.Type;
 /** Private admission facts, not a reusable authorization grant; Core rechecks them at execution. */
 export const OAuthCanonicalAdmission = Schema.Struct({
   userId: UserId,
@@ -19,6 +28,7 @@ export const OAuthCanonicalAdmission = Schema.Struct({
   deadlineMilliseconds: Schema.Int.check(Schema.isGreaterThan(0)),
   operation: CanonicalOperationId,
   input: Schema.Json,
+  confirmation: Schema.optionalKey(OAuthConfirmationAttempt),
 });
 export type OAuthCanonicalAdmission = typeof OAuthCanonicalAdmission.Type;
 

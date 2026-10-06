@@ -140,6 +140,7 @@ const executeCanonicalAdmission = (
       bucket: Option.fromUndefinedOr(environment.STATEMENT_STAGING_BUCKET),
       hostedFence,
       inference,
+      oauthConfirmation: Option.none(),
     });
   });
 
@@ -287,6 +288,7 @@ const privateOAuthCanonicalWork = (
       deadlineMilliseconds: admitted.deadlineMilliseconds,
       operation: admitted.operation,
       input: admitted.input,
+      confirmation: Option.fromUndefinedOr(admitted.confirmation),
       bucket: Option.fromUndefinedOr(input.environment.STATEMENT_STAGING_BUCKET),
       inference,
       subject: {

@@ -214,6 +214,7 @@ export const prepareHeldStatementSubmission = (
     return {
       _tag: "Prepared",
       mutation: {
+        oauthReview: Option.none(),
         requiredScope: Option.none(),
         auditBudget: "shared",
         commitGuards: Option.none(),
@@ -284,6 +285,7 @@ export const statementMutationAdapter = {
       return {
         _tag: "Prepared",
         mutation: {
+          oauthReview: Option.none(),
           requiredScope: callerScope(work.subject),
           statements: publication.statements,
           guardRefusal: guardedStatementRefusal(config, publication),

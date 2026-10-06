@@ -25,7 +25,7 @@ const trackStatement = (
   return tracked;
 };
 
-/** Hold one native Transaction mutation batch after preparation, before D1 executes any statement. */
+/** Hold one protected native mutation batch after preparation, before D1 executes any statement. */
 export const makeMutationCommitGate = (
   database: D1Database
 ): Readonly<{
@@ -40,10 +40,14 @@ export const makeMutationCommitGate = (
         statements.map((statement) => sources.get(statement)?.statement ?? statement)
       );
     const held = gate;
-    const mutatesTransactions = statements.some((statement) =>
-      sources.get(statement)?.sql.includes("INSERT INTO transactions (")
-    );
-    if (Option.isNone(held) || !mutatesTransactions) return run();
+    const protectedMutation = statements.some((statement) => {
+      const sql = sources.get(statement)?.sql ?? "";
+      return (
+        sql.includes("INSERT INTO transactions (") ||
+        sql.includes("DELETE FROM oauth_operation_intents WHERE reference = ?")
+      );
+    });
+    if (Option.isNone(held) || !protectedMutation) return run();
     gate = Option.none();
     held.value.waiting.resolve();
     return held.value.release.promise.then(run).finally(held.value.settled.resolve);

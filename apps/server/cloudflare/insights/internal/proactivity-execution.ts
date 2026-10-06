@@ -21,6 +21,7 @@ import { generateReminderQuestion } from "./reminder-question";
 import { generateOffers } from "./proactivity-offers";
 import { generateBudgetAlerts } from "./budget-generation";
 import { readConsentStatus } from "../../consent/operations";
+import { evaluateBudgetAlerts } from "../../budgets/operations";
 
 /** Category generation runs inside the existing User coordinator, without provider effects or financial backlog replay. */
 export const generateProactivity = (
@@ -35,6 +36,7 @@ export const generateProactivity = (
     if (input.userId !== input.work.userId) return yield* new InsightUnavailable();
     if ((yield* readConsentStatus(input)) !== "Granted") return { _tag: "Done" } as const;
     yield* admitWeeklyResource({ ...input, phase: "generation" });
+    yield* evaluateBudgetAlerts(input);
     yield* generateBudgetAlerts(input);
     yield* generateOffers(input);
     yield* generateReminderQuestion(input);

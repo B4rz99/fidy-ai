@@ -8,6 +8,7 @@ import {
   readNotice as readReminderNoticeOwned,
 } from "./internal/reminder-governor";
 import { requestOffer } from "./internal/proactivity-offers";
+import { evaluateBudgetAlerts, prepareBudgetOptInFence } from "../budgets/operations";
 import {
   findReport as findProactivityReportOwned,
   prepareSettlement,
@@ -168,6 +169,10 @@ export const recordProactivityDecision = (
     if (Option.isNone(prepared)) return false;
     const decision = prepared.value;
     const statements = [...decision.statements];
+    if (input.kind === "budget-threshold" && decision.decision === "accept") {
+      if (!(yield* evaluateBudgetAlerts(input))) return false;
+      statements.unshift(prepareBudgetOptInFence(input));
+    }
     if (input.kind === "manual-entry-reminder") {
       if (decision.decision === "accept" || decision.decision === "continue") {
         statements.push(

@@ -311,7 +311,11 @@ disclosures after Queue delay or window closing, without replacing started or am
 Maintenance repairs lost outbox started checkpoints from channel-owned metadata before discovery.
 The shared content-free protocol and runtime are named Proactivity; Weekly identities retain only
 weekly-specific meaning, and the existing Queue/Workflow resource bindings remain unchanged.
-Retained report identities do not restrict ephemeral offer deletion.
+Retained report identities do not restrict ephemeral offer deletion. Retained Budget reconciliation
+work participates in fair bounded Maintenance discovery and drains under the same User coordinator
+before crossing publication. Budget opt-in first drains pre-opt-in work under its previous
+eligibility and atomically fences the new grant against any remaining reconciliation, so a delayed
+post-commit evaluation cannot turn earlier financial changes into retroactive delivery.
 Installed implementation and test evidence do not constitute issue acceptance, template approval,
 or production enablement.
 

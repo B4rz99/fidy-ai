@@ -12,6 +12,16 @@ import { currentBudgetReport } from "./budget-queries";
 import { currentProactivityGrantQuery } from "../../consent/operations";
 import { newId } from "../../secret-material/operations";
 
+/** Compose this fence before a new category grant: every pre-opt-in financial revision must already be latched under its prior eligibility. */
+export const prepareOptInFence = (
+  input: Readonly<{ db: D1Database; userId: UserId }>
+): D1PreparedStatement =>
+  input.db
+    .prepare(
+      "INSERT INTO budget_mutation_assertion(id,accepted) SELECT 1,CASE WHEN NOT EXISTS (SELECT 1 FROM budget_reconciliation_work WHERE user_id=?) THEN 1 ELSE 0 END ON CONFLICT(id) DO UPDATE SET accepted=excluded.accepted"
+    )
+    .bind(input.userId);
+
 const Marks = Schema.Struct({
   reached_80: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1 })),
   reached_100: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1 })),

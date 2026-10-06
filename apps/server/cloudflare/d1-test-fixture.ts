@@ -208,4 +208,5 @@ export const hostedTurnTestMigrations = [
   "0048_retire_reminder_outbox",
   "0049_proactive_message_transcript",
   "0050_proactivity_offer_recovery",
+  "0051_budget_reconciliation_recovery",
 ] as const;

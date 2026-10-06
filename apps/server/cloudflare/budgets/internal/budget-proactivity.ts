@@ -115,6 +115,9 @@ export const noteEvaluation = (
   Effect.tryPromise(() =>
     input.db.batch([
       input.db
+        .prepare("UPDATE budget_reconciliation_work SET last_evaluated_at_ms=? WHERE user_id=?")
+        .bind(input.now, input.userId),
+      input.db
         .prepare(
           "UPDATE budget_crossing_publications SET last_evaluated_at_ms=? WHERE user_id=? AND materialized_at_ms IS NULL"
         )
@@ -136,7 +139,7 @@ export const discoverUsers = (
     const result = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
-          "SELECT user_id FROM (SELECT user_id,last_evaluated_at_ms,detected_at_ms AS pending_at FROM budget_crossing_publications WHERE materialized_at_ms IS NULL UNION ALL SELECT user_id,last_evaluated_at_ms,created_at_ms AS pending_at FROM budget_first_creation WHERE offer_requested_at_ms IS NULL) GROUP BY user_id ORDER BY min(last_evaluated_at_ms),min(pending_at) LIMIT ?"
+          "SELECT user_id FROM (SELECT user_id,last_evaluated_at_ms,detected_at_ms AS pending_at FROM budget_crossing_publications WHERE materialized_at_ms IS NULL UNION ALL SELECT user_id,last_evaluated_at_ms,created_at_ms AS pending_at FROM budget_first_creation WHERE offer_requested_at_ms IS NULL UNION ALL SELECT user_id,last_evaluated_at_ms,0 FROM budget_reconciliation_work) GROUP BY user_id ORDER BY min(last_evaluated_at_ms),min(pending_at) LIMIT ?"
         )
         .bind(maximumGroups)
         .all()

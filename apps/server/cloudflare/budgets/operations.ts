@@ -22,8 +22,15 @@ import {
   listOwnedBudgets as caps,
   currentBudgetReport as spending,
 } from "./internal/budget-queries";
-import { reconcileBudgetLatches as evaluateAlerts } from "./internal/budget-latches";
+import {
+  reconcileBudgetLatches as evaluateAlerts,
+  prepareOptInFence,
+} from "./internal/budget-latches";
 import { budgetRefusal as refuse } from "./internal/budget-outcome";
+
+/** Commit-time fence for a new Budget grant; pending pre-opt-in financial reconciliation must be fully drained before legal activation. */
+export const prepareBudgetOptInFence: typeof prepareOptInFence = (input) =>
+  prepareOptInFence(input);
 
 /** Bounded pending same-User delivery groups retain the grant captured at detection, including explicit ineligibility. */
 export const readBudgetCrossingGroups: typeof readGroups = (input) => readGroups(input);

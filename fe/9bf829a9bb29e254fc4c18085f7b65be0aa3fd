@@ -1,0 +1,71 @@
+apps/web/ARCHITECTURE.md
+  s_512c8421b353ac::t_dac50b2c4199b4 109-114
+  s_1efb2618b7dd45::t_7dd7e47d55778f 108,115-116
+docs/research/oauth-confirmation-hosts-988.md
+  s_512c8421b353ac::t_975ad644a84984 12-16
+  s_512c8421b353ac::t_dc02f6a03b709f 23-28
+  s_512c8421b353ac::t_cc6afb5cbb04e5 8-11
+  s_1efb2618b7dd45::t_d596602f6a068b 3-7
+  s_512c8421b353ac::t_12195173974b6b 1-2,17-22,29-202
+docs/adr/0033-hosted-mcp-and-oauth-agent-grants.md
+  s_1efb2618b7dd45::t_9c83db528059a4 3,29-32,40,217-223
+  s_512c8421b353ac::t_7e7b0e093f76b3 5-6,24-28,33,52-58,91-95,171-216,224,245-246
+docs/research/oauth-native-opencode-988.md
+  s_512c8421b353ac::t_934f24abd01e6e 9-13
+  s_1efb2618b7dd45::t_a86db89cfc74d7 3-8
+  s_512c8421b353ac::t_7702af35dafb09 67-73,86,148-153
+  s_512c8421b353ac::t_6cd0457f365dff 1-2,14-66,74-85,87-147,154-175
+ARCHITECTURE.md
+  s_1efb2618b7dd45::t_8e996d8edfeed0 101,104-106,108,111
+  s_512c8421b353ac::t_56a58df3edd2bd 107,109-110,112-115
+apps/server/ARCHITECTURE.md
+  s_1efb2618b7dd45::t_14d0a1d61985fc 115-116,119,126-128,139
+  s_512c8421b353ac::t_d07f61dd81161a 120-125,129
+docs/research/oauth-native-opencode-988-evidence.json
+  s_512c8421b353ac::t_7702af35dafb09 16-23,36,43
+  s_512c8421b353ac::t_980f6e379a54e0 1-15,24-35,37-42,44-53
+docs/research/oauth-native-confirmation-988.md
+  s_1efb2618b7dd45::t_f93d51b4c201a6 3-7
+  s_512c8421b353ac::t_ff2b273276710a 58-62,80,91
+  s_512c8421b353ac::t_b327e1c56332bd 13
+  s_512c8421b353ac::t_73a598ef939a13 8-12
+  s_512c8421b353ac::t_286d2b197b6c7b 1-2,14-57,63-79,81-90,92-259,311-317
+  s_512c8421b353ac::t_bef8bbf31d93dd 260-310
+docs/research/oauth-confirmation-latest-hosts-988.md
+  s_512c8421b353ac::t_d25bef57d4d18e 8-11
+  s_512c8421b353ac::t_ff1eb8b58bb253 12-16
+  s_1efb2618b7dd45::t_30c33b27757a43 3-7
+  s_512c8421b353ac::t_ce73c661619efe 1-2,17-26,32-43,50-164,172-241
+  s_512c8421b353ac::t_dc02f6a03b709f 27-31,44-49,165-171
+GLOSSARY.md
+  s_512c8421b353ac::t_94b880f1a1afae 248-251
+SECURITY_STANDARDS.md
+  s_512c8421b353ac::t_c6faf1a262c44f 181,194-216,319-326
+docs/research/oauth-native-confirmation-988-evidence.json
+  s_512c8421b353ac::t_d812f6899dda0a 1-30,32-35,37-44,46-47,49-52,54-58,64-70,74-79
+  s_512c8421b353ac::t_ff2b273276710a 31,36,45,48,53,59-63,71-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fe9bf829a9bb29e254fc4c18085f7b65be0aa3fd",
+  "prompts": {},
+  "sessions": {
+    "s_1efb2618b7dd45": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a111c2-7d69-7571-8dc0-f7134c9120c1",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_512c8421b353ac": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a10c8c-171b-7113-b270-d2198ca46688",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    }
+  }
+}

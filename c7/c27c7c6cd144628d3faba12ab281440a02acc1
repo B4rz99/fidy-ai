@@ -1,0 +1,34 @@
+apps/server/cloudflare/proactivity.test-fixture.ts
+  s_306ab925389860::t_57cc12d352d17c 37,39
+apps/server/cloudflare/budgets/budgets.test.ts
+  s_306ab925389860::t_704b35f2eb1e79 1927,1934
+  s_306ab925389860::t_028f3f54e40a08 1928-1933,1943-1956,2034-2039,2044-2046
+  s_306ab925389860::t_85e3b90af3799b 2040-2043,2047
+apps/server/cloudflare/insights/internal/proactivity-offers.ts
+  s_306ab925389860::t_028f3f54e40a08 72-76,78-81
+  s_306ab925389860::t_6953b11b4eab94 77,82-83,108
+apps/server/cloudflare/insights/proactivity-runtime.test.ts
+  s_306ab925389860::t_c9780bdf43b9e9 778-782,792,799-803,809-812,821-822
+  s_306ab925389860::t_cc649eb4515085 19,24,44
+  s_306ab925389860::t_09b7bf59c8be9e 46,1531
+  s_306ab925389860::t_028f3f54e40a08 772-777,783-791,793-798,804-808,813-820,1122-1155,1157-1164,1169-1202,1210-1221,1223-1232,1234-1247,1249-1269,1271,1275-1278,1281-1412,1416-1419,1422-1459,1532-1534
+  s_306ab925389860::t_f6be17a2c34421 1460-1509,1519-1520,1525-1529
+apps/server/ARCHITECTURE.md
+  s_306ab925389860::t_11ed6eb6d7fd82 318-321
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c7c27c7c6cd144628d3faba12ab281440a02acc1",
+  "prompts": {},
+  "sessions": {
+    "s_306ab925389860": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a109c8-df42-7697-afe7-6376e97c8760",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

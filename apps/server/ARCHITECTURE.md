@@ -296,10 +296,16 @@ instruction/revision/occurrence/outbox primitives are installed. Undecided expir
 bounded Maintenance retention. Canonical reminder reads/edits now share installed HTTP/hosted owner
 selection, live credential/capability guards, optimistic revisions and Audit. Exact authenticated
 category-qualified channel decisions bypass inference and replay against immutable Consent receipts;
-privacy revocation remains reachable after processing withdrawal. These categories still lack
-first-Budget contextual offers, due-work dispatch, provider delivery, operational reminder governor
-integration, and grouped proactive Transcript settlement. They are not an enabled end-to-end
-proactivity path.
+privacy revocation remains reachable after processing withdrawal. Contextual offers, fair bounded
+category discovery, Queue/Workflow delivery and independent reminder attention now use the existing
+User coordinator and one executable category outbox. Authenticated verified channel evidence commits
+atomically with disclosure, governor, grouped InsightEvent lifecycle and exact Agent Transcript
+settlement. Questions and offers retain standalone message Transcript identities without invented
+financial events or requested Turns; same-User replies recover retained message context. Pending or
+uncertain questions do not suspend scheduled reminders, and only definitive failure or expiry permits
+a fresh question identity. Retained report identities do not restrict ephemeral offer deletion.
+Installed implementation and test evidence do not constitute issue acceptance, template approval,
+or production enablement.
 
 Installed code does not by itself enable a channel or provider. In particular, forwarded-email
 routing remains disabled until institution Connection admission and authenticated institutional

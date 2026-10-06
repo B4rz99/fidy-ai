@@ -1,10 +1,11 @@
-import { Effect, Option, Schema } from "effect";
+import { type Cause, Effect, Option, Schema } from "effect";
 import { ReminderStanding } from "../../../src/core/insights/contract";
 import { whatsAppAssociationQuery } from "../../../src/shell/identity/operations";
 import type { WhatsAppTurnAdmission } from "../../whatsapp/contract";
 import type { UserId } from "../../../src/core/identity/contract";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
-import { prepareConsentAction } from "../../consent/operations";
+import { proactivityVerifiedControlQuery } from "../../whatsapp/operations";
+import { currentProactivityGrantQuery, prepareConsentAction } from "../../consent/operations";
 import { InsightUnavailable } from "../contract";
 
 type Scope = Readonly<{ db: D1Database; userId: UserId }>;
@@ -77,6 +78,34 @@ const controlChoice = Schema.Tuple([
   Schema.String.check(Schema.isUUID()),
   Schema.Literals(["continue", "stop"]),
 ]);
+const liveControlQuery = (
+  proof: WhatsAppTurnAdmission,
+  id: string,
+  now: number
+): OwnedStatement => {
+  const control = proactivityVerifiedControlQuery({ proof, id, now });
+  const grant = currentProactivityGrantQuery({
+    userId: proof.userId,
+    kind: "manual-entry-reminder",
+  });
+  return {
+    sql: `SELECT v.user_id,v.delivery_id FROM (${control.sql}) AS v WHERE v.consent_grant_id IN (SELECT id FROM (${grant.sql}))`,
+    params: [...control.params, ...grant.params],
+  };
+};
+const hasControlReceipt = (
+  input: Readonly<{ db: D1Database; proof: WhatsAppTurnAdmission }>,
+  association: OwnedStatement
+): Effect.Effect<boolean, Cause.UnknownError> =>
+  Effect.tryPromise(() =>
+    input.db
+      .prepare(
+        `SELECT 1 FROM reminder_control_receipts WHERE user_id=? AND message_id=? AND choice=? AND EXISTS (${association.sql})`
+      )
+      .bind(input.proof.userId, input.proof.messageId, input.proof.text, ...association.params)
+      .first()
+  ).pipe(Effect.map((row) => row !== null));
+
 export const controlReminder = (
   input: Readonly<{ db: D1Database; proof: WhatsAppTurnAdmission; now: number }>
 ): Effect.Effect<boolean, InsightUnavailable> =>
@@ -88,15 +117,15 @@ export const controlReminder = (
       userId: proof.userId,
       caller: { businessPortfolioId: proof.portfolioId, businessScopedUserId: proof.bsuid },
     });
-    const prior = yield* Effect.tryPromise(() =>
+    const liveControl = liveControlQuery(proof, choice.value[1], input.now);
+    const evidence = yield* Effect.tryPromise(() =>
       input.db
-        .prepare(
-          `SELECT 1 FROM reminder_control_receipts WHERE user_id=? AND message_id=? AND choice=? AND EXISTS (${association.sql})`
-        )
-        .bind(proof.userId, proof.messageId, proof.text, ...association.params)
+        .prepare(`SELECT 1 FROM (${liveControl.sql}) WHERE 1=1`)
+        .bind(...liveControl.params)
         .first()
     );
-    if (prior !== null) return true;
+    if (evidence === null) return false;
+    if (yield* hasControlReceipt(input, association)) return true;
     const accepted = yield* Effect.tryPromise(() =>
       input.db
         .prepare(
@@ -110,7 +139,7 @@ export const controlReminder = (
       input.db.batch([
         input.db
           .prepare(
-            `INSERT INTO reminder_control_receipts(user_id,message_id,choice) SELECT ?,?,? WHERE EXISTS (${association.sql}) AND EXISTS (SELECT 1 FROM reminder_governors WHERE user_id=? AND question_id=?)`
+            `INSERT INTO reminder_control_receipts(user_id,message_id,choice) SELECT ?,?,? WHERE EXISTS (${association.sql}) AND EXISTS (SELECT 1 FROM reminder_governors WHERE user_id=? AND question_id=?) AND EXISTS (${liveControl.sql})`
           )
           .bind(
             proof.userId,
@@ -118,7 +147,8 @@ export const controlReminder = (
             proof.text,
             ...association.params,
             proof.userId,
-            choice.value[1]
+            choice.value[1],
+            ...liveControl.params
           ),
         input.db.prepare(
           "INSERT INTO proactivity_message_assertion(id,accepted) VALUES(1,CASE WHEN changes()=1 THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted=excluded.accepted"

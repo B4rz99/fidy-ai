@@ -1,4 +1,4 @@
-import { Effect, Exit, Option, Schema } from "effect";
+import { DateTime, Effect, Exit, Option, Schema } from "effect";
 import type { Prompt } from "effect/ai";
 import { freezeDeep } from "./deep-freeze";
 import {
@@ -33,15 +33,37 @@ import type {
 import { maximumActiveRequestTokens, maximumHostedProviderAttempts } from "./limits";
 import { projectHostedStructuredContextInternal, projectHostedTextContextInternal } from "./prompt";
 
+// Structured clone drops Effect DateTime's prototype/identity. Copy semantic instants explicitly
+// before freezing the detached context so proactive Transcript codecs still receive DateTime.Utc.
+const copyInstant = (value: DateTime.Utc): DateTime.Utc =>
+  DateTime.makeUnsafe(DateTime.toEpochMillis(value));
+const copyTimestampedEntry = <A extends Readonly<{ occurredAt: DateTime.Utc }>>(entry: A): A => ({
+  ...structuredClone(entry),
+  occurredAt: copyInstant(entry.occurredAt),
+});
 const isolateTextContext = (context: HostedTextContext): HostedTextContext =>
-  freezeDeep(structuredClone(context));
+  freezeDeep({
+    ...structuredClone(context),
+    sections: context.sections.map((section) => {
+      if (section._tag === "TurnStarted") {
+        return { ...structuredClone(section), startedAt: copyInstant(section.startedAt) };
+      }
+      if (section._tag === "Transcript") {
+        return { ...structuredClone(section), entry: copyTimestampedEntry(section.entry) };
+      }
+      if (section._tag === "ProactiveReply") {
+        return { ...structuredClone(section), entry: copyTimestampedEntry(section.entry) };
+      }
+      return structuredClone(section);
+    }),
+  });
 
 // `Option` is immutable and not structured-clone-compatible (its `_tag` is an accessor), so only
 // the mutable entry array is cloned; sharing the prior keeps `Option.match` working downstream.
 const isolateStructuredContext = (context: HostedStructuredContext): HostedStructuredContext =>
   freezeDeep({
     prior: context.prior,
-    entries: structuredClone(context.entries),
+    entries: context.entries.map(copyTimestampedEntry),
   });
 
 type ContinuationState<Continuation> = {

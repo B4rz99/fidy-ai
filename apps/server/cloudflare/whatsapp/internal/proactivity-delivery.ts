@@ -195,6 +195,31 @@ export const recordSend = (
       .run()
   ).pipe(Effect.asVoid);
 
+export const prepareReconciliation = (
+  input: Readonly<{ db: D1Database; admission: WhatsAppStatusAdmission }>
+): D1PreparedStatement => {
+  const status = input.admission;
+  return input.db
+    .prepare(
+      "UPDATE proactivity_whatsapp_claims SET state=CASE WHEN ?='delivered' THEN 'delivered' WHEN state IN ('delivered','rejected') THEN state WHEN ?='failed' THEN 'rejected' ELSE 'accepted' END,provider_message_id=coalesce(provider_message_id,?),delivered_at_ms=CASE WHEN ?='delivered' THEN coalesce(delivered_at_ms,?) ELSE delivered_at_ms END WHERE user_id=? AND correlation_token=? AND business_phone_number_id=? AND send_started_at_ms IS NOT NULL AND (provider_message_id IS NULL OR provider_message_id=?) AND ?+?>=send_started_at_ms AND ?<=? AND state NOT IN ('staged','expired')"
+    )
+    .bind(
+      status.outcome,
+      status.outcome,
+      status.providerMessageId,
+      status.outcome,
+      status.occurredAtMs,
+      status.userId,
+      status.correlationToken,
+      status.businessPhoneNumberId,
+      status.providerMessageId,
+      status.occurredAtMs,
+      timestampPrecisionMs,
+      status.occurredAtMs,
+      status.receivedAtMs + maximumFutureDriftMs
+    );
+};
+
 export const reconcile = (
   input: Readonly<{ db: D1Database; admission: WhatsAppStatusAdmission }>
 ): Effect.Effect<ProactivityChannelReconciliation, WhatsAppUnavailable> =>
@@ -203,14 +228,10 @@ export const reconcile = (
     const raw = yield* attempt(() =>
       input.db
         .prepare(
-          `UPDATE proactivity_whatsapp_claims SET state=CASE WHEN ?='delivered' THEN 'delivered' WHEN state IN ('delivered','rejected') THEN state WHEN ?='failed' THEN 'rejected' ELSE 'accepted' END,provider_message_id=coalesce(provider_message_id,?),delivered_at_ms=CASE WHEN ?='delivered' THEN coalesce(delivered_at_ms,?) ELSE delivered_at_ms END WHERE user_id=? AND correlation_token=? AND business_phone_number_id=? AND send_started_at_ms IS NOT NULL AND (provider_message_id IS NULL OR provider_message_id=?) AND ?+?>=send_started_at_ms AND ?<=? AND state NOT IN ('staged','expired') RETURNING delivery_id,state`
+          `SELECT delivery_id,CASE WHEN ?='delivered' THEN 'delivered' ELSE state END AS state FROM proactivity_whatsapp_claims WHERE user_id=? AND correlation_token=? AND business_phone_number_id=? AND send_started_at_ms IS NOT NULL AND (provider_message_id IS NULL OR provider_message_id=?) AND ?+?>=send_started_at_ms AND ?<=? AND state NOT IN ('staged','expired')`
         )
         .bind(
           status.outcome,
-          status.outcome,
-          status.providerMessageId,
-          status.outcome,
-          status.occurredAtMs,
           status.userId,
           status.correlationToken,
           status.businessPhoneNumberId,
@@ -229,9 +250,11 @@ export const reconcile = (
         state: Schema.Literals(["sending", "accepted", "ambiguous", "rejected", "delivered"]),
       })
     )(raw);
-    return row.state === "delivered"
-      ? ({ _tag: "VerifiedDelivery", userId: status.userId, id: row.delivery_id } as const)
-      : ({ _tag: "Recorded" } as const);
+    if (row.state === "delivered") {
+      return { _tag: "VerifiedDelivery", userId: status.userId, id: row.delivery_id } as const;
+    }
+    yield* attempt(() => prepareReconciliation(input).run());
+    return { _tag: "Recorded" } as const;
   }).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
 
 export const findDeliveryUser = (
@@ -257,6 +280,14 @@ export const findDeliveryUser = (
         );
   }).pipe(Effect.mapError(() => new WhatsAppUnavailable()));
 
+/** Definitive failure evidence for one captured delivery; unknown/accepted sends never authorize a replacement question. */
+export const rejectedDeliveryQuery = (
+  input: Readonly<{ userId: UserId; id: string }>
+): OwnedStatement => ({
+  sql: "SELECT user_id,delivery_id FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=? AND state='rejected'",
+  params: [input.userId, input.id],
+});
+
 export const deliveryQuery = (input: Readonly<{ userId: UserId; id: string }>): OwnedStatement => ({
   sql: "SELECT user_id,delivery_id,role,provider_message_id,send_started_at_ms,delivered_at_ms FROM proactivity_whatsapp_claims WHERE user_id=? AND delivery_id=? AND state='delivered' AND provider_message_id IS NOT NULL AND delivered_at_ms IS NOT NULL",
   params: [input.userId, input.id],
@@ -268,6 +299,31 @@ export const transcriptQuery = (
   return {
     sql: `SELECT v.*,c.text FROM (${base.sql}) AS v JOIN proactivity_whatsapp_claims AS c ON c.user_id=v.user_id AND c.delivery_id=v.delivery_id WHERE c.text IS NOT NULL AND c.send_started_at_ms+?>?`,
     params: [...base.params, retentionMs, input.now],
+  };
+};
+/** A qualified question control is bound to exact verified visible delivery, current association and retained channel evidence. */
+export const controlQuery = (
+  input: Readonly<{ proof: WhatsAppTurnAdmission; id: string; now: number }>
+): OwnedStatement => {
+  const association = whatsAppIdentityQuery({
+    userId: input.proof.userId,
+    portfolioId: input.proof.portfolioId,
+    bsuid: input.proof.bsuid,
+  });
+  return {
+    sql: `SELECT c.user_id,c.delivery_id,c.consent_grant_id FROM proactivity_whatsapp_claims AS c WHERE c.user_id=? AND c.delivery_id=? AND c.role='reminder-question' AND c.state='delivered' AND c.text IS NOT NULL AND c.send_started_at_ms+?>? AND c.delivered_at_ms<=?+? AND c.portfolio_id=? AND c.bsuid=? AND c.business_phone_number_id=? AND EXISTS (${association.sql})`,
+    params: [
+      input.proof.userId,
+      input.id,
+      retentionMs,
+      input.now,
+      input.proof.occurredAtMs,
+      timestampPrecisionMs,
+      input.proof.portfolioId,
+      input.proof.bsuid,
+      input.proof.businessPhoneNumberId,
+      ...association.params,
+    ],
   };
 };
 export const replyQuery = (input: WhatsAppTurnAdmission): OwnedStatement => {

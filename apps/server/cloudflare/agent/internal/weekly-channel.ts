@@ -33,6 +33,7 @@ import {
   insightVerifiedDeliveryQuery,
   insightVerifiedTranscriptQuery,
   prepareInsightRecipient,
+  prepareProactivityStatus,
   proactivityReminderReplyQuery,
   proactivityVerifiedDeliveryQuery,
   proactivityVerifiedTranscriptQuery,
@@ -46,6 +47,7 @@ import {
 import { type AgentEnvironment, AgentUnavailable } from "../contract";
 import {
   prepareGroupedProactiveTranscript,
+  prepareMessageTranscript,
   prepareProactiveTranscript,
 } from "./proactive-transcript";
 
@@ -90,6 +92,31 @@ const reconcileQuestion = (input: Status): Effect.Effect<boolean, AgentUnavailab
     return Option.isSome(owner) && owner.value === userId;
   }).pipe(Effect.mapError(() => new AgentUnavailable()));
 
+const prepareCategorySettlement = (
+  input: Status,
+  id: string
+): ReadonlyArray<D1PreparedStatement> => {
+  const { environment, userId, status } = input;
+  const scope = { db: environment.DB, userId, id };
+  const proof = proactivityVerifiedDeliveryQuery(scope);
+  const transcript = proactivityVerifiedTranscriptQuery({ ...scope, now: status.receivedAtMs });
+  return [
+    prepareProactivityStatus({ db: environment.DB, admission: status }),
+    prepareVerifiedProactivityDisclosure({ ...scope, proof }),
+    ...prepareReminderDelivery({ ...scope, proof }),
+    ...prepareProactivityDeliverySettlement({ ...scope, proof }),
+    prepareMessageTranscript({ ...scope, now: status.receivedAtMs, proof: transcript }),
+    ...prepareGroupedProactiveTranscript({
+      links: proactivityTranscriptLinksQuery({ ...scope, proof }),
+      db: environment.DB,
+      userId,
+      insightEventId: InsightEventId.make(id),
+      now: status.receivedAtMs,
+      proof: proactivityTranscriptOccurrenceQuery({ ...scope, proof: transcript }),
+    }),
+  ];
+};
+
 /** Signed status is rechecked against same-User claims; actual Channel proof composes settlement atomically. */
 export const reconcileWeeklyChannel = (input: Status): Effect.Effect<boolean, AgentUnavailable> =>
   Effect.gen(function* () {
@@ -97,34 +124,8 @@ export const reconcileWeeklyChannel = (input: Status): Effect.Effect<boolean, Ag
     if (yield* reconcileQuestion(input)) return true;
     const category = yield* reconcileProactivityStatus({ db: environment.DB, admission: status });
     if (category._tag === "VerifiedDelivery") {
-      const scope = { db: environment.DB, userId, id: category.id };
-      const text = proactivityTranscriptOccurrenceQuery({
-        ...scope,
-        proof: proactivityVerifiedTranscriptQuery({ ...scope, now: status.receivedAtMs }),
-      });
       yield* Effect.tryPromise(() =>
-        environment.DB.batch([
-          prepareVerifiedProactivityDisclosure({
-            ...scope,
-            proof: proactivityVerifiedDeliveryQuery(scope),
-          }),
-          ...prepareReminderDelivery({ ...scope, proof: proactivityVerifiedDeliveryQuery(scope) }),
-          ...prepareProactivityDeliverySettlement({
-            ...scope,
-            proof: proactivityVerifiedDeliveryQuery(scope),
-          }),
-          ...prepareGroupedProactiveTranscript({
-            links: proactivityTranscriptLinksQuery({
-              ...scope,
-              proof: proactivityVerifiedDeliveryQuery(scope),
-            }),
-            db: environment.DB,
-            userId,
-            insightEventId: InsightEventId.make(category.id),
-            now: status.receivedAtMs,
-            proof: text,
-          }),
-        ])
+        environment.DB.batch([...prepareCategorySettlement(input, category.id)])
       );
       return true;
     }

@@ -13,6 +13,9 @@ import {
 } from "./consent/operations";
 import { findReminderSchedule, recordProactivityDecision } from "./insights/operations";
 import { installTestSchema, isolatedTestDatabases } from "./d1-test-fixture";
+import { makeAgentService } from "./agent/runtime";
+import { WhatsAppTurnAdmission } from "./whatsapp/contract";
+import { approvedWorkersAiModel } from "../src/shell/hosted-inference/contract";
 import { newId } from "./secret-material/operations";
 import { HostedAgentSessionConsentBasis, TranscriptTurnId } from "../src/core/agent/contract";
 import { mintHostedStatementCaller } from "./agent/operations";
@@ -20,6 +23,57 @@ import type { WhatsAppHostedSubject } from "./whatsapp/contract";
 import type { AuthorizedPAT } from "./tokens/contract";
 import type { HostedCanonicalCaller, TransactionSubject } from "./canonical-work/contract";
 import { whatsAppAssociationQuery } from "../src/shell/identity/operations";
+
+/** Observe the genuine hosted provider request after same-User reply admission. Model failure is intentional, never fabricated terminal delivery. */
+export const observeTestHostedContext = (
+  input: Readonly<{ db: D1Database; proof: WhatsAppTurnAdmission }>
+): Effect.Effect<string, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const { db, proof } = input;
+    yield* Effect.tryPromise(() =>
+      db.batch([
+        db
+          .prepare(
+            "INSERT INTO verified_email_credentials(user_id,email_address,verified_at_ms) SELECT id,'reminder-context@example.com',created_at_ms FROM users WHERE id=?"
+          )
+          .bind(proof.userId),
+        db
+          .prepare(
+            "INSERT INTO trial_periods(user_id,started_at_ms,ends_at_ms) SELECT id,created_at_ms,created_at_ms+604800000 FROM users WHERE id=?"
+          )
+          .bind(proof.userId),
+      ])
+    );
+    const prompts: unknown[] = [];
+    const service = makeAgentService({
+      userId: proof.userId,
+      environment: {
+        DB: db,
+        KAPSO_API_KEY: "test-only",
+        AI: {
+          run: (_model, request) => {
+            prompts.push(request);
+            return Promise.reject(new Error("Test model failure after genuine context admission"));
+          },
+        },
+        HOSTED_AI_MODEL: approvedWorkersAiModel,
+      },
+      scheduleRecovery: () => Promise.resolve(),
+    });
+    const body = yield* Schema.encodeEffect(
+      Schema.fromJsonString(Schema.toCodecJson(WhatsAppTurnAdmission))
+    )(proof);
+    const admitted = Option.getOrThrow(
+      service.accept({
+        request: new Request("https://coordinator/hosted-turn/whatsapp", { method: "POST", body }),
+        preceding: Promise.resolve(),
+      })
+    );
+    yield* Effect.tryPromise(() => admitted.response);
+    yield* Effect.tryPromise(() => admitted.settled);
+    if (prompts.length === 0) return yield* Effect.die("Expected actual hosted provider request");
+    return yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Array(Schema.Unknown)))(prompts);
+  });
 
 /** Remove the seeded Session's active authority without fabricating delivery/terminal evidence. */
 export const endTestHostedAuthority = (
@@ -228,7 +282,7 @@ export const withdrawTestProcessingConsent = (
   });
 
 const databaseThrough = (
-  boundary: "BeforeCanonicalAudit" | "Current"
+  boundary: "BeforeCanonicalAudit" | "BeforeOfferRetention" | "Current"
 ): Effect.Effect<D1Database, Cause.UnknownError | Schema.SchemaError> =>
   Effect.gen(function* () {
     const db = yield* Effect.tryPromise(() => proactivityTestDatabases.acquire());
@@ -239,7 +293,11 @@ const databaseThrough = (
       installTestSchema({
         db,
         sources: names
-          .filter((name) => boundary === "Current" || name < "0040")
+          .filter(
+            (name) =>
+              boundary === "Current" ||
+              name < (boundary === "BeforeCanonicalAudit" ? "0040" : "0047")
+          )
           .map((name) => new URL(`./migrations/${name}`, import.meta.url)),
       })
     );
@@ -283,3 +341,5 @@ const databaseThrough = (
 export const proactivityDatabase = databaseThrough("Current");
 /** Independent populated-upgrade baseline; 0040 must be applied separately by the migration test. */
 export const proactivityDatabaseBeforeCanonicalAudit = databaseThrough("BeforeCanonicalAudit");
+/** Populated category delivery predecessor for the offer-reference retention migration. */
+export const proactivityDatabaseBeforeOfferRetention = databaseThrough("BeforeOfferRetention");

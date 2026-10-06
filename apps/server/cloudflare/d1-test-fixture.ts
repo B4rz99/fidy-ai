@@ -204,4 +204,7 @@ export const hostedTurnTestMigrations = [
   "0044_proactivity_channel",
   "0045_budget_messages_transcript",
   "0046_contextual_offers",
+  "0047_proactivity_offer_retention",
+  "0048_retire_reminder_outbox",
+  "0049_proactive_message_transcript",
 ] as const;

@@ -7,7 +7,8 @@ import { Brand, type DateTime, Option } from "effect";
 import { type User, type UserId } from "../../../src/core/identity/contract";
 
 import type { HostedInitialTextContext } from "../../../src/shell/hosted-inference/contract";
-import { type ProactiveReplyContext, hostedContextSections } from "./context-sections";
+import { hostedContextSections } from "./context-sections";
+import type { ProactiveReplyContext } from "../contract";
 
 const makeInitialContext = Brand.nominal<HostedInitialTextContext>();
 

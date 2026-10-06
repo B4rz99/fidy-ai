@@ -4,7 +4,7 @@ import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { listLaunchCategories } from "~/core/categories/operations";
 import type { User } from "~/core/identity/contract";
 import {
-  ProactiveInsightTranscriptEntry,
+  ProactiveTranscriptEntry,
   type TranscriptEntry,
   TranscriptEntryId,
   TranscriptText,
@@ -188,9 +188,9 @@ const projectEvidenceSection = (
       return [
         quotedUserContext(
           "proactive_reply",
-          Schema.encodeSync(
-            Schema.fromJsonString(Schema.toCodecJson(ProactiveInsightTranscriptEntry))
-          )(section.entry)
+          Schema.encodeSync(Schema.fromJsonString(Schema.toCodecJson(ProactiveTranscriptEntry)))(
+            section.entry
+          )
         ),
       ];
     case "ToolResult":

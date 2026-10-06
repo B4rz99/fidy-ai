@@ -1,17 +1,10 @@
 import { type DateTime, Option } from "effect";
 
-import type { User, UserId } from "../../../src/core/identity/contract";
-import type {
-  ProactiveInsightTranscriptEntry,
-  TranscriptEntry,
-} from "../../../src/core/agent/contract";
+import type { User } from "../../../src/core/identity/contract";
+import type { TranscriptEntry } from "../../../src/core/agent/contract";
 import type { HostedContextSection } from "../../../src/shell/hosted-inference/contract";
 
-/** A contextual reference has a User, but never a fabricated requested Turn or session. */
-export type ProactiveReplyContext = Readonly<{
-  userId: UserId;
-  entry: ProactiveInsightTranscriptEntry;
-}>;
+import type { ProactiveReplyContext } from "../contract";
 
 /** The semantic values one hosted context orders into its canonical section list. */
 export type HostedContextSectionInput = Readonly<{

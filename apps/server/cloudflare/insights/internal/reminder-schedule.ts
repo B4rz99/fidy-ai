@@ -264,7 +264,7 @@ const guard = (input: GenerationScope, statement: OwnedStatement): D1PreparedSta
     kind: "manual-entry-reminder",
     grantId: input.snapshot.consentGrantId,
     statement: {
-      sql: `${statement.sql} AND EXISTS (SELECT 1 FROM reminder_schedules AS s JOIN reminder_governors AS g ON g.user_id=s.user_id WHERE s.user_id=? AND s.id=? AND s.version=? AND s.enabled=1 AND s.next_scheduled_at=? AND s.next_scheduled_at<=? AND s.consent_grant_id=? AND json_extract(g.standing_json,'$._tag') IN ('Attentive','QuestionDelivered'))`,
+      sql: `${statement.sql} AND EXISTS (SELECT 1 FROM reminder_schedules AS s JOIN reminder_governors AS g ON g.user_id=s.user_id WHERE s.user_id=? AND s.id=? AND s.version=? AND s.enabled=1 AND s.next_scheduled_at=? AND s.next_scheduled_at<=? AND s.consent_grant_id=? AND json_extract(g.standing_json,'$._tag') IN ('Attentive','QuestionPending','QuestionDelivered'))`,
       params: [
         ...statement.params,
         input.userId,
@@ -328,9 +328,6 @@ const occurrence = (
     )
     .bind(input.userId, input.id, input.snapshot.consentGrantId, input.expiresAt.epochMilliseconds),
   input.db
-    .prepare("INSERT INTO reminder_outbox(user_id,insight_event_id,created_at_ms) VALUES (?,?,?)")
-    .bind(input.userId, input.id, input.now.epochMilliseconds),
-  input.db
     .prepare(
       "INSERT INTO proactivity_reports(delivery_id,user_id,role,consent_grant_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms) VALUES (?,?,'manual-entry-reminder',?,?,?,?,?,?)"
     )
@@ -368,9 +365,7 @@ const eligibleSchedule = (
       return Option.none();
     }
     const standing = yield* findStanding(input);
-    return standing._tag === "Paused" || standing._tag === "QuestionPending"
-      ? Option.none()
-      : found;
+    return standing._tag === "Paused" ? Option.none() : found;
   });
 
 export const materialize = (

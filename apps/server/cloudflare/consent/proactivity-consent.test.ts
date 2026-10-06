@@ -3,9 +3,11 @@ import { afterAll, expect, it } from "vitest";
 import { DateTime, Effect, Option } from "effect";
 import { proactivityDisclosureFor } from "../../src/shell/consent/operations";
 import {
+  activateTestReminder,
   proactivityTestCallers as callers,
   proactivityTestDatabases as databases,
   proactivityTestNow as now,
+  proactivityDatabaseBeforeOfferRetention,
   proactivityDatabase as setup,
   proactivityTestUsers as users,
 } from "../proactivity.test-fixture";
@@ -18,7 +20,117 @@ import {
   sweepProactivityConsentOffers,
 } from "./operations";
 
+import { applyTestMigration } from "../d1-test-fixture";
+import { materializeReminder } from "../insights/operations";
+
 afterAll(() => databases.dispose());
+
+it("expires an undecided contextual offer without losing its frozen delivery identity or blocking unrelated retention", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* proactivityDatabaseBeforeOfferRetention;
+      const schedule = yield* activateTestReminder(db);
+      const occurrence = yield* materializeReminder({
+        db,
+        userId: users[0],
+        id: schedule.id,
+        now: DateTime.makeUnsafe("2026-10-06T23:00:00Z"),
+      });
+      if (occurrence._tag !== "Created") {
+        return yield* Effect.die("Expected populated predecessor message links");
+      }
+      const offer = Option.getOrThrow(
+        yield* createProactivityConsentOffer({
+          db,
+          userId: users[0],
+          caller: callers[0],
+          kind: "manual-entry-reminder",
+          now,
+        })
+      );
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db
+            .prepare(
+              "INSERT INTO proactivity_reports(delivery_id,user_id,role,offer_id,text,scheduled_at_ms,expires_at_ms,time_zone,created_at_ms) VALUES(?,?,'reminder-offer',?,?,?,?,?,?)"
+            )
+            .bind(
+              offer.id,
+              users[0],
+              offer.id,
+              offer.disclosure.text,
+              now.epochMilliseconds,
+              offer.expiresAt.epochMilliseconds,
+              "America/Bogota",
+              now.epochMilliseconds
+            ),
+          db
+            .prepare(
+              "INSERT INTO proactivity_outbox(user_id,delivery_id,created_at_ms) VALUES(?,?,?)"
+            )
+            .bind(users[0], offer.id, now.epochMilliseconds),
+        ])
+      );
+      const other = Option.getOrThrow(
+        yield* createProactivityConsentOffer({
+          db,
+          userId: users[1],
+          caller: callers[1],
+          kind: "budget-threshold",
+          now,
+        })
+      );
+      yield* Effect.tryPromise(() =>
+        applyTestMigration({
+          db,
+          source: new URL("../migrations/0047_proactivity_offer_retention.sql", import.meta.url),
+        })
+      );
+      yield* sweepProactivityConsentOffers({
+        db,
+        nowEpochMs: DateTime.makeUnsafe("2026-10-07T23:00:00Z").epochMilliseconds,
+      });
+      expect(
+        (yield* Effect.tryPromise(() => db.prepare("PRAGMA foreign_key_check").all())).results
+      ).toEqual([]);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT count(*) AS n FROM proactivity_consent_offers WHERE id IN (?,?)")
+            .bind(offer.id, other.id)
+            .first()
+        )
+      ).toEqual({ n: 0 });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT offer_id,text FROM proactivity_reports WHERE user_id=? AND delivery_id=?"
+            )
+            .bind(users[0], offer.id)
+            .first()
+        )
+      ).toEqual({ offer_id: offer.id, text: offer.disclosure.text });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT insight_event_id FROM proactivity_message_events WHERE user_id=? AND delivery_id=?"
+            )
+            .bind(users[0], occurrence.id)
+            .first()
+        )
+      ).toEqual({ insight_event_id: occurrence.id });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT state FROM proactivity_outbox WHERE user_id=? AND delivery_id=?")
+            .bind(users[0], occurrence.id)
+            .first()
+        )
+      ).toEqual({ state: "ready" });
+    })
+  ));
 
 it("keeps Budget and reminder grants independent and refuses undisclosed, foreign and replayed choices without authority", () =>
   Effect.runPromise(

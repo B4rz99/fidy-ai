@@ -92,11 +92,6 @@ export const prepareSettlement = (
       `UPDATE proactivity_outbox SET state='settled' WHERE user_id=? AND delivery_id=? AND EXISTS (SELECT 1 FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=?)`
     )
     .bind(input.userId, input.id, ...input.proof.params, input.userId, input.id),
-  input.db
-    .prepare(
-      `UPDATE reminder_outbox SET state='settled' WHERE user_id=? AND insight_event_id IN (SELECT l.insight_event_id FROM proactivity_message_events AS l JOIN (${input.proof.sql}) AS v ON v.user_id=l.user_id AND v.delivery_id=l.delivery_id WHERE l.user_id=? AND l.delivery_id=?)`
-    )
-    .bind(input.userId, ...input.proof.params, input.userId, input.id),
 ];
 export const transcriptLinksQuery = (
   input: Readonly<{ userId: UserId; id: string; proof: OwnedStatement }>

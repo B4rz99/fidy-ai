@@ -39,7 +39,12 @@ export const discoverProactivityUsers = (
         Schema.isMaxLength(maximumGenerationUsers)
       )
     )(offersRaw.results)).map((row) => row.user_id);
-    return [...new Set([...offers, ...budgets, ...reminders])].slice(0, maximumGenerationUsers);
+    const balanced = Array.from({ length: maximumGenerationUsers }, (_, index) => [
+      ...offers.slice(index, index + 1),
+      ...budgets.slice(index, index + 1),
+      ...reminders.slice(index, index + 1),
+    ]).flat();
+    return [...new Set(balanced)].slice(0, maximumGenerationUsers);
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 /** Rotate attempted work even when processing authority or coordination is unavailable. */
 export const noteProactivityEvaluation = (

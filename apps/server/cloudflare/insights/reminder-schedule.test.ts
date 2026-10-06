@@ -36,7 +36,7 @@ const reminderPersistence = (
   SELECT s.*,
     (SELECT count(*) FROM insight_events WHERE user_id=s.user_id) AS events,
     (SELECT count(*) FROM reminder_occurrence_reports WHERE user_id=s.user_id) AS reports,
-    (SELECT count(*) FROM reminder_outbox WHERE user_id=s.user_id) AS outbox,
+    (SELECT count(*) FROM proactivity_outbox WHERE user_id=s.user_id) AS outbox,
     (SELECT count(*) FROM reminder_schedule_executions WHERE user_id=s.user_id) AS executions,
     (SELECT count(*) FROM reminder_schedule_revisions WHERE user_id=s.user_id) AS revisions,
     (SELECT standing_json FROM reminder_governors WHERE user_id=s.user_id) AS standing_json
@@ -151,7 +151,7 @@ it.each(["budget-threshold", "manual-entry-reminder"] as const)(
     (SELECT count(*) FROM reminder_schedules WHERE user_id=u.id) AS schedules,
     (SELECT count(*) FROM reminder_governors WHERE user_id=u.id) AS governors,
     (SELECT count(*) FROM insight_events WHERE user_id=u.id) AS events,
-    (SELECT count(*) FROM reminder_outbox WHERE user_id=u.id) AS outbox
+    (SELECT count(*) FROM proactivity_outbox WHERE user_id=u.id) AS outbox
     FROM users u WHERE id=?`)
               .bind(input.userId)
               .first()
@@ -258,7 +258,7 @@ it("rolls back reminder occurrence, outbox and execution advancement together wh
       yield* Effect.tryPromise(() =>
         db
           .prepare(
-            "CREATE TRIGGER reject_reminder_outbox BEFORE INSERT ON reminder_outbox BEGIN SELECT RAISE(ABORT,'test_outbox_refusal'); END"
+            "CREATE TRIGGER reject_proactivity_outbox BEFORE INSERT ON proactivity_outbox BEGIN SELECT RAISE(ABORT,'test_outbox_refusal'); END"
           )
           .run()
       );
@@ -275,12 +275,12 @@ it("rolls back reminder occurrence, outbox and execution advancement together wh
       expect(DateTime.formatIso(after.nextScheduledAt)).toBe(
         DateTime.formatIso(schedule.nextScheduledAt)
       );
-      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER reject_reminder_outbox").run());
+      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER reject_proactivity_outbox").run());
       expect((yield* materializeReminder(input))._tag).toBe("Created");
       expect(
         yield* Effect.tryPromise(() =>
           db
-            .prepare("SELECT count(*) AS count FROM reminder_outbox WHERE user_id=?")
+            .prepare("SELECT count(*) AS count FROM proactivity_outbox WHERE user_id=?")
             .bind(input.userId)
             .first()
         )

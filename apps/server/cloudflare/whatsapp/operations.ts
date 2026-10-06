@@ -66,14 +66,23 @@ export const startProactivitySend: typeof proactivity.start = (input) => proacti
 export const recordProactivitySend: typeof proactivity.recordSend = (input) =>
   proactivity.recordSend(input);
 /** Authenticate ingress before calling; same-User/channel/started-send correlation is rechecked here. */
+/** Compose exact authenticated correlated claim evidence with lifecycle, governor and Transcript in the same D1 unit. */
+export const prepareProactivityStatus: typeof proactivity.prepareReconciliation = (input) =>
+  proactivity.prepareReconciliation(input);
 export const reconcileProactivityStatus: typeof proactivity.reconcile = (input) =>
   proactivity.reconcile(input);
 /** Metadata-only routing cannot authorize report content or a provider send. */
 export const findProactivityDeliveryUser: typeof proactivity.findDeliveryUser = (input) =>
   proactivity.findDeliveryUser(input);
+/** Definitive one-delivery failure metadata, never unknown provider outcome, for a fresh question decision. */
+export const proactivityRejectedDeliveryQuery: typeof proactivity.rejectedDeliveryQuery = (input) =>
+  proactivity.rejectedDeliveryQuery(input);
 /** Inert authenticated delivery metadata for atomic Insights/Agent settlement. */
 export const proactivityVerifiedDeliveryQuery: typeof proactivity.deliveryQuery = (input) =>
   proactivity.deliveryQuery(input);
+/** Exact verified question delivery metadata for an authenticated qualified control; no provider claim or Transcript detail escapes. */
+export const proactivityVerifiedControlQuery: typeof proactivity.controlQuery = (input) =>
+  proactivity.controlQuery(input);
 /** Exact channel text within fixed retention; Agent separately guards current processing purpose before copying. */
 export const proactivityVerifiedTranscriptQuery: typeof proactivity.transcriptQuery = (input) =>
   proactivity.transcriptQuery(input);

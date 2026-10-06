@@ -446,8 +446,12 @@ export const contextualInsightQuery = (
       subject: { _tag: "User", userId: input.userId },
       requirement: "active",
       statement: {
-        sql: `SELECT user_id,insight_event_id FROM insight_whatsapp_claims WHERE user_id=? AND portfolio_id=? AND bsuid=? AND provider_message_id=? AND state='delivered' AND EXISTS (${association.sql})`,
+        sql: `SELECT user_id,insight_event_id,delivery_id FROM (SELECT user_id,insight_event_id,insight_event_id AS delivery_id FROM insight_whatsapp_claims WHERE user_id=? AND portfolio_id=? AND bsuid=? AND provider_message_id=? AND state='delivered' UNION ALL SELECT user_id,delivery_id AS insight_event_id,delivery_id FROM proactivity_whatsapp_claims WHERE user_id=? AND portfolio_id=? AND bsuid=? AND provider_message_id=? AND state='delivered') WHERE EXISTS (${association.sql})`,
         params: [
+          input.userId,
+          input.portfolioId,
+          input.bsuid,
+          input.replyToMessageId.value,
           input.userId,
           input.portfolioId,
           input.bsuid,

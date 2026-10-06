@@ -7,11 +7,14 @@ import {
 import type { WeeklyEnvironment } from "../insights/contract";
 import type { WorkersAiEnvironment } from "../ai/contract";
 import {
+  type ProactiveTranscriptEntry,
   type ToolCallId,
   TranscriptText,
   type TranscriptTurnId,
 } from "../../src/core/agent/contract";
 import { UserId } from "../../src/core/identity/contract";
+/** Same-User verified proactive Transcript context; never a fabricated requested Turn or session. */
+export type ProactiveReplyContext = Readonly<{ userId: UserId; entry: ProactiveTranscriptEntry }>;
 /** Maximum time from a hosted reply proposal to authenticated visible delivery, in milliseconds. */
 export const deliveryAcknowledgmentWindowMs = 120_000;
 

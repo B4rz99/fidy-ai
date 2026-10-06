@@ -1,0 +1,23 @@
+bun.lock
+  s_9f41c9e764c0e5::t_6095deacf25102 148,439,441,443,445,447,449,451,453,455,457,459,461,463,465,467,469,471,473,475,477,479,481,483,485,487,489,1387,1567,1929
+package.json
+  s_9f41c9e764c0e5::t_39e0f4c35053e9 80
+scripts/install-workspace.sh
+  s_9f41c9e764c0e5::t_6a9fa39e90b80d 17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d10fa09c00c9090e37e37feea7dcee0c90bab049",
+  "prompts": {},
+  "sessions": {
+    "s_9f41c9e764c0e5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a10e96-cf9a-76d1-94c9-4df034a9844f",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

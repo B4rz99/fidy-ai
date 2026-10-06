@@ -48,7 +48,7 @@ import {
 } from "../../../resource-admission/contract";
 import { type WhatsAppAuthenticatedInbound as WebhookInbound } from "../../../whatsapp/contract";
 import { expireVoiceRefusals } from "../../../whatsapp/operations";
-import { type ConsentIngressEnvironment } from "../contract";
+import { type ConsentDeliveryInput, type ConsentIngressEnvironment } from "../contract";
 
 export type DisclosureSender = (
   request: Readonly<{
@@ -84,14 +84,16 @@ type StoredExchange = typeof PendingExchangeRow.Type & {
 const dayMs = 86_400_000;
 // Initiation must become ineligible before its receipt-based exchange expires, even
 // when Kapso's signed event clock leads our receipt clock by its full tolerance.
-const maxKapsoFutureSkewMs = Duration.toMillis(Duration.minutes(maxWhatsAppFutureTimestampMinutes));
+export const maxKapsoFutureSkewMs = Duration.toMillis(
+  Duration.minutes(maxWhatsAppFutureTimestampMinutes)
+);
 const hourMs = 3_600_000;
 const statusReplyCooldownMs = 60_000;
 const maximumHourlyDisclosures = 500;
 const expiredExchangeSweepLimit = 32;
 const scheduledExchangeSweepLimit = 128;
-const HTTP_OK = 200;
-const HTTP_CONFLICT = 409;
+export const HTTP_OK = 200;
+export const HTTP_CONFLICT = 409;
 const HTTP_UNPROCESSABLE = 422;
 const HTTP_UNAVAILABLE = 503;
 const oneUnit = ResourceAdmissionUnits.make(1);
@@ -193,11 +195,11 @@ type Inbound = WebhookInbound &
       content: Extract<WhatsAppInboundEvent["content"], { _tag: "Text" }>;
     };
   }>;
-const answer = (status: number): Response =>
+export const answer = (status: number): Response =>
   new Response(null, { status, headers: { "cache-control": "no-store" } });
 
 /** Keep foreign I/O failures distinct from an absent result; the ingress maps them to 503. */
-const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, void> =>
+export const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, void> =>
   Effect.tryPromise({ try: run, catch: () => undefined });
 
 const beforeDeliveryState = (
@@ -543,26 +545,24 @@ const recordDecision = (db: D1Database, input: Inbound): Effect.Effect<Response,
     return yield* persistDecision({ db, input, pending: pending.value, decision });
   });
 
-const sameDelivery = (
-  row: typeof DeliveryRow.Type,
-  input: Pick<DeliveryInput, "messageId" | "phoneNumberId" | "occurredAtMs">
-): boolean =>
+export const sameDelivery = ({
+  row,
+  input,
+}: Readonly<{
+  row: typeof DeliveryRow.Type;
+  input: Pick<ConsentDeliveryInput, "messageId" | "phoneNumberId" | "occurredAtMs">;
+}>): boolean =>
   row.message_id === input.messageId &&
   row.phone_number_id === input.phoneNumberId &&
   row.occurred_at_ms === input.occurredAtMs;
 
-type DeliveryInput = Readonly<{
-  correlationToken: DisclosureDeliveryCorrelationToken;
-  phoneNumberId: WhatsAppBusinessPhoneNumberId;
-  messageId: WhatsAppProviderMessageId;
-  occurredAtMs: number;
-  receivedAtMs: number;
-}>;
-
-const findDelivery = (
-  db: D1Database,
-  token: DisclosureDeliveryCorrelationToken
-): Effect.Effect<Option.Option<typeof DeliveryRow.Type>, void> =>
+export const findDelivery = ({
+  db,
+  token,
+}: Readonly<{ db: D1Database; token: DisclosureDeliveryCorrelationToken }>): Effect.Effect<
+  Option.Option<typeof DeliveryRow.Type>,
+  void
+> =>
   attempt(() =>
     db
       .prepare(
@@ -580,39 +580,6 @@ const findDelivery = (
           )
     )
   );
-
-export const recordDelivery = ({
-  db,
-  input,
-}: Readonly<{ db: D1Database; input: DeliveryInput }>): Effect.Effect<Response, void> =>
-  Effect.gen(function* () {
-    const existing = yield* findDelivery(db, input.correlationToken);
-    if (Option.isSome(existing)) {
-      return answer(sameDelivery(existing.value, input) ? HTTP_OK : HTTP_CONFLICT);
-    }
-    const inserted = yield* Effect.exit(
-      attempt(() =>
-        db
-          .prepare(`INSERT INTO pending_consent_delivery
-      (correlation_token, phone_number_id, message_id, occurred_at_ms, received_at_ms, decision_not_before_ms)
-      VALUES (?, ?, ?, ?, ?, ?)`)
-          .bind(
-            input.correlationToken,
-            input.phoneNumberId,
-            input.messageId,
-            input.occurredAtMs,
-            input.receivedAtMs,
-            input.receivedAtMs + maxKapsoFutureSkewMs
-          )
-          .run()
-      )
-    );
-    if (Exit.isSuccess(inserted)) return answer(HTTP_OK);
-    const retry = yield* findDelivery(db, input.correlationToken);
-    return answer(
-      Option.isSome(retry) && sameDelivery(retry.value, input) ? HTTP_OK : HTTP_CONFLICT
-    );
-  });
 
 type NewExchange = Readonly<{
   input: Inbound;

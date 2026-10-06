@@ -1134,18 +1134,18 @@ const PROBES: readonly Probe[] = [
     name: "tooling cannot acquire private Memory storage or free-text projections",
   },
   {
-    name: "native callers cannot acquire private canonical dispatch",
+    name: "native callers cannot acquire private portable canonical implementation",
     expect: {
       kind: "rejected",
       mustContain: [
-        `error cloudflare-imports-portable-canonical-internal: cloudflare/${PROBE_PREFIX}canonical-private/probe.ts → src/shell/canonical-operations/internal/operation-registry.ts`,
+        `error cloudflare-imports-portable-canonical-internal: cloudflare/${PROBE_PREFIX}canonical-private/probe.ts → src/shell/canonical-operations/internal/response-suggestions.ts`,
       ],
     },
     files: [
       {
         path: `cloudflare/${PROBE_PREFIX}canonical-private/probe.ts`,
         source:
-          'import { findCanonicalOperationImplementation } from "~/shell/canonical-operations/internal/operation-registry";\nexport const bypass = findCanonicalOperationImplementation;\n',
+          'import { responseSuggestions } from "~/shell/canonical-operations/internal/response-suggestions";\nexport const bypass = responseSuggestions;\n',
       },
     ],
   },
@@ -1969,14 +1969,17 @@ const PROBES: readonly Probe[] = [
     expect: {
       kind: "rejected",
       mustContain: [
-        `error cloudflare-imports-portable-transactions-internal: cloudflare/transactions/${PROBE_PREFIX}portable-private/probe.ts → src/shell/transactions/internal/continuation.ts`,
+        `error cloudflare-imports-portable-transactions-internal: cloudflare/transactions/${PROBE_PREFIX}portable-private/probe.ts → src/shell/transactions/internal/${PROBE_PREFIX}continuation.ts`,
       ],
     },
     files: [
       {
+        path: `src/shell/transactions/internal/${PROBE_PREFIX}continuation.ts`,
+        source: "export const privateContinuation = 1;\n",
+      },
+      {
         path: `cloudflare/transactions/${PROBE_PREFIX}portable-private/probe.ts`,
-        source:
-          'import { nextTransactionPage } from "../../../src/shell/transactions/internal/continuation";\nexport const privateContinuation = nextTransactionPage;\n',
+        source: `import { privateContinuation } from "../../../src/shell/transactions/internal/${PROBE_PREFIX}continuation";\nexport const leak = privateContinuation;\n`,
       },
     ],
   },

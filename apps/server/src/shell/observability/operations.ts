@@ -12,7 +12,6 @@ import {
 } from "effect";
 import { dual } from "effect/Function";
 import {
-  type DeclaredOutcome,
   DurableTraceContext,
   type ExternalHttpOutcomeAttributes,
   type ExternalHttpRequestAttributes,
@@ -20,9 +19,7 @@ import {
   ProjectedStackFrame,
   type SpanDescriptor,
   type TelemetryAdapter,
-  TelemetryAttempt,
   type TelemetryCode,
-  TelemetryCodeSchema,
   type TelemetryExternalHttpMethod,
   TelemetryHttpStatus,
   type TelemetryHttpStatusClass,
@@ -412,141 +409,7 @@ export const makeTelemetryService = (adapter: TelemetryAdapter): TelemetryServic
   });
 };
 
-/** Side-effect-free telemetry service for narrow optional-observability boundaries. */
-export const DisabledTelemetry: TelemetryService = makeTelemetryService(
-  DisabledTelemetryResource.adapter
-);
-
 /** Makes every telemetry operation a side-effect-free no-op while preserving wrapped Work. */
 export const TelemetryDisabled: Layer.Layer<Telemetry> = Telemetry.layer(
   Effect.succeed(DisabledTelemetryResource)
 );
-
-const ExpectedFailure = Schema.Struct({
-  error: Schema.Struct({ code: TelemetryCodeSchema.error }),
-});
-
-/** Reads the declared error contract out of one canonical failure, ignoring undeclared shapes. */
-export const expectedOutcome = (failure: unknown): Option.Option<DeclaredOutcome> =>
-  Option.map(Schema.decodeUnknownOption(ExpectedFailure)(failure), ({ error }) => ({
-    outcome: "rejected",
-    error: Option.some(error.code),
-    retryable: false,
-  }));
-
-/**
- * The canonical operation span shared by HTTP-dispatched and hosted in-process execution, so both
- * paths remain observable through the same descriptor.
- */
-export const operationDescriptor = (operation: TelemetryCode<"operation">): SpanDescriptor => ({
-  component: "api",
-  operation,
-  trigger: "api",
-  spanOperation: "fidy.operation",
-  workKind: "canonical_operation",
-  metadata: { _tag: "None" },
-});
-
-/** Records a declared canonical rejection as an outcome rather than an unexpected failure. */
-export const recordExpectedOutcome =
-  (telemetry: TelemetryService) =>
-  (failure: unknown): Effect.Effect<void> =>
-    Option.match(expectedOutcome(failure), {
-      onNone: () => Effect.void,
-      onSome: telemetry.recordOutcome,
-    });
-
-/** A checked-in schedule identity and its fixed exhausted-failure classification. */
-export type ScheduledWorkDescriptor = Readonly<{
-  component: TelemetryCode<"component">;
-  schedule: Extract<TelemetryCode<"operation">, `task.${string}`>;
-  operationalError: TelemetryCode<"error">;
-}>;
-
-const recordScheduledWorkExit = (
-  telemetry: TelemetryService,
-  descriptor: ScheduledWorkDescriptor,
-  exit: Exit.Exit<unknown, unknown>
-): Effect.Effect<void> => {
-  if (Exit.isSuccess(exit)) return Effect.void;
-  const cause = exit.cause;
-  if (isPureInterruption(cause)) {
-    return telemetry.recordOutcome({
-      outcome: "interrupted",
-      error: Option.none(),
-      retryable: false,
-    });
-  }
-  if (Cause.hasDies(cause)) {
-    return Effect.all(
-      [
-        telemetry.recordOutcome({
-          outcome: "failed",
-          error: Option.some("unexpected_defect"),
-          retryable: false,
-        }),
-        telemetry.captureFailure({
-          _tag: "Defect",
-          component: descriptor.component,
-          operation: descriptor.schedule,
-          error: "unexpected_defect",
-          cause,
-        }),
-      ],
-      { discard: true }
-    );
-  }
-  return Effect.all(
-    [
-      telemetry.recordOutcome({
-        outcome: "failed",
-        error: Option.some(descriptor.operationalError),
-        retryable: true,
-      }),
-      telemetry.captureFailure({
-        _tag: "ExhaustedOperationalFailure",
-        component: descriptor.component,
-        operation: descriptor.schedule,
-        error: descriptor.operationalError,
-        provider: Option.none(),
-        retryable: true,
-        cause,
-      }),
-    ],
-    { discard: true }
-  );
-};
-
-const observeScheduledWork = <A, E, R>(
-  work: Effect.Effect<A, E, R>,
-  descriptor: ScheduledWorkDescriptor
-): Effect.Effect<A, E, R | Telemetry> =>
-  Effect.gen(function* () {
-    const telemetry = yield* Telemetry;
-    return yield* telemetry.rootSpan(
-      {
-        component: descriptor.component,
-        operation: descriptor.schedule,
-        trigger: "schedule",
-        spanOperation: "task.scheduled",
-        workKind: "scheduled_execution",
-        metadata: { _tag: "Schedule", attempt: TelemetryAttempt.make(1) },
-      },
-      Effect.onExit(work, (exit) => recordScheduledWorkExit(telemetry, descriptor, exit))
-    );
-  });
-
-/**
- * Observes one independently triggered execution as an isolated root. The wrapped exit is unchanged;
- * expected outcomes may be declared by the work, pure shutdown interruption is not captured, and an
- * exhausted failure is captured once with only the descriptor's fixed diagnostic codes.
- */
-export const runScheduledWork: {
-  (
-    descriptor: ScheduledWorkDescriptor
-  ): <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R | Telemetry>;
-  <A, E, R>(
-    work: Effect.Effect<A, E, R>,
-    descriptor: ScheduledWorkDescriptor
-  ): Effect.Effect<A, E, R | Telemetry>;
-} = dual(2, observeScheduledWork);

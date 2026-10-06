@@ -1,4 +1,4 @@
-import { Data, DateTime, Effect, Option, Schema } from "effect";
+import { Data, Effect, Option, Schema } from "effect";
 import { UserId } from "../../../src/core/identity/contract";
 import { Currency } from "../../../src/core/_shared/money";
 import {
@@ -20,7 +20,6 @@ import { prepareOwnedStatement } from "../../database/operations";
 import {
   type QueryCaller,
   callerAuthority,
-  childCaller,
   isPATCaller,
   transactionFailure,
   transactionId,
@@ -29,8 +28,8 @@ import {
 import { RecurringUnavailable } from "../contract";
 import { pageSize } from "./models";
 
-const maximumCursorLength = 1024;
-const Cursor = Schema.Struct({
+export const maximumCursorLength = 1024;
+export const Cursor = Schema.Struct({
   currency: Currency,
   key: Schema.String.check(Schema.isMaxLength(maximumCursorLength)),
   id: RecurringSeriesId,
@@ -96,7 +95,7 @@ const auditStatements = ({
       .bind(...authority.bindings),
   ];
 };
-const invalidCursor = (call: Call): Effect.Effect<Response> =>
+export const invalidCursor = (call: Call): Effect.Effect<Response> =>
   Effect.tryPromise(() => call.db.batch([...auditStatements({ ...call, accepted: false })])).pipe(
     Effect.map(() =>
       transactionFailure({
@@ -201,7 +200,7 @@ const revisionAssertion = (
       "INSERT OR REPLACE INTO recurring_cursor_assertion (id, expected_revision, current_revision) VALUES (1, ?, COALESCE((SELECT evaluated_revision FROM recurring_progress WHERE user_id = ?), 0))"
     )
     .bind(revision, userId);
-const readPage = ({
+export const readPage = ({
   call,
   cursor,
 }: Readonly<{ call: Call; cursor: Option.Option<typeof Cursor.Type> }>): Effect.Effect<Response> =>
@@ -243,26 +242,3 @@ const readPage = ({
     Effect.catchTag("RecurringCursorChanged", () => invalidCursor(call)),
     Effect.orElseSucceed(transactionUnavailable)
   );
-
-export const list = ({
-  db,
-  subject,
-  request,
-}: Readonly<{
-  db: D1Database;
-  subject: QueryCaller;
-  request: Request;
-}>): Effect.Effect<Response> =>
-  Effect.gen(function* () {
-    const call = {
-      db,
-      subject: childCaller({ subject, requiredScope: Option.some("read") }),
-      current: DateTime.toEpochMillis(yield* DateTime.now),
-      accepted: true,
-    };
-    const raw = new URL(request.url).searchParams.get("cursor");
-    if (raw === null) return yield* readPage({ call, cursor: Option.none() });
-    if (raw.length > maximumCursorLength) return yield* invalidCursor(call);
-    const cursor = Schema.decodeOption(Schema.fromJsonString(Cursor))(raw);
-    return yield* Option.isNone(cursor) ? invalidCursor(call) : readPage({ call, cursor });
-  });

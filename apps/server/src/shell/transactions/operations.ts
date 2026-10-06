@@ -1,149 +1,30 @@
-import { nextTransactionPage as nextPage } from "~/shell/transactions/internal/continuation";
-import { DateTime, Effect, Match, Option } from "effect";
+import { Option, Schema } from "effect";
+import { NextOperations } from "~/shell/public-http/contract";
 import {
-  type IneligibleTransactionPair,
-  type InvalidTransactionPeriod,
-  type SameTransactionPair,
-  type TransactionFailure,
-  type TransactionNotFound,
-  type TransactionNotYetOccurred,
-} from "~/core/transactions/contract";
-import { NotFound, ValidationFailed } from "~/shell/public-http/contract";
-import {
-  type SuggestedOperationCaller,
   checkpointSuggestedOperations,
+  freePatCaller,
   suggestOperation,
 } from "~/shell/canonical-operations/operations";
 
-/** What a `TransactionFailure` becomes once it has to leave the process. */
-export type TransactionApiFailure = NotFound | ValidationFailed;
-
-const reversedPeriodRejected = (failure: InvalidTransactionPeriod): ValidationFailed =>
-  ValidationFailed.make({
-    error: {
-      code: "validation_failed",
-      message: "A transaction period must start before it ends. Correct from or to and retry.",
-      fields: [
-        {
-          path: "from",
-          message: `Expected an instant before ${DateTime.formatIso(failure.to)}, got ${DateTime.formatIso(failure.from)}`,
-        },
-      ],
-    },
-    next: [],
-  });
-
-const unknownTransactionRejected = (
-  failure: TransactionNotFound,
-  caller: SuggestedOperationCaller
-): NotFound =>
-  NotFound.make({
-    error: {
-      code: "not_found",
-      message:
-        `No transaction ${failure.transactionId} is in your history. ` +
-        `List transactions to see the ids you can ask for.`,
-    },
-    next: checkpointSuggestedOperations({
+/** An authorized, typed canonical continuation for the next bounded Transaction history page. */
+export const nextTransactionPage = ({
+  cursor,
+  filters,
+  operation,
+}: Readonly<{
+  cursor: string;
+  filters: Readonly<Record<string, string>>;
+  operation: "transactions.listTransactions" | "transactions.searchTransactions";
+}>): typeof NextOperations.Encoded =>
+  Schema.encodeSync(NextOperations)(
+    checkpointSuggestedOperations({
       candidates: [
         suggestOperation({
-          tool: "transactions.listTransactions",
-          args: Option.none(),
-          hint: "List transactions to find the id you meant.",
+          tool: operation,
+          hint: "Continue browsing the next page of your FinancialRecord.",
+          args: Option.some({ query: { ...filters, cursor } }),
         }),
       ],
-      caller,
-    }),
-  });
-
-const futureMovementRejected = (failure: TransactionNotYetOccurred): ValidationFailed =>
-  ValidationFailed.make({
-    error: {
-      code: "validation_failed",
-      message:
-        `A transaction records money that has already moved. ` +
-        `Send an occurredAt at or before ${DateTime.formatIso(failure.now)} and retry.`,
-      fields: [
-        {
-          path: "occurredAt",
-          message: `Expected an instant no later than ${DateTime.formatIso(failure.now)}`,
-        },
-      ],
-    },
-    next: [],
-  });
-
-const invalidPairRejected = (
-  failure: IneligibleTransactionPair | SameTransactionPair
-): ValidationFailed => {
-  const messages = {
-    IneligibleTransactionPair: "The Transactions cannot be linked in their current state.",
-    SameTransactionPair: "Linking requires two different Transaction ids.",
-  } as const;
-  return ValidationFailed.make({
-    error: {
-      code: "validation_failed",
-      message: `${messages[failure._tag]} Correct the pair or list Transactions and retry.`,
-      fields: [],
-    },
-    next: [],
-  });
-};
-
-type TransactionValidationFailure =
-  | IneligibleTransactionPair
-  | InvalidTransactionPeriod
-  | SameTransactionPair
-  | TransactionNotYetOccurred;
-
-type FailureMappingInput<Failure extends TransactionFailure> = {
-  readonly failure: Failure;
-  readonly caller: SuggestedOperationCaller;
-};
-
-function toApiFailure(input: FailureMappingInput<TransactionValidationFailure>): ValidationFailed;
-function toApiFailure(input: FailureMappingInput<TransactionFailure>): TransactionApiFailure;
-function toApiFailure({
-  failure,
-  caller,
-}: FailureMappingInput<TransactionFailure>): TransactionApiFailure {
-  return Match.typeTags<TransactionFailure, TransactionApiFailure>()({
-    IneligibleTransactionPair: invalidPairRejected,
-    InvalidTransactionPeriod: reversedPeriodRejected,
-    SameTransactionPair: invalidPairRejected,
-    TransactionNotFound: (notFound) => unknownTransactionRejected(notFound, caller),
-    // An API-shaped failure the input schema cannot express, because it depends on the clock.
-    TransactionNotYetOccurred: futureMovementRejected,
-  })(failure);
-}
-
-/**
- * Maps a declared Transaction failure to its stable caller-facing API error.
- * Caller facts determine whether any recovery operation may be suggested; the
- * original failure remains in the typed error channel as its corresponding API
- * error.
- */
-export const mapTransactionFailure = ({
-  caller,
-}: {
-  readonly caller: SuggestedOperationCaller;
-}): (<A, R>(
-  self: Effect.Effect<A, TransactionFailure, R>
-) => Effect.Effect<A, TransactionApiFailure, R>) =>
-  Effect.mapError((failure: TransactionFailure) => toApiFailure({ failure, caller }));
-
-/**
- * Preserves a validation-only error channel for operations that cannot encounter
- * missing Transactions, while delegating all translation to the exhaustive mapper.
- */
-export const mapTransactionValidationFailure = ({
-  caller,
-}: {
-  readonly caller: SuggestedOperationCaller;
-}): (<A, R>(
-  self: Effect.Effect<A, TransactionValidationFailure, R>
-) => Effect.Effect<A, ValidationFailed, R>) =>
-  Effect.mapError((failure: TransactionValidationFailure) => toApiFailure({ failure, caller }));
-
-/** Advertise only the authorized bounded continuation for an existing Transaction query. */
-export const nextTransactionPage: typeof nextPage = (input) => nextPage(input);
+      caller: freePatCaller(["read"]),
+    })
+  );

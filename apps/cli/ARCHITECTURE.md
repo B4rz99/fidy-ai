@@ -9,7 +9,7 @@ from the canonical encoded input schema; structured file/stdin input remains the
 ## Runtime and execution
 
 The reviewed runtime is Bun `1.4.3-canary.1`, full revision
-`9bd19c98eacc01530a4e7609bc427abffa87d77e`. Run `bash scripts/install-bun.sh`, then put the reported
+`13a98b0dbd136bcc5c98a8adfb53c909aa3183cc`. Run `bash scripts/install-bun.sh`, then put the reported
 directory first on PATH. `bun run cli login` prompts for the exact recipient, non-empty unique
 scope set and fixed lifetime. Explicit non-secret arguments are also supported:
 
@@ -35,13 +35,13 @@ bun run cli operations executeAtomicBatch --input batch.json --json
 #   "operation":"dashboard.applyDashboardEdit","input":{"payload":{"op":"set-title","title":"Mi tablero"}}}]}}
 ```
 
-The CLI refuses another runtime revision before accessing credentials. The installer uses exact
-GitHub release asset IDs and reviewed SHA-256 digests; it never trusts the moving `canary` URL.
+The CLI refuses another runtime revision before accessing credentials. The installer uses
+a retained repository release and reviewed SHA-256 digests; it never trusts the moving `canary` URL.
 If upstream removes an asset, installation fails closed rather than silently moving to a new
 runtime. Supported installer targets are macOS, glibc Linux and Windows (Git Bash), x64 and arm64.
 The x64 build requires AVX2. Runtime upgrades are deliberate source changes. Until a verified
-stable release supplies local-only Windows persistence, refresh the canary pin manually when
-upstream replaces its assets; each refresh updates all platform IDs/digests, exact revision,
+stable release supplies local-only Windows persistence, retain all six checksum-verified upstream
+archives in a versioned repository release before refreshing the canary pin; each refresh updates all platform digests, exact revision,
 installer/CI paths and recovery guidance, then reruns native conformance and the full CI gate.
 
 The workspace builds server declarations before CLI/web and bundles the executable for Bun.
@@ -87,7 +87,7 @@ and Windows uses Credential Manager with explicit `persist: "local"`.
 Bun 1.4.1 and 1.4.2 hardcode Windows roaming-capable persistence. The pinned build includes upstream
 [1016a7a](https://github.com/oven-sh/bun/commit/1016a7afb04a24098e9530d9a95b91d482d17f20), which adds the
 local-only option. See the [official API](https://bun.sh/docs/runtime/secrets) and the pinned
-[Windows implementation](https://github.com/oven-sh/bun/blob/9bd19c98eacc01530a4e7609bc427abffa87d77e/src/jsc/bindings/SecretsWindows.cpp).
+[Windows implementation](https://github.com/oven-sh/bun/blob/13a98b0dbd136bcc5c98a8adfb53c909aa3183cc/src/jsc/bindings/SecretsWindows.cpp).
 This API is experimental; native-provider evidence is distinct from deterministic adapter fixtures.
 
 One fixed native service is qualified by `https://api.fidyapp.com`. Safe schema-validated grant

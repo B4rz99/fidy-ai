@@ -15,7 +15,7 @@ const recovery =
 export const failures: Readonly<Record<CliFailure["reason"], string>> = {
   Cancelled: "Proceso interrumpido localmente. Si aprobaste un permiso, " + recovery,
   UnsupportedRuntime:
-    "Este CLI requiere el Bun verificado 9bd19c98e. Ejecuta bash scripts/install-bun.sh y usa ese ejecutable.",
+    "Este CLI requiere el Bun verificado 13a98b0db. Ejecuta bash scripts/install-bun.sh y usa ese ejecutable.",
   InvalidInput:
     "Uso: fidy login [--recipient NOMBRE --scopes read,write,dashboard --lifetime DÍAS] | status | logout | commands | GRUPO OPERACIÓN [--input ARCHIVO|- | --CAMPO VALOR ...] [--json]. No mezcles fuentes, repitas flags ni uses nombres desconocidos. Usa GRUPO OPERACIÓN --help para consultar nombres, requisitos, opciones y entrada estructurada. Texto libre o sensible: archivo/stdin, no historial del shell.",
   StorageUnavailable:

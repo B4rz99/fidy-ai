@@ -1,0 +1,140 @@
+apps/server/cloudflare/whatsapp/operations.ts
+  s_306ab925389860::t_99d02bd73c3571 70-71
+  s_306ab925389860::t_ec1199a2c0b074 69
+  s_306ab925389860::t_9ba02e5656a8d9 78-79,84-85
+  s_306ab925389860::t_38218a07363b34 83
+  s_306ab925389860::t_dd583a01871c4a 77
+apps/server/cloudflare/consent/proactivity-consent.test.ts
+  s_306ab925389860::t_1f116a54df01a7 32-41,84-87,114-131
+  s_306ab925389860::t_99d02bd73c3571 25,28-31,42-83,88-113,132-133
+  s_306ab925389860::t_0ba39526dfb458 134
+  s_306ab925389860::t_c31fa175280562 6,23-24
+  s_306ab925389860::t_ea5abd7e92aad6 10
+apps/server/cloudflare/insights/reminder-schedule.test.ts
+  s_306ab925389860::t_efdd9065d8da6f 39,154,261,278,283
+apps/server/cloudflare/migrations/0048_retire_reminder_outbox.sql
+  s_306ab925389860::t_2a0533f4f6f443 1-3
+apps/server/cloudflare/insights/internal/proactivity-work.ts
+  s_306ab925389860::t_99d02bd73c3571 42-45
+  s_306ab925389860::t_efcc3b12e328bf 46-47
+apps/server/src/shell/hosted-inference/contract.ts
+  s_306ab925389860::t_b319b896b08fac 15,31
+apps/server/cloudflare/insights/internal/reminder-schedule.ts
+  s_306ab925389860::t_250d1fb5c1dfa3 267
+  s_306ab925389860::t_a349d0bfddb305 368
+apps/server/cloudflare/agent/internal/proactive-transcript.ts
+  s_306ab925389860::t_d722c34b630f92 4,88
+  s_306ab925389860::t_8dd37e1200645e 12-16
+  s_306ab925389860::t_1bc47c2832fee5 236,247,255,264
+  s_306ab925389860::t_99d02bd73c3571 62-87,127-142,167-206,237-246,256-263
+  s_306ab925389860::t_ce642e8d447f42 207
+apps/server/cloudflare/migrations/0049_proactive_message_transcript.sql
+  s_306ab925389860::t_cc708dac33b891 1-13
+apps/server/cloudflare/agent/contract.ts
+  s_306ab925389860::t_9ba02e5656a8d9 17
+  s_306ab925389860::t_328bde7c4ae07c 10,16
+apps/server/cloudflare/agent/internal/context-sections.ts
+  s_306ab925389860::t_eda0cc02cd38a5 3-4,7
+apps/server/cloudflare/whatsapp/internal/insight-delivery.ts
+  s_306ab925389860::t_4c0a54d0474fa3 449
+  s_306ab925389860::t_0f1459c167a7a3 451-454
+apps/server/cloudflare/d1-test-fixture.ts
+  s_306ab925389860::t_67fc5681c31e68 209
+  s_306ab925389860::t_a0477204ca67eb 208
+  s_306ab925389860::t_37cbc9669a818a 207
+apps/server/cloudflare/insights/internal/reminder-governor.ts
+  s_306ab925389860::t_f1c5f932439275 1,95,108
+  s_306ab925389860::t_5cadc070400254 81-94,96-107,120,128
+  s_306ab925389860::t_71d6c32a612b32 7-8,142,150-151
+  s_306ab925389860::t_9ba02e5656a8d9 121,123-124,127
+apps/server/src/core/agent/contract.ts
+  s_306ab925389860::t_99d02bd73c3571 106-109,111-121,123-127
+  s_306ab925389860::t_c9bbd3e5e71944 105,110,122,128
+apps/server/cloudflare/proactivity.test-fixture.ts
+  s_306ab925389860::t_99d02bd73c3571 296-300,345
+  s_306ab925389860::t_801d9892533eba 16-18,27
+  s_306ab925389860::t_405d39d18b1489 75
+  s_306ab925389860::t_177c39076fc61d 285,344
+  s_306ab925389860::t_5cadc070400254 28-74,76
+  s_306ab925389860::t_e01e03ddf4af41 77
+apps/server/src/shell/hosted-inference/internal/inference.ts
+  s_306ab925389860::t_815d63eac25518 38-39,45-47,58-59
+  s_306ab925389860::t_94e254019c8811 40-43,48-56
+  s_306ab925389860::t_7bb7bb86b4f67e 1,36-37
+  s_306ab925389860::t_559300781f6e32 57
+  s_306ab925389860::t_63341538c6ccdd 66
+apps/server/ARCHITECTURE.md
+  s_306ab925389860::t_06110ee1b3c883 299-308
+apps/server/cloudflare/migrations/0047_proactivity_offer_retention.sql
+  s_306ab925389860::t_55e39c0124c483 1,6-22,46-48
+  s_306ab925389860::t_3efe7c78c5374d 2-5,23-45
+apps/server/cloudflare/agent/operations.ts
+  s_306ab925389860::t_9ba02e5656a8d9 35-36
+  s_306ab925389860::t_99d02bd73c3571 38-39
+  s_306ab925389860::t_5cadc070400254 7
+  s_306ab925389860::t_31b6dbd954f849 5,37
+  s_306ab925389860::t_d75d6f7907113e 34
+apps/server/src/shell/hosted-inference/internal/prompt.ts
+  s_306ab925389860::t_99d02bd73c3571 191-193
+  s_306ab925389860::t_8d38b14a7369cf 7
+apps/server/cloudflare/insights/proactivity-runtime.test.ts
+  s_306ab925389860::t_3d4dcee2324896 774
+  s_306ab925389860::t_815d63eac25518 1030-1032
+  s_306ab925389860::t_9565891905e399 309
+  s_306ab925389860::t_db11f7eb7ee2e5 37
+  s_306ab925389860::t_d20e44c43fd38f 918,924,1122,1128
+  s_306ab925389860::t_cc870677e464d7 976
+  s_306ab925389860::t_d7e2da4f4eeaaa 1040
+  s_306ab925389860::t_b52754b7e4c504 371
+  s_306ab925389860::t_5b03eb0b752994 965
+  s_306ab925389860::t_072b0038c5d027 25,1064
+  s_306ab925389860::t_3b15cc269b5673 203
+  s_306ab925389860::t_7cc8927bee2ac2 758-759
+  s_306ab925389860::t_ec997194453531 894
+  s_306ab925389860::t_94e254019c8811 744-757,877-893
+  s_306ab925389860::t_99d02bd73c3571 333-337,339-352,775-817,929,1103-1108,1110-1112,1114
+  s_306ab925389860::t_b7270cf422bfab 338
+  s_306ab925389860::t_5cadc070400254 23,383-396,399-401,1078-1082
+  s_306ab925389860::t_9ba02e5656a8d9 12,40-44,253-308,857,948-963,977-998,1000-1021,1023-1025,1057-1063,1066-1077,1083-1102
+  s_306ab925389860::t_8dd37e1200645e 13-15,671
+  s_306ab925389860::t_9058ea26e5db36 35-36
+  s_306ab925389860::t_d7c02744eaafc8 1039,1123
+  s_306ab925389860::t_1dd108f60914cc 161-202,204-231,310-319,597-670,672-743,761-773,964,966-975,1026-1029,1033-1038,1041-1056
+  s_306ab925389860::t_4864cdf37fd1b5 856,901,999,1109,1113
+  s_306ab925389860::t_88e75a2a9c2e6a 5,397-398,760,947,1022,1065
+  s_306ab925389860::t_671c06ef51d45f 818
+apps/server/cloudflare/insights/internal/reminder-question.ts
+  s_306ab925389860::t_ec33e89dce5e82 1,12
+  s_306ab925389860::t_5cadc070400254 10-11,13-15,17,20,25-52
+  s_306ab925389860::t_b40334ebfe0493 4
+apps/server/cloudflare/whatsapp/internal/proactivity-delivery.ts
+  s_306ab925389860::t_5cadc070400254 253,255
+  s_306ab925389860::t_99d02bd73c3571 198-220,254,256-257
+  s_306ab925389860::t_d801607fc8677d 221-222,231
+  s_306ab925389860::t_6611e079bf0149 283,290
+  s_306ab925389860::t_9ba02e5656a8d9 284-289,305-327
+  s_306ab925389860::t_31c5d5fc73588d 304,328
+apps/server/cloudflare/agent/internal/weekly-channel.ts
+  s_306ab925389860::t_0fbf9408fab7f7 36
+  s_306ab925389860::t_5cadc070400254 95-117,128
+  s_306ab925389860::t_a8132ed3d80530 118-119
+  s_306ab925389860::t_d43a9b180f65d9 50
+apps/server/cloudflare/agent/internal/working-context.ts
+  s_306ab925389860::t_e461df8a1ec073 10-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "586eceded860b00a56d8f15c0ac1e928671425f1",
+  "prompts": {},
+  "sessions": {
+    "s_306ab925389860": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a109c8-df42-7697-afe7-6376e97c8760",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

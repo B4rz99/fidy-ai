@@ -20,8 +20,8 @@ confirmation, canonical execution, management, refresh, discovery, and native re
 All 181 historical case titles map exactly once, and all 103 original test/describe AST nodes
 match after normalizing only the extracted fixtures' named arguments/defaults. The fixtures
 retain independent databases and coordinators, including the predecessor-migration paths.
-Weights are explicitly historical single-run estimates; splitting maps original per-case durations
-to the new files rather than claiming measurements of their new startup costs. The existing four
+Weights are explicitly single-run estimates, refreshed from the first successful Linux PR run
+after the split and fixture optimization. The existing four
 runners and serial file execution remain unchanged.
 
 Pooled D1 fixtures now prepare their baseline batch inside the same native Worker rather than
@@ -47,7 +47,12 @@ real D1 batches. Payment enrollment arranges the elapsed retained verification c
 of sleeping four seconds and also proves a premature retry stays pending. No behavioral tests
 were deleted: the inspected expensive cases protect distinct isolation, atomicity, recovery,
 resource or protocol failures. The focused fixture/Recurring/payment run passed all 87 tests.
-Fresh Linux PR artifacts are required to establish the resulting job times.
+[First Linux PR run 37545947947](https://github.com/B4rz99/fidy-ai/actions/runs/37545947947)
+passed all four shards: 1,343 executed cases and nine existing environment-gated cases. The native
+host and provider Sandbox gates retain their original conditions. Suite elapsed times were
+254.0/161.8/267.4/310.3s, so the historical weights left a 148.5s spread after the uneven fixture gains.
+The follow-up scheduling estimates use those actual split-file timings. The final PR-head run must
+validate the updated assignment before merge; these two revisions must not be pooled into a median.
 
 ## Linux CI confirmation
 

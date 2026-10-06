@@ -55,6 +55,20 @@ export const prepareProactiveTranscript = (
     },
   }),
 ];
+export const prepareGroupedProactiveTranscript = (
+  input: Parameters<typeof prepareProactiveTranscript>[0] & Readonly<{ links: OwnedStatement }>
+): ReadonlyArray<D1PreparedStatement> => [
+  ...prepareProactiveTranscript(input),
+  prepareProtected({
+    db: input.db,
+    subject: { _tag: "User", userId: input.userId },
+    requirement: "active",
+    statement: {
+      sql: `INSERT OR IGNORE INTO proactive_transcript_event_links(user_id,transcript_id,insight_event_id) SELECT p.user_id,p.id,l.insight_event_id FROM proactive_transcript_entries AS p JOIN (${input.links.sql}) AS l ON l.user_id=p.user_id WHERE p.user_id=? AND p.insight_event_id=? AND p.expires_at_ms>?`,
+      params: [...input.links.params, input.userId, input.insightEventId, input.now],
+    },
+  }),
+];
 /** Read only the verified message referenced by the authenticated WhatsApp request, with no fabricated session history. */
 export const readContextualProactiveReply = (
   input: Readonly<{
@@ -96,7 +110,7 @@ export const readProactiveTranscript = (
         subject: { _tag: "User", userId: input.userId },
         requirement: "active",
         statement: {
-          sql: "SELECT id,insight_event_id,occurred_at_ms,text FROM proactive_transcript_entries WHERE user_id=? AND insight_event_id=? AND expires_at_ms>?",
+          sql: "SELECT p.id,p.insight_event_id,p.occurred_at_ms,p.text FROM proactive_transcript_entries AS p WHERE p.user_id=? AND EXISTS (SELECT 1 FROM proactive_transcript_event_links AS l WHERE l.user_id=p.user_id AND l.transcript_id=p.id AND l.insight_event_id=?) AND p.expires_at_ms>?",
           params: [input.userId, input.insightEventId, input.now],
         },
       }).first()

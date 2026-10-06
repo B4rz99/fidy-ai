@@ -1,5 +1,12 @@
 import { Effect } from "effect";
-import { readGroups } from "./internal/budget-proactivity";
+import {
+  discoverUsers,
+  findFirstCreation,
+  noteEvaluation,
+  prepareFirstOffer,
+  preparePublication,
+  readGroups,
+} from "./internal/budget-proactivity";
 import type { BudgetCrossing } from "../../src/core/budgets/contract";
 import { type BudgetCrossingRead, BudgetCrossingUnavailable } from "./contract";
 import { readCrossings } from "./internal/budget-crossings";
@@ -20,6 +27,21 @@ import { budgetRefusal as refuse } from "./internal/budget-outcome";
 
 /** Bounded pending same-User delivery groups retain the grant captured at detection, including explicit ineligibility. */
 export const readBudgetCrossingGroups: typeof readGroups = (input) => readGroups(input);
+
+/** Acknowledge frozen publication only in the peer's atomic occurrence unit, under its same-User occurrence proof. */
+export const prepareBudgetCrossingPublication: typeof preparePublication = (input) =>
+  preparePublication(input);
+/** Bounded identity-only pending publication hints; no financial facts or execution authority. */
+export const discoverBudgetCrossingUsers: typeof discoverUsers = (input) => discoverUsers(input);
+
+/** Rotate identity-only pending publication hints after an attempted coordinated evaluation. */
+export const noteBudgetCrossingEvaluation: typeof noteEvaluation = (input) => noteEvaluation(input);
+
+/** Observe the original first-Budget milestone once, without reading financial content. */
+export const findFirstBudgetOffer: typeof findFirstCreation = (input) => findFirstCreation(input);
+/** Acknowledge the first-Budget milestone in the atomic contextual request unit under the peer's same-User request proof. */
+export const prepareFirstBudgetOffer: typeof prepareFirstOffer = (input) =>
+  prepareFirstOffer(input);
 
 const matchesCrossingMonth = (
   crossing: BudgetCrossing,

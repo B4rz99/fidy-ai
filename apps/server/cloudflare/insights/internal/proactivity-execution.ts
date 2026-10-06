@@ -13,6 +13,9 @@ import {
 import type { ProactivityChannelClaim, ProactivityChannelScope } from "../../whatsapp/contract";
 import type { ProactivityTemplateSender } from "../../../src/shell/channels/whatsapp/contract";
 import { sendEvidence } from "./weekly-execution";
+import { generateReminderQuestion } from "./reminder-question";
+import { generateOffers } from "./proactivity-offers";
+import { generateBudgetAlerts } from "./budget-generation";
 import { readConsentStatus } from "../../consent/operations";
 
 /** Category generation runs inside the existing User coordinator, without provider effects or financial backlog replay. */
@@ -28,6 +31,9 @@ export const generateProactivity = (
     if (input.userId !== input.work.userId) return yield* new InsightUnavailable();
     if ((yield* readConsentStatus(input)) !== "Granted") return { _tag: "Done" } as const;
     yield* admitWeeklyResource({ ...input, phase: "generation" });
+    yield* generateBudgetAlerts(input);
+    yield* generateOffers(input);
+    yield* generateReminderQuestion(input);
     const schedule = yield* findSchedule(input);
     if (Option.isSome(schedule)) yield* materialize({ ...input, id: schedule.value.id });
     return { _tag: "Done" } as const;

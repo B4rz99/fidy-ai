@@ -60,6 +60,15 @@ export const createProactivityConsentOffer = (
 ): Effect.Effect<Option.Option<ProactivityConsentOffer>, ConsentUnavailable> =>
   proactivity.createOffer(input);
 
+/** Reuse one still-live authenticated category disclosure after interrupted contextual delivery preparation. */
+export const findCurrentProactivityOffer: typeof proactivity.findCurrentOffer = (input) =>
+  proactivity.findCurrentOffer(input);
+
+/** Compose authenticated exact offer delivery evidence with owner settlement; acceptance alone never establishes disclosure. */
+export const prepareVerifiedProactivityDisclosure: typeof proactivity.prepareVerifiedDisclosure = (
+  input
+) => proactivity.prepareVerifiedDisclosure(input);
+
 /** Retain the exact disclosure message id only from authenticated native channel send evidence, never a model or canonical caller. */
 export const recordProactivityConsentDisclosure = (
   input: ProactivityConsentContext &

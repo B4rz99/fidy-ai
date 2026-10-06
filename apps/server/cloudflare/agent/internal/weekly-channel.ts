@@ -1,23 +1,30 @@
 import { DateTime, Effect, Option } from "effect";
 import { InsightEventId } from "../../../src/core/insights/contract";
+import { TranscriptText } from "../../../src/core/agent/contract";
 import { IanaTimeZone } from "../../../src/core/_shared/context";
 import { type UserId } from "../../../src/core/identity/contract";
 import type { WeeklyConsentContext } from "../../consent/contract";
 import {
   hasProactivityConsentChoiceReceipt,
   hasWeeklyConsentChoiceReceipt,
+  prepareVerifiedProactivityDisclosure,
   readProactivityConsentChoiceKind,
   recordWeeklyConsentDisclosure,
 } from "../../consent/operations";
 import {
+  controlManualReminders,
   prepareProactivityDeliverySettlement,
+  prepareReminderDelivery,
+  prepareReminderReply,
   prepareWeeklyDeliverySettlement,
   prepareWeeklyGovernorReply,
   prepareWeeklyQuestionDelivery,
+  proactivityTranscriptLinksQuery,
   proactivityTranscriptOccurrenceQuery,
   readWeeklyThresholds,
   recordProactivityDecision,
   recordWeeklySummaryDecision,
+  requestProactivityConsent,
   requestWeeklySummaryConsent,
 } from "../../insights/operations";
 import { type WhatsAppStatusAdmission, type WhatsAppTurnAdmission } from "../../whatsapp/contract";
@@ -26,6 +33,7 @@ import {
   insightVerifiedDeliveryQuery,
   insightVerifiedTranscriptQuery,
   prepareInsightRecipient,
+  proactivityReminderReplyQuery,
   proactivityVerifiedDeliveryQuery,
   proactivityVerifiedTranscriptQuery,
   readWeeklyReplyChoice,
@@ -36,7 +44,10 @@ import {
   weeklySummaryReplyQuery,
 } from "../../whatsapp/operations";
 import { type AgentEnvironment, AgentUnavailable } from "../contract";
-import { prepareProactiveTranscript } from "./proactive-transcript";
+import {
+  prepareGroupedProactiveTranscript,
+  prepareProactiveTranscript,
+} from "./proactive-transcript";
 
 const accepted = 202;
 const success = 200;
@@ -93,11 +104,20 @@ export const reconcileWeeklyChannel = (input: Status): Effect.Effect<boolean, Ag
       });
       yield* Effect.tryPromise(() =>
         environment.DB.batch([
+          prepareVerifiedProactivityDisclosure({
+            ...scope,
+            proof: proactivityVerifiedDeliveryQuery(scope),
+          }),
+          ...prepareReminderDelivery({ ...scope, proof: proactivityVerifiedDeliveryQuery(scope) }),
           ...prepareProactivityDeliverySettlement({
             ...scope,
             proof: proactivityVerifiedDeliveryQuery(scope),
           }),
-          ...prepareProactiveTranscript({
+          ...prepareGroupedProactiveTranscript({
+            links: proactivityTranscriptLinksQuery({
+              ...scope,
+              proof: proactivityVerifiedDeliveryQuery(scope),
+            }),
             db: environment.DB,
             userId,
             insightEventId: InsightEventId.make(category.id),
@@ -138,6 +158,11 @@ export const recordWeeklyReply = (
 ): Effect.Effect<void, AgentUnavailable> =>
   Effect.tryPromise(() =>
     input.db.batch([
+      prepareReminderReply({
+        db: input.db,
+        userId: input.proof.userId,
+        proof: proactivityReminderReplyQuery(input.proof),
+      }),
       prepareWeeklyGovernorReply({
         db: input.db,
         userId: input.proof.userId,
@@ -168,6 +193,55 @@ const handleProactivityChoice = (
     return new Response(null, { status: saved ? success : refused });
   }).pipe(Effect.mapError(() => new AgentUnavailable()));
 
+const handleWeeklyConsentChoice = (
+  input: WeeklyConsentContext & Readonly<{ choice: string; decisionMessageId: string }>
+): Effect.Effect<Response, AgentUnavailable> =>
+  Effect.gen(function* () {
+    if (yield* hasWeeklyConsentChoiceReceipt(input)) return new Response(null, { status: success });
+    const saved = yield* recordWeeklySummaryDecision(input);
+    return new Response(null, { status: saved ? success : refused });
+  }).pipe(Effect.mapError(() => new AgentUnavailable()));
+
+const handleCategoryCommand = (
+  input: Readonly<{
+    environment: AgentEnvironment;
+    proof: WhatsAppTurnAdmission;
+    now: number;
+    context: WeeklyConsentContext;
+  }>
+): Effect.Effect<Option.Option<Response>, AgentUnavailable> =>
+  Effect.gen(function* () {
+    const { environment, proof, now, context } = input;
+    const command =
+      /^(?:activar|reactivar) (?:los )?(recordatorios|alertas de presupuesto)$/iu.exec(
+        proof.text.trim()
+      );
+    if (command === null) return Option.none();
+    yield* Effect.tryPromise(() =>
+      environment.DB.batch([
+        prepareInsightRecipient({
+          db: environment.DB,
+          userId: proof.userId,
+          recipient: {
+            portfolioId: proof.portfolioId,
+            bsuid: proof.bsuid,
+            businessPhoneNumberId: proof.businessPhoneNumberId,
+          },
+          receivedAtMs: now,
+        }),
+      ])
+    );
+    yield* requestProactivityConsent({
+      ...context,
+      kind:
+        command[1]?.toLowerCase() === "recordatorios"
+          ? "manual-entry-reminder"
+          : "budget-threshold",
+      messageId: proof.messageId,
+    });
+    return Option.some(new Response(null, { status: accepted }));
+  }).pipe(Effect.mapError(() => new AgentUnavailable()));
+
 /** Explicit commands and exact disclosure-qualified choices never become inferred Consent or invented Turns. */
 export const handleWeeklyChoice = (
   input: Readonly<{ environment: AgentEnvironment; proof: WhatsAppTurnAdmission; now: number }>
@@ -183,28 +257,26 @@ export const handleWeeklyChoice = (
     };
     const replyChoice = yield* readWeeklyReplyChoice({ db: environment.DB, proof, now });
     const choice = Option.getOrElse(replyChoice, () => proof.text);
+    if (choice.startsWith("reminder:")) {
+      const saved = yield* controlManualReminders({
+        db: environment.DB,
+        proof: { ...proof, text: TranscriptText.make(choice) },
+        now,
+      });
+      return Option.some(new Response(null, { status: saved ? success : refused }));
+    }
     if (choice.startsWith("proactivity:")) {
       return Option.some(
         yield* handleProactivityChoice({ context, choice, decisionMessageId: proof.messageId })
       );
     }
     if (choice.startsWith("weekly:")) {
-      if (
-        yield* hasWeeklyConsentChoiceReceipt({
-          ...context,
-          choice,
-          decisionMessageId: proof.messageId,
-        })
-      ) {
-        return Option.some(new Response(null, { status: success }));
-      }
-      const saved = yield* recordWeeklySummaryDecision({
-        ...context,
-        choice,
-        decisionMessageId: proof.messageId,
-      });
-      return Option.some(new Response(null, { status: saved ? success : refused }));
+      return Option.some(
+        yield* handleWeeklyConsentChoice({ ...context, choice, decisionMessageId: proof.messageId })
+      );
     }
+    const categoryCommand = yield* handleCategoryCommand({ ...input, context });
+    if (Option.isSome(categoryCommand)) return categoryCommand;
     if (!/^(?:activar|reactivar) (?:el )?resumen semanal$/iu.test(proof.text.trim())) {
       return Option.none();
     }

@@ -20,6 +20,7 @@ export type ProactivityConsentContext = Readonly<{
 /** Delivered exact disclosure with exchange-qualified explicit choices. */
 export type ProactivityConsentOffer = Readonly<{
   id: ConsentRecordId;
+  expiresAt: DateTime.Utc;
   disclosure: DisclosureSnapshot;
   acceptChoice: string;
   declineChoice: string;

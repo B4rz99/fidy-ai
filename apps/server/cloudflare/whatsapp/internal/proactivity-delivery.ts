@@ -18,6 +18,7 @@ import {
   type ProactivityChannelScope,
   type ProactivityChannelStage,
   type WhatsAppStatusAdmission,
+  type WhatsAppTurnAdmission,
   WhatsAppUnavailable,
 } from "../contract";
 
@@ -267,6 +268,25 @@ export const transcriptQuery = (
   return {
     sql: `SELECT v.*,c.text FROM (${base.sql}) AS v JOIN proactivity_whatsapp_claims AS c ON c.user_id=v.user_id AND c.delivery_id=v.delivery_id WHERE c.text IS NOT NULL AND c.send_started_at_ms+?>?`,
     params: [...base.params, retentionMs, input.now],
+  };
+};
+export const replyQuery = (input: WhatsAppTurnAdmission): OwnedStatement => {
+  const association = whatsAppIdentityQuery({
+    userId: input.userId,
+    portfolioId: input.portfolioId,
+    bsuid: input.bsuid,
+  });
+  return {
+    sql: `SELECT c.user_id,c.delivery_id,c.role,c.delivered_at_ms,? AS occurred_at_ms FROM proactivity_whatsapp_claims AS c WHERE c.user_id=? AND c.provider_message_id=? AND c.state='delivered' AND c.role IN ('manual-entry-reminder','reminder-question') AND c.portfolio_id=? AND c.bsuid=? AND c.business_phone_number_id=? AND EXISTS (${association.sql})`,
+    params: [
+      input.occurredAtMs,
+      input.userId,
+      Option.getOrElse(input.replyToMessageId, () => ""),
+      input.portfolioId,
+      input.bsuid,
+      input.businessPhoneNumberId,
+      ...association.params,
+    ],
   };
 };
 export const sweepEvidence = (

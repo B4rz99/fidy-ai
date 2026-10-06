@@ -1,4 +1,4 @@
-import { Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
 import {
   ConsentRecord,
   ConsentRecordId,
@@ -182,11 +182,70 @@ export const createOffer = (
     return Option.some({
       id,
       disclosure,
+      expiresAt: DateTime.makeUnsafe(input.now.epochMilliseconds + offerLifetimeMs),
       acceptChoice: `${prefix}:accept`,
       declineChoice: `${prefix}:decline`,
       revokeChoice: `${prefix}:revoke`,
     });
   }).pipe(Effect.mapError(() => new ConsentUnavailable()));
+
+/** Reuse an unexpired exact category offer after a lost materialization acknowledgement. */
+export const findCurrentOffer = (
+  input: ProactivityConsentContext
+): Effect.Effect<Option.Option<ProactivityConsentOffer>, ConsentUnavailable> =>
+  Effect.gen(function* () {
+    const raw = yield* Effect.tryPromise(() =>
+      channelAction(
+        input,
+        {
+          sql: "SELECT id,disclosure_json,expires_at_ms FROM proactivity_consent_offers WHERE user_id=? AND kind=? AND portfolio_id=? AND bsuid=? AND decision IS NULL AND expires_at_ms>?",
+          params: [
+            input.userId,
+            input.kind,
+            input.caller.businessPortfolioId,
+            input.caller.businessScopedUserId,
+            input.now.epochMilliseconds,
+          ],
+        },
+        false
+      ).first()
+    );
+    if (raw === null) return Option.none();
+    const row = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({
+        expires_at_ms: Schema.DateTimeUtcFromMillis,
+        id: ConsentRecordId,
+        disclosure_json: Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot)),
+      })
+    )(raw);
+    const prefix = `proactivity:${input.kind}:${row.id}`;
+    return Option.some({
+      id: row.id,
+      expiresAt: row.expires_at_ms,
+      disclosure: row.disclosure_json,
+      acceptChoice: `${prefix}:accept`,
+      declineChoice: `${prefix}:decline`,
+      revokeChoice: `${prefix}:revoke`,
+    });
+  }).pipe(Effect.mapError(() => new ConsentUnavailable()));
+
+export const prepareVerifiedDisclosure = (
+  input: Readonly<{ db: D1Database; userId: UserId; id: string; proof: OwnedStatement }>
+): D1PreparedStatement =>
+  input.db
+    .prepare(
+      `UPDATE proactivity_consent_offers SET disclosure_message_id=(SELECT v.provider_message_id FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=?) WHERE user_id=? AND id=? AND disclosure_message_id IS NULL AND decision IS NULL AND EXISTS (SELECT 1 FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=? AND ((kind='budget-threshold' AND v.role='budget-offer') OR (kind='manual-entry-reminder' AND v.role='reminder-offer')))`
+    )
+    .bind(
+      ...input.proof.params,
+      input.userId,
+      input.id,
+      input.userId,
+      input.id,
+      ...input.proof.params,
+      input.userId,
+      input.id
+    );
 
 export const discloseOffer = (
   input: ProactivityConsentContext &

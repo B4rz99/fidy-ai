@@ -18,6 +18,63 @@ import { WhatsAppTurnAdmission } from "../whatsapp/contract";
 import { makeAgentService } from "./runtime";
 
 afterAll(() => proactivityTestDatabases.dispose());
+it("an authenticated reminder request creates a contextual offer without inference or implied opt-in", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* proactivityDatabase;
+      const now = yield* DateTime.now;
+      const service = makeAgentService({
+        userId: proactivityTestUsers[0],
+        environment: {
+          DB: db,
+          AI: { run: (): Promise<never> => Promise.reject(new Error("Offer must not infer")) },
+          HOSTED_AI_MODEL: approvedWorkersAiModel,
+        },
+        scheduleRecovery: () => Promise.resolve(),
+      });
+      const admission = yield* Schema.decodeEffect(WhatsAppTurnAdmission)({
+        userId: proactivityTestUsers[0],
+        portfolioId: proactivityTestCallers[0].businessPortfolioId,
+        bsuid: proactivityTestCallers[0].businessScopedUserId,
+        businessPhoneNumberId: "123456789",
+        messageId: "request-reminders",
+        occurredAtMs: now.epochMilliseconds,
+        receivedAtMs: now.epochMilliseconds,
+        text: "activar recordatorios",
+      });
+      const body = yield* Schema.encodeEffect(
+        Schema.fromJsonString(Schema.toCodecJson(WhatsAppTurnAdmission))
+      )(admission);
+      const request = new Request("https://coordinator/hosted-turn/whatsapp", {
+        method: "POST",
+        body,
+      });
+      const response = yield* Effect.tryPromise(
+        () => Option.getOrThrow(service.accept({ request, preceding: Promise.resolve() })).response
+      );
+      expect(response.status).toBe(202);
+      expect(
+        Option.isNone(
+          yield* findProactivityConsentGrant({
+            db,
+            userId: admission.userId,
+            kind: "manual-entry-reminder",
+          })
+        )
+      ).toBe(true);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT count(*) AS n FROM proactivity_offer_requests WHERE user_id=? AND kind='manual-entry-reminder'"
+            )
+            .bind(admission.userId)
+            .first()
+        )
+      ).toEqual({ n: 1 });
+    })
+  ));
+
 it.each(["budget-threshold", "manual-entry-reminder"] as const)(
   "routes exact authenticated %s choices before model execution, retaining replay receipts without extra legal events",
   (kind) =>

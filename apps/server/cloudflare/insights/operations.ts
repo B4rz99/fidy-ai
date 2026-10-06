@@ -1,4 +1,19 @@
-import { prepareSettlement, transcriptOccurrenceQuery } from "./internal/proactivity-reports";
+import {
+  controlReminder as controlReminderOwned,
+  findGovernor as findReminderGovernorOwned,
+  prepareDelivery as prepareReminderDeliveryOwned,
+  prepareNoticeCompletion as prepareReminderNoticeCompletionOwned,
+  prepareNotice as prepareReminderNoticeOwned,
+  prepareReply as prepareReminderReplyOwned,
+  readNotice as readReminderNoticeOwned,
+} from "./internal/reminder-governor";
+import { requestOffer } from "./internal/proactivity-offers";
+import {
+  findReport as findProactivityReportOwned,
+  prepareSettlement,
+  transcriptLinksQuery,
+  transcriptOccurrenceQuery,
+} from "./internal/proactivity-reports";
 
 import {
   prepareCanonicalReminderRevision as prepareCanonicalReminderRevisionOwned,
@@ -65,12 +80,47 @@ import {
   insightRefusal as refuse,
 } from "./internal/insight-store";
 
+/** Apply only an authenticated exact current-question continue/stop choice; operational state never grants or revokes legal Consent. */
+export const controlManualReminders: typeof controlReminderOwned = (input) =>
+  controlReminderOwned(input);
+
+/** Observe independent reminder-only attention under current processing Consent. */
+export const findReminderGovernor: typeof findReminderGovernorOwned = (input) =>
+  findReminderGovernorOwned(input);
+/** Compose one-shot verified reminder/question evidence with exact Transcript settlement. */
+export const prepareReminderDelivery: typeof prepareReminderDeliveryOwned = (input) =>
+  prepareReminderDeliveryOwned(input);
+/** Reset only from same-User channel-qualified reminder/question reply evidence. */
+export const prepareReminderReply: typeof prepareReminderReplyOwned = (input) =>
+  prepareReminderReplyOwned(input);
+/** Bind an operational pause mention to an admitted User request, never a scheduler Turn. */
+export const prepareReminderPauseNotice: typeof prepareReminderNoticeOwned = (input) =>
+  prepareReminderNoticeOwned(input);
+/** Observe only the notice bound to this admitted same-User Turn. */
+export const readReminderPauseNotice: typeof readReminderNoticeOwned = (input) =>
+  readReminderNoticeOwned(input);
+/** Mark the mention complete only from verified exact visible assistant evidence. */
+export const prepareReminderPauseNoticeCompletion: typeof prepareReminderNoticeCompletionOwned = (
+  input
+) => prepareReminderNoticeCompletionOwned(input);
+
+/** Record an authenticated exact category request for durable contextual disclosure, never a legal grant. */
+export const requestProactivityConsent: typeof requestOffer = (input) => requestOffer(input);
+
+/** Observe one same-User frozen category payload under current processing Consent; this snapshot grants no send authority. */
+export const findProactivityReport: typeof findProactivityReportOwned = (input) =>
+  findProactivityReportOwned(input);
+
 /** Settle linked occurrences and outbox from authenticated channel evidence in the caller's atomic Transcript unit. */
 export const prepareProactivityDeliverySettlement: typeof prepareSettlement = (input) =>
   prepareSettlement(input);
 /** Supply the primary retained occurrence and exact channel text without exposing Insights persistence. */
 export const proactivityTranscriptOccurrenceQuery: typeof transcriptOccurrenceQuery = (input) =>
   transcriptOccurrenceQuery(input);
+
+/** All same-User occurrence links for one verified message, for atomic Agent-owned Transcript linking. */
+export const proactivityTranscriptLinksQuery: typeof transcriptLinksQuery = (input) =>
+  transcriptLinksQuery(input);
 
 /** Read instructions under the canonical caller's live authority and required Audit. */
 export const readCanonicalReminderSchedule: typeof readCanonicalReminderScheduleOwned = (input) =>

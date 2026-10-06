@@ -78,6 +78,9 @@ export const proactivityVerifiedDeliveryQuery: typeof proactivity.deliveryQuery 
 export const proactivityVerifiedTranscriptQuery: typeof proactivity.transcriptQuery = (input) =>
   proactivity.transcriptQuery(input);
 /** Bounded independent content erasure preserves one-shot correlation tombstones. */
+/** Correlate an ordinary authenticated reply to only this User's verified reminder/question message. */
+export const proactivityReminderReplyQuery: typeof proactivity.replyQuery = (input) =>
+  proactivity.replyQuery(input);
 export const sweepProactivityChannelEvidence: typeof proactivity.sweepEvidence = (input) =>
   proactivity.sweepEvidence(input);
 

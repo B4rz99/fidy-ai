@@ -1,5 +1,5 @@
 import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
-import { readWeeklyPauseNotice } from "../../insights/operations";
+import { readReminderPauseNotice, readWeeklyPauseNotice } from "../../insights/operations";
 import type { WhatsAppDocument } from "../../../src/shell/channels/whatsapp/contract";
 import type { OutboundHttpService } from "../../../src/shell/outbound-http/operations";
 import {
@@ -1845,9 +1845,16 @@ const proposeDelivery = (input: Parameters<typeof proposeChannelDelivery>[0]): P
         userId: input.userId,
         turnId: input.turnId,
       });
-      const answer = Option.isNone(notice)
-        ? input.answer
-        : yield* Schema.decodeEffect(TranscriptText)(`${notice.value}\n\n${input.answer}`);
+      const reminderNotice = yield* readReminderPauseNotice({
+        db: input.db,
+        userId: input.userId,
+        turnId: input.turnId,
+      });
+      const notices = [...Option.toArray(notice), ...Option.toArray(reminderNotice)];
+      const answer =
+        notices.length === 0
+          ? input.answer
+          : yield* Schema.decodeEffect(TranscriptText)(`${notices.join("\n")}\n\n${input.answer}`);
       return yield* Effect.tryPromise(() => proposeChannelDelivery({ ...input, answer }));
     })
   );

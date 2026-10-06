@@ -21,8 +21,8 @@ All 181 historical case titles map exactly once, and all 103 original test/descr
 match after normalizing only the extracted fixtures' named arguments/defaults. The fixtures
 retain independent databases and coordinators, including the predecessor-migration paths.
 Weights are explicitly single-run estimates, refreshed from the first successful Linux PR run
-after the split and fixture optimization. The existing four
-runners and serial file execution remain unchanged.
+after the split and fixture optimization. The existing four runners remain unchanged. The initial measurements retained serial file
+execution; the final concurrency probe below uses two isolated file processes per runner.
 
 Pooled D1 fixtures now prepare their baseline batch inside the same native Worker rather than
 making one synchronous Miniflare proxy call per statement. Every fresh binding still executes
@@ -57,10 +57,10 @@ validate the updated assignment before merge; these two revisions must not be po
 
 The next [Linux run 37546743993](https://github.com/B4rz99/fidy-ai/actions/runs/37546743993)
 passed, but adapter jobs still took 304/212/311/300s and infrastructure took 424s. Adapter file
-execution summed to 931.2s; even ideal packing at that observed cost takes 232.8s across the
+execution summed to 931.2s; even ideal serial-file packing at that observed cost takes 232.8s across the
 existing four runners, before dependency installation and module loading. Three-minute jobs
 with about 30s of setup require at most 600s of aggregate validation, roughly 36% less work.
-This is a measured limit for the current implementation, not proof that further optimization
+This is a measured limit for serial file execution, not proof that further optimization
 is impossible. Runner variance means weights alone cannot guarantee a three-minute deadline.
 
 The infrastructure conformance script tests accounted for at least 370s of deliberate waiting:
@@ -78,7 +78,17 @@ behavioral path refusal checks, and duplicate missing-configuration tests become
 behavioral check. Hosted-turn fixtures seed eight ordered writes in one native D1 batch instead
 of eight requests; the tests still receive fresh independent bindings and unchanged seed facts.
 These removals do not justify deleting distinct credential, atomicity or recovery failures merely
-to meet a runtime target. The final Linux run must establish actual post-change job durations.
+to meet a runtime target. The infrastructure fix passed in [run 37547940591](https://github.com/B4rz99/fidy-ai/actions/runs/37547940591)
+in 101s for the complete job, down from 424s. That run's static gate caught a new test using the
+Node subprocess API; the follow-up uses Effect's scoped process API and passes local typechecking
+and all six native conformance cases.
+
+A subsequent concurrency probe passed all 384 cases in one adapter shard in 73.4s locally with
+two file processes. The selected Vitest release uses isolated forks: each file owns independent
+Miniflare channels and binding pools. The full-suite probe passed all 1,342 executed cases with nine unchanged provider-gated skips
+and zero failures in 288.3s locally. The final Linux run must validate this bounded concurrency
+before merge. This uses the same four runners and their existing hardware;
+no runner scaling or concurrent cases are introduced.
 
 ## Linux CI confirmation
 

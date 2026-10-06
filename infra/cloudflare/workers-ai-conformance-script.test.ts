@@ -1,8 +1,8 @@
-import { spawnSync } from "node:child_process";
-import { it } from "vitest";
-import { BunFileSystem } from "@effect/platform-bun";
+import { BunServices } from "@effect/platform-bun";
 import { expect, layer } from "@effect/vitest";
-import { Config, Data, Effect, FileSystem, Schema } from "effect";
+import { Config, Data, Effect, FileSystem, Schema, Stream } from "effect";
+
+import { ChildProcess } from "effect/process";
 
 class FixtureFailure extends Data.TaggedError("FixtureFailure")<{ cause: unknown }> {}
 const wait = <A>(run: () => Promise<A>): Effect.Effect<A, FixtureFailure> =>
@@ -141,7 +141,7 @@ const exercise = Effect.fn(function* (scenario: Scenario) {
   expect(yield* fs.exists(`${directory}/worker.settled`)).toBe(true);
 }, Effect.scoped);
 
-layer(BunFileSystem.layer, { excludeTestServices: true })((it) => {
+layer(BunServices.layer, { excludeTestServices: true })((it) => {
   for (const scenario of [
     "readiness-headers",
     "post-headers",
@@ -155,26 +155,37 @@ layer(BunFileSystem.layer, { excludeTestServices: true })((it) => {
       25_000
     );
   }
-});
-
-it("refuses invalid or raised client deadlines before starting conformance work", () => {
-  for (const timeout of ["0", "181", "9999", "1.5", "-1", "invalid"]) {
-    const result = spawnSync(
-      "bash",
-      [new URL("./scripts/check-workers-ai-conformance.sh", import.meta.url).pathname],
-      {
-        encoding: "utf8",
-        env: {
-          ...Bun.env,
-          HOSTED_AI_MODEL: "fixture-model",
-          WORKERS_AI_CONFORMANCE_TIMEOUT_SECONDS: timeout,
-        },
+  it.effect("refuses invalid or raised client deadlines before starting conformance work", () =>
+    Effect.gen(function* () {
+      for (const timeout of ["0", "181", "9999", "1.5", "-1", "invalid"]) {
+        const child = yield* ChildProcess.make(
+          "bash",
+          [new URL("./scripts/check-workers-ai-conformance.sh", import.meta.url).pathname],
+          {
+            env: {
+              ...Bun.env,
+              HOSTED_AI_MODEL: "fixture-model",
+              WORKERS_AI_CONFORMANCE_TIMEOUT_SECONDS: timeout,
+            },
+            stdin: "ignore",
+            stdout: "pipe",
+            stderr: "pipe",
+          }
+        );
+        const result = yield* Effect.all(
+          {
+            status: child.exitCode,
+            stdout: Stream.mkString(Stream.decodeText(child.stdout)),
+            stderr: Stream.mkString(Stream.decodeText(child.stderr)),
+          },
+          { concurrency: "unbounded" }
+        );
+        expect(result.status, timeout).toBe(1);
+        expect(result.stderr).toBe(
+          "Workers AI conformance timeout must be an integer from 1 to 180 seconds.\n"
+        );
+        expect(result.stdout).toBe("");
       }
-    );
-    expect(result.status, timeout).toBe(1);
-    expect(result.stderr).toBe(
-      "Workers AI conformance timeout must be an integer from 1 to 180 seconds.\n"
-    );
-    expect(result.stdout).toBe("");
-  }
+    }).pipe(Effect.scoped, Effect.timeout("5 seconds"))
+  );
 });

@@ -16,7 +16,6 @@ import {
   type QueryCaller,
   transactionFailure,
   transactionNoStore,
-  transactionNow,
   transactionUnavailable,
 } from "../../canonical-work/operations";
 import { readBudgetContributions } from "../../transactions/operations";
@@ -61,9 +60,7 @@ export const listOwnedBudgets = ({
     if (result.results.length > maximumBudgetCount) return Option.none<ReadonlyArray<Budget>>();
     const budgets: Array<Budget> = [];
     for (const raw of result.results) {
-      const budget = budgetFromRow(raw);
-      if (Option.isNone(budget)) return Option.none<ReadonlyArray<Budget>>();
-      budgets.push(budget.value);
+      budgets.push(yield* budgetFromRow(raw));
     }
     return Option.some(budgets);
   }).pipe(Effect.orElseSucceed(() => Option.none()));
@@ -225,12 +222,14 @@ const readAuthorizedBudget = ({
   operation,
   id,
   query,
+  now,
 }: Readonly<{
   db: D1Database;
   subject: QueryCaller;
   operation: BudgetQueryOperation;
   id: Option.Option<BudgetId>;
   query: Option.Option<typeof BudgetStatusQueryParameters.Type>;
+  now: DateTime.Utc;
 }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
     if (operation === "budgets.getBudget") {
@@ -241,8 +240,9 @@ const readAuthorizedBudget = ({
           .bind(subject.userId, Option.getOrThrow(id))
           .first()
       );
-      const found = budgetFromRow(raw);
-      return Option.isSome(found) ? respond(Schema.toCodecJson(Budget), found.value) : missing();
+      if (raw === null) return missing();
+      const found = yield* budgetFromRow(raw);
+      return respond(Schema.toCodecJson(Budget), found);
     }
     if (operation === "budgets.listBudgets") {
       const all = yield* listOwnedBudgets({ db, userId: subject.userId });
@@ -254,7 +254,7 @@ const readAuthorizedBudget = ({
       db,
       userId: subject.userId,
       query: Option.getOrThrow(query),
-      now: DateTime.nowUnsafe(),
+      now,
     });
     return Option.isSome(report)
       ? respond(Schema.toCodecJson(BudgetStatusReport), report.value)
@@ -272,23 +272,22 @@ export const browseBudgets = ({
   subject: QueryCaller;
   request: Request;
   operation: BudgetQueryOperation;
-}>): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const parsed = budgetParameters(operation, new URL(request.url));
-      const outcome = Option.isSome(parsed) ? "accepted" : "rejected";
-      if (
-        (yield* recordBudgetCall({
-          db,
-          subject,
-          operation,
-          outcome,
-          current: transactionNow(),
-        })) !== "recorded"
-      ) {
-        return transactionUnavailable();
-      }
-      if (Option.isNone(parsed)) return operation === "budgets.getBudget" ? missing() : invalid();
-      return yield* readAuthorizedBudget({ db, subject, operation, ...parsed.value });
-    }).pipe(Effect.orElseSucceed(transactionUnavailable))
-  );
+}>): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const now = yield* DateTime.now;
+    const parsed = budgetParameters(operation, new URL(request.url));
+    const outcome = Option.isSome(parsed) ? "accepted" : "rejected";
+    if (
+      (yield* recordBudgetCall({
+        db,
+        subject,
+        operation,
+        outcome,
+        current: DateTime.toEpochMillis(now),
+      })) !== "recorded"
+    ) {
+      return transactionUnavailable();
+    }
+    if (Option.isNone(parsed)) return operation === "budgets.getBudget" ? missing() : invalid();
+    return yield* readAuthorizedBudget({ db, subject, operation, now, ...parsed.value });
+  }).pipe(Effect.orElseSucceed(transactionUnavailable));

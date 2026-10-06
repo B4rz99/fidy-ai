@@ -5,14 +5,14 @@ import {
 } from "../../../src/core/agent/contract";
 import { type UserId } from "../../../src/core/identity/contract";
 import { type HostedSubject, hostedAuthority, isWhatsAppHosted } from "./hosted-authority";
-import { type Cause, Effect, Option, Schema } from "effect";
+import { type Cause, Crypto, Effect, Option, Schema } from "effect";
+import { Hex } from "effect/encoding";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
 import { newId } from "../../secret-material/operations";
 
 const lifetimeMs = 600_000;
 const nonceBytes = 32;
-const hexRadix = 16;
 const commandPrefix = "CONFIRMAR ";
 /** Identify only exact confirmation attempts, so malformed commands cannot become model prompts. */
 export const isHostedConfirmationAttempt = (text: TranscriptText): boolean =>
@@ -27,12 +27,6 @@ export type ConfirmationRow = typeof ConfirmationRow.Type;
 
 /** A User-visible host challenge, bound to precisely the model's validated canonical input. */
 export type PendingHostedConfirmation = Readonly<{ text: TranscriptText; command: string }>;
-
-const randomCommand = (): string =>
-  commandPrefix +
-  Array.from(crypto.getRandomValues(new Uint8Array(nonceBytes)), (byte) =>
-    byte.toString(hexRadix).padStart(2, "0")
-  ).join("");
 
 /** Store a short-lived, single-use challenge before offering it through visible delivery. */
 export const issueHostedConfirmation = ({
@@ -51,10 +45,14 @@ export const issueHostedConfirmation = ({
   now: number;
 }>): Effect.Effect<
   Option.Option<PendingHostedConfirmation>,
-  Cause.UnknownError | Schema.SchemaError
+  Cause.UnknownError | Schema.SchemaError,
+  Crypto.Crypto
 > =>
   Effect.gen(function* () {
-    const command = randomCommand();
+    const crypto = yield* Crypto.Crypto;
+    const nonce = yield* crypto.randomBytes(nonceBytes).pipe(Effect.option);
+    if (Option.isNone(nonce)) return Option.none();
+    const command = commandPrefix + Hex.encode(nonce.value);
     const inputJson = yield* Schema.encodeEffect(Schema.fromJsonString(CanonicalToolEvidence))(
       input
     );

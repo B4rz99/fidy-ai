@@ -7,6 +7,38 @@ import { checkBrowserBundle } from "./check-browser-bundle";
 const webRoot = process.cwd();
 const workspaceRoot = join(webRoot, "..", "..");
 
+it.effect("rejects Effect SQL runtime modules from the current published distribution", () =>
+  Effect.acquireUseRelease(
+    Effect.tryPromise(() => mkdtemp(join(webRoot, ".bundle-test-"))),
+    (fixtureRoot) =>
+      Effect.gen(function* () {
+        yield* Effect.tryPromise(() =>
+          Bun.write(
+            join(fixtureRoot, "src/main.tsx"),
+            'import { SqlClient } from "effect/sql";\nexport const Root = SqlClient.SqlClient;\nexport const loadDashboard = () => import("./features/dashboard/fixture");\n'
+          )
+        );
+        yield* Effect.tryPromise(() =>
+          Bun.write(
+            join(fixtureRoot, "src/features/dashboard/fixture.ts"),
+            'export { LineChart } from "recharts";\n'
+          )
+        );
+        yield* Effect.tryPromise(() =>
+          expect(
+            checkBrowserBundle({
+              entrypoint: "src/main.tsx",
+              outdir: join(fixtureRoot, "bundle"),
+              webRoot: fixtureRoot,
+              workspaceRoot,
+            })
+          ).rejects.toThrow(/Browser-incompatible runtime modules[\s\S]*effect\/dist\/sql\//u)
+        );
+      }),
+    (fixtureRoot) => Effect.tryPromise(() => rm(fixtureRoot, { recursive: true, force: true }))
+  )
+);
+
 it.effect("rejects a forbidden runtime dependency reachable from the web entrypoint", () =>
   Effect.acquireUseRelease(
     Effect.tryPromise(() => mkdtemp(join(webRoot, ".bundle-test-"))),

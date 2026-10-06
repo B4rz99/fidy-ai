@@ -195,35 +195,76 @@ const boundedJson = Effect.fn(function* (response: HttpClientResponse.HttpClient
   }
   return yield* decodeJson(new TextDecoder().decode(bytes));
 });
-const providerJson = Effect.fn(function* (request: HttpClientRequest.HttpClientRequest) {
-  const client = yield* HttpClient.HttpClient;
-  const response = yield* client
-    .execute(request)
-    .pipe(Effect.mapError(() => Error("Provider request failed; inspect traffic state")));
-  return yield* boundedJson(response);
-}, Effect.timeout("10 seconds"));
-const shell = Effect.fn(function* (args: ReadonlyArray<string>) {
-  const child = Bun.spawn([...args], {
-    cwd: import.meta.dir,
-    stdout: "pipe",
-    stderr: "ignore",
-    env: process.env,
-  });
-  const [output, exitCode] = yield* Effect.all([
-    Effect.tryPromise({
-      try: () => new Response(child.stdout).text(),
+const providerJson = Effect.fn(
+  function* (request: HttpClientRequest.HttpClientRequest) {
+    const client = yield* HttpClient.HttpClient;
+    const response = yield* HttpClient.withScope(client)
+      .execute(request)
+      .pipe(Effect.mapError(() => Error("Provider request failed; inspect traffic state")));
+    return yield* boundedJson(response);
+  },
+  Effect.scoped,
+  Effect.timeout("10 seconds")
+);
+/** Own native command output and actual exit; interruption of a started write is not rollback. */
+export const releaseCommand = ({
+  args,
+  lifetime,
+}: Readonly<{
+  args: ReadonlyArray<string>;
+  lifetime: "read-only" | "started-write";
+}>): Effect.Effect<string, ReleaseFailure> =>
+  Effect.acquireUseRelease(
+    Effect.try({
+      try: () => {
+        const child = Bun.spawn([...args], {
+          cwd: import.meta.dir,
+          stdout: "pipe",
+          stderr: "ignore",
+          env: process.env,
+        });
+        const settlement = Promise.allSettled([new Response(child.stdout).text(), child.exited]);
+        return { child, settlement };
+      },
       catch: () => new ReleaseFailure({ message: "Release tooling failed" }),
     }),
-    Effect.tryPromise({
-      try: () => child.exited,
-      catch: () => new ReleaseFailure({ message: "Release tooling failed" }),
-    }),
-  ]);
-  if (exitCode !== 0) {
-    return yield* Effect.fail(Error("Release tooling failed; inspect traffic state"));
-  }
-  return output;
-});
+    ({ settlement }) =>
+      Effect.tryPromise({
+        try: () => settlement,
+        catch: () => new ReleaseFailure({ message: "Release tooling failed" }),
+      }).pipe(
+        Effect.flatMap(([output, exit]) =>
+          output.status === "fulfilled" && exit.status === "fulfilled" && exit.value === 0
+            ? Effect.succeed(output.value)
+            : Effect.fail(
+                new ReleaseFailure({ message: "Release tooling failed; inspect traffic state" })
+              )
+        )
+      ),
+    ({ child, settlement }, exit) =>
+      Effect.gen(function* () {
+        const cancellation = yield* Effect.exit(
+          lifetime === "read-only" && exit._tag === "Failure" && child.exitCode === null
+            ? Effect.try({
+                try: () => child.kill("SIGTERM"),
+                catch: () => new ReleaseFailure({ message: "Release tooling cleanup failed" }),
+              })
+            : Effect.void
+        );
+        const results = yield* Effect.tryPromise({
+          try: () => settlement,
+          catch: () => new ReleaseFailure({ message: "Release tooling cleanup failed" }),
+        });
+        if (cancellation._tag === "Failure") return yield* Effect.failCause(cancellation.cause);
+        if (results[1].status !== "fulfilled") {
+          return yield* new ReleaseFailure({
+            message: "Release tooling exit could not be confirmed",
+          });
+        }
+      })
+  );
+const shell = (args: ReadonlyArray<string>): Effect.Effect<string, ReleaseFailure> =>
+  releaseCommand({ args, lifetime: "read-only" });
 const readFile = (path: string): Effect.Effect<unknown, Error> =>
   Effect.tryPromise({
     try: () => Bun.file(path).text(),
@@ -499,16 +540,19 @@ export const releasePort = ({
         if (versions.some((version) => version.percentage === 0)) {
           // Cloudflare documents 0% through Wrangler, but its create-deployment API schema
           // specifies a nonzero minimum. Never substitute 0.01%.
-          yield* shell([
-            "bun",
-            "../../node_modules/wrangler/bin/wrangler.js",
-            "versions",
-            "deploy",
-            ...versions.map((version) => `${version.id}@${version.percentage}`),
-            "--name",
-            name,
-            "--yes",
-          ]);
+          yield* releaseCommand({
+            args: [
+              "bun",
+              "../../node_modules/wrangler/bin/wrangler.js",
+              "versions",
+              "deploy",
+              ...versions.map((version) => `${version.id}@${version.percentage}`),
+              "--name",
+              name,
+              "--yes",
+            ],
+            lifetime: "started-write",
+          });
           return yield* current(name);
         }
         return yield* createDeployment(json, { url: url(name), token: env.token, versions });

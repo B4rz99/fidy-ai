@@ -38,8 +38,8 @@ const Claim = Schema.Struct({
   business_phone_number_id: InsightRecipient.fields.businessPhoneNumberId,
   summary_json: Schema.NullOr(Schema.fromJsonString(InsightTemplateSummary)),
   text: Schema.NullOr(TranscriptText),
-  scheduled_at_ms: Schema.Int,
-  expires_at_ms: Schema.Int,
+  scheduled_at_ms: Schema.DateTimeUtcFromMillis,
+  expires_at_ms: Schema.DateTimeUtcFromMillis,
   time_zone: IanaTimeZone,
   state: Schema.Literals([
     "staged",
@@ -202,8 +202,8 @@ export const startInsightSend = (
     const row = yield* Schema.decodeUnknownEffect(Claim)(raw);
     const decision = decideInsightDelivery({
       now: input.now,
-      scheduledAt: DateTime.makeUnsafe(row.scheduled_at_ms),
-      expiresAt: DateTime.makeUnsafe(row.expires_at_ms),
+      scheduledAt: row.scheduled_at_ms,
+      expiresAt: row.expires_at_ms,
       timeZone: row.time_zone,
     });
     if (decision._tag === "Expired") {
@@ -344,8 +344,8 @@ export const readInsightDeliveryEvidence = (
       Schema.Struct({
         insight_event_id: InsightEventId,
         provider_message_id: WhatsAppProviderMessageId,
-        send_started_at_ms: Schema.Int,
-        delivered_at_ms: Schema.Int,
+        send_started_at_ms: Schema.DateTimeUtcFromMillis,
+        delivered_at_ms: Schema.DateTimeUtcFromMillis,
       })
     )(raw);
     const textRaw = yield* Effect.tryPromise(() =>
@@ -368,8 +368,8 @@ export const readInsightDeliveryEvidence = (
     return Option.some({
       insightEventId: row.insight_event_id,
       providerMessageId: row.provider_message_id,
-      sentAt: DateTime.makeUnsafe(row.send_started_at_ms),
-      deliveredAt: DateTime.makeUnsafe(row.delivered_at_ms),
+      sentAt: row.send_started_at_ms,
+      deliveredAt: row.delivered_at_ms,
       text,
     });
   });

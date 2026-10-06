@@ -92,6 +92,7 @@ describe("manual Transaction capture", () => {
         apiClient={makeFidyClient({ apiOrigin: "https://api.test.fidyapp.com" })}
         timeZone="America/Bogota"
         onCreated={() => undefined}
+        onCheckHistory={() => undefined}
       />
     );
     expect(screen.getByLabelText("Fecha del movimiento")).toHaveValue("2026-08-31");

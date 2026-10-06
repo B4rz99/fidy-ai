@@ -46,6 +46,7 @@ export {
   BrowserLoginPollingRateLimitedApi,
   EmailAddress,
   EmailVerificationCode,
+  EmailVerificationInvalidApi,
   EmailReplacementFreshPairingRequiredApi,
   EmailReplacementInvalidApi,
   DashboardCatalogEntry,
@@ -223,7 +224,7 @@ export type SubscriptionEnrollmentClient = Readonly<{
   signal: AbortSignal;
   execute: <A, E>(
     use: (client: EnrollmentApiClient) => Effect.Effect<A, E>,
-    options?: Readonly<{ signal: AbortSignal }>
+    options?: Partial<Readonly<{ signal: AbortSignal }>>
   ) => Promise<A>;
   dispose: () => Promise<void>;
 }>;

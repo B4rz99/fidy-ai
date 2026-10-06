@@ -47,7 +47,7 @@ const fixture = (): Promise<D1Database> =>
         "CREATE TABLE trial_periods (user_id TEXT PRIMARY KEY, started_at_ms INTEGER NOT NULL, ends_at_ms INTEGER NOT NULL) STRICT",
         "CREATE TABLE web_sessions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, token_digest BLOB NOT NULL, revoked_at_ms INTEGER, idle_expires_at_ms INTEGER NOT NULL, hard_expires_at_ms INTEGER NOT NULL) STRICT",
         "CREATE TABLE consent_user_revocations (user_id TEXT PRIMARY KEY) STRICT",
-        "CREATE TABLE pat_audit (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, session_id TEXT, pat_id TEXT, operation TEXT NOT NULL, outcome TEXT NOT NULL, occurred_at_ms INTEGER NOT NULL) STRICT",
+        "CREATE TABLE pat_audit (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, session_id TEXT, pat_id TEXT, oauth_connection_id TEXT, oauth_credential_id TEXT, operation TEXT NOT NULL, outcome TEXT NOT NULL, occurred_at_ms INTEGER NOT NULL) STRICT",
         "CREATE TABLE pat_atomic_assertion (id INTEGER PRIMARY KEY CHECK (id = 1), accepted INTEGER NOT NULL CHECK (accepted = 1)) STRICT",
         "CREATE TABLE pats (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, bearer_digest BLOB NOT NULL, scopes_json TEXT NOT NULL, expires_at_ms INTEGER NOT NULL, revoked_at_ms INTEGER, last_used_at_ms INTEGER) STRICT",
       ]);
@@ -139,19 +139,64 @@ effectIt.effect(
     })
 );
 
+effectIt.effect("inherits the query owner's Clock for credential expiry and Audit evidence", () =>
+  Effect.gen(function* () {
+    const db = yield* fromTestPromise(() => fixture());
+    const clock = yield* Clock.Clock;
+    const session = yield* fromTestPromise(() =>
+      db
+        .prepare("SELECT hard_expires_at_ms FROM web_sessions WHERE id = ?")
+        .bind(sessionA)
+        .first<{ hard_expires_at_ms: number }>()
+    );
+    if (session === null) return yield* Effect.die(new Error("Missing test WebSession"));
+    const atTime = (millis: number): Clock.Clock => ({
+      currentTimeMillisUnsafe: () => millis,
+      currentTimeMillis: Effect.succeed(millis),
+      currentTimeNanosUnsafe: () => BigInt(millis) * 1_000_000n,
+      currentTimeNanos: Effect.succeed(BigInt(millis) * 1_000_000n),
+      monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
+      monotonicTimeNanos: clock.monotonicTimeNanos,
+      sleep: (duration) => clock.sleep(duration),
+    });
+    const query = {
+      db,
+      subject: { id: sessionA, userId: userA, digest: token },
+      operation: CanonicalOperationId.make("subscription.getSubscriptionStatus"),
+      input: {},
+      bucket: Option.none(),
+    };
+    const acceptedAt = session.hard_expires_at_ms - 1;
+    const accepted = Option.getOrThrow(
+      yield* executeCanonicalQuery(query).pipe(
+        Effect.provideService(Clock.Clock, atTime(acceptedAt))
+      )
+    );
+    expect(accepted.status).toBe(200);
+    const expired = Option.getOrThrow(
+      yield* executeCanonicalQuery(query).pipe(
+        Effect.provideService(Clock.Clock, atTime(session.hard_expires_at_ms))
+      )
+    );
+    expect(expired.status).toBe(401);
+    expect(
+      (yield* fromTestPromise(() => db.prepare("SELECT occurred_at_ms FROM pat_audit").all()))
+        .results
+    ).toEqual([{ occurred_at_ms: acceptedAt }]);
+  })
+);
+
 effectIt.effect(
   "returns only the authenticated User's expired trial and rejects a wrong bearer without an audit",
   () =>
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => fixture());
       const subject = { id: sessionA, userId: userA, digest: token };
-      const response = yield* fromTestPromise(() =>
-        executeProtectedSubscriptionQuery({
-          db,
-          subject,
-          operation: "subscription.getSubscriptionStatus",
-        })
-      );
+      const response = yield* executeProtectedSubscriptionQuery({
+        db,
+        subject,
+        operation: "subscription.getSubscriptionStatus",
+      });
       expect(response.status).toBe(200);
       const body = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ data: Schema.toCodecJson(SubscriptionStatus) })
@@ -161,13 +206,11 @@ effectIt.effect(
         Date.parse("2026-09-01T12:00:00Z")
       );
       expect(body.data.recentAttempts).toEqual([]);
-      const foreign = yield* fromTestPromise(() =>
-        executeProtectedSubscriptionQuery({
-          db,
-          subject: { ...subject, userId: userB },
-          operation: "subscription.getSubscriptionStatus",
-        })
-      );
+      const foreign = yield* executeProtectedSubscriptionQuery({
+        db,
+        subject: { ...subject, userId: userB },
+        operation: "subscription.getSubscriptionStatus",
+      });
       expect(foreign.status).toBe(401);
       expect(
         (yield* fromTestPromise(() => db.prepare("SELECT * FROM pat_audit").all())).results
@@ -186,13 +229,11 @@ effectIt.effect("cannot renew the original TrialPeriod by updating its persisted
           .run()
       ).rejects.toThrow()
     );
-    const response = yield* fromTestPromise(() =>
-      executeProtectedSubscriptionQuery({
-        db,
-        subject: { id: sessionA, userId: userA, digest: token },
-        operation: "subscription.getSubscriptionStatus",
-      })
-    );
+    const response = yield* executeProtectedSubscriptionQuery({
+      db,
+      subject: { id: sessionA, userId: userA, digest: token },
+      operation: "subscription.getSubscriptionStatus",
+    });
     const body = yield* Schema.decodeUnknownEffect(
       Schema.Struct({ data: Schema.toCodecJson(SubscriptionStatus) })
     )(yield* fromTestPromise(() => response.json()));
@@ -215,12 +256,8 @@ effectIt.effect(
         "subscription.getSubscriptionStatus",
         "subscription.listSubscriptionOffers",
       ] as const;
-      const responses = yield* fromTestPromise(() =>
-        Promise.all(
-          operations.map((operation) =>
-            executeProtectedSubscriptionQuery({ db, subject, operation })
-          )
-        )
+      const responses = yield* Effect.forEach(operations, (operation) =>
+        executeProtectedSubscriptionQuery({ db, subject, operation })
       );
       for (const response of responses) {
         expect(response.status).toBe(401);
@@ -305,21 +342,17 @@ effectIt.effect(
   () =>
     Effect.gen(function* () {
       const db = yield* fromTestPromise(() => fixture());
-      const denied = yield* fromTestPromise(() =>
-        executeProtectedSubscriptionQuery({
-          db,
-          subject: { id: sessionA, userId: userA, digest: new Uint8Array(32).fill(1) },
-          operation: "subscription.listSubscriptionOffers",
-        })
-      );
+      const denied = yield* executeProtectedSubscriptionQuery({
+        db,
+        subject: { id: sessionA, userId: userA, digest: new Uint8Array(32).fill(1) },
+        operation: "subscription.listSubscriptionOffers",
+      });
       expect(denied.status).toBe(401);
-      const accepted = yield* fromTestPromise(() =>
-        executeProtectedSubscriptionQuery({
-          db,
-          subject: { id: sessionB, userId: userB, digest: token },
-          operation: "subscription.listSubscriptionOffers",
-        })
-      );
+      const accepted = yield* executeProtectedSubscriptionQuery({
+        db,
+        subject: { id: sessionB, userId: userB, digest: token },
+        operation: "subscription.listSubscriptionOffers",
+      });
       expect(accepted.status).toBe(200);
       const result = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ data: Schema.toCodecJson(SubscriptionOffers) })

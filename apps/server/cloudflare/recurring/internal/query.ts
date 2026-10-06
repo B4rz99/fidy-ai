@@ -1,4 +1,4 @@
-import { Data, Effect, Option, Schema } from "effect";
+import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { UserId } from "../../../src/core/identity/contract";
 import { Currency } from "../../../src/core/_shared/money";
 import {
@@ -24,7 +24,6 @@ import {
   isPATCaller,
   transactionFailure,
   transactionId,
-  transactionNow,
   transactionUnavailable,
 } from "../../canonical-work/operations";
 import { RecurringUnavailable } from "../contract";
@@ -253,16 +252,17 @@ export const list = ({
   db: D1Database;
   subject: QueryCaller;
   request: Request;
-}>): Effect.Effect<Response> => {
-  const call = {
-    db,
-    subject: childCaller({ subject, requiredScope: Option.some("read") }),
-    current: transactionNow(),
-    accepted: true,
-  };
-  const raw = new URL(request.url).searchParams.get("cursor");
-  if (raw === null) return readPage({ call, cursor: Option.none() });
-  if (raw.length > maximumCursorLength) return invalidCursor(call);
-  const cursor = Schema.decodeOption(Schema.fromJsonString(Cursor))(raw);
-  return Option.isNone(cursor) ? invalidCursor(call) : readPage({ call, cursor });
-};
+}>): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const call = {
+      db,
+      subject: childCaller({ subject, requiredScope: Option.some("read") }),
+      current: DateTime.toEpochMillis(yield* DateTime.now),
+      accepted: true,
+    };
+    const raw = new URL(request.url).searchParams.get("cursor");
+    if (raw === null) return yield* readPage({ call, cursor: Option.none() });
+    if (raw.length > maximumCursorLength) return yield* invalidCursor(call);
+    const cursor = Schema.decodeOption(Schema.fromJsonString(Cursor))(raw);
+    return yield* Option.isNone(cursor) ? invalidCursor(call) : readPage({ call, cursor });
+  });

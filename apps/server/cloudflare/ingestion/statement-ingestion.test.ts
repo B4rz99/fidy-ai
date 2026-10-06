@@ -31,7 +31,7 @@ import {
   executeHostedStatementQuery,
 } from "../canonical-operations/operations";
 import { UserTransactionCoordinator } from "../transactions/runtime";
-import { prepareHeldStatementReviewDecision } from "./operations";
+import { prepareHeldStatementReviewDecision, readStatementSubmission } from "./operations";
 import {
   dispatchStatementExtraction,
   executeStatementExtraction,
@@ -400,6 +400,61 @@ const sessionHeaders = (index: number): Record<string, string> => ({
   cookie: `__Host-fidy_session=${bearer(index)}`,
   origin: browserOrigin,
 });
+
+it("inherits the statement read owner's Clock for credential expiry and Audit", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const clock = yield* Clock.Clock;
+      const session = yield* fromTestPromise(() =>
+        runtime.db
+          .prepare(
+            "SELECT MIN(idle_expires_at_ms, hard_expires_at_ms) AS expires_at_ms FROM web_sessions WHERE id = ?"
+          )
+          .bind(sessionA)
+          .first<{ expires_at_ms: number }>()
+      );
+      if (session === null) return yield* Effect.die(new Error("Missing test WebSession"));
+      const atTime = (millis: number): Clock.Clock => ({
+        currentTimeMillisUnsafe: () => millis,
+        currentTimeMillis: Effect.succeed(millis),
+        currentTimeNanosUnsafe: () => BigInt(millis) * 1_000_000n,
+        currentTimeNanos: Effect.succeed(BigInt(millis) * 1_000_000n),
+        monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
+        monotonicTimeNanos: clock.monotonicTimeNanos,
+        sleep: (duration) => clock.sleep(duration),
+      });
+      const query = {
+        environment: coreEnvironment(runtime),
+        request: new Request(
+          "https://core.internal/ingestion/submissions/10000000-0000-4000-8000-000000000999"
+        ),
+        subject: {
+          id: sessionA,
+          userId: userA,
+          digest: yield* fromTestPromise(() => digest(bearer(0))),
+        },
+      };
+      const acceptedAt = session.expires_at_ms - 1;
+      const accepted = yield* readStatementSubmission(query).pipe(
+        Effect.provideService(Clock.Clock, atTime(acceptedAt))
+      );
+      expect(accepted.status).toBe(404);
+      const expired = yield* readStatementSubmission(query).pipe(
+        Effect.provideService(Clock.Clock, atTime(session.expires_at_ms))
+      );
+      expect(expired.status).toBe(401);
+      expect(
+        (yield* fromTestPromise(() =>
+          runtime.db
+            .prepare(
+              "SELECT occurred_at_ms FROM statement_submission_audit WHERE operation = 'ingestion.getStatementSubmission'"
+            )
+            .all()
+        )).results
+      ).toEqual([{ occurred_at_ms: acceptedAt }]);
+    })
+  ));
 
 it(
   "enables forwarding through the public canonical mutation and reads its User-owned address",

@@ -1,4 +1,3 @@
-import { currentMillis } from "../../runtime/operations";
 import {
   PAT,
   PATScopes,
@@ -14,7 +13,7 @@ import {
   pairingMilliseconds,
 } from "../../../src/shell/tokens/operations";
 import { patPairingUnavailableBody } from "../../../src/shell/tokens/contract";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { type Cause, Clock, DateTime, Effect, Option, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
 import { freshSessionExists } from "../../../src/shell/web-session/operations";
 import { RequestBodyPolicy } from "../../http/contract";
@@ -49,6 +48,16 @@ export const SessionRow = Schema.Struct({
   user_id: Schema.String.check(Schema.isUUID()),
 });
 export type SessionRow = typeof SessionRow.Type;
+
+/** Retained milliseconds must represent an instant the canonical PAT codec can publish. */
+export const retainedPATMillis = Schema.Finite.check(
+  Schema.isInt(),
+  Schema.makeFilter((milliseconds) =>
+    Option.exists(DateTime.make(milliseconds), Schema.is(Schema.toType(PAT.fields.createdAt)))
+      ? undefined
+      : "Expected a canonical PAT timestamp"
+  )
+);
 /** One decoded grant row; caller supplies its explicit subject when reading owned data. */
 export const PATRow = Schema.Struct({
   id: Schema.String,
@@ -57,10 +66,10 @@ export const PATRow = Schema.Struct({
   recipient_label: Schema.String,
   scopes_json: Schema.String,
   lifetime_days: Schema.Int,
-  created_at_ms: Schema.Finite,
-  expires_at_ms: Schema.Finite,
-  last_used_at_ms: Schema.NullOr(Schema.Finite),
-  revoked_at_ms: Schema.NullOr(Schema.Finite),
+  created_at_ms: retainedPATMillis,
+  expires_at_ms: retainedPATMillis,
+  last_used_at_ms: Schema.NullOr(retainedPATMillis),
+  revoked_at_ms: Schema.NullOr(retainedPATMillis),
 });
 export type PATRow = typeof PATRow.Type;
 
@@ -108,18 +117,16 @@ export const decodeBody = <Decoded, Encoded>({
 }: Readonly<{
   request: Request;
   schema: Schema.Codec<Decoded, Encoded>;
-}>): Promise<Option.Option<Decoded>> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
-        return Option.none<Decoded>();
-      }
-      const bytes = yield* readBoundedRequestBody(request, policy);
-      const text = yield* Effect.try(() => new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-      const value = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text);
-      return Schema.decodeUnknownOption(schema)(value);
-    }).pipe(Effect.orElseSucceed(() => Option.none<Decoded>()))
-  );
+}>): Effect.Effect<Option.Option<Decoded>> =>
+  Effect.gen(function* () {
+    if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
+      return Option.none<Decoded>();
+    }
+    const bytes = yield* readBoundedRequestBody(request, policy);
+    const text = yield* Effect.try(() => new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    const value = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text);
+    return Schema.decodeUnknownOption(schema)(value);
+  }).pipe(Effect.orElseSucceed(() => Option.none<Decoded>()));
 export const scopesFrom = (text: string): Option.Option<PATScopes> => {
   try {
     return Schema.decodeUnknownOption(PATScopes)(JSON.parse(text));
@@ -149,9 +156,16 @@ export const webSession = ({
   request,
   db,
   fresh,
-}: Readonly<{ request: Request; db: D1Database; fresh: boolean }>): Promise<
-  Option.Option<SessionRow>
-> => browserSession({ request, db, input: { current: currentMillis(), fresh } });
+}: Readonly<{ request: Request; db: D1Database; fresh: boolean }>): Effect.Effect<
+  Option.Option<SessionRow>,
+  Cause.UnknownError
+> =>
+  Effect.gen(function* () {
+    const current = yield* Clock.currentTimeMillis;
+    return yield* Effect.tryPromise(() =>
+      browserSession({ request, db, input: { current, fresh } })
+    );
+  });
 /** Recheck the exact WebSession inside a D1 atomic transition, not only on a prior read. */
 export const sessionExists = freshSessionExists;
 export const response = ({ body, status }: Readonly<{ body: unknown; status: number }>): Response =>

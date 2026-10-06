@@ -1,13 +1,28 @@
-import { Cause, Context, Effect, Exit, Layer, Option, Schema } from "effect";
+import {
+  Cause,
+  Context,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Option,
+  Predicate,
+  Schema,
+} from "effect";
+import { it as effectIt } from "@effect/vitest";
+import { TestClock } from "effect/testing";
 import { SmokeRequest } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 import { FetchHttpClient, HttpClient } from "effect/http";
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import {
   verifyCandidateSmoke,
   verifyProductionSmoke,
   verifyPromotedSmoke,
   verifyReadOnlySmokeRouting,
 } from "./verify-production-smoke";
+
+afterEach(() => vi.restoreAllMocks());
 
 const revision = "0123456789abcdef0123456789abcdef01234567";
 const previousRevision = "fedcba9876543210fedcba9876543210fedcba98";
@@ -55,11 +70,14 @@ const intermediateRequest = (request: Request): boolean =>
     `fidy-public="${publicStable}"`
   );
 
-const pairingResponse = (input: {
-  oldPublic: boolean;
-  coreRevision: string;
-  readiness: boolean;
-}): Response => {
+const pairingResponse = (
+  input: {
+    oldPublic: boolean;
+    coreRevision: string;
+    readiness: boolean;
+  },
+  padding: Option.Option<string> = Option.none()
+): Response => {
   const publicVersion = input.oldPublic ? publicStable : publicCandidate;
   return Response.json(
     {
@@ -75,6 +93,7 @@ const pairingResponse = (input: {
         workerVersionId: coreCandidate,
       },
       manifest: { protocolVersion: 1, asyncWorkVersion: 1 },
+      ...Option.match(padding, { onNone: () => ({}), onSome: (value) => ({ padding: value }) }),
     },
     { headers: { ...securityHeaders, "x-fidy-smoke-worker-version": publicVersion } }
   );
@@ -92,6 +111,28 @@ const edgeResponse = (path: string): Response =>
     headers: { ...securityHeaders, "x-fidy-smoke-worker-version": publicCandidate },
   });
 
+const heldSmokeBody = (
+  response: Response,
+  cancelled: () => void,
+  onRead: () => void = () => undefined
+): Promise<Response> =>
+  response.arrayBuffer().then(
+    (bytes) =>
+      new Response(
+        new ReadableStream({
+          start(controller): void {
+            controller.enqueue(new Uint8Array(bytes));
+          },
+          pull(): void {
+            onRead();
+          },
+          cancel(): void {
+            cancelled();
+          },
+        }),
+        { headers: response.headers }
+      )
+  );
 for (const phase of ["readiness", "synthetic"] as const) {
   for (const hostileBody of ["overflow", "malformed"] as const) {
     it(
@@ -161,6 +202,90 @@ for (const phase of ["readiness", "synthetic"] as const) {
 }
 
 const routingModes = ["candidate", "intermediate", "promoted"] as const;
+
+effectIt.effect.each([undefined, "1"])(
+  "rejects an oversized streaming smoke response despite declared length %s",
+  (declaredLength) =>
+    Effect.gen(function* () {
+      let cancelled = false;
+      const fetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+        const request = new Request(input, init);
+        const response = pairingResponse(
+          {
+            oldPublic: intermediateRequest(request),
+            coreRevision: revision,
+            readiness: false,
+          },
+          Option.some("x".repeat(32 * 1024))
+        );
+        if (declaredLength !== undefined) response.headers.set("content-length", declaredLength);
+        return heldSmokeBody(response, () => {
+          cancelled = true;
+        });
+      });
+      const services = yield* Layer.build(FetchHttpClient.layer);
+      const exit = yield* verifyProductionSmoke(config).pipe(
+        Effect.provideService(HttpClient.HttpClient, Context.get(services, HttpClient.HttpClient)),
+        Effect.provideService(FetchHttpClient.Fetch, fetch),
+        Effect.exit
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const failure = Option.getOrThrow(Cause.findErrorOption(exit.cause));
+        expect(Predicate.isTagged(failure, "ReleaseSmokeFailed")).toBe(true);
+        if (Predicate.isTagged(failure, "ReleaseSmokeFailed")) {
+          expect(failure.reason).toContain("byte budget");
+        }
+      }
+      expect(cancelled).toBe(true);
+    }).pipe(Effect.scoped)
+);
+
+effectIt.effect(
+  "times out total synthetic response work after headers without waiting indefinitely for EOF",
+  () =>
+    Effect.gen(function* () {
+      const ready = yield* Deferred.make<void>();
+      let cancelled = false;
+      const fetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+        const request = new Request(input, init);
+        const response = pairingResponse({
+          oldPublic: intermediateRequest(request),
+          coreRevision: revision,
+          readiness: false,
+        });
+        return heldSmokeBody(
+          response,
+          () => {
+            cancelled = true;
+          },
+          () => {
+            Deferred.doneUnsafe(ready, Effect.void);
+          }
+        );
+      });
+      const services = yield* Layer.build(FetchHttpClient.layer);
+      const fiber = yield* verifyProductionSmoke(config).pipe(
+        Effect.provideService(HttpClient.HttpClient, Context.get(services, HttpClient.HttpClient)),
+        Effect.provideService(FetchHttpClient.Fetch, fetch),
+        Effect.exit,
+        Effect.forkScoped
+      );
+      yield* Deferred.await(ready);
+      yield* TestClock.adjust("8 seconds");
+      const exit = yield* Fiber.join(fiber);
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const failure = Option.getOrThrow(Cause.findErrorOption(exit.cause));
+        expect(Predicate.isTagged(failure, "ReleaseSmokeFailed")).toBe(true);
+        if (Predicate.isTagged(failure, "ReleaseSmokeFailed")) {
+          expect(failure.reason).toContain("total deadline");
+        }
+      }
+      expect(cancelled).toBe(true);
+    }).pipe(Effect.scoped)
+);
+
 describe("read-only routing readiness", () => {
   it("starts neither synthetic pairing until old ingress also reaches the exact candidate Core", () =>
     Effect.runPromise(

@@ -339,7 +339,7 @@ export const addMoney = (operands: {
   readonly right: ReadonlyMoney;
 }): Effect.Effect<Money, CurrencyMismatch> =>
   requireSameCurrency(operands.left, operands.right).pipe(
-    Effect.as(
+    Effect.map(() =>
       Money.make({
         amount: BigDecimal.sum(operands.left.amount, operands.right.amount),
         currency: operands.left.currency,

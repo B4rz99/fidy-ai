@@ -47,8 +47,19 @@
 // whose exclusion is gone fails, so a standing permission to ship a
 // vulnerability cannot outlive the vulnerability it was written for.
 
-import { Array as Arr, Console, Data, DateTime, Effect, Layer, Option, Schema } from "effect";
-import { FetchHttpClient, HttpClient } from "effect/http";
+import {
+  Array as Arr,
+  Cause,
+  Console,
+  Data,
+  DateTime,
+  Effect,
+  Layer,
+  Option,
+  Schema,
+  Stream,
+} from "effect";
+import { FetchHttpClient, HttpClient, HttpClientError, type HttpClientResponse } from "effect/http";
 
 /**
  * The check itself could not run — a manifest that will not parse, a registry
@@ -89,6 +100,10 @@ const SCA_CONFIG_PATH = ".fluidattacks/sca.yaml";
 
 /** Concurrent registry requests. The registry is generous; this is politeness, not a rate limit. */
 const REGISTRY_CONCURRENCY = 8;
+// Full packuments include historical releases; bound their decoded bytes, not compressed length.
+const maximumPackumentBytes = 67_108_864; // 64 MiB of actual decoded packument bytes.
+const rateLimitedStatus = 429;
+const serverErrorMinimumStatus = 500;
 
 /** An exact pin, and nothing else: `1.2.3`, or `1.2.3-beta.4`. A leading `^`, `~`, `>=` or `*` fails to match, which is the point. */
 const EXACT_PIN = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
@@ -250,18 +265,64 @@ const newestInstallable = (
     );
 };
 
+const readPackument = Effect.fn(function* (response: HttpClientResponse.HttpClientResponse) {
+  if (Number(response.headers["content-length"] ?? 0) > maximumPackumentBytes) {
+    return yield* new CheckFailed({ message: "Registry response exceeded its byte budget" });
+  }
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  yield* Stream.runForEachWhile(response.stream, (chunk) =>
+    Effect.sync(() => {
+      size += chunk.byteLength;
+      if (size > maximumPackumentBytes) return false;
+      chunks.push(chunk);
+      return true;
+    })
+  );
+  if (size > maximumPackumentBytes) {
+    return yield* new CheckFailed({ message: "Registry response exceeded its byte budget" });
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  const text = yield* Effect.try({
+    try: () => new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+    catch: () => new CheckFailed({ message: "Registry response contained invalid text" }),
+  });
+  return yield* Schema.decodeEffect(Schema.fromJsonString(Packument))(text);
+});
+
 const fetchPackument = (
   name: string
 ): Effect.Effect<typeof Packument.Type, CheckFailed, HttpClient.HttpClient> =>
-  HttpClient.get(`${REGISTRY_URL}/${encodeURIComponent(name)}`).pipe(
-    Effect.flatMap((response) => response.json),
-    Effect.flatMap(Schema.decodeUnknownEffect(Packument)),
-    Effect.retry({ times: 3 }),
-    Effect.mapError(
-      (cause) =>
-        new CheckFailed({
-          message: `Could not read ${name} from the npm registry: ${String(cause)}`,
-        })
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const response = yield* HttpClient.filterStatusOk(HttpClient.withScope(client)).get(
+      `${REGISTRY_URL}/${encodeURIComponent(name)}`
+    );
+    return yield* readPackument(response);
+  }).pipe(
+    Effect.scoped,
+    Effect.timeout("30 seconds"),
+    Effect.retry({
+      times: 3,
+      while: (failure) =>
+        Cause.isTimeoutError(failure) ||
+        (HttpClientError.isHttpClientError(failure) &&
+          (failure.reason._tag === "TransportError" ||
+            (failure.reason._tag === "StatusCodeError" &&
+              (failure.reason.response.status === rateLimitedStatus ||
+                failure.reason.response.status >= serverErrorMinimumStatus)))),
+    }),
+    Effect.mapError((failure) =>
+      failure instanceof CheckFailed
+        ? failure
+        : new CheckFailed({
+            message: `Could not read ${name} from the npm registry within the request policy`,
+          })
     )
   );
 
@@ -721,7 +782,8 @@ const rangedPinFindings = (ranged: ReadonlyArray<Pin>): ReadonlyArray<Finding> =
       `  Pin the exact version the lockfile resolved.`,
   }));
 
-const check = Effect.gen(function* () {
+/** Evaluate the repository's dependency policy under the caller-owned HTTP and Clock services. */
+export const checkDependencyUpdates = Effect.gen(function* () {
   const startedAt = yield* DateTime.now;
   const policy = yield* readJson(Policy, POLICY_PATH);
   const scanner = yield* readYaml(ScaConfig, SCA_CONFIG_PATH);
@@ -779,7 +841,7 @@ const check = Effect.gen(function* () {
 // program.
 const main = Effect.scoped(
   Effect.flatMap(Layer.build(FetchHttpClient.layer), (services) =>
-    Effect.provideContext(check, services)
+    Effect.provideContext(checkDependencyUpdates, services)
   )
 ).pipe(
   Effect.catchTag("CheckFailed", (failure) =>
@@ -788,7 +850,9 @@ const main = Effect.scoped(
   Effect.flatMap((failed) => Effect.sync(() => process.exit(failed ? 1 : 0)))
 );
 
-Effect.runPromise(main).catch((error: unknown) => {
-  process.stderr.write(`${String(error)}\n`);
-  process.exitCode = 1;
-});
+if (import.meta.main) {
+  Effect.runPromise(main).catch((error: unknown) => {
+    process.stderr.write(`${String(error)}\n`);
+    process.exitCode = 1;
+  });
+}

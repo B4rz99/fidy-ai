@@ -1,5 +1,7 @@
 import { statementParserLimits } from "../../src/shell/ingestion/contract";
-import { Effect, Option } from "effect";
+import { Clock, Effect, Exit, Option } from "effect";
+import { deepStrictEqual } from "node:assert/strict";
+import { StatementProcessingUnavailable } from "./contract";
 import { installTestSchema, isolatedTestStorage } from "../d1-test-fixture";
 import { afterAll, expect } from "vitest";
 import { it as effectIt } from "@effect/vitest";
@@ -47,7 +49,10 @@ const migrations = [
 ];
 const storage = isolatedTestStorage();
 
-const setup = (csv: string): Promise<{ db: D1Database; bucket: R2Bucket }> =>
+const setup = (
+  content: string | Uint8Array,
+  sourceFormat: "csv" | "xlsx" = "csv"
+): Promise<{ db: D1Database; bucket: R2Bucket }> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const { db, bucket } = yield* fromTestPromise(() => storage.acquire());
@@ -70,8 +75,10 @@ const setup = (csv: string): Promise<{ db: D1Database; bucket: R2Bucket }> =>
           )
         )
       );
-      const bytes = new TextEncoder().encode(csv);
-      const hash = yield* fromTestPromise(() => crypto.subtle.digest("SHA-256", bytes));
+      const bytes = typeof content === "string" ? new TextEncoder().encode(content) : content;
+      const hash = yield* fromTestPromise(() =>
+        crypto.subtle.digest("SHA-256", Uint8Array.from(bytes))
+      );
       const sha256 = Array.from(new Uint8Array(hash), (byte) =>
         byte.toString(16).padStart(2, "0")
       ).join("");
@@ -82,12 +89,13 @@ const setup = (csv: string): Promise<{ db: D1Database; bucket: R2Bucket }> =>
         db
           .prepare(`INSERT INTO statement_staging_objects
     (id,user_id,object_key,byte_length,sha256,source_format,status,created_at_ms,expires_at_ms,published_submission_id)
-    VALUES (?,?,'staging/statement/v1/test',?,?,'csv','published',?,?,?)`)
+    VALUES (?,?,'staging/statement/v1/test',?, ?,?,'published',?,?,?)`)
           .bind(
             stagingId,
             userA,
             bytes.length,
             sha256,
+            sourceFormat,
             current - 1000,
             current + retentionMs,
             submissionId
@@ -99,13 +107,14 @@ const setup = (csv: string): Promise<{ db: D1Database; bucket: R2Bucket }> =>
           .prepare(`INSERT INTO statement_submissions
     (id,user_id,idempotency_key,staging_id,submitted_at_ms,source_format,parser_revision,
       service_market,locale,time_zone,status,retention_expires_at_ms)
-    VALUES (?,?,?,?,?,'csv','statement-parser-v1','CO','es-CO','America/Bogota','queued',?)`)
+    VALUES (?,?,?,?,?,?,'statement-parser-v1','CO','es-CO','America/Bogota','queued',?)`)
           .bind(
             submissionId,
             userA,
             "10000000-0000-4000-8000-000000000603",
             stagingId,
             current,
+            sourceFormat,
             current + retentionMs
           )
           .run()
@@ -115,6 +124,44 @@ const setup = (csv: string): Promise<{ db: D1Database; bucket: R2Bucket }> =>
   );
 
 afterAll(() => storage.dispose());
+
+effectIt.effect(
+  "finalizes parsed XLSX rows once without decoding their optional cell metadata twice",
+  () =>
+    Effect.gen(function* () {
+      const bytes = yield* fromTestPromise(() =>
+        Bun.file(
+          new URL(
+            "../../src/shell/ingestion/internal/fixtures/synthetic-statement.xlsx",
+            import.meta.url
+          )
+        ).bytes()
+      );
+      const { db, bucket } = yield* fromTestPromise(() => setup(bytes, "xlsx"));
+      const input = { DB: db, STATEMENT_STAGING_BUCKET: bucket, userId: userA, submissionId };
+      yield* processStatementSubmission(input);
+      yield* processStatementSubmission(input);
+      const state = yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "SELECT status, input_rows, needs_review_rows FROM statement_submissions WHERE id = ?"
+          )
+          .bind(submissionId)
+          .first()
+      );
+      expect(state).toMatchObject({ status: "completed", input_rows: 2, needs_review_rows: 2 });
+      const reviews = yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "SELECT original_evidence FROM statement_needs_review WHERE user_id = ? ORDER BY record_number"
+          )
+          .bind(userA)
+          .all()
+      );
+      expect(reviews.results).toHaveLength(2);
+      expect(reviews.results[1]?.original_evidence).toContain("12500*2");
+    })
+);
 
 effectIt.effect(
   "extends clarification with session activity but never resumes an abandoned origin",
@@ -142,14 +189,12 @@ effectIt.effect(
           .bind(userA, submissionId)
           .run()
       );
-      yield* fromTestPromise(() =>
-        processStatementSubmission({
-          DB: db,
-          STATEMENT_STAGING_BUCKET: bucket,
-          userId: userA,
-          submissionId,
-        })
-      );
+      yield* processStatementSubmission({
+        DB: db,
+        STATEMENT_STAGING_BUCKET: bucket,
+        userId: userA,
+        submissionId,
+      });
       const activity = (at: number, expiry: number): Promise<unknown> =>
         db.batch([
           ...prepareStatementSessionActivity({
@@ -219,14 +264,12 @@ effectIt.effect("holds a zero-capture Free reservation while rows await clarific
         .bind(userA, submissionId)
         .run()
     );
-    yield* fromTestPromise(() =>
-      processStatementSubmission({
-        DB: db,
-        STATEMENT_STAGING_BUCKET: bucket,
-        userId: userA,
-        submissionId,
-      })
-    );
+    yield* processStatementSubmission({
+      DB: db,
+      STATEMENT_STAGING_BUCKET: bucket,
+      userId: userA,
+      submissionId,
+    });
     const entitlement = yield* fromTestPromise(() =>
       db
         .prepare(
@@ -246,7 +289,7 @@ effectIt.effect(
       const { db } = yield* fromTestPromise(() =>
         setup("fecha,valor,descripcion\n2026-08-01,-1,Cafe\n")
       );
-      const expiredAt = currentMillis() - 1_000;
+      const expiredAt = (yield* Clock.currentTimeMillis) - 1_000;
       yield* fromTestPromise(() =>
         db
           .prepare(`WITH RECURSIVE numbered(n) AS (
@@ -262,7 +305,7 @@ effectIt.effect(
           .bind(userA, submissionId, expiredAt, expiredAt)
           .run()
       );
-      yield* fromTestPromise(() => expireStatementReviewEvidence({ DB: db }));
+      yield* expireStatementReviewEvidence({ DB: db });
       const pending = yield* fromTestPromise(() =>
         db
           .prepare(`SELECT count(*) AS count FROM statement_needs_review
@@ -286,14 +329,12 @@ effectIt.effect(
     Effect.gen(function* () {
       const { db, bucket } = yield* fromTestPromise(() => setup("not,a,statement\n"));
       expect(
-        yield* fromTestPromise(() =>
-          processStatementSubmission({
-            DB: db,
-            STATEMENT_STAGING_BUCKET: bucket,
-            userId: userA,
-            submissionId,
-          })
-        )
+        yield* processStatementSubmission({
+          DB: db,
+          STATEMENT_STAGING_BUCKET: bucket,
+          userId: userA,
+          submissionId,
+        })
       ).toBe("completed");
       const state = yield* fromTestPromise(() =>
         db
@@ -318,14 +359,12 @@ effectIt.effect(
       const { db, bucket } = yield* fromTestPromise(() =>
         setup("fecha,valor,moneda,contraparte\n2026-08-01,-45000,COP,Cafe\n")
       );
-      yield* fromTestPromise(() =>
-        processStatementSubmission({
-          DB: db,
-          STATEMENT_STAGING_BUCKET: bucket,
-          userId: userB,
-          submissionId,
-        })
-      );
+      yield* processStatementSubmission({
+        DB: db,
+        STATEMENT_STAGING_BUCKET: bucket,
+        userId: userB,
+        submissionId,
+      });
       const status = yield* fromTestPromise(() =>
         db
           .prepare("SELECT status FROM statement_submissions WHERE id = ?")
@@ -348,8 +387,8 @@ effectIt.effect(
         setup("fecha,valor,moneda,contraparte\n2026-08-01,-45000,COP,Cafe\n")
       );
       const input = { DB: db, STATEMENT_STAGING_BUCKET: bucket, userId: userA, submissionId };
-      yield* fromTestPromise(() => processStatementSubmission(input));
-      yield* fromTestPromise(() => processStatementSubmission(input));
+      yield* processStatementSubmission(input);
+      yield* processStatementSubmission(input);
       const result = yield* fromTestPromise(() =>
         db
           .prepare(`SELECT s.status, s.accepted_rows, s.needs_review_rows,
@@ -387,14 +426,12 @@ effectIt.effect(
           .bind(userA, submissionId)
           .run()
       );
-      yield* fromTestPromise(() =>
-        processStatementSubmission({
-          DB: db,
-          STATEMENT_STAGING_BUCKET: bucket,
-          userId: userA,
-          submissionId,
-        })
-      );
+      yield* processStatementSubmission({
+        DB: db,
+        STATEMENT_STAGING_BUCKET: bucket,
+        userId: userA,
+        submissionId,
+      });
       const grant = yield* fromTestPromise(() =>
         db
           .prepare(
@@ -425,14 +462,12 @@ effectIt.effect(
           .run()
       );
       expect(
-        yield* fromTestPromise(() =>
-          processStatementSubmission({
-            DB: db,
-            STATEMENT_STAGING_BUCKET: bucket,
-            userId: userA,
-            submissionId,
-          })
-        )
+        yield* processStatementSubmission({
+          DB: db,
+          STATEMENT_STAGING_BUCKET: bucket,
+          userId: userA,
+          submissionId,
+        })
       ).toBe("continue");
       const readGrant = (): Promise<{
         consumed_at_ms: unknown;
@@ -448,14 +483,12 @@ effectIt.effect(
       const captured = yield* fromTestPromise(readGrant);
       expect(captured.consumed_at_ms).toEqual(expect.any(Number));
       expect(captured.submission_id).toBe(submissionId);
-      yield* fromTestPromise(() =>
-        failStatementSubmission({
-          DB: db,
-          userId: userA,
-          submissionId,
-          reason: "resource-limit",
-        })
-      );
+      yield* failStatementSubmission({
+        DB: db,
+        userId: userA,
+        submissionId,
+        reason: "resource-limit",
+      });
       expect(yield* fromTestPromise(readGrant)).toEqual(captured);
     })
 );
@@ -482,16 +515,15 @@ effectIt.effect(
         BEGIN SELECT RAISE(ABORT, 'capture unavailable'); END`)
           .run()
       );
-      yield* fromTestPromise(() =>
-        expect(
-          processStatementSubmission({
-            DB: db,
-            STATEMENT_STAGING_BUCKET: bucket,
-            userId: userA,
-            submissionId,
-          })
-        ).rejects.toThrow()
+      const result = yield* Effect.exit(
+        processStatementSubmission({
+          DB: db,
+          STATEMENT_STAGING_BUCKET: bucket,
+          userId: userA,
+          submissionId,
+        })
       );
+      deepStrictEqual(result, Exit.fail(new StatementProcessingUnavailable()));
       const grant = yield* fromTestPromise(() =>
         db
           .prepare(
@@ -538,14 +570,12 @@ effectIt.effect(
           )
           .run()
       );
-      yield* fromTestPromise(() =>
-        processStatementSubmission({
-          DB: db,
-          STATEMENT_STAGING_BUCKET: bucket,
-          userId: userA,
-          submissionId,
-        })
-      );
+      yield* processStatementSubmission({
+        DB: db,
+        STATEMENT_STAGING_BUCKET: bucket,
+        userId: userA,
+        submissionId,
+      });
       const categories = yield* fromTestPromise(() =>
         db
           .prepare(`SELECT a.statement_record_number AS record_number,
@@ -588,16 +618,15 @@ effectIt.effect(
         },
       });
       const input = { DB: db, STATEMENT_STAGING_BUCKET: bucket, userId: userA, submissionId };
-      yield* fromTestPromise(() =>
-        expect(processStatementSubmission({ ...input, DB: interruptedDB })).rejects.toThrow(
-          "simulated interruption"
-        )
+      const interrupted = yield* Effect.exit(
+        processStatementSubmission({ ...input, DB: interruptedDB })
       );
+      deepStrictEqual(interrupted, Exit.fail(new StatementProcessingUnavailable()));
       const first = yield* fromTestPromise(() =>
         db.prepare("SELECT count(*) AS count FROM transactions").first<{ count: number }>()
       );
       expect(first?.count).toBe(1);
-      expect(yield* fromTestPromise(() => processStatementSubmission(input))).toBe("completed");
+      expect(yield* processStatementSubmission(input)).toBe("completed");
       const counts = yield* fromTestPromise(() =>
         db
           .prepare(`SELECT
@@ -619,10 +648,14 @@ effectIt.effect(
         setup("fecha,valor,moneda,contraparte\n2026-08-01,-45000,COP,Cafe\n")
       );
       const input = { DB: db, STATEMENT_STAGING_BUCKET: bucket, userId: userA, submissionId };
-      yield* fromTestPromise(() =>
-        Promise.allSettled([processStatementSubmission(input), processStatementSubmission(input)])
+      yield* Effect.all(
+        [
+          Effect.exit(processStatementSubmission(input)),
+          Effect.exit(processStatementSubmission(input)),
+        ],
+        { concurrency: 2 }
       );
-      expect(yield* fromTestPromise(() => processStatementSubmission(input))).toBe("completed");
+      expect(yield* processStatementSubmission(input)).toBe("completed");
       const counts = yield* fromTestPromise(() =>
         db
           .prepare(`SELECT
@@ -644,14 +677,12 @@ effectIt.effect(
       const { db, bucket } = yield* fromTestPromise(() =>
         setup("fecha,valor,descripcion\n2026-08-01,-45000,Cafe\n")
       );
-      yield* fromTestPromise(() =>
-        processStatementSubmission({
-          DB: db,
-          STATEMENT_STAGING_BUCKET: bucket,
-          userId: userA,
-          submissionId,
-        })
-      );
+      yield* processStatementSubmission({
+        DB: db,
+        STATEMENT_STAGING_BUCKET: bucket,
+        userId: userA,
+        submissionId,
+      });
       const item = yield* fromTestPromise(() =>
         db
           .prepare("SELECT reason, original_evidence FROM statement_needs_review WHERE user_id = ?")
@@ -685,22 +716,18 @@ effectIt.effect(
           .bind(userA, submissionId)
           .run()
       );
-      yield* fromTestPromise(() =>
-        failStatementSubmission({
-          DB: db,
-          userId: userA,
-          submissionId,
-          reason: "resource-limit",
-        })
-      );
-      yield* fromTestPromise(() =>
-        failStatementSubmission({
-          DB: db,
-          userId: userA,
-          submissionId,
-          reason: "resource-limit",
-        })
-      );
+      yield* failStatementSubmission({
+        DB: db,
+        userId: userA,
+        submissionId,
+        reason: "resource-limit",
+      });
+      yield* failStatementSubmission({
+        DB: db,
+        userId: userA,
+        submissionId,
+        reason: "resource-limit",
+      });
       const state = yield* fromTestPromise(() =>
         db
           .prepare("SELECT status,failure_reason FROM statement_submissions WHERE id = ?")
@@ -723,22 +750,18 @@ effectIt.effect("does not regress a completed submission when a delayed failure 
     const { db, bucket } = yield* fromTestPromise(() =>
       setup("fecha,valor,moneda,contraparte\n2026-08-01,-45000,COP,Cafe\n")
     );
-    yield* fromTestPromise(() =>
-      processStatementSubmission({
-        DB: db,
-        STATEMENT_STAGING_BUCKET: bucket,
-        userId: userA,
-        submissionId,
-      })
-    );
-    yield* fromTestPromise(() =>
-      failStatementSubmission({
-        DB: db,
-        userId: userA,
-        submissionId,
-        reason: "resource-limit",
-      })
-    );
+    yield* processStatementSubmission({
+      DB: db,
+      STATEMENT_STAGING_BUCKET: bucket,
+      userId: userA,
+      submissionId,
+    });
+    yield* failStatementSubmission({
+      DB: db,
+      userId: userA,
+      submissionId,
+      reason: "resource-limit",
+    });
     const state = yield* fromTestPromise(() =>
       db
         .prepare("SELECT status,failure_reason FROM statement_submissions WHERE id = ?")
@@ -766,14 +789,12 @@ effectIt.effect(
           .bind(userA, submissionId)
           .run()
       );
-      const progress = yield* fromTestPromise(() =>
-        processStatementSubmission({
-          DB: db,
-          STATEMENT_STAGING_BUCKET: bucket,
-          userId: userA,
-          submissionId,
-        })
-      );
+      const progress = yield* processStatementSubmission({
+        DB: db,
+        STATEMENT_STAGING_BUCKET: bucket,
+        userId: userA,
+        submissionId,
+      });
       expect(progress).toBe("continue");
       const before = yield* fromTestPromise(() =>
         db
@@ -784,14 +805,12 @@ effectIt.effect(
           .first<{ count: number }>()
       );
       expect(before?.count).toBe(32);
-      yield* fromTestPromise(() =>
-        failStatementSubmission({
-          DB: db,
-          userId: userA,
-          submissionId,
-          reason: "resource-limit",
-        })
-      );
+      yield* failStatementSubmission({
+        DB: db,
+        userId: userA,
+        submissionId,
+        reason: "resource-limit",
+      });
       const state = yield* fromTestPromise(() =>
         db
           .prepare(
@@ -862,9 +881,9 @@ effectIt.effect(
         "\n";
       const { db, bucket } = yield* fromTestPromise(() => setup(csv));
       const input = { DB: db, STATEMENT_STAGING_BUCKET: bucket, userId: userA, submissionId };
-      expect(yield* fromTestPromise(() => processStatementSubmission(input))).toBe("continue");
-      expect(yield* fromTestPromise(() => processStatementSubmission(input))).toBe("completed");
-      expect(yield* fromTestPromise(() => processStatementSubmission(input))).toBe("completed");
+      expect(yield* processStatementSubmission(input)).toBe("continue");
+      expect(yield* processStatementSubmission(input)).toBe("completed");
+      expect(yield* processStatementSubmission(input)).toBe("completed");
       const result = yield* fromTestPromise(() =>
         db
           .prepare(
@@ -887,10 +906,10 @@ effectIt.effect(
         "\n";
       const { db, bucket } = yield* fromTestPromise(() => setup(csv));
       const input = { DB: db, STATEMENT_STAGING_BUCKET: bucket, userId: userA, submissionId };
-      expect(yield* fromTestPromise(() => processStatementSubmission(input))).toBe("continue");
-      expect(yield* fromTestPromise(() => processStatementSubmission(input))).toBe("continue");
-      expect(yield* fromTestPromise(() => processStatementSubmission(input))).toBe("continue");
-      expect(yield* fromTestPromise(() => processStatementSubmission(input))).toBe("completed");
+      expect(yield* processStatementSubmission(input)).toBe("continue");
+      expect(yield* processStatementSubmission(input)).toBe("continue");
+      expect(yield* processStatementSubmission(input)).toBe("continue");
+      expect(yield* processStatementSubmission(input)).toBe("completed");
       const state = yield* fromTestPromise(() =>
         db
           .prepare(
@@ -924,14 +943,12 @@ effectIt.effect("fails above the parser row ceiling without creating partial eff
       "\n";
     const { db, bucket } = yield* fromTestPromise(() => setup(csv));
     expect(
-      yield* fromTestPromise(() =>
-        processStatementSubmission({
-          DB: db,
-          STATEMENT_STAGING_BUCKET: bucket,
-          userId: userA,
-          submissionId,
-        })
-      )
+      yield* processStatementSubmission({
+        DB: db,
+        STATEMENT_STAGING_BUCKET: bucket,
+        userId: userA,
+        submissionId,
+      })
     ).toBe("completed");
     const state = yield* fromTestPromise(() =>
       db
@@ -968,14 +985,12 @@ effectIt.effect(
           .run()
       );
       expect(
-        yield* fromTestPromise(() =>
-          processStatementSubmission({
-            DB: db,
-            STATEMENT_STAGING_BUCKET: bucket,
-            userId: userA,
-            submissionId,
-          })
-        )
+        yield* processStatementSubmission({
+          DB: db,
+          STATEMENT_STAGING_BUCKET: bucket,
+          userId: userA,
+          submissionId,
+        })
       ).toBe("continue");
       const expired = StatementStaging.make({
         database: db,
@@ -1000,4 +1015,46 @@ effectIt.effect(
       expect(state).toMatchObject({ status: "failed", input_rows: 32, needs_review_rows: 32 });
       expect(entitlement?.consumed_at_ms).toBeNull();
     })
+);
+
+effectIt.effect("uses the owner Clock to expire statement work before any row commits", () =>
+  Effect.gen(function* () {
+    const { db, bucket } = yield* fromTestPromise(() =>
+      setup("fecha,valor,moneda,contraparte\n2026-08-01,-45000,COP,Cafe\n")
+    );
+    const ownerNow = currentMillis() + retentionMs + 1000;
+    const liveClock = yield* Clock.Clock;
+    const clock: Clock.Clock = {
+      currentTimeMillisUnsafe: () => ownerNow,
+      currentTimeMillis: Effect.succeed(ownerNow),
+      currentTimeNanosUnsafe: () => BigInt(ownerNow) * 1000000n,
+      currentTimeNanos: Effect.succeed(BigInt(ownerNow) * 1000000n),
+      monotonicTimeNanosUnsafe: () => liveClock.monotonicTimeNanosUnsafe(),
+      monotonicTimeNanos: liveClock.monotonicTimeNanos,
+      sleep: (duration) => liveClock.sleep(duration),
+    };
+    yield* processStatementSubmission({
+      DB: db,
+      STATEMENT_STAGING_BUCKET: bucket,
+      userId: userA,
+      submissionId,
+    }).pipe(Effect.provideService(Clock.Clock, clock));
+    const state = yield* fromTestPromise(() =>
+      db
+        .prepare(
+          "SELECT status, failure_reason, completed_at_ms FROM statement_submissions WHERE id = ?"
+        )
+        .bind(submissionId)
+        .first()
+    );
+    const counts = yield* fromTestPromise(() =>
+      db.prepare("SELECT count(*) AS count FROM transactions WHERE user_id = ?").bind(userA).first()
+    );
+    expect(state).toMatchObject({
+      status: "failed",
+      failure_reason: "retention-expired",
+      completed_at_ms: ownerNow,
+    });
+    expect(counts).toMatchObject({ count: 0 });
+  })
 );

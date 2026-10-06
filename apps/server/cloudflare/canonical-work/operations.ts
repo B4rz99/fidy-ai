@@ -347,16 +347,18 @@ export const rejectInvalidTransactionInput = ({
   db,
   subject,
   operation,
+  current,
 }: Readonly<{
   db: D1Database;
   subject: TransactionCaller;
   operation: TransactionMutationOperation;
+  current: number;
 }>): Promise<Response> =>
   rejectTransactionMutation({
     db,
     subject,
     operation,
-    current: transactionNow(),
+    current,
     refusal: { outcome: "validation_failed", message: invalidTransactionMessage },
   });
 
@@ -452,12 +454,11 @@ export const rejectBatchEnvelope = (
     );
 };
 
-/** Classify a PAT protected-work refusal after re-reading the current User Consent decision. */
-export const refusedPATWork = ({
+const refusedBearerWork = Effect.fn(function* ({
   db,
   userId,
-}: Readonly<{ db: D1Database; userId: string }>): Promise<Response> =>
-  readConsentStatus({ db, userId }).pipe(
+}: Readonly<{ db: D1Database; userId: string }>) {
+  return yield* readConsentStatus({ db, userId }).pipe(
     Effect.map((standing) =>
       standing !== "Revoked"
         ? transactionFailure({
@@ -470,9 +471,14 @@ export const refusedPATWork = ({
             status: 403,
             message: "Return to Fidy to review your withdrawn Consent.",
           })
-    ),
-    Effect.runPromise
+    )
   );
+});
+
+/** Native Promise admission adapter; Effect owners compose refusedCredentialResponse instead. */
+export const refusedPATWork = (
+  input: Readonly<{ db: D1Database; userId: string }>
+): Promise<Response> => Effect.runPromise(refusedBearerWork(input));
 
 /** The canonical unauthenticated response every Transaction entry point shares. */
 export const unauthenticatedTransaction = (): Response =>
@@ -496,9 +502,10 @@ export const refusedCredentialResponse = ({
   db,
   subject,
 }: Readonly<{ db: D1Database; subject: QueryCaller }>): Effect.Effect<Response> =>
-  Effect.tryPromise(() => refusedTransactionWork({ db, subject })).pipe(
-    Effect.orElseSucceed(transactionUnavailable)
-  );
+  (isPATCaller(subject) || isOAuthCaller(subject)
+    ? refusedBearerWork({ db, userId: subject.userId })
+    : Effect.succeed(unauthenticatedTransaction())
+  ).pipe(Effect.orElseSucceed(transactionUnavailable));
 
 /** Narrow a live authority to its PAT credential for statement accountability. */
 export const isPATAuthority = (authority: TransactionAuthority): authority is PATAuthority =>

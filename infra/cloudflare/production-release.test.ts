@@ -1,5 +1,5 @@
-import { Cause, Effect, Exit, Option } from "effect";
-import { HttpClient, HttpClientResponse } from "effect/http";
+import { Cause, Context, Effect, Exit, Layer, Option } from "effect";
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import { it } from "@effect/vitest";
 import { describe, expect } from "vitest";
 import {
@@ -67,6 +67,64 @@ const referenceHarness = (
   });
   return { port, requests };
 };
+
+it.effect(
+  "aborts rejected status and declared oversized native responses before returning release failure",
+  () =>
+    Effect.gen(function* () {
+      const services = yield* Layer.build(FetchHttpClient.layer);
+      for (const options of [
+        { status: 503, headers: new Headers() },
+        { status: 200, headers: new Headers({ "content-length": "100001" }) },
+      ]) {
+        let aborted = false;
+        let pulled = 0;
+        const fetch: typeof globalThis.fetch = Object.assign(
+          (
+            _input: Parameters<typeof globalThis.fetch>[0],
+            init?: Parameters<typeof globalThis.fetch>[1]
+          ): Promise<Response> => {
+            init?.signal?.addEventListener("abort", () => {
+              aborted = true;
+            });
+            return Promise.resolve(
+              new Response(
+                new ReadableStream<Uint8Array>(
+                  {
+                    pull() {
+                      pulled += 1;
+                    },
+                  },
+                  { highWaterMark: 0 }
+                ),
+                options
+              )
+            );
+          },
+          { preconnect: globalThis.fetch.preconnect }
+        );
+        const port = releasePort({
+          client: Context.get(services, HttpClient.HttpClient),
+          env: {
+            account: "0".repeat(32),
+            token: "test-only-cloudflare",
+            revision,
+            repository: "test/fidy",
+            githubToken: "test-only-github",
+            file: "/unused-snapshot",
+            smokeProof: "0".repeat(64),
+            smokeAttestationFile: "/unused-attestation",
+          },
+        });
+        const outcome = yield* port
+          .current("prod-ingress")
+          .pipe(Effect.provideService(FetchHttpClient.Fetch, fetch), Effect.exit);
+        expect(Exit.isFailure(outcome)).toBe(true);
+        expect(aborted).toBe(true);
+        expect(pulled).toBe(0);
+      }
+    }).pipe(Effect.scoped)
+);
 
 describe("Production release trunk guard", () => {
   it.effect(

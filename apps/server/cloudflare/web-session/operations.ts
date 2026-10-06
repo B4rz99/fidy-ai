@@ -1,4 +1,4 @@
-import { Effect, Option } from "effect";
+import { type Effect, Option } from "effect";
 import type { FreshSessionSubject } from "../../src/shell/web-session/contract";
 import { completePairing, logout } from "./internal/lifecycle";
 import { currentUser } from "./internal/current-user";
@@ -20,19 +20,27 @@ export const authenticateWebSession = (
 ): Promise<Option.Option<AuthenticatedWebSession>> =>
   authenticate({ ...input, requireConsent: false });
 
-/** Revoke only the presented credential and expire its browser cookie; absence is indistinguishable. */
-export const logoutWebSession = (input: WebSessionRequest): Promise<Response> => logout(input);
+/**
+ * Revoke only the presented credential at the caller's Clock and expire its browser cookie;
+ * absence is indistinguishable. Cancellation waits for an already-started revocation to settle.
+ */
+export const logoutWebSession = (input: WebSessionRequest): Effect.Effect<Response, void> =>
+  logout(input);
 
 /**
  * Consume one approved, unexpired BrowserLoginPairing and issue a fresh independent bearer once.
  * The BrowserLogin owner supplies exact-proof consumption and its bound User projection. Those
  * operations and issuance commit together; replay cannot reissue credentials or change ownership.
  */
-export const establishWebSession = (input: WebSessionEstablishment): Promise<Response> =>
-  Effect.runPromise(completePairing(input));
+export const establishWebSession = (
+  input: WebSessionEstablishment
+): Effect.Effect<Response, void> => completePairing(input);
 
-/** Renew live browser use within immutable hard expiry and return the canonical User projection. */
-export const currentWebSessionUser = (input: WebSessionRequest): Promise<Response> =>
+/**
+ * Renew live browser use within immutable hard expiry at the caller's Clock and return the
+ * canonical User projection. Cancellation settles a started renewal or Audit but stops later work.
+ */
+export const currentWebSessionUser = (input: WebSessionRequest): Effect.Effect<Response> =>
   currentUser(input);
 
 /** Resolve one live or fresh browser session for account-security composition. */

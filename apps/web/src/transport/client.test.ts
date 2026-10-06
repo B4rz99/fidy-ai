@@ -374,15 +374,20 @@ describe("browser HTTP policy", () => {
     })
   );
 
-  it.effect("refuses redirect responses without following their destination", () =>
+  it.effect("aborts an unread redirect response before refusing its destination", () =>
     Effect.gen(function* () {
       let executions = 0;
-      const httpClient = makeHttpClient((request) => {
+      let aborted = false;
+      const markAborted = (): void => {
+        aborted = true;
+      };
+      const httpClient = HttpClient.make((request, _url, signal) => {
         executions++;
+        signal.addEventListener("abort", markAborted, { once: true });
         return Effect.succeed(
           HttpClientResponse.fromWeb(
             request,
-            new Response(null, {
+            new Response(new ReadableStream<Uint8Array>(), {
               status: 302,
               headers: { location: "https://attacker.example/collect" },
             })
@@ -394,6 +399,7 @@ describe("browser HTTP policy", () => {
       const exit = yield* client.get("https://api.test.fidyapp.com/redirect").pipe(Effect.exit);
 
       expect(executions).toBe(1);
+      expect(aborted).toBe(true);
       const diagnosticRequest = HttpClientRequest.make("GET")("https://browser-api.invalid");
       expect(exit).toEqual(
         Exit.fail(

@@ -37,14 +37,7 @@ const budgetOwner =
     operation: "budgets.listBudgets" | "budgets.getBudget" | "budgets.getBudgetStatus"
   ): QueryOwner =>
   ({ db, subject, request }) =>
-    Effect.tryPromise(() =>
-      browseBudgets({
-        db,
-        subject,
-        request,
-        operation,
-      })
-    );
+    browseBudgets({ db, subject, request, operation });
 const historyOwner =
   (
     operation:
@@ -53,23 +46,21 @@ const historyOwner =
       | "transactions.getTransaction"
   ): QueryOwner =>
   ({ db, subject, request }) =>
-    Effect.tryPromise(() =>
-      browseTransactions({
-        db,
-        selection:
-          operation === "transactions.searchTransactions"
-            ? { request, subject, search: true, id: Option.none() }
-            : {
-                request,
-                subject,
-                search: false,
-                id:
-                  operation === "transactions.getTransaction"
-                    ? Option.some(new URL(request.url).pathname.split("/").at(-1) ?? "")
-                    : Option.none(),
-              },
-      })
-    );
+    browseTransactions({
+      db,
+      selection:
+        operation === "transactions.searchTransactions"
+          ? { request, subject, search: true, id: Option.none() }
+          : {
+              request,
+              subject,
+              search: false,
+              id:
+                operation === "transactions.getTransaction"
+                  ? Option.some(new URL(request.url).pathname.split("/").at(-1) ?? "")
+                  : Option.none(),
+            },
+    });
 
 // This installed-owner registry selects only canonical catalog entries; it declares no private tool.
 const queryOwners = new Map<string, QueryOwner>([
@@ -81,53 +72,45 @@ const queryOwners = new Map<string, QueryOwner>([
   [
     "subscription.getUpgradeUrl",
     ({ db, subject, browserOrigin }): Effect.Effect<Response, Cause.UnknownError> =>
-      Effect.tryPromise(() =>
-        executeProtectedSubscriptionQuery({
-          db,
-          subject,
-          operation: "subscription.getUpgradeUrl",
-          browserOrigin,
-        })
-      ),
+      executeProtectedSubscriptionQuery({
+        db,
+        subject,
+        operation: "subscription.getUpgradeUrl",
+        browserOrigin,
+      }),
   ],
   [
     "pats.listPATs",
     ({ db, subject }): Effect.Effect<Response, Cause.UnknownError> =>
-      isOAuthCaller(subject)
-        ? Effect.succeed(transactionUnavailable())
-        : Effect.tryPromise(() => listPATs({ db, subject })),
+      isOAuthCaller(subject) ? Effect.succeed(transactionUnavailable()) : listPATs({ db, subject }),
   ],
   [
     "categories.listCategories",
     ({ db, subject }): Effect.Effect<Response, Cause.UnknownError> =>
-      Effect.tryPromise(() => executeProtectedCategories({ db, subject })),
+      executeProtectedCategories({ db, subject }),
   ],
   [
     "categories.listKeywordRules",
     ({ db, subject }): Effect.Effect<Response, Cause.UnknownError> =>
-      Effect.tryPromise(() => listOwnKeywordRules({ db, subject })),
+      listOwnKeywordRules({ db, subject }),
   ],
   [
     "subscription.listSubscriptionOffers",
     ({ db, subject }): Effect.Effect<Response, Cause.UnknownError> =>
-      Effect.tryPromise(() =>
-        executeProtectedSubscriptionQuery({
-          db,
-          subject,
-          operation: "subscription.listSubscriptionOffers",
-        })
-      ),
+      executeProtectedSubscriptionQuery({
+        db,
+        subject,
+        operation: "subscription.listSubscriptionOffers",
+      }),
   ],
   [
     "subscription.getSubscriptionStatus",
     ({ db, subject }): Effect.Effect<Response, Cause.UnknownError> =>
-      Effect.tryPromise(() =>
-        executeProtectedSubscriptionQuery({
-          db,
-          subject,
-          operation: "subscription.getSubscriptionStatus",
-        })
-      ),
+      executeProtectedSubscriptionQuery({
+        db,
+        subject,
+        operation: "subscription.getSubscriptionStatus",
+      }),
   ],
   ["budgets.listBudgets", budgetOwner("budgets.listBudgets")],
   ["budgets.getBudget", budgetOwner("budgets.getBudget")],
@@ -175,16 +158,14 @@ const queryOwners = new Map<string, QueryOwner>([
   [
     "ingestion.getStatementSubmission",
     ({ db, subject, request, bucket }): Effect.Effect<Response, Cause.UnknownError> =>
-      Effect.tryPromise(() =>
-        readStatementSubmission({
-          request,
-          subject,
-          environment: {
-            DB: db,
-            ...(Option.isSome(bucket) ? { STATEMENT_STAGING_BUCKET: bucket.value } : {}),
-          },
-        })
-      ),
+      readStatementSubmission({
+        request,
+        subject,
+        environment: {
+          DB: db,
+          ...(Option.isSome(bucket) ? { STATEMENT_STAGING_BUCKET: bucket.value } : {}),
+        },
+      }),
   ],
   [
     "ingestion.listNeedsReviewItems",

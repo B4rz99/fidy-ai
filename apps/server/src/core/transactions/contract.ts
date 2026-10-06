@@ -250,7 +250,7 @@ const LinkedPresentationMetadata = Schema.Union([
 const IndependentTransactionPresentation = Schema.Struct({
   ...Transaction.fields,
   presentation: IndependentPresentationMetadata,
-});
+}).check(positiveTransactionMoney);
 
 /**
  * One effective Transaction with metadata explaining how the requested id maps to its visible
@@ -259,7 +259,9 @@ const IndependentTransactionPresentation = Schema.Struct({
 export const TransactionPresentation = Schema.Struct({
   ...Transaction.fields,
   presentation: Schema.Union([IndependentPresentationMetadata, LinkedPresentationMetadata]),
-}).annotate({ identifier: "TransactionPresentation" });
+})
+  .check(positiveTransactionMoney)
+  .annotate({ identifier: "TransactionPresentation" });
 export type TransactionPresentation = typeof TransactionPresentation.Type;
 
 /** The canonically ordered independent originals restored by one successful unlink mutation. */

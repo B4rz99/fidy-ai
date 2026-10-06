@@ -1,6 +1,7 @@
 import { afterAll } from "vitest";
 import { expect, it } from "@effect/vitest";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Exit, Option, Schema } from "effect";
+import { AgentUnavailable } from "./contract";
 import { type InsightUnavailable } from "../insights/contract";
 import {
   findInsight,
@@ -138,6 +139,35 @@ const verify = (
     });
   });
 afterAll(() => weeklySummaryTestDatabases.dispose());
+it.live("returns typed AgentUnavailable for corrupt retained proactive Transcript time", () =>
+  Effect.gen(function* () {
+    const input = yield* deliveredFixture(yield* weeklySummaryTestDatabase);
+    yield* Effect.tryPromise(() =>
+      input.db
+        .prepare(
+          "INSERT INTO proactive_transcript_entries (id,user_id,insight_event_id,occurred_at_ms,text,expires_at_ms) VALUES (?,?,?,?,?,?)"
+        )
+        .bind(
+          "11111111-1111-4111-8111-111111111111",
+          input.userId,
+          input.insightEventId,
+          8_640_000_000_000_001,
+          "Verified reply",
+          8_640_000_000_000_001 + 2_592_000_000
+        )
+        .run()
+    );
+    const result = yield* Effect.exit(
+      readProactiveTranscript({
+        db: input.db,
+        userId: input.userId,
+        insightEventId: input.insightEventId,
+        now: input.now.epochMilliseconds,
+      })
+    );
+    expect(result).toEqual(Exit.fail(new AgentUnavailable()));
+  })
+);
 it.live(
   "contextual financial reads bind User and live association, and a cached proof cannot survive Consent withdrawal",
   () =>

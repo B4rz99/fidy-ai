@@ -1,9 +1,9 @@
-import { Effect, Option } from "effect";
+import { Clock, Effect, Option } from "effect";
 import type { CanonicalToolEvidence } from "../../../src/core/agent/contract";
 import type { CatalogOperation } from "../../../src/shell/canonical-catalog/contract";
 import type { HostedCommitFence } from "../contract";
 import type { WhatsAppHostedSubject } from "../../whatsapp/contract";
-import { transactionNow, transactionUnavailable } from "../../canonical-work/operations";
+import { transactionUnavailable } from "../../canonical-work/operations";
 import {
   executeHostedStatementCall,
   executeHostedStatementQuery,
@@ -29,32 +29,30 @@ export const whatsAppStatementMutationExecutor =
     operation: CatalogOperation["id"],
     input: CanonicalToolEvidence,
     fence: HostedCommitFence
-  ) => Promise<Response>) =>
+  ) => Effect.Effect<Response>) =>
   (operation, input, fence) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const current = transactionNow();
-        const caller = yield* mintHostedStatementCaller({
-          db,
-          subject,
-          turnId: fence.turnId,
-          current,
-          live: hostedAuthority({ subject, current }),
-          approval: Option.some({ operation, input }),
-        });
-        return Option.isNone(caller)
-          ? transactionUnavailable()
-          : yield* executeHostedStatementCall({
-              db,
-              bucket,
-              caller: caller.value,
-              current,
-              operation,
-              input,
-              fence,
-            });
-      })
-    );
+    Effect.gen(function* () {
+      const current = yield* Clock.currentTimeMillis;
+      const caller = yield* mintHostedStatementCaller({
+        db,
+        subject,
+        turnId: fence.turnId,
+        current,
+        live: hostedAuthority({ subject, current }),
+        approval: Option.some({ operation, input }),
+      });
+      return Option.isNone(caller)
+        ? transactionUnavailable()
+        : yield* executeHostedStatementCall({
+            db,
+            bucket,
+            caller: caller.value,
+            current,
+            operation,
+            input,
+            fence,
+          });
+    });
 
 /** Use the installed read owner without lending the channel a WebSession or PAT. */
 export const executeWhatsAppStatementQuery = ({
@@ -71,7 +69,7 @@ export const executeWhatsAppStatementQuery = ({
     input: CanonicalToolEvidence;
   }>): Effect.Effect<Option.Option<Response>> =>
   Effect.gen(function* () {
-    const current = transactionNow();
+    const current = yield* Clock.currentTimeMillis;
     const caller = yield* mintHostedStatementCaller({
       db,
       subject,

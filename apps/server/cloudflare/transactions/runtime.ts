@@ -11,22 +11,19 @@ import {
   executeCanonicalWork,
   executeOAuthCanonicalWork,
 } from "../canonical-operations/operations";
-import { currentMillis } from "../runtime/operations";
 import { OAuthCanonicalAdmission } from "../../src/shell/mcp/contract";
+import { OAuthMcpAdmission } from "../mcp/contract";
+import { type McpResidency, makeMcpResidency } from "../mcp/runtime";
 import { OAuthRefreshAdmission, OAuthRevocationAdmission } from "../oauth-agents/contract";
 import { executeOAuthRefresh, executeOAuthRevocation } from "../oauth-agents/operations";
 import type { HostedCommitFence } from "../agent/contract";
 import { UserId } from "../../src/core/identity/contract";
 
-import { Data, DateTime, Effect, Exit, Option, Schema, type Scope } from "effect";
+import { Clock, Data, DateTime, Effect, Exit, Option, Schema, type Scope } from "effect";
 
 import { optionalHostedInference } from "../ai/runtime";
 import type { WorkersAiEnvironment } from "../ai/contract";
-import {
-  type TransactionCaller,
-  transactionNow,
-  transactionUnavailable,
-} from "../canonical-work/operations";
+import { type TransactionCaller, transactionUnavailable } from "../canonical-work/operations";
 import { ForwardedEmailWork, StatementCoordinatorActivity } from "../ingestion/contract";
 import {
   failStatementSubmission,
@@ -45,9 +42,6 @@ import {
 const digestBytes = 32;
 const HTTP_OK = 200;
 const HTTP_ACCEPTED = 202;
-class StatementActivityUnavailable extends Data.TaggedError("StatementActivityUnavailable")<{
-  cause: unknown;
-}> {}
 class EmailActivityUnavailable extends Data.TaggedError("EmailActivityUnavailable") {}
 const httpServiceUnavailable = 503;
 /** Rebuild the exact live subject the work admission was issued for. */
@@ -91,30 +85,26 @@ const executeStatementActivity = (
   userId: string
 ): Effect.Effect<Response> => {
   const { submissionId } = activity;
-  const request =
-    activity._tag === "StatementFailed"
-      ? (): Promise<number> =>
-          failStatementSubmission({
-            DB: environment.DB,
-            userId,
-            submissionId,
-            // The Workflow's bounded retry budget is exhausted; preserve partial outcomes.
-            reason: "resource-limit",
-          }).then(() => HTTP_OK)
-      : (): Promise<number> => {
-          const bucket = environment.STATEMENT_STAGING_BUCKET;
-          if (bucket === undefined) return Promise.resolve(httpServiceUnavailable);
-          return processStatementSubmission({
-            DB: environment.DB,
-            STATEMENT_STAGING_BUCKET: bucket,
-            userId,
-            submissionId,
-          }).then((progress) => (progress === "continue" ? HTTP_ACCEPTED : HTTP_OK));
-        };
-  return Effect.tryPromise({
-    try: request,
-    catch: (cause) => new StatementActivityUnavailable({ cause }),
-  }).pipe(
+  const request = Effect.gen(function* () {
+    if (activity._tag === "StatementFailed") {
+      yield* failStatementSubmission({
+        DB: environment.DB,
+        userId,
+        submissionId,
+        reason: "resource-limit",
+      });
+      return HTTP_OK;
+    }
+    if (environment.STATEMENT_STAGING_BUCKET === undefined) return httpServiceUnavailable;
+    const progress = yield* processStatementSubmission({
+      DB: environment.DB,
+      STATEMENT_STAGING_BUCKET: environment.STATEMENT_STAGING_BUCKET,
+      userId,
+      submissionId,
+    });
+    return progress === "continue" ? HTTP_ACCEPTED : HTTP_OK;
+  });
+  return request.pipe(
     Effect.map((status) => new Response(null, { status })),
     Effect.orElseSucceed(transactionUnavailable)
   );
@@ -146,7 +136,7 @@ const executeCanonicalAdmission = (
       db: environment.DB,
       work: admission.work,
       subject: admissionSubject(admission),
-      current: transactionNow(),
+      current: yield* Clock.currentTimeMillis,
       bucket: Option.fromUndefinedOr(environment.STATEMENT_STAGING_BUCKET),
       hostedFence,
       inference,
@@ -278,10 +268,13 @@ const privateOAuthCanonicalWork = (
     return Effect.succeed(transactionUnavailable());
   }
   const admitted = oauth.value;
-  if (input.request.signal.aborted || currentMillis() >= admitted.deadlineMilliseconds) {
-    return Effect.succeed(transactionUnavailable());
-  }
   return Effect.gen(function* () {
+    if (
+      input.request.signal.aborted ||
+      (yield* Clock.currentTimeMillis) >= admitted.deadlineMilliseconds
+    ) {
+      return transactionUnavailable();
+    }
     const inference = yield* optionalHostedInference({
       environment: input.environment,
       db: input.environment.DB,
@@ -324,12 +317,15 @@ const privateWeeklyActivity = (
     return Option.some(Effect.succeed(transactionUnavailable()));
   }
   return Option.some(
-    executeWeeklyWork({
-      environment: input.environment,
-      userId: UserId.make(input.userId),
-      work: work.value,
-      now: DateTime.makeUnsafe(transactionNow()),
-    }).pipe(
+    DateTime.now.pipe(
+      Effect.flatMap((now) =>
+        executeWeeklyWork({
+          environment: input.environment,
+          userId: UserId.make(input.userId),
+          work: work.value,
+          now,
+        })
+      ),
       Effect.map((result) => Response.json(result, { headers: { "cache-control": "no-store" } })),
       Effect.orElseSucceed(transactionUnavailable)
     )
@@ -392,6 +388,38 @@ const reservedCoordinatorProbe = ({
 };
 
 /** One instance per stable User coordinates mutations; D1 alone owns the FinancialRecord. */
+const executeMcpProtocolAdmission = (
+  mcp: McpResidency,
+  request: Request,
+  userId: string
+): Promise<Response> =>
+  Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const candidate = yield* Effect.option(Effect.tryPromise(() => request.json()));
+        if (Option.isNone(candidate)) return transactionUnavailable();
+        const admission = Schema.decodeUnknownOption(OAuthMcpAdmission)(candidate.value);
+        if (Option.isNone(admission) || admission.value.userId !== userId) {
+          return transactionUnavailable();
+        }
+        return yield* mcp.handle({ admission: admission.value, signal: request.signal });
+      })
+    )
+  );
+const executeResidentOAuthActivity = (
+  input: OAuthActivityInput,
+  mcp: McpResidency,
+  activity: Effect.Effect<Response, never, Scope.Scope>
+): Effect.Effect<Response, never, Scope.Scope> =>
+  Effect.gen(function* () {
+    const response = yield* activity;
+    if (new URL(input.request.url).pathname !== "/oauth-revoke" || !response.ok) return response;
+    const revoked = Schema.decodeUnknownOption(OAuthRevocationAdmission)(input.candidate);
+    if (Option.isSome(revoked) && revoked.value.userId === input.userId) {
+      yield* mcp.retireConnections(revoked.value.connectionId);
+    }
+    return response;
+  });
 export class UserTransactionCoordinator {
   private pending: Promise<void> = Promise.resolve();
   private readonly state: Readonly<{
@@ -399,6 +427,7 @@ export class UserTransactionCoordinator {
     storage: Pick<DurableObjectStorage, "setAlarm">;
   }>;
   private readonly env: CoordinatorEnvironment;
+  private readonly mcp: McpResidency;
   constructor(
     state: Readonly<{
       id: Readonly<{ name: string }>;
@@ -408,6 +437,49 @@ export class UserTransactionCoordinator {
   ) {
     this.state = state;
     this.env = env;
+    this.mcp = makeMcpResidency({
+      userId: state.id.name,
+      db: env.DB,
+      enqueueCanonicalWork: (input) => this.enqueueOAuthCanonicalWork(input),
+    });
+  }
+
+  /** Compose one canonical ticket on the callback fiber, including predecessor and native settlement. */
+  private enqueueOAuthCanonicalWork(
+    input: Readonly<{ admission: OAuthCanonicalAdmission; signal: AbortSignal }>
+  ): Effect.Effect<Response> {
+    return Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const preceding = this.pending;
+        const settled = Promise.withResolvers<void>();
+        this.pending = settled.promise;
+        return { preceding, settled };
+      }),
+      ({ preceding }) =>
+        Effect.tryPromise(() => preceding).pipe(
+          // The pending chain is normalized on every ordinary ingress and our resolve-only
+          // ticket owns this predecessor. Rejection would violate that internal invariant.
+          Effect.orDie,
+          Effect.andThen(
+            Effect.scoped(
+              privateOAuthCanonicalWork({
+                request: new Request("https://coordinator.internal/oauth-canonical", {
+                  method: "POST",
+                  signal: input.signal,
+                }),
+                candidate: input.admission,
+                environment: this.env,
+                userId: this.state.id.name,
+              })
+            )
+          )
+        ),
+      ({ preceding, settled }) =>
+        Effect.tryPromise(() => preceding).pipe(
+          Effect.orDie,
+          Effect.ensuring(Effect.sync(settled.resolve))
+        )
+    );
   }
 
   fetch(request: Request): Promise<Response> {
@@ -421,6 +493,15 @@ export class UserTransactionCoordinator {
       method: request.method,
     });
     if (Option.isSome(probe)) return probe.value;
+    if (path === "/oauth-mcp") {
+      const mcp = this.mcp;
+      // Protocol/control never waits behind its target; only canonical callbacks take a ticket.
+      return observeWorkerResponse(() => executeMcpProtocolAdmission(mcp, request, userId), {
+        environment: workerRelease(environment),
+        telemetry: cloudflareWorkerTelemetry,
+        operation: "worker.core.coordinator",
+      });
+    }
     const hosted = makeAgentService({
       environment,
       userId: UserId.make(userId),
@@ -458,6 +539,7 @@ export class UserTransactionCoordinator {
   ): Promise<Response> {
     const { request, userId } = input;
     const environment = this.env;
+    const mcp = this.mcp;
     return Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
@@ -476,7 +558,13 @@ export class UserTransactionCoordinator {
             environment,
             userId,
           });
-          if (Option.isSome(oauth)) return yield* oauth.value;
+          if (Option.isSome(oauth)) {
+            return yield* executeResidentOAuthActivity(
+              { request, candidate: candidate.value, environment, userId },
+              mcp,
+              oauth.value
+            );
+          }
           const admission = Schema.decodeUnknownOption(CanonicalWorkAdmission)(candidate.value);
           if (
             Option.isNone(admission) ||

@@ -29,6 +29,7 @@ import {
 import { makeHostedSender } from "../../../src/shell/channels/whatsapp/runtime";
 import {
   Cause,
+  Clock,
   Context,
   Deferred,
   Duration,
@@ -58,7 +59,7 @@ import {
 } from "./hosted-turn";
 import { expireHostedPending, finishHostedTurn } from "./turn-store";
 import { makeUserCloudflareHostedInference, optionalHostedInference } from "../../ai/runtime";
-import { transactionNow, transactionUnavailable } from "../../canonical-work/operations";
+import { transactionUnavailable } from "../../canonical-work/operations";
 import {
   cloudflareWorkerTelemetry,
   observeProviderFetch,
@@ -91,26 +92,28 @@ const sendWhatsAppAttempt = ({
   admission: Pick<WhatsAppTurnAdmission, "bsuid" | "businessPhoneNumberId">;
   text: TranscriptText;
   correlationToken: HostedDeliveryCorrelationToken;
-}>): Promise<
+}>): Effect.Effect<
   | Readonly<{ kind: "accepted"; messageId: WhatsAppProviderMessageId }>
   | Readonly<{ kind: "ambiguous" | "rejected" }>
 > =>
-  Effect.runPromiseExit(
+  Effect.exit(
     sender({
       recipient: admission.bsuid,
       businessPhoneNumberId: admission.businessPhoneNumberId,
       text,
       correlationToken,
     })
-  ).then((outcome) =>
-    Exit.isSuccess(outcome)
-      ? { kind: "accepted" as const, messageId: outcome.value.messageEvidence.providerMessageId }
-      : {
-          kind: Option.match(Cause.findErrorOption(outcome.cause), {
-            onSome: (failure) => failure.deliveryCertainty,
-            onNone: () => "ambiguous" as const,
-          }),
-        }
+  ).pipe(
+    Effect.map((outcome) =>
+      Exit.isSuccess(outcome)
+        ? { kind: "accepted" as const, messageId: outcome.value.messageEvidence.providerMessageId }
+        : {
+            kind: Option.match(Cause.findErrorOption(outcome.cause), {
+              onSome: (failure) => failure.deliveryCertainty,
+              onNone: () => "ambiguous" as const,
+            }),
+          }
+    )
   );
 
 const prepareWhatsAppExecution = (
@@ -168,7 +171,7 @@ const startWhatsAppTurn = ({
   signal: AbortSignal;
   scheduleRecovery: (dueAtMs: number) => Promise<void>;
   onAdmitted: (turnId: TranscriptTurnId) => void;
-}>): Promise<Response> => {
+}>): ReturnType<typeof completeWhatsAppTurnWithAdmission> => {
   const input: Parameters<typeof completeWhatsAppTurnWithAdmission>[0]["input"] = {
     db,
     subject: WhatsAppHostedSubject.make({
@@ -284,7 +287,7 @@ const recoverAbandonedWork = (owner: AgentServiceInput): Promise<void> => {
       const next = yield* expireHostedPending({
         db: env.DB,
         userId: owner.userId,
-        now: transactionNow(),
+        now: yield* Clock.currentTimeMillis,
       });
       if (Option.isSome(next)) {
         yield* Effect.tryPromise(() => owner.scheduleRecovery(next.value));
@@ -309,18 +312,16 @@ const runHostedReceipt = (owner: AgentServiceInput, request: Request): Promise<R
       ) {
         return transactionUnavailable();
       }
-      return yield* Effect.tryPromise(() =>
-        acknowledgeBrowserTurn({
-          db: env.DB,
-          subject: {
-            userId,
-            id: admission.value.sessionId,
-            digest: new Uint8Array(admission.value.digest),
-          },
-          turnId: admission.value.turnId,
-          receipt: admission.value.receipt,
-        })
-      ).pipe(Effect.orElseSucceed(transactionUnavailable));
+      return yield* acknowledgeBrowserTurn({
+        db: env.DB,
+        subject: {
+          userId,
+          id: admission.value.sessionId,
+          digest: new Uint8Array(admission.value.digest),
+        },
+        turnId: admission.value.turnId,
+        receipt: admission.value.receipt,
+      }).pipe(Effect.orElseSucceed(transactionUnavailable));
     })
   );
 };
@@ -342,18 +343,16 @@ const runHostedProgress = (owner: AgentServiceInput, request: Request): Promise<
       ) {
         return transactionUnavailable();
       }
-      return yield* Effect.tryPromise(() =>
-        readHostedProgress({
-          db: env.DB,
-          subject: {
-            userId,
-            id: admission.value.sessionId,
-            digest: new Uint8Array(admission.value.digest),
-          },
-          turnId: admission.value.turnId,
-          scheduleRecovery: (due) => state.storage.setAlarm(due),
-        })
-      ).pipe(Effect.orElseSucceed(transactionUnavailable));
+      return yield* readHostedProgress({
+        db: env.DB,
+        subject: {
+          userId,
+          id: admission.value.sessionId,
+          digest: new Uint8Array(admission.value.digest),
+        },
+        turnId: admission.value.turnId,
+        scheduleRecovery: (due) => state.storage.setAlarm(due),
+      }).pipe(Effect.orElseSucceed(transactionUnavailable));
     })
   );
 };
@@ -371,44 +370,42 @@ const executeHostedMutation = (
     input: CanonicalToolEvidence;
     hostedFence: HostedCommitFence;
   }>
-): Promise<Response> => {
+): Effect.Effect<Response, Cause.UnknownError> => {
   const env = owner.environment;
   const batch = Schema.decodeUnknownOption(
     Schema.Struct({ payload: Schema.Struct({ calls: BatchCalls }) })
   )(input);
   if (operation === atomicBatchOperation && Option.isNone(batch)) {
-    return Promise.resolve(transactionUnavailable());
+    return Effect.succeed(transactionUnavailable());
   }
   const work: CanonicalWork =
     operation === atomicBatchOperation && Option.isSome(batch)
       ? { _tag: "Batch", calls: batch.value.payload.calls }
       : { _tag: "Call", operation, input };
-  return Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const inference = canonicalWorkRequiresInference(work)
-          ? yield* optionalHostedInference({
-              environment: env,
-              db: env.DB,
-              userId: admission.userId,
-              admittedTurnId: () => Option.some(hostedFence.turnId),
-            })
-          : Option.none();
-        return yield* executeCanonicalWork({
-          db: env.DB,
-          work,
-          subject: {
+  return Effect.scoped(
+    Effect.gen(function* () {
+      const inference = canonicalWorkRequiresInference(work)
+        ? yield* optionalHostedInference({
+            environment: env,
+            db: env.DB,
             userId: admission.userId,
-            id: admission.sessionId,
-            digest: new Uint8Array(admission.digest),
-          },
-          current: transactionNow(),
-          bucket: Option.fromUndefinedOr(env.STATEMENT_STAGING_BUCKET),
-          hostedFence: Option.some(hostedFence),
-          inference,
-        });
-      })
-    )
+            admittedTurnId: () => Option.some(hostedFence.turnId),
+          })
+        : Option.none();
+      return yield* executeCanonicalWork({
+        db: env.DB,
+        work,
+        subject: {
+          userId: admission.userId,
+          id: admission.sessionId,
+          digest: new Uint8Array(admission.digest),
+        },
+        current: yield* Clock.currentTimeMillis,
+        bucket: Option.fromUndefinedOr(env.STATEMENT_STAGING_BUCKET),
+        hostedFence: Option.some(hostedFence),
+        inference,
+      });
+    })
   );
 };
 
@@ -473,32 +470,30 @@ const runWhatsAppWork = (
           Option.some(work.value.turnId)
         );
         if (Option.isNone(prepared)) return transactionUnavailable();
-        return yield* Effect.tryPromise(() =>
-          resumeWhatsAppTurn({
-            outbound: prepared.value.outbound,
-            db: env.DB,
-            userId: UserId.make(userId),
-            turnId: work.value.turnId,
-            bucket: Option.fromUndefinedOr(env.STATEMENT_STAGING_BUCKET),
-            inference: prepared.value.inference,
-            signal: deadline.signal,
-            scheduleRecovery: owner.scheduleRecovery,
-            deliver: (admission) => ({
-              _tag: "WhatsApp",
-              contextualReplyQuery: contextualProactiveInsightQuery({
-                ...admission,
-                userId: UserId.make(userId),
-              }),
-              send: ({ text, correlationToken }) =>
-                sendWhatsAppAttempt({
-                  sender: prepared.value.sender,
-                  admission,
-                  text,
-                  correlationToken,
-                }),
+        return yield* resumeWhatsAppTurn({
+          outbound: prepared.value.outbound,
+          db: env.DB,
+          userId: UserId.make(userId),
+          turnId: work.value.turnId,
+          bucket: Option.fromUndefinedOr(env.STATEMENT_STAGING_BUCKET),
+          inference: prepared.value.inference,
+          signal: deadline.signal,
+          scheduleRecovery: owner.scheduleRecovery,
+          deliver: (admission) => ({
+            _tag: "WhatsApp",
+            contextualReplyQuery: contextualProactiveInsightQuery({
+              ...admission,
+              userId: UserId.make(userId),
             }),
-          })
-        );
+            send: ({ text, correlationToken }) =>
+              sendWhatsAppAttempt({
+                sender: prepared.value.sender,
+                admission,
+                text,
+                correlationToken,
+              }),
+          }),
+        });
       }).pipe(
         Effect.provideService(
           FetchHttpClient.Fetch,
@@ -538,7 +533,7 @@ const runWhatsAppTurn = (
     const replay = yield* classifyWhatsAppAdmission({
       db: env.DB,
       proof,
-      now: transactionNow(),
+      now: yield* Clock.currentTimeMillis,
     });
     if (replay !== "fresh") {
       const status = { expired: 422, replay: 200, conflict: 409 }[replay];
@@ -547,25 +542,23 @@ const runWhatsAppTurn = (
     const choice = yield* handleWeeklyChoice({
       environment: env,
       proof,
-      now: transactionNow(),
+      now: yield* Clock.currentTimeMillis,
     });
     if (Option.isSome(choice)) return choice.value;
     yield* recordWeeklyReply({ db: env.DB, proof });
     const prepared = yield* prepareWhatsAppExecution(env, owner.userId, deadline.admittedTurnId);
     if (Option.isNone(prepared)) return transactionUnavailable();
-    return yield* Effect.tryPromise(() =>
-      startWhatsAppTurn({
-        db: env.DB,
-        proof,
-        bucket: Option.fromUndefinedOr(env.STATEMENT_STAGING_BUCKET),
-        outbound: prepared.value.outbound,
-        inference: prepared.value.inference,
-        sender: prepared.value.sender,
-        signal: deadline.signal,
-        scheduleRecovery: owner.scheduleRecovery,
-        onAdmitted: deadline.onAdmitted,
-      })
-    );
+    return yield* startWhatsAppTurn({
+      db: env.DB,
+      proof,
+      bucket: Option.fromUndefinedOr(env.STATEMENT_STAGING_BUCKET),
+      outbound: prepared.value.outbound,
+      inference: prepared.value.inference,
+      sender: prepared.value.sender,
+      signal: deadline.signal,
+      scheduleRecovery: owner.scheduleRecovery,
+      onAdmitted: deadline.onAdmitted,
+    });
   }).pipe(
     Effect.provideService(
       FetchHttpClient.Fetch,
@@ -590,8 +583,9 @@ const runHostedTurn = (
   const userId = owner.userId;
   const env = owner.environment;
   const state = { storage: { setAlarm: owner.scheduleRecovery } };
-  const executeMutation = (input: Parameters<typeof executeHostedMutation>[1]): Promise<Response> =>
-    executeHostedMutation(owner, input);
+  const executeMutation = (
+    input: Parameters<typeof executeHostedMutation>[1]
+  ): ReturnType<typeof executeHostedMutation> => executeHostedMutation(owner, input);
   return Effect.runPromise(
     Effect.gen(function* () {
       const candidate = yield* Effect.tryPromise(() => request.json()).pipe(
@@ -614,28 +608,26 @@ const runHostedTurn = (
         })
       );
       if (Exit.isFailure(inference)) return transactionUnavailable();
-      return yield* Effect.tryPromise(() =>
-        completeHostedTurnWithAdmission({
-          input: {
-            db: env.DB,
-            bucket: Option.fromUndefinedOr(env.STATEMENT_STAGING_BUCKET),
-            executeMutation: Option.some((operation, input, hostedFence) =>
-              executeMutation({ admission: admission.value, operation, input, hostedFence })
-            ),
-            subject: {
-              userId: admission.value.userId,
-              id: admission.value.sessionId,
-              digest: new Uint8Array(admission.value.digest),
-            },
-            text: admission.value.text,
-            inference: inference.value,
-            deliver: browserHostedDelivery,
-            signal: deadline.signal,
-            scheduleRecovery: (dueAtMs) => state.storage.setAlarm(dueAtMs),
+      return yield* completeHostedTurnWithAdmission({
+        input: {
+          db: env.DB,
+          bucket: Option.fromUndefinedOr(env.STATEMENT_STAGING_BUCKET),
+          executeMutation: Option.some((operation, input, hostedFence) =>
+            executeMutation({ admission: admission.value, operation, input, hostedFence })
+          ),
+          subject: {
+            userId: admission.value.userId,
+            id: admission.value.sessionId,
+            digest: new Uint8Array(admission.value.digest),
           },
-          onAdmitted: deadline.onAdmitted,
-        })
-      ).pipe(
+          text: admission.value.text,
+          inference: inference.value,
+          deliver: browserHostedDelivery,
+          signal: deadline.signal,
+          scheduleRecovery: (dueAtMs) => state.storage.setAlarm(dueAtMs),
+        },
+        onAdmitted: deadline.onAdmitted,
+      }).pipe(
         Effect.withSpan("agent.hostedTurn.execution"),
         Effect.orElseSucceed(transactionUnavailable)
       );
@@ -685,8 +677,13 @@ const acceptHostedRequest = (
     }),
     settled: Option.match(deadline, {
       onNone: () => ownerSettled,
+      // Recovery fences only this hosted execution, never its ordinary predecessor. Its timer
+      // cannot release the shared User queue until that predecessor has independently settled.
       onSome: () =>
-        boundedHostedOwner({ ownerSettled, recover: () => recoverAbandonedWork(owner) }),
+        preceding.then(
+          () => boundedHostedOwner({ ownerSettled, recover: () => recoverAbandonedWork(owner) }),
+          () => ownerSettled
+        ),
     }),
   });
 };

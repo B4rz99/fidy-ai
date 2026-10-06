@@ -5,7 +5,7 @@ import type { TelemetryWorkRecord } from "../../src/shell/observability/contract
 import { makeWorkerTelemetry } from "../runtime/telemetry/operations";
 import { TestClock } from "effect/testing";
 import { allowancePeriod } from "../../src/core/quotas/operations";
-import { Clock, Data, DateTime, Effect, Exit, Option } from "effect";
+import { Clock, Data, DateTime, Effect, Exit, Option, Schema } from "effect";
 import { Miniflare } from "miniflare";
 import { applyTestMigration } from "../d1-test-fixture";
 import { afterEach, expect } from "vitest";
@@ -18,6 +18,7 @@ import {
   receiveForwardedEmailWork,
 } from "./runtime";
 import { listNeedsReviewItems, processForwardedEmail } from "./operations";
+import { currentMillis } from "../runtime/operations";
 
 import { UserTransactionCoordinator } from "../transactions/runtime";
 
@@ -171,7 +172,7 @@ const setup = Effect.fn(function* () {
     CREATE TABLE web_sessions (id TEXT PRIMARY KEY, user_id TEXT, token_digest BLOB, revoked_at_ms INTEGER, idle_expires_at_ms INTEGER, hard_expires_at_ms INTEGER);
     CREATE TABLE statement_submission_audit (id TEXT PRIMARY KEY, user_id TEXT, operation TEXT, outcome TEXT, occurred_at_ms INTEGER);
     CREATE TABLE transaction_audit (user_id TEXT, occurred_at_ms INTEGER);
-    CREATE TABLE pat_audit (user_id TEXT, pat_id TEXT, operation TEXT, occurred_at_ms INTEGER);
+    CREATE TABLE pat_audit (user_id TEXT, pat_id TEXT, oauth_connection_id TEXT, oauth_credential_id TEXT, operation TEXT, occurred_at_ms INTEGER);
     CREATE TABLE category_audit (user_id TEXT, occurred_at_ms INTEGER);
     CREATE TABLE memory_audit (user_id TEXT, occurred_at_ms INTEGER);
     CREATE TABLE categories (id TEXT PRIMARY KEY);
@@ -641,6 +642,117 @@ it("keeps uncertain mail in visible review rather than creating a Transaction", 
       ).toHaveLength(0);
     })
   ));
+
+it.effect(
+  "validates persisted XLSX optional fields and neighboring CSV without publishing purpose-bound evidence",
+  () =>
+    Effect.gen(function* () {
+      const { db } = yield* setup();
+      const current = currentMillis();
+      const id = "10000000-0000-4000-8000-000000000201";
+      const digest = new Uint8Array(32);
+      yield* wait(() =>
+        db
+          .prepare(
+            "INSERT INTO web_sessions (id, user_id, token_digest, idle_expires_at_ms, hard_expires_at_ms) VALUES (?, ?, ?, ?, ?)"
+          )
+          .bind(id, userA, digest, current + 60_000, current + 60_000)
+          .run()
+      );
+      yield* wait(() =>
+        db
+          .prepare(
+            "INSERT INTO statement_clarifications (submission_id,user_id,state,expires_at_ms) VALUES (?,?,'awaiting',?)"
+          )
+          .bind("10000000-0000-4000-8000-000000000602", userA, current + 60_000)
+          .run()
+      );
+      const evidence = [
+        {
+          sourceFormat: "xlsx",
+          sheetName: "Sheet1",
+          sheetIndex: 0,
+          rowNumber: 2,
+          hidden: true,
+          cells: [
+            {
+              address: "B2",
+              cellType: "number",
+              value: "25000",
+              formattedText: "$25,000",
+              numberFormat: "$#,##0",
+              formula: "12500*2",
+            },
+            { address: "C2", cellType: "string", value: "Mercado" },
+          ],
+        },
+        {
+          sourceFormat: "csv",
+          recordNumber: 1,
+          startLine: 1,
+          endLine: 1,
+          rawRecord: "2026-02-05,25000,Mercado",
+          fields: ["2026-02-05", "25000", "Mercado"],
+        },
+      ];
+      for (const [index, original] of evidence.entries()) {
+        yield* wait(() =>
+          db
+            .prepare(
+              `INSERT INTO statement_needs_review (id, user_id, submission_id, record_number, reason, original_evidence, issues, status, evidence_expires_at_ms, created_at_ms, service_market, locale, time_zone, source_format, parser_revision, extractor_revision) VALUES (?, ?, ?, ?, 'mapping-unavailable', ?, '[]', 'pending', ?, ?, 'CO', 'es-CO', 'America/Bogota', ?, 'statement-parser-v1', 'test')`
+            )
+            .bind(
+              `10000000-0000-4000-8000-00000000060${index}`,
+              userA,
+              "10000000-0000-4000-8000-000000000602",
+              index + 1,
+              JSON.stringify(original),
+              current + 60_000,
+              current - index,
+              original.sourceFormat
+            )
+            .run()
+        );
+      }
+      const page = yield* listNeedsReviewItems({
+        database: db,
+        environment: { DB: db },
+        subject: { id, userId: userA, digest },
+        url: new URL("https://api.fidyapp.com/ingestion/needs-review"),
+      });
+      expect(page.status).toBe(200);
+      const body = yield* wait(() => page.json());
+      expect(body).toMatchObject({
+        data: [{ sourceFormat: "xlsx" }, { sourceFormat: "csv" }],
+      });
+      expect(yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(body)).not.toContain(
+        "originalEvidence"
+      );
+      yield* wait(() =>
+        db.prepare("UPDATE statement_needs_review SET original_evidence='malformed'").run()
+      );
+      const corrupt = yield* listNeedsReviewItems({
+        database: db,
+        environment: { DB: db },
+        subject: { id, userId: userA, digest },
+        url: new URL("https://api.fidyapp.com/ingestion/needs-review"),
+      });
+      expect(corrupt.status).toBe(503);
+      yield* wait(() => db.prepare("DELETE FROM statement_clarifications").run());
+      const metadata = yield* listNeedsReviewItems({
+        database: db,
+        environment: { DB: db },
+        subject: { id, userId: userA, digest },
+        url: new URL("https://api.fidyapp.com/ingestion/needs-review"),
+      });
+      expect(metadata.status).toBe(200);
+      const retained = yield* wait(() => metadata.json());
+      expect(retained).toMatchObject({ data: [{ sourceFormat: "xlsx" }, { sourceFormat: "csv" }] });
+      expect(
+        yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(retained)
+      ).not.toContain("originalEvidence");
+    })
+);
 
 it("shows only the owner's pending forwarded email in the canonical review page", () =>
   Effect.runPromise(

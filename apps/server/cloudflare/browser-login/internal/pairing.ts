@@ -25,9 +25,9 @@ const PairingProof = Schema.Struct({
 });
 const Pairing = Schema.Struct({
   verifier_digest: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))),
-  expires_at_ms: Schema.Finite,
+  expires_at_ms: Schema.DateTimeUtcFromMillis,
   wrong_attempts: Schema.Int,
-  last_poll_at_ms: Schema.NullOr(Schema.Finite),
+  last_poll_at_ms: Schema.NullOr(Schema.DateTimeUtcFromMillis),
   minimum_poll_interval_seconds: Schema.Int,
   state: Schema.Literals(["pending_approval", "ready", "consumed", "invalidated"]),
 });
@@ -106,46 +106,44 @@ const samplePublicCode = (): string => {
 };
 
 /** Start an unbound browser challenge. Only the browser receives its private verifier. */
-export const startBrowserPairing = (db: D1Database): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const started = yield* Clock.currentTimeMillis;
-      const retained = retainedSessionPairingsQuery();
-      // Expiry is checked at every use; pruning is bounded and cannot change an active pairing.
-      yield* attempt(() =>
-        db
-          .prepare(
-            `DELETE FROM browser_login_pairings WHERE id IN (
+export const startBrowserPairing = (db: D1Database): Effect.Effect<Response, void> =>
+  Effect.gen(function* () {
+    const started = yield* Clock.currentTimeMillis;
+    const retained = retainedSessionPairingsQuery();
+    // Expiry is checked at every use; pruning is bounded and cannot change an active pairing.
+    yield* attempt(() =>
+      db
+        .prepare(
+          `DELETE FROM browser_login_pairings WHERE id IN (
     SELECT id FROM browser_login_pairings WHERE expires_at_ms <= ? AND id NOT IN
     (SELECT pairingId FROM (${retained.sql})) ORDER BY expires_at_ms LIMIT 32)`
-          )
-          .bind(started, ...retained.params)
-          .run()
-      );
-      const publicCode = samplePublicCode();
-      const privateVerifier = Base64Url.encode(crypto.getRandomValues(new Uint8Array(digestBytes)));
-      const pairingId = uuid();
-      const proofDigest = yield* attempt(() => sha256(privateVerifier));
-      const result = yield* attempt(() =>
-        db
-          .prepare(
-            `INSERT INTO browser_login_pairings
+        )
+        .bind(started, ...retained.params)
+        .run()
+    );
+    const publicCode = samplePublicCode();
+    const privateVerifier = Base64Url.encode(crypto.getRandomValues(new Uint8Array(digestBytes)));
+    const pairingId = uuid();
+    const proofDigest = yield* attempt(() => sha256(privateVerifier));
+    const result = yield* attempt(() =>
+      db
+        .prepare(
+          `INSERT INTO browser_login_pairings
     (id, public_code, verifier_digest, created_at_ms, expires_at_ms)
     VALUES (?, ?, ?, ?, ?)`
-          )
-          .bind(pairingId, publicCode, proofDigest, started, started + pairingMs)
-          .run()
-      );
-      if (result.meta.changes !== 1) return unavailable();
-      return json({
-        pairingId,
-        privateVerifier,
-        publicCode,
-        expiresAt: instant(started + pairingMs),
-        pollingIntervalSeconds: 5,
-      });
-    })
-  );
+        )
+        .bind(pairingId, publicCode, proofDigest, started, started + pairingMs)
+        .run()
+    );
+    if (result.meta.changes !== 1) return unavailable();
+    return json({
+      pairingId,
+      privateVerifier,
+      publicCode,
+      expiresAt: instant(started + pairingMs),
+      pollingIntervalSeconds: 5,
+    });
+  });
 
 /** One signed WhatsApp message may bind one pending challenge to its established User. */
 type ApprovalInput = Readonly<{
@@ -162,51 +160,49 @@ export const approveBrowserPairing = ({
 }: {
   db: D1Database;
   input: ApprovalInput;
-}): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const caller = Schema.decodeOption(WhatsAppCallerReference)({
-        businessPortfolioId: input.portfolioId,
-        businessScopedUserId: input.bsuid,
-      });
-      if (Option.isNone(caller)) return invalid();
-      const user = yield* findWhatsAppUser({
+}): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const caller = Schema.decodeOption(WhatsAppCallerReference)({
+      businessPortfolioId: input.portfolioId,
+      businessScopedUserId: input.bsuid,
+    });
+    if (Option.isNone(caller)) return invalid();
+    const user = yield* findWhatsAppUser({
+      db,
+      portfolioId: caller.value.businessPortfolioId,
+      bsuid: caller.value.businessScopedUserId,
+    });
+    if (Option.isNone(user)) return invalid();
+    const result = yield* attempt(() =>
+      prepareWhatsAppIdentity({
         db,
-        portfolioId: caller.value.businessPortfolioId,
-        bsuid: caller.value.businessScopedUserId,
-      });
-      if (Option.isNone(user)) return invalid();
-      const result = yield* attempt(() =>
-        prepareWhatsAppIdentity({
-          db,
-          userId: user.value,
-          statement: protectConsentStatement({
-            statement: {
-              sql: `INSERT INTO browser_login_approvals (portfolio_id, message_id, pairing_id, user_id)
+        userId: user.value,
+        statement: protectConsentStatement({
+          statement: {
+            sql: `INSERT INTO browser_login_approvals (portfolio_id, message_id, pairing_id, user_id)
               SELECT ?, ?, p.id, w.userId FROM browser_login_pairings AS p
               JOIN identity_associations AS w ON w.businessPortfolioId = ? AND w.businessScopedUserId = ?
               WHERE p.public_code = ? AND p.state = 'pending_approval'
                 AND p.expires_at_ms > ? AND p.expires_at_ms > ?
                 AND ? >= (p.created_at_ms / 1000) * 1000`,
-              params: [
-                input.portfolioId,
-                input.messageId,
-                input.portfolioId,
-                input.bsuid,
-                input.publicCode,
-                input.receivedAtMs,
-                input.occurredAtMs,
-                input.occurredAtMs,
-              ],
-            },
-            subject: { _tag: "User", userId: user.value },
-            requirement: "granted",
-          }),
-        }).run()
-      );
-      return result.meta.changes > 0 ? new Response(null, { status: 200 }) : invalid();
-    }).pipe(Effect.catchCause(() => Effect.succeed(invalid())))
-  );
+            params: [
+              input.portfolioId,
+              input.messageId,
+              input.portfolioId,
+              input.bsuid,
+              input.publicCode,
+              input.receivedAtMs,
+              input.occurredAtMs,
+              input.occurredAtMs,
+            ],
+          },
+          subject: { _tag: "User", userId: user.value },
+          requirement: "granted",
+        }),
+      }).run()
+    );
+    return result.meta.changes > 0 ? new Response(null, { status: 200 }) : invalid();
+  }).pipe(Effect.orElseSucceed(invalid));
 
 /** Redeem only an approved pairing with the browser's independent verifier. */
 export const redeemBrowserPairing = ({
@@ -215,37 +211,35 @@ export const redeemBrowserPairing = ({
 }: {
   request: Request;
   db: D1Database;
-}): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
-        return invalid();
-      }
-      {
-        const bytes = yield* readBoundedRequestBody(request, policy);
-        const text = yield* Effect.try({
-          try: () => new TextDecoder("utf-8", { fatal: true }).decode(bytes),
-          catch: () => undefined,
-        });
-        const proof = Schema.decodeOption(Schema.fromJsonString(PairingProof))(text);
-        if (Option.isNone(proof)) return invalid();
-        const raw = yield* attempt(() =>
-          db
-            .prepare(
-              `SELECT verifier_digest, expires_at_ms, wrong_attempts, state,
+}): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
+      return invalid();
+    }
+    {
+      const bytes = yield* readBoundedRequestBody(request, policy);
+      const text = yield* Effect.try({
+        try: () => new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+        catch: () => undefined,
+      });
+      const proof = Schema.decodeOption(Schema.fromJsonString(PairingProof))(text);
+      if (Option.isNone(proof)) return invalid();
+      const raw = yield* attempt(() =>
+        db
+          .prepare(
+            `SELECT verifier_digest, expires_at_ms, wrong_attempts, state,
         last_poll_at_ms, minimum_poll_interval_seconds
       FROM browser_login_pairings WHERE id = ?`
-            )
-            .bind(proof.value.pairingId)
-            .first()
-        );
-        if (raw === null) return invalid();
-        const pairing = Schema.decodeUnknownOption(Pairing)(raw);
-        if (Option.isNone(pairing)) return unavailable();
-        return yield* redeemValidProof(db, proof.value, pairing.value);
-      }
-    }).pipe(Effect.catchCause(() => Effect.succeed(invalid())))
-  );
+          )
+          .bind(proof.value.pairingId)
+          .first()
+      );
+      if (raw === null) return invalid();
+      const pairing = Schema.decodeUnknownOption(Pairing)(raw);
+      if (Option.isNone(pairing)) return unavailable();
+      return yield* redeemValidProof(db, proof.value, pairing.value);
+    }
+  }).pipe(Effect.orElseSucceed(invalid));
 
 const redeemValidProof = (
   db: D1Database,
@@ -260,11 +254,8 @@ const redeemValidProof = (
       verifierMatches: sameDigest(pairing.verifier_digest, verifierDigest),
       wrongVerifierAttempts: pairing.wrong_attempts,
       minimumPollIntervalSeconds: pairing.minimum_poll_interval_seconds,
-      lastAcceptedPollAt: Option.map(
-        Option.fromNullishOr(pairing.last_poll_at_ms),
-        DateTime.makeUnsafe
-      ),
-      expiresAt: DateTime.makeUnsafe(pairing.expires_at_ms),
+      lastAcceptedPollAt: Option.fromNullishOr(pairing.last_poll_at_ms),
+      expiresAt: pairing.expires_at_ms,
       attemptedAt: DateTime.makeUnsafe(current),
     });
     if (decision._tag === "WrongVerifier") {
@@ -293,12 +284,10 @@ const redeemValidProof = (
       });
     }
     if (decision._tag !== "Consume") return invalid();
-    return yield* attempt(() =>
-      establishWebSession({
-        db,
-        claim: prepareClaim({ pairingId: proof.pairingId, current, verifierDigest }),
-      })
-    );
+    return yield* establishWebSession({
+      db,
+      claim: prepareClaim({ pairingId: proof.pairingId, current, verifierDigest }),
+    });
   });
 
 const recordWrongVerifier = ({
@@ -385,14 +374,19 @@ const recordPoll = ({
           `UPDATE browser_login_pairings SET last_poll_at_ms = ?
     WHERE id = ? AND state = 'pending_approval' AND last_poll_at_ms IS ? AND expires_at_ms > ?`
         )
-        .bind(current, pairingId, pairing.last_poll_at_ms, current)
+        .bind(
+          current,
+          pairingId,
+          pairing.last_poll_at_ms === null ? null : DateTime.toEpochMillis(pairing.last_poll_at_ms),
+          current
+        )
         .run()
     );
     if (accepted.meta.changes !== 1) return invalid();
     return json(
       {
         status: "pending_approval",
-        expiresAt: instant(pairing.expires_at_ms),
+        expiresAt: DateTime.formatIso(pairing.expires_at_ms),
         pollingIntervalSeconds: decision.minimumPollIntervalSeconds,
       },
       HTTP_PENDING

@@ -29,12 +29,11 @@ import {
   recordOAuthCall,
 } from "../../src/shell/audit/operations";
 import { livePATAuthority, recordLivePATUse } from "../../src/shell/tokens/operations";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { type HostedInference } from "../../src/shell/hosted-inference/operations";
 import type { AuthorizedPAT } from "../tokens/contract";
 import { prepareOwnedStatement } from "../database/operations";
 import { newId } from "../secret-material/operations";
-import { currentMillis } from "../runtime/operations";
 import {
   type QueryCaller,
   type TransactionBoundaryFailure,
@@ -71,7 +70,6 @@ import {
 const HTTP_OK = 200;
 const MemoryCodec = Schema.toCodecJson(Memory);
 
-const memoryNow = (): number => currentMillis();
 const memoryId = (): string => newId();
 
 const jsonResponse = (body: unknown, status: number): Response =>
@@ -406,10 +404,12 @@ export const rejectMemoryMutation = ({
   subject: TransactionCaller;
   operation: MemoryOperationId;
   outcome: MemoryRefusalOutcome;
-}>): Effect.Effect<Response> => {
-  const refusal = memoryRefusal({ db, subject, operation, outcome, current: memoryNow() });
-  return refusal.record().pipe(Effect.flatMap(refusal.respond));
-};
+}>): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const current = yield* Clock.currentTimeMillis;
+    const refusal = memoryRefusal({ db, subject, operation, outcome, current });
+    return yield* refusal.record().pipe(Effect.flatMap(refusal.respond));
+  });
 
 const browserRecallAudit = ({
   db,
@@ -501,9 +501,8 @@ const recallRefused = ({
   subject: QueryCaller;
 }>): Effect.Effect<Response, TransactionBoundaryFailure> =>
   Effect.gen(function* () {
-    const live = yield* waitFor(() =>
-      liveTransactionAuthority({ db, subject, current: memoryNow() })
-    );
+    const current = yield* Clock.currentTimeMillis;
+    const live = yield* waitFor(() => liveTransactionAuthority({ db, subject, current }));
     return live ? memoryUnavailable() : yield* refusedCredentialResponse({ db, subject });
   });
 
@@ -528,7 +527,7 @@ export const recallMemories = ({
   subject: QueryCaller;
 }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
-    const current = memoryNow();
+    const current = yield* Clock.currentTimeMillis;
     if (yield* budgetExhausted({ db, subject, current })) return memoryRateLimited();
     const query = memoryRowsQuery({
       userId: subject.userId,

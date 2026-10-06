@@ -4,6 +4,10 @@ set -euo pipefail
 port="${WORKERS_AI_CONFORMANCE_PORT:-8799}"
 model="${HOSTED_AI_MODEL:?HOSTED_AI_MODEL must select the approval candidate}"
 
+# Client availability bounds, not proof that remote inference was cancelled or safe to replay.
+readonly readiness_connect_seconds=2 readiness_total_seconds=10
+readonly conformance_connect_seconds=5 conformance_total_seconds=180
+
 # The promotion gate combines deterministic malformed-output/recovery evidence with the live model.
 bun run --cwd ../../apps/server test:hosted-inference
 
@@ -42,9 +46,16 @@ worker_pid="$!"
 
 ready=false
 for _attempt in $(seq 1 60); do
-  if curl --silent --output /dev/null "http://127.0.0.1:${port}/"; then
+  if curl --silent --connect-timeout "$readiness_connect_seconds" \
+    --max-time "$readiness_total_seconds" --output /dev/null "http://127.0.0.1:${port}/"; then
     ready=true
     break
+  else
+    curl_status=$?
+    if [[ "$curl_status" == 28 ]]; then
+      echo "Workers AI conformance readiness request timed out." >&2
+      exit 1
+    fi
   fi
   if ! kill -0 "$worker_pid" 2>/dev/null; then
     echo "Workers AI conformance Worker failed to start." >&2
@@ -60,11 +71,16 @@ if [[ "$ready" != true ]]; then
   exit 1
 fi
 
-status=$(curl --silent --show-error \
+if ! status=$(curl --silent \
+  --connect-timeout "$conformance_connect_seconds" \
+  --max-time "$conformance_total_seconds" \
   --request POST \
   --write-out '%{http_code}' \
   --output "$response_file" \
-  "http://127.0.0.1:${port}/conformance")
+  "http://127.0.0.1:${port}/conformance"); then
+  echo "Workers AI conformance request failed." >&2
+  exit 1
+fi
 
 if [[ "$status" != 200 ]] || ! jq --exit-status \
   '. == {modelApprovalRevision: "workers-ai-gemma-4-2026-09-22", outcome: "conforming"}' \

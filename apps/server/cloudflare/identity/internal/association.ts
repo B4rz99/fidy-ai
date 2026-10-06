@@ -23,8 +23,13 @@ export const resolveCaller = ({
         .first(),
     catch: () => new IdentityUnavailable(),
   }).pipe(
-    Effect.map((row) =>
-      Option.map(Schema.decodeUnknownOption(UserRow)(row), ({ user_id }) => user_id)
+    Effect.flatMap((row) =>
+      row === null
+        ? Effect.succeed(Option.none<UserId>())
+        : Schema.decodeUnknownEffect(UserRow)(row).pipe(
+            Effect.map(({ user_id }) => Option.some(user_id)),
+            Effect.mapError(() => new IdentityUnavailable())
+          )
     )
   );
 

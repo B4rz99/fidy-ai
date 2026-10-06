@@ -1,24 +1,9 @@
-import { Crypto, Effect, PlatformError, Redacted } from "effect";
+import { Crypto, Effect, type PlatformError, Redacted } from "effect";
 import { Base64Url } from "effect/encoding";
+import { workerCryptoOptions } from "./internal/worker-crypto";
 
 const secretBytes = 32;
-const workerCrypto = Crypto.make({
-  randomBytes: (size) => crypto.getRandomValues(new Uint8Array(size)),
-  digest: (algorithm, data) =>
-    Effect.tryPromise({
-      try: () =>
-        crypto.subtle
-          .digest(algorithm, Uint8Array.from(data))
-          .then((bytes) => new Uint8Array(bytes)),
-      catch: (cause) =>
-        PlatformError.systemError({
-          _tag: "Unknown",
-          module: "WorkerCrypto",
-          method: "digest",
-          cause,
-        }),
-    }),
-});
+const workerCrypto = Crypto.make(workerCryptoOptions);
 /** Generate an unpredictable non-secret UUID for a new persisted identity. */
 export const newId = (): string => Effect.runSync(workerCrypto.randomUUIDv4.pipe(Effect.orDie));
 /** Generate 256 bits of opaque one-time secret authority; disclosure belongs to the owning transport. */

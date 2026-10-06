@@ -11,7 +11,7 @@ import { parseStatementFile } from "../../../src/shell/ingestion/operations";
 
 import type { CategoryId } from "../../../src/core/categories/contract";
 import { categorizeCaptures } from "../../categories/operations";
-import { Data, DateTime, Effect, Option, Schema } from "effect";
+import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
 import {
   type InterpretedStatementRow,
   ParsedStatementRow,
@@ -24,7 +24,7 @@ import {
 } from "../../../src/core/ingestion/operations";
 import { TransactionExtraction } from "../../../src/core/transactions/contract";
 import { prepareStatementCapture } from "../../transactions/operations";
-import { currentMillis } from "../../runtime/operations";
+import { StatementProcessingUnavailable } from "../contract";
 import { StatementStaging, newIngestionId } from "./statement-staging";
 import { maximumRetainedReviewEvidence } from "./statement-review-retention";
 import { statementChunkSize } from "./statement-processing-limits";
@@ -47,17 +47,15 @@ const evidenceCodec = Schema.toCodecJson(StatementRowEvidence);
 const extractorRevision = "statement-mechanical-v1";
 
 const newId = newIngestionId;
-const nowMs = currentMillis;
-const iso = (): string => DateTime.formatIso(DateTime.makeUnsafe(nowMs()));
-class StatementProcessingUnavailable extends Data.TaggedError("StatementProcessingUnavailable")<{
+class StatementProcessingDependencyFailed extends Data.TaggedError(
+  "StatementProcessingDependencyFailed"
+)<{
   readonly cause: unknown;
 }> {}
-const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, StatementProcessingUnavailable> =>
-  Effect.tryPromise({ try: run, catch: (cause) => new StatementProcessingUnavailable({ cause }) });
-const restoreRejection = <A>(promise: Promise<A>): Promise<A> =>
-  promise.catch((error: unknown) => {
-    if (error instanceof StatementProcessingUnavailable) throw error.cause;
-    throw error;
+const attempt = <A>(run: () => Promise<A>): Effect.Effect<A, StatementProcessingDependencyFailed> =>
+  Effect.tryPromise({
+    try: run,
+    catch: (cause) => new StatementProcessingDependencyFailed({ cause }),
   });
 
 const findOwned = (
@@ -66,7 +64,7 @@ const findOwned = (
   submissionId: string
 ): Effect.Effect<
   Option.Option<SubmissionRow>,
-  StatementProcessingUnavailable | Schema.SchemaError
+  StatementProcessingDependencyFailed | Schema.SchemaError
 > =>
   Effect.gen(function* () {
     const raw = yield* attempt(() =>
@@ -93,11 +91,13 @@ const markFailed = ({
   userId: string;
   submissionId: string;
   reason: typeof StatementFailureReason.Type;
-}>): Effect.Effect<void, StatementProcessingUnavailable> =>
-  attempt(() =>
-    db.batch([
-      db
-        .prepare(`UPDATE statement_submissions SET status = 'failed',
+}>): Effect.Effect<void, StatementProcessingDependencyFailed> =>
+  Effect.gen(function* () {
+    const current = yield* Clock.currentTimeMillis;
+    yield* attempt(() =>
+      db.batch([
+        db
+          .prepare(`UPDATE statement_submissions SET status = 'failed',
       started_at_ms = coalesce(started_at_ms, ?), completed_at_ms = ?, failure_reason = ?,
       input_rows = (SELECT nullif(count(*), 0) FROM statement_record_outcomes
         WHERE submission_id = ? AND user_id = ?),
@@ -110,30 +110,31 @@ const markFailed = ({
         (SELECT count(*) FROM statement_record_outcomes WHERE submission_id = ? AND user_id = ?
           AND outcome = 'needs-review') ELSE NULL END
       WHERE id = ? AND user_id = ? AND status IN ('queued', 'processing')`)
-        .bind(
-          nowMs(),
-          nowMs(),
-          reason,
-          submissionId,
-          userId,
-          submissionId,
-          userId,
-          submissionId,
-          userId,
-          submissionId,
-          userId,
-          submissionId,
-          userId,
-          submissionId,
-          userId
-        ),
-      db
-        .prepare(`UPDATE statement_backfill_entitlements
+          .bind(
+            current,
+            current,
+            reason,
+            submissionId,
+            userId,
+            submissionId,
+            userId,
+            submissionId,
+            userId,
+            submissionId,
+            userId,
+            submissionId,
+            userId,
+            submissionId,
+            userId
+          ),
+        db
+          .prepare(`UPDATE statement_backfill_entitlements
       SET submission_id = CASE WHEN consumed_at_ms IS NULL THEN NULL ELSE submission_id END
       WHERE user_id = ? AND submission_id = ? AND changes() = 1`)
-        .bind(userId, submissionId),
-    ])
-  ).pipe(Effect.asVoid);
+          .bind(userId, submissionId),
+      ])
+    ).pipe(Effect.asVoid, Effect.uninterruptible);
+  });
 
 /**
  * Settles exhausted statement work under the User coordinator, atomically releasing a pending
@@ -150,17 +151,11 @@ export const failStatementSubmission = ({
   userId: string;
   submissionId: string;
   reason: typeof StatementFailureReason.Type;
-}>): Promise<void> =>
-  restoreRejection(
-    Effect.runPromise(
-      markFailed({
-        db: DB,
-        userId,
-        submissionId,
-        reason: Schema.decodeSync(StatementFailureReason)(reason),
-      })
-    )
-  );
+}>): Effect.Effect<void, StatementProcessingUnavailable> =>
+  Effect.gen(function* () {
+    const safeReason = yield* Schema.decodeEffect(StatementFailureReason)(reason);
+    yield* markFailed({ db: DB, userId, submissionId, reason: safeReason });
+  }).pipe(Effect.mapError(() => new StatementProcessingUnavailable()));
 
 type RowWork = Readonly<{
   db: D1Database;
@@ -189,8 +184,11 @@ const acceptedStatements = (
       result: Extract<RowWork["result"], { outcome: "accepted" }>;
       categoryId: CategoryId;
     }>,
-  id: string,
-  activeArgs: ReadonlyArray<string | number>
+  {
+    id,
+    activeArgs,
+    current,
+  }: Readonly<{ id: string; activeArgs: ReadonlyArray<string | number>; current: number }>
 ): ReadonlyArray<D1PreparedStatement> =>
   prepareStatementCapture({
     db,
@@ -204,7 +202,7 @@ const acceptedStatements = (
       locale: context.locale,
       timeZone: context.time_zone,
       interpretationRevision: context.parser_revision,
-      createdAt: iso(),
+      createdAt: DateTime.formatIso(DateTime.makeUnsafe(current)),
       statementSubmissionId: submissionId,
       statementRecordNumber: row.recordNumber,
       statementContentHash: context.sha256,
@@ -222,8 +220,11 @@ const reviewStatement = (
     result,
     context,
   }: RowWork & Readonly<{ result: Extract<RowWork["result"], { outcome: "needs-review" }> }>,
-  id: string,
-  activeArgs: ReadonlyArray<string | number>
+  {
+    id,
+    activeArgs,
+    current,
+  }: Readonly<{ id: string; activeArgs: ReadonlyArray<string | number>; current: number }>
 ): D1PreparedStatement => {
   const evidence = Schema.encodeUnknownSync(evidenceCodec)(result.evidence);
   return db
@@ -246,14 +247,14 @@ const reviewStatement = (
       result.reason,
       maximumRetainedReviewEvidence,
       context.retention_expires_at_ms,
-      nowMs(),
+      current,
       JSON.stringify(evidence),
       JSON.stringify(result.issues),
       maximumRetainedReviewEvidence,
       context.retention_expires_at_ms,
-      nowMs(),
+      current,
       context.retention_expires_at_ms,
-      nowMs(),
+      current,
       context.service_market,
       context.locale,
       context.time_zone,
@@ -274,7 +275,7 @@ const commitOutcome = ({
   id: string;
   activeArgs: ReadonlyArray<string | number>;
   statements: ReadonlyArray<D1PreparedStatement>;
-}>): Effect.Effect<void, StatementProcessingUnavailable> =>
+}>): Effect.Effect<void, StatementProcessingDependencyFailed> =>
   attempt(() =>
     work.db.batch([
       ...statements,
@@ -296,7 +297,7 @@ const commitOutcome = ({
     ])
   ).pipe(Effect.asVoid);
 
-const rowOutcome = (work: RowWork): Effect.Effect<void, StatementProcessingUnavailable> =>
+const rowOutcome = (work: RowWork): Effect.Effect<void, StatementProcessingDependencyFailed> =>
   Effect.gen(function* () {
     const { db, userId, submissionId, row, result } = work;
     const existing = yield* attempt(() =>
@@ -308,14 +309,15 @@ const rowOutcome = (work: RowWork): Effect.Effect<void, StatementProcessingUnava
     );
     if (existing !== null) {
       if (Option.isNone(Schema.decodeUnknownOption(outcomeRow)(existing))) {
-        return yield* new StatementProcessingUnavailable({
+        return yield* new StatementProcessingDependencyFailed({
           cause: new Error("Statement outcome unavailable"),
         });
       }
       return;
     }
     const id = newId();
-    const activeArgs = [submissionId, userId, nowMs()];
+    const current = yield* Clock.currentTimeMillis;
+    const activeArgs = [submissionId, userId, current];
     const statements =
       result.outcome === "accepted"
         ? acceptedStatements(
@@ -324,12 +326,11 @@ const rowOutcome = (work: RowWork): Effect.Effect<void, StatementProcessingUnava
               result,
               categoryId: work.categoryId,
             },
-            id,
-            activeArgs
+            { id, activeArgs, current }
           )
-        : [reviewStatement({ ...work, result }, id, activeArgs)];
+        : [reviewStatement({ ...work, result }, { id, activeArgs, current })];
     // The unique record identity, its evidence and its Transaction or review commit together.
-    yield* commitOutcome({ work, id, activeArgs, statements });
+    yield* commitOutcome({ work, id, activeArgs, statements }).pipe(Effect.uninterruptible);
   });
 
 /**
@@ -352,20 +353,21 @@ type Progress = typeof countRow.Type;
 const readParsed = (
   input: ProcessInput,
   context: SubmissionRow
-): Effect.Effect<Option.Option<ParsedStatement>, StatementProcessingUnavailable> =>
+): Effect.Effect<Option.Option<ParsedStatement>, StatementProcessingDependencyFailed> =>
   Effect.gen(function* () {
     const { DB, STATEMENT_STAGING_BUCKET, userId, submissionId } = input;
+    const clock = yield* Clock.Clock;
     const staging = StatementStaging.make({
       database: DB,
       bucket: STATEMENT_STAGING_BUCKET,
-      nowEpochMs: nowMs,
+      nowEpochMs: () => clock.currentTimeMillisUnsafe(),
     });
     const bytes = yield* Effect.result(
       staging.readOwnedStagedBytes({ userId, stagingId: context.staging_id })
     );
     if (bytes._tag === "Failure") {
       if (bytes.failure._tag === "StatementStagingUnavailable") {
-        return yield* new StatementProcessingUnavailable({
+        return yield* new StatementProcessingDependencyFailed({
           cause: new Error("Statement storage unavailable"),
         });
       }
@@ -402,7 +404,7 @@ const validateParsed = (
   input: ProcessInput,
   context: SubmissionRow,
   parsed: ParsedStatement
-): Effect.Effect<Option.Option<ParsedStatement>, StatementProcessingUnavailable> =>
+): Effect.Effect<Option.Option<ParsedStatement>, StatementProcessingDependencyFailed> =>
   Effect.gen(function* () {
     if (parsed.sourceFormat !== context.source_format) {
       yield* markFailed({
@@ -438,7 +440,7 @@ const validateParsed = (
 
 const readProgress = (
   input: ProcessInput
-): Effect.Effect<Progress, StatementProcessingUnavailable | Schema.SchemaError> =>
+): Effect.Effect<Progress, StatementProcessingDependencyFailed | Schema.SchemaError> =>
   Effect.gen(function* () {
     const raw = yield* attempt(() =>
       input.DB.prepare(`SELECT count(*) AS total,
@@ -478,7 +480,7 @@ const finalizeChunk = ({
   parsed: ParsedStatement;
   rows: ReadonlyArray<ParsedStatementRow>;
   progress: Progress;
-}>): Effect.Effect<void, StatementProcessingUnavailable | Schema.SchemaError> =>
+}>): Effect.Effect<void, StatementProcessingDependencyFailed | Schema.SchemaError> =>
   Effect.gen(function* () {
     const chunk = rows.slice(progress.total, progress.total + statementChunkSize);
     const mapping = mechanicalMappingFor(parsed.headers);
@@ -497,7 +499,7 @@ const finalizeChunk = ({
     }).pipe(
       Effect.mapError(
         () =>
-          new StatementProcessingUnavailable({
+          new StatementProcessingDependencyFailed({
             cause: new Error("Statement categorization unavailable"),
           })
       )
@@ -507,7 +509,7 @@ const finalizeChunk = ({
       const categoryId = yield* Effect.fromOption(
         Option.fromUndefinedOr(categories[index]),
         () =>
-          new StatementProcessingUnavailable({
+          new StatementProcessingDependencyFailed({
             cause: new Error("Statement categorization unavailable"),
           })
       );
@@ -527,9 +529,10 @@ const completeSubmission = (
   input: ProcessInput,
   rows: number,
   counts: Progress
-): Effect.Effect<void, StatementProcessingUnavailable> =>
+): Effect.Effect<void, StatementProcessingDependencyFailed> =>
   Effect.gen(function* () {
     const { DB, userId, submissionId } = input;
+    const current = yield* Clock.currentTimeMillis;
     const finished = yield* attempt(() =>
       DB.batch([
         DB.prepare(`UPDATE statement_submissions
@@ -538,7 +541,7 @@ const completeSubmission = (
     WHERE id = ? AND user_id = ? AND status = 'processing'
       AND (SELECT count(*) FROM statement_record_outcomes
         WHERE submission_id = ? AND user_id = ?) = ?`).bind(
-          nowMs(),
+          current,
           rows,
           counts.accepted,
           counts.review,
@@ -560,7 +563,7 @@ const completeSubmission = (
       ])
     );
     if ((finished[0]?.meta.changes ?? 0) < 1) {
-      return yield* new StatementProcessingUnavailable({
+      return yield* new StatementProcessingDependencyFailed({
         cause: new Error("Statement finalization unavailable"),
       });
     }
@@ -570,18 +573,24 @@ const advanceSubmission = (
   input: ProcessInput,
   context: SubmissionRow,
   parsed: ParsedStatement
-): Effect.Effect<"continue" | "completed", StatementProcessingUnavailable | Schema.SchemaError> =>
+): Effect.Effect<
+  "continue" | "completed",
+  StatementProcessingDependencyFailed | Schema.SchemaError
+> =>
   Effect.gen(function* () {
-    const rows = yield* Schema.decodeUnknownEffect(Schema.Array(ParsedStatementRow))(parsed.rows);
+    const rows = yield* Schema.decodeEffect(Schema.toType(Schema.Array(ParsedStatementRow)))(
+      parsed.rows
+    );
+    const current = yield* Clock.currentTimeMillis;
     yield* attempt(() =>
       input.DB.prepare(`UPDATE statement_submissions SET status = 'processing',
     started_at_ms = coalesce(started_at_ms, ?) WHERE id = ? AND user_id = ? AND status = 'queued'`)
-        .bind(nowMs(), input.submissionId, input.userId)
+        .bind(current, input.submissionId, input.userId)
         .run()
     );
     const progress = yield* readProgress(input);
     if (progress.total > rows.length || progress.accepted + progress.review !== progress.total) {
-      return yield* new StatementProcessingUnavailable({
+      return yield* new StatementProcessingDependencyFailed({
         cause: new Error("Statement accounting unavailable"),
       });
     }
@@ -591,7 +600,7 @@ const advanceSubmission = (
     const counts = yield* readProgress(input);
     if (counts.total < rows.length) return "continue";
     if (counts.total !== rows.length || counts.accepted + counts.review !== rows.length) {
-      return yield* new StatementProcessingUnavailable({
+      return yield* new StatementProcessingDependencyFailed({
         cause: new Error("Statement accounting unavailable"),
       });
     }
@@ -601,28 +610,25 @@ const advanceSubmission = (
 
 export const processStatementSubmission = (
   input: ProcessInput
-): Promise<"continue" | "completed"> =>
-  restoreRejection(
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const context = yield* findOwned(input.DB, input.userId, input.submissionId);
-        if (Option.isNone(context)) return "completed";
-        if (context.value.status === "completed" || context.value.status === "failed") {
-          return "completed";
-        }
-        if (context.value.retention_expires_at_ms <= nowMs()) {
-          yield* markFailed({
-            db: input.DB,
-            userId: input.userId,
-            submissionId: input.submissionId,
-            reason: "retention-expired",
-          });
-          return "completed";
-        }
-        const parsed = yield* readParsed(input, context.value);
-        return Option.isSome(parsed)
-          ? yield* advanceSubmission(input, context.value, parsed.value)
-          : "completed";
-      })
-    )
-  );
+): Effect.Effect<"continue" | "completed", StatementProcessingUnavailable> =>
+  Effect.gen(function* () {
+    const context = yield* findOwned(input.DB, input.userId, input.submissionId);
+    if (Option.isNone(context)) return "completed";
+    if (context.value.status === "completed" || context.value.status === "failed") {
+      return "completed";
+    }
+    const current = yield* Clock.currentTimeMillis;
+    if (context.value.retention_expires_at_ms <= current) {
+      yield* markFailed({
+        db: input.DB,
+        userId: input.userId,
+        submissionId: input.submissionId,
+        reason: "retention-expired",
+      });
+      return "completed";
+    }
+    const parsed = yield* readParsed(input, context.value);
+    return Option.isSome(parsed)
+      ? yield* advanceSubmission(input, context.value, parsed.value)
+      : "completed";
+  }).pipe(Effect.mapError(() => new StatementProcessingUnavailable()));

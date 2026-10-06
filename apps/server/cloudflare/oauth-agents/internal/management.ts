@@ -34,8 +34,8 @@ const ConnectionRow = Schema.Struct({
   id: OAuthConnectionId,
   claimed_client_name: OAuthRegistration.fields.client_name,
   scopes_json: Schema.String,
-  expires_at_ms: Schema.Int,
-  revoked_at_ms: Schema.OptionFromNullOr(Schema.Int),
+  expires_at_ms: Schema.DateTimeUtcFromMillis,
+  revoked_at_ms: Schema.OptionFromNullOr(Schema.DateTimeUtcFromMillis),
 });
 const permissionCopy = (
   scope: PATScopes[number]
@@ -48,7 +48,7 @@ const connectionState = (
   current: number
 ): "revoked" | "expired" | "active" => {
   if (Option.isSome(row.revoked_at_ms)) return "revoked";
-  return row.expires_at_ms <= current ? "expired" : "active";
+  return DateTime.toEpochMillis(row.expires_at_ms) <= current ? "expired" : "active";
 };
 const projectConnection = (
   input: AuthorizedInput,
@@ -67,7 +67,7 @@ const projectConnection = (
       claimedClientName: row.claimed_client_name,
       scopes,
       permissions: scopes.map(permissionCopy),
-      expiresAt: DateTime.makeUnsafe(row.expires_at_ms),
+      expiresAt: row.expires_at_ms,
       state: connectionState(row, input.current),
       recentActivity,
     });
@@ -102,7 +102,7 @@ const listConnections = (
     }
     const rows = yield* Schema.decodeUnknownEffect(
       Schema.Array(ConnectionRow).check(Schema.isMaxLength(oauthConnectionPageSize + 1))
-    )(results[1]?.results);
+    )(results[1]?.results).pipe(Effect.mapError(() => new BootstrapUnavailable()));
     const page = rows.slice(0, oauthConnectionPageSize);
     const connections = yield* Effect.forEach(page, (row) => projectConnection(input, row));
     const body = yield* Schema.decodeEffect(Schema.toType(OAuthConnectionList))({

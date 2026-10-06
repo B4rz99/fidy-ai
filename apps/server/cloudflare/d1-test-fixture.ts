@@ -161,6 +161,8 @@ export const canonicalAdmissionMigrationNames = (
       "0033_canonical_request_protection",
       "0034_forwarded_email_deferral",
       "0035_media_submissions",
+      "0033_oauth_authority",
+      "0037_oauth_shared_audit_budget",
     ]),
   ].sort();
 /** Shared final clarification schema; processing and the shared Audit base must precede it. */

@@ -1,4 +1,4 @@
-import { type Cause, DateTime, Effect, Option, Schema } from "effect";
+import { type Cause, Effect, Option, Schema } from "effect";
 import {
   ProactiveInsightTranscriptEntry,
   TranscriptEntryId,
@@ -113,16 +113,16 @@ const decodeProactiveEntry = (
       Schema.Struct({
         id: TranscriptEntryId,
         insight_event_id: ProactiveInsightTranscriptEntry.fields.insightEventId,
-        occurred_at_ms: Schema.Int,
+        occurred_at_ms: Schema.DateTimeUtcFromMillis,
         text: ProactiveInsightTranscriptEntry.fields.text,
       })
     )(raw);
     return Option.some(
-      yield* Schema.decodeEffect(Schema.toCodecJson(ProactiveInsightTranscriptEntry))({
+      yield* Schema.decodeEffect(Schema.toType(ProactiveInsightTranscriptEntry))({
         _tag: "ProactiveInsightTranscriptEntry",
         id: row.id,
         insightEventId: row.insight_event_id,
-        occurredAt: DateTime.formatIso(DateTime.makeUnsafe(row.occurred_at_ms)),
+        occurredAt: row.occurred_at_ms,
         text: row.text,
       })
     );

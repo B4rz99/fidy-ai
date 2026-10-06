@@ -2,8 +2,13 @@ import {
   type StagedStatementBytes,
   type StatementStagingFailureReason,
   StatementStagingId,
+  StatementSubmissionId,
 } from "../../src/shell/ingestion/contract";
-import { Data, Effect, Fiber, Option, Result } from "effect";
+import { Data, Effect, Exit, Fiber, Option, Predicate, Result } from "effect";
+import { readCanonicalSubmission } from "./internal/statement-ingestion";
+import { prepareHeldStatementReviewDecision, prepareHeldStatementSubmission } from "./operations";
+import type { StatementDecisionWork } from "./contract";
+import assert from "node:assert/strict";
 import { Hex } from "effect/encoding";
 import { Miniflare } from "miniflare";
 import { applyTestMigration } from "../d1-test-fixture";
@@ -289,12 +294,394 @@ const onlyStagingRow = (database: D1Database): Promise<Option.Option<StagingRowR
     .first<StagingRowRecord>()
     .then(Option.fromNullishOr);
 
+/** Simulates a corrupt driver projection after the real User-scoped query has run. */
+const corruptFirst = (
+  database: D1Database,
+  select: string,
+  corrupt: (row: unknown) => unknown
+): D1Database => {
+  const wrap = (statement: D1PreparedStatement): D1PreparedStatement =>
+    new Proxy(statement, {
+      get: (target, property): unknown => {
+        if (property === "bind") return (...values: unknown[]) => wrap(target.bind(...values));
+        if (property === "first") return () => target.first().then(corrupt);
+        return Reflect.get(target, property, target);
+      },
+    });
+  return new Proxy(database, {
+    get: (target, property): unknown =>
+      property === "prepare"
+        ? (sql: string) => (sql.includes(select) ? wrap(target.prepare(sql)) : target.prepare(sql))
+        : Reflect.get(target, property, target),
+  });
+};
+
+const completedSubmission = (
+  runtime: Runtime,
+  stagingId: string
+): Effect.Effect<StatementSubmissionId> =>
+  Effect.gen(function* () {
+    const submissionId = StatementSubmissionId.make("20000000-0000-4000-8000-000000000101");
+    yield* fromTestPromise(() =>
+      runtime.database
+        .prepare(`INSERT INTO statement_submissions
+    (id,user_id,idempotency_key,staging_id,source_format,parser_revision,service_market,locale,time_zone,status,submitted_at_ms,started_at_ms,completed_at_ms,retention_expires_at_ms,input_rows,accepted_rows,needs_review_rows)
+    VALUES (?, ?, ?, ?, 'csv', 'v1', 'CO', 'es-CO', 'America/Bogota', 'completed', ?, ?, ?, ?, 0, 0, 0)`)
+        .bind(
+          submissionId,
+          userA,
+          "30000000-0000-4000-8000-000000000101",
+          stagingId,
+          startedAtEpochMs,
+          startedAtEpochMs,
+          startedAtEpochMs,
+          startedAtEpochMs + statementStagingLifetime
+        )
+        .run()
+    );
+    return submissionId;
+  });
+
+const publicationWork = (
+  runtime: Runtime,
+  staged: StagedStatementBytes
+): StatementDecisionWork => ({
+  db: runtime.database,
+  bucket: Option.some(runtime.bucket),
+  userId: userA,
+  authority: { table: "hosted_turns", predicate: "0 = 1", bindings: [] },
+  originSessionId: Option.none(),
+  originTurns: Option.none(),
+  publicationOrigin: Option.some({
+    sql: "SELECT user_id FROM statement_submissions WHERE 0 = 1",
+    params: [],
+  }),
+  requiredScope: Option.none(),
+  current: startedAtEpochMs,
+  input: {
+    payload: {
+      idempotencyKey: "30000000-0000-4000-8000-000000000101",
+      reference: {
+        stagingId: staged.stagingId,
+        byteLength: staged.byteLength,
+        sha256: staged.sha256,
+      },
+    },
+  },
+});
+
 const digestHex = (bytes: Uint8Array): Promise<string> =>
   crypto.subtle
     .digest("SHA-256", Uint8Array.from(bytes))
     .then((value) => Hex.encode(new Uint8Array(value)));
 
 describe("Cloudflare statement byte staging", () => {
+  it("keeps corrupt present staging metadata unavailable rather than blaming the caller", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(makeRuntime);
+        const staged = requireValue(
+          yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
+        );
+        const database = corruptFirst(
+          runtime.database,
+          "SELECT id, object_key, byte_length",
+          (row) => (row === null ? null : { id: staged.stagingId, byte_length: "corrupt" })
+        );
+        const staging = StatementStaging.make({
+          database,
+          bucket: runtime.bucket,
+          nowEpochMs: currentNowEpochMs,
+        });
+        assert.deepStrictEqual(
+          yield* Effect.exit(
+            staging.readOwnedStagedBytes({ userId: userA, stagingId: staged.stagingId })
+          ),
+          Exit.fail(new StatementStagingUnavailable({ reason: "authority_unavailable" }))
+        );
+        assert.deepStrictEqual(
+          yield* Effect.exit(
+            staging.readOwnedStagedBytes({ userId: userB, stagingId: staged.stagingId })
+          ),
+          Exit.fail(new StatementStagingFailed({ reason: "not-found" }))
+        );
+        assert.deepStrictEqual(
+          yield* Effect.exit(
+            staging.readOwnedStagedBytes({
+              userId: userA,
+              stagingId: StatementStagingId.make("90000000-0000-4000-8000-000000000101"),
+            })
+          ),
+          Exit.fail(new StatementStagingFailed({ reason: "not-found" }))
+        );
+        expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
+          0
+        );
+        expect(
+          yield* fromTestPromise(() => count(runtime.database, "statement_submission_audit"))
+        ).toBe(0);
+        expect((yield* fromTestPromise(() => runtime.bucket.list())).objects).toHaveLength(1);
+      })
+    ));
+  it.each([
+    ["parser_revision", null],
+    ["id", "corrupt"],
+    ["started_at_ms", null],
+    ["accepted_rows", 1],
+    ["submitted_at_ms", 8640000000000001],
+    ["started_at_ms", 8640000000000001],
+    ["completed_at_ms", 8640000000000001],
+  ] as const)(
+    "keeps corrupt retained %s unavailable through the typed read and canonical projection",
+    (column, value) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const runtime = yield* fromTestPromise(makeRuntime);
+          const staged = requireValue(
+            yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
+          );
+          const submissionId = yield* completedSubmission(runtime, staged.stagingId);
+          // D1 itself permits this out-of-Date-domain integer; other malformed shapes are injected
+          // after the real owner query because the SQL constraints prevent retaining them normally.
+          if (column === "completed_at_ms") {
+            yield* fromTestPromise(() =>
+              runtime.database
+                .prepare("UPDATE statement_submissions SET completed_at_ms = ? WHERE id = ?")
+                .bind(value, submissionId)
+                .run()
+            );
+          }
+          const database =
+            column === "completed_at_ms"
+              ? runtime.database
+              : corruptFirst(runtime.database, "SELECT s.id, s.source_format", (row) =>
+                  Predicate.isObject(row) ? { ...row, [column]: value } : row
+                );
+          const staging = StatementStaging.make({
+            database,
+            bucket: runtime.bucket,
+            nowEpochMs: currentNowEpochMs,
+          });
+          assert.deepStrictEqual(
+            yield* Effect.exit(
+              staging.readOwnedStatementSubmission({ userId: userA, submissionId })
+            ),
+            Exit.fail(new StatementStagingUnavailable({ reason: "authority_unavailable" }))
+          );
+          const response = yield* readCanonicalSubmission({
+            config: { database },
+            userId: userA,
+            submissionId,
+            scope: Option.none(),
+          });
+          expect(response.status).toBe(503);
+          const replay = yield* prepareHeldStatementSubmission({
+            ...publicationWork(runtime, staged),
+            db: database,
+          });
+          if (
+            replay._tag !== "Prepared" ||
+            replay.mutation.outcome._tag !== "StatementSubmission"
+          ) {
+            throw new Error("Expected a retained replay readback");
+          }
+          assert.deepStrictEqual(
+            yield* Effect.exit(replay.mutation.outcome.publication.readCommitted(userA)),
+            Exit.succeed(Option.none())
+          );
+          expect(yield* fromTestPromise(() => response.json())).toEqual({
+            error: {
+              code: "unavailable",
+              message: "Canonical operation is temporarily unavailable.",
+            },
+            next: [],
+          });
+          expect(
+            Option.isNone(
+              yield* staging
+                .readOwnedStatementSubmission({ userId: userB, submissionId })
+                .pipe(Effect.orDie)
+            )
+          ).toBe(true);
+          expect(
+            (yield* readCanonicalSubmission({
+              config: { database },
+              userId: userB,
+              submissionId,
+              scope: Option.none(),
+            })).status
+          ).toBe(404);
+          if (column === "completed_at_ms") {
+            yield* fromTestPromise(() =>
+              runtime.database
+                .prepare("UPDATE statement_submissions SET completed_at_ms = ? WHERE id = ?")
+                .bind(startedAtEpochMs, submissionId)
+                .run()
+            );
+          }
+          const valid = yield* readCanonicalSubmission({
+            config: { database: runtime.database },
+            userId: userA,
+            submissionId,
+            scope: Option.none(),
+          });
+          expect(valid.status).toBe(200);
+          expect(yield* fromTestPromise(() => valid.json())).toEqual({
+            data: {
+              id: submissionId,
+              sourceFormat: "csv",
+              parserRevision: "v1",
+              status: "completed",
+              submittedAt: "2026-09-01T00:00:00.000Z",
+              startedAt: "2026-09-01T00:00:00.000Z",
+              completedAt: "2026-09-01T00:00:00.000Z",
+              accounting: { inputRows: 0, acceptedRows: 0, needsReviewRows: 0 },
+            },
+            next: [],
+          });
+          expect(
+            yield* fromTestPromise(() => count(runtime.database, "statement_submission_audit"))
+          ).toBe(0);
+          expect((yield* fromTestPromise(() => runtime.bucket.list())).objects).toHaveLength(1);
+        })
+      )
+  );
+
+  it("does not prepare a replay or caller refusal when a present idempotency row is corrupt", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(makeRuntime);
+        const staged = requireValue(
+          yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
+        );
+        yield* completedSubmission(runtime, staged.stagingId);
+        const work = publicationWork(runtime, staged);
+        const database = corruptFirst(
+          runtime.database,
+          "SELECT id, staging_id FROM statement_submissions",
+          (row) => (Predicate.isObject(row) ? { ...row, id: null } : row)
+        );
+        expect(yield* prepareHeldStatementSubmission({ ...work, db: database })).toEqual({
+          _tag: "Unavailable",
+        });
+        expect(
+          (yield* prepareHeldStatementSubmission({ ...work, db: database, userId: userB }))._tag
+        ).toBe("Refused");
+        expect(yield* fromTestPromise(() => count(runtime.database, "statement_submissions"))).toBe(
+          1
+        );
+        expect(
+          yield* fromTestPromise(() => count(runtime.database, "statement_submission_audit"))
+        ).toBe(0);
+        expect((yield* fromTestPromise(() => runtime.bucket.list())).objects).toHaveLength(1);
+      })
+    ));
+
+  it("keeps corrupt eligible clarification metadata out of caller refusal Audit and decisions", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const runtime = yield* fromTestPromise(makeRuntime);
+        const staged = requireValue(
+          yield* fromTestPromise(() => stage(runtime, userA, statementBytes))
+        );
+        const submissionId = yield* completedSubmission(runtime, staged.stagingId);
+        const reviewId = "40000000-0000-4000-8000-000000000101";
+        const sessionId = "50000000-0000-4000-8000-000000000101";
+        yield* fromTestPromise(() =>
+          runtime.database.batch([
+            runtime.database
+              .prepare(
+                `INSERT INTO browser_login_pairings (id,public_code,verifier_digest,user_id,state,created_at_ms,expires_at_ms) VALUES (?, '123456789', zeroblob(32), ?, 'consumed', ?, ?)`
+              )
+              .bind(sessionId, userA, startedAtEpochMs, startedAtEpochMs + 600000),
+            runtime.database
+              .prepare(
+                `INSERT INTO web_sessions (id,pairing_id,user_id,token_digest,created_at_ms,fresh_until_ms,idle_expires_at_ms,hard_expires_at_ms) VALUES (?, ?, ?, zeroblob(32), ?, ?, ?, ?)`
+              )
+              .bind(
+                sessionId,
+                sessionId,
+                userA,
+                startedAtEpochMs,
+                startedAtEpochMs + 600000,
+                startedAtEpochMs + 600000,
+                startedAtEpochMs + 7776000000
+              ),
+            runtime.database
+              .prepare(
+                `INSERT INTO statement_clarifications (submission_id,user_id,state,expires_at_ms) VALUES (?, ?, 'awaiting', ?)`
+              )
+              .bind(submissionId, userA, startedAtEpochMs + 600000),
+            runtime.database
+              .prepare(`INSERT INTO statement_needs_review
+        (id,user_id,submission_id,record_number,reason,original_evidence,issues,status,evidence_expires_at_ms,created_at_ms,service_market,locale,time_zone,source_format,parser_revision,extractor_revision)
+        VALUES (?, ?, ?, 1, 'missing-required-fact', 'private-evidence', '[]', 'pending', ?, ?, 'CO', 'es-CO', 'America/Bogota', 'csv', 'v1', 'v1')`)
+              .bind(reviewId, userA, submissionId, startedAtEpochMs + 600000, startedAtEpochMs),
+          ])
+        );
+        const work: StatementDecisionWork = {
+          ...publicationWork(runtime, staged),
+          authority: {
+            table: "web_sessions",
+            predicate: "web_sessions.id = ? AND web_sessions.user_id = ?",
+            bindings: [sessionId, userA],
+          },
+          publicationOrigin: Option.none(),
+          input: { params: { id: reviewId } },
+        };
+        const database = corruptFirst(
+          runtime.database,
+          "SELECT r.id, r.submission_id, r.record_number",
+          (row) => (Predicate.isObject(row) ? { ...row, record_number: "corrupt" } : row)
+        );
+        const operation = "ingestion.skipNeedsReviewItem";
+        expect(
+          yield* prepareHeldStatementReviewDecision({ operation, work: { ...work, db: database } })
+        ).toEqual({ _tag: "Failed" });
+        expect(
+          (yield* prepareHeldStatementReviewDecision({
+            operation,
+            work: { ...work, db: database, userId: userB },
+          }))._tag
+        ).toBe("Refused");
+        const prepared = yield* prepareHeldStatementReviewDecision({ operation, work });
+        expect(prepared._tag).toBe("Prepared");
+        if (prepared._tag !== "Prepared" || prepared.mutation.outcome._tag !== "Owner") {
+          throw new Error("Expected a prepared owner decision");
+        }
+        const corruptRead = corruptFirst(runtime.database, "SELECT s.id, s.source_format", (row) =>
+          Predicate.isObject(row) ? { ...row, completed_at_ms: 8640000000000001 } : row
+        );
+        assert.deepStrictEqual(
+          yield* Effect.exit(prepared.mutation.outcome.read(corruptRead, userA)),
+          Exit.succeed(Option.none())
+        );
+        expect(
+          yield* fromTestPromise(() =>
+            runtime.database
+              .prepare("SELECT count(*) AS total FROM statement_review_decisions")
+              .first("total")
+          )
+        ).toBe(0);
+        expect(
+          yield* fromTestPromise(() =>
+            runtime.database
+              .prepare("SELECT count(*) AS total FROM statement_clarification_audit")
+              .first("total")
+          )
+        ).toBe(0);
+        expect(
+          yield* fromTestPromise(() =>
+            runtime.database
+              .prepare("SELECT original_evidence FROM statement_needs_review WHERE id = ?")
+              .bind(reviewId)
+              .first("original_evidence")
+          )
+        ).toBe("private-evidence");
+        expect((yield* fromTestPromise(() => runtime.bucket.list())).objects).toHaveLength(1);
+      })
+    ));
+
   it("keeps staged bytes non-authoritative and private until canonical publication", () =>
     Effect.runPromise(
       Effect.gen(function* () {

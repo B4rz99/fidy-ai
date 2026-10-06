@@ -6,7 +6,8 @@ import type {
   RecoveryBrowserPairingApproval,
   RecoveryBrowserPairingQuery,
 } from "./contract";
-import type { Option } from "effect";
+import { Effect, type Option } from "effect";
+import { BrowserPairingUnavailable } from "./contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 
 import {
@@ -27,21 +28,25 @@ import {
 } from "./internal/pairing";
 
 /** Create a bounded unbound pairing; disclose its private verifier only to the initiating browser. */
-export const startBrowserPairing = (db: D1Database): Promise<Response> => start(db);
+export const startBrowserPairing = (
+  db: D1Database
+): Effect.Effect<Response, BrowserPairingUnavailable> =>
+  start(db).pipe(Effect.mapError(() => new BrowserPairingUnavailable()));
 
 /** Bind a pending pairing only to the established User proved by this authenticated channel event. */
-export const approveBrowserPairing = (input: BrowserPairingApproval): Promise<Response> =>
+export const approveBrowserPairing = (input: BrowserPairingApproval): Effect.Effect<Response> =>
   approve(input);
 
 /** Authenticate the browser-private verifier and redeem the approved pairing once. */
 export const redeemBrowserPairing = (
   input: Readonly<{ request: Request; db: D1Database }>
-): Promise<Response> => redeem(input);
+): Effect.Effect<Response> => redeem(input);
 
 /** Check the browser-private verifier against the pending pairing and apply the bounded wrong-proof policy. */
 export const provePendingBrowserPairing = (
   input: PendingBrowserPairingRequest
-): Promise<Option.Option<number>> => provePendingPairing(input);
+): Effect.Effect<Option.Option<number>, BrowserPairingUnavailable> =>
+  provePendingPairing(input).pipe(Effect.mapError(() => new BrowserPairingUnavailable()));
 /** Project pairingId/expiresAt only for a currently pending, unexpired and unexhausted exact pairing subject. */
 export const pendingBrowserPairingQuery = (input: PendingBrowserPairingQuery): OwnedStatement =>
   pendingPairingQuery(input);

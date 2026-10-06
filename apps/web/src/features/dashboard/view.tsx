@@ -815,6 +815,7 @@ const ResponsiveLayout = ({
 export type DashboardEditorError = Readonly<{
   message: string;
   title: string;
+  onRefresh: Option.Option<() => void>;
 }>;
 
 /** Editing capabilities supplied by the route controller to the Dashboard canvas. */
@@ -890,6 +891,25 @@ const DashboardCanvas = ({
   </section>
 );
 
+const DashboardEditorNotice = ({
+  error,
+}: Readonly<{ error: DashboardEditorError }>): JSX.Element => (
+  <Alert variant="destructive" role="alert">
+    <AlertTitle>{error.title}</AlertTitle>
+    <AlertDescription>
+      {error.message}
+      {Option.match(error.onRefresh, {
+        onNone: () => null,
+        onSome: (refresh) => (
+          <Button onClick={refresh} type="button" variant="outline">
+            Actualizar tablero
+          </Button>
+        ),
+      })}
+    </AlertDescription>
+  </Alert>
+);
+
 /** Responsive projection of one schema-decoded canonical Dashboard view. */
 export const DashboardViewComponent = ({
   editor,
@@ -918,10 +938,7 @@ export const DashboardViewComponent = ({
         )}
       </header>
       {Option.isNone(editor) || Option.isNone(editor.value.error) ? null : (
-        <Alert variant="destructive" role="alert">
-          <AlertTitle>{editor.value.error.value.title}</AlertTitle>
-          <AlertDescription>{editor.value.error.value.message}</AlertDescription>
-        </Alert>
+        <DashboardEditorNotice error={editor.value.error.value} />
       )}
       {Option.isNone(activeEditor) ? null : <DashboardCatalogTray editor={activeEditor.value} />}
       <DashboardCanvas editor={activeEditor} view={view} />

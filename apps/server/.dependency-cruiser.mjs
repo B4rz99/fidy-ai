@@ -671,6 +671,7 @@ export default {
       to: {
         path:
           "(^|.*/)node_modules/@effect/platform|" +
+          "(^|.*/)node_modules/effect/(dist|src)/(http|http-api)(/|$)|" +
           "^(fs|http|https|net|os|child_process|stream|dns|tls|timers|cluster|worker_threads)(/|$)",
       },
     },

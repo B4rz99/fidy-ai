@@ -35,6 +35,7 @@ import { Check, WorkflowStatus, periodMs, recordCanary, staleMs } from "./intern
 const Available = Schema.Struct({ usable: Schema.Literal(1) });
 const probeUrl = "https://internal.invalid/operational/probe";
 const probeSuccessStatus = 204;
+const alertDeliveryConcurrency = 2;
 
 /** An actual Queue consumer, not queue.send(), proves Queue execution. */
 export const receiveCanary = (
@@ -234,17 +235,18 @@ export const runOperationalAlerts = (input: OperationalAlertDelivery): Promise<v
         input.alerts,
         (alert) => deliverFiring({ input, alert }),
         {
-          concurrency: "unbounded",
+          concurrency: alertDeliveryConcurrency,
         }
       );
       const rows = yield* claimResolutions(input);
       const resolutions = yield* Effect.forEach(rows, (row) => deliverResolution({ input, row }), {
-        concurrency: "unbounded",
+        concurrency: alertDeliveryConcurrency,
       });
       if (attempts.includes(false) || resolutions.includes(false)) {
         return yield* Effect.die(new Error("Operator alert email unavailable"));
       }
-    })
+    }),
+    { signal: input.signal }
   );
 
 /** Bounded expiry prevents operational event buckets from growing indefinitely. */

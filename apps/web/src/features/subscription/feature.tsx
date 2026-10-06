@@ -6,8 +6,9 @@ import {
   useAtomValue,
 } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Data, Effect, Array as EffectArray, Option, Predicate, Redacted } from "effect";
-import { Atom } from "effect/reactivity";
+import { Cause, Data, Effect, Array as EffectArray, Option, Predicate, Redacted } from "effect";
+import { AsyncResult, Atom } from "effect/reactivity";
+import { makeEnrollmentCommand } from "./enrollment-command";
 import { DaviplataEnrollmentForm } from "./daviplata-form";
 import { DaviplataAuthorizationLock } from "./daviplata-activity";
 import { BillingEmailField, EnrollmentConsent } from "./enrollment-controls";
@@ -16,7 +17,14 @@ import {
   allDecisionsAccepted,
   emptyDecisions,
 } from "./enrollment-decisions";
-import { type FormEvent, type JSX, type RefCallback, useRef, useState } from "react";
+import {
+  type FormEvent,
+  type JSX,
+  type RefCallback,
+  type RefObject,
+  useRef,
+  useState,
+} from "react";
 import { useSession } from "@/session/session-context";
 import { useSubscriptionEnrollmentClient } from "@/session/subscription-enrollment-context";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
@@ -506,14 +514,14 @@ const preparePaymentFlow = Effect.fn(function* (
   method: EnrollmentMethod
 ) {
   const prepared = yield* Effect.tryPromise({
-    try: () => gateway.prepare(priceId, method),
+    try: (signal) => gateway.prepare(priceId, method, signal),
     catch: () => new EnrollmentInteractionFailed(),
   });
   if (prepared.status !== "verifying" && prepared.status !== "creating") {
     return enrollmentFlow(prepared);
   }
   const resumed = yield* Effect.tryPromise({
-    try: () => gateway.resume(prepared.enrollmentId),
+    try: (signal) => gateway.resume(prepared.enrollmentId, signal),
     catch: () => new EnrollmentInteractionFailed(),
   });
   return Option.match(resumed, {
@@ -556,13 +564,14 @@ const refreshPaymentUntilTerminal = Effect.fn(function* (
     if (pageIsHidden()) continue;
     refreshCount += 1;
     const refreshed = yield* Effect.tryPromise({
-      try: () =>
+      try: (signal) =>
         current.value.status === "payment-pending"
           ? gateway.observeBillingAttempt(
               current.value.enrollmentId,
-              current.value.billingAttempt.id
+              current.value.billingAttempt.id,
+              signal
             )
-          : gateway.continue(current.value.enrollmentId, current.billingEmail),
+          : gateway.continue(current.value.enrollmentId, current.billingEmail, signal),
       catch: () => new EnrollmentInteractionFailed(),
     }).pipe(Effect.option);
     if (Option.isSome(refreshed)) {
@@ -823,14 +832,39 @@ const usePaymentRefresh = (
   return { interrupt, start };
 };
 
+const publishPaymentFlow =
+  (
+    input: Readonly<{
+      activeFlowId: RefObject<number>;
+      flowId: number;
+      setScopedFlow: PaymentFlowSetter;
+      paymentRefresh: PaymentRefreshControl;
+    }>
+  ): ((value: PaymentFlowState) => Effect.Effect<void>) =>
+  (value) =>
+    Effect.sync(() => {
+      if (input.activeFlowId.current !== input.flowId) return;
+      input.setScopedFlow(Option.some({ flowId: input.flowId, state: value }));
+      input.paymentRefresh.start(input.flowId, value);
+    });
+
 const useEnrollmentInteraction = (
   gateway: Option.Option<EnrollmentGateway>
 ): EnrollmentInteraction => {
   const [scopedFlow, setScopedFlow] = useAtom(PaymentFlow.use());
-  const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [command] = useState(() =>
+    makeEnrollmentCommand<PaymentFlowState, EnrollmentInteractionFailed>()
+  );
+  const status = useAtomValue(command.atom);
+  const controlCommand = useAtomSet(command.atom);
   const activeFlowId = useRef(0);
   const paymentRefresh = usePaymentRefresh(gateway, setScopedFlow);
+  const interrupt = (): void => {
+    activeFlowId.current += 1;
+    command.clear();
+    controlCommand(Atom.Interrupt);
+    paymentRefresh.interrupt();
+  };
   const start = (
     work: (
       gateway: EnrollmentGateway
@@ -842,42 +876,25 @@ const useEnrollmentInteraction = (
     Option.match(gateway, {
       onNone: () => undefined,
       onSome: (availableGateway) => {
-        setBusy(true);
-        setFailed(false);
-        Effect.runFork(
+        command.offer(
           work(availableGateway).pipe(
-            Effect.matchEffect({
-              onSuccess: (value) =>
-                Effect.sync(() => {
-                  if (activeFlowId.current !== flowId) return;
-                  setScopedFlow(Option.some({ flowId, state: value }));
-                  setBusy(false);
-                  paymentRefresh.start(flowId, value);
-                }),
-              onFailure: () =>
-                Effect.sync(() => {
-                  if (activeFlowId.current !== flowId) return;
-                  setFailed(true);
-                  setBusy(false);
-                }),
-            })
+            Effect.tap(publishPaymentFlow({ activeFlowId, flowId, setScopedFlow, paymentRefresh }))
           )
         );
+        controlCommand(undefined);
       },
     });
   };
   const reset = (): void => {
-    paymentRefresh.interrupt();
-    activeFlowId.current += 1;
+    interrupt();
+    controlCommand(Atom.Reset);
     setScopedFlow(Option.none());
-    setBusy(false);
-    setFailed(false);
   };
   return {
     enrollment: Option.map(scopedFlow, (active) => active.state),
-    busy,
-    failed,
-    interrupt: paymentRefresh.interrupt,
+    busy: status.waiting,
+    failed: AsyncResult.isFailure(status) && !Cause.hasInterrupts(status.cause),
+    interrupt,
     start,
     reset,
   };
@@ -912,7 +929,7 @@ const refreshEnrollmentFlow = (
   enrollmentId: PreparedEnrollment["enrollmentId"]
 ): Effect.Effect<PaymentFlowState, EnrollmentInteractionFailed> =>
   Effect.tryPromise({
-    try: () => gateway.status(enrollmentId),
+    try: (signal) => gateway.status(enrollmentId, signal),
     catch: () => new EnrollmentInteractionFailed(),
   }).pipe(Effect.map(enrollmentFlow));
 
@@ -925,7 +942,11 @@ const submitPaymentFlow = (
   }>
 ): Effect.Effect<PaymentFlowState, EnrollmentInteractionFailed> =>
   Effect.tryPromise({
-    try: () => gateway.submit(input.prepared, input.email, Option.getOrUndefined(input.fields)),
+    try: (signal) =>
+      gateway.submit(input.prepared, input.email, {
+        fields: input.fields,
+        signal: Option.some(signal),
+      }),
     catch: () => new EnrollmentInteractionFailed(),
   }).pipe(
     Effect.map((submission) => submissionFlow(submission, input.email, Option.some(input.prepared)))
@@ -997,7 +1018,7 @@ const enrollmentAvailability = Atom.family((gateway: Option.Option<EnrollmentGat
       onNone: () => Effect.fail(new EnrollmentInteractionFailed()),
       onSome: (available) =>
         Effect.tryPromise({
-          try: () => available.availability(),
+          try: (signal) => available.availability(signal),
           catch: () => new EnrollmentInteractionFailed(),
         }),
     })

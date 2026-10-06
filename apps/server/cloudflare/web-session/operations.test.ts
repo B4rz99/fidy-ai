@@ -88,9 +88,10 @@ it("revokes only the presented browser session and never clears another User's a
             ),
         ])
       );
-      const response = yield* Effect.tryPromise(() =>
-        logoutWebSession({ request: cookieRequest(`__Host-fidy_session=${tokenA}`), db })
-      );
+      const response = yield* logoutWebSession({
+        request: cookieRequest(`__Host-fidy_session=${tokenA}`),
+        db,
+      });
       expect(response.status).toBe(204);
       expect(response.headers.get("set-cookie")).toBe(
         "__Host-fidy_session=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0"
@@ -225,7 +226,7 @@ it("refuses session establishment without the exact browser-private verifier and
           crypto.subtle.digest("SHA-256", new TextEncoder().encode(privateVerifier))
         )
       );
-      const redeem = (verifier: string): Promise<Response> =>
+      const redeem = (verifier: string): Effect.Effect<Response> =>
         redeemBrowserPairing({
           db,
           request: new Request("https://api.fidyapp.com/web/pairings/redeem", {
@@ -246,7 +247,7 @@ it("refuses session establishment without the exact browser-private verifier and
           created_at_ms INTEGER, fresh_until_ms INTEGER, idle_expires_at_ms INTEGER, hard_expires_at_ms INTEGER)`),
         ])
       );
-      const rejected = yield* Effect.tryPromise(() => redeem("r".repeat(43)));
+      const rejected = yield* redeem("r".repeat(43));
       expect(rejected.status).toBe(400);
       expect(rejected.headers.get("set-cookie")).toBeNull();
       expect(
@@ -259,7 +260,7 @@ it("refuses session establishment without the exact browser-private verifier and
           db.prepare("SELECT count(*) AS count FROM web_sessions").first()
         )
       ).toEqual({ count: 0 });
-      const accepted = yield* Effect.tryPromise(() => redeem(privateVerifier));
+      const accepted = yield* redeem(privateVerifier);
       expect(accepted.status).toBe(200);
       expect(
         yield* Effect.tryPromise(() => db.prepare("SELECT user_id FROM web_sessions").first())

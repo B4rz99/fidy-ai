@@ -2739,6 +2739,18 @@ const PROBES: readonly Probe[] = [
     ],
     name: "core-imports-the-world rejects a core module importing an I/O builtin",
   },
+  ...["http", "http-api"].map((family) => ({
+    expect: {
+      kind: "rejected" as const,
+      mustContain: [
+        `error core-imports-the-world: ${CORE_TO_WORLD}/probe-${family}.ts → node_modules/effect/dist/${family}/index.js`,
+      ],
+    },
+    files: [
+      { path: `${CORE_TO_WORLD}/probe-${family}.ts`, source: `import "effect/${family}";\n` },
+    ],
+    name: `core-imports-the-world rejects Effect stable ${family}`,
+  })),
   {
     expect: { kind: "allowed" },
     files: [

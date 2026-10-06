@@ -1,9 +1,11 @@
+import { Effect } from "effect";
 import { type CatalogOperation } from "../../src/shell/canonical-catalog/contract";
 import {
   type AuthorizedPAT,
   type PATAuthorizationDecision,
   type PATMetadataQuery,
   type PATRequest,
+  PATUnavailable,
 } from "./contract";
 import {
   authorizeCanonicalPAT as authorize,
@@ -22,18 +24,21 @@ import { commitPATUnit as commit } from "./internal/pat-unit";
 /** Admit one declared canonical operation using the exact bearer, User, lifetime, Consent and scope. Protected work rechecks the returned proof in its atomic unit. */
 export const authorizeCanonicalPAT = (
   input: PATRequest & Readonly<{ operation: CatalogOperation }>
-): Promise<AuthorizedPAT | Exclude<PATAuthorizationDecision, "accepted">> => authorize(input);
+): Effect.Effect<AuthorizedPAT | Exclude<PATAuthorizationDecision, "accepted">, PATUnavailable> =>
+  authorize(input).pipe(Effect.mapError(() => new PATUnavailable()));
 
 /** Resolve only bearer ownership, lifetime and Consent; this proof grants no operation capability. The protected canonical coordinator and domain owner enforce the requested scope. */
 export const resolveCanonicalPATCredential = (
   input: PATRequest & Readonly<{ operation: CatalogOperation }>
-): Promise<AuthorizedPAT | "unauthenticated" | "user_action_required"> => resolveCredential(input);
+): Effect.Effect<AuthorizedPAT | "unauthenticated" | "user_action_required", PATUnavailable> =>
+  resolveCredential(input).pipe(Effect.mapError(() => new PATUnavailable()));
 
 /** Dispatch only a declared PAT operation; private pairing proofs and persisted grants stay with Tokens. */
-export const handlePATRequest = (input: PATRequest): Promise<Response> => handle(input);
+export const handlePATRequest = (input: PATRequest): Effect.Effect<Response, PATUnavailable> =>
+  handle(input).pipe(Effect.mapError(() => new PATUnavailable()));
 
 /** List safe active metadata under the exact caller proof, rechecking live WebSession and Consent in the audited D1 snapshot. PAT credentials cannot manage themselves. */
-export const listPATs = (input: PATMetadataQuery): Promise<Response> => list(input);
+export const listPATs = (input: PATMetadataQuery): Effect.Effect<Response> => list(input);
 
 /** Commit owner-composed PAT work with a final constraint that rolls back a skipped guard or Audit. */
 export const commitPATUnit = (

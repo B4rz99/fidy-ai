@@ -108,7 +108,7 @@ const EnrollmentRow = Schema.Struct({
   ]),
   contracts_json: Schema.String,
   disclosure_json: Schema.String,
-  expires_at_ms: Schema.Finite,
+  expires_at_ms: Schema.DateTimeUtcFromMillis,
   payment_request_id: Schema.NullOr(Schema.String),
   wompi_candidate_source_id: Schema.NullOr(Schema.Finite),
   refusal_reason: Schema.NullOr(
@@ -187,7 +187,7 @@ const rateLimited = (): Response =>
   Response.json(paymentEnrollmentRateLimitedBody, { status: 429, headers: noStore });
 const json = (body: unknown): Response => Response.json(body, { headers: noStore });
 const instant = (ms: number): string => DateTime.formatIso(DateTime.makeUnsafe(ms));
-const id = (): string => Effect.runSync(workerCrypto.randomUUIDv4.pipe(Effect.orDie));
+const id = workerCrypto.randomUUIDv4.pipe(Effect.orDie);
 const digest = (text: string): Promise<Uint8Array> =>
   crypto.subtle
     .digest("SHA-256", new TextEncoder().encode(text))
@@ -240,13 +240,15 @@ const daviplataPolicy = (
 
 const makeWompi = (
   environment: ConfiguredEnrollmentEnvironment
-): Promise<WompiEnrollmentClientService> =>
-  Effect.runPromise(wompiOutboundHttp(environment)).then((outboundHttp) =>
-    makeWompiEnrollmentClient({
-      outboundHttp,
-      crypto: workerCrypto,
-      publicKey: environment.WOMPI_PUBLIC_KEY,
-    })
+): Effect.Effect<WompiEnrollmentClientService> =>
+  wompiOutboundHttp(environment).pipe(
+    Effect.map((outboundHttp) =>
+      makeWompiEnrollmentClient({
+        outboundHttp,
+        crypto: workerCrypto,
+        publicKey: environment.WOMPI_PUBLIC_KEY,
+      })
+    )
   );
 
 const authority = (
@@ -351,7 +353,7 @@ const project = (
         recurringDisclosure: disclosure.value,
         wompiPublicKey: environment.WOMPI_PUBLIC_KEY,
         paymentSourceMode: row.payment_source_mode,
-        expiresAt: DateTime.makeUnsafe(row.expires_at_ms),
+        expiresAt: row.expires_at_ms,
       };
       if (row.method !== "daviplata") return { ...prepared, method: row.method };
       const policy = daviplataPolicy(environment);
@@ -381,22 +383,23 @@ const project = (
   }
 };
 
+class EnrollmentBodyMalformed extends Data.TaggedError("EnrollmentBodyMalformed")<{}> {}
+
 const readBody = <A, E>(
   request: Request,
   schema: Schema.Codec<A, E>
-): Promise<Option.Option<A>> => {
-  if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
-    return Promise.resolve(Option.none());
-  }
-  return Effect.runPromiseExit(readBoundedRequestBody(request, jsonPolicy)).then((result) => {
-    if (Exit.isFailure(result)) return Option.none();
-    try {
-      return parse(schema, new TextDecoder("utf-8", { fatal: true }).decode(result.value));
-    } catch {
+): Effect.Effect<Option.Option<A>> =>
+  Effect.gen(function* () {
+    if (request.headers.get("content-type")?.split(";")[0] !== "application/json") {
       return Option.none();
     }
+    const result = yield* Effect.exit(readBoundedRequestBody(request, jsonPolicy));
+    if (Exit.isFailure(result)) return Option.none();
+    return yield* Effect.try({
+      try: () => parse(schema, new TextDecoder("utf-8", { fatal: true }).decode(result.value)),
+      catch: () => new EnrollmentBodyMalformed(),
+    }).pipe(Effect.catchTag("EnrollmentBodyMalformed", () => Effect.succeedNone));
   });
-};
 
 const prepare = ({
   request,
@@ -408,184 +411,181 @@ const prepare = ({
   session: typeof Session.Type;
   environment: ConfiguredEnrollmentEnvironment;
   now: number;
-}>): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const body = yield* waitFor(() => readBody(request, PreparePaymentEnrollmentPayload));
-      if (Option.isNone(body)) return invalid();
-      if (body.value.method === "daviplata" && Option.isNone(daviplataPolicy(environment))) {
-        return unavailable();
-      }
-      const selected = yield* waitFor(() => price(environment.DB, body.value.priceId));
-      if (Option.isNone(selected)) return invalid();
-      const incompatibleSource = yield* waitFor(() =>
-        environment.DB.prepare(
-          `SELECT s.id FROM card_payment_sources AS s WHERE s.user_id = ? AND (s.method <> ?
+}>): Effect.Effect<Response, EnrollmentBoundaryFailure | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const body = yield* readBody(request, PreparePaymentEnrollmentPayload);
+    if (Option.isNone(body)) return invalid();
+    if (body.value.method === "daviplata" && Option.isNone(daviplataPolicy(environment))) {
+      return unavailable();
+    }
+    const selected = yield* waitFor(() => price(environment.DB, body.value.priceId));
+    if (Option.isNone(selected)) return invalid();
+    const incompatibleSource = yield* waitFor(() =>
+      environment.DB.prepare(
+        `SELECT s.id FROM card_payment_sources AS s WHERE s.user_id = ? AND (s.method <> ?
             OR NOT EXISTS (SELECT 1 FROM card_enrollments AS origin WHERE origin.id = s.enrollment_id
               AND (origin.wompi_environment = ? OR (origin.wompi_environment IS NULL AND EXISTS
                 (SELECT 1 FROM billing_attempts AS a WHERE a.payment_source_id = s.id AND a.wompi_environment = ?))))
             OR EXISTS (SELECT 1 FROM billing_attempts AS a WHERE a.payment_source_id = s.id AND a.wompi_environment <> ?))`
+      )
+        .bind(
+          session.user_id,
+          body.value.method,
+          environment.WOMPI_ENVIRONMENT,
+          environment.WOMPI_ENVIRONMENT,
+          environment.WOMPI_ENVIRONMENT
         )
-          .bind(
-            session.user_id,
-            body.value.method,
-            environment.WOMPI_ENVIRONMENT,
-            environment.WOMPI_ENVIRONMENT,
-            environment.WOMPI_ENVIRONMENT
-          )
-          .first()
-      );
-      if (incompatibleSource !== null) return invalid();
-      const active = yield* waitFor(() =>
-        environment.DB.prepare(`SELECT id FROM card_enrollments WHERE user_id = ?
+        .first()
+    );
+    if (incompatibleSource !== null) return invalid();
+    const active = yield* waitFor(() =>
+      environment.DB.prepare(`SELECT id FROM card_enrollments WHERE user_id = ?
     AND status IN ('preparing', 'prepared', 'creating', 'verifying') ORDER BY prepared_at_ms DESC LIMIT 1`)
-          .bind(session.user_id)
-          .first()
+        .bind(session.user_id)
+        .first()
+    );
+    const activeId = decodeRow(Schema.Struct({ id: PaymentEnrollmentId }), active);
+    if (Option.isSome(activeId)) {
+      const existing = yield* waitFor(() =>
+        enrollment(environment.DB, session.user_id, activeId.value.id)
       );
-      const activeId = decodeRow(Schema.Struct({ id: PaymentEnrollmentId }), active);
-      if (Option.isSome(activeId)) {
-        const existing = yield* waitFor(() =>
-          enrollment(environment.DB, session.user_id, activeId.value.id)
-        );
-        if (
-          Option.isSome(existing) &&
-          existing.value.price_id === selected.value.id &&
-          existing.value.method === body.value.method &&
-          existing.value.wompi_environment === environment.WOMPI_ENVIRONMENT &&
-          existing.value.status === "prepared" &&
-          existing.value.expires_at_ms > now
-        ) {
-          const presented = yield* Schema.encodeEffect(Schema.toCodecJson(PaymentEnrollment))(
-            project(existing.value, selected.value, environment)
-          );
-          return json(presented);
-        }
-        if (
-          Option.isSome(existing) &&
-          existing.value.status === "preparing" &&
-          existing.value.expires_at_ms > now
-        ) {
-          return unavailable();
-        }
-        if (
-          Option.isSome(existing) &&
-          existing.value.status !== "prepared" &&
-          existing.value.status !== "preparing"
-        ) {
-          const activePrice = yield* waitFor(() => price(environment.DB, existing.value.price_id));
-          if (Option.isNone(activePrice)) return unavailable();
-          const presented = yield* Schema.encodeEffect(Schema.toCodecJson(PaymentEnrollment))(
-            project(existing.value, activePrice.value, environment)
-          );
-          return json(presented);
-        }
-      }
-      const attempt = yield* Effect.exit(
-        admitEnrollmentAttempt({ db: environment.DB, userId: session.user_id, now })
-      );
-      if (Exit.isFailure(attempt)) {
-        return Option.exists(
-          Cause.findErrorOption(attempt.cause),
-          (error) => error instanceof ResourceAdmissionRefused
-        )
-          ? rateLimited()
-          : unavailable();
-      }
-      const capacity = yield* waitFor(() =>
-        environment.DB.prepare(
-          "SELECT count(*) AS count FROM card_enrollments WHERE user_id = ? AND prepared_at_ms > ?"
-        )
-          .bind(session.user_id, now - preparationWindowMs)
-          .first()
-      );
+      if (Option.isNone(existing)) return unavailable();
       if (
-        !Schema.is(Schema.Struct({ count: Schema.Finite }))(capacity) ||
-        capacity.count >= maximumPreparationsPerHour
+        Option.isSome(existing) &&
+        existing.value.price_id === selected.value.id &&
+        existing.value.method === body.value.method &&
+        existing.value.wompi_environment === environment.WOMPI_ENVIRONMENT &&
+        existing.value.status === "prepared" &&
+        DateTime.toEpochMillis(existing.value.expires_at_ms) > now
+      ) {
+        const presented = yield* Schema.encodeEffect(Schema.toCodecJson(PaymentEnrollment))(
+          project(existing.value, selected.value, environment)
+        );
+        return json(presented);
+      }
+      if (
+        Option.isSome(existing) &&
+        existing.value.status === "preparing" &&
+        DateTime.toEpochMillis(existing.value.expires_at_ms) > now
       ) {
         return unavailable();
       }
-      if (Option.isSome(activeId)) {
-        yield* waitFor(() =>
-          environment.DB.prepare(
-            "UPDATE card_enrollments SET status = 'expired' WHERE id = ? AND user_id = ? AND status IN ('prepared', 'preparing')"
-          )
-            .bind(activeId.value.id, session.user_id)
-            .run()
+      if (
+        Option.isSome(existing) &&
+        existing.value.status !== "prepared" &&
+        existing.value.status !== "preparing"
+      ) {
+        const activePrice = yield* waitFor(() => price(environment.DB, existing.value.price_id));
+        if (Option.isNone(activePrice)) return unavailable();
+        const presented = yield* Schema.encodeEffect(Schema.toCodecJson(PaymentEnrollment))(
+          project(existing.value, activePrice.value, environment)
         );
+        return json(presented);
       }
-      const enrollmentId = PaymentEnrollmentId.make(id());
-      const reserved = yield* waitFor(() =>
-        environment.DB.prepare(`INSERT OR IGNORE INTO card_enrollments
+    }
+    const attempt = yield* Effect.exit(
+      admitEnrollmentAttempt({ db: environment.DB, userId: session.user_id, now })
+    );
+    if (Exit.isFailure(attempt)) {
+      return Option.exists(
+        Cause.findErrorOption(attempt.cause),
+        (error) => error instanceof ResourceAdmissionRefused
+      )
+        ? rateLimited()
+        : unavailable();
+    }
+    const capacity = yield* waitFor(() =>
+      environment.DB.prepare(
+        "SELECT count(*) AS count FROM card_enrollments WHERE user_id = ? AND prepared_at_ms > ?"
+      )
+        .bind(session.user_id, now - preparationWindowMs)
+        .first()
+    );
+    if (
+      !Schema.is(Schema.Struct({ count: Schema.Finite }))(capacity) ||
+      capacity.count >= maximumPreparationsPerHour
+    ) {
+      return unavailable();
+    }
+    if (Option.isSome(activeId)) {
+      yield* waitFor(() =>
+        environment.DB.prepare(
+          "UPDATE card_enrollments SET status = 'expired' WHERE id = ? AND user_id = ? AND status IN ('prepared', 'preparing')"
+        )
+          .bind(activeId.value.id, session.user_id)
+          .run()
+      );
+    }
+    const enrollmentId = PaymentEnrollmentId.make(yield* id);
+    const reserved = yield* waitFor(() =>
+      environment.DB.prepare(`INSERT OR IGNORE INTO card_enrollments
     (id, user_id, price_id, billing_email, method, wompi_environment, status, payment_source_mode, contracts_json,
     disclosure_json, prepared_at_ms, expires_at_ms) VALUES (?, ?, ?, ?, ?, ?, 'preparing', 'create', '{}', '{}', ?, ?)`)
-          .bind(
-            enrollmentId,
-            session.user_id,
-            selected.value.id,
-            session.email_address,
-            body.value.method,
-            environment.WOMPI_ENVIRONMENT,
-            now,
-            now + enrollmentLifetimeMs
-          )
+        .bind(
+          enrollmentId,
+          session.user_id,
+          selected.value.id,
+          session.email_address,
+          body.value.method,
+          environment.WOMPI_ENVIRONMENT,
+          now,
+          now + enrollmentLifetimeMs
+        )
+        .run()
+    );
+    if (reserved.meta.changes !== 1) return unavailable();
+    const wompi = yield* makeWompi(environment);
+    const contracts = yield* Effect.exit(wompi.contracts(DateTime.makeUnsafe(now)));
+    if (Exit.isFailure(contracts)) {
+      yield* waitFor(() =>
+        environment.DB.prepare(
+          "UPDATE card_enrollments SET status = 'refused', refusal_reason = 'provider-error' WHERE id = ? AND status = 'preparing'"
+        )
+          .bind(enrollmentId)
           .run()
       );
-      if (reserved.meta.changes !== 1) return unavailable();
-      const wompi = yield* waitFor(() => makeWompi(environment));
-      const contracts = yield* Effect.exit(wompi.contracts(DateTime.makeUnsafe(now)));
-      if (Exit.isFailure(contracts)) {
-        yield* waitFor(() =>
-          environment.DB.prepare(
-            "UPDATE card_enrollments SET status = 'refused', refusal_reason = 'provider-error' WHERE id = ? AND status = 'preparing'"
-          )
-            .bind(enrollmentId)
-            .run()
-        );
-        return unavailable();
-      }
-      const statement = "Autorizo los cobros recurrentes de mi suscripción.";
-      const disclosure = RecurringDisclosure.make({
-        revision: enrollmentDisclosureRevisions[body.value.method],
-        displayedText: statement,
-        contentSha256: Array.from(yield* waitFor(() => digest(statement)), (byte) =>
-          byte.toString(hexBase).padStart(2, "0")
-        ).join(""),
-      });
-      const source = yield* waitFor(() =>
-        environment.DB.prepare(
-          "SELECT id FROM card_payment_sources WHERE user_id = ? AND method = ?"
-        )
-          .bind(session.user_id, body.value.method)
-          .first()
-      );
-      const inserted = yield* waitFor(() =>
-        environment.DB.prepare(`UPDATE card_enrollments
+      return unavailable();
+    }
+    const statement = "Autorizo los cobros recurrentes de mi suscripción.";
+    const disclosure = RecurringDisclosure.make({
+      revision: enrollmentDisclosureRevisions[body.value.method],
+      displayedText: statement,
+      contentSha256: Array.from(yield* waitFor(() => digest(statement)), (byte) =>
+        byte.toString(hexBase).padStart(2, "0")
+      ).join(""),
+    });
+    const source = yield* waitFor(() =>
+      environment.DB.prepare("SELECT id FROM card_payment_sources WHERE user_id = ? AND method = ?")
+        .bind(session.user_id, body.value.method)
+        .first()
+    );
+    const inserted = yield* waitFor(() =>
+      environment.DB.prepare(`UPDATE card_enrollments
     SET status = 'prepared', payment_source_mode = ?, contracts_json = ?, disclosure_json = ?
     WHERE id = ? AND user_id = ? AND status = 'preparing'`)
-          .bind(
-            source === null ? "create" : "reuse",
-            JSON.stringify(
-              Schema.encodeSync(Schema.toCodecJson(WompiContractEvidenceSet))(
-                contracts.value.evidence
-              )
-            ),
-            JSON.stringify(Schema.encodeSync(Schema.toCodecJson(RecurringDisclosure))(disclosure)),
-            enrollmentId,
-            session.user_id
-          )
-          .run()
-      );
-      if (inserted.meta.changes !== 1) return unavailable();
-      const retained = yield* waitFor(() =>
-        enrollment(environment.DB, session.user_id, enrollmentId)
-      );
-      if (Option.isNone(retained)) return unavailable();
-      const presented = yield* Schema.encodeEffect(Schema.toCodecJson(PaymentEnrollment))(
-        project(retained.value, selected.value, environment)
-      );
-      return json(presented);
-    })
-  );
+        .bind(
+          source === null ? "create" : "reuse",
+          JSON.stringify(
+            Schema.encodeSync(Schema.toCodecJson(WompiContractEvidenceSet))(
+              contracts.value.evidence
+            )
+          ),
+          JSON.stringify(Schema.encodeSync(Schema.toCodecJson(RecurringDisclosure))(disclosure)),
+          enrollmentId,
+          session.user_id
+        )
+        .run()
+    );
+    if (inserted.meta.changes !== 1) return unavailable();
+    const retained = yield* waitFor(() =>
+      enrollment(environment.DB, session.user_id, enrollmentId)
+    );
+    if (Option.isNone(retained)) return unavailable();
+    const presented = yield* Schema.encodeEffect(Schema.toCodecJson(PaymentEnrollment))(
+      project(retained.value, selected.value, environment)
+    );
+    return json(presented);
+  });
 
 const attemptFor = (
   db: D1Database,
@@ -658,61 +658,62 @@ const finish = ({
   sourceId: string;
   now: number;
   wompiSourceId: Option.Option<number>;
-}>): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const selected = yield* waitFor(() => price(environment.DB, row.price_id));
-      if (Option.isNone(selected)) return unavailable();
-      const attemptId = yield* waitFor(() =>
-        billingAttemptIdFor({
-          userId: UserId.make(userId),
-          requestId: PaymentRequestId.make(requestId),
-        })
-      );
-      const reference = `fidy-${attemptId}`;
-      const current = yield* Clock.currentTimeMillis;
-      const guard = enrollmentAuthority(session, current);
-      const statements = [
-        environment.DB.prepare(`INSERT INTO payment_commit_guards (enrollment_id, allowed)
+}>): Effect.Effect<Response, EnrollmentBoundaryFailure | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const selected = yield* waitFor(() => price(environment.DB, row.price_id));
+    if (Option.isNone(selected)) return unavailable();
+    const attemptId = yield* waitFor(() =>
+      billingAttemptIdFor({
+        userId: UserId.make(userId),
+        requestId: PaymentRequestId.make(requestId),
+      })
+    );
+    const reference = `fidy-${attemptId}`;
+    const current = yield* Clock.currentTimeMillis;
+    const guard = enrollmentAuthority(session, current);
+    const statements = [
+      environment.DB.prepare(`INSERT INTO payment_commit_guards (enrollment_id, allowed)
           VALUES (?, (SELECT 1 FROM (${guard.sql}) LIMIT 1))`).bind(row.id, ...guard.params),
-        ...(Option.isNone(wompiSourceId)
-          ? []
-          : [
-              environment.DB.prepare(`INSERT INTO card_payment_sources
+      ...(Option.isNone(wompiSourceId)
+        ? []
+        : [
+            environment.DB.prepare(`INSERT INTO card_payment_sources
       (id, user_id, enrollment_id, wompi_source_id, billing_email, created_at_ms, method)
       VALUES (?, ?, ?, ?, ?, ?, ?)`).bind(
-                sourceId,
-                userId,
-                row.id,
-                wompiSourceId.value,
-                row.billing_email,
-                now,
-                row.method
-              ),
-            ]),
-        environment.DB.prepare(
-          "UPDATE card_enrollments SET status = 'available' WHERE id = ? AND user_id = ? AND status IN ('creating', 'verifying') AND payment_request_id = ?"
-        ).bind(row.id, userId, requestId),
-        environment.DB.prepare(`INSERT INTO billing_attempts (id, user_id, enrollment_id,
+              sourceId,
+              userId,
+              row.id,
+              wompiSourceId.value,
+              row.billing_email,
+              now,
+              row.method
+            ),
+          ]),
+      environment.DB.prepare(
+        "UPDATE card_enrollments SET status = 'available' WHERE id = ? AND user_id = ? AND status IN ('creating', 'verifying') AND payment_request_id = ?"
+      ).bind(row.id, userId, requestId),
+      environment.DB.prepare(`INSERT INTO billing_attempts (id, user_id, enrollment_id,
       payment_request_id, payment_source_id, price_id, amount, currency, billing_period,
       service_market, tax_treatment, time_zone, wompi_environment, wompi_reference, created_at_ms)
       SELECT ?, ?, ?, ?, ?, p.id, p.amount, p.currency, p.billing_period, p.service_market,
       p.tax_treatment, ?, ?, ?, ? FROM subscription_prices AS p JOIN card_enrollments AS e ON e.price_id = p.id
       WHERE e.id = ? AND e.user_id = ? AND e.status = 'available' AND e.payment_request_id = ?`).bind(
-          attemptId,
-          userId,
-          row.id,
-          requestId,
-          sourceId,
-          session.timeZone,
-          environment.WOMPI_ENVIRONMENT,
-          reference,
-          now,
-          row.id,
-          userId,
-          requestId
-        ),
-      ];
+        attemptId,
+        userId,
+        row.id,
+        requestId,
+        sourceId,
+        session.timeZone,
+        environment.WOMPI_ENVIRONMENT,
+        reference,
+        now,
+        row.id,
+        userId,
+        requestId
+      ),
+    ];
+    // Once D1 starts, settle the atomic unit and its acceptance notification even if delivery is lost.
+    const accepted = yield* Effect.gen(function* () {
       const committed = yield* waitFor(() =>
         environment.DB.batch([
           ...statements,
@@ -722,18 +723,20 @@ const finish = ({
         ])
       );
       // D1 counts the arm and outbox trigger writes alongside the BillingAttempt insertion.
-      if ((committed.at(billingInsertResultFromEnd)?.meta.changes ?? 0) === 0) return unavailable();
+      if ((committed.at(billingInsertResultFromEnd)?.meta.changes ?? 0) === 0) return false;
       environment.onAccepted(attemptId);
-      const attempt = yield* waitFor(() => attemptFor(environment.DB, userId, attemptId));
-      if (Option.isNone(attempt)) return unavailable();
-      const presented = yield* Schema.encodeEffect(Schema.toCodecJson(PaymentSubmission))({
-        status: "payment-pending",
-        enrollmentId: row.id,
-        billingAttempt: attempt.value,
-      });
-      return json(presented);
-    })
-  );
+      return true;
+    }).pipe(Effect.uninterruptible);
+    if (!accepted) return unavailable();
+    const attempt = yield* waitFor(() => attemptFor(environment.DB, userId, attemptId));
+    if (Option.isNone(attempt)) return unavailable();
+    const presented = yield* Schema.encodeEffect(Schema.toCodecJson(PaymentSubmission))({
+      status: "payment-pending",
+      enrollmentId: row.id,
+      billingAttempt: attempt.value,
+    });
+    return json(presented);
+  });
 
 const resolveCandidate = ({
   environment,
@@ -745,65 +748,61 @@ const resolveCandidate = ({
   session: typeof Session.Type;
   row: typeof EnrollmentRow.Type;
   now: number;
-}>): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const candidate = row.wompi_candidate_source_id;
-      if (candidate === null || row.payment_request_id === null) {
-        return json({ status: "source-verifying", enrollmentId: row.id });
-      }
-      const claimedLookup = yield* waitFor(() =>
-        environment.DB.prepare(`UPDATE card_enrollments
+}>): Effect.Effect<Response, EnrollmentBoundaryFailure | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const candidate = row.wompi_candidate_source_id;
+    if (candidate === null || row.payment_request_id === null) {
+      return json({ status: "source-verifying", enrollmentId: row.id });
+    }
+    const claimedLookup = yield* waitFor(() =>
+      environment.DB.prepare(`UPDATE card_enrollments
     SET verification_attempts = verification_attempts + 1, last_verification_at_ms = ?
     WHERE id = ? AND user_id = ? AND status = 'verifying' AND payment_request_id = ?
       AND wompi_candidate_source_id = ? AND verification_attempts < ?
       AND (last_verification_at_ms IS NULL OR last_verification_at_ms <= ?)`)
-          .bind(
-            now,
-            row.id,
-            session.user_id,
-            row.payment_request_id,
-            candidate,
-            maximumVerificationAttempts,
-            now - verificationCooldownMs
-          )
+        .bind(
+          now,
+          row.id,
+          session.user_id,
+          row.payment_request_id,
+          candidate,
+          maximumVerificationAttempts,
+          now - verificationCooldownMs
+        )
+        .run()
+    );
+    if (claimedLookup.meta.changes !== 1) {
+      return json({ status: "source-verifying", enrollmentId: row.id });
+    }
+    const wompi = yield* makeWompi(environment);
+    const verified = yield* Effect.exit(
+      wompi.verifyPaymentSource(WompiSourceId.make(candidate), row.method)
+    );
+    if (Exit.isFailure(verified) || verified.value.sourceId !== candidate) {
+      return json({ status: "source-verifying", enrollmentId: row.id });
+    }
+    if (verified.value.billingEmail !== row.billing_email) {
+      yield* waitFor(() =>
+        environment.DB.prepare(
+          "UPDATE card_enrollments SET status = 'refused', refusal_reason = 'provider-error' WHERE id = ? AND user_id = ? AND status = 'verifying'"
+        )
+          .bind(row.id, session.user_id)
           .run()
       );
-      if (claimedLookup.meta.changes !== 1) {
-        return json({ status: "source-verifying", enrollmentId: row.id });
-      }
-      const wompi = yield* waitFor(() => makeWompi(environment));
-      const verified = yield* Effect.exit(
-        wompi.verifyPaymentSource(WompiSourceId.make(candidate), row.method)
-      );
-      if (Exit.isFailure(verified) || verified.value.sourceId !== candidate) {
-        return json({ status: "source-verifying", enrollmentId: row.id });
-      }
-      if (verified.value.billingEmail !== row.billing_email) {
-        yield* waitFor(() =>
-          environment.DB.prepare(
-            "UPDATE card_enrollments SET status = 'refused', refusal_reason = 'provider-error' WHERE id = ? AND user_id = ? AND status = 'verifying'"
-          )
-            .bind(row.id, session.user_id)
-            .run()
-        );
-        return json({ status: "refused", enrollmentId: row.id, reason: "provider-error" });
-      }
-      const requestId = row.payment_request_id;
-      return yield* waitFor(() =>
-        finish({
-          environment,
-          userId: session.user_id,
-          row,
-          requestId,
-          session,
-          sourceId: PaymentSourceId.make(id()),
-          now,
-          wompiSourceId: Option.some(candidate),
-        })
-      );
-    })
-  );
+      return json({ status: "refused", enrollmentId: row.id, reason: "provider-error" });
+    }
+    const requestId = row.payment_request_id;
+    return yield* finish({
+      environment,
+      userId: session.user_id,
+      row,
+      requestId,
+      session,
+      sourceId: PaymentSourceId.make(yield* id),
+      now,
+      wompiSourceId: Option.some(candidate),
+    });
+  });
 
 const verifyEnrollmentAuthorization = (
   context: Readonly<{
@@ -833,7 +832,7 @@ const verifyEnrollmentAuthorization = (
         admission.failure._tag === "ResourceAdmissionRefused" ? rateLimited() : unavailable()
       );
     }
-    const wompi = yield* waitFor(() => makeWompi(environment));
+    const wompi = yield* makeWompi(environment);
     const approved = yield* Effect.exit(
       input.method === "nequi"
         ? wompi.verifyNequiApproval(token)
@@ -895,261 +894,251 @@ const submit = ({
   session: typeof Session.Type;
   environment: ConfiguredEnrollmentEnvironment;
   now: number;
-}>): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const body = yield* waitFor(() => readBody(request, SubmitPaymentEnrollmentPayload));
-      if (Option.isNone(body)) return invalid();
-      const input = body.value;
-      let row = yield* waitFor(() =>
-        enrollment(environment.DB, session.user_id, input.enrollmentId)
+}>): Effect.Effect<Response, EnrollmentBoundaryFailure | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const body = yield* readBody(request, SubmitPaymentEnrollmentPayload);
+    if (Option.isNone(body)) return invalid();
+    const input = body.value;
+    let row = yield* waitFor(() => enrollment(environment.DB, session.user_id, input.enrollmentId));
+    if (Option.isNone(row) || row.value.wompi_environment !== environment.WOMPI_ENVIRONMENT) {
+      return invalid();
+    }
+    if (
+      row.value.payment_request_id !== null &&
+      row.value.payment_request_id !== input.paymentRequestId
+    ) {
+      return invalid();
+    }
+    const existing = yield* waitFor(() =>
+      environment.DB.prepare(
+        "SELECT id, enrollment_id FROM billing_attempts WHERE user_id = ? AND payment_request_id = ?"
+      )
+        .bind(session.user_id, input.paymentRequestId)
+        .first()
+    );
+    const existingId = decodeRow(
+      Schema.Struct({ id: BillingAttemptId, enrollment_id: PaymentEnrollmentId }),
+      existing
+    );
+    if (Option.isSome(existingId)) {
+      if (existingId.value.enrollment_id !== row.value.id) return invalid();
+      const attempt = yield* waitFor(() =>
+        attemptFor(environment.DB, session.user_id, existingId.value.id)
       );
-      if (Option.isNone(row) || row.value.wompi_environment !== environment.WOMPI_ENVIRONMENT) {
-        return invalid();
-      }
-      if (
-        row.value.payment_request_id !== null &&
-        row.value.payment_request_id !== input.paymentRequestId
-      ) {
-        return invalid();
-      }
-      const existing = yield* waitFor(() =>
-        environment.DB.prepare(
-          "SELECT id, enrollment_id FROM billing_attempts WHERE user_id = ? AND payment_request_id = ?"
-        )
-          .bind(session.user_id, input.paymentRequestId)
-          .first()
-      );
-      const existingId = decodeRow(
-        Schema.Struct({ id: BillingAttemptId, enrollment_id: PaymentEnrollmentId }),
-        existing
-      );
-      if (Option.isSome(existingId)) {
-        if (existingId.value.enrollment_id !== row.value.id) return invalid();
-        const attempt = yield* waitFor(() =>
-          attemptFor(environment.DB, session.user_id, existingId.value.id)
-        );
-        if (Option.isNone(attempt)) return invalid();
-        const presented = yield* Schema.encodeEffect(Schema.toCodecJson(PaymentSubmission))({
-          status: "payment-pending",
-          enrollmentId: row.value.id,
-          billingAttempt: attempt.value,
-        });
-        return json(presented);
-      }
-      // The same PaymentRequestId was handled above; a different action cannot collect
-      // while this User has an attempt without success or confirmed no-charge evidence.
-      const blocked = yield* waitFor(() =>
-        environment.DB.prepare(`SELECT 1 AS blocked FROM billing_attempts AS a
+      if (Option.isNone(attempt)) return invalid();
+      const presented = yield* Schema.encodeEffect(Schema.toCodecJson(PaymentSubmission))({
+        status: "payment-pending",
+        enrollmentId: row.value.id,
+        billingAttempt: attempt.value,
+      });
+      return json(presented);
+    }
+    // The same PaymentRequestId was handled above; a different action cannot collect
+    // while this User has an attempt without success or confirmed no-charge evidence.
+    const blocked = yield* waitFor(() =>
+      environment.DB.prepare(`SELECT 1 AS blocked FROM billing_attempts AS a
       WHERE a.user_id = ? AND a.status <> 'succeeded'
         AND NOT EXISTS (SELECT 1 FROM billing_no_charge_confirmations AS c
           WHERE c.attempt_id = a.id) LIMIT 1`)
-          .bind(session.user_id)
-          .first()
+        .bind(session.user_id)
+        .first()
+    );
+    if (blocked !== null) return unavailable();
+    if (row.value.status === "creating") {
+      return json({ status: "source-verifying", enrollmentId: row.value.id });
+    }
+    if (row.value.status === "verifying") {
+      const verifying = row.value;
+      return yield* resolveCandidate({ environment, session, row: verifying, now });
+    }
+    if (row.value.status === "expired" || DateTime.toEpochMillis(row.value.expires_at_ms) <= now) {
+      return json({ status: "refused", enrollmentId: row.value.id, reason: "expired" });
+    }
+    if (row.value.status === "refused") {
+      return json({
+        status: "refused",
+        enrollmentId: row.value.id,
+        reason: row.value.refusal_reason ?? "provider-error",
+      });
+    }
+    if (
+      row.value.status !== "prepared" ||
+      row.value.payment_source_mode !== input.paymentSourceMode ||
+      row.value.billing_email !== input.billingEmail
+    ) {
+      return invalid();
+    }
+    if (input.paymentSourceMode === "create" && input.method !== row.value.method) {
+      return invalid();
+    }
+    const authorization = yield* verifyEnrollmentAuthorization({
+      environment,
+      userId: session.user_id,
+      input,
+      method: row.value.method,
+      now,
+    });
+    if (Result.isFailure(authorization)) return authorization.failure;
+    const authorizationDigest = authorization.success;
+    const userId = yield* Schema.decodeEffect(UserId)(session.user_id);
+    const claimedAt = yield* Clock.currentTimeMillis;
+    const claimed = yield* waitFor(() =>
+      claimPreparedPaymentEnrollment({
+        db: environment.DB,
+        authorityGuard: enrollmentAuthority(session, claimedAt),
+        input: {
+          userId,
+          enrollmentId: input.enrollmentId,
+          paymentRequestId: input.paymentRequestId,
+          billingEmail: input.billingEmail,
+          paymentSourceMode: input.paymentSourceMode,
+          ...(Option.isNone(authorizationDigest)
+            ? {}
+            : { authorizationDigest: authorizationDigest.value }),
+        },
+        claimedAtMs: claimedAt,
+      })
+    );
+    if (!claimed) {
+      return yield* deniedClaimResponse({
+        db: environment.DB,
+        userId: session.user_id,
+        enrollmentId: input.enrollmentId,
+      });
+    }
+    row = yield* waitFor(() => enrollment(environment.DB, session.user_id, input.enrollmentId));
+    if (Option.isNone(row)) return unavailable();
+    const retained = row.value;
+    if (input.paymentSourceMode === "reuse") {
+      const source = decodeRow(
+        Schema.Struct({ id: PaymentSourceId }),
+        yield* waitFor(() =>
+          environment.DB.prepare(
+            "SELECT id FROM card_payment_sources WHERE user_id = ? AND method = ?"
+          )
+            .bind(session.user_id, retained.method)
+            .first()
+        )
       );
-      if (blocked !== null) return unavailable();
-      if (row.value.status === "creating") {
-        return json({ status: "source-verifying", enrollmentId: row.value.id });
-      }
-      if (row.value.status === "verifying") {
-        const verifying = row.value;
-        return yield* waitFor(() =>
-          resolveCandidate({ environment, session, row: verifying, now })
-        );
-      }
-      if (row.value.status === "expired" || row.value.expires_at_ms <= now) {
-        return json({ status: "refused", enrollmentId: row.value.id, reason: "expired" });
-      }
-      if (row.value.status === "refused") {
-        return json({
-          status: "refused",
-          enrollmentId: row.value.id,
-          reason: row.value.refusal_reason ?? "provider-error",
-        });
-      }
-      if (
-        row.value.status !== "prepared" ||
-        row.value.payment_source_mode !== input.paymentSourceMode ||
-        row.value.billing_email !== input.billingEmail
-      ) {
-        return invalid();
-      }
-      if (input.paymentSourceMode === "create" && input.method !== row.value.method) {
-        return invalid();
-      }
-      const authorization = yield* verifyEnrollmentAuthorization({
+      if (Option.isNone(source)) return unavailable();
+      return yield* finish({
         environment,
         userId: session.user_id,
-        input,
-        method: row.value.method,
+        row: retained,
+        requestId: input.paymentRequestId,
+        session,
+        sourceId: source.value.id,
         now,
+        wompiSourceId: Option.none(),
       });
-      if (Result.isFailure(authorization)) return authorization.failure;
-      const authorizationDigest = authorization.success;
-      const userId = yield* Schema.decodeEffect(UserId)(session.user_id);
-      const claimedAt = yield* Clock.currentTimeMillis;
-      const claimed = yield* waitFor(() =>
-        claimPreparedPaymentEnrollment({
-          db: environment.DB,
-          authorityGuard: enrollmentAuthority(session, claimedAt),
-          input: {
-            userId,
-            enrollmentId: input.enrollmentId,
-            paymentRequestId: input.paymentRequestId,
-            billingEmail: input.billingEmail,
-            paymentSourceMode: input.paymentSourceMode,
-            ...(Option.isNone(authorizationDigest)
-              ? {}
-              : { authorizationDigest: authorizationDigest.value }),
-          },
-          claimedAtMs: claimedAt,
-        })
-      );
-      if (!claimed) {
-        return yield* deniedClaimResponse({
-          db: environment.DB,
-          userId: session.user_id,
-          enrollmentId: input.enrollmentId,
-        });
-      }
-      row = yield* waitFor(() => enrollment(environment.DB, session.user_id, input.enrollmentId));
-      if (Option.isNone(row)) return unavailable();
-      const retained = row.value;
-      if (input.paymentSourceMode === "reuse") {
-        const source = decodeRow(
-          Schema.Struct({ id: PaymentSourceId }),
-          yield* waitFor(() =>
-            environment.DB.prepare(
-              "SELECT id FROM card_payment_sources WHERE user_id = ? AND method = ?"
-            )
-              .bind(session.user_id, retained.method)
-              .first()
-          )
-        );
-        if (Option.isNone(source)) return unavailable();
-        return yield* waitFor(() =>
-          finish({
-            environment,
-            userId: session.user_id,
-            row: retained,
-            requestId: input.paymentRequestId,
-            session,
-            sourceId: source.value.id,
-            now,
-            wompiSourceId: Option.none(),
-          })
-        );
-      }
-      const wompi = yield* waitFor(() => makeWompi(environment));
-      const fresh = yield* Effect.exit(wompi.contracts(DateTime.makeUnsafe(now)));
-      if (Exit.isFailure(fresh)) {
-        yield* waitFor(() =>
-          environment.DB.prepare(
-            "UPDATE card_enrollments SET status = 'refused', refusal_reason = 'provider-error' WHERE id = ? AND status = 'creating'"
-          )
-            .bind(row.value.id)
-            .run()
-        );
-        return unavailable();
-      }
-      const old = parse(Schema.toCodecJson(WompiContractEvidenceSet), row.value.contracts_json);
-      const current = fresh.value.evidence;
-      if (
-        Option.isNone(old) ||
-        old.value.endUserPolicy.contentSha256 !== current.endUserPolicy.contentSha256 ||
-        old.value.endUserPolicy.providerContentHash !== current.endUserPolicy.providerContentHash ||
-        old.value.personalDataAuthorization.contentSha256 !==
-          current.personalDataAuthorization.contentSha256 ||
-        old.value.personalDataAuthorization.providerContentHash !==
-          current.personalDataAuthorization.providerContentHash
-      ) {
-        yield* waitFor(() =>
-          environment.DB.prepare(
-            "UPDATE card_enrollments SET status = 'refused', refusal_reason = 'terms-changed' WHERE id = ? AND status = 'creating'"
-          )
-            .bind(row.value.id)
-            .run()
-        );
-        return json({ status: "refused", enrollmentId: row.value.id, reason: "terms-changed" });
-      }
-      if (
-        !(yield* authorizeSourcePost({ db: environment.DB, session, enrollmentId: row.value.id }))
-      ) {
-        return invalid();
-      }
-      const source = yield* Effect.exit(
-        wompi.createPaymentSource({
-          token: submittedToken(input),
-          method: input.method,
-          billingEmail: input.billingEmail,
-          contracts: fresh.value,
-        })
-      );
-      if (Exit.isFailure(source)) {
-        yield* waitFor(() =>
-          environment.DB.prepare(
-            "UPDATE card_enrollments SET status = 'verifying' WHERE id = ? AND status = 'creating'"
-          )
-            .bind(row.value.id)
-            .run()
-        );
-        return json({ status: "source-verifying", enrollmentId: row.value.id });
-      }
-      if (source.value._tag === "Refused") {
-        yield* waitFor(() =>
-          environment.DB.prepare(
-            "UPDATE card_enrollments SET status = 'refused', refusal_reason = 'provider-declined' WHERE id = ? AND status = 'creating'"
-          )
-            .bind(row.value.id)
-            .run()
-        );
-        return json({ status: "refused", enrollmentId: row.value.id, reason: "provider-declined" });
-      }
-      const createdSourceId = source.value.sourceId;
-      const candidate = yield* waitFor(() =>
-        environment.DB.prepare(`UPDATE card_enrollments
-    SET status = 'verifying', wompi_candidate_source_id = ?
-    WHERE id = ? AND user_id = ? AND status = 'creating' AND payment_request_id = ?`)
-          .bind(createdSourceId, retained.id, session.user_id, input.paymentRequestId)
+    }
+    const wompi = yield* makeWompi(environment);
+    const fresh = yield* Effect.exit(wompi.contracts(DateTime.makeUnsafe(now)));
+    if (Exit.isFailure(fresh)) {
+      yield* waitFor(() =>
+        environment.DB.prepare(
+          "UPDATE card_enrollments SET status = 'refused', refusal_reason = 'provider-error' WHERE id = ? AND status = 'creating'"
+        )
+          .bind(row.value.id)
           .run()
       );
-      if (candidate.meta.changes !== 1) return unavailable();
-      const pending = yield* waitFor(() =>
-        enrollment(environment.DB, session.user_id, row.value.id)
+      return unavailable();
+    }
+    const old = parse(Schema.toCodecJson(WompiContractEvidenceSet), row.value.contracts_json);
+    const current = fresh.value.evidence;
+    if (
+      Option.isNone(old) ||
+      old.value.endUserPolicy.contentSha256 !== current.endUserPolicy.contentSha256 ||
+      old.value.endUserPolicy.providerContentHash !== current.endUserPolicy.providerContentHash ||
+      old.value.personalDataAuthorization.contentSha256 !==
+        current.personalDataAuthorization.contentSha256 ||
+      old.value.personalDataAuthorization.providerContentHash !==
+        current.personalDataAuthorization.providerContentHash
+    ) {
+      yield* waitFor(() =>
+        environment.DB.prepare(
+          "UPDATE card_enrollments SET status = 'refused', refusal_reason = 'terms-changed' WHERE id = ? AND status = 'creating'"
+        )
+          .bind(row.value.id)
+          .run()
       );
-      return Option.isSome(pending)
-        ? yield* waitFor(() => resolveCandidate({ environment, session, row: pending.value, now }))
-        : unavailable();
-    })
-  );
+      return json({ status: "refused", enrollmentId: row.value.id, reason: "terms-changed" });
+    }
+    if (
+      !(yield* authorizeSourcePost({ db: environment.DB, session, enrollmentId: row.value.id }))
+    ) {
+      return invalid();
+    }
+    const source = yield* Effect.exit(
+      wompi.createPaymentSource({
+        token: submittedToken(input),
+        method: input.method,
+        billingEmail: input.billingEmail,
+        contracts: fresh.value,
+      })
+    );
+    if (Exit.isFailure(source)) {
+      yield* waitFor(() =>
+        environment.DB.prepare(
+          "UPDATE card_enrollments SET status = 'verifying' WHERE id = ? AND status = 'creating'"
+        )
+          .bind(row.value.id)
+          .run()
+      );
+      return json({ status: "source-verifying", enrollmentId: row.value.id });
+    }
+    if (source.value._tag === "Refused") {
+      yield* waitFor(() =>
+        environment.DB.prepare(
+          "UPDATE card_enrollments SET status = 'refused', refusal_reason = 'provider-declined' WHERE id = ? AND status = 'creating'"
+        )
+          .bind(row.value.id)
+          .run()
+      );
+      return json({ status: "refused", enrollmentId: row.value.id, reason: "provider-declined" });
+    }
+    const createdSourceId = source.value.sourceId;
+    const candidate = yield* waitFor(() =>
+      environment.DB.prepare(`UPDATE card_enrollments
+    SET status = 'verifying', wompi_candidate_source_id = ?
+    WHERE id = ? AND user_id = ? AND status = 'creating' AND payment_request_id = ?`)
+        .bind(createdSourceId, retained.id, session.user_id, input.paymentRequestId)
+        .run()
+    );
+    if (candidate.meta.changes !== 1) return unavailable();
+    const pending = yield* waitFor(() => enrollment(environment.DB, session.user_id, row.value.id));
+    return Option.isSome(pending)
+      ? yield* resolveCandidate({ environment, session, row: pending.value, now })
+      : unavailable();
+  });
 
-/** Exact-origin fresh-session direct browser boundary; provider identity never leaves Core. */
-export const handlePaymentEnrollment = ({
+/** Owner-private browser workflow; time, provider work and commit settlement share its caller fiber. */
+export const paymentEnrollmentWork = ({
   request,
   environment,
 }: {
   request: Request;
   environment: EnrollmentEnvironment;
-}): Promise<Response> => {
-  const config = decodeRow(WompiConfiguration, environment);
-  if (
-    Option.isNone(config) ||
-    (config.value.WOMPI_ENVIRONMENT === "sandbox"
-      ? !config.value.WOMPI_PUBLIC_KEY.startsWith("pub_test_") ||
-        !config.value.WOMPI_PRIVATE_KEY.startsWith("prv_test_") ||
-        !config.value.WOMPI_INTEGRITY_SECRET.startsWith("test_integrity_")
-      : !config.value.WOMPI_PUBLIC_KEY.startsWith("pub_prod_") ||
-        !config.value.WOMPI_PRIVATE_KEY.startsWith("prv_prod_") ||
-        !config.value.WOMPI_INTEGRITY_SECRET.startsWith("prod_integrity_"))
-  ) {
-    return Promise.resolve(unavailable());
-  }
-  const configured = { ...environment, ...config.value };
-  if (request.headers.get("origin") !== configured.BROWSER_ORIGIN) {
-    return Promise.resolve(invalid(forbiddenStatus));
-  }
-  return Effect.runPromise(
-    Effect.gen(function* () {
+}): Effect.Effect<Response, EnrollmentBoundaryFailure | Schema.SchemaError> =>
+  Effect.suspend(() => {
+    const config = decodeRow(WompiConfiguration, environment);
+    if (
+      Option.isNone(config) ||
+      (config.value.WOMPI_ENVIRONMENT === "sandbox"
+        ? !config.value.WOMPI_PUBLIC_KEY.startsWith("pub_test_") ||
+          !config.value.WOMPI_PRIVATE_KEY.startsWith("prv_test_") ||
+          !config.value.WOMPI_INTEGRITY_SECRET.startsWith("test_integrity_")
+        : !config.value.WOMPI_PUBLIC_KEY.startsWith("pub_prod_") ||
+          !config.value.WOMPI_PRIVATE_KEY.startsWith("prv_prod_") ||
+          !config.value.WOMPI_INTEGRITY_SECRET.startsWith("prod_integrity_"))
+    ) {
+      return Effect.succeed(unavailable());
+    }
+    const configured = { ...environment, ...config.value };
+    if (request.headers.get("origin") !== configured.BROWSER_ORIGIN) {
+      return Effect.succeed(invalid(forbiddenStatus));
+    }
+    return Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
       const session = yield* waitFor(() => authority(request, environment.DB, now));
       if (Option.isNone(session)) return invalid(unauthorizedStatus);
@@ -1166,14 +1155,10 @@ export const handlePaymentEnrollment = ({
         );
       }
       if (transport.value.operation === "prepare") {
-        return yield* waitFor(() =>
-          prepare({ request, session: session.value, environment: configured, now })
-        );
+        return yield* prepare({ request, session: session.value, environment: configured, now });
       }
       if (transport.value.operation === "submit") {
-        return yield* waitFor(() =>
-          submit({ request, session: session.value, environment: configured, now })
-        );
+        return yield* submit({ request, session: session.value, environment: configured, now });
       }
       if (Option.isSome(transport.value.parameter)) {
         const addressedId = transport.value.parameter.value;
@@ -1199,6 +1184,13 @@ export const handlePaymentEnrollment = ({
         return json(presented);
       }
       return invalid();
-    })
-  ).catch(() => unavailable());
-};
+    });
+  });
+
+/** Exact-origin fresh-session direct browser boundary; provider identity never leaves Core. */
+export const handlePaymentEnrollment = (
+  input: Readonly<{ request: Request; environment: EnrollmentEnvironment }>
+): Promise<Response> =>
+  Effect.runPromise(paymentEnrollmentWork(input), { signal: input.request.signal }).catch(() =>
+    unavailable()
+  );

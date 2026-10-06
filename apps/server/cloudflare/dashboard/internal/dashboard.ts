@@ -1,4 +1,4 @@
-import { Data, Effect, Option, Schema } from "effect";
+import { Data, DateTime, Effect, Option, Schema } from "effect";
 import {
   prepareAuthorizedAuditCall,
   recordCanonicalPATWork,
@@ -23,7 +23,6 @@ import {
   transactionFailure,
   transactionId,
   transactionNoStore,
-  transactionNow,
   transactionUnavailable,
 } from "../../canonical-work/operations";
 import {
@@ -102,7 +101,7 @@ export const queryDashboard = ({
   operation: DashboardQueryOperation;
 }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
-    const current = transactionNow();
+    const current = DateTime.toEpochMillis(yield* DateTime.now);
     const live = yield* Effect.tryPromise(() => liveTransactionAuthority({ db, subject, current }));
     if (!live) {
       return transactionFailure({
@@ -164,13 +163,11 @@ export const browseDashboard = (input: DashboardRequest): Effect.Effect<Response
     }
     const edit =
       operation === "dashboard.applyDashboardEdit"
-        ? yield* Effect.tryPromise(() =>
-            boundedJsonBody({
-              request,
-              policy: editBodyPolicy,
-              schema: Schema.toCodecJson(DashboardEdit),
-            })
-          ).pipe(Effect.orElseSucceed(() => Option.none()))
+        ? yield* boundedJsonBody({
+            request,
+            policy: editBodyPolicy,
+            schema: Schema.toCodecJson(DashboardEdit),
+          }).pipe(Effect.orElseSucceed(() => Option.none()))
         : Option.none<DashboardEdit>();
     return input.operation === "dashboard.applyDashboardEdit"
       ? yield* input.runMutation({

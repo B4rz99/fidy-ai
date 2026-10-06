@@ -16,7 +16,15 @@ it("reads an offset spelling and a UTC spelling as the same instant", () => {
 });
 
 it("rejects text that names no valid instant", () => {
-  for (const text of ["", "yesterday", "2026-13-01T00:00:00Z"]) {
+  for (const text of [
+    "",
+    "yesterday",
+    "2026-13-01T00:00:00Z",
+    "2026-02-31T00:00:00Z",
+    "2026-04-31T00:00:00Z",
+    "2025-02-29T09:00:00-05:00",
+    "1900-02-29T00:00:00Z",
+  ]) {
     expect(Result.isFailure(decode(text))).toBe(true);
   }
 });
@@ -31,7 +39,13 @@ it("rejects invalid in-memory instants at the domain boundary", () => {
 });
 
 it("accepts the last valid day in months with 30 or 31 days", () => {
-  for (const text of ["2026-04-30T00:00:00Z", "2026-03-31T00:00:00Z"]) {
+  for (const text of [
+    "2026-04-30T00:00:00Z",
+    "2026-03-31T00:00:00Z",
+    "2024-02-29T09:00:00-05:00",
+    "2000-02-29T00:00:00Z",
+    "0004-02-29T00:00:00Z",
+  ]) {
     expect(Result.isSuccess(decode(text))).toBe(true);
   }
 });

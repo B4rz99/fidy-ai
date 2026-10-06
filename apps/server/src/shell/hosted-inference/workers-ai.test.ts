@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { expect, it } from "@effect/vitest";
-import { Effect, Exit, Fiber, Option, Schema } from "effect";
+import { Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { ToolCallId } from "~/core/agent/contract";
@@ -12,6 +12,7 @@ import {
   HostedToolCallMaximum,
   type WorkersAiBindingRun,
   type WorkersAiRequest,
+  type WorkersAiRun,
   approvedWorkersAiModel,
 } from "./contract";
 import { hostedInitialTextContext } from "./context.test-fixture";
@@ -77,12 +78,23 @@ const makeConfiguredInference = (
 ): Effect.Effect<HostedInferenceService, HostedInferenceError> =>
   makeWorkersAiHostedInference({
     model: Option.some(approvedWorkersAiModel),
-    run: Option.some(run),
+    run: Option.some(fromBinding(run)),
   });
+
+const fromBinding =
+  (run: WorkersAiBindingRun): WorkersAiRun =>
+  (model, request) =>
+    Effect.tryPromise({
+      try: (signal) => run(model, request, { returnRawResponse: true, signal }),
+      catch: (failure) =>
+        failure instanceof HostedInferenceError
+          ? failure
+          : hostedFailure({ _tag: "ProviderUnavailable" }, true),
+    });
 
 it.effect("fails closed when the configured Workers AI model is absent or unsupported", () =>
   Effect.gen(function* () {
-    const run = captureRun(() => Promise.resolve(completed())).run;
+    const run = fromBinding(captureRun(() => Promise.resolve(completed())).run);
 
     const configurations = [
       { model: Option.none<string>(), run: Option.some(run) },
@@ -441,21 +453,21 @@ it.effect("bounds provider responses and performs no hidden retry", () =>
   })
 );
 
-it.effect("times out stalled response bodies and cancels their reader", () =>
+it.effect("times out stalled model output even when provider cancellation remains pending", () =>
   Effect.gen(function* () {
     let cancelled = false;
-    const binding = captureRun(() =>
-      Promise.resolve(
-        new Response(
-          new ReadableStream({
-            cancel: (): void => {
-              cancelled = true;
-            },
-            pull: (): void => undefined,
-          })
-        )
-      )
+    const cancellation = yield* Deferred.make<void>();
+    const runWithServices = Effect.runPromiseWith(yield* Effect.context<never>());
+    const providerResponse = new Response(
+      new ReadableStream({
+        cancel: (): Promise<void> => {
+          cancelled = true;
+          return runWithServices(Deferred.await(cancellation));
+        },
+        pull: (): void => undefined,
+      })
     );
+    const binding = captureRun(() => Promise.resolve(providerResponse));
     const inference = yield* makeConfiguredInference(binding.run);
     const prepared = yield* inference.prepareText({
       context: initialContext(),
@@ -466,10 +478,102 @@ it.effect("times out stalled response bodies and cancels their reader", () =>
     yield* Effect.yieldNow;
 
     yield* TestClock.adjust("121 seconds");
+    const beforeCancellationSettles = execution.pollUnsafe();
+    const locked = providerResponse.body?.locked;
+    yield* Deferred.succeed(cancellation, undefined);
     const exit = yield* Effect.exit(Fiber.join(execution));
 
+    assertHostedFailure(
+      beforeCancellationSettles,
+      hostedFailure({ _tag: "ProviderUnavailable" }, true)
+    );
     assertHostedFailure(exit, hostedFailure({ _tag: "ProviderUnavailable" }, true));
     expect(cancelled).toBe(true);
+    expect(locked).toBe(false);
+  })
+);
+
+for (const outcome of ["success", "stream failure", "provider refusal"] as const) {
+  it.effect(`releases model response ownership after ${outcome}`, () =>
+    Effect.gen(function* () {
+      let cancelled = false;
+      const providerResponse =
+        outcome === "success"
+          ? completed()
+          : new Response(
+              new ReadableStream({
+                start: (controller): void => {
+                  if (outcome === "stream failure") {
+                    controller.error(new Error("Provider body unavailable"));
+                  }
+                },
+                cancel: (): Promise<void> => {
+                  cancelled = true;
+                  return Promise.reject(new Error("Cancellation unavailable"));
+                },
+              }),
+              { status: outcome === "provider refusal" ? 429 : 200 }
+            );
+      const inference = yield* makeConfiguredInference(() => Promise.resolve(providerResponse));
+      const prepared = yield* inference.prepareText({
+        context: initialContext(),
+        availableOperations: [],
+        toolChoice: "none",
+      });
+      const exit = yield* Effect.exit(prepared.execute);
+      if (outcome === "success") expect(Exit.isSuccess(exit)).toBe(true);
+      else {
+        assertHostedFailure(
+          exit,
+          outcome === "provider refusal"
+            ? hostedFailure({ _tag: "ProviderUnavailable" }, true)
+            : hostedFailure({
+                _tag: "InvalidOutput",
+                description: "Hosted provider response was invalid",
+              })
+        );
+      }
+      if (outcome === "provider refusal") expect(cancelled).toBe(true);
+      expect(providerResponse.body?.locked).toBe(false);
+    })
+  );
+}
+
+it.effect("rejects overflowing model output without waiting for provider cancellation", () =>
+  Effect.gen(function* () {
+    const cancellation = yield* Deferred.make<void>();
+    const cancellationStarted = yield* Deferred.make<void>();
+    const runWithServices = Effect.runPromiseWith(yield* Effect.context<never>());
+    const providerResponse = new Response(
+      new ReadableStream({
+        start: (controller): void => controller.enqueue(new Uint8Array(524_289)),
+        cancel: (): Promise<void> =>
+          runWithServices(
+            Deferred.succeed(cancellationStarted, undefined).pipe(
+              Effect.andThen(Deferred.await(cancellation))
+            )
+          ),
+      })
+    );
+    const inference = yield* makeConfiguredInference(() => Promise.resolve(providerResponse));
+    const prepared = yield* inference.prepareText({
+      context: initialContext(),
+      availableOperations: [],
+      toolChoice: "none",
+    });
+    const execution = yield* prepared.execute.pipe(Effect.forkChild({ startImmediately: true }));
+    yield* Deferred.await(cancellationStarted);
+    yield* Effect.yieldNow;
+    const beforeCancellationSettles = execution.pollUnsafe();
+    const locked = providerResponse.body?.locked;
+    yield* Deferred.succeed(cancellation, undefined);
+    yield* Fiber.await(execution);
+
+    assertHostedFailure(
+      beforeCancellationSettles,
+      hostedFailure({ _tag: "InvalidOutput", description: "Hosted provider response was invalid" })
+    );
+    expect(locked).toBe(false);
   })
 );
 

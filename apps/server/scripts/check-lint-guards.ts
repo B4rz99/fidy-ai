@@ -40,6 +40,13 @@ type LintProbe = Readonly<
 >;
 
 const probes: ReadonlyArray<LintProbe> = [
+  ...["effect/http", "effect/http-api", "effect/http/HttpClient", "effect/http-api/HttpApi"].map(
+    (module): LintProbe => ({
+      name: `core-${module.replaceAll("/", "-")}`,
+      expectedRule: "eslint(no-restricted-imports)",
+      source: `import "${module}";\n`,
+    })
+  ),
   {
     name: "effect-promise",
     expectedRule: "effect-guards(no-effect-promise)",

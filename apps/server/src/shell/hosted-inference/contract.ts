@@ -1,5 +1,6 @@
 import {
   type Brand,
+  type Cause,
   Data,
   type DateTime,
   type Duration,
@@ -323,10 +324,16 @@ export type WorkersAiBindingRun = (
   options: Readonly<{ returnRawResponse: true; signal: AbortSignal }>
 ) => Promise<Response>;
 
+/** Provider execution composed in the calling Effect owner, including admission and Consent. */
+export type WorkersAiRun = (
+  model: ApprovedWorkersAiModel,
+  request: WorkersAiRequest
+) => Effect.Effect<Response, HostedInferenceError | Cause.UnknownError>;
+
 /** Optional native configuration decoded before hosted inference authority is constructed. */
 export type WorkersAiConfiguration = Readonly<{
   model: Option.Option<string>;
-  run: Option.Option<WorkersAiBindingRun>;
+  run: Option.Option<WorkersAiRun>;
 }>;
 
 /** Closed live approval checks, identifying a failing capability without exposing model content. */

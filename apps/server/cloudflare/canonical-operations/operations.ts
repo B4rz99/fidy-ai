@@ -2,10 +2,8 @@ import {
   executeHostedStatementCall as heldStatementCall,
   executeHostedStatementQuery as heldStatementQuery,
 } from "./internal/hosted-statement";
-import { Cause, Effect, Exit, Option, Schema } from "effect";
+import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
 import type { OAuthCaller } from "../../src/shell/oauth-agents/contract";
-
-import { currentMillis } from "../runtime/operations";
 import { HostedInference } from "../../src/shell/hosted-inference/operations";
 import { type HostedInferenceService } from "../../src/shell/hosted-inference/contract";
 import { type CanonicalOperationId } from "../../src/core/canonical-operations/contract";
@@ -206,10 +204,10 @@ const executeOAuthWork = (input: OAuthCanonicalWork): Effect.Effect<Response> =>
     if (Option.isNone(installed)) return transactionUnavailable();
     const operation = installed.value;
     const scope = userOwnedAgentCapability(operation.policy.access);
-    const current = currentMillis();
+    const current = yield* Clock.currentTimeMillis;
     const admission = { ...input.subject, requiredScope: Option.none() };
     const caller = yield* resolveOAuthQueryCaller({ db: input.db, subject: admission, current });
-    if (input.signal.aborted || currentMillis() >= input.deadlineMilliseconds) {
+    if (input.signal.aborted || (yield* Clock.currentTimeMillis) >= input.deadlineMilliseconds) {
       return transactionUnavailable();
     }
     if (Option.isNone(caller)) {

@@ -1,6 +1,6 @@
 import { it } from "@effect/vitest";
 import { Data, Effect, Option, Schema } from "effect";
-import { afterEach, describe, expect } from "vitest";
+import { afterEach, describe, expect, vi } from "vitest";
 import { heapUsage, profileWorkerRequest } from "./workerd-inspector";
 
 class InspectorTestError extends Data.TaggedError("InspectorTestError")<{
@@ -41,6 +41,67 @@ const acknowledgeStart = (socket: Bun.ServerWebSocket<SocketData>, message: stri
 
 afterEach(() =>
   Promise.all(servers.splice(0).map((server) => server.stop(true))).then(() => undefined)
+);
+
+it.each(["heap", "profile"] as const)(
+  "closes a silent %s inspector and bounded associated work without caller abort",
+  (operation) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        try {
+          const requested = Promise.withResolvers<void>();
+          const disconnected = Promise.withResolvers<void>();
+          const debuggerUrl = serveInspector(
+            (socket, message) => {
+              const command = Schema.decodeSync(Command)(message);
+              if (operation === "profile" && command.id < 3) acknowledgeStart(socket, message);
+              else requested.resolve();
+            },
+            () => disconnected.resolve()
+          );
+          let requestSignal = Option.none<AbortSignal>();
+          let cancelled = false;
+          const work =
+            operation === "heap"
+              ? heapUsage({ debuggerUrl, signal: Option.none() })
+              : profileWorkerRequest({
+                  debuggerUrl,
+                  signal: Option.none(),
+                  sendRequest: (signal) => {
+                    requestSignal = Option.some(signal);
+                    return Promise.resolve(
+                      new Response(
+                        new ReadableStream({
+                          cancel(): Promise<void> {
+                            cancelled = true;
+                            return Promise.withResolvers<void>().promise;
+                          },
+                        })
+                      )
+                    );
+                  },
+                });
+          const outcome = work.then(
+            () => "unexpected success",
+            (failure: unknown) => failure
+          );
+          yield* Effect.tryPromise(() => requested.promise);
+          yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(30_001));
+          expect(yield* Effect.tryPromise(() => outcome)).toMatchObject({
+            _tag: "InspectorIoError",
+            cause: { _tag: "TimeoutError" },
+          });
+          yield* Effect.tryPromise(() => disconnected.promise);
+          if (operation === "profile") {
+            expect(Option.isSome(requestSignal) && requestSignal.value.aborted).toBe(true);
+            expect(cancelled).toBe(true);
+          }
+        } finally {
+          vi.useRealTimers();
+        }
+      })
+    )
 );
 
 describe("workerd inspector", () => {

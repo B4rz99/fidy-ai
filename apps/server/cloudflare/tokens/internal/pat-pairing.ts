@@ -24,7 +24,7 @@ import {
   buildPairedPATDisclosure,
   selectPATPairingPublicCodeSymbols,
 } from "../../../src/core/tokens/operations";
-import { type Cause, DateTime, Effect, Option, Result, Schema } from "effect";
+import { type Cause, Clock, DateTime, Effect, Option, Result, Schema } from "effect";
 import { Hex } from "effect/encoding";
 import {
   expirePATConsents,
@@ -44,13 +44,13 @@ import {
   pairingMilliseconds,
   rejected,
   response,
+  retainedPATMillis,
   scopesFrom,
   unauthorized,
   unavailable,
   webSession,
 } from "./pat-shared";
 import { newId } from "../../secret-material/operations";
-import { currentMillis } from "../../runtime/operations";
 import { commitPATUnit } from "./pat-unit";
 import { prepareOwnedStatement } from "../../database/operations";
 
@@ -89,8 +89,8 @@ export const PairingRow = Schema.Struct({
   recipient_label: Schema.String,
   scopes_json: Schema.String,
   lifetime_days: Schema.Int,
-  created_at_ms: Schema.Finite,
-  expires_at_ms: Schema.Finite,
+  created_at_ms: retainedPATMillis,
+  expires_at_ms: retainedPATMillis,
   state: Schema.Literals([
     "pending_approval",
     "approved_awaiting_claim",
@@ -99,55 +99,53 @@ export const PairingRow = Schema.Struct({
     "revoked_unclaimed",
   ]),
   user_id: Schema.NullOr(Schema.String),
-  approved_at_ms: Schema.NullOr(Schema.Finite),
-  pat_expires_at_ms: Schema.NullOr(Schema.Finite),
+  approved_at_ms: Schema.NullOr(retainedPATMillis),
+  pat_expires_at_ms: Schema.NullOr(retainedPATMillis),
   wrong_attempts: Schema.Int,
-  last_poll_at_ms: Schema.NullOr(Schema.Finite),
+  last_poll_at_ms: Schema.NullOr(retainedPATMillis),
   minimum_poll_seconds: Schema.Int,
 });
 export type PairingRow = typeof PairingRow.Type;
 
 /** Reclaim unapproved anonymous metadata; never remove approved User-bound grant evidence. */
-export const sweepExpiredPATPairings = (db: D1Database): Promise<void> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const current = currentMillis();
-      yield* Effect.tryPromise(() =>
-        db.batch([
-          prepareOwnedStatement({
-            db,
-            statement: expirePairingConsents({
-              current,
-              candidates: expiredPairingGrants({ current, limit: scheduledSweepLimit }),
-            }),
+export const sweepExpiredPATPairings = (db: D1Database): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const current = yield* Clock.currentTimeMillis;
+    yield* Effect.tryPromise(() =>
+      db.batch([
+        prepareOwnedStatement({
+          db,
+          statement: expirePairingConsents({
+            current,
+            candidates: expiredPairingGrants({ current, limit: scheduledSweepLimit }),
           }),
-          prepareOwnedStatement({ db, statement: expireApprovedPairings(current) }),
-          prepareOwnedStatement({ db, statement: pairingExpiryCompletion(current) }),
-          prepareOwnedStatement({
-            db,
-            statement: expirePATConsents({
-              current,
-              candidates: expiredPATGrants({ current, limit: scheduledSweepLimit }),
-            }),
+        }),
+        prepareOwnedStatement({ db, statement: expireApprovedPairings(current) }),
+        prepareOwnedStatement({ db, statement: pairingExpiryCompletion(current) }),
+        prepareOwnedStatement({
+          db,
+          statement: expirePATConsents({
+            current,
+            candidates: expiredPATGrants({ current, limit: scheduledSweepLimit }),
           }),
-          prepareOwnedStatement({ db, statement: expireFixedPATs(current) }),
-          prepareOwnedStatement({ db, statement: patExpiryCompletion(current) }),
-          prepareOwnedStatement({
-            db,
-            statement: sweepUnapprovedPairings({ current, limit: scheduledSweepLimit }),
-          }),
-          prepareOwnedStatement({
-            db,
-            statement: sweepPairingAdmission({ current, limit: scheduledSweepLimit }),
-          }),
-          prepareOwnedStatement({
-            db,
-            statement: sweepPairingReviews({ current, limit: scheduledSweepLimit }),
-          }),
-        ])
-      );
-    })
-  );
+        }),
+        prepareOwnedStatement({ db, statement: expireFixedPATs(current) }),
+        prepareOwnedStatement({ db, statement: patExpiryCompletion(current) }),
+        prepareOwnedStatement({
+          db,
+          statement: sweepUnapprovedPairings({ current, limit: scheduledSweepLimit }),
+        }),
+        prepareOwnedStatement({
+          db,
+          statement: sweepPairingAdmission({ current, limit: scheduledSweepLimit }),
+        }),
+        prepareOwnedStatement({
+          db,
+          statement: sweepPairingReviews({ current, limit: scheduledSweepLimit }),
+        }),
+      ])
+    );
+  });
 type StartedPairing = Readonly<{
   source: Uint8Array;
   payload: StartPATPairingPayload;
@@ -195,49 +193,45 @@ const reservePairing = (
 export const startPATPairing = ({
   request,
   db,
-}: Readonly<{ request: Request; db: D1Database }>): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const payload = yield* Effect.tryPromise(() =>
-        decodeBody({ request, schema: StartPATPairingPayload })
-      );
-      if (Option.isNone(payload)) return invalid();
-      const source = Schema.decodeUnknownOption(sourceDigest)(request.headers.get("x-pat-source"));
-      if (Option.isNone(source)) return unavailable();
-      const bytes = Hex.decode(source.value);
-      if (Result.isFailure(bytes)) return unavailable();
-      const current = currentMillis();
-      const code = publicCode();
-      const privateCode = newProof();
-      const pairingId = newId();
-      const expires = current + pairingMilliseconds;
-      return yield* reservePairing(db, {
-        source: bytes.success,
-        payload: payload.value,
-        current,
-        code,
-        privateCode,
-        pairingId,
-        expires,
-      }).pipe(
-        Effect.map((reserved) =>
-          reserved
-            ? response({
-                body: {
-                  pairingId,
-                  privateDeviceCode: privateCode,
-                  publicCode: code,
-                  expiresAt: iso(expires),
-                  pollingIntervalSeconds: 5,
-                },
-                status: successStatus,
-              })
-            : rateLimited()
-        ),
-        Effect.orElseSucceed(() => unavailable())
-      );
-    })
-  );
+}: Readonly<{ request: Request; db: D1Database }>): Effect.Effect<Response, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const payload = yield* decodeBody({ request, schema: StartPATPairingPayload });
+    if (Option.isNone(payload)) return invalid();
+    const source = Schema.decodeUnknownOption(sourceDigest)(request.headers.get("x-pat-source"));
+    if (Option.isNone(source)) return unavailable();
+    const bytes = Hex.decode(source.value);
+    if (Result.isFailure(bytes)) return unavailable();
+    const current = yield* Clock.currentTimeMillis;
+    const code = publicCode();
+    const privateCode = newProof();
+    const pairingId = newId();
+    const expires = current + pairingMilliseconds;
+    return yield* reservePairing(db, {
+      source: bytes.success,
+      payload: payload.value,
+      current,
+      code,
+      privateCode,
+      pairingId,
+      expires,
+    }).pipe(
+      Effect.map((reserved) =>
+        reserved
+          ? response({
+              body: {
+                pairingId,
+                privateDeviceCode: privateCode,
+                publicCode: code,
+                expiresAt: iso(expires),
+                pollingIntervalSeconds: 5,
+              },
+              status: successStatus,
+            })
+          : rateLimited()
+      ),
+      Effect.orElseSucceed(() => unavailable())
+    );
+  });
 
 const admitReview = (
   db: D1Database,
@@ -261,43 +255,45 @@ const admitReview = (
 export const inspectPATPairing = ({
   request,
   db,
-}: Readonly<{ request: Request; db: D1Database }>): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const session = yield* Effect.tryPromise(() => webSession({ request, db, fresh: true }));
-      if (Option.isNone(session)) return unauthorized();
-      const current = currentMillis();
-      if (!(yield* admitReview(db, session.value.id, current))) return rateLimited();
-      const input = yield* Effect.tryPromise(() =>
-        decodeBody({ request, schema: Schema.Struct({ publicCode: Schema.String }) })
-      );
-      const code = Option.flatMap(input, (value) =>
-        Schema.decodeOption(PATPairingPublicCodeInput)(value.publicCode)
-      );
-      if (Option.isNone(code)) return rejected();
-      const raw = yield* Effect.tryPromise(() =>
-        db
-          .prepare(`SELECT * FROM pat_pairings WHERE public_code = ? AND state = 'pending_approval'
+}: Readonly<{ request: Request; db: D1Database }>): Effect.Effect<
+  Response,
+  Cause.UnknownError | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    const session = yield* webSession({ request, db, fresh: true });
+    if (Option.isNone(session)) return unauthorized();
+    const current = yield* Clock.currentTimeMillis;
+    if (!(yield* admitReview(db, session.value.id, current))) return rateLimited();
+    const input = yield* decodeBody({
+      request,
+      schema: Schema.Struct({ publicCode: Schema.String }),
+    });
+    const code = Option.flatMap(input, (value) =>
+      Schema.decodeOption(PATPairingPublicCodeInput)(value.publicCode)
+    );
+    if (Option.isNone(code)) return rejected();
+    const raw = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`SELECT * FROM pat_pairings WHERE public_code = ? AND state = 'pending_approval'
     AND expires_at_ms > ?`)
-          .bind(code.value, current)
-          .first()
-      );
-      const pairing = Schema.decodeUnknownOption(PairingRow)(raw);
-      if (Option.isNone(pairing)) return rejected();
-      const scopes = scopesFrom(pairing.value.scopes_json);
-      if (Option.isNone(scopes)) return unavailable();
-      const review = Schema.decodeUnknownOption(Schema.toType(PATPairingReview))({
-        pairingId: pairing.value.id,
-        recipientLabel: pairing.value.recipient_label,
-        scopes: scopes.value,
-        lifetimeDays: pairing.value.lifetime_days,
-        claimBy: DateTime.makeUnsafe(pairing.value.expires_at_ms),
-      });
-      return Option.isSome(review)
-        ? canonical(yield* Schema.encodeEffect(Schema.toCodecJson(PATPairingReview))(review.value))
-        : unavailable();
-    })
-  );
+        .bind(code.value, current)
+        .first()
+    );
+    const pairing = Schema.decodeUnknownOption(PairingRow)(raw);
+    if (Option.isNone(pairing)) return raw === null ? rejected() : unavailable();
+    const scopes = scopesFrom(pairing.value.scopes_json);
+    if (Option.isNone(scopes)) return unavailable();
+    const review = Schema.decodeUnknownOption(Schema.toType(PATPairingReview))({
+      pairingId: pairing.value.id,
+      recipientLabel: pairing.value.recipient_label,
+      scopes: scopes.value,
+      lifetimeDays: pairing.value.lifetime_days,
+      claimBy: DateTime.makeUnsafe(pairing.value.expires_at_ms),
+    });
+    return Option.isSome(review)
+      ? canonical(yield* Schema.encodeEffect(Schema.toCodecJson(PATPairingReview))(review.value))
+      : unavailable();
+  });
 
 type Approval = Readonly<{
   session: SessionRow;
@@ -360,55 +356,57 @@ const commitApproval = (
 export const approvePATPairing = ({
   request,
   db,
-}: Readonly<{ request: Request; db: D1Database }>): Promise<Response> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const session = yield* Effect.tryPromise(() => webSession({ request, db, fresh: true }));
-      if (Option.isNone(session)) return unauthorized();
-      const payload = yield* Effect.tryPromise(() =>
-        decodeBody({ request, schema: Schema.toCodecJson(ApprovePATPairingPayload) })
-      );
-      if (Option.isNone(payload)) return rejected();
-      const current = currentMillis();
-      const raw = yield* Effect.tryPromise(() =>
-        db
-          .prepare(`SELECT * FROM pat_pairings WHERE id = ? AND state = 'pending_approval'
+}: Readonly<{ request: Request; db: D1Database }>): Effect.Effect<
+  Response,
+  Cause.UnknownError | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    const session = yield* webSession({ request, db, fresh: true });
+    if (Option.isNone(session)) return unauthorized();
+    const payload = yield* decodeBody({
+      request,
+      schema: Schema.toCodecJson(ApprovePATPairingPayload),
+    });
+    if (Option.isNone(payload)) return rejected();
+    const current = yield* Clock.currentTimeMillis;
+    const raw = yield* Effect.tryPromise(() =>
+      db
+        .prepare(`SELECT * FROM pat_pairings WHERE id = ? AND state = 'pending_approval'
     AND expires_at_ms > ?`)
-          .bind(payload.value.pairingId, current)
-          .first()
-      );
-      const pairing = Schema.decodeUnknownOption(PairingRow)(raw);
-      if (Option.isNone(pairing)) return rejected();
-      const expires = current + pairing.value.lifetime_days * dayMilliseconds;
-      const scopes = scopesFrom(pairing.value.scopes_json);
-      if (Option.isNone(scopes)) return unavailable();
-      const disclosure = buildPairedPATDisclosure({
-        grant: {
-          recipientLabel: yield* Schema.decodeEffect(StartPATPairingPayload.fields.recipientLabel)(
-            pairing.value.recipient_label
-          ),
-          scopes: scopes.value,
-          lifetimeDays: yield* Schema.decodeUnknownEffect(
-            StartPATPairingPayload.fields.lifetimeDays
-          )(pairing.value.lifetime_days),
-        },
-        expiresAt: DateTime.makeUnsafe(expires),
-      });
-      if (
-        !(yield* commitApproval(db, {
-          session: session.value,
-          pairing: pairing.value,
-          current,
-          expires,
-          disclosure,
-        }))
-      ) {
-        return rejected();
-      }
-      return canonical({
-        pairingId: pairing.value.id,
-        patExpiresAt: iso(expires),
-        claimBy: iso(pairing.value.expires_at_ms),
-      });
-    })
-  );
+        .bind(payload.value.pairingId, current)
+        .first()
+    );
+    const pairing = Schema.decodeUnknownOption(PairingRow)(raw);
+    if (Option.isNone(pairing)) return raw === null ? rejected() : unavailable();
+    const expires = current + pairing.value.lifetime_days * dayMilliseconds;
+    const scopes = scopesFrom(pairing.value.scopes_json);
+    if (Option.isNone(scopes)) return unavailable();
+    const disclosure = buildPairedPATDisclosure({
+      grant: {
+        recipientLabel: yield* Schema.decodeEffect(StartPATPairingPayload.fields.recipientLabel)(
+          pairing.value.recipient_label
+        ),
+        scopes: scopes.value,
+        lifetimeDays: yield* Schema.decodeUnknownEffect(StartPATPairingPayload.fields.lifetimeDays)(
+          pairing.value.lifetime_days
+        ),
+      },
+      expiresAt: DateTime.makeUnsafe(expires),
+    });
+    if (
+      !(yield* commitApproval(db, {
+        session: session.value,
+        pairing: pairing.value,
+        current,
+        expires,
+        disclosure,
+      }))
+    ) {
+      return rejected();
+    }
+    return canonical({
+      pairingId: pairing.value.id,
+      patExpiresAt: iso(expires),
+      claimBy: iso(pairing.value.expires_at_ms),
+    });
+  });

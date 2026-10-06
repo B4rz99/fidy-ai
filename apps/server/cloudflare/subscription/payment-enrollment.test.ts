@@ -10,7 +10,7 @@ import {
 } from "../../src/core/subscription/contract";
 import { UserId } from "../../src/core/identity/contract";
 import { Cause, Clock, Config, Data, DateTime, Effect, Option, Redacted, Schema } from "effect";
-import { billingAttemptIdFor } from "./internal/payment-enrollment";
+import { billingAttemptIdFor, paymentEnrollmentWork } from "./internal/payment-enrollment";
 import {
   handlePaymentEnrollment,
   reconcileBillingCandidates,
@@ -101,7 +101,7 @@ const setup = (): Promise<{
         "CREATE TABLE onboarding_consent_records (user_id TEXT PRIMARY KEY) STRICT",
         "CREATE TABLE consent_user_revocations (user_id TEXT PRIMARY KEY) STRICT",
         "CREATE TABLE trial_periods (user_id TEXT PRIMARY KEY, started_at_ms INTEGER NOT NULL, ends_at_ms INTEGER NOT NULL) STRICT",
-        "CREATE TABLE pat_audit (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, session_id TEXT, pat_id TEXT, operation TEXT NOT NULL, outcome TEXT NOT NULL, occurred_at_ms INTEGER NOT NULL) STRICT",
+        "CREATE TABLE pat_audit (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, session_id TEXT, pat_id TEXT, oauth_connection_id TEXT, oauth_credential_id TEXT, operation TEXT NOT NULL, outcome TEXT NOT NULL, occurred_at_ms INTEGER NOT NULL) STRICT",
         "CREATE TABLE pat_atomic_assertion (id INTEGER PRIMARY KEY CHECK (id = 1), accepted INTEGER NOT NULL CHECK (accepted = 1)) STRICT",
         `CREATE TABLE web_sessions (id TEXT NOT NULL, user_id TEXT NOT NULL, token_digest BLOB NOT NULL,
       revoked_at_ms INTEGER, fresh_until_ms INTEGER NOT NULL, idle_expires_at_ms INTEGER NOT NULL,
@@ -1105,13 +1105,11 @@ it.each([
         ).toEqual({ count: 0 });
         expect((yield* fromTestPromise(send)).status).toBe(200);
         expect(sourceCreations).toBe(1);
-        const beforeSettlement = yield* fromTestPromise(() =>
-          executeProtectedSubscriptionQuery({
-            db: environment.DB,
-            subject: fixture.subject,
-            operation: "subscription.getSubscriptionStatus",
-          })
-        );
+        const beforeSettlement = yield* executeProtectedSubscriptionQuery({
+          db: environment.DB,
+          subject: fixture.subject,
+          operation: "subscription.getSubscriptionStatus",
+        });
         expect(yield* fromTestPromise(() => beforeSettlement.json())).toMatchObject({
           data: { accessTier: "free", paidSubscription: null },
         });
@@ -1135,23 +1133,19 @@ it.each([
           billingPeriod: scenario.period,
         });
         expect(chargeCreations).toBe(1);
-        const afterSettlement = yield* fromTestPromise(() =>
-          executeProtectedSubscriptionQuery({
-            db: environment.DB,
-            subject: fixture.subject,
-            operation: "subscription.getSubscriptionStatus",
-          })
-        );
+        const afterSettlement = yield* executeProtectedSubscriptionQuery({
+          db: environment.DB,
+          subject: fixture.subject,
+          operation: "subscription.getSubscriptionStatus",
+        });
         expect(yield* fromTestPromise(() => afterSettlement.json())).toMatchObject({
           data: { accessTier: "pro", paidSubscription: { billingPeriod: scenario.period } },
         });
-        const otherUser = yield* fromTestPromise(() =>
-          executeProtectedSubscriptionQuery({
-            db: environment.DB,
-            subject: { ...fixture.subject, userId: userB },
-            operation: "subscription.getSubscriptionStatus",
-          })
-        );
+        const otherUser = yield* executeProtectedSubscriptionQuery({
+          db: environment.DB,
+          subject: { ...fixture.subject, userId: userB },
+          operation: "subscription.getSubscriptionStatus",
+        });
         expect(otherUser.status).toBe(401);
         const retained = yield* fromTestPromise(() =>
           environment.DB.batch([
@@ -2178,6 +2172,324 @@ it("prepares a Price and creates exactly one provider source and pending Billing
       ).toHaveLength(2);
     })
   ));
+
+it.each([8_640_000_000_000_001, 1_800_000_000_000.5])(
+  "refuses retained expiry %s before source creation or billing",
+  (expiry) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db, environment, request } = yield* fromTestPromise(setup);
+        const provider = vi.fn((url: URL) =>
+          Promise.resolve(new Response(providerBody(url, "AVAILABLE")))
+        );
+        vi.stubGlobal("fetch", provider);
+        const prepared = yield* fromTestPromise(() =>
+          handlePaymentEnrollment({
+            request: request("/web/subscription/payment-enrollments/prepare", "POST", { priceId }),
+            environment,
+          })
+        );
+        const data = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentEnrollment))(
+          yield* fromTestPromise(() => prepared.json())
+        );
+        // Model a hostile D1 projection without weakening production persistence constraints.
+        const corruptDb = new Proxy(db, {
+          get: (target, key): unknown =>
+            key === "prepare"
+              ? (sql: string): D1PreparedStatement => {
+                  const statement = target.prepare(sql);
+                  if (!sql.startsWith("SELECT * FROM card_enrollments")) return statement;
+                  const wrap = (bound: D1PreparedStatement): D1PreparedStatement =>
+                    new Proxy(bound, {
+                      get: (query, member): unknown => {
+                        if (member === "bind") {
+                          return (...values: Array<unknown>) => wrap(query.bind(...values));
+                        }
+                        if (member === "first") {
+                          return () =>
+                            query.first().then((row) => ({ ...row, expires_at_ms: expiry }));
+                        }
+                        return Reflect.get(query, member, query);
+                      },
+                    });
+                  return wrap(statement);
+                }
+              : Reflect.get(target, key, target),
+        });
+        provider.mockClear();
+        const response = yield* fromTestPromise(() =>
+          handlePaymentEnrollment({
+            environment: { ...environment, DB: corruptDb },
+            request: request("/web/subscription/payment-enrollments/submit", "POST", {
+              enrollmentId: data.enrollmentId,
+              paymentSourceMode: "create",
+              cardToken: "tok_test_browser_only",
+              paymentRequestId: "30000000-0000-4000-8000-000000000099",
+              billingEmail: "payer@example.com",
+              decisions: {
+                acceptedEndUserPolicy: true,
+                acceptedPersonalDataAuthorization: true,
+                authorizedRecurringCharges: true,
+              },
+            }),
+          })
+        );
+        expect(response.status).toBe(400);
+        const status = yield* fromTestPromise(() =>
+          handlePaymentEnrollment({
+            environment: { ...environment, DB: corruptDb },
+            request: request(`/web/subscription/payment-enrollments/${data.enrollmentId}`),
+          })
+        );
+        expect(status.status).toBe(400);
+        const repeatedPreparation = yield* fromTestPromise(() =>
+          handlePaymentEnrollment({
+            environment: { ...environment, DB: corruptDb },
+            request: request("/web/subscription/payment-enrollments/prepare", "POST", { priceId }),
+          })
+        );
+        expect(repeatedPreparation.status).toBe(503);
+        expect(provider).not.toHaveBeenCalled();
+        expect(
+          yield* fromTestPromise(() => db.prepare("SELECT status FROM card_enrollments").first())
+        ).toEqual({ status: "prepared" });
+        for (const table of [
+          "card_payment_sources",
+          "billing_attempts",
+          "billing_collection_outbox",
+        ]) {
+          expect(
+            yield* fromTestPromise(() =>
+              db.prepare(`SELECT count(*) AS count FROM ${table}`).first()
+            )
+          ).toEqual({ count: 0 });
+        }
+      })
+    )
+);
+
+it("inherits the workflow Clock through source authorization and live settlement", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, environment, request } = yield* fromTestPromise(setup);
+      const current = (yield* Clock.currentTimeMillis) - 3_600_000;
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "UPDATE web_sessions SET fresh_until_ms = ?, idle_expires_at_ms = ?, hard_expires_at_ms = ?"
+          )
+          .bind(current + 600_000, current + 600_000, current + 600_000)
+          .run()
+      );
+      const liveClock = yield* Clock.Clock;
+      const clock = new Proxy(liveClock, {
+        get: (target, key): unknown => {
+          if (key === "currentTimeMillis") return Effect.succeed(current);
+          if (key === "currentTimeMillisUnsafe") return () => current;
+          return Reflect.get(target, key, target);
+        },
+      });
+      const provider = vi.fn((url: URL) =>
+        Promise.resolve(new Response(providerBody(url, "AVAILABLE")))
+      );
+      vi.stubGlobal("fetch", provider);
+      const prepared = yield* paymentEnrollmentWork({
+        environment,
+        request: request("/web/subscription/payment-enrollments/prepare", "POST", { priceId }),
+      }).pipe(Effect.provideService(Clock.Clock, clock));
+      expect(prepared.status).toBe(200);
+      const data = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentEnrollment))(
+        yield* fromTestPromise(() => prepared.json())
+      );
+      const submitted = yield* paymentEnrollmentWork({
+        environment,
+        request: request("/web/subscription/payment-enrollments/submit", "POST", {
+          enrollmentId: data.enrollmentId,
+          paymentSourceMode: "create",
+          cardToken: "tok_test_browser_only",
+          paymentRequestId: "30000000-0000-4000-8000-000000000097",
+          billingEmail: "payer@example.com",
+          decisions: {
+            acceptedEndUserPolicy: true,
+            acceptedPersonalDataAuthorization: true,
+            authorizedRecurringCharges: true,
+          },
+        }),
+      }).pipe(Effect.provideService(Clock.Clock, clock));
+      expect(submitted.status).toBe(200);
+      expect(yield* fromTestPromise(() => submitted.json())).toMatchObject({
+        status: "payment-pending",
+      });
+      expect(
+        yield* fromTestPromise(() =>
+          db.prepare("SELECT accepted_at_ms FROM card_enrollments").first()
+        )
+      ).toEqual({ accepted_at_ms: current });
+      expect(
+        yield* fromTestPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM billing_collection_outbox").first()
+        )
+      ).toEqual({ count: 1 });
+    })
+  ));
+
+it("cancels an unfinished enrollment body without reserving provider work", () => {
+  // The native Request is cancelled independently of the test's Effect fiber.
+  const controller = new AbortController();
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const { db, environment, request } = yield* fromTestPromise(setup);
+      let cancelled = false;
+      const body = new ReadableStream<Uint8Array>({
+        cancel: (): void => {
+          cancelled = true;
+        },
+      });
+      const provider = vi.fn(() => Promise.resolve(new Response(merchant)));
+      vi.stubGlobal("fetch", provider);
+      const input = new Request(request("/web/subscription/payment-enrollments/prepare", "POST"), {
+        method: "POST",
+        body,
+        signal: controller.signal,
+      });
+      const pending = handlePaymentEnrollment({ request: input, environment });
+      yield* fromTestPromise(() => vi.waitFor(() => expect(input.body?.locked).toBe(true)));
+      controller.abort();
+      expect((yield* fromTestPromise(() => pending)).status).toBe(503);
+      expect(cancelled).toBe(true);
+      expect(provider).not.toHaveBeenCalled();
+      expect(
+        yield* fromTestPromise(() =>
+          db.prepare("SELECT count(*) AS count FROM card_enrollments").first()
+        )
+      ).toEqual({ count: 0 });
+    })
+  );
+});
+
+it.each(["contracts", "source", "commit"] as const)(
+  "cancels enrollment at %s without detached continuation or replaying a source POST",
+  (stage) => {
+    // Drive the native ingress signal, not interruption of the test's own Effect fiber.
+    const controller = new AbortController();
+    return Effect.runPromise(
+      Effect.gen(function* () {
+        const { db, environment, request } = yield* fromTestPromise(setup);
+        const started = Promise.withResolvers<void>();
+        const released = Promise.withResolvers<void>();
+        const onAccepted = vi.fn();
+        let merchantCalls = 0;
+        let posts = 0;
+        let providerAborted = false;
+        const assertProviderAborted = (): void => {
+          expect(providerAborted).toBe(true);
+        };
+        vi.stubGlobal(
+          "fetch",
+          (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+            const req = new Request(input, init);
+            if (req.url.includes("/merchants/")) merchantCalls++;
+            if (req.method === "POST") posts++;
+            const blocked =
+              (stage === "contracts" && merchantCalls === 2 && req.url.includes("/merchants/")) ||
+              (stage === "source" && req.url.includes("/payment_sources/3891"));
+            const response = (): Response =>
+              new Response(providerBody(new URL(req.url), "AVAILABLE"));
+            if (!blocked) return Promise.resolve(response());
+            started.resolve();
+            // Native fetch must return a Promise; the fixture owns its settlement gate.
+            const pending = Promise.withResolvers<Response>();
+            req.signal.addEventListener(
+              "abort",
+              () => {
+                providerAborted = true;
+                pending.reject(new Error("provider request interrupted"));
+              },
+              { once: true }
+            );
+            released.promise.then(() => pending.resolve(response()), pending.reject);
+            return pending.promise;
+          }
+        );
+        const prepared = yield* fromTestPromise(() =>
+          handlePaymentEnrollment({
+            request: request("/web/subscription/payment-enrollments/prepare", "POST", { priceId }),
+            environment,
+          })
+        );
+        const data = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentEnrollment))(
+          yield* fromTestPromise(() => prepared.json())
+        );
+        const delayedDb = new Proxy(db, {
+          get: (target, key): unknown =>
+            key === "batch" && stage === "commit"
+              ? (statements: Array<D1PreparedStatement>) => {
+                  const result = target.batch(statements);
+                  started.resolve();
+                  return result.then((committed) => released.promise.then(() => committed));
+                }
+              : Reflect.get(target, key, target),
+        });
+        const payload = {
+          enrollmentId: data.enrollmentId,
+          paymentSourceMode: "create",
+          cardToken: "tok_test_browser_only",
+          paymentRequestId: "30000000-0000-4000-8000-000000000098",
+          billingEmail: "payer@example.com",
+          decisions: {
+            acceptedEndUserPolicy: true,
+            acceptedPersonalDataAuthorization: true,
+            authorizedRecurringCharges: true,
+          },
+        };
+        let settled = false;
+        const pending = handlePaymentEnrollment({
+          environment: { ...environment, DB: delayedDb, onAccepted },
+          request: new Request(
+            request("/web/subscription/payment-enrollments/submit", "POST", payload),
+            {
+              signal: controller.signal,
+            }
+          ),
+        }).then((response) => {
+          settled = true;
+          return response;
+        });
+        yield* Effect.gen(function* () {
+          yield* fromTestPromise(() => started.promise);
+          controller.abort();
+          if (stage === "commit") {
+            yield* Effect.sleep("20 millis");
+            expect(settled).toBe(false);
+            expect(onAccepted).not.toHaveBeenCalled();
+          } else {
+            yield* fromTestPromise(() => vi.waitFor(assertProviderAborted));
+          }
+        }).pipe(Effect.ensuring(Effect.sync(() => released.resolve())));
+        expect((yield* fromTestPromise(() => pending)).status).toBe(503);
+        expect(onAccepted).toHaveBeenCalledTimes(stage === "commit" ? 1 : 0);
+        expect(
+          yield* fromTestPromise(() =>
+            db.prepare("SELECT count(*) AS count FROM billing_attempts").first()
+          )
+        ).toEqual({ count: stage === "commit" ? 1 : 0 });
+        expect(
+          yield* fromTestPromise(() =>
+            db.prepare("SELECT count(*) AS count FROM card_payment_sources").first()
+          )
+        ).toEqual({ count: stage === "commit" ? 1 : 0 });
+        const replay = yield* fromTestPromise(() =>
+          handlePaymentEnrollment({
+            environment,
+            request: request("/web/subscription/payment-enrollments/submit", "POST", payload),
+          })
+        );
+        expect(replay.status).toBe(200);
+        expect(posts).toBe(stage === "contracts" ? 0 : 1);
+      })
+    );
+  }
+);
 
 it("reserves preparation before calling Wompi and bounds failed preparations", () =>
   Effect.runPromise(

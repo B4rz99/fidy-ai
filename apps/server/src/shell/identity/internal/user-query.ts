@@ -1,4 +1,4 @@
-import { DateTime, Effect, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import type { OwnedStatement } from "~/shell/owner-write/contract";
 import { User, UserId } from "~/core/identity/contract";
 
@@ -9,9 +9,9 @@ const UserRow = Schema.Struct({
   service_market: Schema.String,
   locale: Schema.String,
   time_zone: Schema.String,
-  created_at_ms: Schema.Finite,
-  started_at_ms: Schema.Finite,
-  ends_at_ms: Schema.Finite,
+  created_at_ms: Schema.DateTimeUtcFromMillis,
+  started_at_ms: Schema.DateTimeUtcFromMillis,
+  ends_at_ms: Schema.DateTimeUtcFromMillis,
 });
 
 export const currentUserQuery = (userId: UserId): OwnedStatement =>
@@ -35,10 +35,10 @@ export const decodeUser = (row: unknown): Effect.Effect<User, Schema.SchemaError
         serviceMarket: value.service_market,
         locale: value.locale,
         timeZone: value.time_zone,
-        createdAt: DateTime.makeUnsafe(value.created_at_ms),
+        createdAt: value.created_at_ms,
         trialPeriod: {
-          startedAt: DateTime.makeUnsafe(value.started_at_ms),
-          endsAt: DateTime.makeUnsafe(value.ends_at_ms),
+          startedAt: value.started_at_ms,
+          endsAt: value.ends_at_ms,
         },
       })
     )

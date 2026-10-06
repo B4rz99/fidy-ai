@@ -15,7 +15,7 @@ esac
 install_directory="${1:-$HOME/.fidy/bun-13a98b0db}"
 temporary_directory="$(mktemp -d)"
 trap 'rm -rf "$temporary_directory"' EXIT
-curl --fail --silent --show-error --location --max-time 120 \
+curl --fail --silent --show-error --location --retry 2 --connect-timeout 15 --max-time 600 \
   "https://github.com/B4rz99/fidy-ai/releases/download/runtime-bun-13a98b0db/$archive.zip" \
   -o "$temporary_directory/bun.zip"
 if command -v sha256sum >/dev/null; then

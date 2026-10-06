@@ -16,8 +16,8 @@ it("separates the two slowest suites and fills spare capacity with smaller suite
       count: 2,
     })
   ).toEqual([
-    [transactions, dashboard],
-    [statements, pats],
+    [transactions, pats],
+    [dashboard, statements],
   ]);
 });
 

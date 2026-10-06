@@ -96,6 +96,7 @@ export default {
         path: "^(src|cloudflare)/",
         pathNot: [
           "\\.test\\.ts$",
+          "^cloudflare/oauth-agents/oauth-ingress\\.test-fixture\\.ts$",
           "^cloudflare/(core-worker|public-worker|operational-canary-workflow|browser-acceptance-preview)\\.ts$",
           "^cloudflare/ingestion/email-worker\\.ts$",
           "\\.d\\.mts$",

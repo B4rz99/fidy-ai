@@ -446,14 +446,15 @@ it.effect("paginates confirmed patterns without dropping rows or mixing complete
     const db = yield* setup();
     const seriesCount = 33;
     const prefix = 30_000_000;
-    for (let index = 0; index < seriesCount; index += 1) {
-      for (const month of [1, 2, 3]) {
-        yield* capture(db, month, {
+    const statements = Array.from({ length: seriesCount }, (_, index) =>
+      [1, 2, 3].map((month) =>
+        captureStatement(db, month, {
           counterparty: `Merchant ${String(index).padStart(2, "0")}`,
           idPrefix: String(prefix + index),
-        });
-      }
-    }
+        })
+      )
+    ).flat();
+    yield* fromPromise(() => db.batch(statements));
     yield* evaluate(db, seriesCount + 3);
     const first = yield* query(db);
     expect(first.series).toHaveLength(32);
@@ -564,13 +565,17 @@ it.effect(
       const unrelatedCount = 129;
       const prefix = 40_000_000;
       const base = DateTime.makeUnsafe("2026-01-15T12:00:00.000Z");
-      for (let index = 0; index < unrelatedCount; index += 1) {
-        yield* capture(db, 1, {
-          counterparty: "",
-          idPrefix: String(prefix + index),
-          createdAt: DateTime.formatIso(DateTime.add(base, { hours: index })),
-        });
-      }
+      yield* fromPromise(() =>
+        db.batch(
+          Array.from({ length: unrelatedCount }, (_, index) =>
+            captureStatement(db, 1, {
+              counterparty: "",
+              idPrefix: String(prefix + index),
+              createdAt: DateTime.formatIso(DateTime.add(base, { hours: index })),
+            })
+          )
+        )
+      );
       const body = yield* Schema.encodeEffect(
         Schema.fromJsonString(Schema.Struct({ userId: UserId }))
       )({ userId });

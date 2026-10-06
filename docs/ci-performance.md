@@ -3,6 +3,52 @@
 For the measured follow-up and remaining Linux evidence requirements for #922–#926, see
 [CI follow-up: #922–#926](ci-improvements-922-926.md).
 
+## Adapter regression follow-up: #1066
+
+The last 50 actual adapter shard jobs on October 5–6 contained 45 successes, three failures,
+and two cancellations. Successful jobs had a 4m23s median, a 5m11s mean, and an 11m30s maximum;
+eight exceeded eight minutes. Median time outside adapter validation was 34 seconds.
+
+[Historical run 37542170991](https://github.com/B4rz99/fidy-ai/actions/runs/37542170991)
+passed 1,352 cases in 100 files. Its four validation steps took 221s, 627s, 233s and 312s.
+OAuth ingress accounted for 181 cases and 430s, while its missing scheduling weight estimated
+one second. Those figures diagnose the regression; they are not a controlled comparison with
+this change's revision.
+
+The OAuth composition now has seven independently scheduled suites: bootstrap/approval,
+confirmation, canonical execution, management, refresh, discovery, and native residency.
+All 181 historical case titles map exactly once, and all 103 original test/describe AST nodes
+match after normalizing only the extracted fixtures' named arguments/defaults. The fixtures
+retain independent databases and coordinators, including the predecessor-migration paths.
+Weights are explicitly historical single-run estimates; splitting maps original per-case durations
+to the new files rather than claiming measurements of their new startup costs. The existing four
+runners and serial file execution remain unchanged.
+
+Pooled D1 fixtures now prepare their baseline batch inside the same native Worker rather than
+making one synchronous Miniflare proxy call per statement. Every fresh binding still executes
+every requested migration, with actual constraints, triggers, seeds and transactional rollback.
+Unregistered/wrapped D1 bindings retain the ordinary batch path; file-by-file migration tests
+continue using `applyTestMigration`. No database, mutable schema or coordinator is reused.
+
+Three alternating local before/after measurements installed all 87 migration files into 16 fresh
+D1 bindings per run, with Bun 1.4.1 and Miniflare 5.20260911.1-alpha on macOS arm64:
+
+| Schema installation seconds | Run 1 | Run 2 | Run 3 | Median |
+| --------------------------- | ----: | ----: | ----: | -----: |
+| Original proxy preparation  | 7.533 | 7.521 | 7.556 |  7.533 |
+| Worker-local preparation    | 4.812 | 4.827 | 4.814 |  4.814 |
+
+This is a 36.1% reduction in schema installation, not a whole-suite or Linux guarantee.
+The benchmark excludes acquisition and disposal; warmed binding acquisition totals were
+0.10–0.23s per run. The first cold baseline additionally took 1.83s to acquire its bindings.
+
+Recurring pagination/scan arrangements replace 228 sequential fixture INSERT requests with two
+real D1 batches. Payment enrollment arranges the elapsed retained verification cooldown instead
+of sleeping four seconds and also proves a premature retry stays pending. No behavioral tests
+were deleted: the inspected expensive cases protect distinct isolation, atomicity, recovery,
+resource or protocol failures. The focused fixture/Recurring/payment run passed all 87 tests.
+Fresh Linux PR artifacts are required to establish the resulting job times.
+
 ## Linux CI confirmation
 
 [Checks run 36649040251](https://github.com/B4rz99/fidy-ai/actions/runs/36649040251) on

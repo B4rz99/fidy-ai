@@ -2,6 +2,8 @@ import { Miniflare } from "miniflare";
 import { Option } from "effect";
 
 const migrationStatements = new Map<string, Promise<ReadonlyArray<string>>>();
+// A binding's bootstrap route follows its identity without retaining the binding or its runtime.
+const schemaInstallers = new WeakMap<D1Database, (sql: ReadonlyArray<string>) => Promise<void>>();
 
 const loadMigrationStatements = (source: URL): Promise<ReadonlyArray<string>> =>
   Option.getOrElse(Option.fromUndefinedOr(migrationStatements.get(source.href)), () => {
@@ -44,11 +46,49 @@ export const installTestSchema = ({
       Promise.resolve([])
     )
     .then((sql) =>
-      sql.length === 0 ? undefined : db.batch(sql.map((statement) => db.prepare(statement)))
+      sql.length === 0
+        ? undefined
+        : Option.match(Option.fromUndefinedOr(schemaInstallers.get(db)), {
+            onNone: () =>
+              db.batch(sql.map((statement) => db.prepare(statement))).then(() => undefined),
+            onSome: (install) => install(sql),
+          })
     )
     .then(() => undefined);
 
 type BindingSlot = Readonly<{ runtime: Miniflare; index: number }>;
+// Prepare pooled schema batches inside the Worker instead of crossing the synchronous proxy
+// for each statement. Independently wrapped/custom bindings keep the ordinary batch path.
+const acquireDatabase = (slot: BindingSlot): Promise<D1Database> =>
+  slot.runtime.getD1Database(`DB_${slot.index}`).then((db) => {
+    schemaInstallers.set(db, (sql) =>
+      slot.runtime
+        .dispatchFetch(`http://fixture/DB_${slot.index}`, {
+          method: "POST",
+          body: sql.join("\u0000"),
+        })
+        .then((response) => {
+          if (!response.ok) throw new Error("Fixture schema installation failed");
+        })
+    );
+    return db;
+  });
+// Only checked-in fixture SQL crosses this private local bootstrap route.
+const schemaWorker = `export default {
+  async fetch(request, env) {
+    const binding = new URL(request.url).pathname.slice(1);
+    const database = env[binding];
+    if (request.method !== 'POST' || !database) return new Response('missing', {status: 404});
+    const statements = (await request.text()).split('\u0000');
+    try {
+      await database.batch(statements.map(sql => database.prepare(sql)));
+      return new Response(null, {status: 204});
+    } catch {
+      return new Response('Fixture schema installation failed', {status: 500});
+    }
+  }
+}`;
+
 const bindingPool = (
   withBuckets: boolean
 ): Readonly<{
@@ -81,7 +121,7 @@ const bindingPool = (
                 mainModule: "index.mjs",
                 modules: {
                   "index.mjs": {
-                    contents: "export default {fetch(){return new Response('ok')}}",
+                    contents: schemaWorker,
                     type: "esm",
                   },
                 },
@@ -111,10 +151,7 @@ export const isolatedTestDatabases = (): Readonly<{
 }> => {
   const pool = bindingPool(false);
   return {
-    acquire: () => {
-      const slot = pool.acquire();
-      return slot.runtime.getD1Database(`DB_${slot.index}`);
-    },
+    acquire: () => acquireDatabase(pool.acquire()),
     dispose: pool.dispose,
   };
 };
@@ -132,7 +169,7 @@ export const isolatedTestStorage = (): Readonly<{
     acquire: () => {
       const slot = pool.acquire();
       return Promise.all([
-        slot.runtime.getD1Database(`DB_${slot.index}`),
+        acquireDatabase(slot),
         slot.runtime
           .getBindings<{ [key: `BUCKET_${number}`]: R2Bucket }>()
           .then((bindings) =>

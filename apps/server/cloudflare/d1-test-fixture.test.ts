@@ -75,7 +75,7 @@ it.live("applies cached baseline seeds independently and retains real foreign-ke
       const db = yield* wait(() => databases.acquire());
       yield* wait(() =>
         installTestSchema({
-          db,
+          db: index === 0 ? db : new Proxy(db, {}),
           sources: [
             new URL("./migrations/0001_categories.sql", import.meta.url),
             new URL("./migrations/0002_resource_admission.sql", import.meta.url),
@@ -116,13 +116,16 @@ it.live("rolls back the entire fixture schema when a later migration fails", () 
   Effect.gen(function* () {
     const db = yield* wait(() => databases.acquire());
     const source = new URL("./migrations/0001_categories.sql", import.meta.url);
-    yield* wait(() =>
-      expect(installTestSchema({ db, sources: [source, source] })).rejects.toThrow()
-    );
-    expect(
+    // Exercise Worker-local bootstrap and the fallback for independently wrapped bindings.
+    for (const binding of [db, new Proxy(db, {})]) {
       yield* wait(() =>
-        db.prepare("SELECT name FROM sqlite_master WHERE name = 'categories'").all()
-      )
-    ).toMatchObject({ results: [] });
+        expect(installTestSchema({ db: binding, sources: [source, source] })).rejects.toThrow()
+      );
+      expect(
+        yield* wait(() =>
+          db.prepare("SELECT name FROM sqlite_master WHERE name = 'categories'").all()
+        )
+      ).toMatchObject({ results: [] });
+    }
   })
 );

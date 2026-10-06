@@ -3,11 +3,11 @@ import {
   executeHostedStatementQuery as heldStatementQuery,
 } from "./internal/hosted-statement";
 import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
-import type { OAuthCaller } from "../../src/shell/oauth-agents/contract";
+import { type OAuthCaller } from "../../src/shell/oauth-agents/contract";
 import { HostedInference } from "../../src/shell/hosted-inference/operations";
 import { type HostedInferenceService } from "../../src/shell/hosted-inference/contract";
 import { type CanonicalOperationId } from "../../src/core/canonical-operations/contract";
-import type { CatalogOperation } from "../../src/shell/canonical-catalog/contract";
+import { type CatalogOperation } from "../../src/shell/canonical-catalog/contract";
 import { AtomicBatchAdmission, atomicBatchOperation } from "../../src/shell/operations/contract";
 import { operationCatalog } from "../../src/shell/api";
 import { decideOperationAccess } from "../../src/shell/canonical-policy/operations";
@@ -16,10 +16,10 @@ import {
   grantsRequiredTier,
 } from "../../src/shell/canonical-operations/operations";
 import { userOwnedAgentCapability } from "../../src/shell/canonical-policy/contract";
-import type { HostedCommitFence } from "../agent/contract";
-import type { OAuthConfirmationAttempt } from "../../src/shell/mcp/contract";
-import type { OAuthConfirmationWork } from "../oauth-confirmation/contract";
-import type { CanonicalMutationPreparation, CanonicalWork } from "./contract";
+import { type HostedCommitFence } from "../agent/contract";
+import { type OAuthConfirmationAttempt } from "../../src/shell/mcp/contract";
+import { type OAuthConfirmationWork } from "../oauth-confirmation/contract";
+import { type CanonicalMutationPreparation, type CanonicalWork } from "./contract";
 import { executeCanonicalBatch, executeHostedCanonicalBatch, rawOperation } from "./internal/batch";
 import {
   type CanonicalMutationAdapter,
@@ -33,7 +33,7 @@ import { withCanonicalLifetime } from "./internal/canonical-lifetime";
 import { canonicalOperationRequiresInference } from "./internal/inference-requirement";
 import { resolveOAuthQueryCaller } from "../oauth-agents/operations";
 import { canonicalHostedStatementQueryOwner, canonicalQueryOwner } from "./internal/query-registry";
-import { matchesRoute } from "../routing/operations";
+import { matchesRouteTemplate } from "../../src/shell/public-http/operations";
 import { evaluateBudgetAlerts } from "../budgets/operations";
 import { unavailableStatement } from "../ingestion/operations";
 import {
@@ -553,7 +553,9 @@ const queryOrigin = "https://canonical.internal";
 const requestFromTarget = (operation: CatalogOperation, target: string): Option.Option<Request> =>
   Option.liftThrowable(() => new URL(target, queryOrigin))().pipe(
     Option.filter(
-      (url) => url.origin === queryOrigin && matchesRoute(operation.route, url.pathname)
+      (url) =>
+        url.origin === queryOrigin &&
+        matchesRouteTemplate({ template: operation.route, path: url.pathname })
     ),
     Option.map((url) => new Request(url, { method: operation.method }))
   );
@@ -633,7 +635,7 @@ export const executeCanonicalHttpQuery = ({
     const url = new URL(input.request.url);
     if (
       input.request.method !== operation.value.method ||
-      !matchesRoute(operation.value.route, url.pathname)
+      !matchesRouteTemplate({ template: operation.value.route, path: url.pathname })
     ) {
       return transactionUnavailable();
     }

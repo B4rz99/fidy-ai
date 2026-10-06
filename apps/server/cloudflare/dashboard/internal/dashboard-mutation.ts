@@ -1,6 +1,6 @@
-import type { DashboardMutationOperation, DashboardOperation } from "../contract";
+import { type DashboardMutationOperation, type DashboardOperation } from "../contract";
 import { listCategories } from "../../categories/operations";
-import { Data, DateTime, Effect, Option, Result, Schema } from "effect";
+import { Data, DateTime, Effect, Option, Schema } from "effect";
 import {
   prepareAuthorizedAuditCall,
   recordCanonicalPATWork,
@@ -8,44 +8,25 @@ import {
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import { prepareOwnedStatement } from "../../database/operations";
 import {
-  applyDashboardEdit,
   collectDashboardCategoryReferences,
   makeDefaultDashboard,
 } from "../../../src/core/dashboard/operations";
 import { categoryIds } from "../../../src/core/categories/contract";
-import {
-  DashboardDocument,
-  type DashboardEdit,
-  WidgetId,
-} from "../../../src/core/dashboard/contract";
-
+import { DashboardDocument, WidgetId } from "../../../src/core/dashboard/contract";
 import { DashboardView } from "../../../src/shell/dashboard/contract";
 import { loadDashboardFacts } from "./dashboard-view";
 import { renderDashboardView } from "../../../src/shell/dashboard/operations";
 import {
   type TransactionCaller,
   callerAuthority,
-  callerScope,
-  credentialRefusedPreparation,
-  failedPreparation,
-  isOAuthCaller,
   isPATCaller,
-  liveTransactionAuthority,
-  refusedPreparation,
   transactionFailure,
   transactionId,
-  transactionNoStore,
-  transactionUnavailable,
 } from "../../canonical-work/operations";
 import {
-  type CanonicalMutationPreparation,
-  type CanonicalMutationRefusal,
   type CommittedMutationValue,
   type OwnerOutcome,
 } from "../../canonical-operations/contract";
-
-import { dashboardOAuthReview, oauthDefaultDashboard } from "./oauth-review";
-import type { OAuthMutationReview } from "../../oauth-confirmation/contract";
 
 /** The persisted Dashboard is decoded before it is used to plan any mutation. */
 const DocumentJson = Schema.fromJsonString(Schema.toCodecJson(DashboardDocument));
@@ -64,11 +45,15 @@ export const dashboardCompletion = `INSERT INTO dashboard_assertion (id, accepte
   VALUES (1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END)
   ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`;
 
-const audit = (
-  work: MutationContext,
-  operation: DashboardMutationOperation,
-  outcome: "accepted" | "rejected"
-): D1PreparedStatement => {
+export const audit = ({
+  work,
+  operation,
+  outcome,
+}: Readonly<{
+  work: MutationContext;
+  operation: DashboardMutationOperation;
+  outcome: "accepted" | "rejected";
+}>): D1PreparedStatement => {
   const { db, subject, current } = work;
   if (isPATCaller(subject)) {
     return prepareOwnedStatement({
@@ -97,7 +82,7 @@ const audit = (
   });
 };
 
-const credentialUse = (work: MutationContext): ReadonlyArray<D1PreparedStatement> =>
+export const credentialUse = (work: MutationContext): ReadonlyArray<D1PreparedStatement> =>
   isPATCaller(work.subject)
     ? [
         prepareOwnedStatement({
@@ -148,7 +133,7 @@ export const findDashboardDocument = ({
     })
   );
 
-const defaultDocument = (): DashboardDocument =>
+export const defaultDocument = (): DashboardDocument =>
   makeDefaultDashboard({
     restaurantCategoryId: categoryIds.restaurantes,
     widgetIds: [
@@ -159,10 +144,13 @@ const defaultDocument = (): DashboardDocument =>
     ],
   });
 
-const firstUse = (
-  work: MutationContext,
-  document: DashboardDocument
-): Effect.Effect<D1PreparedStatement, Schema.SchemaError> =>
+export const firstUse = ({
+  work,
+  document,
+}: Readonly<{ work: MutationContext; document: DashboardDocument }>): Effect.Effect<
+  D1PreparedStatement,
+  Schema.SchemaError
+> =>
   Schema.encodeEffect(DocumentJson)(document).pipe(
     Effect.map((encoded) => {
       const authority = callerAuthority(work);
@@ -178,44 +166,19 @@ const firstUse = (
 
 const HTTP_NOT_FOUND = 404;
 const HTTP_BAD_REQUEST = 400;
-const failure = (code: "validation_failed" | "not_found"): Response =>
+export const failure = (code: "validation_failed" | "not_found"): Response =>
   transactionFailure({
     code,
     status: code === "not_found" ? HTTP_NOT_FOUND : HTTP_BAD_REQUEST,
     message: code === "not_found" ? "Dashboard widget unavailable." : "Invalid Dashboard edit.",
   });
 
-/** Refusal audit is separate from the rolled-back unit, under the same live credential. */
-export const dashboardRefusal = ({
-  work,
-  operation,
-  code,
-}: Readonly<{
-  work: MutationContext;
-  operation: DashboardMutationOperation;
-  code: "validation_failed" | "not_found";
-}>): CanonicalMutationRefusal => ({
-  code,
-  message: code === "not_found" ? "Dashboard widget unavailable." : "Invalid Dashboard edit.",
-  record: () =>
-    Effect.tryPromise(() =>
-      work.db.batch([
-        ...credentialUse(work),
-        audit(work, operation, "rejected"),
-        work.db.prepare(dashboardCompletion),
-      ])
-    ).pipe(
-      Effect.map(() => "recorded" as const),
-      Effect.orElseSucceed(() => "unavailable" as const)
-    ),
-  respond: (disposition) =>
-    Effect.succeed(disposition === "recorded" ? failure(code) : transactionUnavailable()),
-});
-
-const validCategories = (
-  db: D1Database,
-  document: DashboardDocument
-): Effect.Effect<Option.Option<boolean>> => {
+export const validCategories = ({
+  db,
+  document,
+}: Readonly<{ db: D1Database; document: DashboardDocument }>): Effect.Effect<
+  Option.Option<boolean>
+> => {
   const ids = [
     ...new Set(collectDashboardCategoryReferences(document).map((item) => item.categoryId)),
   ];
@@ -228,39 +191,7 @@ const validCategories = (
   );
 };
 
-const decideDocument = ({
-  work,
-  operation,
-  edit,
-  base,
-}: Readonly<{
-  work: MutationContext;
-  operation: DashboardMutationOperation;
-  edit: Option.Option<DashboardEdit>;
-  base: DashboardDocument;
-}>): Effect.Effect<Result.Result<DashboardDocument, CanonicalMutationPreparation>> =>
-  Effect.gen(function* () {
-    if (operation !== "dashboard.applyDashboardEdit" || Option.isNone(edit)) {
-      return Result.succeed(base);
-    }
-    const result = yield* Effect.result(applyDashboardEdit({ document: base, edit: edit.value }));
-    if (Result.isFailure(result)) {
-      const code =
-        result.failure._tag === "WidgetNotFound" || result.failure._tag === "RegionNotFound"
-          ? "not_found"
-          : "validation_failed";
-      return Result.fail(refusedPreparation(dashboardRefusal({ work, operation, code })));
-    }
-    const valid = yield* validCategories(work.db, result.success);
-    if (Option.isNone(valid)) return Result.fail(failedPreparation());
-    return valid.value
-      ? Result.succeed(result.success)
-      : Result.fail(
-          refusedPreparation(dashboardRefusal({ work, operation, code: "validation_failed" }))
-        );
-  });
-
-const editWrite = ({
+export const editWrite = ({
   work,
   operation,
   document,
@@ -285,116 +216,8 @@ const editWrite = ({
   );
 };
 
-const preparedDashboard = ({
-  work,
-  operation,
-  initial,
-  write,
-  oauthReview,
-}: Readonly<{
-  work: MutationContext;
-  operation: DashboardMutationOperation;
-  initial: Option.Option<D1PreparedStatement>;
-  write: ReadonlyArray<D1PreparedStatement>;
-  oauthReview: Option.Option<OAuthMutationReview>;
-}>): CanonicalMutationPreparation => ({
-  _tag: "Prepared",
-  mutation: {
-    oauthReview,
-    requiredScope: callerScope(work.subject),
-    auditBudget: "shared",
-    commitGuards: Option.none(),
-    guardRefusal: ({ db, subject, current }) =>
-      Effect.succeed(
-        dashboardRefusal({
-          work: { db, subject, current },
-          operation,
-          code: "validation_failed",
-        })
-      ),
-    statements: [
-      ...credentialUse(work),
-      ...(Option.isSome(initial) ? [initial.value] : []),
-      // A first edit cannot update a competing document it did not validate.
-      ...(operation === "dashboard.applyDashboardEdit" && Option.isSome(initial)
-        ? [work.db.prepare(dashboardCompletion)]
-        : []),
-      ...write,
-      // The revision guard must change exactly one row before a success Audit can commit.
-      ...(write.length > 0 ? [work.db.prepare(dashboardCompletion)] : []),
-      audit(work, operation, "accepted"),
-    ],
-    outcome: dashboardOutcome(operation),
-  },
-});
-
-const dashboardAccess = ({
-  work,
-  operation,
-  edit,
-}: Readonly<{
-  work: MutationContext;
-  operation: DashboardMutationOperation;
-  edit: Option.Option<DashboardEdit>;
-}>): Effect.Effect<Option.Option<CanonicalMutationPreparation>> =>
-  Effect.tryPromise(() => liveTransactionAuthority(work)).pipe(
-    Effect.option,
-    Effect.map((live) => {
-      if (Option.isNone(live)) return Option.some(failedPreparation());
-      if (!live.value) return Option.some(credentialRefusedPreparation());
-      return operation === "dashboard.applyDashboardEdit" && Option.isNone(edit)
-        ? Option.some(
-            refusedPreparation(dashboardRefusal({ work, operation, code: "validation_failed" }))
-          )
-        : Option.none();
-    })
-  );
-
-/** Prepare explicit initialization or a guarded edit, without opening a D1 unit. */
-export const prepareDashboard = ({
-  work,
-  operation,
-  edit,
-}: Readonly<{
-  work: MutationContext;
-  operation: DashboardMutationOperation;
-  edit: Option.Option<DashboardEdit>;
-}>): Effect.Effect<CanonicalMutationPreparation> =>
-  Effect.gen(function* () {
-    const access = yield* dashboardAccess({ work, operation, edit });
-    if (Option.isSome(access)) return access.value;
-    const existing = yield* findDashboardDocument({
-      db: work.db,
-      userId: work.subject.userId,
-    });
-    const base = Option.getOrElse(
-      Option.map(existing, (stored) => stored.document),
-      () => (isOAuthCaller(work.subject) ? oauthDefaultDashboard() : defaultDocument())
-    );
-    const decision = yield* decideDocument({ work, operation, edit, base });
-    if (Result.isFailure(decision)) return decision.failure;
-    const document = decision.success;
-    const initial = Option.isSome(existing)
-      ? Option.none()
-      : Option.some(yield* firstUse(work, base));
-    const write = yield* editWrite({
-      work,
-      operation,
-      document,
-      revision: Option.isSome(existing) ? existing.value.revision : 1,
-    });
-    const oauthReview = yield* dashboardOAuthReview({
-      ...work,
-      operation,
-      existing,
-      document,
-      edit,
-    });
-    return preparedDashboard({ work, operation, initial, write, oauthReview });
-  }).pipe(Effect.orElseSucceed(failedPreparation));
-
 /** Commit-time owner decisions stay with the Dashboard, not in the common mutation unit. */
-const dashboardOutcome = (operation: DashboardMutationOperation): OwnerOutcome => ({
+export const dashboardOutcome = (operation: DashboardMutationOperation): OwnerOutcome => ({
   _tag: "Owner",
   operation,
   collisionKey: Option.some("dashboard-document"),
@@ -458,12 +281,3 @@ export const findDashboardValue = ({
       encode: () => Schema.encodeEffect(Schema.toCodecJson(DashboardView))(view),
     });
   }).pipe(Effect.orElseSucceed(() => Option.none()));
-
-/** The Dashboard owner presents exactly the same value for individual and batch callers. */
-export const presentDashboard = (
-  value: Extract<CommittedMutationValue, { _tag: "Owner" }>
-): Effect.Effect<Response> =>
-  value.encode().pipe(
-    Effect.map((data) => Response.json({ data, next: [] }, { headers: transactionNoStore })),
-    Effect.orElseSucceed(transactionUnavailable)
-  );

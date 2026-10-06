@@ -3,17 +3,17 @@ import {
   type OperationCatalog,
   getBoundOperationCatalog,
 } from "~/shell/canonical-catalog/contract";
-import { Effect, Function, type Option, Schema } from "effect";
-import type {
-  CanonicalCapability,
-  CanonicalOperationId,
+import { Function, type Option, Schema } from "effect";
+import {
+  type CanonicalCapability,
+  type CanonicalOperationId,
 } from "~/core/canonical-operations/contract";
-import type { AccessTier } from "~/core/access-tier/contract";
+import { type AccessTier } from "~/core/access-tier/contract";
 import { type OperationId, operationCatalog } from "~/shell/api";
-import { type CanonicalCaller, type ResolvedCaller } from "~/shell/authorization/contract";
+import { type CanonicalCaller } from "~/shell/authorization/contract";
 import { toAccessCaller } from "~/shell/authorization/operations";
-import type { UserId } from "~/core/identity/contract";
-import type { CanonicalInput } from "./contract";
+
+import { type CanonicalInput } from "./contract";
 import {
   type OperationAccessCaller,
   type OperationPolicyValue,
@@ -25,7 +25,6 @@ import {
   SuggestedOperation,
   type SuggestedOperation as SuggestedOperationValue,
 } from "~/shell/public-http/contract";
-
 import { responseSuggestions } from "~/shell/canonical-operations/internal/response-suggestions";
 
 /** Apply caller-policy continuation privacy throughout an encoded canonical response without projecting away domain data. */
@@ -74,13 +73,6 @@ export const toSuggestedOperationCaller = (input: {
 export const freePatCaller = (
   capabilities: ReadonlyArray<CanonicalCapability>
 ): SuggestedOperationCaller => ({ accessCaller: { _tag: "PAT", capabilities }, tier: "free" });
-
-/** Cloudflare authorization supplies the User and AccessTier in the Worker adapter. */
-export const resolveSuggestedOperationCaller: Effect.Effect<
-  Readonly<{ readonly userId: UserId; readonly caller: SuggestedOperationCaller }>,
-  never,
-  ResolvedCaller
-> = Effect.die("Cloudflare authorization boundary is not configured");
 
 /** Whether current capabilities satisfy one canonical operation's declared tier. */
 export const grantsRequiredTier = (input: {

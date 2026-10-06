@@ -3,9 +3,9 @@ import { HttpApi } from "effect/http-api";
 import { claimPATPairing } from "./pat-claim";
 import { approvePATPairing, inspectPATPairing, startPATPairing } from "./pat-pairing";
 import { createManualPAT, listPATs, revokeAllPATs, revokePAT } from "./pat-management";
-import { matchesRoute } from "../../routing/operations";
+import { matchesRouteTemplate } from "../../../src/shell/public-http/operations";
 import { type Cause, Effect, type Schema } from "effect";
-import type { ConsentUnavailable } from "../../consent/contract";
+import { type ConsentUnavailable } from "../../consent/contract";
 
 type PATHandlerFailure = Cause.UnknownError | Schema.SchemaError | ConsentUnavailable;
 
@@ -49,7 +49,7 @@ HttpApi.reflect(declared, {
   },
 });
 const forPath = (path: string): ReadonlyArray<Route> =>
-  routes.filter((route) => matchesRoute(route.template, path));
+  routes.filter((route) => matchesRouteTemplate({ template: route.template, path }));
 /** PAT paths derive from the declared direct bootstrap and canonical operation groups. */
 export const patRoute = (path: string): boolean => forPath(path).length > 0;
 export const patDirectRoute = (path: string): boolean =>

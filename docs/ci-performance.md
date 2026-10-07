@@ -372,3 +372,13 @@ schema through the existing native ordered installer. These cases contain no mig
 assertions. All 19 Recurring cases pass locally, retaining full detector, coordinator and public
 query behavior. Scheduling estimates use this actual three-process run rather than retaining
 the lower two-process costs. Recurring conservatively retains its pre-bootstrap-fix measurement.
+
+The [next Linux run 37554265766](https://github.com/B4rz99/fidy-ai/actions/runs/37554265766)
+completed all four adapter jobs within three minutes (173/164/170/169s), but the combined
+Recurring acceptance-and-union case still timed out. This is not a successful performance
+verdict. Exact 128-pattern acceptance and retained-plus-new refusal now have independent
+cases. The refusal fixture clones one genuinely confirmed pattern through native ordered
+batches, with distinct transaction support, counterparties, series and immutable confirmation
+identities; native detection still processes the subsequent real facts. The acceptance case
+retains the full 128-pattern production detection. The same three-file contention probe passes
+all 134 cases, with acceptance and union taking 2.6s and 2.3s respectively. No deadline is raised.

@@ -905,18 +905,18 @@ const assertOtherUserEvaluates = (db: D1Database): Effect.Effect<void> =>
       )).confirmations
     ).toHaveLength(1);
   });
-const seedPatterns = (db: D1Database, count: number): Effect.Effect<void> =>
+const seedPatterns = (db: D1Database, count: number, offset = 0): Effect.Effect<void> =>
   Effect.gen(function* () {
     const prefix = 50_000_000;
-    const statements = Array.from({ length: count }, (_, index) =>
+    const statements = Array.from({ length: count }, (_, position) =>
       [1, 2, 3].map((month) =>
         captureStatement(db, month, {
-          counterparty: `Limit merchant ${String(index).padStart(3, "0")}`,
-          idPrefix: String(prefix + index),
+          counterparty: `Limit merchant ${String(position + offset).padStart(3, "0")}`,
+          idPrefix: String(prefix + position + offset),
           createdAt: DateTime.formatIso(
             DateTime.add(
               DateTime.makeUnsafe(`2026-${String(month).padStart(2, "0")}-15T12:00:00.000Z`),
-              { hours: index }
+              { hours: position + offset }
             )
           ),
         })
@@ -989,14 +989,96 @@ it.effect("rejects 129 proposed series before publishing any current result", ()
   })
 );
 
+// Arrange retained identities from one genuinely confirmed pattern, with distinct matching facts
+// and immutable confirmation IDs. The separate acceptance case exercises all 128 detections.
+const seedRetainedPatternLimit = (db: D1Database): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    yield* seedPatterns(db, 1);
+    expect((yield* coordinatedEvaluation({ db, userId, steps: 6 })).status).toBe(200);
+    const original = Option.getOrThrow(
+      Option.fromNullOr(
+        yield* fromPromise(() =>
+          db
+            .prepare("SELECT id FROM recurring_series WHERE user_id = ?")
+            .bind(userId)
+            .first<string>("id")
+        )
+      )
+    );
+    const count = 128;
+    yield* seedPatterns(db, count - 1, 1);
+    yield* fromPromise(() =>
+      db.batch([
+        db
+          .prepare(`UPDATE recurring_series SET evidence_json = json_set(evidence_json,
+        '$.evaluatedFactRevision', (SELECT revision FROM transaction_fact_state WHERE user_id = ?))
+        WHERE user_id = ?`)
+          .bind(userId, userId),
+        db
+          .prepare(`WITH RECURSIVE copies(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM copies WHERE n < ?)
+        INSERT INTO recurring_series
+        SELECT user_id, printf('51000000-0000-4000-8000-%012d',n), currency,
+          printf('limit merchant %03d',n),
+          json_set(series_json, '$.id', printf('51000000-0000-4000-8000-%012d',n),
+            '$.counterparty', printf('Limit merchant %03d',n)),
+          json_set(evidence_json, '$.supportingTransactionIds', json_array(
+            printf('%08d-0000-4000-8000-000000000001',50000000+n),
+            printf('%08d-0000-4000-8000-000000000002',50000000+n),
+            printf('%08d-0000-4000-8000-000000000003',50000000+n)),
+            '$.latestTransactionId', printf('%08d-0000-4000-8000-000000000003',50000000+n)),
+          reference_json, valid FROM recurring_series CROSS JOIN copies WHERE user_id = ? AND id = ?`)
+          .bind(count - 1, userId, original),
+        db
+          .prepare(`WITH RECURSIVE copies(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM copies WHERE n < ?)
+        INSERT INTO recurring_confirmations
+        SELECT user_id, printf('52000000-0000-4000-8000-%012d',n),
+          printf('51000000-0000-4000-8000-%012d',n), confirmed_at, context_json,
+          json_set(confirmation_json, '$.id', printf('52000000-0000-4000-8000-%012d',n),
+            '$.seriesId', printf('51000000-0000-4000-8000-%012d',n))
+        FROM recurring_confirmations CROSS JOIN copies WHERE user_id = ? AND series_id = ?`)
+          .bind(count - 1, userId, original),
+        db
+          .prepare(`UPDATE recurring_progress SET revision =
+        (SELECT revision FROM transaction_fact_state WHERE user_id = ?), evaluated_revision =
+        (SELECT revision FROM transaction_fact_state WHERE user_id = ?) WHERE user_id = ?`)
+          .bind(userId, userId, userId),
+      ])
+    );
+  });
+
+it.effect("publishes exactly 128 proposed series at the coordinator identity limit", () =>
+  Effect.gen(function* () {
+    const db = yield* setup();
+    const count = 128;
+    yield* seedPatterns(db, count);
+    expect((yield* coordinatedEvaluation({ db, userId, steps: count + 10 })).status).toBe(200);
+    expect((yield* query(db)).evaluation.kind).toBe("current");
+    expect(
+      yield* fromPromise(() =>
+        db
+          .prepare("SELECT count(*) AS count FROM recurring_series WHERE user_id = ?")
+          .bind(userId)
+          .first<number>("count")
+      )
+    ).toBe(count);
+    expect(
+      yield* fromPromise(() =>
+        db
+          .prepare("SELECT count(*) AS count FROM recurring_confirmations WHERE user_id = ?")
+          .bind(userId)
+          .first<number>("count")
+      )
+    ).toBe(count);
+  })
+);
+
 it.effect(
   "guards the retained-plus-new identity union rather than only each individual series count",
   () =>
     Effect.gen(function* () {
       const db = yield* setup();
       const count = 128;
-      yield* seedPatterns(db, count);
-      expect((yield* coordinatedEvaluation({ db, userId, steps: count + 10 })).status).toBe(200);
+      yield* seedRetainedPatternLimit(db);
       const before = yield* query(db);
       expect(before.evaluation.kind).toBe("current");
       const confirmationsBefore = yield* confirmations(db);

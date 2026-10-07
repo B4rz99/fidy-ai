@@ -1,9 +1,8 @@
 import { Effect, Schema } from "effect";
 import { UserId } from "~/core/identity/contract";
-import { AuditUnavailable, utcDayMilliseconds } from "~/shell/audit/contract";
+import { AuditUnavailable, auditRetentionDays, utcDayMilliseconds } from "~/shell/audit/contract";
 
-const retentionDays = 365;
-const retentionMilliseconds = retentionDays * utcDayMilliseconds;
+const retentionMilliseconds = auditRetentionDays * utcDayMilliseconds;
 const maximumRowsPerProjection = 64;
 const maximumSubjectsPerSweep = 8;
 const tables = [

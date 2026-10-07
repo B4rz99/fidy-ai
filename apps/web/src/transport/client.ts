@@ -63,6 +63,7 @@ export {
   PATLifetimeDays,
   ActivePATList,
   ActivePATMetadata,
+  PATActivity,
   ApprovedPATPairing,
   PATPairingId,
   PATPairingPublicCode,

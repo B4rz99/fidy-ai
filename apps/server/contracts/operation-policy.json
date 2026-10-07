@@ -621,6 +621,17 @@
       }
     },
     {
+      "id": "pats.getPATActivity",
+      "policy": {
+        "access": {
+          "type": "web-or-hosted"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredTier": "free"
+      }
+    },
+    {
       "id": "pats.inspectPATPairing",
       "policy": {
         "access": {

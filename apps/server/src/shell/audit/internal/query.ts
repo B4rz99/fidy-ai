@@ -35,7 +35,7 @@ const projection = (
   outcome: string
 ): string =>
   `SELECT id, user_id AS subjectUserId, session_id AS sessionId, ${caller === "pat" ? "pat_id" : "NULL"} AS patId,
-    ${caller === "insight" ? "hosted_turn_id" : "NULL"} AS hostedTurnId,
+    ${caller === "insight" || caller === "pat" ? "hosted_turn_id" : "NULL"} AS hostedTurnId,
     ${caller === "pat" ? "oauth_connection_id AS oauthConnectionId, oauth_credential_id AS oauthCredentialId," : ""}
     operation, ${outcome} AS outcome, occurred_at_ms AS occurredAt FROM ${table} WHERE user_id = ?
     ORDER BY occurred_at_ms, id LIMIT ?`;

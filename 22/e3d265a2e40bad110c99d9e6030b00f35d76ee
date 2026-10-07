@@ -1,0 +1,68 @@
+apps/server/cloudflare/audit/internal/reminder-audit-migration.test.ts
+  h_c6d49c804e0ad2 95-100
+apps/server/cloudflare/canonical-operations/internal/query-registry.ts
+  h_c6d49c804e0ad2 1,26,91-101,226-241
+apps/server/cloudflare/d1-test-fixture.ts
+  h_c6d49c804e0ad2 205-206
+apps/server/cloudflare/migrations/0062_pat_activity.sql
+  h_c6d49c804e0ad2 1-38
+apps/server/cloudflare/oauth-agents/oauth-canonical.test.ts
+  h_c6d49c804e0ad2 101-106
+apps/server/cloudflare/oauth-agents/oauth-ingress.test-fixture.ts
+  h_c6d49c804e0ad2 145-149
+apps/server/cloudflare/tokens/contract.ts
+  h_c6d49c804e0ad2 1,26-34
+apps/server/cloudflare/tokens/internal/pat-activity.ts
+  h_c6d49c804e0ad2 1-81
+apps/server/cloudflare/tokens/internal/pat-routes.ts
+  h_c6d49c804e0ad2 5-7,10,27-35
+apps/server/cloudflare/tokens/operations.ts
+  h_c6d49c804e0ad2 5,22,58-66
+apps/server/cloudflare/tokens/pats.test.ts
+  h_c6d49c804e0ad2 22-23,25-29,270,3786-4342
+apps/server/contracts/openapi.json
+  h_c6d49c804e0ad2 51,4499-4594,9648-9657,10589,16944,16950,16977,16983,17654-17798
+apps/server/contracts/operation-policy.json
+  h_c6d49c804e0ad2 623-633
+apps/server/src/client.ts
+  h_c6d49c804e0ad2 150-151
+apps/server/src/core/audit/contract.ts
+  h_c6d49c804e0ad2 58-75
+apps/server/src/core/tokens/contract.ts
+  h_c6d49c804e0ad2 434-440
+apps/server/src/shell/audit/contract.ts
+  h_c6d49c804e0ad2 65-66,216-222
+apps/server/src/shell/audit/internal/daily-budget.ts
+  h_c6d49c804e0ad2 19
+apps/server/src/shell/audit/internal/query.ts
+  h_c6d49c804e0ad2 38
+apps/server/src/shell/audit/internal/retention.ts
+  h_c6d49c804e0ad2 3,5
+apps/server/src/shell/audit/operations.ts
+  h_c6d49c804e0ad2 1-7,20-21,23,231-291
+apps/server/src/shell/tokens/contract.ts
+  h_c6d49c804e0ad2 2,17,148-175,309
+apps/server/src/shell/tokens/operations.ts
+  h_c6d49c804e0ad2 1,3,5-9,588-638
+apps/web/src/features/pats/activity-feature.tsx
+  h_c6d49c804e0ad2 1-39
+apps/web/src/features/pats/activity-view.test.tsx
+  h_c6d49c804e0ad2 1-111
+apps/web/src/features/pats/activity-view.tsx
+  h_c6d49c804e0ad2 1-140
+apps/web/src/features/pats/feature.tsx
+  h_c6d49c804e0ad2 11,54
+apps/web/src/transport/client.ts
+  h_c6d49c804e0ad2 66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "22e3d265a2e40bad110c99d9e6030b00f35d76ee",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

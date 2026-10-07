@@ -1,0 +1,22 @@
+docs/research/hosted-mcp-automated-990.evidence.json
+  s_e3b9a05f422f64::t_d6892e5d59b1c1 973,982,991,1000,1009,1018
+  s_e3b9a05f422f64::t_8ce2ff42f512c7 1-972,974-981,983-990,992-999,1001-1008,1010-1017,1019-1028
+apps/server/src/shell/mcp/FEATURE.md
+  s_e3b9a05f422f64::t_d6a5a44266252e 55-56,60-66,77-79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5ef3b1b236e7c1f3e516e218466cdcfbacc3f419",
+  "prompts": {},
+  "sessions": {
+    "s_e3b9a05f422f64": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a115f2-dfce-7741-a6e9-e22144cd3fad",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

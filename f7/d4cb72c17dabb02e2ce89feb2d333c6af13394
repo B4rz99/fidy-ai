@@ -1,0 +1,23 @@
+scripts/mcp/production-native.test.ts
+  s_e3b9a05f422f64::t_401ec9b12489a7 151-156
+scripts/mcp/production-native.ts
+  s_e3b9a05f422f64::t_401ec9b12489a7 559-563,1843-1847,1882-1886
+scripts/mcp/production-checks.ts
+  s_e3b9a05f422f64::t_401ec9b12489a7 170,239,278,318
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f7d4cb72c17dabb02e2ce89feb2d333c6af13394",
+  "prompts": {},
+  "sessions": {
+    "s_e3b9a05f422f64": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a115f2-dfce-7741-a6e9-e22144cd3fad",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

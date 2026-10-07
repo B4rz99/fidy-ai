@@ -2091,14 +2091,17 @@ const PROBES: readonly Probe[] = [
     expect: {
       kind: "rejected",
       mustContain: [
-        `error foreign-module-imports-cloudflare-identity-internal: ${cloudflareIdentityContextPrivate}/probe.ts → cloudflare/identity/user-context/internal/context.ts`,
+        `error foreign-module-imports-cloudflare-identity-internal: ${cloudflareIdentityContextPrivate}/probe.ts → cloudflare/identity/user-context/internal/${PROBE_PREFIX}context.ts`,
       ],
     },
     files: [
       {
         path: `${cloudflareIdentityContextPrivate}/probe.ts`,
-        source:
-          'import { loadContext } from "../../cloudflare/identity/user-context/internal/context";\nexport const privateContext = loadContext;\n',
+        source: `import { loadContext } from "../../cloudflare/identity/user-context/internal/${PROBE_PREFIX}context";\nexport const privateContext = loadContext;\n`,
+      },
+      {
+        path: `cloudflare/identity/user-context/internal/${PROBE_PREFIX}context.ts`,
+        source: "export const loadContext = (): void => {};\n",
       },
     ],
     name: "tooling cannot import private Identity context projections",

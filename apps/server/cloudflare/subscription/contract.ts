@@ -153,11 +153,11 @@ export type BillingWorkflowStarter = Readonly<{
 }>;
 
 /** Private same-User admission; a queued identity never authorizes a charge by itself. */
-export const CardRenewalAdmission = Schema.TaggedStruct("CardRenewal", {
+export const SubscriptionRenewalAdmission = Schema.TaggedStruct("SubscriptionRenewal", {
   userId: UserId,
   previousPaidAttemptId: BillingAttemptId,
 });
-export type CardRenewalDispatchInput = Readonly<{
+export type SubscriptionRenewalDispatchInput = Readonly<{
   DB: D1Database;
   WOMPI_ENVIRONMENT: string;
   USER_TRANSACTION_COORDINATOR: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;

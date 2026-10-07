@@ -241,7 +241,14 @@ atomically creates billing-email notice intent; the shared billing Queue/Workflo
 identity-only notices through bounded Resend transport. Newly admitted renewals use the published
 Price, while pending attempts retain their snapshot. See ADR 0034.
 
-Monthly and yearly card renewal shares that same durable path. Each admitted attempt retains the
+Nequi and DaviPlata automatic renewal share the same bounded discovery, User coordinator,
+immutable attempt and D1 outbox, Queue/Workflow collection, and independently verified settlement
+path as card. Retained wallet sources are charged without new authorization, account details,
+OTPs or renewal reminders. Duplicate and delayed work cannot rearm collection or shift the calendar;
+provider failures remain failed BillingAttempts without extending paid history. Weekly grace remains
+card-only.
+
+Monthly and yearly renewal shares that same durable path. Each admitted attempt retains the
 first paid period's start as an immutable calendar anchor, advances from the preceding paid boundary
 in the captured time zone, and freezes explicit UTC period boundaries before collection. Short months
 clamp to their last day and February 29 clamps to February 28 in ordinary years; later periods return

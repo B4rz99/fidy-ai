@@ -427,7 +427,7 @@ _Avoid_: Checkout, payment attempt, card session, CardEnrollment, nequi-account.
 **PaymentSource**:
 The one private reusable provider authority per User created by an available PaymentEnrollment.
 Its provider identity and environment remain server-only; switching EnrollmentMethod is not offered. Explicit Price selection can reuse a matching-method source through a new PaymentEnrollment;
-automatic weekly card renewal uses notified replacement terms without new enrollment. Source availability
+automatic weekly, monthly, and yearly renewal uses replacement terms without new enrollment. Source availability
 or wallet token approval alone never grants paid Pro; verified BillingAttempt settlement does.
 _Avoid_: Saved card (Fidy does not store a card), payment method token, CardPaymentSource.
 

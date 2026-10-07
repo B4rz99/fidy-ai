@@ -199,6 +199,7 @@ export const canonicalAdmissionMigrationNames = (
       "0035_billing_corrections",
       "0052_weekly_card_renewal",
       "0053_calendar_card_renewal",
+      "0058_wallet_renewal",
       "0032_commercial_allowances",
       "0033_canonical_request_protection",
       "0034_forwarded_email_deferral",

@@ -8,8 +8,8 @@ import { type PaidPeriodWindow, renewalPeriod } from "../../../src/core/subscrip
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import {
   BillingCollectionFailure,
-  CardRenewalAdmission,
-  type CardRenewalDispatchInput,
+  SubscriptionRenewalAdmission,
+  type SubscriptionRenewalDispatchInput,
 } from "../contract";
 
 const fromPromise = <A>(
@@ -51,7 +51,7 @@ const prepareRenewalClaim = (
       JOIN billing_paid_periods period ON period.attempt_id = a.id
       JOIN card_payment_sources source ON source.id = a.payment_source_id AND source.user_id = a.user_id
       JOIN subscription_prices price ON price.published_order IS NOT NULL AND price.billing_period = a.billing_period AND price.service_market = a.service_market
-      WHERE s.user_id = ? AND a.id = ? AND source.method = 'card'
+      WHERE s.user_id = ? AND a.id = ?
         AND a.wompi_environment = ? AND a.status = 'succeeded'
         AND NOT EXISTS (SELECT 1 FROM subscription_renewal_stops stop WHERE stop.user_id = s.user_id)
         AND NOT EXISTS (SELECT 1 FROM billing_attempts renewal WHERE renewal.previous_paid_attempt_id = a.id)
@@ -72,7 +72,7 @@ const prepareRenewalClaim = (
   });
 };
 
-export const claimCardRenewal = (
+export const claimSubscriptionRenewal = (
   input: RenewalClaimInput
 ): Effect.Effect<void, BillingCollectionFailure> =>
   Effect.gen(function* () {
@@ -107,8 +107,8 @@ export const claimCardRenewal = (
   });
 
 /** Discover only bounded identities; each admission rechecks same-User authority inside its coordinator. */
-export const dispatchCardRenewals = (
-  input: CardRenewalDispatchInput
+export const dispatchSubscriptionRenewals = (
+  input: SubscriptionRenewalDispatchInput
 ): Effect.Effect<void, BillingCollectionFailure> =>
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
@@ -120,7 +120,7 @@ export const dispatchCardRenewals = (
     FROM billing_followup_outbox due JOIN subscriptions s ON s.attempt_id = due.attempt_id
     JOIN billing_attempts a ON a.id = s.attempt_id AND a.user_id = s.user_id
     JOIN card_payment_sources source ON source.id = a.payment_source_id AND source.user_id = a.user_id
-    WHERE due.due_at_ms <= ? AND source.method = 'card'
+    WHERE due.due_at_ms <= ?
       AND a.wompi_environment = ?
       AND NOT EXISTS (SELECT 1 FROM subscription_renewal_stops stop WHERE stop.user_id = s.user_id)
       AND NOT EXISTS (SELECT 1 FROM billing_attempts r WHERE r.previous_paid_attempt_id = a.id)
@@ -141,8 +141,10 @@ export const dispatchCardRenewals = (
       Effect.mapError((cause) => new BillingCollectionFailure({ cause: Option.some(cause) }))
     );
     for (const entry of entries) {
-      const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(CardRenewalAdmission))({
-        _tag: "CardRenewal",
+      const encoded = yield* Schema.encodeEffect(
+        Schema.fromJsonString(SubscriptionRenewalAdmission)
+      )({
+        _tag: "SubscriptionRenewal",
         userId: entry.user_id,
         previousPaidAttemptId: entry.id,
       }).pipe(
@@ -150,7 +152,7 @@ export const dispatchCardRenewals = (
       );
       const response = yield* fromPromise((signal) =>
         input.USER_TRANSACTION_COORDINATOR.getByName(entry.user_id).fetch(
-          new Request("https://coordinator.internal/card-renewal-work", {
+          new Request("https://coordinator.internal/subscription-renewal-work", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: encoded,

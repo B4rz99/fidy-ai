@@ -1,0 +1,37 @@
+apps/server/cloudflare/identity/operations.ts
+  s_55523bb8416825::t_479c592827a90a 58-60
+  s_55523bb8416825::t_260954c52cf0e6 4,9-11,44-46,49-57
+apps/server/cloudflare/identity/identity-owner.test.ts
+  s_55523bb8416825::t_260954c52cf0e6 11,14-15,172,175-179,187,210
+  s_55523bb8416825::t_0afba23f5e8bb8 167,180
+apps/server/ARCHITECTURE.md
+  s_55523bb8416825::t_f6a36c1e09703b 164-173
+apps/server/cloudflare/onboarding/operations.ts
+  s_55523bb8416825::t_f6a36c1e09703b 1,5,16-17,20-22,24-25,27-30
+apps/server/cloudflare/onboarding/internal/completion.ts
+  s_55523bb8416825::t_f6a36c1e09703b 1-50
+  s_55523bb8416825::t_52d81b7b1b7906 51-52
+apps/server/cloudflare/identity/contract.ts
+  s_55523bb8416825::t_260954c52cf0e6 7,30-31,37-38,42-45
+apps/server/scripts/check-dependency-guards.ts
+  s_55523bb8416825::t_260954c52cf0e6 2050,2053
+apps/server/cloudflare/identity/internal/bootstrap.ts
+  s_55523bb8416825::t_260954c52cf0e6 11,15,34,41-48
+  s_55523bb8416825::t_479c592827a90a 5-9,35-40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8a29729dafa0b1b576a8ac3d44af786c1ac93d6e",
+  "prompts": {},
+  "sessions": {
+    "s_55523bb8416825": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11896-74c5-7f82-b3d7-9e3ce7978236",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

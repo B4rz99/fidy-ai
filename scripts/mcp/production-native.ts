@@ -567,8 +567,8 @@ export const nativeLogin = ({
   },
   NativeProofError,
   FileSystem.FileSystem
-> => {
-  return Effect.scoped(
+> =>
+  Effect.scoped(
     Effect.gen(function* () {
       return yield* runLogin(
         {
@@ -591,7 +591,6 @@ export const nativeLogin = ({
       )
     )
   );
-};
 type PlannedTool = Readonly<{
   name: string;
   args: Schema.Json;
@@ -1853,8 +1852,8 @@ export const nativeCredential = ({
   }>,
   NativeProofError,
   FileSystem.FileSystem
-> => {
-  return Effect.scoped(
+> =>
+  Effect.scoped(
     Effect.gen(function* () {
       return yield* readCredential(
         {
@@ -1878,7 +1877,6 @@ export const nativeCredential = ({
       )
     )
   );
-};
 export const nativeLogout = ({
   host,
   binary,
@@ -1890,8 +1888,8 @@ export const nativeLogout = ({
   },
   NativeProofError,
   never
-> => {
-  return Effect.scoped(
+> =>
+  Effect.scoped(
     Effect.gen(function* () {
       return yield* command({
         args: [binary, "mcp", "logout", "fidy"],
@@ -1916,6 +1914,5 @@ export const nativeLogout = ({
       )
     )
   );
-};
 const now = (): number => Effect.runSync(Clock.currentTimeMillis);
 const stringify = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));

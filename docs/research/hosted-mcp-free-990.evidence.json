@@ -1,0 +1,136 @@
+{
+  "verifiedAt": "2026-10-07T16:56:29.721822+00:00",
+  "revision": "63494fd4f7a915005a8f750547f4bb3548835e90",
+  "deployment": "https://github.com/B4rz99/fidy-ai/actions/runs/37653543667",
+  "versions": {
+    "core": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+    "ingress": "41ce2bf1-22e3-410f-926c-24fb2d65323f"
+  },
+  "hosts": {
+    "claude": {
+      "version": "2.1.289",
+      "journeyToolsPassed": 4,
+      "repeatedReadsPassed": 20,
+      "naturalRefreshPassed": true
+    },
+    "codex": {
+      "version": "0.160.0",
+      "journeyToolsPassed": 4,
+      "repeatedReadsPassed": 10,
+      "naturalRefreshPassed": true
+    }
+  },
+  "verifiedOperations": [
+    "categories.listCategories",
+    "budgets.createBudget",
+    "operations.executeAtomicBatch (two transactions.createTransaction children)",
+    "budgets.deleteBudget (native acceptance)"
+  ],
+  "coreMcp": {
+    "count": 68,
+    "outcomes": {
+      "ok": 65,
+      "canceled": 3
+    },
+    "cpuMedianMs": 7.0,
+    "cpuMinMs": 2,
+    "cpuMaxMs": 21
+  },
+  "cpuLimitTerminations": 0,
+  "newRefreshEvents": 2,
+  "cleanup": {
+    "activeConnections": 0,
+    "activeBrowserSessions": 0,
+    "budgets": 0,
+    "nativeLogoutsPassed": true,
+    "credentialProfilesAndPrivateTracesRemoved": true,
+    "syntheticTransactionsRetained": 6
+  },
+  "noAccountPlanChange": true,
+  "limitations": [
+    "Synthetic provider approval does not prove provider identity or email delivery.",
+    "Canned local model drives real native clients and Production MCP; no paid inference.",
+    "Billing-plan read unavailable; no plan change made.",
+    "Trace samples verify bounded journeys, not all workloads or daily quotas.",
+    "Fixture Transactions and Audit remain immutable; disposable Budgets, active connections and browser sessions are cleaned up.",
+    "Only the named clients and operations were verified live; launch authorization is separate.",
+    "Absolute seven-day connection expiry is covered at its exact boundary locally; natural Production expiry was not waited for."
+  ],
+  "gapVerification": {
+    "verifiedAt": "2026-10-07T17:38:03.677237+00:00",
+    "revision": "63494fd4f7a915005a8f750547f4bb3548835e90",
+    "nativeHosts": {
+      "claude": {
+        "host": "claude",
+        "nativeToolCount": 46,
+        "exactRestrictedCatalog": true,
+        "forbiddenOperationIdentifiersAbsentFromInputSchemas": true,
+        "cancellation": {
+          "nativeEscape": true,
+          "toolError": "user_action_required",
+          "budgetPreserved": true,
+          "acceptedDeleteAuditUnchanged": true
+        },
+        "cleanupAccepted": true,
+        "postRevocation": {
+          "host": "claude",
+          "credentialSource": "actual native OAuth isolated test store",
+          "postRevocationToolStatus": 401,
+          "postRevocationRefreshStatus": 400,
+          "refreshError": "invalid_grant"
+        }
+      },
+      "codex": {
+        "host": "codex",
+        "nativeToolCount": 46,
+        "exactRestrictedCatalog": true,
+        "forbiddenOperationIdentifiersAbsentFromInputSchemas": true,
+        "cancellation": {
+          "nativeEscape": true,
+          "toolError": "user_action_required",
+          "budgetPreserved": true,
+          "acceptedDeleteAuditUnchanged": true
+        },
+        "cleanupAccepted": true,
+        "postRevocation": {
+          "host": "codex",
+          "credentialSource": "actual native OAuth isolated file test store",
+          "postRevocationToolStatus": 401,
+          "postRevocationRefreshStatus": 400,
+          "refreshError": "invalid_grant"
+        }
+      }
+    },
+    "localIntegration": {
+      "passed": 195,
+      "skipped": 1,
+      "filesPassed": 7,
+      "skipReason": "Opt-in local native-host bridge was not enabled; native cancellation and acceptance were exercised against Production instead.",
+      "covers": [
+        "all seven nonempty permission combinations",
+        "exact absolute grant expiry and credential clipping",
+        "post-revocation call and refresh refusal",
+        "confirmation cancellation and sensitive-operation review",
+        "public ingress and canonical operation boundary",
+        "runtime admission and residency"
+      ]
+    },
+    "cleanup": {
+      "activeConnections": 0,
+      "activeBrowserSessions": 0,
+      "budgets": 0,
+      "newTransactions": 0,
+      "syntheticTransactionsRetained": 6,
+      "rejectedBudgetDeletions": 2,
+      "acceptedBudgetDeletions": 2,
+      "nativeLogoutsPassed": true,
+      "operatorBrowserSessionRevocations": 1,
+      "operatorCleanupReason": "A disposable browser-state file was overwritten while switching Codex OAuth stores; that fixture session was revoked directly with an exact synthetic User/time predicate.",
+      "credentialProfilesAndPrivateTracesRemoved": true
+    },
+    "probeMethod": "Native tool catalogs and cancellation/acceptance UI; post-revocation HTTP probes use actual native OAuth credentials. Codex refusal proof used a fresh isolated native file-store login with a successful native read before revocation.",
+    "productionRequestBound": 100,
+    "productionWindowMinutes": 30,
+    "absoluteGrantExpiryLive": false
+  }
+}

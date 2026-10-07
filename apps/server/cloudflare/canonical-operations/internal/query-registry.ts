@@ -1,4 +1,4 @@
-import { InsightEventId } from "../../../src/core/insights/contract";
+import { RecurringDigestReportParams } from "../../../src/core/insights/contract";
 import { operationCatalog } from "../../../src/shell/api";
 import { type Cause, Effect, Option, Schema } from "effect";
 import {
@@ -214,7 +214,7 @@ export const canonicalHostedStatementQueryOwner = (
   if (id === "insights.getRecurringDigestReport") {
     return Option.some((work) => {
       const input = Schema.decodeUnknownOption(
-        Schema.Struct({ params: Schema.Struct({ id: InsightEventId }) })
+        Schema.Struct({ params: RecurringDigestReportParams })
       )(work.input);
       return Option.isSome(input)
         ? readHeldRecurringDigestReport({ ...work, id: input.value.params.id })

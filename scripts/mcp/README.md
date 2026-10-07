@@ -26,7 +26,7 @@ The scope is private operator configuration, not a credential. Supply these fiel
   "workers": { "core": "CORE_WORKER_NAME", "ingress": "INGRESS_WORKER_NAME" },
   "binaries": { "claude": "/absolute/path/to/claude", "codex": "/absolute/path/to/codex" },
   "windowMinutes": 30,
-  "maximumRequests": 100
+  "maximumRequests": 150
 }
 ```
 
@@ -52,7 +52,11 @@ revocation, and subsequent access/refresh refusal. State and Audit assertions mu
 agree with client outcomes. The natural refresh wait takes about ten minutes.
 OAuth/MCP Worker observations must match the approved versions and contain no
 CPU-limit termination. Scheduled-job failures are counted separately in evidence.
-Observed request counts are an admission check, not a server rate limit.
+The bounded run admits at most 150 observed OAuth/MCP requests, reserving ten for
+cleanup. The complete real-client sequence exceeded the original 100-request
+proposal because fresh native processes repeat discovery and initialization;
+obtain approval for the 150-request scope before running it. Observed request
+counts are an admission check, not a server rate limit.
 
 A pass is written only after cleanup and private-profile removal succeed. Browser
 sessions and connections are revoked and disposable Budgets deleted; four synthetic

@@ -71,7 +71,7 @@ it("rejects a stale approved scope without performing Production checks", () =>
             workers: { core: "fixture-core", ingress: "fixture-ingress" },
             binaries: { claude: "/nonexistent/claude", codex: "/nonexistent/codex" },
             windowMinutes: 30,
-            maximumRequests: 100,
+            maximumRequests: 150,
           })
         );
         const result = Bun.spawnSync(

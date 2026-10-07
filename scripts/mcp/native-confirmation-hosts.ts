@@ -3,7 +3,7 @@ import { BunCrypto, BunFileSystem } from "@effect/platform-bun";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { Data, Effect, FileSystem, Layer, type PlatformError, Schema } from "effect";
+import { Data, Effect, FileSystem, Layer, Option, type PlatformError, Schema } from "effect";
 import {
   type NativeHost,
   type NativeMode,
@@ -196,8 +196,13 @@ const runCase = Effect.fn(function* (args: Arguments, name: HostCase) {
     root,
     budgetId: reset.budgetId,
   });
-  const native = yield* nativeTools(host, args[host], root, decision, "local-native-confirmation", {
-    mcpUrl: `${bridgeUrl}/mcp`,
+  const native = yield* nativeTools({
+    host,
+    binary: args[host],
+    root,
+    mode: decision,
+    namespace: "local-native-confirmation",
+    mcpUrl: Option.some(`${bridgeUrl}/mcp`),
   });
   const observed = yield* bridge("/status", Status);
   const accepted = decision === "accept";

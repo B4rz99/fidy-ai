@@ -252,6 +252,23 @@ type ProofContext = {
   readonly before: FixtureSnapshot;
   readonly started: number;
 };
+const runNativeTools = ({
+  context,
+  host,
+  mode,
+}: {
+  readonly context: ProofContext;
+  readonly host: NativeHost;
+  readonly mode: Parameters<typeof nativeTools>[0]["mode"];
+}): ReturnType<typeof nativeTools> =>
+  nativeTools({
+    host,
+    binary: context.scope.binaries[host],
+    root: context.root,
+    mode,
+    namespace: context.scope.namespace,
+    mcpUrl: Option.none(),
+  });
 const hostJourney = Effect.fn(function* (context: ProofContext, host: NativeHost) {
   const { scope, root, browser, observation } = context;
   yield* budgetAdmission(scope, observation);
@@ -264,7 +281,7 @@ const hostJourney = Effect.fn(function* (context: ProofContext, host: NativeHost
     { concurrency: 2 }
   );
   yield* report(`${host}: canonical journey`);
-  yield* nativeTools(host, scope.binaries[host], root, "journey", scope.namespace);
+  yield* runNativeTools({ context, host, mode: "journey" });
   yield* validateCatalog(root, host);
   const beforeCancel = yield* snapshot(scope);
   yield* requireCheck(
@@ -272,10 +289,10 @@ const hostJourney = Effect.fn(function* (context: ProofContext, host: NativeHost
     "Native journey did not create exactly one disposable Budget"
   );
   yield* report(`${host}: cancellation`);
-  yield* nativeTools(host, scope.binaries[host], root, "cancel", scope.namespace);
+  yield* runNativeTools({ context, host, mode: "cancel" });
   yield* verifyCancellation(beforeCancel, yield* snapshot(scope));
   yield* report(`${host}: confirmed cleanup`);
-  yield* nativeTools(host, scope.binaries[host], root, "accept", scope.namespace);
+  yield* runNativeTools({ context, host, mode: "accept" });
   const afterDelete = yield* snapshot(scope);
   yield* requireCheck(
     afterDelete.budgets === 0 && afterDelete.deletedBudgets === beforeCancel.deletedBudgets + 1,
@@ -283,7 +300,7 @@ const hostJourney = Effect.fn(function* (context: ProofContext, host: NativeHost
   );
   yield* budgetAdmission(scope, observation);
   yield* report(`${host}: repeated reads`);
-  yield* nativeTools(host, scope.binaries[host], root, "repeat", scope.namespace);
+  yield* runNativeTools({ context, host, mode: "repeat" });
   return {
     nativeOAuth: true,
     restrictedCatalog: true,
@@ -316,7 +333,7 @@ const naturalRefresh = Effect.fn(function* (context: ProofContext) {
   }
   for (const host of HOSTS) {
     yield* report(`${host}: natural refresh`);
-    yield* nativeTools(host, scope.binaries[host], root, "refresh", scope.namespace);
+    yield* runNativeTools({ context, host, mode: "refresh" });
   }
   yield* requireCheck(
     (yield* snapshot(scope)).refreshEvents === refreshBaseline.refreshEvents + 2,
@@ -455,7 +472,7 @@ const runProof = Effect.fn(function* (scope: ApprovedScope) {
   });
   return yield* work.pipe(
     Effect.tapCause(() => reportFailedObservation(observation)),
-    Effect.ensuring(cleanupProof(context).pipe(Effect.orDie))
+    Effect.onExit(() => cleanupProof(context))
   );
 });
 const main = Effect.gen(function* () {

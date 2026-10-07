@@ -136,7 +136,7 @@ export const approveNativeLogin = Effect.fn(function* (options: Approval) {
   yield* Effect.scoped(
     Effect.gen(function* () {
       const context = yield* browserContext(options.browser);
-      yield* approve(options, context).pipe(Effect.ensuring(logout(context).pipe(Effect.orDie)));
+      yield* approve(options, context).pipe(Effect.onExit(() => logout(context)));
     })
   );
 });
@@ -163,7 +163,7 @@ export const revokeConnections = Effect.fn(function* (scope: ApprovedScope, brow
   yield* Effect.scoped(
     Effect.gen(function* () {
       const context = yield* browserContext(browser);
-      yield* revoke(scope, context).pipe(Effect.ensuring(logout(context).pipe(Effect.orDie)));
+      yield* revoke(scope, context).pipe(Effect.onExit(() => logout(context)));
     })
   );
 });

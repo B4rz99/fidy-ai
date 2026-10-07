@@ -47,9 +47,6 @@ type AnthropicEventsInput = Readonly<{
   step: number;
 }>;
 export type NativeMode = "journey" | "cancel" | "accept" | "repeat" | "refresh" | "headless";
-export type NativeOptions = Readonly<{
-  mcpUrl: string;
-}>;
 export class NativeProofError extends Data.TaggedError("NativeProofError")<{
   reason: string;
   host: NativeHost;
@@ -1725,16 +1722,16 @@ const runTools = (input: ToolInput, signal: AbortSignal): ToolsEffect =>
   );
 /** Drives canned model decisions through real native clients. Mutation delivery is never retried; caller reconciles private outputs with canonical state and Audit. */
 export const nativeTools = (
-  ...values: [
-    host: NativeHost,
-    binary: string,
-    root: string,
-    mode: NativeMode,
-    namespace: string,
-    ...options: NativeOptions[],
-  ]
+  input: Readonly<{
+    host: NativeHost;
+    binary: string;
+    root: string;
+    mode: NativeMode;
+    namespace: string;
+    mcpUrl: Option.Option<string>;
+  }>
 ): Effect.Effect<NativeSummary, NativeProofError, FileSystem.FileSystem | Crypto.Crypto> => {
-  const [host, binary, root, mode, namespace] = values;
+  const { host, binary, root, mode, namespace } = input;
   return Effect.scoped(
     Effect.gen(function* () {
       const signal = yield* Effect.abortSignal;
@@ -1759,7 +1756,7 @@ export const nativeTools = (
           mode,
           namespace,
           budgetFile,
-          mcpUrl: values[5]?.mcpUrl ?? productionUrl,
+          mcpUrl: Option.getOrElse(input.mcpUrl, () => productionUrl),
           plan: toolPlan({
             host,
             mode,

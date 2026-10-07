@@ -132,7 +132,14 @@ describe("isolated native MCP proof boundary", () => {
           const fs = yield* FileSystem.FileSystem;
           yield* fs.makeDirectory(join(root, "codex-profile"));
           yield* fs.writeFileString(binary, fakeCodex, { mode: executableMode });
-          const result = yield* nativeTools("codex", binary, root, "refresh", "synthetic-test");
+          const result = yield* nativeTools({
+            host: "codex",
+            binary,
+            root,
+            mode: "refresh",
+            namespace: "synthetic-test",
+            mcpUrl: Option.none(),
+          });
           expect(result).toMatchObject({ passed: true, expected: 1, received: 1 });
         })
       )
@@ -144,7 +151,14 @@ describe("isolated native MCP proof boundary", () => {
           yield* Effect.all([nativeLogin("claude", binary, root), callbackFixture(root)], {
             concurrency: 2,
           });
-          const result = yield* nativeTools("claude", binary, root, "refresh", "synthetic-test");
+          const result = yield* nativeTools({
+            host: "claude",
+            binary,
+            root,
+            mode: "refresh",
+            namespace: "synthetic-test",
+            mcpUrl: Option.none(),
+          });
           expect(result.passed).toBe(true);
         })
       )
@@ -153,7 +167,14 @@ describe("isolated native MCP proof boundary", () => {
     run(
       withClient("journey", ({ root, binary }) =>
         Effect.gen(function* () {
-          const result = yield* nativeTools("claude", binary, root, "journey", "synthetic-test");
+          const result = yield* nativeTools({
+            host: "claude",
+            binary,
+            root,
+            mode: "journey",
+            namespace: "synthetic-test",
+            mcpUrl: Option.none(),
+          });
           expect(result).toMatchObject({ passed: true, expected: 3, received: 3 });
           const fs = yield* FileSystem.FileSystem;
           const budget = yield* fs.readFileString(join(root, "claude-budget-private.json"));
@@ -165,7 +186,14 @@ describe("isolated native MCP proof boundary", () => {
     run(
       withClient("cancel", ({ root, binary }) =>
         Effect.gen(function* () {
-          const result = yield* nativeTools("claude", binary, root, "cancel", "synthetic-test");
+          const result = yield* nativeTools({
+            host: "claude",
+            binary,
+            root,
+            mode: "cancel",
+            namespace: "synthetic-test",
+            mcpUrl: Option.none(),
+          });
           expect(result).toMatchObject({ passed: true, nativeFormAnswered: true, received: 1 });
         })
       )
@@ -178,7 +206,14 @@ describe("isolated native MCP proof boundary", () => {
           Effect.gen(function* () {
             const phase: NativeMode = mode === "wrong-refusal" ? "headless" : "refresh";
             const result = yield* Effect.result(
-              nativeTools("claude", binary, root, phase, "synthetic-test")
+              nativeTools({
+                host: "claude",
+                binary,
+                root,
+                mode: phase,
+                namespace: "synthetic-test",
+                mcpUrl: Option.none(),
+              })
             );
             expect(result._tag).toBe("Failure");
             if (mode === "wrong-refusal" && result._tag === "Failure") {
@@ -204,7 +239,14 @@ describe("isolated native MCP proof boundary", () => {
           Effect.gen(function* () {
             const fs = yield* FileSystem.FileSystem;
             const fiber = yield* Effect.forkScoped(
-              nativeTools("claude", binary, root, "refresh", "synthetic-test")
+              nativeTools({
+                host: "claude",
+                binary,
+                root,
+                mode: "refresh",
+                namespace: "synthetic-test",
+                mcpUrl: Option.none(),
+              })
             );
             const path = join(root, "child-pid.json");
             for (let attempt = 0; attempt < readinessAttempts; attempt++) {

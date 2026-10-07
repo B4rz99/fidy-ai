@@ -1,4 +1,4 @@
-import { Effect, FileSystem, Schema } from "effect";
+import { Effect, FileSystem, Option, Schema } from "effect";
 import {
   type ApprovedScope,
   VerificationFailure,
@@ -41,7 +41,14 @@ export const disposeBudget = Effect.fn(function* (
   } else {
     yield* writeJson(path, { id: owned.id });
   }
-  yield* nativeTools(host, scope.binaries[host], root, "accept", scope.namespace);
+  yield* nativeTools({
+    host,
+    binary: scope.binaries[host],
+    root,
+    mode: "accept",
+    namespace: scope.namespace,
+    mcpUrl: Option.none(),
+  });
   const remaining = yield* query(scope, ownedSql);
   yield* requireCheck(remaining.length === 0, "Budget remained after native cleanup confirmation");
 });

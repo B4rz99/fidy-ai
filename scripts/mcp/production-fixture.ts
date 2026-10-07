@@ -11,6 +11,7 @@ export const attempt = Effect.fn(function <Value>(
   return Effect.tryPromise({ try: run, catch: () => new VerificationFailure({ message }) });
 });
 const WINDOW_MINUTES = 30;
+const MAXIMUM_REQUESTS = 150;
 const APPROVAL_MAX_AGE_MS = 900_000;
 const PRIVATE_DIRECTORY_MODE = 0o700;
 const COMMAND_OUTPUT_LIMIT = 2_000_000;
@@ -34,7 +35,7 @@ export const Scope = Schema.Struct({
   workers: Schema.Struct({ core: opaqueName, ingress: opaqueName }),
   binaries: Schema.Struct({ claude: binaryPath, codex: binaryPath }),
   windowMinutes: Schema.Literal(WINDOW_MINUTES),
-  maximumRequests: Schema.Literal(100),
+  maximumRequests: Schema.Literal(MAXIMUM_REQUESTS),
 });
 export type ApprovedScope = typeof Scope.Type;
 export const budgetCategories = {

@@ -422,7 +422,7 @@ const prepare = ({
     if (Option.isNone(selected)) return invalid();
     const incompatibleSource = yield* waitFor(() =>
       environment.DB.prepare(
-        `SELECT s.id FROM card_payment_sources AS s WHERE s.user_id = ? AND (s.method <> ?
+        `SELECT s.id FROM card_payment_sources AS s WHERE s.user_id = ? AND (EXISTS (SELECT 1 FROM subscription_cancellations c WHERE c.payment_source_id=s.id) OR s.method <> ?
             OR NOT EXISTS (SELECT 1 FROM card_enrollments AS origin WHERE origin.id = s.enrollment_id
               AND (origin.wompi_environment = ? OR (origin.wompi_environment IS NULL AND EXISTS
                 (SELECT 1 FROM billing_attempts AS a WHERE a.payment_source_id = s.id AND a.wompi_environment = ?))))

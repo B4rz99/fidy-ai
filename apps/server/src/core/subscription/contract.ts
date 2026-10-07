@@ -481,5 +481,13 @@ export const RefundStartFailure = Schema.Literals([
 ]).annotate({ identifier: "RefundStartFailure" });
 export type RefundStartFailure = typeof RefundStartFailure.Type;
 
-/** Fixed post-boundary Pro continuation for an unstopped weekly card Subscription; paid history is unchanged. */
-export const weeklyRenewalGraceMs = 259_200_000;
+/** Fixed post-boundary Pro continuation for an unstopped Subscription; paid history is unchanged. */
+export const renewalGraceMs = 259_200_000;
+
+/** Retained cancellation stops future collection while preserving the already-paid interval. */
+export const SubscriptionCancellation = Schema.Struct({
+  cancelledAt: UtcTimestamp,
+  paidThrough: UtcTimestamp,
+  sourceCancellation: Schema.Literals(["detached", "void-pending", "voided"]),
+}).annotate({ identifier: "SubscriptionCancellation" });
+export type SubscriptionCancellation = typeof SubscriptionCancellation.Type;

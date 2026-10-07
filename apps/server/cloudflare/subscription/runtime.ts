@@ -1,3 +1,4 @@
+import { dispatchCancellations } from "./internal/source-cancellation";
 import { dispatchPriceNotices } from "./internal/price-notice";
 import { publishWeeklyPrice } from "./operations";
 import { type Price } from "../../src/core/subscription/contract";
@@ -13,6 +14,7 @@ import { handlePaymentEnrollment as enroll } from "./internal/payment-enrollment
 import type {
   BillingPriceNoticeDispatchInput,
   EnrollmentEnvironment,
+  SubscriptionCancellationDispatchInput,
   SubscriptionRenewalDispatchInput,
 } from "./contract";
 import {
@@ -220,3 +222,8 @@ export const publishWeeklyPriceAndNotify = (
 export const dispatchBillingPriceNotices = (
   input: BillingPriceNoticeDispatchInput
 ): Effect.Effect<void, BillingCollectionFailure> => dispatchPriceNotices(input);
+
+/** Recover retained DaviPlata cancellation intent through bounded identity-only offers. */
+export const dispatchSubscriptionCancellations = (
+  input: SubscriptionCancellationDispatchInput
+): Effect.Effect<void, BillingCollectionFailure> => dispatchCancellations(input);

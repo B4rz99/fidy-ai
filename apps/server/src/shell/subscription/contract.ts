@@ -13,13 +13,14 @@ import {
   PaymentRequestId,
   PaymentSubmission,
   PriceId,
+  SubscriptionCancellation,
   SubscriptionOffers,
   SubscriptionStatus,
   UpgradeDestination,
   maximumTransientPaymentTokenCharacters,
 } from "~/core/subscription/contract";
 import { operationPolicy, userOwnedAgentScoped } from "~/shell/canonical-policy/contract";
-import { OperationResponse, Unavailable } from "~/shell/public-http/contract";
+import { NotFound, OperationResponse, Unavailable } from "~/shell/public-http/contract";
 
 const getUpgradeUrl = HttpApiEndpoint.get("getUpgradeUrl", "/subscription/upgrade-url", {
   success: OperationResponse(UpgradeDestination),
@@ -74,11 +75,33 @@ const getSubscriptionStatus = HttpApiEndpoint.get("getSubscriptionStatus", "/sub
     })
   );
 
+const cancelSubscription = HttpApiEndpoint.post(
+  "cancelSubscription",
+  "/subscription/cancellation",
+  {
+    success: OperationResponse(SubscriptionCancellation),
+    error: [NotFound, Unavailable],
+  }
+)
+  .annotate(
+    OpenApi.Description,
+    "Cancel future Subscription renewals and detach the reusable PaymentSource. Preserve access through the already-paid period and all billing history."
+  )
+  .annotateMerge(
+    operationPolicy({
+      access: userOwnedAgentScoped("write"),
+      requiredTier: "free",
+      agentConfirmation: "required",
+      kind: "mutation",
+    })
+  );
+
 /** Canonical Free operation group for discovering and presenting Subscription standing and offers. */
 export const SubscriptionGroup = HttpApiGroup.make("subscription")
   .add(getUpgradeUrl)
   .add(listSubscriptionOffers)
-  .add(getSubscriptionStatus);
+  .add(getSubscriptionStatus)
+  .add(cancelSubscription);
 
 const invalidError = {
   code: "card_enrollment_invalid",

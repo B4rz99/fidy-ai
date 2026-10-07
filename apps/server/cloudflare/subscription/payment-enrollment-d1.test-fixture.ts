@@ -45,6 +45,8 @@ export const makePaymentEnrollmentD1 = Effect.fnUntraced(function* (
     "0052_weekly_card_renewal.sql",
     "0053_calendar_card_renewal.sql",
     "0058_wallet_renewal.sql",
+    "0059_subscription_retries.sql",
+    "0060_subscription_cancellation.sql",
   ]) {
     yield* fromPromise(() =>
       applyTestMigration({ db, source: new URL(`../migrations/${file}`, import.meta.url) })

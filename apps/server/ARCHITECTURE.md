@@ -245,8 +245,18 @@ Nequi and DaviPlata automatic renewal share the same bounded discovery, User coo
 immutable attempt and D1 outbox, Queue/Workflow collection, and independently verified settlement
 path as card. Retained wallet sources are charged without new authorization, account details,
 OTPs or renewal reminders. Duplicate and delayed work cannot rearm collection or shift the calendar;
-provider failures remain failed BillingAttempts without extending paid history. Weekly grace remains
-card-only.
+provider failures remain failed BillingAttempts without extending paid history. All methods and periods share three-day grace and bounded renewal retries.
+
+Failed renewals admit at most two new immutable BillingAttempts at 24 and 48 hours after the
+original boundary, only during three-day grace. Pending or ambiguous collection blocks retry;
+verified success grants the adjacent period once and fences queued sibling attempts. Source, terms,
+and original calendar stay frozen throughout retry. Grace expiry is a read-time AccessTier decision;
+TrialPeriod remains independent. Canonical Subscription cancellation shares the one-User mutation
+unit, accountability, scope and confirmation policy. Its retained stop and detached-source guards
+prevent new attempts and unsent collection without rewriting history. DaviPlata source void intent
+uses the existing billing Queue/Workflow; a claimed PUT is never repeated and bounded matching GETs
+reconcile uncertainty. Card and Nequi are detached locally because provider void semantics are not
+established. See ADR 0034.
 
 Monthly and yearly renewal shares that same durable path. Each admitted attempt retains the
 first paid period's start as an immutable calendar anchor, advances from the preceding paid boundary
@@ -269,7 +279,7 @@ routing bucket, provider representation or credential authority.
 Payment enrollment requires fresh browser authority and Consent and stays outside canonical/PAT
 access. Transient payment authorization material goes directly from the browser to Wompi. Paid Pro
 requires independently verified matching settlement, not authorization or PaymentSource availability.
-AccessTier is derived at the decision instant, never persisted as a separate authority. Weekly card
+AccessTier is derived at the decision instant, never persisted as a separate authority. Automatic
 renewal includes a fixed three-day grace after the paid boundary, excluding stopped renewals and
 refunded periods; grace never alters paid history. See
 [ADR 0021](../../docs/adr/0021-browser-only-payment-credential-enrollment.md).

@@ -1,4 +1,4 @@
-import { weeklyRenewalGraceMs } from "~/core/subscription/contract";
+import { renewalGraceMs } from "~/core/subscription/contract";
 import { UserId } from "~/core/identity/contract";
 import { Option, Schema } from "effect";
 import { userTrialPeriodQuery } from "~/shell/identity/operations";
@@ -18,10 +18,9 @@ const bindings = (
 // These aliases belong to the Subscription-owned standing and protected-access queries.
 export const paidAccessEndSql = `MIN(p.ends_at_ms, COALESCE(
   (SELECT MIN(adjustment.ends_at_ms) FROM billing_access_adjustments adjustment WHERE adjustment.attempt_id=p.attempt_id), p.ends_at_ms))
-  + CASE WHEN a.billing_period='weekly' AND source.method='card'
-    AND NOT EXISTS (SELECT 1 FROM subscription_renewal_stops stop WHERE stop.user_id=s.user_id)
+  + CASE WHEN NOT EXISTS (SELECT 1 FROM subscription_renewal_fences stop WHERE stop.user_id=s.user_id)
     AND NOT EXISTS (SELECT 1 FROM billing_access_adjustments adjustment WHERE adjustment.attempt_id=p.attempt_id)
-    THEN ${weeklyRenewalGraceMs} ELSE 0 END`;
+    THEN ${renewalGraceMs} ELSE 0 END`;
 
 /** Published Prices are ordered and capped before projection as a complete three-Price set. */
 export const subscriptionOffersQuery = (

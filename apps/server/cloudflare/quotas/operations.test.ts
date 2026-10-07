@@ -28,6 +28,9 @@ const database = Effect.gen(function* () {
       db.prepare("CREATE TABLE card_payment_sources (id TEXT, user_id TEXT, method TEXT)"),
       db.prepare("CREATE TABLE subscription_renewal_stops (user_id TEXT)"),
       db.prepare(
+        "CREATE VIEW subscription_renewal_fences AS SELECT * FROM subscription_renewal_stops"
+      ),
+      db.prepare(
         "CREATE TABLE billing_paid_periods (attempt_id TEXT, starts_at_ms INTEGER, ends_at_ms INTEGER)"
       ),
       db.prepare("CREATE TABLE billing_access_adjustments (attempt_id TEXT, ends_at_ms INTEGER)"),

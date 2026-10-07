@@ -45,6 +45,9 @@ it("derives each decision from one User's original trial and current settled pai
           db.prepare("CREATE TABLE card_payment_sources (id TEXT, user_id TEXT, method TEXT)"),
           db.prepare("CREATE TABLE subscription_renewal_stops (user_id TEXT)"),
           db.prepare(
+            "CREATE VIEW subscription_renewal_fences AS SELECT * FROM subscription_renewal_stops"
+          ),
+          db.prepare(
             "CREATE TABLE billing_paid_periods (attempt_id TEXT, starts_at_ms INTEGER, ends_at_ms INTEGER)"
           ),
           db.prepare(
@@ -90,7 +93,8 @@ it("derives each decision from one User's original trial and current settled pai
       expect(yield* Effect.tryPromise(observePaidAccess)).toBe(1);
       expect(yield* Effect.tryPromise(() => tier(399))).toBe(0);
       expect(yield* Effect.tryPromise(() => tier(400))).toBe(1);
-      expect(yield* Effect.tryPromise(() => tier(500))).toBe(0);
+      expect(yield* Effect.tryPromise(() => tier(500))).toBe(1);
+      expect(yield* Effect.tryPromise(() => tier(500 + 259200000))).toBe(0);
       expect(yield* Effect.tryPromise(() => tier(99, "20000000-0000-4000-8000-000000000002"))).toBe(
         0
       );

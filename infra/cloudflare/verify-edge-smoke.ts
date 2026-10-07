@@ -7,9 +7,11 @@ import * as HttpBody from "effect/http/HttpBody";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { productionTopology } from "../../apps/server/cloudflare/runtime/contract";
+import { oauthPaths } from "../../apps/server/src/shell/oauth-agents/contract";
 
 const apiOrigin = `https://${productionTopology.ingress.hostname}`;
 const healthyStatus = 200;
+const unauthorizedStatus = 401;
 const probes = [
   { method: "GET", path: "/health", expectedStatus: healthyStatus, headers: {} },
   { method: "GET", path: "/categories", expectedStatus: 401, headers: {} },
@@ -21,6 +23,20 @@ const probes = [
   },
   { method: "POST", path: "/providers/wompi/billing-events", expectedStatus: 400, headers: {} },
   { method: "POST", path: "/web/hosted-turns", expectedStatus: 403, headers: {} },
+  { method: "GET", path: oauthPaths.resource, expectedStatus: 200, headers: {} },
+  { method: "GET", path: oauthPaths.issuer, expectedStatus: 200, headers: {} },
+  { method: "GET", path: oauthPaths.authorize, expectedStatus: 400, headers: {} },
+  { method: "POST", path: oauthPaths.register, expectedStatus: 400, headers: {} },
+  { method: "POST", path: oauthPaths.token, expectedStatus: 400, headers: {} },
+  { method: "GET", path: oauthPaths.review, expectedStatus: 403, headers: {} },
+  { method: "POST", path: oauthPaths.connect, expectedStatus: 403, headers: {} },
+  { method: "GET", path: oauthPaths.mcp, expectedStatus: 401, headers: {} },
+  {
+    method: "GET",
+    path: oauthPaths.mcp,
+    expectedStatus: 403,
+    headers: { origin: "https://untrusted.invalid" },
+  },
 ] as const;
 
 type EdgeResponse = Readonly<{ status: number; headers: Headers }>;
@@ -57,6 +73,7 @@ export const verifyEdgeSmoke = <E, R>({
       }).pipe(Effect.mapError(() => new EdgeSmokeFailure({ path: entry.path })));
       if (
         !isExpectedResponse(response, entry.expectedStatus) ||
+        !hasExpectedChallenge(response, entry.path, entry.expectedStatus) ||
         !candidateResponseMatches(response, entry.path, candidate)
       ) {
         return yield* new EdgeSmokeFailure({ path: entry.path });
@@ -64,6 +81,12 @@ export const verifyEdgeSmoke = <E, R>({
     }
     if (Option.isSome(candidate)) yield* verifyCandidateHealth(probe, candidate.value);
   });
+
+const hasExpectedChallenge = (response: EdgeResponse, path: string, status: number): boolean =>
+  path !== oauthPaths.mcp ||
+  status !== unauthorizedStatus ||
+  response.headers.get("www-authenticate") ===
+    `Bearer resource_metadata="${apiOrigin}${oauthPaths.resource}", scope="read"`;
 
 const candidateResponseMatches = (
   response: EdgeResponse,
@@ -99,6 +122,8 @@ const verifyCandidateHealth = <E, R>(
 const isExpectedResponse = (response: EdgeResponse, status: number): boolean =>
   response.status === status &&
   response.headers.get("cf-mitigated") === null &&
+  response.headers.get("access-control-allow-origin") === null &&
+  response.headers.get("access-control-allow-credentials") === null &&
   Object.entries({
     "cache-control": "no-store",
     "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
@@ -120,7 +145,7 @@ export const productionProbe = ({
     const client = yield* HttpClient.HttpClient;
     const request =
       method === "GET"
-        ? HttpClientRequest.get(`${apiOrigin}${path}`)
+        ? HttpClientRequest.get(`${apiOrigin}${path}`, { headers })
         : HttpClientRequest.post(`${apiOrigin}${path}`, {
             headers: { "content-type": "application/json", ...headers },
             body: HttpBody.text("{}", "application/json"),

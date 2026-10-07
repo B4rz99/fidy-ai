@@ -17,10 +17,12 @@ const PendingAttempt = Schema.Struct({
   expires_at_ms: Schema.Int,
 });
 
-export const readInitiationResult = (
-  db: D1Database,
-  userId: string
-): Effect.Effect<Option.Option<CommittedMutationValue>> =>
+export const readInitiationResult = ({
+  db,
+  userId,
+}: Readonly<{ db: D1Database; userId: string }>): Effect.Effect<
+  Option.Option<CommittedMutationValue>
+> =>
   Effect.gen(function* () {
     const raw = yield* Effect.tryPromise(() =>
       db

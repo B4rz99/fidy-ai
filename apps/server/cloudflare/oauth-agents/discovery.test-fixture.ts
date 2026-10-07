@@ -5,6 +5,9 @@ export const readDiscovery: ReadonlyArray<string> = [
   "budgets.listBudgets",
   "categories.listCategories",
   "categories.listKeywordRules",
+  "connections.getConnection",
+  "connections.listConnections",
+  "connections.listInstitutions",
   "dashboard.getDashboard",
   "dashboard.getDashboardView",
   "dashboard.listDashboardCatalog",
@@ -27,6 +30,7 @@ export const readDiscovery: ReadonlyArray<string> = [
 const ordinaryWriteDiscovery = [
   "budgets.createBudget",
   "categories.createKeywordRule",
+  "connections.connectInstitution",
   "ingestion.enableEmailForwarding",
   "memory.remember",
   "transactions.createTransaction",

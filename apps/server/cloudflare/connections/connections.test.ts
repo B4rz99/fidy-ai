@@ -28,10 +28,13 @@ const digest = (text: string): Promise<Uint8Array> =>
     .digest("SHA-256", new TextEncoder().encode(text))
     .then((value) => new Uint8Array(value));
 // The Miniflare fixture owns foreign Promise APIs, not application workflow.
-
 const seedUser = (
   db: D1Database,
-  input: Readonly<{ user: string; index: number; current: number }>
+  input: Readonly<{
+    user: string;
+    index: number;
+    current: number;
+  }>
 ): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
     const { user, index, current } = input;
@@ -73,7 +76,6 @@ const seedUser = (
       ])
     );
   });
-
 const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
   Effect.gen(function* () {
     const db = yield* Effect.tryPromise(() => databases.acquire());
@@ -214,180 +216,230 @@ const request = (
         }
   );
 };
-
-it("discovers Bancolombia as unavailable without creating a Connection or exposing institution plumbing", async () => {
-  const db = await Effect.runPromise(setup());
-  const response = await send(db, request(0, "/institutions"));
-  expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({
-    data: [
-      {
-        id: "bancolombia",
-        displayName: "Bancolombia",
-        availability: "unavailable",
-        connection: null,
-      },
-    ],
-    next: [],
-  });
-  const list = await send(db, request(0, "/connections"));
-  expect(list.status).toBe(200);
-  expect(await list.json()).toEqual({ data: [], next: [] });
-});
-
-it("starts a stable Connecting association and reuses its original browser attempt", async () => {
-  const db = await Effect.runPromise(setup());
-  await db
-    .prepare(
-      "UPDATE connection_institution_gate SET enabled = 1 WHERE institution_id = 'bancolombia'"
-    )
-    .run();
-  const first = await send(
-    db,
-    request(0, "/connections", "POST", { institutionId: "bancolombia" })
-  );
-  expect(first.status).toBe(200);
-  const started = await first.json();
-  expect(started).toMatchObject({
-    data: {
-      type: "continue_in_browser",
-      connection: { institutionId: "bancolombia", state: "Connecting" },
-    },
-  });
-  const repeated = await send(
-    db,
-    request(0, "/connections", "POST", { institutionId: "bancolombia" })
-  );
-  expect(repeated.status).toBe(200);
-  expect(await repeated.json()).toEqual(started);
-  const listed = await send(db, request(0, "/connections"));
-  expect(await listed.json()).toMatchObject({
-    data: [{ institutionId: "bancolombia", state: "Connecting" }],
-  });
-});
-
-const start = async (db: D1Database, index = 0): Promise<ConnectInstitutionResult> => {
-  const response = await send(
-    db,
-    request(index, "/connections", "POST", { institutionId: "bancolombia" })
-  );
-  expect(response.status).toBe(200);
-  return Schema.decodeUnknownSync(
-    Schema.Struct({
-      data: Schema.toCodecJson(ConnectInstitutionResult),
-      next: Schema.Array(Schema.Unknown),
+it("discovers Bancolombia as unavailable without creating a Connection or exposing institution plumbing", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      const response = yield* Effect.tryPromise(() => send(db, request(0, "/institutions")));
+      expect(response.status).toBe(200);
+      expect(yield* Effect.tryPromise(() => response.json())).toEqual({
+        data: [
+          {
+            id: "bancolombia",
+            displayName: "Bancolombia",
+            availability: "unavailable",
+            connection: null,
+          },
+        ],
+        next: [],
+      });
+      const list = yield* Effect.tryPromise(() => send(db, request(0, "/connections")));
+      expect(list.status).toBe(200);
+      expect(yield* Effect.tryPromise(() => list.json())).toEqual({ data: [], next: [] });
     })
-  )(await response.json()).data;
-};
-
-it("replaces an attempt at its exact expiry without changing stable Connection identity", async () => {
-  const db = await Effect.runPromise(setup());
-  await db.prepare("UPDATE connection_institution_gate SET enabled = 1").run();
-  const first = await start(db);
-  if (first.type !== "continue_in_browser") throw new Error("Expected browser continuation");
-  vi.setSystemTime(first.continuation.expiresAt.epochMilliseconds - 1000);
-  const replacement = await start(db);
-  if (replacement.type !== "continue_in_browser") throw new Error("Expected browser continuation");
-  expect(replacement.connection.id).toBe(first.connection.id);
-  expect(replacement.continuation.url).not.toBe(first.continuation.url);
-  expect(replacement.continuation.expiresAt.epochMilliseconds).toBe(
-    first.continuation.expiresAt.epochMilliseconds + 600000
-  );
-  expect(
-    await db.prepare("SELECT status FROM connection_attempts ORDER BY created_at_ms").all()
-  ).toMatchObject({ results: [{ status: "invalidated" }, { status: "pending" }] });
-});
-
-it("keeps one stable identity under concurrent starts and isolates another User", async () => {
-  const db = await Effect.runPromise(setup());
-  await db.prepare("UPDATE connection_institution_gate SET enabled = 1").run();
-  const starts = await Promise.all(
-    Array.from({ length: 3 }, () =>
-      send(db, request(0, "/connections", "POST", { institutionId: "bancolombia" }))
-    )
-  );
-  expect(starts.some((response) => response.status === 200)).toBe(true);
-  expect(starts.every((response) => response.status === 200 || response.status === 429)).toBe(true);
-  const successes = await Promise.all(
-    starts
-      .filter((response) => response.status === 200)
-      .map(
-        async (response) =>
-          Schema.decodeUnknownSync(
-            Schema.Struct({
-              data: Schema.toCodecJson(ConnectInstitutionResult),
-              next: Schema.Array(Schema.Unknown),
-            })
-          )(await response.json()).data
-      )
-  );
-  const owned = await start(db);
-  expect(successes.every((value) => value.connection.id === owned.connection.id)).toBe(true);
-  const foreign = await send(db, request(1, `/connections/${owned.connection.id}`));
-  expect(foreign.status).toBe(404);
-  expect(await foreign.json()).toMatchObject({ error: { code: "not_found" } });
-  const foreignList = await send(db, request(1, "/connections"));
-  expect(await foreignList.json()).toEqual({ data: [], next: [] });
-  const second = await start(db, 1);
-  expect(second.connection.id).not.toBe(owned.connection.id);
-  const original = await send(db, request(0, `/connections/${owned.connection.id}`));
-  expect(await original.json()).toEqual({ data: owned.connection, next: [] });
-  const ownInstitutions = await send(db, request(0, "/institutions"));
-  expect(await ownInstitutions.json()).toEqual({
-    data: [
-      {
-        id: "bancolombia",
-        displayName: "Bancolombia",
-        availability: "available",
-        connection: { id: owned.connection.id, state: "Connecting" },
-      },
-    ],
-    next: [],
+  ));
+it("starts a stable Connecting association and reuses its original browser attempt", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "UPDATE connection_institution_gate SET enabled = 1 WHERE institution_id = 'bancolombia'"
+          )
+          .run()
+      );
+      const first = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/connections", "POST", { institutionId: "bancolombia" }))
+      );
+      expect(first.status).toBe(200);
+      const started = yield* Effect.tryPromise(() => first.json());
+      expect(started).toMatchObject({
+        data: {
+          type: "continue_in_browser",
+          connection: { institutionId: "bancolombia", state: "Connecting" },
+        },
+      });
+      const repeated = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/connections", "POST", { institutionId: "bancolombia" }))
+      );
+      expect(repeated.status).toBe(200);
+      expect(yield* Effect.tryPromise(() => repeated.json())).toEqual(started);
+      const listed = yield* Effect.tryPromise(() => send(db, request(0, "/connections")));
+      expect(yield* Effect.tryPromise(() => listed.json())).toMatchObject({
+        data: [{ institutionId: "bancolombia", state: "Connecting" }],
+      });
+    })
+  ));
+const decodeStartResponse = (
+  response: Response
+): Effect.Effect<ConnectInstitutionResult, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const data = yield* Effect.tryPromise(() => response.json());
+    return (yield* Schema.decodeUnknownEffect(
+      Schema.Struct({
+        data: Schema.toCodecJson(ConnectInstitutionResult),
+        next: Schema.Array(Schema.Unknown),
+      })
+    )(data)).data;
   });
-});
 
+const start = (db: D1Database, index = 0): Promise<ConnectInstitutionResult> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const response = yield* Effect.tryPromise(() =>
+        send(db, request(index, "/connections", "POST", { institutionId: "bancolombia" }))
+      );
+      expect(response.status).toBe(200);
+      return (yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          data: Schema.toCodecJson(ConnectInstitutionResult),
+          next: Schema.Array(Schema.Unknown),
+        })
+      )(yield* Effect.tryPromise(() => response.json()))).data;
+    })
+  );
+it("replaces an attempt at its exact expiry without changing stable Connection identity", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
+      );
+      const first = yield* Effect.tryPromise(() => start(db));
+      if (first.type !== "continue_in_browser") throw new Error("Expected browser continuation");
+      vi.setSystemTime(first.continuation.expiresAt.epochMilliseconds - 1000);
+      const replacement = yield* Effect.tryPromise(() => start(db));
+      if (replacement.type !== "continue_in_browser") {
+        throw new Error("Expected browser continuation");
+      }
+      expect(replacement.connection.id).toBe(first.connection.id);
+      expect(replacement.continuation.url).not.toBe(first.continuation.url);
+      expect(replacement.continuation.expiresAt.epochMilliseconds).toBe(
+        first.continuation.expiresAt.epochMilliseconds + 600000
+      );
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT status FROM connection_attempts ORDER BY created_at_ms").all()
+        )
+      ).toMatchObject({ results: [{ status: "invalidated" }, { status: "pending" }] });
+    })
+  ));
+it("keeps one stable identity under concurrent starts and isolates another User", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
+      );
+      const starts = yield* Effect.tryPromise(() =>
+        Promise.all(
+          Array.from({ length: 3 }, () =>
+            send(db, request(0, "/connections", "POST", { institutionId: "bancolombia" }))
+          )
+        )
+      );
+      expect(starts.some((response) => response.status === 200)).toBe(true);
+      expect(starts.every((response) => response.status === 200 || response.status === 429)).toBe(
+        true
+      );
+      const successes = yield* Effect.forEach(
+        starts.filter((response) => response.status === 200),
+        decodeStartResponse
+      );
+      const owned = yield* Effect.tryPromise(() => start(db));
+      expect(successes.every((value) => value.connection.id === owned.connection.id)).toBe(true);
+      const foreign = yield* Effect.tryPromise(() =>
+        send(db, request(1, `/connections/${owned.connection.id}`))
+      );
+      expect(foreign.status).toBe(404);
+      expect(yield* Effect.tryPromise(() => foreign.json())).toMatchObject({
+        error: { code: "not_found" },
+      });
+      const foreignList = yield* Effect.tryPromise(() => send(db, request(1, "/connections")));
+      expect(yield* Effect.tryPromise(() => foreignList.json())).toEqual({ data: [], next: [] });
+      const second = yield* Effect.tryPromise(() => start(db, 1));
+      expect(second.connection.id).not.toBe(owned.connection.id);
+      const original = yield* Effect.tryPromise(() =>
+        send(db, request(0, `/connections/${owned.connection.id}`))
+      );
+      expect(yield* Effect.tryPromise(() => original.json())).toEqual({
+        data: owned.connection,
+        next: [],
+      });
+      const ownInstitutions = yield* Effect.tryPromise(() => send(db, request(0, "/institutions")));
+      expect(yield* Effect.tryPromise(() => ownInstitutions.json())).toEqual({
+        data: [
+          {
+            id: "bancolombia",
+            displayName: "Bancolombia",
+            availability: "available",
+            connection: { id: owned.connection.id, state: "Connecting" },
+          },
+        ],
+        next: [],
+      });
+    })
+  ));
 it.each([
   ["bancolombia", 400],
   ["unknown", 404],
 ] as const)(
   "refuses unavailable institution %s without creating either lifecycle row",
-  async (institutionId, status) => {
-    const db = await Effect.runPromise(setup());
-    const response = await send(db, request(0, "/connections", "POST", { institutionId }));
-    expect(response.status).toBe(status);
-    expect(await response.json()).toMatchObject({ error: { message: "Institution unavailable." } });
-    const list = await send(db, request(0, "/connections"));
-    expect(await list.json()).toEqual({ data: [], next: [] });
-    expect(await db.prepare("SELECT id FROM connection_attempts").all()).toMatchObject({
-      results: [],
-    });
-  }
-);
-
-it("returns an Active association without starting another attempt", async () => {
-  const db = await Effect.runPromise(setup());
-  await db.prepare("UPDATE connection_institution_gate SET enabled = 1").run();
-  const original = await start(db);
-  // Trusted authorization fixture models the later browser owner; initiation cannot activate.
-  await db
-    .prepare(
-      "UPDATE connection_attempts SET status = 'consumed', consumed_at_ms = ? WHERE user_id = ? AND status = 'pending'"
+  (institutionId, status) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        const response = yield* Effect.tryPromise(() =>
+          send(db, request(0, "/connections", "POST", { institutionId }))
+        );
+        expect(response.status).toBe(status);
+        expect(yield* Effect.tryPromise(() => response.json())).toMatchObject({
+          error: { message: "Institution unavailable." },
+        });
+        const list = yield* Effect.tryPromise(() => send(db, request(0, "/connections")));
+        expect(yield* Effect.tryPromise(() => list.json())).toEqual({ data: [], next: [] });
+        expect(
+          yield* Effect.tryPromise(() => db.prepare("SELECT id FROM connection_attempts").all())
+        ).toMatchObject({
+          results: [],
+        });
+      })
     )
-    .bind(DateTime.nowUnsafe().epochMilliseconds, users[0])
-    .run();
-  await db
-    .prepare("UPDATE connections SET state = 'Active' WHERE user_id = ?")
-    .bind(users[0])
-    .run();
-  expect(await start(db)).toEqual({
-    type: "already_connected",
-    connection: { ...original.connection, state: "Active" },
-  });
-});
-
+);
+it("returns an Active association without starting another attempt", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
+      );
+      const original = yield* Effect.tryPromise(() => start(db));
+      // Trusted authorization fixture models the later browser owner; initiation cannot activate.
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "UPDATE connection_attempts SET status = 'consumed', consumed_at_ms = ? WHERE user_id = ? AND status = 'pending'"
+          )
+          .bind(DateTime.nowUnsafe().epochMilliseconds, users[0])
+          .run()
+      );
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE connections SET state = 'Active' WHERE user_id = ?").bind(users[0]).run()
+      );
+      expect(yield* Effect.tryPromise(() => start(db))).toEqual({
+        type: "already_connected",
+        connection: { ...original.connection, state: "Active" },
+      });
+    })
+  ));
 const seedPAT = (
   db: D1Database,
-  input: Readonly<{ token: string; scope: "read" | "write"; id: string }>
+  input: Readonly<{
+    token: string;
+    scope: "read" | "write";
+    id: string;
+  }>
 ): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> =>
   Effect.gen(function* () {
     const { token, scope, id } = input;
@@ -415,235 +467,307 @@ const seedPAT = (
         .run()
     );
   });
-
-it("uses read and write capabilities from the shared authorization algebra", async () => {
-  const db = await Effect.runPromise(setup());
-  await db.prepare("UPDATE connection_institution_gate SET enabled = 1").run();
-  const readToken = `fin_${"r".repeat(8)}_${"a".repeat(43)}`;
-  const writeToken = `fin_${"w".repeat(8)}_${"b".repeat(43)}`;
-  await Effect.runPromise(
-    seedPAT(db, { token: readToken, scope: "read", id: "10000000-0000-4000-8000-000000000081" })
-  );
-  await Effect.runPromise(
-    seedPAT(db, { token: writeToken, scope: "write", id: "10000000-0000-4000-8000-000000000082" })
-  );
-  const asPAT = (
-    token: string,
-    path: string,
-    ...args: [method?: string, body?: object]
-  ): Request => {
-    const [method = "GET", body = {}] = args;
-    const value = request(0, path, method, method === "GET" ? undefined : body);
-    value.headers.delete("cookie");
-    value.headers.set("authorization", `Bearer ${token}`);
-    return value;
-  };
-  const deniedStart = await send(
-    db,
-    asPAT(readToken, "/connections", "POST", { institutionId: "bancolombia" })
-  );
-  expect(deniedStart.status).toBe(403);
-  const allowedRead = await send(db, asPAT(readToken, "/institutions"));
-  expect(allowedRead.status).toBe(200);
-  const deniedRead = await send(db, asPAT(writeToken, "/connections"));
-  expect(deniedRead.status).toBe(403);
-  const allowedStart = await send(
-    db,
-    asPAT(writeToken, "/connections", "POST", { institutionId: "bancolombia" })
-  );
-  expect(allowedStart.status).toBe(200);
-  expect(await allowedStart.json()).toMatchObject({ data: { type: "continue_in_browser" } });
-  await db
-    .prepare("UPDATE pats SET revoked_at_ms = ? WHERE id = ?")
-    .bind(DateTime.nowUnsafe().epochMilliseconds, "10000000-0000-4000-8000-000000000082")
-    .run();
-  const revoked = await send(
-    db,
-    asPAT(writeToken, "/connections", "POST", { institutionId: "bancolombia" })
-  );
-  expect(revoked.status).toBe(401);
-});
-
-it("rolls back Connection, attempt and success Audit when the final evidence write fails", async () => {
-  const db = await Effect.runPromise(setup());
-  await db.prepare("UPDATE connection_institution_gate SET enabled = 1").run();
-  await db
-    .prepare(
-      "CREATE TRIGGER refuse_connection_audit BEFORE INSERT ON pat_audit WHEN NEW.operation = 'connections.connectInstitution' AND NEW.outcome = 'accepted' BEGIN SELECT RAISE(ABORT, 'fixture_evidence_unavailable'); END"
-    )
-    .run();
-  const response = await send(
-    db,
-    request(0, "/connections", "POST", { institutionId: "bancolombia" })
-  );
-  expect(response.status).toBe(503);
-  const listed = await send(db, request(0, "/connections"));
-  expect(await listed.json()).toEqual({ data: [], next: [] });
-  expect(await db.prepare("SELECT id FROM connection_attempts").all()).toMatchObject({
-    results: [],
-  });
-  expect(
-    await db
-      .prepare(
-        "SELECT id FROM pat_audit WHERE operation = 'connections.connectInstitution' AND outcome = 'accepted'"
-      )
-      .all()
-  ).toMatchObject({ results: [] });
-});
-
-it("composes a Connection start in the canonical atomic batch and refuses duplicate targets before commit", async () => {
-  const db = await Effect.runPromise(setup());
-  await db.prepare("UPDATE connection_institution_gate SET enabled = 1").run();
-  const call = (index: number): object => ({
-    callId: `20000000-0000-4000-8000-00000000000${index}`,
-    operation: "connections.connectInstitution",
-    input: { payload: { institutionId: "bancolombia" } },
-  });
-  const refused = await send(
-    db,
-    request(0, "/operations/atomic-batch", "POST", { calls: [call(1), call(2)] })
-  );
-  expect(refused.status).toBe(400);
-  const listed = await send(db, request(0, "/connections"));
-  expect(await listed.json()).toEqual({ data: [], next: [] });
-  const accepted = await send(
-    db,
-    request(0, "/operations/atomic-batch", "POST", { calls: [call(1)] })
-  );
-  expect(accepted.status).toBe(200);
-  expect(await accepted.json()).toMatchObject({
-    data: {
-      results: [
-        {
-          operation: "connections.connectInstitution",
-          output: { data: { type: "continue_in_browser" } },
+it("uses read and write capabilities from the shared authorization algebra", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
+      );
+      const readToken = `fin_${"r".repeat(8)}_${"a".repeat(43)}`;
+      const writeToken = `fin_${"w".repeat(8)}_${"b".repeat(43)}`;
+      yield* seedPAT(db, {
+        token: readToken,
+        scope: "read",
+        id: "10000000-0000-4000-8000-000000000081",
+      });
+      yield* seedPAT(db, {
+        token: writeToken,
+        scope: "write",
+        id: "10000000-0000-4000-8000-000000000082",
+      });
+      const asPAT = (
+        token: string,
+        path: string,
+        ...args: [method?: string, body?: object]
+      ): Request => {
+        const [method = "GET", body = {}] = args;
+        const value = request(0, path, method, method === "GET" ? undefined : body);
+        value.headers.delete("cookie");
+        value.headers.set("authorization", `Bearer ${token}`);
+        return value;
+      };
+      const deniedStart = yield* Effect.tryPromise(() =>
+        send(db, asPAT(readToken, "/connections", "POST", { institutionId: "bancolombia" }))
+      );
+      expect(deniedStart.status).toBe(403);
+      const allowedRead = yield* Effect.tryPromise(() =>
+        send(db, asPAT(readToken, "/institutions"))
+      );
+      expect(allowedRead.status).toBe(200);
+      const deniedRead = yield* Effect.tryPromise(() =>
+        send(db, asPAT(writeToken, "/connections"))
+      );
+      expect(deniedRead.status).toBe(403);
+      const allowedStart = yield* Effect.tryPromise(() =>
+        send(db, asPAT(writeToken, "/connections", "POST", { institutionId: "bancolombia" }))
+      );
+      expect(allowedStart.status).toBe(200);
+      expect(yield* Effect.tryPromise(() => allowedStart.json())).toMatchObject({
+        data: { type: "continue_in_browser" },
+      });
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("UPDATE pats SET revoked_at_ms = ? WHERE id = ?")
+          .bind(DateTime.nowUnsafe().epochMilliseconds, "10000000-0000-4000-8000-000000000082")
+          .run()
+      );
+      const revoked = yield* Effect.tryPromise(() =>
+        send(db, asPAT(writeToken, "/connections", "POST", { institutionId: "bancolombia" }))
+      );
+      expect(revoked.status).toBe(401);
+    })
+  ));
+it("rolls back Connection, attempt and success Audit when the final evidence write fails", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
+      );
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TRIGGER refuse_connection_audit BEFORE INSERT ON pat_audit WHEN NEW.operation = 'connections.connectInstitution' AND NEW.outcome = 'accepted' BEGIN SELECT RAISE(ABORT, 'fixture_evidence_unavailable'); END"
+          )
+          .run()
+      );
+      const response = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/connections", "POST", { institutionId: "bancolombia" }))
+      );
+      expect(response.status).toBe(503);
+      const listed = yield* Effect.tryPromise(() => send(db, request(0, "/connections")));
+      expect(yield* Effect.tryPromise(() => listed.json())).toEqual({ data: [], next: [] });
+      expect(
+        yield* Effect.tryPromise(() => db.prepare("SELECT id FROM connection_attempts").all())
+      ).toMatchObject({
+        results: [],
+      });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT id FROM pat_audit WHERE operation = 'connections.connectInstitution' AND outcome = 'accepted'"
+            )
+            .all()
+        )
+      ).toMatchObject({ results: [] });
+    })
+  ));
+it("composes a Connection start in the canonical atomic batch and refuses duplicate targets before commit", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
+      );
+      const call = (index: number): object => ({
+        callId: `20000000-0000-4000-8000-00000000000${index}`,
+        operation: "connections.connectInstitution",
+        input: { payload: { institutionId: "bancolombia" } },
+      });
+      const refused = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/operations/atomic-batch", "POST", { calls: [call(1), call(2)] }))
+      );
+      expect(refused.status).toBe(400);
+      const listed = yield* Effect.tryPromise(() => send(db, request(0, "/connections")));
+      expect(yield* Effect.tryPromise(() => listed.json())).toEqual({ data: [], next: [] });
+      const accepted = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/operations/atomic-batch", "POST", { calls: [call(1)] }))
+      );
+      expect(accepted.status).toBe(200);
+      expect(yield* Effect.tryPromise(() => accepted.json())).toMatchObject({
+        data: {
+          results: [
+            {
+              operation: "connections.connectInstitution",
+              output: { data: { type: "continue_in_browser" } },
+            },
+          ],
         },
-      ],
-    },
-  });
-});
-
-it("persists immutable expiry, same-User ownership, and terminal single-use attempt state", async () => {
-  const db = await Effect.runPromise(setup());
-  await db.prepare("UPDATE connection_institution_gate SET enabled = 1").run();
-  const started = await start(db);
-  await expect(
-    db.prepare("UPDATE connection_attempts SET expires_at_ms = expires_at_ms + 1").run()
-  ).rejects.toThrow();
-  await expect(
-    db.prepare("UPDATE connection_attempts SET user_id = ?").bind(users[1]).run()
-  ).rejects.toThrow();
-  await expect(
-    db
-      .prepare("UPDATE connection_attempts SET status = 'consumed', consumed_at_ms = expires_at_ms")
-      .run()
-  ).rejects.toThrow();
-  await db
-    .prepare("UPDATE connection_attempts SET status = 'consumed', consumed_at_ms = ?")
-    .bind(DateTime.nowUnsafe().epochMilliseconds)
-    .run();
-  await expect(
-    db.prepare("UPDATE connection_attempts SET status = 'pending', consumed_at_ms = NULL").run()
-  ).rejects.toThrow();
-  await expect(
-    db
-      .prepare("UPDATE connection_attempts SET status = 'consumed', consumed_at_ms = ?")
-      .bind(DateTime.nowUnsafe().epochMilliseconds + 1)
-      .run()
-  ).rejects.toThrow();
-  await expect(
-    db
-      .prepare(
-        "INSERT INTO connections (id,user_id,institution_id,state,created_at_ms,updated_at_ms) VALUES ('10000000-0000-4000-8000-000000000091',?,'bancolombia','Connecting',?,?)"
-      )
-      .bind(
-        users[0],
-        DateTime.nowUnsafe().epochMilliseconds,
-        DateTime.nowUnsafe().epochMilliseconds
-      )
-      .run()
-  ).rejects.toThrow();
-  const next = await start(db);
-  expect(next.connection.id).toBe(started.connection.id);
-  if (next.type !== "continue_in_browser" || started.type !== "continue_in_browser") {
-    throw new Error("Expected browser continuations");
-  }
-  expect(next.continuation.url).not.toBe(started.continuation.url);
-});
-
+      });
+    })
+  ));
+it("persists immutable expiry, same-User ownership, and terminal single-use attempt state", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
+      );
+      const started = yield* Effect.tryPromise(() => start(db));
+      yield* Effect.tryPromise(() =>
+        expect(
+          db.prepare("UPDATE connection_attempts SET expires_at_ms = expires_at_ms + 1").run()
+        ).rejects.toThrow()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          db.prepare("UPDATE connection_attempts SET user_id = ?").bind(users[1]).run()
+        ).rejects.toThrow()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          db
+            .prepare(
+              "UPDATE connection_attempts SET status = 'consumed', consumed_at_ms = expires_at_ms"
+            )
+            .run()
+        ).rejects.toThrow()
+      );
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("UPDATE connection_attempts SET status = 'consumed', consumed_at_ms = ?")
+          .bind(DateTime.nowUnsafe().epochMilliseconds)
+          .run()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          db
+            .prepare("UPDATE connection_attempts SET status = 'pending', consumed_at_ms = NULL")
+            .run()
+        ).rejects.toThrow()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          db
+            .prepare("UPDATE connection_attempts SET status = 'consumed', consumed_at_ms = ?")
+            .bind(DateTime.nowUnsafe().epochMilliseconds + 1)
+            .run()
+        ).rejects.toThrow()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          db
+            .prepare(
+              "INSERT INTO connections (id,user_id,institution_id,state,created_at_ms,updated_at_ms) VALUES ('10000000-0000-4000-8000-000000000091',?,'bancolombia','Connecting',?,?)"
+            )
+            .bind(
+              users[0],
+              DateTime.nowUnsafe().epochMilliseconds,
+              DateTime.nowUnsafe().epochMilliseconds
+            )
+            .run()
+        ).rejects.toThrow()
+      );
+      const next = yield* Effect.tryPromise(() => start(db));
+      expect(next.connection.id).toBe(started.connection.id);
+      if (next.type !== "continue_in_browser" || started.type !== "continue_in_browser") {
+        throw new Error("Expected browser continuations");
+      }
+      expect(next.continuation.url).not.toBe(started.continuation.url);
+    })
+  ));
 it.each(["Action required", "Ended"] as const)(
   "starts a fresh %s reauthorization attempt with the same identity",
-  async (state) => {
-    const db = await Effect.runPromise(setup());
-    await db.prepare("UPDATE connection_institution_gate SET enabled = 1").run();
-    const original = await start(db);
-    await db
-      .prepare("UPDATE connections SET state = ? WHERE user_id = ?")
-      .bind(state, users[0])
-      .run();
-    const next = await start(db);
-    expect(next.connection.id).toBe(original.connection.id);
-    if (next.type !== "continue_in_browser" || original.type !== "continue_in_browser") {
-      throw new Error("Expected browser continuations");
-    }
-    expect(next.continuation.url).not.toBe(original.continuation.url);
-  }
+  (state) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        yield* Effect.tryPromise(() =>
+          db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
+        );
+        const original = yield* Effect.tryPromise(() => start(db));
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("UPDATE connections SET state = ? WHERE user_id = ?")
+            .bind(state, users[0])
+            .run()
+        );
+        const next = yield* Effect.tryPromise(() => start(db));
+        expect(next.connection.id).toBe(original.connection.id);
+        if (next.type !== "continue_in_browser" || original.type !== "continue_in_browser") {
+          throw new Error("Expected browser continuations");
+        }
+        expect(next.continuation.url).not.toBe(original.continuation.url);
+      })
+    )
 );
-
-it("refuses malformed and cross-origin starts before any lifecycle effect", async () => {
-  const db = await Effect.runPromise(setup());
-  await db.prepare("UPDATE connection_institution_gate SET enabled = 1").run();
-  const malformed = await send(
-    db,
-    request(0, "/connections", "POST", { institutionId: "../bancolombia" })
-  );
-  expect(malformed.status).toBe(400);
-  const crossOrigin = request(0, "/connections", "POST", { institutionId: "bancolombia" });
-  crossOrigin.headers.set("origin", "https://attacker.example");
-  expect((await send(db, crossOrigin)).status).toBe(403);
-  const anonymous = request(0, "/connections");
-  anonymous.headers.delete("cookie");
-  expect((await send(db, anonymous)).status).toBe(401);
-  const list = await send(db, request(0, "/connections"));
-  expect(await list.json()).toEqual({ data: [], next: [] });
-});
-
-it("counts browser inspection and initiation against the same shared Audit budget", async () => {
-  const db = await Effect.runPromise(setup());
-  await db.prepare("UPDATE connection_institution_gate SET enabled = 1").run();
-  await db
-    .prepare(`INSERT INTO pat_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
+it("refuses malformed and cross-origin starts before any lifecycle effect", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
+      );
+      const malformed = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/connections", "POST", { institutionId: "../bancolombia" }))
+      );
+      expect(malformed.status).toBe(400);
+      const crossOrigin = request(0, "/connections", "POST", { institutionId: "bancolombia" });
+      crossOrigin.headers.set("origin", "https://attacker.example");
+      expect((yield* Effect.tryPromise(() => send(db, crossOrigin))).status).toBe(403);
+      const anonymous = request(0, "/connections");
+      anonymous.headers.delete("cookie");
+      expect((yield* Effect.tryPromise(() => send(db, anonymous))).status).toBe(401);
+      const list = yield* Effect.tryPromise(() => send(db, request(0, "/connections")));
+      expect(yield* Effect.tryPromise(() => list.json())).toEqual({ data: [], next: [] });
+    })
+  ));
+it("counts browser inspection and initiation against the same shared Audit budget", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
+      );
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(`INSERT INTO pat_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
     WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 255)
     SELECT 'connection-audit-' || n, ?, ?, 'connections.listConnections', 'accepted', ? FROM seq`)
-    .bind(users[0], sessions[0], DateTime.nowUnsafe().epochMilliseconds)
-    .run();
-  const inspection = await send(db, request(0, "/institutions"));
-  expect(inspection.status).toBe(200);
-  const denied = await send(
-    db,
-    request(0, "/connections", "POST", { institutionId: "bancolombia" })
-  );
-  expect(denied.status).toBe(429);
-  expect(await db.prepare("SELECT id FROM connections").all()).toMatchObject({ results: [] });
-  expect(await db.prepare("SELECT id FROM connection_attempts").all()).toMatchObject({
-    results: [],
-  });
-});
-
-it("removes expired attempts after their bounded retention while retaining the stable Connection", async () => {
-  const db = await Effect.runPromise(setup());
-  await db.prepare("UPDATE connection_institution_gate SET enabled = 1").run();
-  const original = await start(db);
-  if (original.type !== "continue_in_browser") throw new Error("Expected browser continuation");
-  vi.setSystemTime(original.continuation.expiresAt.epochMilliseconds + 86400000);
-  // A trusted returning-browser fixture keeps the live credential separate from expired attempt state.
-  await db
-    .prepare("UPDATE web_sessions SET idle_expires_at_ms = ? WHERE user_id = ?")
-    .bind(DateTime.nowUnsafe().epochMilliseconds + 3600000, users[0])
-    .run();
-  const returned = await start(db);
-  expect(returned.connection.id).toBe(original.connection.id);
-  expect(await db.prepare("SELECT status FROM connection_attempts").all()).toMatchObject({
-    results: [{ status: "pending" }],
-  });
-});
+          .bind(users[0], sessions[0], DateTime.nowUnsafe().epochMilliseconds)
+          .run()
+      );
+      const inspection = yield* Effect.tryPromise(() => send(db, request(0, "/institutions")));
+      expect(inspection.status).toBe(200);
+      const denied = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/connections", "POST", { institutionId: "bancolombia" }))
+      );
+      expect(denied.status).toBe(429);
+      expect(
+        yield* Effect.tryPromise(() => db.prepare("SELECT id FROM connections").all())
+      ).toMatchObject({ results: [] });
+      expect(
+        yield* Effect.tryPromise(() => db.prepare("SELECT id FROM connection_attempts").all())
+      ).toMatchObject({
+        results: [],
+      });
+    })
+  ));
+it("removes expired attempts after their bounded retention while retaining the stable Connection", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
+      );
+      const original = yield* Effect.tryPromise(() => start(db));
+      if (original.type !== "continue_in_browser") throw new Error("Expected browser continuation");
+      vi.setSystemTime(original.continuation.expiresAt.epochMilliseconds + 86400000);
+      // A trusted returning-browser fixture keeps the live credential separate from expired attempt state.
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare("UPDATE web_sessions SET idle_expires_at_ms = ? WHERE user_id = ?")
+          .bind(DateTime.nowUnsafe().epochMilliseconds + 3600000, users[0])
+          .run()
+      );
+      const returned = yield* Effect.tryPromise(() => start(db));
+      expect(returned.connection.id).toBe(original.connection.id);
+      expect(
+        yield* Effect.tryPromise(() => db.prepare("SELECT status FROM connection_attempts").all())
+      ).toMatchObject({
+        results: [{ status: "pending" }],
+      });
+    })
+  ));

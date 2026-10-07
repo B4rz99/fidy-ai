@@ -40,10 +40,13 @@ const operation = "connections.connectInstitution";
 const Gate = Schema.Struct({ enabled: Schema.Literals([0, 1]) });
 
 /** Decide and audit an initiation refusal under the caller's live authority. */
-export const connectionInputRefusal = (
-  work: CanonicalPreparationWork,
-  code: "not_found" | "validation_failed" = "validation_failed"
-): CanonicalMutationRefusal => ({
+export const connectionInputRefusal = ({
+  work,
+  code,
+}: Readonly<{
+  work: CanonicalPreparationWork;
+  code: "not_found" | "validation_failed";
+}>): CanonicalMutationRefusal => ({
   code,
   message: "Institution unavailable.",
   record: () =>
@@ -111,10 +114,16 @@ export const prepareConnectInstitution = (
       work.input
     );
     if (Option.isNone(input)) {
-      return { _tag: "Refused", refusal: connectionInputRefusal(work) } as const;
+      return {
+        _tag: "Refused",
+        refusal: connectionInputRefusal({ work, code: "validation_failed" }),
+      } as const;
     }
     if (input.value.payload.institutionId !== "bancolombia") {
-      return { _tag: "Refused", refusal: connectionInputRefusal(work, "not_found") } as const;
+      return {
+        _tag: "Refused",
+        refusal: connectionInputRefusal({ work, code: "not_found" }),
+      } as const;
     }
     const authority = callerAuthority(work);
     const raw = yield* Effect.tryPromise(() =>
@@ -128,7 +137,10 @@ export const prepareConnectInstitution = (
     if (raw === null) return { _tag: "CredentialRefused" } as const;
     const gate = yield* Schema.decodeUnknownEffect(Gate)(raw);
     if (gate.enabled === 0) {
-      return { _tag: "Refused", refusal: connectionInputRefusal(work) } as const;
+      return {
+        _tag: "Refused",
+        refusal: connectionInputRefusal({ work, code: "validation_failed" }),
+      } as const;
     }
     const prepared: CanonicalMutationPreparation = {
       _tag: "Prepared",
@@ -138,13 +150,14 @@ export const prepareConnectInstitution = (
         auditBudget: "shared",
         statements: initiationStatements(work),
         commitGuards: Option.none(),
-        guardRefusal: () => Effect.succeed(connectionInputRefusal(work)),
+        guardRefusal: () =>
+          Effect.succeed(connectionInputRefusal({ work, code: "validation_failed" })),
         outcome: {
           _tag: "Owner",
           operation,
           collisionKey: Option.some("connections:bancolombia"),
           guardFacts: Option.none(),
-          read: readInitiationResult,
+          read: (db, userId) => readInitiationResult({ db, userId }),
           triggerRefusal: (_work, kind) =>
             kind === "audit" ? Option.some(initiationAuditLimit()) : Option.none(),
         },

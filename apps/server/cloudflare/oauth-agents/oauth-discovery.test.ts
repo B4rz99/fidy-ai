@@ -244,6 +244,7 @@ const expectedQueryFailure = (id: string, peer: boolean): boolean =>
       "dashboard.getDashboard",
       "dashboard.getDashboardView",
       "budgets.getBudget",
+      "connections.getConnection",
       "transactions.getTransaction",
     ].includes(id));
 
@@ -300,6 +301,11 @@ it.each(userQueryCases)(
                 time,
                 time
               ),
+            fixture.db
+              .prepare(
+                "INSERT INTO connections (id,user_id,institution_id,state,created_at_ms,updated_at_ms) VALUES (?,?,'bancolombia','Connecting',1,1)"
+              )
+              .bind(resourceId, "10000000-0000-4000-8000-000000000001"),
             fixture.db
               .prepare("INSERT INTO budgets VALUES (?, ?, ?, 'COP', '9007199254740994', ?, ?)")
               .bind(

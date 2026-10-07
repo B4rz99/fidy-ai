@@ -258,7 +258,7 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
     {
       prepare: prepareConnectInstitution,
       present: present(HTTP_OK),
-      invalidRefusal: connectionInputRefusal,
+      invalidRefusal: (work) => connectionInputRefusal({ work, code: "validation_failed" }),
     },
   ],
   [

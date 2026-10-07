@@ -1,7 +1,7 @@
 import { Clock, Effect, Option, Schema } from "effect";
 import { PATActivity } from "../../../src/shell/tokens/contract";
 import { TokenShortId } from "../../../src/core/tokens/contract";
-import { preparePATActivityMetadata } from "../../../src/shell/tokens/operations";
+import { patIdentityQuery, preparePATActivityMetadata } from "../../../src/shell/tokens/operations";
 import {
   preparePATActivity,
   recordPATActivityQuery,
@@ -42,7 +42,8 @@ export const getHeldActivity = ({ db, ...read }: PATActivityRead): Effect.Effect
       },
     };
     const metadata = preparePATActivityMetadata(input);
-    const activity = preparePATActivity(input);
+    const auditInput = { ...input, grant: patIdentityQuery(input) };
+    const activity = preparePATActivity(auditInput);
     const results = yield* Effect.tryPromise({
       try: () =>
         db.batch([
@@ -50,7 +51,7 @@ export const getHeldActivity = ({ db, ...read }: PATActivityRead): Effect.Effect
           prepareOwnedStatement({ db, statement: activity.statement }),
           prepareOwnedStatement({
             db,
-            statement: recordPATActivityQuery({ ...input, id: newId() }),
+            statement: recordPATActivityQuery({ ...auditInput, id: newId() }),
           }),
         ]),
       catch: (error) =>

@@ -235,11 +235,11 @@ const ActivityRow = Schema.Struct({
   occurredAt: Schema.DateTimeUtcFromMillis,
 });
 
-/** Prepare a selected User-owned PAT's latest retained canonical outcomes under the exact live caller proof. Commit the read and its Audit together before disclosure. */
+/** Read bounded retained evidence using Tokens' same-User grant selection and the exact live caller proof. Commit the read and its Audit together before disclosure. */
 export const preparePATActivity = (
   input: Readonly<{
     userId: string;
-    shortId: string;
+    grant: OwnedStatement;
     current: number;
     authority: PATActivityAuthority;
   }>
@@ -251,11 +251,11 @@ export const preparePATActivity = (
   return {
     statement: {
       sql: `SELECT operation,outcome,occurred_at_ms AS occurredAt FROM pat_audit
-        WHERE user_id = ? AND pat_id = (SELECT id FROM pats WHERE user_id = ? AND short_id = ?)
+        WHERE user_id = ? AND pat_id = (${input.grant.sql})
         AND session_id IS NULL AND operation NOT LIKE 'pats.%' AND occurred_at_ms >= ?
         AND EXISTS (SELECT 1 FROM ${input.authority.table} WHERE ${input.authority.predicate})
         ORDER BY occurred_at_ms DESC, id DESC LIMIT ${maximumPATActivityEntries + 1}`,
-      params: [input.userId, input.userId, input.shortId, cutoff, ...input.authority.bindings],
+      params: [input.userId, ...input.grant.params, cutoff, ...input.authority.bindings],
     },
     decode: (raw) =>
       Effect.gen(function* () {
@@ -279,13 +279,13 @@ export const recordPATActivityQuery = (
   input: Readonly<{
     id: string;
     userId: string;
-    shortId: string;
+    grant: OwnedStatement;
     current: number;
     authority: PATActivityAuthority;
   }>
 ): OwnedStatement => ({
   sql: `INSERT INTO pat_audit (id,user_id,${input.authority.table === "hosted_turns" ? "hosted_turn_id" : "session_id"},operation,outcome,occurred_at_ms)
-    SELECT ?,user_id,id,'pats.getPATActivity',CASE WHEN EXISTS (SELECT 1 FROM pats WHERE user_id = ? AND short_id = ?) THEN 'accepted' ELSE 'rejected' END,?
+    SELECT ?,user_id,id,'pats.getPATActivity',CASE WHEN EXISTS (${input.grant.sql}) THEN 'accepted' ELSE 'rejected' END,?
     FROM ${input.authority.table} WHERE ${input.authority.predicate}`,
-  params: [input.id, input.userId, input.shortId, input.current, ...input.authority.bindings],
+  params: [input.id, ...input.grant.params, input.current, ...input.authority.bindings],
 });

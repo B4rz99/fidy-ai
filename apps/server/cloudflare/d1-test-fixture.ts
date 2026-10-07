@@ -202,7 +202,7 @@ export const canonicalAdmissionMigrationNames = (
       "0058_wallet_renewal",
       "0059_subscription_retries",
       "0060_subscription_cancellation",
-      "0061_pat_activity",
+      "0062_pat_activity",
       "0032_commercial_allowances",
       "0033_canonical_request_protection",
       "0034_forwarded_email_deferral",

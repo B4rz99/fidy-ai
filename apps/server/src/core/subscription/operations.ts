@@ -50,10 +50,37 @@ export const paidPeriodFor: {
   }
 );
 
-/** Derive the next adjacent week from the preceding paid boundary, never from provider delay. */
-export const weeklyRenewalPeriod = (
-  input: Readonly<{ timeZone: IanaTimeZone; previousEndsAt: DateTime.Utc }>
-): Effect.Effect<PaidPeriodWindow> => paidPeriodFor("weekly", input.timeZone, input.previousEndsAt);
+/**
+ * Advances one adjacent calendar period from its paid boundary. originalStartsAt is the first
+ * paid period's start and preserves its local day and time through month-end and leap-day clamps.
+ * Delayed execution never skips periods or moves the original calendar anchor.
+ */
+export const renewalPeriod = (
+  input: Readonly<{
+    billingPeriod: BillingPeriod;
+    timeZone: IanaTimeZone;
+    originalStartsAt: DateTime.Utc;
+    previousEndsAt: DateTime.Utc;
+  }>
+): Effect.Effect<PaidPeriodWindow> => {
+  if (input.billingPeriod === "weekly") {
+    return paidPeriodFor("weekly", input.timeZone, input.previousEndsAt);
+  }
+  const zone = DateTime.zoneMakeNamedUnsafe(input.timeZone);
+  const original = DateTime.setZone(input.originalStartsAt, zone);
+  const start = DateTime.toParts(original);
+  const boundary = DateTime.toParts(DateTime.setZone(input.previousEndsAt, zone));
+  const years = boundary.year - start.year;
+  const monthsPerYear = 12;
+  const end = DateTime.add(
+    original,
+    input.billingPeriod === "monthly"
+      ? { months: years * monthsPerYear + boundary.month - start.month + 1 }
+      : { years: years + 1 }
+  );
+  const endsAt = DateTime.toUtc(end);
+  return Effect.succeed({ startsAt: input.previousEndsAt, endsAt, renewalAnchor: endsAt });
+};
 
 /**
  * Persisted enrollment lifecycle: prepared waits for submission; creating has been claimed;

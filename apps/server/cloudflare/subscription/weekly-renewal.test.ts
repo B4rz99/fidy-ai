@@ -1,18 +1,20 @@
+import { it as effectIt } from "@effect/vitest";
+import { TestClock } from "effect/testing";
 import { UserId } from "../../src/core/identity/contract";
 import { activePaidSubscriptionCondition } from "../../src/shell/subscription/operations";
 import { type Miniflare } from "miniflare";
 import { afterEach, expect, it, vi } from "vitest";
-import { type Cause, Effect, Fiber, Option, Schema } from "effect";
+import { type Cause, DateTime, Effect, Fiber, Option, Schema } from "effect";
 import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
 import {
-  dispatchWeeklyRenewals,
+  dispatchCardRenewals,
   publishWeeklyPriceAndNotify,
   receiveBillingCollection,
   runBillingCollectionWorkflow,
 } from "./runtime";
 import { type BillingCollectionFailure, type BillingRuntime } from "./contract";
 import { Price } from "../../src/core/subscription/contract";
-import { executeWeeklyRenewalAdmission, publishWeeklyPrice } from "./operations";
+import { executeCardRenewalAdmission, publishWeeklyPrice } from "./operations";
 
 const userId = "10000000-0000-4000-8000-000000000001";
 const enrollmentId = "20000000-0000-4000-8000-000000000001";
@@ -25,6 +27,7 @@ let instance: Option.Option<Miniflare> = Option.none();
 let fixtureCounter = 0;
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
   const disposed = Option.match(instance, {
     onNone: () => Promise.resolve(),
     onSome: (value) => value.dispose(),
@@ -33,7 +36,18 @@ afterEach(() => {
   return disposed;
 });
 
-const fixture = (method: "card" | "nequi" = "card"): Promise<D1Database> =>
+const fixture = (
+  method: "card" | "nequi" = "card",
+  calendar: Readonly<{
+    billingPeriod: "weekly" | "monthly" | "yearly";
+    startsAt: string;
+    endsAt: string;
+  }> = {
+    billingPeriod: "weekly",
+    startsAt: "2026-10-06T15:00:00Z",
+    endsAt: "2026-10-13T15:00:00Z",
+  }
+): Promise<D1Database> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const created = yield* makePaymentEnrollmentD1(`weekly-renewal-${++fixtureCounter}`, [
@@ -43,6 +57,11 @@ const fixture = (method: "card" | "nequi" = "card"): Promise<D1Database> =>
       ]);
       instance = Option.some(created.instance);
       const db = created.db;
+      const selectedPriceId = {
+        weekly: priceId,
+        monthly: "22700000-0000-4000-8000-000000000002",
+        yearly: "22700000-0000-4000-8000-000000000003",
+      }[calendar.billingPeriod];
       yield* Effect.tryPromise(() =>
         db.batch([
           db.prepare("INSERT INTO users VALUES (?, 'America/Bogota')").bind(userId),
@@ -53,7 +72,7 @@ const fixture = (method: "card" | "nequi" = "card"): Promise<D1Database> =>
         payment_source_mode, contracts_json, disclosure_json, prepared_at_ms, expires_at_ms,
         payment_request_id, wompi_candidate_source_id, method, wompi_environment)
         VALUES (?, ?, ?, 'payer@example.com', 'creating', 'create', '{}', '{}', 0, 900000, ?, 3891, ?, 'sandbox')`)
-            .bind(enrollmentId, userId, priceId, paymentRequestId, method),
+            .bind(enrollmentId, userId, selectedPriceId, paymentRequestId, method),
           db
             .prepare(`INSERT INTO card_payment_sources
         (id, user_id, enrollment_id, wompi_source_id, billing_email, created_at_ms, method)
@@ -66,9 +85,17 @@ const fixture = (method: "card" | "nequi" = "card"): Promise<D1Database> =>
             .prepare(`INSERT INTO billing_attempts (id, user_id, enrollment_id, payment_request_id,
         payment_source_id, price_id, amount, currency, billing_period, service_market,
         tax_treatment, time_zone, wompi_environment, wompi_reference, created_at_ms)
-        VALUES (?, ?, ?, ?, ?, ?, '9900', 'COP', 'weekly', 'CO', 'not-taxable',
-          'America/Bogota', 'sandbox', ?, 0)`)
-            .bind(attemptId, userId, enrollmentId, paymentRequestId, sourceId, priceId, reference),
+        SELECT ?, ?, ?, ?, ?, id, amount, currency, billing_period, service_market, tax_treatment,
+          'America/Bogota', 'sandbox', ?, 0 FROM subscription_prices WHERE id = ?`)
+            .bind(
+              attemptId,
+              userId,
+              enrollmentId,
+              paymentRequestId,
+              sourceId,
+              reference,
+              selectedPriceId
+            ),
         ])
       );
       yield* Effect.tryPromise(() =>
@@ -77,43 +104,61 @@ const fixture = (method: "card" | "nequi" = "card"): Promise<D1Database> =>
             .prepare(
               "UPDATE billing_attempts SET status = 'succeeded', finalized_at_ms = ? WHERE id = ?"
             )
-            .bind(Date.parse("2026-10-06T15:00:00Z"), attemptId),
+            .bind(Date.parse(calendar.startsAt), attemptId),
           db
             .prepare("INSERT INTO billing_paid_periods VALUES (?, ?, ?, ?)")
             .bind(
               attemptId,
-              Date.parse("2026-10-06T15:00:00Z"),
-              Date.parse("2026-10-13T15:00:00Z"),
-              Date.parse("2026-10-13T15:00:00Z")
+              Date.parse(calendar.startsAt),
+              Date.parse(calendar.endsAt),
+              Date.parse(calendar.endsAt)
             ),
           db
             .prepare("INSERT INTO subscriptions VALUES (?, ?, ?, ?, ?)")
             .bind(
               userId,
               attemptId,
-              priceId,
-              Date.parse("2026-10-13T15:00:00Z"),
-              Date.parse("2026-10-13T15:00:00Z")
+              selectedPriceId,
+              Date.parse(calendar.endsAt),
+              Date.parse(calendar.endsAt)
             ),
           db
             .prepare("INSERT INTO billing_followup_outbox VALUES (?, 'renewal_due', ?)")
-            .bind(attemptId, Date.parse("2026-10-13T15:00:00Z")),
+            .bind(attemptId, Date.parse(calendar.endsAt)),
         ])
       );
       return db;
     })
   );
 
+const billingCalendars = [
+  {
+    billingPeriod: "weekly" as const,
+    startsAt: "2026-10-06T15:00:00Z",
+    endsAt: "2026-10-13T15:00:00Z",
+  },
+  {
+    billingPeriod: "monthly" as const,
+    startsAt: "2026-01-31T23:30:00Z",
+    endsAt: "2026-02-28T23:30:00Z",
+  },
+  {
+    billingPeriod: "yearly" as const,
+    startsAt: "2024-02-29T15:00:00Z",
+    endsAt: "2025-02-28T15:00:00Z",
+  },
+] as const;
+
 const fromPromise = <A>(run: () => Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
   Effect.tryPromise(run);
 const dueAt = Date.parse("2026-10-13T15:00:00Z");
 const admission = (db: D1Database, now: number = dueAt): Effect.Effect<Response> =>
-  executeWeeklyRenewalAdmission({
+  executeCardRenewalAdmission({
     db,
     userId,
     environment: "sandbox",
     now,
-    candidate: { _tag: "WeeklyRenewal", userId, previousPaidAttemptId: attemptId },
+    candidate: { _tag: "CardRenewal", userId, previousPaidAttemptId: attemptId },
   });
 
 it("converges concurrent due claims on one frozen pending weekly attempt and durable collection intent", () =>
@@ -215,62 +260,66 @@ it("settles a late renewal once into the frozen adjacent week and schedules the 
     })
   ));
 
-it("rejects foreign admission and refuses early and revoked renewals without partial intent", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* fromPromise(() => fixture());
-      const foreignUserId = "10000000-0000-4000-8000-000000000002";
-      yield* fromPromise(() =>
-        db.batch([
-          db.prepare("INSERT INTO users VALUES (?, 'America/Bogota')").bind(foreignUserId),
-          db.prepare("INSERT INTO onboarding_consent_records VALUES (?)").bind(foreignUserId),
-        ])
-      );
-      const billingState = (): Promise<D1Result[]> =>
-        db.batch([
-          db.prepare("SELECT * FROM billing_attempts ORDER BY id"),
-          db.prepare("SELECT * FROM billing_collection_arms ORDER BY attempt_id"),
-          db.prepare("SELECT * FROM billing_collection_outbox ORDER BY attempt_id"),
-        ]);
-      const before = (yield* fromPromise(billingState)).map((result) => result.results);
-      yield* executeWeeklyRenewalAdmission({
-        db,
-        userId: foreignUserId,
-        environment: "sandbox",
-        now: dueAt,
-        candidate: {
-          _tag: "WeeklyRenewal",
+it.each(billingCalendars)(
+  "rejects foreign admission and refuses early and revoked $billingPeriod renewals without partial intent",
+  (calendar) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* fromPromise(() => fixture("card", calendar));
+        const boundaryMs = Date.parse(calendar.endsAt);
+        const foreignUserId = "10000000-0000-4000-8000-000000000002";
+        yield* fromPromise(() =>
+          db.batch([
+            db.prepare("INSERT INTO users VALUES (?, 'America/Bogota')").bind(foreignUserId),
+            db.prepare("INSERT INTO onboarding_consent_records VALUES (?)").bind(foreignUserId),
+          ])
+        );
+        const billingState = (): Promise<D1Result[]> =>
+          db.batch([
+            db.prepare("SELECT * FROM billing_attempts ORDER BY id"),
+            db.prepare("SELECT * FROM billing_collection_arms ORDER BY attempt_id"),
+            db.prepare("SELECT * FROM billing_collection_outbox ORDER BY attempt_id"),
+          ]);
+        const before = (yield* fromPromise(billingState)).map((result) => result.results);
+        yield* executeCardRenewalAdmission({
+          db,
           userId: foreignUserId,
-          previousPaidAttemptId: attemptId,
-        },
-      });
-      expect((yield* fromPromise(billingState)).map((result) => result.results)).toEqual(before);
-      const foreign = yield* executeWeeklyRenewalAdmission({
-        db,
-        userId: "10000000-0000-4000-8000-000000000002",
-        environment: "sandbox",
-        now: dueAt,
-        candidate: { _tag: "WeeklyRenewal", userId, previousPaidAttemptId: attemptId },
-      });
-      expect(foreign.status).toBe(403);
-      yield* admission(db, dueAt - 1);
-      yield* fromPromise(() =>
-        db.prepare("INSERT INTO consent_user_revocations VALUES (?)").bind(userId).run()
-      );
-      yield* admission(db);
-      expect(
-        (yield* fromPromise(() =>
-          db
-            .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id IS NOT NULL")
-            .all()
-        )).results
-      ).toEqual([]);
-      expect(
-        (yield* fromPromise(() => db.prepare("SELECT * FROM billing_collection_outbox").all()))
-          .results
-      ).toHaveLength(1);
-    })
-  ));
+          environment: "sandbox",
+          now: boundaryMs,
+          candidate: {
+            _tag: "CardRenewal",
+            userId: foreignUserId,
+            previousPaidAttemptId: attemptId,
+          },
+        });
+        expect((yield* fromPromise(billingState)).map((result) => result.results)).toEqual(before);
+        const foreign = yield* executeCardRenewalAdmission({
+          db,
+          userId: "10000000-0000-4000-8000-000000000002",
+          environment: "sandbox",
+          now: boundaryMs,
+          candidate: { _tag: "CardRenewal", userId, previousPaidAttemptId: attemptId },
+        });
+        expect(foreign.status).toBe(403);
+        yield* admission(db, boundaryMs - 1);
+        yield* fromPromise(() =>
+          db.prepare("INSERT INTO consent_user_revocations VALUES (?)").bind(userId).run()
+        );
+        yield* admission(db, boundaryMs);
+        expect(
+          (yield* fromPromise(() =>
+            db
+              .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id IS NOT NULL")
+              .all()
+          )).results
+        ).toEqual([]);
+        expect(
+          (yield* fromPromise(() => db.prepare("SELECT * FROM billing_collection_outbox").all()))
+            .results
+        ).toHaveLength(1);
+      })
+    )
+);
 
 it("preserves weekly card Pro for exactly three days after the boundary without rewriting paid history", () =>
   Effect.runPromise(
@@ -413,77 +462,86 @@ it("offers Price-change notices immediately and sends the retained billing email
     })
   ));
 
-it("rechecks Consent before the renewal POST even after its pending intent was accepted", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* fromPromise(() => fixture());
-      yield* admission(db);
-      const row = yield* fromPromise(() =>
-        db
-          .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id=?")
-          .bind(attemptId)
-          .first<{ id: string }>()
-      );
-      if (row === null) throw new Error("Missing renewal fixture");
-      yield* fromPromise(() =>
-        db.prepare("INSERT INTO consent_user_revocations VALUES (?)").bind(userId).run()
-      );
-      const fetch = vi.fn(() => Promise.reject(new Error("Revoked renewal must not reach Wompi")));
-      vi.stubGlobal("fetch", fetch);
-      yield* fromPromise(() =>
-        runBillingCollectionWorkflow({
-          environment: {
-            DB: db,
-            WOMPI_ENVIRONMENT: "sandbox",
-            WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
-            WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
-            WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
-          },
-          payload: { version: 1, attemptId: row.id },
-          activity: (_name, _options, activity) => activity(),
-        })
-      );
-      expect(fetch).not.toHaveBeenCalled();
-      expect(
-        yield* fromPromise(() =>
+it.each(billingCalendars)(
+  "rechecks Consent before the $billingPeriod renewal POST even after pending intent was accepted",
+  (calendar) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* fromPromise(() => fixture("card", calendar));
+        yield* admission(db, Date.parse(calendar.endsAt));
+        const row = yield* fromPromise(() =>
           db
-            .prepare("SELECT state FROM billing_collection_arms WHERE attempt_id=?")
-            .bind(row.id)
-            .first()
-        )
-      ).toEqual({ state: "armed" });
-      expect(
-        (yield* fromPromise(() => db.prepare("SELECT * FROM billing_paid_periods").all())).results
-      ).toHaveLength(1);
-    })
-  ));
+            .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id=?")
+            .bind(attemptId)
+            .first<{ id: string }>()
+        );
+        if (row === null) throw new Error("Missing renewal fixture");
+        yield* fromPromise(() =>
+          db.prepare("INSERT INTO consent_user_revocations VALUES (?)").bind(userId).run()
+        );
+        const fetch = vi.fn(() =>
+          Promise.reject(new Error("Revoked renewal must not reach Wompi"))
+        );
+        vi.stubGlobal("fetch", fetch);
+        yield* fromPromise(() =>
+          runBillingCollectionWorkflow({
+            environment: {
+              DB: db,
+              WOMPI_ENVIRONMENT: "sandbox",
+              WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+              WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+              WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+            },
+            payload: { version: 1, attemptId: row.id },
+            activity: (_name, _options, activity) => activity(),
+          })
+        );
+        expect(fetch).not.toHaveBeenCalled();
+        expect(
+          yield* fromPromise(() =>
+            db
+              .prepare("SELECT state FROM billing_collection_arms WHERE attempt_id=?")
+              .bind(row.id)
+              .first()
+          )
+        ).toEqual({ state: "armed" });
+        expect(
+          (yield* fromPromise(() => db.prepare("SELECT * FROM billing_paid_periods").all())).results
+        ).toHaveLength(1);
+      })
+    )
+);
 
-it("does not admit automatic renewal or post-boundary grace for a wallet Subscription", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* fromPromise(() => fixture("nequi"));
-      yield* admission(db);
-      expect(
-        (yield* fromPromise(() =>
-          db
-            .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id IS NOT NULL")
-            .all()
-        )).results
-      ).toEqual([]);
-      const condition = activePaidSubscriptionCondition({
-        userId: UserId.make(userId),
-        nowEpochMs: dueAt,
-      });
-      expect(
-        yield* fromPromise(() =>
-          db
-            .prepare(`SELECT ${condition.sql} AS active`)
-            .bind(...condition.params)
-            .first()
-        )
-      ).toEqual({ active: 0 });
-    })
-  ));
+it.each(billingCalendars)(
+  "does not admit automatic $billingPeriod renewal or grace for a wallet Subscription",
+  (calendar) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* fromPromise(() => fixture("nequi", calendar));
+        const boundaryMs = Date.parse(calendar.endsAt);
+        yield* admission(db, boundaryMs);
+        expect(
+          (yield* fromPromise(() =>
+            db
+              .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id IS NOT NULL")
+              .all()
+          )).results
+        ).toEqual([]);
+        const condition = activePaidSubscriptionCondition({
+          userId: UserId.make(userId),
+          nowEpochMs: boundaryMs,
+        });
+        expect(
+          yield* fromPromise(() =>
+            db
+              .prepare(`SELECT ${condition.sql} AS active`)
+              .bind(...condition.params)
+              .first()
+          )
+        ).toEqual({ active: 0 });
+      })
+    )
+);
 
 const noticeEnvironment = (db: D1Database): BillingRuntime => ({
   DB: db,
@@ -507,7 +565,7 @@ it("aborts an interrupted renewal coordinator dispatch", () =>
       const db = yield* fromPromise(() => fixture());
       yield* fromPromise(() => db.prepare("UPDATE billing_followup_outbox SET due_at_ms=0").run());
       const started = Promise.withResolvers<Request>();
-      const fiber = yield* dispatchWeeklyRenewals({
+      const fiber = yield* dispatchCardRenewals({
         DB: db,
         WOMPI_ENVIRONMENT: "sandbox",
         USER_TRANSACTION_COORDINATOR: {
@@ -676,5 +734,317 @@ it("rejects foreign notice work and revoked queued notice egress without checkpo
           db.prepare("SELECT send_started_at_ms,accepted_at_ms FROM billing_price_notices").first()
         )
       ).toEqual({ send_started_at_ms: null, accepted_at_ms: null });
+    })
+  ));
+
+it("freezes one March 31 monthly renewal across duplicate delayed scheduler claims", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() =>
+        fixture("card", {
+          billingPeriod: "monthly",
+          startsAt: "2026-01-31T23:30:00Z",
+          endsAt: "2026-02-28T23:30:00Z",
+        })
+      );
+      const now = Date.parse("2026-03-04T10:00:00Z");
+      yield* Effect.all([admission(db, now), admission(db, now)], { concurrency: 2 });
+      expect(
+        (yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT status, period_starts_at_ms, period_ends_at_ms FROM billing_attempts WHERE previous_paid_attempt_id = ?"
+            )
+            .bind(attemptId)
+            .all()
+        )).results
+      ).toEqual([
+        {
+          status: "pending",
+          period_starts_at_ms: Date.parse("2026-02-28T23:30:00Z"),
+          period_ends_at_ms: Date.parse("2026-03-31T23:30:00Z"),
+        },
+      ]);
+      expect(
+        (yield* fromPromise(() => db.prepare("SELECT * FROM billing_paid_periods").all())).results
+      ).toHaveLength(1);
+      const immutable = yield* Effect.exit(
+        fromPromise(() =>
+          db
+            .prepare(
+              "UPDATE billing_attempts SET calendar_anchor_ms = 0 WHERE previous_paid_attempt_id = ?"
+            )
+            .bind(attemptId)
+            .run()
+        )
+      );
+      expect(immutable._tag).toBe("Failure");
+      expect(
+        yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT calendar_anchor_ms FROM billing_attempts WHERE previous_paid_attempt_id = ?"
+            )
+            .bind(attemptId)
+            .first()
+        )
+      ).toEqual({ calendar_anchor_ms: Date.parse("2026-01-31T23:30:00Z") });
+    })
+  ));
+
+it.each([
+  {
+    billingPeriod: "monthly" as const,
+    startsAt: "2026-01-31T23:30:00Z",
+    endsAt: "2026-02-28T23:30:00Z",
+    boundaries: ["2026-03-31T23:30:00Z", "2026-04-30T23:30:00Z"],
+    cents: 2890000,
+  },
+  {
+    billingPeriod: "monthly" as const,
+    startsAt: "2024-01-31T23:30:00Z",
+    endsAt: "2024-02-29T23:30:00Z",
+    boundaries: ["2024-03-31T23:30:00Z"],
+    cents: 2890000,
+  },
+  {
+    billingPeriod: "yearly" as const,
+    startsAt: "2024-02-29T15:00:00Z",
+    endsAt: "2025-02-28T15:00:00Z",
+    boundaries: ["2026-02-28T15:00:00Z", "2027-02-28T15:00:00Z", "2028-02-29T15:00:00Z"],
+    cents: 28990000,
+  },
+])(
+  "settles adjacent $billingPeriod periods once while retaining the original $startsAt anchor",
+  (calendar) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* fromPromise(() => fixture("card", calendar));
+        let previousPaidAttemptId = attemptId;
+        let previousEndsAt = Date.parse(calendar.endsAt);
+        let paidPeriods = 1;
+        for (const boundary of calendar.boundaries) {
+          const candidate = { _tag: "CardRenewal", userId, previousPaidAttemptId };
+          const claim = (): Effect.Effect<Response> =>
+            executeCardRenewalAdmission({
+              db,
+              userId,
+              environment: "sandbox",
+              now: previousEndsAt + 60000,
+              candidate,
+            });
+          yield* Effect.all([claim(), claim()], { concurrency: 2 });
+          const row = yield* fromPromise(() =>
+            db
+              .prepare(
+                "SELECT id, wompi_reference, calendar_anchor_ms FROM billing_attempts WHERE previous_paid_attempt_id = ?"
+              )
+              .bind(previousPaidAttemptId)
+              .first<{ id: string; wompi_reference: string; calendar_anchor_ms: number }>()
+          );
+          if (row === null) throw new Error("Missing calendar renewal fixture");
+          expect(row.calendar_anchor_ms).toBe(Date.parse(calendar.startsAt));
+          let posts = 0;
+          let status = "PENDING";
+          vi.stubGlobal("fetch", (_input: RequestInfo | URL, init?: RequestInit) => {
+            if (init?.method === "POST") posts++;
+            return Promise.resolve(
+              Response.json({
+                data: {
+                  id: `calendar-${row.id}`,
+                  reference: row.wompi_reference,
+                  status,
+                  amount_in_cents: calendar.cents,
+                  currency: "COP",
+                  payment_source_id: 3891,
+                  ...(status === "APPROVED"
+                    ? {
+                        finalized_at: DateTime.formatIso(
+                          DateTime.makeUnsafe(previousEndsAt + 240000)
+                        ),
+                      }
+                    : {}),
+                },
+              })
+            );
+          });
+          const run = (lookup = false): Promise<void> =>
+            runBillingCollectionWorkflow({
+              environment: {
+                DB: db,
+                WOMPI_ENVIRONMENT: "sandbox",
+                WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+                WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+                WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+              },
+              payload: lookup
+                ? { version: 1, kind: "lookup", transactionId: `calendar-${row.id}` }
+                : { version: 1, attemptId: row.id },
+              activity: (_name, _options, work) => work(),
+            });
+          yield* fromPromise(() => run());
+          expect(
+            (yield* fromPromise(() => db.prepare("SELECT * FROM billing_paid_periods").all()))
+              .results
+          ).toHaveLength(paidPeriods);
+          status = "APPROVED";
+          yield* fromPromise(() => run(true));
+          yield* fromPromise(() => run(true));
+          yield* fromPromise(() => run());
+          expect(posts).toBe(1);
+          expect(
+            yield* fromPromise(() =>
+              db
+                .prepare(
+                  "SELECT starts_at_ms, ends_at_ms FROM billing_paid_periods WHERE attempt_id = ?"
+                )
+                .bind(row.id)
+                .first()
+            )
+          ).toEqual({ starts_at_ms: previousEndsAt, ends_at_ms: Date.parse(boundary) });
+          paidPeriods++;
+          expect(
+            (yield* fromPromise(() => db.prepare("SELECT * FROM billing_paid_periods").all()))
+              .results
+          ).toHaveLength(paidPeriods);
+          previousPaidAttemptId = row.id;
+          previousEndsAt = Date.parse(boundary);
+        }
+      })
+    )
+);
+
+effectIt.effect(
+  "discovers a monthly renewal at its captured boundary and preserves it after scheduler delay",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() =>
+        fixture("card", {
+          billingPeriod: "monthly",
+          startsAt: "2026-01-31T23:30:00Z",
+          endsAt: "2026-02-28T23:30:00Z",
+        })
+      );
+      const boundary = Date.parse("2026-02-28T23:30:00Z");
+      const requests: Request[] = [];
+      const dispatch = (): Effect.Effect<void, BillingCollectionFailure> =>
+        dispatchCardRenewals({
+          DB: db,
+          WOMPI_ENVIRONMENT: "sandbox",
+          USER_TRANSACTION_COORDINATOR: {
+            getByName: (name) => ({
+              fetch: (request: Request): Promise<Response> => {
+                expect(name).toBe(userId);
+                requests.push(request);
+                return Promise.resolve(new Response(null, { status: 202 }));
+              },
+            }),
+          },
+        });
+      yield* TestClock.setTime(boundary - 1);
+      yield* dispatch();
+      expect(requests).toHaveLength(0);
+      yield* TestClock.setTime(boundary);
+      yield* dispatch();
+      expect(requests).toHaveLength(1);
+      const first = requests[0];
+      if (first === undefined) throw new Error("Missing due renewal request");
+      expect(new URL(first.url).pathname).toBe("/card-renewal-work");
+      expect(yield* fromPromise(() => first.json())).toEqual({
+        _tag: "CardRenewal",
+        userId,
+        previousPaidAttemptId: attemptId,
+      });
+      yield* TestClock.setTime(Date.parse("2026-03-04T10:00:00Z"));
+      yield* dispatch();
+      expect(requests).toHaveLength(2);
+    })
+);
+
+it("a failed monthly renewal cannot extend paid access or create another collection", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() =>
+        fixture("card", {
+          billingPeriod: "monthly",
+          startsAt: "2026-01-31T23:30:00Z",
+          endsAt: "2026-02-28T23:30:00Z",
+        })
+      );
+      const boundary = Date.parse("2026-02-28T23:30:00Z");
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(boundary);
+      yield* admission(db, boundary);
+      const row = yield* fromPromise(() =>
+        db
+          .prepare(
+            "SELECT id, wompi_reference FROM billing_attempts WHERE previous_paid_attempt_id = ?"
+          )
+          .bind(attemptId)
+          .first<{ id: string; wompi_reference: string }>()
+      );
+      if (row === null) throw new Error("Missing declined renewal fixture");
+      vi.stubGlobal("fetch", () =>
+        Promise.resolve(
+          Response.json({
+            data: {
+              id: `declined-${row.id}`,
+              reference: row.wompi_reference,
+              status: "DECLINED",
+              amount_in_cents: 2890000,
+              currency: "COP",
+              payment_source_id: 3891,
+              finalized_at: "2026-02-28T23:30:00Z",
+            },
+          })
+        )
+      );
+      const environment: BillingRuntime = {
+        DB: db,
+        WOMPI_ENVIRONMENT: "sandbox",
+        WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+        WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+        WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+      };
+      yield* fromPromise(() =>
+        runBillingCollectionWorkflow({
+          environment,
+          payload: { version: 1, attemptId: row.id },
+          activity: (_name, _options, work) => work(),
+        })
+      );
+      vi.setSystemTime(boundary + 240000);
+      yield* fromPromise(() =>
+        runBillingCollectionWorkflow({
+          environment,
+          payload: { version: 1, kind: "lookup", transactionId: `declined-${row.id}` },
+          activity: (_name, _options, work) => work(),
+        })
+      );
+      expect(
+        yield* fromPromise(() =>
+          db.prepare("SELECT status FROM billing_attempts WHERE id = ?").bind(row.id).first()
+        )
+      ).toEqual({ status: "failed" });
+      yield* admission(db, boundary + 240000);
+      expect(
+        (yield* fromPromise(() => db.prepare("SELECT * FROM billing_paid_periods").all())).results
+      ).toHaveLength(1);
+      expect(
+        (yield* fromPromise(() =>
+          db
+            .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id = ?")
+            .bind(attemptId)
+            .all()
+        )).results
+      ).toHaveLength(1);
+      expect(
+        yield* fromPromise(() =>
+          db
+            .prepare("SELECT paid_period_ends_at_ms FROM subscriptions WHERE user_id = ?")
+            .bind(userId)
+            .first()
+        )
+      ).toEqual({ paid_period_ends_at_ms: boundary });
     })
   ));

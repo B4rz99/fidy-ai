@@ -241,6 +241,14 @@ atomically creates billing-email notice intent; the shared billing Queue/Workflo
 identity-only notices through bounded Resend transport. Newly admitted renewals use the published
 Price, while pending attempts retain their snapshot. See ADR 0034.
 
+Monthly and yearly card renewal shares that same durable path. Each admitted attempt retains the
+first paid period's start as an immutable calendar anchor, advances from the preceding paid boundary
+in the captured time zone, and freezes explicit UTC period boundaries before collection. Short months
+clamp to their last day and February 29 clamps to February 28 in ordinary years; later periods return
+to the original day. Scheduler delay and provider finalization cannot shift these dates. Pending or
+failed collection never extends paid history. Weekly grace and weekly Price-change notification retain
+their existing policy.
+
 Subscription's portable declaration and fixed-policy runtime own dedicated PaymentEnrollment
 transport recognition: declared methods, parameterized status paths and the cookie-only/origin
 forwarding projection. Public ingress and private Core consume that same browser-only meaning;

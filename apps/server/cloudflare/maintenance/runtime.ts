@@ -27,9 +27,9 @@ import {
 import {
   dispatchBillingCollection,
   dispatchBillingPriceNotices,
+  dispatchCardRenewals,
   dispatchRefunds,
   dispatchVoidVerification,
-  dispatchWeeklyRenewals,
   reconcileBillingCandidates,
   sweepExpiredEnrollmentAdmission,
 } from "../subscription/runtime";
@@ -99,7 +99,7 @@ const emailActivities = (environment: CoreMaintenanceInput): ReadonlyArray<Sched
 ];
 
 const billingActivities = (environment: CoreMaintenanceInput): ReadonlyArray<ScheduledActivity> => [
-  activity("billing.renewal.dispatch", dispatchWeeklyRenewals(environment)),
+  activity("billing.renewal.dispatch", dispatchCardRenewals(environment)),
   activity(
     "billing.priceNotice.dispatch",
     Option.match(environment.BILLING_COLLECTION_QUEUE, {

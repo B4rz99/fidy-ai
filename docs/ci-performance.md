@@ -340,3 +340,12 @@ bun --bun ../../node_modules/vitest/vitest.mjs run --coverage
 Use direct Bun invocation for these local measurements: the package-command invocation on this
 workstation launched adapter workers without Bun globals. The runtime-invocation issue was not
 changed as part of these performance optimizations.
+
+The [rebased Linux run 37552158122](https://github.com/B4rz99/fidy-ai/actions/runs/37552158122)
+passed all gates and 1,351 adapter cases, with nine unchanged gated skips. Complete adapter jobs
+took 140/136/146/215s; infrastructure took 103s. The first three met three minutes, while the
+fourth held 322.5s of file work versus 198.0–216.7s on its peers. The additional allowance suite
+measured 23.7s rather than its unmeasured one-second default, and fixture gains changed the
+relative costs. Scheduling estimates now use this complete revision, including that suite.
+Successful-case console logs are retained only when a case fails; native assertions and failure
+diagnostics remain enabled. Final CI must validate the updated assignment.

@@ -16,6 +16,8 @@ export default defineConfig({
     pool: "forks",
     fileParallelism: true,
     maxWorkers: 2,
+    // Retain diagnostics for failed cases without flushing successful native fixture logs.
+    silent: "passed-only",
     testTimeout: 15_000,
   },
 });

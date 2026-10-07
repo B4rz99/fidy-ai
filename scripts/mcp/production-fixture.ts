@@ -37,6 +37,10 @@ export const Scope = Schema.Struct({
   maximumRequests: Schema.Literal(100),
 });
 export type ApprovedScope = typeof Scope.Type;
+export const budgetCategories = {
+  codex: "10000000-0000-4000-8000-000000000006",
+  claude: "10000000-0000-4000-8000-000000000007",
+} as const;
 export const requireCheck = Effect.fn(function (
   passed: boolean,
   message: string

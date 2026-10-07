@@ -50,7 +50,7 @@ const count=mode==='journey'?3:1;
 for(let step=0;step<count;step++){
  const response=await fetch(endpoint,{method:'POST',body:JSON.stringify({model:'fixture-model',tools,messages:[{content}]})});
  if(!response.ok)process.exit(1);
- await response.text();
+ const events=await response.text();
  if(step===0){const housekeeping=await fetch(endpoint,{method:'POST',body:JSON.stringify({model:'fixture-model',tools:[],messages:[{content:[]}]})});if(!housekeeping.ok)process.exit(1);if((await housekeeping.text()).includes('"tool_use"'))process.exit(1);
  const pending=await fetch(endpoint,{method:'POST',body:JSON.stringify({model:'fixture-model',tools:mode==='missing-tool'?[{name:'unrelated'}]:tools,messages:[{content:[]}]})});if(!pending.ok)process.exit(1);if((await pending.text()).includes('"tool_use"'))process.exit(1);}
  if(mode==='incomplete')process.exit(0);
@@ -58,8 +58,13 @@ for(let step=0;step<count;step++){
   process.stdout.write('Confirmar la acción');
   await new Promise(resolve=>process.stdin.once('data',resolve));
  }
- const result=mode==='cancel'?{isError:true,error:{code:'user_action_required'}}:mode==='wrong-refusal'?{isError:true,error:{code:'unavailable'}}:{isError:false,id:'30000000-0000-4000-8000-000000000001'};
- content.push({type:'tool_result',tool_use_id:'fixture_'+step,content:JSON.stringify(result)});
+ const stamp='2026-10-07T00:00:00.000Z';const id='30000000-0000-4000-8000-000000000001';
+ const args=events.split('\\n').filter(line=>line.startsWith('data: ')).map(line=>JSON.parse(line.slice(6))).find(event=>event.delta?.partial_json)?.delta.partial_json;
+ const calls=args?JSON.parse(args).payload?.calls:undefined;
+ const transaction={id,money:{amount:'15000',currency:'COP'},direction:'outflow',categoryId:'10000000-0000-4000-8000-000000000006',occurredAt:stamp,createdAt:stamp,revision:0};
+ const success=mode==='journey'&&step===1?{data:{id,categoryId:'10000000-0000-4000-8000-000000000007',cap:{amount:'1000',currency:'COP'},createdAt:stamp,updatedAt:stamp},next:[]}:mode==='journey'&&step===2?{data:{results:calls.map(call=>({callId:call.callId,operation:call.operation,output:{data:transaction,next:[]}}))},next:[]}:{data:[],next:[]};
+ const result=mode==='cancel'?{isError:true,error:{code:'user_action_required',message:'Confirmation required.'},next:[]}:mode==='wrong-refusal'?{isError:true,error:{code:'unavailable',message:'Unavailable.'},next:[]}:success;
+ content.push({type:'tool_result',tool_use_id:'fixture_'+step,content:mode==='malformed'?'not valid JSON':JSON.stringify(result)});
 }
 await fetch(endpoint,{method:'POST',body:JSON.stringify({model:'fixture-model',tools,messages:[{content}]})});
 await Bun.sleep(1000);
@@ -75,7 +80,7 @@ await Bun.sleep(1100);
 const response=await fetch(endpoint,{method:'POST',body:JSON.stringify({tools,input:[]})});
 const body=await response.text();
 if(!required||!body.includes('function_call'))process.exit(1);
-await fetch(endpoint,{method:'POST',body:JSON.stringify({tools,input:[{type:'function_call_output',call_id:'fixture_0',output:JSON.stringify({isError:false})}]})});
+await fetch(endpoint,{method:'POST',body:JSON.stringify({tools,input:[{type:'function_call_output',call_id:'fixture_0',output:JSON.stringify({data:[],next:[]})}]})});
 await Bun.sleep(1000);
 `;
 const decodeBudget = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json));
@@ -165,7 +170,7 @@ describe("isolated native MCP proof boundary", () => {
         })
       )
     ));
-  it.each(["incomplete", "wrong-refusal", "missing-tool"])(
+  it.each(["incomplete", "wrong-refusal", "missing-tool", "malformed"])(
     "rejects %s instead of claiming proof",
     (mode) =>
       run(

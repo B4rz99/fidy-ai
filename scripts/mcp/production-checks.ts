@@ -23,7 +23,6 @@ import {
   encodeJson,
   privateDirectory,
   query,
-  readJson,
   readScope,
   requireCheck,
   snapshot,
@@ -36,10 +35,8 @@ import type { Browser } from "@playwright/test";
 import type { Observation } from "./production-observation";
 import { nativeCredential, nativeLogin, nativeLogout, nativeTools } from "./production-native";
 import type { NativeHost } from "./production-native";
-import {
-  discoveryCases,
-  excludedAccountSecurityDiscovery,
-} from "../../apps/server/cloudflare/oauth-agents/discovery.test-fixture";
+import { validateCatalog } from "./production-catalog";
+import { disposeBudget } from "./production-cleanup";
 
 const GRANT_MAX_MS = 604_800_000;
 const GRANT_MIN_MS = 604_740_000;
@@ -57,40 +54,6 @@ const report = (phase: string): Effect.Effect<void> =>
   Effect.sync(() => {
     process.stdout.write(encodeJson({ phase }) + "\n");
   });
-const Catalog = Schema.Array(
-  Schema.Struct({
-    name: Schema.String,
-    input_schema: Schema.optionalKey(Schema.Unknown),
-    parameters: Schema.optionalKey(Schema.Unknown),
-    tools: Schema.optionalKey(
-      Schema.Array(
-        Schema.Struct({ name: Schema.String, parameters: Schema.optionalKey(Schema.Unknown) })
-      )
-    ),
-  })
-);
-const validateCatalog = Effect.fn(function* (root: string, host: NativeHost) {
-  const catalog = yield* readJson(Catalog, `${root}/${host}-catalog-private.json`);
-  const tools =
-    host === "claude" ? catalog : (catalog.find((tool) => tool.name === "mcp__fidy")?.tools ?? []);
-  const names = tools.map((tool) => tool.name.replace(/^mcp__fidy__/u, "")).sort();
-  const expected = (discoveryCases[3]?.tools ?? []).map((name) => name.replaceAll(".", "_")).sort();
-  yield* requireCheck(
-    encodeJson(names) === encodeJson(expected),
-    "Native restricted catalog did not match the permission contract"
-  );
-  const schemas = encodeJson(
-    tools.map((tool) => ("input_schema" in tool ? tool.input_schema : tool.parameters))
-  );
-  yield* requireCheck(
-    [
-      "dashboard.initializeDashboard",
-      "dashboard.applyDashboardEdit",
-      ...excludedAccountSecurityDiscovery,
-    ].every((name) => !schemas.includes(`"${name}"`)),
-    "Unauthorized operation identifier leaked into native input schemas"
-  );
-});
 const Connections = Schema.Array(
   Schema.Struct({
     id: Schema.String,
@@ -423,24 +386,6 @@ const finishProof = Effect.fn(function* (context: ProofContext, hosts: HostProof
     ],
   };
 });
-const disposeBudget = Effect.fn(function* (context: ProofContext, host: NativeHost) {
-  const { scope, root } = context;
-  const path = `${root}/${host}-budget-private.json`;
-  if (!(yield* attempt("Cannot inspect Budget cleanup state", () => Bun.file(path).exists()))) {
-    return;
-  }
-  const budget = yield* readJson(
-    Schema.Struct({ id: Schema.String.check(Schema.isPattern(/^[a-f0-9-]{36}$/u)) }),
-    path
-  );
-  const remaining = yield* query(
-    scope,
-    `SELECT id FROM budgets WHERE id='${budget.id}' AND user_id='${scope.fixtureUserId}';`
-  );
-  if (remaining.length > 0) {
-    yield* nativeTools(host, scope.binaries[host], root, "accept", scope.namespace);
-  }
-});
 const cleanupProof = Effect.fn(function* (context: ProofContext) {
   const { scope, root, browser } = context;
   const results = [];
@@ -457,6 +402,17 @@ const cleanupProof = Effect.fn(function* (context: ProofContext) {
     )
   );
   results.push(yield* Effect.exit(cleanNativeProfiles(scope, root)));
+  results.push(
+    yield* Effect.exit(
+      Effect.gen(function* () {
+        const final = yield* snapshot(scope);
+        yield* requireCheck(
+          final.activeConnections === 0 && final.activeBrowsers === 0 && final.budgets === 0,
+          "Synthetic cleanup inventory was not empty"
+        );
+      })
+    )
+  );
   yield* requireCheck(
     results.every(Exit.isSuccess),
     "Synthetic cleanup failed; review fixture state before rerunning"

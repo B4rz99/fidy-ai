@@ -115,6 +115,8 @@
               "./scripts/mcp/production-checks.ts",
               "./scripts/mcp/native-confirmation-hosts.ts",
               "./scripts/mcp/production-checks.test.ts",
+              "./scripts/mcp/production-catalog.test.ts",
+              "./scripts/mcp/production-cleanup.test.ts",
               "./scripts/mcp/production-native.test.ts"
             ],
             "options": {

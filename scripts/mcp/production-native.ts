@@ -16,8 +16,12 @@ import {
   Redacted,
   Result,
   Schema,
+  SchemaAST,
   Stream,
 } from "effect";
+
+import { budgetCategories } from "./production-fixture";
+import { operationCatalog } from "../../apps/server/src/shell/api";
 
 export type NativeHost = "claude" | "codex";
 type LoginEffect = Effect.Effect<
@@ -108,6 +112,7 @@ const loginTimeout = 300_000;
 const callbackLimit = 16_384;
 const toolsTimeout = 120_000;
 const terminalLimit = 4_194_304;
+const maximumResultDepth = 5;
 const warmDelay = 15_000;
 const formDelay = 600;
 const keyDelay = 300;
@@ -124,6 +129,33 @@ const productionUrl = "https://api.fidyapp.com/mcp";
 const parseJson = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json));
 const ModelJsonObject = Schema.Record(Schema.String, Schema.Json);
 const ModelJsonArray = Schema.Array(Schema.Json);
+const HostModelRequest = Schema.Struct({
+  tools: Schema.optionalKey(ModelJsonArray),
+  input: Schema.optionalKey(ModelJsonArray),
+  messages: Schema.optionalKey(
+    Schema.Array(
+      Schema.Struct({
+        content: Schema.optionalKey(Schema.Union([Schema.String, ModelJsonArray])),
+      })
+    )
+  ),
+});
+const ClaudeToolResult = Schema.Struct({
+  type: Schema.Literal("tool_result"),
+  tool_use_id: Schema.NonEmptyString,
+  content: Schema.Union([Schema.String, ModelJsonArray]),
+  is_error: Schema.optionalKey(Schema.Boolean),
+});
+const CodexToolResult = Schema.Struct({
+  type: Schema.Literal("function_call_output"),
+  call_id: Schema.NonEmptyString,
+  output: Schema.String,
+});
+const TextResult = Schema.Struct({ type: Schema.Literal("text"), text: Schema.String });
+const DaemonMetadata = Schema.Struct({
+  managedCodexPath: Schema.String,
+  appServerVersion: Schema.String,
+});
 const object = (
   value: Schema.Json
 ): {
@@ -597,10 +629,7 @@ const plannedBudget = (host: NativeHost): PlannedTool => ({
   name: "createBudget",
   args: {
     payload: {
-      categoryId:
-        host === "codex"
-          ? "10000000-0000-4000-8000-000000000006"
-          : "10000000-0000-4000-8000-000000000007",
+      categoryId: budgetCategories[host],
       cap: {
         amount: "1000",
         currency: "COP",
@@ -658,15 +687,17 @@ const toolPlan = ({
     },
   ];
 };
-const parseEmbedded = (value: string): Schema.Json => {
-  try {
-    return parseJson(value.split("Output:\n").at(-1) ?? value);
-  } catch {
-    return null;
-  }
-};
+const parseEmbedded = (value: string): Option.Option<Schema.Json> =>
+  Result.match(
+    Schema.decodeResult(Schema.fromJsonString(Schema.Json))(
+      value.split("Output:\n").at(-1) ?? value
+    ),
+    { onFailure: () => Option.none(), onSuccess: Option.some }
+  );
 const findId = (value: Schema.Json): string => {
-  if (typeof value === "string") return findId(parseEmbedded(value));
+  if (typeof value === "string") {
+    return Option.match(parseEmbedded(value), { onNone: () => "", onSome: findId });
+  }
   const fields = object(value);
   if (typeof fields.id === "string" && /^[\da-f-]{36}$/iu.test(fields.id)) return fields.id;
   for (const child of Schema.is(ModelJsonArray)(value) ? value : Object.values(fields)) {
@@ -676,7 +707,9 @@ const findId = (value: Schema.Json): string => {
   return "";
 };
 const failedOutput = (value: Schema.Json): boolean => {
-  if (typeof value === "string") return failedOutput(parseEmbedded(value));
+  if (typeof value === "string") {
+    return Option.match(parseEmbedded(value), { onNone: () => false, onSome: failedOutput });
+  }
   const fields = object(value);
   if (fields.is_error === true || fields.isError === true) return true;
   return (Schema.is(ModelJsonArray)(value) ? value : Object.values(fields)).some(failedOutput);
@@ -840,6 +873,63 @@ const modelOutputs = (host: NativeHost, body: JsonObject): ReadonlyArray<Schema.
     .flatMap((message) => array(object(message).content ?? []))
     .filter((item) => object(item).type === "tool_result");
 };
+// Only host payload fields contain serialized JSON. Ordinary scalar fields inside a
+// canonical result (labels, UUIDs, notes) must never be interpreted as JSON documents.
+const canonicalPayload = (value: Schema.Json, depth = 0): Option.Option<Schema.Json> => {
+  if (depth > maximumResultDepth) return Option.none();
+  if (Predicate.isString(value)) {
+    return Option.flatMap(parseEmbedded(value), (parsed) => canonicalPayload(parsed, depth + 1));
+  }
+  if (Schema.is(ModelJsonArray)(value)) {
+    const blocks = value.filter(Schema.is(TextResult));
+    const block = blocks[0];
+    return blocks.length === 1 && block !== undefined
+      ? canonicalPayload(block.text, depth + 1)
+      : Option.none();
+  }
+  return Schema.is(ModelJsonObject)(value) ? objectPayload(value, depth) : Option.none();
+};
+const objectPayload = (value: JsonObject, depth: number): Option.Option<Schema.Json> => {
+  if (value.structuredContent !== undefined) {
+    return canonicalPayload(value.structuredContent, depth + 1);
+  }
+  if (value.content !== undefined) return canonicalPayload(value.content, depth + 1);
+  return Option.some(value);
+};
+const validPlannedOutput = ({
+  host,
+  plan,
+  value,
+  refusal,
+}: Readonly<{
+  host: NativeHost;
+  plan: PlannedTool;
+  value: Schema.Json;
+  refusal: boolean;
+}>): boolean => {
+  const envelope =
+    host === "claude"
+      ? Result.match(Schema.decodeUnknownResult(ClaudeToolResult)(value), {
+          onFailure: () => Option.none(),
+          onSuccess: (result) => Option.some(result.content),
+        })
+      : Result.match(Schema.decodeUnknownResult(CodexToolResult)(value), {
+          onFailure: () => Option.none(),
+          onSuccess: (result) => Option.some(result.output),
+        });
+  const payload = Option.flatMap(envelope, (result) => canonicalPayload(result));
+  const operation = operationCatalog.operations.find((candidate) =>
+    candidate.id.endsWith(`.${plan.name}`)
+  );
+  if (operation === undefined || Option.isNone(payload)) return false;
+  const schema = Schema.make(
+    SchemaAST.toEncoded((refusal ? operation.failure : operation.success).ast)
+  );
+  return (
+    Schema.is(schema)(payload.value) &&
+    (refusal ? refusalCode(payload.value) : !failedOutput(value))
+  );
+};
 const flattenTools = (tools: ReadonlyArray<Schema.Json>): ReadonlyArray<ModelTool> =>
   tools.flatMap((tool) => [
     {
@@ -989,7 +1079,11 @@ const serveModel = (
       const raw = yield* foreign(() => request.text());
       state.requestBytes = new TextEncoder().encode(raw).byteLength;
       state.stage = "parse_request";
-      const body = object(parseJson(raw));
+      const parsed = parseJson(raw);
+      if (!Schema.is(HostModelRequest)(parsed) || !Schema.is(ModelJsonObject)(parsed)) {
+        throw new Error("invalid host request");
+      }
+      const body = parsed;
       state.inputTypes = array(body.input ?? [])
         .map((value) => text(object(value).type ?? ""))
         .filter((name) => ["function_call_output", "function_call", "message"].includes(name));
@@ -1068,24 +1162,17 @@ type DaemonState = {
 const daemonVersion = (
   input: NativeInput,
   signal: AbortSignal
-): Effect.Effect<
-  {
-    readonly [key: string]: Schema.Json;
-  },
-  NativeBoundaryFailure | Cause.TimeoutError,
-  never
-> =>
+): Effect.Effect<typeof DaemonMetadata.Type, NativeBoundaryFailure | Cause.TimeoutError, never> =>
   Effect.scoped(
     Effect.gen(function* () {
-      return object(
-        parseJson(
-          yield* command({
-            args: [input.binary, "app-server", "daemon", "version"],
-            env: environment(input.host, input.root),
-            root: input.root,
-            signal,
-          })
-        )
+      const raw = yield* command({
+        args: [input.binary, "app-server", "daemon", "version"],
+        env: environment(input.host, input.root),
+        root: input.root,
+        signal,
+      });
+      return yield* Schema.decodeEffect(Schema.fromJsonString(DaemonMetadata))(raw).pipe(
+        Effect.mapError(() => new NativeBoundaryFailure())
       );
     })
   );
@@ -1105,11 +1192,7 @@ const pinDaemon = (
         signal,
       });
       const initial = yield* daemonVersion(input, signal);
-      if (
-        !resolve(text(initial.managedCodexPath ?? "")).startsWith(
-          `${profilePath(input.host, root)}${sep}`
-        )
-      ) {
+      if (!resolve(initial.managedCodexPath).startsWith(`${profilePath(input.host, root)}${sep}`)) {
         throw new Error("daemon ownership");
       }
       daemon.owned = true;
@@ -1424,13 +1507,17 @@ const runToolsPty = (
     })
   );
 const refusalCode = (value: Schema.Json): boolean => {
-  if (typeof value === "string") return refusalCode(parseEmbedded(value));
+  if (typeof value === "string") {
+    return Option.match(parseEmbedded(value), { onNone: () => false, onSome: refusalCode });
+  }
   const fields = object(value);
   if (fields.code === "user_action_required") return true;
   return (Schema.is(ModelJsonArray)(value) ? value : Object.values(fields)).some(refusalCode);
 };
 const closedErrorCode = (value: Schema.Json): string => {
-  if (typeof value === "string") return closedErrorCode(parseEmbedded(value));
+  if (typeof value === "string") {
+    return Option.match(parseEmbedded(value), { onNone: () => "none", onSome: closedErrorCode });
+  }
   const fields = object(value);
   const code = text(fields.code ?? "");
   if (
@@ -1534,9 +1621,10 @@ const summarizeTools = (
         stringify(state.outputs)
       );
       const refusal = mode === "cancel" || mode === "headless";
-      const resultsValid = refusal
-        ? state.outputs.every(refusalCode)
-        : !state.outputs.some(failedOutput);
+      const resultsValid = state.outputs.every((value, index) => {
+        const plan = input.plan[index];
+        return plan !== undefined && validPlannedOutput({ host, plan, value, refusal });
+      });
       const formValid = !["cancel", "accept"].includes(mode) || answered;
       const passed =
         !state.failed && state.outputs.length === input.plan.length && resultsValid && formValid;

@@ -1,5 +1,12 @@
 # MCP verification
 
+Run the local runner regressions and the complete OAuth/MCP integration suite:
+
+```sh
+bun run test:ci-tools
+bun run --cwd apps/server test:cloudflare cloudflare/oauth-agents
+```
+
 Run the Production journey with Bun. It uses real Claude Code and Codex clients,
 a real browser, and the deployed ingress/Core/D1 path. A local canned model chooses
 the tool calls, so the check needs no paid inference.

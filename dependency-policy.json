@@ -19,6 +19,12 @@
   ],
   "deferredUpdates": [
     {
+      "name": "@tanstack/react-router",
+      "manifest": "apps/web/package.json",
+      "reason": "The eligible 1.170.41 patch cannot be installed with the pinned Bun without workspace re-resolution, which rejects existing Effect 4.0.0 packages under the unchanged seven-day minimumReleaseAge. Reproduced with bun update @tanstack/react-router@1.170.41 --exact on 2026-10-07; the installer exits before changing the manifest or lockfile. Retain 1.170.40 until the existing workspace resolutions are eligible, then use the normal installer and rerun web builds and browser tests. Do not add install-age exclusions.",
+      "until": "2026-10-10T00:00:00Z"
+    },
+    {
       "name": "@hugeicons/core-free-icons",
       "manifest": "apps/web/package.json",
       "reason": "4.3.4 publishes dist/esm/index.js exports for Grid2x2 and Grid3x2 icons with lowercase x, but its Linux tarball contains only uppercase X filenames. Vite production builds and browser acceptance fail on case-sensitive runners. Keep 4.3.3 until the publisher fixes the export paths; verify the package tarball and Linux build before updating.",

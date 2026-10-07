@@ -33,6 +33,23 @@ evidence. Run the same journey separately for Claude Code and Codex.
 | Continue access                   | Wait for the actual ten-minute access-token expiry and call from a new native process. Automatic refresh succeeds without extending the reviewed connection expiry.                                                       |
 | Disconnect an agent               | Revoke through fresh first-party settings. Later calls and refresh must refuse; client logout removes local credentials. Reconcile synthetic effects through their owning lifecycles.                                     |
 
+## Automated coverage
+
+The [Production runner](../../../../../scripts/mcp/README.md) repeats the five
+journeys above with both native clients. Local public-ingress → Core/D1 tests cover
+the failure cases without exhausting or corrupting the Production fixture:
+
+| MCP behavior                                                                       | Existing integration checks                                                                                                                                       |
+| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Registration, metadata, callbacks, review and narrowed permissions                 | [Ingress](../../../cloudflare/oauth-agents/oauth-ingress.test.ts), [discovery](../../../cloudflare/oauth-agents/oauth-discovery.test.ts)                          |
+| Stateless 2026 and session-based 2025 transport, bounds, deadlines and disconnects | [Free-tier handoff](../../../cloudflare/oauth-agents/oauth-mcp-free.test.ts), [native residency](../../../cloudflare/oauth-agents/oauth-native-residency.test.ts) |
+| Canonical calls, atomic batches, ambiguous delivery and shared allowances          | [Canonical execution](../../../cloudflare/oauth-agents/oauth-canonical.test.ts), [allowances](../../../cloudflare/oauth-agents/oauth-allowance.test.ts)           |
+| Sensitive confirmation, cancellation and replay refusal                            | [Confirmation](../../../cloudflare/oauth-agents/oauth-confirmation.test.ts)                                                                                       |
+| Refresh rotation, exact expiry, replay, connection inspection and revocation       | [Refresh](../../../cloudflare/oauth-agents/oauth-refresh.test.ts), [management](../../../cloudflare/oauth-agents/oauth-management.test.ts)                        |
+
+Run all nine files with `bun run --cwd apps/server test:cloudflare cloudflare/oauth-agents`.
+Canonical financial behavior remains the owning feature's testing responsibility.
+
 ## Latest Production verification
 
 **2026-10-07 · revision `63494fd4` · limited synthetic proof.**
@@ -53,8 +70,8 @@ other canonical operations. Provider identity/email approval used a synthetic
 fixture. This proof does not establish every workload or Free-tier quota, or
 authorize real-User launch.
 
-[Cloudflare integration tests](../../../cloudflare/oauth-agents/) passed 195
-tests across seven files, including all seven permission combinations and exact
+[Cloudflare integration tests](../../../cloudflare/oauth-agents/) passed 205
+tests across all nine files, including all seven permission combinations and exact
 absolute-expiry boundaries. The opt-in
 [native-client harness](../../../../../scripts/mcp/native-confirmation-hosts.ts)
 bridge was skipped; native confirmation was tested live instead. The harness is

@@ -98,18 +98,36 @@ const pairingResponse = (
     { headers: { ...securityHeaders, "x-fidy-smoke-worker-version": publicVersion } }
   );
 };
-const edgeResponse = (path: string): Response =>
-  new Response(null, {
-    status:
-      new Map([
-        ["/health", 200],
-        ["/categories", 401],
-        ["/providers/kapso/callback", 401],
-        ["/providers/wompi/billing-events", 400],
-        ["/web/hosted-turns", 403],
-      ]).get(path) ?? 404,
-    headers: { ...securityHeaders, "x-fidy-smoke-worker-version": publicCandidate },
+const edgeResponse = (request: Request): Response => {
+  const path = new URL(request.url).pathname;
+  const status =
+    new Map([
+      ["/health", 200],
+      ["/categories", 401],
+      ["/providers/kapso/callback", 401],
+      ["/providers/wompi/billing-events", 400],
+      ["/web/hosted-turns", 403],
+      ["/.well-known/oauth-protected-resource/mcp", 200],
+      ["/.well-known/oauth-authorization-server", 200],
+      ["/oauth/authorize", 400],
+      ["/oauth/register", 400],
+      ["/oauth/token", 400],
+      ["/web/oauth/review", 403],
+      ["/web/oauth/connect", 403],
+      ["/mcp", request.headers.has("origin") ? 403 : 401],
+    ]).get(path) ?? 404;
+  const headers = new Headers({
+    ...securityHeaders,
+    "x-fidy-smoke-worker-version": publicCandidate,
   });
+  if (path === "/mcp" && status === 401) {
+    headers.set(
+      "www-authenticate",
+      'Bearer resource_metadata="https://api.fidyapp.com/.well-known/oauth-protected-resource/mcp", scope="read"'
+    );
+  }
+  return new Response(null, { status, headers });
+};
 
 const heldSmokeBody = (
   response: Response,
@@ -299,7 +317,7 @@ describe("read-only routing readiness", () => {
             const url = new URL(request.url);
             const oldPublic = intermediateRequest(request);
             if (url.pathname !== "/internal/release-smoke") {
-              return Promise.resolve(edgeResponse(url.pathname));
+              return Promise.resolve(edgeResponse(request));
             }
             const readiness = url.searchParams.get("readiness") === "1";
             if (readiness && oldPublic) {
@@ -524,20 +542,7 @@ describe("intermediate production smoke", () => {
               // Sequential smoke deadlocks here instead of accidentally passing a timing assertion.
               return gatedResponse(bothStarted.promise, { request, bodies, response });
             }
-            const status =
-              new Map([
-                ["/health", 200],
-                ["/categories", 401],
-                ["/providers/kapso/callback", 401],
-                ["/providers/wompi/billing-events", 400],
-                ["/web/hosted-turns", 403],
-              ]).get(path) ?? 404;
-            return Promise.resolve(
-              new Response(null, {
-                status,
-                headers: { ...securityHeaders, "x-fidy-smoke-worker-version": publicCandidate },
-              })
-            );
+            return Promise.resolve(edgeResponse(request));
           });
           try {
             const exit = yield* Effect.scoped(
@@ -581,7 +586,7 @@ describe("intermediate production smoke", () => {
           const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
             const request = new Request(input, init);
             const path = new URL(request.url).pathname;
-            if (path !== "/internal/release-smoke") return Promise.resolve(edgeResponse(path));
+            if (path !== "/internal/release-smoke") return Promise.resolve(edgeResponse(request));
             const oldPublic = intermediateRequest(request);
             const reject = oldPublic && !rejected;
             if (reject) rejected = true;
@@ -633,7 +638,7 @@ describe("intermediate production smoke", () => {
             const mockedFetch = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
               const request = new Request(input, init);
               const path = new URL(request.url).pathname;
-              if (path !== "/internal/release-smoke") return Promise.resolve(edgeResponse(path));
+              if (path !== "/internal/release-smoke") return Promise.resolve(edgeResponse(request));
               const oldPublic = intermediateRequest(request);
               return recordingResponse({
                 request,
@@ -804,20 +809,7 @@ describe("intermediate production smoke", () => {
             );
             return recordingResponse({ request, bodies, response });
           }
-          const status =
-            new Map([
-              ["/health", 200],
-              ["/categories", 401],
-              ["/providers/kapso/callback", 401],
-              ["/providers/wompi/billing-events", 400],
-              ["/web/hosted-turns", 403],
-            ]).get(path) ?? 404;
-          return Promise.resolve(
-            new Response(null, {
-              status,
-              headers: { ...securityHeaders, "x-fidy-smoke-worker-version": publicCandidate },
-            })
-          );
+          return Promise.resolve(edgeResponse(request));
         });
         try {
           const exit = yield* Effect.scoped(
@@ -879,25 +871,12 @@ describe("intermediate production smoke", () => {
                 )
               );
             }
-            const status =
-              new Map([
-                ["/health", 200],
-                ["/categories", 401],
-                ["/providers/kapso/callback", 401],
-                ["/providers/wompi/billing-events", 400],
-                ["/web/hosted-turns", 403],
-              ]).get(path) ?? 404;
-            return Promise.resolve(
-              new Response(null, {
-                status,
-                headers: {
-                  ...securityHeaders,
-                  "x-fidy-smoke-worker-version": request.headers.has("x-fidy-smoke-proof")
-                    ? publicCandidate
-                    : publicStable,
-                },
-              })
+            const response = edgeResponse(request);
+            response.headers.set(
+              "x-fidy-smoke-worker-version",
+              request.headers.has("x-fidy-smoke-proof") ? publicCandidate : publicStable
             );
+            return Promise.resolve(response);
           });
           try {
             const exit = yield* Effect.scoped(

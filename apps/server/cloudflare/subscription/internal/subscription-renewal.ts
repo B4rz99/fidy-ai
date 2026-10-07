@@ -2,7 +2,11 @@ import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { workerCrypto } from "./wompi-runtime";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { UserId } from "../../../src/core/identity/contract";
-import { BillingAttemptId, BillingPeriod } from "../../../src/core/subscription/contract";
+import {
+  BillingAttemptId,
+  BillingPeriod,
+  renewalGraceMs,
+} from "../../../src/core/subscription/contract";
 import { IanaTimeZone } from "../../../src/core/_shared/context";
 import { type PaidPeriodWindow, renewalPeriod } from "../../../src/core/subscription/operations";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
@@ -26,6 +30,14 @@ const Boundary = Schema.Struct({
   calendar_anchor_ms: Schema.Int,
 });
 
+const unresolvedCollectionSql = (userColumn: "s.user_id" | "sub.user_id"): string => `EXISTS (
+  SELECT 1 FROM billing_attempts unresolved WHERE unresolved.user_id=${userColumn}
+    AND (unresolved.status='pending' OR (unresolved.status='failed' AND unresolved.previous_paid_attempt_id IS NULL))
+    AND NOT EXISTS (SELECT 1 FROM billing_no_charge_confirmations clear WHERE clear.attempt_id=unresolved.id)
+    AND NOT EXISTS (SELECT 1 FROM billing_collection_arms stopped WHERE stopped.attempt_id=unresolved.id AND stopped.state='rejected'
+      AND unresolved.previous_paid_attempt_id IS NOT NULL AND EXISTS (SELECT 1 FROM billing_attempts success
+        JOIN billing_paid_periods paid ON paid.attempt_id=success.id WHERE success.previous_paid_attempt_id=unresolved.previous_paid_attempt_id)))`;
+
 type RenewalClaimInput = Readonly<{
   db: D1Database;
   userId: UserId;
@@ -44,7 +56,7 @@ const prepareRenewalClaim = (
       sql: `INSERT INTO billing_attempts
       (id, user_id, enrollment_id, payment_request_id, payment_source_id, price_id, amount, currency,
       billing_period, service_market, tax_treatment, time_zone, wompi_environment, wompi_reference,
-      created_at_ms, previous_paid_attempt_id, period_starts_at_ms, period_ends_at_ms, attempt_number, calendar_anchor_ms)
+      created_at_ms, previous_paid_attempt_id, period_starts_at_ms, period_ends_at_ms, renewal_attempt_number, calendar_anchor_ms)
       SELECT ?, a.user_id, a.enrollment_id, ?, a.payment_source_id, price.id, price.amount, price.currency,
       price.billing_period, price.service_market, price.tax_treatment, a.time_zone, a.wompi_environment, ?, ?, a.id, ?, ?, 1, COALESCE(a.calendar_anchor_ms, period.starts_at_ms)
       FROM subscriptions s JOIN billing_attempts a ON a.id = s.attempt_id AND a.user_id = s.user_id
@@ -53,10 +65,9 @@ const prepareRenewalClaim = (
       JOIN subscription_prices price ON price.published_order IS NOT NULL AND price.billing_period = a.billing_period AND price.service_market = a.service_market
       WHERE s.user_id = ? AND a.id = ?
         AND a.wompi_environment = ? AND a.status = 'succeeded'
-        AND NOT EXISTS (SELECT 1 FROM subscription_renewal_stops stop WHERE stop.user_id = s.user_id)
+        AND NOT EXISTS (SELECT 1 FROM subscription_renewal_fences stop WHERE stop.user_id = s.user_id)
         AND NOT EXISTS (SELECT 1 FROM billing_attempts renewal WHERE renewal.previous_paid_attempt_id = a.id)
-        AND NOT EXISTS (SELECT 1 FROM billing_attempts unresolved WHERE unresolved.user_id = s.user_id AND unresolved.status <> 'succeeded'
-          AND NOT EXISTS (SELECT 1 FROM billing_no_charge_confirmations clear WHERE clear.attempt_id = unresolved.id))`,
+        AND NOT (${unresolvedCollectionSql("s.user_id")})`,
       params: [
         id,
         id,
@@ -71,6 +82,42 @@ const prepareRenewalClaim = (
     },
   });
 };
+
+const prepareRetryClaim = (input: RenewalClaimInput & Readonly<{ id: string }>): OwnedStatement =>
+  protectConsentStatement({
+    subject: { _tag: "User", userId: input.userId },
+    requirement: "active",
+    statement: {
+      sql: `INSERT INTO billing_attempts
+          (id,user_id,enrollment_id,payment_request_id,payment_source_id,price_id,amount,currency,billing_period,
+          service_market,tax_treatment,time_zone,wompi_environment,wompi_reference,created_at_ms,
+          previous_paid_attempt_id,period_starts_at_ms,period_ends_at_ms,renewal_attempt_number,calendar_anchor_ms)
+          SELECT ?, first.user_id,first.enrollment_id,?,first.payment_source_id,first.price_id,first.amount,first.currency,
+          first.billing_period,first.service_market,first.tax_treatment,first.time_zone,first.wompi_environment,?,?,
+          first.previous_paid_attempt_id,first.period_starts_at_ms,first.period_ends_at_ms,last.renewal_attempt_number+1,first.calendar_anchor_ms
+          FROM billing_attempts first JOIN billing_attempts last ON last.previous_paid_attempt_id=first.previous_paid_attempt_id
+          JOIN subscriptions sub ON sub.attempt_id=first.previous_paid_attempt_id AND sub.user_id=first.user_id
+          WHERE first.user_id=? AND first.previous_paid_attempt_id=? AND first.renewal_attempt_number=1
+            AND first.wompi_environment=? AND last.status='failed' AND last.renewal_attempt_number<3
+            AND ? >= first.period_starts_at_ms + last.renewal_attempt_number * 86400000
+            AND ? < first.period_starts_at_ms + ${renewalGraceMs}
+            AND NOT EXISTS (SELECT 1 FROM billing_attempts sibling WHERE sibling.previous_paid_attempt_id=first.previous_paid_attempt_id
+              AND (sibling.status<>'failed' OR sibling.renewal_attempt_number>last.renewal_attempt_number))
+            AND NOT EXISTS (SELECT 1 FROM subscription_renewal_fences stop WHERE stop.user_id=sub.user_id)
+            AND NOT (${unresolvedCollectionSql("sub.user_id")})`,
+      params: [
+        input.id,
+        input.id,
+        `fidy-${input.id}`,
+        input.now,
+        input.userId,
+        input.previousPaidAttemptId,
+        input.environment,
+        input.now,
+        input.now,
+      ],
+    },
+  });
 
 export const claimSubscriptionRenewal = (
   input: RenewalClaimInput
@@ -89,6 +136,14 @@ export const claimSubscriptionRenewal = (
     if (row === null) return;
     const boundary = yield* Schema.decodeUnknownEffect(Boundary)(row).pipe(
       Effect.mapError((cause) => new BillingCollectionFailure({ cause: Option.some(cause) }))
+    );
+    const retryId = yield* workerCrypto.randomUUIDv4.pipe(Effect.orDie);
+    const retry = prepareRetryClaim({ ...input, id: retryId });
+    yield* fromPromise(() =>
+      input.db
+        .prepare(retry.sql)
+        .bind(...retry.params)
+        .run()
     );
     const period = yield* renewalPeriod({
       timeZone: boundary.time_zone,
@@ -122,12 +177,16 @@ export const dispatchSubscriptionRenewals = (
     JOIN card_payment_sources source ON source.id = a.payment_source_id AND source.user_id = a.user_id
     WHERE due.due_at_ms <= ?
       AND a.wompi_environment = ?
-      AND NOT EXISTS (SELECT 1 FROM subscription_renewal_stops stop WHERE stop.user_id = s.user_id)
-      AND NOT EXISTS (SELECT 1 FROM billing_attempts r WHERE r.previous_paid_attempt_id = a.id)
-      AND NOT EXISTS (SELECT 1 FROM billing_attempts unresolved WHERE unresolved.user_id = s.user_id AND unresolved.status <> 'succeeded'
-          AND NOT EXISTS (SELECT 1 FROM billing_no_charge_confirmations clear WHERE clear.attempt_id = unresolved.id))
+      AND NOT EXISTS (SELECT 1 FROM subscription_renewal_fences stop WHERE stop.user_id = s.user_id)
+      AND (NOT EXISTS (SELECT 1 FROM billing_attempts r WHERE r.previous_paid_attempt_id = a.id)
+        OR EXISTS (SELECT 1 FROM billing_attempts r WHERE r.previous_paid_attempt_id = a.id AND r.status='failed'
+          AND r.renewal_attempt_number < 3 AND ? >= r.period_starts_at_ms + r.renewal_attempt_number * 86400000
+          AND ? < r.period_starts_at_ms + ${renewalGraceMs}
+          AND NOT EXISTS (SELECT 1 FROM billing_attempts newer WHERE newer.previous_paid_attempt_id=a.id
+            AND (newer.status<>'failed' OR newer.renewal_attempt_number>r.renewal_attempt_number))))
+      AND NOT (${unresolvedCollectionSql("s.user_id")})
     `,
-        params: [now, input.WOMPI_ENVIRONMENT],
+        params: [now, input.WOMPI_ENVIRONMENT, now, now],
       },
     });
     const result = yield* fromPromise(() =>

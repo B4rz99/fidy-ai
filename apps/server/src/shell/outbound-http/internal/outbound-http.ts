@@ -274,6 +274,13 @@ const makeWompiRequest = (
             body: HttpBody.text(value.body, "application/json"),
           })
         ),
+      WompiVoidPaymentSource: (value) =>
+        Effect.succeed(
+          HttpClientRequest.put(
+            `${origin}/v1/payment_sources/${encodeURIComponent(value.sourceId)}/void`,
+            { headers: { authorization } }
+          )
+        ),
       WompiVerifyPaymentSource: (value) =>
         Effect.succeed(
           HttpClientRequest.get(
@@ -420,6 +427,7 @@ const prepareRequest = (
       WompiDaviplataSandboxOtp: (value) => prepareWompi(value, context),
       WompiCreatePaymentSource: (value) => prepareWompi(value, context),
       WompiVerifyPaymentSource: (value) => prepareWompi(value, context),
+      WompiVoidPaymentSource: (value) => prepareWompi(value, context),
       WompiCreateTransaction: (value) => prepareWompi(value, context),
       WompiFindTransaction: (value) => prepareWompi(value, context),
       WompiSandboxRefund: (value) => prepareWompi(value, context),

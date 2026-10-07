@@ -1,3 +1,9 @@
+import { cancellationRefusal, prepareCancellation } from "./internal/cancellation";
+import type {
+  CanonicalMutationPreparation,
+  CanonicalMutationRefusal,
+  CanonicalPreparationWork,
+} from "../canonical-operations/contract";
 import { claimSubscriptionRenewal } from "./internal/subscription-renewal";
 import {
   Price,
@@ -144,3 +150,12 @@ export const publishWeeklyPrice = (
       catch: (cause) => new BillingCollectionFailure({ cause: Option.some(cause) }),
     });
   });
+
+/** Prepare an idempotent same-User cancellation with its collection fence and accountability. */
+export const prepareSubscriptionCancellation = (
+  work: CanonicalPreparationWork
+): Effect.Effect<CanonicalMutationPreparation> => prepareCancellation(work);
+/** Closed refusal for absent paid standing under the caller's current authority. */
+export const subscriptionCancellationRefusal = (
+  work: CanonicalPreparationWork
+): CanonicalMutationRefusal => cancellationRefusal(work);

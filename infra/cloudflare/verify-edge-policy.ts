@@ -10,7 +10,8 @@ import { edgeSecurityPolicy } from "./edge-security";
 // identity, Queue topology, public routing, and edge rules remain unchanged.
 // Includes #29's authenticated recurring report route in the catalog-derived rate-limit prefixes.
 // Includes #990's manual OAuth redirect forwarding; authority and edge rules are unchanged.
-const expectedEdgePolicyDigest = "03cbe70c3731d87bc06e371b086fe0540c9536dbe807d51fa886c25ebd7ea4cd";
+// Includes #236's authenticated canonical Subscription cancellation route in the catalog-derived rate limit.
+const expectedEdgePolicyDigest = "1a3c5a8521d2bf3cb66db626751a1aebb2fe6c97ba12c14f01b8ec6bcb94aa3c";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),

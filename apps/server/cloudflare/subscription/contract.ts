@@ -176,3 +176,16 @@ export type BillingPriceNoticeDispatchInput = Readonly<{
     send: (work: typeof BillingPriceNoticeWork.Type) => Promise<unknown>;
   }>;
 }>;
+
+/** Cancellation work contains only the User whose retained intent must be rechecked. */
+export const SubscriptionCancellationWork = Schema.Struct({
+  version: Schema.Literal(1),
+  kind: Schema.Literal("source-cancellation"),
+  userId: UserId,
+});
+export type SubscriptionCancellationDispatchInput = Readonly<{
+  DB: D1Database;
+  BILLING_COLLECTION_QUEUE: Readonly<{
+    send: (work: typeof SubscriptionCancellationWork.Type) => Promise<unknown>;
+  }>;
+}>;

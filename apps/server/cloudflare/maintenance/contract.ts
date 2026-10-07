@@ -21,6 +21,7 @@ export type ScheduledOperation =
   | "billing.refund.reconcile"
   | "billing.priceNotice.dispatch"
   | "billing.renewal.dispatch"
+  | "billing.cancellation.dispatch"
   | "billing.collection.dispatch"
   | "billing.collection.reconcile"
   | "billing.cardPreparationAdmissionSweep"

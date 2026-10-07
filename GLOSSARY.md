@@ -391,7 +391,7 @@ _Avoid_: Advice (unqualified), recommendation.
 
 **AccessTier**:
 The User's current capability tier: `free` or `pro`. It is derived at the decision instant from an
-active TrialPeriod, active paid Subscription, or its three-day weekly card renewal grace; it is never
+active TrialPeriod, active paid Subscription, or its three-day renewal grace; it is never
 persisted as a separate owner fact.
 _Avoid_: PaidTier, effective access, access basis, trial tier.
 
@@ -405,7 +405,8 @@ _Avoid_: Trial status, renewable trial, onboarding window.
 **Subscription**:
 The User's paid access to Fidy — weekly, monthly, or yearly Pro. Its activation ServiceMarket,
 billing periods, Prices, tax treatment, provider references, refunds, and UTC instants stay
-historically interpretable.
+historically interpretable. Cancellation stops future renewal and preserves already-paid access; renewal
+grace is temporary Pro access without a new paid period.
 _Avoid_: Membership, plan (alone), recurring charge (that is a RecurringSeries).
 
 **Price**:
@@ -436,7 +437,8 @@ One asynchronous attempt to collect a Subscription charge, retaining its Money, 
 provider references, and UTC instants. It groups every Wompi transaction created under its one
 checkout reference. Starting one yields `pending`; any verified approval advances it to
 `succeeded`, and verified provider negatives advance it to `failed` only after Wompi's retry
-opportunity elapses. Success never regresses.
+opportunity elapses. A bounded renewal retry is a distinct BillingAttempt with the original renewal
+Money, Price and calendar; success never regresses.
 _Avoid_: Charge (alone), synchronous payment, settlement promise.
 
 **Paywall**:

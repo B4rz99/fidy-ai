@@ -1,15 +1,15 @@
 {
   "$comment": [
     "Updates this repo has decided not to take yet. Read by scripts/check-dependency-updates.ts,",
-    "which fails on any compatible update \u2014 patch, minor, or prerelease-to-stable \u2014 that a pin has",
+    "which fails on any compatible update — patch, minor, or prerelease-to-stable — that a pin has",
     "not taken. An entry here downgrades that failure to a warning until its date; it never hides it.",
     "`until` is exclusive: a deferral dated 2026-09-01 stops applying on 2026-09-01. Give a reason a",
-    "reader in three months can act on \u2014 what breaks, and what has to happen first.",
+    "reader in three months can act on — what breaks, and what has to happen first.",
     "`manifest` scopes an entry to one manifest; omit it and the entry speaks for every pin of that",
     "name, which is wrong whenever the same package is pinned twice for different reasons.",
     "",
     "`acceptedVulnerabilities` is the other half: a vulnerability this repo ships with, because the",
-    "install delay in bunfig.toml is never punctured \u2014 not even to reach a fix. A release published",
+    "install delay in bunfig.toml is never punctured — not even to reach a fix. A release published",
     "days ago is how a compromised package arrives, so the delay outranks a known CVE, and when the",
     "only fix is too young the vulnerability is carried instead. Each entry pairs one advisory with",
     "one lockfile, matching an `sca.exclusions` entry in .fluidattacks/sca.yaml, which is where the",
@@ -46,6 +46,30 @@
       "name": "@effect/tsgo",
       "manifest": "package.json",
       "reason": "0.47.0 introduces 1,148 unstableApiUsage warnings for required Effect v4 HTTP, MCP, runtime and test APIs; the warning-failing project-reference build exits nonzero although no type errors occur. Its patch CLI also requires an otherwise unused --force flag. Retain verified 0.46.1 without suppressing compiler diagnostics. Revisit the upstream default severity and supported stable replacements before updating, then rerun the normal installer, typecheck and unit verification.",
+      "until": "2026-10-10T00:00:00Z"
+    },
+    {
+      "name": "wrangler",
+      "manifest": "apps/server/package.json",
+      "reason": "Updating Wrangler to 4.145.0 with the pinned Bun forces workspace re-resolution and refuses the existing Effect 4.0.0 (published 2026-10-01) and Alchemy 2.0.0-beta.80 (published 2026-10-02) resolutions under the unchanged seven-day minimumReleaseAge. Both bun install and targeted bun update reproduce the failure. Retain the frozen lockfile and Wrangler 4.144.0 until these resolutions become eligible, then upgrade all three Wrangler pins with the normal installer and rerun workspace, Cloudflare infrastructure, adapter, build and browser checks. Do not add install-age exclusions.",
+      "until": "2026-10-10T00:00:00Z"
+    },
+    {
+      "name": "wrangler",
+      "manifest": "apps/web/package.json",
+      "reason": "Updating Wrangler to 4.145.0 with the pinned Bun forces workspace re-resolution and refuses the existing Effect 4.0.0 (published 2026-10-01) and Alchemy 2.0.0-beta.80 (published 2026-10-02) resolutions under the unchanged seven-day minimumReleaseAge. Both bun install and targeted bun update reproduce the failure. Retain the frozen lockfile and Wrangler 4.144.0 until these resolutions become eligible, then upgrade all three Wrangler pins with the normal installer and rerun workspace, Cloudflare infrastructure, adapter, build and browser checks. Do not add install-age exclusions.",
+      "until": "2026-10-10T00:00:00Z"
+    },
+    {
+      "name": "wrangler",
+      "manifest": "infra/cloudflare/package.json",
+      "reason": "Updating Wrangler to 4.145.0 with the pinned Bun forces workspace re-resolution and refuses the existing Effect 4.0.0 (published 2026-10-01) and Alchemy 2.0.0-beta.80 (published 2026-10-02) resolutions under the unchanged seven-day minimumReleaseAge. Both bun install and targeted bun update reproduce the failure. Retain the frozen lockfile and Wrangler 4.144.0 until these resolutions become eligible, then upgrade all three Wrangler pins with the normal installer and rerun workspace, Cloudflare infrastructure, adapter, build and browser checks. Do not add install-age exclusions.",
+      "until": "2026-10-10T00:00:00Z"
+    },
+    {
+      "name": "rolldown",
+      "manifest": "apps/server/package.json",
+      "reason": "Rolldown 1.2.12 became eligible while validating #236. The pinned Bun re-resolves the workspace on a dependency update and rejects existing Effect 4.0.0 (published 2026-10-01) and Alchemy 2.0.0-beta.80 (published 2026-10-02) under the unchanged seven-day minimumReleaseAge, reproduced by normal and targeted updates. Retain the frozen lockfile and Rolldown 1.2.11 until those resolutions are eligible, then use the normal installer and rerun server bundling and Cloudflare adapter tests. Do not add install-age exclusions.",
       "until": "2026-10-10T00:00:00Z"
     }
   ],

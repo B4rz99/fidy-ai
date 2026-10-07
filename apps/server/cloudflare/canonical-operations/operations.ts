@@ -2,13 +2,18 @@ import {
   executeHostedStatementCall as heldStatementCall,
   executeHostedStatementQuery as heldStatementQuery,
 } from "./internal/hosted-statement";
+import { admitCanonicalOperation } from "../canonical-admission/operations";
 import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
 import { type OAuthCaller } from "../../src/shell/oauth-agents/contract";
 import { HostedInference } from "../../src/shell/hosted-inference/operations";
 import { type HostedInferenceService } from "../../src/shell/hosted-inference/contract";
 import { type CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import { type CatalogOperation } from "../../src/shell/canonical-catalog/contract";
-import { AtomicBatchAdmission, atomicBatchOperation } from "../../src/shell/operations/contract";
+import {
+  AtomicBatchAdmission,
+  atomicBatchOperation,
+  getAtomicBatchInputSchema,
+} from "../../src/shell/operations/contract";
 import { operationCatalog } from "../../src/shell/api";
 import { decideOperationAccess } from "../../src/shell/canonical-policy/operations";
 import {
@@ -57,6 +62,7 @@ export const executeHostedStatementCall: typeof heldStatementCall = (input) =>
   heldStatementCall(input);
 
 const httpServiceUnavailable = 503;
+const unauthenticatedStatus = 401;
 const scopeMissingStatus = 403;
 const paywallRequiredStatus = 402;
 const refuseOAuthCall = (
@@ -155,11 +161,59 @@ type OAuthCanonicalWork = Readonly<{
   signal: AbortSignal;
   deadlineMilliseconds: number;
   confirmation: Option.Option<OAuthConfirmationAttempt>;
+  retryKey: Option.Option<Schema.Json>;
 }>;
 
 /** Execute an installed canonical operation under live OAuth authority and the bounded User coordination turn. */
 export const executeOAuthCanonicalWork = (input: OAuthCanonicalWork): Effect.Effect<Response> =>
   withCanonicalLifetime({ ...input, execute: (db) => executeOAuthWork({ ...input, db }) });
+
+const sensitiveOAuthWork = (input: OAuthCanonicalWork, operation: CatalogOperation): boolean => {
+  if (operation.id !== atomicBatchOperation) {
+    return operation.policy.agentConfirmation === "required";
+  }
+  const batch = Schema.decodeUnknownOption(
+    Schema.Struct({ payload: Schema.toType(getAtomicBatchInputSchema()) })
+  )(input.input);
+  return (
+    Option.isSome(batch) &&
+    batch.value.payload.calls.some(
+      ({ operation }) =>
+        operationCatalog.byId.get(operation)?.policy.agentConfirmation === "required"
+    )
+  );
+};
+const confirmationReference = (
+  input: OAuthCanonicalWork,
+  sensitive: boolean
+): Option.Option<string> =>
+  sensitive && Option.isSome(input.confirmation) && input.confirmation.value._tag === "Decision"
+    ? Option.some(`${input.subject.oauthConnectionId}:${input.confirmation.value.reference}`)
+    : Option.none();
+const executeOAuthWork = (input: OAuthCanonicalWork): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const operation = installedCanonicalOperations().find(
+      ({ id, policy }) => id === input.operation && policy.access._tag === "UserOwnedAgentScoped"
+    );
+    if (operation === undefined) return transactionUnavailable();
+    // Native continuation shares its original admitted envelope; the intent owner still refuses
+    // replayed decisions instead of disclosing a cached sensitive success.
+    const sensitive = sensitiveOAuthWork(input, operation);
+    const reference = confirmationReference(input, sensitive);
+    const response = yield* admitCanonicalOperation({
+      db: input.db,
+      canonicalInput: input.input,
+      retryKey: sensitive ? Option.none() : input.retryKey,
+      confirmationReference: reference,
+      caller: { _tag: "OAuth", value: input.subject },
+      operation,
+      current: yield* Clock.currentTimeMillis,
+      work: executeOAuthOwnedWork(input),
+    });
+    return response.status === unauthenticatedStatus
+      ? yield* refusedCredentialResponse({ db: input.db, subject: input.subject })
+      : response;
+  });
 
 const oauthMutationWork = (
   operation: CatalogOperation,
@@ -204,7 +258,7 @@ const executeOAuthMutation = ({
       : yield* checkpointOAuthResponse({ response, caller });
   }).pipe(Effect.orElseSucceed(transactionUnavailable));
 
-const executeOAuthWork = (input: OAuthCanonicalWork): Effect.Effect<Response> =>
+const executeOAuthOwnedWork = (input: OAuthCanonicalWork): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const installed = Option.fromUndefinedOr(
       installedCanonicalOperations().find(

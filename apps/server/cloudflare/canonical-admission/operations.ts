@@ -1,3 +1,5 @@
+import { OAuthNativeReview } from "../oauth-confirmation/contract";
+import { liveOAuthAuthority } from "../../src/shell/oauth-agents/operations";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { canonicalAllowanceHeaders } from "../../src/shell/quotas/contract";
 import { UserActionRequired } from "../../src/shell/public-http/contract";
@@ -20,6 +22,7 @@ import {
 import { CanonicalRetryKey, type QuotaStatus } from "../../src/core/quotas/contract";
 import { allowancePeriod } from "../../src/core/quotas/operations";
 import {
+  bindConsumptionRetry,
   decodeQuotaStatus,
   prepareAuthorizedQuotaRead,
   prepareConsumption,
@@ -37,16 +40,28 @@ import { type Replay, claimReplay, completeReplay, retainedReplay } from "./inte
 
 type RequestCall<E, R> = Readonly<{
   db: D1Database;
-  request: Request;
   caller: AuthorizedCanonicalCaller;
   operation: CatalogOperation;
   current: number;
-  browserOrigin: string;
   work: Effect.Effect<Response, E, R>;
-}>;
+}> &
+  (
+    | Readonly<{ request: Request }>
+    | Readonly<{
+        canonicalInput: Schema.Json;
+        retryKey: Option.Option<unknown>;
+        /** Server-bound continuation; the confirmation owner retains single-use authority. */
+        confirmationReference: Option.Option<string>;
+      }>
+  );
 type Call<E, R> = RequestCall<E, R> & Readonly<{ scopes: ReadonlyArray<CanonicalCapability> }>;
 type MeteredCall<E, R> = Call<E, R> &
-  Readonly<{ identity: string; inputHash: string; retryKey: Option.Option<string> }>;
+  Readonly<{
+    identity: string;
+    consumptionIdentity: string;
+    inputHash: string;
+    retryKey: Option.Option<string>;
+  }>;
 const unavailable = (): Response =>
   Response.json(
     {
@@ -69,13 +84,19 @@ const noAuthority = (): Response =>
 const scopeMissing = (): Response =>
   Response.json(
     {
-      error: { code: "scope_missing", message: "This PAT lacks the required operation scope." },
+      error: {
+        code: "scope_missing",
+        message: "This credential lacks the required operation scope.",
+      },
       next: [],
     },
     { status: 403 }
   );
 const invalid = (message: string): Response =>
-  Response.json({ error: { code: "validation_failed", message }, next: [] }, { status: 400 });
+  Response.json(
+    { error: { code: "validation_failed", message, fields: [] }, next: [] },
+    { status: 400 }
+  );
 const rateLimited = (): Response =>
   Response.json(
     {
@@ -144,14 +165,59 @@ const patAuthority = (
     bindings: [...credential.bindings, ...scopes],
   };
 };
+const oauthAuthority = (
+  caller: Extract<AuthorizedCanonicalCaller, { _tag: "OAuth" }>,
+  current: number,
+  scopes: ReadonlyArray<CanonicalCapability>
+): AuditAuthority & { table: "oauth_access_credentials" } => {
+  const authority = liveOAuthAuthority({
+    subject: { ...caller.value, requiredScope: Option.none() },
+    current,
+  });
+  const scoped = scopes.map((scope) =>
+    liveOAuthAuthority({ subject: { ...caller.value, requiredScope: Option.some(scope) }, current })
+  );
+  return {
+    ...authority,
+    predicate: `${authority.predicate} AND ${scoped.length === 0 ? "0" : scoped.map(({ predicate }) => `(${predicate})`).join(" AND ")}`,
+    bindings: [...authority.bindings, ...scoped.flatMap(({ bindings }) => bindings)],
+  };
+};
+const credentialAt = (caller: AuthorizedCanonicalCaller, current: number): AuditAuthority => {
+  switch (caller._tag) {
+    case "PAT":
+      return livePATCredential({ subject: caller.value, current });
+    case "OAuth":
+      return liveOAuthAuthority({
+        subject: { ...caller.value, requiredScope: Option.none() },
+        current,
+      });
+    case "WebSession":
+      return liveWebSessionAuthority({ subject: caller.value, current });
+  }
+};
 const authorityAt = (
   caller: AuthorizedCanonicalCaller,
   current: number,
   scopes: ReadonlyArray<CanonicalCapability>
-): AuditAuthority =>
+): AuditAuthority => {
+  switch (caller._tag) {
+    case "PAT":
+      return patAuthority(caller, current, scopes);
+    case "OAuth":
+      return oauthAuthority(caller, current, scopes);
+    case "WebSession":
+      return liveWebSessionAuthority({ subject: caller.value, current });
+  }
+};
+const externalAuthority = (
+  caller: Exclude<AuthorizedCanonicalCaller, { _tag: "WebSession" }>,
+  current: number,
+  scopes: ReadonlyArray<CanonicalCapability>
+): AuditAuthority & { table: "pats" | "oauth_access_credentials" } =>
   caller._tag === "PAT"
     ? patAuthority(caller, current, scopes)
-    : liveWebSessionAuthority({ subject: caller.value, current });
+    : oauthAuthority(caller, current, scopes);
 const proof = (authority: AuditAuthority): OwnedStatement => ({
   sql: `SELECT user_id AS userId FROM ${authority.table} WHERE ${authority.predicate}`,
   params: authority.bindings,
@@ -186,9 +252,9 @@ const checkScopes = <E, R>(
 ): Effect.Effect<Option.Option<Response>, CanonicalAdmissionUnavailable> =>
   Effect.gen(function* () {
     const { db, caller, current, scopes } = input;
-    if (caller._tag !== "PAT") return Option.none();
-    const credential = proof(livePATCredential({ subject: caller.value, current }));
-    const scoped = proof(patAuthority(caller, current, scopes));
+    if (caller._tag === "WebSession") return Option.none();
+    const credential = proof(credentialAt(caller, current));
+    const scoped = proof(authorityAt(caller, current, scopes));
     const rows = yield* batch(db, [bind(db, credential), bind(db, scoped)]);
     if (rows[0]?.results.length !== 1) return Option.some(noAuthority());
     return rows[1]?.results.length === 1 ? Option.none() : Option.some(scopeMissing());
@@ -250,7 +316,9 @@ const disclose = <E, R>(
     const current = yield* Clock.currentTimeMillis;
     const status = yield* standing({ ...input, current });
     if (Option.isNone(status)) return unavailable();
-    return input.caller._tag === "PAT" ? attachStanding(response, status.value, current) : response;
+    return input.caller._tag !== "WebSession"
+      ? attachStanding(response, status.value, current)
+      : response;
   }).pipe(
     Effect.catchIf(
       (failure) => quotaFailure(failure.cause) === "authority",
@@ -268,6 +336,42 @@ const replayReceiptComplete = ({
 }: Readonly<{ rows: ReadonlyArray<D1Result>; accepted: boolean }>): boolean =>
   rows[0]?.meta.changes === 1 && (!accepted || rows[1]?.meta.changes === 1);
 
+const replayPATActivity = ({
+  db,
+  authority,
+  accepted,
+  current,
+  auditId,
+  operation,
+}: Readonly<{
+  db: D1Database;
+  authority: AuditAuthority;
+  accepted: boolean;
+  current: number;
+  auditId: string;
+  operation: CatalogOperation;
+}>): ReadonlyArray<D1PreparedStatement> =>
+  accepted && authority.table === "pats"
+    ? [
+        bind(
+          db,
+          recordAuditedPATUseFromAuthority({
+            authority: {
+              table: "pats",
+              predicate: authority.predicate,
+              bindings: authority.bindings,
+            },
+            current,
+            evidence: recordedPATReplayCallProof({ auditId, operation: operation.id }),
+          })
+        ),
+      ]
+    : [];
+const retryWireKey = <E, R>(input: RequestCall<E, R>): Option.Option<unknown> =>
+  "request" in input
+    ? Option.fromNullishOr(input.request.headers.get("Fidy-Retry-Key"))
+    : input.retryKey;
+
 const auditReplay = <E, R>({
   call,
   replay,
@@ -278,9 +382,9 @@ const auditReplay = <E, R>({
 > =>
   Effect.gen(function* () {
     const { db, caller, retryKey, operation, scopes } = call;
-    if (caller._tag !== "PAT" || Option.isNone(retryKey)) return unavailable();
+    if (caller._tag === "WebSession" || Option.isNone(retryKey)) return unavailable();
     const response = replayResponse(replay);
-    const authority = patAuthority(caller, current, scopes);
+    const authority = externalAuthority(caller, current, scopes);
     const auditId = newId();
     const accepted = response.status < unsuccessfulHttpStatus;
     const rows = yield* batch(db, [
@@ -304,20 +408,11 @@ const auditReplay = <E, R>({
           ],
         },
       }),
-      ...(accepted
-        ? [
-            bind(
-              db,
-              recordAuditedPATUseFromAuthority({
-                authority,
-                current,
-                evidence: recordedPATReplayCallProof({ auditId, operation: operation.id }),
-              })
-            ),
-          ]
-        : []),
+      ...replayPATActivity({ db, authority, accepted, current, auditId, operation }),
     ]);
-    return replayReceiptComplete({ rows, accepted }) ? response : unavailable();
+    return replayReceiptComplete({ rows, accepted: accepted && authority.table === "pats" })
+      ? response
+      : unavailable();
   });
 
 const replayOf = <E, R>(
@@ -339,7 +434,7 @@ const replayOf = <E, R>(
       replay.inputHash !== call.inputHash ||
       replay.state !== "completed"
     ) {
-      return Option.some(matchingReplay(call, replay));
+      return Option.some(yield* unadmittedRefusal(call, newId(), matchingReplay(call, replay)));
     }
     return Option.some(yield* auditReplay({ call, replay, current }));
   });
@@ -368,7 +463,7 @@ const acceptanceStatements = <E, R>(
   call: MeteredCall<E, R>
 ): ReadonlyArray<D1PreparedStatement> => {
   const { db, caller, operation, current, inputHash, identity, retryKey, scopes } = call;
-  if (caller._tag !== "PAT") return [];
+  if (caller._tag === "WebSession") return [];
   return [
     ...(Option.isSome(retryKey)
       ? claimReplay({
@@ -385,13 +480,17 @@ const acceptanceStatements = <E, R>(
       db,
       userId: caller.value.userId,
       allowance: "canonical_call",
-      identity,
+      identity: call.consumptionIdentity,
       current,
       authority: proof(authorityAt(caller, current, scopes)),
     }),
-    db
-      .prepare("INSERT INTO canonical_request_acceptances VALUES (?,?,?,?,?)")
-      .bind(identity, caller.value.userId, caller.value.patId, operation.id, current),
+    ...(caller._tag === "PAT"
+      ? [
+          db
+            .prepare("INSERT INTO canonical_request_acceptances VALUES (?,?,?,?,?)")
+            .bind(identity, caller.value.userId, caller.value.patId, operation.id, current),
+        ]
+      : []),
   ];
 };
 const finishReplay = <E, R>(
@@ -422,15 +521,49 @@ const finishReplay = <E, R>(
       }),
     ]);
   });
+const retainReviewConsumption = <E, R>(
+  call: MeteredCall<E, R>,
+  response: Response
+): Effect.Effect<void, CanonicalAdmissionUnavailable | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    if (call.caller._tag !== "OAuth" || response.headers.get("fidy-oauth-review") !== "1") return;
+    const raw: unknown = yield* Effect.tryPromise({
+      try: () => response.clone().json(),
+      catch: (cause) => new CanonicalAdmissionUnavailable({ cause }),
+    });
+    const review = yield* Schema.decodeUnknownEffect(Schema.toCodecJson(OAuthNativeReview))(raw);
+    const retryIdentity = yield* cryptoHash(
+      `${call.caller.value.oauthConnectionId}:${review.reference}:${call.operation.id}:${call.inputHash}`
+    );
+    const current = yield* Clock.currentTimeMillis;
+    const rows = yield* batch(call.db, [
+      bindConsumptionRetry({
+        db: call.db,
+        userId: call.caller.value.userId,
+        allowance: "canonical_call",
+        identity: call.consumptionIdentity,
+        retryIdentity,
+        current,
+        authority: proof(authorityAt(call.caller, current, call.scopes)),
+      }),
+    ]);
+    if (rows[0]?.meta.changes !== 1) {
+      return yield* new CanonicalAdmissionUnavailable({
+        cause: "Continuation accounting unavailable",
+      });
+    }
+  });
+
 const externalCall = <E, R>(
   call: MeteredCall<E, R>
-): Effect.Effect<Response, E | CanonicalAdmissionUnavailable, R> =>
+): Effect.Effect<Response, E | CanonicalAdmissionUnavailable | Schema.SchemaError, R> =>
   Effect.gen(function* () {
     const replay = yield* replayOf(call);
     if (Option.isSome(replay)) return replay.value;
     const acceptance = yield* batch(call.db, acceptanceStatements(call)).pipe(Effect.result);
     if (acceptance._tag === "Failure") return yield* recoverAcceptance(call, acceptance.failure);
     const response = yield* call.work;
+    yield* retainReviewConsumption(call, response);
     yield* finishReplay(call, response);
     return response;
   });
@@ -460,11 +593,11 @@ const unadmittedRefusal = <E, R>(
   response: Response
 ): Effect.Effect<Response, CanonicalAdmissionUnavailable> =>
   Effect.gen(function* () {
-    if (input.caller._tag !== "PAT") return response;
+    if (input.caller._tag === "WebSession") return response;
     const result = yield* batch(input.db, [
       prepareCanonicalAdmissionRefusal({
         db: input.db,
-        authority: livePATCredential({ subject: input.caller.value, current: input.current }),
+        authority: credentialAt(input.caller, input.current),
         id: identity,
         operation: input.operation.id,
         current: input.current,
@@ -476,6 +609,25 @@ const unadmittedRefusal = <E, R>(
     }
     return result.success[0]?.meta.changes === 1 ? response : noAuthority();
   });
+
+const consumptionReference = <E, R>(
+  input: RequestCall<E, R>,
+  identity: string,
+  inputHash: string
+): Effect.Effect<string, CanonicalAdmissionUnavailable> => {
+  const reference = "canonicalInput" in input ? input.confirmationReference : Option.none<string>();
+  return Option.isNone(reference)
+    ? Effect.succeed(identity)
+    : cryptoHash(`${reference.value}:${input.operation.id}:${inputHash}`);
+};
+
+const invalidInputResponse = <E, R>(
+  input: RequestCall<E, R>,
+  identity: string
+): Effect.Effect<Response, E | CanonicalAdmissionUnavailable, R> =>
+  input.caller._tag === "OAuth"
+    ? input.work
+    : unadmittedRefusal(input, identity, invalid("Invalid canonical operation input."));
 
 const authorizedCall = <E, R>(
   input: RequestCall<E, R>,
@@ -493,29 +645,25 @@ const authorizedCall = <E, R>(
       return yield* unadmittedRefusal(input, identity, primaryFailure.value);
     }
     const valid = yield* validatedCanonicalInput(input);
-    if (Option.isNone(valid)) {
-      return yield* unadmittedRefusal(
-        input,
-        identity,
-        invalid("Invalid canonical operation input.")
-      );
-    }
+    if (Option.isNone(valid)) return yield* invalidInputResponse(input, identity);
     const authorized: Call<E, R> = { ...input, scopes: valid.value.scopes };
     const scopeFailure = yield* checkScopes(authorized);
     if (Option.isSome(scopeFailure)) {
       return yield* unadmittedRefusal(input, identity, scopeFailure.value);
     }
-    const wireKey = Option.fromNullishOr(input.request.headers.get("Fidy-Retry-Key"));
-    const key = Option.flatMap(wireKey, Schema.decodeOption(CanonicalRetryKey));
+    const wireKey = retryWireKey(input);
+    const key = Option.flatMap(wireKey, Schema.decodeUnknownOption(CanonicalRetryKey));
     if (Option.isSome(wireKey) && Option.isNone(key)) {
       return yield* unadmittedRefusal(input, identity, invalid("Invalid canonical retry key."));
     }
     const retryKey = Option.isNone(key)
       ? Option.none<string>()
       : Option.some(yield* cryptoHash(key.value));
+    const consumptionIdentity = yield* consumptionReference(input, identity, valid.value.inputHash);
     const response = yield* operationResponse({
       ...authorized,
       identity,
+      consumptionIdentity,
       inputHash: valid.value.inputHash,
       retryKey,
     });
@@ -569,7 +717,7 @@ const executeProtectedRequest = <E, R>(
   });
 
 /** Header disclosure proves only the live User-owned credential and Consent, not business capability. Missing scope or invalid input can still report that User's allowance; failed proof discloses nothing. */
-const authenticatedResponse = ({
+export const discloseCanonicalAllowance = ({
   db,
   caller,
   response,
@@ -580,10 +728,7 @@ const authenticatedResponse = ({
 }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
-    const authority =
-      caller._tag === "PAT"
-        ? livePATCredential({ subject: caller.value, current })
-        : liveWebSessionAuthority({ subject: caller.value, current });
+    const authority = credentialAt(caller, current);
     const rows = yield* batch(
       db,
       prepareAuthorizedQuotaRead({
@@ -609,6 +754,17 @@ export const protectCanonicalRequest = <E, R>(
 ): Effect.Effect<Response, never, R> =>
   executeProtectedRequest(input).pipe(
     Effect.flatMap((response) =>
-      authenticatedResponse({ db: input.db, caller: input.caller, response })
+      discloseCanonicalAllowance({ db: input.db, caller: input.caller, response })
+    )
+  );
+
+/** Meter canonical work inside an already pressure-protected MCP invocation under the User coordinator. */
+export const admitCanonicalOperation = <E, R>(
+  input: RequestCall<E, R>
+): Effect.Effect<Response, never, R> =>
+  authorizedCall(input, newId()).pipe(
+    Effect.orElseSucceed(unavailable),
+    Effect.flatMap((response) =>
+      discloseCanonicalAllowance({ db: input.db, caller: input.caller, response })
     )
   );

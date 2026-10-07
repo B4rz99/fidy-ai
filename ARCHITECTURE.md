@@ -113,8 +113,9 @@ client-automation risk and bounded ingress/Core/D1 implementation evidence.
 The [compatibility report](docs/research/hosted-mcp-interoperability-977.md) records historical passing
 synthetic exchange/discovery/refresh evidence for exact Claude Code, Codex and Pi versions, their
 registration selection and explicit unsupported sensitive interactions; Pi is no longer a support target. No production route, grant authority, client setup promise or
-launch enablement follows from accepting the design. Exact-host interoperability, real Core/D1
-security evidence, #35's shared User allowance and operator approval remain separate gates.
+launch enablement follows from accepting the design. OAuth MCP now shares #35's stable-User canonical-call allowance and retry semantics with PAT/API/CLI
+through Canonical Admission, including mutation attempts, whole atomic batches and native continuation.
+Exact-host interoperability, real Core/D1 security evidence and operator approval remain separate gates.
 
 ## Production boundary
 

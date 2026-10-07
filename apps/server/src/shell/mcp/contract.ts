@@ -5,6 +5,11 @@ import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import { OAuthClientId, OAuthConnectionId, OAuthCredentialId } from "~/core/oauth-agents/contract";
 import type { CatalogOperation, OperationCatalog } from "~/shell/canonical-catalog/contract";
 
+/** MCP metadata reuses the canonical allowance wire codec and User-bound retry contract. */
+export const mcpCanonicalMetadata = {
+  allowance: "co.fidy/canonicalAllowance",
+  retryKey: "co.fidy/retryKey",
+} as const;
 const digestLength = 32;
 /** Standard native-client decision carried privately, separate from canonical arguments. */
 export const OAuthConfirmationAttempt = Schema.Union([
@@ -29,6 +34,7 @@ export const OAuthCanonicalAdmission = Schema.Struct({
   operation: CanonicalOperationId,
   input: Schema.Json,
   confirmation: Schema.optionalKey(OAuthConfirmationAttempt),
+  retryKey: Schema.optionalKey(Schema.Json),
 });
 export type OAuthCanonicalAdmission = typeof OAuthCanonicalAdmission.Type;
 

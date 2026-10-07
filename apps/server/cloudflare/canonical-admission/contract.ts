@@ -1,10 +1,13 @@
 import { Data } from "effect";
+import type { OAuthCaller } from "../../src/shell/oauth-agents/contract";
 import type { AuthorizedPAT } from "../tokens/contract";
 import type { AuthenticatedWebSession } from "../web-session/contract";
 
 /** Authorization is supplied by the credential owner, never inferred from an allowance or a retry key. */
 export type AuthorizedCanonicalCaller = Readonly<
-  { _tag: "PAT"; value: AuthorizedPAT } | { _tag: "WebSession"; value: AuthenticatedWebSession }
+  | { _tag: "PAT"; value: AuthorizedPAT }
+  | { _tag: "WebSession"; value: AuthenticatedWebSession }
+  | { _tag: "OAuth"; value: OAuthCaller }
 >;
 
 /** Private dependency failure without SQL or credential disclosure. */

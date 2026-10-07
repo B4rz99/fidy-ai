@@ -135,6 +135,11 @@ Hosted Agent Sessions. Malformed or unavailable metadata fails closed, never as 
 
 Public bounds, shared User request pressure, deadlines and cancellation fence queued canonical/refresh work. Already-started D1 batches
 settle atomically even when delivery is lost; cancellation is not rollback or retry authority.
+OAuth MCP canonical calls share Canonical Admission's stable-User commercial consumption and ordinary
+retry receipts with PAT/API/CLI callers. One envelope accounts for one mutation attempt or whole
+atomic batch; native confirmation continuation retains that admitted unit and its single-use owner
+contract. Tool-result metadata projects the same allowance codec; discovery and OAuth lifecycle
+transports remain separate security work.
 Existing bounded public/Core/coordinator Work observations export metadata only, never arguments,
 financial results, credentials, URLs or raw causes. Exact-host onboarding and operator
 launch gates remain separate work.

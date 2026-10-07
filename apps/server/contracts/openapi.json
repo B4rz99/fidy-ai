@@ -1070,6 +1070,30 @@
         ],
         "type": "object"
       },
+      "ConfirmationDay": {
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "localDate": {
+            "$ref": "#/components/schemas/ReminderAnchorDate"
+          },
+          "timeZone": {
+            "$ref": "#/components/schemas/IanaTimeZone"
+          },
+          "toExclusive": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          }
+        },
+        "required": [
+          "localDate",
+          "timeZone",
+          "from",
+          "toExclusive"
+        ],
+        "type": "object"
+      },
       "ConsentRequiredEncoded": {
         "additionalProperties": false,
         "properties": {
@@ -4082,6 +4106,40 @@
       },
       "Objects_34": {
         "additionalProperties": false,
+        "description": "A non-negative exact decimal amount together with its ISO 4217 Currency. Currency precision is enforced and no conversion is implied.",
+        "properties": {
+          "amount": {
+            "description": "A non-negative exact amount as plain decimal text. Responses remove insignificant trailing zeros and never use exponent or locale notation.",
+            "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": "string"
+          },
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          }
+        },
+        "required": [
+          "amount",
+          "currency"
+        ],
+        "type": "object"
+      },
+      "Objects_35": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "monthly"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      "Objects_36": {
+        "additionalProperties": false,
         "properties": {
           "data": {
             "$ref": "#/components/schemas/ReminderSchedule"
@@ -4096,7 +4154,7 @@
         ],
         "type": "object"
       },
-      "Objects_35": {
+      "Objects_37": {
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -4108,7 +4166,7 @@
         ],
         "type": "object"
       },
-      "Objects_36": {
+      "Objects_38": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4137,43 +4195,11 @@
         ],
         "type": "object"
       },
-      "Objects_37": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/InsightEvent"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
-      "Objects_38": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/InsightEvent"
-          },
-          "next": {
-            "$ref": "#/components/schemas/Arrays_"
-          }
-        },
-        "required": [
-          "data",
-          "next"
-        ],
-        "type": "object"
-      },
       "Objects_39": {
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/Memory"
+            "$ref": "#/components/schemas/InsightEvent"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -4204,12 +4230,16 @@
       "Objects_40": {
         "additionalProperties": false,
         "properties": {
-          "id": {
-            "$ref": "#/components/schemas/MemoryId"
+          "data": {
+            "$ref": "#/components/schemas/InsightEvent"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
           }
         },
         "required": [
-          "id"
+          "data",
+          "next"
         ],
         "type": "object"
       },
@@ -4245,7 +4275,7 @@
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/MemoryId"
+            "$ref": "#/components/schemas/Memory"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -4258,6 +4288,34 @@
         "type": "object"
       },
       "Objects_44": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/MemoryId"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "Objects_45": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/MemoryId"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
+        ],
+        "type": "object"
+      },
+      "Objects_46": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4273,7 +4331,7 @@
         ],
         "type": "object"
       },
-      "Objects_45": {
+      "Objects_47": {
         "additionalProperties": false,
         "properties": {
           "publicCode": {
@@ -4285,7 +4343,7 @@
         ],
         "type": "object"
       },
-      "Objects_46": {
+      "Objects_48": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4301,7 +4359,7 @@
         ],
         "type": "object"
       },
-      "Objects_47": {
+      "Objects_49": {
         "additionalProperties": false,
         "properties": {
           "data": {
@@ -4755,6 +4813,102 @@
         },
         "type": "array"
       },
+      "RecurringDigestItem": {
+        "additionalProperties": false,
+        "properties": {
+          "cadence": {
+            "$ref": "#/components/schemas/Objects_35"
+          },
+          "confirmationId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+            "type": "string"
+          },
+          "confirmedAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "counterparty": {
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+            "type": "string"
+          },
+          "money": {
+            "$ref": "#/components/schemas/Objects_34"
+          },
+          "seriesId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirmationId",
+          "seriesId",
+          "counterparty",
+          "money",
+          "cadence",
+          "confirmedAt"
+        ],
+        "type": "object"
+      },
+      "RecurringDigestPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmationDay": {
+            "$ref": "#/components/schemas/ConfirmationDay"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RecurringDigestItem"
+            },
+            "minItems": 1,
+            "prefixItems": [
+              {
+                "$ref": "#/components/schemas/RecurringDigestItem"
+              }
+            ],
+            "type": "array"
+          }
+        },
+        "required": [
+          "confirmationDay",
+          "items"
+        ],
+        "type": "object"
+      },
+      "RecurringDigestReport": {
+        "additionalProperties": false,
+        "properties": {
+          "expiresAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "insightEventId": {
+            "$ref": "#/components/schemas/InsightEventId"
+          },
+          "locale": {
+            "$ref": "#/components/schemas/Locale"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/RecurringDigestPayload"
+          },
+          "scheduledAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "serviceMarket": {
+            "$ref": "#/components/schemas/ServiceMarket"
+          }
+        },
+        "required": [
+          "insightEventId",
+          "serviceMarket",
+          "locale",
+          "scheduledAt",
+          "expiresAt",
+          "payload"
+        ],
+        "type": "object"
+      },
       "RecurringSeries": {
         "additionalProperties": false,
         "properties": {
@@ -4801,19 +4955,7 @@
             ]
           },
           "cadence": {
-            "additionalProperties": false,
-            "properties": {
-              "kind": {
-                "enum": [
-                  "monthly"
-                ],
-                "type": "string"
-              }
-            },
-            "required": [
-              "kind"
-            ],
-            "type": "object"
+            "$ref": "#/components/schemas/Objects_35"
           },
           "confirmedAt": {
             "$ref": "#/components/schemas/UtcTimestamp"
@@ -4836,23 +4978,7 @@
             "$ref": "#/components/schemas/UtcTimestamp"
           },
           "money": {
-            "additionalProperties": false,
-            "description": "A non-negative exact decimal amount together with its ISO 4217 Currency. Currency precision is enforced and no conversion is implied.",
-            "properties": {
-              "amount": {
-                "description": "A non-negative exact amount as plain decimal text. Responses remove insignificant trailing zeros and never use exponent or locale notation.",
-                "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
-                "type": "string"
-              },
-              "currency": {
-                "$ref": "#/components/schemas/Currency"
-              }
-            },
-            "required": [
-              "amount",
-              "currency"
-            ],
-            "type": "object"
+            "$ref": "#/components/schemas/Objects_34"
           }
         },
         "required": [
@@ -8214,6 +8340,45 @@
           {
             "additionalProperties": false,
             "properties": {
+              "args": {
+                "additionalProperties": false,
+                "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
+                "properties": {
+                  "params": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "$ref": "#/components/schemas/InsightEventId"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              },
+              "hint": {
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "insights.getRecurringDigestReport"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
               "hint": {
                 "maxLength": 140,
                 "minLength": 1,
@@ -9946,7 +10111,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_35"
+                    "$ref": "#/components/schemas/Objects_37"
                   },
                   "payload": {
                     "$ref": "#/components/schemas/DeliveryEvidenceInput"
@@ -9982,7 +10147,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_35"
+                    "$ref": "#/components/schemas/Objects_37"
                   }
                 },
                 "required": [
@@ -10014,7 +10179,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_35"
+                    "$ref": "#/components/schemas/Objects_37"
                   }
                 },
                 "required": [
@@ -10078,7 +10243,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_40"
+                    "$ref": "#/components/schemas/Objects_42"
                   },
                   "payload": {
                     "$ref": "#/components/schemas/ReviseInput"
@@ -10114,7 +10279,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "params": {
-                    "$ref": "#/components/schemas/Objects_42"
+                    "$ref": "#/components/schemas/Objects_44"
                   }
                 },
                 "required": [
@@ -10178,7 +10343,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "payload": {
-                    "$ref": "#/components/schemas/Objects_45"
+                    "$ref": "#/components/schemas/Objects_47"
                   }
                 },
                 "required": [
@@ -10663,7 +10828,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_34"
+                "$ref": "#/components/schemas/Objects_36"
               }
             },
             "required": [
@@ -10686,7 +10851,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_36"
+                "$ref": "#/components/schemas/Objects_38"
               }
             },
             "required": [
@@ -10709,7 +10874,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_37"
+                "$ref": "#/components/schemas/Objects_39"
               }
             },
             "required": [
@@ -10732,7 +10897,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_38"
+                "$ref": "#/components/schemas/Objects_40"
               }
             },
             "required": [
@@ -10755,7 +10920,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_39"
+                "$ref": "#/components/schemas/Objects_41"
               }
             },
             "required": [
@@ -10778,7 +10943,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_41"
+                "$ref": "#/components/schemas/Objects_43"
               }
             },
             "required": [
@@ -10801,7 +10966,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_43"
+                "$ref": "#/components/schemas/Objects_45"
               }
             },
             "required": [
@@ -10824,7 +10989,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_44"
+                "$ref": "#/components/schemas/Objects_46"
               }
             },
             "required": [
@@ -10847,7 +11012,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_46"
+                "$ref": "#/components/schemas/Objects_48"
               }
             },
             "required": [
@@ -10870,7 +11035,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_47"
+                "$ref": "#/components/schemas/Objects_49"
               }
             },
             "required": [
@@ -15039,7 +15204,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_36"
+                  "$ref": "#/components/schemas/Objects_38"
                 }
               }
             },
@@ -15175,7 +15340,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_38"
+                  "$ref": "#/components/schemas/Objects_40"
                 }
               }
             },
@@ -15311,7 +15476,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_37"
+                  "$ref": "#/components/schemas/Objects_39"
                 }
               }
             },
@@ -15577,6 +15742,155 @@
         "x-fidy-required-tier": "free"
       }
     },
+    "/insights/recurring/{id}": {
+      "get": {
+        "description": "Read your complete immutable itemized recurring-charge detection report. These historical patterns do not imply active commitments. All items preserve captured Money and Currency. Expired delivery leaves the report available.",
+        "operationId": "insights.getRecurringDigestReport",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/InsightEventId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/RecurringDigestReport"
+                    },
+                    "next": {
+                      "$ref": "#/components/schemas/Arrays_"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequiredEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserActionRequiredEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissingEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundEncoded"
+                }
+              }
+            },
+            "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          },
+          {
+            "webSession": []
+          }
+        ],
+        "tags": [
+          "insights"
+        ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "user-owned-agent-scoped"
+        },
+        "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-operation-kind": "query",
+        "x-fidy-required-tier": "free"
+      }
+    },
     "/insights/reminder": {
       "get": {
         "description": "Read your manual-entry reminder instructions. Null means you have not opted in. This operation never grants delivery Consent.",
@@ -15732,7 +16046,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_34"
+                  "$ref": "#/components/schemas/Objects_36"
                 }
               }
             },
@@ -15997,7 +16311,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_39"
+                  "$ref": "#/components/schemas/Objects_41"
                 }
               }
             },
@@ -16133,7 +16447,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_43"
+                  "$ref": "#/components/schemas/Objects_45"
                 }
               }
             },
@@ -16277,7 +16591,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_41"
+                  "$ref": "#/components/schemas/Objects_43"
                 }
               }
             },
@@ -16856,7 +17170,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_44"
+                  "$ref": "#/components/schemas/Objects_46"
                 }
               }
             },
@@ -17147,7 +17461,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_47"
+                  "$ref": "#/components/schemas/Objects_49"
                 }
               }
             },
@@ -17269,7 +17583,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Objects_45"
+                "$ref": "#/components/schemas/Objects_47"
               }
             }
           },
@@ -17280,7 +17594,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_46"
+                  "$ref": "#/components/schemas/Objects_48"
                 }
               }
             },

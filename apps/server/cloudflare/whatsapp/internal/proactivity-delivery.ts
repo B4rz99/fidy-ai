@@ -55,7 +55,7 @@ const protectedAction = (
     return prepareProactivityConsentAction({
       db: input.db,
       userId: input.userId,
-      kind: input.role === "budget-threshold" ? "budget-threshold" : "manual-entry-reminder",
+      kind: input.role === "reminder-question" ? "manual-entry-reminder" : input.role,
       grantId: input.grantId,
       statement,
     });

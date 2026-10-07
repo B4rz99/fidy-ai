@@ -380,3 +380,29 @@ faster ordinary fixture.
 Verification combines dependency/publication checks, generated contracts, browser graph checks, and
 behavioral evidence. Passing a fake or portable test never establishes a production adapter's
 existence, durable guarantees, or launch readiness.
+
+Recurring publishes a complete, bounded confirmation source for the recurring-charge digest.
+Its same-User checkpoint guards the effective Transaction revision, completed detector evaluation,
+and immutable confirmation cutoff. The source includes invalidated and suppressed confirmations
+and explicit legacy exclusions: snapshots without confirmation-time Counterparty remain retained
+and permanently ineligible; current series labels never repair historical snapshots.
+
+Insights stages the complete source before freezing a closed ConfirmationDay. Identity includes
+its local date and both UTC midnight boundaries, so backward travel can produce distinct reports
+with the same date. Atomic materialization consumes every confirmation in the bucket and commits
+its exact instruction version/grant guards, InsightEvent, immutable itemized report and shared
+Proactivity outbox. Acceptance captures the current local midnight cutoff; stable instruction
+identity and permanent consumption survive disable/re-enable. Source identity and the next closing
+day drive bounded Maintenance discovery through published metadata, without inspecting foreign
+owner tables. No weekly ignore governor or inference participates.
+
+An authenticated foreground WhatsApp interaction records the first-discovery offer opportunity
+with its request in one D1 unit, including suppressed discoveries. Only an undisclosed definitively
+rejected send, or expiry before sending, permits a later foreground replacement. Rejected offer
+replacement requires channel-owner proof in Consent's insertion unit. An exact native category
+choice appends legal evidence and changes standing atomically. Financial messages use the existing
+User coordinator, Queue/Workflow, live claims, resource admission and verified transcript settlement.
+When the complete list exceeds the approved parameter limit, one message carries its count and an
+identifier-only authenticated report URL. `insights.getRecurringDigestReport` is a Free canonical
+read with live read capability, same-User authority and atomic Audit; report retention is independent
+of its send deadline. Browser publication includes Insights' declaration-only report schemas.

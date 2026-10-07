@@ -36,10 +36,14 @@ export type ProactivityChannelScope = Readonly<{
 }> &
   (
     | Readonly<{
-        role: "budget-threshold" | "manual-entry-reminder" | "reminder-question";
+        role:
+          | "budget-threshold"
+          | "manual-entry-reminder"
+          | "reminder-question"
+          | "new-recurring-series";
         grantId: ConsentRecordId;
       }>
-    | Readonly<{ role: "budget-offer" | "reminder-offer" }>
+    | Readonly<{ role: "budget-offer" | "reminder-offer" | "recurring-offer" }>
   );
 export type ProactivityChannelStage = ProactivityChannelScope &
   Readonly<{

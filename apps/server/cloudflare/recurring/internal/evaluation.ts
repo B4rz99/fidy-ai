@@ -268,6 +268,7 @@ const confirmationStatement = (
       seriesId: series.id,
       confirmedAt: series.confirmedAt,
       money: series.money,
+      counterparty: series.counterparty,
       cadence: series.cadence,
       announcement: series.announcement,
     });

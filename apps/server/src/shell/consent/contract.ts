@@ -8,7 +8,11 @@ import { type PATGrantSelection, type PairingGrantSelection } from "~/shell/toke
 import { type FreshSessionSubject } from "~/shell/web-session/contract";
 
 /** Additional launch opt-in categories, each independent of the weekly summary grant. */
-export const ProactivityOptInKind = Schema.Literals(["budget-threshold", "manual-entry-reminder"]);
+export const ProactivityOptInKind = Schema.Literals([
+  "budget-threshold",
+  "manual-entry-reminder",
+  "new-recurring-series",
+]);
 export type ProactivityOptInKind = typeof ProactivityOptInKind.Type;
 
 export {

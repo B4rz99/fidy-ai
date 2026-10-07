@@ -112,9 +112,16 @@ and an explicit Counterparty. It does not establish that the charge is still act
 _Avoid_: Subscription (that word means the user's own paid plan), active subscription.
 
 **RecurringSeriesConfirmed**:
-An immutable occurrence recording the first detection of a RecurringSeries and its announcement
-eligibility. It means detector confirmation, not a decision or approval by the User.
+An immutable occurrence recording the first detection of a RecurringSeries, its confirmation-time
+Counterparty, Money, cadence and announcement eligibility. It means detector confirmation, not a
+decision or approval by the User.
 _Avoid_: User confirmation, recurring alert (delivery is separate).
+
+**ConfirmationDay**:
+A captured local calendar date together with the UTC instants of its local midnight and the next
+local midnight. Equal date labels can denote different day windows after travel. A recurring digest
+freezes one complete closed ConfirmationDay and preserves its historical facts.
+_Avoid_: rolling day, active-subscription day.
 
 ### Ingestion
 

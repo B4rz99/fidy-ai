@@ -1,3 +1,4 @@
+import { recurringDigestSourceIdentities } from "../../recurring/operations";
 import { DateTime, Effect, Schema } from "effect";
 import {
   discoverBudgetCrossingUsers,
@@ -44,10 +45,23 @@ export const discoverProactivityUsers = (
         Schema.isMaxLength(maximumGenerationUsers)
       )
     )(offersRaw.results)).map((row) => row.user_id);
+    const source = recurringDigestSourceIdentities();
+    const recurringRaw = yield* Effect.tryPromise(() =>
+      input.db
+        .prepare(
+          `SELECT i.user_id FROM recurring_digest_instructions AS i JOIN (${source.sql}) AS s ON s.user_id=i.user_id WHERE i.enabled=1 AND (i.last_source_identity IS NULL OR i.last_source_identity<>s.source_identity OR i.next_closed_at_ms<=?) ORDER BY i.last_evaluated_at_ms,i.user_id LIMIT ?`
+        )
+        .bind(...source.params, input.now.epochMilliseconds, maximumGenerationUsers)
+        .all()
+    );
+    const recurring = (yield* Schema.decodeUnknownEffect(
+      Schema.Array(Schema.Struct({ user_id: UserId }))
+    )(recurringRaw.results)).map((row) => row.user_id);
     const balanced = Array.from({ length: maximumGenerationUsers }, (_, index) => [
       ...offers.slice(index, index + 1),
       ...budgets.slice(index, index + 1),
       ...reminders.slice(index, index + 1),
+      ...recurring.slice(index, index + 1),
     ]).flat();
     return [...new Set(balanced)].slice(0, maximumGenerationUsers);
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
@@ -56,6 +70,12 @@ export const noteProactivityEvaluation = (
   input: Readonly<{ db: D1Database; userId: UserId; now: DateTime.Utc }>
 ): Effect.Effect<void, InsightUnavailable> =>
   Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      input.db
+        .prepare("UPDATE recurring_digest_instructions SET last_evaluated_at_ms=? WHERE user_id=?")
+        .bind(input.now.epochMilliseconds, input.userId)
+        .run()
+    );
     yield* noteBudgetCrossingEvaluation({ ...input, now: input.now.epochMilliseconds });
     const pending = recoverableOfferRequests(input.now);
     yield* Effect.tryPromise(() =>

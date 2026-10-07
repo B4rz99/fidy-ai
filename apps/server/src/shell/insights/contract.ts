@@ -5,6 +5,8 @@ import {
   InsightDeliveryAttempt,
   InsightEvent,
   InsightEventId,
+  RecurringDigestReport,
+  RecurringDigestReportParams,
   ReminderSchedule,
   ReminderScheduleEdit,
 } from "~/core/insights/contract";
@@ -27,6 +29,25 @@ export const DeliveredInsight = Schema.Struct({
  * authenticated caller, never from request payloads or opaque event ids.
  */
 export const InsightsGroup = HttpApiGroup.make("insights")
+  .add(
+    HttpApiEndpoint.get("getRecurringDigestReport", "/insights/recurring/:id", {
+      params: RecurringDigestReportParams,
+      success: OperationResponse(RecurringDigestReport),
+      error: NotFound,
+    })
+      .annotate(
+        OpenApi.Description,
+        "Read your complete immutable itemized recurring-charge detection report. These historical patterns do not imply active commitments. All items preserve captured Money and Currency. Expired delivery leaves the report available."
+      )
+      .annotateMerge(
+        operationPolicy({
+          access: userOwnedAgentScoped("read"),
+          requiredTier: "free",
+          agentConfirmation: "not-required",
+          kind: "query",
+        })
+      )
+  )
   .add(
     HttpApiEndpoint.get("getReminderSchedule", "/insights/reminder", {
       success: OperationResponse(Schema.NullOr(ReminderSchedule)),

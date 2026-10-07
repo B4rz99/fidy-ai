@@ -271,3 +271,5 @@ export const makeSubscriptionEnrollmentClient = (
       }),
   };
 };
+
+export { RecurringDigestReport, RecurringDigestReportParams } from "@fidy/server/client";

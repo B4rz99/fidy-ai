@@ -27,7 +27,11 @@ const decodeReport = (row: typeof Row.Type): Effect.Effect<ProactivityReport, In
       expiresAt: row.expires_at_ms,
       timeZone: row.time_zone,
     };
-    if (row.role === "budget-offer" || row.role === "reminder-offer") {
+    if (
+      row.role === "budget-offer" ||
+      row.role === "reminder-offer" ||
+      row.role === "recurring-offer"
+    ) {
       if (Option.isNone(row.offer_id) || Option.isSome(row.consent_grant_id)) {
         return yield* new InsightUnavailable();
       }
@@ -69,7 +73,7 @@ export const findReport = (
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 
 export const deliveryQuery = (input: Readonly<{ userId: UserId; id: string }>): OwnedStatement => ({
-  sql: `SELECT 1 FROM proactivity_reports AS r WHERE r.user_id=? AND r.delivery_id=? AND r.text IS NOT NULL AND (r.role<>'reminder-question' OR EXISTS (SELECT 1 FROM reminder_governors AS g JOIN reminder_schedules AS s ON s.user_id=g.user_id WHERE g.user_id=r.user_id AND s.enabled=1 AND s.consent_grant_id=r.consent_grant_id AND g.question_id=r.delivery_id AND json_extract(g.standing_json,'$._tag')='QuestionPending')) AND (r.role<>'manual-entry-reminder' OR EXISTS (SELECT 1 FROM proactivity_message_events AS l JOIN insight_events AS e ON e.user_id=l.user_id AND e.id=l.insight_event_id JOIN reminder_schedules AS s ON s.user_id=e.user_id AND s.id=e.schedule_id JOIN reminder_governors AS g ON g.user_id=s.user_id WHERE l.user_id=r.user_id AND l.delivery_id=r.delivery_id AND e.kind='manual-entry-reminder' AND s.enabled=1 AND s.consent_grant_id=r.consent_grant_id AND json_extract(g.standing_json,'$._tag')<>'Paused'))`,
+  sql: `SELECT 1 FROM proactivity_reports AS r WHERE r.user_id=? AND r.delivery_id=? AND r.text IS NOT NULL AND (r.role<>'new-recurring-series' OR EXISTS(SELECT 1 FROM recurring_digest_reports AS d JOIN recurring_digest_instructions AS i ON i.user_id=d.user_id AND i.id=d.instruction_id WHERE d.user_id=r.user_id AND d.insight_event_id=r.delivery_id AND i.enabled=1 AND i.version=d.instruction_version AND i.grant_id=r.consent_grant_id)) AND (r.role<>'reminder-question' OR EXISTS (SELECT 1 FROM reminder_governors AS g JOIN reminder_schedules AS s ON s.user_id=g.user_id WHERE g.user_id=r.user_id AND s.enabled=1 AND s.consent_grant_id=r.consent_grant_id AND g.question_id=r.delivery_id AND json_extract(g.standing_json,'$._tag')='QuestionPending')) AND (r.role<>'manual-entry-reminder' OR EXISTS (SELECT 1 FROM proactivity_message_events AS l JOIN insight_events AS e ON e.user_id=l.user_id AND e.id=l.insight_event_id JOIN reminder_schedules AS s ON s.user_id=e.user_id AND s.id=e.schedule_id JOIN reminder_governors AS g ON g.user_id=s.user_id WHERE l.user_id=r.user_id AND l.delivery_id=r.delivery_id AND e.kind='manual-entry-reminder' AND s.enabled=1 AND s.consent_grant_id=r.consent_grant_id AND json_extract(g.standing_json,'$._tag')<>'Paused'))`,
   params: [input.userId, input.id],
 });
 

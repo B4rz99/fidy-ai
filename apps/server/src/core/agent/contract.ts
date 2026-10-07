@@ -113,7 +113,12 @@ export const ProactiveMessageTranscriptEntry = Schema.TaggedStruct(
   {
     id: TranscriptEntryId,
     deliveryId: ProactiveDeliveryId,
-    role: Schema.Literals(["budget-offer", "reminder-offer", "reminder-question"]),
+    role: Schema.Literals([
+      "budget-offer",
+      "reminder-offer",
+      "recurring-offer",
+      "reminder-question",
+    ]),
     occurredAt: UtcTimestamp,
     text: TranscriptText,
   }

@@ -3,7 +3,7 @@ import type { ProactivityOptInKind } from "../../src/shell/consent/contract";
 
 import { type ConsentProtectedStatement } from "../../src/shell/consent/contract";
 import { protectConsentStatement } from "../../src/shell/consent/operations";
-import { type Effect } from "effect";
+import { type Effect, Option } from "effect";
 import {
   type ConsentEgressAction,
   type ConsentEgressRefused,
@@ -33,6 +33,7 @@ import type {
   ProactivityConsentAction,
   ProactivityConsentContext,
   ProactivityConsentOffer,
+  ProactivityOfferReplacement,
   WeeklyConsentAction,
   WeeklyConsentContext,
   WeeklyConsentOffer,
@@ -40,7 +41,6 @@ import type {
 } from "./contract";
 import type { ConsentRecord, ConsentRecordId } from "../../src/core/consent/contract";
 import type { UserId } from "../../src/core/identity/contract";
-import type { Option } from "effect";
 
 /** Decode only a complete qualified category choice; a category identity carries no decision authority. */
 export const readProactivityConsentChoiceKind: typeof proactivity.choiceKind = (choice) =>
@@ -58,7 +58,7 @@ export const sweepProactivityConsentOffers = (
 export const createProactivityConsentOffer = (
   input: ProactivityConsentContext
 ): Effect.Effect<Option.Option<ProactivityConsentOffer>, ConsentUnavailable> =>
-  proactivity.createOffer(input);
+  proactivity.createOffer({ context: input, replacement: Option.none() });
 
 /** Reuse one still-live authenticated category disclosure after interrupted contextual delivery preparation. */
 export const findCurrentProactivityOffer: typeof proactivity.findCurrentOffer = (input) =>
@@ -218,3 +218,9 @@ export const prepareConsentOperationalMetadata = (
     .prepare(`${operationalProjection}
 ${input.statement.sql}`)
     .bind(...input.statement.params);
+
+/** Replace only an undisclosed native offer, guarded by owner-qualified definitive failure evidence in the insertion unit. */
+export const replaceProactivityConsentOffer = (
+  input: ProactivityConsentContext & Readonly<{ replacement: ProactivityOfferReplacement }>
+): Effect.Effect<Option.Option<ProactivityConsentOffer>, ConsentUnavailable> =>
+  proactivity.createOffer({ context: input, replacement: Option.some(input.replacement) });

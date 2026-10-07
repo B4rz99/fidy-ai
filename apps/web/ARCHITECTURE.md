@@ -161,3 +161,10 @@ isolated native credentials. The shared suite excludes that journey: other tests
 its exact result comparisons or PAT Audit counts, and its loopback evidence observer exists only in
 CLI acceptance mode. CI preserves separate shared/CLI per-test JSON timings without capturing
 traces, screenshots, or video.
+
+The authenticated `/insights/recurring/$id` route reads the complete frozen recurring-charge report
+through `insights.getRecurringDigestReport`. Its server-owned report/path schemas cross the single
+browser client publication. The feature renders every historical item as escaped React text with
+exact Money/Currency formatting and captured date/zone context. Canonical loading, retry and refresh
+failure states use the existing session registry and query presentation; the URL carries only the
+opaque report identity and supplies no authorization.

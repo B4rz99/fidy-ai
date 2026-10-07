@@ -128,3 +128,9 @@ export type ConsentRevocationInput = Readonly<{
   evidenceId: string;
   current: number;
 }>;
+
+/** Native owner proof permits replacing an undisclosed, definitively rejected offer only. */
+export type ProactivityOfferReplacement = Readonly<{
+  offerId: ConsentRecordId;
+  proof: OwnedStatement;
+}>;

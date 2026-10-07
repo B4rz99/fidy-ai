@@ -435,6 +435,21 @@
       }
     },
     {
+      "id": "insights.getRecurringDigestReport",
+      "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "user-owned-agent-scoped"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredTier": "free"
+      }
+    },
+    {
       "id": "insights.getReminderSchedule",
       "policy": {
         "access": {

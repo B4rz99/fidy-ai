@@ -17,12 +17,14 @@ this change's revision.
 
 The OAuth composition now has seven independently scheduled suites: bootstrap/approval,
 confirmation, canonical execution, management, refresh, discovery, and native residency.
-All 181 historical case titles map exactly once, and all 103 original test/describe AST nodes
-match after normalizing only the extracted fixtures' named arguments/defaults. The fixtures
+The initial split preserved all 181 historical case titles and all 103 original test/describe
+AST nodes after normalizing only the extracted fixtures' named arguments/defaults. The subsequent
+standards cleanup below removes one redundant inventory case. The fixtures
 retain independent databases and coordinators, including the predecessor-migration paths.
 Weights are explicitly single-run estimates, refreshed from the first successful Linux PR run
-after the split and fixture optimization. The existing four runners remain unchanged. The initial measurements retained serial file
-execution; the final concurrency probe below uses two isolated file processes per runner.
+after the split and fixture optimization, and again from the two-process Linux run. The existing
+four runners remain unchanged. The initial measurements retained serial file execution;
+the subsequent concurrency probes use isolated file processes on the same hardware.
 
 Pooled D1 fixtures now prepare their baseline batch inside the same native Worker rather than
 making one synchronous Miniflare proxy call per statement. Every fresh binding still executes
@@ -86,8 +88,17 @@ and all six native conformance cases.
 A subsequent concurrency probe passed all 384 cases in one adapter shard in 73.4s locally with
 two file processes. The selected Vitest release uses isolated forks: each file owns independent
 Miniflare channels and binding pools. The full-suite probe passed all 1,342 executed cases with nine unchanged provider-gated skips
-and zero failures in 288.3s locally. The final Linux run must validate this bounded concurrency
-before merge. This uses the same four runners and their existing hardware;
+and zero failures in 288.3s locally.
+
+The [two-process Linux run 37548664002](https://github.com/B4rz99/fidy-ai/actions/runs/37548664002)
+passed, but complete adapter jobs took 177/172/215/185s. Infrastructure took 106s. The slowest
+adapter shard held 347.1s of file execution while the lightest held 241.3s; weights were refreshed
+from this run to avoid retaining the old serial-cost imbalance. A three-process probe passed
+all 342 cases in the previous slowest shard in 69.6s locally, but the full three-process run
+took 277.0s and failed three cases (two at the existing 15s timeout). Its 11.3s gain over two
+processes does not justify the contention failures. The cap remains two, with no timeout
+increases or retries to hide failures. Final Linux job durations must validate the rebalanced
+assignment before merge. These probes use the same four runners and their existing hardware;
 no runner scaling or concurrent cases are introduced.
 
 ## Linux CI confirmation

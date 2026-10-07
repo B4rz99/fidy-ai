@@ -90,5 +90,7 @@
     "Controlled clock and access-expiry faults prove behavior, not natural seven-day passage.",
     "Native cancellation/headless proofs remain separate actual-host injected-grant bridge cases."
   ],
-  "secretOrFinancialContentRecorded": false
+  "secretOrFinancialContentRecorded": false,
+  "runtimeRevision": "d4d019f2c3ee5c33096a3191697ea469204d2f0a",
+  "finalFixtureConnectionsRevoked": 2
 }

@@ -10,7 +10,9 @@ the [controlled-proof procedure](../operations/hosted-mcp-release.md) records re
 
 ## Configuration and provenance
 
-Starting/runtime revision: `1e743e2785b84d7cf944d04e533288b737dbef04`. The changes in this ticket
+Starting revision: `1e743e2785b84d7cf944d04e533288b737dbef04`. Complete local host journeys used
+the runtime now committed as `d4d019f2c3ee5c33096a3191697ea469204d2f0a`; the follow-up production
+artifact was built at that exact revision. The changes in this ticket
 extend the existing release edge verifier, correct dropped GET headers, accept bounded standard
 registration scope hints and the already-adopted exact localhost native callback. The browser
 acceptance fixture now retains coordinator instances across HTTP requests, matching resident MCP
@@ -104,7 +106,7 @@ the default topology and fail with connection refusal. Rerunning with that mode 
 | `bun run --cwd apps/web test -- src/features/oauth-connections scripts/production-workflow.test.ts scripts/build-production.test.ts scripts/cloudflare-adapter.test.ts`                        | 42 passed                                     | Spanish permission/duration/management presentation and static artifact/release policies.                                                                                                                                                                                                                       |
 | `CLI_ACCEPTANCE_MODE=oauth bun --bun playwright test --config playwright.oauth.config.ts` in apps/web                                                                                          | Five passed                                   | Built browser, established synthetic sign-in, narrowed scope/lifetime approval, callback exchange, expiry/revocation and separate PAT/logout controls, forged/hostile inputs and bounded bootstrap pressure at real ingress/Core. Browser approval delivery is a loopback operator fixture, not a real channel. |
 | `bun run --cwd infra/cloudflare test -- verify-edge-smoke.test.ts workers.test.ts production-preflight.test.ts production-release.test.ts release-controller.test.ts release-rollback.test.ts` | 96 passed                                     | Release preflight/controller/rollback, ingress ownership/policy and expanded edge gate.                                                                                                                                                                                                                         |
-| `RELEASE_GIT_SHA=1e743e2785b84d7cf944d04e533288b737dbef04 bun run --cwd apps/web build:production`                                                                                             | Passed                                        | Actual validated production-mode static artifact, not only build-policy fixtures.                                                                                                                                                                                                                               |
+| `RELEASE_GIT_SHA=d4d019f2c3ee5c33096a3191697ea469204d2f0a bun run --cwd apps/web build:production`                                                                                             | Passed                                        | Actual validated production-mode static artifact, not only build-policy fixtures.                                                                                                                                                                                                                               |
 
 Streaming/resource evidence is in `oauth-native-residency.test.ts` (actual streamed request/response
 bounds, resident-owner/concurrency limits and disconnect cleanup), `oauth-ingress.test.ts`

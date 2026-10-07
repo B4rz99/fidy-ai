@@ -36,6 +36,19 @@ const queryTools = operationCatalog.operations.filter(
     !uninstalledQueries.has(id)
 );
 
+// Bound each case's workload while deriving complete coverage from the assembled catalog.
+const queriesPerCase = 8;
+const queryGroups = Array.from(
+  { length: Math.ceil(queryTools.length / queriesPerCase) },
+  (_, index) => ({
+    batch: index + 1,
+    operations: queryTools.slice(index * queriesPerCase, (index + 1) * queriesPerCase),
+  })
+);
+const userQueryCases = queryGroups.flatMap((group) =>
+  (["owner", "peer"] as const).map((user) => ({ ...group, user }))
+);
+
 it("refuses deliberately missing canonical query adapters without inventing a binding or accounting work", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -169,10 +182,11 @@ it("retains a 2025 session across separate initialized and discovery requests th
     })
   ));
 
-it("derives exact private canonical discovery for every non-empty capability combination without leaking nested unauthorized identities", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      for (const { scopes, tools, additionalDeclarations } of discoveryCases) {
+it.each(discoveryCases)(
+  "derives exact private discovery for $scopes capabilities without leaking unauthorized identities",
+  ({ scopes, tools, additionalDeclarations }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
         const capabilities = yield* Schema.decodeUnknownEffect(PATScopes)(scopes);
         const fixture = yield* approvedFixture({
           scopes: capabilities,
@@ -218,9 +232,9 @@ it("derives exact private canonical discovery for every non-empty capability com
         )) {
           expect(schemas).not.toContain(`"${operation.id}"`);
         }
-      }
-    })
-  ));
+      })
+    )
+);
 
 const expectedQueryFailure = (id: string, peer: boolean): boolean =>
   id === "ingestion.getStatementSubmission" ||
@@ -232,9 +246,9 @@ const expectedQueryFailure = (id: string, peer: boolean): boolean =>
       "transactions.getTransaction",
     ].includes(id));
 
-it.each(["owner", "peer"] as const)(
-  "executes every installed declaration-derived query through Core for the %s User with private exact structured and text outcomes",
-  (user) =>
+it.each(userQueryCases)(
+  "executes installed queries through Core for the $user User in batch $batch with private exact structured and text outcomes",
+  ({ user, operations }) =>
     Effect.runPromise(
       Effect.gen(function* () {
         const fixture = yield* approvedFixture({
@@ -321,7 +335,7 @@ it.each(["owner", "peer"] as const)(
             (yield* wait(exchangeFixture({ send: fixture.send, body: current.body }))).json()
           )
         );
-        for (const operation of queryTools) {
+        for (const operation of operations) {
           // Catalog cases exercise owner behavior, not burst admission.
           vi.spyOn(Date, "now").mockReturnValue((yield* Clock.currentTimeMillis) + 1000);
           const args = examples.find((example) =>
@@ -406,64 +420,67 @@ it.each(["owner", "peer"] as const)(
     )
 );
 
-it("validates malformed structured inputs for every eligible query without echoing arguments or duplicating accounting", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const fixture = yield* approvedFixture({
-        scopes: ["read", "write", "dashboard"],
-        lifetimeDays: 7,
-        auditMigration: true,
-      });
-      const token = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({ access_token: Schema.String })
-      )(yield* wait((yield* wait(exchangeFixture(fixture))).json()));
-      for (const operation of queryTools) {
-        vi.spyOn(Date, "now").mockReturnValue((yield* Clock.currentTimeMillis) + 1000);
-        const result = yield* Schema.decodeUnknownEffect(
-          Schema.Struct({
-            result: Schema.Struct({
-              isError: Schema.Literal(true),
-              structuredContent: Schema.Json,
-              content: Schema.Array(Schema.Struct({ text: Schema.String })),
-            }),
-          })
-        )(
-          yield* wait(
-            (yield* wait(
-              mcpFixture({
-                retryKey: Option.none(),
-                send: fixture.send,
-                bearer: token.access_token,
-                method: "tools/call",
-                name: operation.id,
-                args: { unexpected: "private-input-must-not-escape" },
-              })
-            )).json()
-          )
-        );
-        expect(result.result.structuredContent, operation.id).toMatchObject({
-          error: { code: "validation_failed" },
-          next: [],
+it.each(queryGroups)(
+  "refuses malformed query inputs in batch $batch without echoing arguments or duplicating accounting",
+  ({ operations }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = yield* approvedFixture({
+          scopes: ["read", "write", "dashboard"],
+          lifetimeDays: 7,
+          auditMigration: true,
         });
-        expect(
-          Option.isSome(Schema.decodeOption(operation.failure)(result.result.structuredContent)),
-          operation.id
-        ).toBe(true);
-        expect(result.result.content[0]?.text, operation.id).not.toContain(
-          "private-input-must-not-escape"
-        );
-        const audit = yield* wait(
-          fixture.db
-            .prepare(
-              "SELECT outcome FROM pat_audit WHERE operation = ? AND oauth_connection_id = ?"
+        const token = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({ access_token: Schema.String })
+        )(yield* wait((yield* wait(exchangeFixture(fixture))).json()));
+        for (const operation of operations) {
+          vi.spyOn(Date, "now").mockReturnValue((yield* Clock.currentTimeMillis) + 1000);
+          const result = yield* Schema.decodeUnknownEffect(
+            Schema.Struct({
+              result: Schema.Struct({
+                isError: Schema.Literal(true),
+                structuredContent: Schema.Json,
+                content: Schema.Array(Schema.Struct({ text: Schema.String })),
+              }),
+            })
+          )(
+            yield* wait(
+              (yield* wait(
+                mcpFixture({
+                  retryKey: Option.none(),
+                  send: fixture.send,
+                  bearer: token.access_token,
+                  method: "tools/call",
+                  name: operation.id,
+                  args: { unexpected: "private-input-must-not-escape" },
+                })
+              )).json()
             )
-            .bind(operation.id, fixture.connectionId)
-            .all()
-        );
-        expect(audit.results, operation.id).toEqual([{ outcome: "rejected" }]);
-      }
-    })
-  ));
+          );
+          expect(result.result.structuredContent, operation.id).toMatchObject({
+            error: { code: "validation_failed" },
+            next: [],
+          });
+          expect(
+            Option.isSome(Schema.decodeOption(operation.failure)(result.result.structuredContent)),
+            operation.id
+          ).toBe(true);
+          expect(result.result.content[0]?.text, operation.id).not.toContain(
+            "private-input-must-not-escape"
+          );
+          const audit = yield* wait(
+            fixture.db
+              .prepare(
+                "SELECT outcome FROM pat_audit WHERE operation = ? AND oauth_connection_id = ?"
+              )
+              .bind(operation.id, fixture.connectionId)
+              .all()
+          );
+          expect(audit.results, operation.id).toEqual([{ outcome: "rejected" }]);
+        }
+      })
+    )
+);
 
 it("retains complete query data while removing scope-inaccessible continuations before MCP serialization", () =>
   Effect.runPromise(

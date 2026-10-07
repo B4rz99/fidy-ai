@@ -382,3 +382,13 @@ batches, with distinct transaction support, counterparties, series and immutable
 identities; native detection still processes the subsequent real facts. The acceptance case
 retains the full 128-pattern production detection. The same three-file contention probe passes
 all 134 cases, with acceptance and union taking 2.6s and 2.3s respectively. No deadline is raised.
+
+The [next Linux run 37554970733](https://github.com/B4rz99/fidy-ai/actions/runs/37554970733)
+completed adapter jobs in 166/160/176/124s and infrastructure in 99s. Both Recurring limit
+cases passed, but the exhaustive owner-query case reached its existing 15s deadline.
+Catalog-derived query groups now cover at most eight operations per case for each User and
+malformed-input sweep; every operation, exact outcome, privacy and Audit assertion remains.
+Each of the seven capability grants also has its own case instead of sharing one deadline.
+The discovery/hosted-turn/native-residency contention probe passes all 129 cases with zero
+failures; the longest case takes 3.5s locally and owner query groups take at most 2.3s.
+These local results require a fresh successful Linux run before merge.

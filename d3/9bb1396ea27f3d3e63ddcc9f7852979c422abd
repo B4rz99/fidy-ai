@@ -1,0 +1,45 @@
+docs/research/hosted-mcp-release-990.md
+  s_e3b9a05f422f64::t_4ba732b03925e8 14-17,48-90,101,170
+  s_e3b9a05f422f64::t_e96aa5f6aee22b 156-164
+docs/operations/hosted-mcp-release.md
+  s_e3b9a05f422f64::t_90b5bcf50df034 17-41
+apps/server/src/shell/oauth-agents/contract.ts
+  s_e3b9a05f422f64::t_91f154dd63e274 94-100
+  s_e3b9a05f422f64::t_1d0bc6dc15d0f2 68
+apps/server/cloudflare/browser-acceptance-preview.ts
+  s_e3b9a05f422f64::t_5c3fb64d80d76f 283-284
+  s_e3b9a05f422f64::t_ac62cc14e4cfd0 282,285
+  s_e3b9a05f422f64::t_d3bcad8f8956c7 269-281,286-288,323
+docs/research/hosted-mcp-journey-990.evidence.json
+  s_e3b9a05f422f64::t_e96aa5f6aee22b 29-30
+  s_e3b9a05f422f64::t_4ba732b03925e8 1-28,31-94
+apps/server/cloudflare/oauth-agents/oauth-ingress.test.ts
+  s_e3b9a05f422f64::t_3ce4911d41e864 940-942
+  s_e3b9a05f422f64::t_bdabd0010c03bb 1128-1129,1131-1159,1164-1169
+  s_e3b9a05f422f64::t_699a00ff5e0256 931,935,943,945,1094-1127
+  s_e3b9a05f422f64::t_5c3fb64d80d76f 1160-1163
+  s_e3b9a05f422f64::t_6d839f0f3a2021 1130
+docs/guides/hosted-mcp.md
+  s_e3b9a05f422f64::t_90b5bcf50df034 17-18,21-24,29,34-35
+apps/web/e2e/oauth-review.spec.ts
+  s_e3b9a05f422f64::t_5c3fb64d80d76f 554-557
+  s_e3b9a05f422f64::t_ac62cc14e4cfd0 15,227
+  s_e3b9a05f422f64::t_e1d7653328bc16 184,189-226,228-236
+  s_e3b9a05f422f64::t_ce77d13b9daeb9 237
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d39bb1396ea27f3d3e63ddcc9f7852979c422abd",
+  "prompts": {},
+  "sessions": {
+    "s_e3b9a05f422f64": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a115f2-dfce-7741-a6e9-e22144cd3fad",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

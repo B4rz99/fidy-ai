@@ -363,3 +363,12 @@ The revised full three-process probe passes all 1,352 executed cases in 199.7s, 
 unchanged gated skips and zero failures. This includes both separate User query cases and the native residency
 case that timed out in the earlier probe. The final configuration selects three isolated file
 processes on each existing runner; Linux CI must confirm reliability and complete-job durations.
+
+The first [three-process Linux run 37553520106](https://github.com/B4rz99/fidy-ai/actions/runs/37553520106)
+passed adapter jobs in 166/152/158s, but the fourth took 189s and timed out the retained-plus-new
+Recurring identity case. Infrastructure passed in 102s. Recurring fixture setup still applied
+all 87 migrations through separate requests on every case; it now installs the same completed
+schema through the existing native ordered installer. These cases contain no migration-history
+assertions. All 19 Recurring cases pass locally, retaining full detector, coordinator and public
+query behavior. Scheduling estimates use this actual three-process run rather than retaining
+the lower two-process costs. Recurring conservatively retains its pre-bootstrap-fix measurement.

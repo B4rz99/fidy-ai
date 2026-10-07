@@ -5,7 +5,7 @@ import { TestClock } from "effect/testing";
 import { UserId } from "../../src/core/identity/contract";
 import { Money } from "../../src/core/_shared/money";
 import { RecurringSeriesPage } from "../../src/core/recurring/contract";
-import { applyTestMigration, isolatedTestDatabases } from "../d1-test-fixture";
+import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import {
   evaluateRecurringSeries,
   listRecurringSeries,
@@ -65,13 +65,9 @@ const setup = (): Effect.Effect<D1Database> =>
     const db = yield* fromPromise(() => databases.acquire());
     const folder = new URL("../migrations/", import.meta.url);
     const names = [...new Bun.Glob("*.sql").scanSync({ cwd: folder.pathname })].sort();
-    for (const name of names) {
-      yield* fromPromise(() =>
-        applyTestMigration({ db, source: new URL(name, folder) }).catch((cause: unknown) => {
-          throw new Error(`Migration ${name} failed`, { cause });
-        })
-      );
-    }
+    yield* fromPromise(() =>
+      installTestSchema({ db, sources: names.map((name) => new URL(name, folder)) })
+    );
     for (const subject of [userId, otherUserId]) {
       yield* fromPromise(() =>
         db.batch([

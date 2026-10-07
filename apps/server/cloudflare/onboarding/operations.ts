@@ -1,10 +1,8 @@
-import { UserId } from "../../src/core/identity/contract";
-import { prepareVerifiedIdentity } from "../identity/operations";
+import { prepareOnboardingWhatsAppAssociation } from "../identity/operations";
 import { recordOnboardingConsent } from "../consent/operations";
 import { verifyOnboardingEmail } from "../email-authentication/operations";
-import { issueInitialBackupRecoveryCode } from "../recovery/operations";
-import { newId } from "../secret-material/operations";
 import type { OnboardingRequest } from "./contract";
+import { completeEnrollment } from "./internal/completion";
 
 /**
  * Create one stable User only after mandatory mailbox proof, composing all owners in one atomic
@@ -15,34 +13,19 @@ export const completeOnboarding = ({ db, request }: OnboardingRequest): Promise<
   verifyOnboardingEmail({
     db,
     request,
-    complete: ({ exchangeId, verifiedAtMs, commit }) => {
-      const userId = UserId.make(newId());
-      const identity = prepareVerifiedIdentity({
+    complete: ({ exchangeId, verifiedAtMs, commit }) =>
+      completeEnrollment({
         db,
-        userId,
-        exchangeId,
         createdAtMs: verifiedAtMs,
-      });
-      return issueInitialBackupRecoveryCode({
-        db,
-        userId,
-        createdAtMs: verifiedAtMs,
-        commit: (credential) =>
-          commit({
+        prepareEvidence: (userId) => [
+          prepareOnboardingWhatsAppAssociation({
+            db,
             userId,
-            statements: [
-              identity.createUser,
-              identity.associateCaller,
-              recordOnboardingConsent({ db, userId, exchangeId }),
-              identity.startTrial,
-              credential,
-            ],
+            exchangeId,
+            createdAtMs: verifiedAtMs,
           }),
-      }).then((recoveryCode) =>
-        Response.json(
-          { status: "created", backupRecoveryCode: recoveryCode },
-          { headers: { "cache-control": "no-store" } }
-        )
-      );
-    },
+          recordOnboardingConsent({ db, userId, exchangeId }),
+        ],
+        commit,
+      }),
   });

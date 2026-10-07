@@ -2047,10 +2047,10 @@ const PROBES: readonly Probe[] = [
       {
         path: `${cloudflareIdentityPublished}/probe.ts`,
         source:
-          'import { findWhatsAppUser, prepareVerifiedIdentity } from "../identity/operations";\n' +
+          'import { findWhatsAppUser, prepareUserCreation, prepareOnboardingWhatsAppAssociation } from "../identity/operations";\n' +
           'import { readUserContext } from "../identity/user-context/operations";\n' +
           'import { User, WhatsAppIdentity } from "@fidy/server/identity-contract";\n' +
-          "export const published = [findWhatsAppUser, prepareVerifiedIdentity, readUserContext, User, WhatsAppIdentity];\n",
+          "export const published = [findWhatsAppUser, prepareUserCreation, prepareOnboardingWhatsAppAssociation, readUserContext, User, WhatsAppIdentity];\n",
       },
     ],
     name: "Cloudflare consumers may use the published Identity contract and operations",

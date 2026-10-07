@@ -178,6 +178,16 @@ session or change the stable User association. Onboarding composes verified owne
 but does not issue a WebSession. Tokens owns the distinct PAT/PATPairing lifecycle; bearer plaintext
 is disclosed only at issuance/claim, while server persistence retains verification evidence.
 
+Under #1088, Onboarding's private completion composition prepares the new User, original
+168-hour TrialPeriod and digest-only BackupRecoveryCode independently of channel evidence.
+The installed WhatsApp/mailbox adapter still requires accepted channel Consent and current mailbox
+proof: it supplies the exact exchange's WhatsApp association and historical Consent to that same
+new User. Email Authentication retains the one-use commit, adding its VerifiedEmailCredential and
+final proof-consumption guard to the single D1 batch. Refusal rolls back all owner state; success
+discloses the recovery code once in the immediate no-store response. Only the proof-bearing request
+is published; the common composition is private and enables no additional signup path. This
+preserved workflow adds no external work or telemetry requirements.
+
 Consent owns current standing and append-only evidence. A standing read is not cached authorization.
 Ordinary protected work checks current Consent. An exact Pending hosted Turn retains its admitted
 Consent basis for bounded completion; revocation prevents the next Turn. Model egress still passes

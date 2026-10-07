@@ -7,9 +7,8 @@ import {
 } from "../email-authentication/runtime";
 import { EmailAddress, EmailVerificationCode } from "../../src/core/email-authentication/contract";
 import { observeOperationalHealth } from "../runtime/operational-health/operations";
-import { Miniflare } from "miniflare";
-import { applyTestMigration } from "../d1-test-fixture";
-import { afterEach, expect, it, vi } from "vitest";
+import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
+import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { startBrowserPairing } from "../browser-login/operations";
 
 import { Cause, Clock, Effect, Exit, Option, Schema } from "effect";
@@ -44,11 +43,11 @@ const signWebhook = (secret: string, body: string | Uint8Array): Promise<string>
 const encodeJson = (value: unknown): string =>
   Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(value);
 
-const mfInstances: Array<Miniflare> = [];
+const databases = isolatedTestDatabases();
+afterAll(() => databases.dispose());
 const exchange = "10000000-0000-4000-8000-000000000001";
 const enrollment = "10000000-0000-4000-8000-000000000002";
 const code = "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ";
-let nextDatabase = 0;
 const digest = (text: string): Promise<Uint8Array> =>
   crypto.subtle
     .digest("SHA-256", new TextEncoder().encode(text))
@@ -80,46 +79,20 @@ const setup = (
 }> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const mf = new Miniflare({
-        workers: [
-          {
-            config: {
-              compatibilityDate: "2026-09-08",
-              env: { DB: { id: `verified-${++nextDatabase}`, type: "d1" } },
-              manifest: {
-                mainModule: "index.mjs",
-                modules: {
-                  "index.mjs": {
-                    contents: "export default {fetch() {return new Response('ok')}}",
-                    type: "esm",
-                  },
-                },
-              },
-              name: `verified-${nextDatabase}`,
-              type: "worker",
-            },
-          },
-        ],
-      });
-      mfInstances.push(mf);
-      yield* Effect.tryPromise(() => mf.ready);
-      const db = yield* Effect.tryPromise(() => mf.getD1Database("DB"));
-      const applyMigration = (name: string): Promise<void> =>
-        applyTestMigration({ db, source: new URL(`../migrations/${name}.sql`, import.meta.url) });
-      // Applied migrations depend on the preceding schema, so they must run in order.
+      const db = yield* Effect.tryPromise(() => databases.acquire());
       yield* Effect.tryPromise(() =>
-        [
-          "0003_pending_consent",
-          "0004_onboarding_email",
-          "0005_verified_onboarding",
-          "0006_browser_login",
-          "0007_browser_pairing_email",
-          "0008_support_recovery",
-          "0009_email_replacement",
-        ].reduce<Promise<void>>(
-          (previous, name) => previous.then(() => applyMigration(name)),
-          Promise.resolve()
-        )
+        installTestSchema({
+          db,
+          sources: [
+            "0003_pending_consent",
+            "0004_onboarding_email",
+            "0005_verified_onboarding",
+            "0006_browser_login",
+            "0007_browser_pairing_email",
+            "0008_support_recovery",
+            "0009_email_replacement",
+          ].map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
+        })
       );
 
       const now = yield* Clock.currentTimeMillis;
@@ -247,15 +220,10 @@ const setup = (
     })
   );
 
-afterEach(() =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      vi.useRealTimers();
-      vi.restoreAllMocks();
-      yield* Effect.tryPromise(() => Promise.all(mfInstances.splice(0).map((mf) => mf.dispose())));
-    })
-  )
-);
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 it("creates one complete stable identity on first valid mailbox proof and refuses replay", () =>
   Effect.runPromise(

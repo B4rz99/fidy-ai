@@ -16,8 +16,8 @@ it("separates the two slowest suites and fills spare capacity with smaller suite
       count: 2,
     })
   ).toEqual([
-    [transactions, dashboard],
-    [statements, pats],
+    [transactions, pats],
+    [dashboard, statements],
   ]);
 });
 
@@ -33,9 +33,9 @@ it("assigns new and measured files exactly once regardless of discovery order", 
   }
 });
 
-it("runs the entire discovered suite when only one shard is requested", () => {
+it("orders the entire discovered suite longest-first when only one shard is requested", () => {
   const files = [file("new-feature"), file("transactions/transactions")];
   const shards = cloudflareTestShards({ files, cloudflareRoot: root, count: 1 });
   expect(shards).toHaveLength(1);
-  expect(shards.flat().sort()).toEqual([...files].sort());
+  expect(shards.flat()).toEqual([file("transactions/transactions"), file("new-feature")]);
 });

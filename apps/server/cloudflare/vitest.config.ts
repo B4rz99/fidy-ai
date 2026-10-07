@@ -11,11 +11,11 @@ export default defineConfig({
   test: {
     include: ["cloudflare/**/*.test.ts"],
     sequence: { sequencer: CloudflareTestSequencer },
-    // Miniflare instances answer their synchronous D1/R2 calls through a worker channel that
-    // asserts each response id. Running several D1/R2-heavy files at once delivers a foreign id and
-    // fails an unrelated file's test with `assert(message?.id === id)`. Files run one at a time so
-    // the suite is deterministic; CI distributes files by estimated duration across runners.
-    fileParallelism: false,
+    // Bound concurrency on the existing runner, with a separate process and module isolation
+    // for each file's native Miniflare channels. Do not share bindings or run concurrent cases.
+    pool: "forks",
+    fileParallelism: true,
+    maxWorkers: 3,
     testTimeout: 15_000,
   },
 });

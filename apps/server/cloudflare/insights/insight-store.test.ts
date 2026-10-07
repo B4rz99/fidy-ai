@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { InsightUnavailable } from "./contract";
 import { UserId } from "../../src/core/identity/contract";
 import {
-  applyTestMigration,
   canonicalAdmissionMigrationNames,
+  installTestSchema,
   isolatedTestDatabases,
   statementAuditTestMigrations,
 } from "../d1-test-fixture";
@@ -40,10 +40,6 @@ const insightCompletion = (db: D1Database): D1PreparedStatement =>
     VALUES (1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END)
     ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`);
 afterAll(() => databases.dispose());
-const migrate = (db: D1Database, migration: string): Effect.Effect<void> =>
-  fromTestPromise(() =>
-    applyTestMigration({ db, source: new URL(`../migrations/${migration}.sql`, import.meta.url) })
-  );
 const seedUser = (db: D1Database, index: number, current: number): Effect.Effect<void> =>
   Effect.gen(function* () {
     const user = users[index] ?? users[0];
@@ -116,13 +112,13 @@ const setup = (): Effect.Effect<D1Database> =>
       "0018_dashboard",
       ...statementAuditTestMigrations,
     ];
-    yield* Effect.forEach(
-      canonicalAdmissionMigrationNames(migrations),
-      (migration) => migrate(db, migration),
-      {
-        concurrency: 1,
-        discard: true,
-      }
+    yield* fromTestPromise(() =>
+      installTestSchema({
+        db,
+        sources: canonicalAdmissionMigrationNames(migrations).map(
+          (name) => new URL(`../migrations/${name}.sql`, import.meta.url)
+        ),
+      })
     );
     const current = DateTime.nowUnsafe().epochMilliseconds;
     yield* Effect.forEach(users, (_user, index) => seedUser(db, index, current), {
@@ -411,15 +407,26 @@ effectIt.effect(
     Effect.gen(function* () {
       const db = yield* setup();
       yield* fromTestPromise(() => authorizeBrowser(db));
-      yield* Effect.forEach(
-        Array.from({ length: 65 }, (_, index) => index),
-        (index) =>
-          generateInsight({
-            db,
-            userId: users[0],
-            input: { ...input, scheduledAt: DateTime.add(input.scheduledAt, { seconds: index }) },
-          }),
-        { concurrency: 1, discard: true }
+      const seed = Option.getOrThrow(yield* generated(db));
+      // Seed the remaining occurrences in one native batch; generator behavior is covered above.
+      yield* fromTestPromise(() =>
+        db.batch(
+          Array.from({ length: 64 }, (_, index) =>
+            db
+              .prepare(
+                `INSERT INTO insight_events
+                  (id,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,
+                    scheduled_at,money_groups_json,lifecycle_state)
+                SELECT ?,user_id,kind,schedule_id,schedule_version,service_market,locale,time_zone,
+                  ?,money_groups_json,lifecycle_state FROM insight_events WHERE id = ?`
+              )
+              .bind(
+                `90000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+                DateTime.formatIso(DateTime.add(input.scheduledAt, { seconds: index + 1 })),
+                seed.id
+              )
+          )
+        )
       );
       const due = Option.getOrThrow(
         yield* discoverDueInsights({ db, now: DateTime.add(input.scheduledAt, { minutes: 2 }) })

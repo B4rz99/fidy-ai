@@ -845,7 +845,18 @@ it.each([
       ).toEqual({ count: 0 });
       if (scenario.status === "source-verifying") {
         matching = true;
-        yield* Effect.sleep("4 seconds");
+        const premature = yield* fromTestPromise(send);
+        expect(yield* fromTestPromise(() => premature.json())).toMatchObject({
+          status: "source-verifying",
+          enrollmentId: prepared.enrollmentId,
+        });
+        // Arrange an elapsed persisted cooldown without delaying the adapter suite.
+        yield* fromTestPromise(() =>
+          fixture.db
+            .prepare("UPDATE card_enrollments SET last_verification_at_ms = ? WHERE id = ?")
+            .bind(DateTime.nowUnsafe().epochMilliseconds - 4_000, prepared.enrollmentId)
+            .run()
+        );
         const adopted = yield* fromTestPromise(send);
         expect(yield* fromTestPromise(() => adopted.json())).toMatchObject({
           status: "payment-pending",

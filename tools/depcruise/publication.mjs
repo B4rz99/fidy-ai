@@ -49,8 +49,16 @@ const compositionRoots = new Set([
   // Correction isolation constructs the actual User coordinator with migrated D1 persistence.
   "cloudflare/subscription/refunds.test.ts",
   "cloudflare/tokens/pats.test.ts",
-  // Real public/Core OAuth bootstrap with isolated admission and fresh-session D1.
+  // OAuth suites compose real public/Core ingress, canonical owners and User coordination.
+  "cloudflare/oauth-agents/oauth-ingress.test-fixture.ts",
   "cloudflare/oauth-agents/oauth-ingress.test.ts",
+  "cloudflare/oauth-agents/oauth-confirmation.test.ts",
+  "cloudflare/oauth-agents/oauth-canonical.test.ts",
+  "cloudflare/oauth-agents/oauth-allowance.test.ts",
+  "cloudflare/oauth-agents/oauth-management.test.ts",
+  "cloudflare/oauth-agents/oauth-refresh.test.ts",
+  "cloudflare/oauth-agents/oauth-discovery.test.ts",
+  "cloudflare/oauth-agents/oauth-native-residency.test.ts",
   "cloudflare/transactions/transactions.test.ts",
   "cloudflare/audit/internal/audit.test.ts",
   // Real predecessor upgrade and mixed browser/PAT/hosted Audit observation.

@@ -465,7 +465,11 @@
     // The guard is meant to catch deep nesting, not to ban array callbacks in
     // tests, so tests get one level of their own.
     {
-      "files": ["**/*.test.ts", "**/*.test.js"],
+      "files": [
+        "**/*.test.ts",
+        "**/*.test.js",
+        "apps/server/cloudflare/oauth-agents/oauth-ingress.test-fixture.ts"
+      ],
       "rules": {
         "max-nested-callbacks": ["error", 4],
         "max-lines-per-function": "off",

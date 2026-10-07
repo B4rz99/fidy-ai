@@ -330,6 +330,7 @@ const setup = (seedLegacyTurn = false): Promise<D1Database> =>
         Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot))
       )(currentDisclosureFor());
       const timestamp = now();
+      const statements: D1PreparedStatement[] = [];
       for (const index of [0, 1]) {
         const user = users[index];
         const pairing = pairings[index];
@@ -343,24 +344,22 @@ const setup = (seedLegacyTurn = false): Promise<D1Database> =>
         ) {
           throw Error("fixture");
         }
-        yield* Effect.tryPromise(() =>
+        statements.push(
           db
             .prepare(
               "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)"
             )
             .bind(user, timestamp)
-            .run()
         );
-        yield* Effect.tryPromise(() =>
+        statements.push(
           db
             .prepare(
               "INSERT INTO onboarding_consent_records (id, user_id, disclosure_json, disclosure_message_id, decision_message_id, decision_received_at_ms, accepted_at_ms) VALUES (?, ?, ?, 'disclosed', 'accepted', ?, ?)"
             )
             .bind(grant, user, snapshot, timestamp, timestamp)
-            .run()
         );
         const awaited1 = yield* Effect.tryPromise(() => digest(`verifier${index}`));
-        yield* Effect.tryPromise(() =>
+        statements.push(
           db
             .prepare(
               "INSERT INTO browser_login_pairings (id, public_code, verifier_digest, user_id, state, created_at_ms, expires_at_ms) VALUES (?, ?, ?, ?, 'consumed', ?, ?)"
@@ -373,10 +372,9 @@ const setup = (seedLegacyTurn = false): Promise<D1Database> =>
               timestamp - 1_000,
               timestamp + 599_000
             )
-            .run()
         );
         const awaited2 = yield* Effect.tryPromise(() => digest(bearer(index)));
-        yield* Effect.tryPromise(() =>
+        statements.push(
           db
             .prepare(
               "INSERT INTO web_sessions (id, pairing_id, user_id, token_digest, created_at_ms, fresh_until_ms, idle_expires_at_ms, hard_expires_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
@@ -391,9 +389,9 @@ const setup = (seedLegacyTurn = false): Promise<D1Database> =>
               timestamp + 3_600_000,
               timestamp + 7_776_000_000
             )
-            .run()
         );
       }
+      yield* Effect.tryPromise(() => db.batch(statements));
       return db;
     })
   );

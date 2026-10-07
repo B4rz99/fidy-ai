@@ -21,6 +21,17 @@ export class CloudflareTestSequencer {
   }
 
   sort(files: TestSpecification[]): Promise<TestSpecification[]> {
-    return Promise.resolve(files);
+    // Start long files first so a late long file cannot leave the other process idle.
+    const ordered = cloudflareTestShards({
+      files: files.map((file) => file.moduleId),
+      cloudflareRoot: new URL("./", import.meta.url).pathname,
+      count: 1,
+    }).flat();
+    const rank = new Map(ordered.map((moduleId, index) => [moduleId, index]));
+    return Promise.resolve(
+      [...files].sort(
+        (left, right) => (rank.get(left.moduleId) ?? 0) - (rank.get(right.moduleId) ?? 0)
+      )
+    );
   }
 }

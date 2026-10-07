@@ -148,9 +148,12 @@ describe("isolated native MCP proof boundary", () => {
     run(
       withClient("login-tools", ({ root, binary }) =>
         Effect.gen(function* () {
-          yield* Effect.all([nativeLogin("claude", binary, root), callbackFixture(root)], {
-            concurrency: 2,
-          });
+          yield* Effect.all(
+            [nativeLogin({ host: "claude", binary, root }), callbackFixture(root)],
+            {
+              concurrency: 2,
+            }
+          );
           const result = yield* nativeTools({
             host: "claude",
             binary,

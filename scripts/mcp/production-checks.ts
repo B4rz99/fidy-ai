@@ -167,7 +167,7 @@ const boundedRefusalBody = Effect.fn(function* (response: HttpClientResponse.Htt
   ).pipe(Effect.mapError(() => new VerificationFailure({ message: "Refresh refusal invalid" })));
 });
 const refusedCredentials = Effect.fn(function* (host: NativeHost, binary: string, root: string) {
-  const token = yield* nativeCredential(host, binary, root);
+  const token = yield* nativeCredential({ host, binary, root });
   const now = yield* Clock.currentTimeMillis;
   yield* requireCheck(
     token.expiresAt > now,
@@ -236,7 +236,7 @@ const cleanNativeProfiles = Effect.fn(function* (scope: ApprovedScope, root: str
               ).exists()
             )
           ) {
-            yield* nativeLogout(host, scope.binaries[host], root);
+            yield* nativeLogout({ host, binary: scope.binaries[host], root });
           }
         })
       )
@@ -275,7 +275,7 @@ const hostJourney = Effect.fn(function* (context: ProofContext, host: NativeHost
   yield* report(`${host}: native OAuth`);
   yield* Effect.all(
     [
-      nativeLogin(host, scope.binaries[host], root),
+      nativeLogin({ host, binary: scope.binaries[host], root }),
       approveNativeLogin({ scope, browser, root, host }),
     ],
     { concurrency: 2 }
@@ -315,7 +315,7 @@ const naturalRefresh = Effect.fn(function* (context: ProofContext) {
   const grants = yield* validateConnections(scope);
   const refreshBaseline = yield* snapshot(scope);
   const credentials = yield* Effect.all(
-    HOSTS.map((host) => nativeCredential(host, scope.binaries[host], root)),
+    HOSTS.map((host) => nativeCredential({ host, binary: scope.binaries[host], root })),
     { concurrency: 1 }
   );
   const expiry = Math.max(...credentials.map((token) => token.expiresAt)) + EXPIRY_MARGIN_MS;

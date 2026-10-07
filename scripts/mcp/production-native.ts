@@ -556,9 +556,11 @@ const runLogin = (input: NativeInput, signal: AbortSignal): LoginEffect =>
     })
   );
 /** Starts isolated native OAuth. The caller concurrently approves the private authorization URL and writes the host callback file. */
-export const nativeLogin = (
-  ...args: [host: NativeHost, binary: string, root: string]
-): Effect.Effect<
+export const nativeLogin = ({
+  host,
+  binary,
+  root,
+}: NativeInput): Effect.Effect<
   {
     host: NativeHost;
     passed: boolean;
@@ -566,7 +568,6 @@ export const nativeLogin = (
   NativeProofError,
   FileSystem.FileSystem
 > => {
-  const [host, binary, root] = args;
   return Effect.scoped(
     Effect.gen(function* () {
       return yield* runLogin(
@@ -1839,9 +1840,11 @@ const selectCredential = (host: NativeHost, raw: Schema.Json): NativeCredential 
   return normalizeCredential(matches[0]);
 };
 /** Reads only this isolated native client's OAuth credential. Secrets remain redacted in memory; never serialize this result. */
-export const nativeCredential = (
-  ...args: [host: NativeHost, binary: string, root: string]
-): Effect.Effect<
+export const nativeCredential = ({
+  host,
+  binary,
+  root,
+}: NativeInput): Effect.Effect<
   Readonly<{
     accessToken: Redacted.Redacted<string>;
     refreshToken: Redacted.Redacted<string>;
@@ -1851,7 +1854,6 @@ export const nativeCredential = (
   NativeProofError,
   FileSystem.FileSystem
 > => {
-  const [host, binary, root] = args;
   return Effect.scoped(
     Effect.gen(function* () {
       return yield* readCredential(
@@ -1877,9 +1879,11 @@ export const nativeCredential = (
     )
   );
 };
-export const nativeLogout = (
-  ...args: [host: NativeHost, binary: string, root: string]
-): Effect.Effect<
+export const nativeLogout = ({
+  host,
+  binary,
+  root,
+}: NativeInput): Effect.Effect<
   {
     host: NativeHost;
     passed: boolean;
@@ -1887,7 +1891,6 @@ export const nativeLogout = (
   NativeProofError,
   never
 > => {
-  const [host, binary, root] = args;
   return Effect.scoped(
     Effect.gen(function* () {
       return yield* command({

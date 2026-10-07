@@ -19,9 +19,6 @@ export const allowancePeriod = (now: DateTime.Utc): AllowancePeriod => {
   };
 };
 
-/** Returns the fixed Free entitlement for one directly measurable unit. */
-export const allowanceLimit = (allowance: AllowanceKind): number => limits[allowance];
-
 /** Projects a decoded consumption count without granting authorization or reserving capacity. */
 export const allowanceMeter = (
   input: Readonly<{

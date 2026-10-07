@@ -1,5 +1,4 @@
 import {
-  type CreateTransactionInput,
   IneligibleTransactionPair,
   InvalidTransactionPeriod,
   type LinkedTransactionDecision,
@@ -8,7 +7,6 @@ import {
   TransactionNotYetOccurred,
   type TransactionPair,
   type TransactionPairInput,
-  TransactionUserDecisions,
 } from "./contract";
 import { DateTime, Effect, Equal, Option } from "effect";
 /**
@@ -116,35 +114,3 @@ export const decideTransactionLink = Effect.fn(function* (
     visibleTransactionId: visibleMember.id,
   } satisfies LinkedTransactionDecision;
 });
-
-/** No User decision is inferred from statement or notification-email extraction. */
-export const automaticUserDecisions = TransactionUserDecisions.make({
-  category: false,
-  counterparty: false,
-  notes: false,
-});
-
-/** A complete Transaction correction explicitly decides every represented field state. */
-export const correctedUserDecisions = TransactionUserDecisions.make({
-  category: true,
-  counterparty: true,
-  notes: true,
-});
-
-type CaptureUserDecisionInput = Readonly<{
-  categoryId: CreateTransactionInput["categoryId"];
-  counterparty: CreateTransactionInput["counterparty"];
-  notes: CreateTransactionInput["notes"];
-}>;
-
-/** Decides which optional caller-capture facts were explicitly supplied by the User. */
-export const decideCaptureUserDecisions = (
-  input: CaptureUserDecisionInput
-): Effect.Effect<TransactionUserDecisions> =>
-  Effect.succeed(
-    TransactionUserDecisions.make({
-      category: Option.isSome(input.categoryId),
-      counterparty: Option.isSome(input.counterparty),
-      notes: Option.isSome(input.notes),
-    })
-  );

@@ -2136,14 +2136,17 @@ const PROBES: readonly Probe[] = [
     expect: {
       kind: "rejected",
       mustContain: [
-        `error cloudflare-imports-portable-web-session-internal: ${cloudflareSessionShellPrivate}/probe.ts → src/shell/web-session/internal/authority.ts`,
+        `error cloudflare-imports-portable-web-session-internal: ${cloudflareSessionShellPrivate}/probe.ts → src/shell/web-session/internal/${PROBE_PREFIX}authority.ts`,
       ],
     },
     files: [
       {
+        path: `src/shell/web-session/internal/${PROBE_PREFIX}authority.ts`,
+        source: 'export const sessionCredentialAuthority = () => "private";\n',
+      },
+      {
         path: `${cloudflareSessionShellPrivate}/probe.ts`,
-        source:
-          'import { sessionCredentialAuthority } from "~/shell/web-session/internal/authority";\nexport const privateAuthority = sessionCredentialAuthority;\n',
+        source: `import { sessionCredentialAuthority } from "~/shell/web-session/internal/${PROBE_PREFIX}authority";\nexport const privateAuthority = sessionCredentialAuthority;\n`,
       },
     ],
     name: "Cloudflare WebSession must respect portable owner internals",

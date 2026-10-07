@@ -157,7 +157,10 @@ const setup = Effect.fn(function* () {
     CREATE TABLE consent_user_context (user_id TEXT PRIMARY KEY, time_zone TEXT);
     CREATE TABLE trial_periods (user_id TEXT PRIMARY KEY,started_at_ms INTEGER,ends_at_ms INTEGER);
     CREATE TABLE subscriptions (user_id TEXT PRIMARY KEY,attempt_id TEXT,paid_period_ends_at_ms INTEGER);
-    CREATE TABLE billing_paid_periods (attempt_id TEXT PRIMARY KEY,starts_at_ms INTEGER);
+    CREATE TABLE billing_attempts (id TEXT, user_id TEXT, payment_source_id TEXT, billing_period TEXT);
+ CREATE TABLE card_payment_sources (id TEXT, user_id TEXT, method TEXT);
+ CREATE TABLE subscription_renewal_stops (user_id TEXT);
+ CREATE TABLE billing_paid_periods (attempt_id TEXT PRIMARY KEY,starts_at_ms INTEGER, ends_at_ms INTEGER);
  CREATE TABLE billing_access_adjustments (attempt_id TEXT,ends_at_ms INTEGER);
     CREATE TABLE statement_clarification_audit (id TEXT PRIMARY KEY, user_id TEXT, operation TEXT, outcome TEXT, occurred_at_ms INTEGER);
     CREATE TABLE statement_clarifications (submission_id TEXT PRIMARY KEY, user_id TEXT, state TEXT, expires_at_ms INTEGER);

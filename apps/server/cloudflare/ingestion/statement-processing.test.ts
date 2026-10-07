@@ -43,6 +43,7 @@ const migrations = [
   "0016_statement_processing",
   "0017_statement_dispatch",
   "0035_billing_corrections",
+  "0052_weekly_card_renewal",
   "0032_statement_capture_entitlement",
   "0033_statement_clarification",
   "0035_statement_hosted_origin",

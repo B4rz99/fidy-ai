@@ -384,7 +384,8 @@ _Avoid_: Advice (unqualified), recommendation.
 
 **AccessTier**:
 The User's current capability tier: `free` or `pro`. It is derived at the decision instant from an
-active TrialPeriod or active paid Subscription; it is never persisted as a separate owner fact.
+active TrialPeriod, active paid Subscription, or its three-day weekly card renewal grace; it is never
+persisted as a separate owner fact.
 _Avoid_: PaidTier, effective access, access basis, trial tier.
 
 **TrialPeriod**:
@@ -403,7 +404,8 @@ _Avoid_: Membership, plan (alone), recurring charge (that is a RecurringSeries).
 **Price**:
 An immutable version of Subscription price terms: exact Money, billing period, tax treatment, and
 the ServiceMarket in which the terms were offered. A later price change never rewrites a prior
-billing period.
+billing period. A replacement Price is notified immediately and applies to subsequent renewal
+BillingAttempts without renewed acceptance; pending BillingAttempts retain their captured Price.
 _Avoid_: Current price, price config, rate.
 
 **PaymentEnrollment**:
@@ -417,8 +419,8 @@ _Avoid_: Checkout, payment attempt, card session, CardEnrollment, nequi-account.
 
 **PaymentSource**:
 The one private reusable provider authority per User created by an available PaymentEnrollment.
-Its provider identity and environment remain server-only; switching EnrollmentMethod is not offered. Changing Price terms requires a new PaymentEnrollment
-but can reuse a matching-method source without collecting payment details again. Source availability
+Its provider identity and environment remain server-only; switching EnrollmentMethod is not offered. Explicit Price selection can reuse a matching-method source through a new PaymentEnrollment;
+automatic weekly card renewal uses notified replacement terms without new enrollment. Source availability
 or wallet token approval alone never grants paid Pro; verified BillingAttempt settlement does.
 _Avoid_: Saved card (Fidy does not store a card), payment method token, CardPaymentSource.
 

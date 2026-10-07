@@ -234,6 +234,13 @@ mutation execution under
 Recurring consumes Transaction-owned facts and invalidation under its
 [design ADR](../../docs/adr/0032-deterministic-recurring-charge-detection.md).
 
+Weekly card renewal consumes Subscription's retained due intent through the same User coordinator,
+then commits a pending attempt, its frozen adjacent calendar week and collection outbox. Verified
+settlement alone adds a paid period. Trusted weekly Price publication retains immutable terms and
+atomically creates billing-email notice intent; the shared billing Queue/Workflow dispatches these
+identity-only notices through bounded Resend transport. Newly admitted renewals use the published
+Price, while pending attempts retain their snapshot. See ADR 0034.
+
 Subscription's portable declaration and fixed-policy runtime own dedicated PaymentEnrollment
 transport recognition: declared methods, parameterized status paths and the cookie-only/origin
 forwarding projection. Public ingress and private Core consume that same browser-only meaning;
@@ -247,7 +254,9 @@ routing bucket, provider representation or credential authority.
 Payment enrollment requires fresh browser authority and Consent and stays outside canonical/PAT
 access. Transient payment authorization material goes directly from the browser to Wompi. Paid Pro
 requires independently verified matching settlement, not authorization or PaymentSource availability.
-AccessTier is derived at the decision instant, never persisted as a separate authority. See
+AccessTier is derived at the decision instant, never persisted as a separate authority. Weekly card
+renewal includes a fixed three-day grace after the paid boundary, excluding stopped renewals and
+refunded periods; grace never alters paid history. See
 [ADR 0021](../../docs/adr/0021-browser-only-payment-credential-enrollment.md).
 
 ## 6. Hosted execution and delivery

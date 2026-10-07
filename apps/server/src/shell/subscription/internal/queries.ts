@@ -35,6 +35,7 @@ const StandingRow = Schema.Struct({
   starts_at_ms: Schema.NullOr(Schema.Finite),
   ends_at_ms: Schema.NullOr(Schema.Finite),
   renewal_anchor_ms: Schema.NullOr(Schema.Finite),
+  access_ends_at_ms: Schema.NullOr(Schema.Finite),
 });
 const AttemptRow = Schema.Struct({
   id: Schema.String,
@@ -176,8 +177,8 @@ export const projectSubscriptionStatus = ({
       paidProActive:
         row.starts_at_ms !== null &&
         row.starts_at_ms <= now &&
-        row.ends_at_ms !== null &&
-        row.ends_at_ms > now,
+        row.access_ends_at_ms !== null &&
+        row.access_ends_at_ms > now,
     }),
     trialPeriod: { startedAt: instant(row.started_at_ms), endsAt: instant(row.trial_ends_at_ms) },
     paidSubscription,

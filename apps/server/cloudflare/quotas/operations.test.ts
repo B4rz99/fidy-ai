@@ -22,7 +22,14 @@ const database = Effect.gen(function* () {
       db.prepare(
         "CREATE TABLE subscriptions (user_id TEXT, paid_period_ends_at_ms INTEGER, attempt_id TEXT)"
       ),
-      db.prepare("CREATE TABLE billing_paid_periods (attempt_id TEXT, starts_at_ms INTEGER)"),
+      db.prepare(
+        "CREATE TABLE billing_attempts (id TEXT, user_id TEXT, payment_source_id TEXT, billing_period TEXT)"
+      ),
+      db.prepare("CREATE TABLE card_payment_sources (id TEXT, user_id TEXT, method TEXT)"),
+      db.prepare("CREATE TABLE subscription_renewal_stops (user_id TEXT)"),
+      db.prepare(
+        "CREATE TABLE billing_paid_periods (attempt_id TEXT, starts_at_ms INTEGER, ends_at_ms INTEGER)"
+      ),
       db.prepare("CREATE TABLE billing_access_adjustments (attempt_id TEXT, ends_at_ms INTEGER)"),
       db.prepare("CREATE TABLE authority (userId TEXT PRIMARY KEY, live INTEGER)"),
       db.prepare("CREATE TABLE publication (id TEXT PRIMARY KEY)"),
@@ -141,8 +148,12 @@ it("uses corrected paid standing at publication without retroactively charging P
             .prepare("INSERT INTO subscriptions VALUES (?,?,?)")
             .bind(userId, current + 1, "paid-attempt"),
           db
-            .prepare("INSERT INTO billing_paid_periods VALUES (?,?)")
-            .bind("paid-attempt", current - 1),
+            .prepare("INSERT INTO billing_paid_periods VALUES (?,?,?)")
+            .bind("paid-attempt", current - 1, current + 1),
+          db
+            .prepare("INSERT INTO billing_attempts VALUES ('paid-attempt', ?, 'source', 'weekly')")
+            .bind(userId),
+          db.prepare("INSERT INTO card_payment_sources VALUES ('source', ?, 'nequi')").bind(userId),
         ])
       );
       yield* io(() => consume(db, "paid"));

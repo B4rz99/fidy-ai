@@ -1,3 +1,6 @@
+import { receivePriceNotice, sendPriceNotice } from "./price-notice";
+import { protectConsentStatement } from "../../../src/shell/consent/operations";
+import { UserId } from "../../../src/core/identity/contract";
 import { WompiEnvironment } from "../../../src/shell/secret-material/contract";
 import {
   BillingAttemptId,
@@ -23,7 +26,9 @@ import { wompiOutboundHttp } from "./wompi-runtime";
 import {
   type BillingCollectionEnvironment,
   BillingCollectionFailure,
+  BillingPriceNoticeWork,
   type BillingRuntime,
+  type BillingWorkflowStarter,
 } from "../contract";
 
 const CollectionMessage = Schema.Struct({
@@ -41,14 +46,7 @@ const workflowRetention = { successRetention: "3 days", errorRetention: "3 days"
 type CollectionQueue = Readonly<{
   send: (work: typeof CollectionMessage.Type) => Promise<unknown>;
 }>;
-type CollectionWorkflow = Readonly<{
-  create: (options: {
-    id: string;
-    params: typeof CollectionMessage.Type;
-    retention: typeof workflowRetention;
-  }) => Promise<unknown>;
-  get: (id: string) => Promise<unknown>;
-}>;
+type CollectionWorkflow = BillingWorkflowStarter;
 type LookupWorkflowBinding = Readonly<{
   create: (options: {
     id: string;
@@ -59,7 +57,9 @@ type LookupWorkflowBinding = Readonly<{
 }>;
 /** Identify this Queue payload without interpreting any provider data as authority. */
 export const isBillingCollectionWork = (body: unknown): boolean =>
-  Option.isSome(Schema.decodeUnknownOption(CollectionMessage)(body));
+  Option.isSome(
+    Schema.decodeUnknownOption(Schema.Union([CollectionMessage, BillingPriceNoticeWork]))(body)
+  );
 const Snapshot = Schema.Struct({
   id: BillingAttemptId,
   user_id: Schema.String.check(Schema.isUUID()),
@@ -72,6 +72,9 @@ const Snapshot = Schema.Struct({
   billing_email: BillingEmail,
   wompi_source_id: WompiSourceId,
   method: EnrollmentMethod,
+  previous_paid_attempt_id: Schema.OptionFromNullOr(BillingAttemptId),
+  period_starts_at_ms: Schema.OptionFromNullOr(Schema.Int),
+  period_ends_at_ms: Schema.OptionFromNullOr(Schema.Int),
 });
 const Candidate = Schema.Struct({
   transaction_id: WompiTransactionId,
@@ -123,7 +126,8 @@ const snapshot = (
     const row = yield* attempt(() =>
       db
         .prepare(`SELECT a.id, a.user_id, a.amount, a.currency, a.billing_period, a.time_zone,
-          a.wompi_environment, a.wompi_reference, s.billing_email, s.wompi_source_id, s.method
+          a.wompi_environment, a.wompi_reference, s.billing_email, s.wompi_source_id, s.method,
+          a.previous_paid_attempt_id, a.period_starts_at_ms, a.period_ends_at_ms
         FROM billing_attempts AS a JOIN card_payment_sources AS s ON s.id = a.payment_source_id
         WHERE a.id = ? AND a.user_id = s.user_id`)
         .bind(id)
@@ -217,16 +221,24 @@ export const receiveBillingCollection = (
 ): Effect.Effect<void, BillingCollectionFailure> =>
   Effect.gen(function* () {
     for (const message of input.batch.messages) {
-      const work = Schema.decodeUnknownOption(CollectionMessage)(message.body);
+      const work = Schema.decodeUnknownOption(
+        Schema.Union([CollectionMessage, BillingPriceNoticeWork])
+      )(message.body);
       if (Option.isNone(work)) {
         message.ack();
         continue;
       }
+      if ("kind" in work.value) {
+        yield* receivePriceNotice({ environment: input.environment, work: work.value });
+        message.ack();
+        continue;
+      }
+      const collection = work.value;
       const row = yield* attempt(() =>
         input.environment.DB.prepare(
           "SELECT state FROM billing_collection_arms WHERE attempt_id = ?"
         )
-          .bind(work.value.attemptId)
+          .bind(collection.attemptId)
           .first()
       );
       const arm = Schema.decodeUnknownOption(ArmState)(row);
@@ -237,8 +249,8 @@ export const receiveBillingCollection = (
       const started = yield* Effect.exit(
         attempt(() =>
           input.environment.BILLING_COLLECTION_WORKFLOW.create({
-            id: work.value.attemptId,
-            params: work.value,
+            id: collection.attemptId,
+            params: collection,
             retention: workflowRetention,
           })
         )
@@ -246,7 +258,7 @@ export const receiveBillingCollection = (
       if (Exit.isFailure(started)) {
         // A failed create may have succeeded remotely. Confirm the deterministic instance before ack.
         yield* attempt(() =>
-          input.environment.BILLING_COLLECTION_WORKFLOW.get(work.value.attemptId)
+          input.environment.BILLING_COLLECTION_WORKFLOW.get(collection.attemptId)
         );
       }
       message.ack();
@@ -332,11 +344,17 @@ export const reconcileBillingTransaction = (
     let settlement: VerifiedOutcome;
     if (found.status === "APPROVED") {
       if (Option.isNone(found.finalizedAt)) return yield* failure();
-      const period = yield* paidPeriodFor(
-        captured.billing_period,
-        captured.time_zone,
-        found.finalizedAt.value
-      );
+      const period = Option.isSome(captured.previous_paid_attempt_id)
+        ? {
+            startsAt: DateTime.makeUnsafe(Option.getOrThrow(captured.period_starts_at_ms)),
+            endsAt: DateTime.makeUnsafe(Option.getOrThrow(captured.period_ends_at_ms)),
+            renewalAnchor: DateTime.makeUnsafe(Option.getOrThrow(captured.period_ends_at_ms)),
+          }
+        : yield* paidPeriodFor(
+            captured.billing_period,
+            captured.time_zone,
+            found.finalizedAt.value
+          );
       settlement = {
         status: "APPROVED",
         finalizedAtMs: DateTime.toEpochMillis(found.finalizedAt.value),
@@ -433,6 +451,44 @@ export const receiveWompiBillingEvent = (
     return new Response(null, { status: 200 });
   });
 
+const claimCollection = (
+  input: Readonly<{
+    environment: BillingRuntime;
+    captured: typeof Snapshot.Type;
+    attemptId: BillingAttemptId;
+    now: number;
+  }>
+): Effect.Effect<boolean, BillingCollectionFailure> => {
+  const { environment, captured, attemptId, now } = input;
+  const collectionClaim = {
+    sql: `UPDATE billing_collection_arms
+      SET state = 'sent', sent_at_ms = ? WHERE attempt_id = ? AND state = 'armed'`,
+    params: [now, attemptId],
+  };
+  const protectedClaim = Option.isSome(captured.previous_paid_attempt_id)
+    ? protectConsentStatement({
+        subject: { _tag: "User", userId: UserId.make(captured.user_id) },
+        requirement: "active",
+        statement: {
+          sql: `${collectionClaim.sql}
+            AND EXISTS (SELECT 1 FROM subscriptions WHERE user_id = ? AND attempt_id = ?)
+            AND NOT EXISTS (SELECT 1 FROM subscription_renewal_stops WHERE user_id = ?)`,
+          params: [
+            ...collectionClaim.params,
+            captured.user_id,
+            captured.previous_paid_attempt_id.value,
+            captured.user_id,
+          ],
+        },
+      })
+    : collectionClaim;
+  return attempt(() =>
+    environment.DB.prepare(protectedClaim.sql)
+      .bind(...protectedClaim.params)
+      .run()
+  ).pipe(Effect.map((result) => result.meta.changes === 1));
+};
+
 const collect = (
   environment: BillingRuntime,
   attemptId: BillingAttemptId
@@ -444,13 +500,8 @@ const collect = (
     const amount = yield* billingAmount(captured);
     // Claim BEFORE outbound I/O: a crash between this write and POST is ambiguous, never retried blindly.
     const now = yield* Clock.currentTimeMillis;
-    const claimed = yield* attempt(() =>
-      environment.DB.prepare(`UPDATE billing_collection_arms
-      SET state = 'sent', sent_at_ms = ? WHERE attempt_id = ? AND state = 'armed'`)
-        .bind(now, attemptId)
-        .run()
-    );
-    if (claimed.meta.changes !== 1) return;
+    const claimed = yield* claimCollection({ environment, captured, attemptId, now });
+    if (!claimed) return;
     const created = yield* Effect.exit(
       client.createTransaction({
         reference: captured.wompi_reference,
@@ -496,11 +547,17 @@ type CollectionActivity = (
 export const runBillingCollectionWorkflow = (
   input: Readonly<{ environment: BillingRuntime; payload: unknown; activity: CollectionActivity }>
 ): Promise<void> => {
-  const work = Schema.decodeUnknownOption(Schema.Union([CollectionMessage, LookupWork]))(
-    input.payload
-  );
+  const work = Schema.decodeUnknownOption(
+    Schema.Union([CollectionMessage, LookupWork, BillingPriceNoticeWork])
+  )(input.payload);
   if (Option.isNone(work)) return Promise.resolve();
   const options = { retries: { limit: 0, delay: "1 second" } } as const;
+  if ("kind" in work.value && work.value.kind === "price-notice") {
+    const notice = work.value;
+    return input.activity("send-billing-price-notice-v1", options, () =>
+      Effect.runPromise(sendPriceNotice({ environment: input.environment, work: notice }))
+    );
+  }
   if ("kind" in work.value) {
     const transactionId = work.value.transactionId;
     return input.activity("lookup-wompi-billing-v1", options, () =>

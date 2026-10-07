@@ -1,4 +1,7 @@
-import { executeRefundSupportAdmission } from "../subscription/operations";
+import {
+  executeRefundSupportAdmission,
+  executeWeeklyRenewalAdmission,
+} from "../subscription/operations";
 import { ProactivityActivity, type ProactivityEnvironment } from "../insights/contract";
 import { executeProactivityWork } from "../insights/runtime";
 import { RecurringWork } from "../recurring/contract";
@@ -341,6 +344,24 @@ const privateProactivityActivity = (
 const privateOwnerActivity = (
   input: Parameters<typeof privateProactivityActivity>[0]
 ): Option.Option<Effect.Effect<Response>> => {
+  if (
+    input.request.method === "POST" &&
+    new URL(input.request.url).pathname === "/weekly-renewal-work"
+  ) {
+    return Option.some(
+      Clock.currentTimeMillis.pipe(
+        Effect.flatMap((now) =>
+          executeWeeklyRenewalAdmission({
+            db: input.environment.DB,
+            userId: input.userId,
+            candidate: input.candidate,
+            environment: input.environment.WOMPI_ENVIRONMENT ?? "",
+            now,
+          })
+        )
+      )
+    );
+  }
   if (
     input.request.method === "POST" &&
     new URL(input.request.url).pathname === "/billing-refund-work"

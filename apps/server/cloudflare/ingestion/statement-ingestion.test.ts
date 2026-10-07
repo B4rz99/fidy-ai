@@ -163,6 +163,7 @@ const migrationNames = [
   "0028_recurring_audit_budget",
   "0029_audit_owner_retention",
   "0035_billing_corrections",
+  "0052_weekly_card_renewal",
   "0032_statement_capture_entitlement",
   "0033_statement_clarification",
   "0034_statement_clarification_audit",

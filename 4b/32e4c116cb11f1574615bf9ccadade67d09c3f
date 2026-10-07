@@ -1,0 +1,95 @@
+dependency-policy.json
+  s_e3b9a05f422f64::t_dc5725c9589250 4,7,12,50-73
+apps/server/contracts/openapi.json
+  s_e3b9a05f422f64::t_dc5725c9589250 4322,4337-4341,4345-4346,4353-4354,4358,4366,4390-4405,7120-7144,8870-8892,10368-10391,10434,11075,11090-11112,11126,11149,17284,17575,17697,17708,18242-18365
+  s_e3b9a05f422f64::t_0d05741be87033 18366-18368
+apps/server/src/core/subscription/contract.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 484-493
+apps/server/cloudflare/subscription/internal/payment-enrollment.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 425
+apps/server/cloudflare/quotas/operations.test.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 31-32
+  s_e3b9a05f422f64::t_604e961878cd24 30
+apps/server/cloudflare/subscription/internal/billing-workflow.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 1,10,34,64-66,220-231,242,249,492-494,500-501,572-577,587-590
+  s_e3b9a05f422f64::t_7aeafe9a879963 591-592
+apps/server/src/shell/subscription/internal/query-sql.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 1,21,23
+infra/cloudflare/verify-edge-policy.test.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 7
+GLOSSARY.md
+  s_e3b9a05f422f64::t_dc5725c9589250 394,408-409,440-441
+apps/server/cloudflare/migrations/0059_subscription_retries.sql
+  s_e3b9a05f422f64::t_dc5725c9589250 1-96
+apps/server/cloudflare/subscription/internal/subscription-renewal.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 5-9,33-40,59,68,70,86-121,140-147,180-187,189
+apps/server/cloudflare/ingestion/forwarding-address.test.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 60
+apps/server/cloudflare/maintenance/contract.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 24
+apps/server/cloudflare/ingestion/media-submissions.test.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 39
+apps/server/cloudflare/migrations/0060_subscription_cancellation.sql
+  s_e3b9a05f422f64::t_dc5725c9589250 1-44
+apps/server/src/shell/subscription/contract.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 16,23,78-98,103-104
+apps/server/cloudflare/ingestion/forwarded-email.test.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 162
+apps/server/cloudflare/maintenance/runtime.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 31,104-111
+apps/server/cloudflare/subscription/internal/cancellation.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 1-189
+apps/server/cloudflare/subscription/internal/source-cancellation.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 1-185
+apps/server/src/shell/audit/contract.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 46
+apps/server/src/shell/outbound-http/internal/outbound-http.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 277-283,430
+docs/adr/0034-weekly-card-renewal.md
+  s_e3b9a05f422f64::t_dc5725c9589250 1,5,13,24-45
+apps/server/cloudflare/oauth-agents/discovery.test-fixture.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 50
+apps/server/cloudflare/canonical-operations/internal/mutation-registry.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 2-4,255-262
+  s_e3b9a05f422f64::t_c3bf33a00356f6 1
+apps/server/cloudflare/subscription/operations.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 1-6,153-161
+apps/server/cloudflare/subscription/payment-enrollment-d1.test-fixture.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 48-49
+apps/server/ARCHITECTURE.md
+  s_e3b9a05f422f64::t_dc5725c9589250 252-263,286
+apps/server/cloudflare/subscription/contract.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 179-191
+apps/server/cloudflare/subscription/runtime.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 1,17,225-229
+apps/server/cloudflare/d1-test-fixture.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 203-204
+apps/server/cloudflare/subscription/weekly-renewal.test.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 1-7,11-13,27-31,229,371-395,399-400,403-406,598,1056,1138-1920
+apps/server/src/shell/outbound-http/contract.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 82
+apps/server/cloudflare/access-tier.test.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 48-49,96-97
+  s_e3b9a05f422f64::t_7f45c93768f57e 47
+infra/cloudflare/verify-edge-policy.ts
+  s_e3b9a05f422f64::t_dc5725c9589250 13-14
+apps/server/contracts/operation-policy.json
+  s_e3b9a05f422f64::t_dc5725c9589250 709-722
+  s_e3b9a05f422f64::t_ff136bce11e10b 708
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4b32e4c116cb11f1574615bf9ccadade67d09c3f",
+  "prompts": {},
+  "sessions": {
+    "s_e3b9a05f422f64": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a115f2-dfce-7741-a6e9-e22144cd3fad",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

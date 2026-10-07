@@ -18,10 +18,6 @@ export const emailWorkflowExpiry = (startedAt: DateTime.Utc): DateTime.Utc =>
 export const proofExpiry = (generatedAt: DateTime.Utc): DateTime.Utc =>
   DateTime.add(generatedAt, { minutes: 10 });
 
-/** Returns the earliest instant at which the User may explicitly request another delivery. */
-export const resendAvailability = (submittedAt: DateTime.Utc): DateTime.Utc =>
-  DateTime.add(submittedAt, { seconds: 60 });
-
 /** Maps random bytes to unbiased code symbols; 256 is exactly divisible by the alphabet size. */
 export const selectEmailCodeSymbols = (input: {
   readonly bytes: ArrayLike<number>;
@@ -31,18 +27,6 @@ export const selectEmailCodeSymbols = (input: {
     .slice(0, input.maximum)
     .map((byte) => emailCodeAlphabet[byte % emailCodeAlphabet.length])
     .join("");
-
-/** Formats unambiguous symbols into fixed groups without changing their entropy. */
-export const formatEmailCode = (input: {
-  readonly symbols: string;
-  readonly groupSize: number;
-}): string => {
-  const groups: Array<string> = [];
-  for (let offset = 0; offset < input.symbols.length; offset += input.groupSize) {
-    groups.push(input.symbols.slice(offset, offset + input.groupSize));
-  }
-  return groups.join("-");
-};
 
 /** Decides resend/supersession admission from one already-locked replacement workflow. */
 export const decideEmailReplacementRequest = (input: {

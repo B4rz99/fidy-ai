@@ -10,8 +10,6 @@ import {
 } from "~/core/canonical-operations/contract";
 import { type AccessTier } from "~/core/access-tier/contract";
 import { type OperationId, operationCatalog } from "~/shell/api";
-import { type CanonicalCaller } from "~/shell/authorization/contract";
-import { toAccessCaller } from "~/shell/authorization/operations";
 
 import { type CanonicalInput } from "./contract";
 import {
@@ -59,15 +57,6 @@ export type SuggestedOperationCaller = {
   readonly accessCaller: OperationAccessCaller;
   readonly tier: AccessTier;
 };
-
-/** Projects a canonical caller and resolved tier into suggestion-policy facts. */
-export const toSuggestedOperationCaller = (input: {
-  readonly resolved: CanonicalCaller;
-  readonly accessTier: AccessTier;
-}): SuggestedOperationCaller => ({
-  accessCaller: toAccessCaller(input.resolved),
-  tier: input.accessTier,
-});
 
 /** Explicit test adapter for a Free PAT with fixed capabilities. */
 export const freePatCaller = (

@@ -464,6 +464,7 @@ const coreRequest = (
       // Transfer this body directly: cloning an unfinished stream would leave an unread tee branch
       // and prevent Core's bounded-body cancellation from closing the ingress source.
       return new Request(`https://core.internal${path}${new URL(request.url).search}`, {
+        redirect: "manual",
         method: request.method,
         headers,
         body: request.body,

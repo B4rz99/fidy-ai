@@ -36,6 +36,19 @@ const startReview = (
     return new URL(started.headers.get("location") ?? "").pathname.split("/").at(-1) ?? "";
   });
 
+it("returns the OAuth browser review redirect without following it inside private Core", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const fixture = yield* setup();
+      const query = yield* authorizationQuery(fixture.send);
+      const response = yield* wait(fixture.send(`/oauth/authorize?${query}`));
+      expect(response.status).toBe(302);
+      const location = new URL(response.headers.get("location") ?? "");
+      expect(location.origin).toBe("https://app.fidyapp.com");
+      expect(location.pathname).toMatch(/^\/oauth\/review\/[a-f0-9-]{36}$/u);
+    })
+  ));
+
 type HeldBody = Readonly<{
   body: ReadableStream<Uint8Array>;
   reading: Promise<void>;

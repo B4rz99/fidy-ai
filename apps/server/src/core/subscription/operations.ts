@@ -50,6 +50,11 @@ export const paidPeriodFor: {
   }
 );
 
+/** Derive the next adjacent week from the preceding paid boundary, never from provider delay. */
+export const weeklyRenewalPeriod = (
+  input: Readonly<{ timeZone: IanaTimeZone; previousEndsAt: DateTime.Utc }>
+): Effect.Effect<PaidPeriodWindow> => paidPeriodFor("weekly", input.timeZone, input.previousEndsAt);
+
 /**
  * Persisted enrollment lifecycle: prepared waits for submission; creating has been claimed;
  * available has a reusable payment source; refused is a definitive provider rejection; expired

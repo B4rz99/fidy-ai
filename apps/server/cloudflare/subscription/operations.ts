@@ -1,9 +1,16 @@
-import { type RefundAttempt, type RefundStartFailure } from "../../src/core/subscription/contract";
+import { claimWeeklyRenewal } from "./internal/weekly-renewal";
 import {
+  Price,
+  type RefundAttempt,
+  type RefundStartFailure,
+} from "../../src/core/subscription/contract";
+import {
+  BillingCollectionFailure,
   type RefundReadCall,
   type RefundStartCall,
   RefundSupportAdmission,
   type SubscriptionQueryInput,
+  WeeklyRenewalAdmission,
   refundSupportBasePath,
   refundSupportReadPath,
 } from "./contract";
@@ -70,3 +77,70 @@ export const prepareBillingWorkObservation = (
     limit: number;
   }>
 ): D1PreparedStatement => pendingBillingWork(input);
+
+/** Admit an automatic renewal under explicit same-User coordination and live billing authority. */
+export const executeWeeklyRenewalAdmission = (
+  input: Readonly<{
+    db: D1Database;
+    userId: string;
+    environment: string;
+    candidate: unknown;
+    now: number;
+  }>
+): Effect.Effect<Response> => {
+  const work = Schema.decodeUnknownOption(WeeklyRenewalAdmission)(input.candidate);
+  if (Option.isNone(work) || work.value.userId !== input.userId) {
+    return Effect.succeed(new Response(null, { status: 403 }));
+  }
+  return claimWeeklyRenewal({ ...input, ...work.value }).pipe(
+    Effect.as(new Response(null, { status: 202 })),
+    Effect.orElseSucceed(() => new Response(null, { status: 503 }))
+  );
+};
+
+/** Trusted operator publication: freezes replacement terms and records affected Users' notice intent atomically. */
+export const publishWeeklyPrice = (
+  input: Readonly<{ db: D1Database; price: Price }>
+): Effect.Effect<void, BillingCollectionFailure> =>
+  Effect.gen(function* () {
+    const encoded = yield* Schema.encodeEffect(Price)(input.price).pipe(
+      Effect.mapError((cause) => new BillingCollectionFailure({ cause: Option.some(cause) }))
+    );
+    if (encoded.billingPeriod !== "weekly") {
+      return yield* new BillingCollectionFailure({ cause: Option.none() });
+    }
+    const terms = yield* Schema.encodeEffect(
+      Schema.fromJsonString(
+        Schema.Struct({
+          ...Price.fields.renewalTerms.fields,
+          paymentMethods: Price.fields.paymentMethods,
+        })
+      )
+    )({ ...input.price.renewalTerms, paymentMethods: input.price.paymentMethods }).pipe(
+      Effect.mapError((cause) => new BillingCollectionFailure({ cause: Option.some(cause) }))
+    );
+    yield* Effect.tryPromise({
+      try: () =>
+        input.db.batch([
+          input.db
+            .prepare(`INSERT INTO subscription_prices
+      (id, amount, currency, billing_period, service_market, tax_treatment, terms_json, published_order)
+      VALUES (?, ?, ?, 'weekly', ?, ?, ?, NULL)`)
+            .bind(
+              encoded.id,
+              encoded.money.amount,
+              encoded.money.currency,
+              encoded.serviceMarket,
+              encoded.taxTreatment,
+              terms
+            ),
+          input.db.prepare(
+            "UPDATE subscription_prices SET published_order = NULL WHERE published_order = 1"
+          ),
+          input.db
+            .prepare("UPDATE subscription_prices SET published_order = 1 WHERE id = ?")
+            .bind(encoded.id),
+        ]),
+      catch: (cause) => new BillingCollectionFailure({ cause: Option.some(cause) }),
+    });
+  });

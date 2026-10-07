@@ -1,3 +1,4 @@
+import { weeklyRenewalGraceMs } from "~/core/subscription/contract";
 import { UserId } from "~/core/identity/contract";
 import { Option, Schema } from "effect";
 import { userTrialPeriodQuery } from "~/shell/identity/operations";
@@ -13,6 +14,14 @@ const bindings = (
   authority: Option.Option<Authority>
 ): ReadonlyArray<string | number | Uint8Array> =>
   Option.match(authority, { onNone: () => [], onSome: (value) => value.bindings });
+
+// These aliases belong to the Subscription-owned standing and protected-access queries.
+export const paidAccessEndSql = `MIN(p.ends_at_ms, COALESCE(
+  (SELECT MIN(adjustment.ends_at_ms) FROM billing_access_adjustments adjustment WHERE adjustment.attempt_id=p.attempt_id), p.ends_at_ms))
+  + CASE WHEN a.billing_period='weekly' AND source.method='card'
+    AND NOT EXISTS (SELECT 1 FROM subscription_renewal_stops stop WHERE stop.user_id=s.user_id)
+    AND NOT EXISTS (SELECT 1 FROM billing_access_adjustments adjustment WHERE adjustment.attempt_id=p.attempt_id)
+    THEN ${weeklyRenewalGraceMs} ELSE 0 END`;
 
 /** Published Prices are ordered and capped before projection as a complete three-Price set. */
 export const subscriptionOffersQuery = (
@@ -41,10 +50,12 @@ export const subscriptionStandingQuery = ({
       p.starts_at_ms,
       MIN(p.ends_at_ms,COALESCE((SELECT MIN(adjustment.ends_at_ms) FROM billing_access_adjustments adjustment
         WHERE adjustment.attempt_id=p.attempt_id),p.ends_at_ms)) AS ends_at_ms,
-      p.renewal_anchor_ms
+      p.renewal_anchor_ms,
+      ${paidAccessEndSql} AS access_ends_at_ms
       FROM (${trial.sql}) AS t LEFT JOIN subscriptions AS s ON s.user_id = ?
       LEFT JOIN billing_attempts AS a ON a.id = s.attempt_id AND a.user_id = s.user_id
       LEFT JOIN billing_paid_periods AS p ON p.attempt_id = a.id
+      LEFT JOIN card_payment_sources AS source ON source.id = a.payment_source_id AND source.user_id = a.user_id
       WHERE TRUE${guard(authority)} LIMIT 1`,
     params: [...trial.params, userId, ...bindings(authority)],
   };

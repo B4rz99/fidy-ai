@@ -17,6 +17,7 @@ const trial = {
   starts_at_ms: null,
   ends_at_ms: null,
   renewal_anchor_ms: null,
+  access_ends_at_ms: null,
 };
 
 it("ends the original TrialPeriod at its half-open boundary without hiding history", () => {
@@ -42,6 +43,7 @@ it("derives Pro from a paid period while exposing its exact immutable Price snap
       tax_treatment: "not-taxable",
       starts_at_ms: Date.parse("2026-09-09T12:00:00Z"),
       ends_at_ms: Date.parse("2026-09-16T12:00:00Z"),
+      access_ends_at_ms: Date.parse("2026-09-19T12:00:00Z"),
       renewal_anchor_ms: Date.parse("2026-09-16T12:00:00Z"),
     },
     attemptRows: [],

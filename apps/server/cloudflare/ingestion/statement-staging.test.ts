@@ -69,6 +69,7 @@ const migrationNames = [
   "0018_batch_envelope_audit",
   "0019_canonical_child_guards",
   "0035_billing_corrections",
+  "0052_weekly_card_renewal",
 ] as const;
 type Runtime = Readonly<{
   readonly database: D1Database;

@@ -240,6 +240,7 @@ const migrationNames = [
   "0020_dashboard_projection",
   ...hostedTurnTestMigrations,
   "0035_billing_corrections",
+  "0052_weekly_card_renewal",
   "0009_email_replacement",
   "0016_budgets",
   "0037_budget_crossing_facts",

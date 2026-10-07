@@ -1,3 +1,7 @@
+import { dispatchPriceNotices } from "./internal/price-notice";
+import { publishWeeklyPrice } from "./operations";
+import { type Price } from "../../src/core/subscription/contract";
+import { dispatchWeeklyRenewals as dispatchRenewals } from "./internal/weekly-renewal";
 import {
   dispatchRefunds as dispatchCorrections,
   dispatchVoidVerification as dispatchVerification,
@@ -6,7 +10,11 @@ import {
   isRefundWork as recognizesRefund,
 } from "./internal/refund-workflow";
 import { handlePaymentEnrollment as enroll } from "./internal/payment-enrollment";
-import type { EnrollmentEnvironment } from "./contract";
+import type {
+  BillingPriceNoticeDispatchInput,
+  EnrollmentEnvironment,
+  WeeklyRenewalDispatchInput,
+} from "./contract";
 import {
   WorkflowEntrypoint,
   type WorkflowEvent,
@@ -195,3 +203,20 @@ export const runBillingCollectionWorkflow = (
 export const handlePaymentEnrollment = (
   input: Readonly<{ request: Request; environment: EnrollmentEnvironment }>
 ): Promise<Response> => enroll(input);
+
+/** Offer bounded due weekly renewals to their original User coordinator; D1 owns eligibility and history. */
+export const dispatchWeeklyRenewals = (
+  input: WeeklyRenewalDispatchInput
+): Effect.Effect<void, BillingCollectionFailure> => dispatchRenewals(input);
+
+/** Publish immutable weekly replacement terms and promptly offer the atomically retained notice intent. */
+export const publishWeeklyPriceAndNotify = (
+  input: BillingPriceNoticeDispatchInput & Readonly<{ price: Price }>
+): Effect.Effect<void, BillingCollectionFailure> =>
+  publishWeeklyPrice({ db: input.DB, price: input.price }).pipe(
+    Effect.flatMap(() => dispatchPriceNotices(input))
+  );
+/** Recover missed publication offers; provider ambiguity never authorizes a second notice submission. */
+export const dispatchBillingPriceNotices = (
+  input: BillingPriceNoticeDispatchInput
+): Effect.Effect<void, BillingCollectionFailure> => dispatchPriceNotices(input);

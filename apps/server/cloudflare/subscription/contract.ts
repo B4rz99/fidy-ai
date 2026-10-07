@@ -1,5 +1,7 @@
+import { UserId } from "../../src/core/identity/contract";
 import {
-  type BillingAttemptId,
+  BillingAttemptId,
+  PriceId,
   type RefundAttemptId,
   StartRefundInput,
 } from "../../src/core/subscription/contract";
@@ -120,7 +122,8 @@ export type RefundReceiveInput = Readonly<{
 export type BillingRuntime = Pick<
   BillingCollectionEnvironment,
   "DB" | "WOMPI_ENVIRONMENT" | "WOMPI_PUBLIC_KEY" | "WOMPI_PRIVATE_KEY" | "WOMPI_INTEGRITY_SECRET"
->;
+> &
+  Partial<Readonly<{ RESEND_API_KEY: string }>>;
 
 /** Closed correction-work failure; Queue redelivery remains possible without publishing platform diagnostics. */
 export class RefundWorkFailure extends Data.TaggedError("RefundWorkFailure")<{
@@ -147,4 +150,29 @@ export type BillingWorkflowStarter = Readonly<{
     }>
   ) => Promise<unknown>;
   get: (id: string) => Promise<unknown>;
+}>;
+
+/** Private same-User admission; a queued identity never authorizes a charge by itself. */
+export const WeeklyRenewalAdmission = Schema.TaggedStruct("WeeklyRenewal", {
+  userId: UserId,
+  previousPaidAttemptId: BillingAttemptId,
+});
+export type WeeklyRenewalDispatchInput = Readonly<{
+  DB: D1Database;
+  WOMPI_ENVIRONMENT: string;
+  USER_TRANSACTION_COORDINATOR: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
+}>;
+
+/** Bounded notice identity only; recipient and immutable Price facts are reloaded privately. */
+export const BillingPriceNoticeWork = Schema.Struct({
+  version: Schema.Literal(1),
+  kind: Schema.Literal("price-notice"),
+  userId: UserId,
+  priceId: PriceId,
+});
+export type BillingPriceNoticeDispatchInput = Readonly<{
+  DB: D1Database;
+  BILLING_COLLECTION_QUEUE: Readonly<{
+    send: (work: typeof BillingPriceNoticeWork.Type) => Promise<unknown>;
+  }>;
 }>;

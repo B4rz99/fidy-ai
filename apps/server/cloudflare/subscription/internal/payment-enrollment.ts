@@ -131,7 +131,7 @@ const AttemptRow = Schema.Struct({
   renewal_anchor_ms: Schema.NullOr(Schema.Finite),
 });
 const enrollmentDisclosureRevisions = {
-  card: "wompi-card-enrollment-v1",
+  card: "wompi-card-enrollment-v2",
   nequi: "wompi-nequi-enrollment-v1",
   daviplata: "wompi-daviplata-enrollment-v1",
 } as const satisfies Readonly<Record<EnrollmentMethod, RecurringDisclosure["revision"]>>;
@@ -302,7 +302,7 @@ const enrollmentAuthority = (session: typeof Session.Type, now: number): OwnedSt
 const price = (db: D1Database, priceId: string): Promise<Option.Option<Price>> =>
   db
     .prepare(`SELECT id, amount, currency, billing_period,
-    service_market, tax_treatment, terms_json FROM subscription_prices WHERE id = ?`)
+    service_market, tax_treatment, terms_json FROM subscription_prices WHERE id = ? AND published_order IS NOT NULL`)
     .bind(priceId)
     .first()
     .then((raw) => {
@@ -546,7 +546,10 @@ const prepare = ({
       );
       return unavailable();
     }
-    const statement = "Autorizo los cobros recurrentes de mi suscripción.";
+    const statement =
+      body.value.method === "card"
+        ? "Autorizo los cobros recurrentes de mi suscripción. Si cambia el precio, Fidy me informará de inmediato y los próximos cobros usarán el nuevo precio sin una nueva aceptación. Los cobros pendientes conservan su precio."
+        : "Autorizo los cobros recurrentes de mi suscripción.";
     const disclosure = RecurringDisclosure.make({
       revision: enrollmentDisclosureRevisions[body.value.method],
       displayedText: statement,

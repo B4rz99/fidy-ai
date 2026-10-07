@@ -282,6 +282,7 @@ export type WompiContractEvidenceSet = typeof WompiContractEvidenceSet.Type;
 export const RecurringDisclosure = Schema.Struct({
   revision: Schema.Literals([
     "wompi-card-enrollment-v1",
+    "wompi-card-enrollment-v2",
     "wompi-nequi-enrollment-v1",
     "wompi-daviplata-enrollment-v1",
   ]),
@@ -479,3 +480,6 @@ export const RefundStartFailure = Schema.Literals([
   "unavailable",
 ]).annotate({ identifier: "RefundStartFailure" });
 export type RefundStartFailure = typeof RefundStartFailure.Type;
+
+/** Fixed post-boundary Pro continuation for an unstopped weekly card Subscription; paid history is unchanged. */
+export const weeklyRenewalGraceMs = 259_200_000;

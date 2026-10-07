@@ -2,6 +2,7 @@ import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { UserId } from "../../../src/core/identity/contract";
 import {
   RecurringDigestReport,
+  RecurringDigestReportParams,
   ReminderSchedule,
   type ReminderScheduleEdit,
 } from "../../../src/core/insights/contract";
@@ -311,12 +312,34 @@ export const reminderRevisionRefusal = (
 ): CanonicalMutationRefusal =>
   refusal(authorize({ ...input, capability: "write" }), "validation_failed");
 
+const rejectInvalidDigestIdentifier = (work: Work): Effect.Effect<Response, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      work.db.batch([
+        ...audit({
+          work,
+          operation: "insights.getRecurringDigestReport",
+          outcome: "rejected",
+          afterOwnerWrite: false,
+        }),
+        assertion(work),
+      ])
+    );
+    return transactionFailure({
+      code: "validation_failed",
+      status: httpBadRequest,
+      message: "Invalid recurring report identifier.",
+    });
+  });
+
 /** Exact report read and credential/accountability guards commit together; opaque ids never authorize access. */
 export const readHeldRecurringDigestReport = (
   input: Work & Readonly<{ id: string }>
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const work = bindUser(input);
+    const params = Schema.decodeOption(RecurringDigestReportParams)({ id: input.id });
+    if (Option.isNone(params)) return yield* rejectInvalidDigestIdentifier(work);
     const results = yield* Effect.tryPromise(() =>
       work.db.batch([
         ...audit({
@@ -330,7 +353,7 @@ export const readHeldRecurringDigestReport = (
           .prepare(
             `SELECT report_json FROM recurring_digest_reports WHERE user_id=? AND insight_event_id=? AND EXISTS(SELECT 1 FROM ${work.authority.table} WHERE ${work.authority.predicate})`
           )
-          .bind(work.userId, input.id, ...work.authority.bindings),
+          .bind(work.userId, params.value.id, ...work.authority.bindings),
       ])
     );
     const rows = results.at(-1)?.results;
@@ -348,7 +371,7 @@ export const readHeldRecurringDigestReport = (
         report_json: Schema.fromJsonString(Schema.toCodecJson(RecurringDigestReport)),
       })
     )(raw);
-    if (row.report_json.insightEventId !== input.id) return transactionUnavailable();
+    if (row.report_json.insightEventId !== params.value.id) return transactionUnavailable();
     const data = yield* Schema.encodeEffect(Schema.toCodecJson(RecurringDigestReport))(
       row.report_json
     );

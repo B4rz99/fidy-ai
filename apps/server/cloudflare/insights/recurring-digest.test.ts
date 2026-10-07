@@ -359,6 +359,20 @@ it("retains frozen historical facts after invalidation and rejects foreign, unde
           .run()
       );
       const input = { db, subject, current: closedNow.epochMilliseconds, id };
+      const malformed = yield* readCanonicalRecurringDigestReport({ ...input, id: "not-a-uuid" });
+      expect(malformed.status).toBe(400);
+      expect(yield* Effect.tryPromise((): Promise<unknown> => malformed.json())).toMatchObject({
+        error: { code: "validation_failed" },
+      });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT outcome FROM pat_audit WHERE operation='insights.getRecurringDigestReport' ORDER BY rowid DESC LIMIT 1"
+            )
+            .first()
+        )
+      ).toEqual({ outcome: "rejected" });
       const valid = yield* readCanonicalRecurringDigestReport(input);
       expect(valid.status).toBe(200);
       expect(valid.headers.get("cache-control")).toBe("no-store");

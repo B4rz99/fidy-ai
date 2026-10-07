@@ -5,7 +5,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import { OAuthCanonicalAdmission } from "../../src/shell/mcp/contract";
 import { authenticateOAuth, executeOAuthRefresh } from "./operations";
 import { OAuthRefreshAdmission } from "./contract";
-import { handleMcpRequest } from "../mcp/runtime";
+import { handleMcpRequest, makeMcpResidency } from "../mcp/runtime";
+import { OAuthMcpAdmission } from "../mcp/contract";
 import { handleOAuthRequest } from "./runtime";
 import { OAuthReviewChoice } from "../../src/shell/oauth-agents/contract";
 import { makeAudit } from "../../src/shell/audit/runtime";
@@ -563,12 +564,22 @@ it("inherits the supplied Clock through MCP protocol callbacks when bounding can
               runNative(
                 Effect.gen(function* () {
                   const request = incoming instanceof Request ? incoming : new Request(incoming);
-                  const admission = yield* Schema.decodeUnknownEffect(OAuthCanonicalAdmission)(
+                  const admission = yield* Schema.decodeUnknownEffect(OAuthMcpAdmission)(
                     yield* wait(request.json())
                   );
-                  deadline = admission.deadlineMilliseconds;
-                  const payload = yield* Schema.encodeEffect(OAuthCanonicalAdmission)(admission);
-                  return yield* wait(fixture.coordinate(userId, payload));
+                  const residency = makeMcpResidency({
+                    userId,
+                    db: fixture.db,
+                    enqueueCanonicalWork: ({ admission: work }) =>
+                      Effect.gen(function* () {
+                        deadline = work.deadlineMilliseconds;
+                        const payload = yield* Schema.encodeEffect(OAuthCanonicalAdmission)(work);
+                        return yield* wait(fixture.coordinate(userId, payload));
+                      }).pipe(Effect.orDie),
+                  });
+                  return yield* residency
+                    .handle({ admission, signal: request.signal })
+                    .pipe(Effect.provideService(Clock.Clock, clock));
                 })
               ),
           }),

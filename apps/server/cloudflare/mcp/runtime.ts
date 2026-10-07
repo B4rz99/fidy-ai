@@ -1,5 +1,4 @@
 import { type Cause, Clock, Context, DateTime, Effect, Layer, Option, Schema } from "effect";
-import { RpcSerialization } from "effect/rpc";
 import { McpProtocol, McpSchema, McpServer } from "effect/ai";
 import { HttpRouter } from "effect/http";
 import { operationCatalog } from "../../src/shell/api";
@@ -47,15 +46,10 @@ type ToolAdmission = Readonly<{
   db: D1Database;
   subject: OAuthCaller;
   scopes: PATScopes;
-}> &
-  (
-    | Readonly<{ coordinator: Coordinator }>
-    | Readonly<{
-        enqueueCanonicalWork: CanonicalQueue;
-        signal: AbortSignal;
-        transportDeadlineMilliseconds: number;
-      }>
-  );
+  enqueueCanonicalWork: CanonicalQueue;
+  signal: AbortSignal;
+  transportDeadlineMilliseconds: number;
+}>;
 const unavailable = (): Response =>
   Response.json(
     { error: { code: "unavailable", message: "This operation is unavailable." }, next: [] },
@@ -103,37 +97,24 @@ const dispatchCanonicalTool = (
   input: ToolAdmission,
   admission: string
 ): Effect.Effect<Response, Cause.UnknownError | Schema.SchemaError> =>
-  "enqueueCanonicalWork" in input
-    ? Effect.scoped(
-        Effect.gen(function* () {
-          const scopeSignal = yield* Effect.abortSignal;
-          const decoded = yield* Schema.decodeEffect(
-            Schema.fromJsonString(OAuthCanonicalAdmission)
-          )(admission);
-          return yield* input.enqueueCanonicalWork({
-            admission: decoded,
-            signal: AbortSignal.any([input.signal, scopeSignal]),
-          });
-        })
-      )
-    : Effect.tryPromise((signal) =>
-        input.coordinator.getByName(input.subject.userId).fetch(
-          new Request("https://coordinator.internal/oauth-canonical", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: admission,
-            signal,
-          })
-        )
+  Effect.scoped(
+    Effect.gen(function* () {
+      const scopeSignal = yield* Effect.abortSignal;
+      const decoded = yield* Schema.decodeEffect(Schema.fromJsonString(OAuthCanonicalAdmission))(
+        admission
       );
+      return yield* input.enqueueCanonicalWork({
+        admission: decoded,
+        signal: AbortSignal.any([input.signal, scopeSignal]),
+      });
+    })
+  );
 const canonicalDeadline = (
   input: Readonly<{ admission: ToolAdmission; current: number; continuation: boolean }>
 ): number => {
   const boundedExecution = input.current + queryLifetimeMilliseconds;
   if (input.continuation) return boundedExecution;
-  return "transportDeadlineMilliseconds" in input.admission
-    ? Math.min(boundedExecution, input.admission.transportDeadlineMilliseconds)
-    : boundedExecution;
+  return Math.min(boundedExecution, input.admission.transportDeadlineMilliseconds);
 };
 
 const decodeToolResponse = (
@@ -277,6 +258,8 @@ const schemaDocument = (schema: Schema.Top): Schema.Json => {
   return Schema.decodeUnknownSync(Schema.Json)({ ...document.schema, $defs: document.definitions });
 };
 type RegisteredTool = Readonly<{ operation: CatalogOperation; tool: McpSchema.Tool }>;
+// Only immutable catalog metadata is shared; authority is resolved for every request.
+const catalogProjections = new Map<string, ReadonlyArray<RegisteredTool>>();
 const catalogTools = (
   scopes: PATScopes
 ): Effect.Effect<ReadonlyArray<RegisteredTool>, Schema.SchemaError> =>
@@ -287,6 +270,9 @@ const catalogTools = (
         capabilities: scopes,
       })._tag === "Allowed";
     const allowedIds = new Set(operationCatalog.operations.filter(available).map(({ id }) => id));
+    const projectionKey = scopes.toSorted().join(" ");
+    const cached = catalogProjections.get(projectionKey);
+    if (cached !== undefined) return cached;
     const tools: Array<RegisteredTool> = [];
     for (const operation of installedCanonicalOperations()
       .filter(available)
@@ -304,22 +290,10 @@ const catalogTools = (
       });
       tools.push({ operation, tool });
     }
+    catalogProjections.set(projectionKey, tools);
     return tools;
   });
-const registration = (
-  input: ToolAdmission
-): Effect.Effect<void, Schema.SchemaError, McpServer.McpServer> =>
-  Effect.gen(function* () {
-    const server = yield* McpServer.McpServer;
-    for (const { operation, tool } of yield* catalogTools(input.scopes)) {
-      yield* server.addTool({
-        tool,
-        annotations: Context.empty(),
-        handle: (payload: unknown) => executeTool(input, operation, payload),
-      });
-    }
-  });
-const forwardStatefulMcp = (
+const forwardMcp = (
   input: Readonly<{ request: Request; coordinator: Coordinator }>,
   subject: OAuthCaller,
   body: Uint8Array
@@ -355,7 +329,7 @@ const forwardStatefulMcp = (
       )
     );
   });
-/** Request-private protocol execution projects installed authorized canonical operations with bounded lifetime and cleanup. */
+/** Authenticates and transfers bounded MCP work to the User execution boundary, where both protocol runtimes own cleanup. */
 export const handleMcpRequest = (
   input: Readonly<{ request: Request; db: D1Database; coordinator: Coordinator }>
 ): Effect.Effect<Response> =>
@@ -364,90 +338,15 @@ export const handleMcpRequest = (
     const caller = yield* authenticateOAuth({ ...input, current: yield* Clock.currentTimeMillis });
     if (Option.isNone(caller)) return denied();
     const body = yield* readBoundedRequestBody(input.request, bodyPolicy);
-    if (statefulRequest(input.request, body)) {
-      return yield* forwardStatefulMcp(input, caller.value.subject, body);
-    }
-    const server = McpServer.layerHttp({
-      name: "fidy",
-      version: "0.0.0",
-      path: "/mcp",
-      protocols: [McpProtocol.v2026_07_28, McpProtocol.v2025_11_25],
-      allowedOrigins: [],
-    });
-    const routes = Layer.merge(
-      server,
-      Layer.effectDiscard(
-        registration({ ...caller.value, db: input.db, coordinator: input.coordinator })
-      ).pipe(Layer.provide(server))
-    );
-    const clock = yield* Clock.Clock;
-    const handler = HttpRouter.toWebHandler(
-      routes.pipe(Layer.provide(Layer.succeed(Clock.Clock, clock))),
-      { disableLogger: true }
-    );
-    const request = new Request(input.request.url, {
-      method: input.request.method,
-      headers: input.request.headers,
-      ...(input.request.method === "POST" ? { body } : {}),
-      signal: input.request.signal,
-    });
-    const response = yield* Effect.tryPromise(() =>
-      handler.handler(request, Context.make(Clock.Clock, clock))
-    ).pipe(Effect.ensuring(Effect.tryPromise(() => handler.dispose()).pipe(Effect.ignore)));
-    const headers = new Headers(response.headers);
-    headers.set("cache-control", "no-store");
-    return new Response(response.body, { status: response.status, headers });
+    return yield* forwardMcp(input, caller.value.subject, body);
   }).pipe(
     Effect.raceFirst(awaitRequestAbort(input.request)),
     Effect.timeoutOrElse({ duration: "5 seconds", orElse: () => Effect.succeed(unavailable()) }),
     Effect.catchCause(() => Effect.succeed(unavailable()))
   );
 
-const RpcRequestMetadata = Schema.TaggedStruct("Request", {
-  tag: Schema.String,
-  payload: Schema.Unknown,
-});
-const protocolRequests = (body: Uint8Array): ReadonlyArray<typeof RpcRequestMetadata.Type> => {
-  try {
-    return RpcSerialization.jsonRpc()
-      .makeUnsafe()
-      .decode(body)
-      .flatMap((message) => {
-        const decoded = Schema.decodeUnknownOption(RpcRequestMetadata)(message);
-        return Option.isSome(decoded) ? [decoded.value] : [];
-      });
-  } catch {
-    // The unchanged SDK still owns the malformed wire response; metadata cannot authorize work.
-    return [];
-  }
-};
-const statefulRequest = (request: Request, body: Uint8Array): boolean => {
-  const version = request.headers.get("mcp-protocol-version");
-  if (version === McpProtocol.v2026_07_28.protocolVersion) return false;
-  if (
-    version === McpProtocol.v2025_11_25.protocolVersion ||
-    request.headers.has("mcp-session-id")
-  ) {
-    return true;
-  }
-  return protocolRequests(body).some(
-    ({ tag, payload }) =>
-      tag === "initialize" &&
-      Option.isSome(
-        Schema.decodeUnknownOption(
-          Schema.Struct({
-            // Effect negotiates the supported stateful version even when a client offers an
-            // older version. Its resulting session must live in the resident owner, not
-            // a one-request handler that is immediately disposed after initialization.
-            protocolVersion: Schema.String,
-          })
-        )(payload)
-      )
-  );
-};
-
 type NativeToolAdmission = Readonly<{
-  admission: Extract<ToolAdmission, { enqueueCanonicalWork: CanonicalQueue }>;
+  admission: ToolAdmission;
 }>;
 class NativeToolAdmissionContext extends Context.Service<
   NativeToolAdmissionContext,
@@ -750,7 +649,7 @@ const createOwner = (registry: ResidentRegistry, catalog: ResidentCatalog): Resi
     name: "fidy",
     version: "0.0.0",
     path: "/mcp",
-    protocols: [McpProtocol.v2025_11_25],
+    protocols: [McpProtocol.v2026_07_28, McpProtocol.v2025_11_25],
     allowedOrigins: [],
   });
   const registered = residentRegistration(registry, () => owner, catalog.tools);

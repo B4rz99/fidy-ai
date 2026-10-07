@@ -75,8 +75,13 @@ ticket. These are simulated protocol clients at a native platform seam, distinct
 
 `SECURITY_STANDARDS.md` and telemetry's closed metadata projection prohibit bodies, bearer/code URLs,
 financial content and raw errors. Runtime telemetry remains owned by existing ingress/Core and
-canonical Audit. No new external workflow or telemetry exporter was added. Source review and the
-existing telemetry tests remain separate from evidence of effective live export configuration.
+canonical Audit. No new external workflow or telemetry exporter was added. The existing focused
+`bun run --cwd apps/server test:cloudflare cloudflare/runtime/telemetry.test.ts` passed nine tests;
+`bun run --cwd apps/server test -- src/shell/observability/telemetry.test.ts --coverage.enabled=false`
+passed seven. These cover sanitized success/failure/interruption outcomes and preservation of the
+application result, not effective live export configuration. The first shell invocation passed its
+seven tests but failed the whole-source coverage threshold because only one file ran. The focused
+rerun disabled coverage collection; repository thresholds and the full CI gate remain unchanged.
 
 ## Production observations
 

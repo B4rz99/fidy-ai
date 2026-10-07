@@ -61,10 +61,14 @@ const TailRecord = Schema.Struct({
   event: Schema.optionalKey(
     Schema.Struct({
       request: Schema.optionalKey(Schema.Struct({ url: Schema.String, method: Schema.String })),
+      rpcMethod: Schema.optionalKey(Schema.String),
+      scheduledTime: Schema.optionalKey(Schema.Unknown),
+      cron: Schema.optionalKey(Schema.String),
     })
   ),
   scriptVersion: Schema.optionalKey(Schema.Struct({ id: Schema.String })),
   exceptions: Schema.optionalKey(Schema.Array(Schema.Unknown)),
+  durableObjectId: Schema.optionalKey(Schema.String),
 });
 type Surface = "core" | "ingress";
 export type TailSummary = {
@@ -74,6 +78,8 @@ export type TailSummary = {
   readonly version: string;
   readonly route: string;
   readonly exceptions: number;
+  readonly eventKind: "fetch" | "rpc" | "scheduled" | "alarm" | "other";
+  readonly durableObject: boolean;
 };
 export type Observation = {
   readonly rows: Array<TailSummary>;
@@ -82,9 +88,24 @@ export type Observation = {
 };
 const routeFamily = (url: string): string => {
   const path = new URL(url).pathname;
-  return ["/mcp", "/oauth-mcp", "/oauth/token", "/oauth/register", "/oauth/authorize"].includes(
-    path
-  )
+  if (path.startsWith("/.well-known/oauth-protected-resource")) {
+    return "/.well-known/oauth-protected-resource";
+  }
+  if (path.startsWith("/.well-known/oauth-authorization-server")) {
+    return "/.well-known/oauth-authorization-server";
+  }
+  return [
+    "/mcp",
+    "/oauth-mcp",
+    "/oauth/token",
+    "/oauth/register",
+    "/oauth/authorize",
+    "/.well-known/openid-configuration",
+    "/web/oauth/review",
+    "/web/oauth/connect",
+    "/web/oauth/revoke-all",
+    "/web/session/logout",
+  ].includes(path)
     ? path
     : "other";
 };
@@ -108,6 +129,14 @@ const frameEnd = (buffer: string): number => {
   }
   return -1;
 };
+const eventKind = (event: typeof TailRecord.Type): TailSummary["eventKind"] => {
+  const source = event.event ?? {};
+  if (source.request !== undefined) return "fetch";
+  if (source.rpcMethod !== undefined) return "rpc";
+  if (source.cron !== undefined) return "scheduled";
+  if (source.scheduledTime !== undefined) return "alarm";
+  return "other";
+};
 const retainEvent = Effect.fn(function* (surface: Surface, body: string, observation: Observation) {
   const event = yield* Schema.decodeEffect(Schema.fromJsonString(TailRecord))(body).pipe(
     Effect.mapError(
@@ -129,6 +158,8 @@ const retainEvent = Effect.fn(function* (surface: Surface, body: string, observa
     version: event.scriptVersion?.id ?? "",
     route,
     exceptions: event.exceptions?.length ?? 0,
+    eventKind: eventKind(event),
+    durableObject: event.durableObjectId !== undefined,
   });
 });
 const drainFrames = Effect.fn(function* (

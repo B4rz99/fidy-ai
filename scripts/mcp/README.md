@@ -32,20 +32,27 @@ The scope is private operator configuration, not a credential. Supply these fiel
 
 Run the Production check on macOS, where the pinned Claude credential reader uses
 the isolated native Keychain entry. Use the existing Wrangler and GitHub operator logins, installed Playwright Chromium,
-Claude Code 2.1.289, and Codex 0.160.0. The approval timestamp must be less than
+Claude Code 2.1.289, and Codex 0.160.0. The runner resolves its temporary directory
+to a canonical path before creating native profiles; macOS path aliases can
+otherwise break Claude's profile lookup. The approval timestamp must be less than
 15 minutes old when the run starts. `--validate-only` checks scope validity without
 contacting Production. The runner refuses a deployment mismatch or a fixture
 inventory containing real Users, existing Budgets, or active sessions/connections.
 It approves browser pairing only for the existing synthetic User; it does not seed
 or onboard another identity.
 
+The isolated Codex profile marks Fidy as a required MCP server. This makes the
+client wait for discovery before starting the canned-model journey; an optional
+server can be omitted from its initial catalog while still connecting.
+
 Both clients must pass OAuth with narrowed permissions, exact tool discovery,
 Category reads, Budget creation, an atomic two-Transaction batch, cancellation,
 confirmed deletion, repeated reads, natural access-token refresh, first-party
 revocation, and subsequent access/refresh refusal. State and Audit assertions must
 agree with client outcomes. The natural refresh wait takes about ten minutes.
-Worker observations must match the approved versions and contain no CPU-limit
-termination. Observed request counts are an admission check, not a server rate limit.
+OAuth/MCP Worker observations must match the approved versions and contain no
+CPU-limit termination. Scheduled-job failures are counted separately in evidence.
+Observed request counts are an admission check, not a server rate limit.
 
 A pass is written only after cleanup and private-profile removal succeed. Browser
 sessions and connections are revoked and disposable Budgets deleted; four synthetic

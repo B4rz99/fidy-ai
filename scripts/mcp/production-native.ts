@@ -12,6 +12,7 @@ import {
   FileSystem,
   Option,
   type PlatformError,
+  Predicate,
   Redacted,
   Result,
   Schema,
@@ -28,7 +29,7 @@ type LoginEffect = Effect.Effect<
   FileSystem.FileSystem
 >;
 type ToolPlanInput = Readonly<{
-  callIds: ReadonlyArray<string>;
+  callIds: readonly [string, string];
   occurredAt: string;
   host: NativeHost;
   mode: NativeMode;
@@ -67,6 +68,7 @@ export type NativeDiagnostics = Readonly<{
   mainModelRequests: number;
   countTokenRequests: number;
   probeRequests: number;
+  toolNames: ReadonlyArray<string>;
 }>;
 type NativeStartup = {
   apiKeyPrompt: boolean;
@@ -120,14 +122,16 @@ const pinnedVersions = {
 } as const;
 const productionUrl = "https://api.fidyapp.com/mcp";
 const parseJson = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json));
-const isArray = (value: Schema.Json): value is Schema.JsonArray => Array.isArray(value);
+const ModelJsonObject = Schema.Record(Schema.String, Schema.Json);
+const ModelJsonArray = Schema.Array(Schema.Json);
 const object = (
   value: Schema.Json
 ): {
   readonly [key: string]: Schema.Json;
-} => (typeof value === "object" && value !== null && !isArray(value) ? value : {});
-const array = (value: Schema.Json): ReadonlyArray<Schema.Json> => (isArray(value) ? value : []);
-const text = (value: Schema.Json): string => (typeof value === "string" ? value : "");
+} => (Schema.is(ModelJsonObject)(value) ? value : {});
+const array = (value: Schema.Json): ReadonlyArray<Schema.Json> =>
+  Schema.is(ModelJsonArray)(value) ? value : [];
+const text = (value: Schema.Json): string => (Predicate.isString(value) ? value : "");
 const profilePath = (host: NativeHost, root: string): string =>
   join(resolve(root), `${host}-profile`);
 const privateWrite = (
@@ -136,10 +140,11 @@ const privateWrite = (
 ): Effect.Effect<void, PlatformError.PlatformError, FileSystem.FileSystem> =>
   Effect.scoped(
     Effect.gen(function* () {
-      yield* writeFile(path, value, {
+      const fs = yield* FileSystem.FileSystem;
+      yield* fs.writeFileString(path, value, {
         mode: privateFileMode,
       });
-      yield* chmod(path, privateFileMode);
+      yield* fs.chmod(path, privateFileMode);
     })
   );
 const environment = (
@@ -327,20 +332,21 @@ const prepareProfile = (
 > =>
   Effect.scoped(
     Effect.gen(function* () {
-      yield* mkdir(root, {
+      const fs = yield* FileSystem.FileSystem;
+      yield* fs.makeDirectory(root, {
         recursive: true,
         mode: privateDirectoryMode,
       });
-      yield* chmod(root, privateDirectoryMode);
+      yield* fs.chmod(root, privateDirectoryMode);
       const profile = profilePath(host, root);
-      yield* mkdir(profile, {
+      yield* fs.makeDirectory(profile, {
         recursive: true,
         mode: privateDirectoryMode,
       });
       if (host === "claude") {
         const config = join(profile, ".claude.json");
         const previous = (yield* foreign(() => Bun.file(config).exists()))
-          ? object(parseJson(yield* readFile(config, "utf8")))
+          ? object(parseJson(yield* fs.readFileString(config)))
           : {};
         yield* privateWrite(
           config,
@@ -368,7 +374,7 @@ const prepareProfile = (
       } else {
         yield* privateWrite(
           join(profile, "config.toml"),
-          `mcp_oauth_credentials_store="file"\n[mcp_servers.fidy]\nurl=${stringify(mcpUrl)}\n`
+          `mcp_oauth_credentials_store="file"\n[mcp_servers.fidy]\nrequired=true\nurl=${stringify(mcpUrl)}\n`
         );
       }
     })
@@ -406,7 +412,8 @@ const deliverCallback = (
   Effect.scoped(
     Effect.gen(function* () {
       if (state.callbackSent || !(yield* foreign(() => Bun.file(path).exists()))) return;
-      const value = (yield* readFile(path, "utf8")).trim();
+      const fs = yield* FileSystem.FileSystem;
+      const value = (yield* fs.readFileString(path)).trim();
       if (value.length > callbackLimit) throw new Error("callback bound");
       terminal.write(`${value}\r`);
       state.callbackSent = true;
@@ -454,16 +461,14 @@ const resetLoginFiles = (
   host: NativeHost,
   root: string
 ): Effect.Effect<void, PlatformError.PlatformError, FileSystem.FileSystem> =>
-  Effect.forEach(
-    [`${host}-authorize-url.txt`, `${host}-callback-url.txt`],
-    (name) =>
-      rm(join(root, name), {
-        force: true,
-      }),
-    {
-      discard: true,
-    }
-  );
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    yield* Effect.forEach(
+      [`${host}-authorize-url.txt`, `${host}-callback-url.txt`],
+      (name) => fs.remove(join(root, name), { force: true }),
+      { discard: true }
+    );
+  });
 const runLogin = (input: NativeInput, signal: AbortSignal): LoginEffect =>
   Effect.scoped(
     Effect.gen(function* () {
@@ -566,17 +571,20 @@ const transactionCalls = ({
   occurredAt,
   namespace,
 }: Readonly<{
-  callIds: ReadonlyArray<string>;
+  callIds: readonly [string, string];
   occurredAt: string;
   namespace: string;
 }>): ReadonlyArray<Schema.Json> =>
-  transactionAmounts.map((amount, index) => ({
-    callId: callIds[index] ?? "",
+  [
+    { callId: callIds[0], amount: transactionAmounts[0] },
+    { callId: callIds[1], amount: transactionAmounts[1] },
+  ].map(({ callId, amount }) => ({
+    callId,
     operation: "transactions.createTransaction",
     input: {
       payload: {
         money: {
-          amount: String(amount),
+          amount,
           currency: "COP",
         },
         direction: "outflow",
@@ -661,7 +669,7 @@ const findId = (value: Schema.Json): string => {
   if (typeof value === "string") return findId(parseEmbedded(value));
   const fields = object(value);
   if (typeof fields.id === "string" && /^[\da-f-]{36}$/iu.test(fields.id)) return fields.id;
-  for (const child of isArray(value) ? value : Object.values(fields)) {
+  for (const child of Schema.is(ModelJsonArray)(value) ? value : Object.values(fields)) {
     const id = findId(child);
     if (id.length > 0) return id;
   }
@@ -671,7 +679,7 @@ const failedOutput = (value: Schema.Json): boolean => {
   if (typeof value === "string") return failedOutput(parseEmbedded(value));
   const fields = object(value);
   if (fields.is_error === true || fields.isError === true) return true;
-  return (isArray(value) ? value : Object.values(fields)).some(failedOutput);
+  return (Schema.is(ModelJsonArray)(value) ? value : Object.values(fields)).some(failedOutput);
 };
 const sse = (events: ReadonlyArray<Schema.Json>): string =>
   events.map((event) => `data: ${stringify(event)}\n\n`).join("");
@@ -955,6 +963,9 @@ const retainCatalog = Effect.fn(function* (input: ToolInput, state: ModelState, 
   if (catalogSize > state.catalogSize) {
     yield* privateWrite(join(input.root, `${input.host}-catalog-private.json`), stringify(catalog));
     state.catalogSize = catalogSize;
+    state.toolNames = flattenTools(catalog)
+      .map((tool) => text(tool.value.name ?? ""))
+      .filter((name) => /^[a-zA-Z0-9_.-]{1,160}$/u.test(name));
   }
 });
 const serveModel = (
@@ -979,9 +990,6 @@ const serveModel = (
       state.requestBytes = new TextEncoder().encode(raw).byteLength;
       state.stage = "parse_request";
       const body = object(parseJson(raw));
-      state.toolNames = flattenTools(array(body.tools ?? []))
-        .map((tool) => text(tool.value.name ?? ""))
-        .filter((name) => /^[a-zA-Z0-9_.-]{1,160}$/u.test(name));
       state.inputTypes = array(body.input ?? [])
         .map((value) => text(object(value).type ?? ""))
         .filter((name) => ["function_call_output", "function_call", "message"].includes(name));
@@ -1116,8 +1124,9 @@ const pinDaemon = (
     })
   );
 const restoreClaudeStartup = Effect.fn(function* (input: ToolInput) {
+  const fs = yield* FileSystem.FileSystem;
   const config = join(profilePath(input.host, input.root), ".claude.json");
-  const previous = object(parseJson(yield* readFile(config, "utf8")));
+  const previous = object(parseJson(yield* fs.readFileString(config)));
   const projects = object(previous.projects ?? {});
   const project = object(projects[resolve(input.root)] ?? {});
   yield* privateWrite(
@@ -1169,7 +1178,7 @@ const prepareTools = (
       }
       {
         const config =
-          `mcp_oauth_credentials_store="file"\nmodel="fixture-model"\nmodel_provider="fixture"\n[model_providers.fixture]\nname="Loopback fixture"\nbase_url="${modelUrl}/v1"\nwire_api="responses"\nrequires_openai_auth=false\n[mcp_servers.fidy]\nurl=${stringify(input.mcpUrl)}\n[projects.${stringify(resolve(root))}]\ntrust_level="trusted"\n` +
+          `mcp_oauth_credentials_store="file"\nmodel="fixture-model"\nmodel_provider="fixture"\n[model_providers.fixture]\nname="Loopback fixture"\nbase_url="${modelUrl}/v1"\nwire_api="responses"\nrequires_openai_auth=false\n[mcp_servers.fidy]\nrequired=true\nurl=${stringify(input.mcpUrl)}\n[projects.${stringify(resolve(root))}]\ntrust_level="trusted"\n` +
           [
             "categories.listCategories",
             "budgets.createBudget",
@@ -1283,7 +1292,11 @@ const startupFailures = (compact: string): ReadonlyArray<string> => {
       code: "model_request_error",
       pattern: /APIError|APIConnectionError|Connectionerror|Invalidmodel/iu,
     },
-    { code: "mcp_connect_error", pattern: /Failedtoconnect|MCPconnectionfailed|MCPserverfailed/iu },
+    {
+      code: "mcp_connect_error",
+      pattern:
+        /Failedtoconnect|MCPconnectionfailed|MCPserverfailed|MCPstartupfailed|MCPstartupincomplete|MCPclientfor.{0,180}failedtostart/iu,
+    },
     { code: "invalid_oauth_scope", pattern: /invalid_scope|invalidscope/iu },
     {
       code: "invalid_tool_schema",
@@ -1414,7 +1427,7 @@ const refusalCode = (value: Schema.Json): boolean => {
   if (typeof value === "string") return refusalCode(parseEmbedded(value));
   const fields = object(value);
   if (fields.code === "user_action_required") return true;
-  return (isArray(value) ? value : Object.values(fields)).some(refusalCode);
+  return (Schema.is(ModelJsonArray)(value) ? value : Object.values(fields)).some(refusalCode);
 };
 const closedErrorCode = (value: Schema.Json): string => {
   if (typeof value === "string") return closedErrorCode(parseEmbedded(value));
@@ -1436,7 +1449,7 @@ const closedErrorCode = (value: Schema.Json): string => {
   ) {
     return code;
   }
-  for (const child of isArray(value) ? value : Object.values(fields)) {
+  for (const child of Schema.is(ModelJsonArray)(value) ? value : Object.values(fields)) {
     const nested = closedErrorCode(child);
     if (nested !== "none") return nested;
   }
@@ -1463,6 +1476,7 @@ const toolDiagnostics = (
     mainModelRequests: state.mainModelRequests,
     countTokenRequests: state.countTokenRequests,
     probeRequests: state.probeRequests,
+    toolNames: state.toolNames,
   };
 };
 const invalidTools = Effect.fn(function* (
@@ -1564,13 +1578,14 @@ const initialStartup = (): NativeStartup => ({
 const runTools = (input: ToolInput, signal: AbortSignal): ToolsEffect =>
   Effect.scoped(
     Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
       yield* checkVersion(input, signal);
       const state: ModelState = {
         outputs: [],
         budgetId: text(
           object(
             parseJson(
-              yield* readFile(input.budgetFile, "utf8").pipe(Effect.orElseSucceed(() => "{}"))
+              yield* fs.readFileString(input.budgetFile).pipe(Effect.orElseSucceed(() => "{}"))
             )
           ).id ?? ""
         ),
@@ -1635,9 +1650,15 @@ export const nativeTools = (
   return Effect.scoped(
     Effect.gen(function* () {
       const signal = yield* Effect.abortSignal;
+      const fs = yield* FileSystem.FileSystem;
+      const crypto = yield* Crypto.Crypto;
+      const callIds: readonly [string, string] = [
+        yield* crypto.randomUUIDv4,
+        yield* crypto.randomUUIDv4,
+      ];
       const budgetFile = join(root, `${host}-budget-private.json`);
       const budgetId = (yield* foreign(() => Bun.file(budgetFile).exists()))
-        ? text(object(parseJson(yield* readFile(budgetFile, "utf8"))).id ?? "")
+        ? text(object(parseJson(yield* fs.readFileString(budgetFile))).id ?? "")
         : "";
       if (["cancel", "accept", "headless"].includes(mode) && budgetId.length === 0) {
         throw new Error("missing budget");
@@ -1656,9 +1677,7 @@ export const nativeTools = (
             mode,
             namespace,
             budgetId,
-            callIds: yield* Effect.forEach(transactionAmounts, () =>
-              Effect.flatMap(Crypto.Crypto, (crypto) => crypto.randomUUIDv4)
-            ),
+            callIds,
             occurredAt: DateTime.formatIso(yield* DateTime.now),
           }),
         },
@@ -1686,7 +1705,8 @@ const readCredential = (
       const { host, root } = input;
       const profile = profilePath(host, root);
       if (host === "codex") {
-        return parseJson(yield* readFile(join(profile, ".credentials.json"), "utf8"));
+        const fs = yield* FileSystem.FileSystem;
+        return parseJson(yield* fs.readFileString(join(profile, ".credentials.json")));
       }
       const service = `Claude Code-credentials-${new Bun.CryptoHasher("sha256").update(profile.normalize("NFC")).digest("hex").slice(0, hashLength)}`;
       return parseJson(
@@ -1809,31 +1829,5 @@ export const nativeLogout = (
     )
   );
 };
-const mkdir = (
-  path: string,
-  options: Parameters<FileSystem.FileSystem["makeDirectory"]>[1] = {}
-): Effect.Effect<void, PlatformError.PlatformError, FileSystem.FileSystem> =>
-  Effect.flatMap(FileSystem.FileSystem, (fs) => fs.makeDirectory(path, options));
-const chmod = (
-  path: string,
-  mode: number
-): Effect.Effect<void, PlatformError.PlatformError, FileSystem.FileSystem> =>
-  Effect.flatMap(FileSystem.FileSystem, (fs) => fs.chmod(path, mode));
-const rm = (
-  path: string,
-  options: Parameters<FileSystem.FileSystem["remove"]>[1] = {}
-): Effect.Effect<void, PlatformError.PlatformError, FileSystem.FileSystem> =>
-  Effect.flatMap(FileSystem.FileSystem, (fs) => fs.remove(path, options));
-const writeFile = (
-  path: string,
-  value: string,
-  options: Parameters<FileSystem.FileSystem["writeFileString"]>[2] = {}
-): Effect.Effect<void, PlatformError.PlatformError, FileSystem.FileSystem> =>
-  Effect.flatMap(FileSystem.FileSystem, (fs) => fs.writeFileString(path, value, options));
-const readFile = (
-  path: string,
-  _encoding: string
-): Effect.Effect<string, PlatformError.PlatformError, FileSystem.FileSystem> =>
-  Effect.flatMap(FileSystem.FileSystem, (fs) => fs.readFileString(path));
 const now = (): number => Effect.runSync(Clock.currentTimeMillis);
 const stringify = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));

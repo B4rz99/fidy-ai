@@ -64,6 +64,20 @@ for(let step=0;step<count;step++){
 await fetch(endpoint,{method:'POST',body:JSON.stringify({model:'fixture-model',tools,messages:[{content}]})});
 await Bun.sleep(1000);
 `;
+const fakeCodex = `#!/usr/bin/env bun
+if(process.argv.includes('--version')){console.log('codex-cli 0.160.0');process.exit(0);}
+if(process.argv.includes('app-server')){if(process.argv.includes('version'))console.log(JSON.stringify({managedCodexPath:process.env.CODEX_HOME+'/owned/codex',appServerVersion:'0.160.0'}));process.exit(0);}
+const config=await Bun.file(process.env.CODEX_HOME+'/config.toml').text();
+const endpoint=config.match(/base_url="([^"]+)"/)[1]+'/responses';
+const required=config.includes('[mcp_servers.fidy]\\nrequired=true\\n');
+const tools=required?[{type:'namespace',name:'mcp__fidy',tools:[{type:'function',name:'listCategories'}]}]:[{type:'function',name:'unrelated'}];
+await Bun.sleep(1100);
+const response=await fetch(endpoint,{method:'POST',body:JSON.stringify({tools,input:[]})});
+const body=await response.text();
+if(!required||!body.includes('function_call'))process.exit(1);
+await fetch(endpoint,{method:'POST',body:JSON.stringify({tools,input:[{type:'function_call_output',call_id:'fixture_0',output:JSON.stringify({isError:false})}]})});
+await Bun.sleep(1000);
+`;
 const decodeBudget = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json));
 const stringify = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 const withClient = <A, E>(
@@ -106,6 +120,18 @@ const callbackFixture = Effect.fn(function* (root: string) {
   );
 });
 describe("isolated native MCP proof boundary", () => {
+  it("requires Fidy before the first Codex model catalog despite delayed startup", () =>
+    run(
+      withClient("codex-required", ({ root, binary }) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          yield* fs.makeDirectory(join(root, "codex-profile"));
+          yield* fs.writeFileString(binary, fakeCodex, { mode: executableMode });
+          const result = yield* nativeTools("codex", binary, root, "refresh", "synthetic-test");
+          expect(result).toMatchObject({ passed: true, expected: 1, received: 1 });
+        })
+      )
+    ));
   it("keeps native login onboarding complete and answers separate startup approvals", () =>
     run(
       withClient("login-tools", ({ root, binary }) =>

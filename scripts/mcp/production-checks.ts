@@ -364,14 +364,16 @@ const naturalRefresh = Effect.fn(function* (context: ProofContext) {
     "Native refresh extended or changed approved connection authority"
   );
 });
-const finishProof = Effect.fn(function* (context: ProofContext, hosts: Record<string, unknown>) {
+type HostProof = Effect.Success<ReturnType<typeof hostJourney>>;
+type HostProofs = Readonly<{ claude: HostProof; codex: HostProof }>;
+const finishProof = Effect.fn(function* (context: ProofContext, hosts: HostProofs) {
   const { scope, root, browser, observation, before, started } = context;
   yield* report("First-party revocation and refusal checks");
   yield* revokeConnections(scope, browser);
-  const refusal: Record<string, unknown> = {};
-  for (const host of HOSTS) {
-    refusal[host] = yield* refusedCredentials(host, scope.binaries[host], root).pipe(Effect.scoped);
-  }
+  const refusal = {
+    claude: yield* refusedCredentials("claude", scope.binaries.claude, root).pipe(Effect.scoped),
+    codex: yield* refusedCredentials("codex", scope.binaries.codex, root).pipe(Effect.scoped),
+  };
   yield* Effect.sleep("3 seconds");
   yield* checkObservation(scope, observation);
   const after = yield* snapshot(scope);
@@ -402,7 +404,10 @@ const finishProof = Effect.fn(function* (context: ProofContext, hosts: Record<st
     platform: {
       observedIngressRequests: observation.ingressRequests(),
       coreMcp: observation.rows.filter((row) => row.surface === "core" && row.route === "/mcp"),
-      cpuLimitTerminations: 0,
+      oauthMcpCpuLimitTerminations: 0,
+      scheduledCpuLimitTerminations: observation.rows.filter(
+        (row) => row.eventKind === "scheduled" && row.outcome === "exceededCpu"
+      ).length,
     },
     cleanup: {
       activeConnections: after.activeConnections,
@@ -457,6 +462,16 @@ const cleanupProof = Effect.fn(function* (context: ProofContext) {
     "Synthetic cleanup failed; review fixture state before rerunning"
   );
 });
+const reportFailedObservation = (observation: Observation): Effect.Effect<void> =>
+  Effect.sync(() => {
+    process.stderr.write(
+      encodeJson({
+        phase: "failed platform observations",
+        observations: observation.rows.filter((row) => row.route !== "other"),
+        failures: observation.failures,
+      }) + "\n"
+    );
+  });
 const runProof = Effect.fn(function* (scope: ApprovedScope) {
   yield* verifyProvenance(scope);
   yield* validatePinnedHosts(scope);
@@ -475,14 +490,17 @@ const runProof = Effect.fn(function* (scope: ApprovedScope) {
   const observation = yield* startObservation(scope);
   const context = { scope, root, browser, observation, before, started };
   const work = Effect.gen(function* () {
-    const hosts: Record<string, unknown> = {};
-    for (const host of HOSTS) {
-      hosts[host] = yield* hostJourney(context, host);
-    }
+    const hosts: HostProofs = {
+      claude: yield* hostJourney(context, "claude"),
+      codex: yield* hostJourney(context, "codex"),
+    };
     yield* naturalRefresh(context);
     return yield* finishProof(context, hosts);
   });
-  return yield* work.pipe(Effect.ensuring(cleanupProof(context).pipe(Effect.orDie)));
+  return yield* work.pipe(
+    Effect.tapCause(() => reportFailedObservation(observation)),
+    Effect.ensuring(cleanupProof(context).pipe(Effect.orDie))
+  );
 });
 const main = Effect.gen(function* () {
   const { values } = parseArgs({

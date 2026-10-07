@@ -1,7 +1,7 @@
 import { dispatchPriceNotices } from "./internal/price-notice";
 import { publishWeeklyPrice } from "./operations";
 import { type Price } from "../../src/core/subscription/contract";
-import { dispatchWeeklyRenewals as dispatchRenewals } from "./internal/weekly-renewal";
+import { dispatchCardRenewals as dispatchRenewals } from "./internal/card-renewal";
 import {
   dispatchRefunds as dispatchCorrections,
   dispatchVoidVerification as dispatchVerification,
@@ -12,8 +12,8 @@ import {
 import { handlePaymentEnrollment as enroll } from "./internal/payment-enrollment";
 import type {
   BillingPriceNoticeDispatchInput,
+  CardRenewalDispatchInput,
   EnrollmentEnvironment,
-  WeeklyRenewalDispatchInput,
 } from "./contract";
 import {
   WorkflowEntrypoint,
@@ -204,9 +204,9 @@ export const handlePaymentEnrollment = (
   input: Readonly<{ request: Request; environment: EnrollmentEnvironment }>
 ): Promise<Response> => enroll(input);
 
-/** Offer bounded due weekly renewals to their original User coordinator; D1 owns eligibility and history. */
-export const dispatchWeeklyRenewals = (
-  input: WeeklyRenewalDispatchInput
+/** Offer bounded due card renewals to their original User coordinator; D1 owns eligibility and history. */
+export const dispatchCardRenewals = (
+  input: CardRenewalDispatchInput
 ): Effect.Effect<void, BillingCollectionFailure> => dispatchRenewals(input);
 
 /** Publish immutable weekly replacement terms and promptly offer the atomically retained notice intent. */

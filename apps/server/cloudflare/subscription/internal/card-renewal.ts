@@ -2,17 +2,14 @@ import { type OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { workerCrypto } from "./wompi-runtime";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { UserId } from "../../../src/core/identity/contract";
-import { BillingAttemptId } from "../../../src/core/subscription/contract";
+import { BillingAttemptId, BillingPeriod } from "../../../src/core/subscription/contract";
 import { IanaTimeZone } from "../../../src/core/_shared/context";
-import {
-  type PaidPeriodWindow,
-  weeklyRenewalPeriod,
-} from "../../../src/core/subscription/operations";
+import { type PaidPeriodWindow, renewalPeriod } from "../../../src/core/subscription/operations";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import {
   BillingCollectionFailure,
-  WeeklyRenewalAdmission,
-  type WeeklyRenewalDispatchInput,
+  CardRenewalAdmission,
+  type CardRenewalDispatchInput,
 } from "../contract";
 
 const fromPromise = <A>(
@@ -22,7 +19,12 @@ const fromPromise = <A>(
     try: run,
     catch: (cause) => new BillingCollectionFailure({ cause: Option.some(cause) }),
   });
-const Boundary = Schema.Struct({ ends_at_ms: Schema.Int, time_zone: IanaTimeZone });
+const Boundary = Schema.Struct({
+  ends_at_ms: Schema.Int,
+  time_zone: IanaTimeZone,
+  billing_period: BillingPeriod,
+  calendar_anchor_ms: Schema.Int,
+});
 
 type RenewalClaimInput = Readonly<{
   db: D1Database;
@@ -42,12 +44,13 @@ const prepareRenewalClaim = (
       sql: `INSERT INTO billing_attempts
       (id, user_id, enrollment_id, payment_request_id, payment_source_id, price_id, amount, currency,
       billing_period, service_market, tax_treatment, time_zone, wompi_environment, wompi_reference,
-      created_at_ms, previous_paid_attempt_id, period_starts_at_ms, period_ends_at_ms, attempt_number)
+      created_at_ms, previous_paid_attempt_id, period_starts_at_ms, period_ends_at_ms, attempt_number, calendar_anchor_ms)
       SELECT ?, a.user_id, a.enrollment_id, ?, a.payment_source_id, price.id, price.amount, price.currency,
-      price.billing_period, price.service_market, price.tax_treatment, a.time_zone, a.wompi_environment, ?, ?, a.id, ?, ?, 1
+      price.billing_period, price.service_market, price.tax_treatment, a.time_zone, a.wompi_environment, ?, ?, a.id, ?, ?, 1, COALESCE(a.calendar_anchor_ms, period.starts_at_ms)
       FROM subscriptions s JOIN billing_attempts a ON a.id = s.attempt_id AND a.user_id = s.user_id
+      JOIN billing_paid_periods period ON period.attempt_id = a.id
       JOIN card_payment_sources source ON source.id = a.payment_source_id AND source.user_id = a.user_id
-      JOIN subscription_prices price ON price.published_order = 1 AND price.billing_period = 'weekly' AND price.service_market = a.service_market
+      JOIN subscription_prices price ON price.published_order IS NOT NULL AND price.billing_period = a.billing_period AND price.service_market = a.service_market
       WHERE s.user_id = ? AND a.id = ? AND source.method = 'card'
         AND a.wompi_environment = ? AND a.status = 'succeeded'
         AND NOT EXISTS (SELECT 1 FROM subscription_renewal_stops stop WHERE stop.user_id = s.user_id)
@@ -69,16 +72,16 @@ const prepareRenewalClaim = (
   });
 };
 
-export const claimWeeklyRenewal = (
+export const claimCardRenewal = (
   input: RenewalClaimInput
 ): Effect.Effect<void, BillingCollectionFailure> =>
   Effect.gen(function* () {
     const row = yield* fromPromise(() =>
       input.db
-        .prepare(`SELECT p.ends_at_ms, a.time_zone
+        .prepare(`SELECT p.ends_at_ms, a.time_zone, a.billing_period, COALESCE(a.calendar_anchor_ms, p.starts_at_ms) AS calendar_anchor_ms
     FROM subscriptions s JOIN billing_attempts a ON a.id = s.attempt_id AND a.user_id = s.user_id
     JOIN billing_paid_periods p ON p.attempt_id = a.id
-    WHERE s.user_id = ? AND a.id = ? AND a.status = 'succeeded' AND a.billing_period = 'weekly'
+    WHERE s.user_id = ? AND a.id = ? AND a.status = 'succeeded'
     AND a.wompi_environment = ? AND p.ends_at_ms <= ?`)
         .bind(input.userId, input.previousPaidAttemptId, input.environment, input.now)
         .first()
@@ -87,8 +90,10 @@ export const claimWeeklyRenewal = (
     const boundary = yield* Schema.decodeUnknownEffect(Boundary)(row).pipe(
       Effect.mapError((cause) => new BillingCollectionFailure({ cause: Option.some(cause) }))
     );
-    const period = yield* weeklyRenewalPeriod({
+    const period = yield* renewalPeriod({
       timeZone: boundary.time_zone,
+      billingPeriod: boundary.billing_period,
+      originalStartsAt: DateTime.makeUnsafe(boundary.calendar_anchor_ms),
       previousEndsAt: DateTime.makeUnsafe(boundary.ends_at_ms),
     });
     const id = yield* workerCrypto.randomUUIDv4.pipe(Effect.orDie);
@@ -102,8 +107,8 @@ export const claimWeeklyRenewal = (
   });
 
 /** Discover only bounded identities; each admission rechecks same-User authority inside its coordinator. */
-export const dispatchWeeklyRenewals = (
-  input: WeeklyRenewalDispatchInput
+export const dispatchCardRenewals = (
+  input: CardRenewalDispatchInput
 ): Effect.Effect<void, BillingCollectionFailure> =>
   Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
@@ -115,7 +120,7 @@ export const dispatchWeeklyRenewals = (
     FROM billing_followup_outbox due JOIN subscriptions s ON s.attempt_id = due.attempt_id
     JOIN billing_attempts a ON a.id = s.attempt_id AND a.user_id = s.user_id
     JOIN card_payment_sources source ON source.id = a.payment_source_id AND source.user_id = a.user_id
-    WHERE due.due_at_ms <= ? AND a.billing_period = 'weekly' AND source.method = 'card'
+    WHERE due.due_at_ms <= ? AND source.method = 'card'
       AND a.wompi_environment = ?
       AND NOT EXISTS (SELECT 1 FROM subscription_renewal_stops stop WHERE stop.user_id = s.user_id)
       AND NOT EXISTS (SELECT 1 FROM billing_attempts r WHERE r.previous_paid_attempt_id = a.id)
@@ -136,8 +141,8 @@ export const dispatchWeeklyRenewals = (
       Effect.mapError((cause) => new BillingCollectionFailure({ cause: Option.some(cause) }))
     );
     for (const entry of entries) {
-      const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(WeeklyRenewalAdmission))({
-        _tag: "WeeklyRenewal",
+      const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(CardRenewalAdmission))({
+        _tag: "CardRenewal",
         userId: entry.user_id,
         previousPaidAttemptId: entry.id,
       }).pipe(
@@ -145,7 +150,7 @@ export const dispatchWeeklyRenewals = (
       );
       const response = yield* fromPromise((signal) =>
         input.USER_TRANSACTION_COORDINATOR.getByName(entry.user_id).fetch(
-          new Request("https://coordinator.internal/weekly-renewal-work", {
+          new Request("https://coordinator.internal/card-renewal-work", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: encoded,

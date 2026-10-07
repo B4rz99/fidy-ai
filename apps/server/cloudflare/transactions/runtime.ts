@@ -1,6 +1,6 @@
 import {
+  executeCardRenewalAdmission,
   executeRefundSupportAdmission,
-  executeWeeklyRenewalAdmission,
 } from "../subscription/operations";
 import { ProactivityActivity, type ProactivityEnvironment } from "../insights/contract";
 import { executeProactivityWork } from "../insights/runtime";
@@ -346,12 +346,12 @@ const privateOwnerActivity = (
 ): Option.Option<Effect.Effect<Response>> => {
   if (
     input.request.method === "POST" &&
-    new URL(input.request.url).pathname === "/weekly-renewal-work"
+    new URL(input.request.url).pathname === "/card-renewal-work"
   ) {
     return Option.some(
       Clock.currentTimeMillis.pipe(
         Effect.flatMap((now) =>
-          executeWeeklyRenewalAdmission({
+          executeCardRenewalAdmission({
             db: input.environment.DB,
             userId: input.userId,
             candidate: input.candidate,

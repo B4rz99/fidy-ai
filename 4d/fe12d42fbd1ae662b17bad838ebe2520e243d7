@@ -1,0 +1,41 @@
+ARCHITECTURE.md
+  s_e3b9a05f422f64::t_057c979d9cb51a 118-120
+infra/cloudflare/verify-edge-smoke.ts
+  s_e3b9a05f422f64::t_40109e0da4b474 10
+  s_e3b9a05f422f64::t_9442298f714b88 26-33,125-126,148
+  s_e3b9a05f422f64::t_057c979d9cb51a 34-39,86-87
+  s_e3b9a05f422f64::t_778a47bf849500 14,76,85,88-90
+docs/research/hosted-mcp-native-990.evidence.json
+  s_e3b9a05f422f64::t_057c979d9cb51a 25,37,50,63,75,88
+  s_e3b9a05f422f64::t_7453a9bfd7470e 1-24,26-36,38-49,51-62,64-74,76-87,89-91
+docs/research/hosted-mcp-release-990.md
+  s_e3b9a05f422f64::t_057c979d9cb51a 1-125
+infra/cloudflare/verify-edge-smoke.test.ts
+  s_e3b9a05f422f64::t_40109e0da4b474 114,145,179-187
+  s_e3b9a05f422f64::t_057c979d9cb51a 13-14,28-32,36-44,50-53,79-82,88-92,125-130
+  s_e3b9a05f422f64::t_88f6820517ea51 33-35,46-47,57-60,66-78,83-87,93-100
+  s_e3b9a05f422f64::t_903ff8d2ce3919 45,48-49,54-56,61-65,165,242
+docs/operations/production-releases.md
+  s_e3b9a05f422f64::t_057c979d9cb51a 428-435
+docs/operations/hosted-mcp-release.md
+  s_e3b9a05f422f64::t_1012eb18154a7e 1-61
+docs/guides/hosted-mcp.md
+  s_e3b9a05f422f64::t_1012eb18154a7e 1-78,89-92
+  s_e3b9a05f422f64::t_057c979d9cb51a 79-88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4dfe12d42fbd1ae662b17bad838ebe2520e243d7",
+  "prompts": {},
+  "sessions": {
+    "s_e3b9a05f422f64": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a115f2-dfce-7741-a6e9-e22144cd3fad",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

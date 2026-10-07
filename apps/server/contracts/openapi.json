@@ -48,14 +48,7 @@
             "$ref": "#/components/schemas/UtcTimestamp"
           },
           "lastUsedAt": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/UtcTimestamp"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Union_13"
           },
           "recipientLabel": {
             "$ref": "#/components/schemas/PATRecipientLabel"
@@ -4500,6 +4493,102 @@
           "startsAt",
           "endsAt",
           "renewalAnchor"
+        ],
+        "type": "object"
+      },
+      "PATActivity": {
+        "additionalProperties": false,
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/PATActivityEntry"
+            },
+            "maxItems": 50,
+            "type": "array"
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "pat": {
+            "$ref": "#/components/schemas/PATActivityMetadata"
+          },
+          "retainedSince": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          }
+        },
+        "required": [
+          "pat",
+          "entries",
+          "hasMore",
+          "retainedSince"
+        ],
+        "type": "object"
+      },
+      "PATActivityEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "occurredAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/CanonicalOperationId"
+          },
+          "outcome": {
+            "enum": [
+              "succeeded",
+              "rejected",
+              "failed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "outcome",
+          "occurredAt"
+        ],
+        "type": "object"
+      },
+      "PATActivityMetadata": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "expiresAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "lastUsedAt": {
+            "$ref": "#/components/schemas/Union_13"
+          },
+          "recipientLabel": {
+            "$ref": "#/components/schemas/PATRecipientLabel"
+          },
+          "revokedAt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scopes": {
+            "$ref": "#/components/schemas/Arrays_5"
+          },
+          "shortId": {
+            "$ref": "#/components/schemas/TokenShortId"
+          }
+        },
+        "required": [
+          "shortId",
+          "recipientLabel",
+          "scopes",
+          "createdAt",
+          "lastUsedAt",
+          "expiresAt",
+          "revokedAt"
         ],
         "type": "object"
       },
@@ -9558,6 +9647,16 @@
       "Union_13": {
         "anyOf": [
           {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "Union_14": {
+        "anyOf": [
+          {
             "additionalProperties": false,
             "properties": {
               "callId": {
@@ -10487,7 +10586,7 @@
           }
         ]
       },
-      "Union_14": {
+      "Union_15": {
         "anyOf": [
           {
             "additionalProperties": false,
@@ -16842,13 +16941,13 @@
                 "properties": {
                   "calls": {
                     "items": {
-                      "$ref": "#/components/schemas/Union_13"
+                      "$ref": "#/components/schemas/Union_14"
                     },
                     "maxItems": 12,
                     "minItems": 1,
                     "prefixItems": [
                       {
-                        "$ref": "#/components/schemas/Union_13"
+                        "$ref": "#/components/schemas/Union_14"
                       }
                     ],
                     "type": "array"
@@ -16875,13 +16974,13 @@
                       "properties": {
                         "results": {
                           "items": {
-                            "$ref": "#/components/schemas/Union_14"
+                            "$ref": "#/components/schemas/Union_15"
                           },
                           "maxItems": 12,
                           "minItems": 1,
                           "prefixItems": [
                             {
-                              "$ref": "#/components/schemas/Union_14"
+                              "$ref": "#/components/schemas/Union_15"
                             }
                           ],
                           "type": "array"
@@ -17549,6 +17648,151 @@
         },
         "x-fidy-agent-confirmation": "required",
         "x-fidy-operation-kind": "mutation",
+        "x-fidy-required-tier": "free"
+      }
+    },
+    "/pats/{shortId}/activity": {
+      "get": {
+        "description": "Answer activity questions for one of the User's PATs by safe short id, including expired or revoked grants. Returns at most the latest 50 retained canonical outcomes, newest first. Empty history means no retained activity, not that the PAT was never used; retainedSince gives the retention cutoff and hasMore indicates additional retained entries. Never request or supply a bearer.",
+        "operationId": "pats.getPATActivity",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "shortId",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TokenShortId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PATActivity"
+                    },
+                    "next": {
+                      "$ref": "#/components/schemas/Arrays_"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequiredEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserActionRequiredEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissingEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundEncoded"
+                }
+              }
+            },
+            "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          },
+          {
+            "webSession": []
+          }
+        ],
+        "tags": [
+          "pats"
+        ],
+        "x-fidy-access": {
+          "type": "web-or-hosted"
+        },
+        "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-operation-kind": "query",
         "x-fidy-required-tier": "free"
       }
     },

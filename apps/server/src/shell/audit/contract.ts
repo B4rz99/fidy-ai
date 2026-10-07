@@ -62,6 +62,8 @@ export type AuditPublicationOperation =
 export const dailyAuditBudget = 256;
 /** UTC-day width used by canonical admission, in milliseconds. */
 export const utcDayMilliseconds = 86400000;
+/** Maximum retention of canonical activity evidence, in UTC days. */
+export const auditRetentionDays = 365;
 
 /** A live, User-scoped credential gate supplied by the credential owner; Audit never resolves identity. */
 export type AuditAuthority =
@@ -211,3 +213,10 @@ export type AuditPublicationEvidence = typeof AuditPublicationEvidence.Type;
 
 /** Attributable evidence returned through the canonical metadata-only model. */
 export { AuditLogEntry };
+
+/** Exact same-User browser or admitted hosted-Turn proof for a PAT activity answer; never a PAT or OAuth credential. */
+export type PATActivityAuthority = Readonly<{
+  table: "web_sessions" | "hosted_turns";
+  predicate: string;
+  bindings: ReadonlyArray<string | number | Uint8Array>;
+}>;

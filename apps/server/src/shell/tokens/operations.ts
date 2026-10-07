@@ -1,7 +1,12 @@
+import type { PATActivityAuthority } from "~/shell/audit/contract";
 import { type UserId } from "~/core/identity/contract";
-import { type Effect, Option } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { type SqlClient } from "effect/sql";
-import { type ActivePATList, type CreateManualPATPayload } from "~/core/tokens/contract";
+import {
+  type ActivePATList,
+  type CreateManualPATPayload,
+  PATActivityMetadata,
+} from "~/core/tokens/contract";
 import { type Unavailable } from "~/shell/public-http/contract";
 import {
   patMetadataQuery,
@@ -579,4 +584,55 @@ export const expiredPairingGrants = (
     AND expires_at_ms <= ? ORDER BY expires_at_ms LIMIT ?`,
     params: [input.current, input.limit],
   },
+});
+
+/** Identify a selected User-owned grant even after expiry or revocation, without exposing credential or internal identity material. */
+export const preparePATActivityMetadata = (
+  input: Readonly<{
+    userId: string;
+    shortId: string;
+    authority: PATActivityAuthority;
+  }>
+): Readonly<{
+  statement: OwnedStatement;
+  decode: (rows: unknown) => Effect.Effect<Option.Option<PATActivityMetadata>, Schema.SchemaError>;
+}> => ({
+  statement: {
+    sql: `SELECT short_id,recipient_label,scopes_json,created_at_ms,last_used_at_ms,expires_at_ms,revoked_at_ms
+      FROM pats WHERE user_id = ? AND short_id = ?
+      AND EXISTS (SELECT 1 FROM ${input.authority.table} WHERE ${input.authority.predicate}) LIMIT 1`,
+    params: [input.userId, input.shortId, ...input.authority.bindings],
+  },
+  decode: (raw) =>
+    Effect.gen(function* () {
+      const rows = yield* Schema.decodeUnknownEffect(
+        Schema.Array(
+          Schema.Struct({
+            short_id: PATActivityMetadata.fields.shortId,
+            recipient_label: PATActivityMetadata.fields.recipientLabel,
+            scopes_json: Schema.String,
+            created_at_ms: Schema.DateTimeUtcFromMillis,
+            last_used_at_ms: Schema.OptionFromNullOr(Schema.DateTimeUtcFromMillis),
+            expires_at_ms: Schema.DateTimeUtcFromMillis,
+            revoked_at_ms: Schema.OptionFromNullOr(Schema.DateTimeUtcFromMillis),
+          })
+        ).check(Schema.isMaxLength(1))
+      )(raw);
+      const row = rows[0];
+      if (row === undefined) return Option.none();
+      const scopes = yield* Schema.decodeEffect(
+        Schema.fromJsonString(PATActivityMetadata.fields.scopes)
+      )(row.scopes_json);
+      return Option.some(
+        yield* Schema.decodeEffect(Schema.toType(PATActivityMetadata))({
+          shortId: row.short_id,
+          recipientLabel: row.recipient_label,
+          scopes,
+          createdAt: row.created_at_ms,
+          lastUsedAt: row.last_used_at_ms,
+          expiresAt: row.expires_at_ms,
+          revokedAt: row.revoked_at_ms,
+        })
+      );
+    }),
 });

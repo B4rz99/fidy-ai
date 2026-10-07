@@ -147,3 +147,5 @@ export {
 } from "~/shell/web-authentication/contract";
 
 export { RecurringDigestReport, RecurringDigestReportParams } from "~/core/insights/contract";
+
+export { PATActivity } from "~/shell/tokens/contract";

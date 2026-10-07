@@ -1,3 +1,10 @@
+import { DateTime, Effect, Schema } from "effect";
+import {
+  PATActivityEntry,
+  PATActivityHistory,
+  maximumPATActivityEntries,
+} from "~/core/audit/contract";
+
 import type { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import type { OAuthAuthority } from "~/shell/oauth-agents/contract";
 import type { OwnedStatement } from "~/shell/owner-write/contract";
@@ -10,7 +17,10 @@ import {
   type CanonicalReplayAccess,
   type EmailReplacementEvidence,
   type OwnerAuditCall,
+  type PATActivityAuthority,
+  auditRetentionDays,
   dailyAuditBudget,
+  utcDayMilliseconds,
 } from "./contract";
 import { emailReplacementEvidence } from "~/shell/audit/internal/email-evidence";
 import {
@@ -218,3 +228,64 @@ export const prepareOwnerAuditCall = ({
   const statement = ownerCallStatement(input);
   return db.prepare(statement.sql).bind(...statement.params);
 };
+
+const ActivityRow = Schema.Struct({
+  operation: PATActivityEntry.fields.operation,
+  outcome: Schema.Literals(["accepted", "rejected"]),
+  occurredAt: Schema.DateTimeUtcFromMillis,
+});
+
+/** Prepare a selected User-owned PAT's latest retained canonical outcomes under the exact live caller proof. Commit the read and its Audit together before disclosure. */
+export const preparePATActivity = (
+  input: Readonly<{
+    userId: string;
+    shortId: string;
+    current: number;
+    authority: PATActivityAuthority;
+  }>
+): Readonly<{
+  statement: OwnedStatement;
+  decode: (rows: unknown) => Effect.Effect<PATActivityHistory, AuditUnavailable>;
+}> => {
+  const cutoff = input.current - auditRetentionDays * utcDayMilliseconds;
+  return {
+    statement: {
+      sql: `SELECT operation,outcome,occurred_at_ms AS occurredAt FROM pat_audit
+        WHERE user_id = ? AND pat_id = (SELECT id FROM pats WHERE user_id = ? AND short_id = ?)
+        AND session_id IS NULL AND operation NOT LIKE 'pats.%' AND occurred_at_ms >= ?
+        AND EXISTS (SELECT 1 FROM ${input.authority.table} WHERE ${input.authority.predicate})
+        ORDER BY occurred_at_ms DESC, id DESC LIMIT ${maximumPATActivityEntries + 1}`,
+      params: [input.userId, input.userId, input.shortId, cutoff, ...input.authority.bindings],
+    },
+    decode: (raw) =>
+      Effect.gen(function* () {
+        const rows = yield* Schema.decodeUnknownEffect(
+          Schema.Array(ActivityRow).check(Schema.isMaxLength(maximumPATActivityEntries + 1))
+        )(raw);
+        return yield* Schema.decodeUnknownEffect(Schema.toType(PATActivityHistory))({
+          entries: rows.slice(0, maximumPATActivityEntries).map((row) => ({
+            ...row,
+            outcome: row.outcome === "accepted" ? "succeeded" : "rejected",
+          })),
+          hasMore: rows.length > maximumPATActivityEntries,
+          retainedSince: DateTime.makeUnsafe(cutoff),
+        });
+      }).pipe(Effect.mapError(() => new AuditUnavailable())),
+  };
+};
+
+/** Account for a PAT activity answer or indistinguishable missing/foreign grant without retaining the requested identifier. */
+export const recordPATActivityQuery = (
+  input: Readonly<{
+    id: string;
+    userId: string;
+    shortId: string;
+    current: number;
+    authority: PATActivityAuthority;
+  }>
+): OwnedStatement => ({
+  sql: `INSERT INTO pat_audit (id,user_id,${input.authority.table === "hosted_turns" ? "hosted_turn_id" : "session_id"},operation,outcome,occurred_at_ms)
+    SELECT ?,user_id,id,'pats.getPATActivity',CASE WHEN EXISTS (SELECT 1 FROM pats WHERE user_id = ? AND short_id = ?) THEN 'accepted' ELSE 'rejected' END,?
+    FROM ${input.authority.table} WHERE ${input.authority.predicate}`,
+  params: [input.id, input.userId, input.shortId, input.current, ...input.authority.bindings],
+});

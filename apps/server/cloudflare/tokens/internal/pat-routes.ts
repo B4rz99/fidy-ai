@@ -2,9 +2,12 @@ import { PATPairingDirectGroup, PATsGroup } from "../../../src/shell/tokens/cont
 import { HttpApi } from "effect/http-api";
 import { claimPATPairing } from "./pat-claim";
 import { approvePATPairing, inspectPATPairing, startPATPairing } from "./pat-pairing";
+import { getActivity } from "./pat-activity";
+import { authenticateCanonicalWebSession } from "../../web-session/operations";
+import { unauthorized } from "./pat-shared";
 import { createManualPAT, listPATs, revokeAllPATs, revokePAT } from "./pat-management";
 import { matchesRouteTemplate } from "../../../src/shell/public-http/operations";
-import { type Cause, Effect, type Schema } from "effect";
+import { type Cause, Clock, Effect, Option, type Schema } from "effect";
 import { type ConsentUnavailable } from "../../consent/contract";
 
 type PATHandlerFailure = Cause.UnknownError | Schema.SchemaError | ConsentUnavailable;
@@ -21,6 +24,15 @@ const handlers = {
   inspectPATPairing,
   approvePATPairing,
   listPATs,
+  getPATActivity: ({ request, db, path }): Effect.Effect<Response, PATHandlerFailure> =>
+    Effect.gen(function* () {
+      const current = yield* Clock.currentTimeMillis;
+      const subject = yield* Effect.tryPromise(() =>
+        authenticateCanonicalWebSession({ request, db, current })
+      );
+      if (Option.isNone(subject)) return unauthorized();
+      return yield* getActivity({ db, subject: subject.value, shortId: path.split("/")[2] ?? "" });
+    }),
   createManualPAT,
   revokeAllPATs,
   revokePAT: ({ request, db, path }): Effect.Effect<Response, PATHandlerFailure> =>

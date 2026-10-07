@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import { type CatalogOperation } from "../../src/shell/canonical-catalog/contract";
 import {
   type AuthorizedPAT,
+  type PATActivityRead,
   type PATAuthorizationDecision,
   type PATMetadataQuery,
   type PATRequest,
@@ -18,6 +19,7 @@ import {
   patMethods as methods,
   patRoute as route,
 } from "./internal/pat-routes";
+import { getActivity, getHeldActivity } from "./internal/pat-activity";
 import { listPATsForCaller as list } from "./internal/pat-management";
 import { commitPATUnit as commit } from "./internal/pat-unit";
 
@@ -53,3 +55,12 @@ export const patDirectRoute = (path: string): boolean => directRoute(path);
 export const patBrowserRoute = (path: string): boolean => browserRoute(path);
 /** Declared methods for a recognized PAT path, without speculative endpoints. */
 export const patMethods = (path: string): ReadonlyArray<string> => methods(path);
+
+/** Answer a selected grant's retained activity under live same-User WebSession authority; PAT callers are refused. HTTP and hosted execution share this audited snapshot. */
+export const getPATActivity = (
+  input: PATMetadataQuery & Readonly<{ shortId: string }>
+): Effect.Effect<Response> => getActivity(input);
+
+/** Answer retained activity inside a verified, admitted hosted Turn, with the same projection and Audit as browser execution. */
+export const getHeldPATActivity = (input: PATActivityRead): Effect.Effect<Response> =>
+  getHeldActivity(input);

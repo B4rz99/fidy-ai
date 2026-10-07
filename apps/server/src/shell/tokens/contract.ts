@@ -1,4 +1,5 @@
 import type { OwnedStatement } from "~/shell/owner-write/contract";
+import { PATActivityHistory } from "~/core/audit/contract";
 import {
   type CanonicalCapability,
   CanonicalOperationId,
@@ -13,6 +14,7 @@ import {
   CreateManualPATPayload,
   IssuedPAT,
   PAT,
+  PATActivityMetadata,
   PATLifecycleCheck,
   PATPairingReview,
   PendingPATPairingClaim,
@@ -133,6 +135,34 @@ const listPATs = HttpApiEndpoint.get("listPATs", "/pats", {
   .annotate(
     OpenApi.Description,
     "List safe metadata for the User's currently usable PATs. Credential material and terminal lifecycle history are never returned."
+  )
+  .annotateMerge(
+    operationPolicy({
+      access: webOrHosted,
+      requiredTier: "free",
+      agentConfirmation: "not-required",
+      kind: "query",
+    })
+  );
+
+/** One selected grant and its bounded, metadata-only retained activity. */
+export const PATActivity = Schema.Struct({
+  pat: PATActivityMetadata,
+  ...PATActivityHistory.fields,
+}).annotate({ identifier: "PATActivity" });
+export type PATActivity = typeof PATActivity.Type;
+
+/** Safe grant selection for a User-owned activity query. */
+export const PATActivityParams = Schema.Struct({ shortId: TokenShortId });
+
+const getPATActivity = HttpApiEndpoint.get("getPATActivity", "/pats/:shortId/activity", {
+  params: PATActivityParams,
+  success: OperationResponse(PATActivity),
+  error: [NotFound, Unavailable],
+})
+  .annotate(
+    OpenApi.Description,
+    "Answer activity questions for one of the User's PATs by safe short id, including expired or revoked grants. Returns at most the latest 50 retained canonical outcomes, newest first. Empty history means no retained activity, not that the PAT was never used; retainedSince gives the retention cutoff and hasMore indicates additional retained entries. Never request or supply a bearer."
   )
   .annotateMerge(
     operationPolicy({
@@ -276,6 +306,7 @@ const approvePATPairing = HttpApiEndpoint.post("approvePATPairing", "/pats/pairi
 /** Fresh authenticated-web operations for manual and direct-client PAT authority. */
 export const PATsGroup = HttpApiGroup.make("pats")
   .add(listPATs)
+  .add(getPATActivity)
   .add(revokePAT)
   .add(revokeAllPATs)
   .add(createManualPAT)

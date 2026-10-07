@@ -1,3 +1,4 @@
+import { PATActivityParams } from "../../../src/shell/tokens/contract";
 import { RecurringDigestReportParams } from "../../../src/core/insights/contract";
 import { operationCatalog } from "../../../src/shell/api";
 import { type Cause, Effect, Option, Schema } from "effect";
@@ -22,7 +23,7 @@ import {
   readHeldRecurringDigestReport,
   readHeldReminderSchedule,
 } from "../../insights/operations";
-import { listPATs } from "../../tokens/operations";
+import { getHeldPATActivity, getPATActivity, listPATs } from "../../tokens/operations";
 import type { StatementDecisionWork } from "../../ingestion/contract";
 import {
   forwardingAddressResponse,
@@ -86,6 +87,17 @@ const queryOwners = new Map<string, QueryOwner>([
         operation: "subscription.getUpgradeUrl",
         browserOrigin,
       }),
+  ],
+  [
+    "pats.getPATActivity",
+    ({ db, subject, request }): Effect.Effect<Response> =>
+      isOAuthCaller(subject)
+        ? Effect.succeed(transactionUnavailable())
+        : getPATActivity({
+            db,
+            subject,
+            shortId: new URL(request.url).pathname.split("/")[2] ?? "",
+          }),
   ],
   [
     "pats.listPATs",
@@ -211,6 +223,22 @@ export const canonicalHostedStatementQueryOwner = (
   id: string
 ): Option.Option<(work: StatementDecisionWork) => Effect.Effect<Response>> => {
   if (Option.isNone(canonicalQueryOwner(id))) return Option.none();
+  if (id === "pats.getPATActivity") {
+    return Option.some((work) => {
+      const selected = Schema.decodeUnknownOption(Schema.Struct({ params: PATActivityParams }))(
+        work.input
+      );
+      return Option.isSome(selected) && work.authority.table === "hosted_turns"
+        ? getHeldPATActivity({
+            db: work.db,
+            userId: work.userId,
+            authority: work.authority,
+            current: work.current,
+            shortId: selected.value.params.shortId,
+          })
+        : Effect.succeed(transactionUnavailable());
+    });
+  }
   if (id === "insights.getRecurringDigestReport") {
     return Option.some((work) => {
       const input = Schema.decodeUnknownOption(

@@ -431,3 +431,10 @@ export type PATPairingClaimDecision =
   | Readonly<{ _tag: "ExpireUnapproved" }>
   | Readonly<{ _tag: "RevokeUnclaimed" }>
   | Readonly<{ _tag: "Invalid" }>;
+
+/** Safe grant identification for activity, including expired and revoked grants. */
+export const PATActivityMetadata = Schema.Struct({
+  ...ActivePATMetadata.fields,
+  revokedAt: Schema.OptionFromNullOr(UtcTimestamp),
+}).annotate({ identifier: "PATActivityMetadata" });
+export type PATActivityMetadata = typeof PATActivityMetadata.Type;

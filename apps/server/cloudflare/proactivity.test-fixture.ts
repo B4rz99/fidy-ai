@@ -90,37 +90,38 @@ export const endTestHostedAuthority = (
   ).pipe(Effect.asVoid);
 
 const testHostedConsentBasis = (
-  db: D1Database
+  input: Readonly<{ db: D1Database; userId: UserId }>
 ): Effect.Effect<string, ConsentUnavailable | Schema.SchemaError> =>
   Effect.gen(function* () {
-    const standing = yield* readConsentStanding({ db, userId: proactivityTestUsers[0] });
+    const standing = yield* readConsentStanding(input);
     if (standing._tag === "Missing") return yield* Effect.die("Fixture needs processing Consent");
     return yield* Schema.encodeEffect(
       Schema.fromJsonString(Schema.toCodecJson(HostedAgentSessionConsentBasis))
     )(standing.basis);
   });
 
-const fixtureHostedSubject = (): WhatsAppHostedSubject => ({
+const fixtureHostedSubject = (index: 0 | 1): WhatsAppHostedSubject => ({
   _tag: "WhatsAppHosted",
-  userId: proactivityTestUsers[0],
-  portfolioId: proactivityTestCallers[0].businessPortfolioId,
-  bsuid: proactivityTestCallers[0].businessScopedUserId,
+  userId: proactivityTestUsers[index],
+  portfolioId: proactivityTestCallers[index].businessPortfolioId,
+  bsuid: proactivityTestCallers[index].businessScopedUserId,
 });
 
 /** Establish real held Turn/channel rows, then mint through Agent's live authority seam. No browser credential substitutes for the hosted caller. */
 export const proactivityHostedCaller = (
-  db: D1Database
+  input: Readonly<{ db: D1Database; userIndex: 0 | 1 }>
 ): Effect.Effect<
   HostedCanonicalCaller,
   Cause.UnknownError | Schema.SchemaError | ConsentUnavailable
 > =>
   Effect.gen(function* () {
-    const userId = proactivityTestUsers[0];
-    const caller = proactivityTestCallers[0];
+    const { db, userIndex } = input;
+    const userId = proactivityTestUsers[userIndex];
+    const caller = proactivityTestCallers[userIndex];
     const sessionId = newId();
     const turnId = TranscriptTurnId.make(newId());
     const current = proactivityTestNow.epochMilliseconds;
-    const basis = yield* testHostedConsentBasis(db);
+    const basis = yield* testHostedConsentBasis({ db, userId });
     yield* Effect.tryPromise(() =>
       db.batch([
         db
@@ -151,7 +152,7 @@ export const proactivityHostedCaller = (
     return Option.getOrThrow(
       yield* mintHostedStatementCaller({
         db,
-        subject: fixtureHostedSubject(),
+        subject: fixtureHostedSubject(userIndex),
         turnId,
         current,
         approval: Option.none(),

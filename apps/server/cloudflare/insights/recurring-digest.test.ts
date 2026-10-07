@@ -1,3 +1,4 @@
+import { executeHostedStatementQuery } from "../canonical-operations/operations";
 import type { WorkflowStep } from "cloudflare:workers";
 import type { Cause } from "effect";
 import type {
@@ -27,9 +28,12 @@ import { evaluateRecurringSeries } from "../recurring/operations";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { DateTime, Effect, Option, Schema } from "effect";
 import {
+  endTestHostedAuthority,
   proactivityDatabase,
+  proactivityHostedCaller,
   proactivityTestCallers,
   proactivityTestDatabases,
+  proactivityTestNow,
   proactivityTestPAT,
   proactivityTestUsers,
   seedLargeRecurringDigestSource,
@@ -416,6 +420,61 @@ it("retains frozen historical facts after invalidation and rejects foreign, unde
           .run()
       );
       expect((yield* readCanonicalRecurringDigestReport(input)).status).not.toBe(200);
+    })
+  ));
+
+it("refuses a populated foreign report through an admitted hosted Turn without disclosing financial facts", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* proactivityDatabase;
+      const context = yield* activateDigest(db);
+      const marker = "private-historical-counterparty";
+      yield* seedRecurringDigestSource({
+        ...context,
+        confirmedAt: "2026-10-06T19:00:00Z",
+        counterparty: marker,
+        index: 1,
+      });
+      const id = yield* freezeDigest(db);
+      const caller = yield* proactivityHostedCaller({ db, userIndex: 1 });
+      const work = {
+        db,
+        caller,
+        bucket: Option.none<R2Bucket>(),
+        current: proactivityTestNow.epochMilliseconds,
+        operation: "insights.getRecurringDigestReport",
+        input: { params: { id } },
+      };
+      const response = yield* executeHostedStatementQuery(work);
+      expect(response.status).toBe(404);
+      const text = yield* Effect.tryPromise(() => response.text());
+      expect(text).not.toContain(marker);
+      expect(text).not.toContain(id);
+      expect(text).not.toContain("items");
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT user_id,hosted_turn_id,operation FROM insight_audit").all()
+        )
+      ).toMatchObject({
+        results: [
+          { user_id: caller.userId, hosted_turn_id: caller.turnId, operation: work.operation },
+        ],
+      });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare("SELECT count(*) AS n FROM recurring_digest_reports WHERE user_id=?")
+            .bind(caller.userId)
+            .first()
+        )
+      ).toEqual({ n: 0 });
+      yield* endTestHostedAuthority({ db, caller });
+      expect((yield* executeHostedStatementQuery(work)).status).not.toBe(200);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT count(*) AS n FROM insight_audit").first()
+        )
+      ).toEqual({ n: 1 });
     })
   ));
 

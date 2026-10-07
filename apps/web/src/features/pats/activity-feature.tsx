@@ -27,7 +27,7 @@ const SelectedActivity = ({ shortId }: Readonly<{ shortId: TokenShortId }>): JSX
 
 /** Keep activity queries in the authentication registry; selecting a different grant resets the displayed query. */
 export const PATActivityFeature = (): JSX.Element => {
-  const [selected, setSelected] = useState<Option.Option<TokenShortId>>(Option.none());
+  const [selected, setSelected] = useState<Option.Option<TokenShortId>>(() => Option.none());
   return (
     <>
       <PATActivityPicker onSelect={(shortId) => setSelected(Option.some(shortId))} />

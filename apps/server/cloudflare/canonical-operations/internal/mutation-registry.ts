@@ -1,4 +1,8 @@
 import {
+  prepareSubscriptionCancellation,
+  subscriptionCancellationRefusal,
+} from "../../subscription/operations";
+import {
   type CanonicalMutationPreparation,
   type CanonicalMutationRefusal,
   type CanonicalPreparationWork,
@@ -248,6 +252,14 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
   CanonicalOperationId,
   CanonicalMutationAdapter
 >([
+  [
+    CanonicalOperationId.make("subscription.cancelSubscription"),
+    {
+      prepare: prepareSubscriptionCancellation,
+      present: present(HTTP_OK),
+      invalidRefusal: subscriptionCancellationRefusal,
+    },
+  ],
   ...(
     [
       [

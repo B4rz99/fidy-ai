@@ -1,6 +1,16 @@
+import {
+  OAuthClientId,
+  OAuthConnectionId,
+  OAuthCredentialId,
+} from "../../src/core/oauth-agents/contract";
+import { type OAuthCaller, oauthResource } from "../../src/shell/oauth-agents/contract";
+import type { OAuthConfirmationWork } from "../oauth-confirmation/contract";
 import { it as effectIt } from "@effect/vitest";
 import { TestClock } from "effect/testing";
 import { UserId } from "../../src/core/identity/contract";
+import { executeCanonicalWork } from "../canonical-operations/operations";
+import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
+import { applyTestMigration } from "../d1-test-fixture";
 import { activePaidSubscriptionCondition } from "../../src/shell/subscription/operations";
 import { type Miniflare } from "miniflare";
 import { afterEach, expect, it, vi } from "vitest";
@@ -14,7 +24,11 @@ import {
 } from "./runtime";
 import { type BillingCollectionFailure, type BillingRuntime } from "./contract";
 import { Price } from "../../src/core/subscription/contract";
-import { executeSubscriptionRenewalAdmission, publishWeeklyPrice } from "./operations";
+import {
+  executeProtectedSubscriptionQuery,
+  executeSubscriptionRenewalAdmission,
+  publishWeeklyPrice,
+} from "./operations";
 
 const RecordedTransaction = Schema.Struct({
   data: Schema.Struct({
@@ -212,7 +226,7 @@ it("converges concurrent due claims on one frozen pending weekly attempt and dur
         amount: "9900",
         period_starts_at_ms: dueAt,
         period_ends_at_ms: Date.parse("2026-10-20T15:00:00Z"),
-        attempt_number: 1,
+        renewal_attempt_number: 1,
       });
       expect(
         (yield* fromPromise(() =>
@@ -354,38 +368,42 @@ it.each(renewalCalendars)(
     )
 );
 
-it("preserves weekly card Pro for exactly three days after the boundary without rewriting paid history", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* fromPromise(() => fixture());
-      for (const [now, expected] of [
-        [dueAt, 1],
-        [Date.parse("2026-10-16T14:59:59.999Z"), 1],
-        [Date.parse("2026-10-16T15:00:00Z"), 0],
-      ] as const) {
-        const condition = activePaidSubscriptionCondition({
-          userId: UserId.make(userId),
-          nowEpochMs: now,
-        });
+it.each(renewalCalendars)(
+  "preserves $method $billingPeriod Pro for exactly three days without rewriting paid history",
+  (calendar) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* fromPromise(() => fixture(calendar.method, calendar));
+        const boundary = Date.parse(calendar.endsAt);
+        for (const [now, expected] of [
+          [boundary, 1],
+          [boundary + 259200000 - 1, 1],
+          [boundary + 259200000, 0],
+        ] as const) {
+          const condition = activePaidSubscriptionCondition({
+            userId: UserId.make(userId),
+            nowEpochMs: now,
+          });
+          expect(
+            yield* fromPromise(() =>
+              db
+                .prepare(`SELECT ${condition.sql} AS active`)
+                .bind(...condition.params)
+                .first()
+            )
+          ).toEqual({ active: expected });
+        }
         expect(
           yield* fromPromise(() =>
             db
-              .prepare(`SELECT ${condition.sql} AS active`)
-              .bind(...condition.params)
+              .prepare("SELECT ends_at_ms FROM billing_paid_periods WHERE attempt_id = ?")
+              .bind(attemptId)
               .first()
           )
-        ).toEqual({ active: expected });
-      }
-      expect(
-        yield* fromPromise(() =>
-          db
-            .prepare("SELECT ends_at_ms FROM billing_paid_periods WHERE attempt_id = ?")
-            .bind(attemptId)
-            .first()
-        )
-      ).toEqual({ ends_at_ms: dueAt });
-    })
-  ));
+        ).toEqual({ ends_at_ms: boundary });
+      })
+    )
+);
 
 it("publishes a changed weekly Price with immediate durable notice and charges it only in newly admitted attempts", () =>
   Effect.runPromise(
@@ -577,7 +595,7 @@ it.each(
               .bind(...condition.params)
               .first()
           )
-        ).toEqual({ active: 0 });
+        ).toEqual({ active: 1 });
       })
     )
 );
@@ -1035,7 +1053,7 @@ effectIt.effect.each(renewalCalendars)(
 );
 
 it.each(["card", "nequi", "daviplata"] as const)(
-  "a failed $0 monthly renewal cannot extend paid access or create another collection",
+  "a failed $0 monthly renewal retries only at the bounded original schedule",
   (method) =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -1117,6 +1135,789 @@ it.each(["card", "nequi", "daviplata"] as const)(
               .first()
           )
         ).toEqual({ paid_period_ends_at_ms: boundary });
+        yield* admission(db, boundary + 86400000 - 1);
+        yield* Effect.all(
+          [admission(db, boundary + 86400000), admission(db, boundary + 86400000)],
+          { concurrency: 2 }
+        );
+        expect(
+          (yield* fromPromise(() =>
+            db
+              .prepare(
+                "SELECT renewal_attempt_number, price_id, period_starts_at_ms, period_ends_at_ms FROM billing_attempts WHERE previous_paid_attempt_id=? ORDER BY renewal_attempt_number"
+              )
+              .bind(attemptId)
+              .all()
+          )).results
+        ).toEqual([
+          {
+            renewal_attempt_number: 1,
+            price_id: "22700000-0000-4000-8000-000000000002",
+            period_starts_at_ms: boundary,
+            period_ends_at_ms: Date.parse("2026-03-31T23:30:00Z"),
+          },
+          {
+            renewal_attempt_number: 2,
+            price_id: "22700000-0000-4000-8000-000000000002",
+            period_starts_at_ms: boundary,
+            period_ends_at_ms: Date.parse("2026-03-31T23:30:00Z"),
+          },
+        ]);
+      })
+    )
+);
+
+const cancellationFixture = (
+  method: "card" | "nequi" | "daviplata"
+): Effect.Effect<D1Database, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    const db = yield* fromPromise(() => fixture(method));
+    yield* fromPromise(() =>
+      db.exec(`CREATE TABLE web_sessions (id TEXT PRIMARY KEY,user_id TEXT,token_digest BLOB,revoked_at_ms INTEGER,idle_expires_at_ms INTEGER,hard_expires_at_ms INTEGER);
+CREATE TABLE pat_audit (id TEXT PRIMARY KEY,user_id TEXT,session_id TEXT,pat_id TEXT,oauth_connection_id TEXT,oauth_credential_id TEXT,operation TEXT,outcome TEXT,occurred_at_ms INTEGER);
+CREATE TABLE transaction_audit (user_id TEXT,operation TEXT,occurred_at_ms INTEGER);
+CREATE TABLE category_audit (user_id TEXT,occurred_at_ms INTEGER);
+CREATE TABLE memory_audit (user_id TEXT,occurred_at_ms INTEGER);
+CREATE TABLE statement_submission_audit (user_id TEXT,occurred_at_ms INTEGER);
+CREATE TABLE statement_review_audit (user_id TEXT,occurred_at_ms INTEGER);
+CREATE TABLE statement_clarification_audit (user_id TEXT,occurred_at_ms INTEGER);`)
+    );
+    yield* fromPromise(() =>
+      applyTestMigration({
+        db,
+        source: new URL("../migrations/0019_canonical_child_guards.sql", import.meta.url),
+      })
+    );
+    yield* fromPromise(() =>
+      db
+        .prepare("INSERT INTO web_sessions VALUES (?, ?, ?, NULL, ?, ?)")
+        .bind(enrollmentId, userId, new Uint8Array(32), 9000000000000, 9000000000000)
+        .run()
+    );
+    return db;
+  });
+const cancel = (db: D1Database, now: number, subjectUser = userId): Effect.Effect<Response> =>
+  executeCanonicalWork({
+    db,
+    subject: { id: enrollmentId, userId: subjectUser, digest: new Uint8Array(32) },
+    current: now,
+    bucket: Option.none(),
+    hostedFence: Option.none(),
+    inference: Option.none(),
+    oauthConfirmation: Option.none(),
+    work: {
+      _tag: "Call",
+      operation: CanonicalOperationId.make("subscription.cancelSubscription"),
+      input: {},
+    },
+  });
+it.each(["card", "nequi", "daviplata"] as const)(
+  "cancels $0 renewal idempotently while preserving the paid period and fencing queued collection",
+  (method) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* cancellationFixture(method);
+        const cancelledAt = dueAt - 1000;
+        const response = yield* cancel(db, cancelledAt);
+        expect(response.status).toBe(200);
+        expect(yield* fromPromise(() => response.json())).toMatchObject({
+          data: {
+            cancelledAt: "2026-10-13T14:59:59.000Z",
+            paidThrough: "2026-10-13T15:00:00.000Z",
+            sourceCancellation: method === "daviplata" ? "void-pending" : "detached",
+          },
+        });
+        expect((yield* cancel(db, cancelledAt + 500)).status).toBe(200);
+        yield* admission(db, dueAt);
+        expect(
+          (yield* fromPromise(() =>
+            db
+              .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id IS NOT NULL")
+              .all()
+          )).results
+        ).toHaveLength(0);
+        for (const [now, expected] of [
+          [cancelledAt, 1],
+          [dueAt, 0],
+        ] as const) {
+          const condition = activePaidSubscriptionCondition({
+            userId: UserId.make(userId),
+            nowEpochMs: now,
+          });
+          expect(
+            yield* fromPromise(() =>
+              db
+                .prepare(`SELECT ${condition.sql} AS active`)
+                .bind(...condition.params)
+                .first()
+            )
+          ).toEqual({ active: expected });
+        }
+      })
+    )
+);
+it.each(["card", "nequi", "daviplata"] as const)(
+  "detaches $0 locally and voids only a matching DaviPlata source once",
+  (method) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* cancellationFixture(method);
+        yield* cancel(db, dueAt - 1000);
+        let puts = 0;
+        vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
+          const request = new Request(input, init);
+          if (request.method === "PUT") puts++;
+          expect(new URL(request.url).pathname).toBe(
+            request.method === "PUT" ? "/v1/payment_sources/3891/void" : "/v1/payment_sources/3891"
+          );
+          return Promise.resolve(
+            Response.json({ data: { id: 3891, type: "DAVIPLATA", status: "VOIDED" } })
+          );
+        });
+        const run = (): Promise<void> =>
+          runBillingCollectionWorkflow({
+            environment: {
+              DB: db,
+              WOMPI_ENVIRONMENT: "sandbox",
+              WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+              WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+              WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+            },
+            payload: { version: 1, kind: "source-cancellation", userId },
+            activity: (_name, _options, work) => work(),
+          });
+        yield* fromPromise(run);
+        yield* fromPromise(run);
+        expect(puts).toBe(method === "daviplata" ? 1 : 0);
+        const response = yield* cancel(db, dueAt);
+        expect(yield* fromPromise(() => response.json())).toMatchObject({
+          data: { sourceCancellation: method === "daviplata" ? "voided" : "detached" },
+        });
+      })
+    )
+);
+const runObservedRenewal = ({
+  db,
+  id,
+  status,
+  now,
+  amountInCents,
+}: Readonly<{
+  db: D1Database;
+  id: string;
+  status: "DECLINED" | "APPROVED";
+  now: number;
+  amountInCents: number;
+}>): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
+    vi.stubGlobal("fetch", () =>
+      Promise.resolve(
+        Response.json({
+          data: {
+            ...recordedTransactions[status].data,
+            id: `dunning-${id}`,
+            reference: `fidy-${id}`,
+            amount_in_cents: amountInCents,
+            payment_source_id: 3891,
+            finalized_at:
+              status === "APPROVED" ? DateTime.formatIso(DateTime.makeUnsafe(now)) : null,
+          },
+        })
+      )
+    );
+    const environment: BillingRuntime = {
+      DB: db,
+      WOMPI_ENVIRONMENT: "sandbox",
+      WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+      WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+      WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+    };
+    const run = (lookup: boolean): Promise<void> =>
+      runBillingCollectionWorkflow({
+        environment,
+        payload: lookup
+          ? { version: 1, kind: "lookup", transactionId: `dunning-${id}` }
+          : { version: 1, attemptId: id },
+        activity: (_name, _options, work) => work(),
+      });
+    yield* fromPromise(() => run(false));
+    vi.setSystemTime(now + 240000);
+    yield* fromPromise(() => run(true));
+  });
+const latestRenewal = (db: D1Database): Effect.Effect<string, Cause.UnknownError> =>
+  fromPromise(() =>
+    db
+      .prepare(
+        "SELECT id FROM billing_attempts WHERE previous_paid_attempt_id=? ORDER BY renewal_attempt_number DESC LIMIT 1"
+      )
+      .bind(attemptId)
+      .first()
+  ).pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(Schema.Struct({ id: Schema.String }))),
+    Effect.map((row) => row.id),
+    Effect.orDie
+  );
+
+it.each(["card", "nequi", "daviplata"] as const)(
+  "bounds $0 retries at 24/48 hours and exhausts grace without granting another paid period",
+  (method) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* fromPromise(() => fixture(method, billingCalendars[1]));
+        const boundary = Date.parse("2026-02-28T23:30:00Z");
+        for (const offset of [0, 86400000, 172800000]) {
+          yield* admission(db, boundary + offset);
+          const id = yield* latestRenewal(db);
+          yield* runObservedRenewal({
+            db,
+            id,
+            status: "DECLINED",
+            now: boundary + offset,
+            amountInCents: 2890000,
+          });
+        }
+        yield* admission(db, boundary + 172800001);
+        yield* admission(db, boundary + 259200000);
+        expect(
+          (yield* fromPromise(() =>
+            db
+              .prepare(
+                "SELECT renewal_attempt_number,status FROM billing_attempts WHERE previous_paid_attempt_id=? ORDER BY renewal_attempt_number"
+              )
+              .bind(attemptId)
+              .all()
+          )).results
+        ).toEqual([
+          { renewal_attempt_number: 1, status: "failed" },
+          { renewal_attempt_number: 2, status: "failed" },
+          { renewal_attempt_number: 3, status: "failed" },
+        ]);
+        const condition = activePaidSubscriptionCondition({
+          userId: UserId.make(userId),
+          nowEpochMs: boundary + 259200000,
+        });
+        expect(
+          yield* fromPromise(() =>
+            db
+              .prepare(`SELECT ${condition.sql} AS active`)
+              .bind(...condition.params)
+              .first()
+          )
+        ).toEqual({ active: 0 });
+        expect(
+          (yield* fromPromise(() => db.prepare("SELECT * FROM billing_paid_periods").all())).results
+        ).toHaveLength(1);
+      })
+    )
+);
+
+it.each(["card", "nequi", "daviplata"] as const)(
+  "recovers $0 on verified retry success and absorbs a delayed earlier approval without anchor drift",
+  (method) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* fromPromise(() => fixture(method, billingCalendars[1]));
+        const boundary = Date.parse("2026-02-28T23:30:00Z");
+        yield* admission(db, boundary);
+        const first = yield* latestRenewal(db);
+        yield* runObservedRenewal({
+          db,
+          id: first,
+          status: "DECLINED",
+          now: boundary,
+          amountInCents: 2890000,
+        });
+        yield* admission(db, boundary + 86400000);
+        const retry = yield* latestRenewal(db);
+        expect(retry).not.toBe(first);
+        yield* runObservedRenewal({
+          db,
+          id: retry,
+          status: "APPROVED",
+          now: boundary + 86400000,
+          amountInCents: 2890000,
+        });
+        yield* runObservedRenewal({
+          db,
+          id: first,
+          status: "APPROVED",
+          now: boundary + 86400001,
+          amountInCents: 2890000,
+        });
+        expect(
+          (yield* fromPromise(() =>
+            db
+              .prepare(
+                "SELECT starts_at_ms,ends_at_ms FROM billing_paid_periods ORDER BY starts_at_ms"
+              )
+              .all()
+          )).results
+        ).toEqual([
+          { starts_at_ms: Date.parse("2026-01-31T23:30:00Z"), ends_at_ms: boundary },
+          { starts_at_ms: boundary, ends_at_ms: Date.parse("2026-03-31T23:30:00Z") },
+        ]);
+        expect(
+          yield* fromPromise(() =>
+            db
+              .prepare("SELECT renewal_anchor_ms FROM subscriptions WHERE user_id=?")
+              .bind(userId)
+              .first()
+          )
+        ).toEqual({ renewal_anchor_ms: Date.parse("2026-03-31T23:30:00Z") });
+        yield* executeSubscriptionRenewalAdmission({
+          db,
+          userId,
+          environment: "sandbox",
+          now: Date.parse("2026-03-31T23:30:00Z"),
+          candidate: { _tag: "SubscriptionRenewal", userId, previousPaidAttemptId: retry },
+        });
+        expect(
+          (yield* fromPromise(() =>
+            db
+              .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id=?")
+              .bind(retry)
+              .all()
+          )).results
+        ).toHaveLength(1);
+      })
+    )
+);
+it("recovers on an earlier verified success while a retry is still queued", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() => fixture("card", billingCalendars[1]));
+      const boundary = Date.parse("2026-02-28T23:30:00Z");
+      yield* admission(db, boundary);
+      const first = yield* latestRenewal(db);
+      yield* runObservedRenewal({
+        db,
+        id: first,
+        status: "DECLINED",
+        now: boundary,
+        amountInCents: 2890000,
+      });
+      yield* admission(db, boundary + 86400000);
+      yield* runObservedRenewal({
+        db,
+        id: first,
+        status: "APPROVED",
+        now: boundary + 86400001,
+        amountInCents: 2890000,
+      });
+      const response = yield* executeSubscriptionRenewalAdmission({
+        db,
+        userId,
+        environment: "sandbox",
+        now: Date.parse("2026-03-31T23:30:00Z"),
+        candidate: { _tag: "SubscriptionRenewal", userId, previousPaidAttemptId: first },
+      });
+      expect(response.status).toBe(202);
+      expect(
+        (yield* fromPromise(() =>
+          db
+            .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id=?")
+            .bind(first)
+            .all()
+        )).results
+      ).toHaveLength(1);
+    })
+  ));
+it("refuses a borrowed or revoked browser credential before cancellation and rolls back when Audit fails", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* cancellationFixture("card");
+      const foreign = "10000000-0000-4000-8000-000000000009";
+      expect((yield* cancel(db, dueAt - 1000, foreign)).status).toBe(401);
+      yield* fromPromise(() => db.prepare("UPDATE web_sessions SET revoked_at_ms=1").run());
+      expect((yield* cancel(db, dueAt - 1000)).status).toBe(401);
+      yield* fromPromise(() => db.prepare("UPDATE web_sessions SET revoked_at_ms=NULL").run());
+      yield* fromPromise(() =>
+        db
+          .prepare(
+            "CREATE TRIGGER reject_cancellation_audit BEFORE INSERT ON pat_audit BEGIN SELECT RAISE(ABORT,'test_audit_failure'); END"
+          )
+          .run()
+      );
+      expect((yield* cancel(db, dueAt - 1000)).status).toBe(503);
+      expect(
+        (yield* fromPromise(() =>
+          db.prepare("SELECT user_id FROM subscription_cancellations").all()
+        )).results
+      ).toHaveLength(0);
+      yield* admission(db, dueAt);
+      expect(
+        (yield* fromPromise(() =>
+          db
+            .prepare("SELECT id FROM billing_attempts WHERE previous_paid_attempt_id=?")
+            .bind(attemptId)
+            .all()
+        )).results
+      ).toHaveLength(1);
+    })
+  ));
+
+it("fences an already queued renewal at cancellation without submitting its charge", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* cancellationFixture("card");
+      yield* admission(db, dueAt);
+      const queued = yield* latestRenewal(db);
+      expect((yield* cancel(db, dueAt + 1)).status).toBe(200);
+      const provider = vi.fn(() =>
+        Promise.reject(new Error("Cancelled collection must not reach Wompi"))
+      );
+      vi.stubGlobal("fetch", provider);
+      yield* fromPromise(() =>
+        runBillingCollectionWorkflow({
+          environment: {
+            DB: db,
+            WOMPI_ENVIRONMENT: "sandbox",
+            WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+            WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+            WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+          },
+          payload: { version: 1, attemptId: queued },
+          activity: (_name, _options, work) => work(),
+        })
+      );
+      expect(provider).not.toHaveBeenCalled();
+    })
+  ));
+
+it("reconciles an ambiguous DaviPlata void without repeating PUT or trusting foreign source evidence", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* cancellationFixture("daviplata");
+      yield* cancel(db, dueAt - 1000);
+      let puts = 0;
+      let foundId = 3892;
+      vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init);
+        if (request.method === "PUT") {
+          puts++;
+          return Promise.reject(new Error("Ambiguous provider delivery"));
+        }
+        return Promise.resolve(
+          Response.json({ data: { id: foundId, type: "DAVIPLATA", status: "VOIDED" } })
+        );
+      });
+      const run = (subject = userId): Promise<void> =>
+        runBillingCollectionWorkflow({
+          environment: {
+            DB: db,
+            WOMPI_ENVIRONMENT: "sandbox",
+            WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+            WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+            WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+          },
+          payload: { version: 1, kind: "source-cancellation", userId: subject },
+          activity: (_name, _options, work) => work(),
+        });
+      yield* fromPromise(() => run("10000000-0000-4000-8000-000000000009"));
+      expect(puts).toBe(0);
+      expect((yield* Effect.exit(fromPromise(() => run())))._tag).toBe("Failure");
+      const pending = yield* cancel(db, dueAt);
+      expect(yield* fromPromise(() => pending.json())).toMatchObject({
+        data: { sourceCancellation: "void-pending" },
+      });
+      foundId = 3891;
+      yield* fromPromise(() => run());
+      yield* fromPromise(() => run());
+      expect(puts).toBe(1);
+      const done = yield* cancel(db, dueAt);
+      expect(yield* fromPromise(() => done.json())).toMatchObject({
+        data: { sourceCancellation: "voided" },
+      });
+    })
+  ));
+it("does not submit a queued retry after its grace boundary", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() => fixture("card", billingCalendars[1]));
+      const boundary = Date.parse("2026-02-28T23:30:00Z");
+      yield* admission(db, boundary);
+      const first = yield* latestRenewal(db);
+      yield* runObservedRenewal({
+        db,
+        id: first,
+        status: "DECLINED",
+        now: boundary,
+        amountInCents: 2890000,
+      });
+      yield* admission(db, boundary + 86400000);
+      const queued = yield* latestRenewal(db);
+      vi.setSystemTime(boundary + 259200000);
+      const provider = vi.fn(() => Promise.reject(new Error("Grace has expired")));
+      vi.stubGlobal("fetch", provider);
+      yield* fromPromise(() =>
+        runBillingCollectionWorkflow({
+          environment: {
+            DB: db,
+            WOMPI_ENVIRONMENT: "sandbox",
+            WOMPI_PUBLIC_KEY: `pub_test_${"f1d7c0de".repeat(3)}`,
+            WOMPI_PRIVATE_KEY: `prv_test_${"f1d7c0de".repeat(3)}`,
+            WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
+          },
+          payload: { version: 1, attemptId: queued },
+          activity: (_name, _options, work) => work(),
+        })
+      );
+      expect(provider).not.toHaveBeenCalled();
+    })
+  ));
+
+it("preserves an independent TrialPeriod after grace exhaustion and cancellation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* cancellationFixture("card");
+      yield* fromPromise(() =>
+        db.exec(
+          "CREATE TABLE trial_periods (user_id TEXT PRIMARY KEY,started_at_ms INTEGER,ends_at_ms INTEGER) STRICT"
+        )
+      );
+      yield* fromPromise(() =>
+        db
+          .prepare("INSERT INTO trial_periods VALUES (?,?,?)")
+          .bind(userId, dueAt, dueAt + 604800000)
+          .run()
+      );
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(dueAt + 259200000);
+      expect((yield* cancel(db, dueAt + 259200000)).status).toBe(200);
+      const response = yield* executeProtectedSubscriptionQuery({
+        db,
+        subject: { id: enrollmentId, userId, digest: new Uint8Array(32) },
+        operation: "subscription.getSubscriptionStatus",
+      });
+      expect(response.status).toBe(200);
+      expect(yield* fromPromise(() => response.json())).toMatchObject({
+        data: { accessTier: "pro", paidSubscription: { endsAt: "2026-10-13T15:00:00.000Z" } },
+      });
+    })
+  ));
+
+it("keeps retry Money and Price frozen after replacement publication", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* fromPromise(() => fixture());
+      yield* admission(db, dueAt);
+      const first = yield* latestRenewal(db);
+      yield* runObservedRenewal({
+        db,
+        id: first,
+        status: "DECLINED",
+        now: dueAt,
+        amountInCents: 990000,
+      });
+      const replacement = yield* Schema.decodeEffect(Schema.toCodecJson(Price))({
+        id: "22700000-0000-4000-8000-000000000004",
+        money: { amount: "10900", currency: "COP" },
+        billingPeriod: "weekly",
+        serviceMarket: "CO",
+        taxTreatment: "not-taxable",
+        renewalTerms: {
+          automaticRenewal: true,
+          renewalReminder: "none",
+          cancellation: "future-renewals-only",
+          paidAccessEnds: "paid-period-end",
+        },
+        paymentMethods: ["card", "nequi", "daviplata"],
+      });
+      yield* publishWeeklyPrice({ db, price: replacement });
+      yield* admission(db, dueAt + 86400000);
+      const retry = yield* latestRenewal(db);
+      expect(
+        yield* fromPromise(() =>
+          db
+            .prepare(
+              "SELECT price_id,amount,renewal_attempt_number,period_starts_at_ms,period_ends_at_ms FROM billing_attempts WHERE id=?"
+            )
+            .bind(retry)
+            .first()
+        )
+      ).toEqual({
+        price_id: priceId,
+        amount: "9900",
+        renewal_attempt_number: 2,
+        period_starts_at_ms: dueAt,
+        period_ends_at_ms: Date.parse("2026-10-20T15:00:00Z"),
+      });
+    })
+  ));
+
+it("refuses cancellation with a read-only PAT without changing renewal work or recording use", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* cancellationFixture("card");
+      yield* admission(db, dueAt);
+      yield* fromPromise(() =>
+        db.exec(
+          `CREATE TABLE pats(id TEXT PRIMARY KEY,user_id TEXT,bearer_digest BLOB,scopes_json TEXT,revoked_at_ms INTEGER,expires_at_ms INTEGER,last_used_at_ms INTEGER);`
+        )
+      );
+      yield* fromPromise(() =>
+        db
+          .prepare("INSERT INTO pats VALUES(?,?,?,'[\"read\"]',NULL,9000000000000,NULL)")
+          .bind(enrollmentId, userId, new Uint8Array(32))
+          .run()
+      );
+      const before = yield* cancellationEffects(db);
+      const response = yield* executeCanonicalWork({
+        db,
+        subject: {
+          patId: enrollmentId,
+          userId,
+          digest: new Uint8Array(32),
+          requiredScope: Option.some("write"),
+        },
+        current: dueAt + 1,
+        bucket: Option.none(),
+        hostedFence: Option.none(),
+        inference: Option.none(),
+        oauthConfirmation: Option.none(),
+        work: {
+          _tag: "Call",
+          operation: CanonicalOperationId.make("subscription.cancelSubscription"),
+          input: {},
+        },
+      });
+      expect(response.status).toBe(401);
+      expect(yield* cancellationEffects(db)).toEqual(before);
+      expect(
+        yield* fromPromise(() => db.prepare("SELECT last_used_at_ms FROM pats").first())
+      ).toEqual({ last_used_at_ms: null });
+    })
+  ));
+
+const cancellationEffects = (db: D1Database): Effect.Effect<unknown, Cause.UnknownError> =>
+  fromPromise(() =>
+    db
+      .prepare(`SELECT
+  (SELECT COUNT(*) FROM subscription_cancellations) AS cancellations,
+  (SELECT COUNT(*) FROM subscription_renewal_stops) AS stops,
+  (SELECT COUNT(*) FROM billing_collection_arms WHERE state='armed') AS armed,
+  (SELECT COUNT(*) FROM billing_collection_outbox) AS offers,
+  (SELECT COUNT(*) FROM pat_audit WHERE outcome='accepted') AS accepted`)
+      .first()
+  );
+
+it.each(["missing", "declined", "expired", "borrowed", "replayed"] as const)(
+  "refuses $0 OAuth cancellation confirmation without partial billing effects",
+  (kind) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* cancellationFixture("card");
+        yield* admission(db, dueAt);
+        yield* fromPromise(() =>
+          db.exec(`CREATE TABLE oauth_connections(id TEXT PRIMARY KEY,user_id TEXT,client_id TEXT,resource TEXT,scopes_json TEXT,revoked_at_ms INTEGER,expires_at_ms INTEGER);
+CREATE TABLE oauth_access_credentials(id TEXT PRIMARY KEY,user_id TEXT,digest BLOB,connection_id TEXT,scopes_json TEXT,expires_at_ms INTEGER);
+CREATE TABLE oauth_grant_consents(connection_id TEXT,user_id TEXT);`)
+        );
+        yield* fromPromise(() =>
+          applyTestMigration({
+            db,
+            source: new URL("../migrations/0038_oauth_confirmation.sql", import.meta.url),
+          })
+        );
+        const subject: OAuthCaller = {
+          oauthConnectionId: OAuthConnectionId.make(enrollmentId),
+          credentialId: OAuthCredentialId.make(sourceId),
+          userId: UserId.make(userId),
+          clientId: OAuthClientId.make(paymentRequestId),
+          resource: oauthResource,
+          digest: new Uint8Array(32),
+          requiredScope: Option.some("write"),
+        };
+        yield* fromPromise(() =>
+          db.batch([
+            db
+              .prepare(
+                "INSERT INTO oauth_connections VALUES(?,?,?,?,'[\"write\"]',NULL,9000000000000)"
+              )
+              .bind(enrollmentId, userId, subject.clientId, oauthResource),
+            db
+              .prepare(
+                "INSERT INTO oauth_access_credentials VALUES(?,?,?,?,'[\"write\"]',9000000000000)"
+              )
+              .bind(sourceId, userId, subject.digest, enrollmentId),
+            db.prepare("INSERT INTO oauth_grant_consents VALUES(?,?)").bind(enrollmentId, userId),
+          ])
+        );
+        const operation = CanonicalOperationId.make("subscription.cancelSubscription");
+        const invoke = (
+          confirmation: Option.Option<OAuthConfirmationWork>
+        ): Effect.Effect<Response> =>
+          executeCanonicalWork({
+            db,
+            subject,
+            current: dueAt + 1,
+            bucket: Option.none(),
+            hostedFence: Option.none(),
+            inference: Option.none(),
+            oauthConfirmation: confirmation,
+            work: { _tag: "Call", operation, input: {} },
+          });
+        const before = yield* cancellationEffects(db);
+        if (kind === "missing") {
+          expect((yield* invoke(Option.none())).status).toBe(403);
+        } else {
+          const review = yield* invoke(
+            Option.some({ operation, input: {}, attempt: { _tag: "Review" } })
+          );
+          expect(review.status).toBe(409);
+          const retained = yield* fromPromise(() =>
+            db.prepare("SELECT reference FROM oauth_operation_intents").first()
+          );
+          const { reference } = yield* Schema.decodeUnknownEffect(
+            Schema.Struct({ reference: Schema.String })
+          )(retained);
+          if (kind === "expired") {
+            yield* fromPromise(() =>
+              db.prepare("UPDATE oauth_operation_intents SET expires_at_ms=2,created_at_ms=1").run()
+            );
+          }
+          if (kind === "borrowed") {
+            yield* fromPromise(() =>
+              db
+                .prepare(
+                  "INSERT INTO oauth_connections SELECT ?,user_id,client_id,resource,scopes_json,revoked_at_ms,expires_at_ms FROM oauth_connections WHERE id=?"
+                )
+                .bind(attemptId, enrollmentId)
+                .run()
+            );
+            yield* fromPromise(() =>
+              db.prepare("UPDATE oauth_operation_intents SET connection_id=?").bind(attemptId).run()
+            );
+          }
+          if (kind === "replayed") {
+            yield* fromPromise(() => db.prepare("DELETE FROM oauth_operation_intents").run());
+          }
+          const response = yield* invoke(
+            Option.some({
+              operation,
+              input: {},
+              attempt: {
+                _tag: "Decision",
+                reference,
+                response: {
+                  action: kind === "declined" ? "decline" : "accept",
+                  content: { confirm: true },
+                },
+              },
+            })
+          );
+          expect(response.status).toBe(kind === "declined" ? 403 : 503);
+          if (kind === "borrowed") {
+            expect(
+              yield* fromPromise(() =>
+                db.prepare("SELECT COUNT(*) AS count FROM oauth_operation_intents").first()
+              )
+            ).toEqual({ count: 1 });
+          }
+        }
+        expect(yield* cancellationEffects(db)).toEqual(before);
       })
     )
 );

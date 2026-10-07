@@ -4319,7 +4319,7 @@
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/IssuedManualPATResponse"
+            "$ref": "#/components/schemas/SubscriptionCancellation"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -4334,20 +4334,8 @@
       "Objects_47": {
         "additionalProperties": false,
         "properties": {
-          "publicCode": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "publicCode"
-        ],
-        "type": "object"
-      },
-      "Objects_48": {
-        "additionalProperties": false,
-        "properties": {
           "data": {
-            "$ref": "#/components/schemas/PATPairingReview"
+            "$ref": "#/components/schemas/IssuedManualPATResponse"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -4359,11 +4347,23 @@
         ],
         "type": "object"
       },
+      "Objects_48": {
+        "additionalProperties": false,
+        "properties": {
+          "publicCode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "publicCode"
+        ],
+        "type": "object"
+      },
       "Objects_49": {
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/ApprovedPATPairing"
+            "$ref": "#/components/schemas/PATPairingReview"
           },
           "next": {
             "$ref": "#/components/schemas/Arrays_"
@@ -4384,6 +4384,22 @@
         },
         "required": [
           "id"
+        ],
+        "type": "object"
+      },
+      "Objects_50": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ApprovedPATPairing"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Arrays_"
+          }
+        },
+        "required": [
+          "data",
+          "next"
         ],
         "type": "object"
       },
@@ -7101,6 +7117,31 @@
         ],
         "type": "object"
       },
+      "SubscriptionCancellation": {
+        "additionalProperties": false,
+        "properties": {
+          "cancelledAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "paidThrough": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "sourceCancellation": {
+            "enum": [
+              "detached",
+              "void-pending",
+              "voided"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "cancelledAt",
+          "paidThrough",
+          "sourceCancellation"
+        ],
+        "type": "object"
+      },
       "SubscriptionOffers": {
         "maxItems": 3,
         "minItems": 3,
@@ -8838,6 +8879,29 @@
               "tool": {
                 "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
                 "enum": [
+                  "subscription.cancelSubscription"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "hint": {
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
                   "quota.getQuota"
                 ],
                 "type": "string"
@@ -10309,6 +10373,30 @@
               },
               "input": {
                 "additionalProperties": false,
+                "type": "object"
+              },
+              "operation": {
+                "enum": [
+                  "subscription.cancelSubscription"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "callId",
+              "operation",
+              "input"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "callId": {
+                "$ref": "#/components/schemas/AtomicBatchCallId"
+              },
+              "input": {
+                "additionalProperties": false,
                 "properties": {
                   "payload": {
                     "$ref": "#/components/schemas/CreateManualPATPayload"
@@ -10343,7 +10431,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "payload": {
-                    "$ref": "#/components/schemas/Objects_47"
+                    "$ref": "#/components/schemas/Objects_48"
                   }
                 },
                 "required": [
@@ -10984,7 +11072,7 @@
               },
               "operation": {
                 "enum": [
-                  "pats.createManualPAT"
+                  "subscription.cancelSubscription"
                 ],
                 "type": "string"
               },
@@ -11007,12 +11095,35 @@
               },
               "operation": {
                 "enum": [
+                  "pats.createManualPAT"
+                ],
+                "type": "string"
+              },
+              "output": {
+                "$ref": "#/components/schemas/Objects_47"
+              }
+            },
+            "required": [
+              "callId",
+              "operation",
+              "output"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "callId": {
+                "$ref": "#/components/schemas/AtomicBatchCallId"
+              },
+              "operation": {
+                "enum": [
                   "pats.inspectPATPairing"
                 ],
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_48"
+                "$ref": "#/components/schemas/Objects_49"
               }
             },
             "required": [
@@ -11035,7 +11146,7 @@
                 "type": "string"
               },
               "output": {
-                "$ref": "#/components/schemas/Objects_49"
+                "$ref": "#/components/schemas/Objects_50"
               }
             },
             "required": [
@@ -17170,7 +17281,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_46"
+                  "$ref": "#/components/schemas/Objects_47"
                 }
               }
             },
@@ -17461,7 +17572,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_49"
+                  "$ref": "#/components/schemas/Objects_50"
                 }
               }
             },
@@ -17583,7 +17694,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Objects_47"
+                "$ref": "#/components/schemas/Objects_48"
               }
             }
           },
@@ -17594,7 +17705,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Objects_48"
+                  "$ref": "#/components/schemas/Objects_49"
                 }
               }
             },
@@ -18125,6 +18236,133 @@
         },
         "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "query",
+        "x-fidy-required-tier": "free"
+      }
+    },
+    "/subscription/cancellation": {
+      "post": {
+        "description": "Cancel future Subscription renewals and detach the reusable PaymentSource. Preserve access through the already-paid period and all billing history.",
+        "operationId": "subscription.cancelSubscription",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Objects_46"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailedEncoded"
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedEncoded"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaywallRequiredEncoded"
+                }
+              }
+            },
+            "description": "PaywallRequired"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequiredEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserActionRequiredEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissingEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundEncoded"
+                }
+              }
+            },
+            "description": "NotFound"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaExhaustedEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ResourceLimitedEncoded"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "QuotaExhausted | ResourceLimited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnavailableEncoded"
+                }
+              }
+            },
+            "description": "Unavailable"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          },
+          {
+            "webSession": []
+          }
+        ],
+        "tags": [
+          "subscription"
+        ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "user-owned-agent-scoped"
+        },
+        "x-fidy-agent-confirmation": "required",
+        "x-fidy-operation-kind": "mutation",
         "x-fidy-required-tier": "free"
       }
     },

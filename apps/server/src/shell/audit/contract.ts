@@ -43,6 +43,7 @@ export type AuditCredentialOperation =
   | "memory.revise"
   | "operations.executeAtomicBatch"
   | "quota.getQuota"
+  | "subscription.cancelSubscription"
   | "subscription.getUpgradeUrl"
   | "subscription.getSubscriptionStatus"
   | "subscription.listSubscriptionOffers"

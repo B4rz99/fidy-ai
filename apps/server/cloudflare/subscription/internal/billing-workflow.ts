@@ -1,3 +1,4 @@
+import { cancelSource, receiveCancellation } from "./source-cancellation";
 import { receivePriceNotice, sendPriceNotice } from "./price-notice";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
 import { UserId } from "../../../src/core/identity/contract";
@@ -6,6 +7,7 @@ import {
   BillingAttemptId,
   BillingEmail,
   EnrollmentMethod,
+  renewalGraceMs,
 } from "../../../src/core/subscription/contract";
 import { IanaTimeZone } from "../../../src/core/_shared/context";
 import { Money } from "../../../src/core/_shared/money";
@@ -29,6 +31,7 @@ import {
   BillingPriceNoticeWork,
   type BillingRuntime,
   type BillingWorkflowStarter,
+  SubscriptionCancellationWork,
 } from "../contract";
 
 const CollectionMessage = Schema.Struct({
@@ -58,7 +61,9 @@ type LookupWorkflowBinding = Readonly<{
 /** Identify this Queue payload without interpreting any provider data as authority. */
 export const isBillingCollectionWork = (body: unknown): boolean =>
   Option.isSome(
-    Schema.decodeUnknownOption(Schema.Union([CollectionMessage, BillingPriceNoticeWork]))(body)
+    Schema.decodeUnknownOption(
+      Schema.Union([CollectionMessage, BillingPriceNoticeWork, SubscriptionCancellationWork])
+    )(body)
   );
 const Snapshot = Schema.Struct({
   id: BillingAttemptId,
@@ -212,6 +217,18 @@ export const dispatchBillingCollection = (
     if (failed) return yield* failure();
   }).pipe(Effect.withSpan("billing.collection.dispatch"));
 
+const receiveAuxiliaryWork = (
+  environment: Readonly<{ DB: D1Database; BILLING_COLLECTION_WORKFLOW: CollectionWorkflow }>,
+  work: typeof BillingPriceNoticeWork.Type | typeof SubscriptionCancellationWork.Type
+): Effect.Effect<void, BillingCollectionFailure> =>
+  work.kind === "source-cancellation"
+    ? receiveCancellation({
+        db: environment.DB,
+        workflow: environment.BILLING_COLLECTION_WORKFLOW,
+        work,
+      })
+    : receivePriceNotice({ environment, work });
+
 /** Duplicated Queue messages converge on one deterministic Workflow instance. */
 export const receiveBillingCollection = (
   input: Readonly<{
@@ -222,14 +239,14 @@ export const receiveBillingCollection = (
   Effect.gen(function* () {
     for (const message of input.batch.messages) {
       const work = Schema.decodeUnknownOption(
-        Schema.Union([CollectionMessage, BillingPriceNoticeWork])
+        Schema.Union([CollectionMessage, BillingPriceNoticeWork, SubscriptionCancellationWork])
       )(message.body);
       if (Option.isNone(work)) {
         message.ack();
         continue;
       }
       if ("kind" in work.value) {
-        yield* receivePriceNotice({ environment: input.environment, work: work.value });
+        yield* receiveAuxiliaryWork(input.environment, work.value);
         message.ack();
         continue;
       }
@@ -472,12 +489,16 @@ const claimCollection = (
         statement: {
           sql: `${collectionClaim.sql}
             AND EXISTS (SELECT 1 FROM subscriptions WHERE user_id = ? AND attempt_id = ?)
-            AND NOT EXISTS (SELECT 1 FROM subscription_renewal_stops WHERE user_id = ?)`,
+            AND NOT EXISTS (SELECT 1 FROM subscription_renewal_fences WHERE user_id = ?)
+            AND EXISTS (SELECT 1 FROM billing_attempts due WHERE due.id=? AND
+              (due.renewal_attempt_number=1 OR due.period_starts_at_ms + ${renewalGraceMs} > ?))`,
           params: [
             ...collectionClaim.params,
             captured.user_id,
             captured.previous_paid_attempt_id.value,
             captured.user_id,
+            attemptId,
+            now,
           ],
         },
       })
@@ -548,7 +569,12 @@ export const runBillingCollectionWorkflow = (
   input: Readonly<{ environment: BillingRuntime; payload: unknown; activity: CollectionActivity }>
 ): Promise<void> => {
   const work = Schema.decodeUnknownOption(
-    Schema.Union([CollectionMessage, LookupWork, BillingPriceNoticeWork])
+    Schema.Union([
+      CollectionMessage,
+      LookupWork,
+      BillingPriceNoticeWork,
+      SubscriptionCancellationWork,
+    ])
   )(input.payload);
   if (Option.isNone(work)) return Promise.resolve();
   const options = { retries: { limit: 0, delay: "1 second" } } as const;
@@ -556,6 +582,12 @@ export const runBillingCollectionWorkflow = (
     const notice = work.value;
     return input.activity("send-billing-price-notice-v1", options, () =>
       Effect.runPromise(sendPriceNotice({ environment: input.environment, work: notice }))
+    );
+  }
+  if ("kind" in work.value && work.value.kind === "source-cancellation") {
+    const cancellation = work.value;
+    return input.activity("cancel-wompi-source-v1", options, () =>
+      Effect.runPromise(cancelSource({ environment: input.environment, work: cancellation }))
     );
   }
   if ("kind" in work.value) {

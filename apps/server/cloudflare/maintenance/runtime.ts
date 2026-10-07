@@ -28,6 +28,7 @@ import {
   dispatchBillingCollection,
   dispatchBillingPriceNotices,
   dispatchRefunds,
+  dispatchSubscriptionCancellations,
   dispatchSubscriptionRenewals,
   dispatchVoidVerification,
   reconcileBillingCandidates,
@@ -100,6 +101,14 @@ const emailActivities = (environment: CoreMaintenanceInput): ReadonlyArray<Sched
 
 const billingActivities = (environment: CoreMaintenanceInput): ReadonlyArray<ScheduledActivity> => [
   activity("billing.renewal.dispatch", dispatchSubscriptionRenewals(environment)),
+  activity(
+    "billing.cancellation.dispatch",
+    Option.match(environment.BILLING_COLLECTION_QUEUE, {
+      onNone: () => Effect.void,
+      onSome: (queue) =>
+        dispatchSubscriptionCancellations({ DB: environment.DB, BILLING_COLLECTION_QUEUE: queue }),
+    })
+  ),
   activity(
     "billing.priceNotice.dispatch",
     Option.match(environment.BILLING_COLLECTION_QUEUE, {

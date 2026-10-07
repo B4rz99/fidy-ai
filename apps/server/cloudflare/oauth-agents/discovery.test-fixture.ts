@@ -47,6 +47,7 @@ const sensitiveWriteDiscovery = [
   "insights.updateReminderSchedule",
   "memory.forget",
   "memory.revise",
+  "subscription.cancelSubscription",
   "transactions.updateTransaction",
 ];
 const writeDiscovery = [...ordinaryWriteDiscovery, ...sensitiveWriteDiscovery];

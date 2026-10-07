@@ -1,3 +1,4 @@
+import { browseConnections } from "../../connections/operations";
 import { PATActivityParams } from "../../../src/shell/tokens/contract";
 import { RecurringDigestReportParams } from "../../../src/core/insights/contract";
 import { operationCatalog } from "../../../src/shell/api";
@@ -73,6 +74,16 @@ const historyOwner =
 
 // This installed-owner registry selects only canonical catalog entries; it declares no private tool.
 const queryOwners = new Map<string, QueryOwner>([
+  ...(
+    [
+      "connections.listInstitutions",
+      "connections.listConnections",
+      "connections.getConnection",
+    ] as const
+  ).map((operation): readonly [string, QueryOwner] => [
+    operation,
+    (work) => browseConnections({ ...work, operation }),
+  ]),
   [
     "quota.getQuota",
     ({ db, subject }): Effect.Effect<Response, Cause.UnknownError> =>

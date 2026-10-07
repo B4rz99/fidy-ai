@@ -1289,7 +1289,7 @@ export default {
         path: "^src/",
         pathNot: [
           "^src/shell/public-http/contract\\.ts$",
-          "^src/shell/(identity|categories|transactions|subscription|budgets|dashboard|insights|recurring|email-authentication|tokens|browser-login|recovery|ingestion|memory|quotas|canonical-catalog|authorization|operations)/contract\\.ts$",
+          "^src/shell/(identity|categories|transactions|subscription|budgets|dashboard|insights|recurring|connections|email-authentication|tokens|browser-login|recovery|ingestion|memory|quotas|canonical-catalog|authorization|operations)/contract\\.ts$",
         ],
       },
     },

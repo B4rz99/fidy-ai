@@ -22,6 +22,7 @@ const sessionDestinations = new Map([
   ["insights", "insight_audit"],
   ["subscription", "pat_audit"],
   ["quota", "pat_audit"],
+  ["connections", "pat_audit"],
   ["recurring", "pat_audit"],
 ]);
 const sessionDestination = (operation: AuditCredentialOperation): string => {
@@ -157,7 +158,7 @@ export const queryCallStatement = ({ missingWhen, ...input }: AuditQueryCall): O
     "user_id",
     ...credential.map(() => "id"),
     "?",
-    `CASE WHEN EXISTS (${missingWhen.sql}) THEN '${pat ? "rejected" : "not_found"}' ELSE '${pat ? "accepted" : "success"}' END`,
+    `CASE WHEN EXISTS (${missingWhen.sql}) THEN '${table === "pat_audit" ? "rejected" : "not_found"}' ELSE '${table === "pat_audit" ? "accepted" : "success"}' END`,
     "?",
   ];
   return {

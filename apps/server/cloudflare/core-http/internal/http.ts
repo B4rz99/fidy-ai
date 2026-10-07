@@ -1,3 +1,4 @@
+import { ConnectInstitutionInput } from "../../../src/core/connections/contract";
 import { oauthPaths } from "../../../src/shell/oauth-agents/contract";
 import { handleOAuthRequest } from "../../oauth-agents/runtime";
 import { type MemoryOperationId, memoryOperationIds } from "../../../src/shell/memory/contract";
@@ -1282,6 +1283,33 @@ const dashboardResponse = (
     });
   });
 
+const connectionBodyPolicy = Schema.decodeSync(RequestBodyPolicy)({
+  maximumBytes: 1024,
+  deadlineMilliseconds: 2000,
+});
+
+const connectInstitutionResponse = (
+  input: Readonly<{
+    request: Request;
+    environment: CoreHttpEnvironment;
+    subject: TransactionCaller;
+  }>
+): Effect.Effect<Response> =>
+  Effect.gen(function* () {
+    const payload = yield* boundedJsonBody({
+      request: input.request,
+      policy: connectionBodyPolicy,
+      schema: Schema.toCodecJson(ConnectInstitutionInput),
+    }).pipe(Effect.orElseSucceed(() => Option.none()));
+    return yield* sendToCoordinator({
+      environment: input.environment,
+      subject: input.subject,
+      work: ownerCall(CanonicalOperationId.make("connections.connectInstitution"), {
+        payload: Option.getOrElse(payload, () => ({})),
+      }),
+    });
+  }).pipe(Effect.orElseSucceed(unavailable));
+
 /** Once admitted, every credential executes through the same canonical operation dispatch. */
 const executeCanonicalWork = (
   input: Readonly<{
@@ -1304,6 +1332,7 @@ const executeCanonicalWork = (
         sendToCoordinator({ environment, subject, work }).pipe(Effect.orElseSucceed(unavailable)),
     });
   }
+  if (operation.id === "connections.connectInstitution") return connectInstitutionResponse(input);
   const primaryOwner = Option.orElse(insightResponse(input), () => dashboardResponse(input));
   const otherOwner = Option.orElse(budgetResponse(input), () =>
     Option.orElse(keywordRuleResponse(input), () => memoryResponse(input))

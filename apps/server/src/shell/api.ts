@@ -5,6 +5,7 @@ import { TokenAuthorization } from "~/shell/authorization/contract";
 import { bindOperationCatalog, makeOperationCatalog } from "~/shell/canonical-catalog/contract";
 import { BrowserLoginGroup } from "~/shell/browser-login/contract";
 import { BudgetsGroup } from "~/shell/budgets/contract";
+import { ConnectionsGroup } from "~/shell/connections/contract";
 import { CategoriesGroup } from "~/shell/categories/contract";
 import { DashboardGroup } from "~/shell/dashboard/contract";
 import { EmailAuthenticationGroup } from "~/shell/email-authentication/contract";
@@ -25,6 +26,7 @@ const OrdinaryFidyApi = HttpApi.make("fidy")
   .add(IdentityGroup)
   .add(CategoriesGroup)
   .add(BudgetsGroup)
+  .add(ConnectionsGroup)
   .add(DashboardGroup)
   .add(EmailAuthenticationGroup)
   .add(TransactionsGroup)

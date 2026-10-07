@@ -4,6 +4,9 @@ import { afterAll, expect } from "vitest";
 import { applyTestMigration, installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import { makeMutationCommitGate } from "./mutation-commit.test-fixture";
 import { UserTransactionCoordinator } from "../transactions/runtime";
+import { type McpResidency, makeMcpResidency } from "../mcp/runtime";
+import { OAuthMcpAdmission } from "../mcp/contract";
+import { OAuthCanonicalAdmission } from "../../src/shell/mcp/contract";
 import publicWorker from "../public-worker";
 import coreWorker from "../core-worker";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
@@ -50,6 +53,59 @@ const pauseBudgetRead = (
     },
   });
 
+const admitsCanonicalFault = (
+  request: Request,
+  intercept: Option.Option<Parameters<Harness["interceptQueryResponse"]>[0]>
+): boolean => new URL(request.url).pathname === "/oauth-mcp" && Option.isSome(intercept);
+
+const fetchCoordinator = (
+  input: Readonly<{
+    name: string;
+    request: Request;
+    coordinators: Map<string, UserTransactionCoordinator>;
+    environment: ConstructorParameters<typeof UserTransactionCoordinator>[1];
+  }>
+): Promise<Response> => {
+  let coordinator = input.coordinators.get(input.name);
+  if (coordinator === undefined) {
+    coordinator = new UserTransactionCoordinator(
+      { id: { name: input.name }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+      input.environment
+    );
+    input.coordinators.set(input.name, coordinator);
+  }
+  return coordinator.fetch(input.request);
+};
+
+const deliverCanonicalFault = (
+  input: Readonly<{
+    name: string;
+    request: Request;
+    db: D1Database;
+    residencies: Map<string, McpResidency>;
+    enqueueCanonicalWork: Parameters<typeof makeMcpResidency>[0]["enqueueCanonicalWork"];
+  }>
+): Promise<Response> => {
+  let residency = input.residencies.get(input.name);
+  if (residency === undefined) {
+    residency = makeMcpResidency({
+      userId: input.name,
+      db: input.db,
+      enqueueCanonicalWork: input.enqueueCanonicalWork,
+    });
+    input.residencies.set(input.name, residency);
+  }
+  const resident = residency;
+  return input.request.text().then((body) =>
+    Effect.runPromise(
+      resident.handle({
+        admission: Schema.decodeSync(Schema.fromJsonString(OAuthMcpAdmission))(body),
+        signal: input.request.signal,
+      })
+    )
+  );
+};
+
 export type Harness = Readonly<{
   disableInference: () => void;
   mcpHandoffs: () => number;
@@ -92,6 +148,7 @@ export const setup = (auditMigration = true): Effect.Effect<Harness, TestFailure
     else for (const source of sources) yield* wait(applyTestMigration({ db, source }));
     let mcpHandoffCount = 0;
     const coordinators = new Map<string, UserTransactionCoordinator>();
+    const deliveryResidencies = new Map<string, McpResidency>();
     let queryGate: Option.Option<QueryGate> = Option.none();
     const mutationCommit = makeMutationCommitGate(db);
     const queryDb = new Proxy(mutationCommit.db, {
@@ -132,17 +189,33 @@ export const setup = (auditMigration = true): Effect.Effect<Harness, TestFailure
           fetch: (incoming): Promise<Response> => {
             const request = incoming instanceof Request ? incoming : new Request(incoming);
             if (new URL(request.url).pathname === "/oauth-mcp") mcpHandoffCount += 1;
-            const run = (): Promise<Response> => {
-              let coordinator = coordinators.get(name);
-              if (coordinator === undefined) {
-                coordinator = new UserTransactionCoordinator(
-                  { id: { name }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
-                  environment
-                );
-                coordinators.set(name, coordinator);
-              }
-              return coordinator.fetch(request);
-            };
+            // Delivery-fault tests compose the published residency with the real canonical
+            // HTTP boundary, so faults affect SDK result decoding without patching internals.
+            if (admitsCanonicalFault(request, queryResponseIntercept)) {
+              return deliverCanonicalFault({
+                name,
+                request,
+                db: queryDb,
+                residencies: deliveryResidencies,
+                enqueueCanonicalWork: ({ admission, signal }) =>
+                  Effect.gen(function* () {
+                    const body = yield* Schema.encodeEffect(
+                      Schema.fromJsonString(OAuthCanonicalAdmission)
+                    )(admission);
+                    return yield* Effect.tryPromise(() =>
+                      environment.USER_TRANSACTION_COORDINATOR.getByName(name).fetch(
+                        new Request("https://coordinator.internal/oauth-canonical", {
+                          method: "POST",
+                          signal,
+                          body,
+                        })
+                      )
+                    );
+                  }).pipe(Effect.orDie),
+              });
+            }
+            const run = (): Promise<Response> =>
+              fetchCoordinator({ coordinators, name, environment, request });
             const intercept = queryResponseIntercept;
             if (new URL(request.url).pathname === "/oauth-canonical" && Option.isSome(intercept)) {
               return run().then((response) => intercept.value({ request, response }));

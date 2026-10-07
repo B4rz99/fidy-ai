@@ -34,7 +34,10 @@ const setup = Effect.gen(function* () {
     db.exec(`CREATE TABLE users(id TEXT PRIMARY KEY,service_market TEXT DEFAULT 'CO',locale TEXT DEFAULT 'es-CO',time_zone TEXT DEFAULT 'America/Bogota');
  CREATE TABLE trial_periods(user_id TEXT,started_at_ms INTEGER,ends_at_ms INTEGER);
  CREATE TABLE subscriptions(user_id TEXT,attempt_id TEXT,paid_period_ends_at_ms INTEGER);
- CREATE TABLE billing_paid_periods(attempt_id TEXT,starts_at_ms INTEGER);
+ CREATE TABLE billing_attempts (id TEXT, user_id TEXT, payment_source_id TEXT, billing_period TEXT);
+ CREATE TABLE card_payment_sources (id TEXT, user_id TEXT, method TEXT);
+ CREATE TABLE subscription_renewal_stops (user_id TEXT);
+ CREATE TABLE billing_paid_periods(attempt_id TEXT,starts_at_ms INTEGER, ends_at_ms INTEGER);
  CREATE TABLE billing_access_adjustments(attempt_id TEXT,ends_at_ms INTEGER);
  CREATE TABLE whatsapp_identities(user_id TEXT,portfolio_id TEXT,bsuid TEXT);
  CREATE TABLE onboarding_consent_records(user_id TEXT PRIMARY KEY,accepted_at_ms INTEGER);

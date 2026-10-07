@@ -39,7 +39,14 @@ it("derives each decision from one User's original trial and current settled pai
           db.prepare(
             "CREATE TABLE subscriptions (user_id TEXT, attempt_id TEXT, paid_period_ends_at_ms INTEGER)"
           ),
-          db.prepare("CREATE TABLE billing_paid_periods (attempt_id TEXT, starts_at_ms INTEGER)"),
+          db.prepare(
+            "CREATE TABLE billing_attempts (id TEXT, user_id TEXT, payment_source_id TEXT, billing_period TEXT)"
+          ),
+          db.prepare("CREATE TABLE card_payment_sources (id TEXT, user_id TEXT, method TEXT)"),
+          db.prepare("CREATE TABLE subscription_renewal_stops (user_id TEXT)"),
+          db.prepare(
+            "CREATE TABLE billing_paid_periods (attempt_id TEXT, starts_at_ms INTEGER, ends_at_ms INTEGER)"
+          ),
           db.prepare(
             "CREATE TABLE billing_access_adjustments (attempt_id TEXT, ends_at_ms INTEGER)"
           ),
@@ -73,7 +80,11 @@ it("derives each decision from one User's original trial and current settled pai
       yield* Effect.tryPromise(() =>
         db.batch([
           db.prepare("INSERT INTO subscriptions VALUES (?, 'attempt', 500)").bind(userId),
-          db.prepare("INSERT INTO billing_paid_periods VALUES ('attempt', 400)"),
+          db.prepare("INSERT INTO billing_paid_periods VALUES ('attempt', 400, 500)"),
+          db
+            .prepare("INSERT INTO billing_attempts VALUES ('attempt', ?, 'source', 'weekly')")
+            .bind(userId),
+          db.prepare("INSERT INTO card_payment_sources VALUES ('source', ?, 'nequi')").bind(userId),
         ])
       );
       expect(yield* Effect.tryPromise(observePaidAccess)).toBe(1);
@@ -99,7 +110,10 @@ it("derives each decision from one User's original trial and current settled pai
       expect(yield* Effect.tryPromise(() => tier(450))).toBe(0);
       yield* Effect.tryPromise(() =>
         db.batch([
-          db.prepare("INSERT INTO billing_paid_periods VALUES ('newer-attempt',425)"),
+          db.prepare("INSERT INTO billing_paid_periods VALUES ('newer-attempt',425,550)"),
+          db
+            .prepare("INSERT INTO billing_attempts VALUES ('newer-attempt', ?, 'source', 'weekly')")
+            .bind(userId),
           db
             .prepare(
               "UPDATE subscriptions SET attempt_id='newer-attempt',paid_period_ends_at_ms=550 WHERE user_id=?"

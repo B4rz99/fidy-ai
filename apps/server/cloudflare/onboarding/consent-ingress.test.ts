@@ -1,10 +1,9 @@
 import { maxWhatsAppWebhookBytes } from "../../src/shell/consent/contract";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import { type Cause, Clock, DateTime, Effect, Equal, Exit, Option, Schema } from "effect";
-import { Miniflare } from "miniflare";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { recoverPendingDisclosures, sweepExpiredConsent } from "../consent/ingress/runtime";
-import { applyTestMigration } from "../d1-test-fixture";
+import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import {
   dispatchOnboardingEmail,
   receiveOnboardingEmail,
@@ -44,8 +43,8 @@ const bsuid = "CO.13491208655302741918";
 
 const nowSeconds = Math.floor(Effect.runSync(Clock.currentTimeMillis) / 1000);
 const migration = new URL("../migrations/0003_pending_consent.sql", import.meta.url);
-const active = new Set<Miniflare>();
-let databaseNumber = 0;
+const databases = isolatedTestDatabases();
+afterAll(() => databases.dispose());
 
 const seedSyntheticEnrollment = (
   db: D1Database,
@@ -125,38 +124,16 @@ const setup = (
         WORKFLOW: { create: forbiddenEffects.workflow },
         R2: { put: forbiddenEffects.r2 },
       };
-      const mf = new Miniflare({
-        workers: [
-          {
-            config: {
-              compatibilityDate: "2026-09-08",
-              env: { DB: { id: `consent-test-${++databaseNumber}`, type: "d1" } },
-              manifest: {
-                mainModule: "index.mjs",
-                modules: {
-                  "index.mjs": {
-                    contents: "export default {fetch() {return new Response('ok')}}",
-                    type: "esm",
-                  },
-                },
-              },
-              name: `consent-test-${databaseNumber}`,
-              type: "worker",
-            },
-          },
-        ],
-      });
-      active.add(mf);
-      yield* Effect.tryPromise(() => mf.ready);
-      const db = yield* Effect.tryPromise(() => mf.getD1Database("DB"));
-      // Apply migrations and their statements in order; triggers must not be split at BEGIN/END.
-      const applyMigration = (source: URL): Promise<void> => applyTestMigration({ db, source });
+      const db = yield* Effect.tryPromise(() => databases.acquire());
       yield* Effect.tryPromise(() =>
-        applyMigration(new URL("../migrations/0002_resource_admission.sql", import.meta.url))
-      );
-      yield* Effect.tryPromise(() => applyMigration(migration));
-      yield* Effect.tryPromise(() =>
-        applyMigration(new URL("../migrations/0025_voice_refusal.sql", import.meta.url))
+        installTestSchema({
+          db,
+          sources: [
+            new URL("../migrations/0002_resource_admission.sql", import.meta.url),
+            migration,
+            new URL("../migrations/0025_voice_refusal.sql", import.meta.url),
+          ],
+        })
       );
       // This pre-User fixture exercises Consent only; no verified association exists yet.
       yield* Effect.tryPromise(() =>
@@ -192,10 +169,13 @@ const setup = (
         ])
       );
       yield* Effect.tryPromise(() =>
-        applyMigration(new URL("../migrations/0026_whatsapp_recovery.sql", import.meta.url))
-      );
-      yield* Effect.tryPromise(() =>
-        applyMigration(new URL("../migrations/0004_onboarding_email.sql", import.meta.url))
+        installTestSchema({
+          db,
+          sources: [
+            new URL("../migrations/0026_whatsapp_recovery.sql", import.meta.url),
+            new URL("../migrations/0004_onboarding_email.sql", import.meta.url),
+          ],
+        })
       );
       const send = (
         body: string,
@@ -265,16 +245,10 @@ const setup = (
     })
   );
 
-afterEach(() =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      vi.useRealTimers();
-      vi.unstubAllGlobals();
-      yield* Effect.tryPromise(() => Promise.all([...active].map((mf) => mf.dispose())));
-      active.clear();
-    })
-  )
-);
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 const inbound = (id: string, text: string, timestamp = String(nowSeconds)): string =>
   JSON.stringify({

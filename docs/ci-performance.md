@@ -101,6 +101,19 @@ increases or retries to hide failures. Final Linux job durations must validate t
 assignment before merge. These probes use the same four runners and their existing hardware;
 no runner scaling or concurrent cases are introduced.
 
+The final fixture pass moves Consent ingress, verified onboarding, forwarded email and Statement
+staging to the existing native pool. Every case still receives distinct D1/R2 bindings; these
+fixtures used a Worker with a constant `fetch` response only to obtain storage, with no Worker
+lifecycle assertion. Real Worker/coordinator lifecycle fixtures retain their owned runtimes.
+Insight storage and the onboarding/staging baselines use the native ordered schema installer.
+The 65-occurrence Insight paging arrangement now uses one real generation plus 64 native batch
+inserts; generator behavior remains covered separately, and the 64+1 pagination boundary is unchanged.
+All 127 cases in the five affected suites passed. Local two-process file work was 29.8s in the
+full pre-change probe and 12.7s in the focused post-change run; these different scopes are not a
+controlled Linux comparison. Files now also start longest-first within each runner, using the
+same measured weights, to reduce idle time when one process finishes before a late long file.
+The final Linux artifacts must establish the complete-job result.
+
 ## Linux CI confirmation
 
 [Checks run 36649040251](https://github.com/B4rz99/fidy-ai/actions/runs/36649040251) on

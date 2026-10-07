@@ -10,9 +10,8 @@ import { prepareHeldStatementReviewDecision, prepareHeldStatementSubmission } fr
 import type { StatementDecisionWork } from "./contract";
 import assert from "node:assert/strict";
 import { Hex } from "effect/encoding";
-import { Miniflare } from "miniflare";
-import { applyTestMigration } from "../d1-test-fixture";
-import { afterEach, describe, expect, it } from "vitest";
+import { installTestSchema, isolatedTestStorage } from "../d1-test-fixture";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
 import {
   StatementStaging,
   StatementStagingFailed,
@@ -38,7 +37,8 @@ const statementBytes = new TextEncoder().encode(
 
 type StagingResult<A> = Result.Result<A, StatementStagingFailed | StatementStagingUnavailable>;
 
-const instances = new Set<Miniflare>();
+const storage = isolatedTestStorage();
+afterAll(() => storage.dispose());
 const migrationsDirectoryUrl = new URL("../migrations/", import.meta.url);
 // Migrate in deployment order so staging and its retention sweep use real D1 schema.
 const migrationNames = [
@@ -70,51 +70,10 @@ const migrationNames = [
   "0019_canonical_child_guards",
   "0035_billing_corrections",
 ] as const;
-const workerScript = "export default { fetch() { return new Response('ok') } }";
-const stagingWorkerName = "statement-staging-test-worker";
-
-const makeMiniflare = (): Promise<Miniflare> =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const miniflare = new Miniflare({
-        workers: [
-          {
-            config: {
-              compatibilityDate: "2026-09-08",
-              env: {
-                DB: { id: "statement-staging-test", type: "d1" },
-                BUCKET: { type: "r2" },
-              },
-              manifest: {
-                mainModule: "index.mjs",
-                modules: { "index.mjs": { contents: workerScript, type: "esm" } },
-              },
-              name: stagingWorkerName,
-              type: "worker",
-            },
-          },
-        ],
-      });
-      instances.add(miniflare);
-      yield* fromTestPromise(() => miniflare.ready);
-      return miniflare;
-    })
-  );
-
-const applyMigration = (database: D1Database, name: string): Promise<void> =>
-  applyTestMigration({ db: database, source: new URL(`${name}.sql`, migrationsDirectoryUrl) });
-
-const migrateDatabase = (database: D1Database): Promise<void> =>
-  migrationNames.reduce(
-    (previous, name) => previous.then(() => applyMigration(database, name)),
-    Promise.resolve()
-  );
-
 type Runtime = Readonly<{
   readonly database: D1Database;
   readonly bucket: R2Bucket;
   readonly staging: StatementStagingService;
-  readonly miniflare: Miniflare;
 }>;
 
 let nowEpochMs = (): number => startedAtEpochMs;
@@ -123,20 +82,21 @@ const currentNowEpochMs = (): number => nowEpochMs();
 const makeRuntime = (): Promise<Runtime> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const miniflare = yield* fromTestPromise(makeMiniflare);
-      const bindings = yield* fromTestPromise(() =>
-        miniflare.getBindings<{ readonly DB: D1Database; readonly BUCKET: R2Bucket }>(
-          stagingWorkerName
-        )
+      const { db: database, bucket } = yield* fromTestPromise(() => storage.acquire());
+      yield* fromTestPromise(() =>
+        installTestSchema({
+          db: database,
+          sources: migrationNames.map((name) => new URL(`${name}.sql`, migrationsDirectoryUrl)),
+        })
       );
-      yield* fromTestPromise(() => migrateDatabase(bindings.DB));
       yield* fromTestPromise(() =>
         [userA, userB].reduce<Promise<unknown>>(
           (previous, userId) =>
             previous.then(() =>
-              bindings.DB.prepare(
-                "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)"
-              )
+              database
+                .prepare(
+                  "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)"
+                )
                 .bind(userId, startedAtEpochMs)
                 .run()
             ),
@@ -144,29 +104,20 @@ const makeRuntime = (): Promise<Runtime> =>
         )
       );
       return {
-        bucket: bindings.BUCKET,
-        database: bindings.DB,
-        miniflare,
+        bucket,
+        database,
         staging: StatementStaging.make({
-          bucket: bindings.BUCKET,
-          database: bindings.DB,
+          bucket,
+          database,
           nowEpochMs: currentNowEpochMs,
         }),
       };
     })
   );
 
-afterEach(() =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      nowEpochMs = (): number => startedAtEpochMs;
-      yield* fromTestPromise(() =>
-        Promise.all([...instances].map((miniflare): Promise<void> => miniflare.dispose()))
-      );
-      instances.clear();
-    })
-  )
-);
+afterEach(() => {
+  nowEpochMs = (): number => startedAtEpochMs;
+});
 
 const request = (body: Uint8Array | ReadableStream<Uint8Array>): Request =>
   new Request("https://core.internal/ingestion/statements", {

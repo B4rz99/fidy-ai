@@ -6,9 +6,8 @@ import { makeWorkerTelemetry } from "../runtime/telemetry/operations";
 import { TestClock } from "effect/testing";
 import { allowancePeriod } from "../../src/core/quotas/operations";
 import { Clock, Data, DateTime, Effect, Exit, Option, Schema } from "effect";
-import { Miniflare } from "miniflare";
-import { applyTestMigration } from "../d1-test-fixture";
-import { afterEach, expect } from "vitest";
+import { applyTestMigration, isolatedTestStorage } from "../d1-test-fixture";
+import { afterAll, expect } from "vitest";
 import emailWorker, { makeEmailWorker } from "./email-worker";
 import { runEmailMaintenance } from "../maintenance/runtime";
 import { EmailScheduleUnavailable } from "../maintenance/contract";
@@ -29,7 +28,8 @@ const localB = "b".repeat(32);
 const raw = new TextEncoder().encode(
   "From: bank@example.test\r\nTo: other@example.test\r\nSubject: Compra\r\n\r\nPago confirmado"
 );
-const instances: Miniflare[] = [];
+const storage = isolatedTestStorage();
+afterAll(() => storage.dispose());
 
 it.live("still offers another User's current email when expired-byte deletion fails", () =>
   Effect.gen(function* () {
@@ -138,33 +138,7 @@ const wait = <A>(run: () => Promise<A>): Effect.Effect<A> =>
   Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) }).pipe(Effect.orDie);
 
 const setup = Effect.fn(function* () {
-  const miniflare = new Miniflare({
-    workers: [
-      {
-        config: {
-          compatibilityDate: "2026-09-08",
-          env: { DB: { id: "forwarded-email-test", type: "d1" }, EMAIL_BUCKET: { type: "r2" } },
-          manifest: {
-            mainModule: "index.mjs",
-            modules: {
-              "index.mjs": {
-                contents: "export default { fetch() { return new Response('ok') } }",
-                type: "esm",
-              },
-            },
-          },
-          name: "forwarded-email-test-worker",
-          type: "worker",
-        },
-      },
-    ],
-  });
-  instances.push(miniflare);
-  yield* wait(() => miniflare.ready);
-  const bindings = yield* wait(() =>
-    miniflare.getBindings<{ DB: D1Database; EMAIL_BUCKET: R2Bucket }>("forwarded-email-test-worker")
-  );
-  const { DB: db, EMAIL_BUCKET: bucket } = bindings;
+  const { db, bucket } = yield* wait(() => storage.acquire());
   yield* wait(() =>
     db.exec(`CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL DEFAULT 'America/Bogota', service_market TEXT NOT NULL DEFAULT 'CO', locale TEXT NOT NULL DEFAULT 'es-CO');
     CREATE TABLE onboarding_consent_records (user_id TEXT PRIMARY KEY, accepted_at_ms INTEGER NOT NULL);
@@ -454,14 +428,6 @@ const delivery = (
     },
   };
 };
-
-afterEach(() =>
-  Effect.runPromise(
-    Effect.forEach(instances.splice(0), (instance) => wait(() => instance.dispose()), {
-      discard: true,
-    })
-  )
-);
 
 it("rejects an unapproved envelope even when MIME names a known User, without retaining bytes", () =>
   Effect.runPromise(

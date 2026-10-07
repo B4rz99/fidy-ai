@@ -1,0 +1,23 @@
+apps/server/cloudflare/oauth-agents/oauth-ingress.test-fixture.ts
+  s_e3b9a05f422f64::t_83e48ed4e394c7 100,151,192-193,198-200,206-212,215-216
+  s_e3b9a05f422f64::t_cafba11ff1f755 213-214
+  s_e3b9a05f422f64::t_5b6220de83c8aa 61-68,81-83,87-88
+  s_e3b9a05f422f64::t_847637b741774b 8-9
+  s_e3b9a05f422f64::t_81751a65f05b58 7,56-60,69-80,84-86,89-99,101-108,194-197,201-205,217-218
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "40eed5059d9b6674f77796a407a68faecbb39ecd",
+  "prompts": {},
+  "sessions": {
+    "s_e3b9a05f422f64": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a115f2-dfce-7741-a6e9-e22144cd3fad",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

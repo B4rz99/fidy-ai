@@ -112,6 +112,10 @@ it("keeps platform diagnostic opt-outs on their reviewed file boundaries", () =>
           "nodeBuiltinImport:./scripts/document-parsing/check.ts",
           "nodeBuiltinImport:./scripts/document-parsing/extraction-proof.ts",
           "nodeBuiltinImport:./scripts/document-parsing/protected-document-proof.ts",
+          // Native CLI ownership needs the host's OS path semantics.
+          "nodeBuiltinImport:./scripts/mcp/native-confirmation-hosts.ts",
+          "nodeBuiltinImport:./scripts/mcp/production-native.test.ts",
+          "nodeBuiltinImport:./scripts/mcp/production-native.ts",
           "processEnv:./apps/web/playwright.config.ts",
           // Alchemy exposes an any-typed failure channel; the isolated SDK entrypoint
           // contains all failures and Schema-decodes the read-only plan before reporting.
@@ -122,6 +126,13 @@ it("keeps platform diagnostic opt-outs on their reviewed file boundaries", () =>
           "strictEffectProvide:./apps/cli/test/journey-entry.ts",
           "strictEffectProvide:./apps/web/e2e/cli-login.spec.ts",
           "strictEffectProvide:./infra/cloudflare/inspect-worker-drift.ts",
+          // Standalone Bun process roots and their isolated integration fixtures.
+          "strictEffectProvide:./scripts/mcp/native-confirmation-hosts.ts",
+          "strictEffectProvide:./scripts/mcp/production-catalog.test.ts",
+          "strictEffectProvide:./scripts/mcp/production-checks.test.ts",
+          "strictEffectProvide:./scripts/mcp/production-checks.ts",
+          "strictEffectProvide:./scripts/mcp/production-cleanup.test.ts",
+          "strictEffectProvide:./scripts/mcp/production-native.test.ts",
         ].toSorted()
       );
     }));

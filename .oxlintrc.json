@@ -208,7 +208,7 @@
     },
     // Vitest discovers these standalone configurations through its required default-export contract.
     {
-      "files": ["apps/server/tools/contracts/vitest.config.ts"],
+      "files": ["apps/server/tools/contracts/vitest.config.ts", "scripts/vitest.config.ts"],
       "rules": {
         "import/no-default-export": "off"
       }
@@ -217,6 +217,7 @@
     // UI components and a few test/configuration files. New browser source retains the rule.
     {
       "files": [
+        "scripts/mcp/production-browser.ts",
         "apps/web/src/ui/class-names.ts",
         "apps/web/src/ui/components/{alert,badge,button,checkbox,empty,input,progress,toggle-group}.tsx",
         "apps/web/e2e/{browser-pairing,static-shell}.spec.ts",

@@ -1,0 +1,1028 @@
+{
+  "verifiedAt": "2026-10-07T22:30:51.249Z",
+  "revision": "63494fd4f7a915005a8f750547f4bb3548835e90",
+  "versions": {
+    "core": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+    "ingress": "41ce2bf1-22e3-410f-926c-24fb2d65323f"
+  },
+  "hosts": {
+    "claude": {
+      "nativeOAuth": true,
+      "restrictedCatalog": true,
+      "journey": true,
+      "cancellation": true,
+      "acceptedDeletion": true,
+      "repeatedReads": 20
+    },
+    "codex": {
+      "nativeOAuth": true,
+      "restrictedCatalog": true,
+      "journey": true,
+      "cancellation": true,
+      "acceptedDeletion": true,
+      "repeatedReads": 10
+    }
+  },
+  "naturalRefresh": true,
+  "postRevocation": {
+    "claude": {
+      "toolStatus": 401,
+      "refreshStatus": 400,
+      "refreshError": "invalid_grant"
+    },
+    "codex": {
+      "toolStatus": 401,
+      "refreshStatus": 400,
+      "refreshError": "invalid_grant"
+    }
+  },
+  "platform": {
+    "observedIngressRequests": 137,
+    "coreMcp": [
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 9,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 20,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 9,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 8,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "canceled",
+        "cpuTime": 8,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 10,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 7,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "canceled",
+        "cpuTime": 9,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 18,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 10,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "canceled",
+        "cpuTime": 8,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 8,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 5,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 5,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 8,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 12,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 5,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 5,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 5,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 5,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 5,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 7,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 7,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "canceled",
+        "cpuTime": 7,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 3,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 3,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 7,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 7,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 5,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 4,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 5,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 3,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 4,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 5,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 9,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 9,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 20,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 9,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 7,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 9,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 7,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 10,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 4,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 12,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 5,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 7,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 9,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 7,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 8,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 9,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 5,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 12,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "canceled",
+        "cpuTime": 3,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 10,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 5,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 7,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 3,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 2,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 6,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 5,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 4,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      },
+      {
+        "surface": "core",
+        "outcome": "ok",
+        "cpuTime": 3,
+        "version": "2ef8ed24-1a98-4bcc-a083-533c433a803b",
+        "route": "/mcp",
+        "exceptions": 0,
+        "eventKind": "fetch",
+        "durableObject": false
+      }
+    ],
+    "oauthMcpCpuLimitTerminations": 0,
+    "scheduledCpuLimitTerminations": 0
+  },
+  "cleanup": {
+    "activeConnections": 0,
+    "activeBrowsers": 0,
+    "budgets": 0,
+    "syntheticTransactionsAdded": 4
+  },
+  "limitations": [
+    "Synthetic pairing approval does not verify identity or email delivery.",
+    "Natural absolute seven-day expiry is covered locally, not waited for here.",
+    "Canned loopback model; no paid inference; only named native versions and canonical operations.",
+    "Worker tails observe the request budget conservatively; they are not a server-side rate limiter."
+  ],
+  "passed": true,
+  "nativeLogoutsPassed": true,
+  "privateProfilesRemoved": true,
+  "nativeVersions": {
+    "claude": "2.1.289",
+    "codex": "0.160.0"
+  },
+  "localNativeConfirmation": [
+    {
+      "host": "claude",
+      "decision": "accept",
+      "passed": true,
+      "formAnswered": true,
+      "remaining": 0,
+      "acceptedAudit": 1,
+      "protocols": ["2026-07-28"]
+    },
+    {
+      "host": "claude",
+      "decision": "cancel",
+      "passed": true,
+      "formAnswered": true,
+      "remaining": 1,
+      "acceptedAudit": 0,
+      "protocols": ["2026-07-28"]
+    },
+    {
+      "host": "codex",
+      "decision": "accept",
+      "passed": true,
+      "formAnswered": true,
+      "remaining": 0,
+      "acceptedAudit": 1,
+      "protocols": ["2025-06-18", "2025-11-25"]
+    },
+    {
+      "host": "codex",
+      "decision": "cancel",
+      "passed": true,
+      "formAnswered": true,
+      "remaining": 1,
+      "acceptedAudit": 0,
+      "protocols": ["2025-06-18", "2025-11-25"]
+    },
+    {
+      "host": "claude",
+      "decision": "headless",
+      "passed": true,
+      "formAnswered": false,
+      "remaining": 1,
+      "acceptedAudit": 0,
+      "protocols": ["2026-07-28"]
+    },
+    {
+      "host": "codex",
+      "decision": "headless",
+      "passed": true,
+      "formAnswered": false,
+      "remaining": 1,
+      "acceptedAudit": 0,
+      "protocols": ["2025-06-18", "2025-11-25"]
+    }
+  ],
+  "localChecks": {
+    "toolingTestsPassed": 81,
+    "oauthMcpIntegrationTestsPassed": 205,
+    "optInNativeBridgePassed": true,
+    "productionAdapterTestsPassed": 24,
+    "staticGatePassed": true
+  }
+}

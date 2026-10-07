@@ -158,6 +158,9 @@ and two handoffs. The focused OAuth ingress/native residency suite passed 61 tes
 metadata-only Work observations continue to cover the handoff; fatal CPU termination is diagnosed
 through platform outcomes rather than a new public error containing private causes.
 
-Production acceptance is still pending for this candidate. Record exact deployed versions,
-repeat requests, both real host journeys, platform CPU outcomes and cleanup before declaring the
-Free-tier incident resolved.
+After deployment at `63494fd4`, bounded native Claude Code and Codex Production journeys,
+repeated reads, natural refresh and cleanup passed without a plan change or CPU-limit termination.
+The [retained evidence](hosted-mcp-free-990.evidence.json) records exact versions and limitations;
+the [MCP feature document](../../apps/server/src/shell/mcp/FEATURE.md) maps user actions to checks
+and identifies the remaining live-proof gaps. This does not establish all application workloads
+or authorize real-User launch.

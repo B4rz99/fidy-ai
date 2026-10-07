@@ -111,8 +111,39 @@
         },
         "overrides": [
           {
+            "include": [
+              "./scripts/mcp/production-checks.ts",
+              "./scripts/mcp/native-confirmation-hosts.ts",
+              "./scripts/mcp/production-checks.test.ts",
+              "./scripts/mcp/production-catalog.test.ts",
+              "./scripts/mcp/production-cleanup.test.ts",
+              "./scripts/mcp/production-native.test.ts"
+            ],
+            "options": {
+              "diagnosticSeverity": {
+                "strictEffectProvide": "off"
+              }
+            }
+          },
+          {
+            "include": [
+              "./scripts/mcp/production-native.ts",
+              "./scripts/mcp/native-confirmation-hosts.ts",
+              "./scripts/mcp/production-native.test.ts"
+            ],
+            "options": {
+              "diagnosticSeverity": {
+                "nodeBuiltinImport": "off"
+              }
+            }
+          },
+          {
             "include": ["./apps/cli/src/credential/internal/local-path.ts"],
-            "options": { "diagnosticSeverity": { "nodeBuiltinImport": "off" } }
+            "options": {
+              "diagnosticSeverity": {
+                "nodeBuiltinImport": "off"
+              }
+            }
           },
           {
             "include": [
@@ -120,7 +151,11 @@
               "./apps/cli/test/journey-entry.ts",
               "./apps/web/e2e/cli-login.spec.ts"
             ],
-            "options": { "diagnosticSeverity": { "strictEffectProvide": "off" } }
+            "options": {
+              "diagnosticSeverity": {
+                "strictEffectProvide": "off"
+              }
+            }
           },
           {
             "include": ["./apps/web/cloudflare/production-policy/artifact.ts"],
@@ -156,7 +191,9 @@
           {
             "include": ["./infra/cloudflare/worker-receipt.test.ts"],
             "options": {
-              "diagnosticSeverity": { "anyUnknownInErrorContext": "off" }
+              "diagnosticSeverity": {
+                "anyUnknownInErrorContext": "off"
+              }
             }
           },
           {

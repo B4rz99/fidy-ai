@@ -1,0 +1,34 @@
+apps/server/cloudflare/oauth-agents/oauth-mcp-free.test.ts
+  s_e3b9a05f422f64::t_6d2e75b40619ea 2,10
+  s_e3b9a05f422f64::t_912b42b81cbe5c 3-9,11-23,25-39
+  s_e3b9a05f422f64::t_76623ffb1f689f 1,24
+docs/research/hosted-mcp-free-cpu-990.md
+  s_e3b9a05f422f64::t_912b42b81cbe5c 112-163
+  s_e3b9a05f422f64::t_1d2abe691f0c60 1-111
+apps/server/cloudflare/oauth-agents/oauth-ingress.test-fixture.ts
+  s_e3b9a05f422f64::t_6d2e75b40619ea 55,93,134,207
+apps/server/ARCHITECTURE.md
+  s_e3b9a05f422f64::t_912b42b81cbe5c 112-116
+apps/server/cloudflare/mcp/runtime.ts
+  s_e3b9a05f422f64::t_912b42b81cbe5c 103-104,106-109
+  s_e3b9a05f422f64::t_c6a811de147c7f 296,341,652
+  s_e3b9a05f422f64::t_6d2e75b40619ea 275
+  s_e3b9a05f422f64::t_a831906766213b 261-262,273-274,293
+  s_e3b9a05f422f64::t_8c420cbbc1bb2a 49-52,100-102,110-111,117,332,349
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3021d819f167dba0b178b78641432e4c00e721c4",
+  "prompts": {},
+  "sessions": {
+    "s_e3b9a05f422f64": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a115f2-dfce-7741-a6e9-e22144cd3fad",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

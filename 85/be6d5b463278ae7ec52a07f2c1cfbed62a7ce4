@@ -1,0 +1,38 @@
+apps/server/cloudflare/canonical-operations/internal/mutation-registry.ts
+  s_e0bf4a3e766516::t_ae4a7e2d2be42d 261
+apps/server/cloudflare/connections/connections.test.ts
+  s_e0bf4a3e766516::t_4463070b49665d 274-276
+  s_e0bf4a3e766516::t_08218fcd10a4d4 33-37,219-273,283-284,288-293,295-298,302-312,314,316-345,349-383,389-407,409-435,438-442,470-596,598-670,673-694,696-726,729-773
+  s_e0bf4a3e766516::t_21d660775cfdf6 277-282,287,294,299,313,315,346-348
+apps/server/cloudflare/connections/operations.ts
+  s_e0bf4a3e766516::t_08218fcd10a4d4 44-49,117-120
+  s_e0bf4a3e766516::t_87ff949f0e3123 43,123-126,140-143,153-154,160
+apps/server/cloudflare/connections/internal/initiation.ts
+  s_e0bf4a3e766516::t_08218fcd10a4d4 20-25
+apps/server/cloudflare/oauth-agents/discovery.test-fixture.ts
+  s_e0bf4a3e766516::t_1c5cb77435969f 8-10,33
+apps/server/cloudflare/oauth-agents/oauth-discovery.test.ts
+  s_e0bf4a3e766516::t_f477ac3b2162ef 247,304-308
+apps/server/cloudflare/oauth-agents/oauth-ingress.test-fixture.ts
+  s_e0bf4a3e766516::t_5d8dee32e341cc 148-150
+infra/cloudflare/verify-edge-policy.test.ts
+  s_e0bf4a3e766516::t_be2f5f99bf7ddb 7
+infra/cloudflare/verify-edge-policy.ts
+  s_e0bf4a3e766516::t_decbf3508ab8d4 14-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "85be6d5b463278ae7ec52a07f2c1cfbed62a7ce4",
+  "prompts": {},
+  "sessions": {
+    "s_e0bf4a3e766516": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11875-a6ed-7533-a4ce-e283eeee4baf",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

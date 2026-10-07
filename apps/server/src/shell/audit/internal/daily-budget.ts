@@ -16,7 +16,7 @@ export const auditDayCountExpression = `(SELECT count(*) FROM transaction_audit 
       + (SELECT count(*) FROM pat_audit WHERE user_id = ?
       AND operation != 'operations.executeAtomicBatch'
       AND (((pat_id IS NOT NULL OR (oauth_connection_id IS NOT NULL AND oauth_credential_id IS NOT NULL))
-        AND operation NOT LIKE 'pats.%') OR operation IN ('pats.listPATs', 'recurring.listRecurringSeries'))
+        AND operation NOT LIKE 'pats.%') OR operation IN ('pats.listPATs', 'pats.getPATActivity', 'recurring.listRecurringSeries'))
       AND occurred_at_ms >= ? AND occurred_at_ms < ?)
       + (SELECT count(*) FROM category_audit WHERE user_id = ?
       AND occurred_at_ms >= ? AND occurred_at_ms < ?)

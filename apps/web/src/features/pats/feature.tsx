@@ -8,6 +8,7 @@ import { type BrowserAuthentication, useSession } from "@/session/session-contex
 import { presentCanonicalQuery } from "@/transport/canonical-query";
 import { type FidyClient } from "@/transport/client";
 import { sensitiveClipboardLifetime } from "@/browser/sensitive-clipboard";
+import { PATActivityFeature } from "./activity-feature";
 import { type IssueManualPATCommand, ManualPATView } from "./view";
 import {
   type ActivePATManagementState,
@@ -50,6 +51,7 @@ const PATManagementContent = ({
     {(clipboard) => (
       <>
         <ActivePATManagementView state={activePATState} revokeAll={revokeAll} revokeOne={revoke} />
+        <PATActivityFeature />
         <PATPairingView approve={approve} inspect={inspect} />
         <ManualPATView clipboard={clipboard} issue={issue} />
       </>

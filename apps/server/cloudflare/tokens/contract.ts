@@ -1,3 +1,4 @@
+import type { PATActivityAuthority } from "../../src/shell/audit/contract";
 import type { PATSubject } from "../../src/shell/tokens/contract";
 import type { WebSessionSubject } from "../../src/shell/web-session/contract";
 import { Data } from "effect";
@@ -21,4 +22,13 @@ export type PATRequest = Readonly<{ request: Request; db: D1Database }>;
 export type PATMetadataQuery = Readonly<{
   db: D1Database;
   subject: WebSessionSubject | AuthorizedPAT;
+}>;
+
+/** A PAT activity read inside already admitted browser or hosted authority. Tokens correlates the User with that proof again at the audited snapshot. */
+export type PATActivityRead = Readonly<{
+  db: D1Database;
+  userId: string;
+  shortId: string;
+  current: number;
+  authority: PATActivityAuthority;
 }>;

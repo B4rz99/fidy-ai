@@ -19,8 +19,14 @@ import {
   Option,
   Schema,
 } from "effect";
+import { makeAudit } from "../../src/shell/audit/runtime";
+import { PATActivity } from "../../src/shell/tokens/contract";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
-import { executeCanonicalQuery } from "../canonical-operations/operations";
+import {
+  executeCanonicalQuery,
+  executeHostedStatementQuery,
+  installedHostedStatementOperations,
+} from "../canonical-operations/operations";
 import { SqlClient } from "effect/sql";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
@@ -261,6 +267,7 @@ const setup = (
         "0029_audit_owner_retention",
         ...statementClarificationTestMigrations,
         "0038_proactivity_consent",
+        "0040_reminder_canonical_audit",
       ];
       yield* awaitPromise(
         installTestSchema({
@@ -3774,5 +3781,562 @@ it("closes an approved unclaimed pairing on User revocation and prevents later c
             .first()
         ))?.total
       ).toBe(0);
+    })
+  ));
+
+it("answers retained PAT activity through HTTP and the hosted canonical query with only safe metadata", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { db, send, sessions } = yield* awaitPromise(setup());
+      const issued = yield* issueManualPAT({
+        send,
+        session: sessions[0],
+        requestId: "70000000-0000-4000-8000-000000000251",
+        grant: manualGrant(),
+      });
+      expect(
+        (yield* awaitPromise(send({ path: "/categories", method: "GET", bearer: issued.bearer })))
+          .status
+      ).toBe(200);
+      const http = yield* awaitPromise(
+        send({ path: `/pats/${issued.pat.shortId}/activity`, method: "GET", session: sessions[0] })
+      );
+      expect(http.status).toBe(200);
+      const hosted = Option.getOrThrow(
+        yield* executeCanonicalQuery({
+          db,
+          operation: CanonicalOperationId.make("pats.getPATActivity"),
+          input: { params: { shortId: issued.pat.shortId } },
+          subject: {
+            id: "40000000-0000-4000-8000-000000000001",
+            userId: userA,
+            digest: yield* awaitPromise(dig("1".repeat(43))),
+          },
+          bucket: Option.none(),
+        })
+      );
+      expect(hosted.status).toBe(200);
+      const body = yield* awaitPromise(http.json());
+      expect(yield* awaitPromise(hosted.json())).toMatchObject({
+        data: {
+          pat: { shortId: issued.pat.shortId },
+          entries: [{ operation: "categories.listCategories", outcome: "succeeded" }],
+          hasMore: false,
+        },
+      });
+      const activity = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({
+          data: Schema.Struct({
+            entries: Schema.Array(
+              Schema.Struct({
+                operation: Schema.String,
+                outcome: Schema.String,
+                occurredAt: Schema.String,
+              })
+            ),
+            hasMore: Schema.Boolean,
+            pat: Schema.Struct({ shortId: Schema.String }),
+          }),
+        })
+      )(body);
+      expect(activity.data.pat.shortId).toBe(issued.pat.shortId);
+      expect(activity.data.entries).toHaveLength(1);
+      expect(activity.data.entries[0]).toMatchObject({
+        operation: "categories.listCategories",
+        outcome: "succeeded",
+      });
+      expect(activity.data.hasMore).toBe(false);
+      expect(Object.keys(activity.data.entries[0] ?? {}).sort()).toEqual([
+        "occurredAt",
+        "operation",
+        "outcome",
+      ]);
+      expect(yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(body)).not.toContain(
+        issued.bearer
+      );
+    })
+  ));
+
+const activityBody = (
+  response: Response
+): Effect.Effect<PATActivity, TestPromiseFailure | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    expect(response.status).toBe(200);
+    const body = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ data: Schema.toCodecJson(PATActivity), next: Schema.Array(Schema.Unknown) }),
+      { onExcessProperty: "error" }
+    )(yield* awaitPromise(response.json()));
+    return body.data;
+  });
+
+it("returns only the latest 50 retained PAT calls, breaking timestamp ties deterministically and excluding lifecycle evidence", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { db, send, sessions } = yield* awaitPromise(setup());
+      const issued = yield* issueManualPAT({
+        send,
+        session: sessions[0],
+        requestId: "70000000-0000-4000-8000-000000000252",
+        grant: manualGrant(),
+      });
+      const current = clock();
+      const call = (index: number, time: number): D1PreparedStatement =>
+        db
+          .prepare(`INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
+      SELECT ?,?,id,'categories.listCategories',?,? FROM pats WHERE user_id = ? AND short_id = ?`)
+          .bind(
+            `e0000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+            userA,
+            index === 58 ? "rejected" : "accepted",
+            time,
+            userA,
+            issued.pat.shortId
+          );
+      yield* awaitPromise(
+        db.batch([
+          ...Array.from({ length: 60 }, (_, index) => call(index, current - 1000)),
+          call(99, current - 366 * 86400000),
+        ])
+      );
+      const path = `/pats/${issued.pat.shortId}/activity`;
+      const history = yield* activityBody(
+        yield* awaitPromise(send({ path, method: "GET", session: sessions[0] }))
+      );
+      expect(history.entries).toHaveLength(50);
+      expect(history.entries[0]?.outcome).toBe("succeeded");
+      expect(history.entries[1]?.outcome).toBe("rejected");
+      expect(history.hasMore).toBe(true);
+      expect(
+        history.entries.every(
+          (entry) => DateTime.toEpochMillis(entry.occurredAt) === current - 1000
+        )
+      ).toBe(true);
+      expect(DateTime.toEpochMillis(history.retainedSince)).toBeGreaterThanOrEqual(
+        current - 365 * 86400000
+      );
+      expect(
+        (yield* activityBody(
+          yield* awaitPromise(send({ path, method: "GET", session: sessions[0] }))
+        )).entries
+      ).toEqual(history.entries);
+      expect(
+        (yield* awaitPromise(
+          send({ path: `/pats/${issued.pat.shortId}`, method: "DELETE", session: sessions[0] })
+        )).status
+      ).toBe(200);
+      const revoked = yield* activityBody(
+        yield* awaitPromise(send({ path, method: "GET", session: sessions[0] }))
+      );
+      expect(Option.isSome(revoked.pat.revokedAt)).toBe(true);
+      expect(revoked.entries).toEqual(history.entries);
+    })
+  ));
+
+it("represents unused, expired and retention-truncated PAT histories without claiming the PAT was never used", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { db, send, sessions } = yield* awaitPromise(setup());
+      const issued = yield* issueManualPAT({
+        send,
+        session: sessions[0],
+        requestId: "70000000-0000-4000-8000-000000000253",
+        grant: manualGrant(),
+      });
+      const path = `/pats/${issued.pat.shortId}/activity`;
+      const empty = yield* activityBody(
+        yield* awaitPromise(send({ path, method: "GET", session: sessions[0] }))
+      );
+      expect(empty.entries).toEqual([]);
+      expect(empty.hasMore).toBe(false);
+      const current = clock();
+      yield* awaitPromise(
+        db
+          .prepare(`INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
+      SELECT 'e0000000-0000-4000-8000-000000000253',?,id,'categories.listCategories','accepted',? FROM pats WHERE short_id = ?`)
+          .bind(userA, current - 366 * 86400000, issued.pat.shortId)
+          .run()
+      );
+      yield* awaitPromise(
+        db
+          .prepare(
+            "UPDATE pats SET created_at_ms = created_at_ms - 691200000, expires_at_ms = expires_at_ms - 691200000 WHERE short_id = ?"
+          )
+          .bind(issued.pat.shortId)
+          .run()
+      );
+      const retained = yield* activityBody(
+        yield* awaitPromise(send({ path, method: "GET", session: sessions[0] }))
+      );
+      expect(retained.entries).toEqual([]);
+      expect(retained.hasMore).toBe(false);
+      expect(DateTime.toEpochMillis(retained.pat.expiresAt)).toBeLessThan(current);
+      expect(DateTime.toEpochMillis(retained.retainedSince)).toBeGreaterThan(
+        current - 366 * 86400000
+      );
+    })
+  ));
+
+it("refuses PAT self-access, cross-User activity and substituted hosted identity without changing grant state", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { db, send, sessions } = yield* awaitPromise(setup());
+      const issued = yield* issueManualPAT({
+        send,
+        session: sessions[0],
+        requestId: "70000000-0000-4000-8000-000000000254",
+        grant: manualGrant(),
+      });
+      const path = `/pats/${issued.pat.shortId}/activity`;
+      const before = yield* awaitPromise(
+        db
+          .prepare("SELECT last_used_at_ms,revoked_at_ms FROM pats WHERE short_id = ?")
+          .bind(issued.pat.shortId)
+          .first()
+      );
+      expect(
+        (yield* awaitPromise(send({ path, method: "GET", bearer: issued.bearer }))).status
+      ).toBe(401);
+      const foreign = yield* awaitPromise(send({ path, method: "GET", session: sessions[1] }));
+      const missing = yield* awaitPromise(
+        send({ path: "/pats/unknown1/activity", method: "GET", session: sessions[1] })
+      );
+      expect(foreign.status).toBe(404);
+      expect(yield* awaitPromise(foreign.json())).toEqual(yield* awaitPromise(missing.json()));
+      const query = {
+        db,
+        operation: CanonicalOperationId.make("pats.getPATActivity"),
+        input: { params: { shortId: issued.pat.shortId } },
+        bucket: Option.none(),
+      };
+      const hosted = Option.getOrThrow(
+        yield* executeCanonicalQuery({
+          ...query,
+          subject: {
+            id: "40000000-0000-4000-8000-000000000002",
+            userId: userB,
+            digest: yield* awaitPromise(dig("2".repeat(43))),
+          },
+        })
+      );
+      expect(hosted.status).toBe(404);
+      const substituted = Option.getOrThrow(
+        yield* executeCanonicalQuery({
+          ...query,
+          subject: {
+            id: "40000000-0000-4000-8000-000000000001",
+            userId: userB,
+            digest: yield* awaitPromise(dig("1".repeat(43))),
+          },
+        })
+      );
+      expect(substituted.status).toBe(401);
+      expect(
+        yield* awaitPromise(
+          db
+            .prepare("SELECT last_used_at_ms,revoked_at_ms FROM pats WHERE short_id = ?")
+            .bind(issued.pat.shortId)
+            .first()
+        )
+      ).toEqual(before);
+      expect(
+        (yield* awaitPromise(
+          db
+            .prepare(
+              "SELECT user_id,outcome FROM pat_audit WHERE operation = 'pats.getPATActivity' ORDER BY rowid"
+            )
+            .all()
+        )).results
+      ).toEqual([
+        { user_id: userB, outcome: "rejected" },
+        { user_id: userB, outcome: "rejected" },
+        { user_id: userB, outcome: "rejected" },
+      ]);
+    })
+  ));
+
+for (const refusal of [
+  "revoked-session",
+  "withdrawn-consent",
+  "suppressed-audit",
+  "malformed-evidence",
+] as const) {
+  it(`never discloses PAT activity through HTTP or hosted execution after ${refusal}`, () =>
+    runTest(
+      Effect.gen(function* () {
+        const { db, send, sessions } = yield* awaitPromise(setup());
+        const issued = yield* issueManualPAT({
+          send,
+          session: sessions[0],
+          requestId: "70000000-0000-4000-8000-000000000255",
+          grant: manualGrant(),
+        });
+        const current = clock();
+        if (refusal === "revoked-session") {
+          yield* awaitPromise(
+            db
+              .prepare("UPDATE web_sessions SET revoked_at_ms = ? WHERE id = ?")
+              .bind(current, "40000000-0000-4000-8000-000000000001")
+              .run()
+          );
+        } else if (refusal === "withdrawn-consent") {
+          yield* awaitPromise(
+            db
+              .prepare(`INSERT INTO onboarding_consent_records (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms)
+        VALUES ('e0000000-0000-4000-8000-000000000001',?,'{}','disclosure','decision',?,?)`)
+              .bind(userA, current, current)
+              .run()
+          );
+          yield* awaitPromise(
+            db
+              .prepare(`INSERT INTO consent_user_revocations (id,user_id,grant_record_id,session_id,occurred_at_ms)
+        VALUES ('e0000000-0000-4000-8000-000000000002',?,'e0000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001',?)`)
+              .bind(userA, current)
+              .run()
+          );
+        } else if (refusal === "suppressed-audit") {
+          yield* awaitPromise(
+            db
+              .prepare(
+                "CREATE TRIGGER refuse_activity_audit BEFORE INSERT ON pat_audit WHEN NEW.operation = 'pats.getPATActivity' BEGIN SELECT RAISE(IGNORE); END"
+              )
+              .run()
+          );
+        } else {
+          yield* awaitPromise(
+            db
+              .prepare(`INSERT INTO pat_audit (id,user_id,pat_id,operation,outcome,occurred_at_ms)
+        SELECT 'e0000000-0000-4000-8000-000000000255',?,id,'unsafe error prose','accepted',? FROM pats WHERE short_id = ?`)
+              .bind(userA, current, issued.pat.shortId)
+              .run()
+          );
+        }
+        const before = yield* awaitPromise(
+          db
+            .prepare("SELECT last_used_at_ms,revoked_at_ms FROM pats WHERE short_id = ?")
+            .bind(issued.pat.shortId)
+            .first()
+        );
+        const http = yield* awaitPromise(
+          send({
+            path: `/pats/${issued.pat.shortId}/activity`,
+            method: "GET",
+            session: sessions[0],
+          })
+        );
+        const hosted = Option.getOrThrow(
+          yield* executeCanonicalQuery({
+            db,
+            operation: CanonicalOperationId.make("pats.getPATActivity"),
+            input: { params: { shortId: issued.pat.shortId } },
+            subject: {
+              id: "40000000-0000-4000-8000-000000000001",
+              userId: userA,
+              digest: yield* awaitPromise(dig("1".repeat(43))),
+            },
+            bucket: Option.none(),
+          })
+        );
+        expect(http.status).toBe(refusal === "malformed-evidence" ? 503 : 401);
+        expect(hosted.status).toBe(refusal === "malformed-evidence" ? 503 : 401);
+        for (const result of [http, hosted]) {
+          const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+            yield* awaitPromise(result.json())
+          );
+          expect(body).not.toContain("entries");
+          expect(body).not.toContain(issued.bearer);
+          expect(body).not.toContain("unsafe error prose");
+        }
+        expect(
+          yield* awaitPromise(
+            db
+              .prepare("SELECT last_used_at_ms,revoked_at_ms FROM pats WHERE short_id = ?")
+              .bind(issued.pat.shortId)
+              .first()
+          )
+        ).toEqual(before);
+        if (refusal !== "malformed-evidence") {
+          expect(
+            yield* awaitPromise(
+              db
+                .prepare(
+                  "SELECT count(*) AS total FROM pat_audit WHERE operation = 'pats.getPATActivity'"
+                )
+                .first()
+            )
+          ).toEqual({ total: 0 });
+        }
+      })
+    ));
+}
+
+it("bounds PAT activity answers with the shared User canonical Audit budget", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { db, send, sessions } = yield* awaitPromise(setup());
+      const issued = yield* issueManualPAT({
+        send,
+        session: sessions[0],
+        requestId: "70000000-0000-4000-8000-000000000256",
+        grant: manualGrant(),
+      });
+      const current = clock();
+      yield* awaitPromise(
+        db.batch(
+          Array.from({ length: 255 }, (_, index) =>
+            db
+              .prepare(`INSERT INTO pat_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
+    VALUES (?,?,'40000000-0000-4000-8000-000000000001','pats.getPATActivity','accepted',?)`)
+              .bind(`e0000000-0000-4000-8000-${String(index).padStart(12, "0")}`, userA, current)
+          )
+        )
+      );
+      const path = `/pats/${issued.pat.shortId}/activity`;
+      expect(
+        (yield* awaitPromise(send({ path, method: "GET", session: sessions[0] }))).status
+      ).toBe(200);
+      expect(
+        (yield* awaitPromise(send({ path, method: "GET", session: sessions[0] }))).status
+      ).toBe(429);
+      expect(
+        (yield* awaitPromise(send({ path: "/pats", method: "GET", session: sessions[0] }))).status
+      ).toBe(429);
+      expect(
+        yield* awaitPromise(
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM pat_audit WHERE operation = 'pats.getPATActivity'"
+            )
+            .first()
+        )
+      ).toEqual({ total: 256 });
+    })
+  ));
+
+it("offers PAT activity to admitted hosted Turns and refuses substituted Users or inactive authority", () =>
+  runTest(
+    Effect.gen(function* () {
+      const { db, send, sessions } = yield* awaitPromise(setup());
+      const issued = yield* issueManualPAT({
+        send,
+        session: sessions[0],
+        requestId: "70000000-0000-4000-8000-000000000257",
+        grant: manualGrant(),
+      });
+      const current = clock();
+      const sessionId = "50000000-0000-4000-8000-000000000251";
+      const turnId = "60000000-0000-4000-8000-000000000251";
+      yield* awaitPromise(
+        db
+          .prepare(`INSERT INTO onboarding_consent_records (id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms)
+    VALUES ('e0000000-0000-4000-8000-000000000257',?,'{}','disclosure','decision',?,?)`)
+          .bind(userA, current, current)
+          .run()
+      );
+      yield* awaitPromise(
+        db.batch([
+          db
+            .prepare(
+              "INSERT INTO hosted_agent_sessions (id,user_id,consent_basis_json,started_at_ms,status) VALUES (?,?,'{}',?,'active')"
+            )
+            .bind(sessionId, userA, current),
+          db
+            .prepare(
+              "INSERT INTO hosted_turns (id,user_id,hosted_session_id,started_at_ms,status) VALUES (?,?,?,?,'pending')"
+            )
+            .bind(turnId, userA, sessionId, current),
+        ])
+      );
+      const caller = {
+        _tag: "HostedCanonical" as const,
+        userId: userA,
+        turnId,
+        sessionId,
+        authorizedOperation: Option.none<string>(),
+        originTurns: { sql: "SELECT id FROM hosted_turns WHERE user_id = ?", params: [userA] },
+        publicationOrigin: {
+          sql: "SELECT id FROM hosted_turns WHERE user_id = ?",
+          params: [userA],
+        },
+        authority: {
+          table: "hosted_turns" as const,
+          predicate:
+            "id = ? AND user_id = ? AND status = 'pending' AND EXISTS (SELECT 1 FROM hosted_agent_sessions WHERE id = hosted_turns.hosted_session_id AND status = 'active')",
+          bindings: [turnId, userA],
+        },
+      };
+      const work = {
+        db,
+        bucket: Option.none<R2Bucket>(),
+        caller,
+        current,
+        operation: "pats.getPATActivity",
+        input: { params: { shortId: issued.pat.shortId } },
+      };
+      expect(installedHostedStatementOperations().map((operation) => operation.id)).toContain(
+        "pats.getPATActivity"
+      );
+      const history = yield* activityBody(yield* executeHostedStatementQuery(work));
+      expect(history.pat.shortId).toBe(issued.pat.shortId);
+      expect(history.entries).toEqual([]);
+      expect(
+        yield* awaitPromise(
+          db
+            .prepare(
+              "SELECT user_id,session_id,hosted_turn_id,outcome FROM pat_audit WHERE operation = 'pats.getPATActivity'"
+            )
+            .first()
+        )
+      ).toEqual({ user_id: userA, session_id: null, hosted_turn_id: turnId, outcome: "accepted" });
+      expect(yield* makeAudit({ database: db }).query({ userId: userA, limit: 20 })).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            caller: { _tag: "HostedTurn", turnId },
+            operation: "pats.getPATActivity",
+            outcome: "succeeded",
+          }),
+        ])
+      );
+      const foreign = yield* issueManualPAT({
+        send,
+        session: sessions[1],
+        requestId: "70000000-0000-4000-8000-000000000258",
+        grant: manualGrant(),
+      });
+      expect(
+        (yield* executeHostedStatementQuery({
+          ...work,
+          input: { params: { shortId: foreign.pat.shortId } },
+        })).status
+      ).toBe(404);
+      yield* awaitPromise(
+        db
+          .prepare(
+            "CREATE TRIGGER refuse_hosted_activity_audit BEFORE INSERT ON pat_audit WHEN NEW.operation = 'pats.getPATActivity' BEGIN SELECT RAISE(IGNORE); END"
+          )
+          .run()
+      );
+      expect((yield* executeHostedStatementQuery(work)).status).toBe(401);
+      yield* awaitPromise(db.prepare("DROP TRIGGER refuse_hosted_activity_audit").run());
+      const substituted = yield* executeHostedStatementQuery({
+        ...work,
+        caller: { ...caller, userId: userB },
+      });
+      expect(substituted.status).toBe(401);
+      yield* awaitPromise(
+        db
+          .prepare("UPDATE hosted_agent_sessions SET status='revoked' WHERE id=?")
+          .bind(sessionId)
+          .run()
+      );
+      expect((yield* executeHostedStatementQuery(work)).status).toBe(401);
+      expect(
+        yield* awaitPromise(
+          db
+            .prepare(
+              "SELECT count(*) AS total FROM pat_audit WHERE operation = 'pats.getPATActivity'"
+            )
+            .first()
+        )
+      ).toEqual({ total: 2 });
     })
   ));

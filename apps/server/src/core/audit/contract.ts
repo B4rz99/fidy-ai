@@ -55,3 +55,21 @@ export const OAuthRecentActivity = Schema.Array(
   })
 ).check(Schema.isMaxLength(3));
 export type OAuthRecentActivity = typeof OAuthRecentActivity.Type;
+
+/** Maximum retained canonical outcomes disclosed in one PAT activity answer. */
+export const maximumPATActivityEntries = 50;
+
+/** Retained canonical PAT outcomes; no request, credential, attribution, or error prose is exposed. */
+export const PATActivityEntry = Schema.Struct({
+  operation: AuditLogEntry.fields.operation,
+  outcome: AuditLogEntry.fields.outcome,
+  occurredAt: AuditLogEntry.fields.occurredAt,
+}).annotate({ identifier: "PATActivityEntry" });
+
+/** A bounded retained history, never a claim that earlier activity did not occur. */
+export const PATActivityHistory = Schema.Struct({
+  entries: Schema.Array(PATActivityEntry).check(Schema.isMaxLength(maximumPATActivityEntries)),
+  hasMore: Schema.Boolean,
+  retainedSince: UtcTimestamp,
+}).annotate({ identifier: "PATActivityHistory" });
+export type PATActivityHistory = typeof PATActivityHistory.Type;

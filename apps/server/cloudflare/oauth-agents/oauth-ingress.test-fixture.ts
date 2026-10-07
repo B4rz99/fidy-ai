@@ -179,11 +179,22 @@ export const setup = (auditMigration = true): Effect.Effect<Harness, TestFailure
           RELEASE_GIT_SHA: environment.RELEASE_GIT_SHA,
           // A service binding consumes the forwarded request; it does not tee its body.
           CORE: {
-            fetch: (incoming) =>
-              coreWorker.fetch(
-                incoming instanceof Request ? incoming : new Request(incoming),
-                environment
-              ),
+            fetch: (incoming) => {
+              const forwarded = incoming instanceof Request ? incoming : new Request(incoming);
+              return coreWorker.fetch(forwarded, environment).then((response) => {
+                const location = response.headers.get("location");
+                // Cloudflare's HTTP binding follows redirects on newly constructed Requests.
+                // Keep the redirect target inside this isolated Core, never on the network.
+                if (
+                  forwarded.redirect === "follow" &&
+                  response.status === 302 &&
+                  location !== null
+                ) {
+                  return coreWorker.fetch(new Request(location), environment);
+                }
+                return response;
+              });
+            },
           },
         }
       );

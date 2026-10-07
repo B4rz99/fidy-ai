@@ -52,18 +52,18 @@ Canonical financial behavior remains the owning feature's testing responsibility
 
 ## Latest Production verification
 
-**2026-10-07 · revision `63494fd4` · limited synthetic proof.**
-[Evidence](../../../../../docs/research/hosted-mcp-free-990.evidence.json).
+**2026-10-07 · revision `63494fd4` · automated synthetic proof.**
+[Evidence](../../../../../docs/research/hosted-mcp-automated-990.evidence.json).
 
 Claude Code 2.1.289 and Codex 0.160.0 passed native OAuth, Category reads, Budget
 creation, a two-Transaction atomic batch, confirmed Budget deletion and natural
-token refresh. Repeated reads passed 20/20 and 10/10 respectively. Core captured
-68 MCP invocations with zero CPU-limit terminations. A follow-up checked native
-cancellation without Budget deletion or accepted deletion Audit,
-exact restricted catalogs (46 tools each), fresh confirmation for cleanup, and
-post-revocation access/refresh refusal (401 / 400 `invalid_grant`). Cleanup left
-zero active connections, browser sessions or Budgets; one lost fixture browser
-session required operator revocation. Native logouts passed.
+token refresh without extending the seven-day grant. Repeated reads passed 20/20
+and 10/10 respectively. Native cancellation, confirmed deletion, exact restricted
+catalogs (46 tools each), and post-revocation access/refresh refusal
+(401 / 400 `invalid_grant`) all passed. The run observed 137 ingress requests and
+90 Core MCP invocations with zero OAuth/MCP CPU-limit terminations. Cleanup left
+zero active connections, browser sessions or Budgets. Native logouts and private
+profile removal passed.
 
 **Not verified live:** natural seven-day connection expiry, other clients and
 other canonical operations. Provider identity/email approval used a synthetic
@@ -74,9 +74,9 @@ authorize real-User launch.
 tests across all nine files, including all seven permission combinations and exact
 absolute-expiry boundaries. The opt-in
 [native-client harness](../../../../../scripts/mcp/native-confirmation-hosts.ts)
-bridge was skipped; native confirmation was tested live instead. The harness is
-not a Production runner. The reusable [Production checks](../../../../../scripts/mcp/README.md)
-are being validated against the deployed synthetic fixture.
+also passed all six real-client accept, cancel and headless-refusal cases on the
+local public/Core seam. The reusable [Production checks](../../../../../scripts/mcp/README.md)
+passed the complete deployed journey; runner regressions passed 81 tooling tests.
 
 Update this document when behavior or execution changes. Keep only the latest
 verification summary here; detailed evidence lives behind the link.

@@ -82,7 +82,7 @@ export const dispatchStatementExtraction = (
         JOIN statement_submissions AS s ON s.id = o.submission_id AND s.user_id = o.user_id
         WHERE s.status IN ('queued', 'processing')
           AND (o.last_attempt_at_ms IS NULL OR o.last_attempt_at_ms < ?)
-        ORDER BY o.last_attempt_at_ms, o.published_at_ms, o.submission_id LIMIT ?`)
+        ORDER BY o.published_at_ms, o.submission_id LIMIT ?`)
         .bind(now - dispatchCooldownMs, dispatchLimit)
         .all()
     );
@@ -210,7 +210,7 @@ export const reconcileStatementExtraction = (
         ON s.id = o.submission_id AND s.user_id = o.user_id
       WHERE o.published_at_ms > 0 AND s.status IN ('queued', 'processing')
         AND s.retention_expires_at_ms > ?
-      ORDER BY coalesce(o.last_attempt_at_ms, 0), o.submission_id LIMIT ?`)
+      ORDER BY o.last_reconciled_at_ms, o.published_at_ms, o.submission_id LIMIT ?`)
         .bind(now, dispatchLimit)
         .all()
     );
@@ -221,7 +221,7 @@ export const reconcileStatementExtraction = (
       // Rotate even on transient get failure: the next scheduled run can inspect it again.
       yield* attempt(() =>
         input.DB.prepare(`UPDATE statement_ingestion_outbox
-        SET last_attempt_at_ms = ? WHERE submission_id = ? AND user_id = ?`)
+        SET last_reconciled_at_ms = ? WHERE submission_id = ? AND user_id = ?`)
           .bind(now, row.submission_id, row.user_id)
           .run()
       );

@@ -153,6 +153,7 @@ const migrationNames = [
   "0017_hosted_compaction",
   "0017_forwarded_email",
   "0017_statement_dispatch",
+  "0061_statement_reconciliation",
   "0018_batch_envelope_audit",
   "0018_dashboard",
   "0018_forwarded_email_processing",
@@ -1230,6 +1231,48 @@ it(
   30_000
 );
 
+it("offers eligible statement identities in publication order even after an earlier delivery attempt", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const runtime = yield* fromTestPromise(() => setup());
+      const identities: Array<{ version: 1; userId: string; submissionId: string }> = [];
+      for (const index of [0, 1]) {
+        const staged = yield* fromTestPromise(() => stageOne(runtime, index));
+        const submitted = yield* fromTestPromise(() =>
+          publishFixture(runtime, {
+            index,
+            reference: staged.staged,
+            idempotencyKey: "20000000-0000-4000-8000-000000000986",
+          })
+        );
+        const submission = yield* fromTestPromise(() => submissionOf(submitted));
+        identities.push({
+          version: 1,
+          userId: index === 0 ? userA : userB,
+          submissionId: submission.id,
+        });
+        yield* fromTestPromise(() =>
+          runtime.db
+            .prepare(`UPDATE statement_ingestion_outbox
+        SET published_at_ms = ?, last_attempt_at_ms = ? WHERE submission_id = ?`)
+            .bind(1000 + index, index === 0 ? 1 : null, submission.id)
+            .run()
+        );
+      }
+      const offered: Array<unknown> = [];
+      yield* dispatchStatementExtraction({
+        DB: runtime.db,
+        STATEMENT_EXTRACTION_QUEUE: {
+          send: (body) => {
+            offered.push(body);
+            return Promise.resolve();
+          },
+        },
+      });
+      expect(offered).toEqual(identities);
+    })
+  ));
+
 it(
   "offers a queued submission with only its owned identity and starts one deterministic Workflow on redelivery",
   () =>
@@ -1327,6 +1370,12 @@ it.each([false, true])(
               {
                 ...coreEnvironment(runtime),
                 DB: database,
+                STATEMENT_EXTRACTION_WORKFLOW: {
+                  get: (): Promise<never> => Promise.reject(new Error("Workflow not yet created")),
+                  create: (): Promise<never> => Promise.reject(new Error("unused")),
+                  createBatch: (): Promise<never> => Promise.reject(new Error("unused")),
+                  deleteBatch: (): Promise<never> => Promise.reject(new Error("unused")),
+                },
                 STATEMENT_EXTRACTION_QUEUE: {
                   metrics: () => Promise.resolve({ backlogCount: 0, backlogBytes: 0 }),
                   send: (body: unknown) => {

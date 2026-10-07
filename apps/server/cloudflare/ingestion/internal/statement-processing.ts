@@ -132,14 +132,21 @@ const markFailed = ({
       SET submission_id = CASE WHEN consumed_at_ms IS NULL THEN NULL ELSE submission_id END
       WHERE user_id = ? AND submission_id = ? AND changes() = 1`)
           .bind(userId, submissionId),
+        db
+          .prepare(`DELETE FROM statement_ingestion_outbox
+          WHERE submission_id = ? AND user_id = ? AND revision = 1
+            AND EXISTS (SELECT 1 FROM statement_submissions
+              WHERE id = ? AND user_id = ? AND status IN ('completed', 'failed'))`)
+          .bind(submissionId, userId, submissionId, userId),
       ])
     ).pipe(Effect.asVoid, Effect.uninterruptible);
   });
 
 /**
  * Settles exhausted statement work under the User coordinator, atomically releasing a pending
- * Free entitlement. Repeated or late failure cannot regress a completed submission. Only a
- * closed public reason is stored; the Workflow's raw exception must never be passed here.
+ * Free entitlement and acknowledging its extraction identity. Repeated or late failure cannot
+ * regress a completed submission. Only a closed public reason is stored; the Workflow's raw
+ * exception must never be passed here.
  */
 export const failStatementSubmission = ({
   DB,
@@ -559,6 +566,15 @@ const completeSubmission = (
           userId,
           submissionId,
           submissionId
+        ),
+        DB.prepare(`DELETE FROM statement_ingestion_outbox
+          WHERE submission_id = ? AND user_id = ? AND revision = 1
+            AND EXISTS (SELECT 1 FROM statement_submissions
+              WHERE id = ? AND user_id = ? AND status = 'completed')`).bind(
+          submissionId,
+          userId,
+          submissionId,
+          userId
         ),
       ])
     );

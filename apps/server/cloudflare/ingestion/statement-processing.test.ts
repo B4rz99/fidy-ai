@@ -3,7 +3,7 @@ import { Clock, Effect, Exit, Option } from "effect";
 import { deepStrictEqual } from "node:assert/strict";
 import { StatementProcessingUnavailable } from "./contract";
 import { installTestSchema, isolatedTestStorage } from "../d1-test-fixture";
-import { afterAll, expect } from "vitest";
+import { afterAll, expect, it } from "vitest";
 import { it as effectIt } from "@effect/vitest";
 import { currentMillis } from "../runtime/operations";
 import {
@@ -118,6 +118,13 @@ const setup = (
             sourceFormat,
             current + retentionMs
           )
+          .run()
+      );
+      yield* fromTestPromise(() =>
+        db
+          .prepare(`INSERT INTO statement_ingestion_outbox
+          (submission_id, user_id, revision, published_at_ms) VALUES (?, ?, 1, ?)`)
+          .bind(submissionId, userA, current)
           .run()
       );
       return { db, bucket };
@@ -366,6 +373,21 @@ effectIt.effect(
         userId: userB,
         submissionId,
       });
+      yield* failStatementSubmission({
+        DB: db,
+        userId: userB,
+        submissionId,
+        reason: "resource-limit",
+      });
+      const outbox = yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "SELECT user_id, revision FROM statement_ingestion_outbox WHERE submission_id = ?"
+          )
+          .bind(submissionId)
+          .first()
+      );
+      expect(outbox).toEqual({ user_id: userA, revision: 1 });
       const status = yield* fromTestPromise(() =>
         db
           .prepare("SELECT status FROM statement_submissions WHERE id = ?")
@@ -1058,4 +1080,61 @@ effectIt.effect("uses the owner Clock to expire statement work before any row co
     });
     expect(counts).toMatchObject({ count: 0 });
   })
+);
+
+it.each(["completed", "failed"] as const)(
+  "rolls back %s settlement when outbox acknowledgment fails and resumes without duplicate output",
+  (terminalStatus) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db, bucket } = yield* fromTestPromise(() =>
+          setup("fecha,valor,moneda,contraparte\n2026-08-01,-45000,COP,Cafe\n")
+        );
+        const input = { DB: db, STATEMENT_STAGING_BUCKET: bucket, userId: userA, submissionId };
+        yield* fromTestPromise(() =>
+          db
+            .prepare(`CREATE TRIGGER reject_statement_ack
+      BEFORE DELETE ON statement_ingestion_outbox
+      BEGIN SELECT RAISE(ABORT, 'ack unavailable'); END`)
+            .run()
+        );
+        const settle =
+          terminalStatus === "completed"
+            ? processStatementSubmission(input).pipe(Effect.asVoid)
+            : failStatementSubmission({ ...input, reason: "resource-limit" });
+        deepStrictEqual(
+          yield* Effect.exit(settle),
+          Exit.fail(new StatementProcessingUnavailable())
+        );
+        const pending = yield* fromTestPromise(() =>
+          db
+            .prepare(`SELECT status,
+      (SELECT count(*) FROM statement_ingestion_outbox WHERE submission_id = ?) AS pending
+      FROM statement_submissions WHERE id = ?`)
+            .bind(submissionId, submissionId)
+            .first()
+        );
+        expect(pending).toEqual({
+          status: terminalStatus === "completed" ? "processing" : "queued",
+          pending: 1,
+        });
+        yield* fromTestPromise(() => db.prepare("DROP TRIGGER reject_statement_ack").run());
+        yield* settle;
+        yield* settle;
+        const finished = yield* fromTestPromise(() =>
+          db
+            .prepare(`SELECT status,
+      (SELECT count(*) FROM statement_ingestion_outbox WHERE submission_id = ?) AS pending,
+      (SELECT count(*) FROM source_attestations WHERE statement_submission_id = ?) AS attestations
+      FROM statement_submissions WHERE id = ?`)
+            .bind(submissionId, submissionId, submissionId)
+            .first()
+        );
+        expect(finished).toEqual({
+          status: terminalStatus,
+          pending: 0,
+          attestations: terminalStatus === "completed" ? 1 : 0,
+        });
+      })
+    )
 );

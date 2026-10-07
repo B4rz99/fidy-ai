@@ -1,0 +1,20 @@
+apps/server/cloudflare/oauth-agents/oauth-refresh.test.ts
+  s_e3b9a05f422f64::t_b784a9d9224ee0 580-582
+  s_e3b9a05f422f64::t_1b67d83511693a 8-9,567,570-579
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5ba38c1a100f1b53ed88f1147a05ebe4992a930a",
+  "prompts": {},
+  "sessions": {
+    "s_e3b9a05f422f64": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a115f2-dfce-7741-a6e9-e22144cd3fad",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

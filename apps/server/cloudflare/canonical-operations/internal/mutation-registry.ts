@@ -1,3 +1,4 @@
+import { connectionInputRefusal, prepareConnectInstitution } from "../../connections/operations";
 import {
   prepareSubscriptionCancellation,
   subscriptionCancellationRefusal,
@@ -252,6 +253,14 @@ const adapters: ReadonlyMap<CanonicalOperationId, CanonicalMutationAdapter> = ne
   CanonicalOperationId,
   CanonicalMutationAdapter
 >([
+  [
+    CanonicalOperationId.make("connections.connectInstitution"),
+    {
+      prepare: prepareConnectInstitution,
+      present: present(HTTP_OK),
+      invalidRefusal: connectionInputRefusal,
+    },
+  ],
   [
     CanonicalOperationId.make("subscription.cancelSubscription"),
     {

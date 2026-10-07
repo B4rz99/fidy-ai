@@ -24,6 +24,7 @@ const compositionRoots = new Set([
   // have no such role; a new broad composition must be named and reviewed here.
   "cloudflare/agent/hosted-turn.test.ts",
   "cloudflare/budgets/budgets.test.ts",
+  "cloudflare/connections/connections.test.ts",
   "cloudflare/categories/keyword-rules.test.ts",
   "cloudflare/dashboard/dashboard.test.ts",
   "cloudflare/email-authentication/retention.test.ts",

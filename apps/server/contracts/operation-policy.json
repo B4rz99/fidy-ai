@@ -177,6 +177,66 @@
       }
     },
     {
+      "id": "connections.connectInstitution",
+      "policy": {
+        "access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "user-owned-agent-scoped"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "mutation",
+        "requiredTier": "free"
+      }
+    },
+    {
+      "id": "connections.getConnection",
+      "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "user-owned-agent-scoped"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredTier": "free"
+      }
+    },
+    {
+      "id": "connections.listConnections",
+      "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "user-owned-agent-scoped"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredTier": "free"
+      }
+    },
+    {
+      "id": "connections.listInstitutions",
+      "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "user-owned-agent-scoped"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredTier": "free"
+      }
+    },
+    {
       "id": "dashboard.applyDashboardEdit",
       "policy": {
         "access": {

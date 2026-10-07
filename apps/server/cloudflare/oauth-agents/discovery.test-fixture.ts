@@ -11,6 +11,7 @@ export const readDiscovery: ReadonlyArray<string> = [
   "ingestion.getEmailForwarding",
   "ingestion.getStatementSubmission",
   "ingestion.listNeedsReviewItems",
+  "insights.getRecurringDigestReport",
   "insights.getReminderSchedule",
   "insights.listPendingInsights",
   "memory.recall",

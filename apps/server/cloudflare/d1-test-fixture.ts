@@ -251,8 +251,8 @@ export const hostedTurnTestMigrations = [
   "0049_proactive_message_transcript",
   "0050_proactivity_offer_recovery",
   "0051_budget_reconciliation_recovery",
-  "0052_recurring_digest_source",
-  "0053_recurring_proactivity",
-  "0054_recurring_digests",
-  "0056_recurring_offer_replacement",
+  "0053_recurring_digest_source",
+  "0054_recurring_proactivity",
+  "0055_recurring_digests",
+  "0057_recurring_offer_replacement",
 ] as const;

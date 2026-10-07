@@ -109,7 +109,11 @@ with no grace window or recoverable replacement cache.
 
 `mcp` projects installed eligible canonical queries and mutations from the assembled declarations through Effect's
 protocol runtime. Discovery is deterministic and authorization-private, including nested batch children and
-SuggestedOperations. Calls use the shared canonical owner invocation under live OAuth credential,
+SuggestedOperations. Both supported MCP protocol adapters execute in the existing User Durable Object;
+Core authenticates and forwards a bounded private admission. Sessionless protocol requests retire
+their SDK owner after the leased response, while sessionful requests retain their bounded native
+owner. Only immutable scope-projected catalog metadata is shared; current User authority is never
+cached. Calls use the shared canonical owner invocation under live OAuth credential,
 grant, User, Consent and capability guards, with distinct Audit attribution and exact Money codecs.
 Ordinary mutations and authorized atomic batches reuse the canonical one-User mutation unit, owner preparation,
 collision policy, live authority, accounting and Audit. Sensitive operations require exact OAuth-native confirmation

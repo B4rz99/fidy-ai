@@ -52,6 +52,7 @@ const pauseBudgetRead = (
 
 export type Harness = Readonly<{
   disableInference: () => void;
+  mcpHandoffs: () => number;
   holdMutationCommit: () => Readonly<{
     waiting: Promise<void>;
     settled: Promise<void>;
@@ -89,6 +90,7 @@ export const setup = (auditMigration = true): Effect.Effect<Harness, TestFailure
       .map((name) => new URL(`../migrations/${name}`, import.meta.url));
     if (auditMigration) yield* wait(installTestSchema({ db, sources }));
     else for (const source of sources) yield* wait(applyTestMigration({ db, source }));
+    let mcpHandoffCount = 0;
     const coordinators = new Map<string, UserTransactionCoordinator>();
     let queryGate: Option.Option<QueryGate> = Option.none();
     const mutationCommit = makeMutationCommitGate(db);
@@ -129,6 +131,7 @@ export const setup = (auditMigration = true): Effect.Effect<Harness, TestFailure
         getByName: (name: string): Pick<Fetcher, "fetch"> => ({
           fetch: (incoming): Promise<Response> => {
             const request = incoming instanceof Request ? incoming : new Request(incoming);
+            if (new URL(request.url).pathname === "/oauth-mcp") mcpHandoffCount += 1;
             const run = (): Promise<Response> => {
               let coordinator = coordinators.get(name);
               if (coordinator === undefined) {
@@ -201,6 +204,7 @@ export const setup = (auditMigration = true): Effect.Effect<Harness, TestFailure
     return {
       db: queryDb,
       send,
+      mcpHandoffs: () => mcpHandoffCount,
       holdMutationCommit: mutationCommit.hold,
       disableInference: () => {
         environment.HOSTED_AI_MODEL = "";

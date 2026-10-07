@@ -1,0 +1,19 @@
+infra/cloudflare/verify-production-smoke.test.ts
+  s_e3b9a05f422f64::t_894985d415da77 101-121,123-130,320,545,589,641,812,874-877,879
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e28261afbc7ec6903a84bc86cb45649586430e4f",
+  "prompts": {},
+  "sessions": {
+    "s_e3b9a05f422f64": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a115f2-dfce-7741-a6e9-e22144cd3fad",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

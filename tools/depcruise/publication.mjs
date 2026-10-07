@@ -54,6 +54,7 @@ const compositionRoots = new Set([
   "cloudflare/oauth-agents/oauth-ingress.test.ts",
   "cloudflare/oauth-agents/oauth-confirmation.test.ts",
   "cloudflare/oauth-agents/oauth-canonical.test.ts",
+  "cloudflare/oauth-agents/oauth-allowance.test.ts",
   "cloudflare/oauth-agents/oauth-management.test.ts",
   "cloudflare/oauth-agents/oauth-refresh.test.ts",
   "cloudflare/oauth-agents/oauth-discovery.test.ts",

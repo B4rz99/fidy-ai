@@ -321,6 +321,7 @@ it.each(["abort", "deadline"])(
         );
         const gate = fixture.holdBudgetRead();
         const response = mcpFixture({
+          retryKey: Option.none(),
           send: (path, init) => fixture.send(path, { ...init, signal: abort.signal }),
           bearer: token.access_token,
           method: "tools/call",
@@ -344,6 +345,7 @@ it.each(["abort", "deadline"])(
         gate.release();
         const next = yield* wait(
           mcpFixture({
+            retryKey: Option.none(),
             send: fixture.send,
             bearer: token.access_token,
             method: "tools/call",
@@ -393,6 +395,7 @@ it("rejects revoked and exactly expired grants before code exchange or query adm
       expect(
         (yield* wait(
           mcpFixture({
+            retryKey: Option.none(),
             send: fixture.send,
             bearer: token.access_token,
             method: "tools/call",
@@ -432,6 +435,7 @@ it("expires access authority without extending the reviewed connection or disclo
       );
       const rejected = yield* wait(
         mcpFixture({
+          retryKey: Option.none(),
           send: fixture.send,
           bearer: token.access_token,
           method: "tools/call",

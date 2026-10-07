@@ -482,6 +482,7 @@ it("counts fully attributed OAuth reads in the shared User Audit budget", () =>
       for (let index = 0; index < 3; index += 1) {
         const response = yield* wait(
           mcpFixture({
+            retryKey: Option.none(),
             send: fixture.send,
             bearer: token.access_token,
             method: "tools/call",
@@ -527,6 +528,7 @@ it("creates a Transaction through the ordinary OAuth mutation with one protected
       );
       const response = yield* wait(
         mcpFixture({
+          retryKey: Option.none(),
           send: fixture.send,
           bearer: token.access_token,
           method: "tools/call",
@@ -581,6 +583,7 @@ it("commits an authorized OAuth atomic batch with exact correlated results and o
       );
       const response = yield* wait(
         mcpFixture({
+          retryKey: Option.none(),
           send: fixture.send,
           bearer: token.access_token,
           method: "tools/call",
@@ -646,6 +649,7 @@ it("preserves the canonical owner's invalid ordinary OAuth mutation refusal", ()
       );
       const response = yield* wait(
         mcpFixture({
+          retryKey: Option.none(),
           send: fixture.send,
           bearer: token.access_token,
           method: "tools/call",
@@ -749,6 +753,7 @@ it.each(["invalid", "collision", "owner-collision", "hidden", "sensitive", "audi
         }
         const response = yield* wait(
           mcpFixture({
+            retryKey: Option.none(),
             send: fixture.send,
             bearer: token.access_token,
             method: "tools/call",
@@ -816,6 +821,7 @@ it.each(["empty", "oversized", "unattributed"])(
         if (shape === "unattributed") calls = [{}];
         const response = yield* wait(
           mcpFixture({
+            retryKey: Option.none(),
             send: fixture.send,
             bearer: token.access_token,
             method: "tools/call",
@@ -885,6 +891,7 @@ it("rejects read-only and cross-User mutation admissions at the authoritative co
       );
       const batch = yield* wait(
         mcpFixture({
+          retryKey: Option.none(),
           send: fixture.send,
           bearer: token.access_token,
           method: "tools/call",
@@ -928,6 +935,7 @@ it("settles concurrent OAuth batches once per child and never retries ambiguous 
         Promise.all(
           [1, 2].map(() =>
             mcpFixture({
+              retryKey: Option.none(),
               send: fixture.send,
               bearer: token.access_token,
               method: "tools/call",
@@ -983,6 +991,7 @@ it("keeps Memory and Dashboard owner construction independent of read scope and 
       );
       const response = yield* wait(
         mcpFixture({
+          retryKey: Option.none(),
           send: fixture.send,
           bearer: token.access_token,
           method: "tools/call",
@@ -1012,6 +1021,7 @@ it("keeps Memory and Dashboard owner construction independent of read scope and 
       expect(memoryId).not.toBeNull();
       const refused = yield* wait(
         mcpFixture({
+          retryKey: Option.none(),
           send: fixture.send,
           bearer: token.access_token,
           method: "tools/call",
@@ -1057,6 +1067,7 @@ it("fails Memory batches closed when owner inference construction is unavailable
       fixture.disableInference();
       const response = yield* wait(
         mcpFixture({
+          retryKey: Option.none(),
           send: fixture.send,
           bearer: token.access_token,
           method: "tools/call",
@@ -1088,6 +1099,7 @@ it("fails Memory batches closed when owner inference construction is unavailable
       ).toBe(0);
       const sensitive = yield* wait(
         mcpFixture({
+          retryKey: Option.none(),
           send: fixture.send,
           bearer: token.access_token,
           method: "tools/call",
@@ -1119,6 +1131,7 @@ it("fails Memory batches closed when owner inference construction is unavailable
       ).toMatchObject({ results: [{ operation: "memory.forget", outcome: "rejected" }] });
       const ordinary = yield* wait(
         mcpFixture({
+          retryKey: Option.none(),
           send: fixture.send,
           bearer: token.access_token,
           method: "tools/call",
@@ -1151,6 +1164,7 @@ it("reports interruption after a committed OAuth mutation without undoing or ret
       yield* wait(
         expect(
           mcpFixture({
+            retryKey: Option.none(),
             send: (path, init) => fixture.send(path, { ...init, signal: controller.signal }),
             bearer: token.access_token,
             method: "tools/call",
@@ -1214,6 +1228,7 @@ it("shares bounded mutation concurrency across OAuth credentials for the same Us
       });
       const invoke = (bearer: string): Promise<Response> =>
         mcpFixture({
+          retryKey: Option.none(),
           send: fixture.send,
           bearer,
           method: "tools/call",
@@ -1262,6 +1277,7 @@ it("reuses Category and Budget owner behavior in one OAuth mutation unit with ex
       );
       const response = yield* wait(
         mcpFixture({
+          retryKey: Option.none(),
           send: fixture.send,
           bearer: token.access_token,
           method: "tools/call",
@@ -1349,6 +1365,7 @@ it("refuses a foreign Transaction child after preparing an owned child without c
         yield* wait(
           (yield* wait(
             mcpFixture({
+              retryKey: Option.none(),
               send: fixture.send,
               bearer: token.access_token,
               method: "tools/call",
@@ -1377,6 +1394,7 @@ it("refuses a foreign Transaction child after preparing an owned child without c
       );
       const response = yield* wait(
         mcpFixture({
+          retryKey: Option.none(),
           send: fixture.send,
           bearer: token.access_token,
           method: "tools/call",
@@ -1470,6 +1488,7 @@ it("links and unlinks exact owned Transactions through ordinary OAuth mutations 
         yield* wait(
           (yield* wait(
             mcpFixture({
+              retryKey: Option.none(),
               send: fixture.send,
               bearer: token.access_token,
               method: "tools/call",
@@ -1489,6 +1508,7 @@ it("links and unlinks exact owned Transactions through ordinary OAuth mutations 
       for (const name of ["transactions.linkTransactions", "transactions.unlinkTransactions"]) {
         const response = yield* wait(
           mcpFixture({
+            retryKey: Option.none(),
             send: fixture.send,
             bearer: token.access_token,
             method: "tools/call",
@@ -1545,6 +1565,7 @@ it.each(["single", "mixed"])(
         const pending =
           unit === "single"
             ? mcpFixture({
+                retryKey: Option.none(),
                 send: fixture.send,
                 bearer: token.access_token,
                 method: "tools/call",
@@ -1552,6 +1573,7 @@ it.each(["single", "mixed"])(
                 args: transactionArguments,
               })
             : mcpFixture({
+                retryKey: Option.none(),
                 send: fixture.send,
                 bearer: token.access_token,
                 method: "tools/call",
@@ -1629,6 +1651,7 @@ it.each(["single", "mixed"])(
           const pending =
             unit === "single"
               ? mcpFixture({
+                  retryKey: Option.none(),
                   send: fixture.send,
                   bearer: token.access_token,
                   method: "tools/call",
@@ -1636,6 +1659,7 @@ it.each(["single", "mixed"])(
                   args: transactionArguments,
                 })
               : mcpFixture({
+                  retryKey: Option.none(),
                   send: fixture.send,
                   bearer: token.access_token,
                   method: "tools/call",
@@ -1718,6 +1742,7 @@ it("rechecks immutable OAuth grant expiration at the protected mixed-batch commi
       );
       const held = fixture.holdMutationCommit();
       const pending = mcpFixture({
+        retryKey: Option.none(),
         send: fixture.send,
         bearer: token.access_token,
         method: "tools/call",

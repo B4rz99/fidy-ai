@@ -52,7 +52,12 @@ it("reconnects an expired access credential with rotated authority for the same 
       vi.spyOn(Date, "now").mockReturnValue(accessExpiry ?? 0);
       expect(
         (yield* wait(
-          mcpFixture({ send: fixture.send, bearer: original.access_token, method: "tools/list" })
+          mcpFixture({
+            retryKey: Option.none(),
+            send: fixture.send,
+            bearer: original.access_token,
+            method: "tools/list",
+          })
         )).status
       ).toBe(401);
       const response = yield* wait(
@@ -66,6 +71,7 @@ it("reconnects an expired access credential with rotated authority for the same 
       expect(rotated.access_token).not.toBe(original.access_token);
       const queried = yield* wait(
         mcpFixture({
+          retryKey: Option.none(),
           send: fixture.send,
           bearer: rotated.access_token,
           method: "tools/call",
@@ -117,7 +123,14 @@ it("treats lost token delivery as replay, revokes every generation across restar
       expect(yield* wait(replay.json())).toEqual({ error: "invalid_grant" });
       for (const bearer of [original.access_token, winner.access_token]) {
         expect(
-          (yield* wait(mcpFixture({ send: fixture.send, bearer, method: "tools/list" }))).status
+          (yield* wait(
+            mcpFixture({
+              retryKey: Option.none(),
+              send: fixture.send,
+              bearer,
+              method: "tools/list",
+            })
+          )).status
         ).toBe(401);
       }
       expect(
@@ -145,7 +158,12 @@ it("treats lost token delivery as replay, revokes every generation across restar
       );
       expect(
         (yield* wait(
-          mcpFixture({ send: fixture.send, bearer: reconnected.access_token, method: "tools/list" })
+          mcpFixture({
+            retryKey: Option.none(),
+            send: fixture.send,
+            bearer: reconnected.access_token,
+            method: "tools/list",
+          })
         )).status
       ).toBe(200);
       yield* assertReleased(fixture.db);
@@ -195,7 +213,12 @@ it("persists replay revocation even when independent coordinator instances race 
       const winner = yield* Schema.decodeUnknownEffect(TokenFixture)(yield* wait(delivered.json()));
       expect(
         (yield* wait(
-          mcpFixture({ send: fixture.send, bearer: winner.access_token, method: "tools/list" })
+          mcpFixture({
+            retryKey: Option.none(),
+            send: fixture.send,
+            bearer: winner.access_token,
+            method: "tools/list",
+          })
         )).status
       ).toBe(401);
       expect(
@@ -239,7 +262,12 @@ it.each(["write", "admin"])(
         ).toBe(400);
         expect(
           (yield* wait(
-            mcpFixture({ send: fixture.send, bearer: winner.access_token, method: "tools/list" })
+            mcpFixture({
+              retryKey: Option.none(),
+              send: fixture.send,
+              bearer: winner.access_token,
+              method: "tools/list",
+            })
           )).status
         ).toBe(401);
         expect(
@@ -354,7 +382,12 @@ it("allows one concurrent refresh winner but the recognized loser revokes its en
       fixture.restartCoordinators();
       expect(
         (yield* wait(
-          mcpFixture({ send: fixture.send, bearer: winner.access_token, method: "tools/list" })
+          mcpFixture({
+            retryKey: Option.none(),
+            send: fixture.send,
+            bearer: winner.access_token,
+            method: "tools/list",
+          })
         )).status
       ).toBe(401);
       expect(
@@ -572,6 +605,7 @@ it("refuses exact OAuth credential expiry under a supplied Clock without canonic
       const liveClock = yield* Clock.Clock;
       const clock = clockAt({ live: liveClock, current, read: () => current });
       const response = yield* executeOAuthCanonicalWork({
+        retryKey: Option.none(),
         confirmation: Option.none(),
         bucket: Option.none(),
         inference: Option.none(),
@@ -631,6 +665,7 @@ it("fences later Promise-owned query units at the supplied Clock deadline while 
         sleep: (duration) => live.sleep(duration),
       };
       const running = yield* executeOAuthCanonicalWork({
+        retryKey: Option.none(),
         confirmation: Option.none(),
         bucket: Option.none(),
         inference: Option.none(),
@@ -714,7 +749,12 @@ it("rejects unknown, wrong-purpose, wrong client/resource and escalated refresh 
       }
       expect(
         (yield* wait(
-          mcpFixture({ send: fixture.send, bearer: original.access_token, method: "tools/list" })
+          mcpFixture({
+            retryKey: Option.none(),
+            send: fixture.send,
+            bearer: original.access_token,
+            method: "tools/list",
+          })
         )).status
       ).toBe(200);
       expect(
@@ -849,7 +889,12 @@ it("rolls back replay revocation if its required Consent evidence cannot be appe
       ).toBeNull();
       expect(
         (yield* wait(
-          mcpFixture({ send: fixture.send, bearer: winner.access_token, method: "tools/list" })
+          mcpFixture({
+            retryKey: Option.none(),
+            send: fixture.send,
+            bearer: winner.access_token,
+            method: "tools/list",
+          })
         )).status
       ).toBe(200);
       yield* wait(fixture.db.prepare("DROP TRIGGER skip_replay_evidence").run());
@@ -860,7 +905,12 @@ it("rolls back replay revocation if its required Consent evidence cannot be appe
       ).toBe(400);
       expect(
         (yield* wait(
-          mcpFixture({ send: fixture.send, bearer: winner.access_token, method: "tools/list" })
+          mcpFixture({
+            retryKey: Option.none(),
+            send: fixture.send,
+            bearer: winner.access_token,
+            method: "tools/list",
+          })
         )).status
       ).toBe(401);
       yield* assertReleased(fixture.db);
@@ -935,7 +985,12 @@ it("clips both new credentials to the immutable grant and rejects at its exact e
       ).toBe(400);
       expect(
         (yield* wait(
-          mcpFixture({ send: fixture.send, bearer: winner.access_token, method: "tools/list" })
+          mcpFixture({
+            retryKey: Option.none(),
+            send: fixture.send,
+            bearer: winner.access_token,
+            method: "tools/list",
+          })
         )).status
       ).toBe(401);
       expect(
@@ -1009,7 +1064,12 @@ it("retains narrowed credential scopes across reconnect and never escalates back
       );
       expect(narrowed.scope).toBe("write");
       const listed = yield* wait(
-        mcpFixture({ send: fixture.send, bearer: narrowed.access_token, method: "tools/list" })
+        mcpFixture({
+          retryKey: Option.none(),
+          send: fixture.send,
+          bearer: narrowed.access_token,
+          method: "tools/list",
+        })
       );
       const narrowedTools = yield* Schema.decodeUnknownEffect(ListedTools)(
         yield* wait(listed.json())

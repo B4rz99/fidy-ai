@@ -358,7 +358,7 @@ export const assertReleased = (db: D1Database): Effect.Effect<void, TestFailure>
     ).toBe(0);
   });
 
-type FixtureHeaders = Readonly<{ origin: string; cookie: string; "content-type": string }>;
+export type FixtureHeaders = Readonly<{ origin: string; cookie: string; "content-type": string }>;
 
 export const reviewedFixture = (
   {
@@ -462,7 +462,7 @@ export const exchangeFixture = (
 
 export const mcpFixture = (
   input: Readonly<
-    { send: Harness["send"]; bearer: string } & (
+    { send: Harness["send"]; bearer: string; retryKey: Option.Option<Schema.Json> } & (
       | { method: "tools/list" }
       | { method: "tools/call"; name: string; args: Schema.Json }
     )
@@ -487,6 +487,10 @@ export const mcpFixture = (
         _meta: {
           "io.modelcontextprotocol/protocolVersion": "2026-07-28",
           "io.modelcontextprotocol/clientCapabilities": {},
+          ...Option.match(input.retryKey, {
+            onNone: () => ({}),
+            onSome: (retryKey) => ({ "co.fidy/retryKey": retryKey }),
+          }),
         },
       },
     }),
@@ -552,6 +556,7 @@ export const pendingBudgetDeletion = (
     const bearer = token.access_token;
     const created = yield* wait(
       mcpFixture({
+        retryKey: Option.none(),
         ...fixture,
         bearer,
         method: "tools/call",
@@ -725,3 +730,66 @@ export const ListedTools = Schema.Struct({
 });
 
 afterAll(() => databases.dispose());
+
+export const nativePeer = ({
+  fixture,
+  userIndex,
+}: Readonly<{
+  fixture: Pick<NativeFixture, "send" | "db">;
+  userIndex: 1 | 2;
+}>): Effect.Effect<
+  Readonly<{ bearer: string; connectionId: string }>,
+  TestFailure | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    const query = yield* authorizationQuery(fixture.send);
+    query.set("scope", "read write");
+    const started = yield* wait(fixture.send(`/oauth/authorize?${query}`));
+    const requestId =
+      new URL(started.headers.get("location") ?? "").pathname.split("/").at(-1) ?? "";
+    const cookie = yield* sessionForUser({ db: fixture.db, index: userIndex + 7, userIndex });
+    yield* wait(
+      fixture.db
+        .prepare(
+          "INSERT OR IGNORE INTO onboarding_consent_records VALUES (?, ?, '{}', 'disclosure', 'decision', 1, 1)"
+        )
+        .bind(`native-peer-${userIndex}`, `${userIndex}0000000-0000-4000-8000-000000000001`)
+        .run()
+    );
+    const headers = {
+      origin: "https://app.fidyapp.com",
+      cookie,
+      "content-type": "application/json",
+    };
+    const reviewed = yield* wait(
+      fixture.send(`/web/oauth/review?requestId=${requestId}`, { headers })
+    );
+    const disclosure = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ reviewedAt: Schema.DateTimeUtcFromString })
+    )(yield* wait(reviewed.json()));
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
+      requestId,
+      scopes: ["read", "write"],
+      lifetimeDays: 7,
+      reviewedAt: DateTime.formatIso(disclosure.reviewedAt),
+      expiresAt: DateTime.formatIso(DateTime.add(disclosure.reviewedAt, { days: 7 })),
+    });
+    const connected = yield* wait(
+      fixture.send("/web/oauth/connect", { method: "POST", headers, body })
+    );
+    const approved = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ connectionId: Schema.String, callback: Schema.String })
+    )(yield* wait(connected.json()));
+    const tokenBody = new URLSearchParams({
+      grant_type: "authorization_code",
+      client_id: query.get("client_id") ?? "",
+      code: new URL(approved.callback).searchParams.get("code") ?? "",
+      code_verifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+      redirect_uri: query.get("redirect_uri") ?? "",
+      resource: "https://api.fidyapp.com/mcp",
+    });
+    const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
+      yield* wait((yield* wait(exchangeFixture({ send: fixture.send, body: tokenBody }))).json())
+    );
+    return { bearer: token.access_token, connectionId: approved.connectionId };
+  });

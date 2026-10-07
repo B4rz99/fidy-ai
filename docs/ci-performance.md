@@ -15,8 +15,10 @@ OAuth ingress accounted for 181 cases and 430s, while its missing scheduling wei
 one second. Those figures diagnose the regression; they are not a controlled comparison with
 this change's revision.
 
-The OAuth composition now has seven independently scheduled suites: bootstrap/approval,
+The OAuth composition has seven independently scheduled suites: bootstrap/approval,
 confirmation, canonical execution, management, refresh, discovery, and native residency.
+Rebasing onto #989 preserves its nine new shared-allowance cases in an eighth suite, rather
+than restoring the monolith. Retry metadata and direct-call admission inputs retain the new behavior.
 The initial split preserved all 181 historical case titles and all 103 original test/describe
 AST nodes after normalizing only the extracted fixtures' named arguments/defaults. The subsequent
 standards cleanup below removes one redundant inventory case. The fixtures

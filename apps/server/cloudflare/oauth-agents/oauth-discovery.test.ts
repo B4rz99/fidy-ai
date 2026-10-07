@@ -50,6 +50,7 @@ it("refuses deliberately missing canonical query adapters without inventing a bi
       for (const name of uninstalledQueries) {
         const response = yield* wait(
           mcpFixture({
+            retryKey: Option.none(),
             send: fixture.send,
             bearer: token.access_token,
             method: "tools/call",
@@ -184,7 +185,12 @@ it("derives exact private canonical discovery for every non-empty capability com
         const listed = yield* Schema.decodeUnknownEffect(ListedTools)(
           yield* wait(
             (yield* wait(
-              mcpFixture({ send: fixture.send, bearer: token.access_token, method: "tools/list" })
+              mcpFixture({
+                retryKey: Option.none(),
+                send: fixture.send,
+                bearer: token.access_token,
+                method: "tools/list",
+              })
             )).json()
           )
         );
@@ -324,6 +330,7 @@ it("executes every installed declaration-derived query through Core for two User
           expect(args, operation.id).toBeDefined();
           const response = yield* wait(
             mcpFixture({
+              retryKey: Option.none(),
               send: fixture.send,
               bearer: token.access_token,
               method: "tools/call",
@@ -422,6 +429,7 @@ it("validates malformed structured inputs for every eligible query without echoi
           yield* wait(
             (yield* wait(
               mcpFixture({
+                retryKey: Option.none(),
                 send: fixture.send,
                 bearer: token.access_token,
                 method: "tools/call",
@@ -496,6 +504,7 @@ it("retains complete query data while removing scope-inaccessible continuations 
         yield* wait(
           (yield* wait(
             mcpFixture({
+              retryKey: Option.none(),
               send: fixture.send,
               bearer: token.access_token,
               method: "tools/call",
@@ -593,6 +602,7 @@ it.each([
           yield* wait(
             (yield* wait(
               mcpFixture({
+                retryKey: Option.none(),
                 send: fixture.send,
                 bearer: token.access_token,
                 method: "tools/call",
@@ -647,6 +657,7 @@ it("returns a schema-valid unavailable failure from a genuinely unavailable nati
       const raw = yield* wait(
         (yield* wait(
           mcpFixture({
+            retryKey: Option.none(),
             send: fixture.send,
             bearer: token.access_token,
             method: "tools/call",
@@ -682,6 +693,7 @@ it("returns the canonical uninitialized Dashboard outcome without creating domai
       )(yield* wait((yield* wait(exchangeFixture(fixture))).json()));
       const response = yield* wait(
         mcpFixture({
+          retryKey: Option.none(),
           send: fixture.send,
           bearer: token.access_token,
           method: "tools/call",
@@ -717,7 +729,12 @@ it("keeps read and account-security tools uncallable by a write-only connection"
         Schema.Struct({ access_token: Schema.String })
       )(yield* wait(exchanged.json()));
       const listed = yield* wait(
-        mcpFixture({ send: fixture.send, bearer: token.access_token, method: "tools/list" })
+        mcpFixture({
+          retryKey: Option.none(),
+          send: fixture.send,
+          bearer: token.access_token,
+          method: "tools/list",
+        })
       );
       const tools = yield* Schema.decodeUnknownEffect(ListedTools)(yield* wait(listed.json()));
       expect(tools.result.tools.map(({ name }) => name)).toContain("operations.executeAtomicBatch");
@@ -728,6 +745,7 @@ it("keeps read and account-security tools uncallable by a write-only connection"
       ]) {
         const refused = yield* wait(
           mcpFixture({
+            retryKey: Option.none(),
             send: fixture.send,
             bearer: token.access_token,
             method: "tools/call",
@@ -757,6 +775,7 @@ it("blocks wrong-purpose credentials and live explicit Consent revocation after 
       )(yield* wait((yield* wait(exchangeFixture(fixture))).json()));
       const request = (): Promise<Response> =>
         mcpFixture({
+          retryKey: Option.none(),
           send: fixture.send,
           bearer: token.access_token,
           method: "tools/call",
@@ -765,12 +784,22 @@ it("blocks wrong-purpose credentials and live explicit Consent revocation after 
         });
       expect(
         (yield* wait(
-          mcpFixture({ send: fixture.send, bearer: token.access_token, method: "tools/list" })
+          mcpFixture({
+            retryKey: Option.none(),
+            send: fixture.send,
+            bearer: token.access_token,
+            method: "tools/list",
+          })
         )).status
       ).toBe(200);
       expect(
         (yield* wait(
-          mcpFixture({ send: fixture.send, bearer: token.refresh_token, method: "tools/list" })
+          mcpFixture({
+            retryKey: Option.none(),
+            send: fixture.send,
+            bearer: token.refresh_token,
+            method: "tools/list",
+          })
         )).status
       ).toBe(401);
       yield* revokeFixtureConsent(fixture.db);
@@ -854,6 +883,7 @@ it("rejects cross-User and client coordinator substitutions and returns validate
       ).toBe(0);
       const invalid = yield* wait(
         mcpFixture({
+          retryKey: Option.none(),
           send: fixture.send,
           bearer: token.access_token,
           method: "tools/call",

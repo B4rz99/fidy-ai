@@ -31,6 +31,7 @@ it("lists distinct owned agent connections with canonical activity and no creden
       for (let call = 0; call < 5; call++) {
         yield* wait(
           mcpFixture({
+            retryKey: Option.none(),
             send: fixture.send,
             bearer: token.access_token,
             method: "tools/call",
@@ -88,7 +89,12 @@ it("revokes one agent atomically across restart without revoking another connect
         yield* wait((yield* wait(exchangeFixture({ ...fixture, body: second.body }))).json())
       );
       const discovered = yield* wait(
-        mcpFixture({ send: fixture.send, bearer: original.access_token, method: "tools/list" })
+        mcpFixture({
+          retryKey: Option.none(),
+          send: fixture.send,
+          bearer: original.access_token,
+          method: "tools/list",
+        })
       );
       expect(yield* wait(discovered.text())).toContain("categories.listCategories");
       const revoked = yield* wait(
@@ -106,6 +112,7 @@ it("revokes one agent atomically across restart without revoking another connect
       expect(
         (yield* wait(
           mcpFixture({
+            retryKey: Option.none(),
             send: fixture.send,
             bearer: original.access_token,
             method: "tools/call",
@@ -122,6 +129,7 @@ it("revokes one agent atomically across restart without revoking another connect
       expect(
         (yield* wait(
           mcpFixture({
+            retryKey: Option.none(),
             send: fixture.send,
             bearer: other.access_token,
             method: "tools/call",
@@ -213,6 +221,7 @@ it.each(["wrong-user", "forged-session", "stale-session", "csrf", "oauth-bearer"
         expect(
           (yield* wait(
             mcpFixture({
+              retryKey: Option.none(),
               send: fixture.send,
               bearer: token.access_token,
               method: "tools/call",
@@ -261,6 +270,7 @@ it("revokes all owned agents while a refresh is queued, leaving another User and
       );
       yield* wait(
         mcpFixture({
+          retryKey: Option.none(),
           send: fixture.send,
           bearer: original.access_token,
           method: "tools/call",
@@ -290,6 +300,7 @@ it("revokes all owned agents while a refresh is queued, leaving another User and
         expect(
           (yield* wait(
             mcpFixture({
+              retryKey: Option.none(),
               send: fixture.send,
               bearer: token.access_token,
               method: "tools/call",
@@ -307,6 +318,7 @@ it("revokes all owned agents while a refresh is queued, leaving another User and
       expect(
         (yield* wait(
           mcpFixture({
+            retryKey: Option.none(),
             send: fixture.send,
             bearer: otherToken.access_token,
             method: "tools/call",
@@ -549,6 +561,7 @@ it("keeps OAuth revocation, PAT-wide revocation, Hosted Agent Sessions and brows
       expect(
         (yield* wait(
           mcpFixture({
+            retryKey: Option.none(),
             send: fixture.send,
             bearer: token.access_token,
             method: "tools/call",
@@ -565,6 +578,7 @@ it("keeps OAuth revocation, PAT-wide revocation, Hosted Agent Sessions and brows
       expect(
         (yield* wait(
           mcpFixture({
+            retryKey: Option.none(),
             send: fixture.send,
             bearer: token.access_token,
             method: "tools/call",

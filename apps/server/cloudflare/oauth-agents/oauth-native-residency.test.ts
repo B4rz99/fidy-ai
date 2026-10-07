@@ -1321,6 +1321,7 @@ describe("native2025 residency integration", () => {
                   )
                 );
                 return yield* executeOAuthCanonicalWork({
+                  retryKey: Option.none(),
                   confirmation: Option.none(),
                   db: harness.db,
                   bucket: Option.none(),

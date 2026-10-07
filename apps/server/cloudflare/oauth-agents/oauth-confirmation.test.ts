@@ -1,5 +1,5 @@
 import { categoryIds } from "../../src/core/categories/contract";
-import { Clock, DateTime, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, Schema } from "effect";
 import { nativeHostBridgeFile, runNativeHostFixture } from "./native-host.test-fixture";
 import { afterEach, expect, it, vi } from "vitest";
 import {
@@ -7,13 +7,12 @@ import {
   type TestFailure,
   TokenFixture,
   approvedFixture,
-  authorizationQuery,
   exchangeFixture,
   mcpFixture,
   nativeConfirmationCall,
+  nativePeer,
   pendingBudgetDeletion,
   revokeFixtureConsent,
-  sessionForUser,
   transactionArguments,
   wait,
 } from "./oauth-ingress.test-fixture";
@@ -34,6 +33,7 @@ it("reviews an exact Budget deletion natively and consumes client acceptance wit
       const bearer = token.access_token;
       const created = yield* wait(
         mcpFixture({
+          retryKey: Option.none(),
           ...fixture,
           bearer,
           method: "tools/call",
@@ -669,73 +669,13 @@ it.each(["single", "batch"] as const)(
     )
 );
 
-const nativePeer = (
-  fixture: NativeFixture,
-  userIndex: 1 | 2
-): Effect.Effect<
-  Readonly<{ bearer: string; connectionId: string }>,
-  TestFailure | Schema.SchemaError
-> =>
-  Effect.gen(function* () {
-    const query = yield* authorizationQuery(fixture.send);
-    query.set("scope", "read write");
-    const started = yield* wait(fixture.send(`/oauth/authorize?${query}`));
-    const requestId =
-      new URL(started.headers.get("location") ?? "").pathname.split("/").at(-1) ?? "";
-    const cookie = yield* sessionForUser({ db: fixture.db, index: userIndex + 7, userIndex });
-    yield* wait(
-      fixture.db
-        .prepare(
-          "INSERT OR IGNORE INTO onboarding_consent_records VALUES (?, ?, '{}', 'disclosure', 'decision', 1, 1)"
-        )
-        .bind(`native-peer-${userIndex}`, `${userIndex}0000000-0000-4000-8000-000000000001`)
-        .run()
-    );
-    const headers = {
-      origin: "https://app.fidyapp.com",
-      cookie,
-      "content-type": "application/json",
-    };
-    const reviewed = yield* wait(
-      fixture.send(`/web/oauth/review?requestId=${requestId}`, { headers })
-    );
-    const disclosure = yield* Schema.decodeUnknownEffect(
-      Schema.Struct({ reviewedAt: Schema.DateTimeUtcFromString })
-    )(yield* wait(reviewed.json()));
-    const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Json))({
-      requestId,
-      scopes: ["read", "write"],
-      lifetimeDays: 7,
-      reviewedAt: DateTime.formatIso(disclosure.reviewedAt),
-      expiresAt: DateTime.formatIso(DateTime.add(disclosure.reviewedAt, { days: 7 })),
-    });
-    const connected = yield* wait(
-      fixture.send("/web/oauth/connect", { method: "POST", headers, body })
-    );
-    const approved = yield* Schema.decodeUnknownEffect(
-      Schema.Struct({ connectionId: Schema.String, callback: Schema.String })
-    )(yield* wait(connected.json()));
-    const tokenBody = new URLSearchParams({
-      grant_type: "authorization_code",
-      client_id: query.get("client_id") ?? "",
-      code: new URL(approved.callback).searchParams.get("code") ?? "",
-      code_verifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
-      redirect_uri: query.get("redirect_uri") ?? "",
-      resource: "https://api.fidyapp.com/mcp",
-    });
-    const token = yield* Schema.decodeUnknownEffect(TokenFixture)(
-      yield* wait((yield* wait(exchangeFixture({ send: fixture.send, body: tokenBody }))).json())
-    );
-    return { bearer: token.access_token, connectionId: approved.connectionId };
-  });
-
 it.each([1, 2] as const)(
   "does not lend native intent authority to another connection of User %s",
   (userIndex) =>
     Effect.runPromise(
       Effect.gen(function* () {
         const fixture = yield* pendingBudgetDeletion();
-        const peer = yield* nativePeer(fixture, userIndex);
+        const peer = yield* nativePeer({ fixture, userIndex });
         expect(peer.connectionId).not.toBe(fixture.connectionId);
         const refused = yield* wait(
           nativeConfirmationCall({
@@ -822,6 +762,7 @@ const ownerJourneyArgs = (
   Effect.gen(function* () {
     const ordinary = (operation: string, args: Schema.Json): Promise<Response> =>
       mcpFixture({
+        retryKey: Option.none(),
         send: fixture.send,
         bearer: fixture.bearer,
         method: "tools/call",

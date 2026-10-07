@@ -18,7 +18,6 @@ import {
   readOnboardingEmailStatus as readStatus,
   startOnboardingEmailEnrollment as startEnrollment,
 } from "./internal/ingress-enrollment";
-import { verifiedEmailQuery as mailboxQuery } from "./internal/ancillary-projections";
 import {
   prepareEmailPendingWorkObservation as pendingWork,
   prepareEmailRejectedWorkObservation as rejectedWork,
@@ -71,8 +70,10 @@ export const readOnboardingEmailStatus = (
  * Possession of a UserId grants no authority: compose the live credential and purpose guards in
  * the same statement before releasing the mailbox. This query is not a reusable authorization.
  */
-export const verifiedEmailQuery = (input: VerifiedEmailQueryInput): OwnedStatement =>
-  mailboxQuery(input);
+export const verifiedEmailQuery = ({ userId }: VerifiedEmailQueryInput): OwnedStatement => ({
+  sql: "SELECT user_id AS userId, email_address AS emailAddress FROM verified_email_credentials WHERE user_id = ?",
+  params: [userId],
+});
 /** Observe at most eight pending work identities and deadlines; no User, mailbox or proof is released. */
 export const prepareEmailPendingWorkObservation = (
   input: EmailPendingWorkObservationInput

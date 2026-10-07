@@ -1,4 +1,4 @@
-import { claimCardRenewal } from "./internal/card-renewal";
+import { claimSubscriptionRenewal } from "./internal/subscription-renewal";
 import {
   Price,
   type RefundAttempt,
@@ -6,11 +6,11 @@ import {
 } from "../../src/core/subscription/contract";
 import {
   BillingCollectionFailure,
-  CardRenewalAdmission,
   type RefundReadCall,
   type RefundStartCall,
   RefundSupportAdmission,
   type SubscriptionQueryInput,
+  SubscriptionRenewalAdmission,
   refundSupportBasePath,
   refundSupportReadPath,
 } from "./contract";
@@ -79,7 +79,7 @@ export const prepareBillingWorkObservation = (
 ): D1PreparedStatement => pendingBillingWork(input);
 
 /** Admit an automatic renewal under explicit same-User coordination and live billing authority. */
-export const executeCardRenewalAdmission = (
+export const executeSubscriptionRenewalAdmission = (
   input: Readonly<{
     db: D1Database;
     userId: string;
@@ -88,11 +88,11 @@ export const executeCardRenewalAdmission = (
     now: number;
   }>
 ): Effect.Effect<Response> => {
-  const work = Schema.decodeUnknownOption(CardRenewalAdmission)(input.candidate);
+  const work = Schema.decodeUnknownOption(SubscriptionRenewalAdmission)(input.candidate);
   if (Option.isNone(work) || work.value.userId !== input.userId) {
     return Effect.succeed(new Response(null, { status: 403 }));
   }
-  return claimCardRenewal({ ...input, ...work.value }).pipe(
+  return claimSubscriptionRenewal({ ...input, ...work.value }).pipe(
     Effect.as(new Response(null, { status: 202 })),
     Effect.orElseSucceed(() => new Response(null, { status: 503 }))
   );

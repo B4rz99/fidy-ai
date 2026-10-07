@@ -98,6 +98,12 @@ it("upgrades retained OAuth Audit evidence into the shared budget and atomically
           source: new URL("../migrations/0037_oauth_shared_audit_budget.sql", import.meta.url),
         })
       );
+      yield* wait(
+        applyTestMigration({
+          db,
+          source: new URL("../migrations/0062_pat_activity.sql", import.meta.url),
+        })
+      );
       expect(yield* wait(dailyAuditCount({ db, userId: subject.userId, current }))).toBe(1);
       // Native fixture rows establish the threshold, including refused work and the excluded envelope.
       yield* wait(

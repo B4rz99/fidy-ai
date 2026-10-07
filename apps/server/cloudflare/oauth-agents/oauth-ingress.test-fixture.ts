@@ -85,7 +85,11 @@ export const setup = (auditMigration = true): Effect.Effect<Harness, TestFailure
       new Bun.Glob("*.sql").scanSync(new URL("../migrations/", import.meta.url).pathname)
     )
       .sort((left, right) => left.localeCompare(right))
-      .filter((name) => auditMigration || name !== "0037_oauth_shared_audit_budget.sql")
+      .filter(
+        (name) =>
+          auditMigration ||
+          (name !== "0037_oauth_shared_audit_budget.sql" && name !== "0062_pat_activity.sql")
+      )
       .map((name) => new URL(`../migrations/${name}`, import.meta.url));
     if (auditMigration) yield* wait(installTestSchema({ db, sources }));
     else for (const source of sources) yield* wait(applyTestMigration({ db, source }));

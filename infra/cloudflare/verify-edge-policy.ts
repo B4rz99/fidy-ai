@@ -8,7 +8,8 @@ import { edgeSecurityPolicy } from "./edge-security";
 // and fail-closed Core configuration; public routing and edge policy are unchanged by #27.
 // Includes #28's shared ProactivityDeliveryWorkflow class; its WeeklyDeliveryWorkflow resource
 // identity, Queue topology, public routing, and edge rules remain unchanged.
-const expectedEdgePolicyDigest = "a3f5f5ff95067e96b5dd308f7d32de0432b3e9fe73e4440448a9bc7537ac79bd";
+// Includes #29's authenticated recurring report route in the catalog-derived rate-limit prefixes.
+const expectedEdgePolicyDigest = "7bcdd52d470e83b14bc3a665264007a1834d3008ef82cd74dc87727ebb62d61f";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),

@@ -65,7 +65,7 @@ const nativeCallback = (value: string): boolean => {
       url.password === "" &&
       url.hash === "" &&
       (url.protocol === "https:" ||
-        (url.protocol === "http:" && ["127.0.0.1", "[::1]"].includes(url.hostname)))
+        (url.protocol === "http:" && ["127.0.0.1", "[::1]", "localhost"].includes(url.hostname)))
     );
   } catch {
     return false;
@@ -91,6 +91,13 @@ export const OAuthRegistration = Schema.Struct({
   response_types: Schema.optionalKey(Schema.Tuple([Schema.Literal("code")])),
   token_endpoint_auth_method: Schema.optionalKey(Schema.Literal("none")),
   application_type: Schema.optionalKey(Schema.Literal("native")),
+  // Registration metadata is a bounded hint; only the later request and User review authorize scopes.
+  scope: Schema.optionalKey(
+    Schema.NonEmptyString.check(
+      Schema.isMaxLength(maximumScopeLength),
+      Schema.makeFilter((value) => Schema.is(PATScopes)(value.split(" ")))
+    )
+  ),
 });
 export type OAuthRegistration = typeof OAuthRegistration.Type;
 export const OAuthAuthorization = Schema.Struct({

@@ -928,18 +928,21 @@ it("rejects hostile registration metadata and actual oversized streamed bytes wi
   Effect.runPromise(
     Effect.gen(function* () {
       const { send, db } = yield* setup();
-      for (const body of [
+      for (const [index, body] of [
         '{"client_name":"Agente","redirect_uris":["https://example.com/cb"],"client_uri":"http://169.254.169.254/metadata"}',
         '{"client_name":"Agente","redirect_uris":["https://user:secret@example.com/cb"]}',
         '{"client_name":"Agente","redirect_uris":["http://192.168.1.1/cb"]}',
-        '{"client_name":"Agente","redirect_uris":["http://localhost/cb"]}',
+        '{"client_name":"Agente","redirect_uris":["http://localhost.evil.example/cb"]}',
         '{"client_name":"Agente","redirect_uris":["https://example.com/cb","https://example.com/cb"]}',
         '{"client_name":"Agente","redirect_uris":["https://example.com/cb"],"grant_types":["authorization_code","authorization_code"]}',
         '{"client_name":"Agente","redirect_uris":["https://example.com/cb#fragment"]}',
         '{"client_name":"Agente","redirect_uris":["https://example.com/cb"],"token_endpoint_auth_method":"client_secret_basic"}',
-      ]) {
+        '{"client_name":"Agente","redirect_uris":["https://example.com/cb"],"scope":"admin"}',
+        '{"client_name":"Agente","redirect_uris":["https://example.com/cb"],"scope":"read read"}',
+        '{"client_name":"Agente","redirect_uris":["https://example.com/cb"],"scope":""}',
+      ].entries()) {
         const rejected = yield* wait(
-          send("/oauth/register", {
+          sendFrom({ send, index })("/oauth/register", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body,
@@ -1086,6 +1089,82 @@ it("discovers the fixed MCP resource and issuer through ingress/Core without pur
         'Bearer resource_metadata="https://api.fidyapp.com/.well-known/oauth-protected-resource/mcp", scope="read"'
       );
       expect(resource.headers.get("cache-control")).toBe("no-store");
+    })
+  ));
+
+it("accepts Claude's exact localhost callback with only native port variation", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { send } = yield* setup();
+      const registered = yield* wait(
+        send("/oauth/register", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: '{"client_name":"Claude Code (fidy)","redirect_uris":["http://localhost:63740/callback"],"grant_types":["authorization_code","refresh_token"],"response_types":["code"],"token_endpoint_auth_method":"none","application_type":"native","scope":"read"}',
+        })
+      );
+      expect(registered.status).toBe(201);
+      const client = yield* Schema.decodeUnknownEffect(Schema.Struct({ client_id: Schema.String }))(
+        yield* wait(registered.json())
+      );
+      const query = new URLSearchParams({
+        client_id: client.client_id,
+        redirect_uri: "http://localhost:63741/callback",
+        response_type: "code",
+        resource: "https://api.fidyapp.com/mcp",
+        code_challenge: "A".repeat(43),
+        code_challenge_method: "S256",
+      });
+      expect((yield* wait(send(`/oauth/authorize?${query}`))).status).toBe(302);
+      for (const redirect of [
+        "http://127.0.0.1:63741/callback",
+        "http://localhost.evil.example:63741/callback",
+        "http://localhost:63741/other",
+        "http://localhost:63741/callback?extra=1",
+      ]) {
+        query.set("redirect_uri", redirect);
+        expect((yield* wait(send(`/oauth/authorize?${query}`))).status).toBe(400);
+      }
+    })
+  ));
+
+it("accepts Codex native registration scope hints without widening the authorization review", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const { send, db } = yield* setup();
+      const registered = yield* wait(
+        send("/oauth/register", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: '{"client_name":"Codex","redirect_uris":["http://127.0.0.1:50786/callback"],"grant_types":["authorization_code","refresh_token"],"token_endpoint_auth_method":"none","response_types":["code"],"scope":"read write dashboard","application_type":"native"}',
+        })
+      );
+      expect(registered.status).toBe(201);
+      const client = yield* Schema.decodeUnknownEffect(Schema.Struct({ client_id: Schema.String }))(
+        yield* wait(registered.json())
+      );
+      expect((yield* wait(send("/mcp"))).status).toBe(401);
+      const query = new URLSearchParams({
+        client_id: client.client_id,
+        redirect_uri: "http://127.0.0.1:50786/callback",
+        response_type: "code",
+        resource: "https://api.fidyapp.com/mcp",
+        code_challenge: "A".repeat(43),
+        code_challenge_method: "S256",
+      });
+      const started = yield* wait(send(`/oauth/authorize?${query}`));
+      expect(started.status).toBe(302);
+      const requestId = new URL(started.headers.get("location") ?? "").pathname.split("/").at(-1);
+      const review = yield* wait(
+        send(`/web/oauth/review?requestId=${requestId}`, {
+          headers: {
+            origin: "https://app.fidyapp.com",
+            cookie: yield* sessionFor({ db, index: 1 }),
+          },
+        })
+      );
+      expect(review.status).toBe(200);
+      expect(yield* wait(review.json())).toMatchObject({ scopes: ["read"] });
     })
   ));
 

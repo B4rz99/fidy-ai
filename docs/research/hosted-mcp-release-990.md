@@ -11,8 +11,10 @@ the [controlled-proof procedure](../operations/hosted-mcp-release.md) records re
 ## Configuration and provenance
 
 Starting/runtime revision: `1e743e2785b84d7cf944d04e533288b737dbef04`. The changes in this ticket
-extend the existing release edge verifier and correct dropped GET headers; they add no domain
-runtime, deployment path, D1 binding, credential authority or launch switch.
+extend the existing release edge verifier, correct dropped GET headers, accept bounded standard
+registration scope hints and the already-adopted exact localhost native callback. The browser
+acceptance fixture now retains coordinator instances across HTTP requests, matching resident MCP
+session ownership. No new domain owner, deployment path, D1 binding or launch switch is added.
 
 Effect **4.0.0**; Bun **1.4.3-canary.1+13a98b0db**; Vitest **5.0.2**;
 Playwright **1.63.0**, macOS arm64. The production build reports canonical contract digest
@@ -43,10 +45,49 @@ and recording time are in [native evidence](hosted-mcp-native-990.evidence.json)
 The historical [#977 report](hosted-mcp-interoperability-977.md) used Claude Code 2.1.288 and Codex
 0.160.0 with Effect 4.0.0, a simulated OAuth server and CIMD. It proved synthetic exchange and two
 refresh/reconnects, not installed Fidy authorization. Current issuer metadata advertises DCR and
-`client_id_metadata_document_supported: false`; arbitrary metadata URLs are refused. Actual-host
-DCR selection/fallback and callback handling against this installed authority remain unproved.
-Do not combine historical simulator login and current injected-grant confirmation into one
-end-to-end support claim.
+`client_id_metadata_document_supported: false`; arbitrary metadata URLs are refused. Actual-host DCR selection and callback handling against the installed authority now pass in the
+separate complete journey below; this does not infer CIMD interoperability.
+
+### Complete local OAuth journeys
+
+Claude Code **2.1.289** and Codex CLI/pinned daemon **0.160.0** used fresh isolated profiles and the
+canonical hosted URL. A process-specific CA and streaming CONNECT proxy routed only that fixed
+issuer to the genuine local public ingress/private Core and disposable Miniflare D1. The browser
+used the built first-party app; the existing loopback operator delivered synthetic WhatsApp sign-in
+approval. No manually injected bearer, hooks, real provider message or paid model inference was
+used. Hosts consumed the actual callback through their supported `--no-browser` flow.
+
+Both selected DCR (201), completed S256 exchange with the exact resource (200), requested
+`read write dashboard`, removed dashboard in first-party review, selected seven days and approved.
+Codex requested scopes through `mcp login --scopes read,write,dashboard`; Claude used the documented
+space-separated `oauth.scopes` string. Claude's default request was separately observed as read-only.
+The exact callback hosts were `localhost` for Claude and `127.0.0.1` for Codex. The real registration
+payloads first failed existing decoding; ingress regressions turned red before the bounded scope
+hint and adopted localhost callback fixes. Scope hints alone still grant no authority.
+
+Each host then listed private tools, queried Categories, created one Budget, executed an atomic batch
+of two Transaction creations and accepted native confirmation to delete its created Budget. All
+four canonical results succeeded. D1's OAuth-attributable canonical Audit contained exactly two
+accepted Budget creations, two accepted Budget deletions, two accepted Category queries and four
+accepted Transaction creations across the two hosts. Canned loopback models chose the exact tools;
+scripted operator keystrokes answered the native form, not independent human-presence evidence.
+
+New host processes refreshed after only their disposable access credentials were expired. Both
+refreshes returned 200 and queries succeeded; the approved grant expiration timestamps remained
+unchanged. Advancing only the disposable authority clock by eight days made each host's MCP call
+return 401 and refresh return 400. Grant rows and canonical Audit remained unchanged; the clock was
+restored. Fresh first-party settings revocation was separately exercised against actual browser-
+approved host connections in the prior isolated fixture: both later MCP and refresh attempts were
+refused (401/400), with no tool execution. No Production rows were rewritten. These faults prove
+expiry behavior, not natural seven-day passage or platform suspension.
+
+Observed subsequent MCP request headers were **2026-07-28** for Claude and **2025-11-25** for Codex.
+Codex's resident session survived notification and tools/list across requests; an added browser
+regression first failed with 404 before retaining fixture coordinators. Optional GET/DELETE probes
+still return 405. Metadata-only outcomes are in [journey evidence](hosted-mcp-journey-990.evidence.json).
+Native cancel/headless cases above remain separate bridge proofs; the complete OAuth journeys cover
+native acceptance. The local proxy had to forward SSE incrementally to deliver native forms; it
+must not buffer an outstanding confirmation response until completion.
 
 ## Executed integration evidence
 
@@ -57,7 +98,7 @@ the default topology and fail with connection refusal. Rerunning with that mode 
 
 | Seam / command                                                                                                                                                                                 | Result                                        | What it proves                                                                                                                                                                                                                                                                                                  |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bun run --cwd apps/server test:cloudflare cloudflare/oauth-agents cloudflare/transactions/oauth-review.test.ts`                                                                               | 222 passed; one opt-in host bridge skipped    | Declaration-derived catalog, canonical owners, scope/User isolation, atomic batches, Consent, PKCE/substitution/replay, absolute expiry, rotation/revocation, confirmation, #35 allowance and retry identity at native ingress/Core/D1 seams.                                                                   |
+| `bun run --cwd apps/server test:cloudflare cloudflare/oauth-agents cloudflare/transactions/oauth-review.test.ts`                                                                               | 224 passed; one opt-in host bridge skipped    | Declaration-derived catalog, canonical owners, scope/User isolation, atomic batches, Consent, PKCE/substitution/replay, absolute expiry, rotation/revocation, confirmation, #35 allowance and retry identity at native ingress/Core/D1 seams.                                                                   |
 | Opt-in host bridge with the pinned host runner                                                                                                                                                 | One bridge test passed; six host cases passed | Actual native host presentation/continuation and once-only D1 mutation/Audit; excludes OAuth login and model inference.                                                                                                                                                                                         |
 | `bun run test:contracts`                                                                                                                                                                       | Four passed                                   | Generated contract/policy artifact freshness.                                                                                                                                                                                                                                                                   |
 | `bun run --cwd apps/web test -- src/features/oauth-connections scripts/production-workflow.test.ts scripts/build-production.test.ts scripts/cloudflare-adapter.test.ts`                        | 42 passed                                     | Spanish permission/duration/management presentation and static artifact/release policies.                                                                                                                                                                                                                       |
@@ -112,19 +153,19 @@ operator evidence; static checks cannot certify them.
 
 ## Remaining gates and acceptance status
 
-| #990 requirement                                                                                                                                                         | Status / missing evidence                                                                                                                                                                                               |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Exact supported hosts complete add URL → existing sign-in → narrowed review/duration → approve → query/mutation/batch → confirmation → refresh/reconnect → expiry/revoke | Partial. Current native confirmation/discovery passes, and assembled browser/protocol suites pass separately. Each exact host's complete journey against installed authority, especially DCR fallback, remains pending. |
-| Spanish setup/troubleshooting                                                                                                                                            | Prepared in the guide, with verified URL and explicit pre-release/host limitations. Publication to users waits for host/enablement gates.                                                                               |
-| Alchemy, ingress/Core, OAuth exposure, Origin/CORS/cache/referrer, secrets/static safety                                                                                 | Local release/artifact gates and live credential-free exposure pass. Expanded zero-traffic candidate probes and restricted live configuration review remain pending.                                                    |
-| Authentication/metadata bounds, streaming, rate/concurrency, interruption/ambiguous delivery, safe telemetry                                                             | Native behavior suites pass. CIMD fetch is unavailable, not unbounded. Effective Cloudflare limits and live telemetry success/failure/interruption proof remain pending.                                                |
-| Assembled behavior/security and release checks                                                                                                                           | Focused suites and actual production artifact pass. Full CI and expanded candidate-pair release are separate gates.                                                                                                     |
-| Safe synthetic Production proof                                                                                                                                          | Procedure prepared; no operator-authorized proving window or synthetic identity is recorded in this task. No remote grants/mutations were attempted.                                                                    |
-| #35 and explicit real-user enablement approval                                                                                                                           | #35 and #989 are closed; shared OAuth tests pass. Operator approval is absent. Enablement remains paused, and readiness is incomplete while the proofs above remain pending.                                            |
+| #990 requirement                                                                                                                                                         | Status / missing evidence                                                                                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Exact supported hosts complete add URL → existing sign-in → narrowed review/duration → approve → query/mutation/batch → confirmation → refresh/reconnect → expiry/revoke | Pass locally for both exact hosts against installed authority, including DCR, actual browser approval, operations/confirmation, refresh, controlled absolute expiry and fresh first-party revocation. Synthetic channel/model/clock and loopback transport limitations above remain; Production is unproved.              |
+| Spanish setup/troubleshooting                                                                                                                                            | Prepared in the guide, with verified URL and explicit pre-release/host limitations. Publication to users waits for host/enablement gates.                                                                                                                                                                                 |
+| Alchemy, ingress/Core, OAuth exposure, Origin/CORS/cache/referrer, secrets/static safety                                                                                 | Local release/artifact gates and live credential-free exposure pass. Expanded zero-traffic candidate probes and restricted live configuration review remain pending.                                                                                                                                                      |
+| Authentication/metadata bounds, streaming, rate/concurrency, interruption/ambiguous delivery, safe telemetry                                                             | Native behavior suites pass. CIMD fetch is unavailable, not unbounded. Effective Cloudflare limits and live telemetry success/failure/interruption proof remain pending.                                                                                                                                                  |
+| Assembled behavior/security and release checks                                                                                                                           | Focused suites and actual production artifact pass. Full CI and expanded candidate-pair release are separate gates.                                                                                                                                                                                                       |
+| Safe synthetic Production proof                                                                                                                                          | Concrete scope prepared in the controlled-proof procedure. Existing Cloudflare OAuth access was verified and a restricted aggregate query returned zero Production Users on 2026-10-07. The operator must select a controlled test contact and authorize its onboarding/proof; no remote grants/mutations were attempted. |
+| #35 and explicit real-user enablement approval                                                                                                                           | #35 and #989 are closed; shared OAuth tests pass. Operator approval is absent. Enablement remains paused, and readiness is incomplete while the proofs above remain pending.                                                                                                                                              |
 
 The [Production launch runbook](../operations/production-launch.md) explicitly requires establishing
 real-data presence, enforceable admission boundaries and operator approval before synthetic work.
 Closure of #725/#920 and a green release do not supply these facts. No proof of a closed live ingress
 or empty baseline is inferred. No new admission switch is silently introduced by this ticket.
-Keep #990 open until the missing host and applicable Production evidence is recorded; do not
+Keep #990 open until applicable Production evidence is recorded; do not
 request or imply launch approval from passing local checks.

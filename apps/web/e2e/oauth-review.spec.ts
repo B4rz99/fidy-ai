@@ -12,6 +12,7 @@ const created = 201;
 const found = 302;
 const noContent = 204;
 const ok = 200;
+const accepted = 202;
 const invalid = 400;
 const unauthorized = 401;
 const forbidden = 403;
@@ -180,9 +181,59 @@ test("built browser approves an exact connection and exchanges its callback code
       expect(
         (yield* Effect.tryPromise(() => request.post(`${api}/oauth/token`, { form }))).status()
       ).toBe(invalid);
+      yield* assertResidentHostSession(request, token.access_token);
       yield* inspectAndRevoke({ page, request, query, token });
     })
   ));
+
+const assertResidentHostSession = (
+  request: APIRequestContext,
+  bearer: string
+): Effect.Effect<void, TestFailure> =>
+  Effect.gen(function* () {
+    const headers = {
+      authorization: `Bearer ${bearer}`,
+      accept: "application/json, text/event-stream",
+    };
+    const initialized = yield* Effect.tryPromise(() =>
+      request.post(`${api}/mcp`, {
+        headers,
+        data: {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: {
+            protocolVersion: "2025-11-25",
+            capabilities: {},
+            clientInfo: { name: "browser-resident-host", version: "1" },
+          },
+        },
+      })
+    );
+    expect(initialized.status()).toBe(ok);
+    const session = initialized.headers()["mcp-session-id"];
+    expect(session).toBeTruthy();
+    const residentHeaders = {
+      ...headers,
+      "mcp-session-id": session ?? "",
+      "mcp-protocol-version": "2025-11-25",
+    };
+    const notified = yield* Effect.tryPromise(() =>
+      request.post(`${api}/mcp`, {
+        headers: residentHeaders,
+        data: { jsonrpc: "2.0", method: "notifications/initialized" },
+      })
+    );
+    expect(notified.status()).toBe(accepted);
+    const listed = yield* Effect.tryPromise(() =>
+      request.post(`${api}/mcp`, {
+        headers: residentHeaders,
+        data: { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
+      })
+    );
+    expect(listed.status()).toBe(ok);
+    expect(yield* Effect.tryPromise(() => listed.json())).toHaveProperty("result.tools");
+  });
 
 const callCategories = (request: APIRequestContext, bearer: string): Promise<APIResponse> =>
   request.post(`${api}/mcp`, {
@@ -500,7 +551,10 @@ test("built browser and real ingress refuse forged sessions, callback substituti
       expect(
         (yield* Effect.tryPromise(() =>
           request.post(`${api}/oauth/register`, {
-            data: { client_name: "Agente", redirect_uris: ["http://localhost/callback"] },
+            data: {
+              client_name: "Agente",
+              redirect_uris: ["http://localhost.evil.example/callback"],
+            },
           })
         )).status()
       ).toBe(invalid);

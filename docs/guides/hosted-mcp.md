@@ -14,20 +14,25 @@ propias credenciales de conexión.
 En Claude Code, agrega el servidor desde el proyecto donde lo usarás:
 
 ```sh
-claude mcp add --transport http fidy https://api.fidyapp.com/mcp
+claude mcp add-json fidy \
+  '{"type":"http","url":"https://api.fidyapp.com/mcp","oauth":{"scopes":"read write dashboard"}}'
 ```
+
+Estos ejemplos solicitan los tres permisos; puedes quitar los que no necesites en Fidy.
+Claude usa `oauth.scopes` como texto separado por espacios. Para pedir solo consulta, usa `read`.
+Sin esta configuración, el desafío mínimo de Fidy pide solo consulta.
 
 Abre `/mcp` y elige autenticar Fidy. En Codex CLI:
 
 ```sh
 codex mcp add fidy --url https://api.fidyapp.com/mcp
-codex mcp login fidy
+codex mcp login fidy --scopes read,write,dashboard
 ```
 
 Estos comandos configuran el cliente; no certifican que la conexión completa esté disponible.
 Las versiones con evidencia de confirmación nativa son Claude Code **2.1.289** y Codex **0.160.0**.
-La prueba anterior de inicio de sesión usó Claude Code **2.1.288**, Codex **0.160.0** y un servidor
-simulado. Las versiones nuevas necesitan verificación. Pi, OpenCode, aplicaciones de escritorio y
+Estas versiones también completaron registro dinámico e inicio de sesión con la autoridad de
+Fidy en una prueba local aislada; eso todavía no certifica el recorrido en Producción. Las versiones nuevas necesitan verificación. Pi, OpenCode, aplicaciones de escritorio y
 MCP Apps no forman parte de esta verificación.
 
 Cuando se abra el navegador, comprueba que estás en `app.fidyapp.com`, inicia sesión con tu cuenta

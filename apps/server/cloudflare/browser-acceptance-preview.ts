@@ -266,6 +266,26 @@ process.stdout.write(`Browser approval fixture listening at ${operator.url}\n`);
 const telemetry = makeWorkerTelemetry(() => undefined);
 const core = makeCoreWorker(telemetry);
 const worker = makePublicWorker(telemetry);
+// Retain each fixture actor as Cloudflare does; resident MCP sessions span HTTP requests.
+const coordinators = new Map<string, Pick<Fetcher, "fetch">>();
+const coordinatorFor = (name: string): Pick<Fetcher, "fetch"> => {
+  const existing = coordinators.get(name);
+  if (existing !== undefined) return existing;
+  const coordinator = new UserTransactionCoordinator(
+    { id: { name }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
+    {
+      DB: db,
+      AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
+      HOSTED_AI_MODEL: approvedWorkersAiModel,
+    }
+  );
+  const fetcher = {
+    fetch: (command: RequestInfo | URL): Promise<Response> =>
+      coordinator.fetch(new Request(command)),
+  };
+  coordinators.set(name, fetcher);
+  return fetcher;
+};
 const admissionKeyLength = 32;
 const digestHexLength = 64;
 const server = Bun.serve({
@@ -300,20 +320,7 @@ const server = Bun.serve({
               WOMPI_INTEGRITY_SECRET: `test_integrity_${"f1d7c0de".repeat(3)}`,
               ...syntheticDaviplataBindings,
               USER_TRANSACTION_COORDINATOR: {
-                getByName: (name): Pick<Fetcher, "fetch"> => ({
-                  fetch: (command) =>
-                    new UserTransactionCoordinator(
-                      {
-                        id: { name },
-                        storage: { setAlarm: (): Promise<void> => Promise.resolve() },
-                      },
-                      {
-                        DB: db,
-                        AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
-                        HOSTED_AI_MODEL: approvedWorkersAiModel,
-                      }
-                    ).fetch(new Request(command)),
-                }),
+                getByName: coordinatorFor,
               },
               KAPSO_API_KEY: "",
               KAPSO_WEBHOOK_SECRET: "",

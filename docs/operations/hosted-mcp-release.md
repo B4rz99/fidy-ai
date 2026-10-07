@@ -14,6 +14,31 @@ proof channel, bounded request/spend budget, test window, cleanup and any fault 
 User data, charges, messages, provider inference or destructive reset is covered by this procedure.
 If a required proof cannot run within those limits, leave it pending and obtain separate approval.
 
+### Prepared operator choice
+
+The agent gathers environment/release metadata, secret **names**, deployed topology and restricted
+aggregate inventory through GitHub and the existing Cloudflare login. The operator does not need to
+assemble those reports or paste credentials into chat. On 2026-10-07, a read-only aggregate query of
+the sole Production D1 database returned **zero Users**. That observation does not prove absence of
+retained personal data or an enforceable onboarding boundary; both still require the restricted
+preflight. No existing synthetic User was found to reuse.
+
+Proposed scope for approval: namespace `issue-990-2026-10-07`, one operator-controlled test identity,
+a 30-minute window, at most 100 OAuth/MCP requests, two seven-day connections, one synthetic Budget
+and two synthetic Transactions per host. Use a canned local model; authorize no paid model inference,
+charges, customer messages, remote clock manipulation, row rewriting or fault injection. The
+existing first-party login may deliver a proof only to the approved test contact. Reconcile effects
+through canonical operations, revoke both connections and follow purpose-bound retention/cleanup;
+do not reset the database or erase security evidence.
+
+The operator chooses the test contact they control and approves this bounded scope. Creating its
+User is **Production onboarding**, separately authorized because #990 excludes onboarding. Before
+execution, the agent verifies the admission boundary and retained-data inventory, records exact
+release provenance and serializes work with the Production coordinator. Any needed deployment or
+missing boundary change requires a separate reviewed approval; this proposal authorizes neither.
+The run remains paused until these conditions and approval are recorded. Never invent an address or
+ask for login codes, tokens or private keys in chat.
+
 Record the protected Production workflow run, Git SHA, contract digest, immutable ingress/Core
 version IDs, deployed compatibility date/flags, exact host CLI/daemon versions, Effect version,
 negotiated protocol and UTC timestamps. Store only redacted outcomes and restricted evidence

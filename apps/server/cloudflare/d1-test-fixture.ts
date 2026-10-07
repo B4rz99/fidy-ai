@@ -39,7 +39,7 @@ export const installTestSchema = ({
   db,
   sources,
 }: Readonly<{ db: D1Database; sources: ReadonlyArray<URL> }>): Promise<void> =>
-  sources
+  Array.from(new Map(sources.map((source) => [source.href, source])).values())
     .reduce<Promise<ReadonlyArray<string>>>(
       (previous, source) =>
         previous.then((sql) => loadMigrationStatements(source).then((next) => [...sql, ...next])),
@@ -225,6 +225,7 @@ export const statementAuditTestMigrations = [
 
 /** Ordered schema additions shared by isolated D1 integration harnesses across owners. */
 export const hostedTurnTestMigrations = [
+  "0027_recurring",
   "0021_hosted_confirmation",
   "0022_hosted_mutation_fence",
   "0023_hosted_delivery_refresh",
@@ -250,4 +251,8 @@ export const hostedTurnTestMigrations = [
   "0049_proactive_message_transcript",
   "0050_proactivity_offer_recovery",
   "0051_budget_reconciliation_recovery",
+  "0053_recurring_digest_source",
+  "0054_recurring_proactivity",
+  "0055_recurring_digests",
+  "0057_recurring_offer_replacement",
 ] as const;

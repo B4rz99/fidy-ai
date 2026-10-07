@@ -29,6 +29,12 @@ it("expires an undecided contextual offer without losing its frozen delivery ide
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* proactivityDatabaseBeforeOfferRetention;
+      yield* Effect.tryPromise(() =>
+        applyTestMigration({
+          db,
+          source: new URL("../migrations/0057_recurring_offer_replacement.sql", import.meta.url),
+        })
+      );
       const schedule = yield* activateTestReminder(db);
       const occurrence = yield* materializeReminder({
         db,
@@ -86,6 +92,24 @@ it("expires an undecided contextual offer without losing its frozen delivery ide
           source: new URL("../migrations/0047_proactivity_offer_retention.sql", import.meta.url),
         })
       );
+      for (const migration of [
+        "0048_retire_reminder_outbox",
+        "0049_proactive_message_transcript",
+        "0050_proactivity_offer_recovery",
+        "0051_budget_reconciliation_recovery",
+        "0053_recurring_digest_source",
+        "0054_recurring_proactivity",
+        "0055_recurring_digests",
+        "0056_recurring_report_audit",
+        "0057_recurring_offer_replacement",
+      ]) {
+        yield* Effect.tryPromise(() =>
+          applyTestMigration({
+            db,
+            source: new URL(`../migrations/${migration}.sql`, import.meta.url),
+          })
+        );
+      }
       yield* sweepProactivityConsentOffers({
         db,
         nowEpochMs: DateTime.makeUnsafe("2026-10-07T23:00:00Z").epochMilliseconds,

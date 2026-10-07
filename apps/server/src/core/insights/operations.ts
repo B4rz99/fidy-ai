@@ -1,6 +1,7 @@
 import { Cron, DateTime, Effect } from "effect";
 import type { IanaTimeZone } from "~/core/_shared/context";
 import type {
+  ConfirmationDay,
   InsightDeliveryDecision,
   ReminderCadence,
   ReminderTiming,
@@ -10,6 +11,46 @@ import type {
 import { type InsightLifecycleState, InvalidInsightTransition } from "./contract";
 
 const elapsedDayMs = 86_400_000;
+
+/** Capture a confirmation's calendar identity in its historical zone, including DST day length. */
+export const captureConfirmationDay = (
+  input: Readonly<{
+    confirmedAt: DateTime.Utc;
+    timeZone: IanaTimeZone;
+  }>
+): ConfirmationDay => {
+  const start = DateTime.startOf(
+    DateTime.setZoneNamedUnsafe(input.confirmedAt, input.timeZone),
+    "day"
+  );
+  return {
+    localDate: DateTime.formatIsoDate(start),
+    timeZone: input.timeZone,
+    from: DateTime.toUtc(start),
+    toExclusive: DateTime.toUtc(DateTime.add(start, { days: 1 })),
+  };
+};
+
+/** Next local morning and an elapsed-day deadline are distinct from the confirmation window. */
+export const recurringDigestTiming = (
+  day: ConfirmationDay
+): Readonly<{
+  scheduledAt: DateTime.Utc;
+  expiresAt: DateTime.Utc;
+}> => {
+  const scheduledAt = DateTime.toUtc(
+    DateTime.setParts(DateTime.setZoneNamedUnsafe(day.toExclusive, day.timeZone), {
+      hour: 9,
+      minute: 0,
+      second: 0,
+      millisecond: 0,
+    })
+  );
+  return {
+    scheduledAt,
+    expiresAt: DateTime.makeUnsafe(scheduledAt.epochMilliseconds + elapsedDayMs),
+  };
+};
 const threeDayInterval = 3;
 const maximumCalendarCandidates = 7;
 

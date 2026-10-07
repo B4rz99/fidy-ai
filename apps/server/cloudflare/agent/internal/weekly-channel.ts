@@ -1,3 +1,4 @@
+import type { ProactivityOptInKind } from "../../../src/shell/consent/contract";
 import { DateTime, Effect, Option } from "effect";
 import { InsightEventId } from "../../../src/core/insights/contract";
 import { TranscriptText } from "../../../src/core/agent/contract";
@@ -25,6 +26,7 @@ import {
   recordProactivityDecision,
   recordWeeklySummaryDecision,
   requestProactivityConsent,
+  requestRecurringDigestOffer,
   requestWeeklySummaryConsent,
 } from "../../insights/operations";
 import { type WhatsAppStatusAdmission, type WhatsAppTurnAdmission } from "../../whatsapp/contract";
@@ -203,21 +205,11 @@ const handleWeeklyConsentChoice = (
     return new Response(null, { status: saved ? success : refused });
   }).pipe(Effect.mapError(() => new AgentUnavailable()));
 
-const handleCategoryCommand = (
-  input: Readonly<{
-    environment: AgentEnvironment;
-    proof: WhatsAppTurnAdmission;
-    now: number;
-    context: WeeklyConsentContext;
-  }>
-): Effect.Effect<Option.Option<Response>, AgentUnavailable> =>
+const captureForegroundRecipient = (
+  input: Readonly<{ environment: AgentEnvironment; proof: WhatsAppTurnAdmission; now: number }>
+): Effect.Effect<void, AgentUnavailable> =>
   Effect.gen(function* () {
-    const { environment, proof, now, context } = input;
-    const command =
-      /^(?:activar|reactivar) (?:los )?(recordatorios|alertas de presupuesto)$/iu.exec(
-        proof.text.trim()
-      );
-    if (command === null) return Option.none();
+    const { environment, proof, now } = input;
     yield* Effect.tryPromise(() =>
       environment.DB.batch([
         prepareInsightRecipient({
@@ -232,12 +224,32 @@ const handleCategoryCommand = (
         }),
       ])
     );
+  }).pipe(Effect.mapError(() => new AgentUnavailable()));
+const categoryCommandKind = (command: string): ProactivityOptInKind => {
+  if (command === "recordatorios") return "manual-entry-reminder";
+  if (command === "avisos de cargos recurrentes") return "new-recurring-series";
+  return "budget-threshold";
+};
+
+const handleCategoryCommand = (
+  input: Readonly<{
+    environment: AgentEnvironment;
+    proof: WhatsAppTurnAdmission;
+    now: number;
+    context: WeeklyConsentContext;
+  }>
+): Effect.Effect<Option.Option<Response>, AgentUnavailable> =>
+  Effect.gen(function* () {
+    const { proof, context } = input;
+    const command =
+      /^(?:activar|reactivar) (?:los )?(recordatorios|alertas de presupuesto|avisos de cargos recurrentes)$/iu.exec(
+        proof.text.trim()
+      );
+    if (command === null) return Option.none();
+    yield* captureForegroundRecipient(input);
     yield* requestProactivityConsent({
       ...context,
-      kind:
-        command[1]?.toLowerCase() === "recordatorios"
-          ? "manual-entry-reminder"
-          : "budget-threshold",
+      kind: categoryCommandKind(command[1]?.toLowerCase() ?? ""),
       messageId: proof.messageId,
     });
     return Option.some(new Response(null, { status: accepted }));
@@ -279,22 +291,15 @@ export const handleWeeklyChoice = (
     const categoryCommand = yield* handleCategoryCommand({ ...input, context });
     if (Option.isSome(categoryCommand)) return categoryCommand;
     if (!/^(?:activar|reactivar) (?:el )?resumen semanal$/iu.test(proof.text.trim())) {
+      yield* captureForegroundRecipient(input);
+      yield* requestRecurringDigestOffer({
+        ...context,
+        kind: "new-recurring-series",
+        messageId: proof.messageId,
+      });
       return Option.none();
     }
-    yield* Effect.tryPromise(() =>
-      environment.DB.batch([
-        prepareInsightRecipient({
-          db: environment.DB,
-          userId: proof.userId,
-          recipient: {
-            portfolioId: proof.portfolioId,
-            bsuid: proof.bsuid,
-            businessPhoneNumberId: proof.businessPhoneNumberId,
-          },
-          receivedAtMs: now,
-        }),
-      ])
-    );
+    yield* captureForegroundRecipient(input);
     yield* requestWeeklySummaryConsent({ ...context, messageId: proof.messageId });
     return Option.some(new Response(null, { status: accepted }));
   }).pipe(Effect.mapError(() => new AgentUnavailable()));

@@ -75,7 +75,7 @@ it("an authenticated reminder request creates a contextual offer without inferen
     })
   ));
 
-it.each(["budget-threshold", "manual-entry-reminder"] as const)(
+it.each(["budget-threshold", "manual-entry-reminder", "new-recurring-series"] as const)(
   "routes exact authenticated %s choices before model execution, retaining replay receipts without extra legal events",
   (kind) =>
     Effect.runPromise(

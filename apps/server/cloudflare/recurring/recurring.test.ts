@@ -9,7 +9,9 @@ import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import {
   evaluateRecurringSeries,
   listRecurringSeries,
+  prepareRecurringDigestSourceGuard,
   readRecurringConfirmations,
+  readRecurringDigestSource,
 } from "./operations";
 import { makeCoordinators, sendBackground } from "./recurring.test-fixture";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
@@ -1119,5 +1121,43 @@ it.effect(
       ).toBe(count);
       expect(confirmationsBefore.confirmations).toHaveLength(32);
       yield* assertOtherUserEvaluates(db);
+    })
+);
+
+it.effect(
+  "binds complete confirmation traversal to one User and fact revision, retaining invalidation dispositions",
+  () =>
+    Effect.gen(function* () {
+      const db = yield* setup();
+      for (const month of [1, 2, 3]) yield* capture(db, month);
+      yield* evaluate(db);
+      const page = yield* readRecurringDigestSource({ db, userId, cursor: Option.none() }).pipe(
+        Effect.orDie
+      );
+      expect(page.complete).toBe(true);
+      expect(page.confirmations).toHaveLength(1);
+      expect(
+        Option.getOrThrow(Option.getOrThrow(Option.fromUndefinedOr(page.confirmations[0])).snapshot)
+          .occurrence.counterparty
+      ).toBe("Netflix");
+      const foreign = yield* Effect.exit(
+        prepareRecurringDigestSourceGuard({ db, userId: otherUserId, checkpoint: page.checkpoint })
+      );
+      expect(foreign._tag).toBe("Failure");
+      yield* capture(db, 4);
+      const guard = yield* prepareRecurringDigestSourceGuard({
+        db,
+        userId,
+        checkpoint: page.checkpoint,
+      }).pipe(Effect.orDie);
+      const stale = yield* Effect.exit(fromPromise(() => db.batch([...guard])));
+      expect(stale._tag).toBe("Failure");
+      yield* evaluate(db);
+      const refreshed = yield* readRecurringDigestSource({
+        db,
+        userId,
+        cursor: Option.none(),
+      }).pipe(Effect.orDie);
+      expect(refreshed.checkpoint).not.toBe(page.checkpoint);
     })
 );

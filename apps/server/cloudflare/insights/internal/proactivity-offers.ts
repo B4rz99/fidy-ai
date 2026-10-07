@@ -10,9 +10,14 @@ import {
   findCurrentProactivityOffer,
   findProactivityConsentGrant,
   prepareConsentAction,
+  replaceProactivityConsentOffer,
 } from "../../consent/operations";
 import type { ProactivityConsentContext, ProactivityConsentOffer } from "../../consent/contract";
-import { findInsightRecipient, proactivityStartedDeliveryQuery } from "../../whatsapp/operations";
+import {
+  findInsightRecipient,
+  proactivityRejectedDeliveryQuery,
+  proactivityStartedDeliveryQuery,
+} from "../../whatsapp/operations";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import type { InsightRecipient } from "../../whatsapp/contract";
 import { newId } from "../../secret-material/operations";
@@ -26,27 +31,36 @@ export const requestOffer = (
 ): Effect.Effect<void, InsightUnavailable> =>
   Effect.gen(function* () {
     const association = whatsAppAssociationQuery(input);
-    yield* Effect.tryPromise(() =>
-      prepareConsentAction({
-        db: input.db,
-        subject: { _tag: "User", userId: input.userId },
-        requirement: "active",
-        statement: {
-          sql: `INSERT OR IGNORE INTO proactivity_offer_requests(id,user_id,kind,request_message_id,created_at_ms) SELECT ?,?,?,?,? WHERE EXISTS (${association.sql}) AND (SELECT count(*) FROM proactivity_offer_requests WHERE user_id=? AND created_at_ms>?)<?`,
-          params: [
-            newId(),
-            input.userId,
-            input.kind,
-            input.messageId,
-            input.now.epochMilliseconds,
-            ...association.params,
-            input.userId,
-            input.now.epochMilliseconds - dayMs,
-            maximumRequests,
-          ],
-        },
-      }).run()
-    );
+    const request = prepareConsentAction({
+      db: input.db,
+      subject: { _tag: "User", userId: input.userId },
+      requirement: "active",
+      statement: {
+        sql: `INSERT OR IGNORE INTO proactivity_offer_requests(id,user_id,kind,request_message_id,created_at_ms) SELECT ?,?,?,?,? WHERE EXISTS (${association.sql}) AND (SELECT count(*) FROM proactivity_offer_requests WHERE user_id=? AND created_at_ms>?)<?`,
+        params: [
+          newId(),
+          input.userId,
+          input.kind,
+          input.messageId,
+          input.now.epochMilliseconds,
+          ...association.params,
+          input.userId,
+          input.now.epochMilliseconds - dayMs,
+          maximumRequests,
+        ],
+      },
+    });
+    const statements = [request];
+    if (input.kind === "new-recurring-series") {
+      statements.push(
+        input.db
+          .prepare(
+            "INSERT INTO recurring_digest_opportunities(user_id,request_id) SELECT user_id,id FROM proactivity_offer_requests WHERE user_id=? AND kind='new-recurring-series' AND request_message_id=? ON CONFLICT(user_id) DO UPDATE SET request_id=excluded.request_id"
+          )
+          .bind(input.userId, input.messageId)
+      );
+    }
+    yield* Effect.tryPromise(() => input.db.batch(statements));
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 const RequestRow = Schema.Struct({
   id: Schema.String.check(Schema.isUUID()),
@@ -64,7 +78,7 @@ export const offerWindowOpen = (now: DateTime.Utc): boolean =>
 export const recoverableOfferRequests = (now: DateTime.Utc): OwnedStatement => {
   const started = proactivityStartedDeliveryQuery();
   return {
-    sql: `SELECT q.id,q.user_id,q.kind,q.created_at_ms,q.last_evaluated_at_ms FROM proactivity_offer_requests AS q WHERE (q.materialized_at_ms IS NULL OR EXISTS (SELECT 1 FROM proactivity_reports AS r WHERE r.user_id=q.user_id AND r.delivery_id=q.delivery_id AND r.expires_at_ms<=? AND NOT EXISTS (SELECT 1 FROM (${started.sql}) AS c WHERE c.user_id=r.user_id AND c.delivery_id=r.delivery_id)))`,
+    sql: `SELECT q.id,q.user_id,q.kind,q.created_at_ms,q.last_evaluated_at_ms FROM proactivity_offer_requests AS q WHERE (q.materialized_at_ms IS NULL OR (q.kind<>'new-recurring-series' AND EXISTS (SELECT 1 FROM proactivity_reports AS r WHERE r.user_id=q.user_id AND r.delivery_id=q.delivery_id AND r.expires_at_ms<=? AND NOT EXISTS (SELECT 1 FROM (${started.sql}) AS c WHERE c.user_id=r.user_id AND c.delivery_id=r.delivery_id))))`,
     params: [now.epochMilliseconds],
   };
 };
@@ -92,6 +106,31 @@ const consentContext = (
   caller: { businessPortfolioId: recipient.portfolioId, businessScopedUserId: recipient.bsuid },
 });
 
+const offerRoles = {
+  "new-recurring-series": "recurring-offer",
+  "budget-threshold": "budget-offer",
+  "manual-entry-reminder": "reminder-offer",
+} as const;
+const selectOffer = (
+  context: ProactivityConsentContext,
+  prior: Option.Option<ProactivityConsentOffer>
+): Effect.Effect<Option.Option<ProactivityConsentOffer>, InsightUnavailable> =>
+  Effect.gen(function* () {
+    if (Option.isNone(prior)) return yield* createProactivityConsentOffer(context);
+    if (context.kind !== "new-recurring-series") return prior;
+    const proof = proactivityRejectedDeliveryQuery({ ...context, id: prior.value.id });
+    const rejected = yield* Effect.tryPromise(() =>
+      context.db
+        .prepare(proof.sql)
+        .bind(...proof.params)
+        .first()
+    );
+    if (rejected === null) return prior;
+    return yield* replaceProactivityConsentOffer({
+      ...context,
+      replacement: { offerId: prior.value.id, proof },
+    });
+  }).pipe(Effect.mapError(() => new InsightUnavailable()));
 const materializeOffer = (
   input: Readonly<{ db: D1Database; userId: UserId; now: DateTime.Utc }>,
   request: typeof RequestRow.Type
@@ -101,7 +140,7 @@ const materializeOffer = (
     if (Option.isNone(recipient)) return;
     const context = consentContext(input, request.kind, recipient.value);
     const prior = yield* findCurrentProactivityOffer(context);
-    const offer = Option.isSome(prior) ? prior : yield* createProactivityConsentOffer(context);
+    const offer = yield* selectOffer(context, prior);
     if (Option.isNone(offer)) return;
     const value = offer.value;
     const grant = yield* findProactivityConsentGrant({ ...input, kind: request.kind });
@@ -117,7 +156,7 @@ const materializeOffer = (
             params: [
               value.id,
               input.userId,
-              request.kind === "budget-threshold" ? "budget-offer" : "reminder-offer",
+              offerRoles[request.kind],
               value.id,
               text,
               input.now.epochMilliseconds,

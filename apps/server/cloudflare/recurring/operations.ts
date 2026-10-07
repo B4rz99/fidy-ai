@@ -1,3 +1,5 @@
+import type { OwnedStatement } from "../../src/shell/owner-write/contract";
+import { RecurringConfirmationId } from "../../src/core/recurring/contract";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { UserId } from "../../src/core/identity/contract";
 
@@ -8,7 +10,12 @@ import {
 } from "../transactions/operations";
 
 import { type QueryCaller, childCaller } from "../canonical-work/operations";
-import { type RecurringConfirmationPage, RecurringUnavailable } from "./contract";
+import {
+  type RecurringConfirmationPage,
+  type RecurringDigestSourcePage,
+  RecurringUnavailable,
+  maximumDigestCheckpointLength,
+} from "./contract";
 import { Progress, StringRow, pageSize } from "./internal/models";
 import { protectConsentStatement } from "../../src/shell/consent/operations";
 
@@ -28,8 +35,41 @@ import {
   maximumCursorLength,
   readPage,
 } from "./internal/query";
+import { prepareSourceGuard, readSource } from "./internal/digest-source";
 
 type Work = Readonly<{ db: D1Database; userId: UserId }>;
+
+/** Traverse one complete revision-bounded confirmation cutoff. Invalidations and legacy exclusions remain explicit; a changed cutoff fails closed and requires restarting traversal. */
+export const readRecurringDigestSource = (
+  input: Work & Readonly<{ cursor: Option.Option<string> }>
+): Effect.Effect<RecurringDigestSourcePage, RecurringUnavailable> =>
+  Effect.gen(function* () {
+    const page = yield* readSource(input);
+    for (const confirmation of page.confirmations) {
+      if (Option.isNone(confirmation.snapshot)) continue;
+      const snapshot = confirmation.snapshot.value;
+      if (
+        snapshot.userId !== input.userId ||
+        snapshot.occurrence.id !== confirmation.id ||
+        snapshot.occurrence.confirmedAt.epochMilliseconds !==
+          confirmation.confirmedAt.epochMilliseconds
+      ) {
+        return yield* new RecurringUnavailable();
+      }
+    }
+    return page;
+  });
+
+/** Compose the exact cutoff's live processing, fact-revision and complete-evaluation guards with the consumer's own atomic commit. This does not inspect or authorize consumer state. */
+export const prepareRecurringDigestSourceGuard = (
+  input: Work & Readonly<{ checkpoint: string }>
+): Effect.Effect<ReadonlyArray<D1PreparedStatement>, RecurringUnavailable> =>
+  Effect.gen(function* () {
+    if (input.checkpoint.length > maximumDigestCheckpointLength) {
+      return yield* new RecurringUnavailable();
+    }
+    return yield* prepareSourceGuard(input);
+  });
 
 /** Advance one bounded evaluation step under this User's existing coordinator and live processing Consent. */
 export const evaluateRecurringSeries = (work: Work): Effect.Effect<void, RecurringUnavailable> =>
@@ -117,7 +157,7 @@ export const readRecurringConfirmations = ({
       subject: { _tag: "User", userId },
       requirement: "active",
       statement: {
-        sql: `SELECT c.id, c.context_json, c.confirmation_json FROM recurring_confirmations c JOIN recurring_series s ON s.user_id = c.user_id AND s.id = c.series_id WHERE c.user_id = ? AND ? = 1 AND s.valid = 1 AND (c.confirmed_at, c.id) > (?, ?)`,
+        sql: `SELECT c.id, c.context_json, c.confirmation_json FROM recurring_confirmations c JOIN recurring_series s ON s.user_id = c.user_id AND s.id = c.series_id WHERE c.user_id = ? AND ? = 1 AND s.valid = 1 AND json_type(c.confirmation_json,'$.counterparty') IS NOT NULL AND (c.confirmed_at, c.id) > (?, ?)`,
         params: [userId, Option.isSome(snapshot) ? 1 : 0, ...after],
       },
     });
@@ -178,3 +218,35 @@ export const listRecurringSeries = ({
     const cursor = Schema.decodeOption(Schema.fromJsonString(QueryCursor))(raw);
     return yield* Option.isNone(cursor) ? invalidCursor(call) : readPage({ call, cursor });
   });
+
+/** First retained discovery, including suppressed or legacy evidence, supplies only an opt-in opportunity identity. It never grants delivery or substitutes financial snapshots. */
+export const findRecurringDiscovery = (
+  input: Work
+): Effect.Effect<Option.Option<RecurringConfirmationId>, RecurringUnavailable> =>
+  Effect.gen(function* () {
+    const protectedRead = protectConsentStatement({
+      subject: { _tag: "User", userId: input.userId },
+      requirement: "active",
+      statement: {
+        sql: "SELECT id FROM recurring_confirmations WHERE user_id=? ORDER BY confirmed_at,id LIMIT 1",
+        params: [input.userId],
+      },
+    });
+    const raw = yield* Effect.tryPromise(() =>
+      input.db
+        .prepare(protectedRead.sql)
+        .bind(...protectedRead.params)
+        .first()
+    );
+    if (raw === null) return Option.none();
+    const row = yield* Schema.decodeUnknownEffect(Schema.Struct({ id: RecurringConfirmationId }))(
+      raw
+    );
+    return Option.some(row.id);
+  }).pipe(Effect.mapError(() => new RecurringUnavailable()));
+
+/** Metadata-only complete evaluation identities for fair digest discovery; no financial content or execution authority is projected. */
+export const recurringDigestSourceIdentities = (): OwnedStatement => ({
+  sql: "SELECT p.user_id,p.evaluated_revision||':'||p.evaluated_at||':'||(SELECT coalesce(max(rowid),0) FROM recurring_confirmations WHERE user_id=p.user_id)||':'||(SELECT count(*) FROM recurring_confirmations WHERE user_id=p.user_id) AS source_identity FROM recurring_progress AS p WHERE p.phase='complete'",
+  params: [],
+});

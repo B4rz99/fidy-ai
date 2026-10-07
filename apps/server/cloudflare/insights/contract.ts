@@ -29,12 +29,17 @@ const messageContext = {
 export const ProactivityReport = Schema.Union([
   Schema.TaggedStruct("GrantMessage", {
     ...messageContext,
-    role: Schema.Literals(["budget-threshold", "manual-entry-reminder", "reminder-question"]),
+    role: Schema.Literals([
+      "budget-threshold",
+      "manual-entry-reminder",
+      "reminder-question",
+      "new-recurring-series",
+    ]),
     grantId: ConsentRecordId,
   }),
   Schema.TaggedStruct("ConsentOfferMessage", {
     ...messageContext,
-    role: Schema.Literals(["budget-offer", "reminder-offer"]),
+    role: Schema.Literals(["budget-offer", "reminder-offer", "recurring-offer"]),
     offerId: ConsentRecordId,
   }),
 ]);
@@ -198,3 +203,7 @@ export class ReminderRevisionConflict extends Data.TaggedError("ReminderRevision
 
 /** Insight state could not be read or retained completely; it is not an absent occurrence. */
 export class InsightUnavailable extends Data.TaggedError("InsightUnavailable") {}
+
+export type RecurringDigestAdvanceResult =
+  | Readonly<{ _tag: "NoWork" | "Progress" }>
+  | Readonly<{ _tag: "Created"; id: InsightEventId }>;

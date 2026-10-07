@@ -1,5 +1,6 @@
+import { RecurringDigestReportParams } from "../../../src/core/insights/contract";
 import { operationCatalog } from "../../../src/shell/api";
-import { type Cause, Effect, Option } from "effect";
+import { type Cause, Effect, Option, Schema } from "effect";
 import {
   type QueryCaller,
   isOAuthCaller,
@@ -16,7 +17,9 @@ import { recallMemories } from "../../memory/operations";
 import { listRecurringSeries } from "../../recurring/operations";
 import {
   listPendingInsights,
+  readCanonicalRecurringDigestReport,
   readCanonicalReminderSchedule,
+  readHeldRecurringDigestReport,
   readHeldReminderSchedule,
 } from "../../insights/operations";
 import { listPATs } from "../../tokens/operations";
@@ -147,6 +150,16 @@ const queryOwners = new Map<string, QueryOwner>([
       listRecurringSeries({ db, subject, request }),
   ],
   [
+    "insights.getRecurringDigestReport",
+    ({ db, subject, request }): Effect.Effect<Response> =>
+      readCanonicalRecurringDigestReport({
+        db,
+        subject,
+        current: transactionNow(),
+        id: new URL(request.url).pathname.split("/").at(-1) ?? "",
+      }),
+  ],
+  [
     "insights.getReminderSchedule",
     ({ db, subject }): Effect.Effect<Response> =>
       readCanonicalReminderSchedule({ db, subject, current: transactionNow() }),
@@ -198,6 +211,16 @@ export const canonicalHostedStatementQueryOwner = (
   id: string
 ): Option.Option<(work: StatementDecisionWork) => Effect.Effect<Response>> => {
   if (Option.isNone(canonicalQueryOwner(id))) return Option.none();
+  if (id === "insights.getRecurringDigestReport") {
+    return Option.some((work) => {
+      const input = Schema.decodeUnknownOption(
+        Schema.Struct({ params: RecurringDigestReportParams })
+      )(work.input);
+      return Option.isSome(input)
+        ? readHeldRecurringDigestReport({ ...work, id: input.value.params.id })
+        : Effect.succeed(transactionUnavailable());
+    });
+  }
   if (id === "insights.getReminderSchedule") {
     return Option.some((work) => readHeldReminderSchedule(work));
   }

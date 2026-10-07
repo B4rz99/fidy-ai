@@ -1,3 +1,5 @@
+import { advance as advanceRecurringDigest } from "./recurring-generation";
+import { findRecurringDiscovery } from "../../recurring/operations";
 import { DateTime, Effect, Option } from "effect";
 import { type UserId } from "../../../src/core/identity/contract";
 import {
@@ -42,6 +44,7 @@ export const generateProactivity = (
     yield* generateReminderQuestion(input);
     const schedule = yield* findSchedule(input);
     if (Option.isSome(schedule)) yield* materialize({ ...input, id: schedule.value.id });
+    if (Option.isSome(yield* findRecurringDiscovery(input))) yield* advanceRecurringDigest(input);
     return { _tag: "Done" } as const;
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
 

@@ -116,10 +116,13 @@ it.live("rolls back the entire fixture schema when a later migration fails", () 
   Effect.gen(function* () {
     const db = yield* wait(() => databases.acquire());
     const source = new URL("./migrations/0001_categories.sql", import.meta.url);
+    const failing = new URL("./migrations/0057_recurring_offer_replacement.sql", import.meta.url);
     // Exercise Worker-local bootstrap and the fallback for independently wrapped bindings.
     for (const binding of [db, new Proxy(db, {})]) {
       yield* wait(() =>
-        expect(installTestSchema({ db: binding, sources: [source, source] })).rejects.toThrow()
+        expect(
+          installTestSchema({ db: binding, sources: [source, source, failing] })
+        ).rejects.toThrow()
       );
       expect(
         yield* wait(() =>

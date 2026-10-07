@@ -73,7 +73,7 @@ export const prepareMessageTranscript = (
     subject: { _tag: "User", userId: input.userId },
     requirement: "active",
     statement: {
-      sql: `INSERT OR IGNORE INTO proactive_message_transcript_entries(id,user_id,delivery_id,role,occurred_at_ms,text,expires_at_ms) SELECT ?,v.user_id,v.delivery_id,v.role,v.delivered_at_ms,v.text,v.delivered_at_ms+? FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=? AND v.role IN ('budget-offer','reminder-offer','reminder-question') AND v.text IS NOT NULL AND v.delivered_at_ms+?>?`,
+      sql: `INSERT OR IGNORE INTO proactive_message_transcript_entries(id,user_id,delivery_id,role,occurred_at_ms,text,expires_at_ms) SELECT ?,v.user_id,v.delivery_id,v.role,v.delivered_at_ms,v.text,v.delivered_at_ms+? FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=? AND v.role IN ('budget-offer','reminder-offer','recurring-offer','reminder-question') AND v.text IS NOT NULL AND v.delivered_at_ms+?>?`,
       params: [
         newId(),
         hostedTranscriptRetentionMs,

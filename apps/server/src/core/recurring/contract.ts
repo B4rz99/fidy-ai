@@ -49,6 +49,7 @@ export type RecurringSeries = typeof RecurringSeries.Type;
 export const RecurringSeriesConfirmed = Schema.Struct({
   id: RecurringConfirmationId,
   seriesId: RecurringSeriesId,
+  counterparty: Counterparty,
   confirmedAt: UtcTimestamp,
   money: positiveMoney,
   cadence: Cadence,

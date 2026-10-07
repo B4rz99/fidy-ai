@@ -19,6 +19,7 @@ import {
   type ProactivityConsentAction,
   type ProactivityConsentContext,
   type ProactivityConsentOffer,
+  type ProactivityOfferReplacement,
 } from "../contract";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 
@@ -141,22 +142,44 @@ const assertion = (db: D1Database): D1PreparedStatement =>
     "INSERT INTO proactivity_consent_assertion(id,accepted) VALUES (1,CASE WHEN changes()=1 THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted=excluded.accepted"
   );
 
+const replacementProof = (
+  input: ProactivityConsentContext,
+  replacement: Option.Option<ProactivityOfferReplacement>
+): Readonly<{ replacementId: string; replacementGuard: OwnedStatement }> => {
+  const replacementId = Option.match(replacement, {
+    onNone: () => "",
+    onSome: (value) => value.offerId,
+  });
+  const replacementGuard = Option.match(replacement, {
+    onNone: () => ({ sql: "1=1", params: [] }),
+    onSome: (value) => ({
+      sql: `EXISTS (SELECT 1 FROM proactivity_consent_offers AS old WHERE old.user_id=? AND old.kind=? AND old.id=? AND old.disclosure_message_id IS NULL AND old.decision IS NULL AND EXISTS (SELECT 1 FROM (${value.proof.sql}) AS rejected WHERE rejected.user_id=old.user_id AND rejected.delivery_id=old.id))`,
+      params: [input.userId, input.kind, value.offerId, ...value.proof.params],
+    }),
+  });
+  return { replacementId, replacementGuard };
+};
 export const createOffer = (
-  input: ProactivityConsentContext
+  work: Readonly<{
+    context: ProactivityConsentContext;
+    replacement: Option.Option<ProactivityOfferReplacement>;
+  }>
 ): Effect.Effect<Option.Option<ProactivityConsentOffer>, ConsentUnavailable> =>
   Effect.gen(function* () {
+    const { context: input, replacement } = work;
     const disclosure = proactivityDisclosureFor(input.kind);
     const json = yield* Schema.encodeEffect(
       Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot))
     )(disclosure);
     const id = ConsentRecordId.make(newId());
+    const { replacementId, replacementGuard } = replacementProof(input, replacement);
     const result = yield* Effect.tryPromise(() =>
       channelAction(
         input,
         {
-          sql: `INSERT INTO proactivity_consent_offers(id,user_id,kind,portfolio_id,bsuid,disclosure_json,created_at_ms,expires_at_ms)
- SELECT ?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM proactivity_consent_offers WHERE user_id=? AND created_at_ms>?) < ?
- AND NOT EXISTS (SELECT 1 FROM proactivity_consent_offers WHERE user_id=? AND kind=? AND decision IS NULL AND expires_at_ms>?)`,
+          sql: `INSERT INTO proactivity_consent_offers(id,user_id,kind,portfolio_id,bsuid,disclosure_json,created_at_ms,expires_at_ms,replaces_offer_id)
+ SELECT ?,?,?,?,?,?,?,?,nullif(?,'') WHERE (SELECT count(*) FROM proactivity_consent_offers WHERE user_id=? AND created_at_ms>?) < ?
+ AND NOT EXISTS (SELECT 1 FROM proactivity_consent_offers AS o WHERE user_id=? AND kind=? AND decision IS NULL AND expires_at_ms>? AND ( ?='' OR id<>?) AND NOT EXISTS(SELECT 1 FROM proactivity_consent_offers AS n WHERE n.replaces_offer_id=o.id)) AND ${replacementGuard.sql}`,
           params: [
             id,
             input.userId,
@@ -166,12 +189,16 @@ export const createOffer = (
             json,
             input.now.epochMilliseconds,
             input.now.epochMilliseconds + offerLifetimeMs,
+            replacementId,
             input.userId,
             input.now.epochMilliseconds - elapsedDayMs,
             maximumDailyOffers,
             input.userId,
             input.kind,
             input.now.epochMilliseconds,
+            replacementId,
+            replacementId,
+            ...replacementGuard.params,
           ],
         },
         false
@@ -198,7 +225,7 @@ export const findCurrentOffer = (
       channelAction(
         input,
         {
-          sql: "SELECT id,disclosure_json,expires_at_ms FROM proactivity_consent_offers WHERE user_id=? AND kind=? AND portfolio_id=? AND bsuid=? AND decision IS NULL AND expires_at_ms>?",
+          sql: "SELECT id,disclosure_json,expires_at_ms FROM proactivity_consent_offers AS o WHERE user_id=? AND kind=? AND portfolio_id=? AND bsuid=? AND decision IS NULL AND expires_at_ms>? AND NOT EXISTS(SELECT 1 FROM proactivity_consent_offers AS n WHERE n.replaces_offer_id=o.id)",
           params: [
             input.userId,
             input.kind,
@@ -234,7 +261,7 @@ export const prepareVerifiedDisclosure = (
 ): D1PreparedStatement =>
   input.db
     .prepare(
-      `UPDATE proactivity_consent_offers SET disclosure_message_id=(SELECT v.provider_message_id FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=?) WHERE user_id=? AND id=? AND disclosure_message_id IS NULL AND decision IS NULL AND EXISTS (SELECT 1 FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=? AND ((kind='budget-threshold' AND v.role='budget-offer') OR (kind='manual-entry-reminder' AND v.role='reminder-offer')))`
+      `UPDATE proactivity_consent_offers SET disclosure_message_id=(SELECT v.provider_message_id FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=?) WHERE user_id=? AND id=? AND disclosure_message_id IS NULL AND decision IS NULL AND EXISTS (SELECT 1 FROM (${input.proof.sql}) AS v WHERE v.user_id=? AND v.delivery_id=? AND ((kind='budget-threshold' AND v.role='budget-offer') OR (kind='manual-entry-reminder' AND v.role='reminder-offer') OR (kind='new-recurring-series' AND v.role='recurring-offer')))`
     )
     .bind(
       ...input.proof.params,

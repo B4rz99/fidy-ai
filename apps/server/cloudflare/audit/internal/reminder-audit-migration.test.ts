@@ -92,7 +92,7 @@ it("preserves populated browser Audit across 0040, reads mixed browser/PAT/hoste
         )).results
       ).toEqual(before.results);
       yield* Effect.tryPromise(() => db.prepare("DELETE FROM audit_retention_permits").run());
-      const caller = yield* proactivityHostedCaller(db);
+      const caller = yield* proactivityHostedCaller({ db, userIndex: 0 });
       expect(
         (yield* executeHostedStatementQuery({
           db,

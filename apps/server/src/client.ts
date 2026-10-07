@@ -145,3 +145,5 @@ export {
   emailReplacementFreshBody,
   emailReplacementInvalidBody,
 } from "~/shell/web-authentication/contract";
+
+export { RecurringDigestReport, RecurringDigestReportParams } from "~/core/insights/contract";

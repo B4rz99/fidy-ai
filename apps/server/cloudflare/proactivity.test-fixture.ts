@@ -1,3 +1,6 @@
+import { vi } from "vitest";
+import { evaluateRecurringSeries } from "./recurring/operations";
+import type { RecurringUnavailable } from "./recurring/contract";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { DisclosureSnapshot } from "../src/core/consent/contract";
 import { UserId, WhatsAppCallerReference } from "../src/core/identity/contract";
@@ -87,37 +90,38 @@ export const endTestHostedAuthority = (
   ).pipe(Effect.asVoid);
 
 const testHostedConsentBasis = (
-  db: D1Database
+  input: Readonly<{ db: D1Database; userId: UserId }>
 ): Effect.Effect<string, ConsentUnavailable | Schema.SchemaError> =>
   Effect.gen(function* () {
-    const standing = yield* readConsentStanding({ db, userId: proactivityTestUsers[0] });
+    const standing = yield* readConsentStanding(input);
     if (standing._tag === "Missing") return yield* Effect.die("Fixture needs processing Consent");
     return yield* Schema.encodeEffect(
       Schema.fromJsonString(Schema.toCodecJson(HostedAgentSessionConsentBasis))
     )(standing.basis);
   });
 
-const fixtureHostedSubject = (): WhatsAppHostedSubject => ({
+const fixtureHostedSubject = (index: 0 | 1): WhatsAppHostedSubject => ({
   _tag: "WhatsAppHosted",
-  userId: proactivityTestUsers[0],
-  portfolioId: proactivityTestCallers[0].businessPortfolioId,
-  bsuid: proactivityTestCallers[0].businessScopedUserId,
+  userId: proactivityTestUsers[index],
+  portfolioId: proactivityTestCallers[index].businessPortfolioId,
+  bsuid: proactivityTestCallers[index].businessScopedUserId,
 });
 
 /** Establish real held Turn/channel rows, then mint through Agent's live authority seam. No browser credential substitutes for the hosted caller. */
 export const proactivityHostedCaller = (
-  db: D1Database
+  input: Readonly<{ db: D1Database; userIndex: 0 | 1 }>
 ): Effect.Effect<
   HostedCanonicalCaller,
   Cause.UnknownError | Schema.SchemaError | ConsentUnavailable
 > =>
   Effect.gen(function* () {
-    const userId = proactivityTestUsers[0];
-    const caller = proactivityTestCallers[0];
+    const { db, userIndex } = input;
+    const userId = proactivityTestUsers[userIndex];
+    const caller = proactivityTestCallers[userIndex];
     const sessionId = newId();
     const turnId = TranscriptTurnId.make(newId());
     const current = proactivityTestNow.epochMilliseconds;
-    const basis = yield* testHostedConsentBasis(db);
+    const basis = yield* testHostedConsentBasis({ db, userId });
     yield* Effect.tryPromise(() =>
       db.batch([
         db
@@ -148,7 +152,7 @@ export const proactivityHostedCaller = (
     return Option.getOrThrow(
       yield* mintHostedStatementCaller({
         db,
-        subject: fixtureHostedSubject(),
+        subject: fixtureHostedSubject(userIndex),
         turnId,
         current,
         approval: Option.none(),
@@ -343,3 +347,80 @@ export const proactivityDatabase = databaseThrough("Current");
 export const proactivityDatabaseBeforeCanonicalAudit = databaseThrough("BeforeCanonicalAudit");
 /** Populated category delivery predecessor for the offer-reference retention migration. */
 export const proactivityDatabaseBeforeOfferRetention = databaseThrough("BeforeOfferRetention");
+
+const july = 7;
+const august = 8;
+const september = 9;
+const identityStride = 10;
+const identityLength = 12;
+const evaluationPasses = 12;
+
+/** Arrange historical Transactions and run the real detector; digest tests never manufacture confirmation snapshots. */
+export const seedRecurringDigestSource = (
+  input: Readonly<{
+    db: D1Database;
+    userId: UserId;
+    confirmedAt: string;
+    counterparty: string;
+    index: number;
+  }>
+): Effect.Effect<void, Cause.UnknownError | RecurringUnavailable> =>
+  Effect.gen(function* () {
+    const statements = [july, august, september].map((month) =>
+      input.db
+        .prepare(
+          "INSERT INTO transactions(id,user_id,amount,currency,direction,counterparty,category_id,occurred_at,created_at) VALUES(?,?,'12345.67','COP','outflow',?,'10000000-0000-4000-8000-000000000016',?,?)"
+        )
+        .bind(
+          `29000000-0000-4000-8000-${String(input.index * identityStride + month).padStart(identityLength, "0")}`,
+          input.userId,
+          input.counterparty,
+          `2026-${String(month).padStart(2, "0")}-01T18:00:00.000Z`,
+          `2026-${String(month).padStart(2, "0")}-01T18:00:00.000Z`
+        )
+    );
+    yield* Effect.tryPromise(() => input.db.batch(statements));
+    const clock = vi
+      .spyOn(Date, "now")
+      .mockReturnValue(DateTime.makeUnsafe(input.confirmedAt).epochMilliseconds);
+    yield* Effect.forEach(
+      Array.from({ length: evaluationPasses }),
+      () => evaluateRecurringSeries(input),
+      {
+        discard: true,
+      }
+    );
+    clock.mockRestore();
+  });
+
+/** Arrange one detector evaluation spanning multiple source pages. */
+export const seedLargeRecurringDigestSource = (
+  input: Readonly<{ db: D1Database; userId: UserId; confirmedAt: string; count: number }>
+): Effect.Effect<void, Cause.UnknownError | RecurringUnavailable> =>
+  Effect.gen(function* () {
+    const statements = Array.from({ length: input.count }, (_, index) =>
+      [july, august, september].map((month) =>
+        input.db
+          .prepare(
+            "INSERT INTO transactions(id,user_id,amount,currency,direction,counterparty,category_id,occurred_at,created_at) VALUES(?,?,'12345.67','COP','outflow',?,'10000000-0000-4000-8000-000000000016',?,?)"
+          )
+          .bind(
+            `29000000-0000-4000-8000-${String(index * identityStride + month).padStart(identityLength, "0")}`,
+            input.userId,
+            `Servicio histórico ${String(index).padStart(2, "0")}`,
+            `2026-${String(month).padStart(2, "0")}-01T18:00:00.000Z`,
+            `2026-${String(month).padStart(2, "0")}-01T18:00:00.000Z`
+          )
+      )
+    ).flat();
+    yield* Effect.tryPromise(() => input.db.batch(statements));
+    const clock = vi
+      .spyOn(Date, "now")
+      .mockReturnValue(DateTime.makeUnsafe(input.confirmedAt).epochMilliseconds);
+    yield* Effect.forEach(
+      Array.from({ length: input.count + evaluationPasses }),
+      () => evaluateRecurringSeries(input),
+      { discard: true }
+    );
+    clock.mockRestore();
+  });

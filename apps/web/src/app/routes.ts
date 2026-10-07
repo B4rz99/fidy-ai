@@ -1,3 +1,4 @@
+import { RecurringDigestFeature } from "@/features/recurring-digest/feature";
 import { Option, Schema } from "effect";
 import { OAuthConnectionListQuery, OAuthRequestId } from "@/transport/client";
 import { OAuthManagementFeature, OAuthReviewFeature } from "@/features/oauth-connections/feature";
@@ -78,6 +79,11 @@ const transactionsRoute = createRoute({
   path: "/transactions",
   component: TransactionListFeature,
 });
+const recurringDigestRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/insights/recurring/$id",
+  component: RecurringDigestFeature,
+});
 const patManagementRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: "/settings/pats",
@@ -132,6 +138,7 @@ const routeTree = rootRoute.addChildren([
     signedInRoute.addChildren([signedInIndexRoute, dashboardRoute, agentRoute, transactionsRoute]),
     patManagementRoute,
     oauthManagementRoute,
+    recurringDigestRoute,
     emailReplacementRoute,
     backupRecoveryRoute,
   ]),

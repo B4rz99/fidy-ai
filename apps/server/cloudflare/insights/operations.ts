@@ -1,3 +1,8 @@
+import type { RecurringDigestAdvanceResult } from "./contract";
+import { requestDiscoveryOffer } from "./internal/recurring-offer";
+import * as recurringGeneration from "./internal/recurring-generation";
+import { type RecurringDigestReport } from "../../src/core/insights/contract";
+import * as recurringStanding from "./internal/recurring-standing";
 import {
   controlReminder as controlReminderOwned,
   findGovernor as findReminderGovernorOwned,
@@ -19,7 +24,9 @@ import {
 import {
   prepareCanonicalReminderRevision as prepareCanonicalReminderRevisionOwned,
   prepareHeldReminderRevision as prepareHeldReminderRevisionOwned,
+  readCanonicalRecurringDigestReport as readCanonicalDigestOwned,
   readCanonicalReminderSchedule as readCanonicalReminderScheduleOwned,
+  readHeldRecurringDigestReport as readHeldDigestOwned,
   readHeldReminderSchedule as readHeldReminderScheduleOwned,
   reminderRevisionRefusal as reminderRevisionRefusalOwned,
 } from "./internal/reminder-canonical";
@@ -38,7 +45,10 @@ import { prepareWeeklyDeliverySettlement as prepareWeeklyDeliverySettlementOwned
 import { type DateTime, Effect, Option } from "effect";
 import * as reminder from "./internal/reminder-schedule";
 import type { ReminderSchedule, ReminderScheduleEdit } from "../../src/core/insights/contract";
-import type { ProactivityConsentContext } from "../consent/contract";
+import type {
+  PreparedProactivityConsentDecision,
+  ProactivityConsentContext,
+} from "../consent/contract";
 import { type InsightEventId, type ScheduleId } from "../../src/core/insights/contract";
 import {
   prepareProactivityConsentDecision,
@@ -160,6 +170,28 @@ export const findReminderSchedule = (
     )
   );
 
+const prepareCategoryStanding = (
+  input: ProactivityConsentContext,
+  decision: PreparedProactivityConsentDecision
+): Effect.Effect<ReadonlyArray<D1PreparedStatement>, InsightUnavailable> =>
+  Effect.gen(function* () {
+    const statements: D1PreparedStatement[] = [];
+    if (input.kind === "manual-entry-reminder") {
+      if (decision.decision === "accept" || decision.decision === "continue") {
+        statements.push(
+          ...(yield* reminder.prepareActivation({ ...input, grantId: decision.grantId }))
+        );
+      } else statements.push(reminder.prepareDisable(input));
+    }
+    if (input.kind === "new-recurring-series") {
+      if (decision.decision === "accept" || decision.decision === "continue") {
+        statements.push(
+          ...(yield* recurringStanding.prepareActivation({ ...input, grantId: decision.grantId }))
+        );
+      } else statements.push(recurringStanding.prepareDisable(input));
+    }
+    return statements;
+  });
 /** Commit an exact authenticated category choice with reminder activation/disablement in one User-coordinated D1 unit. Legal standing is never inferred from a canonical/model call. */
 export const recordProactivityDecision = (
   input: ProactivityConsentContext & Readonly<{ choice: string; decisionMessageId: string }>
@@ -173,16 +205,28 @@ export const recordProactivityDecision = (
       if (!(yield* evaluateBudgetAlerts(input))) return false;
       statements.unshift(prepareBudgetOptInFence(input));
     }
-    if (input.kind === "manual-entry-reminder") {
-      if (decision.decision === "accept" || decision.decision === "continue") {
-        statements.push(
-          ...(yield* reminder.prepareActivation({ ...input, grantId: decision.grantId }))
-        );
-      } else statements.push(reminder.prepareDisable(input));
-    }
+    statements.push(...(yield* prepareCategoryStanding(input, decision)));
     yield* Effect.tryPromise(() => input.db.batch(statements));
     return true;
   }).pipe(Effect.mapError(() => new InsightUnavailable()));
+
+/** Explicit native WhatsApp choice atomically changes exact recurring Consent and standing; other categories are refused. */
+export const recordRecurringDigestDecision = (
+  input: ProactivityConsentContext & Readonly<{ choice: string; decisionMessageId: string }>
+): Effect.Effect<boolean, InsightUnavailable> =>
+  input.kind === "new-recurring-series" ? recordProactivityDecision(input) : Effect.succeed(false);
+
+/** Advance bounded confirmation consumption and freeze one complete closed captured day under the existing User coordinator. */
+export const advanceRecurringDigest = (
+  input: Readonly<{ db: D1Database; userId: UserId; now: DateTime.Utc }>
+): Effect.Effect<RecurringDigestAdvanceResult, InsightUnavailable> =>
+  recurringGeneration.advance(input);
+
+/** Read the complete immutable report for this explicit User; expiry of its send never removes historical facts. */
+export const findRecurringDigestReport = (
+  input: Readonly<{ db: D1Database; userId: UserId; id: InsightEventId }>
+): Effect.Effect<Option.Option<RecurringDigestReport>, InsightUnavailable> =>
+  recurringGeneration.findReport(input);
 
 /** Prepare a complete reminder instruction edit under the caller's User coordination. Compose these revision/grant/Consent guards with canonical credential authority and Audit in the caller's atomic unit; this operation never grants opt-in. */
 export const prepareReminderRevision = (
@@ -335,3 +379,15 @@ export const insightRefusal: typeof refuse = (input) => refuse(input);
 export const findInsightAttempt = (
   input: Omit<Parameters<typeof findAttempt>[0], "userId"> & Readonly<{ userId: UserId }>
 ): ReturnType<typeof findAttempt> => findAttempt(input);
+
+/** Canonical complete report read rechecks the caller's live read authority and records accountability in the same commit. */
+export const readCanonicalRecurringDigestReport: typeof readCanonicalDigestOwned = (input) =>
+  readCanonicalDigestOwned(input);
+/** Held hosted report access retains the same User and original admitted Turn authority. */
+export const readHeldRecurringDigestReport: typeof readHeldDigestOwned = (input) =>
+  readHeldDigestOwned(input);
+
+/** Offer the first retained discovery in an authenticated foreground WhatsApp interaction, including permanently suppressed discoveries. */
+export const requestRecurringDigestOffer = (
+  input: ProactivityConsentContext & Readonly<{ messageId: string }>
+): Effect.Effect<void, InsightUnavailable> => requestDiscoveryOffer(input);

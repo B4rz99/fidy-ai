@@ -228,7 +228,7 @@ it("shares canonical reads with live hosted authority, attributes Audit to the T
     Effect.gen(function* () {
       const db = yield* proactivityDatabase;
       const schedule = yield* activateTestReminder(db);
-      const caller = yield* proactivityHostedCaller(db);
+      const caller = yield* proactivityHostedCaller({ db, userIndex: 0 });
       const work = {
         db,
         bucket: Option.none<R2Bucket>(),

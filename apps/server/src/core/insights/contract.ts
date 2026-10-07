@@ -1,6 +1,7 @@
 import { Data, DateTime, Option, Schema, Struct } from "effect";
+import { RecurringSeriesConfirmed } from "~/core/recurring/contract";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
-import { MoneyGroups } from "~/core/_shared/money";
+import { MoneyGroups, type ReadonlyMoney } from "~/core/_shared/money";
 import { ProviderMessageEvidence } from "~/core/provider-evidence/contract";
 import { UtcTimestamp } from "~/core/_shared/time";
 
@@ -43,8 +44,10 @@ export const ProactivityMessageRole = Schema.Literals([
   "budget-threshold",
   "manual-entry-reminder",
   "budget-offer",
+  "recurring-offer",
   "reminder-offer",
   "reminder-question",
+  "new-recurring-series",
 ]);
 export type ProactivityMessageRole = typeof ProactivityMessageRole.Type;
 
@@ -175,6 +178,84 @@ export const ReminderAnchorDate = Schema.String.check(
 ).annotate({ identifier: "ReminderAnchorDate" });
 export type ReminderAnchorDate = typeof ReminderAnchorDate.Type;
 
+/** Captured local date and midnight window; equal labels with different windows are different days. */
+export const ConfirmationDay = Schema.Struct({
+  localDate: ReminderAnchorDate,
+  timeZone: IanaTimeZone,
+  from: UtcTimestamp,
+  toExclusive: UtcTimestamp,
+})
+  .check(
+    Schema.makeFilter((day) => {
+      const start = DateTime.startOf(DateTime.setZoneNamedUnsafe(day.from, day.timeZone), "day");
+      return (
+        DateTime.formatIsoDate(start) === day.localDate &&
+        start.epochMilliseconds === day.from.epochMilliseconds &&
+        DateTime.add(start, { days: 1 }).epochMilliseconds === day.toExclusive.epochMilliseconds
+      );
+    })
+  )
+  .annotate({ identifier: "ConfirmationDay" });
+export type ConfirmationDay = typeof ConfirmationDay.Type;
+
+/** Immutable itemized detection facts; Counterparty is captured at confirmation, never substituted later. */
+export const RecurringDigestItem = Schema.Struct({
+  confirmationId: RecurringSeriesConfirmed.fields.id,
+  seriesId: RecurringSeriesConfirmed.fields.seriesId,
+  counterparty: RecurringSeriesConfirmed.fields.counterparty,
+  money: RecurringSeriesConfirmed.fields.money,
+  cadence: RecurringSeriesConfirmed.fields.cadence,
+  confirmedAt: RecurringSeriesConfirmed.fields.confirmedAt,
+}).annotate({ identifier: "RecurringDigestItem" });
+export type RecurringDigestItem = typeof RecurringDigestItem.Type;
+
+type DigestItemView = Omit<RecurringDigestItem, "money"> & Readonly<{ money: ReadonlyMoney }>;
+const digestItemPrecedes = (previous: DigestItemView, item: DigestItemView): boolean => {
+  if (previous.money.currency !== item.money.currency) {
+    return previous.money.currency < item.money.currency;
+  }
+  if (previous.counterparty !== item.counterparty) return previous.counterparty < item.counterparty;
+  return previous.confirmationId < item.confirmationId;
+};
+/** Complete, nonempty, identity-unique historical items ordered by Currency, Counterparty and confirmation identity. */
+export const RecurringDigestPayload = Schema.Struct({
+  confirmationDay: ConfirmationDay,
+  items: Schema.NonEmptyArray(RecurringDigestItem),
+})
+  .check(
+    Schema.makeFilter<
+      Readonly<{ confirmationDay: ConfirmationDay; items: ReadonlyArray<DigestItemView> }>
+    >((payload) => {
+      const ids = new Set<string>();
+      return payload.items.every((item: DigestItemView, index) => {
+        if (ids.has(item.confirmationId)) return false;
+        ids.add(item.confirmationId);
+        if (
+          item.confirmedAt.epochMilliseconds < payload.confirmationDay.from.epochMilliseconds ||
+          item.confirmedAt.epochMilliseconds >=
+            payload.confirmationDay.toExclusive.epochMilliseconds
+        ) {
+          return false;
+        }
+        const previous = payload.items[index - 1];
+        return previous === undefined || digestItemPrecedes(previous, item);
+      });
+    })
+  )
+  .annotate({ identifier: "RecurringDigestPayload" });
+export type RecurringDigestPayload = typeof RecurringDigestPayload.Type;
+
+/** Frozen complete historical report; delivery and attention state are separate historical facts. */
+export const RecurringDigestReport = Schema.Struct({
+  insightEventId: InsightEventId,
+  serviceMarket: ServiceMarket,
+  locale: Locale,
+  scheduledAt: UtcTimestamp,
+  expiresAt: UtcTimestamp,
+  payload: RecurringDigestPayload,
+}).annotate({ identifier: "RecurringDigestReport" });
+export type RecurringDigestReport = typeof RecurringDigestReport.Type;
+
 /** Direct launch presets. Three-day intervals count calendar dates from the retained anchor. */
 export const ReminderCadence = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("daily") }),
@@ -235,3 +316,6 @@ export const InsightDeliveryDecision = Schema.Union([
   Schema.TaggedStruct("Expired", {}),
 ]).annotate({ identifier: "InsightDeliveryDecision" });
 export type InsightDeliveryDecision = typeof InsightDeliveryDecision.Type;
+
+/** Identifier-only path declaration for the authenticated complete historical report. */
+export const RecurringDigestReportParams = Schema.Struct({ id: InsightEventId });

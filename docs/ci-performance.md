@@ -98,7 +98,7 @@ adapter shard held 347.1s of file execution while the lightest held 241.3s; weig
 from this run to avoid retaining the old serial-cost imbalance. A three-process probe passed
 all 342 cases in the previous slowest shard in 69.6s locally, but the full three-process run
 took 277.0s and failed three cases (two at the existing 15s timeout). Its 11.3s gain over two
-processes does not justify the contention failures. The cap remains two, with no timeout
+processes does not justify the contention failures. The initial selection retained two, with no timeout
 increases or retries to hide failures. Final Linux job durations must validate the rebalanced
 assignment before merge. These probes use the same four runners and their existing hardware;
 no runner scaling or concurrent cases are introduced.
@@ -347,5 +347,19 @@ took 140/136/146/215s; infrastructure took 103s. The first three met three minut
 fourth held 322.5s of file work versus 198.0–216.7s on its peers. The additional allowance suite
 measured 23.7s rather than its unmeasured one-second default, and fixture gains changed the
 relative costs. Scheduling estimates now use this complete revision, including that suite.
-Successful-case console logs are retained only when a case fails; native assertions and failure
-diagnostics remain enabled. Final CI must validate the updated assignment.
+Final CI must validate the updated assignment.
+
+The [next run 37552674845](https://github.com/B4rz99/fidy-ai/actions/runs/37552674845)
+was slower, at 188/188/195/226s, and failed the single case covering all queries for both Users
+at its existing 15s deadline. Its 1,222.5s of aggregate file work requires at least 152.8s over
+eight simultaneous file processes before setup and imports; weights alone cannot fit this run
+within three-minute complete jobs. Owner and peer public query executions now have separate
+cases, preserving every private outcome and Audit assertion without increasing timeouts.
+The speculative successful-log suppression is removed. A fresh complete three-process probe
+uses the final pooled fixtures and optimized 65-occurrence Insight arrangement; the earlier
+three-process rejection preceded that fixture improvement.
+
+The revised full three-process probe passes all 1,352 executed cases in 199.7s, with nine
+unchanged gated skips and zero failures. This includes both separate User query cases and the native residency
+case that timed out in the earlier probe. The final configuration selects three isolated file
+processes on each existing runner; Linux CI must confirm reliability and complete-job durations.

@@ -15,9 +15,7 @@ export default defineConfig({
     // for each file's native Miniflare channels. Do not share bindings or run concurrent cases.
     pool: "forks",
     fileParallelism: true,
-    maxWorkers: 2,
-    // Retain diagnostics for failed cases without flushing successful native fixture logs.
-    silent: "passed-only",
+    maxWorkers: 3,
     testTimeout: 15_000,
   },
 });

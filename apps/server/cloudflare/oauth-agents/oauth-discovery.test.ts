@@ -232,86 +232,88 @@ const expectedQueryFailure = (id: string, peer: boolean): boolean =>
       "transactions.getTransaction",
     ].includes(id));
 
-it("executes every installed declaration-derived query through Core for two Users with private exact structured and text outcomes", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const fixture = yield* approvedFixture({
-        scopes: ["read", "write", "dashboard"],
-        lifetimeDays: 7,
-        auditMigration: true,
-      });
-      const cookie = yield* sessionForUser({ db: fixture.db, index: 2, userIndex: 2 });
-      const time = DateTime.formatIso(yield* DateTime.now);
-      const resourceId = "30000000-0000-4000-8000-000000000001";
-      const privateMarker = "primary-user-private";
-      yield* wait(
-        fixture.db.batch([
-          fixture.db
-            .prepare(
-              "INSERT INTO onboarding_consent_records VALUES ('grant-peer', ?, '{}', 'disclosure', 'decision', 1, 1)"
-            )
-            .bind("20000000-0000-4000-8000-000000000001"),
-          fixture.db
-            .prepare("INSERT INTO trial_periods VALUES (?,0,604800000)")
-            .bind("10000000-0000-4000-8000-000000000001"),
-          fixture.db
-            .prepare("INSERT INTO trial_periods VALUES (?,0,604800000)")
-            .bind("20000000-0000-4000-8000-000000000001"),
-          fixture.db
-            .prepare("INSERT INTO memories VALUES (?, ?, ?, ?, ?)")
-            .bind(resourceId, "10000000-0000-4000-8000-000000000001", privateMarker, time, time),
-          fixture.db
-            .prepare("INSERT INTO keyword_rules VALUES (?, ?, ?, ?, ?, ?, ?)")
-            .bind(
-              resourceId,
-              "10000000-0000-4000-8000-000000000001",
-              privateMarker,
-              privateMarker,
-              "10000000-0000-4000-8000-000000000001",
-              time,
-              time
-            ),
-          fixture.db
-            .prepare(
-              "INSERT INTO transactions (id,user_id,amount,currency,direction,counterparty,category_id,notes,occurred_at,created_at) VALUES (?,?,'9007199254740993','COP','outflow','Mercado',?,?,?,?)"
-            )
-            .bind(
-              resourceId,
-              "10000000-0000-4000-8000-000000000001",
-              "10000000-0000-4000-8000-000000000001",
-              privateMarker,
-              time,
-              time
-            ),
-          fixture.db
-            .prepare("INSERT INTO budgets VALUES (?, ?, ?, 'COP', '9007199254740994', ?, ?)")
-            .bind(
-              resourceId,
-              "10000000-0000-4000-8000-000000000001",
-              "10000000-0000-4000-8000-000000000001",
-              time,
-              time
-            ),
-        ])
-      );
-      expect(
-        (yield* wait(
-          fixture.send("/dashboard/initialize", {
-            method: "POST",
-            headers: fixture.headers,
-            body: "{}",
-          })
-        )).status
-      ).toBe(200);
-      const peer = yield* approveAgain({ ...fixture, headers: { ...fixture.headers, cookie } });
-      const examples: ReadonlyArray<Schema.Json> = [
-        {},
-        { query: {} },
-        { query: { timeZone: "America/Bogota" } },
-        { query: { q: "mercado" } },
-        { params: { id: resourceId } },
-      ];
-      for (const current of [fixture, peer]) {
+it.each(["owner", "peer"] as const)(
+  "executes every installed declaration-derived query through Core for the %s User with private exact structured and text outcomes",
+  (user) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fixture = yield* approvedFixture({
+          scopes: ["read", "write", "dashboard"],
+          lifetimeDays: 7,
+          auditMigration: true,
+        });
+        const cookie = yield* sessionForUser({ db: fixture.db, index: 2, userIndex: 2 });
+        const time = DateTime.formatIso(yield* DateTime.now);
+        const resourceId = "30000000-0000-4000-8000-000000000001";
+        const privateMarker = "primary-user-private";
+        yield* wait(
+          fixture.db.batch([
+            fixture.db
+              .prepare(
+                "INSERT INTO onboarding_consent_records VALUES ('grant-peer', ?, '{}', 'disclosure', 'decision', 1, 1)"
+              )
+              .bind("20000000-0000-4000-8000-000000000001"),
+            fixture.db
+              .prepare("INSERT INTO trial_periods VALUES (?,0,604800000)")
+              .bind("10000000-0000-4000-8000-000000000001"),
+            fixture.db
+              .prepare("INSERT INTO trial_periods VALUES (?,0,604800000)")
+              .bind("20000000-0000-4000-8000-000000000001"),
+            fixture.db
+              .prepare("INSERT INTO memories VALUES (?, ?, ?, ?, ?)")
+              .bind(resourceId, "10000000-0000-4000-8000-000000000001", privateMarker, time, time),
+            fixture.db
+              .prepare("INSERT INTO keyword_rules VALUES (?, ?, ?, ?, ?, ?, ?)")
+              .bind(
+                resourceId,
+                "10000000-0000-4000-8000-000000000001",
+                privateMarker,
+                privateMarker,
+                "10000000-0000-4000-8000-000000000001",
+                time,
+                time
+              ),
+            fixture.db
+              .prepare(
+                "INSERT INTO transactions (id,user_id,amount,currency,direction,counterparty,category_id,notes,occurred_at,created_at) VALUES (?,?,'9007199254740993','COP','outflow','Mercado',?,?,?,?)"
+              )
+              .bind(
+                resourceId,
+                "10000000-0000-4000-8000-000000000001",
+                "10000000-0000-4000-8000-000000000001",
+                privateMarker,
+                time,
+                time
+              ),
+            fixture.db
+              .prepare("INSERT INTO budgets VALUES (?, ?, ?, 'COP', '9007199254740994', ?, ?)")
+              .bind(
+                resourceId,
+                "10000000-0000-4000-8000-000000000001",
+                "10000000-0000-4000-8000-000000000001",
+                time,
+                time
+              ),
+          ])
+        );
+        expect(
+          (yield* wait(
+            fixture.send("/dashboard/initialize", {
+              method: "POST",
+              headers: fixture.headers,
+              body: "{}",
+            })
+          )).status
+        ).toBe(200);
+        const peer = yield* approveAgain({ ...fixture, headers: { ...fixture.headers, cookie } });
+        const examples: ReadonlyArray<Schema.Json> = [
+          {},
+          { query: {} },
+          { query: { timeZone: "America/Bogota" } },
+          { query: { q: "mercado" } },
+          { params: { id: resourceId } },
+        ];
+        const current = user === "owner" ? fixture : peer;
         const token = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ access_token: Schema.String })
         )(
@@ -393,16 +395,16 @@ it("executes every installed declaration-derived query through Core for two User
             operation: operation.id,
           });
         }
-      }
-      expect(
-        yield* wait(
-          fixture.db
-            .prepare("SELECT count(*) AS total FROM dashboard_documents")
-            .first<number>("total")
-        )
-      ).toBe(1);
-    })
-  ));
+        expect(
+          yield* wait(
+            fixture.db
+              .prepare("SELECT count(*) AS total FROM dashboard_documents")
+              .first<number>("total")
+          )
+        ).toBe(1);
+      })
+    )
+);
 
 it("validates malformed structured inputs for every eligible query without echoing arguments or duplicating accounting", () =>
   Effect.runPromise(

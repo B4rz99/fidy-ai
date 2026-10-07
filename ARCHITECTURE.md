@@ -115,7 +115,9 @@ synthetic exchange/discovery/refresh evidence for exact Claude Code, Codex and P
 registration selection and explicit unsupported sensitive interactions; Pi is no longer a support target. No production route, grant authority, client setup promise or
 launch enablement follows from accepting the design. OAuth MCP now shares #35's stable-User canonical-call allowance and retry semantics with PAT/API/CLI
 through Canonical Admission, including mutation attempts, whole atomic batches and native continuation.
-Exact-host interoperability, real Core/D1 security evidence and operator approval remain separate gates.
+Exact-host interoperability, real Core/D1 security evidence and operator approval remain separate gates. See the [#990 release evidence](docs/research/hosted-mcp-release-990.md),
+[Spanish connection guide](docs/guides/hosted-mcp.md) and
+[controlled-proof procedure](docs/operations/hosted-mcp-release.md).
 
 ## Production boundary
 

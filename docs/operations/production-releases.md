@@ -425,3 +425,11 @@ state, provider outcomes, and operational evidence before choosing a response.
 
 Never print, copy into metadata, or pass Cloudflare tokens as command arguments. Rotate a token in
 Cloudflare and GitHub if exposure is suspected.
+
+## Hosted MCP release evidence
+
+The existing edge smoke gate also checks OAuth discovery, malformed bootstrap requests, the exact
+MCP authentication challenge and hostile-Origin refusal. GET probes preserve candidate overrides
+and reserved proof headers. See the [controlled hosted MCP proof](hosted-mcp-release.md) and
+[current evidence](../research/hosted-mcp-release-990.md) before requesting real-user enablement.
+A successful deployment is not host interoperability or launch approval.

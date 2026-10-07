@@ -1,0 +1,96 @@
+{
+  "recordedAt": "2026-10-07T11:57:09Z",
+  "environment": "isolated local public ingress/private Core/Miniflare D1",
+  "productionWrites": false,
+  "effectVersion": "4.0.0",
+  "hosts": [
+    {
+      "name": "Claude Code",
+      "version": "2.1.289",
+      "protocol": "2026-07-28",
+      "callbackHost": "localhost"
+    },
+    {
+      "name": "Codex CLI and pinned daemon",
+      "version": "0.160.0",
+      "protocol": "2025-11-25",
+      "callbackHost": "127.0.0.1"
+    }
+  ],
+  "registration": {
+    "mechanism": "DCR",
+    "status": 201,
+    "cimdAdvertised": false,
+    "manualBearerInjection": false,
+    "metadataScopeHintDoesNotAuthorize": true
+  },
+  "browser": {
+    "establishedSignIn": "synthetic WhatsApp approval delivered through existing loopback fixture",
+    "requestedScopes": ["read", "write", "dashboard"],
+    "approvedScopes": ["read", "write"],
+    "durationDays": 7,
+    "issuerMatches": true,
+    "realProviderMessage": false
+  },
+  "operations": {
+    "eachHost": [
+      "categories.listCategories",
+      "budgets.createBudget",
+      "operations.executeAtomicBatch (two transactions.createTransaction children)",
+      "budgets.deleteBudget"
+    ],
+    "allCanonicalResultsSucceeded": true,
+    "nativeConfirmationAccepted": true,
+    "acceptedAuditCountsBothHosts": [
+      {
+        "operation": "budgets.createBudget",
+        "outcome": "accepted",
+        "total": 2
+      },
+      {
+        "operation": "budgets.deleteBudget",
+        "outcome": "accepted",
+        "total": 2
+      },
+      {
+        "operation": "categories.listCategories",
+        "outcome": "accepted",
+        "total": 2
+      },
+      {
+        "operation": "transactions.createTransaction",
+        "outcome": "accepted",
+        "total": 4
+      }
+    ]
+  },
+  "refresh": {
+    "newHostProcesses": true,
+    "accessExpiryFault": "only disposable local access credential expiration changed",
+    "tokenStatus": 200,
+    "approvedGrantExpirationUnchanged": true
+  },
+  "absoluteExpiry": {
+    "fault": "advance only disposable authority Date.now by eight days; restore afterward",
+    "grantRowsChanged": false,
+    "eachHostMcpStatus": 401,
+    "eachHostRefreshStatus": 400,
+    "canonicalAuditUnchanged": true
+  },
+  "revocation": {
+    "freshFirstPartySettings": true,
+    "actualHostProofFixture": "earlier fresh local fixture, same runtime and host versions",
+    "eachHostMcpStatus": 401,
+    "eachHostRefreshStatus": 400,
+    "toolsExecutedAfterRevocation": 0
+  },
+  "limits": [
+    "Canned loopback model, scripted native keystrokes and synthetic sign-in delivery; no paid inference or real channel proof.",
+    "Process-local TLS and fixed-issuer proxy route only api.fidyapp.com to loopback; no production transport/platform proof.",
+    "Controlled clock and access-expiry faults prove behavior, not natural seven-day passage.",
+    "Native cancellation/headless proofs remain separate actual-host injected-grant bridge cases."
+  ],
+  "secretOrFinancialContentRecorded": false,
+  "runtimeRevision": "d4d019f2c3ee5c33096a3191697ea469204d2f0a",
+  "finalFixtureConnectionsRevoked": 2
+}

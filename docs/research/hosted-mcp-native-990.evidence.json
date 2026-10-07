@@ -1,0 +1,91 @@
+{
+  "recordedAt": "2026-10-07T10:52:59.607945+00:00",
+  "sourceRevision": "1e743e2785b84d7cf944d04e533288b737dbef04",
+  "effectVersion": "4.0.0",
+  "bunRevision": "1.4.3-canary.1+13a98b0db",
+  "seam": "Public ingress \u2192 Core \u2192 OAuth canonical admission \u2192 immutable intent \u2192 atomic owner mutation + Audit in D1",
+  "fixture": "Disposable approved OAuth credential injected by loopback fixture; canned model; actual pinned CLIs and PTYs; no hooks",
+  "trustBoundary": "OAuth-authorized client acceptance, not independently verified human presence",
+  "limitations": [
+    "Injected synthetic grant: no add-URL or actual host OAuth browser approval/exchange proof.",
+    "Loopback workerd/D1 and canned model: no Production mutation or provider inference.",
+    "Exact two hosts only; no Pi, desktop-client or MCP Apps support."
+  ],
+  "results": [
+    {
+      "host": "claude",
+      "version": "2.1.289",
+      "decision": "accept",
+      "formAnswered": true,
+      "completed": true,
+      "remaining": 0,
+      "acceptedAudit": 1,
+      "actualToolCalled": true,
+      "passed": true,
+      "protocols": ["2026-07-28"]
+    },
+    {
+      "host": "claude",
+      "version": "2.1.289",
+      "decision": "cancel",
+      "formAnswered": true,
+      "completed": true,
+      "remaining": 1,
+      "acceptedAudit": 0,
+      "actualToolCalled": true,
+      "passed": true,
+      "protocols": ["2026-07-28"]
+    },
+    {
+      "host": "codex",
+      "version": "0.160.0",
+      "appServerVersion": "0.160.0",
+      "decision": "accept",
+      "formAnswered": true,
+      "completed": true,
+      "remaining": 0,
+      "acceptedAudit": 1,
+      "actualToolCalled": true,
+      "passed": true,
+      "protocols": ["2025-11-25"]
+    },
+    {
+      "host": "codex",
+      "version": "0.160.0",
+      "appServerVersion": "0.160.0",
+      "decision": "cancel",
+      "formAnswered": true,
+      "completed": true,
+      "remaining": 1,
+      "acceptedAudit": 0,
+      "actualToolCalled": true,
+      "passed": true,
+      "protocols": ["2025-11-25"]
+    },
+    {
+      "host": "claude",
+      "version": "2.1.289",
+      "decision": "headless",
+      "formAnswered": false,
+      "completed": true,
+      "remaining": 1,
+      "acceptedAudit": 0,
+      "actualToolCalled": true,
+      "passed": true,
+      "protocols": ["2026-07-28"]
+    },
+    {
+      "host": "codex",
+      "version": "0.160.0",
+      "appServerVersion": "0.160.0",
+      "decision": "headless",
+      "formAnswered": false,
+      "completed": true,
+      "remaining": 1,
+      "acceptedAudit": 0,
+      "actualToolCalled": true,
+      "passed": true,
+      "protocols": ["2025-11-25"]
+    }
+  ]
+}

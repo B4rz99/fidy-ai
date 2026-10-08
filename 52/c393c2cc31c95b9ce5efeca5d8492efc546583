@@ -1,0 +1,138 @@
+apps/server/cloudflare/onboarding/operations.ts
+  s_55523bb8416825::t_c4102065807dd3 35-36,38
+  s_55523bb8416825::t_2fec4f24a7f913 34,37
+apps/server/cloudflare/provider-authentication/internal/google-token.ts
+  s_55523bb8416825::t_6205667cb970de 44
+  s_55523bb8416825::t_c4102065807dd3 1-43,45-162,165-166
+  s_55523bb8416825::t_8738c7c34bd58f 163-164
+.github/workflows/production.yml
+  s_55523bb8416825::t_1aff92652206c8 72-73,114-115
+apps/server/src/shell/observability/contract.ts
+  s_55523bb8416825::t_c4102065807dd3 134
+apps/web/e2e/microsoft-authentication.spec.ts
+  s_55523bb8416825::t_3d366172606065 2-6,8-13,15-17,19-21,24-26,28-30,33
+  s_55523bb8416825::t_b67d3111f45bf2 1,7,14,18,22-23,27,31-32,34-38
+apps/server/cloudflare/provider-authentication/internal/completion.ts
+  s_55523bb8416825::t_c4102065807dd3 2-3,6,107,109,128,130
+  s_55523bb8416825::t_3d366172606065 108,111
+  s_55523bb8416825::t_4688d2ee59b1f4 4-5,110
+apps/web/e2e/provider-authentication.journeys.ts
+  s_55523bb8416825::t_3d366172606065 1-13,15-86,88-90,93-147,149-150,153-209,211-212,215-257,259-260,263-289,297,299-301,303-304,315-316,318-320,322-328,331-332,334-347
+  s_55523bb8416825::t_e54eadf57e8f57 14,87,91-92,148,151-152,210,213-214,258,261-262,290-296,298,302,305-314,317,321,329-330,333
+apps/server/cloudflare/provider-authentication/internal/token-contract.ts
+  s_55523bb8416825::t_c4102065807dd3 2-15,17-18
+  s_55523bb8416825::t_c1f3bbc4de3881 1,16
+apps/server/src/shell/outbound-http/internal/transport.ts
+  s_55523bb8416825::t_c4102065807dd3 32
+infra/cloudflare/alchemy.run.ts
+  s_55523bb8416825::t_1aff92652206c8 22-23,319-327
+apps/server/src/shell/provider-authentication/contract.ts
+  s_55523bb8416825::t_3d366172606065 16-22,27,32,50,68-93
+  s_55523bb8416825::t_86106c03210c9a 94-95
+apps/server/cloudflare/provider-authentication/internal/configuration.ts
+  s_55523bb8416825::t_29d0f8d43c4f60 4
+  s_55523bb8416825::t_3dc9f47eb97c69 1-3,5-49
+apps/server/src/shell/outbound-http/operations.ts
+  s_55523bb8416825::t_c4102065807dd3 145-153
+  s_55523bb8416825::t_7d39622ca22a82 1,19,144,154
+apps/server/src/shell/outbound-http/contract.ts
+  s_55523bb8416825::t_c4102065807dd3 91-92
+apps/server/cloudflare/provider-authentication/internal/status.ts
+  s_55523bb8416825::t_c4102065807dd3 2-3,5,8,18-21,23,40,42
+  s_55523bb8416825::t_1acfb23a12fa11 4,22
+infra/cloudflare/scripts/check-production-runtime-config.sh
+  s_55523bb8416825::t_1aff92652206c8 7-8
+apps/server/cloudflare/provider-authentication/internal/callback.ts
+  s_55523bb8416825::t_c4102065807dd3 5-9,27,36,38,40,48-49,51,69-72,75-79,83,87,89,93,96-99,101,103-104,108-111,117,123,125,129-134,136-138
+  s_55523bb8416825::t_bbddb1474be1d6 1-2,4,39,41,50,88,100,135
+apps/web/e2e/google-authentication.spec.ts
+  s_55523bb8416825::t_3d366172606065 2-6,8,10-13,15-17,19-21,24-26,28-30,33
+  s_55523bb8416825::t_978094f179fc88 7,14,18,22-23,27,31-32,35-38
+apps/server/cloudflare/core-http/internal/http.ts
+  s_55523bb8416825::t_c4102065807dd3 2,1473,1475-1476,1478
+  s_55523bb8416825::t_3d366172606065 4,1474
+  s_55523bb8416825::t_140a61f7a60251 3,5-6
+infra/cloudflare/scripts/check-production-runtime-config.test.ts
+  s_55523bb8416825::t_1aff92652206c8 24-25
+apps/server/cloudflare/public-worker.ts
+  s_55523bb8416825::t_3d366172606065 2-4,234-236,250-252,272,474-475
+  s_55523bb8416825::t_566e583954985e 1
+apps/server/cloudflare/provider-authentication/operations.ts
+  s_55523bb8416825::t_c4102065807dd3 3,35,38,56,59
+  s_55523bb8416825::t_3d366172606065 8-10,12-13,16,18-20,24,34,58,64
+  s_55523bb8416825::t_6638b0656dede9 7,36,41,45,55,57,60-63,65-66
+apps/server/src/shell/secret-material/operations.ts
+  s_55523bb8416825::t_c4102065807dd3 94-100
+ARCHITECTURE.md
+  s_55523bb8416825::t_ca8479575c0ef3 149,164
+SECURITY_STANDARDS.md
+  s_55523bb8416825::t_cf180108fbed06 150,161-162,170,174,178-185
+apps/server/.dependency-cruiser.mjs
+  s_55523bb8416825::t_f9816502e47135 100-101
+apps/server/ARCHITECTURE.md
+  s_55523bb8416825::t_5b4713c0938d16 175,178
+apps/server/cloudflare/browser-acceptance-preview.ts
+  s_55523bb8416825::t_7dc37ae9525d51 82-134,139-140,315-318,327-334,336,421-423
+apps/server/cloudflare/core-http/contract.ts
+  s_55523bb8416825::t_8dda7f57c10fac 1,5
+apps/server/cloudflare/core-worker.ts
+  s_55523bb8416825::t_2f2e52e82a8e19 1,36
+apps/server/cloudflare/migrations/0064_microsoft_authentication.sql
+  s_55523bb8416825::t_1006b95a00f23d 1-2
+apps/server/cloudflare/provider-authentication/contract.ts
+  s_55523bb8416825::t_2f4a8a8ca30e7a 4-5,11-13
+apps/server/cloudflare/provider-authentication/internal/microsoft-token.ts
+  s_55523bb8416825::t_3c520c06fe8f42 1-164
+apps/server/cloudflare/provider-authentication/internal/start.ts
+  s_55523bb8416825::t_ff4c96fab21b85 1-2,4-7,14,37,42-43,48-53,55-56,66-114,117-122,124-125,131,144-145,148-149,153,164
+apps/server/cloudflare/provider-authentication/journey.test-fixture.ts
+  s_55523bb8416825::t_c78e501ef929e2 1-106
+apps/server/cloudflare/provider-authentication/journey.test.ts
+  s_55523bb8416825::t_d8e83005fb5258 3,5,10
+apps/server/cloudflare/provider-authentication/microsoft.test.ts
+  s_55523bb8416825::t_615d0d75b24620 1-701
+apps/server/src/client.ts
+  s_55523bb8416825::t_16e7338741af46 152-153
+apps/server/src/shell/outbound-http/internal/oidc-http.ts
+  s_55523bb8416825::t_c4168bd0c34fef 4,7-18,20,26-28,33-34
+apps/server/src/shell/web-authentication/contract.ts
+  s_55523bb8416825::t_d1b8455f4b33ce 13-14
+apps/web/ARCHITECTURE.md
+  s_55523bb8416825::t_8fa360151435d9 81-82,84-85,89
+apps/web/src/app/routes.ts
+  s_55523bb8416825::t_455ef1a95a7291 17-19,138,143-153,160-161
+apps/web/src/features/browser-login/feature.tsx
+  s_55523bb8416825::t_aa71f269b21eda 285
+apps/web/src/features/provider-authentication/controller.ts
+  s_55523bb8416825::t_6c3c4acf45fc28 7,15,19-21,23,25-35,39,67,71,76,78,85,112,123,128-131,172,174,181,187,193,196,203-205,212-214,217,219,222,246,253,255,266
+apps/web/src/features/provider-authentication/feature.tsx
+  s_55523bb8416825::t_578b5416e95be7 1,8,13-23,28,33,68,70,86,88,113-122,126-128,142-144,146,157-162,164-168,177-180,182
+apps/web/src/transport/client.ts
+  s_55523bb8416825::t_b640111186d7e9 24
+docs/operations/google-authentication.md
+  s_55523bb8416825::t_6b9160484581fe 8
+docs/operations/microsoft-authentication.md
+  s_55523bb8416825::t_565f0fc563fdb0 1-63
+docs/operations/provider-inventory.md
+  s_55523bb8416825::t_e3ed900b2efbea 9
+scripts/check-credential-evidence.ts
+  s_55523bb8416825::t_7d00aa7abc3c5b 22-27
+apps/server/src/shell/consent/internal/web-disclosure.ts
+  s_55523bb8416825::t_b2ec49137830c3 3,6-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "52c393c2cc31c95b9ce5efeca5d8492efc546583",
+  "prompts": {},
+  "sessions": {
+    "s_55523bb8416825": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11896-74c5-7f82-b3d7-9e3ce7978236",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

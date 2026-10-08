@@ -43,8 +43,6 @@ const readMigrationRepairEvidence = (
       "api",
       "--paginate",
       "--slurp",
-      "--jq",
-      "add",
       `repos/${repository}/commits/${headSha}/statuses?per_page=100`,
     ])
   ),

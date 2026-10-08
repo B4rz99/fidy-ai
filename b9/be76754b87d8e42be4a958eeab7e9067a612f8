@@ -1,0 +1,19 @@
+infra/cloudflare/scripts/migration-history.ts
+  s_55523bb8416825::t_fb9eb4a000157d 154,308
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b9be76754b87d8e42be4a958eeab7e9067a612f8",
+  "prompts": {},
+  "sessions": {
+    "s_55523bb8416825": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11896-74c5-7f82-b3d7-9e3ce7978236",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

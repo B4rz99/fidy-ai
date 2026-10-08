@@ -97,6 +97,15 @@ client name, only requested permissions, a narrower non-empty approval subset, c
 7/30/90/365-day duration (90 default), expiration and Conectar / Cancelar. Omitted scope defaults to
 read only, with no implicit write or unrequested capability. Escalation needs a new explicit review.
 
+The independent institution `connections` feature presents `/connections/continue` using only a
+public attempt reference. The server-owned browser declaration composes into the dedicated browser
+client. Review requires the same User's live cookie; preparation requires fresh authority and runs
+only on an explicit click. Login returns to this fixed route with the public reference, never a
+caller-supplied redirect. Query state and expiry work belong to the authentication registry.
+An uncertain preparation disables repeat submission and recovers through review. The screen
+truthfully shows pending authorization: institution authorization, callback credentials, Account
+discovery and activation remain unavailable until the verified institution capsule is installed.
+
 Conectar submits the exact reviewed scope subset, duration and absolute expiration through the typed
 origin/CSRF-protected client. Its void command result prevents callback codes from entering Atom result
 state; it immediately navigates to the server-owned registered callback. Fidy never handles or stores

@@ -1,6 +1,11 @@
 import { RecurringDigestFeature } from "@/features/recurring-digest/feature";
 import { Option, Schema } from "effect";
-import { OAuthConnectionListQuery, OAuthRequestId } from "@/transport/client";
+import {
+  ConnectionAttemptReference,
+  OAuthConnectionListQuery,
+  OAuthRequestId,
+} from "@/transport/client";
+import { ConnectionContinuationFeature } from "@/features/connections/feature";
 import { OAuthManagementFeature, OAuthReviewFeature } from "@/features/oauth-connections/feature";
 import { type JSX, Suspense, createElement, lazy } from "react";
 import {
@@ -115,13 +120,25 @@ const browserLoginPairingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/auth/pair",
   validateSearch: (search) =>
-    Schema.decodeSync(Schema.Struct({ oauthRequest: Schema.optionalKey(OAuthRequestId) }))(search),
+    Schema.decodeSync(
+      Schema.Struct({
+        oauthRequest: Schema.optionalKey(OAuthRequestId),
+        connectionAttempt: Schema.optionalKey(ConnectionAttemptReference),
+      })
+    )(search),
   component: BrowserLoginPairingFeature,
 });
 const oauthReviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/oauth/review/$requestId",
   component: OAuthReviewFeature,
+});
+const connectionContinuationRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/connections/continue",
+  validateSearch: (search) =>
+    Schema.decodeSync(Schema.Struct({ attempt: Schema.optionalKey(Schema.Unknown) }))(search),
+  component: ConnectionContinuationFeature,
 });
 const emailOnboardingRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -132,6 +149,7 @@ const routeTree = rootRoute.addChildren([
   createPublicSiteRoute(rootRoute),
   browserLoginPairingRoute,
   oauthReviewRoute,
+  connectionContinuationRoute,
   subscriptionOffersRoute,
   emailOnboardingRoute,
   authenticatedRoute.addChildren([

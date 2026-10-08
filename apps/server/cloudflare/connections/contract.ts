@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Data, Schema } from "effect";
 import { WebSessionId } from "../../src/core/web-session/contract";
 import { UserId } from "../../src/core/identity/contract";
 import { ConnectionAttemptReference } from "../../src/shell/connections/contract";
@@ -21,3 +21,8 @@ export type ConnectionQueryOperation =
   | "connections.listInstitutions"
   | "connections.listConnections"
   | "connections.getConnection";
+
+/** Connection continuation cleanup could not complete; no private storage detail is exposed. */
+export class ConnectionRetentionUnavailable extends Data.TaggedError(
+  "ConnectionRetentionUnavailable"
+) {}

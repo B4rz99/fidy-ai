@@ -12,6 +12,7 @@ import { UserTransactionCoordinator } from "../transactions/runtime";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { ConnectInstitutionResult } from "../../src/core/connections/contract";
+import { sweepConnectionAttempts } from "./runtime";
 
 const users = [
   "10000000-0000-4000-8000-000000000051",
@@ -82,6 +83,7 @@ const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
     const migrations = [
       "0063_connections",
       "0064_connection_browser_execution",
+      "0065_connection_attempt_retention",
       "0001_categories",
       "0002_resource_admission",
       "0003_pending_consent",
@@ -1168,5 +1170,125 @@ it("removes expired attempts after their bounded retention while retaining the s
       ).toMatchObject({
         results: [{ status: "pending" }],
       });
+    })
+  ));
+
+it("scheduled retention erases abandoned preparation after Consent withdrawal without another User request", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
+      );
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO onboarding_consent_records VALUES ('retention-grant', ?, '{}', 'disclosure', 'decision', 1, 1)"
+          )
+          .bind(users[0])
+          .run()
+      );
+      const started = yield* Effect.tryPromise(() => start(db));
+      if (started.type !== "continue_in_browser") throw new Error("Expected browser continuation");
+      const attempt = new URL(started.continuation.url).searchParams.get("attempt");
+      expect(
+        (yield* Effect.tryPromise(() =>
+          send(db, request(0, "/web/connections/begin", "POST", { attempt }))
+        )).status
+      ).toBe(200);
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "INSERT INTO consent_user_revocations VALUES ('retention-withdrawn', ?, 'retention-grant', ?, ?)"
+          )
+          .bind(users[0], sessions[0], DateTime.nowUnsafe().epochMilliseconds)
+          .run()
+      );
+      const tick = (): Promise<void> =>
+        coreWorker
+          .scheduled(
+            {
+              cron: "* * * * *",
+              scheduledTime: DateTime.nowUnsafe().epochMilliseconds,
+              noRetry: () => undefined,
+            },
+            {
+              DB: db,
+              AI: { run: () => Promise.reject(new Error("unused inference")) },
+              USER_TRANSACTION_COORDINATOR: {
+                getByName: () => ({ fetch: () => Promise.reject(new Error("unused coordinator")) }),
+              },
+              HOSTED_AI_MODEL: approvedWorkersAiModel,
+              BROWSER_ORIGIN: "https://app.fidyapp.com",
+              CLOUDFLARE_ACCESS_AUDIENCE: "",
+              CLOUDFLARE_ACCESS_ISSUER: "",
+              CONTRACT_DIGEST: "a".repeat(64),
+              RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
+              KAPSO_API_KEY: "",
+              KAPSO_WEBHOOK_SECRET: "",
+              WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio",
+              WOMPI_ENVIRONMENT: "",
+              WOMPI_INTEGRITY_SECRET: "",
+              WOMPI_PRIVATE_KEY: "",
+              WOMPI_PUBLIC_KEY: "",
+            }
+          )
+          .catch(() => undefined);
+      // Other owners have incomplete schemas in this focused fixture; their failures cannot skip retention.
+      vi.setSystemTime(started.continuation.expiresAt.epochMilliseconds + 86400000 - 1);
+      yield* Effect.tryPromise(tick);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db.prepare("SELECT attempt_id FROM connection_authorization_executions").all()
+        )).results
+      ).toHaveLength(1);
+      vi.setSystemTime(started.continuation.expiresAt.epochMilliseconds + 86400000);
+      yield* Effect.tryPromise(tick);
+      expect(
+        yield* Effect.tryPromise(() => db.prepare("SELECT id FROM connection_attempts").all())
+      ).toMatchObject({ results: [] });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT attempt_id FROM connection_authorization_executions").all()
+        )
+      ).toMatchObject({ results: [] });
+      expect(
+        yield* Effect.tryPromise(() => db.prepare("SELECT id FROM connections").all())
+      ).toMatchObject({ results: [{ id: started.connection.id }] });
+    })
+  ));
+
+it("bounds independent retention and preserves live attempts and stable Connections", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
+      );
+      const started = yield* Effect.tryPromise(() => start(db));
+      const current = DateTime.nowUnsafe().epochMilliseconds;
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(`INSERT INTO connection_attempts
+        (id,user_id,connection_id,institution_id,public_reference,status,created_at_ms,expires_at_ms)
+        WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 130)
+        SELECT 'retention-' || n, ?, ?, 'bancolombia', 'retention-reference-' || n, 'invalidated', ?, ? FROM seq`)
+          .bind(users[0], started.connection.id, current - 86400000 - 600000, current - 86400000)
+          .run()
+      );
+      yield* sweepConnectionAttempts({ db, current });
+      expect(
+        (yield* Effect.tryPromise(() =>
+          db.prepare("SELECT id FROM connection_attempts WHERE status = 'invalidated'").all()
+        )).results
+      ).toHaveLength(2);
+      yield* sweepConnectionAttempts({ db, current });
+      expect(
+        (yield* Effect.tryPromise(() => db.prepare("SELECT status FROM connection_attempts").all()))
+          .results
+      ).toEqual([{ status: "pending" }]);
+      expect(
+        (yield* Effect.tryPromise(() => db.prepare("SELECT id FROM connections").all())).results
+      ).toEqual([{ id: started.connection.id }]);
     })
   ));

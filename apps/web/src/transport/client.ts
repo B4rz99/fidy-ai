@@ -32,6 +32,8 @@ export type {
   SubmitPaymentEnrollmentPayload,
 } from "@fidy/server/client";
 export {
+  ConnectionAttemptReference,
+  ConnectionContinuationReview,
   OAuthConnectionId,
   OAuthConnectionList,
   OAuthConnectionListQuery,

@@ -36,6 +36,7 @@ export {
 export { CanonicalAllowance, canonicalAllowanceHeaders } from "~/shell/quotas/contract";
 export {
   ConnectionBrowserApi,
+  ConnectionAttemptReference,
   ConnectionContinuationInput,
   ConnectionContinuationFailure,
   ConnectionContinuationReview,

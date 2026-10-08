@@ -8,6 +8,7 @@ export type ScheduledOperation =
   | "audit.retention"
   | "canonical.admissionRetention"
   | "oauth.confirmationRetention"
+  | "connections.attemptRetention"
   | "quota.consumptionRetention"
   | "operational.events.retention"
   | "operational.canary.publish"

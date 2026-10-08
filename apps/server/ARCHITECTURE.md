@@ -70,7 +70,10 @@ rechecks the exact fresh WebSession, unrevoked Consent, institution gate and ori
 deadline before consumption, private execution metadata and Audit commit. Review needs a live
 same-User session and returns only safe Connection facts and `ready` or `prepared` progress.
 A newer attempt retires the older continuation's progress; execution metadata cascades with the
-attempt's existing bounded retention. Preparation leaves the Connection `Connecting` and grants
+attempt's bounded retention. Independent Core maintenance removes at most 128 attempts per tick
+once their original expiry is 24 hours old, cascading execution metadata even after Consent
+withdrawal or inactivity. Stable Connections and their separate Audit evidence remain retained.
+Preparation leaves the Connection `Connecting` and grants
 no institution authority. Bancolombia authorization, callback validation, protected credentials,
 Account discovery and activation remain pending the verified institution contract; the production
 gate remains disabled.

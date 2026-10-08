@@ -21,6 +21,7 @@ export const wait = <A>(promise: Promise<A>): Effect.Effect<A, TestFailure> =>
 type QueryGate = Readonly<{
   waiting: ReturnType<typeof Promise.withResolvers<void>>;
   release: ReturnType<typeof Promise.withResolvers<void>>;
+  settled: ReturnType<typeof Promise.withResolvers<void>>;
   scheduled: string[];
 }>;
 
@@ -41,10 +42,12 @@ const pauseBudgetRead = (
         if (key === "all" && sql.includes("FROM budgets WHERE") && gate.scheduled.length === 0) {
           gate.scheduled.push("held");
           gate.waiting.resolve();
-          return gate.release.promise.then(() => {
-            const result: unknown = Reflect.apply(method, target, args);
-            return result;
-          });
+          return gate.release.promise
+            .then(() => {
+              const result: unknown = Reflect.apply(method, target, args);
+              return result;
+            })
+            .finally(gate.settled.resolve);
         }
         if (gate.scheduled.length > 0) gate.scheduled.push(sql);
         const result: unknown = Reflect.apply(method, target, args);
@@ -117,6 +120,7 @@ export type Harness = Readonly<{
   holdBudgetRead: () => Readonly<{
     waiting: Promise<void>;
     release: () => void;
+    settled: Promise<void>;
     scheduled: () => ReadonlyArray<string>;
   }>;
   db: D1Database;
@@ -295,12 +299,14 @@ export const setup = (auditMigration = true): Effect.Effect<Harness, TestFailure
         const gate: QueryGate = {
           waiting: Promise.withResolvers<void>(),
           release: Promise.withResolvers<void>(),
+          settled: Promise.withResolvers<void>(),
           scheduled: [],
         };
         queryGate = Option.some(gate);
         return {
           waiting: gate.waiting.promise,
           release: gate.release.resolve,
+          settled: gate.settled.promise,
           scheduled: () => gate.scheduled.slice(1),
         };
       },

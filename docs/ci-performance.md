@@ -108,7 +108,23 @@ remains. The new fixture case proves auth schema variants, no private-row captur
 foreign-key rejection. Migration-specific suites retain their original runtime and migrations.
 All 321 subscription cases across 14 files pass locally in 26.7s with eight unchanged Sandbox
 skips; all eight native fixture cases pass. Scheduling budgets the seven new measured costs
-conservatively. Final CI must confirm the complete-workflow target.
+conservatively.
+
+[Subscription-pool run 37859634224](https://github.com/B4rz99/fidy-ai/actions/runs/37859634224)
+finished in 2m54s but failed an existing OAuth in-flight deadline case, so this is not a successful
+performance result. The test released a held D1 read and immediately issued a follow-up without
+consuming the expired reply or observing native read settlement. It now drains the reply and
+waits for the fixture's explicit settlement signal. The real deadline, coordinator, native
+response, SQL-fencing and follow-up success assertions remain; no retry or sleep is added.
+The three-file contention probe passes all 160 cases, including abort and deadline variants.
+
+Scheduling now uses actual file test-body durations from the complete green Linux run
+37858866790, replacing local estimates for all 115 files. Changed subscription/fixture costs
+use only their passed file results from 37859634224; the failed OAuth file retains its prior
+successful cost. These mixed-revision values are conservative scheduling estimates, not
+medians or equivalent-revision performance evidence. Tiny and unknown files keep a one-second
+floor. Original estimated work distribution missed a 194–309s spread in the latest run.
+Final CI must confirm all gates and the complete-workflow target.
 
 ## Adapter regression follow-up: #1066
 

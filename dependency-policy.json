@@ -1,15 +1,15 @@
 {
   "$comment": [
     "Updates this repo has decided not to take yet. Read by scripts/check-dependency-updates.ts,",
-    "which fails on any compatible update — patch, minor, or prerelease-to-stable — that a pin has",
+    "which fails on any compatible update \u2014 patch, minor, or prerelease-to-stable \u2014 that a pin has",
     "not taken. An entry here downgrades that failure to a warning until its date; it never hides it.",
     "`until` is exclusive: a deferral dated 2026-09-01 stops applying on 2026-09-01. Give a reason a",
-    "reader in three months can act on — what breaks, and what has to happen first.",
+    "reader in three months can act on \u2014 what breaks, and what has to happen first.",
     "`manifest` scopes an entry to one manifest; omit it and the entry speaks for every pin of that",
     "name, which is wrong whenever the same package is pinned twice for different reasons.",
     "",
     "`acceptedVulnerabilities` is the other half: a vulnerability this repo ships with, because the",
-    "install delay in bunfig.toml is never punctured — not even to reach a fix. A release published",
+    "install delay in bunfig.toml is never punctured \u2014 not even to reach a fix. A release published",
     "days ago is how a compromised package arrives, so the delay outranks a known CVE, and when the",
     "only fix is too young the vulnerability is carried instead. Each entry pairs one advisory with",
     "one lockfile, matching an `sca.exclusions` entry in .fluidattacks/sca.yaml, which is where the",
@@ -85,12 +85,6 @@
       "path": "bun.lock",
       "reason": "Temporarily retain the required shadcn 4.21.0 development CLI, whose fast-glob and ts-morph dependencies bring in braces 3.0.3. GHSA-vfj7-8cjw-p6xm reports stack exhaustion from deeply nested brace patterns; no patched npm release exists as of 2026-10-03. This is risk acceptance, not remediation: the vulnerable package remains installed. Limit CLI use to reviewed component names, local paths and trusted registry inputs during this window. Recheck upstream before expiry; replace or upgrade the affected chain only after every new release meets the unchanged seven-day minimumReleaseAge, rerun CLI and application verification plus SCA, and remove both this record and the matching scanner exclusion once the finding is resolved.",
       "until": "2026-10-10T00:00:00Z"
-    },
-    {
-      "cve": "CVE-2026-93749",
-      "path": "bun.lock",
-      "reason": "Temporarily retain source-map-js 1.2.1 in the Vite/Tailwind, jsdom and related build/test tooling graph. GHSA-68fv-2mgg-jv7q reports event-loop denial of service from malicious indexed source-map section offsets. The 1.2.2 fix was published 2026-09-30T14:08:09.382Z and becomes eligible under the unchanged seven-day minimumReleaseAge on 2026-10-07T14:08:09.382Z. This is risk acceptance, not remediation: the vulnerable package remains installed. During this window, build and test only reviewed repository sources and trusted source maps; do not process externally supplied source maps or expose the development server to untrusted clients. Upgrade the transitive resolution to 1.2.2 after eligibility, rerun builds/browser tests/SCA, and remove this record and its matching scanner exclusion before expiry.",
-      "until": "2026-10-08T00:00:00Z"
     }
   ]
 }

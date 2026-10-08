@@ -4,6 +4,11 @@ fidy-ai has not been released, it is in development phase. Any backward compatib
 
 ## Agent skills
 
+### Codex cloud workers
+
+For Debian-based Codex cloud setup and native CLI test sessions, see
+[`docs/agents/codex-cloud.md`](docs/agents/codex-cloud.md).
+
 ### Issue tracker
 
 Issues and PRDs live as **GitHub issues** in `B4rz99/fidy-ai`, managed via the `gh` CLI. See `docs/agents/issue-tracker.md`.

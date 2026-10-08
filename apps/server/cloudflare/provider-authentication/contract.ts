@@ -1,3 +1,4 @@
+import type { PendingConsentExchangeId } from "../../src/shell/consent/contract";
 import { Data } from "effect";
 import type { UserId } from "../../src/core/identity/contract";
 import type { DisclosureSnapshot } from "../../src/core/consent/contract";
@@ -16,6 +17,9 @@ export type ProviderEnvironment = Readonly<{ DB: D1Database; BROWSER_ORIGIN: str
 
 /** One-use verified web origin. Compose owner records only inside this request and commit them together. */
 export type ProvenProviderSignup = Readonly<{
+  origin:
+    | Readonly<{ _tag: "Web" }>
+    | Readonly<{ _tag: "WhatsApp"; exchangeId: PendingConsentExchangeId }>;
   attemptId: string;
   disclosure: DisclosureSnapshot;
   acceptedAtMs: number;

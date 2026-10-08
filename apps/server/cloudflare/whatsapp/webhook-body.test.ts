@@ -32,6 +32,7 @@ const probeOversizedBody = (
   const response = Effect.runPromise(
     receiveWhatsAppWebhook({
       DB: db,
+      BROWSER_ORIGIN: "https://app.fidyapp.com",
       KAPSO_API_KEY: "test-key",
       KAPSO_WEBHOOK_SECRET: "test-secret",
       WHATSAPP_BUSINESS_PORTFOLIO_ID: "test-portfolio",

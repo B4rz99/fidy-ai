@@ -1,3 +1,4 @@
+import { captureWhatsApp, whatsappOperator } from "./browser-acceptance-whatsapp";
 import { Clock, Effect, Option, Schema } from "effect";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import {
@@ -136,6 +137,12 @@ globalThis.fetch = new Proxy(globalThis.fetch, {
   apply: (target, thisArg, args): unknown => {
     const requestUrl: unknown = args[0];
     const url = requestUrl instanceof Request ? requestUrl.url : String(requestUrl);
+    if (url.startsWith("https://api.kapso.ai/meta/whatsapp/")) {
+      const outbound: unknown = Reflect.construct(Request, args);
+      return outbound instanceof Request
+        ? captureWhatsApp(outbound)
+        : Promise.resolve(new Response(null, { status: 400 }));
+    }
     const oidc = oidcFixtureResponse({ url, args });
     if (Option.isSome(oidc)) return oidc.value;
     if (url === `${accessIssuer}/cdn-cgi/access/certs`) {
@@ -350,7 +357,9 @@ const operator = Bun.serve({
     if (operatorRoute(request, "/email/replacement/deliver", "POST")) {
       return deliverReplacementProof();
     }
-    const setup = Option.orElse(googleOperator(request), () => operatorSetup(request));
+    const setup = Option.orElse(whatsappOperator(request), () =>
+      Option.orElse(googleOperator(request), () => operatorSetup(request))
+    );
     if (Option.isSome(setup)) return setup.value;
     const loginCode = operatorCode(request, "/email/login/deliver");
     if (Option.isSome(loginCode)) return deliverEmailLoginProof(loginCode.value);
@@ -432,11 +441,11 @@ const server = Bun.serve({
               USER_TRANSACTION_COORDINATOR: {
                 getByName: coordinatorFor,
               },
-              KAPSO_API_KEY: "",
-              KAPSO_WEBHOOK_SECRET: "",
+              KAPSO_API_KEY: "acceptance-kapso-key",
+              KAPSO_WEBHOOK_SECRET: "acceptance-kapso-secret",
               CLOUDFLARE_ACCESS_ISSUER: accessIssuer,
               CLOUDFLARE_ACCESS_AUDIENCE: accessAudience,
-              WHATSAPP_BUSINESS_PORTFOLIO_ID: "",
+              WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio",
             }),
         },
       })

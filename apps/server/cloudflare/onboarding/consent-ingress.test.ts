@@ -1,14 +1,9 @@
 import { maxWhatsAppWebhookBytes } from "../../src/shell/consent/contract";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
-import { type Cause, Clock, DateTime, Effect, Equal, Exit, Option, Schema } from "effect";
+import { Clock, Effect, Exit, Option, Schema } from "effect";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { recoverPendingDisclosures, sweepExpiredConsent } from "../consent/ingress/runtime";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
-import {
-  dispatchOnboardingEmail,
-  receiveOnboardingEmail,
-  runOnboardingEmailWorkflow,
-} from "../email-authentication/runtime";
 import { WhatsAppStatusAdmission, WhatsAppTurnAdmission } from "../whatsapp/contract";
 
 import coreWorker from "../core-worker";
@@ -38,67 +33,12 @@ const decodeJson = (value: string): unknown =>
 const secret = "kapso-webhook-secret-for-consent-tests";
 const portfolio = "portfolio-1";
 const dayMs = 86_400_000;
-const statusCooldownElapsedMs = 61_000;
 const bsuid = "CO.13491208655302741918";
 
 const nowSeconds = Math.floor(Effect.runSync(Clock.currentTimeMillis) / 1000);
 const migration = new URL("../migrations/0003_pending_consent.sql", import.meta.url);
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
-
-const seedSyntheticEnrollment = (
-  db: D1Database,
-  index: number
-): Effect.Effect<void, Cause.UnknownError> =>
-  Effect.gen(function* () {
-    const suffix = String(index).padStart(12, "0");
-    const exchange = `00000000-0000-4000-8000-${suffix}`;
-    const token = `00000001-0000-4000-8000-${suffix}`;
-    const enrollment = `00000002-0000-4000-8000-${suffix}`;
-    const caller = `CO.${String(index).padStart(20, "0")}`;
-    yield* Effect.tryPromise(() =>
-      db
-        .prepare(`INSERT INTO pending_consent_exchanges
-      (id,portfolio_id,bsuid,phone_number_id,initiating_message_id,initiating_body_sha256,
-       correlation_token,disclosure_json,disclosure_message_id,created_at_ms,expires_at_ms,state)
-      SELECT ?,portfolio_id,?,phone_number_id,?,initiating_body_sha256,?,
-        disclosure_json,disclosure_message_id,created_at_ms,expires_at_ms,'outbound_started'
-      FROM pending_consent_exchanges WHERE bsuid = ?`)
-        .bind(exchange, caller, `wamid.first-${index}`, token, bsuid)
-        .run()
-    );
-    yield* Effect.tryPromise(() =>
-      db
-        .prepare(`INSERT INTO pending_consent_delivery
-      (correlation_token,phone_number_id,message_id,occurred_at_ms,received_at_ms,decision_not_before_ms)
-      SELECT ?,phone_number_id,message_id,occurred_at_ms,received_at_ms,decision_not_before_ms
-      FROM pending_consent_delivery WHERE correlation_token = (
-        SELECT correlation_token FROM pending_consent_exchanges WHERE bsuid = ?)`)
-        .bind(token, bsuid)
-        .run()
-    );
-    yield* Effect.tryPromise(() =>
-      db
-        .prepare(`INSERT INTO pending_consent_decisions
-      (exchange_id,portfolio_id,bsuid,phone_number_id,decision,disclosure_json,disclosure_message_id,
-       decision_message_id,delivery_key,body_sha256,occurred_at_ms,received_at_ms)
-      SELECT ?,portfolio_id,?,phone_number_id,decision,disclosure_json,disclosure_message_id,
-        ?,delivery_key,body_sha256,occurred_at_ms,received_at_ms
-      FROM pending_consent_decisions WHERE bsuid = ?`)
-        .bind(exchange, caller, `wamid.accept-${index}`, bsuid)
-        .run()
-    );
-    yield* Effect.tryPromise(() =>
-      db
-        .prepare(`INSERT INTO pending_email_enrollments
-      (id,exchange_id,email_address,submission_message_id,submission_body_sha256,created_at_ms,expires_at_ms,state)
-      SELECT ?,?,email_address,?,submission_body_sha256,created_at_ms,expires_at_ms,state
-      FROM pending_email_enrollments WHERE exchange_id = (
-        SELECT id FROM pending_consent_exchanges WHERE bsuid = ?)`)
-        .bind(enrollment, exchange, `wamid.email-${index}`, bsuid)
-        .run()
-    );
-  });
 
 const runSweep = (db: D1Database): Promise<void> => Effect.runPromise(sweepExpiredConsent(db)());
 
@@ -134,6 +74,13 @@ const setup = (
             new URL("../migrations/0025_voice_refusal.sql", import.meta.url),
           ],
         })
+      );
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TABLE whatsapp_provider_handoffs (id TEXT PRIMARY KEY,exchange_id TEXT,created_at_ms INTEGER,expires_at_ms INTEGER,handoff_send_started_ms INTEGER,pairing_id TEXT,review_code TEXT,review_started_ms INTEGER,review_message_id TEXT,decision TEXT,consumed_at_ms INTEGER)"
+          )
+          .run()
       );
       // This pre-User fixture exercises Consent only; no verified association exists yet.
       yield* Effect.tryPromise(() =>
@@ -226,6 +173,7 @@ const setup = (
                     CLOUDFLARE_ACCESS_ISSUER: "",
                     CLOUDFLARE_ACCESS_AUDIENCE: "",
                     KAPSO_API_KEY: "fake-provider-key",
+
                     WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio,
                     RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
                     // Canary bindings: a rejected webhook must not touch these authorities.
@@ -744,7 +692,7 @@ it("records only one origin-qualified pending acceptance despite duplicate and l
       expect(results).toHaveLength(1);
       expect(
         yield* Schema.decodeUnknownEffect(Schema.String)(results[0]?.disclosure_json)
-      ).toContain("onboarding-2026-09-28-kapso-free");
+      ).toContain("onboarding-2026-10-08-providers");
       expect(results).toMatchObject([
         {
           decision: "accepted",
@@ -787,7 +735,7 @@ it("does not enroll a replay of the mailbox message that initiated disclosure", 
       ).toBe(200);
       expect(
         (yield* Effect.tryPromise(() => send(inbound("wamid.first", "test@example.com")))).status
-      ).toBe(409);
+      ).toBe(200);
       expect(
         (yield* Effect.tryPromise(() =>
           db.prepare("SELECT * FROM pending_email_enrollments").all()
@@ -834,7 +782,7 @@ it("remembers a mailbox seen before disclosure delivery, without creating work",
         (yield* Effect.tryPromise(() => send(inbound("wamid.accept", "Acepto", decisionTime))))
           .status
       ).toBe(200);
-      expect((yield* Effect.tryPromise(() => send(preDeliveryEmail))).status).toBe(409);
+      expect((yield* Effect.tryPromise(() => send(preDeliveryEmail))).status).toBe(200);
       expect(
         (yield* Effect.tryPromise(() =>
           db.prepare("SELECT * FROM pending_email_enrollments").all()
@@ -867,7 +815,7 @@ it("cannot replay a previously seen future-dated pre-Consent email into an enrol
         (yield* Effect.tryPromise(() => send(inbound("wamid.accept", "Acepto", decisionTime))))
           .status
       ).toBe(200);
-      expect((yield* Effect.tryPromise(() => send(earlyEmail))).status).toBe(409);
+      expect((yield* Effect.tryPromise(() => send(earlyEmail))).status).toBe(200);
       expect(
         (yield* Effect.tryPromise(() =>
           db.prepare("SELECT * FROM pending_email_enrollments").all()
@@ -877,677 +825,6 @@ it("cannot replay a previously seen future-dated pre-Consent email into an enrol
         (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM onboarding_email_outbox").all()))
           .results
       ).toEqual([]);
-    })
-  ));
-
-it("commits one pending mailbox and outbox identity for an accepted Consent reply", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send, forbiddenEffects } = yield* Effect.tryPromise(() => setup());
-      const token = yield* Effect.tryPromise(() => startDisclosure(send));
-      const created = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first()
-      );
-      const occurred = String(Math.ceil(Number(created?.created_at_ms) / 1000));
-      expect((yield* Effect.tryPromise(() => deliver(send, token, occurred))).status).toBe(200);
-      const decisionTime = yield* Effect.tryPromise(() => advancePastDecisionProof(db));
-      expect(
-        (yield* Effect.tryPromise(() => send(inbound("wamid.decision-1", "Acepto", decisionTime))))
-          .status
-      ).toBe(200);
-      const mailboxTime = String(Number(decisionTime) + 1);
-      const wrongPhone = inbound("wamid.wrong-phone", "test@example.com", mailboxTime).replace(
-        "123456789012345",
-        "123456789012346"
-      );
-      expect((yield* Effect.tryPromise(() => send(wrongPhone))).status).toBe(409);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          send(inbound("wamid.bad-email", "not an address", mailboxTime))
-        )).status
-      ).toBe(422);
-      expect(
-        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM onboarding_email_outbox").all()))
-          .results
-      ).toEqual([]);
-      const submission = inbound("wamid.email-1", "  Test@Example.com  ", mailboxTime);
-      expect((yield* Effect.tryPromise(() => send(submission))).status).toBe(200);
-      expect((yield* Effect.tryPromise(() => send(submission))).status).toBe(200);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          send(inbound("wamid.email-2", "else@example.com", mailboxTime))
-        )).status
-      ).toBe(409);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT email_address FROM pending_email_enrollments").all()
-        )).results
-      ).toMatchObject([{ email_address: "test@example.com" }]);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT id, version FROM onboarding_email_outbox").all()
-        )).results
-      ).toMatchObject([{ version: 1 }]);
-      expect(forbiddenEffects.queue).not.toHaveBeenCalled();
-      expect(forbiddenEffects.workflow).not.toHaveBeenCalled();
-    })
-  ));
-
-it("reoffers the same bounded work after publication settlement is lost", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send } = yield* Effect.tryPromise(() => setup());
-      const token = yield* Effect.tryPromise(() => startDisclosure(send));
-      const created = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first()
-      );
-      expect(
-        (yield* Effect.tryPromise(() =>
-          deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))
-        )).status
-      ).toBe(200);
-      const decisionTime = yield* Effect.tryPromise(() => advancePastDecisionProof(db));
-      expect(
-        (yield* Effect.tryPromise(() => send(inbound("wamid.accept", "Acepto", decisionTime))))
-          .status
-      ).toBe(200);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          send(inbound("wamid.email", "test@example.com", String(Number(decisionTime) + 1)))
-        )).status
-      ).toBe(200);
-      const offered = vi.fn((work: { readonly version: 1; readonly id: string }) =>
-        Promise.resolve(work)
-      );
-      const dispatcher = {
-        identity: Option.none<string>(),
-        DB: db,
-        ONBOARDING_EMAIL_QUEUE: { send: offered },
-      };
-      yield* dispatchOnboardingEmail(dispatcher);
-      yield* dispatchOnboardingEmail(dispatcher);
-      expect(offered).toHaveBeenCalledTimes(1);
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE onboarding_email_outbox SET last_attempt_at_ms = NULL").run()
-      );
-      yield* dispatchOnboardingEmail(dispatcher);
-      expect(offered).toHaveBeenCalledTimes(2);
-      expect(offered.mock.calls[0]).toEqual(offered.mock.calls[1]);
-      expect(offered.mock.calls[0]?.[0]).toMatchObject({ version: 1 });
-    })
-  ));
-
-it("continues to publish other identities when one Queue offer fails", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send } = yield* Effect.tryPromise(() => setup());
-      const token = yield* Effect.tryPromise(() => startDisclosure(send));
-      const created = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first()
-      );
-      expect(
-        (yield* Effect.tryPromise(() =>
-          deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))
-        )).status
-      ).toBe(200);
-      const decisionTime = yield* Effect.tryPromise(() => advancePastDecisionProof(db));
-      expect(
-        (yield* Effect.tryPromise(() => send(inbound("wamid.accept", "Acepto", decisionTime))))
-          .status
-      ).toBe(200);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          send(inbound("wamid.email", "test@example.com", String(Number(decisionTime) + 1)))
-        )).status
-      ).toBe(200);
-      const secondExchange = "00000000-0000-4000-8000-000000000002";
-      const secondToken = "00000000-0000-4000-8000-000000000003";
-      const secondEnrollment = "00000000-0000-4000-8000-000000000004";
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(`INSERT INTO pending_consent_exchanges
-    (id,portfolio_id,bsuid,phone_number_id,initiating_message_id,initiating_body_sha256,
-     correlation_token,disclosure_json,disclosure_message_id,created_at_ms,expires_at_ms,state)
-    SELECT ?,portfolio_id,?,phone_number_id,?,initiating_body_sha256,?,
-      disclosure_json,disclosure_message_id,created_at_ms,expires_at_ms,'outbound_started'
-    FROM pending_consent_exchanges LIMIT 1`)
-          .bind(secondExchange, "CO.23491208655302741918", "wamid.second-first", secondToken)
-          .run()
-      );
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(`INSERT INTO pending_consent_delivery
-    (correlation_token,phone_number_id,message_id,occurred_at_ms,received_at_ms,decision_not_before_ms)
-    SELECT ?,phone_number_id,message_id,occurred_at_ms,received_at_ms,decision_not_before_ms
-    FROM pending_consent_delivery LIMIT 1`)
-          .bind(secondToken)
-          .run()
-      );
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(`INSERT INTO pending_consent_decisions
-    (exchange_id,portfolio_id,bsuid,phone_number_id,decision,disclosure_json,disclosure_message_id,
-     decision_message_id,delivery_key,body_sha256,occurred_at_ms,received_at_ms)
-    SELECT ?,portfolio_id,?,phone_number_id,decision,disclosure_json,disclosure_message_id,
-      ?,delivery_key,body_sha256,occurred_at_ms,received_at_ms
-    FROM pending_consent_decisions LIMIT 1`)
-          .bind(secondExchange, "CO.23491208655302741918", "wamid.second-accept")
-          .run()
-      );
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(`INSERT INTO pending_email_enrollments
-    (id,exchange_id,email_address,submission_message_id,submission_body_sha256,created_at_ms,expires_at_ms,state)
-    SELECT ?,?,email_address,?,submission_body_sha256,created_at_ms,expires_at_ms,state
-    FROM pending_email_enrollments LIMIT 1`)
-          .bind(secondEnrollment, secondExchange, "wamid.second-email")
-          .run()
-      );
-      const offered = vi
-        .fn()
-        .mockRejectedValueOnce(new Error("queue unavailable"))
-        .mockResolvedValue(undefined);
-      expect(
-        Equal.equals(
-          yield* Effect.exit(
-            dispatchOnboardingEmail({
-              identity: Option.none(),
-              DB: db,
-              ONBOARDING_EMAIL_QUEUE: { send: offered },
-            })
-          ),
-          Exit.fail(undefined)
-        )
-      ).toBe(true);
-      expect(offered).toHaveBeenCalledTimes(2);
-      yield* dispatchOnboardingEmail({
-        identity: Option.none(),
-        DB: db,
-        ONBOARDING_EMAIL_QUEUE: { send: offered },
-      });
-      expect(offered).toHaveBeenCalledTimes(2);
-      const states = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT published_at_ms, last_attempt_at_ms FROM onboarding_email_outbox").all()
-      );
-      expect(states.results.every((row) => row.last_attempt_at_ms !== null)).toBe(true);
-      expect(states.results.filter((row) => row.published_at_ms === null)).toHaveLength(1);
-      expect(states.results.filter((row) => row.published_at_ms !== null)).toHaveLength(1);
-    })
-  ));
-
-it("offers the 33rd identity after an entire failing Queue batch cools down", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send } = yield* Effect.tryPromise(() => setup());
-      const token = yield* Effect.tryPromise(() => startDisclosure(send));
-      const created = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first()
-      );
-      expect(
-        (yield* Effect.tryPromise(() =>
-          deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))
-        )).status
-      ).toBe(200);
-      const decisionTime = yield* Effect.tryPromise(() => advancePastDecisionProof(db));
-      expect(
-        (yield* Effect.tryPromise(() => send(inbound("wamid.accept", "Acepto", decisionTime))))
-          .status
-      ).toBe(200);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          send(inbound("wamid.email", "test@example.com", String(Number(decisionTime) + 1)))
-        )).status
-      ).toBe(200);
-      const syntheticEnrollments = 32;
-      yield* Effect.forEach(
-        Array.from({ length: syntheticEnrollments }, (_, index) => index + 1),
-        (index) => seedSyntheticEnrollment(db, index),
-        { concurrency: "unbounded" }
-      );
-      const offered = vi.fn().mockRejectedValue(new Error("Queue unavailable"));
-      const dispatcher = {
-        identity: Option.none<string>(),
-        DB: db,
-        ONBOARDING_EMAIL_QUEUE: { send: offered },
-      };
-      expect(
-        Equal.equals(yield* Effect.exit(dispatchOnboardingEmail(dispatcher)), Exit.fail(undefined))
-      ).toBe(true);
-      expect(offered).toHaveBeenCalledTimes(32);
-      const unattempted = yield* Effect.tryPromise(() =>
-        db
-          .prepare(`SELECT id FROM onboarding_email_outbox
-    WHERE last_attempt_at_ms IS NULL`)
-          .first()
-      );
-      expect(unattempted?.id).toBeDefined();
-      offered.mockResolvedValueOnce(undefined);
-      yield* dispatchOnboardingEmail(dispatcher);
-      expect(offered).toHaveBeenCalledTimes(33);
-      expect(offered.mock.calls[32]?.[0]).toEqual({ version: 1, id: unattempted?.id });
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db
-            .prepare(`SELECT COUNT(*) AS count FROM onboarding_email_outbox
-    WHERE last_attempt_at_ms IS NULL`)
-            .first()
-        ))?.count
-      ).toBe(0);
-    })
-  ));
-
-it("rejects malformed Queue work before Workflow creation or provider delivery", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db } = yield* Effect.tryPromise(() => setup());
-      const created = vi.fn(() => Promise.resolve({}));
-      const found = vi.fn(() => Promise.resolve({}));
-      const ack = vi.fn();
-      const batch: MessageBatch<unknown> = {
-        queue: "onboarding-email",
-        metadata: { metrics: { backlogCount: 1, backlogBytes: 20 } },
-        ackAll: vi.fn(),
-        retryAll: vi.fn(),
-        messages: [
-          {
-            id: "malformed",
-            body: { version: 1, id: "not-a-uuid", secret: "unexpected" },
-            attempts: 1,
-
-            timestamp: DateTime.toDate(DateTime.makeUnsafe(0)),
-            retry: vi.fn(),
-            ack,
-          },
-        ],
-      };
-      yield* receiveOnboardingEmail({
-        DB: db,
-        ONBOARDING_EMAIL_WORKFLOW: { create: created, get: found },
-      })(batch);
-      expect(ack).toHaveBeenCalledTimes(1);
-      expect(created).not.toHaveBeenCalled();
-      expect(found).not.toHaveBeenCalled();
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT * FROM pending_email_enrollments").all()
-        )).results
-      ).toEqual([]);
-    })
-  ));
-
-it("starts one deterministic Workflow identity despite Queue redelivery", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send } = yield* Effect.tryPromise(() => setup());
-      const token = yield* Effect.tryPromise(() => startDisclosure(send));
-      const created = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first()
-      );
-      expect(
-        (yield* Effect.tryPromise(() =>
-          deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))
-        )).status
-      ).toBe(200);
-      const decisionTime = yield* Effect.tryPromise(() => advancePastDecisionProof(db));
-      expect(
-        (yield* Effect.tryPromise(() => send(inbound("wamid.accept", "Acepto", decisionTime))))
-          .status
-      ).toBe(200);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          send(inbound("wamid.email", "test@example.com", String(Number(decisionTime) + 1)))
-        )).status
-      ).toBe(200);
-      const row = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT id FROM pending_email_enrollments").first()
-      );
-      const id = (yield* Schema.decodeUnknownEffect(Schema.Struct({ id: Schema.String }))(row)).id;
-      const createdWorkflow = vi
-        .fn((work: { id: string; params: { version: 1; id: string } }) =>
-          Promise.resolve({ id: work.id })
-        )
-        .mockImplementationOnce((work) => Promise.resolve({ id: work.id }))
-        .mockRejectedValueOnce(new Error("already exists"));
-      const found = vi.fn(() => Promise.resolve({ id }));
-      const ack = vi.fn();
-      const batch: MessageBatch<unknown> = {
-        queue: "onboarding-email",
-        metadata: { metrics: { backlogCount: 1, backlogBytes: 60 } },
-        ackAll: vi.fn(),
-        retryAll: vi.fn(),
-        messages: [
-          {
-            id: "work-1",
-            body: { version: 1, id },
-            attempts: 1,
-
-            timestamp: DateTime.toDate(DateTime.makeUnsafe(0)),
-            retry: vi.fn(),
-            ack,
-          },
-        ],
-      };
-      const worker = receiveOnboardingEmail({
-        DB: db,
-        ONBOARDING_EMAIL_WORKFLOW: { create: createdWorkflow, get: found },
-      });
-      yield* worker(batch);
-      yield* worker(batch);
-      expect(createdWorkflow).toHaveBeenCalledTimes(2);
-      expect(createdWorkflow.mock.calls[0]).toEqual(createdWorkflow.mock.calls[1]);
-      expect(createdWorkflow.mock.calls[0]?.[0]).toEqual({ id, params: { version: 1, id } });
-      expect(found).toHaveBeenCalledWith(id);
-      expect(ack).toHaveBeenCalledTimes(2);
-      createdWorkflow.mockRejectedValueOnce(new Error("uncertain start"));
-      found.mockRejectedValueOnce(new Error("cannot confirm instance"));
-      expect(Equal.equals(yield* Effect.exit(worker(batch)), Exit.fail(undefined))).toBe(true);
-      expect(ack).toHaveBeenCalledTimes(2);
-      yield* worker(batch);
-      expect(createdWorkflow).toHaveBeenCalledTimes(4);
-      expect(ack).toHaveBeenCalledTimes(3);
-    })
-  ));
-
-it("runs the versioned Workflow Activity under replay without repeating provider delivery", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send } = yield* Effect.tryPromise(() => setup());
-      const token = yield* Effect.tryPromise(() => startDisclosure(send));
-      const created = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first()
-      );
-      expect(
-        (yield* Effect.tryPromise(() =>
-          deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))
-        )).status
-      ).toBe(200);
-      const decisionTime = yield* Effect.tryPromise(() => advancePastDecisionProof(db));
-      expect(
-        (yield* Effect.tryPromise(() => send(inbound("wamid.accept", "Acepto", decisionTime))))
-          .status
-      ).toBe(200);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          send(inbound("wamid.email", "test@example.com", String(Number(decisionTime) + 1)))
-        )).status
-      ).toBe(200);
-      const row = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT id FROM pending_email_enrollments").first()
-      );
-      const id = (yield* Schema.decodeUnknownEffect(Schema.Struct({ id: Schema.String }))(row)).id;
-      const provider = vi.fn(() => Promise.resolve(Response.json({ id: "resend-message-id" })));
-      vi.stubGlobal("fetch", provider);
-      const steps: Array<string> = [];
-      const activity = (
-        name: string,
-        _options: unknown,
-        run: () => Promise<void>
-      ): Promise<void> => {
-        steps.push(name);
-        return run();
-      };
-      const environment = { DB: db, RESEND_API_KEY: "test-provider-key" };
-      yield* Effect.tryPromise(() =>
-        runOnboardingEmailWorkflow({
-          environment,
-          payload: { version: 1, id },
-          activity,
-        })
-      );
-      yield* Effect.tryPromise(() =>
-        runOnboardingEmailWorkflow({
-          environment,
-          payload: { version: 1, id },
-          activity,
-        })
-      );
-      yield* Effect.tryPromise(() =>
-        runOnboardingEmailWorkflow({
-          environment,
-          payload: { version: 2, id },
-          activity,
-        })
-      );
-      expect(steps).toEqual(["send-onboarding-verification-v1", "send-onboarding-verification-v1"]);
-      expect(provider).toHaveBeenCalledTimes(1);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT state FROM pending_email_enrollments").first()
-        ))?.state
-      ).toBe("awaiting_proof");
-    })
-  ));
-
-it("keeps only a digest after one Resend acceptance and cannot send again on Activity replay", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send } = yield* Effect.tryPromise(() => setup());
-      const token = yield* Effect.tryPromise(() => startDisclosure(send));
-      const created = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first()
-      );
-      expect(
-        (yield* Effect.tryPromise(() =>
-          deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))
-        )).status
-      ).toBe(200);
-      const decisionTime = yield* Effect.tryPromise(() => advancePastDecisionProof(db));
-      expect(
-        (yield* Effect.tryPromise(() => send(inbound("wamid.accept", "Acepto", decisionTime))))
-          .status
-      ).toBe(200);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          send(inbound("wamid.email", "test@example.com", String(Number(decisionTime) + 1)))
-        )).status
-      ).toBe(200);
-      const row = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT id FROM pending_email_enrollments").first()
-      );
-      const id = (yield* Schema.decodeUnknownEffect(Schema.Struct({ id: Schema.String }))(row)).id;
-      const provider = vi.fn(() => Promise.resolve(Response.json({ id: "email_provider_1" })));
-      vi.stubGlobal("fetch", provider);
-      yield* Effect.tryPromise(() =>
-        deliverOnboardingEmail({ DB: db, RESEND_API_KEY: "test-provider-key" })(id)
-      );
-      yield* Effect.tryPromise(() =>
-        deliverOnboardingEmail({ DB: db, RESEND_API_KEY: "test-provider-key" })(id)
-      );
-      expect(provider).toHaveBeenCalledTimes(1);
-      const proof = yield* Effect.tryPromise(() =>
-        db
-          .prepare(`SELECT state, public_code, proof_digest, proof_expires_at_ms
-    FROM pending_email_enrollments WHERE id = ?`)
-          .bind(id)
-          .first()
-      );
-      expect(proof?.state).toBe("awaiting_proof");
-      expect(proof?.public_code).toMatch(/^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/u);
-      const digest = proof?.proof_digest;
-      expect(
-        yield* Schema.decodeUnknownEffect(
-          Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 })))
-        )(digest)
-      ).toHaveLength(32);
-      expect(
-        encodeJson(
-          yield* Effect.tryPromise(() => db.prepare("SELECT * FROM onboarding_email_outbox").all())
-        )
-      ).not.toContain("email_provider_1");
-    })
-  ));
-
-it("treats malformed Resend acceptance as ambiguous rather than sending another proof", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send } = yield* Effect.tryPromise(() => setup());
-      const token = yield* Effect.tryPromise(() => startDisclosure(send));
-      const created = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first()
-      );
-      expect(
-        (yield* Effect.tryPromise(() =>
-          deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))
-        )).status
-      ).toBe(200);
-      const decisionTime = yield* Effect.tryPromise(() => advancePastDecisionProof(db));
-      expect(
-        (yield* Effect.tryPromise(() => send(inbound("wamid.accept", "Acepto", decisionTime))))
-          .status
-      ).toBe(200);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          send(inbound("wamid.email", "test@example.com", String(Number(decisionTime) + 1)))
-        )).status
-      ).toBe(200);
-      const row = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT id FROM pending_email_enrollments").first()
-      );
-      const id = (yield* Schema.decodeUnknownEffect(Schema.Struct({ id: Schema.String }))(row)).id;
-      const provider = vi.fn(() => Promise.resolve(Response.json({ bogus: "not a message id" })));
-      vi.stubGlobal("fetch", provider);
-      yield* Effect.tryPromise(() =>
-        deliverOnboardingEmail({ DB: db, RESEND_API_KEY: "test-provider-key" })(id)
-      );
-      yield* Effect.tryPromise(() =>
-        deliverOnboardingEmail({ DB: db, RESEND_API_KEY: "test-provider-key" })(id)
-      );
-      expect(provider).toHaveBeenCalledTimes(1);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT state FROM pending_email_enrollments").first()
-        ))?.state
-      ).toBe("ambiguous");
-    })
-  ));
-
-it("lets only the accepted WhatsApp caller request a bounded, proof-free delivery status", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send } = yield* Effect.tryPromise(() => setup());
-      const token = yield* Effect.tryPromise(() => startDisclosure(send));
-      const created = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first()
-      );
-      expect(
-        (yield* Effect.tryPromise(() =>
-          deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))
-        )).status
-      ).toBe(200);
-      const decisionTime = yield* Effect.tryPromise(() => advancePastDecisionProof(db));
-      expect(
-        (yield* Effect.tryPromise(() => send(inbound("wamid.accept", "Acepto", decisionTime))))
-          .status
-      ).toBe(200);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          send(inbound("wamid.email", "test@example.com", String(Number(decisionTime) + 1)))
-        )).status
-      ).toBe(200);
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE pending_email_enrollments SET state = 'rejected'").run()
-      );
-      const provider = vi.fn((_url: string, _init: RequestInit) =>
-        Promise.resolve(
-          Response.json({ messaging_product: "whatsapp", messages: [{ id: "wamid.status" }] })
-        )
-      );
-      vi.stubGlobal("fetch", provider);
-      const status = inbound("wamid.status-request", "Estado", String(Number(decisionTime) + 2));
-      expect((yield* Effect.tryPromise(() => send(status, "invalid-signature"))).status).toBe(401);
-      expect(
-        (yield* Effect.tryPromise(() => send(status.replaceAll(bsuid, "CO.23491208655302741918"))))
-          .status
-      ).toBe(409);
-      expect(
-        (yield* Effect.tryPromise(() => send(status.replace("123456789012345", "123456789012346"))))
-          .status
-      ).toBe(409);
-      expect(provider).not.toHaveBeenCalled();
-      expect((yield* Effect.tryPromise(() => send(status))).status).toBe(200);
-      expect((yield* Effect.tryPromise(() => send(status))).status).toBe(200);
-      expect(provider).toHaveBeenCalledTimes(1);
-      const payload = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({
-          text: Schema.Struct({ body: Schema.String }),
-        })
-      )(decodeJson(providerBody(provider.mock.calls[0]?.[1])));
-      expect(payload.text.body).toContain("rechazó");
-      expect(payload.text.body).not.toContain("test@example.com");
-      expect(payload.text.body).not.toMatch(/[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}/u);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT email_status_attempts FROM pending_consent_exchanges").first()
-        ))?.email_status_attempts
-      ).toBe(1);
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "UPDATE pending_consent_exchanges SET email_status_last_ms = email_status_last_ms - ?"
-          )
-          .bind(statusCooldownElapsedMs)
-          .run()
-      );
-      yield* Effect.tryPromise(() =>
-        db.prepare("UPDATE pending_email_enrollments SET state = 'ambiguous'").run()
-      );
-      expect(
-        (yield* Effect.tryPromise(() =>
-          send(inbound("wamid.status-uncertain", "Estado", String(Number(decisionTime) + 3)))
-        )).status
-      ).toBe(200);
-      expect(provider).toHaveBeenCalledTimes(2);
-      const uncertain = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({
-          text: Schema.Struct({ body: Schema.String }),
-        })
-      )(decodeJson(providerBody(provider.mock.calls[1]?.[1])));
-      expect(uncertain.text.body).toContain("No podemos confirmar");
-      expect(uncertain.text.body).not.toContain("test@example.com");
-    })
-  ));
-
-it("marks an interrupted provider call ambiguous without repeating the send", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send } = yield* Effect.tryPromise(() => setup());
-      const token = yield* Effect.tryPromise(() => startDisclosure(send));
-      const created = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first()
-      );
-      expect(
-        (yield* Effect.tryPromise(() =>
-          deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))
-        )).status
-      ).toBe(200);
-      const decisionTime = yield* Effect.tryPromise(() => advancePastDecisionProof(db));
-      expect(
-        (yield* Effect.tryPromise(() => send(inbound("wamid.accept", "Acepto", decisionTime))))
-          .status
-      ).toBe(200);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          send(inbound("wamid.email", "test@example.com", String(Number(decisionTime) + 1)))
-        )).status
-      ).toBe(200);
-      const row = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT id FROM pending_email_enrollments").first()
-      );
-      const id = (yield* Schema.decodeUnknownEffect(Schema.Struct({ id: Schema.String }))(row)).id;
-      const provider = vi.fn(() => Promise.reject(new Error("connection lost after request")));
-      vi.stubGlobal("fetch", provider);
-      yield* Effect.tryPromise(() =>
-        deliverOnboardingEmail({ DB: db, RESEND_API_KEY: "test-provider-key" })(id)
-      );
-      yield* Effect.tryPromise(() =>
-        deliverOnboardingEmail({ DB: db, RESEND_API_KEY: "test-provider-key" })(id)
-      );
-      expect(provider).toHaveBeenCalledTimes(1);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT state FROM pending_email_enrollments").first()
-        ))?.state
-      ).toBe("ambiguous");
     })
   ));
 
@@ -2056,12 +1333,3 @@ it("records refusal without financial work and rejects a decision before verifie
       expect(results).toEqual([{ decision: "declined" }]);
     })
   ));
-
-const deliverOnboardingEmail =
-  (environment: { DB: D1Database; RESEND_API_KEY: string }) =>
-  (id: string): Promise<void> =>
-    runOnboardingEmailWorkflow({
-      environment,
-      payload: { version: 1, id },
-      activity: (_name, _options, run) => run(),
-    });

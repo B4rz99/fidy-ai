@@ -86,7 +86,7 @@ Browser Login. No provider token or protocol code reaches the feature. `/auth/go
 the popup at a parameter-free URL; existing opener isolation remains intact. Cancellation, timeout
 and uncertain completion discard private proof and explain fresh sign-in; no mutation auto-retry or
 recovery redisclosure. Authentication can succeed after Consent withdrawal while ordinary work
-remains gated. Personal and work/school Microsoft accounts are accepted; channel-provider linking remains a subsequent slice.
+remains gated. Personal and work/school Microsoft accounts are accepted; initial WhatsApp linking is installed under #1091.
 
 The preserved channel/mailbox Browser Login begins at `/auth/pair`. The browser retains the private verifier while WhatsApp
 approval, email authentication, or support recovery receives only its intended public proof. Public
@@ -187,3 +187,11 @@ browser client publication. The feature renders every historical item as escaped
 exact Money/Currency formatting and captured date/zone context. Canonical loading, retry and refresh
 failure states use the existing session registry and query presentation; the URL carries only the
 opaque report identity and supplies no authorization.
+
+The public `handoff` search value on `/auth/google` and `/auth/microsoft` identifies one WhatsApp-led
+attempt and survives provider selection. It contains no browser proof. The feature uses accepted chat
+Consent, authenticates the selected provider, then polls with its private pairing verifier. Awaiting
+confirmation shows a public association identifier and directs the caller to compare the native chat
+review and reply to that exact message. New Users save recovery before Browser Login redemption;
+existing Users proceed directly through the same redemption. Initial linking never exposes new recovery.
+The built static browser checks cover both paths against real public/Core/D1 with external-edge fixtures.

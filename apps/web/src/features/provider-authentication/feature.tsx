@@ -1,3 +1,4 @@
+import { Option } from "effect";
 import type { AuthenticationProvider } from "@/transport/client";
 import { useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
@@ -13,24 +14,60 @@ const canContinue = (intent: "signup" | "login", accepted: boolean, ready: boole
 type Authentication = ReturnType<typeof useProviderAuthentication>;
 const ProviderChoice = ({
   provider,
-}: Readonly<{ provider: AuthenticationProvider }>): JSX.Element => (
+  handoffReference,
+}: Readonly<{
+  provider: AuthenticationProvider;
+  handoffReference: Option.Option<string>;
+}>): JSX.Element => (
   <a
     className="text-center underline"
-    href={provider === "google" ? "/auth/microsoft" : "/auth/google"}
+    href={`${provider === "google" ? "/auth/microsoft" : "/auth/google"}${Option.match(handoffReference, { onNone: () => "", onSome: (reference) => `?handoff=${encodeURIComponent(reference)}` })}`}
   >
     {provider === "google" ? "Microsoft" : "Google"}
   </a>
 );
+const ConsentNotice = ({
+  accepted,
+  setAccepted,
+}: Readonly<{ accepted: boolean; setAccepted: (value: boolean) => void }>): JSX.Element => {
+  const router = useRouter();
+  const disclosure = useAtomValue(
+    router.options.context.webAuthClient.query("providerAuthentication", "disclosure", {})
+  );
+  return (
+    <>
+      {AsyncResult.match(disclosure, {
+        onInitial: () => <p>Cargando información de Consentimiento…</p>,
+        onFailure: () => <p>No pudimos cargar el Consentimiento. Vuelve a intentarlo más tarde.</p>,
+        onSuccess: ({ value }) => (
+          <>
+            <p className="whitespace-pre-line text-sm">{value.text}</p>
+            <label className="flex gap-2">
+              <input
+                type="checkbox"
+                checked={accepted}
+                onChange={(event) => setAccepted(event.target.checked)}
+              />
+              Acepto el tratamiento de datos descrito
+            </label>
+          </>
+        ),
+      })}
+    </>
+  );
+};
 const EditingForm = ({
   intent,
   setIntent,
   start,
   provider,
+  handoffReference,
 }: Readonly<{
   intent: "signup" | "login";
   setIntent: (intent: "signup" | "login") => void;
   start: Authentication["start"];
   provider: AuthenticationProvider;
+  handoffReference: Option.Option<string>;
 }>): JSX.Element => {
   const router = useRouter();
   const disclosure = useAtomValue(
@@ -39,65 +76,63 @@ const EditingForm = ({
   const [accepted, setAccepted] = useState(false);
   return (
     <>
-      {intent === "signup" &&
-        AsyncResult.match(disclosure, {
-          onInitial: () => <p>Cargando información de Consentimiento…</p>,
-          onFailure: () => (
-            <p>No pudimos cargar el Consentimiento. Vuelve a intentarlo más tarde.</p>
-          ),
-          onSuccess: ({ value }) => (
-            <>
-              <p className="whitespace-pre-line text-sm">{value.text}</p>
-              <label className="flex gap-2">
-                <input
-                  type="checkbox"
-                  checked={accepted}
-                  onChange={(event) => setAccepted(event.target.checked)}
-                />
-                Acepto el tratamiento de datos descrito
-              </label>
-            </>
-          ),
-        })}
+      {intent === "signup" && Option.isNone(handoffReference) && (
+        <ConsentNotice accepted={accepted} setAccepted={setAccepted} />
+      )}
       <Button
-        disabled={!canContinue(intent, accepted, AsyncResult.isSuccess(disclosure))}
+        disabled={
+          Option.isNone(handoffReference) &&
+          !canContinue(intent, accepted, AsyncResult.isSuccess(disclosure))
+        }
         onClick={() =>
           start(intent, AsyncResult.isSuccess(disclosure) ? disclosure.value.revision : "")
         }
       >
         Continuar con {provider === "google" ? "Google" : "Microsoft"}
       </Button>
-      <ProviderChoice provider={provider} />
-      <Button
-        variant="ghost"
-        onClick={() => {
-          setIntent(intent === "signup" ? "login" : "signup");
-          setAccepted(false);
-        }}
-      >
-        {intent === "signup" ? "Ya tengo cuenta · Iniciar sesión" : "Crear una cuenta"}
-      </Button>
+      <ProviderChoice provider={provider} handoffReference={handoffReference} />
+      {Option.isNone(handoffReference) && (
+        <Button
+          variant="ghost"
+          onClick={() => {
+            setIntent(intent === "signup" ? "login" : "signup");
+            setAccepted(false);
+          }}
+        >
+          {intent === "signup" ? "Ya tengo cuenta · Iniciar sesión" : "Crear una cuenta"}
+        </Button>
+      )}
     </>
   );
 };
-const AttemptStatus = ({
+const ConfirmingStatus = ({
   authentication,
-  setIntent,
-  provider,
-}: Readonly<{
-  provider: AuthenticationProvider;
-  authentication: Authentication;
-  setIntent: (intent: "signup" | "login") => void;
-}>): JSX.Element => (
+}: Readonly<{ authentication: Authentication }>): JSX.Element => (
   <>
-    {authentication.state.status === "waiting" && (
+    {authentication.state.status === "confirming" && (
       <>
-        <output>Esperando confirmación…</output>
+        <output>
+          Vuelve al chat de WhatsApp y escribe “Estado”. Revisa la cuenta y compara este
+          identificador de asociación:
+        </output>
+        <p aria-label="Identificador de asociación" className="font-mono">
+          {authentication.state.code}
+        </p>
+        <p>
+          Confirma respondiendo al mensaje de revisión en tu chat. Si la cuenta no es la tuya,
+          rechaza la asociación.
+        </p>
         <Button variant="outline" onClick={authentication.cancel}>
           Cancelar
         </Button>
       </>
     )}
+  </>
+);
+const RecoveryStatus = ({
+  authentication,
+}: Readonly<{ authentication: Authentication }>): JSX.Element => (
+  <>
     {authentication.state.status === "recovery" && (
       <>
         <h2>Guarda tu código de recuperación</h2>
@@ -108,6 +143,28 @@ const AttemptStatus = ({
           {authentication.state.code}
         </p>
         <Button onClick={authentication.acknowledge}>Lo guardé</Button>
+      </>
+    )}
+  </>
+);
+const AttemptStatus = ({
+  authentication,
+  setIntent,
+  provider,
+}: Readonly<{
+  provider: AuthenticationProvider;
+  authentication: Authentication;
+  setIntent: (intent: "signup" | "login") => void;
+}>): JSX.Element => (
+  <>
+    <ConfirmingStatus authentication={authentication} />
+    <RecoveryStatus authentication={authentication} />
+    {authentication.state.status === "waiting" && (
+      <>
+        <output>Esperando confirmación…</output>
+        <Button variant="outline" onClick={authentication.cancel}>
+          Cancelar
+        </Button>
       </>
     )}
     {(authentication.state.status === "refused" || authentication.state.status === "cancelled") && (
@@ -141,9 +198,13 @@ const AttemptStatus = ({
 );
 export const ProviderAuthenticationFeature = ({
   provider,
-}: Readonly<{ provider: AuthenticationProvider }>): JSX.Element => {
+  handoffReference,
+}: Readonly<{
+  provider: AuthenticationProvider;
+  handoffReference: Option.Option<string>;
+}>): JSX.Element => {
   const [intent, setIntent] = useState<"signup" | "login">("signup");
-  const { mounted, ...authentication } = useProviderAuthentication(provider);
+  const { mounted, ...authentication } = useProviderAuthentication({ provider, handoffReference });
   return (
     <main ref={mounted} className="flex min-h-svh items-center justify-center px-4 py-12">
       <Card className="w-full max-w-lg">
@@ -156,6 +217,7 @@ export const ProviderAuthenticationFeature = ({
           {authentication.state.status === "editing" ? (
             <EditingForm
               provider={provider}
+              handoffReference={handoffReference}
               intent={intent}
               setIntent={setIntent}
               start={authentication.start}

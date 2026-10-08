@@ -4,6 +4,7 @@ import {
   ConnectionAttemptReference,
   OAuthConnectionListQuery,
   OAuthRequestId,
+  ProviderHandoffSearch,
 } from "@/transport/client";
 import { ConnectionContinuationFeature } from "@/features/connections/feature";
 import { OAuthManagementFeature, OAuthReviewFeature } from "@/features/oauth-connections/feature";
@@ -149,10 +150,23 @@ const emailOnboardingRoute = createRoute({
   path: "/auth/verify-email",
   component: EmailOnboardingFeature,
 });
+
+const GoogleAuthentication = (): JSX.Element =>
+  createElement(ProviderAuthenticationFeature, {
+    provider: "google",
+    handoffReference: Option.fromUndefinedOr(googleRoute.useSearch().handoff),
+  });
+const MicrosoftAuthentication = (): JSX.Element =>
+  createElement(ProviderAuthenticationFeature, {
+    provider: "microsoft",
+    handoffReference: Option.fromUndefinedOr(microsoftRoute.useSearch().handoff),
+  });
+
 const googleRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/auth/google",
-  component: () => createElement(ProviderAuthenticationFeature, { provider: "google" }),
+  validateSearch: (search) => Schema.decodeSync(ProviderHandoffSearch)(search),
+  component: GoogleAuthentication,
 });
 const googleReturnRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -162,7 +176,8 @@ const googleReturnRoute = createRoute({
 const microsoftRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/auth/microsoft",
-  component: () => createElement(ProviderAuthenticationFeature, { provider: "microsoft" }),
+  validateSearch: (search) => Schema.decodeSync(ProviderHandoffSearch)(search),
+  component: MicrosoftAuthentication,
 });
 const microsoftReturnRoute = createRoute({
   getParentRoute: () => rootRoute,

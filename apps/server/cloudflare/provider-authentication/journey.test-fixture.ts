@@ -64,9 +64,9 @@ const sendThroughWorkers =
               USER_TRANSACTION_COORDINATOR: {
                 getByName: () => ({ fetch: () => Promise.reject(new Error("unused")) }),
               },
-              KAPSO_API_KEY: "",
-              KAPSO_WEBHOOK_SECRET: "",
-              WHATSAPP_BUSINESS_PORTFOLIO_ID: "",
+              KAPSO_API_KEY: "test-kapso-key",
+              KAPSO_WEBHOOK_SECRET: "test-kapso-secret",
+              WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio",
               CLOUDFLARE_ACCESS_ISSUER: "https://test.cloudflareaccess.com",
               CLOUDFLARE_ACCESS_AUDIENCE: "support",
               WOMPI_ENVIRONMENT: "sandbox",
@@ -78,21 +78,31 @@ const sendThroughWorkers =
       }
     );
 
-export const setup = (): Promise<Journey> =>
+const setupJourney = (options: Readonly<{ whatsapp: boolean }>): Promise<Journey> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => databases.acquire());
       yield* Effect.tryPromise(() =>
         installTestSchema({
           db,
-          sources: [
-            "0003_pending_consent",
-            "0004_onboarding_email",
-            "0005_verified_onboarding",
-            "0006_browser_login",
-            "0063_provider_authentication",
-            "0064_microsoft_authentication",
-          ].map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
+          sources:
+            options.whatsapp === true
+              ? Array.from(
+                  new Bun.Glob("*.sql").scanSync({
+                    cwd: new URL("../migrations/", import.meta.url).pathname,
+                  })
+                )
+                  .sort()
+                  .map((name) => new URL(`../migrations/${name}`, import.meta.url))
+              : [
+                  "0003_pending_consent",
+                  "0004_onboarding_email",
+                  "0005_verified_onboarding",
+                  "0006_browser_login",
+                  "0063_provider_authentication",
+                  "0064_microsoft_authentication",
+                  "0065_whatsapp_provider_handoff",
+                ].map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
         })
       );
       const send = sendThroughWorkers(db);
@@ -104,3 +114,6 @@ export const setup = (): Promise<Journey> =>
     })
   );
 export const disposeJourneys = (): Promise<void> => databases.dispose();
+
+export const setup = (): Promise<Journey> => setupJourney({ whatsapp: false });
+export const setupWhatsApp = (): Promise<Journey> => setupJourney({ whatsapp: true });

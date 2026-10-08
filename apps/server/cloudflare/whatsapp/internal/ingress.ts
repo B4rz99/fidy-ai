@@ -1,3 +1,4 @@
+import { receiveWhatsAppProviderHandoff } from "../../provider-authentication/runtime";
 import { TranscriptText } from "../../../src/core/agent/contract";
 import { Sha256Digest } from "../../../src/shell/consent/contract";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
@@ -296,10 +297,19 @@ const routeTextInbound = (
         },
       });
     }
+    if (/^(Confirmo|Rechazo) asociación /u.test(input.event.content.text.trim())) {
+      const confirmation = yield* receiveWhatsAppProviderHandoff({ environment, inbound: input });
+      return Option.getOrElse(confirmation, () => answer(HTTP_CONFLICT));
+    }
     const hosted = yield* routeHostedInbound(environment, input);
     if (Option.isSome(hosted)) return hosted.value;
+    const handoff = yield* receiveWhatsAppProviderHandoff({ environment, inbound: input });
+    if (Option.isSome(handoff)) return handoff.value;
     const httpClient = yield* HttpClient.HttpClient;
-    return yield* makeConsentIngress({ environment, httpClient })(input);
+    const consent = yield* makeConsentIngress({ environment, httpClient })(input);
+    if (consent.status !== HTTP_OK) return consent;
+    const next = yield* receiveWhatsAppProviderHandoff({ environment, inbound: input });
+    return Option.getOrElse(next, () => consent);
   });
 
 const handleInbound = (

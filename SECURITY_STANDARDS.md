@@ -146,9 +146,8 @@ Windows local-machine persistence verified against the pinned runtime; file/envi
 URLs, browser state, arguments and diagnostics are not bearer-storage channels. Local logout removes
 saved access without asserting server revocation.
 
-The preserved WhatsApp/mailbox origin requires a VerifiedEmailCredential before stable User creation.
-The Google and Microsoft web origins instead require a ProviderCredential keyed by the validated canonical issuer
-and subject. Contact email never establishes identity, merges Users, creates a VerifiedEmailCredential,
+Google and Microsoft signup, on the web or through WhatsApp, require a ProviderCredential keyed by the validated canonical issuer
+and subject. WhatsApp-led signup additionally requires accepted originating-chat Consent and explicit confirmation of the exact reviewed association from that authenticated caller. Contact email never establishes identity, merges Users, creates a VerifiedEmailCredential,
 or substitutes mailbox ownership proof. Missing/changed email claims preserve the same User.
 A VerifiedEmailCredential is globally unique after
 trim-and-lowercase normalization; provider-specific dot or plus-address folding is not proof of
@@ -174,6 +173,19 @@ products and tail consumers must also exclude callback query strings before real
 Lost recovery responses cannot be redisclosed or recreated through completion replay. A fresh provider
 login can prove established ownership after an ambiguous signup, while ordinary work retains live
 Consent checks. Expired provider protocol state is removed after one day.
+
+WhatsApp handoff references and review identifiers are public correlation, never credential or session authority.
+Bind one ten-minute attempt to the authenticated Business Portfolio/BSUID, business phone endpoint and one
+browser-private pairing. An originating chat must receive the selected provider account and matching
+browser review identifier, then reply to that exact native review message with an explicit confirm/deny.
+Opening or forwarding a reference cannot confirm an association. Recheck the accepted exchange, exact
+pairing, live confirmation and initial-association uniqueness in the completion batch; consume once.
+Existing provider Users retain their UserId, Consent, TrialPeriod and recovery credential. Initial linking
+refuses any established channel association, never replaces it. Chat sends claim once before provider I/O;
+ambiguous results never resend. Charge each send against the bounded native spend policy before egress.
+Required negative evidence covers forwarded browser substitution, caller/reply mismatch, denial, expiry,
+replay/concurrency, conflicts, rollback and ambiguous delivery, through authenticated ingress/Core/D1.
+Pre-User handoff state is erased with its expiring Consent exchange; durable legal evidence remains.
 
 Microsoft accepts personal and work/school accounts from all public-cloud Entra tenants by explicit
 User decision in #1090. The common v2 authority is initiation policy, never a wildcard issuer.
@@ -256,12 +268,10 @@ anonymisation, provider payloads, reporting context, or personal-data deletion.
 
 **Invariant:** before onboarding Consent acceptance, Fidy performs no financial processing, answers
 no finance question, and persists no personal content beyond what is strictly required to present
-and record the pending decision. Acceptance permits bounded collection and Resend delivery needed to
-prove the mandatory VerifiedEmailCredential, but no stable User, WhatsAppIdentity, ConsentRecord,
-Transcript,
-or financial processing exists until verification atomically completes onboarding. The onboarding
-Consent covers that mandatory contact and authentication purpose; no separate email Consent grant is
-created. Consent and revocation evidence is tied to the stable User and retains the exact historical
+and record the pending decision. Acceptance permits the bounded first-party provider handoff,
+provider-account authentication and originating-chat association review. No stable User, WhatsAppIdentity,
+ConsentRecord, Transcript or financial processing exists until provider verification and exact chat
+confirmation atomically complete onboarding. Contact email is optional and creates no mailbox credential. Consent and revocation evidence is tied to the stable User and retains the exact historical
 context needed to remain interpretable.
 
 Explicit Consent revocation does not block authentication needed to reach Fidy-owned

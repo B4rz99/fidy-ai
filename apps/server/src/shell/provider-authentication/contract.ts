@@ -24,10 +24,24 @@ export const ProviderBrowserProof = Schema.Struct({
   pairingId: BrowserLoginPairingId,
   privateVerifier: BrowserLoginPrivateVerifier,
 });
+export const ProviderHandoffReference = Schema.String.check(
+  Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u)
+);
+export const ProviderHandoffSearch = Schema.Struct({
+  handoff: Schema.optionalKey(ProviderHandoffReference),
+});
+export const ProviderAuthenticationStatus = Schema.Union([
+  Schema.Struct({ status: Schema.Literals(["pending", "verified", "rejected"]) }),
+  Schema.Struct({
+    status: Schema.Literal("awaiting_confirmation"),
+    associationCode: ProviderHandoffReference,
+  }),
+]);
 export const StartProviderAuthentication = Schema.Struct({
   ...ProviderBrowserProof.fields,
   intent: Schema.Literals(["signup", "login"]),
   consentRevision: Schema.String.check(Schema.isMaxLength(maximumRevisionLength)),
+  handoffReference: Schema.optionalKey(ProviderHandoffReference),
 });
 export const ProviderCompletion = Schema.Union([
   Schema.Struct({
@@ -58,7 +72,7 @@ export const ProviderAuthenticationGroup = HttpApiGroup.make("providerAuthentica
   .add(
     HttpApiEndpoint.post("status", providerPaths.status, {
       payload: ProviderBrowserProof,
-      success: Schema.Struct({ status: Schema.Literals(["pending", "verified", "rejected"]) }),
+      success: ProviderAuthenticationStatus,
       error: HttpApiSchema.status(invalidStatus)(Refusal),
     })
   )
@@ -85,7 +99,7 @@ export const ProviderAuthenticationGroup = HttpApiGroup.make("providerAuthentica
   .add(
     HttpApiEndpoint.post("statusMicrosoft", microsoftProviderPaths.status, {
       payload: ProviderBrowserProof,
-      success: Schema.Struct({ status: Schema.Literals(["pending", "verified", "rejected"]) }),
+      success: ProviderAuthenticationStatus,
       error: HttpApiSchema.status(invalidStatus)(Refusal),
     })
   )

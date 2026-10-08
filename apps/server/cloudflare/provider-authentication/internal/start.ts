@@ -1,5 +1,5 @@
 import { providerConfiguration } from "./configuration";
-import { Clock, Effect, Option, type PlatformError, Redacted, Schema } from "effect";
+import { type Cause, Clock, Effect, Option, type PlatformError, Redacted, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
 import {
   type AuthenticationProvider,
@@ -8,7 +8,7 @@ import {
 import { DisclosureSnapshot } from "../../../src/core/consent/contract";
 import { webSignupDisclosure } from "../../../src/shell/consent/operations";
 import { provePendingBrowserPairing } from "../../browser-login/operations";
-import { digestBytes, newSecret } from "../../secret-material/operations";
+import { digestBytes, newId, newSecret } from "../../secret-material/operations";
 import { boundedJsonBody } from "../../http/operations";
 import { RequestBodyPolicy } from "../../http/contract";
 import type { ProviderEnvironment } from "../contract";
@@ -111,6 +111,50 @@ const startedResponse = ({
       "set-cookie": `${providerConfiguration({ environment, provider }).cookieName}=${verifier}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`,
     },
   });
+const persistAttempt = ({
+  environment,
+  provider,
+  input,
+  proven,
+  prepared,
+}: Readonly<{
+  environment: ProviderEnvironment;
+  provider: AuthenticationProvider;
+  input: typeof StartProviderAuthentication.Type;
+  proven: number;
+  prepared: Effect.Success<ReturnType<typeof prepareAttempt>>;
+}>): Effect.Effect<void, Cause.UnknownError> => {
+  const { current, state, nonce, challenge, snapshot } = prepared;
+  const handoffId = input.handoffReference ?? null;
+  const claim =
+    handoffId === null
+      ? []
+      : [
+          environment.DB.prepare(
+            "UPDATE whatsapp_provider_handoffs SET pairing_id=?,review_code=? WHERE id=? AND pairing_id IS NULL AND expires_at_ms>? AND decision IS NULL AND consumed_at_ms IS NULL"
+          ).bind(input.pairingId, newId(), handoffId, current),
+        ];
+  return Effect.tryPromise(() =>
+    environment.DB.batch([
+      ...claim,
+      environment.DB.prepare(`INSERT INTO provider_authentication_attempts
+      (id,pairing_id,provider,cookie_digest,nonce,intent,disclosure_json,consent_at_ms,created_at_ms,expires_at_ms,state,handoff_id)
+      VALUES(?,?,?,?,?,?,?,?,?,?,'pending',?)`).bind(
+        state,
+        input.pairingId,
+        provider,
+        challenge,
+        nonce,
+        input.intent,
+        input.intent === "signup" ? snapshot : null,
+        input.intent === "signup" ? current : null,
+        current,
+        Math.min(current + attemptLifetimeMs, proven),
+        handoffId
+      ),
+    ])
+  ).pipe(Effect.asVoid);
+};
 export const startProvider = ({
   request,
   environment,
@@ -134,33 +178,24 @@ export const startProvider = ({
       return providerJson({ body: { status: "invalid" }, status: invalidStatus });
     }
     const disclosure = webSignupDisclosure();
-    if (input.value.intent === "signup" && input.value.consentRevision !== disclosure.revision) {
-      return providerJson({ body: { status: "invalid" }, status: invalidStatus });
-    }
+    const validConsent =
+      input.value.handoffReference !== undefined ||
+      input.value.intent !== "signup" ||
+      input.value.consentRevision === disclosure.revision;
+    if (!validConsent) return providerJson({ body: { status: "invalid" }, status: invalidStatus });
     const proven = yield* provePendingBrowserPairing({ db: environment.DB, ...input.value });
     if (Option.isNone(proven)) {
       return providerJson({ body: { status: "invalid" }, status: invalidStatus });
     }
     const { current, state, verifier, nonce, challenge, snapshot } =
       yield* prepareAttempt(disclosure);
-    yield* Effect.tryPromise(() =>
-      environment.DB.prepare(`INSERT INTO provider_authentication_attempts
-      (id,pairing_id,provider,cookie_digest,nonce,intent,disclosure_json,consent_at_ms,created_at_ms,expires_at_ms,state)
-      VALUES(?,?,?,?,?,?,?,?,?,?,'pending')`)
-        .bind(
-          state,
-          input.value.pairingId,
-          provider,
-          challenge,
-          nonce,
-          input.value.intent,
-          input.value.intent === "signup" ? snapshot : null,
-          input.value.intent === "signup" ? current : null,
-          current,
-          Math.min(current + attemptLifetimeMs, proven.value)
-        )
-        .run()
-    );
+    yield* persistAttempt({
+      environment,
+      provider,
+      input: input.value,
+      proven: proven.value,
+      prepared: { current, state, verifier, nonce, challenge, snapshot },
+    });
     return startedResponse({ environment, provider, state, nonce, challenge, verifier });
   }).pipe(
     Effect.orElseSucceed(() => providerJson({ body: { status: "invalid" }, status: invalidStatus }))

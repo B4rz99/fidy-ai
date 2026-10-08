@@ -1,6 +1,6 @@
 import { playwright } from "./playwright-runtime";
 import type { APIRequestContext, BrowserContext, Page, Route } from "@playwright/test";
-import { type Cause, Effect } from "effect";
+import { type Cause, Effect, Schema } from "effect";
 
 export type ProviderJourneyConfiguration = Readonly<{
   provider: "google" | "microsoft";
@@ -343,5 +343,121 @@ export const blockedPopupJourney = ({
       yield* Effect.tryPromise(() =>
         expect(page.getByText("Guarda tu código de recuperación")).toBeVisible()
       );
+    })
+  );
+
+const createWebUserForAssociation = (
+  input: Readonly<{ page: Page; context: BrowserContext }>
+): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => input.page.goto("/auth/google"));
+    yield* Effect.tryPromise(() =>
+      input.page.getByLabel("Acepto el tratamiento de datos descrito").check()
+    );
+    yield* Effect.tryPromise(() =>
+      input.page.getByRole("button", { name: "Continuar con Google" }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(input.page.getByText("Guarda tu código de recuperación")).toBeVisible()
+    );
+    yield* Effect.tryPromise(() => input.page.getByRole("button", { name: "Lo guardé" }).click());
+    yield* Effect.tryPromise(() => expect(input.page).toHaveURL(/\/app\/transactions$/u));
+    yield* Effect.tryPromise(() =>
+      input.page.getByRole("button", { name: "Cerrar sesión" }).click()
+    );
+  });
+const confirmBrowserAssociation = ({
+  page,
+  context,
+  request,
+  caller,
+}: ProviderJourney & Readonly<{ caller: string }>): Effect.Effect<
+  void,
+  Cause.UnknownError | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      expect(page.getByLabel("Identificador de asociación")).toBeVisible()
+    );
+    const code = yield* Effect.tryPromise(() =>
+      page.getByLabel("Identificador de asociación").innerText()
+    );
+    const reviewResponse = yield* Effect.tryPromise(() =>
+      request.post(`http://127.0.0.1:4175/whatsapp/review?caller=${caller}`)
+    );
+    expect(reviewResponse.status()).toBe(successStatus);
+    const review = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ associationCode: Schema.String, reviewMessageId: Schema.String })
+    )(yield* Effect.tryPromise(() => reviewResponse.json()));
+    expect(review.associationCode).toBe(code);
+    expect(
+      (yield* Effect.tryPromise(() => context.cookies())).some(
+        (cookie) => cookie.name === "__Host-fidy_session"
+      )
+    ).toBe(false);
+    yield* Effect.sleep("1100 millis");
+    const confirmation = yield* Effect.tryPromise(() =>
+      request.post(
+        `http://127.0.0.1:4175/whatsapp/confirm?caller=${caller}&code=${code}&reply=${review.reviewMessageId}`
+      )
+    );
+    expect(confirmation.status()).toBe(successStatus);
+  });
+export const whatsappAssociationJourney = ({
+  page,
+  context,
+  request,
+  existing,
+}: ProviderJourney & Readonly<{ existing: boolean }>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const configuration: ProviderJourneyConfiguration = {
+        provider: "google",
+        label: "Google",
+        authorizationPattern: "https://accounts.google.com/o/oauth2/v2/auth**",
+        selectFromPublicSite: false,
+      };
+      const suffix = existing ? "existing" : "new";
+      yield* Effect.tryPromise(() =>
+        context.route(configuration.authorizationPattern, (route) =>
+          redirectSubject(configuration, `whatsapp-browser-${suffix}`, route)
+        )
+      );
+      if (existing) yield* createWebUserForAssociation({ page, context });
+      const caller = `CO.Browser${suffix}`;
+      const start = yield* Effect.tryPromise(() =>
+        request.post(`http://127.0.0.1:4175/whatsapp/start?caller=${caller}`)
+      );
+      const handoff = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ handoffReference: Schema.String })
+      )(yield* Effect.tryPromise(() => start.json()));
+      yield* Effect.tryPromise(() => page.goto(`/auth/google?handoff=${handoff.handoffReference}`));
+      expect(
+        yield* Effect.tryPromise(() =>
+          page.getByLabel("Acepto el tratamiento de datos descrito").count()
+        )
+      ).toBe(0);
+      expect(
+        yield* Effect.tryPromise(() =>
+          page.getByRole("link", { name: "Microsoft", exact: true }).getAttribute("href")
+        )
+      ).toContain(`handoff=${handoff.handoffReference}`);
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Continuar con Google" }).click()
+      );
+      yield* confirmBrowserAssociation({ page, context, request, caller });
+      if (existing) {
+        yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/app\/transactions$/u));
+        yield* Effect.tryPromise(() =>
+          expect(page.getByText("Guarda tu código de recuperación")).toHaveCount(0)
+        );
+      } else {
+        yield* Effect.tryPromise(() =>
+          expect(page.getByText("Guarda tu código de recuperación")).toBeVisible()
+        );
+        yield* Effect.tryPromise(() => page.getByRole("button", { name: "Lo guardé" }).click());
+        yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/app\/transactions$/u));
+      }
+      expect(yield* Effect.tryPromise(() => page.evaluate(retainedSecretCount))).toBe(0);
     })
   );

@@ -46,7 +46,8 @@ text/hash; the prior Google-only revision is refused for new signup. Recorded Co
 are never rewritten.
 Built-browser journeys exercise real Core/D1 signup, acknowledgment, returning login, reload/logout,
 session expiry and withdrawn Consent, plus denial/cancellation, lost completion, pending redemption and blocked-popup refusal/restart.
-The WhatsApp provider handoff has not landed; its combined matrix remains a later ticket.
+The shared WhatsApp provider handoff is installed under #1091, including Microsoft selection.
+See the [handoff review and live gates](./google-authentication.md#whatsapp-handoff-1091).
 
 Fixture evidence does not establish Microsoft or Production readiness. These gates remain pending:
 

@@ -1,3 +1,5 @@
+import { PendingConsentExchangeId } from "../../../src/shell/consent/contract";
+import { prepareOnboardingWhatsAppAssociation } from "../../identity/operations";
 import { type Cause, Clock, Effect, Option, Schema } from "effect";
 import {
   ProviderBrowserProof,
@@ -18,6 +20,7 @@ import { providerBodyPolicy, providerJson } from "./start";
 const invalidStatus = 400;
 const Attempt = Schema.Struct({
   id: Schema.String,
+  handoff_id: Schema.NullOr(Schema.String),
   issuer: Schema.String,
   subject: Schema.String,
   contact_email: Schema.NullOr(Schema.String),
@@ -31,6 +34,7 @@ type CompletionContext = Readonly<{
   proof: typeof ProviderBrowserProof.Type;
   attempt: typeof Attempt.Type;
   current: number;
+  exchangeId: Option.Option<PendingConsentExchangeId>;
 }>;
 const commit =
   (context: CompletionContext) =>
@@ -47,6 +51,17 @@ const commit =
     return context.input.db
       .batch([
         ...statements,
+        ...Option.match(context.exchangeId, {
+          onNone: () => [],
+          onSome: (exchangeId) => [
+            prepareOnboardingWhatsAppAssociation({
+              db: context.input.db,
+              userId,
+              exchangeId,
+              createdAtMs: context.current,
+            }),
+          ],
+        }),
         prepareProvedBrowserPairingApproval({
           db: context.input.db,
           pairingId: context.proof.pairingId,
@@ -76,11 +91,23 @@ const completeSignup = (
     const disclosure = yield* Schema.decodeEffect(Schema.fromJsonString(DisclosureSnapshot))(
       attempt.disclosure_json
     );
-    if (disclosure.revision !== webSignupDisclosure().revision) {
+    if (
+      Option.isNone(context.exchangeId) &&
+      disclosure.revision !== webSignupDisclosure().revision
+    ) {
       return providerJson({ body: { status: "invalid" }, status: invalidStatus });
     }
     return yield* Effect.tryPromise(() =>
       context.input.complete({
+        origin: Option.match(context.exchangeId, {
+          onNone: (): Readonly<{ _tag: "Web" }> => ({ _tag: "Web" }),
+          onSome: (
+            exchangeId
+          ): Readonly<{ _tag: "WhatsApp"; exchangeId: PendingConsentExchangeId }> => ({
+            _tag: "WhatsApp",
+            exchangeId,
+          }),
+        }),
         attemptId: attempt.id,
         disclosure,
         acceptedAtMs: attempt.consent_at_ms ?? current,
@@ -91,6 +118,7 @@ const completeSignup = (
             created: true,
             statements: [
               ...statements,
+
               context.input.db
                 .prepare(
                   "INSERT INTO provider_credentials(issuer,subject,user_id,contact_email,established_at_ms) VALUES(?,?,?,?,?)"
@@ -100,6 +128,33 @@ const completeSignup = (
           }),
       })
     );
+  });
+const confirmedExchange = ({
+  input,
+  attempt,
+  proof,
+  current,
+}: Omit<CompletionContext, "exchangeId">): Effect.Effect<
+  Option.Option<PendingConsentExchangeId>,
+  Cause.UnknownError | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    let exchangeId = Option.none<PendingConsentExchangeId>();
+    if (attempt.handoff_id !== null) {
+      const raw = yield* Effect.tryPromise(() =>
+        input.db
+          .prepare(
+            "SELECT exchange_id FROM whatsapp_provider_handoffs WHERE id=? AND pairing_id=? AND decision='confirmed' AND review_message_id IS NOT NULL AND consumed_at_ms IS NULL AND expires_at_ms>?"
+          )
+          .bind(attempt.handoff_id, proof.pairingId, current)
+          .first()
+      );
+      const handoff = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ exchange_id: PendingConsentExchangeId })
+      )(raw);
+      exchangeId = Option.some(handoff.exchange_id);
+    }
+    return exchangeId;
   });
 export const completeProvider = (input: ProviderCompletionRequest): Promise<Response> =>
   Effect.runPromise(
@@ -125,19 +180,20 @@ export const completeProvider = (input: ProviderCompletionRequest): Promise<Resp
       const row = yield* Effect.tryPromise(() =>
         input.db
           .prepare(
-            `SELECT id,issuer,subject,contact_email,intent,disclosure_json,consent_at_ms FROM provider_authentication_attempts WHERE pairing_id=? AND provider=? AND state='verified' AND expires_at_ms>?`
+            `SELECT id,handoff_id,issuer,subject,contact_email,intent,disclosure_json,consent_at_ms FROM provider_authentication_attempts WHERE pairing_id=? AND provider=? AND state='verified' AND expires_at_ms>?`
           )
           .bind(proof.value.pairingId, provider, current)
           .first()
       );
       const attempt = yield* Schema.decodeUnknownEffect(Attempt)(row);
+      const exchangeId = yield* confirmedExchange({ input, attempt, proof: proof.value, current });
       const rawCredential = yield* Effect.tryPromise(() =>
         input.db
           .prepare("SELECT user_id FROM provider_credentials WHERE issuer=? AND subject=?")
           .bind(attempt.issuer, attempt.subject)
           .first()
       );
-      const commitAttempt = commit({ input, proof: proof.value, attempt, current });
+      const commitAttempt = commit({ input, proof: proof.value, attempt, current, exchangeId });
       if (rawCredential !== null) {
         const credential = yield* Schema.decodeUnknownEffect(Credential)(rawCredential);
         yield* Effect.tryPromise(() =>
@@ -145,7 +201,7 @@ export const completeProvider = (input: ProviderCompletionRequest): Promise<Resp
         );
         return providerJson({ body: { status: "approved" } });
       }
-      return yield* completeSignup({ input, proof: proof.value, attempt, current });
+      return yield* completeSignup({ input, proof: proof.value, attempt, current, exchangeId });
     }).pipe(
       Effect.orElseSucceed(() =>
         providerJson({ body: { status: "invalid" }, status: invalidStatus })

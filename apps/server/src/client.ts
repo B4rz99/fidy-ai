@@ -158,3 +158,5 @@ export { RecurringDigestReport, RecurringDigestReportParams } from "~/core/insig
 export { PATActivity } from "~/shell/tokens/contract";
 
 export type { AuthenticationProvider } from "~/shell/web-authentication/contract";
+
+export { ProviderHandoffSearch } from "~/shell/web-authentication/contract";

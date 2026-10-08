@@ -189,7 +189,7 @@ ${input.statement.sql}`)
 
 /**
  * Compose the accepted caller projection with the Identity owner's bootstrap action. Only
- * exchange_id, portfolio_id, and bsuid are available through accepted_consent_callers; the caller
+ * exchange_id, portfolio_id, bsuid, and phone_number_id are available through accepted_consent_callers; the caller
  * keeps its exact exchange restriction and commits the action in the verified-onboarding D1 unit.
  */
 export const prepareAcceptedConsentCaller = (

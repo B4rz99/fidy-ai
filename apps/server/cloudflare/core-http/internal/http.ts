@@ -2,7 +2,7 @@ import { ConnectInstitutionInput } from "../../../src/core/connections/contract"
 import { connectionBrowserPaths } from "../../../src/shell/connections/contract";
 import { handleConnectionBrowserRequest } from "../../connections/runtime";
 import type { HttpClient } from "effect/http";
-import { completeWebProviderOnboarding } from "../../onboarding/operations";
+import { completeProviderOnboarding } from "../../onboarding/operations";
 import {
   microsoftProviderPaths,
   providerPaths,
@@ -1517,7 +1517,7 @@ const reservedCoreResponse = (
     request.method === "POST"
   ) {
     return Option.some(
-      Effect.tryPromise(() => completeWebProviderOnboarding({ db: environment.DB, request })).pipe(
+      Effect.tryPromise(() => completeProviderOnboarding({ db: environment.DB, request })).pipe(
         Effect.orElseSucceed(unavailable)
       )
     );

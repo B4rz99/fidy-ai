@@ -50,8 +50,8 @@ export const prepareUserCreation = (input: UserCreationInput): UserCreationState
   userCreationStatements(input);
 
 /**
- * Associate the new User only with the exact accepted Consent exchange's originating WhatsApp
- * caller. Commit with User creation, Consent, Recovery and mailbox proof consumption; the final
+ * Establish the initial association of a new or provider-authenticated User only with the exact accepted Consent exchange's originating WhatsApp
+ * caller. Commit with the originating proof consumption and any new User, Consent and Recovery records; the final
  * proof guard must refuse stale, foreign or missing exchange evidence in that same atomic unit.
  * Preparation neither verifies a proof nor authorizes reassociation of an established User.
  */

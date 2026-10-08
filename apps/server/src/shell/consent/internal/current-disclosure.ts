@@ -9,14 +9,14 @@ Usamos Kapso y Meta para atenderte por WhatsApp. Si envías una nota de voz, Kap
 
 Si activas el reenvío de correos financieros, Fidy procesa su texto, HTML e imágenes integradas para registrar movimientos. Conserva el correo original hasta 90 días. Una muestra estructural solo puede conservarse indefinidamente después de anonimización automática y aprobación humana.
 
-Para crear tu cuenta, responde exactamente “Acepto” o usa la opción Aceptar. Si no quieres crearla, responde “No acepto”. Después de aceptar, responde con tu correo electrónico para recibir un código de verificación. Puedes escribir “Estado” para consultar el envío.`;
+Para crear tu cuenta, responde exactamente “Acepto” o usa la opción Aceptar. Si no quieres crearla, responde “No acepto”. Después de aceptar, abre el enlace de Fidy para autenticarte con Google o Microsoft. Vuelve a este chat y escribe “Estado” para revisar y confirmar la asociación de tu cuenta con este chat. No compartas credenciales ni códigos de recuperación por WhatsApp.`;
 
 /** Source-controlled disclosure facts; revisions and digests pin these exact legal bytes. */
 export const currentDisclosureFacts: typeof DisclosureSnapshot.Encoded = {
   serviceMarket: "CO",
   locale: "es-CO",
-  revision: "onboarding-2026-09-28-kapso-free",
-  contentSha256: "c9d0a1ab1eed45936c661a96170dfcc10ac8323937b43a4412eaabf0db455df0",
+  revision: "onboarding-2026-10-08-providers",
+  contentSha256: "034da77df22d383b92d155827c96d823aaaaf5b31fcd96f1dfe8328a4e4ef9b8",
   text: CURRENT_DISCLOSURE_TEXT,
   policy: {
     publicUrl: "https://app.fidyapp.com/politica",

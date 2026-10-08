@@ -1,6 +1,6 @@
 /** Only the accepted caller metadata needed by the atomic verified-onboarding bootstrap. */
 export const acceptedCallerProjection = `WITH accepted_consent_callers AS (
-  SELECT id AS exchange_id, portfolio_id, bsuid FROM pending_consent_exchanges
+  SELECT id AS exchange_id, portfolio_id, bsuid, phone_number_id, expires_at_ms FROM pending_consent_exchanges
   WHERE state = 'accepted'
 )`;
 

@@ -78,3 +78,24 @@ ordinary Consent gate, not permission for financial processing.
   evidence cannot prove ownership of the existing User.
 - **Documents, financial history, or newly supplied contact details as support proof:** rejected
   because Fidy performs no KYC and those facts do not safely establish remote authority.
+
+## Implementation status after #1091
+
+The [amended decision in #1086](https://github.com/B4rz99/fidy-ai/issues/1086) supersedes the
+mandatory mailbox-enrollment decision: Google/Microsoft provider authentication now establishes
+the signup/login credential; no VerifiedEmailCredential or Fidy mailbox code is required.
+Explicit proof from both the provider-authenticated browser and originating WhatsApp caller
+permits initial association of a web-created User, preserving its stable UserId.
+
+#1088 establishes shared atomic Onboarding; #1089 and #1090 install Google and Microsoft web signup/login.
+#1091 installs the WhatsApp provider handoff and explicit initial channel association. The originating
+caller accepts the current chat disclosure, opens a ten-minute first-party provider link, and requests
+“Estado” after provider authentication. Fidy sends the provider account and a public association identifier
+matching the browser. Only an explicit confirm/deny reply to that exact review message from the original
+Business Portfolio/BSUID and business phone endpoint settles the association. Confirmation and browser
+proof are rechecked and consumed together in D1; an existing User receives only an initial association.
+Native send claims and admission fence uncertainty; no blind resend or recovery redisclosure occurs.
+Microsoft eligibility is resolved: personal and work/school accounts from public-cloud Entra tenants.
+Real authenticated Worker/D1 and built-browser journeys are local evidence. Deployed Google/Microsoft
+callbacks and real WhatsApp delivery/confirmation remain prelaunch checks. Legacy mailbox-code adapter
+removal belongs to #1092; this does not add a compatibility commitment.

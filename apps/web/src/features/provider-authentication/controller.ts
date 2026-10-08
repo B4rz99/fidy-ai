@@ -15,6 +15,7 @@ type CommandError =
 export type ProviderViewState =
   | Readonly<{ status: "editing" }>
   | Readonly<{ status: "waiting" }>
+  | Readonly<{ status: "confirming"; code: string }>
   | Readonly<{ status: "recovery"; code: string }>
   | Readonly<{ status: "uncertain" }>
   | Readonly<{ status: "refused" }>
@@ -32,12 +33,17 @@ const providerClient = (
 const awaitProviderVerification = (
   client: Client,
   pairing: Pairing,
-  provider: AuthenticationProvider
+  input: Pick<ControllerInput, "provider" | "setState">
 ): Effect.Effect<void, "rejected"> =>
   Effect.gen(function* () {
     for (;;) {
-      const result = yield* providerClient(client, provider).status({ payload: proof(pairing) });
+      const result = yield* providerClient(client, input.provider).status({
+        payload: proof(pairing),
+      });
       if (result.status === "verified") return;
+      if (result.status === "awaiting_confirmation") {
+        input.setState({ status: "confirming", code: result.associationCode });
+      }
       if (result.status === "rejected") return yield* Effect.fail("rejected");
       yield* Effect.sleep("1 second");
     }
@@ -76,6 +82,7 @@ type ControllerInput = Readonly<{
   setState: (state: ProviderViewState) => void;
   authenticated: () => void;
   provider: AuthenticationProvider;
+  handoffReference: Option.Option<string>;
 }>;
 type ActiveAttempt = {
   submission: Option.Option<Submission>;
@@ -114,13 +121,17 @@ const executeStart = (
         ...proof(started),
         intent: staged.value.intent,
         consentRevision: staged.value.revision,
+        ...Option.match(staged.value.intent === "signup" ? input.handoffReference : Option.none(), {
+          onNone: () => ({}),
+          onSome: (handoffReference) => ({ handoffReference }),
+        }),
       },
     });
     if (active.generation !== current) {
       return;
     }
     yield* Effect.sync(() => staged.value.popup.location.replace(authorization.authorizationUrl));
-    yield* awaitProviderVerification(client, started, input.provider);
+    yield* awaitProviderVerification(client, started, input);
     staged.value.popup.close();
     if (active.generation !== current) {
       return;
@@ -209,9 +220,13 @@ type ProviderAuthentication = Readonly<{
   cancel: () => void;
   acknowledge: () => void;
 }>;
-export const useProviderAuthentication = (
-  provider: AuthenticationProvider
-): ProviderAuthentication => {
+export const useProviderAuthentication = ({
+  provider,
+  handoffReference,
+}: Readonly<{
+  provider: AuthenticationProvider;
+  handoffReference: Option.Option<string>;
+}>): ProviderAuthentication => {
   const router = useRouter();
   const session = useSession();
   const [state, setState] = useState<ProviderViewState>({ status: "editing" });
@@ -220,6 +235,7 @@ export const useProviderAuthentication = (
       webAuthClient: router.options.context.webAuthClient,
       setState,
       provider,
+      handoffReference,
       authenticated: () => {
         session.completeLogin();
         router.navigate({ to: "/app/transactions" }).catch(() => undefined);

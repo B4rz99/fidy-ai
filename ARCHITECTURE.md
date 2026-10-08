@@ -165,3 +165,10 @@ Google and Microsoft web signup/login are implemented under #1089 and #1090. It 
 atomically retaining web Consent, TrialPeriod and digest-only recovery without a WhatsAppIdentity.
 Contact email grants no ownership. Provider approval and Browser Login session issuance remain
 separate authorities; deployed provider verification remains an operator gate.
+
+#1091 adds WhatsApp-led signup through the same provider owner. A ten-minute public handoff binds one
+browser pairing to the authenticated originating Consent exchange. The chat reviews the provider
+account and matching association identifier, and replies to the exact review message. Completion
+atomically creates all new-User records and the initial WhatsAppIdentity, or adds only that association
+to an existing provider User. Established associations refuse replacement. Browser Login retains sole
+WebSession ownership. Legacy mailbox endpoints remain for the separate #1092 removal slice.

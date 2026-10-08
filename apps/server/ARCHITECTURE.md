@@ -180,7 +180,7 @@ is disclosed only at issuance/claim, while server persistence retains verificati
 
 Under #1088, Onboarding's private completion composition prepares the new User, original
 168-hour TrialPeriod and digest-only BackupRecoveryCode independently of channel evidence.
-The installed WhatsApp/mailbox adapter still requires accepted channel Consent and current mailbox
+The legacy WhatsApp/mailbox adapter, awaiting #1092 removal, requires accepted channel Consent and current mailbox
 proof: it supplies the exact exchange's WhatsApp association and historical Consent to that same
 new User. Email Authentication retains the one-use commit, adding its VerifiedEmailCredential and
 final proof-consumption guard to the single D1 batch. Refusal rolls back all owner state; success
@@ -191,8 +191,7 @@ ProviderCredential plus origin-specific proof consumption to the same batch. Ret
 authentication approves the initiating BrowserLoginPairing without creating owner records or
 renewing Consent/TrialPeriod. Google and Microsoft adapters use Outbound HTTP for fixed token/JWKS destinations
 and transient tokens; the native Core root supplies its HTTP lifetime. Maintenance removes expired
-protocol attempts/receipts after one day. The preserved channel workflow remains independently
-verifiable. #1090 accepts personal and work/school Microsoft accounts through the common v2 authority, validating exact tenant/issuer and signing-key scope. Each attempt is bound to its selected provider. See [Google configuration and evidence](../../docs/operations/google-authentication.md) and [Microsoft configuration and evidence](../../docs/operations/microsoft-authentication.md).
+protocol attempts/receipts after one day. The legacy email owner remains pending removal. #1090 accepts personal and work/school Microsoft accounts through the common v2 authority, validating exact tenant/issuer and signing-key scope. Each attempt is bound to its selected provider. See [Google configuration and evidence](../../docs/operations/google-authentication.md) and [Microsoft configuration and evidence](../../docs/operations/microsoft-authentication.md).
 
 Consent owns current standing and append-only evidence. A standing read is not cached authorization.
 Ordinary protected work checks current Consent. An exact Pending hosted Turn retains its admitted
@@ -468,3 +467,15 @@ When the complete list exceeds the approved parameter limit, one message carries
 identifier-only authenticated report URL. `insights.getRecurringDigestReport` is a Free canonical
 read with live read capability, same-User authority and atomic Audit; report retention is independent
 of its send deadline. Browser publication includes Insights' declaration-only report schemas.
+
+#1091 moves native pre-User WhatsApp signup to `provider-authentication`. Consent retains authenticated
+initial disclosure and accepted historical evidence. The provider owner retains public handoff references,
+one claimed BrowserLoginPairing and immutable reviewed provider-account association; native WhatsApp
+routing consumes confirm/deny replies before Agent admission or Transcript. A one-use send claim fences
+each handoff/review before bounded native spend admission and Kapso I/O. Uncertain sends never repeat.
+Identity prepares only an initial association from Consent's accepted caller projection. Provider
+completion adds it to the same D1 batch as proof consumption and pairing approval; the existing table's
+User and Portfolio/BSUID uniqueness refuse established conflicts. Existing Users create no owner records.
+Consent exchange expiry cascades transient handoffs and attempts while copied legal evidence persists.
+The real public/Core/D1 suite verifies decisions, conflicts and atomicity; the built-browser fixture
+substitutes only external provider/Kapso responses. Live WhatsApp and deployed provider evidence remain gates.

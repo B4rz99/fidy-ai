@@ -48,11 +48,14 @@ onboarding Workflow returns 404 and its onboarding Queue binding reports `queue_
 All other stable Queue and Workflow references resolve. The native refusal now confirms the Queue
 category, consistent with the deleted onboarding Queue. Do not force promotion.
 
-The incident recovery uses isolated Ingress/Core admission, checks private Core reachability,
-and requires normal-routing synthetic proof before the ordinary release gates. Regression checks
-cover denial even with a valid smoke proof, proof-before-Core ordering, failed proof and a superseded
-revision. The [recovery procedure](../../../../../docs/operations/production-recovery.md) preserves
-existing User records; it remains pending in Production.
+The [isolated recovery](https://github.com/B4rz99/fidy-ai/actions/runs/37857944758) replaced the
+incompatible Core and passed normal-routing synthetic Queue/Workflow proof and settled routing.
+The candidate edge gate then failed: Ingress stripped the Core version override on OAuth discovery,
+sending the probe to isolated stable Core. Cleanup retained isolated admission; ordinary disclosure
+returns 503 with `isolated` and `no-store`. No promotion occurred. Regression checks now cover
+proof-admitted Core selection without forwarding smoke authority, alongside isolation ordering and
+refusals. The [recovery procedure](../../../../../docs/operations/production-recovery.md) preserves
+existing User records. Resume through the ordinary release gates after the forwarding fix.
 
 Live Ingress/Core settings disable invocation logs, traces, Worker Logpush and tail consumers.
 Authenticated dashboard inspection shows Logpush subscription prompts at account and domain level,

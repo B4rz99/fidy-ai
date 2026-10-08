@@ -64,8 +64,17 @@ and teardown. These are actual complete runs, not a controlled runner-performanc
 The first run also showed critical-path jobs spending 6–10s compressing the same 544MB Bun
 cache, then losing the reservation race to another job. Adapter and browser jobs now restore
 that exact cache without publishing; other existing jobs still publish it on a miss. No cache
-key, dependency installation or validation gate is bypassed. The follow-up run must verify
-the three-minute workflow target, including Required Checks.
+key, dependency installation or validation gate is bypassed.
+
+[Follow-up run 37856351297](https://github.com/B4rz99/fidy-ai/actions/runs/37856351297)
+passed in **3m30s**. Complete adapter jobs took 142/152/136/140s and browser took 160s.
+One adapter started 36s after its peers; that queue delay held up Required Checks.
+The web and native CLI browser journeys now overlap on the same runner using their existing
+separate ports, certificates, build outputs, Users and databases. Each retains its worker limit
+(two web workers and one CLI worker), and other verification groups remain sequential.
+The verifier's rendezvous probe requires both children to start and checks that failure of
+either child fails the gate. All 63 web cases plus the native CLI journey pass locally in 96.7s,
+versus 108.2s sequentially. Final CI must still confirm the three-minute complete-workflow target.
 
 ## Adapter regression follow-up: #1066
 

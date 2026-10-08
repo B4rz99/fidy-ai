@@ -1,0 +1,29 @@
+dependency-policy.json
+  s_14029565f22875::t_62e9cf90eca9ca 4,7,12
+infra/cloudflare/workers.test.ts
+  s_14029565f22875::t_62e9cf90eca9ca 442-443
+infra/cloudflare/edge-security.ts
+  s_14029565f22875::t_62e9cf90eca9ca 1,104
+bun.lock
+  s_14029565f22875::t_5602545d16d5cc 1593
+infra/cloudflare/verify-edge-policy.test.ts
+  s_14029565f22875::t_5ad38e3b364397 7
+infra/cloudflare/verify-edge-policy.ts
+  s_14029565f22875::t_7c4c9c363f34e9 15-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ec072962c2028c83904509b4ac1eb75fc5a634e7",
+  "prompts": {},
+  "sessions": {
+    "s_14029565f22875": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a118b2-9005-7303-8b3c-d474155731ca",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

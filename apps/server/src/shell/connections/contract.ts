@@ -1,5 +1,6 @@
+import { UtcTimestamp } from "~/core/_shared/time";
 import { Schema } from "effect";
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api";
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api";
 import {
   ConnectInstitutionInput,
   ConnectInstitutionResult,
@@ -63,3 +64,59 @@ export const ConnectionsGroup = HttpApiGroup.make("connections")
       .annotate(OpenApi.Description, "Inspect one caller-owned Connection by stable identity.")
       .annotateMerge(read)
   );
+
+/** Public locator only; possession never establishes User or institution authority. */
+export const ConnectionAttemptReference = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("ConnectionAttemptReference"))
+  .annotate({ identifier: "ConnectionAttemptReference" });
+
+export const ConnectionContinuationInput = Schema.Struct({ attempt: ConnectionAttemptReference });
+
+/** Safe same-User continuation facts, with the original absolute deadline. */
+export const ConnectionContinuationReview = Schema.Struct({
+  connection: Connection,
+  institutionName: Schema.Literal("Bancolombia"),
+  expiresAt: UtcTimestamp,
+  phase: Schema.Literals(["ready", "prepared"]),
+});
+
+export const connectionBrowserPaths = {
+  review: "/web/connections/review",
+  begin: "/web/connections/begin",
+} as const;
+
+/** Bounded failure envelope: no locator, credential, or provider detail is reflected. */
+export const ConnectionContinuationFailure = Schema.Struct({
+  error: Schema.Struct({ code: Schema.Literal("continuation_unavailable") }),
+});
+const browserFailureStatuses = {
+  invalid: 400,
+  unauthenticated: 401,
+  forbidden: 403,
+  missing: 404,
+  method: 405,
+  limited: 429,
+  unavailable: 503,
+} as const;
+const browserFailures = Object.values(browserFailureStatuses).map((status) =>
+  ConnectionContinuationFailure.pipe(HttpApiSchema.status(status))
+);
+
+/** Browser-only continuation; excluded from canonical tools and atomic batches. */
+export const ConnectionBrowserApi = HttpApi.make("ConnectionBrowserApi").add(
+  HttpApiGroup.make("connectionBrowser")
+    .add(
+      HttpApiEndpoint.get("review", connectionBrowserPaths.review, {
+        query: ConnectionContinuationInput,
+        success: ConnectionContinuationReview,
+        error: browserFailures,
+      })
+    )
+    .add(
+      HttpApiEndpoint.post("begin", connectionBrowserPaths.begin, {
+        payload: ConnectionContinuationInput,
+        success: ConnectionContinuationReview,
+        error: browserFailures,
+      })
+    )
+);

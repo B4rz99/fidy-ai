@@ -1,6 +1,7 @@
 import { playwright } from "./playwright-runtime";
 import { visiblePairingCode } from "./real-core-fixture";
-import type { APIRequestContext, APIResponse, BrowserContext, Page, Route } from "@playwright/test";
+import { invokeRecoveryOperator } from "../../cli/test/recovery-operator.test-fixture";
+import type { APIRequestContext, BrowserContext, Page, Route } from "@playwright/test";
 import { type Cause, Effect, Schema } from "effect";
 
 export type ProviderJourneyConfiguration = Readonly<{
@@ -20,7 +21,6 @@ const pendingStatus = 202;
 const noContentStatus = 204;
 const forbiddenStatus = 403;
 const successStatus = 200;
-const invalidStatus = 400;
 
 // Provider UI is the only substituted edge; completion and Browser Login run through real Core/D1.
 const redirectSubject = (
@@ -460,63 +460,59 @@ export const whatsappAssociationJourney = ({
   );
 
 /** Recovery uses the pre-issued proof without calling either provider or requiring a mailbox. */
-const providerRecoveryJourney = ({
+const providerRecoveryJourney = Effect.fn(function* ({
   page,
   context,
   request,
   backupRecoveryCode,
-}: ProviderJourney & Readonly<{ backupRecoveryCode: string }>): Effect.Effect<
-  void,
-  Cause.UnknownError
-> =>
-  Effect.gen(function* () {
-    const identity = yield* Effect.tryPromise(() =>
-      context.request.get("https://127.0.0.1:4174/user")
-    );
-    const before: unknown = yield* Effect.tryPromise(() => identity.json());
-    yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cerrar sesión" }).click());
-    const pending = page.waitForResponse(
-      (response) =>
-        response.url().endsWith("/web/pairings/redeem") && response.status() === pendingStatus
-    );
-    yield* Effect.tryPromise(() => page.goto("/auth/pair"));
-    yield* Effect.tryPromise(() =>
-      page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click()
-    );
-    const pairingCode = yield* Effect.tryPromise(() => visiblePairingCode(page));
-    yield* Effect.tryPromise(() => pending);
-    const assertion = yield* Effect.tryPromise(() =>
-      request.get("http://127.0.0.1:4175/assertion").then((response) => response.text())
-    );
-    const decision = (): Promise<APIResponse> =>
-      request.post("https://127.0.0.1:4174/internal/support-recovery", {
-        headers: { "cf-access-jwt-assertion": assertion },
-        data: { pairingCode, backupRecoveryCode },
-      });
-    expect((yield* Effect.tryPromise(decision)).status()).toBe(successStatus);
-    expect((yield* Effect.tryPromise(decision)).status()).toBe(invalidStatus);
-    yield* Effect.tryPromise(() =>
-      expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15000 })
-    );
-    const recovered = yield* Effect.tryPromise(() =>
-      context.request.get("https://127.0.0.1:4174/user")
-    );
-    expect(yield* Effect.tryPromise(() => recovered.json())).toEqual(before);
-    yield* Effect.tryPromise(() => page.goto("/settings/recovery"));
-    yield* Effect.tryPromise(() =>
-      page.getByRole("button", { name: "Crear un código nuevo" }).click()
-    );
-    yield* Effect.tryPromise(() =>
-      expect(page.getByRole("button", { name: "Copiar código" })).toBeVisible()
-    );
-    expect(yield* Effect.tryPromise(() => page.locator("code").innerText())).not.toBe(
-      backupRecoveryCode
-    );
-    yield* Effect.tryPromise(() => page.reload());
-    yield* Effect.tryPromise(() => expect(page.locator("code")).toHaveCount(0));
-    expect(yield* Effect.tryPromise(() => page.evaluate(retainedSecretCount))).toBe(0);
-    yield* Effect.tryPromise(() => page.goto("/app/transactions"));
-  });
+}: ProviderJourney & Readonly<{ backupRecoveryCode: string }>) {
+  const identity = yield* Effect.tryPromise(() =>
+    context.request.get("https://127.0.0.1:4174/user")
+  );
+  const before: unknown = yield* Effect.tryPromise(() => identity.json());
+  yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cerrar sesión" }).click());
+  const pending = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/web/pairings/redeem") && response.status() === pendingStatus
+  );
+  yield* Effect.tryPromise(() => page.goto("/auth/pair"));
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click()
+  );
+  const pairingCode = yield* Effect.tryPromise(() => visiblePairingCode(page));
+  yield* Effect.tryPromise(() => pending);
+  const assertion = yield* Effect.tryPromise(() =>
+    request.get("http://127.0.0.1:4175/assertion").then((response) => response.text())
+  );
+  const decision = invokeRecoveryOperator({ assertion, pairingCode, backupRecoveryCode });
+  const approval = yield* decision;
+  expect(approval.exitCode).toBe(0);
+  expect(approval.output).toContain("Recuperación aprobada");
+  expect(approval.output).not.toContain(backupRecoveryCode);
+  expect(approval.output).not.toContain(assertion);
+  expect((yield* decision).exitCode).toBe(1);
+  yield* Effect.tryPromise(() =>
+    expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15000 })
+  );
+  const recovered = yield* Effect.tryPromise(() =>
+    context.request.get("https://127.0.0.1:4174/user")
+  );
+  expect(yield* Effect.tryPromise(() => recovered.json())).toEqual(before);
+  yield* Effect.tryPromise(() => page.goto("/settings/recovery"));
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Crear un código nuevo" }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("button", { name: "Copiar código" })).toBeVisible()
+  );
+  expect(yield* Effect.tryPromise(() => page.locator("code").innerText())).not.toBe(
+    backupRecoveryCode
+  );
+  yield* Effect.tryPromise(() => page.reload());
+  yield* Effect.tryPromise(() => expect(page.locator("code")).toHaveCount(0));
+  expect(yield* Effect.tryPromise(() => page.evaluate(retainedSecretCount))).toBe(0);
+  yield* Effect.tryPromise(() => page.goto("/app/transactions"));
+});
 
 const returningProviderLogin = ({
   configuration,

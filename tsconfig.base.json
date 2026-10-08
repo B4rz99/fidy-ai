@@ -149,6 +149,7 @@
             "include": [
               "./apps/cli/src/main.ts",
               "./apps/cli/test/journey-entry.ts",
+              "./apps/cli/test/recovery-entry.ts",
               "./apps/web/e2e/cli-login.spec.ts"
             ],
             "options": {

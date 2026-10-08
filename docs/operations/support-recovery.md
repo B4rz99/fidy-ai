@@ -31,19 +31,35 @@ The route is private transport, not a canonical operation. It must remain absent
 generated clients, browser routes, and hosted-agent tools. Generic HTTP request logging is disabled;
 do not add route, header, request-body, response-body, or JWT logging.
 
-The private Worker and atomic D1 approval adapter are implemented. The authenticated operator CLI
-with hidden recovery-code entry remains tracked in #1092; this procedure is not ready for operator
-use until that interface and deployed Access policy are verified. The CLI is only private transport: it
-may hold no database credential, process-local queue or local recovery authority.
+The private Worker, atomic D1 approval adapter and `bun run cli support-recovery` operator command
+are implemented. The command requires the pinned Bun runtime, installed `cloudflared`, and an
+interactive stdin and stderr terminal. It accepts no arguments, `--json`, files or piped input, and
+does not use the saved Fidy PAT or native credential store. Cloudflared opens the Access browser login
+for the exact route with `--quiet`; its diagnostics are suppressed and the bounded JWT is captured
+privately. Cloudflared owns its ordinary short-lived Access token cache; Fidy retains neither that
+assertion nor the claimant's recovery code. Authenticate as the intended operator before proceeding.
+
+The command reads the public reference and recovery code without echo, then submits one bounded POST
+with `cf-access-token`; Access supplies the origin assertion verified by the Worker. Redirects are
+refused, the response is bounded, and the request has a 15-second deadline. Lost, malformed or
+contradictory responses and interruption after submission are uncertain: do not repeat the decision;
+return to the same browser to inspect and complete the pairing, or escalate without secrets.
+The CLI has no database credential, queue or local recovery authority. Its closed terminal output
+needs no extra client telemetry; the Worker's metadata-only recovery evidence remains authoritative.
+
+Local command tests and both provider browser journeys exercise this operator workflow through real
+public/Core Workers and D1, substituting terminal entry and external Access authentication. Live
+Cloudflare Access login, policy and deployed operator recovery remain unverified launch gates.
 
 ## Procedure
 
 1. Ask the User to start a new BrowserLoginPairing in the same browser they will continue using.
 2. Accept only its public reference and the pre-issued BackupRecoveryCode. The User enters no
    browser-private verifier into support.
-3. Use the approved private Worker operator interface after completing the interactive Cloudflare
-   Access login. Enter the public pairing reference, then enter the BackupRecoveryCode in the hidden
-   prompt.
+3. Run `bun run cli support-recovery` from an interactive terminal. Complete Cloudflare Access in
+   the browser as the recovery operator, enter the public pairing reference, then enter the
+   BackupRecoveryCode in the hidden prompt. Do not run `cloudflared access token` separately or
+   print/copy the assertion.
 4. Communicate only the exact result below. Never disclose whether the pairing reference, recovery
    code, credential lifecycle, or User association matched.
 5. On approval, tell the User to return immediately to the same browser. The browser must still

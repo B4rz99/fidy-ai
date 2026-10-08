@@ -124,6 +124,7 @@ it("keeps platform diagnostic opt-outs on their reviewed file boundaries", () =>
           // CLI process roots and the broad browser composition construct the reviewed runtime.
           "strictEffectProvide:./apps/cli/src/main.ts",
           "strictEffectProvide:./apps/cli/test/journey-entry.ts",
+          "strictEffectProvide:./apps/cli/test/recovery-entry.ts",
           "strictEffectProvide:./apps/web/e2e/cli-login.spec.ts",
           "strictEffectProvide:./infra/cloudflare/inspect-worker-drift.ts",
           // Standalone Bun process roots and their isolated integration fixtures.

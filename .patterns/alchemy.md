@@ -44,6 +44,13 @@ The patch `patches/alchemy@2.0.0-beta.80.patch` preserves and verifies the uploa
 receipt using `getScriptVersion`. An upload receipt is not proof of active traffic assignment;
 retain the deployment/version checks at their existing owners.
 
+Production uses the public `Alchemist.Stack.plan` / `Apply.apply` seam in
+`production-resources.ts`. The same retained patch adds `deletions: "defer"` (skip garbage
+collection, preserve tracked generations, refuse delete-first replacements) and `"only"`
+(refuse deployment changes and run native garbage collection without reconciliation). Ordinary
+Apply behavior is unchanged. The protected workflow retires resources only after promotion and
+normal-traffic checks; the runner rechecks the exact promoted pair immediately before deletion.
+
 Local acceptance starts the declared stack and exercises ingress-to-Core service bindings. A fake
 binding proves projection/failure behavior only, not platform parity. Bind validated immutable Git
 revision and contract digest values, and expose only the closed health projection—never environment

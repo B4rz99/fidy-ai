@@ -60,7 +60,9 @@ available at `https://unpkg.com/effect@4.0.0/src/<module>.ts` and
   Real local-emulation tests exercise the actual stack and ingress-to-Core binding.
 - The retained beta.80 WorkerProvider patch validates stored `output.versionId` with
   `workers.getScriptVersion` and carries the upload receipt forward. There is no beta.79
-  patch or alternate provider implementation. Import success is not live deployment parity.
+  patch or alternate provider implementation. The patch also adds explicit deferred/cleanup-only
+  Apply phases through the public SDK; actual-engine fixture tests cover tracked generations,
+  dependency ordering and refusal before mutation. Import success is not live deployment parity.
 
 Stable package version does not mean every individual module is upstream marked stable.
 Keep exact pins, owned boundaries, focused behavior tests and the complete release gates.

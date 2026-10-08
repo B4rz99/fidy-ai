@@ -13,6 +13,25 @@ const preflight = await Bun.file(
 ).text();
 
 describe("Production release workflow policy", () => {
+  it("defers resource retirement until normal traffic and edge checks pass in the same release", () => {
+    const upload = workflow.indexOf("bun production-resources.ts upload");
+    const promote = workflow.indexOf("bun production-release.ts promote");
+    const postSmoke = workflow.indexOf("id: post_smoke");
+    const edge = workflow.indexOf("bun ./verify-edge-smoke.ts");
+    const retire = workflow.indexOf("bun production-resources.ts retire");
+    const drift = workflow.indexOf("- name: Reject post-deployment Cloudflare drift");
+    expect(upload).toBeGreaterThan(0);
+    expect(upload).toBeLessThan(promote);
+    expect(promote).toBeLessThan(postSmoke);
+    expect(postSmoke).toBeLessThan(edge);
+    expect(edge).toBeLessThan(retire);
+    expect(retire).toBeLessThan(drift);
+    const retirementStep = workflow.slice(workflow.lastIndexOf("- name:", retire), drift);
+    expect(retirementStep).toContain(
+      "if: ${{ success() && steps.post_smoke.outcome == 'success' }}"
+    );
+    expect(workflow).not.toContain("alchemy deploy --stage production --yes --no-input");
+  });
   it("keeps ordinary admission behind isolated proof and the existing release gates", () => {
     const steps = [
       "run: bun production-release.ts isolate",
@@ -39,7 +58,7 @@ describe("Production release workflow policy", () => {
       /BOOTSTRAP_RELEASE|RESUME_RELEASE|bootstrap-capture|bootstrap-verify|resume-capture/u
     );
     const driftGate = workflow.indexOf("bash infra/cloudflare/scripts/production-preflight.sh");
-    const upload = workflow.indexOf("alchemy deploy --stage production --yes --no-input");
+    const upload = workflow.indexOf("bun production-resources.ts upload");
     expect(driftGate).toBeGreaterThan(0);
     expect(driftGate).toBeLessThan(upload);
     expect(workflow).not.toContain("check-topology-drift.sh resume");
@@ -125,7 +144,7 @@ describe("Production release workflow policy", () => {
       planStep.indexOf("alchemy plan")
     );
     expect(deployStep.indexOf("bash scripts/check-production-runtime-config.sh")).toBeLessThan(
-      deployStep.indexOf("alchemy deploy")
+      deployStep.indexOf("bun production-resources.ts upload")
     );
   });
 
@@ -153,7 +172,7 @@ describe("Production release workflow policy", () => {
     expect(preflight).toContain(
       "../../node_modules/alchemy/bin/alchemy.js provider cloudflare bootstrap"
     );
-    expect(workflow).toContain("alchemy deploy --stage production --yes --no-input");
+    expect(workflow).toContain("bun production-resources.ts upload");
   });
 
   it("requires the reviewed desired edge policy before planning", () => {
@@ -166,7 +185,7 @@ describe("Production release workflow policy", () => {
 
   it("keeps Alchemy the topology authority and restricts the routing escape hatch", () => {
     const capture = workflow.indexOf("bun production-release.ts capture");
-    const upload = workflow.indexOf("alchemy deploy --stage production --yes --no-input");
+    const upload = workflow.indexOf("bun production-resources.ts upload");
     const stage = workflow.indexOf("bun production-release.ts stage");
     const smoke = workflow.indexOf("run: bun verify-production-smoke.ts\n");
     const promotion = workflow.indexOf("bun production-release.ts promote");
@@ -184,7 +203,7 @@ describe("Production release workflow policy", () => {
     expect(workflow).toContain("Observed Worker traffic:");
     expect(workflow).toContain("failure() && steps.capture.outcome == 'success'");
     expect(workflow).toContain("alchemy plan --stage production --no-input");
-    expect(workflow).toContain("alchemy deploy --stage production --yes --no-input");
+    expect(workflow).toContain("bun production-resources.ts upload");
     expect(workflow).not.toContain("wrangler");
     expect(workflow).not.toContain("railway");
     expect(workflow).not.toContain("cloudflare/wrangler.json");
@@ -211,7 +230,7 @@ describe("Production release workflow policy", () => {
   });
 
   it("verifies the public topology and provider state after deployment", () => {
-    const deploy = workflow.indexOf("alchemy deploy");
+    const deploy = workflow.indexOf("bun production-resources.ts upload");
     const verification = workflow.indexOf("Verify the migrated public topology");
     const postDeploymentDrift = workflow.indexOf("Reject post-deployment Cloudflare drift");
     const postDeploymentDriftCommand = workflow.indexOf(
@@ -235,7 +254,7 @@ describe("Production release workflow policy", () => {
   });
 
   it("checks bounded, rejected machine requests only after the deployed topology is available", () => {
-    const deploy = workflow.indexOf("alchemy deploy --stage production");
+    const deploy = workflow.indexOf("bun production-resources.ts upload");
     const topology = workflow.indexOf("Verify the migrated public topology");
     const smoke = workflow.indexOf("bun ./verify-edge-smoke.ts");
     const record = workflow.indexOf("Record the release");
@@ -248,7 +267,7 @@ describe("Production release workflow policy", () => {
   it("rechecks trunk immediately before the Alchemy deployment", () => {
     const plan = workflow.indexOf("alchemy plan");
     const recheck = workflow.indexOf("Recheck trunk immediately before deployment");
-    const deploy = workflow.indexOf("alchemy deploy");
+    const deploy = workflow.indexOf("bun production-resources.ts upload");
 
     expect(plan).toBeLessThan(recheck);
     expect(recheck).toBeLessThan(deploy);

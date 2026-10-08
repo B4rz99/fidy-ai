@@ -198,12 +198,21 @@
             }
           },
           {
-            "include": ["./infra/cloudflare/inspect-worker-drift.ts"],
+            "include": [
+              "./infra/cloudflare/inspect-worker-drift.ts",
+              "./infra/cloudflare/production-resources.ts"
+            ],
             "options": {
               "diagnosticSeverity": {
                 "anyUnknownInErrorContext": "off",
                 "strictEffectProvide": "off"
               }
+            }
+          },
+          {
+            "include": ["./infra/cloudflare/resource-retirement.test.ts"],
+            "options": {
+              "diagnosticSeverity": { "strictEffectProvide": "off" }
             }
           },
           {

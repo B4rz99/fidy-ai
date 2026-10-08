@@ -333,10 +333,31 @@ const isolateRelease = Effect.fn(function* (
   return { publicVersionId, coreVersionId, publicDeployment, coreDeployment };
 });
 
+/** Cleanup is allowed only for the exact pair already promoted by this release. */
+const verifyRetirement = Effect.fn(function* (
+  port: ReleasePort,
+  input: {
+    release: StagedRelease;
+    promoted: { publicDeploymentId: string; coreDeploymentId: string };
+  }
+) {
+  const { release, promoted } = input;
+  yield* requireTrunk(port, release.snapshot.revision);
+  yield* requireDeployment(port, release.snapshot.public.name, {
+    id: promoted.publicDeploymentId,
+    versions: [{ id: release.publicVersionId, percentage: 100 }],
+  });
+  yield* requireDeployment(port, release.snapshot.core.name, {
+    id: promoted.coreDeploymentId,
+    versions: [{ id: release.coreVersionId, percentage: 100 }],
+  });
+});
+
 export const releaseController = {
   captureRelease,
   deployExact,
   stageRelease,
   promoteRelease,
   isolateRelease,
+  verifyRetirement,
 };

@@ -86,6 +86,7 @@ const UpdatingStateEntry = Schema.Struct({
 });
 const StateMap = Schema.Record(Schema.String, Schema.Unknown);
 const Commands = Schema.Literals([
+  "verify-retirement",
   "capture",
   "stage",
   "promote",
@@ -1135,6 +1136,16 @@ const rollback = Effect.fn(function* (
   yield* releaseRollback.restore(guarded, { release, promoted, compatible });
 });
 
+const verifyRetirement = Effect.fn(function* (port: ReleasePort, env: Config) {
+  const receipt = yield* Schema.decodeUnknownEffect(RollbackReceipt)(
+    yield* readFile(`${env.file}.promoted`)
+  );
+  if (receipt.release.snapshot.revision !== env.revision) {
+    return yield* Effect.fail(Error("Retirement receipt does not belong to this release"));
+  }
+  yield* releaseController.verifyRetirement(port, receipt);
+});
+
 const runRouting = Effect.fn(function* ({
   command,
   port,
@@ -1178,9 +1189,13 @@ if (import.meta.main) {
     const services = yield* Layer.build(FetchHttpClient.layer);
     const client = Context.get(services, HttpClient.HttpClient);
     const port = releasePort({ env: environment, client });
-    yield* command === "isolate"
-      ? isolate(port, environment, client)
-      : runRouting({ command, port, env: environment, client });
+    if (command === "verify-retirement") {
+      yield* verifyRetirement(port, environment);
+    } else if (command === "isolate") {
+      yield* isolate(port, environment, client);
+    } else {
+      yield* runRouting({ command, port, env: environment, client });
+    }
     yield* writeFile(Bun.stdout, "Production release routing step passed.\n");
   }).pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }), Effect.scoped);
   await Effect.runPromise(

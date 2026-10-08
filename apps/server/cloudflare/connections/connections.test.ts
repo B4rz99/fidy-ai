@@ -12,7 +12,7 @@ import { UserTransactionCoordinator } from "../transactions/runtime";
 import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { ConnectInstitutionResult } from "../../src/core/connections/contract";
-import { sweepConnectionAttempts } from "./runtime";
+import { handleConnectionBrowserRequest, sweepConnectionAttempts } from "./runtime";
 
 const users = [
   "10000000-0000-4000-8000-000000000051",
@@ -420,6 +420,28 @@ it("refuses hostile browser input and origins without consuming a live attempt",
       expect((yield* Effect.tryPromise(() => send(db, crossOrigin))).status).toBe(403);
       expect((yield* Effect.tryPromise(() => send(db, originless))).status).toBe(403);
       expect((yield* Effect.tryPromise(() => send(db, anonymous))).status).toBe(401);
+      for (const candidate of [
+        request(0, "/web/connections/begin"),
+        request(0, "/web/connections/review", "POST", { attempt }),
+      ]) {
+        expect((yield* Effect.tryPromise(() => send(db, candidate))).status).toBe(405);
+      }
+      expect(
+        (yield* Effect.tryPromise(() =>
+          send(db, request(0, "/web/connections/other", "POST", { attempt }))
+        )).status
+      ).toBe(404);
+      const unknown = yield* handleConnectionBrowserRequest({
+        request: request(0, "/web/connections/other", "POST", { attempt }),
+        db,
+        browserOrigin: "https://app.fidyapp.com",
+        coordinator: {
+          getByName: () => {
+            throw new Error("No coordinator for an unrecognized transport");
+          },
+        },
+      });
+      expect(unknown.status).toBe(404);
       const hostile = [
         request(0, "/web/connections/begin", "POST", { attempt: "invalid" }),
         request(0, "/web/connections/begin", "POST", {
@@ -437,6 +459,46 @@ it("refuses hostile browser input and origins without consuming a live attempt",
         send(db, request(0, "/web/connections/begin", "POST", { attempt }))
       );
       expect(owner.status).toBe(200);
+    })
+  ));
+it("forwards Connection browser transports with only cookie, content type and origin headers", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      for (const candidate of [
+        request(0, "/web/connections/review?attempt=10000000-0000-4000-8000-000000000001"),
+        request(0, "/web/connections/begin", "POST", {
+          attempt: "10000000-0000-4000-8000-000000000001",
+        }),
+      ]) {
+        candidate.headers.set("authorization", "Bearer must-not-reach-Core");
+        candidate.headers.set("x-user-id", users[1]);
+        candidate.headers.set("x-canonical-source", "must-not-reach-Core");
+        const response = yield* Effect.tryPromise(() =>
+          publicWorker.fetch(candidate, {
+            BROWSER_ORIGIN: "https://app.fidyapp.com",
+            LOCAL_CANONICAL_READ_BEARER: "",
+            PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
+            RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
+            CORE: {
+              fetch: (internal) => {
+                const forwarded = new Request(internal);
+                expect(Array.from(forwarded.headers.keys()).sort()).toEqual([
+                  "content-type",
+                  "cookie",
+                  "origin",
+                ]);
+                expect(forwarded.headers.get("cookie")).toBe(candidate.headers.get("cookie"));
+                expect(forwarded.headers.get("origin")).toBe(candidate.headers.get("origin"));
+                expect(forwarded.headers.get("content-type")).toBe(
+                  candidate.headers.get("content-type") ?? ""
+                );
+                return Promise.resolve(new Response(null, { status: 204 }));
+              },
+            },
+          })
+        );
+        expect(response.status).toBe(204);
+      }
     })
   ));
 it("commits only one concurrent browser preparation and retires old continuation progress", () =>

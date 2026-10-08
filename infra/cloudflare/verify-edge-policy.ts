@@ -13,13 +13,20 @@ import { edgeSecurityPolicy } from "./edge-security";
 // Includes #236's authenticated canonical Subscription cancellation route in the catalog-derived rate limit.
 // Includes #304's catalog-derived /institutions and /connections rate-limit routes.
 // Includes #305's same-User browser Connection review/preparation routes and edge rate limits.
+// Includes Connections-owned browser transport recognition and cookie-only forwarding policy.
 // Includes #1086 provider callbacks, anonymous provider admission, and removal of email signup resources.
-const expectedEdgePolicyDigest = "d0413518f7c8cd12f362501c41bcac19fd4468b800a3cba0cb123b45d85546b2";
+const expectedEdgePolicyDigest = "55ceebdeae1346e5e9f4c07b5e3e69a7a7c062a1a62e108ead4554a55daa9134";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),
   await Bun.file(new URL("worker-observability.ts", import.meta.url)).text(),
   await Bun.file(new URL("../../apps/server/cloudflare/public-worker.ts", import.meta.url)).text(),
+  await Bun.file(
+    new URL("../../apps/server/src/shell/connections/contract.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/src/shell/connections/runtime.ts", import.meta.url)
+  ).text(),
   await Bun.file(
     new URL("../../apps/server/src/shell/subscription/contract.ts", import.meta.url)
   ).text(),

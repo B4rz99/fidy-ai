@@ -3,7 +3,7 @@ import {
   providerPaths,
 } from "../src/shell/provider-authentication/contract";
 import { oauthPaths } from "../src/shell/oauth-agents/contract";
-import { connectionBrowserPaths } from "../src/shell/connections/contract";
+import { connectionBrowserTransport } from "../src/shell/connections/runtime";
 import { refundSupportBasePath, refundSupportReadPath } from "./subscription/contract";
 import { deriveAnonymousSource } from "./anonymous-admission/operations";
 import { keywordRulePath, listCategoriesPath } from "../src/shell/categories/contract";
@@ -277,7 +277,7 @@ const ownedPaths = new Set<string>([
 const oauthPath = (path: string): boolean =>
   Object.values(oauthPaths).some((owned) => owned === path);
 const connectionBrowserPath = (path: string): boolean =>
-  Object.values(connectionBrowserPaths).some((owned) => owned === path);
+  Option.isSome(connectionBrowserTransport(path));
 const ownedPath = (path: string): boolean =>
   connectionBrowserPath(path) ||
   oauthPath(path) ||
@@ -301,9 +301,8 @@ const oauthMethods = (path: string): ReadonlyArray<string> => {
     : ["GET"];
 };
 const specialMethods = (path: string): Option.Option<ReadonlyArray<string>> => {
-  if (connectionBrowserPath(path)) {
-    return Option.some(path === connectionBrowserPaths.review ? ["GET"] : ["POST"]);
-  }
+  const connection = connectionBrowserTransport(path);
+  if (Option.isSome(connection)) return Option.some([connection.value.method]);
   if (oauthPath(path)) return Option.some(oauthMethods(path));
   if (refundSupportPath(path)) return Option.some(refundMethods(path));
   return paymentEnrollmentTransport(path).pipe(Option.map((transport) => [transport.method]));
@@ -421,13 +420,12 @@ const oauthHeaders = (request: Request, path: string): Headers => {
   return headers;
 };
 const specialForwardedHeaders = (request: Request, path: string): Option.Option<Headers> => {
-  if (connectionBrowserPath(path)) {
+  const connection = connectionBrowserTransport(path);
+  if (Option.isSome(connection)) {
     return Option.some(
-      new Headers({
-        cookie: request.headers.get("cookie") ?? "",
-        "content-type": request.headers.get("content-type") ?? "",
-        origin: request.headers.get("origin") ?? "",
-      })
+      new Headers(
+        connection.value.forwardedHeaders.map((name) => [name, request.headers.get(name) ?? ""])
+      )
     );
   }
   if (oauthPath(path)) return Option.some(oauthHeaders(request, path));

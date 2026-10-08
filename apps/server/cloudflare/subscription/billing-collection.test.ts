@@ -1,4 +1,3 @@
-import { type Miniflare } from "miniflare";
 import { type WorkflowStepConfig } from "cloudflare:workers";
 import { afterEach, expect, it, vi } from "vitest";
 import { type Cause, Clock, Effect, Option, Schema } from "effect";
@@ -22,25 +21,17 @@ const paymentRequestId = "50000000-0000-4000-8000-000000000001";
 const priceId = "22700000-0000-4000-8000-000000000001";
 const reference = `fidy-${attemptId}`;
 const transactionId = "provider-transaction-1";
-let instance: Option.Option<Miniflare> = Option.none();
-let fixtureCounter = 0;
 afterEach(() => {
   vi.unstubAllGlobals();
-  const disposed = Option.match(instance, {
-    onNone: () => Promise.resolve(),
-    onSome: (value) => value.dispose(),
-  });
-  instance = Option.none();
-  return disposed;
 });
 
 const fixture = (method: "card" | "nequi" = "card"): Promise<D1Database> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const created = yield* makePaymentEnrollmentD1(`billing-collection-${++fixtureCounter}`, [
+      const created = yield* makePaymentEnrollmentD1([
         "CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL) STRICT",
       ]);
-      instance = Option.some(created.instance);
+
       const db = created.db;
       yield* Effect.tryPromise(() =>
         db.batch([

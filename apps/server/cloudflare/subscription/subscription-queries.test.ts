@@ -1,5 +1,4 @@
-import { type Miniflare } from "miniflare";
-import { afterEach, expect } from "vitest";
+import { expect } from "vitest";
 import { it as effectIt } from "@effect/vitest";
 import { Clock, Effect, Option, Schema } from "effect";
 import { SubscriptionOffers, SubscriptionStatus } from "../../src/core/subscription/contract";
@@ -25,24 +24,11 @@ const sessionB = "20000000-0000-4000-8000-000000000002";
 const patId = "30000000-0000-4000-8000-000000000001";
 const token = new Uint8Array(32);
 const pastEnd = Date.parse("2026-09-08T12:00:00Z");
-let instance: Option.Option<Miniflare> = Option.none();
-let fixtureNumber = 0;
-afterEach(() =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      if (Option.isSome(instance)) {
-        const current = instance.value;
-        yield* fromTestPromise(() => current.dispose());
-      }
-      instance = Option.none();
-    })
-  )
-);
 
 const fixture = (): Promise<D1Database> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const created = yield* makePaymentEnrollmentD1(`subscription-query-${++fixtureNumber}`, [
+      const created = yield* makePaymentEnrollmentD1([
         "CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL) STRICT",
         "CREATE TABLE trial_periods (user_id TEXT PRIMARY KEY, started_at_ms INTEGER NOT NULL, ends_at_ms INTEGER NOT NULL) STRICT",
         "CREATE TABLE web_sessions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, token_digest BLOB NOT NULL, revoked_at_ms INTEGER, idle_expires_at_ms INTEGER NOT NULL, hard_expires_at_ms INTEGER NOT NULL) STRICT",
@@ -51,7 +37,7 @@ const fixture = (): Promise<D1Database> =>
         "CREATE TABLE pat_atomic_assertion (id INTEGER PRIMARY KEY CHECK (id = 1), accepted INTEGER NOT NULL CHECK (accepted = 1)) STRICT",
         "CREATE TABLE pats (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, bearer_digest BLOB NOT NULL, scopes_json TEXT NOT NULL, expires_at_ms INTEGER NOT NULL, revoked_at_ms INTEGER, last_used_at_ms INTEGER) STRICT",
       ]);
-      instance = Option.some(created.instance);
+
       const db = created.db;
       const migration = yield* fromTestPromise(() =>
         Bun.file(new URL("../migrations/0016_subscription_standing.sql", import.meta.url)).text()

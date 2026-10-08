@@ -36,15 +36,25 @@ export const applyTestMigration = ({
  * never a test's rows. Failure rolls back the whole schema. This does not model migration boundaries;
  * tests of file-by-file migration behavior must use applyTestMigration instead.
  */
-export const installTestSchema = ({
+export const installTestSchema = (
+  input: Readonly<{ db: D1Database; sources: ReadonlyArray<URL> }>
+): Promise<void> => installTestSchemaWithPrefix({ ...input, prefixStatements: [] });
+
+/** Includes immutable caller-owned schema declarations before checked-in migrations. */
+export const installTestSchemaWithPrefix = ({
   db,
   sources,
-}: Readonly<{ db: D1Database; sources: ReadonlyArray<URL> }>): Promise<void> =>
+  prefixStatements,
+}: Readonly<{
+  db: D1Database;
+  sources: ReadonlyArray<URL>;
+  prefixStatements: ReadonlyArray<string>;
+}>): Promise<void> =>
   Array.from(new Map(sources.map((source) => [source.href, source])).values())
     .reduce<Promise<ReadonlyArray<string>>>(
       (previous, source) =>
         previous.then((sql) => loadMigrationStatements(source).then((next) => [...sql, ...next])),
-      Promise.resolve([])
+      Promise.resolve(prefixStatements)
     )
     .then((sql) =>
       sql.length === 0
@@ -74,7 +84,7 @@ const acquireDatabase = (slot: BindingSlot): Promise<D1Database> =>
     );
     return db;
   });
-// Only checked-in fixture SQL crosses this private local bootstrap route.
+// Only immutable fixture schema SQL crosses this private local bootstrap route.
 const schemaWorker = `
 const baselines = new Map();
 const installed = new Set();

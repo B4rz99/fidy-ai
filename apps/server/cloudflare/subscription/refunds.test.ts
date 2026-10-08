@@ -1,8 +1,7 @@
 import { type WorkflowStepConfig } from "cloudflare:workers";
 import assert from "node:assert/strict";
 import { afterEach, expect, it, vi } from "vitest";
-import { type Cause, Clock, Effect, Exit, Option, Schema } from "effect";
-import { type Miniflare } from "miniflare";
+import { type Cause, Clock, Effect, Exit, Schema } from "effect";
 import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
 import { seedRefundCharge } from "./refund-charge.test-fixture";
 import { executeProtectedSubscriptionQuery, getRefund, startRefund } from "./operations";
@@ -18,17 +17,12 @@ import {
 const userId = "10000000-0000-4000-8000-000000000001";
 const attemptId = "40000000-0000-4000-8000-000000000001";
 const requestId = "50000000-0000-4000-8000-000000000001";
-let instance: Option.Option<Miniflare> = Option.none();
-let counter = 0;
 afterEach(() => {
   vi.unstubAllGlobals();
-  const disposed = Option.isSome(instance) ? instance.value.dispose() : Promise.resolve();
-  instance = Option.none();
-  return disposed;
 });
 const fixture = (activeTrial = false): Effect.Effect<D1Database, Cause.UnknownError> =>
   Effect.gen(function* () {
-    const made = yield* makePaymentEnrollmentD1(`refund-${++counter}`, [
+    const made = yield* makePaymentEnrollmentD1([
       "CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL) STRICT",
       "CREATE TABLE trial_periods (user_id TEXT PRIMARY KEY, started_at_ms INTEGER NOT NULL, ends_at_ms INTEGER NOT NULL) STRICT",
       "CREATE TABLE web_sessions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, token_digest BLOB NOT NULL, revoked_at_ms INTEGER, idle_expires_at_ms INTEGER NOT NULL, hard_expires_at_ms INTEGER NOT NULL) STRICT",
@@ -36,7 +30,7 @@ const fixture = (activeTrial = false): Effect.Effect<D1Database, Cause.UnknownEr
       "CREATE TABLE pat_audit (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, session_id TEXT, pat_id TEXT, oauth_connection_id TEXT, oauth_credential_id TEXT, operation TEXT NOT NULL, outcome TEXT NOT NULL, occurred_at_ms INTEGER NOT NULL) STRICT",
       "CREATE TABLE pat_atomic_assertion (id INTEGER PRIMARY KEY CHECK (id = 1), accepted INTEGER NOT NULL CHECK (accepted = 1)) STRICT",
     ]);
-    instance = Option.some(made.instance);
+
     const db = made.db;
     const trialStart = activeTrial ? (yield* Clock.currentTimeMillis) - 1000 : 1000;
     const trialEnd = trialStart + 604800000;

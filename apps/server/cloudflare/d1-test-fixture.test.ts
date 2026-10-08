@@ -1,13 +1,51 @@
 import { afterAll, expect } from "vitest";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
-import { installTestSchema, isolatedTestDatabases, isolatedTestStorage } from "./d1-test-fixture";
+import {
+  installTestSchema,
+  installTestSchemaWithPrefix,
+  isolatedTestDatabases,
+  isolatedTestStorage,
+} from "./d1-test-fixture";
 
 const databases = isolatedTestDatabases();
 const storage = isolatedTestStorage();
 afterAll(() => Promise.all([databases.dispose(), storage.dispose()]));
 const wait = <A>(work: () => Promise<A>): Effect.Effect<A> =>
   Effect.tryPromise(work).pipe(Effect.orDie);
+
+it.live("keeps caller-owned auth schema variants and rows independent in native baselines", () =>
+  Effect.gen(function* () {
+    const sources = [new URL("./migrations/0001_categories.sql", import.meta.url)];
+    const prefix = (locale: string): ReadonlyArray<string> => [
+      `CREATE TABLE fixture_users (id TEXT PRIMARY KEY, locale TEXT NOT NULL DEFAULT '${locale}') STRICT`,
+      "CREATE TABLE fixture_credentials (user_id TEXT NOT NULL REFERENCES fixture_users(id)) STRICT",
+    ];
+    const original = yield* wait(() => databases.acquire());
+    yield* wait(() =>
+      installTestSchemaWithPrefix({ db: original, sources, prefixStatements: prefix("es-CO") })
+    );
+    yield* wait(() => original.prepare("INSERT INTO fixture_users(id) VALUES ('private')").run());
+    for (const locale of ["en-US", "es-CO"]) {
+      const fresh = yield* wait(() => databases.acquire());
+      yield* wait(() =>
+        installTestSchemaWithPrefix({ db: fresh, sources, prefixStatements: prefix(locale) })
+      );
+      expect(
+        (yield* wait(() => fresh.prepare("SELECT * FROM fixture_users").all())).results
+      ).toEqual([]);
+      yield* wait(() => fresh.prepare("INSERT INTO fixture_users(id) VALUES ('fresh')").run());
+      expect(
+        yield* wait(() => fresh.prepare("SELECT locale FROM fixture_users").first("locale"))
+      ).toBe(locale);
+      yield* wait(() =>
+        expect(
+          fresh.prepare("INSERT INTO fixture_credentials VALUES ('missing')").run()
+        ).rejects.toThrow()
+      );
+    }
+  })
+);
 
 it.live("installs schema additions without caching pre-existing test rows or replacing them", () =>
   Effect.gen(function* () {

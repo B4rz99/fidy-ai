@@ -94,7 +94,21 @@ browser took 153s. Its final real-Core file left the other browser worker idle f
 The two longest existing browser files now sort first via `00-`/`01-` filename prefixes;
 no case or file is split. Ordinary pairing owns a separate User, TrialPeriod and Dashboard,
 so enrollment can run earlier without changing pairing's initial standing. All 63 web cases
-plus the native CLI journey pass locally in 88.7s. Final CI must confirm the target.
+plus the native CLI journey pass locally in 88.7s.
+
+[Reordered run 37858866790](https://github.com/B4rz99/fidy-ai/actions/runs/37858866790)
+passed all checks in **3m07s**. Browser improved to 137s; adapters took 156/157/151/118s,
+so adapter variability was now the critical path.
+
+Seven subscription suites previously started and disposed a Worker for every case and replayed
+the same payment migrations. Their shared native D1 fixture now allocates a never-reused binding
+from the existing 16-slot pool. Immutable caller-owned auth DDL forms part of the baseline key,
+and seeding stays per database. The Worker closes at file teardown; per-case global/timer cleanup
+remains. The new fixture case proves auth schema variants, no private-row capture and native
+foreign-key rejection. Migration-specific suites retain their original runtime and migrations.
+All 321 subscription cases across 14 files pass locally in 26.7s with eight unchanged Sandbox
+skips; all eight native fixture cases pass. Scheduling budgets the seven new measured costs
+conservatively. Final CI must confirm the complete-workflow target.
 
 ## Adapter regression follow-up: #1066
 

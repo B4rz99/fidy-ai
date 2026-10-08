@@ -1,7 +1,6 @@
 import { newId } from "../secret-material/operations";
 import { wompiOutboundHttp } from "./internal/wompi-runtime";
 import { UnknownJsonString } from "../../src/shell/schema-codecs/contract";
-import { type Miniflare } from "miniflare";
 import { afterEach, expect, it, vi } from "vitest";
 import {
   PaymentEnrollment,
@@ -66,17 +65,8 @@ const merchant = JSON.stringify({
     },
   },
 });
-let counter = 0;
-const instances: Array<Miniflare> = [];
 
-afterEach(() =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      vi.unstubAllGlobals();
-      yield* fromTestPromise(() => Promise.all(instances.splice(0).map((mf) => mf.dispose())));
-    })
-  )
-);
+afterEach(() => vi.unstubAllGlobals());
 
 const setup = (): Promise<{
   db: D1Database;
@@ -94,8 +84,7 @@ const setup = (): Promise<{
 }> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const name = `card-flow-${++counter}`;
-      const { db, instance } = yield* makePaymentEnrollmentD1(name, [
+      const { db } = yield* makePaymentEnrollmentD1([
         "CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL, service_market TEXT NOT NULL DEFAULT 'CO', locale TEXT NOT NULL DEFAULT 'es-CO') STRICT",
         "CREATE TABLE verified_email_credentials (user_id TEXT PRIMARY KEY, email_address TEXT NOT NULL) STRICT",
         "CREATE TABLE onboarding_consent_records (user_id TEXT PRIMARY KEY) STRICT",
@@ -107,7 +96,7 @@ const setup = (): Promise<{
       revoked_at_ms INTEGER, fresh_until_ms INTEGER NOT NULL, idle_expires_at_ms INTEGER NOT NULL,
       hard_expires_at_ms INTEGER NOT NULL) STRICT`,
       ]);
-      instances.push(instance);
+
       yield* fromTestPromise(() =>
         applyTestMigration({
           db,

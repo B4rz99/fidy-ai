@@ -12,7 +12,6 @@ import { executeCanonicalWork } from "../canonical-operations/operations";
 import { CanonicalOperationId } from "../../src/core/canonical-operations/contract";
 import { applyTestMigration } from "../d1-test-fixture";
 import { activePaidSubscriptionCondition } from "../../src/shell/subscription/operations";
-import { type Miniflare } from "miniflare";
 import { afterEach, expect, it, vi } from "vitest";
 import { type Cause, DateTime, Effect, Fiber, Option, Schema } from "effect";
 import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
@@ -66,17 +65,9 @@ const attemptId = "40000000-0000-4000-8000-000000000001";
 const paymentRequestId = "50000000-0000-4000-8000-000000000001";
 const priceId = "22700000-0000-4000-8000-000000000001";
 const reference = `fidy-${attemptId}`;
-let instance: Option.Option<Miniflare> = Option.none();
-let fixtureCounter = 0;
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
-  const disposed = Option.match(instance, {
-    onNone: () => Promise.resolve(),
-    onSome: (value) => value.dispose(),
-  });
-  instance = Option.none();
-  return disposed;
 });
 
 const fixture = (
@@ -93,12 +84,12 @@ const fixture = (
 ): Promise<D1Database> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const created = yield* makePaymentEnrollmentD1(`weekly-renewal-${++fixtureCounter}`, [
+      const created = yield* makePaymentEnrollmentD1([
         "CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL) STRICT",
         "CREATE TABLE onboarding_consent_records (user_id TEXT PRIMARY KEY) STRICT",
         "CREATE TABLE consent_user_revocations (user_id TEXT PRIMARY KEY) STRICT",
       ]);
-      instance = Option.some(created.instance);
+
       const db = created.db;
       const selectedPriceId = {
         weekly: priceId,

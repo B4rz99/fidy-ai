@@ -486,6 +486,16 @@ const preservesCoreQuery = (path: string): boolean =>
   connectionBrowserPath(path) ||
   path === providerPaths.callback ||
   path === microsoftProviderPaths.callback;
+const forwardSmokeVersionOverride = (
+  request: Request,
+  environment: PublicEnvironment,
+  headers: Headers
+): void => {
+  headers.delete(smokeVersionHeader);
+  if (!smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })) return;
+  const override = request.headers.get(smokeVersionHeader);
+  if (override !== null) headers.set(smokeVersionHeader, override);
+};
 const coreRequest = (
   request: Request,
   environment: PublicEnvironment
@@ -493,6 +503,7 @@ const coreRequest = (
   Effect.gen(function* () {
     const path = new URL(request.url).pathname;
     const headers = forwardedHeaders(request, path);
+    forwardSmokeVersionOverride(request, environment, headers);
     yield* canonicalAdmissionHeaders(request, environment, headers);
     if (path === "/pat-pairings" || oauthPath(path)) {
       headers.set(

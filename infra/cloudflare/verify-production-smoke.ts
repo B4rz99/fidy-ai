@@ -138,11 +138,24 @@ const checkEdge = Effect.fn(function* (
       override: headers["cloudflare-workers-version-overrides"] ?? "",
       publicVersionId: config.PUBLIC_VERSION_ID,
     }),
-  }).pipe(Effect.exit);
+  }).pipe(
+    Effect.mapError(
+      (failure) =>
+        new ReleaseSmokeFailed({
+          reason: `Candidate edge probe failed at ${failure.path}`,
+        })
+    ),
+    Effect.exit
+  );
   if (Exit.isFailure(result)) {
-    return yield* new ReleaseSmokeFailed({
-      reason: "Candidate edge rejections or headers were not verified",
-    });
+    const failure = Cause.findErrorOption(result.cause);
+    return yield* Option.getOrElse(
+      failure,
+      () =>
+        new ReleaseSmokeFailed({
+          reason: "Candidate edge rejections or headers were not verified",
+        })
+    );
   }
 });
 

@@ -1,0 +1,36 @@
+infra/cloudflare/smoke.test.ts
+  s_e3b9a05f422f64::t_ad9f592ac6467d 29-38,48-53,55-57,70-73
+  s_e3b9a05f422f64::t_88e5b6edf3304b 39-47,58-69
+  s_e3b9a05f422f64::t_fd918acefc830b 54
+infra/cloudflare/verify-edge-policy.ts
+  s_e3b9a05f422f64::t_7e1cfb614bd688 20
+infra/cloudflare/verify-production-smoke.ts
+  s_e3b9a05f422f64::t_88e5b6edf3304b 142-147,152-158
+  s_e3b9a05f422f64::t_037220f53a8d9b 141,148-149,151
+infra/cloudflare/verify-edge-policy.test.ts
+  s_e3b9a05f422f64::t_7e1cfb614bd688 7
+apps/server/cloudflare/public-worker.ts
+  s_e3b9a05f422f64::t_fd918acefc830b 489-498,506
+apps/web/src/features/provider-authentication/FEATURE.md
+  s_e3b9a05f422f64::t_123ee7d23a7b2f 51-58
+infra/cloudflare/verify-production-smoke.test.ts
+  s_e3b9a05f422f64::t_88e5b6edf3304b 508-511,525-527
+  s_e3b9a05f422f64::t_23ec6531434a27 16,505-507,512,523-524,528-535
+  s_e3b9a05f422f64::t_fd918acefc830b 513-522
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "19d8d9f085bf1ebda831a5201fcb490e1a9b48c2",
+  "prompts": {},
+  "sessions": {
+    "s_e3b9a05f422f64": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a115f2-dfce-7741-a6e9-e22144cd3fad",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

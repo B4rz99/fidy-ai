@@ -132,7 +132,6 @@ export const providerCallback = ({
       query,
       verifier: cookie.value,
       attempt,
-      current,
     });
     return callbackRedirect(environment, provider, true);
   }).pipe(Effect.orElseSucceed(() => callbackRedirect(environment, provider)));

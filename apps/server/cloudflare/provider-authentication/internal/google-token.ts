@@ -1,5 +1,6 @@
 import {
   type Cause,
+  Clock,
   type Config,
   ConfigProvider,
   DateTime,
@@ -135,6 +136,7 @@ export const validateGoogleToken = (
       new TextDecoder().decode(response.body)
     );
     const keys = yield* signingKeys(http);
+    const current = yield* Clock.currentTimeMillis;
     const verified = yield* Effect.tryPromise(() =>
       jwtVerify(token.id_token, keys, {
         issuer: ["https://accounts.google.com", "accounts.google.com"],
@@ -142,7 +144,7 @@ export const validateGoogleToken = (
         algorithms: ["RS256"],
         requiredClaims: ["iss", "sub", "aud", "exp", "iat", "nonce"],
         clockTolerance: 0,
-        currentDate: DateTime.toDateUtc(DateTime.makeUnsafe(input.current)),
+        currentDate: DateTime.toDateUtc(DateTime.makeUnsafe(current)),
       })
     );
     const claims = yield* Schema.decodeUnknownEffect(Claims)(verified.payload);
@@ -150,7 +152,7 @@ export const validateGoogleToken = (
       !validClaims({
         claims,
         attempt: input.attempt,
-        current: input.current,
+        current,
         clientId,
         multipleAudiences: Array.isArray(verified.payload.aud) && verified.payload.aud.length > 1,
       })

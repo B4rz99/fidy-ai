@@ -1,5 +1,6 @@
 import {
   type Cause,
+  Clock,
   type Config,
   ConfigProvider,
   DateTime,
@@ -110,13 +111,15 @@ const validClaims = ({
   claims,
   input,
   clientId,
+  current,
 }: Readonly<{
+  current: number;
   claims: typeof Claims.Type;
   input: Validation;
   clientId: string;
 }>): boolean =>
   claims.nonce === input.attempt.nonce &&
-  claims.iat * millisecondsPerSecond <= input.current &&
+  claims.iat * millisecondsPerSecond <= current &&
   claims.aud === clientId;
 /** Common authorizes both personal and organizational identities. Every key's issuer scope must match the exact token tenant. */
 export const validateMicrosoftToken = (
@@ -141,6 +144,7 @@ export const validateMicrosoftToken = (
     if (tenant.iss !== issuer) return yield* Effect.fail("invalid" as const);
     const keys = yield* signingKeys({ http, issuer, tenant: tenant.tid });
     const clientId = input.environment.MICROSOFT_CLIENT_ID ?? "";
+    const current = yield* Clock.currentTimeMillis;
     const verified = yield* Effect.tryPromise(() =>
       jwtVerify(token.id_token, keys, {
         issuer,
@@ -148,11 +152,11 @@ export const validateMicrosoftToken = (
         algorithms: ["RS256"],
         requiredClaims: ["iss", "sub", "aud", "exp", "iat", "nonce", "tid", "ver"],
         clockTolerance: 0,
-        currentDate: DateTime.toDateUtc(DateTime.makeUnsafe(input.current)),
+        currentDate: DateTime.toDateUtc(DateTime.makeUnsafe(current)),
       })
     );
     const claims = yield* Schema.decodeUnknownEffect(Claims)(verified.payload);
-    if (!validClaims({ claims, input, clientId })) {
+    if (!validClaims({ claims, input, clientId, current })) {
       return yield* Effect.fail("invalid" as const);
     }
     return {

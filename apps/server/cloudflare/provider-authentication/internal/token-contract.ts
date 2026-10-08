@@ -8,7 +8,6 @@ export type Validation = Readonly<{
   query: URLSearchParams;
   verifier: string;
   attempt: Readonly<{ id: string; nonce: string; expires_at_ms: number }>;
-  current: number;
 }>;
 export type VerifiedProviderIdentity = Readonly<{
   issuer: string;

@@ -212,9 +212,10 @@ export const lostCompletionJourney = ({
 }: ProviderJourney & Readonly<{ configuration: ProviderJourneyConfiguration }>): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
+      const subject = `lost-${configuration.provider}-${playwright.test.info().repeatEachIndex}`;
       yield* Effect.tryPromise(() =>
         context.route(configuration.authorizationPattern, (route: Route) =>
-          redirectSubject(configuration, `lost-${configuration.provider}-signup`, route)
+          redirectSubject(configuration, subject, route)
         )
       );
       yield* Effect.tryPromise(() =>

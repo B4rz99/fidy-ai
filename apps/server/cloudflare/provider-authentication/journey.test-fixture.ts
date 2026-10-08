@@ -1,3 +1,4 @@
+import type { SignJWT } from "jose";
 import { Effect, Schema } from "effect";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
 import publicWorker from "../public-worker";
@@ -118,3 +119,25 @@ export const disposeJourneys = (): Promise<void> => databases.dispose();
 
 export const setup = (): Promise<Journey> => setupJourney({ whatsapp: false });
 export const setupWhatsApp = (): Promise<Journey> => setupJourney({ whatsapp: true });
+
+/** Model a provider issuing its token after the callback's initial clock sample. */
+export const delayedProviderTokenResponse = ({
+  token,
+  key,
+}: Readonly<{
+  token: string;
+  key: Parameters<SignJWT["sign"]>[0];
+}>): Promise<Response> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.sleep("1100 millis");
+      const { SignJWT, decodeJwt } = yield* Effect.tryPromise(() => import("jose"));
+      const idToken = yield* Effect.tryPromise(() =>
+        new SignJWT(decodeJwt(token))
+          .setIssuedAt()
+          .setProtectedHeader({ alg: "RS256", kid: "test" })
+          .sign(key)
+      );
+      return Response.json({ id_token: idToken });
+    })
+  );

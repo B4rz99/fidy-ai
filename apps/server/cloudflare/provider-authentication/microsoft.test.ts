@@ -1,7 +1,12 @@
 import type { JWTPayload } from "jose";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { type Cause, Effect, Schema } from "effect";
-import { type Journey, disposeJourneys, setup } from "./journey.test-fixture";
+import {
+  type Journey,
+  delayedProviderTokenResponse,
+  disposeJourneys,
+  setup,
+} from "./journey.test-fixture";
 
 afterAll(disposeJourneys);
 afterEach(() => vi.restoreAllMocks());
@@ -99,7 +104,7 @@ it("creates a Microsoft User without WhatsApp or mailbox proof, discloses recove
       vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
         const url = input instanceof Request ? input.url : input.toString();
         if (url === "https://login.microsoftonline.com/common/oauth2/v2.0/token") {
-          return Promise.resolve(Response.json({ id_token: token }));
+          return delayedProviderTokenResponse({ token, key: keys.privateKey });
         }
         if (url === "https://login.microsoftonline.com/common/discovery/v2.0/keys") {
           return Promise.resolve(

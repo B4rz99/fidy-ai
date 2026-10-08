@@ -19,6 +19,8 @@ const contractDigest = Config.String("CONTRACT_DIGEST").pipe(Config.withDefault(
 const hostedAiModel = Config.schema(ApprovedWorkersAiModel, "HOSTED_AI_MODEL");
 const kapsoWebhookSecret = Config.Redacted("KAPSO_WEBHOOK_SECRET");
 const kapsoApiKey = Config.Redacted("KAPSO_API_KEY");
+const microsoftClientId = Config.String("MICROSOFT_CLIENT_ID");
+const microsoftClientSecret = Config.Redacted("MICROSOFT_CLIENT_SECRET");
 const googleClientId = Config.String("GOOGLE_CLIENT_ID");
 const googleClientSecret = Config.Redacted("GOOGLE_CLIENT_SECRET");
 const resendApiKey = Config.Redacted("RESEND_API_KEY");
@@ -314,6 +316,15 @@ export default Alchemy.Stack(
         GOOGLE_REDIRECT_URI: production
           ? "https://api.fidyapp.com/providers/google/callback"
           : "http://localhost:8787/providers/google/callback",
+        MICROSOFT_CLIENT_ID: yield* development
+          ? microsoftClientId.pipe(Config.withDefault(""))
+          : microsoftClientId,
+        MICROSOFT_CLIENT_SECRET: yield* development
+          ? microsoftClientSecret.pipe(Config.withDefault(Redacted.make("")))
+          : microsoftClientSecret,
+        MICROSOFT_REDIRECT_URI: production
+          ? "https://api.fidyapp.com/providers/microsoft/callback"
+          : "http://localhost:8787/providers/microsoft/callback",
         BROWSER_ORIGIN: resolveBrowserOrigin(production),
         WOMPI_ENVIRONMENT: yield* development
           ? wompiEnvironment.pipe(Config.withDefault("sandbox"))

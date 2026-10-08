@@ -1,4 +1,4 @@
-import { googleHttp } from "~/shell/outbound-http/internal/google-http";
+import { oidcHttp } from "~/shell/outbound-http/internal/oidc-http";
 import { type DaviplataOtpPolicy } from "~/core/subscription/contract";
 import { WompiEnvironment } from "~/shell/secret-material/contract";
 import { Config, Context, Crypto, Effect, Layer, Option, type Redacted, Schema } from "effect";
@@ -13,10 +13,10 @@ import {
   makeOutboundHttp,
 } from "~/shell/outbound-http/internal/outbound-http";
 import type {
-  GoogleHttpService,
   OutboundHttpFailure,
   OutboundHttpRequest,
   OutboundHttpResponse,
+  ProviderOidcHttpService,
 } from "./contract";
 
 const WompiPublicKey = Schema.String.check(
@@ -141,4 +141,14 @@ export const makeGoogleOutboundHttp = (
     redirectUri: string;
     httpClient: HttpClient.HttpClient;
   }>
-): GoogleHttpService => googleHttp(input);
+): ProviderOidcHttpService => oidcHttp({ ...input, provider: "google" });
+
+/** Construct the fixed Microsoft common-authority transport with bounded, secret-free telemetry. */
+export const makeMicrosoftOutboundHttp = (
+  input: Readonly<{
+    clientId: string;
+    clientSecret: Redacted.Redacted<string>;
+    redirectUri: string;
+    httpClient: HttpClient.HttpClient;
+  }>
+): ProviderOidcHttpService => oidcHttp({ ...input, provider: "microsoft" });

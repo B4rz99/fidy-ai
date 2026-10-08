@@ -11,6 +11,8 @@ import { IdentityGroup } from "~/shell/identity/contract";
 import { RecoveryGroup } from "~/shell/recovery/contract";
 import { ConnectionBrowserApi } from "~/shell/connections/contract";
 
+export type { AuthenticationProvider } from "~/shell/provider-authentication/contract";
+
 export {
   BrowserLoginWebAuthGroup,
   BrowserLoginRateLimitedApi,

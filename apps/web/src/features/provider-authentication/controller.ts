@@ -4,7 +4,7 @@ import { Cause, type Context, Effect, Option, Redacted } from "effect";
 import { Atom } from "effect/reactivity";
 import { type RefCallback, useCallback, useState } from "react";
 import { useSession } from "@/session/session-context";
-import type { WebAuthClient } from "@/transport/client";
+import type { AuthenticationProvider, WebAuthClient } from "@/transport/client";
 
 type Client = Context.Service.Shape<WebAuthClient>;
 type Pairing = Effect.Success<ReturnType<Client["browserLogin"]["startPairing"]>>;
@@ -12,19 +12,31 @@ type CommandError =
   | Effect.Error<ReturnType<Client["browserLogin"]["startPairing"]>>
   | Effect.Error<ReturnType<Client["providerAuthentication"]["start"]>>
   | "rejected";
-export type GoogleViewState =
+export type ProviderViewState =
   | Readonly<{ status: "editing" }>
   | Readonly<{ status: "waiting" }>
   | Readonly<{ status: "recovery"; code: string }>
-  | Readonly<{ status: "uncertain" }>;
+  | Readonly<{ status: "uncertain" }>
+  | Readonly<{ status: "refused" }>
+  | Readonly<{ status: "cancelled" }>;
 type Submission = Readonly<{ intent: "signup" | "login"; revision: string; popup: Window }>;
-const awaitGoogleVerification = (
+const providerClient = (
   client: Client,
-  pairing: Pairing
+  provider: AuthenticationProvider
+): Pick<Client["providerAuthentication"], "start" | "status" | "complete"> => {
+  const api = client.providerAuthentication;
+  return provider === "google"
+    ? api
+    : { start: api.startMicrosoft, status: api.statusMicrosoft, complete: api.completeMicrosoft };
+};
+const awaitProviderVerification = (
+  client: Client,
+  pairing: Pairing,
+  provider: AuthenticationProvider
 ): Effect.Effect<void, "rejected"> =>
   Effect.gen(function* () {
     for (;;) {
-      const result = yield* client.providerAuthentication.status({ payload: proof(pairing) });
+      const result = yield* providerClient(client, provider).status({ payload: proof(pairing) });
       if (result.status === "verified") return;
       if (result.status === "rejected") return yield* Effect.fail("rejected");
       yield* Effect.sleep("1 second");
@@ -52,22 +64,25 @@ const redeem = (
     )
   );
 
-type GoogleController = Readonly<{
+type ProviderController = Readonly<{
   start: Atom.AtomResultFn<void, void>;
   acknowledge: Atom.AtomResultFn<void, void>;
   clear: () => void;
+  cancellation: () => ProviderViewState;
   stage: (submission: Submission) => void;
 }>;
 type ControllerInput = Readonly<{
   webAuthClient: WebAuthClient;
-  setState: (state: GoogleViewState) => void;
+  setState: (state: ProviderViewState) => void;
   authenticated: () => void;
+  provider: AuthenticationProvider;
 }>;
 type ActiveAttempt = {
   submission: Option.Option<Submission>;
   pairing: Option.Option<Pairing>;
   popup: Option.Option<Window>;
   generation: number;
+  completionRequested: boolean;
 };
 const clearAttempt = (active: ActiveAttempt): void => {
   active.generation += 1;
@@ -94,7 +109,7 @@ const executeStart = (
       return;
     }
     active.pairing = Option.some(started);
-    const authorization = yield* client.providerAuthentication.start({
+    const authorization = yield* providerClient(client, input.provider).start({
       payload: {
         ...proof(started),
         intent: staged.value.intent,
@@ -105,12 +120,15 @@ const executeStart = (
       return;
     }
     yield* Effect.sync(() => staged.value.popup.location.replace(authorization.authorizationUrl));
-    yield* awaitGoogleVerification(client, started);
+    yield* awaitProviderVerification(client, started, input.provider);
     staged.value.popup.close();
     if (active.generation !== current) {
       return;
     }
-    const result = yield* client.providerAuthentication.complete({ payload: proof(started) });
+    active.completionRequested = true;
+    const result = yield* providerClient(client, input.provider).complete({
+      payload: proof(started),
+    });
     if (active.generation !== current) {
       return;
     }
@@ -151,50 +169,57 @@ const guardedCommand = (
           Cause.hasInterruptsOnly(cause) || active.generation !== current
             ? Effect.void
             : Effect.sync(() => {
+                const status = active.completionRequested ? "uncertain" : "refused";
                 clearAttempt(active);
-                input.setState({ status: "uncertain" });
+                input.setState({ status });
               })
         )
       );
     },
     { concurrent: false }
   );
-const makeGoogleController = (input: ControllerInput): GoogleController => {
+const makeProviderController = (input: ControllerInput): ProviderController => {
   const active: ActiveAttempt = {
     submission: Option.none(),
     pairing: Option.none(),
     popup: Option.none(),
     generation: 0,
+    completionRequested: false,
   };
   return {
     start: guardedCommand(input, active, () => executeStart(input, active)),
     acknowledge: guardedCommand(input, active, () => executeAcknowledgement(input, active)),
     clear: () => clearAttempt(active),
+    cancellation: () => ({ status: active.completionRequested ? "uncertain" : "cancelled" }),
     stage: (value: Submission): void => {
       clearAttempt(active);
+      active.completionRequested = false;
       active.submission = Option.some(value);
       active.popup = Option.some(value.popup);
     },
   };
 };
 
-/** Owns one mounted Google attempt; proofs and recovery are discarded on navigation or restart. */
-type GoogleAuthentication = Readonly<{
-  state: GoogleViewState;
+/** Owns one mounted Provider attempt; proofs and recovery are discarded on navigation or restart. */
+type ProviderAuthentication = Readonly<{
+  state: ProviderViewState;
   mounted: RefCallback<HTMLElement>;
   start: (intent: "signup" | "login", revision: string) => void;
   restart: () => void;
   cancel: () => void;
   acknowledge: () => void;
 }>;
-export const useGoogleAuthentication = (): GoogleAuthentication => {
+export const useProviderAuthentication = (
+  provider: AuthenticationProvider
+): ProviderAuthentication => {
   const router = useRouter();
   const session = useSession();
-  const [state, setState] = useState<GoogleViewState>({ status: "editing" });
+  const [state, setState] = useState<ProviderViewState>({ status: "editing" });
   const [controller] = useState(() =>
-    makeGoogleController({
+    makeProviderController({
       webAuthClient: router.options.context.webAuthClient,
       setState,
+      provider,
       authenticated: () => {
         session.completeLogin();
         router.navigate({ to: "/app/transactions" }).catch(() => undefined);
@@ -218,15 +243,16 @@ export const useGoogleAuthentication = (): GoogleAuthentication => {
     start: (intent: "signup" | "login", revision: string): void => {
       const popup = window.open("about:blank", "_blank", "popup,width=500,height=700");
       if (popup === null) {
-        setState({ status: "uncertain" });
+        setState({ status: "refused" });
         return;
       }
       controller.stage({ intent, revision, popup });
       runStart(undefined);
     },
     cancel: (): void => {
+      const cancellation = controller.cancellation();
       clear();
-      setState({ status: "uncertain" });
+      setState(cancellation);
     },
     restart: (): void => {
       clear();
@@ -237,7 +263,7 @@ export const useGoogleAuthentication = (): GoogleAuthentication => {
 };
 
 /** Closes the provider popup from the clean first-party return URL. */
-export const closeGoogleReturn = (node: Parameters<RefCallback<HTMLElement>>[0]): void => {
+export const closeProviderReturn = (node: Parameters<RefCallback<HTMLElement>>[0]): void => {
   if (node === null) return;
   window.close();
 };

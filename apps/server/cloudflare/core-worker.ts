@@ -1,4 +1,4 @@
-import type { GoogleEnvironment } from "./provider-authentication/contract";
+import type { ProviderEnvironment } from "./provider-authentication/contract";
 import type { ProactivityDeliveryWork, ProactivityEnvironment } from "./insights/contract";
 import type { CoreMaintenanceInput } from "./maintenance/contract";
 import { runCoreMaintenance } from "./maintenance/runtime";
@@ -33,7 +33,7 @@ export { UserTransactionCoordinator } from "./transactions/runtime";
 export { ReleaseSmokeWorkflowV1 } from "./runtime/release-smoke/runtime";
 export { StatementExtractionWorkflowV1 } from "./ingestion/runtime";
 
-type CoreEnvironment = GoogleEnvironment &
+type CoreEnvironment = ProviderEnvironment &
   WorkerTelemetryEnvironment &
   ProactivityEnvironment &
   Readonly<{ CONTRACT_DIGEST: string; RELEASE_GIT_SHA: string }> & {

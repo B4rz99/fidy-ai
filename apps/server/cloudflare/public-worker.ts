@@ -1,4 +1,7 @@
-import { providerPaths } from "../src/shell/provider-authentication/contract";
+import {
+  microsoftProviderPaths,
+  providerPaths,
+} from "../src/shell/provider-authentication/contract";
 import { oauthPaths } from "../src/shell/oauth-agents/contract";
 import { connectionBrowserPaths } from "../src/shell/connections/contract";
 import { refundSupportBasePath, refundSupportReadPath } from "./subscription/contract";
@@ -229,6 +232,9 @@ const postPaths = new Set<string>([
   rotateRecoveryPath,
   ...replacementPaths,
   supportRecoveryPath,
+  microsoftProviderPaths.start,
+  microsoftProviderPaths.status,
+  microsoftProviderPaths.complete,
   providerPaths.start,
   providerPaths.status,
   providerPaths.complete,
@@ -242,6 +248,9 @@ const postPaths = new Set<string>([
 const browserMutationPaths = new Set<string>([
   rotateRecoveryPath,
   ...replacementPaths,
+  microsoftProviderPaths.start,
+  microsoftProviderPaths.status,
+  microsoftProviderPaths.complete,
   providerPaths.start,
   providerPaths.status,
   providerPaths.complete,
@@ -261,6 +270,7 @@ const preflightPaths = new Set<string>([
 ]);
 const ownedPaths = new Set<string>([
   providerPaths.disclosure,
+  microsoftProviderPaths.callback,
   providerPaths.callback,
   "/health",
   listCategoriesPath,
@@ -478,7 +488,8 @@ const preservesCoreQuery = (path: string): boolean =>
   canonicalRoute(path) ||
   path === smokePath ||
   connectionBrowserPath(path) ||
-  path === providerPaths.callback;
+  path === providerPaths.callback ||
+  path === microsoftProviderPaths.callback;
 const coreRequest = (
   request: Request,
   environment: PublicEnvironment

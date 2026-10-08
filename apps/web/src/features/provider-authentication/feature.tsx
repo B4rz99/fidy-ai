@@ -1,23 +1,36 @@
+import type { AuthenticationProvider } from "@/transport/client";
 import { useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { AsyncResult } from "effect/reactivity";
 import { type JSX, useState } from "react";
 import { Button } from "@/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/ui/components/card";
-import { closeGoogleReturn, useGoogleAuthentication } from "./controller";
+import { closeProviderReturn, useProviderAuthentication } from "./controller";
 
 /** First-party web signup and returning login, with explicit signup Consent and one-time recovery. */
 const canContinue = (intent: "signup" | "login", accepted: boolean, ready: boolean): boolean =>
   intent === "login" || (accepted && ready);
-type Authentication = ReturnType<typeof useGoogleAuthentication>;
+type Authentication = ReturnType<typeof useProviderAuthentication>;
+const ProviderChoice = ({
+  provider,
+}: Readonly<{ provider: AuthenticationProvider }>): JSX.Element => (
+  <a
+    className="text-center underline"
+    href={provider === "google" ? "/auth/microsoft" : "/auth/google"}
+  >
+    {provider === "google" ? "Microsoft" : "Google"}
+  </a>
+);
 const EditingForm = ({
   intent,
   setIntent,
   start,
+  provider,
 }: Readonly<{
   intent: "signup" | "login";
   setIntent: (intent: "signup" | "login") => void;
   start: Authentication["start"];
+  provider: AuthenticationProvider;
 }>): JSX.Element => {
   const router = useRouter();
   const disclosure = useAtomValue(
@@ -52,8 +65,9 @@ const EditingForm = ({
           start(intent, AsyncResult.isSuccess(disclosure) ? disclosure.value.revision : "")
         }
       >
-        Continuar con Google
+        Continuar con {provider === "google" ? "Google" : "Microsoft"}
       </Button>
+      <ProviderChoice provider={provider} />
       <Button
         variant="ghost"
         onClick={() => {
@@ -69,7 +83,9 @@ const EditingForm = ({
 const AttemptStatus = ({
   authentication,
   setIntent,
+  provider,
 }: Readonly<{
+  provider: AuthenticationProvider;
   authentication: Authentication;
   setIntent: (intent: "signup" | "login") => void;
 }>): JSX.Element => (
@@ -94,11 +110,22 @@ const AttemptStatus = ({
         <Button onClick={authentication.acknowledge}>Lo guardé</Button>
       </>
     )}
+    {(authentication.state.status === "refused" || authentication.state.status === "cancelled") && (
+      <>
+        <p role="alert">
+          {authentication.state.status === "cancelled"
+            ? "Cancelaste el acceso."
+            : "No se completó el acceso. Puedes iniciar un nuevo intento."}
+        </p>
+        <Button onClick={authentication.restart}>Volver a intentar</Button>
+      </>
+    )}
     {authentication.state.status === "uncertain" && (
       <>
         <p role="alert">
-          No pudimos confirmar el acceso. La cuenta podría haberse creado. Inicia sesión con Google
-          para comprobarlo. El código de recuperación perdido no se vuelve a mostrar.
+          No pudimos confirmar el acceso. La cuenta podría haberse creado. Inicia sesión con{" "}
+          {provider === "google" ? "Google" : "Microsoft"} para comprobarlo. El código de
+          recuperación perdido no se vuelve a mostrar.
         </p>
         <Button
           onClick={() => {
@@ -112,9 +139,11 @@ const AttemptStatus = ({
     )}
   </>
 );
-export const GoogleAuthenticationFeature = (): JSX.Element => {
+export const ProviderAuthenticationFeature = ({
+  provider,
+}: Readonly<{ provider: AuthenticationProvider }>): JSX.Element => {
   const [intent, setIntent] = useState<"signup" | "login">("signup");
-  const { mounted, ...authentication } = useGoogleAuthentication();
+  const { mounted, ...authentication } = useProviderAuthentication(provider);
   return (
     <main ref={mounted} className="flex min-h-svh items-center justify-center px-4 py-12">
       <Card className="w-full max-w-lg">
@@ -125,9 +154,18 @@ export const GoogleAuthenticationFeature = (): JSX.Element => {
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {authentication.state.status === "editing" ? (
-            <EditingForm intent={intent} setIntent={setIntent} start={authentication.start} />
+            <EditingForm
+              provider={provider}
+              intent={intent}
+              setIntent={setIntent}
+              start={authentication.start}
+            />
           ) : (
-            <AttemptStatus authentication={{ ...authentication, mounted }} setIntent={setIntent} />
+            <AttemptStatus
+              provider={provider}
+              authentication={{ ...authentication, mounted }}
+              setIntent={setIntent}
+            />
           )}
         </CardContent>
       </Card>
@@ -136,9 +174,11 @@ export const GoogleAuthenticationFeature = (): JSX.Element => {
 };
 
 /** Clean provider return page; refreshing it cannot repeat provider completion or reveal recovery. */
-export const GoogleReturnFeature = (): JSX.Element => (
-  <main ref={closeGoogleReturn}>
+export const ProviderReturnFeature = ({
+  provider,
+}: Readonly<{ provider: AuthenticationProvider }>): JSX.Element => (
+  <main ref={closeProviderReturn}>
     <p>Puedes volver a la ventana de Fidy para continuar.</p>
-    <a href="/auth/google">Iniciar sesión</a>
+    <a href={`/auth/${provider}`}>Iniciar sesión</a>
   </main>
 );

@@ -5,7 +5,7 @@ atomic User/ProviderCredential/Consent/168-hour TrialPeriod/digest-only recovery
 Browser Login private-verifier redemption. Returning Google authentication preserves stable User
 ownership even without an email claim. It never silently merges another issuer/subject, renews a
 trial, reinstates Consent, or creates WhatsAppIdentity/VerifiedEmailCredential. The old channel/mailbox
-journey remains installed. Microsoft, provider linking, and WhatsApp signup replacement are later tickets.
+journey remains installed. Microsoft is implemented under #1090; provider linking and WhatsApp signup replacement remain later tickets.
 
 ## Operator configuration
 

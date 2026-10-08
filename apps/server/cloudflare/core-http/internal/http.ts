@@ -2,8 +2,11 @@ import { ConnectInstitutionInput } from "../../../src/core/connections/contract"
 import { connectionBrowserPaths } from "../../../src/shell/connections/contract";
 import { handleConnectionBrowserRequest } from "../../connections/runtime";
 import type { HttpClient } from "effect/http";
-import { completeGoogleOnboarding } from "../../onboarding/operations";
-import { providerPaths } from "../../../src/shell/provider-authentication/contract";
+import { completeWebProviderOnboarding } from "../../onboarding/operations";
+import {
+  microsoftProviderPaths,
+  providerPaths,
+} from "../../../src/shell/provider-authentication/contract";
 import {
   handleProviderAuthentication,
   ownsProviderAuthenticationPath,
@@ -1509,9 +1512,12 @@ const reservedCoreResponse = (
       })
     );
   }
-  if (path === providerPaths.complete && request.method === "POST") {
+  if (
+    (path === providerPaths.complete || path === microsoftProviderPaths.complete) &&
+    request.method === "POST"
+  ) {
     return Option.some(
-      Effect.tryPromise(() => completeGoogleOnboarding({ db: environment.DB, request })).pipe(
+      Effect.tryPromise(() => completeWebProviderOnboarding({ db: environment.DB, request })).pipe(
         Effect.orElseSucceed(unavailable)
       )
     );

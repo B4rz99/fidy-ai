@@ -1,8 +1,8 @@
-import type { GoogleEnvironment } from "../provider-authentication/contract";
+import type { ProviderEnvironment } from "../provider-authentication/contract";
 import type { SmokeEnvironment } from "../runtime/release-smoke/contract";
 
 /** Private HTTP binding boundary; no model execution or scheduled maintenance authority. */
-export type CoreHttpEnvironment = GoogleEnvironment &
+export type CoreHttpEnvironment = ProviderEnvironment &
   Readonly<{
     DB: D1Database;
     RELEASE_GIT_SHA: string;

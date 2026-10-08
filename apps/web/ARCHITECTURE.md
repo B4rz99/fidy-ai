@@ -78,15 +78,15 @@ See [ADR 0032](../../docs/adr/0032-explicit-dashboard-creation-and-canonical-que
 
 ## 3. Browser authentication
 
-Google web signup/login begins at `/auth/google`, discoverable from the public site.
-The mounted Google Authentication feature owns its private pairing proof, one-time recovery view,
+Provider web signup/login begins at `/auth/google` or `/auth/microsoft`, discoverable from the public site.
+The mounted Provider Authentication feature owns its private pairing proof, one-time recovery view,
 and provider popup. It uses the generated authentication client: accept the exact disclosure revision,
-initiate Google, poll proof-bearing status, submit completion once, save recovery, then redeem through
-Browser Login. No provider token or protocol code reaches the feature. `/auth/google-return` closes
+initiate the selected provider, poll proof-bearing status, submit completion once, save recovery, then redeem through
+Browser Login. No provider token or protocol code reaches the feature. `/auth/google-return` or `/auth/microsoft-return` closes
 the popup at a parameter-free URL; existing opener isolation remains intact. Cancellation, timeout
 and uncertain completion discard private proof and explain fresh sign-in; no mutation auto-retry or
 recovery redisclosure. Authentication can succeed after Consent withdrawal while ordinary work
-remains gated. Microsoft and channel-provider linking are subsequent slices.
+remains gated. Personal and work/school Microsoft accounts are accepted; channel-provider linking remains a subsequent slice.
 
 The preserved channel/mailbox Browser Login begins at `/auth/pair`. The browser retains the private verifier while WhatsApp
 approval, email authentication, or support recovery receives only its intended public proof. Public

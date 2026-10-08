@@ -282,7 +282,7 @@ export const BrowserLoginPairingFeature = (): JSX.Element => {
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
           <a href="/auth/google" className="text-center underline">
-            Crear cuenta o iniciar sesión con Google
+            Crear cuenta o iniciar sesión con Google o Microsoft
           </a>
           <PairingStatus
             onCompleteEmail={pairing.completeEmail}

@@ -8,13 +8,13 @@ import {
 } from "./provider-authentication.journeys";
 
 const configuration = {
-  provider: "google",
-  label: "Google",
-  authorizationPattern: "https://accounts.google.com/o/oauth2/v2/auth**",
-  selectFromPublicSite: false,
+  provider: "microsoft",
+  label: "Microsoft",
+  authorizationPattern: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize**",
+  selectFromPublicSite: true,
 } as const;
 playwright.test(
-  "creates a User from the public site with Google, saves recovery, and persists the session",
+  "creates a User from the public site with Microsoft, saves recovery, and persists the session",
   ({ page, context, request }) => signupJourney({ configuration, page, context, request })
 );
 playwright.test(

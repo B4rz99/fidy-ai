@@ -91,3 +91,10 @@ export const loadGoogleClientSecret = configuredSecret({
   schema: Schema.String.check(Schema.isNonEmpty()),
   requirement: "must be a nonempty Google application secret",
 });
+
+/** Resolves Microsoft's application secret through redacted configuration diagnostics. */
+export const loadMicrosoftClientSecret = configuredSecret({
+  name: "MICROSOFT_CLIENT_SECRET",
+  schema: Schema.String.check(Schema.isNonEmpty()),
+  requirement: "must be a nonempty Microsoft application secret",
+});

@@ -189,10 +189,10 @@ is published; the common composition remains private. #1089 adds a Google web or
 validates the browser-bound OIDC attempt, supplies accepted web Consent, and appends
 ProviderCredential plus origin-specific proof consumption to the same batch. Returning issuer/subject
 authentication approves the initiating BrowserLoginPairing without creating owner records or
-renewing Consent/TrialPeriod. The Google adapter uses Outbound HTTP for fixed token/JWKS destinations
+renewing Consent/TrialPeriod. Google and Microsoft adapters use Outbound HTTP for fixed token/JWKS destinations
 and transient tokens; the native Core root supplies its HTTP lifetime. Maintenance removes expired
 protocol attempts/receipts after one day. The preserved channel workflow remains independently
-verifiable. See [Google configuration and evidence](../../docs/operations/google-authentication.md).
+verifiable. #1090 accepts personal and work/school Microsoft accounts through the common v2 authority, validating exact tenant/issuer and signing-key scope. Each attempt is bound to its selected provider. See [Google configuration and evidence](../../docs/operations/google-authentication.md) and [Microsoft configuration and evidence](../../docs/operations/microsoft-authentication.md).
 
 Consent owns current standing and append-only evidence. A standing read is not cached authorization.
 Ordinary protected work checks current Consent. An exact Pending hosted Turn retains its admitted

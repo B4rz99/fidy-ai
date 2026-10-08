@@ -79,19 +79,65 @@ const googleFixtureToken = (request: Request): Promise<Response> =>
       .sign(privateKey)
       .then((id_token) => Response.json({ id_token }));
   });
+const microsoftFixtureToken = (request: Request): Promise<Response> =>
+  request.text().then((body) => {
+    const code = new URLSearchParams(body).get("code") ?? "";
+    const value = Schema.decodeSync(GoogleFixtureCode)(atob(code));
+    return new SignJWT({
+      ver: "2.0",
+      tid: "9188040d-6c67-4c5b-b112-36a304b66dad",
+      nonce: value.nonce,
+      email: "microsoft@example.test",
+    })
+      .setProtectedHeader({ alg: "RS256", kid: "acceptance-support" })
+      .setIssuer("https://login.microsoftonline.com/9188040d-6c67-4c5b-b112-36a304b66dad/v2.0")
+      .setSubject(value.subject)
+      .setAudience("acceptance-microsoft")
+      .setIssuedAt()
+      .setExpirationTime("5m")
+      .sign(privateKey)
+      .then((id_token) => Response.json({ id_token }));
+  });
+const oidcFixtureResponse = ({
+  url,
+  args,
+}: Readonly<{ url: string; args: Array<unknown> }>): Option.Option<Promise<Response>> => {
+  if (url === "https://login.microsoftonline.com/common/discovery/v2.0/keys") {
+    return Option.some(
+      Promise.resolve(
+        Response.json({
+          keys: [{ ...jwk, issuer: "https://login.microsoftonline.com/{tenantid}/v2.0" }],
+        })
+      )
+    );
+  }
+  if (url === "https://login.microsoftonline.com/common/oauth2/v2.0/token") {
+    const outbound: unknown = Reflect.construct(Request, args);
+    return Option.some(
+      outbound instanceof Request
+        ? microsoftFixtureToken(outbound)
+        : Promise.resolve(new Response(null, { status: 400 }))
+    );
+  }
+  if (url === "https://www.googleapis.com/oauth2/v3/certs") {
+    return Option.some(Promise.resolve(Response.json({ keys: [jwk] })));
+  }
+  if (url === "https://oauth2.googleapis.com/token") {
+    const outbound: unknown = Reflect.construct(Request, args);
+    return Option.some(
+      outbound instanceof Request
+        ? googleFixtureToken(outbound)
+        : Promise.resolve(new Response(null, { status: 400 }))
+    );
+  }
+  return Option.none();
+};
 globalThis.fetch = new Proxy(globalThis.fetch, {
   apply: (target, thisArg, args): unknown => {
     const requestUrl: unknown = args[0];
     const url = requestUrl instanceof Request ? requestUrl.url : String(requestUrl);
-    if (url === "https://www.googleapis.com/oauth2/v3/certs") {
-      return Promise.resolve(Response.json({ keys: [jwk] }));
-    }
-    if (url === "https://oauth2.googleapis.com/token") {
-      const outbound: unknown = Reflect.construct(Request, args);
-      return outbound instanceof Request
-        ? googleFixtureToken(outbound)
-        : Promise.resolve(new Response(null, { status: 400 }));
-    }
+    const oidc = oidcFixtureResponse({ url, args });
+    if (Option.isSome(oidc)) return oidc.value;
     if (url === `${accessIssuer}/cdn-cgi/access/certs`) {
       return Promise.resolve(Response.json({ keys: [jwk] }));
     }
@@ -266,7 +312,10 @@ const GoogleFixtureSubject = Schema.String.check(
 );
 const googleOperator = (request: Request): Option.Option<Promise<Response>> => {
   const path = new URL(request.url).pathname;
-  if (request.method !== "POST" || (path !== "/google/expire" && path !== "/google/revoke")) {
+  if (
+    request.method !== "POST" ||
+    !["/google/expire", "/google/revoke", "/microsoft/expire", "/microsoft/revoke"].includes(path)
+  ) {
     return Option.none();
   }
   const subject = Schema.decodeUnknownOption(GoogleFixtureSubject)(
@@ -275,17 +324,16 @@ const googleOperator = (request: Request): Option.Option<Promise<Response>> => {
   if (Option.isNone(subject)) {
     return Option.some(Promise.resolve(new Response(null, { status: 400 })));
   }
-  const statement =
-    path === "/google/expire"
-      ? db
-          .prepare(
-            "UPDATE web_sessions SET idle_expires_at_ms=created_at_ms WHERE user_id=(SELECT user_id FROM provider_credentials WHERE subject=?)"
-          )
-          .bind(subject.value)
-      : db
-          .prepare(`INSERT INTO consent_user_revocations(id,user_id,grant_record_id,session_id,occurred_at_ms)
+  const statement = path.endsWith("/expire")
+    ? db
+        .prepare(
+          "UPDATE web_sessions SET idle_expires_at_ms=created_at_ms WHERE user_id=(SELECT user_id FROM provider_credentials WHERE subject=?)"
+        )
+        .bind(subject.value)
+    : db
+        .prepare(`INSERT INTO consent_user_revocations(id,user_id,grant_record_id,session_id,occurred_at_ms)
         SELECT ?,c.user_id,g.id,w.id,? FROM provider_credentials c JOIN onboarding_consent_records g ON g.user_id=c.user_id JOIN web_sessions w ON w.user_id=c.user_id AND w.revoked_at_ms IS NULL WHERE c.subject=? ORDER BY w.created_at_ms DESC LIMIT 1`)
-          .bind(newId(), Effect.runSync(Clock.currentTimeMillis), subject.value);
+        .bind(newId(), Effect.runSync(Clock.currentTimeMillis), subject.value);
   return Option.some(statement.run().then(() => new Response(null, { status: 204 })));
 };
 const operator = Bun.serve({
@@ -370,6 +418,9 @@ const server = Bun.serve({
               RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
               HOSTED_AI_MODEL: approvedWorkersAiModel,
               BROWSER_ORIGIN: browserOrigin,
+              MICROSOFT_CLIENT_ID: "acceptance-microsoft",
+              MICROSOFT_CLIENT_SECRET: "synthetic-microsoft-secret",
+              MICROSOFT_REDIRECT_URI: "https://127.0.0.1:4174/providers/microsoft/callback",
               GOOGLE_CLIENT_ID: "acceptance-google",
               GOOGLE_CLIENT_SECRET: "synthetic-google-secret",
               GOOGLE_REDIRECT_URI: "https://127.0.0.1:4174/providers/google/callback",

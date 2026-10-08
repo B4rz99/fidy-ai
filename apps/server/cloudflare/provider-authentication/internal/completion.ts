@@ -1,5 +1,9 @@
 import { type Cause, Clock, Effect, Option, Schema } from "effect";
-import { ProviderBrowserProof } from "../../../src/shell/provider-authentication/contract";
+import {
+  ProviderBrowserProof,
+  microsoftProviderPaths,
+  providerPaths,
+} from "../../../src/shell/provider-authentication/contract";
 import { UserId } from "../../../src/core/identity/contract";
 import { DisclosureSnapshot } from "../../../src/core/consent/contract";
 import { boundedJsonBody } from "../../http/operations";
@@ -100,6 +104,11 @@ const completeSignup = (
 export const completeProvider = (input: ProviderCompletionRequest): Promise<Response> =>
   Effect.runPromise(
     Effect.gen(function* () {
+      const path = new URL(input.request.url).pathname;
+      if (path !== providerPaths.complete && path !== microsoftProviderPaths.complete) {
+        return providerJson({ body: { status: "invalid" }, status: invalidStatus });
+      }
+      const provider = path === microsoftProviderPaths.complete ? "microsoft" : "google";
       const proof = yield* boundedJsonBody({
         request: input.request,
         policy: providerBodyPolicy,
@@ -116,9 +125,9 @@ export const completeProvider = (input: ProviderCompletionRequest): Promise<Resp
       const row = yield* Effect.tryPromise(() =>
         input.db
           .prepare(
-            `SELECT id,issuer,subject,contact_email,intent,disclosure_json,consent_at_ms FROM provider_authentication_attempts WHERE pairing_id=? AND state='verified' AND expires_at_ms>?`
+            `SELECT id,issuer,subject,contact_email,intent,disclosure_json,consent_at_ms FROM provider_authentication_attempts WHERE pairing_id=? AND provider=? AND state='verified' AND expires_at_ms>?`
           )
-          .bind(proof.value.pairingId, current)
+          .bind(proof.value.pairingId, provider, current)
           .first()
       );
       const attempt = yield* Schema.decodeUnknownEffect(Attempt)(row);

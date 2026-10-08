@@ -147,7 +147,7 @@ URLs, browser state, arguments and diagnostics are not bearer-storage channels. 
 saved access without asserting server revocation.
 
 The preserved WhatsApp/mailbox origin requires a VerifiedEmailCredential before stable User creation.
-The Google web origin instead requires a ProviderCredential keyed by the validated canonical issuer
+The Google and Microsoft web origins instead require a ProviderCredential keyed by the validated canonical issuer
 and subject. Contact email never establishes identity, merges Users, creates a VerifiedEmailCredential,
 or substitutes mailbox ownership proof. Missing/changed email claims preserve the same User.
 A VerifiedEmailCredential is globally unique after
@@ -158,8 +158,8 @@ the candidate before atomically removing the old credential. Email authenticatio
 recovery never create a User, mint a parallel session, substitute a newly supplied credential, or
 change WhatsAppIdentity. The pairing's browser-private verifier remains independently required.
 
-Google OIDC requires signature, issuer, nonempty subject, intended audience, expiry, issued-at,
-state, nonce, and S256 PKCE validation within the same bounded browser-bound attempt. The Google
+Provider OIDC requires signature, issuer, nonempty subject, intended audience, expiry, issued-at,
+state, nonce, and S256 PKCE validation within the same bounded browser-bound attempt. The provider
 PKCE verifier is confined to an API HttpOnly/Secure/SameSite=Lax cookie and token exchange; only
 its digest is retained. The Browser Login verifier stays in mounted memory and independently proves
 initiation, status, completion, and redemption. Claim the callback before exchange; never retry an
@@ -167,13 +167,21 @@ uncertain code exchange. Provider tokens are used transiently and never persiste
 Request only `openid email`. Provider verification approves the initiating pairing; only Browser
 Login mints a session. Signup commits all owner records and proof consumption together; concurrent
 or stale consumption rejects. Returning authentication does not reinstate withdrawn Consent.
-Authorization codes cross only `/providers/google/callback`; the callback immediately returns a
+Authorization codes cross only their exact `/providers/google/callback` or `/providers/microsoft/callback`; the callback immediately returns a
 no-store/no-referrer 303 to a parameter-free first-party page. Automatic Worker invocation logs are
 disabled; application/provider telemetry must exclude URLs, bodies, tokens and claims. Edge log
 products and tail consumers must also exclude callback query strings before real provider use.
-Lost recovery responses cannot be redisclosed or recreated through completion replay. A fresh Google
+Lost recovery responses cannot be redisclosed or recreated through completion replay. A fresh provider
 login can prove established ownership after an ambiguous signup, while ordinary work retains live
 Consent checks. Expired provider protocol state is removed after one day.
+
+Microsoft accepts personal and work/school accounts from all public-cloud Entra tenants by explicit
+User decision in #1090. The common v2 authority is initiation policy, never a wildcard issuer.
+Validate a GUID `tid`, exact `https://login.microsoftonline.com/{tid}/v2.0` issuer, v2 token version,
+intended single audience and every selected signing key's issuer scope before trusting subject.
+Bind callback, status and completion to the attempt's selected provider. Email and preferred_username
+are optional contact/display claims; neither links another credential nor proves mailbox control.
+No tenant-selected URL, custom signing-key application, B2C authority or sovereign-cloud host is fetched.
 
 Browser authentication state must resist theft, fixation, cross-origin use, and leakage through
 URLs, referrers, scripts, caches, or diagnostics. Known and unknown email-authentication attempts

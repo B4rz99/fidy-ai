@@ -31,8 +31,11 @@ export const completeOnboarding = ({ db, request }: OnboardingRequest): Promise<
       }),
   });
 
-/** Complete only the proven Google web origin, with atomic Consent, credential, TrialPeriod and recovery creation and separate Browser Login approval. */
-export const completeGoogleOnboarding = ({ db, request }: OnboardingRequest): Promise<Response> =>
+/** Complete only the proven provider web origin, with atomic Consent, credential, TrialPeriod and recovery creation and separate Browser Login approval. */
+export const completeWebProviderOnboarding = ({
+  db,
+  request,
+}: OnboardingRequest): Promise<Response> =>
   completeProviderAuthentication({
     db,
     request,

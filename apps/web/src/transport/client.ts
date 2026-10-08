@@ -21,6 +21,7 @@ import { AtomHttpApi } from "effect/reactivity";
 import { browserHttpClientLayer } from "./browser-http-policy";
 
 export type {
+  AuthenticationProvider,
   CanonicalInput,
   CanonicalSuccess,
   PaymentEnrollmentType,

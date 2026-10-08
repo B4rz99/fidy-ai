@@ -1,13 +1,17 @@
-import { Clock, Effect, Option, Redacted, Schema } from "effect";
+import { providerConfiguration } from "./configuration";
+import { Clock, Effect, Option, type PlatformError, Redacted, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
-import { StartGoogleAuthentication } from "../../../src/shell/provider-authentication/contract";
+import {
+  type AuthenticationProvider,
+  StartProviderAuthentication,
+} from "../../../src/shell/provider-authentication/contract";
 import { DisclosureSnapshot } from "../../../src/core/consent/contract";
 import { webSignupDisclosure } from "../../../src/shell/consent/operations";
 import { provePendingBrowserPairing } from "../../browser-login/operations";
 import { digestBytes, newSecret } from "../../secret-material/operations";
 import { boundedJsonBody } from "../../http/operations";
 import { RequestBodyPolicy } from "../../http/contract";
-import type { GoogleEnvironment } from "../contract";
+import type { ProviderEnvironment } from "../contract";
 
 const invalidStatus = 400;
 const unavailableStatus = 503;
@@ -28,35 +32,28 @@ export const providerJson = ({
   result.set("referrer-policy", "no-referrer");
   return Response.json(body, { status, headers: result });
 };
-export const cookieName = "__Host-fidy_google";
-const expectedCallback = (origin: string): string => {
-  if (origin === "https://app.fidyapp.com") {
-    return "https://api.fidyapp.com/providers/google/callback";
-  }
-  if (origin === "https://127.0.0.1:4173") {
-    return "https://127.0.0.1:4174/providers/google/callback";
-  }
-  return "http://localhost:8787/providers/google/callback";
-};
-export const configuredGoogle = (environment: GoogleEnvironment): boolean =>
-  (environment.GOOGLE_CLIENT_ID ?? "").length > 0 &&
-  (environment.GOOGLE_CLIENT_SECRET ?? "").length > 0 &&
-  environment.GOOGLE_REDIRECT_URI === expectedCallback(environment.BROWSER_ORIGIN);
 const authorizationUrl = ({
   environment,
+  provider,
   state,
   nonce,
   challenge,
 }: Readonly<{
-  environment: GoogleEnvironment;
+  environment: ProviderEnvironment;
+  provider: AuthenticationProvider;
   state: string;
   nonce: string;
   challenge: Uint8Array;
 }>): string => {
-  const authorization = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+  const configuration = providerConfiguration({ environment, provider });
+  const authorization = new URL(
+    provider === "google"
+      ? "https://accounts.google.com/o/oauth2/v2/auth"
+      : "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+  );
   authorization.search = new URLSearchParams({
-    client_id: environment.GOOGLE_CLIENT_ID ?? "",
-    redirect_uri: environment.GOOGLE_REDIRECT_URI ?? "",
+    client_id: configuration.clientId,
+    redirect_uri: configuration.redirectUri,
     response_type: "code",
     scope: "openid email",
     state,
@@ -66,18 +63,72 @@ const authorizationUrl = ({
   }).toString();
   return authorization.href;
 };
-export const startGoogle = ({
+const prepareAttempt = (
+  disclosure: DisclosureSnapshot
+): Effect.Effect<
+  Readonly<{
+    current: number;
+    state: string;
+    verifier: string;
+    nonce: string;
+    challenge: Uint8Array;
+    snapshot: string;
+  }>,
+  Schema.SchemaError | PlatformError.PlatformError
+> =>
+  Effect.gen(function* () {
+    const current = yield* Clock.currentTimeMillis;
+    const state = Redacted.value(yield* newSecret);
+    const verifier = Redacted.value(yield* newSecret);
+    const nonce = Redacted.value(yield* newSecret);
+    const challenge = yield* digestBytes(new TextEncoder().encode(verifier));
+    const snapshot = yield* Schema.encodeEffect(Schema.fromJsonString(DisclosureSnapshot))(
+      disclosure
+    );
+    return { current, state, verifier, nonce, challenge, snapshot };
+  });
+const startedResponse = ({
+  environment,
+  provider,
+  state,
+  nonce,
+  challenge,
+  verifier,
+}: Readonly<{
+  environment: ProviderEnvironment;
+  provider: AuthenticationProvider;
+  state: string;
+  nonce: string;
+  challenge: Uint8Array;
+  verifier: string;
+}>): Response =>
+  providerJson({
+    body: {
+      authorizationUrl: authorizationUrl({ environment, provider, state, nonce, challenge }),
+    },
+    status: successStatus,
+    headers: {
+      "set-cookie": `${providerConfiguration({ environment, provider }).cookieName}=${verifier}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`,
+    },
+  });
+export const startProvider = ({
   request,
   environment,
-}: Readonly<{ request: Request; environment: GoogleEnvironment }>): Effect.Effect<Response> =>
+  provider,
+}: Readonly<{
+  request: Request;
+  environment: ProviderEnvironment;
+  provider: AuthenticationProvider;
+}>): Effect.Effect<Response> =>
   Effect.gen(function* () {
-    if (!configuredGoogle(environment)) {
+    const configuration = providerConfiguration({ environment, provider });
+    if (!configuration.configured) {
       return providerJson({ body: { status: "unavailable" }, status: unavailableStatus });
     }
     const input = yield* boundedJsonBody({
       request,
       policy: providerBodyPolicy,
-      schema: StartGoogleAuthentication,
+      schema: StartProviderAuthentication,
     });
     if (Option.isNone(input)) {
       return providerJson({ body: { status: "invalid" }, status: invalidStatus });
@@ -90,21 +141,16 @@ export const startGoogle = ({
     if (Option.isNone(proven)) {
       return providerJson({ body: { status: "invalid" }, status: invalidStatus });
     }
-    const current = yield* Clock.currentTimeMillis;
-    const state = Redacted.value(yield* newSecret);
-    const verifier = Redacted.value(yield* newSecret);
-    const nonce = Redacted.value(yield* newSecret);
-    const challenge = yield* digestBytes(new TextEncoder().encode(verifier));
-    const snapshot = yield* Schema.encodeEffect(Schema.fromJsonString(DisclosureSnapshot))(
-      disclosure
-    );
+    const { current, state, verifier, nonce, challenge, snapshot } =
+      yield* prepareAttempt(disclosure);
     yield* Effect.tryPromise(() =>
       environment.DB.prepare(`INSERT INTO provider_authentication_attempts
-      (id,pairing_id,cookie_digest,nonce,intent,disclosure_json,consent_at_ms,created_at_ms,expires_at_ms,state)
-      VALUES(?,?,?,?,?,?,?,?,?,'pending')`)
+      (id,pairing_id,provider,cookie_digest,nonce,intent,disclosure_json,consent_at_ms,created_at_ms,expires_at_ms,state)
+      VALUES(?,?,?,?,?,?,?,?,?,?,'pending')`)
         .bind(
           state,
           input.value.pairingId,
+          provider,
           challenge,
           nonce,
           input.value.intent,
@@ -115,13 +161,7 @@ export const startGoogle = ({
         )
         .run()
     );
-    return providerJson({
-      body: { authorizationUrl: authorizationUrl({ environment, state, nonce, challenge }) },
-      status: successStatus,
-      headers: {
-        "set-cookie": `${cookieName}=${verifier}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`,
-      },
-    });
+    return startedResponse({ environment, provider, state, nonce, challenge, verifier });
   }).pipe(
     Effect.orElseSucceed(() => providerJson({ body: { status: "invalid" }, status: invalidStatus }))
   );

@@ -1,13 +1,16 @@
 import { Data } from "effect";
 import type { UserId } from "../../src/core/identity/contract";
 import type { DisclosureSnapshot } from "../../src/core/consent/contract";
-/** Operator-owned Google application configuration; absent configuration disables authentication. */
-export type GoogleEnvironment = Readonly<{ DB: D1Database; BROWSER_ORIGIN: string }> &
+/** Operator-owned provider application configuration; absent configuration disables authentication. */
+export type ProviderEnvironment = Readonly<{ DB: D1Database; BROWSER_ORIGIN: string }> &
   Partial<
     Readonly<{
       GOOGLE_CLIENT_ID: string;
       GOOGLE_CLIENT_SECRET: string;
       GOOGLE_REDIRECT_URI: string;
+      MICROSOFT_CLIENT_ID: string;
+      MICROSOFT_CLIENT_SECRET: string;
+      MICROSOFT_REDIRECT_URI: string;
     }>
   >;
 

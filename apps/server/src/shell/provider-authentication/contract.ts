@@ -13,16 +13,23 @@ export const providerPaths = {
   status: "/web/providers/google/status",
   complete: "/web/providers/google/complete",
 } as const;
+export const microsoftProviderPaths = {
+  start: "/web/providers/microsoft/start",
+  callback: "/providers/microsoft/callback",
+  status: "/web/providers/microsoft/status",
+  complete: "/web/providers/microsoft/complete",
+} as const;
+export type AuthenticationProvider = "google" | "microsoft";
 export const ProviderBrowserProof = Schema.Struct({
   pairingId: BrowserLoginPairingId,
   privateVerifier: BrowserLoginPrivateVerifier,
 });
-export const StartGoogleAuthentication = Schema.Struct({
+export const StartProviderAuthentication = Schema.Struct({
   ...ProviderBrowserProof.fields,
   intent: Schema.Literals(["signup", "login"]),
   consentRevision: Schema.String.check(Schema.isMaxLength(maximumRevisionLength)),
 });
-export const GoogleCompletion = Schema.Union([
+export const ProviderCompletion = Schema.Union([
   Schema.Struct({
     status: Schema.Literal("created"),
     backupRecoveryCode: Schema.RedactedFromValue(BackupRecoveryCode),
@@ -40,7 +47,7 @@ export const ProviderAuthenticationGroup = HttpApiGroup.make("providerAuthentica
   )
   .add(
     HttpApiEndpoint.post("start", providerPaths.start, {
-      payload: StartGoogleAuthentication,
+      payload: StartProviderAuthentication,
       success: Schema.Struct({ authorizationUrl: Schema.String }),
       error: [
         HttpApiSchema.status(invalidStatus)(Refusal),
@@ -58,7 +65,34 @@ export const ProviderAuthenticationGroup = HttpApiGroup.make("providerAuthentica
   .add(
     HttpApiEndpoint.post("complete", providerPaths.complete, {
       payload: ProviderBrowserProof,
-      success: GoogleCompletion,
+      success: ProviderCompletion,
+      error: [
+        HttpApiSchema.status(invalidStatus)(Refusal),
+        HttpApiSchema.status(unavailableStatus)(Refusal),
+      ],
+    })
+  )
+  .add(
+    HttpApiEndpoint.post("startMicrosoft", microsoftProviderPaths.start, {
+      payload: StartProviderAuthentication,
+      success: Schema.Struct({ authorizationUrl: Schema.String }),
+      error: [
+        HttpApiSchema.status(invalidStatus)(Refusal),
+        HttpApiSchema.status(unavailableStatus)(Refusal),
+      ],
+    })
+  )
+  .add(
+    HttpApiEndpoint.post("statusMicrosoft", microsoftProviderPaths.status, {
+      payload: ProviderBrowserProof,
+      success: Schema.Struct({ status: Schema.Literals(["pending", "verified", "rejected"]) }),
+      error: HttpApiSchema.status(invalidStatus)(Refusal),
+    })
+  )
+  .add(
+    HttpApiEndpoint.post("completeMicrosoft", microsoftProviderPaths.complete, {
+      payload: ProviderBrowserProof,
+      success: ProviderCompletion,
       error: [
         HttpApiSchema.status(invalidStatus)(Refusal),
         HttpApiSchema.status(unavailableStatus)(Refusal),

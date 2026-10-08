@@ -19,9 +19,9 @@ import {
 import { BrowserLoginPairingFeature } from "@/features/browser-login/feature";
 import { HostedAgentFeature } from "@/features/agent/feature";
 import {
-  GoogleAuthenticationFeature,
-  GoogleReturnFeature,
-} from "@/features/google-authentication/feature";
+  ProviderAuthenticationFeature,
+  ProviderReturnFeature,
+} from "@/features/provider-authentication/feature";
 import { EmailOnboardingFeature } from "@/features/email-onboarding/feature";
 import { EmailReplacementFeature } from "@/features/email-replacement/feature";
 import { createPublicSiteRoute } from "@/features/public-site/feature";
@@ -152,18 +152,30 @@ const emailOnboardingRoute = createRoute({
 const googleRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/auth/google",
-  component: GoogleAuthenticationFeature,
+  component: () => createElement(ProviderAuthenticationFeature, { provider: "google" }),
 });
 const googleReturnRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/auth/google-return",
-  component: GoogleReturnFeature,
+  component: () => createElement(ProviderReturnFeature, { provider: "google" }),
+});
+const microsoftRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/auth/microsoft",
+  component: () => createElement(ProviderAuthenticationFeature, { provider: "microsoft" }),
+});
+const microsoftReturnRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/auth/microsoft-return",
+  component: () => createElement(ProviderReturnFeature, { provider: "microsoft" }),
 });
 const routeTree = rootRoute.addChildren([
   createPublicSiteRoute(rootRoute),
   browserLoginPairingRoute,
   googleRoute,
   googleReturnRoute,
+  microsoftRoute,
+  microsoftReturnRoute,
   oauthReviewRoute,
   connectionContinuationRoute,
   subscriptionOffersRoute,

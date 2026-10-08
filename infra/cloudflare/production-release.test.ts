@@ -16,6 +16,29 @@ const publicVersion = "11111111-1111-4111-8111-111111111111";
 const coreVersion = "22222222-2222-4222-8222-222222222222";
 
 it.live(
+  "classifies a queue-related native refusal without publishing resource names or secrets",
+  () =>
+    Effect.gen(function* () {
+      const result = yield* Effect.exit(
+        releaseCommand({
+          args: [
+            process.execPath,
+            "-e",
+            "console.error('Queue private-resource-name does not exist. [code: 10210] private-token'); process.exit(1)",
+          ],
+          lifetime: "read-only",
+        })
+      );
+      expect(result._tag).toBe("Failure");
+      if (result._tag === "Failure") {
+        expect(releaseFailureMessage(result.cause)).toBe(
+          "Release tooling failed (Cloudflare API code 10210; resource=queue); inspect traffic state"
+        );
+      }
+    })
+);
+
+it.live(
   "recognizes Wrangler's rewritten inconsistent-export rejection without disclosing its body",
   () =>
     Effect.gen(function* () {

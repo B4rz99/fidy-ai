@@ -1,0 +1,30 @@
+apps/web/e2e/provider-authentication.journeys.ts
+  s_55523bb8416825::t_f7a0a66f43cf0c 215
+  s_55523bb8416825::t_b57a4b1f5f6009 218
+apps/server/cloudflare/provider-authentication/internal/google-token.ts
+  s_55523bb8416825::t_f63ad0d391c8c1 3,139,147,155
+apps/server/cloudflare/provider-authentication/internal/microsoft-token.ts
+  s_55523bb8416825::t_163b1f50f4bb49 3,114,116,122,147,155,159
+apps/server/cloudflare/provider-authentication/journey.test-fixture.ts
+  s_55523bb8416825::t_30b041d15a0c14 1,122-143
+apps/server/cloudflare/provider-authentication/journey.test.ts
+  s_55523bb8416825::t_054b1865a99653 3-8,99
+apps/server/cloudflare/provider-authentication/microsoft.test.ts
+  s_55523bb8416825::t_198a9919933f55 4-9,107
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6190e595c0a3aa6cf9c5f65eb49641896dd95991",
+  "prompts": {},
+  "sessions": {
+    "s_55523bb8416825": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11896-74c5-7f82-b3d7-9e3ce7978236",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -8,14 +8,12 @@ import {
 import { recordBrowserCategoryWork } from "./canonical-work";
 import { readConsentStatus } from "../../consent/operations";
 import { ListCategoriesResponse } from "../../../src/shell/categories/contract";
-
 import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
 import { recordCanonicalPATWork, recordOAuthCall } from "../../../src/shell/audit/operations";
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import { Clock, Effect, Option, Schema } from "effect";
 import { newId } from "../../secret-material/operations";
 import { commitPATUnit } from "../../tokens/operations";
-import { prepareOwnedStatement } from "../../database/operations";
 import { type TransactionCaller, isPATCaller } from "../../canonical-work/operations";
 
 type CategoryCaller = TransactionCaller | OAuthCaller;
@@ -50,48 +48,43 @@ const categoryStatements = (
 ): Array<D1PreparedStatement> => {
   if (oauthCaller(subject)) {
     const authority = liveOAuthAuthority({ subject, current });
+    const auditStatement = recordOAuthCall({
+      authority,
+      id: newId(),
+      current,
+      operation: "categories.listCategories",
+      outcome: "accepted",
+    });
     return [
       prepareCategoryRead({ db, authority: Option.some(authority) }),
-      prepareOwnedStatement({
-        db,
-        statement: recordOAuthCall({
-          authority,
-          id: newId(),
-          current,
-          operation: "categories.listCategories",
-          outcome: "accepted",
-        }),
-      }),
+      db.prepare(auditStatement.sql).bind(...auditStatement.params),
     ];
   }
   if (isPATCaller(subject)) {
+    const patUseStatement = recordLivePATUse({ subject, current });
+    const auditStatement = recordCanonicalPATWork({
+      authority: livePATAuthority({ subject, current }),
+      input: {
+        id: newId(),
+        current,
+        operation: "categories.listCategories",
+        outcome: "accepted",
+        afterOwnerWrite: false,
+      },
+    });
     return [
-      prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) }),
+      db.prepare(patUseStatement.sql).bind(...patUseStatement.params),
       prepareCategoryRead({ db, authority: Option.some(livePATAuthority({ subject, current })) }),
-      prepareOwnedStatement({
-        db,
-        statement: recordCanonicalPATWork({
-          authority: livePATAuthority({ subject, current }),
-          input: {
-            id: newId(),
-            current,
-            operation: "categories.listCategories",
-            outcome: "accepted",
-            afterOwnerWrite: false,
-          },
-        }),
-      }),
+      db.prepare(auditStatement.sql).bind(...auditStatement.params),
     ];
   }
+  const auditStatement = recordBrowserCategoryWork({ subject, id: newId(), current });
   return [
     prepareCategoryRead({
       db,
       authority: Option.some(liveWebSessionAuthority({ subject, current })),
     }),
-    prepareOwnedStatement({
-      db,
-      statement: recordBrowserCategoryWork({ subject, id: newId(), current }),
-    }),
+    db.prepare(auditStatement.sql).bind(...auditStatement.params),
   ];
 };
 

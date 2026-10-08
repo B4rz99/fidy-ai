@@ -2,7 +2,6 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import { ConnectInstitutionResult, Connection } from "../../../src/core/connections/contract";
 import { prepareAuthorizedAuditCall } from "../../../src/shell/audit/operations";
 import { recordLivePATUse } from "../../../src/shell/tokens/operations";
-import { prepareOwnedStatement } from "../../database/operations";
 import { callerAuthority, isPATCaller, transactionId } from "../../canonical-work/operations";
 import type {
   CanonicalPreparationWork,
@@ -71,7 +70,9 @@ export const initiationStatements = (
   const live = `EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}) AND EXISTS (SELECT 1 FROM connection_institution_gate WHERE institution_id = 'bancolombia' AND enabled = 1)`;
   return [
     ...(isPATCaller(subject)
-      ? [prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) })]
+      ? [recordLivePATUse({ subject, current })].map(({ sql, params }) =>
+          db.prepare(sql).bind(...params)
+        )
       : []),
     db
       .prepare(

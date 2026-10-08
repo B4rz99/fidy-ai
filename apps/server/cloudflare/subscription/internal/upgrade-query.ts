@@ -13,7 +13,6 @@ import {
   isPATCaller,
   rateLimitedTransactionResponse,
 } from "../../canonical-work/operations";
-import { prepareOwnedStatement } from "../../database/operations";
 import { newId } from "../../secret-material/operations";
 import type { SubscriptionQueryInput } from "../contract";
 
@@ -53,18 +52,15 @@ export const queryUpgrade = (
         }),
         ...(isPATCaller(subject)
           ? [
-              prepareOwnedStatement({
-                db,
-                statement: recordAuditedPATUseFromAuthority({
-                  authority: livePATAuthority({ subject, current }),
-                  current,
-                  evidence: recordedPATCallProof({
-                    auditId,
-                    operation: "subscription.getUpgradeUrl",
-                  }),
+              recordAuditedPATUseFromAuthority({
+                authority: livePATAuthority({ subject, current }),
+                current,
+                evidence: recordedPATCallProof({
+                  auditId,
+                  operation: "subscription.getUpgradeUrl",
                 }),
               }),
-            ]
+            ].map(({ sql, params }) => db.prepare(sql).bind(...params))
           : []),
       ])
     );

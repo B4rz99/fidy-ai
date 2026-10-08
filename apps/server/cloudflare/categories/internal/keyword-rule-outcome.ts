@@ -9,7 +9,6 @@ import {
 import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
 import { livePATAuthority } from "../../../src/shell/tokens/operations";
 import { newId } from "../../secret-material/operations";
-import { prepareOwnedStatement } from "../../database/operations";
 import {
   type CategoryFailure,
   CategoryNotFound,
@@ -128,26 +127,25 @@ const recordKeywordRuleGuard = ({
       Effect.orElseSucceed(() => "unavailable" as const)
     );
   }
-  const statement = isPATCaller(subject)
-    ? prepareOwnedStatement({
-        db,
-        statement: recordCanonicalPATWork({
-          authority: livePATAuthority({ subject, current }),
-          input: { id: newId(), current, operation, outcome: "rejected", afterOwnerWrite: false },
-        }),
-      })
-    : ((): D1PreparedStatement => {
-        const authority = liveWebSessionAuthority({ subject, current });
-        return prepareAuthorizedAuditCall({
-          db,
-          authority,
-          id: newId(),
-          operation,
-          outcome: "validation_failed",
-          current,
-          afterOwnerWrite: false,
-        });
-      })();
+  let statement: D1PreparedStatement;
+  if (isPATCaller(subject)) {
+    const auditStatement = recordCanonicalPATWork({
+      authority: livePATAuthority({ subject, current }),
+      input: { id: newId(), current, operation, outcome: "rejected", afterOwnerWrite: false },
+    });
+    statement = db.prepare(auditStatement.sql).bind(...auditStatement.params);
+  } else {
+    const authority = liveWebSessionAuthority({ subject, current });
+    statement = prepareAuthorizedAuditCall({
+      db,
+      authority,
+      id: newId(),
+      operation,
+      outcome: "validation_failed",
+      current,
+      afterOwnerWrite: false,
+    });
+  }
   return Effect.tryPromise(() => statement.run()).pipe(
     Effect.map((result) =>
       result.meta.changes === 1 ? ("recorded" as const) : ("credential_refused" as const)
@@ -240,10 +238,9 @@ const findOwnedRule = ({
 const missingCategoryFailure = ({
   db,
   outcome,
-}: Readonly<{
-  db: D1Database;
-  outcome: KeywordRuleOutcome;
-}>): Effect.Effect<Option.Option<CategoryFailure>> =>
+}: Readonly<{ db: D1Database; outcome: KeywordRuleOutcome }>): Effect.Effect<
+  Option.Option<CategoryFailure>
+> =>
   Effect.gen(function* () {
     if (outcome.operation === "categories.deleteKeywordRule") return Option.none<CategoryFailure>();
     const categoryId = outcome.categoryId;
@@ -388,11 +385,9 @@ export const findKeywordRuleValue = ({
   db,
   userId,
   outcome,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  outcome: KeywordRuleOutcome;
-}>): Effect.Effect<Option.Option<CommittedMutationValue>> =>
+}: Readonly<{ db: D1Database; userId: string; outcome: KeywordRuleOutcome }>): Effect.Effect<
+  Option.Option<CommittedMutationValue>
+> =>
   outcome.operation === "categories.deleteKeywordRule"
     ? Effect.succeedSome({
         _tag: "Owner" as const,

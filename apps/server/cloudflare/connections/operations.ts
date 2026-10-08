@@ -14,7 +14,6 @@ import {
   prepareAuthorizedAuditCall,
 } from "../../src/shell/audit/operations";
 import { recordLivePATUse } from "../../src/shell/tokens/operations";
-import { prepareOwnedStatement } from "../database/operations";
 import { commitPATUnit } from "../tokens/operations";
 import {
   type QueryCaller,
@@ -57,12 +56,9 @@ export const connectionInputRefusal = ({
         db: work.db,
         statements: [
           ...(isPATCaller(work.subject)
-            ? [
-                prepareOwnedStatement({
-                  db: work.db,
-                  statement: recordLivePATUse({ subject: work.subject, current: work.current }),
-                }),
-              ]
+            ? [recordLivePATUse({ subject: work.subject, current: work.current })].map(
+                ({ sql, params }) => work.db.prepare(sql).bind(...params)
+              )
             : []),
           prepareAuthorizedAuditCall({
             db: work.db,
@@ -193,6 +189,7 @@ export const browseConnections = ({
       ...(operation === "connections.getConnection" ? [id] : []),
       ...authority.bindings,
     ];
+
     const read = db
       .prepare(
         `SELECT id, institution_id AS institutionId, state FROM connections WHERE user_id = ? ${selection} AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}) ORDER BY institution_id, id`
@@ -211,7 +208,9 @@ export const browseConnections = ({
           read,
           gate,
           ...(isPATCaller(subject)
-            ? [prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) })]
+            ? [recordLivePATUse({ subject, current })].map(({ sql, params }) =>
+                db.prepare(sql).bind(...params)
+              )
             : []),
           audit,
         ],

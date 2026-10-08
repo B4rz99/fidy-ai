@@ -39,7 +39,6 @@ import {
 } from "./pat-shared";
 import { newId } from "../../secret-material/operations";
 import { commitPATUnit } from "./pat-unit";
-import { prepareOwnedStatement } from "../../database/operations";
 
 const httpForbidden = 403;
 const consentActionRequired = (): Response =>
@@ -119,46 +118,39 @@ const commitIssuance = (
       commitPATUnit({
         db,
         statements: [
-          prepareOwnedStatement({
-            db,
-            statement: issueManualPAT({
-              session,
-              input: {
-                grant,
-                requestId,
-                patId,
-                shortId,
-                bearerDigest,
-                current,
-                expires,
-              },
-            }),
+          issueManualPAT({
+            session,
+            input: {
+              grant,
+              requestId,
+              patId,
+              shortId,
+              bearerDigest,
+              current,
+              expires,
+            },
           }),
-          prepareOwnedStatement({
-            db,
-            statement: grantManualPATConsent({
-              session,
-              input: {
-                id: newId(),
-                requestId,
-                disclosure,
-                current,
-              },
-            }),
+
+          grantManualPATConsent({
+            session,
+            input: {
+              id: newId(),
+              requestId,
+              disclosure,
+              current,
+            },
           }),
-          prepareOwnedStatement({
-            db,
-            statement: recordSessionPATTransition({
-              session,
-              input: {
-                id: newId(),
-                current,
-                patId: Option.some(patId),
-                operation: "pats.createManualPAT",
-              },
-            }),
+
+          recordSessionPATTransition({
+            session,
+            input: {
+              id: newId(),
+              current,
+              patId: Option.some(patId),
+              operation: "pats.createManualPAT",
+            },
           }),
-        ],
+        ].map(({ sql, params }) => db.prepare(sql).bind(...params)),
       })
     );
     return committed.every((item) => item.meta.changes === 1);

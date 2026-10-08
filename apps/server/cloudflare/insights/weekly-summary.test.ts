@@ -4,7 +4,7 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import { type WeeklyScheduleSnapshot, WeeklySummaryReport } from "./contract";
 import { categoryIds } from "../../src/core/categories/contract";
 import {
-  createWeeklyConsentOffer,
+  createWeeklyGovernorConsentOffer,
   findWeeklyConsentGrant,
   recordWeeklyConsentDisclosure,
 } from "../consent/operations";
@@ -34,7 +34,12 @@ const enable = (db: D1Database): Effect.Effect<WeeklyScheduleSnapshot, object> =
       caller: weeklySummaryTestCaller,
       now: weeklySummaryTestNow,
     };
-    const offer = Option.getOrThrow(yield* createWeeklyConsentOffer(context));
+    const offer = Option.getOrThrow(
+      yield* createWeeklyGovernorConsentOffer({
+        ...context,
+        request: { _tag: "ShortOffer", origin: "proactive" },
+      })
+    );
     yield* recordWeeklyConsentDisclosure({
       ...context,
       offerId: offer.id,
@@ -174,7 +179,12 @@ it.live(
         caller: weeklySummaryTestCaller,
         now: weeklySummaryTestNow,
       };
-      const offer = Option.getOrThrow(yield* createWeeklyConsentOffer(context));
+      const offer = Option.getOrThrow(
+        yield* createWeeklyGovernorConsentOffer({
+          ...context,
+          request: { _tag: "ShortOffer", origin: "proactive" },
+        })
+      );
       yield* recordWeeklyConsentDisclosure({
         ...context,
         offerId: offer.id,
@@ -211,7 +221,12 @@ it.live(
           decisionMessageId: "replay",
         })
       ).toBe(false);
-      const revoke = Option.getOrThrow(yield* createWeeklyConsentOffer(context));
+      const revoke = Option.getOrThrow(
+        yield* createWeeklyGovernorConsentOffer({
+          ...context,
+          request: { _tag: "ShortOffer", origin: "proactive" },
+        })
+      );
       yield* recordWeeklyConsentDisclosure({
         ...context,
         offerId: revoke.id,
@@ -240,7 +255,12 @@ it.live(
         caller: weeklySummaryTestCaller,
         now: weeklySummaryTestNow,
       };
-      const offer = Option.getOrThrow(yield* createWeeklyConsentOffer(context));
+      const offer = Option.getOrThrow(
+        yield* createWeeklyGovernorConsentOffer({
+          ...context,
+          request: { _tag: "ShortOffer", origin: "proactive" },
+        })
+      );
       yield* recordWeeklyConsentDisclosure({
         ...context,
         offerId: offer.id,

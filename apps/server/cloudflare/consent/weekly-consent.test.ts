@@ -6,13 +6,13 @@ import { UserId, WhatsAppCallerReference } from "../../src/core/identity/contrac
 import { DisclosureSnapshot } from "../../src/core/consent/contract";
 import { currentDisclosureFor, weeklyDisclosureFor } from "../../src/shell/consent/operations";
 import {
-  createWeeklyConsentOffer,
   createWeeklyGovernorConsentOffer,
   findWeeklyConsentGrant,
   prepareWeeklyConsentAction,
   prepareWeeklyConsentDecision,
   recordWeeklyConsentDisclosure,
 } from "./operations";
+import { createWeeklyConsentOffer } from "./short-offer.test-fixture";
 
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());

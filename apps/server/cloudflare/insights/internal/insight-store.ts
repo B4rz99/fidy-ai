@@ -31,7 +31,6 @@ import {
   transactionUnavailable,
 } from "../../canonical-work/operations";
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
-import { prepareOwnedStatement } from "../../database/operations";
 import {
   type CanonicalMutationPreparation,
   type CanonicalMutationRefusal,
@@ -39,7 +38,6 @@ import {
   type GuardRefusalWork,
   type OwnerOutcome,
 } from "../../canonical-operations/contract";
-
 import { getBoundOperationCatalog } from "../../../src/shell/canonical-catalog/contract";
 import { oauthMutationReview } from "../../oauth-confirmation/operations";
 import type { OAuthMutationReview } from "../../oauth-confirmation/contract";
@@ -96,11 +94,10 @@ export const findInsight = ({
   db,
   userId,
   id,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  id: InsightEventId;
-}>): Effect.Effect<Option.Option<InsightEvent>, InsightUnavailable> =>
+}: Readonly<{ db: D1Database; userId: string; id: InsightEventId }>): Effect.Effect<
+  Option.Option<InsightEvent>,
+  InsightUnavailable
+> =>
   Effect.tryPromise(() =>
     db
       .prepare(`SELECT id, kind, schedule_id, schedule_version, service_market,
@@ -122,11 +119,10 @@ export const generateInsight = ({
   db,
   userId,
   input,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  input: InsightGenerationInput;
-}>): Effect.Effect<Option.Option<InsightEvent>, InsightUnavailable> =>
+}: Readonly<{ db: D1Database; userId: string; input: InsightGenerationInput }>): Effect.Effect<
+  Option.Option<InsightEvent>,
+  InsightUnavailable
+> =>
   Effect.gen(function* () {
     const groups = yield* Schema.encodeEffect(
       Schema.fromJsonString(Schema.toCodecJson(InsightEvent.fields.moneyGroups))
@@ -213,23 +209,23 @@ const insightAuditStatement = ({
   afterOwnerWrite,
 }: InsightCall & Readonly<{ afterOwnerWrite: boolean }>): D1PreparedStatement => {
   const authority = callerAuthority({ subject, current });
-  return isPATCaller(subject)
-    ? prepareOwnedStatement({
-        db,
-        statement: recordCanonicalPATWork({
-          authority: livePATAuthority({ subject, current }),
-          input: { id: transactionId(), current, operation, outcome, afterOwnerWrite },
-        }),
-      })
-    : prepareAuthorizedAuditCall({
-        db,
-        authority,
-        id: transactionId(),
-        operation,
-        outcome,
-        current,
-        afterOwnerWrite,
-      });
+  if (isPATCaller(subject)) {
+    const auditStatement = recordCanonicalPATWork({
+      authority: livePATAuthority({ subject, current }),
+      input: { id: transactionId(), current, operation, outcome, afterOwnerWrite },
+    });
+    return db.prepare(auditStatement.sql).bind(...auditStatement.params);
+  }
+
+  return prepareAuthorizedAuditCall({
+    db,
+    authority,
+    id: transactionId(),
+    operation,
+    outcome,
+    current,
+    afterOwnerWrite,
+  });
 };
 
 /** Account for the live caller inside the same unit as the query or refusal it attests. */
@@ -238,7 +234,9 @@ const insightCallStatements = (input: InsightCall): ReadonlyArray<D1PreparedStat
   const authority = callerAuthority({ subject, current });
   return [
     ...(isPATCaller(subject)
-      ? [prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) })]
+      ? [recordLivePATUse({ subject, current })].map(({ sql, params }) =>
+          db.prepare(sql).bind(...params)
+        )
       : []),
     insightAuditStatement({ ...input, afterOwnerWrite: false }),
     db
@@ -337,11 +335,7 @@ export const listPendingInsights = ({
   db,
   subject,
   request,
-}: Readonly<{
-  db: D1Database;
-  subject: QueryCaller;
-  request: Request;
-}>): Effect.Effect<Response> =>
+}: Readonly<{ db: D1Database; subject: QueryCaller; request: Request }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const call: InsightCall = {
       db,
@@ -584,7 +578,9 @@ const transitionStatements = (
           : Option.some(insightCommitGuards),
       statements: [
         ...(isPATCaller(subject)
-          ? [prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) })]
+          ? [recordLivePATUse({ subject, current })].map(({ sql, params }) =>
+              db.prepare(sql).bind(...params)
+            )
           : []),
         write,
         ...Option.toArray(
@@ -770,11 +766,10 @@ export const findInsightAttempt = ({
   db,
   userId,
   id,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  id: InsightEventId;
-}>): Effect.Effect<Option.Option<InsightDeliveryAttempt>, InsightUnavailable> =>
+}: Readonly<{ db: D1Database; userId: string; id: InsightEventId }>): Effect.Effect<
+  Option.Option<InsightDeliveryAttempt>,
+  InsightUnavailable
+> =>
   Effect.tryPromise(() =>
     db
       .prepare(`SELECT id, insight_event_id, sent_at, channel, provider,

@@ -8,7 +8,6 @@ import {
   refusedByAuditBudget,
 } from "../../../src/shell/audit/operations";
 import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
-import { prepareOwnedStatement } from "../../database/operations";
 import { newId } from "../../secret-material/operations";
 import type { PATActivityRead, PATMetadataQuery } from "../contract";
 import { canonical, notFound, response, serviceUnavailable, unauthorized } from "./pat-shared";
@@ -46,14 +45,14 @@ export const getHeldActivity = ({ db, ...read }: PATActivityRead): Effect.Effect
     const activity = preparePATActivity(auditInput);
     const results = yield* Effect.tryPromise({
       try: () =>
-        db.batch([
-          prepareOwnedStatement({ db, statement: metadata.statement }),
-          prepareOwnedStatement({ db, statement: activity.statement }),
-          prepareOwnedStatement({
-            db,
-            statement: recordPATActivityQuery({ ...auditInput, id: newId() }),
-          }),
-        ]),
+        db.batch(
+          [
+            metadata.statement,
+            activity.statement,
+
+            recordPATActivityQuery({ ...auditInput, id: newId() }),
+          ].map(({ sql, params }) => db.prepare(sql).bind(...params))
+        ),
       catch: (error) =>
         refusedByAuditBudget(error) ? ("rate_limited" as const) : ("unavailable" as const),
     });

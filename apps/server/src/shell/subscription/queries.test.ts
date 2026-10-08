@@ -31,6 +31,16 @@ it("ends the original TrialPeriod at its half-open boundary without hiding histo
   expect(Option.isNone(result.paidSubscription)).toBe(true);
 });
 
+it.each([
+  [trial.started_at_ms - 1, "free"],
+  [trial.started_at_ms, "pro"],
+  [trial.trial_ends_at_ms - 1, "pro"],
+])("projects TrialPeriod standing at decision instant %s as %s", (now, accessTier) => {
+  const result = projectSubscriptionStatus({ standingRow: trial, attemptRows: [], now });
+  expect(result.accessTier).toBe(accessTier);
+  expect(Option.isNone(result.paidSubscription)).toBe(true);
+});
+
 it("derives Pro from a paid period while exposing its exact immutable Price snapshot", () => {
   const result = projectSubscriptionStatus({
     standingRow: {

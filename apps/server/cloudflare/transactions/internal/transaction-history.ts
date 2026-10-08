@@ -22,7 +22,6 @@ import { effectiveTransactionRelation } from "./effective-transaction";
 import { DateTime, Effect, Option, Schema } from "effect";
 import type { AuthorizedPAT } from "../../tokens/contract";
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
-import { prepareOwnedStatement } from "../../database/operations";
 import {
   type QueryAuthority,
   type QueryCaller,
@@ -98,6 +97,7 @@ type Selection = Readonly<{ request: Request; subject: Subject }> &
     // History callers select a single record by id or list when id is absent.
     | Readonly<{ search: false; id: Option.Option<string> }>
   );
+
 type BrowserSelection = Selection & Readonly<{ subject: TransactionSubject }>;
 
 const decodeCursor = (cursor: string): Option.Option<readonly [string, string, string]> => {
@@ -194,11 +194,13 @@ const listStatement = ({ db, userId, query, authority }: HistoryRow): D1Prepared
     "user_id = ?",
     `EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate})`,
   ];
+
   const values: Array<string | number | Uint8Array> = [
     ...relation.bindings,
     userId,
     ...authority.bindings,
   ];
+
   const fields = [
     ["occurred_at >=", Option.map(query.from, DateTime.formatIso)],
     ["occurred_at <", Option.map(query.to, DateTime.formatIso)],
@@ -498,31 +500,23 @@ const patHistoryStatements = (
   const { selection, query, current } = input;
   const { subject } = selection;
   const authority = livePATAuthority({ subject, current });
+  const patUseStatement = recordLivePATUse({ subject, current });
+  const auditStatement = recordCanonicalPATWork({
+    authority: livePATAuthority({ subject, current }),
+    input: {
+      id: uuid(),
+      operation: historyOperation(selection),
+      outcome: Option.isSome(query) ? "accepted" : "rejected",
+      afterOwnerWrite: false,
+      current,
+    },
+  });
   return [
-    prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) }),
+    db.prepare(patUseStatement.sql).bind(...patUseStatement.params),
     ...(Option.isSome(query)
-      ? [
-          historyStatement({
-            db,
-            selection,
-            query: query.value,
-            authority,
-          }),
-        ]
+      ? [historyStatement({ db, selection, query: query.value, authority })]
       : []),
-    prepareOwnedStatement({
-      db,
-      statement: recordCanonicalPATWork({
-        authority: livePATAuthority({ subject, current }),
-        input: {
-          id: uuid(),
-          operation: historyOperation(selection),
-          outcome: Option.isSome(query) ? "accepted" : "rejected",
-          afterOwnerWrite: false,
-          current,
-        },
-      }),
-    }),
+    db.prepare(auditStatement.sql).bind(...auditStatement.params),
   ];
 };
 
@@ -559,23 +553,21 @@ const readOAuthHistory = Effect.fn(function* ({
   if (!isOAuthCaller(selection.subject)) return unavailable();
   const authority = callerAuthority({ subject: selection.subject, current });
   const results = yield* Effect.uninterruptible(
-    Effect.tryPromise(() =>
-      db.batch([
+    Effect.tryPromise(() => {
+      const auditStatement = recordOAuthCall({
+        authority,
+        id: uuid(),
+        current,
+        operation: historyOperation(selection),
+        outcome: Option.isSome(query) ? "accepted" : "rejected",
+      });
+      return db.batch([
         ...(Option.isSome(query)
           ? [historyStatement({ db, selection, query: query.value, authority })]
           : []),
-        prepareOwnedStatement({
-          db,
-          statement: recordOAuthCall({
-            authority,
-            id: uuid(),
-            current,
-            operation: historyOperation(selection),
-            outcome: Option.isSome(query) ? "accepted" : "rejected",
-          }),
-        }),
-      ])
-    )
+        db.prepare(auditStatement.sql).bind(...auditStatement.params),
+      ]);
+    })
   );
   if (results.at(-1)?.meta.changes !== 1) {
     return yield* refusedCredentialResponse({ db, subject: selection.subject });

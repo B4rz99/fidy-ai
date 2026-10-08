@@ -10,7 +10,6 @@ import {
 import { type PreparedSubscriptionRead } from "../../../src/shell/subscription/contract";
 import { UserId } from "../../../src/core/identity/contract";
 import { Clock, Effect } from "effect";
-import { prepareOwnedStatement } from "../../database/operations";
 import { newId } from "../../secret-material/operations";
 import { callerAuthority, isPATCaller } from "../../canonical-work/operations";
 import { type SubscriptionQueryInput as QueryInput } from "../contract";
@@ -48,27 +47,32 @@ const subscriptionStatements = (
     operation === "subscription.listSubscriptionOffers"
       ? prepareSubscriptionOffers(authority)
       : prepareSubscriptionStatus({ userId: UserId.make(subject.userId), authority, current });
-  const work = read.statements.map((statement) => prepareOwnedStatement({ db, statement }));
+  const work = read.statements.map((statement) =>
+    db.prepare(statement.sql).bind(...statement.params)
+  );
   const use = pat
-    ? [prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) })]
+    ? [recordLivePATUse({ subject, current })].map(({ sql, params }) =>
+        db.prepare(sql).bind(...params)
+      )
     : [];
-  const audit = pat
-    ? prepareOwnedStatement({
-        db,
-        statement: recordCanonicalPATWork({
-          authority: livePATAuthority({ subject, current }),
-          input: { id: newId(), current, operation, outcome: "accepted", afterOwnerWrite: false },
-        }),
-      })
-    : prepareAuthorizedAuditCall({
-        db,
-        authority,
-        id: newId(),
-        operation,
-        outcome: "accepted",
-        current,
-        afterOwnerWrite: false,
-      });
+  let audit: D1PreparedStatement;
+  if (pat) {
+    const auditStatement = recordCanonicalPATWork({
+      authority: livePATAuthority({ subject, current }),
+      input: { id: newId(), current, operation, outcome: "accepted", afterOwnerWrite: false },
+    });
+    audit = db.prepare(auditStatement.sql).bind(...auditStatement.params);
+  } else {
+    audit = prepareAuthorizedAuditCall({
+      db,
+      authority,
+      id: newId(),
+      operation,
+      outcome: "accepted",
+      current,
+      afterOwnerWrite: false,
+    });
+  }
   return { statements: [...work, ...use, audit], read };
 };
 

@@ -32,7 +32,6 @@ import { livePATAuthority, recordLivePATUse } from "../../src/shell/tokens/opera
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { type HostedInference } from "../../src/shell/hosted-inference/operations";
 import type { AuthorizedPAT } from "../tokens/contract";
-import { prepareOwnedStatement } from "../database/operations";
 import { newId } from "../secret-material/operations";
 import {
   type QueryCaller,
@@ -56,7 +55,6 @@ import {
   type CanonicalMutationRefusal,
   type PreparedCanonicalMutation,
 } from "../canonical-operations/contract";
-
 import {
   type MemoryOutcome,
   memoryBudgetRefusal,
@@ -66,7 +64,6 @@ import {
   memoryRefusal,
   memoryUnavailable,
 } from "./internal/outcome";
-
 import { memoryOAuthReview } from "./internal/oauth-review";
 import type { OAuthMutationReview } from "../oauth-confirmation/contract";
 
@@ -102,11 +99,10 @@ const readMemories = ({
   db,
   subject,
   current,
-}: Readonly<{
-  db: D1Database;
-  subject: TransactionCaller;
-  current: number;
-}>): Effect.Effect<Option.Option<ReadonlyArray<Memory>>, TransactionBoundaryFailure> =>
+}: Readonly<{ db: D1Database; subject: TransactionCaller; current: number }>): Effect.Effect<
+  Option.Option<ReadonlyArray<Memory>>,
+  TransactionBoundaryFailure
+> =>
   Effect.gen(function* () {
     const query = memoryRowsQuery({
       userId: subject.userId,
@@ -126,12 +122,10 @@ const budgetExhausted = ({
   db,
   subject,
   current,
-}: Readonly<{
-  db: D1Database;
-  subject: QueryCaller;
-  current: number;
-}>): Effect.Effect<boolean, TransactionBoundaryFailure> =>
-  waitFor(() => dailyAuditExhausted({ db, userId: subject.userId, current }));
+}: Readonly<{ db: D1Database; subject: QueryCaller; current: number }>): Effect.Effect<
+  boolean,
+  TransactionBoundaryFailure
+> => waitFor(() => dailyAuditExhausted({ db, userId: subject.userId, current }));
 
 const admit = <A, Requirements>(
   decision: Effect.Effect<A, MemoryCapacityExceeded, Requirements>
@@ -164,33 +158,31 @@ const acceptedAudit = ({
       afterOwnerWrite: true,
     });
   }
-  return isPATCaller(subject)
-    ? prepareOwnedStatement({
-        db,
-        statement: recordCanonicalPATWork({
-          authority: livePATAuthority({ subject, current }),
-          input: {
-            id: memoryId(),
-            current,
-            operation,
-            outcome: "accepted",
-            afterOwnerWrite: true,
-          },
-        }),
-      })
-    : prepareOwnedStatement({
-        db,
-        statement: recordBrowserMemoryWork({
-          subject,
-          input: {
-            id: memoryId(),
-            operation,
-            outcome: "success",
-            afterMutation: true,
-            current,
-          },
-        }),
-      });
+  if (isPATCaller(subject)) {
+    const auditStatement = recordCanonicalPATWork({
+      authority: livePATAuthority({ subject, current }),
+      input: {
+        id: memoryId(),
+        current,
+        operation,
+        outcome: "accepted",
+        afterOwnerWrite: true,
+      },
+    });
+    return db.prepare(auditStatement.sql).bind(...auditStatement.params);
+  }
+
+  const auditStatement = recordBrowserMemoryWork({
+    subject,
+    input: {
+      id: memoryId(),
+      operation,
+      outcome: "success",
+      afterMutation: true,
+      current,
+    },
+  });
+  return db.prepare(auditStatement.sql).bind(...auditStatement.params);
 };
 
 /** The guarded writes one accepted Memory mutation commits, in order, before its assertion. */
@@ -206,17 +198,18 @@ const acceptedStatements = ({
   operation: MemoryOperationId;
   mutation: D1PreparedStatement;
   current: number;
-}>): ReadonlyArray<D1PreparedStatement> =>
-  isPATCaller(subject)
-    ? [
-        prepareOwnedStatement({
-          db,
-          statement: recordLivePATUse({ subject, current }),
-        }),
-        mutation,
-        acceptedAudit({ db, subject, operation, current }),
-      ]
-    : [mutation, acceptedAudit({ db, subject, operation, current })];
+}>): ReadonlyArray<D1PreparedStatement> => {
+  if (isPATCaller(subject)) {
+    const patUseStatement = recordLivePATUse({ subject, current });
+    return [
+      db.prepare(patUseStatement.sql).bind(...patUseStatement.params),
+      mutation,
+      acceptedAudit({ db, subject, operation, current }),
+    ];
+  }
+
+  return [mutation, acceptedAudit({ db, subject, operation, current })];
+};
 
 /**
  * Decide one canonical `memory.remember` against live caller authority, the shared work budget, and
@@ -478,43 +471,37 @@ const browserRecallAudit = ({
   db: D1Database;
   subject: TransactionSubject;
   current: number;
-}>): D1PreparedStatement =>
-  prepareOwnedStatement({
-    db,
-    statement: recordBrowserMemoryWork({
-      subject,
-      input: {
-        id: memoryId(),
-        operation: "memory.recall",
-        outcome: "success",
-        afterMutation: false,
-        current,
-      },
-    }),
+}>): D1PreparedStatement => {
+  const auditStatement = recordBrowserMemoryWork({
+    subject,
+    input: {
+      id: memoryId(),
+      operation: "memory.recall",
+      outcome: "success",
+      afterMutation: false,
+      current,
+    },
   });
+  return db.prepare(auditStatement.sql).bind(...auditStatement.params);
+};
 
 const patRecallAudit = ({
   db,
   subject,
   current,
-}: Readonly<{
-  db: D1Database;
-  subject: AuthorizedPAT;
-  current: number;
-}>): D1PreparedStatement =>
-  prepareOwnedStatement({
-    db,
-    statement: recordCanonicalPATWork({
-      authority: livePATAuthority({ subject, current }),
-      input: {
-        id: memoryId(),
-        current,
-        operation: "memory.recall",
-        outcome: "accepted",
-        afterOwnerWrite: false,
-      },
-    }),
+}: Readonly<{ db: D1Database; subject: AuthorizedPAT; current: number }>): D1PreparedStatement => {
+  const auditStatement = recordCanonicalPATWork({
+    authority: livePATAuthority({ subject, current }),
+    input: {
+      id: memoryId(),
+      current,
+      operation: "memory.recall",
+      outcome: "accepted",
+      afterOwnerWrite: false,
+    },
   });
+  return db.prepare(auditStatement.sql).bind(...auditStatement.params);
+};
 
 const recallStatements = ({
   db,
@@ -528,40 +515,35 @@ const recallStatements = ({
   statement: D1PreparedStatement;
 }>): ReadonlyArray<D1PreparedStatement> => {
   if (isOAuthCaller(subject)) {
+    const auditStatement = recordOAuthCall({
+      authority: callerAuthority({ subject, current }),
+      id: memoryId(),
+      current,
+      operation: "memory.recall",
+      outcome: "accepted",
+    });
+    return [statement, db.prepare(auditStatement.sql).bind(...auditStatement.params)];
+  }
+  if (isPATCaller(subject)) {
+    const patUseStatement = recordLivePATUse({ subject, current });
     return [
+      db.prepare(patUseStatement.sql).bind(...patUseStatement.params),
       statement,
-      prepareOwnedStatement({
-        db,
-        statement: recordOAuthCall({
-          authority: callerAuthority({ subject, current }),
-          id: memoryId(),
-          current,
-          operation: "memory.recall",
-          outcome: "accepted",
-        }),
-      }),
+      patRecallAudit({ db, subject, current }),
     ];
   }
-  return isPATCaller(subject)
-    ? [
-        prepareOwnedStatement({
-          db,
-          statement: recordLivePATUse({ subject, current }),
-        }),
-        statement,
-        patRecallAudit({ db, subject, current }),
-      ]
-    : [statement, browserRecallAudit({ db, subject, current })];
+
+  return [statement, browserRecallAudit({ db, subject, current })];
 };
 
 /** Classify a recall unit whose read or live-authority audit row did not commit. */
 const recallRefused = ({
   db,
   subject,
-}: Readonly<{
-  db: D1Database;
-  subject: QueryCaller;
-}>): Effect.Effect<Response, TransactionBoundaryFailure> =>
+}: Readonly<{ db: D1Database; subject: QueryCaller }>): Effect.Effect<
+  Response,
+  TransactionBoundaryFailure
+> =>
   Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
     const live = yield* waitFor(() => liveTransactionAuthority({ db, subject, current }));
@@ -584,10 +566,7 @@ const recallRows = (
 export const recallMemories = ({
   db,
   subject,
-}: Readonly<{
-  db: D1Database;
-  subject: QueryCaller;
-}>): Effect.Effect<Response> =>
+}: Readonly<{ db: D1Database; subject: QueryCaller }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
     if (yield* budgetExhausted({ db, subject, current })) return memoryRateLimited();

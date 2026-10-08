@@ -14,7 +14,6 @@ import { RequestBodyPolicy } from "../../http/contract";
 import { readBoundedRequestBody } from "../../http/operations";
 import { digestBytes, newId, newSecret, secretDigest } from "../../secret-material/operations";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
-import { prepareOwnedStatement } from "../../database/operations";
 import { BootstrapInvalid, type BootstrapUnavailable, dbWork } from "./bootstrap";
 import { oauthResponse } from "./response";
 import { forwardRefresh } from "./refresh";
@@ -151,9 +150,10 @@ const commitExchange = ({
   grant: CodeRow;
   issuance: Issuance;
 }>): Effect.Effect<unknown, BootstrapUnavailable> =>
-  dbWork(() =>
-    input.db.batch([
-      prepareOwnedStatement({ db: input.db, statement: consumptionStatement(input, proof, grant) }),
+  dbWork(() => {
+    const auditStatement = consumptionStatement(input, proof, grant);
+    return input.db.batch([
+      input.db.prepare(auditStatement.sql).bind(...auditStatement.params),
       input.db
         .prepare(
           `INSERT INTO oauth_access_credentials (id,connection_id,user_id,digest,issued_at_ms,expires_at_ms,scopes_json) SELECT ?,?,?,?,?,?,? WHERE changes() = 1`
@@ -183,8 +183,8 @@ const commitExchange = ({
       input.db.prepare(
         "INSERT INTO oauth_atomic_assertion VALUES (1,CASE WHEN changes() = 1 THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted"
       ),
-    ])
-  );
+    ]);
+  });
 /** Exchanges a bound single-use code; failed atomic issuance leaves the code unconsumed. */
 export const exchangeToken = (
   input: ExchangeInput

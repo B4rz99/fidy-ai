@@ -22,10 +22,8 @@ import { normalizeSearchText as normalizeCategoryKeyword } from "../../../src/co
 import { recordAuthorizedCall, recordCanonicalPATWork } from "../../../src/shell/audit/operations";
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
-import { prepareOwnedStatement } from "../../database/operations";
 import { RequestBodyPolicy } from "../../http/contract";
 import { pathId, readBoundedRequestBody } from "../../http/operations";
-
 import {
   HTTP_BAD_REQUEST,
   HTTP_NOT_FOUND,
@@ -51,14 +49,12 @@ import {
   transactionId as uuid,
 } from "../../canonical-work/operations";
 import type { CanonicalMutationPreparation } from "../../canonical-operations/contract";
-
 import {
   keywordRuleGuardFor,
   keywordRuleOutcome,
   keywordRuleRefusal,
   keywordRuleUnavailable,
 } from "./keyword-rule-outcome";
-
 import { ruleOAuthReview } from "./oauth-review";
 import type { OAuthMutationReview } from "../../oauth-confirmation/contract";
 
@@ -149,18 +145,17 @@ const oauthWriteAudit = (
     operation: KeywordRuleOperation;
     current: number;
   }>
-): D1PreparedStatement =>
-  prepareOwnedStatement({
-    db: input.db,
-    statement: recordAuthorizedCall({
-      authority: callerAuthority(input),
-      operation: input.operation,
-      id: uuid(),
-      current: input.current,
-      outcome: "accepted",
-      afterOwnerWrite: true,
-    }),
+): D1PreparedStatement => {
+  const auditStatement = recordAuthorizedCall({
+    authority: callerAuthority(input),
+    operation: input.operation,
+    id: uuid(),
+    current: input.current,
+    outcome: "accepted",
+    afterOwnerWrite: true,
   });
+  return input.db.prepare(auditStatement.sql).bind(...auditStatement.params);
+};
 
 /** The guarded rule change and its live-authority validation Audit, in the unit's own order. */
 const writeStatements = ({
@@ -180,36 +175,31 @@ const writeStatements = ({
     return [statement, oauthWriteAudit({ db, subject, operation, current })];
   }
   const pat = isPATCaller(subject);
+  const auditStatement = pat
+    ? recordCanonicalPATWork({
+        authority: livePATAuthority({ subject, current }),
+        input: {
+          id: uuid(),
+          current,
+          operation,
+          outcome: "accepted",
+          afterOwnerWrite: true,
+        },
+      })
+    : recordBrowserKeywordRuleWork({
+        subject,
+        operation,
+        id: uuid(),
+        current,
+      });
   return [
     ...(pat
-      ? [
-          prepareOwnedStatement({
-            db,
-            statement: recordLivePATUse({ subject, current }),
-          }),
-        ]
+      ? [recordLivePATUse({ subject, current })].map(({ sql, params }) =>
+          db.prepare(sql).bind(...params)
+        )
       : []),
     statement,
-    prepareOwnedStatement({
-      db,
-      statement: pat
-        ? recordCanonicalPATWork({
-            authority: livePATAuthority({ subject, current }),
-            input: {
-              id: uuid(),
-              current,
-              operation,
-              outcome: "accepted",
-              afterOwnerWrite: true,
-            },
-          })
-        : recordBrowserKeywordRuleWork({
-            subject,
-            operation,
-            id: uuid(),
-            current,
-          }),
-    }),
+    db.prepare(auditStatement.sql).bind(...auditStatement.params),
   ];
 };
 
@@ -328,6 +318,15 @@ export const prepareCreateKeywordRule = ({
 }>): Effect.Effect<CanonicalMutationPreparation> => {
   const ruleId = KeywordRuleId.make(uuid());
   const authority = callerAuthority({ subject, current });
+  const ruleStatement = insertKeywordRule({
+    id: ruleId,
+    userId: subject.userId,
+    keyword: payload.keyword,
+    normalizedKeyword: normalizeCategoryKeyword(payload.keyword),
+    categoryId: payload.categoryId,
+    timestamp: isoTimestamp(current),
+    authority,
+  });
   return prepareRuleWrite({
     db,
     subject,
@@ -338,18 +337,8 @@ export const prepareCreateKeywordRule = ({
       keyword: payload.keyword,
       categoryId: payload.categoryId,
     },
-    statement: prepareOwnedStatement({
-      db,
-      statement: insertKeywordRule({
-        id: ruleId,
-        userId: subject.userId,
-        keyword: payload.keyword,
-        normalizedKeyword: normalizeCategoryKeyword(payload.keyword),
-        categoryId: payload.categoryId,
-        timestamp: isoTimestamp(current),
-        authority,
-      }),
-    }),
+    statement: db.prepare(ruleStatement.sql).bind(...ruleStatement.params),
+
     current,
   }).pipe(Effect.orElseSucceed(failedPreparation));
 };
@@ -369,6 +358,15 @@ export const prepareUpdateKeywordRule = ({
   current: number;
 }>): Effect.Effect<CanonicalMutationPreparation> => {
   const authority = callerAuthority({ subject, current });
+  const ruleStatement = replaceKeywordRule({
+    id: ruleId,
+    userId: subject.userId,
+    keyword: payload.keyword,
+    normalizedKeyword: normalizeCategoryKeyword(payload.keyword),
+    categoryId: payload.categoryId,
+    timestamp: isoTimestamp(current),
+    authority,
+  });
   return prepareRuleWrite({
     db,
     subject,
@@ -379,18 +377,8 @@ export const prepareUpdateKeywordRule = ({
       keyword: payload.keyword,
       categoryId: payload.categoryId,
     },
-    statement: prepareOwnedStatement({
-      db,
-      statement: replaceKeywordRule({
-        id: ruleId,
-        userId: subject.userId,
-        keyword: payload.keyword,
-        normalizedKeyword: normalizeCategoryKeyword(payload.keyword),
-        categoryId: payload.categoryId,
-        timestamp: isoTimestamp(current),
-        authority,
-      }),
-    }),
+    statement: db.prepare(ruleStatement.sql).bind(...ruleStatement.params),
+
     current,
   }).pipe(Effect.orElseSucceed(failedPreparation));
 };
@@ -408,22 +396,17 @@ export const prepareDeleteKeywordRule = ({
   current: number;
 }>): Effect.Effect<CanonicalMutationPreparation> => {
   const authority = callerAuthority({ subject, current });
+  const ruleStatement = removeKeywordRule({
+    id: ruleId,
+    userId: subject.userId,
+    authority,
+  });
   return prepareRuleWrite({
     db,
     subject,
-    outcome: {
-      _tag: "KeywordRule",
-      operation: "categories.deleteKeywordRule",
-      ruleId,
-    },
-    statement: prepareOwnedStatement({
-      db,
-      statement: removeKeywordRule({
-        id: ruleId,
-        userId: subject.userId,
-        authority,
-      }),
-    }),
+    outcome: { _tag: "KeywordRule", operation: "categories.deleteKeywordRule", ruleId },
+    statement: db.prepare(ruleStatement.sql).bind(...ruleStatement.params),
+
     current,
   }).pipe(Effect.orElseSucceed(failedPreparation));
 };
@@ -439,37 +422,30 @@ const listStatements = ({
   current: number;
 }>): Array<D1PreparedStatement> => {
   const pat = isPATCaller(subject);
+  const ruleStatement = protectedKeywordRulesQuery({
+    userId: subject.userId,
+    authority: callerAuthority({ subject, current }),
+  });
+  const auditStatement = pat
+    ? recordCanonicalPATWork({
+        authority: livePATAuthority({ subject, current }),
+        input: {
+          id: uuid(),
+          current,
+          operation: "categories.listKeywordRules",
+          outcome: "accepted",
+          afterOwnerWrite: false,
+        },
+      })
+    : listAudit(subject, current);
   return [
     ...(pat
-      ? [
-          prepareOwnedStatement({
-            db,
-            statement: recordLivePATUse({ subject, current }),
-          }),
-        ]
+      ? [recordLivePATUse({ subject, current })].map(({ sql, params }) =>
+          db.prepare(sql).bind(...params)
+        )
       : []),
-    prepareOwnedStatement({
-      db,
-      statement: protectedKeywordRulesQuery({
-        userId: subject.userId,
-        authority: callerAuthority({ subject, current }),
-      }),
-    }),
-    prepareOwnedStatement({
-      db,
-      statement: pat
-        ? recordCanonicalPATWork({
-            authority: livePATAuthority({ subject, current }),
-            input: {
-              id: uuid(),
-              current,
-              operation: "categories.listKeywordRules",
-              outcome: "accepted",
-              afterOwnerWrite: false,
-            },
-          })
-        : listAudit(subject, current),
-    }),
+    db.prepare(ruleStatement.sql).bind(...ruleStatement.params),
+    db.prepare(auditStatement.sql).bind(...auditStatement.params),
   ];
 };
 const listAudit = (
@@ -503,10 +479,7 @@ const listAudit = (
 const refusedWork = ({
   db,
   subject,
-}: Readonly<{
-  db: D1Database;
-  subject: QueryCaller;
-}>): Effect.Effect<Response> =>
+}: Readonly<{ db: D1Database; subject: QueryCaller }>): Effect.Effect<Response> =>
   Effect.tryPromise(() => refusedTransactionWork({ db, subject })).pipe(
     Effect.orElseSucceed(keywordRuleUnavailable)
   );
@@ -515,10 +488,7 @@ const refusedWork = ({
 export const listOwnKeywordRules = ({
   db,
   subject,
-}: Readonly<{
-  db: D1Database;
-  subject: QueryCaller;
-}>): Effect.Effect<Response> =>
+}: Readonly<{ db: D1Database; subject: QueryCaller }>): Effect.Effect<Response> =>
   Effect.gen(function* () {
     const current = DateTime.toEpochMillis(yield* DateTime.now);
     const statements = listStatements({ db, subject, current });

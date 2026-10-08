@@ -52,7 +52,6 @@ import {
 } from "./pat-shared";
 import { newId } from "../../secret-material/operations";
 import { commitPATUnit } from "./pat-unit";
-import { prepareOwnedStatement } from "../../database/operations";
 
 const symbolCount = 8;
 const sampleBytes = 16;
@@ -112,38 +111,25 @@ export const sweepExpiredPATPairings = (db: D1Database): Effect.Effect<void, Cau
   Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
     yield* Effect.tryPromise(() =>
-      db.batch([
-        prepareOwnedStatement({
-          db,
-          statement: expirePairingConsents({
+      db.batch(
+        [
+          expirePairingConsents({
             current,
             candidates: expiredPairingGrants({ current, limit: scheduledSweepLimit }),
           }),
-        }),
-        prepareOwnedStatement({ db, statement: expireApprovedPairings(current) }),
-        prepareOwnedStatement({ db, statement: pairingExpiryCompletion(current) }),
-        prepareOwnedStatement({
-          db,
-          statement: expirePATConsents({
+          expireApprovedPairings(current),
+          pairingExpiryCompletion(current),
+          expirePATConsents({
             current,
             candidates: expiredPATGrants({ current, limit: scheduledSweepLimit }),
           }),
-        }),
-        prepareOwnedStatement({ db, statement: expireFixedPATs(current) }),
-        prepareOwnedStatement({ db, statement: patExpiryCompletion(current) }),
-        prepareOwnedStatement({
-          db,
-          statement: sweepUnapprovedPairings({ current, limit: scheduledSweepLimit }),
-        }),
-        prepareOwnedStatement({
-          db,
-          statement: sweepPairingAdmission({ current, limit: scheduledSweepLimit }),
-        }),
-        prepareOwnedStatement({
-          db,
-          statement: sweepPairingReviews({ current, limit: scheduledSweepLimit }),
-        }),
-      ])
+          expireFixedPATs(current),
+          patExpiryCompletion(current),
+          sweepUnapprovedPairings({ current, limit: scheduledSweepLimit }),
+          sweepPairingAdmission({ current, limit: scheduledSweepLimit }),
+          sweepPairingReviews({ current, limit: scheduledSweepLimit }),
+        ].map(({ sql, params }) => db.prepare(sql).bind(...params))
+      )
     );
   });
 type StartedPairing = Readonly<{
@@ -163,18 +149,11 @@ const reservePairing = (
     const { source, payload, current, code, privateCode, pairingId, expires } = start;
     const proofDigest = yield* Effect.tryPromise(() => digest(privateCode));
     const committed = yield* Effect.tryPromise(() =>
-      db.batch([
-        prepareOwnedStatement({
-          db,
-          statement: sweepPairingAdmission({ current, limit: scheduledSweepLimit }),
-        }),
-        prepareOwnedStatement({
-          db,
-          statement: admitPairingSource({ sourceDigest: source, current }),
-        }),
-        prepareOwnedStatement({
-          db,
-          statement: startPairingGrant({
+      db.batch(
+        [
+          sweepPairingAdmission({ current, limit: scheduledSweepLimit }),
+          admitPairingSource({ sourceDigest: source, current }),
+          startPairingGrant({
             id: pairingId,
             publicCode: code,
             proofDigest,
@@ -184,8 +163,8 @@ const reservePairing = (
             current,
             expires,
           }),
-        }),
-      ])
+        ].map(({ sql, params }) => db.prepare(sql).bind(...params))
+      )
     );
     return committed[2]?.meta.changes === 1;
   });
@@ -239,16 +218,17 @@ const admitReview = (
   current: number
 ): Effect.Effect<boolean, Cause.UnknownError> =>
   Effect.gen(function* () {
-    const result = yield* Effect.tryPromise(() =>
-      prepareOwnedStatement({
-        db,
-        statement: admitPairingReview({
-          id: newId(),
-          sessionId,
-          current,
-        }),
-      }).run()
-    );
+    const result = yield* Effect.tryPromise(() => {
+      const reviewStatement = admitPairingReview({
+        id: newId(),
+        sessionId,
+        current,
+      });
+      return db
+        .prepare(reviewStatement.sql)
+        .bind(...reviewStatement.params)
+        .run();
+    });
     return result.meta.changes === 1;
   });
 /** Inspect a public code only for a fresh browser User, with bounded guessing. */
@@ -312,42 +292,35 @@ const commitApproval = (
       commitPATUnit({
         db,
         statements: [
-          prepareOwnedStatement({
-            db,
-            statement: approvePairingGrant({
-              session,
-              input: {
-                pairingId: pairing.id,
-                current,
-                expires,
-              },
-            }),
+          approvePairingGrant({
+            session,
+            input: {
+              pairingId: pairing.id,
+              current,
+              expires,
+            },
           }),
-          prepareOwnedStatement({
-            db,
-            statement: grantPairedPATConsent({
-              session,
-              input: {
-                id: newId(),
-                pairingId: pairing.id,
-                disclosure,
-                current,
-              },
-            }),
+
+          grantPairedPATConsent({
+            session,
+            input: {
+              id: newId(),
+              pairingId: pairing.id,
+              disclosure,
+              current,
+            },
           }),
-          prepareOwnedStatement({
-            db,
-            statement: recordSessionPATTransition({
-              session,
-              input: {
-                id: newId(),
-                current,
-                operation: "pats.approvePATPairing",
-                patId: Option.none(),
-              },
-            }),
+
+          recordSessionPATTransition({
+            session,
+            input: {
+              id: newId(),
+              current,
+              operation: "pats.approvePATPairing",
+              patId: Option.none(),
+            },
           }),
-        ],
+        ].map(({ sql, params }) => db.prepare(sql).bind(...params)),
       })
     );
     return committed.every((item) => item.meta.changes === 1);

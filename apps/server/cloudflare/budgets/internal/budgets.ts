@@ -12,7 +12,6 @@ import {
   recordCanonicalPATWork,
 } from "../../../src/shell/audit/operations";
 import { livePATAuthority } from "../../../src/shell/tokens/operations";
-import { prepareOwnedStatement } from "../../database/operations";
 import {
   type TransactionBoundaryFailure,
   type TransactionCaller,
@@ -71,19 +70,17 @@ export const budgetAudit = ({
   current: number;
 }>): D1PreparedStatement => {
   if (isPATCaller(subject)) {
-    return prepareOwnedStatement({
-      db,
-      statement: recordCanonicalPATWork({
-        authority: livePATAuthority({ subject, current }),
-        input: {
-          id: transactionId(),
-          current,
-          operation,
-          outcome: "accepted",
-          afterOwnerWrite: true,
-        },
-      }),
+    const auditStatement = recordCanonicalPATWork({
+      authority: livePATAuthority({ subject, current }),
+      input: {
+        id: transactionId(),
+        current,
+        operation,
+        outcome: "accepted",
+        afterOwnerWrite: true,
+      },
     });
+    return db.prepare(auditStatement.sql).bind(...auditStatement.params);
   }
   const authority = callerAuthority({ subject, current });
   return prepareAuthorizedAuditCall({
@@ -135,11 +132,10 @@ export const authorityReady = ({
   db,
   subject,
   current,
-}: Readonly<{
-  db: D1Database;
-  subject: TransactionCaller;
-  current: number;
-}>): Effect.Effect<boolean, TransactionBoundaryFailure> =>
+}: Readonly<{ db: D1Database; subject: TransactionCaller; current: number }>): Effect.Effect<
+  boolean,
+  TransactionBoundaryFailure
+> =>
   Effect.tryPromise({
     try: () => liveTransactionAuthority({ db, subject, current }),
     catch: boundaryFailure,

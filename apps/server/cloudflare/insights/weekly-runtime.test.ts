@@ -7,7 +7,7 @@ import {
   WhatsAppBusinessPhoneNumberId,
   WhatsAppProviderMessageId,
 } from "../../src/shell/channels/whatsapp/contract";
-import { createWeeklyConsentOffer, findWeeklyConsentGrant } from "../consent/operations";
+import { createWeeklyGovernorConsentOffer, findWeeklyConsentGrant } from "../consent/operations";
 import { prepareInsightRecipient } from "../whatsapp/operations";
 import { WhatsAppStatusAdmission, WhatsAppTurnAdmission } from "../whatsapp/contract";
 import {
@@ -416,11 +416,12 @@ it("a contextual no revokes the category permanently; only a fresh explicit requ
       );
       expect(
         Option.isNone(
-          yield* createWeeklyConsentOffer({
+          yield* createWeeklyGovernorConsentOffer({
             db: fixture.db,
             userId,
             caller: weeklySummaryTestCaller,
             now: DateTime.makeUnsafe(fixture.at.epochMilliseconds + 1),
+            request: { _tag: "ShortOffer", origin: "proactive" },
           })
         )
       ).toBe(true);

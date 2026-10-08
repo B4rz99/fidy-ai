@@ -29,10 +29,8 @@ import {
   transactionId,
   transactionUnavailable,
 } from "../../canonical-work/operations";
-import { prepareOwnedStatement } from "../../database/operations";
 import { recordAuditedPATUseFromAuthority } from "../../../src/shell/tokens/operations";
 import { decodeScheduleSnapshot, findSchedule, prepareRevisionWrites } from "./reminder-schedule";
-
 import { type ReminderCanonicalWork as Work } from "../contract";
 
 type Operation =
@@ -87,25 +85,19 @@ const audit = ({
     ];
   }
   const statements = [
-    prepareOwnedStatement({
-      db: work.db,
-      statement: recordCanonicalPATWork({
-        authority: work.authority,
-        input: { id, operation, outcome, current: work.current, afterOwnerWrite },
-      }),
+    recordCanonicalPATWork({
+      authority: work.authority,
+      input: { id, operation, outcome, current: work.current, afterOwnerWrite },
     }),
-  ];
+  ].map(({ sql, params }) => work.db.prepare(sql).bind(...params));
+
   if (outcome === "accepted") {
-    statements.push(
-      prepareOwnedStatement({
-        db: work.db,
-        statement: recordAuditedPATUseFromAuthority({
-          authority: work.authority,
-          current: work.current,
-          evidence: recordedPATCallProof({ auditId: id, operation }),
-        }),
-      })
-    );
+    const auditStatement = recordAuditedPATUseFromAuthority({
+      authority: work.authority,
+      current: work.current,
+      evidence: recordedPATCallProof({ auditId: id, operation }),
+    });
+    statements.push(work.db.prepare(auditStatement.sql).bind(...auditStatement.params));
   }
   return statements;
 };
@@ -280,6 +272,7 @@ export const prepareHeldReminderRevision = (
             afterOwnerWrite: true,
           }),
         ],
+
         auditBudget: work.authority.table === "pats" ? "shared" : "owner",
         commitGuards:
           work.authority.table === "pats"

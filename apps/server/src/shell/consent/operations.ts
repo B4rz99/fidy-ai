@@ -5,10 +5,6 @@ import { proactivityDisclosure } from "~/shell/consent/internal/proactivity-disc
 import { DisclosureSnapshot } from "~/core/consent/contract";
 import { decidePATRevocation } from "~/core/consent/operations";
 import { type OwnedStatement } from "~/shell/owner-write/contract";
-import {
-  userRevocationProofStatement,
-  userRevocationStatement,
-} from "~/shell/consent/internal/oauth-management";
 import { currentDisclosureFacts } from "~/shell/consent/internal/current-disclosure";
 import {
   expirePATConsentsStatement,
@@ -36,6 +32,7 @@ import {
   type OAuthGrantConsentInput,
   type OAuthGrantConsentSubject,
   type OAuthReplayConsentInput,
+  type OAuthUserRevocationInput,
   type PATRevocationProtection,
   type PairedPATConsentInput,
   type ProactivityOptInKind,
@@ -58,6 +55,10 @@ export {
   decidePATRevocation,
   isConsentIngressDecisionPhase,
 } from "~/core/consent/operations";
+
+const revocationRevision = "oauth-revoke-2026-10";
+const revocationDisclosure =
+  "Revocar este acceso detiene llamadas y renovaciones futuras; no deshace acciones ya realizadas.";
 
 /** Append the exact reviewed OAuth grant after its guarded connection insertion in the same unit. */
 export const grantOAuthConsent = (input: OAuthGrantConsentInput): OwnedStatement => ({
@@ -87,11 +88,27 @@ export const grantOAuthConsent = (input: OAuthGrantConsentInput): OwnedStatement
   ],
 });
 /** Appends the exact first-party decision for each owner-selected same-User grant, in its revocation unit. Already terminal grants gain no duplicate evidence. */
-export const revokeOAuthUserConsent: typeof userRevocationStatement = (input) =>
-  userRevocationStatement(input);
+export const revokeOAuthUserConsent = (input: OAuthUserRevocationInput): OwnedStatement => ({
+  sql: `INSERT INTO oauth_user_revocation_consents(connection_id,user_id,session_id,reason,disclosure_revision,disclosure_text,occurred_at_ms)
+    SELECT selected.connection_id,selected.user_id,?,?,?,?,? FROM (${input.selection.sql}) selected
+    WHERE selected.user_id = ? AND EXISTS (SELECT 1 FROM oauth_grant_consents c WHERE c.connection_id = selected.connection_id AND c.user_id = selected.user_id)`,
+  params: [
+    input.session.id,
+    input.reason,
+    revocationRevision,
+    revocationDisclosure,
+    input.current,
+    ...input.selection.params,
+    input.session.user_id,
+  ],
+});
 /** Requires the same fresh browser decision's immutable Consent evidence for each terminal transition. */
-export const oauthUserRevocationProof: typeof userRevocationProofStatement = (input) =>
-  userRevocationProofStatement(input);
+export const oauthUserRevocationProof = (
+  input: Pick<OAuthUserRevocationInput, "session" | "current" | "reason">
+): OwnedStatement => ({
+  sql: `SELECT connection_id FROM oauth_user_revocation_consents WHERE user_id = ? AND session_id = ? AND reason = ? AND occurred_at_ms = ?`,
+  params: [input.session.user_id, input.session.id, input.reason, input.current],
+});
 /** Automatic replay cleanup requires same-User grant evidence and atomic replay selection, not renewed Consent to issue credentials. */
 export const revokeOAuthReplayConsent = (input: OAuthReplayConsentInput): OwnedStatement => ({
   sql: `INSERT INTO oauth_revocation_consents(id,user_id,connection_id,reason,occurred_at_ms)

@@ -14,8 +14,6 @@ import {
   rateLimitedTransactionResponse,
 } from "../canonical-work/operations";
 import { newId } from "../secret-material/operations";
-import { prepareOwnedStatement } from "../database/operations";
-
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { allowanceMeter, allowancePeriod } from "../../src/core/quotas/operations";
 import {
@@ -250,15 +248,12 @@ export const executeProtectedQuotaQuery = ({
         }),
         ...(isPATCaller(subject)
           ? [
-              prepareOwnedStatement({
-                db,
-                statement: recordAuditedPATUseFromAuthority({
-                  authority: livePATAuthority({ subject, current }),
-                  current,
-                  evidence: recordedPATCallProof({ auditId, operation: "quota.getQuota" }),
-                }),
+              recordAuditedPATUseFromAuthority({
+                authority: livePATAuthority({ subject, current }),
+                current,
+                evidence: recordedPATCallProof({ auditId, operation: "quota.getQuota" }),
               }),
-            ]
+            ].map(({ sql, params }) => db.prepare(sql).bind(...params))
           : []),
       ])
     );

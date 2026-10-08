@@ -31,7 +31,6 @@ import {
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { RequestBodyPolicy } from "../../http/contract";
 import { boundedJsonBody } from "../../http/operations";
-import { prepareOwnedStatement } from "../../database/operations";
 import { ResourceAdmissionRefused } from "../../resource-admission/contract";
 import {
   admitStatementUpload,
@@ -372,21 +371,19 @@ const readStatements = (
     ];
   }
   return [
-    prepareOwnedStatement({ db: database, statement: recordLivePATUse({ subject, current }) }),
-    prepareOwnedStatement({
-      db: database,
-      statement: recordCanonicalPATWork({
-        input: {
-          afterOwnerWrite: false,
-          current,
-          id: newIngestionId(),
-          operation,
-          outcome: "accepted",
-        },
-        authority: livePATAuthority({ subject, current }),
-      }),
+    recordLivePATUse({ subject, current }),
+
+    recordCanonicalPATWork({
+      input: {
+        afterOwnerWrite: false,
+        current,
+        id: newIngestionId(),
+        operation,
+        outcome: "accepted",
+      },
+      authority: livePATAuthority({ subject, current }),
     }),
-  ];
+  ].map(({ sql, params }) => database.prepare(sql).bind(...params));
 };
 
 /** Commits one read's attribution unit: `None` when it stands, or the refusal a dead authority

@@ -4,7 +4,6 @@ import type { CanonicalOperationId } from "../../../src/core/canonical-operation
 import type { CanonicalRefusalDisposition } from "../../canonical-work/contract";
 import { recordOAuthCall } from "../../../src/shell/audit/operations";
 import { liveOAuthAuthority } from "../../../src/shell/oauth-agents/operations";
-import { prepareOwnedStatement } from "../../database/operations";
 import { newId } from "../../secret-material/operations";
 import { operationCatalog } from "../../../src/shell/api";
 import {
@@ -23,18 +22,19 @@ export const recordOAuthRefusal = (
     operation: CanonicalOperationId;
   }>
 ): Effect.Effect<CanonicalRefusalDisposition> =>
-  Effect.tryPromise(() =>
-    prepareOwnedStatement({
-      db: input.db,
-      statement: recordOAuthCall({
-        authority: liveOAuthAuthority(input),
-        id: newId(),
-        current: input.current,
-        operation: input.operation,
-        outcome: "rejected",
-      }),
-    }).run()
-  ).pipe(
+  Effect.tryPromise(() => {
+    const auditStatement = recordOAuthCall({
+      authority: liveOAuthAuthority(input),
+      id: newId(),
+      current: input.current,
+      operation: input.operation,
+      outcome: "rejected",
+    });
+    return input.db
+      .prepare(auditStatement.sql)
+      .bind(...auditStatement.params)
+      .run();
+  }).pipe(
     Effect.map((recorded): CanonicalRefusalDisposition =>
       recorded.meta.changes === 1 ? "recorded" : "credential_refused"
     ),

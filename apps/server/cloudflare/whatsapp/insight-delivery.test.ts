@@ -7,7 +7,10 @@ import {
   WhatsAppBusinessPhoneNumberId,
   WhatsAppProviderMessageId,
 } from "../../src/shell/channels/whatsapp/contract";
-import { createWeeklyConsentOffer, recordWeeklyConsentDisclosure } from "../consent/operations";
+import {
+  createWeeklyGovernorConsentOffer,
+  recordWeeklyConsentDisclosure,
+} from "../consent/operations";
 import {
   findWeeklySummaryReport,
   materializeWeeklySummary,
@@ -324,7 +327,12 @@ it.live("a staged report cannot send after explicit revocation", () =>
       caller: weeklySummaryTestCaller,
       now: input.now,
     };
-    const offer = Option.getOrThrow(yield* createWeeklyConsentOffer(context));
+    const offer = Option.getOrThrow(
+      yield* createWeeklyGovernorConsentOffer({
+        ...context,
+        request: { _tag: "ShortOffer", origin: "proactive" },
+      })
+    );
     yield* recordWeeklyConsentDisclosure({
       ...context,
       offerId: offer.id,

@@ -16,7 +16,6 @@ import {
   recordCanonicalPATWork,
 } from "../../../src/shell/audit/operations";
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
-import { prepareOwnedStatement } from "../../database/operations";
 import {
   type QueryCaller,
   callerAuthority,
@@ -61,33 +60,37 @@ const auditStatements = ({
 }: Call): ReadonlyArray<D1PreparedStatement> => {
   const authority = callerAuthority({ subject, current });
   const outcome = accepted ? "accepted" : "rejected";
+  let audit: D1PreparedStatement;
+  if (isPATCaller(subject)) {
+    const auditStatement = recordCanonicalPATWork({
+      authority: livePATAuthority({ subject, current }),
+      input: {
+        id: transactionId(),
+        operation: "recurring.listRecurringSeries",
+        current,
+        outcome,
+        afterOwnerWrite: false,
+      },
+    });
+    audit = db.prepare(auditStatement.sql).bind(...auditStatement.params);
+  } else {
+    audit = prepareAuthorizedAuditCall({
+      db,
+      authority,
+      id: transactionId(),
+      operation: "recurring.listRecurringSeries",
+      current,
+      outcome,
+      afterOwnerWrite: false,
+    });
+  }
   return [
     ...(isPATCaller(subject)
-      ? [prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) })]
+      ? [recordLivePATUse({ subject, current })].map(({ sql, params }) =>
+          db.prepare(sql).bind(...params)
+        )
       : []),
-    isPATCaller(subject)
-      ? prepareOwnedStatement({
-          db,
-          statement: recordCanonicalPATWork({
-            authority: livePATAuthority({ subject, current }),
-            input: {
-              id: transactionId(),
-              operation: "recurring.listRecurringSeries",
-              current,
-              outcome,
-              afterOwnerWrite: false,
-            },
-          }),
-        })
-      : prepareAuthorizedAuditCall({
-          db,
-          authority,
-          id: transactionId(),
-          operation: "recurring.listRecurringSeries",
-          current,
-          outcome,
-          afterOwnerWrite: false,
-        }),
+    audit,
     db
       .prepare(
         `INSERT INTO recurring_assertion (id, accepted) VALUES (1, CASE WHEN changes() = 1 AND EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.predicate}) THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted`

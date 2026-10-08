@@ -1,7 +1,7 @@
 import {
-  applyTestMigration,
   canonicalAdmissionMigrationNames,
   hostedTurnTestMigrations,
+  installTestSchema,
   isolatedTestDatabases,
   statementAuditTestMigrations,
 } from "../d1-test-fixture";
@@ -126,11 +126,14 @@ const setup = (): Promise<{
         "0018_insight_events",
         ...statementAuditTestMigrations,
       ];
-      for (const name of canonicalAdmissionMigrationNames(migrationNames)) {
-        yield* awaitPromise(
-          applyTestMigration({ db, source: new URL(`../migrations/${name}.sql`, import.meta.url) })
-        );
-      }
+      yield* awaitPromise(
+        installTestSchema({
+          db,
+          sources: canonicalAdmissionMigrationNames(migrationNames).map(
+            (name) => new URL(`../migrations/${name}.sql`, import.meta.url)
+          ),
+        })
+      );
       const createSession = (user: string, index: number): Promise<string> =>
         runTest(
           Effect.gen(function* () {

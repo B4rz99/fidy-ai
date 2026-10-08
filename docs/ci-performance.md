@@ -74,7 +74,21 @@ separate ports, certificates, build outputs, Users and databases. Each retains i
 (two web workers and one CLI worker), and other verification groups remain sequential.
 The verifier's rendezvous probe requires both children to start and checks that failure of
 either child fails the gate. All 63 web cases plus the native CLI journey pass locally in 96.7s,
-versus 108.2s sequentially. Final CI must still confirm the three-minute complete-workflow target.
+versus 108.2s sequentially.
+
+[Overlap run 37857113276](https://github.com/B4rz99/fidy-ai/actions/runs/37857113276)
+finished in 3m13s but failed the first-card browser journey: Chromium discarded the response
+body after application navigation. The native CLI journey had finished a minute earlier.
+The test now reads the actual Core reply through `route.fetch()` before fulfilling the original
+browser request; response status, pending payment, provider-only card data and final real Core
+collection assertions remain. All 11 real-Core browser journeys pass locally.
+
+Category keyword-rule and Memory arrangement still replayed each migration separately, despite
+having no migration-history assertions. They now use the native baseline installer. All 25 cases
+pass; test execution measured 10.3/10.5s under local contention versus the preceding 33.7/28.1s
+file estimates. Scheduling conservatively budgets 12s per file. The 64-binding pool experiment
+saved only 1.8s per 64 complete installations and was not adopted; pool size remains 16.
+Final CI must still confirm the three-minute complete-workflow target.
 
 ## Adapter regression follow-up: #1066
 

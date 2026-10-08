@@ -583,6 +583,24 @@ const captureFidyBodies = (page: Page, bodies: Array<string>): void => {
   });
 };
 
+type EnrollmentSubmission = Readonly<{ status: number; body: unknown }>;
+const captureEnrollmentReply = (
+  response: APIResponse,
+  route: Route,
+  capture: ReturnType<typeof Promise.withResolvers<EnrollmentSubmission>>
+): Promise<void> =>
+  response.json().then((body: unknown) => {
+    capture.resolve({ status: response.status(), body });
+    return route.fulfill({ response });
+  });
+const observeEnrollmentSubmission = (
+  page: Page,
+  capture: ReturnType<typeof Promise.withResolvers<EnrollmentSubmission>>
+): ReturnType<Page["route"]> =>
+  page.route(`${api}/web/subscription/payment-enrollments/submit`, (route) =>
+    route.fetch().then((response) => captureEnrollmentReply(response, route, capture))
+  );
+
 test("tokenizes a first card outside Fidy and enrolls through real public and Core routes", ({
   page,
   request,
@@ -610,9 +628,10 @@ test("tokenizes a first card outside Fidy and enrolls through real public and Co
       yield* fromPlaywright(page.getByLabel("Nombre en la tarjeta").fill("Usuario Prueba"));
       yield* fromPlaywright(page.getByLabel(/Acepto el reglamento/iu).check());
       yield* fromPlaywright(page.getByLabel(/Autorizo el tratamiento/iu).check());
-      const submitResponse = page.waitForResponse(
-        (response) => response.url() === `${api}/web/subscription/payment-enrollments/submit`
-      );
+      // The application navigates on this response. Read the real Core reply before
+      // releasing it to Chromium, which can discard response bodies after navigation.
+      const submitResponse = Promise.withResolvers<EnrollmentSubmission>();
+      yield* fromPlaywright(observeEnrollmentSubmission(page, submitResponse));
       yield* fromPlaywright(
         page
           .getByRole("button", {
@@ -620,9 +639,9 @@ test("tokenizes a first card outside Fidy and enrolls through real public and Co
           })
           .click()
       );
-      const submitted = yield* fromPlaywright(submitResponse);
-      expect(submitted.status()).toBe(ok);
-      expect(yield* fromPlaywright(submitted.json())).toMatchObject({
+      const submitted = yield* fromPlaywright(submitResponse.promise);
+      expect(submitted.status).toBe(ok);
+      expect(submitted.body).toMatchObject({
         status: "payment-pending",
       });
       expect(

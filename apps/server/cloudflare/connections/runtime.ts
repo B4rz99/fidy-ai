@@ -1,9 +1,10 @@
 import { protectCanonicalPressure } from "../canonical-admission/operations";
 import { Clock, Effect, Option, Schema } from "effect";
 import {
+  type ConnectionBrowserApi,
   ConnectionContinuationInput,
-  connectionBrowserPaths,
 } from "../../src/shell/connections/contract";
+import { connectionBrowserTransport } from "../../src/shell/connections/runtime";
 import { authenticateCanonicalWebSession } from "../web-session/operations";
 import { ConnectionBrowserAdmission, ConnectionRetentionUnavailable } from "./contract";
 import { continuationFailure, reviewContinuation } from "./internal/browser";
@@ -12,6 +13,7 @@ import { boundedJsonBody } from "../http/operations";
 import type { AuthenticatedWebSession } from "../web-session/contract";
 
 const forbiddenStatus = 403;
+const notFoundStatus = 404;
 const methodNotAllowedStatus = 405;
 const invalidStatus = 400;
 const unauthenticatedStatus = 401;
@@ -94,19 +96,24 @@ const forwardBegin = (
 const admittedBrowserRequest = (
   input: BrowserRequest,
   subject: AuthenticatedWebSession,
-  review: boolean
-): Effect.Effect<Response> =>
-  Effect.gen(function* () {
-    if (!review) return yield* forwardBegin(input, subject);
-    const parsed = reviewInput(input.request);
-    if (Option.isNone(parsed)) return continuationFailure(invalidStatus);
-    return yield* reviewContinuation({
-      db: input.db,
-      subject,
-      attempt: parsed.value.attempt,
-      current: yield* Clock.currentTimeMillis,
-    });
-  });
+  operation: keyof typeof ConnectionBrowserApi.groups.connectionBrowser.endpoints
+): Effect.Effect<Response> => {
+  switch (operation) {
+    case "begin":
+      return forwardBegin(input, subject);
+    case "review":
+      return Effect.gen(function* () {
+        const parsed = reviewInput(input.request);
+        if (Option.isNone(parsed)) return continuationFailure(invalidStatus);
+        return yield* reviewContinuation({
+          db: input.db,
+          subject,
+          attempt: parsed.value.attempt,
+          current: yield* Clock.currentTimeMillis,
+        });
+      });
+  }
+};
 
 /** Browser cookie is the only caller authority; neither URL nor bank handoff can establish identity. */
 export const handleConnectionBrowserRequest = (input: BrowserRequest): Effect.Effect<Response> =>
@@ -114,8 +121,9 @@ export const handleConnectionBrowserRequest = (input: BrowserRequest): Effect.Ef
     if (input.request.headers.get("origin") !== input.browserOrigin) {
       return continuationFailure(forbiddenStatus);
     }
-    const review = new URL(input.request.url).pathname === connectionBrowserPaths.review;
-    if (input.request.method !== (review ? "GET" : "POST")) {
+    const transport = connectionBrowserTransport(new URL(input.request.url).pathname);
+    if (Option.isNone(transport)) return continuationFailure(notFoundStatus);
+    if (input.request.method !== transport.value.method) {
       return continuationFailure(methodNotAllowedStatus);
     }
     const current = yield* Clock.currentTimeMillis;
@@ -126,7 +134,7 @@ export const handleConnectionBrowserRequest = (input: BrowserRequest): Effect.Ef
     return yield* protectCanonicalPressure({
       db: input.db,
       userId: session.value.userId,
-      work: admittedBrowserRequest(input, session.value, review),
+      work: admittedBrowserRequest(input, session.value, transport.value.operation),
       refused: (response) => Effect.succeed(continuationFailure(response.status)),
     });
   }).pipe(Effect.orElseSucceed(() => continuationFailure(unavailableStatus)));

@@ -1,0 +1,23 @@
+infra/cloudflare/production-release.ts
+  s_e3b9a05f422f64::t_6bfa7643a19765 231-237
+  s_e3b9a05f422f64::t_cf79f76f6976c7 227-230,238-239
+infra/cloudflare/production-release.test.ts
+  s_e3b9a05f422f64::t_6bfa7643a19765 18-30,32-38
+  s_e3b9a05f422f64::t_63aa1623237cdb 31,39-40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "91797934f3e62058c77ec70cc1bc112fa6e6f27b",
+  "prompts": {},
+  "sessions": {
+    "s_e3b9a05f422f64": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a115f2-dfce-7741-a6e9-e22144cd3fad",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

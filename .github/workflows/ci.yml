@@ -190,7 +190,9 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}-headless-shell
       - name: Install Chromium system dependencies
-        run: time bunx --bun playwright install-deps chromium
+        # This disposable runner has no long-lived application daemons to restart.
+        # Run Playwright as root so its apt child retains needrestart's suspend flag.
+        run: time sudo env NEEDRESTART_SUSPEND=1 "$(command -v bun)" x --bun playwright install-deps chromium
       # Default headless Chromium launches the shell, not the full headed browser.
       # Still run installation on cache hits to validate/download any missing binaries.
       - name: Install Chromium headless shell
@@ -204,7 +206,7 @@ jobs:
           VERIFY_TIMING_REPORT: apps/web/test-results/verify-browser.json
         run: |
           # Playwright install-deps already refreshed the package index.
-          sudo apt-get install -y --no-install-recommends dbus-x11 gnome-keyring libsecret-1-0
+          sudo env NEEDRESTART_SUSPEND=1 apt-get install -y --no-install-recommends dbus-x11 gnome-keyring libsecret-1-0
           dbus-run-session -- bash -euc '
             printf "%s" fidy-test-keyring | gnome-keyring-daemon --unlock --components=secrets
             bun run --cwd apps/cli test:native

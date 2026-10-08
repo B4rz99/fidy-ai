@@ -84,7 +84,9 @@ retries, sleeps or longer timeouts.
 
 Adapter and browser jobs restore the exact Bun cache without competing to publish the same
 544MB archive; other jobs still publish cache misses. Browser setup reuses Playwright's APT
-index refresh and installs only required native credential-store packages.
+index refresh and installs only required native credential-store packages. Package installation
+suspends `needrestart` daemon maintenance on the disposable runner; all dependency installation
+and native test gates remain.
 
 The 2m54s result includes setup, teardown and Required Checks. It is an observed successful run,
 not a guarantee of GitHub queue latency: an earlier run queued one adapter 36 seconds longer

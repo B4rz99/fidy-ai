@@ -1,6 +1,6 @@
 /// <reference types="bun-types" />
 
-import { Cause, Context, Data, Effect, Layer, Option, Schema, Stream } from "effect";
+import { Cause, Context, Data, Effect, Layer, Option, Schedule, Schema, Stream } from "effect";
 import { Hex } from "effect/encoding";
 import {
   FetchHttpClient,
@@ -93,6 +93,7 @@ const Commands = Schema.Literals([
   "cleanup",
   "report",
   "inspect",
+  "isolate",
 ]);
 const SmokeAttestation = Schema.Struct({
   revision: SmokeIdentity.fields.gitRevision,
@@ -110,6 +111,7 @@ const successStatusStart = 200;
 const successStatusEnd = 300;
 const probeEntropyBytes = 16;
 const inspectionHistoryLimit = 5;
+const recoveryUnavailableStatus = 503;
 const origin = "https://api.fidyapp.com";
 class ReleaseFailure extends Data.TaggedError("ReleaseFailure")<{ message: string }> {}
 
@@ -734,6 +736,177 @@ const stage = Effect.fn(function* (port: ReleasePort, env: Config) {
   });
   yield* writeFile(env.file, encodeJson(result));
 });
+
+/** Restricted to the inspected incident; ordinary releases cannot select this recovery path. */
+const isolate = Effect.fn(function* (
+  port: ReleasePort,
+  env: Config,
+  client: HttpClient.HttpClient
+) {
+  const snapshot = yield* Schema.decodeUnknownEffect(releaseSchemas.snapshot)(
+    yield* readFile(env.file)
+  );
+  if (
+    snapshot.public.stableVersionId !== "047a8004-15bd-4959-b064-0f020a529089" ||
+    snapshot.core.stableVersionId !== "fa578c5f-2e94-4507-ba70-1fe4fe4dd150"
+  ) {
+    return yield* new ReleaseFailure({
+      message: "Isolation refused: inspected incident baseline changed",
+    });
+  }
+  const workers = yield* workersFromState();
+  if (
+    workers.public.workerName !== snapshot.public.name ||
+    workers.core.workerName !== snapshot.core.name ||
+    Option.isNone(workers.public.versionId) ||
+    Option.isNone(workers.core.versionId)
+  ) {
+    return yield* new ReleaseFailure({ message: "Isolation candidate receipts are incomplete" });
+  }
+  const candidate = {
+    publicVersionId: workers.public.versionId.value,
+    coreVersionId: workers.core.versionId.value,
+  };
+  yield* Effect.all(
+    [
+      verifyIsolationCandidate(env, client, {
+        name: snapshot.public.name,
+        version: candidate.publicVersionId,
+      }),
+      verifyIsolationCandidate(env, client, {
+        name: snapshot.core.name,
+        version: candidate.coreVersionId,
+      }),
+    ],
+    { concurrency: 2 }
+  );
+  yield* proveRecoveryCorePrivate(env, client, snapshot.core.name);
+  const result = yield* releaseController.isolateRelease(port, snapshot, {
+    candidate,
+    proveIsolation: (version) =>
+      proveRecoveryIsolation(client, env.smokeProof, version).pipe(
+        Effect.andThen(proveRecoveryCorePrivate(env, client, snapshot.core.name))
+      ),
+  });
+  yield* writeFile(env.file, encodeJson({ snapshot, ...result }));
+});
+
+const IsolationVersion = Schema.Struct({
+  success: Schema.Literal(true),
+  result: Schema.Struct({
+    id: VersionId,
+    resources: Schema.Struct({
+      bindings: Schema.Array(
+        Schema.Struct({
+          name: Schema.String,
+          type: Schema.String,
+          text: Schema.optional(Schema.String),
+        })
+      ),
+    }),
+  }),
+});
+const verifyIsolationCandidate = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  worker: { name: string; version: string }
+) {
+  const { name, version } = worker;
+  const raw = yield* providerJson(
+    HttpClientRequest.get(
+      `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(name)}/versions/${version}`,
+      { headers: { authorization: `Bearer ${env.token}` } }
+    )
+  ).pipe(Effect.provideService(HttpClient.HttpClient, client));
+  const candidate = yield* Schema.decodeUnknownEffect(IsolationVersion)(raw);
+  if (
+    candidate.result.id !== version ||
+    !candidate.result.resources.bindings.some(
+      (binding) =>
+        binding.name === "RECOVERY_ISOLATION" &&
+        binding.type === "plain_text" &&
+        binding.text === "isolated"
+    )
+  ) {
+    return yield* new ReleaseFailure({ message: "Candidate does not enforce recovery isolation" });
+  }
+});
+
+const proveRecoveryIsolation = Effect.fn(
+  function* (client: HttpClient.HttpClient, proof: string, version: string) {
+    const response = yield* client.execute(
+      HttpClientRequest.get(`${origin}/web/providers/disclosure`, {
+        headers: { "x-fidy-smoke-proof": proof },
+      })
+    );
+    if (
+      response.status !== recoveryUnavailableStatus ||
+      response.headers["x-fidy-recovery-isolation"] !== "isolated" ||
+      response.headers["x-fidy-smoke-worker-version"] !== version
+    ) {
+      return yield* new ReleaseFailure({
+        message: "Public recovery isolation not confirmed; Core unchanged",
+      });
+    }
+  },
+  Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 6 })
+);
+
+/** Read every public route on the inspected zone and account, including workers.dev previews. */
+const proveRecoveryCorePrivate = Effect.fn(function* (
+  env: Config,
+  client: HttpClient.HttpClient,
+  name: string
+) {
+  const account = `https://api.cloudflare.com/client/v4/accounts/${env.account}`;
+  const headers = { authorization: `Bearer ${env.token}` };
+  const raw = yield* Effect.all(
+    {
+      subdomain: providerJson(
+        HttpClientRequest.get(`${account}/workers/scripts/${encodeURIComponent(name)}/subdomain`, {
+          headers,
+        })
+      ),
+      domains: providerJson(HttpClientRequest.get(`${account}/workers/domains`, { headers })),
+      routes: providerJson(
+        HttpClientRequest.get(
+          "https://api.cloudflare.com/client/v4/zones/d94aec07ff939334b56ab53931609e58/workers/routes",
+          { headers }
+        )
+      ),
+    },
+    { concurrency: 3 }
+  ).pipe(Effect.provideService(HttpClient.HttpClient, client));
+  yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      success: Schema.Literal(true),
+      result: Schema.Struct({
+        enabled: Schema.Literal(false),
+        previews_enabled: Schema.Literal(false),
+      }),
+    })
+  )(raw.subdomain);
+  const domains = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      success: Schema.Literal(true),
+      result: Schema.Array(Schema.Struct({ service: Schema.String })),
+    })
+  )(raw.domains);
+  const routes = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      success: Schema.Literal(true),
+      result: Schema.Array(
+        Schema.Struct({ script: Schema.optional(Schema.NullOr(Schema.String)) })
+      ),
+    })
+  )(raw.routes);
+  if (
+    domains.result.some((domain) => domain.service === name) ||
+    routes.result.some((route) => route.script === name)
+  ) {
+    return yield* new ReleaseFailure({ message: "Recovery refused: Core is publicly reachable" });
+  }
+});
 const stablePairUnchanged = Effect.fn(function* (port: ReleasePort, snapshot: ReleaseSnapshot) {
   const publicDeployment = yield* port.current(snapshot.public.name);
   const coreDeployment = yield* port.current(snapshot.core.name);
@@ -1005,7 +1178,9 @@ if (import.meta.main) {
     const services = yield* Layer.build(FetchHttpClient.layer);
     const client = Context.get(services, HttpClient.HttpClient);
     const port = releasePort({ env: environment, client });
-    yield* runRouting({ command, port, env: environment, client });
+    yield* command === "isolate"
+      ? isolate(port, environment, client)
+      : runRouting({ command, port, env: environment, client });
     yield* writeFile(Bun.stdout, "Production release routing step passed.\n");
   }).pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }), Effect.scoped);
   await Effect.runPromise(

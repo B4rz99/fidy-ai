@@ -53,6 +53,7 @@ type CoreEnvironment = ProviderEnvironment &
     readonly WOMPI_INTEGRITY_SECRET: string;
   } & Partial<
     Readonly<{
+      RECOVERY_ISOLATION: string;
       BILLING_SUPPORT_AUDIENCE: string;
       BILLING_REFUND_WORKFLOW: Workflow;
       WOMPI_DAVIPLATA_ACTIVATED: string;

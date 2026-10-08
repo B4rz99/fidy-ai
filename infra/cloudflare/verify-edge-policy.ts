@@ -16,12 +16,19 @@ import { edgeSecurityPolicy } from "./edge-security";
 // Includes Connections-owned browser transport recognition and cookie-only forwarding policy.
 // Includes #1086 provider callbacks, anonymous provider admission, and removal of email signup resources.
 // Includes #305's static sandbox JWKS and fail-closed registration callback without Core authority.
-const expectedEdgePolicyDigest = "bccaa054048ce25c7e13eda4ca4fecdaa2c66f8e0b5c2d0403b94e1bbbcd4f3f";
+// Includes #1086's incident-only isolated public/Core admission and gated recovery uploads.
+const expectedEdgePolicyDigest = "5a2e2ba5070ef2629ac944d864996834fa6f731aa2afdca659cc78c62c934053";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),
   await Bun.file(new URL("worker-observability.ts", import.meta.url)).text(),
   await Bun.file(new URL("../../apps/server/cloudflare/public-worker.ts", import.meta.url)).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/release-isolation/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/core-http/runtime.ts", import.meta.url)
+  ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/bancolombia-sandbox/operations.ts", import.meta.url)
   ).text(),

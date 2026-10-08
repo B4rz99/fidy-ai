@@ -298,4 +298,45 @@ const promoteRelease = Effect.fn(function* (
   return { publicDeploymentId: publicPromoted.id, coreDeploymentId: corePromoted.id };
 });
 
-export const releaseController = { captureRelease, deployExact, stageRelease, promoteRelease };
+/** Incident recovery never retains the incompatible Core in a split or reopens public admission. */
+const isolateRelease = Effect.fn(function* (
+  port: ReleasePort,
+  snapshot: ReleaseSnapshot,
+  input: {
+    candidate: { publicVersionId: string; coreVersionId: string };
+    proveIsolation: (publicVersionId: string) => Effect.Effect<void, Error>;
+  }
+) {
+  const { candidate, proveIsolation } = input;
+  const publicVersionId = yield* Schema.decodeEffect(VersionId)(candidate.publicVersionId);
+  const coreVersionId = yield* Schema.decodeEffect(VersionId)(candidate.coreVersionId);
+  if (
+    publicVersionId === snapshot.public.stableVersionId ||
+    coreVersionId === snapshot.core.stableVersionId
+  ) {
+    return yield* Effect.fail(Error("Isolation requires newly uploaded Worker versions"));
+  }
+  yield* requireTrunk(port, snapshot.revision);
+  yield* requireDeployment(port, snapshot.public.name, stable(snapshot.public));
+  yield* requireDeployment(port, snapshot.core.name, stable(snapshot.core));
+  const publicDeployment = yield* deployExact(port, snapshot.public.name, [
+    { id: publicVersionId, percentage: 100 },
+  ]);
+  yield* proveIsolation(publicVersionId);
+  yield* requireTrunk(port, snapshot.revision);
+  yield* requireDeployment(port, snapshot.public.name, publicDeployment);
+  yield* requireDeployment(port, snapshot.core.name, stable(snapshot.core));
+  const coreDeployment = yield* deployExact(port, snapshot.core.name, [
+    { id: coreVersionId, percentage: 100 },
+  ]);
+  yield* requireDeployment(port, snapshot.public.name, publicDeployment);
+  return { publicVersionId, coreVersionId, publicDeployment, coreDeployment };
+});
+
+export const releaseController = {
+  captureRelease,
+  deployExact,
+  stageRelease,
+  promoteRelease,
+  isolateRelease,
+};

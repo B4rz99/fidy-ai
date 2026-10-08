@@ -37,19 +37,27 @@ Google, Microsoft, Kapso or Cloudflare Access evidence.
 Manual Production check: the public signup link opens `/auth/google`, but its Consent loading
 fails. `GET https://api.fidyapp.com/web/providers/disclosure` returns 404. API `/health` reports
 `449b2a47726c6b88133d84488b90c65e0a6c6beb`, before provider signup was implemented.
-The [diagnostic deployment](https://github.com/B4rz99/fidy-ai/actions/runs/37851881795) failed during
-zero-traffic routing with Cloudflare API code 10210; guarded cleanup succeeded.
+The [diagnostic deployment](https://github.com/B4rz99/fidy-ai/actions/runs/37854432026) failed during
+zero-traffic routing with Cloudflare API code 10210 and `resource=queue`; guarded cleanup succeeded.
 Signup is **blocked in Production**, not verified.
 
 Read-only [traffic inspection](https://github.com/B4rz99/fidy-ai/actions/runs/37848592357)
 confirmed stable public/Core traffic and no topology drift. The uploaded candidate exists. Both
 stable and candidate Core versions are listed as deployable, but the stable Core's referenced
 onboarding Workflow returns 404 and its onboarding Queue binding reports `queue_deleted: true`.
-All other stable Queue and Workflow references resolve. These are deployment-compatibility leads;
-the numeric rejection alone does not establish which resource caused it. Do not force promotion.
+All other stable Queue and Workflow references resolve. The native refusal now confirms the Queue
+category, consistent with the deleted onboarding Queue. Do not force promotion.
+
+The incident recovery uses isolated Ingress/Core admission, checks private Core reachability,
+and requires normal-routing synthetic proof before the ordinary release gates. Regression checks
+cover denial even with a valid smoke proof, proof-before-Core ordering, failed proof and a superseded
+revision. The [recovery procedure](../../../../../docs/operations/production-recovery.md) preserves
+existing User records; it remains pending in Production.
 
 Live Ingress/Core settings disable invocation logs, traces, Worker Logpush and tail consumers.
-Account-wide Logpush inspection was refused (403), so callback logging exclusion is not fully verified.
+Authenticated dashboard inspection shows Logpush subscription prompts at account and domain level,
+and no OpenTelemetry export destinations. Callback invocation records are disabled; actual live
+provider callbacks remain untested.
 
 Remaining: restore a matching deployed web/API release; verify real Google and Microsoft personal
 and work/school signup/returning login/denial with test identities; real WhatsApp association and

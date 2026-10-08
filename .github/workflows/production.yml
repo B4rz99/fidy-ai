@@ -4,6 +4,11 @@ on:
   push:
     branches: [trunk]
   workflow_dispatch:
+    inputs:
+      recover_deleted_queue:
+        description: Recover the inspected deleted Queue incident under isolated public admission
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -69,6 +74,7 @@ jobs:
       - name: Plan the complete Cloudflare topology
         working-directory: infra/cloudflare
         env:
+          RECOVERY_ISOLATION: ${{ inputs.recover_deleted_queue && 'isolated' || '' }}
           MICROSOFT_CLIENT_ID: ${{ secrets.MICROSOFT_CLIENT_ID }}
           MICROSOFT_CLIENT_SECRET: ${{ secrets.MICROSOFT_CLIENT_SECRET }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
@@ -111,6 +117,61 @@ jobs:
       - name: Upload zero-traffic Worker candidates with Alchemy
         working-directory: infra/cloudflare
         env:
+          RECOVERY_ISOLATION: ${{ inputs.recover_deleted_queue && 'isolated' || '' }}
+          MICROSOFT_CLIENT_ID: ${{ secrets.MICROSOFT_CLIENT_ID }}
+          MICROSOFT_CLIENT_SECRET: ${{ secrets.MICROSOFT_CLIENT_SECRET }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          KAPSO_API_KEY: ${{ secrets.KAPSO_API_KEY }}
+          KAPSO_WEBHOOK_SECRET: ${{ secrets.KAPSO_WEBHOOK_SECRET }}
+          WHATSAPP_BUSINESS_PORTFOLIO_ID: ${{ secrets.WHATSAPP_BUSINESS_PORTFOLIO_ID }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          WOMPI_ENVIRONMENT: ${{ secrets.WOMPI_ENVIRONMENT }}
+          WOMPI_PUBLIC_KEY: ${{ secrets.WOMPI_PUBLIC_KEY }}
+          WOMPI_PRIVATE_KEY: ${{ secrets.WOMPI_PRIVATE_KEY }}
+          WOMPI_INTEGRITY_SECRET: ${{ secrets.WOMPI_INTEGRITY_SECRET }}
+          WOMPI_EVENT_SECRET: ${{ secrets.WOMPI_EVENT_SECRET }}
+          CLOUDFLARE_ACCESS_ISSUER: ${{ secrets.CLOUDFLARE_ACCESS_ISSUER }}
+          CLOUDFLARE_ACCESS_AUDIENCE: ${{ secrets.CLOUDFLARE_ACCESS_AUDIENCE }}
+        run: |
+          bash scripts/check-production-runtime-config.sh
+          alchemy() { bun ../../node_modules/alchemy/bin/alchemy.js "$@"; }
+          alchemy deploy --stage production --yes --no-input
+
+      - name: Isolate public admission before replacing incompatible private Core
+        if: ${{ inputs.recover_deleted_queue }}
+        working-directory: infra/cloudflare
+        run: bun production-release.ts isolate
+
+      - name: Export isolated recovery smoke identities
+        if: ${{ inputs.recover_deleted_queue }}
+        run: |
+          {
+            echo "PUBLIC_VERSION_ID=$(jq -r .publicVersionId "$RELEASE_SNAPSHOT_FILE")"
+            echo "CORE_VERSION_ID=$(jq -r .coreVersionId "$RELEASE_SNAPSHOT_FILE")"
+            echo "PUBLIC_WORKER_NAME=$(jq -r .snapshot.public.name "$RELEASE_SNAPSHOT_FILE")"
+            echo "CORE_WORKER_NAME=$(jq -r .snapshot.core.name "$RELEASE_SNAPSHOT_FILE")"
+            echo "STABLE_PUBLIC_VERSION_ID=$(jq -r .snapshot.public.stableVersionId "$RELEASE_SNAPSHOT_FILE")"
+            echo "STABLE_RELEASE_GIT_SHA=$(jq -r .snapshot.stableRevision "$RELEASE_SNAPSHOT_FILE")"
+            echo "STABLE_CONTRACT_DIGEST=$(jq -r .snapshot.stableContractDigest "$RELEASE_SNAPSHOT_FILE")"
+          } >> "$GITHUB_ENV"
+
+      - name: Prove isolated recovery through normal Worker routing
+        if: ${{ inputs.recover_deleted_queue }}
+        working-directory: infra/cloudflare
+        run: bun verify-production-smoke.ts promoted
+
+      - name: Capture the proven isolated baseline for ordinary release gates
+        id: recovery_capture
+        if: ${{ inputs.recover_deleted_queue }}
+        working-directory: infra/cloudflare
+        run: bun production-release.ts capture
+
+      - name: Upload ordinary candidates after isolated recovery proof
+        if: ${{ inputs.recover_deleted_queue }}
+        working-directory: infra/cloudflare
+        env:
+          RECOVERY_ISOLATION: ""
           MICROSOFT_CLIENT_ID: ${{ secrets.MICROSOFT_CLIENT_ID }}
           MICROSOFT_CLIENT_SECRET: ${{ secrets.MICROSOFT_CLIENT_SECRET }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
@@ -195,7 +256,7 @@ jobs:
         run: bun production-release.ts rollback
 
       - name: Remove failed zero-traffic candidates when safe
-        if: ${{ failure() && steps.capture.outcome == 'success' && steps.promote.outcome != 'success' }}
+        if: ${{ failure() && steps.capture.outcome == 'success' && steps.promote.outcome != 'success' && (!inputs.recover_deleted_queue || steps.recovery_capture.outcome == 'success') }}
         working-directory: infra/cloudflare
         run: bun production-release.ts cleanup
 

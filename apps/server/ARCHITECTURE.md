@@ -82,6 +82,12 @@ no institution authority. Bancolombia authorization, callback validation, protec
 Account discovery and activation remain pending the verified institution contract; the production
 gate remains disabled.
 
+`cloudflare/bancolombia-sandbox` owns the public registration prerequisite: a static public RSA
+JWKS and an unavailable callback at fixed sandbox paths. Ingress serves these without a Core
+call or private-key binding. The callback strips query parameters through a fixed 303 before
+returning a static unavailable explanation; it performs no authorization or state change.
+See the [sandbox registration guide](../../docs/operations/bancolombia-sandbox-registration.md).
+
 ## 3. Canonical contracts and execution
 
 `src/shell/api.ts` assembles the canonical API from owner declarations.

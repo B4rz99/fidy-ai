@@ -1,0 +1,21 @@
+infra/cloudflare/scripts/migration-history.test.ts
+  s_55523bb8416825::t_701e00751d81b7 12,50-74
+infra/cloudflare/scripts/migration-history.ts
+  s_55523bb8416825::t_701e00751d81b7 152-155,170,307-309
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e7f87152e844c5ca8afe4c2a22aa1d268c8953c4",
+  "prompts": {},
+  "sessions": {
+    "s_55523bb8416825": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11896-74c5-7f82-b3d7-9e3ce7978236",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": null
+    }
+  }
+}

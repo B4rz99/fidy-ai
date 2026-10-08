@@ -1,6 +1,5 @@
 import * as proactivity from "./internal/proactivity-consent";
 import type { ProactivityOptInKind } from "../../src/shell/consent/contract";
-
 import { type ConsentProtectedStatement } from "../../src/shell/consent/contract";
 import { protectConsentStatement } from "../../src/shell/consent/operations";
 import { type Effect, Option } from "effect";
@@ -102,12 +101,6 @@ export const hasWeeklyConsentChoiceReceipt: typeof hasChoiceReceipt = (input) =>
 /** Snapshot the latest same-User rejection so an older requested prompt cannot bypass a later no. */
 export const latestWeeklyConsentRejection: typeof latestRejection = (input) =>
   latestRejection(input);
-
-/** Begin a bounded contextual offer for an authenticated established WhatsAppIdentity. No grant is recorded. */
-export const createWeeklyConsentOffer = (
-  input: WeeklyConsentContext
-): Effect.Effect<Option.Option<WeeklyConsentOffer>, ConsentUnavailable> =>
-  createOffer({ ...input, request: { _tag: "ShortOffer", origin: "proactive" } });
 
 /** Durable governor questions retain their exact retry identity and a bounded 24-hour choice lifetime. */
 export const createWeeklyGovernorConsentOffer = (

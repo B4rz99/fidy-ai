@@ -6,7 +6,6 @@ import {
   oauthUserRevocationProof,
   revokeOAuthUserConsent,
 } from "../../../src/shell/consent/operations";
-import { prepareOwnedStatement } from "../../database/operations";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { type BootstrapUnavailable, dbWork, invalidRequest } from "./bootstrap";
 import { oauthResponse } from "./response";
@@ -52,7 +51,7 @@ const commitRevocation = (input: RevocationPlan): Effect.Effect<unknown, Bootstr
           all ? 1 : 0,
           ...owned.params
         ),
-      prepareOwnedStatement({ db: input.db, statement: evidence }),
+      input.db.prepare(evidence.sql).bind(...evidence.params),
       input.db
         .prepare(
           `UPDATE oauth_connections SET revoked_at_ms = ? WHERE id IN (${proof.sql}) AND user_id = ? AND revoked_at_ms IS NULL AND ${guard.sql}`

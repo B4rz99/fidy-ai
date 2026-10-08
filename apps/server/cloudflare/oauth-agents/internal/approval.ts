@@ -16,7 +16,6 @@ import type { FreshSessionSubject } from "../../../src/shell/web-session/contrac
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { freshSessionConditions } from "../../../src/shell/web-session/operations";
 import { grantOAuthConsent, protectConsentStatement } from "../../../src/shell/consent/operations";
-import { prepareOwnedStatement } from "../../database/operations";
 import { newId, newSecret, secretDigest } from "../../secret-material/operations";
 import { type BootstrapUnavailable, dbWork, invalidRequest } from "./bootstrap";
 import { oauthResponse } from "./response";
@@ -66,20 +65,20 @@ const commitApproval = (
   input: ApprovalInput,
   material: ApprovalMaterial
 ): Effect.Effect<unknown, BootstrapUnavailable> =>
-  dbWork(() =>
-    input.db.batch([
-      prepareOwnedStatement({ db: input.db, statement: grantStatement(input, material) }),
-      prepareOwnedStatement({
-        db: input.db,
-        statement: grantOAuthConsent({
-          id: newId(),
-          connectionId: material.connectionId,
-          session: input.session,
-          current: input.current,
-          scopes: input.choice.scopes,
-          expiresAt: material.expiresAt,
-        }),
-      }),
+  dbWork(() => {
+    const auditStatement = grantStatement(input, material);
+    const auditStatement2 = grantOAuthConsent({
+      id: newId(),
+      connectionId: material.connectionId,
+      session: input.session,
+      current: input.current,
+      scopes: input.choice.scopes,
+      expiresAt: material.expiresAt,
+    });
+    return input.db.batch([
+      input.db.prepare(auditStatement.sql).bind(...auditStatement.params),
+      input.db.prepare(auditStatement2.sql).bind(...auditStatement2.params),
+
       input.db
         .prepare(
           `INSERT INTO oauth_codes (digest,connection_id,challenge,expires_at_ms) SELECT ?,?,?,? WHERE changes() = 1`
@@ -96,8 +95,8 @@ const commitApproval = (
       input.db.prepare(
         "INSERT INTO oauth_atomic_assertion VALUES (1, CASE WHEN changes() = 1 THEN 1 ELSE 0 END) ON CONFLICT(id) DO UPDATE SET accepted = excluded.accepted"
       ),
-    ])
-  );
+    ]);
+  });
 /** Publishes the exact reviewed grant, Consent and callback code as one indivisible unit. */
 export const approveRequest = (
   input: ApprovalInput

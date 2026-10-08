@@ -35,7 +35,6 @@ import {
 } from "./pat-shared";
 import { newId } from "../../secret-material/operations";
 import { commitPATUnit } from "./pat-unit";
-import { prepareOwnedStatement } from "../../database/operations";
 import { authenticateCanonicalWebSession } from "../../web-session/operations";
 import { liveWebSessionAuthority } from "../../../src/shell/identity/operations";
 import type { PATMetadataQuery } from "../contract";
@@ -66,20 +65,17 @@ export const listPATsForCaller = ({ db, subject }: PATMetadataQuery): Effect.Eff
     return yield* Effect.gen(function* () {
       const [rows, recorded] = yield* Effect.tryPromise({
         try: () =>
-          db.batch([
-            prepareOwnedStatement({
-              db,
-              statement: metadata.statement,
-            }),
-            prepareOwnedStatement({
-              db,
-              statement: recordPATList({
+          db.batch(
+            [
+              metadata.statement,
+
+              recordPATList({
                 session,
                 authority,
                 input: { id: newId(), current },
               }),
-            }),
-          ]),
+            ].map(({ sql, params }) => db.prepare(sql).bind(...params))
+          ),
         catch: (error) =>
           refusedByAuditBudget(error) ? ("rate_limited" as const) : ("unavailable" as const),
       });
@@ -148,30 +144,23 @@ export const revokePAT = ({
       commitPATUnit({
         db,
         statements: [
-          prepareOwnedStatement({
-            db,
-            statement: revokeOnePATConsent({
-              session: session.value,
-              input: { id: newId(), shortId, current },
-              candidates: revocablePATGrants({
-                userId: session.value.user_id,
-                shortId: Option.some(shortId),
-                current,
-              }),
+          revokeOnePATConsent({
+            session: session.value,
+            input: { id: newId(), shortId, current },
+            candidates: revocablePATGrants({
+              userId: session.value.user_id,
+              shortId: Option.some(shortId),
+              current,
             }),
           }),
-          prepareOwnedStatement({
-            db,
-            statement: revokeOnePAT({ session: session.value, input: { shortId, current } }),
+
+          revokeOnePAT({ session: session.value, input: { shortId, current } }),
+
+          recordOnePATRevocation({
+            session: session.value,
+            input: { id: newId(), shortId, current },
           }),
-          prepareOwnedStatement({
-            db,
-            statement: recordOnePATRevocation({
-              session: session.value,
-              input: { id: newId(), shortId, current },
-            }),
-          }),
-        ],
+        ].map(({ sql, params }) => db.prepare(sql).bind(...params)),
       })
     ).pipe(
       Effect.map(() => canonical({ shortId })),
@@ -188,51 +177,41 @@ export const revokeAllPATs = ({
     const session = yield* webSession({ request, db, fresh: true });
     if (Option.isNone(session)) return unauthorized();
     const current = yield* Clock.currentTimeMillis;
-    const committed = yield* Effect.tryPromise(() =>
-      commitPATUnit({
+    const committed = yield* Effect.tryPromise(() => {
+      const auditStatement = revokeAllPATConsents({
+        session: session.value,
+        current,
+        candidates: revocablePATGrants({
+          userId: session.value.user_id,
+          current,
+          shortId: Option.none(),
+        }),
+      });
+      const auditStatement2 = revokeEveryPAT({ session: session.value, current });
+      const auditStatement3 = revokeAllPairingConsents({
+        session: session.value,
+        current,
+        candidates: revocablePairingGrants(session.value.user_id),
+      });
+      const auditStatement4 = revokeEveryPairing({ session: session.value, current });
+      const auditStatement5 = recordAllPATRevocations({
+        session: session.value,
+        input: { id: newId(), current },
+      });
+      return commitPATUnit({
         db,
         statements: [
-          prepareOwnedStatement({
-            db,
-            statement: revokeAllPATConsents({
-              session: session.value,
-              current,
-              candidates: revocablePATGrants({
-                userId: session.value.user_id,
-                current,
-                shortId: Option.none(),
-              }),
-            }),
-          }),
-          prepareOwnedStatement({
-            db,
-            statement: revokeEveryPAT({ session: session.value, current }),
-          }),
-          prepareOwnedStatement({
-            db,
-            statement: revokeAllPairingConsents({
-              session: session.value,
-              current,
-              candidates: revocablePairingGrants(session.value.user_id),
-            }),
-          }),
-          prepareOwnedStatement({
-            db,
-            statement: revokeEveryPairing({ session: session.value, current }),
-          }),
+          db.prepare(auditStatement.sql).bind(...auditStatement.params),
+          db.prepare(auditStatement2.sql).bind(...auditStatement2.params),
+          db.prepare(auditStatement3.sql).bind(...auditStatement3.params),
+          db.prepare(auditStatement4.sql).bind(...auditStatement4.params),
           db
             .prepare(patRevokeAllCompletion)
             .bind(session.value.user_id, current, session.value.user_id),
-          prepareOwnedStatement({
-            db,
-            statement: recordAllPATRevocations({
-              session: session.value,
-              input: { id: newId(), current },
-            }),
-          }),
+          db.prepare(auditStatement5.sql).bind(...auditStatement5.params),
         ],
-      })
-    );
+      });
+    });
     if (committed[5]?.meta.changes !== 1) return unauthorized();
     return canonical({ revokedCount: committed[1]?.meta.changes ?? 0 });
   });

@@ -21,7 +21,6 @@ import type {
   OwnerOutcome,
 } from "../../canonical-operations/contract";
 import { newId } from "../../secret-material/operations";
-import { prepareOwnedStatement } from "../../database/operations";
 import {
   type TransactionCaller,
   callerAuthority,
@@ -123,21 +122,19 @@ const rejectionStatement = ({
       afterOwnerWrite: false,
     });
   }
-  return isPATCaller(subject)
-    ? prepareOwnedStatement({
-        db,
-        statement: recordCanonicalPATWork({
-          authority: livePATAuthority({ subject, current }),
-          input: { id, current, operation, outcome: "rejected", afterOwnerWrite: false },
-        }),
-      })
-    : prepareOwnedStatement({
-        db,
-        statement: recordBrowserMemoryWork({
-          subject,
-          input: { id, operation, outcome, afterMutation: false, current },
-        }),
-      });
+  if (isPATCaller(subject)) {
+    const auditStatement = recordCanonicalPATWork({
+      authority: livePATAuthority({ subject, current }),
+      input: { id, current, operation, outcome: "rejected", afterOwnerWrite: false },
+    });
+    return db.prepare(auditStatement.sql).bind(...auditStatement.params);
+  }
+
+  const auditStatement = recordBrowserMemoryWork({
+    subject,
+    input: { id, operation, outcome, afterMutation: false, current },
+  });
+  return db.prepare(auditStatement.sql).bind(...auditStatement.params);
 };
 
 /** The caller-facing message one decided Memory refusal outcome reports. */
@@ -258,11 +255,9 @@ export const findOwnedMemory = ({
   db,
   userId,
   id,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  id: string;
-}>): Effect.Effect<Option.Option<boolean>> =>
+}: Readonly<{ db: D1Database; userId: string; id: string }>): Effect.Effect<
+  Option.Option<boolean>
+> =>
   Effect.tryPromise(() =>
     db.prepare("SELECT 1 FROM memories WHERE user_id = ? AND id = ?").bind(userId, id).first()
   ).pipe(
@@ -280,11 +275,9 @@ export const findMemoryValue = ({
   db,
   userId,
   outcome,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  outcome: MemoryOutcome;
-}>): Effect.Effect<Option.Option<CommittedMutationValue>> =>
+}: Readonly<{ db: D1Database; userId: string; outcome: MemoryOutcome }>): Effect.Effect<
+  Option.Option<CommittedMutationValue>
+> =>
   outcome.operation === "memory.forget"
     ? Effect.succeedSome({
         _tag: "Owner" as const,

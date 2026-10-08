@@ -6,7 +6,6 @@ import {
   recordCanonicalPATWork,
 } from "../../../src/shell/audit/operations";
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
-import { prepareOwnedStatement } from "../../database/operations";
 import {
   collectDashboardCategoryReferences,
   makeDefaultDashboard,
@@ -56,19 +55,17 @@ export const audit = ({
 }>): D1PreparedStatement => {
   const { db, subject, current } = work;
   if (isPATCaller(subject)) {
-    return prepareOwnedStatement({
-      db,
-      statement: recordCanonicalPATWork({
-        authority: livePATAuthority({ subject, current }),
-        input: {
-          id: transactionId(),
-          current,
-          operation,
-          outcome,
-          afterOwnerWrite: false,
-        },
-      }),
+    const auditStatement = recordCanonicalPATWork({
+      authority: livePATAuthority({ subject, current }),
+      input: {
+        id: transactionId(),
+        current,
+        operation,
+        outcome,
+        afterOwnerWrite: false,
+      },
     });
+    return db.prepare(auditStatement.sql).bind(...auditStatement.params);
   }
   const authority = callerAuthority({ subject, current });
   return prepareAuthorizedAuditCall({
@@ -85,14 +82,11 @@ export const audit = ({
 export const credentialUse = (work: MutationContext): ReadonlyArray<D1PreparedStatement> =>
   isPATCaller(work.subject)
     ? [
-        prepareOwnedStatement({
-          db: work.db,
-          statement: recordLivePATUse({
-            subject: work.subject,
-            current: work.current,
-          }),
+        recordLivePATUse({
+          subject: work.subject,
+          current: work.current,
         }),
-      ]
+      ].map(({ sql, params }) => work.db.prepare(sql).bind(...params))
     : [];
 
 class InvalidStoredDashboard extends Data.TaggedError("InvalidStoredDashboard") {}
@@ -182,6 +176,7 @@ export const validCategories = ({
   const ids = [
     ...new Set(collectDashboardCategoryReferences(document).map((item) => item.categoryId)),
   ];
+
   if (ids.length === 0) return Effect.succeedSome(true);
   return listCategories({ db }).pipe(
     Effect.map((categories) =>
@@ -246,11 +241,9 @@ export const findDashboardValue = ({
   db,
   userId,
   operation,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-  operation: DashboardOperation;
-}>): Effect.Effect<Option.Option<CommittedMutationValue>> =>
+}: Readonly<{ db: D1Database; userId: string; operation: DashboardOperation }>): Effect.Effect<
+  Option.Option<CommittedMutationValue>
+> =>
   Effect.gen(function* () {
     const found = yield* findDashboardDocument({ db, userId });
     if (Option.isNone(found)) return Option.none();

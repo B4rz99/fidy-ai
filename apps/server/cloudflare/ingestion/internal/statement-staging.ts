@@ -50,7 +50,6 @@ import { Hex } from "effect/encoding";
 import { activeProUserCondition } from "../../../src/shell/access-tier/operations";
 import { type BoundedBodyReadFailed } from "../../http/contract";
 import { collectBoundedRequestBody } from "../../http/operations";
-import { prepareOwnedStatement } from "../../database/operations";
 import {
   type TransactionAuthority,
   acceptedPATAccountability,
@@ -184,6 +183,7 @@ export type StatementStagingService = Readonly<{
     ExpiredStatementSubmissions,
     StatementStagingUnavailable
   >;
+
   /** Deletes at most one bounded page of expired staging rows and their R2 objects. */
   readonly sweepExpiredStatementStaging: Effect.Effect<
     StatementStagingSweep,
@@ -1210,6 +1210,7 @@ const readyPublication = (
       database: config.database,
     }),
   ],
+
   submissionId: input.submissionId,
 });
 
@@ -1374,13 +1375,11 @@ const statementRefusalEvidence = (
     });
   }
   if (isPATAuthority(input.authority)) {
-    return prepareOwnedStatement({
-      db: input.database,
-      statement: recordRejectedPATWork({
-        authority: input.authority,
-        input: { current: input.current, id: newId(), operation: "ingestion.submitForExtraction" },
-      }),
+    const auditStatement = recordRejectedPATWork({
+      authority: input.authority,
+      input: { current: input.current, id: newId(), operation: "ingestion.submitForExtraction" },
     });
+    return input.database.prepare(auditStatement.sql).bind(...auditStatement.params);
   }
   return statementSubmissionRefusalAudit({
     authority: input.authority,

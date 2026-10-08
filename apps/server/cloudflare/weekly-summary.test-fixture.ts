@@ -14,7 +14,7 @@ import { DisclosureSnapshot } from "../src/core/consent/contract";
 import { UserId, WhatsAppCallerReference } from "../src/core/identity/contract";
 import { currentDisclosureFor } from "../src/shell/consent/operations";
 import {
-  createWeeklyConsentOffer,
+  createWeeklyGovernorConsentOffer,
   recordConsentRevocation,
   recordWeeklyConsentDisclosure,
 } from "./consent/operations";
@@ -253,7 +253,12 @@ export const activateWeeklySummaryForUser = ({
       caller,
       now,
     };
-    const offer = Option.getOrThrow(yield* createWeeklyConsentOffer(context));
+    const offer = Option.getOrThrow(
+      yield* createWeeklyGovernorConsentOffer({
+        ...context,
+        request: { _tag: "ShortOffer", origin: "proactive" },
+      })
+    );
     yield* recordWeeklyConsentDisclosure({
       ...context,
       offerId: offer.id,

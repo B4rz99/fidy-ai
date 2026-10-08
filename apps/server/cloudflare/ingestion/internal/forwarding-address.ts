@@ -10,7 +10,6 @@ import { liveWebSessionAuthority } from "../../../src/shell/identity/operations"
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import { Clock, DateTime, Effect, Option, Schema } from "effect";
 import { activeProUserCondition } from "../../../src/shell/access-tier/operations";
-import { prepareOwnedStatement } from "../../database/operations";
 import {
   type QueryCaller,
   type TransactionCaller,
@@ -30,7 +29,6 @@ import {
   freeForwardedEmailCap,
   freeForwardedEmailDeferredCap,
 } from "../../../src/core/ingestion/contract";
-
 import { emailAllowancePeriod } from "../../../src/core/ingestion/operations";
 
 const AddressRow = Schema.Struct({
@@ -83,35 +81,30 @@ export const forwardingAddressAudit = ({
 }>): ReadonlyArray<D1PreparedStatement> => {
   if (isOAuthCaller(subject)) {
     return [
-      prepareOwnedStatement({
-        db,
-        statement: recordOAuthCall({
-          authority: callerAuthority({ subject, current }),
+      recordOAuthCall({
+        authority: callerAuthority({ subject, current }),
+        id: transactionId(),
+        current,
+        operation,
+        outcome: "accepted",
+      }),
+    ].map(({ sql, params }) => db.prepare(sql).bind(...params));
+  }
+  if (isPATCaller(subject)) {
+    return [
+      recordLivePATUse({ subject, current }),
+
+      recordCanonicalPATWork({
+        authority: livePATAuthority({ subject, current }),
+        input: {
           id: transactionId(),
           current,
           operation,
           outcome: "accepted",
-        }),
+          afterOwnerWrite: false,
+        },
       }),
-    ];
-  }
-  if (isPATCaller(subject)) {
-    return [
-      prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) }),
-      prepareOwnedStatement({
-        db,
-        statement: recordCanonicalPATWork({
-          authority: livePATAuthority({ subject, current }),
-          input: {
-            id: transactionId(),
-            current,
-            operation,
-            outcome: "accepted",
-            afterOwnerWrite: false,
-          },
-        }),
-      }),
-    ];
+    ].map(({ sql, params }) => db.prepare(sql).bind(...params));
   }
   const authority = liveWebSessionAuthority({ subject, current });
   return [
@@ -138,19 +131,17 @@ export const forwardingAddressGuardAudit = ({
   current: number;
 }>): D1PreparedStatement => {
   if (isPATCaller(subject)) {
-    return prepareOwnedStatement({
-      db,
-      statement: recordCanonicalPATWork({
-        authority: livePATAuthority({ subject, current }),
-        input: {
-          id: transactionId(),
-          current,
-          operation: "ingestion.enableEmailForwarding",
-          outcome: "rejected",
-          afterOwnerWrite: false,
-        },
-      }),
+    const auditStatement = recordCanonicalPATWork({
+      authority: livePATAuthority({ subject, current }),
+      input: {
+        id: transactionId(),
+        current,
+        operation: "ingestion.enableEmailForwarding",
+        outcome: "rejected",
+        afterOwnerWrite: false,
+      },
     });
+    return db.prepare(auditStatement.sql).bind(...auditStatement.params);
   }
   if (isOAuthCaller(subject)) {
     return prepareAuthorizedAuditCall({

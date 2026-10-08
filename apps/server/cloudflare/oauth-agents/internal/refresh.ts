@@ -8,7 +8,6 @@ import {
   protectOAuthGrantConsentAuthority,
   revokeOAuthReplayConsent,
 } from "../../../src/shell/consent/operations";
-import { prepareOwnedStatement } from "../../database/operations";
 import { newId, newSecret, secretDigest } from "../../secret-material/operations";
 import { BootstrapUnavailable, dbWork } from "./bootstrap";
 import { oauthResponse } from "./response";
@@ -158,7 +157,7 @@ export const revokeReplay = ({
     });
     yield* dbWork(() =>
       input.db.batch([
-        prepareOwnedStatement({ db: input.db, statement: evidence }),
+        input.db.prepare(evidence.sql).bind(...evidence.params),
         assertion(input.db),
         input.db
           .prepare(
@@ -270,15 +269,15 @@ const issuanceStatements = (
     ),
   assertion(input.db),
 ];
+
 export const commitRotation = ({
   input,
   grant,
   issuance,
-}: Readonly<{
-  input: RefreshInput;
-  grant: GrantRow;
-  issuance: Issuance;
-}>): Effect.Effect<void, BootstrapUnavailable> =>
+}: Readonly<{ input: RefreshInput; grant: GrantRow; issuance: Issuance }>): Effect.Effect<
+  void,
+  BootstrapUnavailable
+> =>
   Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
     const bound = boundCredential(input.admission);
@@ -302,7 +301,7 @@ export const commitRotation = ({
     });
     return yield* dbWork(() =>
       input.db.batch([
-        prepareOwnedStatement({ db: input.db, statement: consumption }),
+        input.db.prepare(consumption.sql).bind(...consumption.params),
         assertion(input.db),
         ...issuanceStatements(input, current, issuance),
       ])

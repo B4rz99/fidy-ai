@@ -8,7 +8,6 @@ import { OAuthCanonicalAdmission } from "../../src/shell/mcp/contract";
 import { authenticateOAuth } from "./operations";
 import { dailyAuditCount, recordOAuthCall } from "../../src/shell/audit/operations";
 import { liveOAuthAuthority } from "../../src/shell/oauth-agents/operations";
-import { prepareOwnedStatement } from "../database/operations";
 import { browseTransactions } from "../transactions/operations";
 import {
   TestFailure,
@@ -63,17 +62,17 @@ const authenticatedHistoryFixture = Effect.fn(function* (auditMigration: boolean
     id: string,
     operation = "transactions.listTransactions",
     outcome: "accepted" | "rejected" = "accepted"
-  ): D1PreparedStatement =>
-    prepareOwnedStatement({
-      db: fixture.db,
-      statement: recordOAuthCall({
-        authority: liveOAuthAuthority({ subject, current }),
-        id,
-        current,
-        operation: CanonicalOperationId.make(operation),
-        outcome,
-      }),
+  ): D1PreparedStatement => {
+    const auditStatement = recordOAuthCall({
+      authority: liveOAuthAuthority({ subject, current }),
+      id,
+      current,
+      operation: CanonicalOperationId.make(operation),
+      outcome,
     });
+    return fixture.db.prepare(auditStatement.sql).bind(...auditStatement.params);
+  };
+
   return { ...fixture, current, subject, read, audit };
 });
 
@@ -1654,6 +1653,7 @@ it.each(["single", "mixed"])(
             transactionChildren[0],
             { ...transactionChildren[1], operation: "dashboard.initializeDashboard", input: {} },
           ];
+
           const pending =
             unit === "single"
               ? mcpFixture({

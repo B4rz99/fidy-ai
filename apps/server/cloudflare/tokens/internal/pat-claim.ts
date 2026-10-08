@@ -26,7 +26,6 @@ import {
 } from "./pat-shared";
 import { newId } from "../../secret-material/operations";
 import { commitPATUnit } from "./pat-unit";
-import { prepareOwnedStatement } from "../../database/operations";
 
 const maximumPollSeconds = 60;
 const pendingStatus = 202;
@@ -47,17 +46,18 @@ const recordWrongProof = (
   attempts: number
 ): Effect.Effect<Response, Cause.UnknownError> =>
   Effect.gen(function* () {
-    yield* Effect.tryPromise(() =>
-      prepareOwnedStatement({
-        db,
-        statement: recordWrongPairingProof({
-          attempts,
-          pairingId: pairing.id,
-          state: pairing.state,
-          previous: pairing.wrong_attempts,
-        }),
-      }).run()
-    );
+    yield* Effect.tryPromise(() => {
+      const proofStatement = recordWrongPairingProof({
+        attempts,
+        pairingId: pairing.id,
+        state: pairing.state,
+        previous: pairing.wrong_attempts,
+      });
+      return db
+        .prepare(proofStatement.sql)
+        .bind(...proofStatement.params)
+        .run();
+    });
     return invalid();
   });
 const slowPoll = (
@@ -66,16 +66,17 @@ const slowPoll = (
 ): Effect.Effect<Response, Cause.UnknownError> =>
   Effect.gen(function* () {
     const { pairing, seconds, retryAfter } = input;
-    yield* Effect.tryPromise(() =>
-      prepareOwnedStatement({
-        db,
-        statement: slowPairingPoll({
-          seconds: Math.min(maximumPollSeconds, seconds),
-          pairingId: pairing.id,
-          state: pairing.state,
-        }),
-      }).run()
-    );
+    yield* Effect.tryPromise(() => {
+      const pollStatement = slowPairingPoll({
+        seconds: Math.min(maximumPollSeconds, seconds),
+        pairingId: pairing.id,
+        state: pairing.state,
+      });
+      return db
+        .prepare(pollStatement.sql)
+        .bind(...pollStatement.params)
+        .run();
+    });
     return response({
       body: { error: { code: "rate_limited", retryAfterSeconds: retryAfter } },
       status: slowStatus,
@@ -87,16 +88,17 @@ const pending = (
   current: number
 ): Effect.Effect<Response, Cause.UnknownError> =>
   Effect.gen(function* () {
-    const result = yield* Effect.tryPromise(() =>
-      prepareOwnedStatement({
-        db,
-        statement: recordPendingPoll({
-          current,
-          pairingId: pairing.id,
-          lastPoll: Option.fromNullishOr(pairing.last_poll_at_ms),
-        }),
-      }).run()
-    );
+    const result = yield* Effect.tryPromise(() => {
+      const pollStatement = recordPendingPoll({
+        current,
+        pairingId: pairing.id,
+        lastPoll: Option.fromNullishOr(pairing.last_poll_at_ms),
+      });
+      return db
+        .prepare(pollStatement.sql)
+        .bind(...pollStatement.params)
+        .run();
+    });
     return result.meta.changes === 1
       ? response({
           body: {
@@ -124,32 +126,25 @@ const reserveClaim = (db: D1Database, claim: Claim): Effect.Effect<boolean, Caus
       commitPATUnit({
         db,
         statements: [
-          prepareOwnedStatement({
-            db,
-            statement: claimPairingGrant({
-              pairingId: pairing.id,
-              userId: pairing.user_id,
-              current,
-            }),
+          claimPairingGrant({
+            pairingId: pairing.id,
+            userId: pairing.user_id,
+            current,
           }),
-          prepareOwnedStatement({
-            db,
-            statement: insertClaimedPAT({
-              patId,
-              shortId,
-              bearerDigest,
-              approvedAt: pairing.approved_at_ms,
-              current,
-              expires,
-              pairingId: pairing.id,
-              userId: pairing.user_id,
-            }),
+
+          insertClaimedPAT({
+            patId,
+            shortId,
+            bearerDigest,
+            approvedAt: pairing.approved_at_ms,
+            current,
+            expires,
+            pairingId: pairing.id,
+            userId: pairing.user_id,
           }),
-          prepareOwnedStatement({
-            db,
-            statement: recordClaimedPAT({ id: newId(), userId: pairing.user_id, patId, current }),
-          }),
-        ],
+
+          recordClaimedPAT({ id: newId(), userId: pairing.user_id, patId, current }),
+        ].map(({ sql, params }) => db.prepare(sql).bind(...params)),
       })
     );
     return results.every((item) => item.meta.changes === 1);

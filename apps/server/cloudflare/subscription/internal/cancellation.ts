@@ -2,7 +2,6 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import { SubscriptionCancellation } from "../../../src/core/subscription/contract";
 import { prepareAuthorizedAuditCall } from "../../../src/shell/audit/operations";
 import { recordLivePATUse } from "../../../src/shell/tokens/operations";
-import { prepareOwnedStatement } from "../../database/operations";
 import { newId } from "../../secret-material/operations";
 import { oauthMutationReview } from "../../oauth-confirmation/operations";
 import {
@@ -129,7 +128,9 @@ const cancellationStatements = (
   });
   return [
     ...(isPATCaller(subject)
-      ? [prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) })]
+      ? [recordLivePATUse({ subject, current })].map(({ sql, params }) =>
+          db.prepare(sql).bind(...params)
+        )
       : []),
     mutation,
     audit,

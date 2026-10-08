@@ -5,7 +5,6 @@ import {
 } from "../../../src/shell/audit/operations";
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
 import { Effect } from "effect";
-import { prepareOwnedStatement } from "../../database/operations";
 import {
   type QueryCaller,
   callerAuthority,
@@ -41,11 +40,11 @@ export const recordBudgetCall = ({
       if (!live) return Effect.succeed("credential_refused" as const);
       if (isPATCaller(subject)) {
         return Effect.tryPromise(() =>
-          db.batch([
-            prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) }),
-            prepareOwnedStatement({
-              db,
-              statement: recordCanonicalPATWork({
+          db.batch(
+            [
+              recordLivePATUse({ subject, current }),
+
+              recordCanonicalPATWork({
                 authority: livePATAuthority({ subject, current }),
                 input: {
                   id: transactionId(),
@@ -55,8 +54,8 @@ export const recordBudgetCall = ({
                   afterOwnerWrite: false,
                 },
               }),
-            }),
-          ])
+            ].map(({ sql, params }) => db.prepare(sql).bind(...params))
+          )
         ).pipe(
           Effect.map((rows) =>
             rows.every((row) => row.meta.changes === 1)

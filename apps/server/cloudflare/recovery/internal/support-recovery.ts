@@ -3,13 +3,11 @@ import {
   pendingRecoveryBrowserPairingQuery,
   prepareRecoveryBrowserPairingApproval,
 } from "../../browser-login/operations";
-import { prepareOwnedStatement } from "../../database/operations";
 import type { OwnedStatement } from "../../../src/shell/owner-write/contract";
 import { emailPairingAllowsUser } from "../../../src/shell/email-authentication/operations";
 import { BackupRecoveryCode } from "../../../src/core/recovery/contract";
 import { recoveryCodeDigest } from "./material";
 import { type JWTVerifyGetKey, createRemoteJWKSet, jwtVerify } from "jose";
-
 import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
 import { newId } from "../../secret-material/operations";
 import { RequestBodyPolicy } from "../../http/contract";
@@ -152,10 +150,14 @@ const recoveryCandidateQuery = ({
 const matchingRecoveryCandidate = (
   db: D1Database,
   input: Readonly<{ codeDigest: Uint8Array; publicCode: string; now: number }>
-): Promise<boolean> =>
-  prepareOwnedStatement({ db, statement: recoveryCandidateQuery(input) })
+): Promise<boolean> => {
+  const candidateStatement = recoveryCandidateQuery(input);
+  return db
+    .prepare(candidateStatement.sql)
+    .bind(...candidateStatement.params)
     .first()
     .then((candidate) => candidate !== null);
+};
 
 const recoveryCredentialConsume = ({
   ready,
@@ -210,6 +212,8 @@ const approveCase = (db: D1Database, input: CaseDecision): Promise<boolean> => {
   const approvedId = newId();
   const { operator, codeDigest, publicCode, now } = input;
   const ready = approvedRecoveryBrowserPairingQuery({ publicCode, current: now });
+  const credentialStatement = recoveryCredentialConsume({ ready, codeDigest, now });
+  const caseStatement = supportCaseInsert({ ready, caseId, operator, now });
   return db
     .batch([
       prepareRecoveryBrowserPairingApproval({
@@ -217,11 +221,8 @@ const approveCase = (db: D1Database, input: CaseDecision): Promise<boolean> => {
         subject: recoveryCandidateQuery(input),
         current: now,
       }),
-      prepareOwnedStatement({
-        db,
-        statement: recoveryCredentialConsume({ ready, codeDigest, now }),
-      }),
-      prepareOwnedStatement({ db, statement: supportCaseInsert({ ready, caseId, operator, now }) }),
+      db.prepare(credentialStatement.sql).bind(...credentialStatement.params),
+      db.prepare(caseStatement.sql).bind(...caseStatement.params),
       db.prepare(supportCaseOpened).bind(openedId, now, caseId),
       // If any conditional transition did not create its case, the final FK aborts the D1 batch.
       db

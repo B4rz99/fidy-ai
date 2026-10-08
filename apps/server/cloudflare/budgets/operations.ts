@@ -41,7 +41,6 @@ import { prepareCategoryReference } from "../categories/operations";
 import { encodeMoneyAmount } from "../../src/core/_shared/money";
 import { type OAuthMutationReview } from "../oauth-confirmation/contract";
 import { recordLivePATUse } from "../../src/shell/tokens/operations";
-import { prepareOwnedStatement } from "../database/operations";
 import { budgetOutcome, findOwnedBudget } from "./internal/budget-outcome";
 import { calculateBudgetStatus, deriveCurrentBudgetMonth } from "../../src/core/budgets/operations";
 import { type UserContext, UserId } from "../../src/core/identity/contract";
@@ -173,7 +172,9 @@ const statements = ({
     guardRefusal: budgetGuardRefusal(outcome),
     statements: [
       ...(isPATCaller(subject)
-        ? [prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) })]
+        ? [recordLivePATUse({ subject, current })].map(({ sql, params }) =>
+            db.prepare(sql).bind(...params)
+          )
         : []),
       write,
       budgetAudit({ db, subject, operation: outcome.operation, current }),
@@ -665,10 +666,7 @@ const reconcilePendingPeriod = ({
 export const evaluateBudgetAlerts = ({
   db,
   userId,
-}: Readonly<{
-  db: D1Database;
-  userId: string;
-}>): Effect.Effect<boolean> =>
+}: Readonly<{ db: D1Database; userId: string }>): Effect.Effect<boolean> =>
   Effect.gen(function* () {
     const subject = yield* Schema.decodeEffect(UserId)(userId);
     const context = yield* readUserContext({ db, userId: subject, authority: Option.none() });

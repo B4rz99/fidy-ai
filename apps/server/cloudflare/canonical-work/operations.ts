@@ -31,7 +31,6 @@ import {
 import { type CanonicalCapability } from "../../src/core/canonical-operations/contract";
 import { type ErrorCode } from "../../src/shell/public-http/contract";
 import { atomicBatchOperation } from "../../src/shell/operations/contract";
-
 import { liveWebSessionAuthority } from "../../src/shell/identity/operations";
 import { type AuditedPATMutation, type PATAuthority } from "../../src/shell/tokens/contract";
 import {
@@ -40,7 +39,6 @@ import {
   recordAuditedPATUseFromAuthority,
 } from "../../src/shell/tokens/operations";
 import type { AuthorizedPAT } from "../tokens/contract";
-import { prepareOwnedStatement } from "../database/operations";
 import { newId } from "../secret-material/operations";
 
 /** Wrap one rejected dependency promise so the failure channel stays typed. */
@@ -59,10 +57,7 @@ export const callerScope = (subject: QueryCaller): Option.Option<CanonicalCapabi
 export const childCaller = <Caller extends QueryCaller>({
   subject,
   requiredScope,
-}: Readonly<{
-  subject: Caller;
-  requiredScope: Option.Option<CanonicalCapability>;
-}>): Caller =>
+}: Readonly<{ subject: Caller; requiredScope: Option.Option<CanonicalCapability> }>): Caller =>
   (isPATCaller(subject) || isOAuthCaller(subject)) && Option.isSome(requiredScope)
     ? { ...subject, requiredScope }
     : subject;
@@ -92,22 +87,17 @@ export const acceptedPATAccountability = ({
 }>): ReadonlyArray<D1PreparedStatement> => {
   const auditId = newId();
   return [
-    prepareOwnedStatement({
-      db: database,
-      statement: recordCanonicalPATWork({
-        authority,
-        input: { afterOwnerWrite, current, id: auditId, operation, outcome: "accepted" },
-      }),
+    recordCanonicalPATWork({
+      authority,
+      input: { afterOwnerWrite, current, id: auditId, operation, outcome: "accepted" },
     }),
-    prepareOwnedStatement({
-      db: database,
-      statement: recordAuditedPATUseFromAuthority({
-        authority,
-        current,
-        evidence: recordedPATCallProof({ auditId, operation }),
-      }),
+
+    recordAuditedPATUseFromAuthority({
+      authority,
+      current,
+      evidence: recordedPATCallProof({ auditId, operation }),
     }),
-  ];
+  ].map(({ sql, params }) => database.prepare(sql).bind(...params));
 };
 
 /** The same accepted pair for a caller admitted as a subject rather than as a held authority. */
@@ -163,32 +153,30 @@ const refusalStatement = ({
   current: number;
 }>): D1PreparedStatement => {
   if (isOAuthCaller(subject)) {
-    return prepareOwnedStatement({
-      db,
-      statement: recordOAuthCall({
-        authority: liveOAuthAuthority({ subject, current }),
-        id: newId(),
+    const auditStatement = recordOAuthCall({
+      authority: liveOAuthAuthority({ subject, current }),
+      id: newId(),
+      operation,
+      outcome: "rejected",
+      current,
+    });
+    return db.prepare(auditStatement.sql).bind(...auditStatement.params);
+  }
+  if (isPATCaller(subject)) {
+    const auditStatement = recordCanonicalPATWork({
+      authority: livePATAuthority({ subject, current }),
+      input: {
+        id: transactionId(),
+        current,
         operation,
         outcome: "rejected",
-        current,
-      }),
+        afterOwnerWrite: false,
+      },
     });
+    return db.prepare(auditStatement.sql).bind(...auditStatement.params);
   }
-  return isPATCaller(subject)
-    ? prepareOwnedStatement({
-        db,
-        statement: recordCanonicalPATWork({
-          authority: livePATAuthority({ subject, current }),
-          input: {
-            id: transactionId(),
-            current,
-            operation,
-            outcome: "rejected",
-            afterOwnerWrite: false,
-          },
-        }),
-      })
-    : sessionRefusalStatement({ db, subject, outcome, operation, current });
+
+  return sessionRefusalStatement({ db, subject, outcome, operation, current });
 };
 
 const sessionRefusalStatement = ({
@@ -400,16 +388,14 @@ const batchEnvelopeStatement = ({
     });
   }
   if (isOAuthCaller(subject)) {
-    return prepareOwnedStatement({
-      db,
-      statement: recordOAuthCall({
-        authority: liveOAuthAuthority({ subject, current }),
-        id: newId(),
-        operation: atomicBatchOperation,
-        outcome: "rejected",
-        current,
-      }),
+    const auditStatement = recordOAuthCall({
+      authority: liveOAuthAuthority({ subject, current }),
+      id: newId(),
+      operation: atomicBatchOperation,
+      outcome: "rejected",
+      current,
     });
+    return db.prepare(auditStatement.sql).bind(...auditStatement.params);
   }
   const authority = liveWebSessionAuthority({ subject, current });
   return prepareAuthorizedAuditCall({
@@ -542,11 +528,7 @@ export const liveTransactionCredential = ({
   db,
   subject,
   current,
-}: Readonly<{
-  db: D1Database;
-  subject: QueryCaller;
-  current: number;
-}>): Promise<boolean> =>
+}: Readonly<{ db: D1Database; subject: QueryCaller; current: number }>): Promise<boolean> =>
   authorityExists(
     db,
     isPATCaller(subject)
@@ -562,11 +544,8 @@ export const liveTransactionAuthority = ({
   db,
   subject,
   current,
-}: Readonly<{
-  db: D1Database;
-  subject: QueryCaller;
-  current: number;
-}>): Promise<boolean> => authorityExists(db, callerAuthority({ subject, current }));
+}: Readonly<{ db: D1Database; subject: QueryCaller; current: number }>): Promise<boolean> =>
+  authorityExists(db, callerAuthority({ subject, current }));
 
 export type {
   CanonicalRefusalDisposition,

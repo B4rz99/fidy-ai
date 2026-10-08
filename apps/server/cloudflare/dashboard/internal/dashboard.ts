@@ -5,10 +5,8 @@ import {
   refusedByAuditBudget,
 } from "../../../src/shell/audit/operations";
 import { RequestBodyPolicy } from "../../http/contract";
-
 import { DashboardUnavailable } from "../../../src/shell/dashboard/contract";
 import { livePATAuthority, recordLivePATUse } from "../../../src/shell/tokens/operations";
-import { prepareOwnedStatement } from "../../database/operations";
 import {
   type QueryCaller,
   callerAuthority,
@@ -40,32 +38,35 @@ export const accountQuery = ({
   Effect.tryPromise({
     try: () => {
       const authority = callerAuthority({ subject, current });
-      const audit = isPATCaller(subject)
-        ? prepareOwnedStatement({
-            db,
-            statement: recordCanonicalPATWork({
-              authority: livePATAuthority({ subject, current }),
-              input: {
-                id: transactionId(),
-                current,
-                operation,
-                outcome: "accepted",
-                afterOwnerWrite: false,
-              },
-            }),
-          })
-        : prepareAuthorizedAuditCall({
-            db,
-            authority,
+      let audit: D1PreparedStatement;
+      if (isPATCaller(subject)) {
+        const auditStatement = recordCanonicalPATWork({
+          authority: livePATAuthority({ subject, current }),
+          input: {
             id: transactionId(),
+            current,
             operation,
             outcome: "accepted",
-            current,
             afterOwnerWrite: false,
-          });
+          },
+        });
+        audit = db.prepare(auditStatement.sql).bind(...auditStatement.params);
+      } else {
+        audit = prepareAuthorizedAuditCall({
+          db,
+          authority,
+          id: transactionId(),
+          operation,
+          outcome: "accepted",
+          current,
+          afterOwnerWrite: false,
+        });
+      }
       return db.batch([
         ...(isPATCaller(subject)
-          ? [prepareOwnedStatement({ db, statement: recordLivePATUse({ subject, current }) })]
+          ? [recordLivePATUse({ subject, current })].map(({ sql, params }) =>
+              db.prepare(sql).bind(...params)
+            )
           : []),
         audit,
         db.prepare(dashboardCompletion),

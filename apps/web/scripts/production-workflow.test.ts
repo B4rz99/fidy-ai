@@ -13,6 +13,25 @@ const preflight = await Bun.file(
 ).text();
 
 describe("Production release workflow policy", () => {
+  it("keeps ordinary admission behind isolated proof and the existing release gates", () => {
+    const steps = [
+      "run: bun production-release.ts isolate",
+      "run: bun verify-production-smoke.ts promoted",
+      "- name: Capture the proven isolated baseline for ordinary release gates",
+      "- name: Upload ordinary candidates after isolated recovery proof",
+      "run: bun production-release.ts stage",
+      "run: bun diagnose-smoke-routing.ts",
+      "run: bun verify-production-smoke.ts\n",
+      "run: bun production-release.ts promote",
+    ].map((step) => workflow.indexOf(step));
+    expect(steps.every((step) => step > 0)).toBe(true);
+    expect(steps).toEqual([...steps].sort((left, right) => left - right));
+    expect(workflow).toContain("recover_deleted_queue:");
+    expect(workflow).toContain('RECOVERY_ISOLATION: ""');
+    expect(workflow).toContain(
+      "(!inputs.recover_deleted_queue || steps.recovery_capture.outcome == 'success')"
+    );
+  });
   it("does not offer an incident dispatch that bypasses candidate smoke or drift", () => {
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).toContain("environment: production");
@@ -149,7 +168,7 @@ describe("Production release workflow policy", () => {
     const capture = workflow.indexOf("bun production-release.ts capture");
     const upload = workflow.indexOf("alchemy deploy --stage production --yes --no-input");
     const stage = workflow.indexOf("bun production-release.ts stage");
-    const smoke = workflow.indexOf("bun verify-production-smoke.ts");
+    const smoke = workflow.indexOf("run: bun verify-production-smoke.ts\n");
     const promotion = workflow.indexOf("bun production-release.ts promote");
     expect(capture).toBeGreaterThan(0);
     expect(capture).toBeLessThan(upload);
@@ -174,7 +193,7 @@ describe("Production release workflow policy", () => {
 
   it("probes normal traffic before guarded rollback and alerts when release recovery fails", () => {
     const promote = workflow.indexOf("bun production-release.ts promote");
-    const probe = workflow.indexOf("bun verify-production-smoke.ts promoted");
+    const probe = workflow.lastIndexOf("bun verify-production-smoke.ts promoted");
     const rollback = workflow.indexOf("bun production-release.ts rollback");
     const alert = workflow.indexOf("Email operator if deployment failed");
     expect(promote).toBeGreaterThan(0);

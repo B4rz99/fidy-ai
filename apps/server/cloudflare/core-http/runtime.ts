@@ -4,12 +4,21 @@ import type { TelemetryService } from "../../src/shell/observability/contract";
 import type { CoreHttpHandler } from "./contract";
 import { acceptedWorkPublisher, executeCoreHttp } from "./internal/http";
 import { observeWorkerRequest } from "../runtime/telemetry/operations";
+import { recoveryIsolationResponse } from "../runtime/release-isolation";
 
 /** Construct private HTTP assembly with one bounded Work span and post-commit publication lifetime. */
 export const makeCoreHttp =
   (telemetry: TelemetryService): CoreHttpHandler =>
   (request, environment, context) =>
     Effect.gen(function* () {
+      const isolated = recoveryIsolationResponse({
+        request,
+        environment: {
+          mode: Option.fromUndefinedOr(environment.RECOVERY_ISOLATION),
+          proof: Option.fromUndefinedOr(environment.SMOKE_PROOF),
+        },
+      });
+      if (Option.isSome(isolated)) return isolated.value;
       const clients = yield* Layer.build(FetchHttpClient.layer).pipe(
         Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch)
       );

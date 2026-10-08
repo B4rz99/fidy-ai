@@ -38,6 +38,7 @@ import { smokeProofAccepted } from "./runtime/release-smoke/operations";
 import { patBrowserRoute, patDirectRoute, patMethods, patRoute } from "./tokens/operations";
 import { canonicalMethods, canonicalOperation, canonicalRoute } from "./routing/operations";
 import { bancolombiaSandboxResponse } from "./bancolombia-sandbox/operations";
+import { recoveryIsolationResponse } from "./runtime/release-isolation";
 
 type PublicEnvironment = WorkerTelemetryEnvironment & {
   readonly BROWSER_ORIGIN: string;
@@ -47,6 +48,7 @@ type PublicEnvironment = WorkerTelemetryEnvironment & {
 } & Partial<
     Readonly<{
       SMOKE_PROOF: string;
+      RECOVERY_ISOLATION: string;
       CONTRACT_DIGEST: string;
       CF_VERSION_METADATA: { readonly id: string };
     }>
@@ -723,6 +725,16 @@ const fetchEffect = (request: Request, environment: PublicEnvironment): Effect.E
     const origin = Option.fromNullishOr(request.headers.get("origin"));
     if (Option.exists(origin, (value) => value !== browserOrigin.value)) {
       return applyApiPolicy(forbiddenOrigin(), browserOrigin.value, origin);
+    }
+    const recoveryResponse = recoveryIsolationResponse({
+      request,
+      environment: {
+        mode: Option.fromUndefinedOr(environment.RECOVERY_ISOLATION),
+        proof: Option.fromUndefinedOr(environment.SMOKE_PROOF),
+      },
+    });
+    if (Option.isSome(recoveryResponse)) {
+      return applyApiPolicy(recoveryResponse.value, browserOrigin.value, origin);
     }
     const sandboxResponse = bancolombiaSandboxResponse(request);
     if (Option.isSome(sandboxResponse)) {

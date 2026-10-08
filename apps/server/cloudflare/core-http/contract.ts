@@ -22,6 +22,7 @@ export type CoreHttpEnvironment = ProviderEnvironment &
   Partial<SmokeEnvironment> &
   Partial<
     Readonly<{
+      RECOVERY_ISOLATION: string;
       BILLING_SUPPORT_AUDIENCE: string;
       WOMPI_DAVIPLATA_ACTIVATED: string;
       WOMPI_DAVIPLATA_OTP_SEND_URL: string;

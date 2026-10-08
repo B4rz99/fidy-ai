@@ -41,6 +41,9 @@ const daviplataOtpConfirmUrl = Config.String("WOMPI_DAVIPLATA_OTP_CONFIRM_URL").
 );
 const patAdmissionKey = Config.Redacted("PAT_ADMISSION_KEY");
 const smokeProof = Config.Redacted("SMOKE_PROOF");
+const recoveryIsolation = Config.Literals(["", "isolated"], "RECOVERY_ISOLATION").pipe(
+  Config.withDefault("")
+);
 const accessIssuer = Config.String("CLOUDFLARE_ACCESS_ISSUER");
 const accessAudience = Config.String("CLOUDFLARE_ACCESS_AUDIENCE");
 const whatsAppBusinessPortfolioId = Config.String("WHATSAPP_BUSINESS_PORTFOLIO_ID");
@@ -164,6 +167,7 @@ export default Alchemy.Stack(
       })
     ).pipe(Effect.mapError(deploymentConfigError));
     const production = !development;
+    const isolation = production ? yield* recoveryIsolation : "";
     const kapsoBindings = yield* resolveKapsoBindings(development);
     const accessConfig = yield* resolveAccessConfig(development);
 
@@ -231,7 +235,13 @@ export default Alchemy.Stack(
     });
     const core = yield* Cloudflare.Worker("Core", {
       main: "../../apps/server/cloudflare/core-worker.ts",
-      version: production ? { traffic: 0, tag: releaseMetadata.gitRevision } : undefined,
+      version: production
+        ? {
+            traffic: 0,
+            tag: releaseMetadata.gitRevision,
+            message: isolation === "isolated" ? "isolated" : "release",
+          }
+        : undefined,
       observability: freeTierWorkerObservability,
       compatibility: { date: "2026-09-08" },
       crons: ["* * * * *"],
@@ -241,6 +251,7 @@ export default Alchemy.Stack(
         strictPort: true,
       },
       env: {
+        RECOVERY_ISOLATION: isolation,
         AI: Cloudflare.Workers.AI(),
         CF_VERSION_METADATA: Cloudflare.Workers.VersionMetadata(),
         SMOKE_PROOF: yield* development
@@ -418,6 +429,7 @@ export default Alchemy.Stack(
       },
       domain: production ? productionTopology.ingress.hostname : undefined,
       env: {
+        RECOVERY_ISOLATION: isolation,
         BROWSER_ORIGIN: resolveBrowserOrigin(production),
         CONTRACT_DIGEST: releaseMetadata.contractDigest,
         CF_VERSION_METADATA: Cloudflare.Workers.VersionMetadata(),

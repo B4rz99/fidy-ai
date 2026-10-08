@@ -498,6 +498,29 @@ describe("Production topology contract", () => {
 });
 
 describe("Cloudflare Worker topology", () => {
+  it.effect("keeps private Core admission isolated while public routing propagates", () =>
+    Effect.gen(function* () {
+      const isolated = {
+        ...coreEnvironment,
+        RECOVERY_ISOLATION: "isolated",
+        SMOKE_PROOF: "a".repeat(64),
+      };
+      const response = yield* Effect.tryPromise(() =>
+        coreWorker.fetch(
+          new Request("https://core.internal/web/providers/disclosure", {
+            headers: { "x-fidy-smoke-proof": "a".repeat(64) },
+          }),
+          isolated
+        )
+      );
+      expect(response.status).toBe(503);
+      expect(response.headers.get("x-fidy-recovery-isolation")).toBe("isolated");
+      const health = yield* Effect.tryPromise(() =>
+        coreWorker.fetch(new Request("https://core.internal/health"), isolated)
+      );
+      expect(health.status).toBe(200);
+    })
+  );
   it.effect("returns only bounded release and health metadata from Core", () =>
     Effect.gen(function* () {
       const response = yield* Effect.tryPromise(() =>

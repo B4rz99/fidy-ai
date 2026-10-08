@@ -28,6 +28,7 @@ docs/adr/0020-mandatory-verified-email-authentication-and-recovery.md
 apps/server/cloudflare/email-authentication/internal/proof-delivery.ts
   s_55523bb8416825::t_1c4d42d9173d03 3-51
   s_55523bb8416825::t_5b35e66707279e 1-2
+  s_55523bb8416825::t_c090f8645c7977 52-69
 SECURITY_STANDARDS.md
   s_55523bb8416825::t_1c4d42d9173d03 304
 apps/server/cloudflare/web-authentication/operations.test.ts

@@ -37,6 +37,7 @@ import {
 import { smokeProofAccepted } from "./runtime/release-smoke/operations";
 import { patBrowserRoute, patDirectRoute, patMethods, patRoute } from "./tokens/operations";
 import { canonicalMethods, canonicalOperation, canonicalRoute } from "./routing/operations";
+import { bancolombiaSandboxResponse } from "./bancolombia-sandbox/operations";
 
 type PublicEnvironment = WorkerTelemetryEnvironment & {
   readonly BROWSER_ORIGIN: string;
@@ -723,6 +724,10 @@ const fetchEffect = (request: Request, environment: PublicEnvironment): Effect.E
     if (Option.exists(origin, (value) => value !== browserOrigin.value)) {
       return applyApiPolicy(forbiddenOrigin(), browserOrigin.value, origin);
     }
+    const sandboxResponse = bancolombiaSandboxResponse(request);
+    if (Option.isSome(sandboxResponse)) {
+      return applyApiPolicy(sandboxResponse.value, browserOrigin.value, origin);
+    }
     return yield* routeOwnedRequest(
       request,
       { ...environment, BROWSER_ORIGIN: browserOrigin.value },
@@ -769,6 +774,7 @@ export const makePublicWorker = (telemetry: TelemetryService): PublicWorker => (
  * Internet-facing ingress for published API routes. Originless machine callers remain eligible;
  * browser requests and Categories preflight must use `BROWSER_ORIGIN`. Every response is no-store,
  * receives the API security projection, and is observed once. Unknown routes, methods, origins,
- * credentials, and Core failures produce bounded responses; accepted requests are delegated once.
+ * credentials, and Core failures produce bounded responses. Sandbox registration metadata and
+ * its unavailable callback are served locally; accepted stateful requests are delegated once.
  */
 export default makePublicWorker(cloudflareWorkerTelemetry);

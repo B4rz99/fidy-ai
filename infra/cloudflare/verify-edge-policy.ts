@@ -15,12 +15,22 @@ import { edgeSecurityPolicy } from "./edge-security";
 // Includes #305's same-User browser Connection review/preparation routes and edge rate limits.
 // Includes Connections-owned browser transport recognition and cookie-only forwarding policy.
 // Includes #1086 provider callbacks, anonymous provider admission, and removal of email signup resources.
-const expectedEdgePolicyDigest = "55ceebdeae1346e5e9f4c07b5e3e69a7a7c062a1a62e108ead4554a55daa9134";
+// Includes #305's static sandbox JWKS and fail-closed registration callback without Core authority.
+const expectedEdgePolicyDigest = "bccaa054048ce25c7e13eda4ca4fecdaa2c66f8e0b5c2d0403b94e1bbbcd4f3f";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),
   await Bun.file(new URL("worker-observability.ts", import.meta.url)).text(),
   await Bun.file(new URL("../../apps/server/cloudflare/public-worker.ts", import.meta.url)).text(),
+  await Bun.file(
+    new URL("../../apps/server/cloudflare/bancolombia-sandbox/operations.ts", import.meta.url)
+  ).text(),
+  await Bun.file(
+    new URL(
+      "../../apps/server/cloudflare/bancolombia-sandbox/internal/public-key.ts",
+      import.meta.url
+    )
+  ).text(),
   await Bun.file(
     new URL("../../apps/server/src/shell/connections/contract.ts", import.meta.url)
   ).text(),

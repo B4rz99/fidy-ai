@@ -147,7 +147,9 @@ export const setup = (auditMigration = true): Effect.Effect<Harness, TestFailure
           auditMigration ||
           (name !== "0037_oauth_shared_audit_budget.sql" &&
             name !== "0062_pat_activity.sql" &&
-            name !== "0063_connections.sql")
+            name !== "0063_connections.sql" &&
+            name !== "0064_connection_browser_execution.sql" &&
+            name !== "0065_connection_attempt_retention.sql")
       )
       .map((name) => new URL(`../migrations/${name}`, import.meta.url));
     if (auditMigration) yield* wait(installTestSchema({ db, sources }));

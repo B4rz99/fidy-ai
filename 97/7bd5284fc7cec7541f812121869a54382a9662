@@ -1,0 +1,21 @@
+apps/server/cloudflare/provider-authentication/journey.test-fixture.ts
+  s_55523bb8416825::t_f017ffb12482a4 101-103
+apps/server/cloudflare/core-http/internal/http.ts
+  s_55523bb8416825::t_78d823fd5ad673 1501
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "977bd5284fc7cec7541f812121869a54382a9662",
+  "prompts": {},
+  "sessions": {
+    "s_55523bb8416825": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11896-74c5-7f82-b3d7-9e3ce7978236",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

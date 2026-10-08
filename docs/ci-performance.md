@@ -88,7 +88,13 @@ having no migration-history assertions. They now use the native baseline install
 pass; test execution measured 10.3/10.5s under local contention versus the preceding 33.7/28.1s
 file estimates. Scheduling conservatively budgets 12s per file. The 64-binding pool experiment
 saved only 1.8s per 64 complete installations and was not adopted; pool size remains 16.
-Final CI must still confirm the three-minute complete-workflow target.
+[Next run 37858084842](https://github.com/B4rz99/fidy-ai/actions/runs/37858084842)
+passed every check in **3m05s**. Complete adapter jobs took 141/118/147/142s;
+browser took 153s. Its final real-Core file left the other browser worker idle for about 20s.
+The two longest existing browser files now sort first via `00-`/`01-` filename prefixes;
+no case or file is split. Ordinary pairing owns a separate User, TrialPeriod and Dashboard,
+so enrollment can run earlier without changing pairing's initial standing. All 63 web cases
+plus the native CLI journey pass locally in 88.7s. Final CI must confirm the target.
 
 ## Adapter regression follow-up: #1066
 

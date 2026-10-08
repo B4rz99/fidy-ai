@@ -20,6 +20,7 @@ const otherUserId = "24000000-0000-4000-8000-000000000261";
 const otherTransactionId = "24000000-0000-4000-8000-000000000262";
 const backupRecoveryCode = "ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2";
 const recoveryUserId = "24000000-0000-4000-8000-000000000311";
+export const pairingUserId = "24000000-0000-4000-8000-000000000321";
 const now = Effect.runSync(Clock.currentTimeMillis);
 const trialDurationMs = 604_800_000;
 const expiredTrialAgeMs = 691_200_000;
@@ -82,6 +83,13 @@ const seedIdentity = (overrides: Partial<SeedIdentity> = {}): Promise<void> => {
   );
 };
 await seedIdentity();
+// Pairing owns its standing and Dashboard; enrollment journeys may run first or concurrently.
+await seedIdentity({
+  userId: pairingUserId,
+  bsuid: "CO.Pairing",
+  email: "vinculacion@example.com",
+  consentId: "24000000-0000-4000-8000-000000000322",
+});
 await db
   .prepare(
     "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?,?,?,?,?)"

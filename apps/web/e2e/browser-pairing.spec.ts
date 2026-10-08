@@ -460,7 +460,9 @@ test("redeems a real pairing approved out of band and obtains a real WebSession"
       yield* wait(page.goto("/auth/pair"));
       yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());
       const code = yield* wait(visiblePairingCode(page));
-      const approval = yield* wait(request.post(`http://127.0.0.1:4175/approve?code=${code}`));
+      const approval = yield* wait(
+        request.post(`http://127.0.0.1:4175/approve?code=${code}&pairing=true`)
+      );
       expect(approval.status()).toBe(noContentStatus);
       yield* wait(expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15000 }));
       yield* wait(
@@ -479,7 +481,7 @@ test("redeems a real pairing approved out of band and obtains a real WebSession"
       );
       expect(current.status()).toBe(successStatus);
       expect(yield* wait(current.json())).toMatchObject({
-        data: { id: "24000000-0000-4000-8000-000000000241" },
+        data: { id: "24000000-0000-4000-8000-000000000321" },
       });
       const otherTransaction = yield* wait(
         request.get("https://127.0.0.1:4174/transactions/24000000-0000-4000-8000-000000000262", {

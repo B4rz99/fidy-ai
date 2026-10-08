@@ -146,13 +146,34 @@ Windows local-machine persistence verified against the pinned runtime; file/envi
 URLs, browser state, arguments and diagnostics are not bearer-storage channels. Local logout removes
 saved access without asserting server revocation.
 
-One VerifiedEmailCredential is mandatory before stable User creation and is globally unique after
+The preserved WhatsApp/mailbox origin requires a VerifiedEmailCredential before stable User creation.
+The Google web origin instead requires a ProviderCredential keyed by the validated canonical issuer
+and subject. Contact email never establishes identity, merges Users, creates a VerifiedEmailCredential,
+or substitutes mailbox ownership proof. Missing/changed email claims preserve the same User.
+A VerifiedEmailCredential is globally unique after
 trim-and-lowercase normalization; provider-specific dot or plus-address folding is not proof of
 equivalence. The credential may approve BrowserLoginPairing for ordinary email login or recovery to
 its existing UserId but never becomes User identity or direct session authority. Replacement proves
 the candidate before atomically removing the old credential. Email authentication and support
 recovery never create a User, mint a parallel session, substitute a newly supplied credential, or
 change WhatsAppIdentity. The pairing's browser-private verifier remains independently required.
+
+Google OIDC requires signature, issuer, nonempty subject, intended audience, expiry, issued-at,
+state, nonce, and S256 PKCE validation within the same bounded browser-bound attempt. The Google
+PKCE verifier is confined to an API HttpOnly/Secure/SameSite=Lax cookie and token exchange; only
+its digest is retained. The Browser Login verifier stays in mounted memory and independently proves
+initiation, status, completion, and redemption. Claim the callback before exchange; never retry an
+uncertain code exchange. Provider tokens are used transiently and never persisted or exported.
+Request only `openid email`. Provider verification approves the initiating pairing; only Browser
+Login mints a session. Signup commits all owner records and proof consumption together; concurrent
+or stale consumption rejects. Returning authentication does not reinstate withdrawn Consent.
+Authorization codes cross only `/providers/google/callback`; the callback immediately returns a
+no-store/no-referrer 303 to a parameter-free first-party page. Automatic Worker invocation logs are
+disabled; application/provider telemetry must exclude URLs, bodies, tokens and claims. Edge log
+products and tail consumers must also exclude callback query strings before real provider use.
+Lost recovery responses cannot be redisclosed or recreated through completion replay. A fresh Google
+login can prove established ownership after an ambiguous signup, while ordinary work retains live
+Consent checks. Expired provider protocol state is removed after one day.
 
 Browser authentication state must resist theft, fixation, cross-origin use, and leakage through
 URLs, referrers, scripts, caches, or diagnostics. Known and unknown email-authentication attempts

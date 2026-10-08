@@ -1,8 +1,9 @@
+import { DisclosureSnapshot } from "../../src/core/consent/contract";
 import * as proactivity from "./internal/proactivity-consent";
 import type { ProactivityOptInKind } from "../../src/shell/consent/contract";
 import { type ConsentProtectedStatement } from "../../src/shell/consent/contract";
 import { protectConsentStatement } from "../../src/shell/consent/operations";
-import { type Effect, Option } from "effect";
+import { type Effect, Option, Schema } from "effect";
 import {
   type ConsentEgressAction,
   type ConsentEgressRefused,
@@ -217,3 +218,27 @@ export const replaceProactivityConsentOffer = (
   input: ProactivityConsentContext & Readonly<{ replacement: ProactivityOfferReplacement }>
 ): Effect.Effect<Option.Option<ProactivityConsentOffer>, ConsentUnavailable> =>
   proactivity.createOffer({ context: input, replacement: Option.some(input.replacement) });
+
+/** Append the exact accepted web disclosure for the proven provider origin in the caller's atomic onboarding unit. A public reference alone is never evidence. */
+export const recordWebOnboardingConsent = (
+  input: Readonly<{
+    db: D1Database;
+    userId: UserId;
+    attemptId: string;
+    disclosure: DisclosureSnapshot;
+    acceptedAtMs: number;
+  }>
+): D1PreparedStatement =>
+  input.db
+    .prepare(
+      `INSERT INTO onboarding_consent_records(id,user_id,disclosure_json,disclosure_message_id,decision_message_id,decision_received_at_ms,accepted_at_ms) VALUES(?,?,?,?,?,?,?)`
+    )
+    .bind(
+      input.attemptId,
+      input.userId,
+      Schema.encodeSync(Schema.fromJsonString(DisclosureSnapshot))(input.disclosure),
+      `web:${input.attemptId}`,
+      `web:${input.attemptId}`,
+      input.acceptedAtMs,
+      input.acceptedAtMs
+    );

@@ -1,3 +1,4 @@
+import { sweepProviderAuthentication } from "../provider-authentication/runtime";
 import { Clock, Effect, Option } from "effect";
 import { makeAuditRetention } from "../../src/shell/audit/runtime";
 import {
@@ -228,6 +229,10 @@ const admissionActivities = (
   activity(
     "billing.cardPreparationAdmissionSweep",
     sweepExpiredEnrollmentAdmission({ db: environment.DB, now: nowEpochMs })
+  ),
+  activity(
+    "provider.authenticationRetention",
+    sweepProviderAuthentication({ db: environment.DB, current: nowEpochMs })
   ),
   activity("release.smoke.expiry", platform.expireSmokeProbes(nowEpochMs)),
   activity(

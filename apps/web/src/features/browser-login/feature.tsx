@@ -281,6 +281,9 @@ export const BrowserLoginPairingFeature = (): JSX.Element => {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
+          <a href="/auth/google" className="text-center underline">
+            Crear cuenta o iniciar sesión con Google
+          </a>
           <PairingStatus
             onCompleteEmail={pairing.completeEmail}
             onLogout={pairing.logout}

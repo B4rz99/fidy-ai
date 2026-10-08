@@ -561,7 +561,7 @@ export default {
         path: "^cloudflare/",
         pathNot: [
           "^cloudflare/onboarding/",
-          "^cloudflare/(consent|email-authentication|identity|recovery|secret-material)/(contract|operations)\\.ts$",
+          "^cloudflare/(consent|email-authentication|identity|provider-authentication|recovery|secret-material)/(contract|operations)\\.ts$",
         ],
       },
     },

@@ -62,10 +62,36 @@ const jwk = {
   alg: "RS256",
   use: "sig",
 };
+const GoogleFixtureCode = Schema.fromJsonString(
+  Schema.Struct({ nonce: Schema.String, subject: Schema.String })
+);
+const googleFixtureToken = (request: Request): Promise<Response> =>
+  request.text().then((body) => {
+    const code = new URLSearchParams(body).get("code") ?? "";
+    const value = Schema.decodeSync(GoogleFixtureCode)(atob(code));
+    return new SignJWT({ nonce: value.nonce, email: "google@example.test" })
+      .setProtectedHeader({ alg: "RS256", kid: "acceptance-support" })
+      .setIssuer("https://accounts.google.com")
+      .setSubject(value.subject)
+      .setAudience("acceptance-google")
+      .setIssuedAt()
+      .setExpirationTime("5m")
+      .sign(privateKey)
+      .then((id_token) => Response.json({ id_token }));
+  });
 globalThis.fetch = new Proxy(globalThis.fetch, {
   apply: (target, thisArg, args): unknown => {
     const requestUrl: unknown = args[0];
     const url = requestUrl instanceof Request ? requestUrl.url : String(requestUrl);
+    if (url === "https://www.googleapis.com/oauth2/v3/certs") {
+      return Promise.resolve(Response.json({ keys: [jwk] }));
+    }
+    if (url === "https://oauth2.googleapis.com/token") {
+      const outbound: unknown = Reflect.construct(Request, args);
+      return outbound instanceof Request
+        ? googleFixtureToken(outbound)
+        : Promise.resolve(new Response(null, { status: 400 }));
+    }
     if (url === `${accessIssuer}/cdn-cgi/access/certs`) {
       return Promise.resolve(Response.json({ keys: [jwk] }));
     }
@@ -233,11 +259,41 @@ const operatorSetup = (request: Request): Option.Option<Promise<Response>> => {
     ? Option.some(collectBilling())
     : Option.none();
 };
+const googleSubjectMaximumLength = 255;
+const GoogleFixtureSubject = Schema.String.check(
+  Schema.isNonEmpty(),
+  Schema.isMaxLength(googleSubjectMaximumLength)
+);
+const googleOperator = (request: Request): Option.Option<Promise<Response>> => {
+  const path = new URL(request.url).pathname;
+  if (request.method !== "POST" || (path !== "/google/expire" && path !== "/google/revoke")) {
+    return Option.none();
+  }
+  const subject = Schema.decodeUnknownOption(GoogleFixtureSubject)(
+    new URL(request.url).searchParams.get("subject")
+  );
+  if (Option.isNone(subject)) {
+    return Option.some(Promise.resolve(new Response(null, { status: 400 })));
+  }
+  const statement =
+    path === "/google/expire"
+      ? db
+          .prepare(
+            "UPDATE web_sessions SET idle_expires_at_ms=created_at_ms WHERE user_id=(SELECT user_id FROM provider_credentials WHERE subject=?)"
+          )
+          .bind(subject.value)
+      : db
+          .prepare(`INSERT INTO consent_user_revocations(id,user_id,grant_record_id,session_id,occurred_at_ms)
+        SELECT ?,c.user_id,g.id,w.id,? FROM provider_credentials c JOIN onboarding_consent_records g ON g.user_id=c.user_id JOIN web_sessions w ON w.user_id=c.user_id AND w.revoked_at_ms IS NULL WHERE c.subject=? ORDER BY w.created_at_ms DESC LIMIT 1`)
+          .bind(newId(), Effect.runSync(Clock.currentTimeMillis), subject.value);
+  return Option.some(statement.run().then(() => new Response(null, { status: 204 })));
+};
 const operator = Bun.serve({
   hostname: "127.0.0.1",
   port: operatorPort,
   fetch: (request) => {
     if (request.headers.has("origin")) return new Response(null, { status: 403 });
+
     if (operatorRoute(request, "/assertion", "GET")) {
       return assertion().then(
         (signed) => new Response(signed, { headers: { "cache-control": "no-store" } })
@@ -246,7 +302,7 @@ const operator = Bun.serve({
     if (operatorRoute(request, "/email/replacement/deliver", "POST")) {
       return deliverReplacementProof();
     }
-    const setup = operatorSetup(request);
+    const setup = Option.orElse(googleOperator(request), () => operatorSetup(request));
     if (Option.isSome(setup)) return setup.value;
     const loginCode = operatorCode(request, "/email/login/deliver");
     if (Option.isSome(loginCode)) return deliverEmailLoginProof(loginCode.value);
@@ -314,6 +370,9 @@ const server = Bun.serve({
               RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
               HOSTED_AI_MODEL: approvedWorkersAiModel,
               BROWSER_ORIGIN: browserOrigin,
+              GOOGLE_CLIENT_ID: "acceptance-google",
+              GOOGLE_CLIENT_SECRET: "synthetic-google-secret",
+              GOOGLE_REDIRECT_URI: "https://127.0.0.1:4174/providers/google/callback",
               WOMPI_ENVIRONMENT: "sandbox",
               WOMPI_PUBLIC_KEY: providerPublicKey,
               WOMPI_PRIVATE_KEY: providerPrivateKey,

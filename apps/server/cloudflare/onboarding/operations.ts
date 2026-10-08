@@ -1,5 +1,6 @@
+import { completeProviderAuthentication } from "../provider-authentication/operations";
 import { prepareOnboardingWhatsAppAssociation } from "../identity/operations";
-import { recordOnboardingConsent } from "../consent/operations";
+import { recordOnboardingConsent, recordWebOnboardingConsent } from "../consent/operations";
 import { verifyOnboardingEmail } from "../email-authentication/operations";
 import type { OnboardingRequest } from "./contract";
 import { completeEnrollment } from "./internal/completion";
@@ -27,5 +28,27 @@ export const completeOnboarding = ({ db, request }: OnboardingRequest): Promise<
           recordOnboardingConsent({ db, userId, exchangeId }),
         ],
         commit,
+      }),
+  });
+
+/** Complete only the proven Google web origin, with atomic Consent, credential, TrialPeriod and recovery creation and separate Browser Login approval. */
+export const completeGoogleOnboarding = ({ db, request }: OnboardingRequest): Promise<Response> =>
+  completeProviderAuthentication({
+    db,
+    request,
+    complete: (proof) =>
+      completeEnrollment({
+        db,
+        createdAtMs: proof.verifiedAtMs,
+        prepareEvidence: (userId) => [
+          recordWebOnboardingConsent({
+            db,
+            userId,
+            attemptId: proof.attemptId,
+            disclosure: proof.disclosure,
+            acceptedAtMs: proof.acceptedAtMs,
+          }),
+        ],
+        commit: proof.commit,
       }),
   });

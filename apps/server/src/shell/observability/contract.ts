@@ -130,6 +130,7 @@ export const TelemetryRegistry = {
   ],
   provider: [
     "cloudflare-access",
+    "google",
     "cloudflare-workers",
     "cloudflare-workers-ai",
     "kapso",

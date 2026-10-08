@@ -146,7 +146,7 @@ Workstation and provider-controlled source deployments are not release paths. Se
 
 ## Identity and verification
 
-Browser login retains a private verifier in the browser. WhatsApp approval, verified email, or
+Browser login retains a private verifier in the browser. Google provider authentication, WhatsApp approval, verified email, or
 support recovery can approve a pairing for the same stable User, but cannot establish a session
 without that verifier. One approved pairing bootstraps one web session. The server verifies proof
 and owns session authority; the web keeps private material out of URLs, public references, and
@@ -160,3 +160,8 @@ fixtures cover presentation and failure cases without substituting for the real-
 Cloudflare integration tests exercise the relevant Worker and platform boundaries locally; live
 Workers AI behavior has a separate release gate. Application-specific test seams belong in the
 application architecture documents.
+
+Google web signup/login is implemented under #1089. It creates a stable User by canonical issuer/subject,
+atomically retaining web Consent, TrialPeriod and digest-only recovery without a WhatsAppIdentity.
+Contact email grants no ownership. Provider approval and Browser Login session issuance remain
+separate authorities; deployed provider verification remains an operator gate.

@@ -1,3 +1,4 @@
+import { webDisclosureFacts } from "~/shell/consent/internal/web-disclosure";
 import { Config, Schema } from "effect";
 import { PATScopes } from "~/core/tokens/contract";
 import { weeklyDisclosure } from "~/shell/consent/internal/weekly-disclosure";
@@ -275,3 +276,7 @@ export const expiredPATConsentIdentities = (current: number): OwnedStatement =>
  */
 export const expiredPairingConsentIdentities = (current: number): OwnedStatement =>
   pairingExpiryEvidenceStatement(current);
+
+/** Exact first-party signup disclosure; reading it alone does not establish acceptance. */
+export const webSignupDisclosure = (): DisclosureSnapshot =>
+  Schema.decodeSync(DisclosureSnapshot)(webDisclosureFacts);

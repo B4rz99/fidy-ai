@@ -18,6 +18,10 @@ import {
 } from "@tanstack/react-router";
 import { BrowserLoginPairingFeature } from "@/features/browser-login/feature";
 import { HostedAgentFeature } from "@/features/agent/feature";
+import {
+  GoogleAuthenticationFeature,
+  GoogleReturnFeature,
+} from "@/features/google-authentication/feature";
 import { EmailOnboardingFeature } from "@/features/email-onboarding/feature";
 import { EmailReplacementFeature } from "@/features/email-replacement/feature";
 import { createPublicSiteRoute } from "@/features/public-site/feature";
@@ -145,9 +149,21 @@ const emailOnboardingRoute = createRoute({
   path: "/auth/verify-email",
   component: EmailOnboardingFeature,
 });
+const googleRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/auth/google",
+  component: GoogleAuthenticationFeature,
+});
+const googleReturnRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/auth/google-return",
+  component: GoogleReturnFeature,
+});
 const routeTree = rootRoute.addChildren([
   createPublicSiteRoute(rootRoute),
   browserLoginPairingRoute,
+  googleRoute,
+  googleReturnRoute,
   oauthReviewRoute,
   connectionContinuationRoute,
   subscriptionOffersRoute,

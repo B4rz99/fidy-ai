@@ -1,5 +1,4 @@
 import { HomeContent } from "@/features/public-site/landing/home-content";
-import { Registration } from "@/features/public-site/landing/registration";
 import { LandingTheme } from "@/features/public-site/landing/theme";
 import "@/features/public-site/landing/landing.css";
 
@@ -11,8 +10,6 @@ export const PublicHome = (): React.JSX.Element => (
       name="description"
       content="Tus registros financieros, presupuestos y hallazgos en un mismo sistema. Usa Fidy conversando, desde la web o con tus propios agentes. Hecho para Colombia."
     />
-    <Registration>
-      <HomeContent />
-    </Registration>
+    <HomeContent />
   </LandingTheme>
 );

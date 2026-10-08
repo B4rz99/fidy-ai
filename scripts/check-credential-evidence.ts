@@ -20,6 +20,11 @@ type CredentialEvidence = Readonly<{
 
 const credentialEvidence = [
   {
+    configuration: "GOOGLE_CLIENT_SECRET",
+    testFile: "apps/server/cloudflare/provider-authentication/journey.test.ts",
+    testName: "keeps configured Google credentials and protocol proofs out of exported diagnostics",
+  },
+  {
     configuration: "RESEND_API_KEY",
     testFile: "apps/server/src/shell/outbound-http/operations.test.ts",
     testName: "owns the Resend delivery destination, authorization, and idempotency",

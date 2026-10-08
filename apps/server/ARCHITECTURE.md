@@ -185,8 +185,14 @@ proof: it supplies the exact exchange's WhatsApp association and historical Cons
 new User. Email Authentication retains the one-use commit, adding its VerifiedEmailCredential and
 final proof-consumption guard to the single D1 batch. Refusal rolls back all owner state; success
 discloses the recovery code once in the immediate no-store response. Only the proof-bearing request
-is published; the common composition is private and enables no additional signup path. This
-preserved workflow adds no external work or telemetry requirements.
+is published; the common composition remains private. #1089 adds a Google web origin whose owner
+validates the browser-bound OIDC attempt, supplies accepted web Consent, and appends
+ProviderCredential plus origin-specific proof consumption to the same batch. Returning issuer/subject
+authentication approves the initiating BrowserLoginPairing without creating owner records or
+renewing Consent/TrialPeriod. The Google adapter uses Outbound HTTP for fixed token/JWKS destinations
+and transient tokens; the native Core root supplies its HTTP lifetime. Maintenance removes expired
+protocol attempts/receipts after one day. The preserved channel workflow remains independently
+verifiable. See [Google configuration and evidence](../../docs/operations/google-authentication.md).
 
 Consent owns current standing and append-only evidence. A standing read is not cached authorization.
 Ordinary protected work checks current Consent. An exact Pending hosted Turn retains its admitted

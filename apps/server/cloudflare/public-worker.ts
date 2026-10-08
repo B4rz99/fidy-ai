@@ -1,3 +1,4 @@
+import { providerPaths } from "../src/shell/provider-authentication/contract";
 import { oauthPaths } from "../src/shell/oauth-agents/contract";
 import { connectionBrowserPaths } from "../src/shell/connections/contract";
 import { refundSupportBasePath, refundSupportReadPath } from "./subscription/contract";
@@ -228,6 +229,9 @@ const postPaths = new Set<string>([
   rotateRecoveryPath,
   ...replacementPaths,
   supportRecoveryPath,
+  providerPaths.start,
+  providerPaths.status,
+  providerPaths.complete,
   ...emailAuthenticationPaths,
   ...pairingPaths,
   statementStagingPath,
@@ -238,6 +242,9 @@ const postPaths = new Set<string>([
 const browserMutationPaths = new Set<string>([
   rotateRecoveryPath,
   ...replacementPaths,
+  providerPaths.start,
+  providerPaths.status,
+  providerPaths.complete,
   ...emailAuthenticationPaths,
   ...pairingPaths,
   statementStagingPath,
@@ -246,12 +253,20 @@ const browserMutationPaths = new Set<string>([
 ]);
 const sessionPaths = new Set<string>([userPath, ...browserMutationPaths]);
 const preflightPaths = new Set<string>([
+  providerPaths.disclosure,
   listCategoriesPath,
   verificationPath,
   userPath,
   ...browserMutationPaths,
 ]);
-const ownedPaths = new Set<string>(["/health", listCategoriesPath, userPath, ...postPaths]);
+const ownedPaths = new Set<string>([
+  providerPaths.disclosure,
+  providerPaths.callback,
+  "/health",
+  listCategoriesPath,
+  userPath,
+  ...postPaths,
+]);
 const oauthPath = (path: string): boolean =>
   Object.values(oauthPaths).some((owned) => owned === path);
 const connectionBrowserPath = (path: string): boolean =>
@@ -458,12 +473,12 @@ const canonicalAdmissionHeaders = (
       })
     );
   });
-const forwardsQuery = (path: string): boolean =>
+const preservesCoreQuery = (path: string): boolean =>
   transactionPath(path) ||
   canonicalRoute(path) ||
   path === smokePath ||
-  connectionBrowserPath(path);
-
+  connectionBrowserPath(path) ||
+  path === providerPaths.callback;
 const coreRequest = (
   request: Request,
   environment: PublicEnvironment
@@ -498,7 +513,7 @@ const coreRequest = (
     // Rebuilding a Request from the raw body requires runtime-specific duplex options.
     return new Request(
       new Request(
-        `https://core.internal${path}${forwardsQuery(path) ? new URL(request.url).search : ""}`,
+        `https://core.internal${path}${preservesCoreQuery(path) ? new URL(request.url).search : ""}`,
         request
       ),
       { headers }

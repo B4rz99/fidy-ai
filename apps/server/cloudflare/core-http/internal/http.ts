@@ -1,6 +1,13 @@
 import { ConnectInstitutionInput } from "../../../src/core/connections/contract";
 import { connectionBrowserPaths } from "../../../src/shell/connections/contract";
 import { handleConnectionBrowserRequest } from "../../connections/runtime";
+import type { HttpClient } from "effect/http";
+import { completeGoogleOnboarding } from "../../onboarding/operations";
+import { providerPaths } from "../../../src/shell/provider-authentication/contract";
+import {
+  handleProviderAuthentication,
+  ownsProviderAuthenticationPath,
+} from "../../provider-authentication/operations";
 import { oauthPaths } from "../../../src/shell/oauth-agents/contract";
 import { handleOAuthRequest } from "../../oauth-agents/runtime";
 import { type MemoryOperationId, memoryOperationIds } from "../../../src/shell/memory/contract";
@@ -509,6 +516,7 @@ const reconciliationOperation = (
 
 const ownedCorePath = (path: string): boolean =>
   Object.values(connectionBrowserPaths).some((owned) => owned === path) ||
+  ownsProviderAuthenticationPath(path) ||
   refundSupportRoute(path) ||
   enrollmentCorePath(path) ||
   [
@@ -1487,7 +1495,7 @@ const reservedCoreResponse = (
   request: Request,
   environment: CoreHttpEnvironment,
   path: string
-): Option.Option<Effect.Effect<Response>> => {
+): Option.Option<Effect.Effect<Response, never, HttpClient.HttpClient>> => {
   if (!ownedCorePath(path)) {
     return Option.some(Effect.succeed(jsonResponse('{"status":"not_found"}', HTTP_NOT_FOUND)));
   }
@@ -1500,6 +1508,16 @@ const reservedCoreResponse = (
         browserOrigin: environment.BROWSER_ORIGIN,
       })
     );
+  }
+  if (path === providerPaths.complete && request.method === "POST") {
+    return Option.some(
+      Effect.tryPromise(() => completeGoogleOnboarding({ db: environment.DB, request })).pipe(
+        Effect.orElseSucceed(unavailable)
+      )
+    );
+  }
+  if (ownsProviderAuthenticationPath(path)) {
+    return Option.some(handleProviderAuthentication({ request, environment }));
   }
   if (path === smokePath) return Option.some(smokeResponse(request, environment));
   if (refundSupportRoute(path)) {
@@ -1518,7 +1536,7 @@ export const executeCoreHttp = ({
   environment,
   telemetry,
   publish,
-}: RequestExecution): Effect.Effect<Response> => {
+}: RequestExecution): Effect.Effect<Response, never, HttpClient.HttpClient> => {
   const url = new URL(request.url);
   if (Object.values(oauthPaths).some((path) => path === url.pathname)) {
     return handleOAuthRequest({

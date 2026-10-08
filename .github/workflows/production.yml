@@ -69,6 +69,8 @@ jobs:
       - name: Plan the complete Cloudflare topology
         working-directory: infra/cloudflare
         env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           KAPSO_API_KEY: ${{ secrets.KAPSO_API_KEY }}
           KAPSO_WEBHOOK_SECRET: ${{ secrets.KAPSO_WEBHOOK_SECRET }}
           WHATSAPP_BUSINESS_PORTFOLIO_ID: ${{ secrets.WHATSAPP_BUSINESS_PORTFOLIO_ID }}
@@ -107,6 +109,8 @@ jobs:
       - name: Upload zero-traffic Worker candidates with Alchemy
         working-directory: infra/cloudflare
         env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           KAPSO_API_KEY: ${{ secrets.KAPSO_API_KEY }}
           KAPSO_WEBHOOK_SECRET: ${{ secrets.KAPSO_WEBHOOK_SECRET }}
           WHATSAPP_BUSINESS_PORTFOLIO_ID: ${{ secrets.WHATSAPP_BUSINESS_PORTFOLIO_ID }}

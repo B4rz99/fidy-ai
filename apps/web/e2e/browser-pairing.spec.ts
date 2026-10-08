@@ -334,6 +334,7 @@ test("approves email login with the private browser verifier without exposing ma
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
+      yield* wait(page.clock.install());
       const attempts = yield* wait(installEmailLoginRoutes(page));
       yield* wait(page.goto("/auth/pair"));
       yield* wait(page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click());
@@ -349,7 +350,14 @@ test("approves email login with the private browser verifier without exposing ma
         ).toBeVisible()
       );
       yield* wait(page.getByLabel("Código recibido por correo").fill(emailLoginCode));
+      const approved = page.waitForResponse(
+        (reply) =>
+          reply.url().endsWith("/web/email/authentication/complete") &&
+          reply.status() === successStatus
+      );
       yield* wait(page.getByRole("button", { name: "Aprobar este navegador" }).click());
+      yield* wait((yield* wait(approved)).finished());
+      yield* wait(page.clock.fastForward(minimumPollIntervalMilliseconds));
       yield* wait(expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15000 }));
       expect(attempts()).toBe(2);
       expect(page.url()).not.toContain(emailLoginCode);
@@ -510,6 +518,14 @@ test("a SupportRecoveryCase approves the browser-private pairing through the rea
       expect((yield* wait(decision())).status()).toBe(successStatus);
       expect((yield* wait(decision())).status()).toBe(invalidStatus);
       yield* wait(expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15000 }));
+      const recovered = yield* wait(
+        page.request.get("https://127.0.0.1:4174/user", {
+          headers: { origin: "https://127.0.0.1:4173" },
+        })
+      );
+      expect(yield* wait(recovered.json())).toMatchObject({
+        data: { id: "24000000-0000-4000-8000-000000000311" },
+      });
       yield* wait(
         expect(page.getByRole("button", { name: "Registrar transacción" })).toBeVisible()
       );

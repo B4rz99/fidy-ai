@@ -124,6 +124,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/bun-install
+        with:
+          # Other jobs publish this exact cache; avoid compressing it again at teardown.
+          save-cache: "false"
       - name: Cloudflare adapter validation
         env:
           CLOUDFLARE_TEST_SHARD: ${{ matrix.shard }}/4
@@ -173,6 +176,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/bun-install
+        with:
+          # Other jobs publish this exact cache; avoid compressing it again at teardown.
+          save-cache: "false"
       - name: Select installed Playwright version
         id: playwright-version
         working-directory: apps/web

@@ -9,6 +9,7 @@ export type ProviderJourneyConfiguration = Readonly<{
   label: string;
   authorizationPattern: string;
   selectFromPublicSite: boolean;
+  recoverWithOperator: boolean;
 }>;
 type ProviderJourney = Readonly<{
   page: Page;
@@ -138,7 +139,10 @@ export const signupJourney = ({
       );
       expect(yield* Effect.tryPromise(() => page.evaluate(retainedSecretCount))).toBe(0);
       yield* returningProviderLogin({ configuration, page });
-      yield* providerRecoveryJourney({ page, context, request, backupRecoveryCode });
+      // Recovery acts on the stable User, independently of the authentication provider.
+      if (configuration.recoverWithOperator) {
+        yield* providerRecoveryJourney({ page, context, request, backupRecoveryCode });
+      }
       yield* returningSessionPolicies(configuration, { page, context, request });
     })
   );

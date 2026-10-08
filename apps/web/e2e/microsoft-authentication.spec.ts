@@ -9,6 +9,7 @@ const configuration = {
   provider: "microsoft",
   label: "Microsoft",
   authorizationPattern: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize**",
+  recoverWithOperator: false,
   selectFromPublicSite: true,
 } as const;
 playwright.test(

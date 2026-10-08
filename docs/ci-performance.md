@@ -41,20 +41,31 @@ Scheduling estimates were refreshed from the complete local adapter run, includi
 10–44s files previously estimated at one second. These remain single-run cloud-worker estimates,
 not GitHub runner medians. The four estimated work sums differ by less than one second.
 
-The mocked browser polling case advances the browser clock while still asserting the full
-poll interval and no overlapping requests. Three duplicate Microsoft shared-controller journeys
+The mocked browser polling and email-approval cases advance the browser clock while still
+asserting the full poll interval and no overlapping requests. Three duplicate Microsoft shared-controller journeys
 were removed: lost completion, pending redemption and popup blocking remain covered through
 Google; Microsoft retains real signup/session, denial and both WhatsApp handoff journeys.
-Real Core polling and security deadlines retain real time.
+Provider-neutral native operator recovery is exercised once through Google, alongside the
+dedicated SupportRecoveryCase journey; both providers retain signup, return login, session expiry
+and consent revocation. The parallel SupportRecoveryCase owns a separate User because recovery
+revokes sessions. Real Core polling and security deadlines retain real time.
 
 Validation passed 1,549 adapter cases in the complete 114-file run, with nine unchanged
 provider-gated skips, plus 11 focused fixture/new-trunk Sandbox cases and all scheduling probes.
 The final 63-case browser suite and native CLI journey passed in 124.5s locally, excluding job
 setup. Typechecking, lint and the existing workflow tests pass. No security findings.
 
-GitHub Actions must confirm complete-job and workflow durations. The three-minute target remains
-unverified because publishing the branch was blocked by automatic approval review; local timings
-exclude CI dependency provisioning, runner queueing and the Required Checks job.
+[First complete Linux run 37854802258](https://github.com/B4rz99/fidy-ai/actions/runs/37854802258)
+passed in **3m20s**, measured from workflow creation through completion, versus **5m11s** for
+[preceding trunk run 37851111387](https://github.com/B4rz99/fidy-ai/actions/runs/37851111387).
+Complete adapter jobs took 146/165/162/158s and browser validation took 171s including setup
+and teardown. These are actual complete runs, not a controlled runner-performance guarantee.
+
+The first run also showed critical-path jobs spending 6–10s compressing the same 544MB Bun
+cache, then losing the reservation race to another job. Adapter and browser jobs now restore
+that exact cache without publishing; other existing jobs still publish it on a miss. No cache
+key, dependency installation or validation gate is bypassed. The follow-up run must verify
+the three-minute workflow target, including Required Checks.
 
 ## Adapter regression follow-up: #1066
 

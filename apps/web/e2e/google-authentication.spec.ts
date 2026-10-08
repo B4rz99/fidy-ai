@@ -12,6 +12,7 @@ const configuration = {
   provider: "google",
   label: "Google",
   authorizationPattern: "https://accounts.google.com/o/oauth2/v2/auth**",
+  recoverWithOperator: true,
   selectFromPublicSite: false,
 } as const;
 playwright.test(

@@ -19,6 +19,7 @@ export const firstDaviplataUserId = "24000000-0000-4000-8000-000000000291";
 const otherUserId = "24000000-0000-4000-8000-000000000261";
 const otherTransactionId = "24000000-0000-4000-8000-000000000262";
 const backupRecoveryCode = "ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2";
+const recoveryUserId = "24000000-0000-4000-8000-000000000311";
 const now = Effect.runSync(Clock.currentTimeMillis);
 const trialDurationMs = 604_800_000;
 const expiredTrialAgeMs = 691_200_000;
@@ -162,9 +163,17 @@ await seedIdentity({
 const recoveryDigest = new Uint8Array(
   await crypto.subtle.digest("SHA-256", new TextEncoder().encode(backupRecoveryCode))
 );
+// Recovery revokes existing sessions. Its parallel journey must not invalidate the
+// ordinary pairing journey's User while that browser is exercising financial operations.
+await seedIdentity({
+  userId: recoveryUserId,
+  bsuid: "CO.Recovery",
+  email: "recuperacion@example.com",
+  consentId: "24000000-0000-4000-8000-000000000312",
+});
 await db
   .prepare(
     "INSERT INTO backup_recovery_credentials (user_id, code_digest, created_at_ms) VALUES (?,?,?)"
   )
-  .bind(fixtureUserId, recoveryDigest, now)
+  .bind(recoveryUserId, recoveryDigest, now)
   .run();

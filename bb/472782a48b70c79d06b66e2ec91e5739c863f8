@@ -1,0 +1,85 @@
+docs/operations/production-recovery.md
+  s_e3b9a05f422f64::t_b32fa48853cba7 11-27,30-35
+  s_e3b9a05f422f64::t_c454c4a2498a85 28-29
+apps/web/scripts/production-workflow.test.ts
+  s_e3b9a05f422f64::t_1ba431faeaf95f 16-34
+  s_e3b9a05f422f64::t_591f97f3d46b02 171,196
+apps/server/cloudflare/runtime/release-isolation.ts
+  s_e3b9a05f422f64::t_14fd97add5071b 5,24
+  s_e3b9a05f422f64::t_68304ee3469316 17-20
+  s_e3b9a05f422f64::t_56efff62a03b6b 1-4,6-9,14-16,25-26,36
+  s_e3b9a05f422f64::t_2c9509fa1694cd 10,13,27-35
+  s_e3b9a05f422f64::t_8987f45b9c8457 11-12
+  s_e3b9a05f422f64::t_6e493713c708a7 21-23
+apps/server/cloudflare/core-worker.ts
+  s_e3b9a05f422f64::t_56efff62a03b6b 56
+.github/workflows/production.yml
+  s_e3b9a05f422f64::t_65c601ee0a07dc 7-11,77,120,259
+  s_e3b9a05f422f64::t_d2587841d849b4 136,141-174
+  s_e3b9a05f422f64::t_4d1ed0dbb73aa5 121-135,137-140
+apps/server/cloudflare/core-http/contract.ts
+  s_e3b9a05f422f64::t_56efff62a03b6b 25
+infra/cloudflare/workers.test.ts
+  s_e3b9a05f422f64::t_2e70aa09bed1eb 501-502,508,515-523
+  s_e3b9a05f422f64::t_e667d49775d797 503-507,509-514
+apps/server/cloudflare/core-http/runtime.ts
+  s_e3b9a05f422f64::t_56efff62a03b6b 7,21
+  s_e3b9a05f422f64::t_68304ee3469316 14-20
+infra/cloudflare/verify-edge-policy.ts
+  s_e3b9a05f422f64::t_26843162aceec3 19
+  s_e3b9a05f422f64::t_3543e65c846696 20
+  s_e3b9a05f422f64::t_2218010bf95554 26-31
+infra/cloudflare/release-controller.test.ts
+  s_e3b9a05f422f64::t_c9f5c832716d91 105,111-114,125-128
+  s_e3b9a05f422f64::t_ef43174d783351 107-110,115-118,120-124,129-136,138-143,148-152
+  s_e3b9a05f422f64::t_77449e68b61c0c 2-3
+  s_e3b9a05f422f64::t_20baa45f4bb560 92,106,119,137,153
+  s_e3b9a05f422f64::t_1761c7e0a211cf 93-104,144-147
+infra/cloudflare/release-controller.ts
+  s_e3b9a05f422f64::t_605056286213d0 301-304,309,311-342
+  s_e3b9a05f422f64::t_34e6a650f17262 305-308,310
+apps/web/src/features/provider-authentication/FEATURE.md
+  s_e3b9a05f422f64::t_e4ff8cb82b6bbe 51-55
+  s_e3b9a05f422f64::t_591f97f3d46b02 40-41,48-49,58-60
+  s_e3b9a05f422f64::t_ce0d82442a326d 50
+infra/cloudflare/verify-edge-policy.test.ts
+  s_e3b9a05f422f64::t_3543e65c846696 7
+infra/cloudflare/alchemy.run.ts
+  s_e3b9a05f422f64::t_6f71a4276e2746 45-46,170,238,244,432
+  s_e3b9a05f422f64::t_56efff62a03b6b 254
+  s_e3b9a05f422f64::t_8053f8313a3747 44
+  s_e3b9a05f422f64::t_f7ff2b25ff8635 239-243
+infra/cloudflare/production-release.ts
+  s_e3b9a05f422f64::t_861569c01ad348 3
+  s_e3b9a05f422f64::t_2c9509fa1694cd 770-782
+  s_e3b9a05f422f64::t_25850ce2c24216 783,854-856,860-862,903,905-909
+  s_e3b9a05f422f64::t_1761c7e0a211cf 786-789
+  s_e3b9a05f422f64::t_4784006a7588fe 96,739-745,749-752,756-760,763-769,791-797,807-809,813,821,831-834
+  s_e3b9a05f422f64::t_ef43174d783351 746-748,753-755,761-762,798-806,810-811,815-820,822-830,835-842,844-853,857-859,863-879,881-902,904
+  s_e3b9a05f422f64::t_6f4247d18d5c7f 114,784-785,790,812,814,843,880,1181-1183
+infra/cloudflare/smoke.test.ts
+  s_e3b9a05f422f64::t_211caa429b3abd 59-66,74-85,92-117
+  s_e3b9a05f422f64::t_e667d49775d797 86-91
+  s_e3b9a05f422f64::t_e269212cd7d518 67-73
+apps/server/cloudflare/public-worker.ts
+  s_e3b9a05f422f64::t_56efff62a03b6b 41
+  s_e3b9a05f422f64::t_68304ee3469316 729-735
+  s_e3b9a05f422f64::t_ccc47e75a76f6a 51,736-737
+  s_e3b9a05f422f64::t_5fc05529a1b884 738
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bb472782a48b70c79d06b66e2ec91e5739c863f8",
+  "prompts": {},
+  "sessions": {
+    "s_e3b9a05f422f64": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a115f2-dfce-7741-a6e9-e22144cd3fad",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

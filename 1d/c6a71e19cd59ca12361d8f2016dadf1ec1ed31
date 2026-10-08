@@ -1,0 +1,20 @@
+GLOSSARY.md
+  s_55523bb8416825::t_d7f1bcf9907229 269-270,355-356
+  s_55523bb8416825::t_25a5ea90b12e2a 339,344-349,360-361,368-369,408
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1dc6a71e19cd59ca12361d8f2016dadf1ec1ed31",
+  "prompts": {},
+  "sessions": {
+    "s_55523bb8416825": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11896-74c5-7f82-b3d7-9e3ce7978236",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

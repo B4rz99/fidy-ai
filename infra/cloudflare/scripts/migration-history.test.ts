@@ -9,6 +9,7 @@ import {
   compareAppliedMigrationRows,
   containsRepairableMigrationChange,
   decodeLatestProductionWorkflowRun,
+  decodeMigrationRepairStatuses,
   decodePullRequestFiles,
   decodeWranglerMigrationRows,
   hashMigrationSources,
@@ -46,6 +47,31 @@ const approvedRepairStatuses = [
 ] as const;
 
 describe("D1 migration history policy", () => {
+  it("decodes every slurped GitHub page without losing later migration evidence", () => {
+    const files = decodePullRequestFiles(
+      JSON.stringify([
+        [{ filename: `${migrationDirectory}unrelated.sql`, status: "added" }],
+        [{ filename: `${migrationDirectory}${firstMigration}`, status: "removed" }],
+      ])
+    );
+    expect(Effect.runSync(containsRepairableMigrationChange(firstMigration, files))).toBe(true);
+    const status = {
+      id: 11,
+      context: `d1-migration-repair/${firstMigration}`,
+      state: "success",
+      created_at: "2026-09-01T12:02:00.000Z",
+      target_url: repairRunUrl,
+      creator: { login: "github-actions[bot]" },
+    };
+    expect(decodeMigrationRepairStatuses(JSON.stringify([[], [status]]))).toEqual([
+      { ...status, target_url: Option.some(repairRunUrl) },
+    ]);
+    expect(() => decodePullRequestFiles(JSON.stringify([[], [{ status: "removed" }]]))).toThrow();
+    expect(() =>
+      decodeMigrationRepairStatuses(JSON.stringify([[], [{ ...status, state: "invalid" }]]))
+    ).toThrow();
+  });
+
   it("validates repair commit and repository identities", () => {
     expect(Schema.decodeUnknownSync(MigrationRepairCommitSha)("a".repeat(40))).toBe("a".repeat(40));
     expect(Schema.decodeUnknownSync(MigrationRepairCommitSha)("b".repeat(64))).toBe("b".repeat(64));

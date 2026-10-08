@@ -61,8 +61,6 @@ const readChangedFiles = (
     runGitHub([
       "--paginate",
       "--slurp",
-      "--jq",
-      "add",
       `repos/${repository}/pulls/${pullRequestNumber}/files?per_page=100`,
     ])
   );

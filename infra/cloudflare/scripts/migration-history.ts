@@ -149,7 +149,10 @@ const MigrationRepairStatus = Schema.Struct({
 });
 export type MigrationRepairStatus = typeof MigrationRepairStatus.Type;
 
-const GitHubStatuses = Schema.Array(MigrationRepairStatus);
+const GitHubStatuses = Schema.Union([
+  Schema.Array(MigrationRepairStatus),
+  Schema.Array(Schema.Array(MigrationRepairStatus)),
+]);
 const ProductionWorkflowRun = Schema.Struct({
   status: Schema.String,
   updated_at: Schema.String,
@@ -164,7 +167,7 @@ export type ProductionWorkflowRunSnapshot = {
 };
 
 export const decodeMigrationRepairStatuses = (json: string): ReadonlyArray<MigrationRepairStatus> =>
-  Schema.decodeUnknownSync(GitHubStatuses)(JSON.parse(json));
+  Schema.decodeUnknownSync(GitHubStatuses)(JSON.parse(json)).flat();
 
 export const decodeLatestProductionWorkflowRun = (
   json: string
@@ -301,7 +304,9 @@ const PullRequestFile = Schema.Struct({
 export type PullRequestFile = typeof PullRequestFile.Type;
 
 export const decodePullRequestFiles = (json: string): ReadonlyArray<PullRequestFile> =>
-  Schema.decodeUnknownSync(Schema.Array(PullRequestFile))(JSON.parse(json));
+  Schema.decodeUnknownSync(
+    Schema.Union([Schema.Array(PullRequestFile), Schema.Array(Schema.Array(PullRequestFile))])
+  )(JSON.parse(json)).flat();
 
 export const containsRepairableMigrationChange = Effect.fn("containsRepairableMigrationChange")(
   (name: string, files: ReadonlyArray<PullRequestFile>) =>

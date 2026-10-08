@@ -27,6 +27,3 @@ sca:
     - CVE: CVE-2026-93687
       paths:
         - bun.lock
-    - CVE: CVE-2026-93749
-      paths:
-        - bun.lock

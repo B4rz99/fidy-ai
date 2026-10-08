@@ -1,0 +1,69 @@
+apps/server/cloudflare/identity/user-context/operations.test.ts
+  s_55523bb8416825::t_636c092733818c 18-23
+apps/server/cloudflare/transactions/transactions.test.ts
+  s_55523bb8416825::t_636c092733818c 185
+apps/server/cloudflare/agent/hosted-turn.test.ts
+  s_55523bb8416825::t_636c092733818c 213
+apps/server/cloudflare/consent/operations.test.ts
+  s_55523bb8416825::t_636c092733818c 25
+apps/server/cloudflare/migrations/0069_retire_email_code_signup.sql
+  s_55523bb8416825::t_636c092733818c 1-7
+apps/server/cloudflare/categories/keyword-rules.test.ts
+  s_55523bb8416825::t_636c092733818c 99
+apps/server/cloudflare/connections/connections.test.ts
+  s_55523bb8416825::t_636c092733818c 90
+apps/server/cloudflare/insights/insight-store.test.ts
+  s_55523bb8416825::t_636c092733818c 88
+apps/server/cloudflare/tokens/pats.test.ts
+  s_55523bb8416825::t_636c092733818c 238
+apps/server/cloudflare/migrations/0004_onboarding_email.sql
+  s_55523bb8416825::t_ba9d148dbd6de9 1-46
+apps/server/cloudflare/transactions/oauth-review.test.ts
+  s_55523bb8416825::t_636c092733818c 66
+apps/server/cloudflare/migrations/0016_async_health.sql
+  s_55523bb8416825::t_ba9d148dbd6de9 2-3,13
+apps/server/cloudflare/memory/memory.test.ts
+  s_55523bb8416825::t_636c092733818c 80
+apps/server/cloudflare/ingestion/statement-ingestion.test.ts
+  s_55523bb8416825::t_636c092733818c 130
+apps/server/cloudflare/ingestion/statement-staging.test.ts
+  s_55523bb8416825::t_636c092733818c 47
+apps/server/cloudflare/provider-authentication/journey.test-fixture.ts
+  s_55523bb8416825::t_636c092733818c 99,105
+apps/server/cloudflare/ai/workers-ai.test.ts
+  s_55523bb8416825::t_636c092733818c 99
+apps/server/cloudflare/transactions/peer-reads.test.ts
+  s_55523bb8416825::t_636c092733818c 40
+apps/server/cloudflare/budgets/budgets.test.ts
+  s_55523bb8416825::t_636c092733818c 142
+apps/server/cloudflare/migrations/0005_verified_onboarding.sql
+  s_55523bb8416825::t_ba9d148dbd6de9 1-3,44-73
+apps/server/cloudflare/d1-test-fixture.ts
+  s_55523bb8416825::t_636c092733818c 213
+apps/server/cloudflare/ingestion/statement-processing.test.ts
+  s_55523bb8416825::t_636c092733818c 30
+apps/server/cloudflare/categories/operations.test.ts
+  s_55523bb8416825::t_636c092733818c 95
+apps/server/cloudflare/recovery/support-recovery.test.ts
+  s_55523bb8416825::t_636c092733818c 57
+apps/server/cloudflare/ai/admission.test.ts
+  s_55523bb8416825::t_636c092733818c 32
+apps/server/cloudflare/onboarding/browser-authentication.test.ts
+  s_55523bb8416825::t_636c092733818c 71,77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "00bc56212c68ea7952d5c654b7fa78c3b44a8664",
+  "prompts": {},
+  "sessions": {
+    "s_55523bb8416825": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11896-74c5-7f82-b3d7-9e3ce7978236",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

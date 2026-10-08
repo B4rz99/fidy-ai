@@ -1,0 +1,27 @@
+apps/server/cloudflare/d1-test-fixture.ts
+  s_55523bb8416825::t_f67dceee7e885d 210-212
+apps/web/vitest.config.ts
+  s_55523bb8416825::t_f67dceee7e885d 43
+infra/cloudflare/verify-edge-policy.test.ts
+  s_55523bb8416825::t_f67dceee7e885d 7
+infra/cloudflare/verify-edge-policy.ts
+  s_55523bb8416825::t_f67dceee7e885d 16-17
+infra/cloudflare/scripts/check-kapso-launch.test.ts
+  s_55523bb8416825::t_f67dceee7e885d 32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ba7326597325e4f829fa693847ac2a4f27c45583",
+  "prompts": {},
+  "sessions": {
+    "s_55523bb8416825": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11896-74c5-7f82-b3d7-9e3ce7978236",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

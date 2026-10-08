@@ -17,14 +17,14 @@ import { edgeSecurityPolicy } from "./edge-security";
 // Includes #1086 provider callbacks, anonymous provider admission, and removal of email signup resources.
 // Includes #305's static sandbox JWKS and fail-closed registration callback without Core authority.
 // Includes #1086's incident-only isolated public/Core admission and gated recovery uploads.
-const expectedEdgePolicyDigest = "1c95b218ae3cacfaab1d766b9a002706f618ffe73e3158d5c08deeb34f97625f";
+const expectedEdgePolicyDigest = "5a2e2ba5070ef2629ac944d864996834fa6f731aa2afdca659cc78c62c934053";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),
   await Bun.file(new URL("worker-observability.ts", import.meta.url)).text(),
   await Bun.file(new URL("../../apps/server/cloudflare/public-worker.ts", import.meta.url)).text(),
   await Bun.file(
-    new URL("../../apps/server/cloudflare/runtime/release-isolation.ts", import.meta.url)
+    new URL("../../apps/server/cloudflare/release-isolation/operations.ts", import.meta.url)
   ).text(),
   await Bun.file(
     new URL("../../apps/server/cloudflare/core-http/runtime.ts", import.meta.url)

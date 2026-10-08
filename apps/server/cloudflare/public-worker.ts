@@ -38,7 +38,7 @@ import { smokeProofAccepted } from "./runtime/release-smoke/operations";
 import { patBrowserRoute, patDirectRoute, patMethods, patRoute } from "./tokens/operations";
 import { canonicalMethods, canonicalOperation, canonicalRoute } from "./routing/operations";
 import { bancolombiaSandboxResponse } from "./bancolombia-sandbox/operations";
-import { recoveryIsolationResponse } from "./runtime/release-isolation";
+import { recoveryIsolationResponse } from "./release-isolation/operations";
 
 type PublicEnvironment = WorkerTelemetryEnvironment & {
   readonly BROWSER_ORIGIN: string;

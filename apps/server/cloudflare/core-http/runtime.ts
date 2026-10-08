@@ -4,7 +4,7 @@ import type { TelemetryService } from "../../src/shell/observability/contract";
 import type { CoreHttpHandler } from "./contract";
 import { acceptedWorkPublisher, executeCoreHttp } from "./internal/http";
 import { observeWorkerRequest } from "../runtime/telemetry/operations";
-import { recoveryIsolationResponse } from "../runtime/release-isolation";
+import { recoveryIsolationResponse } from "../release-isolation/operations";
 
 /** Construct private HTTP assembly with one bounded Work span and post-commit publication lifetime. */
 export const makeCoreHttp =

@@ -151,7 +151,7 @@ export type MigrationRepairStatus = typeof MigrationRepairStatus.Type;
 
 const GitHubStatuses = Schema.Union([
   Schema.Array(MigrationRepairStatus),
-  Schema.Array(Schema.Array(MigrationRepairStatus)),
+  MigrationRepairStatus.pipe(Schema.Array, Schema.Array),
 ]);
 const ProductionWorkflowRun = Schema.Struct({
   status: Schema.String,
@@ -305,7 +305,7 @@ export type PullRequestFile = typeof PullRequestFile.Type;
 
 export const decodePullRequestFiles = (json: string): ReadonlyArray<PullRequestFile> =>
   Schema.decodeUnknownSync(
-    Schema.Union([Schema.Array(PullRequestFile), Schema.Array(Schema.Array(PullRequestFile))])
+    Schema.Union([Schema.Array(PullRequestFile), PullRequestFile.pipe(Schema.Array, Schema.Array)])
   )(JSON.parse(json)).flat();
 
 export const containsRepairableMigrationChange = Effect.fn("containsRepairableMigrationChange")(

@@ -1,0 +1,36 @@
+apps/server/ARCHITECTURE.md
+  s_55523bb8416825::t_fdbc8582dd788e 66-69
+apps/server/src/shell/connections/runtime.ts
+  s_55523bb8416825::t_fdbc8582dd788e 1-31
+apps/server/src/shell/connections/transport.test.ts
+  s_55523bb8416825::t_fdbc8582dd788e 1-29
+apps/server/cloudflare/connections/connections.test.ts
+  s_55523bb8416825::t_fdbc8582dd788e 15,423-444,464-501
+  s_55523bb8416825::t_4ee66cee024479 502-503
+infra/cloudflare/verify-edge-policy.ts
+  s_55523bb8416825::t_792edaf7502a0d 16,18,24-29
+apps/server/cloudflare/connections/runtime.ts
+  s_55523bb8416825::t_fdbc8582dd788e 4,7,16,99-116,124-126,137
+apps/server/cloudflare/public-worker.ts
+  s_55523bb8416825::t_fdbc8582dd788e 6,280,304-305,423-424,426-428
+infra/cloudflare/verify-edge-policy.test.ts
+  s_55523bb8416825::t_792edaf7502a0d 7
+apps/server/cloudflare/core-http/internal/http.ts
+  s_55523bb8416825::t_fdbc8582dd788e 2,506,1490
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ace63b536025df58c333804f9c76a1a67b96caac",
+  "prompts": {},
+  "sessions": {
+    "s_55523bb8416825": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11896-74c5-7f82-b3d7-9e3ce7978236",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,132 @@
+apps/server/cloudflare/provider-authentication/journey.test-fixture.ts
+  s_55523bb8416825::t_adfd2c06590352 67-69,88
+  s_55523bb8416825::t_4b9b9a7423bed4 81,89-105,117-119
+apps/server/cloudflare/provider-authentication/internal/completion.ts
+  s_55523bb8416825::t_f0f45ba4180e7a 1-2,23,37,54-60,64,94-97,102-107,110,121,132-158,183,196,204
+  s_55523bb8416825::t_aa81e6d573947d 61-63,108-109,189
+apps/server/cloudflare/browser-acceptance-preview.ts
+  s_55523bb8416825::t_5519c799e1eb2e 1,140-143
+  s_55523bb8416825::t_8145514ce25539 144-145,360-362,444-445,448
+ARCHITECTURE.md
+  s_55523bb8416825::t_acdc6e58701981 168-174
+apps/server/cloudflare/provider-authentication/whatsapp.test.ts
+  s_55523bb8416825::t_cdb97961e208eb 2
+  s_55523bb8416825::t_5519c799e1eb2e 420-423
+  s_55523bb8416825::t_5c0e5da1bade54 725
+  s_55523bb8416825::t_17b9741cfa219c 12-13,26,28-29,33-34,48,50,62,64,67,69,76-77,92-93,100-102,105-106,135,188,222,232,247,253-255,258-262,265,274,277-279,281,283,285,287,290-291,293-294,296,299,308,310-316,321-322,325,327-328,331-333,343,354,374-375,379,382,390-401,403-404,408-409,413-416,427,432,436,446-447,452,455-456,460-465,472-473,476-478,480-488,491-492,502-503,506,509-510,515-517,519,526,528-529,531-533,535-537,539-542,551,558,562-563,568-571,573-575,577-578,581-583,585-586,588-589,594,597-599,605-606,613-616,619-724,726-747
+  s_55523bb8416825::t_4c96ade926a54c 1,3-11,14-25,27,30-32,35-47,49,51-61,63,65-66,68,70-75,78-91,94-99,103-104,107-134,136-187,189-221,223-231,233-246,248-252,256-257,263-264,266-273,275-276,280,282,284,286,288-289,292,295,297-298,300-307,309,317-320,323-324,326,329-330,334-342,344-353,355-373,376-378,380-381,383-389,402,405-407,410-412,417-419,424-426,428-431,433-435,437-445,448-451,453-454,457-459,466-471,474-475,479,489-490,493-501,504-505,507-508,511-514,518,520-525,527,530,534,538,543-550,552-557,559-561,564-567,572,576,579-580,584,587,590-593,595-596,600-604,607-612,617-618
+apps/server/cloudflare/whatsapp/internal/ingress.ts
+  s_55523bb8416825::t_f0f45ba4180e7a 300-303,306-307
+  s_55523bb8416825::t_79d06eaf610562 1,309-312
+apps/web/src/features/provider-authentication/feature.tsx
+  s_55523bb8416825::t_adfd2c06590352 1,17-18,21,55,57,86,157-159,167
+  s_55523bb8416825::t_d5b92f9b4a9b7b 29-49,51,85,93-104,108,110,112,114-123,135,152,162
+  s_55523bb8416825::t_32d9b0dc7767b7 20
+  s_55523bb8416825::t_7be2f38c0c3147 19,24,50,52-54,56,58,64,70,79-81,83-84,124,130-134,148-151,153-156,160-161,163-166,168-169,201-205,207,220
+apps/server/src/shell/web-authentication/contract.ts
+  s_55523bb8416825::t_cdb97961e208eb 14
+  s_55523bb8416825::t_478800102ffa21 15
+SECURITY_STANDARDS.md
+  s_55523bb8416825::t_acdc6e58701981 149-150,177-189,271-274
+apps/server/src/shell/provider-authentication/runtime.ts
+  s_55523bb8416825::t_72bec58060a42b 1-3,5-12
+  s_55523bb8416825::t_fdfee58eab9efd 4,13-25
+apps/server/cloudflare/provider-authentication/contract.ts
+  s_55523bb8416825::t_f0f45ba4180e7a 1,20
+  s_55523bb8416825::t_5a9af7c5a421a7 21-22
+apps/server/cloudflare/provider-authentication/runtime.ts
+  s_55523bb8416825::t_cdb97961e208eb 38
+  s_55523bb8416825::t_f2713c16b418c2 1-7,9,39-58
+apps/web/src/features/provider-authentication/controller.ts
+  s_55523bb8416825::t_cdb97961e208eb 36,40,42,45,134
+  s_55523bb8416825::t_adfd2c06590352 18,85,125,127,223-224,226-227,229,238
+  s_55523bb8416825::t_12f5f010e1abf3 41,44,46,124,126,225,228
+apps/web/src/app/routes.ts
+  s_55523bb8416825::t_107067b003cdbf 3,5-8,153-155
+  s_55523bb8416825::t_5f5ae69fecb84f 156-164,168-169,179-180
+apps/server/cloudflare/browser-acceptance-whatsapp.ts
+  s_55523bb8416825::t_5519c799e1eb2e 3-18,21,29,31-158,161,163,166-168,170-171
+  s_55523bb8416825::t_a95484ed00de3f 1-2,19-20,22-28,30,159-160,162,164-165,169,172-183
+apps/server/src/shell/provider-authentication/contract.ts
+  s_55523bb8416825::t_3315990d723334 27
+  s_55523bb8416825::t_ec0e621f001dea 28-39,44,75,102
+apps/server/ARCHITECTURE.md
+  s_55523bb8416825::t_acdc6e58701981 183,194,470-481
+apps/server/cloudflare/identity/operations.ts
+  s_55523bb8416825::t_f0f45ba4180e7a 53-54
+apps/server/cloudflare/provider-authentication/internal/status.ts
+  s_55523bb8416825::t_cdb97961e208eb 28-38,40-42,44,46-55,81,87-90
+  s_55523bb8416825::t_107067b003cdbf 1,13,16-19,21-24,26-27
+  s_55523bb8416825::t_84cdd9374db54a 20,25,39,43,45,91
+apps/server/cloudflare/whatsapp/webhook-body.test.ts
+  s_55523bb8416825::t_f0f45ba4180e7a 35
+apps/server/cloudflare/onboarding/operations.ts
+  s_55523bb8416825::t_f0f45ba4180e7a 44-45
+  s_55523bb8416825::t_2775720477bf09 34-35,46-52
+apps/server/cloudflare/consent/operations.ts
+  s_55523bb8416825::t_72bec58060a42b 192
+apps/web/ARCHITECTURE.md
+  s_55523bb8416825::t_acdc6e58701981 89,190-197
+apps/server/cloudflare/whatsapp/webhook-abort.test.ts
+  s_55523bb8416825::t_f0f45ba4180e7a 43
+apps/server/cloudflare/provider-authentication/internal/start.ts
+  s_55523bb8416825::t_107067b003cdbf 2,11,114
+  s_55523bb8416825::t_cdb97961e208eb 115-127
+  s_55523bb8416825::t_e880b47e682a76 128-157,181-185,192-198
+apps/server/cloudflare/provider-authentication/internal/whatsapp-handoff.ts
+  s_55523bb8416825::t_3315990d723334 10-19,21-52,57-58,64-68,71-72,83-85,87-92,101,103,188-243
+  s_55523bb8416825::t_cdb97961e208eb 73,120-126,159,247,251-252,269-270,275-276,278,287
+  s_55523bb8416825::t_adf0a8ea71311a 1-9,20,53-56,59-63,69-70,74-82,86,93-100,102,104-119,127-158,160-187,244-246,248-250,253-268,271-274,277,279-286,288-299
+apps/server/cloudflare/consent/ingress/internal/ingress.ts
+  s_55523bb8416825::t_e2fe47e65d1814 723-726,738-742
+apps/server/cloudflare/consent/internal/pre-user-projections.ts
+  s_55523bb8416825::t_46f8a019af7085 3
+apps/server/cloudflare/onboarding/consent-ingress.test.ts
+  s_55523bb8416825::t_fd47b0cc97c44b 3,78-84,176,695,738,785,818
+apps/server/cloudflare/whatsapp/contract.ts
+  s_55523bb8416825::t_559fe408069c52 231
+apps/web/e2e/google-authentication.spec.ts
+  s_55523bb8416825::t_ab5637a1447c15 8,40-46
+apps/web/e2e/provider-authentication.journeys.ts
+  s_55523bb8416825::t_482087a517e7fe 3,348-463
+apps/web/src/transport/client.ts
+  s_55523bb8416825::t_6ec175fbd9cad9 280-281
+docs/operations/google-authentication.md
+  s_55523bb8416825::t_3404d20d496260 7-9,55-73
+docs/operations/microsoft-authentication.md
+  s_55523bb8416825::t_4b1c591ab1ca88 49-50
+apps/server/cloudflare/core-http/internal/http.ts
+  s_5406acdc54bc93::t_ce8995ca9a635e 5,1520
+apps/server/cloudflare/migrations/0065_whatsapp_provider_handoff.sql
+  s_5406acdc54bc93::t_77cd30be9894ce 1-58
+apps/server/src/client.ts
+  s_5406acdc54bc93::t_1e546d3c410730 161-162
+apps/server/src/shell/consent/internal/current-disclosure.ts
+  s_5406acdc54bc93::t_d9604defad1d45 12,18-19
+tools/depcruise/publication.mjs
+  s_5406acdc54bc93::t_0d29d7872f1c8c 20,87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1f14d99d79f2cf2a344f6e6948bb90e2e8af65d2",
+  "prompts": {},
+  "sessions": {
+    "s_5406acdc54bc93": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11b50-0285-7511-9e50-6f1045fb3d74",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_55523bb8416825": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11896-74c5-7f82-b3d7-9e3ce7978236",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

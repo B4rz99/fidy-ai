@@ -209,7 +209,7 @@ const providerJson = Effect.fn(
   Effect.timeout("10 seconds")
 );
 // Retain at most 32 KiB in memory; drain the pipe without publishing foreign output.
-const toolingErrorCode = (stream: ReadableStream<Uint8Array>): Promise<Option.Option<string>> => {
+const toolingRefusal = (stream: ReadableStream<Uint8Array>): Promise<Option.Option<string>> => {
   const decoder = new TextDecoder();
   const limit = 32_768;
   let retained = "";
@@ -234,7 +234,13 @@ const toolingErrorCode = (stream: ReadableStream<Uint8Array>): Promise<Option.Op
           )
             ? Option.some("100405")
             : Option.none()
-        )
+        ),
+        // Closed resource categories help diagnose deleted bindings without retaining provider text.
+        Option.map((code) => {
+          if (/\bqueues?\b/iu.test(output)) return `${code}; resource=queue`;
+          if (/\bworkflows?\b/iu.test(output)) return `${code}; resource=workflow`;
+          return code;
+        })
       );
     });
 };
@@ -260,7 +266,7 @@ const startReleaseCommand = (
   const settlement = Promise.allSettled([
     new Response(child.stdout).text(),
     child.exited,
-    toolingErrorCode(child.stderr),
+    toolingRefusal(child.stderr),
   ]);
   return { child, settlement };
 };

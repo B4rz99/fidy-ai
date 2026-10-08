@@ -28,7 +28,7 @@ bun run --cwd apps/web test -- src/features/browser-login src/features/provider-
 ```
 
 Passed: 80 Worker/D1 tests, 20 browser journeys, 14 CLI tests and 13 web tests.
-The release-controller, routing and native command checks also pass (45 tests), including
+The release-controller, routing and native command checks also pass (46 tests), including
 secret-safe native refusal diagnostics after uncertain-write reconciliation.
 Browser journeys use built static assets and real local public/Core/D1; external provider and
 operator/WhatsApp delivery edges are substituted. They are reusable regression checks, not live
@@ -37,15 +37,16 @@ Google, Microsoft, Kapso or Cloudflare Access evidence.
 Manual Production check: the public signup link opens `/auth/google`, but its Consent loading
 fails. `GET https://api.fidyapp.com/web/providers/disclosure` returns 404. API `/health` reports
 `449b2a47726c6b88133d84488b90c65e0a6c6beb`, before provider signup was implemented.
-The [latest deployment](https://github.com/B4rz99/fidy-ai/actions/runs/37845763152) failed during
-zero-traffic routing, before promotion. Signup is **blocked in Production**, not verified.
+The [diagnostic deployment](https://github.com/B4rz99/fidy-ai/actions/runs/37851881795) failed during
+zero-traffic routing with Cloudflare API code 10210; guarded cleanup succeeded.
+Signup is **blocked in Production**, not verified.
 
 Read-only [traffic inspection](https://github.com/B4rz99/fidy-ai/actions/runs/37848592357)
 confirmed stable public/Core traffic and no topology drift. The uploaded candidate exists. Both
 stable and candidate Core versions are listed as deployable, but the stable Core's referenced
-onboarding Workflow returns 404 and the candidate removes `OnboardingEmailWorkflowV1`.
-These are deployment-compatibility leads; the failed staging command discarded its underlying
-diagnostic, so neither is yet established as the exact server rejection. Do not force promotion.
+onboarding Workflow returns 404 and its onboarding Queue binding reports `queue_deleted: true`.
+All other stable Queue and Workflow references resolve. These are deployment-compatibility leads;
+the numeric rejection alone does not establish which resource caused it. Do not force promotion.
 
 Live Ingress/Core settings disable invocation logs, traces, Worker Logpush and tail consumers.
 Account-wide Logpush inspection was refused (403), so callback logging exclusion is not fully verified.
@@ -54,7 +55,8 @@ Remaining: restore a matching deployed web/API release; verify real Google and M
 and work/school signup/returning login/denial with test identities; real WhatsApp association and
 forwarded/expired handoff refusal; Access-backed recovery; deployed session/cookie deadlines,
 retention and callback-query log exclusion. Keep protocol and recovery secrets out of evidence.
-The User approved their personal Gmail for Google testing; interactive sign-in remains pending.
+The User approved personal Google, Microsoft and WhatsApp accounts and will handle sign-in;
+interactive verification remains pending.
 
 [Provider configuration and live checks](../../../../../docs/operations/authentication-feature-map.md)
 and [recovery procedure](../../../../../docs/operations/support-recovery.md) contain operator details.

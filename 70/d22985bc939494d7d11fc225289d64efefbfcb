@@ -1,0 +1,19 @@
+apps/server/cloudflare/identity/identity-owner.test.ts
+  s_55523bb8416825::t_c775af4dda4dc6 158,164,167
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "70d22985bc939494d7d11fc225289d64efefbfcb",
+  "prompts": {},
+  "sessions": {
+    "s_55523bb8416825": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11896-74c5-7f82-b3d7-9e3ce7978236",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

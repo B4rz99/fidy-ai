@@ -439,6 +439,8 @@ describe("Production topology contract", () => {
       "/providers/wompi/billing-events",
       "/web/hosted-turns",
       "/web/hosted-turns/delivery",
+      "/web/connections/review",
+      "/web/connections/begin",
       "/web/subscription/payment-enrollments/prepare",
       "/web/subscription/payment-enrollments/submit",
       "/internal/support/billing-refunds",

@@ -61,6 +61,20 @@ bound the client graph. Semantic leakage through an otherwise legal interface st
 See root architecture's public-surface review and
 [ADR 0031](../../docs/adr/0031-published-owner-interfaces-and-visible-internals.md).
 
+### Connection browser preparation
+
+`cloudflare/connections` owns browser review and single-use preparation independently of the
+canonical initiation operation. The public Worker forwards only the browser cookie, Origin and
+body metadata to private Core. Preparation enters the existing User coordinator and atomically
+rechecks the exact fresh WebSession, unrevoked Consent, institution gate and original attempt
+deadline before consumption, private execution metadata and Audit commit. Review needs a live
+same-User session and returns only safe Connection facts and `ready` or `prepared` progress.
+A newer attempt retires the older continuation's progress; execution metadata cascades with the
+attempt's existing bounded retention. Preparation leaves the Connection `Connecting` and grants
+no institution authority. Bancolombia authorization, callback validation, protected credentials,
+Account discovery and activation remain pending the verified institution contract; the production
+gate remains disabled.
+
 ## 3. Canonical contracts and execution
 
 `src/shell/api.ts` assembles the canonical API from owner declarations.

@@ -1,3 +1,4 @@
+import { connectionBrowserPaths } from "../../apps/server/src/shell/connections/contract";
 import { oauthPaths } from "../../apps/server/src/shell/oauth-agents/contract";
 import { operationCatalog } from "@fidy/server/canonical-catalog";
 import {
@@ -100,6 +101,7 @@ const httpDdosRules: ReadonlyArray<Cloudflare.Ruleset.Rule> = [
 const reservedRateLimitPaths = [
   "/health",
   ...Object.values(oauthPaths),
+  ...Object.values(connectionBrowserPaths),
   reservedIngress.httpCallbacks.kapso.path,
   reservedIngress.httpCallbacks.wompi.path,
   "/web/onboarding/email/verify",

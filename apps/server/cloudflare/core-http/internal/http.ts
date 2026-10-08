@@ -1,4 +1,6 @@
 import { ConnectInstitutionInput } from "../../../src/core/connections/contract";
+import { connectionBrowserPaths } from "../../../src/shell/connections/contract";
+import { handleConnectionBrowserRequest } from "../../connections/runtime";
 import { oauthPaths } from "../../../src/shell/oauth-agents/contract";
 import { handleOAuthRequest } from "../../oauth-agents/runtime";
 import { type MemoryOperationId, memoryOperationIds } from "../../../src/shell/memory/contract";
@@ -506,6 +508,7 @@ const reconciliationOperation = (
 };
 
 const ownedCorePath = (path: string): boolean =>
+  Object.values(connectionBrowserPaths).some((owned) => owned === path) ||
   refundSupportRoute(path) ||
   enrollmentCorePath(path) ||
   [
@@ -1487,6 +1490,16 @@ const reservedCoreResponse = (
 ): Option.Option<Effect.Effect<Response>> => {
   if (!ownedCorePath(path)) {
     return Option.some(Effect.succeed(jsonResponse('{"status":"not_found"}', HTTP_NOT_FOUND)));
+  }
+  if (Object.values(connectionBrowserPaths).some((owned) => owned === path)) {
+    return Option.some(
+      handleConnectionBrowserRequest({
+        coordinator: environment.USER_TRANSACTION_COORDINATOR,
+        request,
+        db: environment.DB,
+        browserOrigin: environment.BROWSER_ORIGIN,
+      })
+    );
   }
   if (path === smokePath) return Option.some(smokeResponse(request, environment));
   if (refundSupportRoute(path)) {

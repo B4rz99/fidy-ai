@@ -1,3 +1,5 @@
+import { ConnectionBrowserAdmission } from "./contract";
+import { beginContinuation } from "./internal/browser";
 import { initiationStatements, readInitiationResult } from "./internal/initiation";
 import { Effect, Option, Schema } from "effect";
 import {
@@ -299,3 +301,14 @@ const queryAudit = ({
         outcome: "accepted",
         afterOwnerWrite: false,
       });
+
+/** Admit preparation only to the original stable User's coordinator, with live guards at commit. */
+export const executeConnectionBrowserAdmission = (
+  input: Readonly<{ db: D1Database; candidate: unknown; userId: string; signal: AbortSignal }>
+): Effect.Effect<Response> => {
+  const admission = Schema.decodeUnknownOption(ConnectionBrowserAdmission)(input.candidate);
+  if (Option.isNone(admission) || admission.value.userId !== input.userId) {
+    return Effect.succeed(transactionUnavailable());
+  }
+  return beginContinuation({ db: input.db, admission: admission.value, signal: input.signal });
+};

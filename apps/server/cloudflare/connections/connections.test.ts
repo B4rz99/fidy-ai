@@ -81,6 +81,7 @@ const setup = (): Effect.Effect<D1Database, Cause.UnknownError> =>
     const db = yield* Effect.tryPromise(() => databases.acquire());
     const migrations = [
       "0063_connections",
+      "0064_connection_browser_execution",
       "0001_categories",
       "0002_resource_admission",
       "0003_pending_consent",
@@ -140,7 +141,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 const coordinatorByDatabase = new WeakMap<D1Database, Map<string, UserTransactionCoordinator>>();
-const send = (db: D1Database, request: Request): Promise<Response> => {
+const send = (
+  db: D1Database,
+  request: Request,
+  beforeCoordinate?: (database: D1Database) => Promise<unknown>
+): Promise<Response> => {
   vi.setSystemTime(DateTime.nowUnsafe().epochMilliseconds + 1000);
   request.headers.set("cf-connecting-ip", "192.0.2.35");
   const coordinators =
@@ -179,7 +184,12 @@ const send = (db: D1Database, request: Request): Promise<Response> => {
                   );
                   coordinators.set(name, coordinator);
                 }
-                return coordinator.fetch(new Request(command));
+                const admittedCoordinator = coordinator;
+                return beforeCoordinate === undefined
+                  ? admittedCoordinator.fetch(new Request(command))
+                  : beforeCoordinate(db).then(() =>
+                      admittedCoordinator.fetch(new Request(command))
+                    );
               },
             }),
           },
@@ -299,6 +309,395 @@ const start = (db: D1Database, index = 0): Promise<ConnectInstitutionResult> =>
       )(yield* Effect.tryPromise(() => response.json()))).data;
     })
   );
+it("prepares a browser authorization once without activating the Connection", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
+      );
+      const started = yield* Effect.tryPromise(() => start(db));
+      if (started.type !== "continue_in_browser") throw new Error("Expected browser continuation");
+      const attempt = new URL(started.continuation.url).searchParams.get("attempt");
+      const foreign = yield* Effect.tryPromise(() =>
+        send(db, request(1, "/web/connections/begin", "POST", { attempt }))
+      );
+      expect(foreign.status).toBe(404);
+      const prepared = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/connections/begin", "POST", { attempt }))
+      );
+      expect(prepared.status).toBe(200);
+      expect(prepared.headers.get("cache-control")).toBe("no-store");
+      expect(yield* Effect.tryPromise(() => prepared.json())).toEqual({
+        connection: started.connection,
+        institutionName: "Bancolombia",
+        expiresAt: DateTime.formatIso(started.continuation.expiresAt),
+        phase: "prepared",
+      });
+      const replay = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/connections/begin", "POST", { attempt }))
+      );
+      expect(replay.status).toBe(404);
+      const progress = yield* Effect.tryPromise(() =>
+        send(db, request(0, `/web/connections/review?attempt=${attempt}`))
+      );
+      expect(yield* Effect.tryPromise(() => progress.json())).toMatchObject({ phase: "prepared" });
+      const inspected = yield* Effect.tryPromise(() =>
+        send(db, request(0, `/connections/${started.connection.id}`))
+      );
+      expect(yield* Effect.tryPromise(() => inspected.json())).toEqual({
+        data: started.connection,
+        next: [],
+      });
+    })
+  ));
+it.each(["expired", "stale-session", "revoked-session", "disabled-institution"] as const)(
+  "refuses %s browser preparation without consuming the attempt",
+  (condition) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        yield* Effect.tryPromise(() =>
+          db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
+        );
+        const started = yield* Effect.tryPromise(() => start(db));
+        if (started.type !== "continue_in_browser") {
+          throw new Error("Expected browser continuation");
+        }
+        const attempt = new URL(started.continuation.url).searchParams.get("attempt");
+        if (condition === "expired") {
+          vi.setSystemTime(started.continuation.expiresAt.epochMilliseconds);
+        }
+        if (condition === "stale-session") {
+          vi.setSystemTime(started.continuation.expiresAt.epochMilliseconds - 2000);
+        }
+        if (condition === "revoked-session") {
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("UPDATE web_sessions SET revoked_at_ms = ? WHERE id = ?")
+              .bind(DateTime.nowUnsafe().epochMilliseconds, sessions[0])
+              .run()
+          );
+        }
+        if (condition === "disabled-institution") {
+          yield* Effect.tryPromise(() =>
+            db.prepare("UPDATE connection_institution_gate SET enabled = 0").run()
+          );
+        }
+        const refused = yield* Effect.tryPromise(() =>
+          send(db, request(0, "/web/connections/begin", "POST", { attempt }))
+        );
+        expect(refused.status).toBe(condition === "revoked-session" ? 401 : 404);
+        // Persistence is the approved D1 atomicity seam: no partial attempt consumption or execution.
+        expect(
+          yield* Effect.tryPromise(() => db.prepare("SELECT status FROM connection_attempts").all())
+        ).toMatchObject({ results: [{ status: "pending" }] });
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT attempt_id FROM connection_authorization_executions").all()
+          )
+        ).toMatchObject({ results: [] });
+      })
+    )
+);
+it("refuses hostile browser input and origins without consuming a live attempt", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
+      );
+      const started = yield* Effect.tryPromise(() => start(db));
+      if (started.type !== "continue_in_browser") throw new Error("Expected browser continuation");
+      const attempt = new URL(started.continuation.url).searchParams.get("attempt");
+      const crossOrigin = request(0, "/web/connections/begin", "POST", { attempt });
+      crossOrigin.headers.set("origin", "https://attacker.example");
+      const originless = request(0, "/web/connections/begin", "POST", { attempt });
+      originless.headers.delete("origin");
+      const anonymous = request(0, "/web/connections/begin", "POST", { attempt });
+      anonymous.headers.delete("cookie");
+      expect((yield* Effect.tryPromise(() => send(db, crossOrigin))).status).toBe(403);
+      expect((yield* Effect.tryPromise(() => send(db, originless))).status).toBe(403);
+      expect((yield* Effect.tryPromise(() => send(db, anonymous))).status).toBe(401);
+      const hostile = [
+        request(0, "/web/connections/begin", "POST", { attempt: "invalid" }),
+        request(0, "/web/connections/begin", "POST", {
+          attempt,
+          authorizationCode: "must-not-be-accepted",
+        }),
+        request(0, "/web/connections/begin", "POST", { attempt, padding: "x".repeat(2048) }),
+        request(0, `/web/connections/begin?attempt=${attempt}`, "POST", { attempt }),
+        request(0, `/web/connections/review?attempt=${attempt}&attempt=${attempt}`),
+      ];
+      for (const candidate of hostile) {
+        expect((yield* Effect.tryPromise(() => send(db, candidate))).status).toBe(400);
+      }
+      const owner = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/connections/begin", "POST", { attempt }))
+      );
+      expect(owner.status).toBe(200);
+    })
+  ));
+it("commits only one concurrent browser preparation and retires old continuation progress", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
+      );
+      const started = yield* Effect.tryPromise(() => start(db));
+      if (started.type !== "continue_in_browser") throw new Error("Expected browser continuation");
+      const attempt = new URL(started.continuation.url).searchParams.get("attempt");
+      const parallel = yield* Effect.tryPromise(() =>
+        Promise.all(
+          Array.from({ length: 3 }, () =>
+            send(db, request(0, "/web/connections/begin", "POST", { attempt }))
+          )
+        )
+      );
+      expect(parallel.filter((response) => response.status === 200)).toHaveLength(1);
+      expect(parallel.every((response) => [200, 404, 429].includes(response.status))).toBe(true);
+      const replacement = yield* Effect.tryPromise(() => start(db));
+      expect(replacement.connection.id).toBe(started.connection.id);
+      const retired = yield* Effect.tryPromise(() =>
+        send(db, request(0, `/web/connections/review?attempt=${attempt}`))
+      );
+      expect(retired.status).toBe(404);
+    })
+  ));
+it("rolls back browser preparation when Audit fails and allows a safe retry", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
+      );
+      const started = yield* Effect.tryPromise(() => start(db));
+      if (started.type !== "continue_in_browser") throw new Error("Expected browser continuation");
+      const attempt = new URL(started.continuation.url).searchParams.get("attempt");
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(
+            "CREATE TRIGGER refuse_browser_audit BEFORE INSERT ON pat_audit WHEN NEW.operation = 'connections.beginContinuation' BEGIN SELECT RAISE(ABORT, 'fixture_evidence_unavailable'); END"
+          )
+          .run()
+      );
+      const refused = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/connections/begin", "POST", { attempt }))
+      );
+      expect(refused.status).toBe(503);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT attempt_id FROM connection_authorization_executions").all()
+        )
+      ).toMatchObject({ results: [] });
+      yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER refuse_browser_audit").run());
+      const retried = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/connections/begin", "POST", { attempt }))
+      );
+      expect(retried.status).toBe(200);
+    })
+  ));
+it.each(["session-revocation", "consent-withdrawal"] as const)(
+  "rechecks %s after browser admission before preparation commits",
+  (change) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* setup();
+        yield* Effect.tryPromise(() =>
+          db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
+        );
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "INSERT INTO onboarding_consent_records VALUES ('browser-grant', ?, '{}', 'disclosure', 'decision', 1, 1)"
+            )
+            .bind(users[0])
+            .run()
+        );
+        const started = yield* Effect.tryPromise(() => start(db));
+        if (started.type !== "continue_in_browser") {
+          throw new Error("Expected browser continuation");
+        }
+        const attempt = new URL(started.continuation.url).searchParams.get("attempt");
+        const response = yield* Effect.tryPromise(() =>
+          send(db, request(0, "/web/connections/begin", "POST", { attempt }), (database) =>
+            change === "session-revocation"
+              ? database
+                  .prepare("UPDATE web_sessions SET revoked_at_ms = ? WHERE id = ?")
+                  .bind(DateTime.nowUnsafe().epochMilliseconds, sessions[0])
+                  .run()
+              : database
+                  .prepare(
+                    "INSERT INTO consent_user_revocations VALUES ('browser-withdrawn', ?, 'browser-grant', ?, ?)"
+                  )
+                  .bind(users[0], sessions[0], DateTime.nowUnsafe().epochMilliseconds)
+                  .run()
+          )
+        );
+        expect(response.status).toBe(404);
+        expect(
+          yield* Effect.tryPromise(() => db.prepare("SELECT status FROM connection_attempts").all())
+        ).toMatchObject({ results: [{ status: "pending" }] });
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT attempt_id FROM connection_authorization_executions").all()
+          )
+        ).toMatchObject({ results: [] });
+      })
+    )
+);
+it("rolls back preparation at the shared User Audit budget", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
+      );
+      const started = yield* Effect.tryPromise(() => start(db));
+      if (started.type !== "continue_in_browser") throw new Error("Expected browser continuation");
+      const attempt = new URL(started.continuation.url).searchParams.get("attempt");
+      yield* Effect.tryPromise(() =>
+        db
+          .prepare(`INSERT INTO pat_audit (id,user_id,session_id,operation,outcome,occurred_at_ms)
+    WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 255)
+    SELECT 'browser-budget-' || n, ?, ?, 'connections.listConnections', 'accepted', ? FROM seq`)
+          .bind(users[0], sessions[0], DateTime.nowUnsafe().epochMilliseconds)
+          .run()
+      );
+      const refused = yield* Effect.tryPromise(() =>
+        send(db, request(0, "/web/connections/begin", "POST", { attempt }))
+      );
+      expect(refused.status).toBe(429);
+      expect(
+        yield* Effect.tryPromise(() => db.prepare("SELECT status FROM connection_attempts").all())
+      ).toMatchObject({ results: [{ status: "pending" }] });
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT attempt_id FROM connection_authorization_executions").all()
+        )
+      ).toMatchObject({ results: [] });
+    })
+  ));
+it("shares canonical User request pressure before browser work is queued", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
+      );
+      const started = yield* Effect.tryPromise(() => start(db));
+      if (started.type !== "continue_in_browser") throw new Error("Expected browser continuation");
+      const attempt = new URL(started.continuation.url).searchParams.get("attempt");
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db
+            .prepare("INSERT INTO canonical_request_leases VALUES ('occupied-one', ?, ?)")
+            .bind(users[0], DateTime.nowUnsafe().epochMilliseconds + 90000),
+          db
+            .prepare("INSERT INTO canonical_request_leases VALUES ('occupied-two', ?, ?)")
+            .bind(users[0], DateTime.nowUnsafe().epochMilliseconds + 90000),
+        ])
+      );
+      expect(
+        (yield* Effect.tryPromise(() =>
+          send(db, request(0, "/web/connections/begin", "POST", { attempt }))
+        )).status
+      ).toBe(429);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          send(db, request(0, `/web/connections/review?attempt=${attempt}`))
+        )).status
+      ).toBe(429);
+      yield* Effect.tryPromise(() =>
+        db.prepare("DELETE FROM canonical_request_leases WHERE user_id = ?").bind(users[0]).run()
+      );
+      expect(
+        (yield* Effect.tryPromise(() =>
+          send(db, request(0, "/web/connections/begin", "POST", { attempt }))
+        )).status
+      ).toBe(200);
+    })
+  ));
+it("isolates ready and prepared browser review from a different User holding the locator", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
+      );
+      const started = yield* Effect.tryPromise(() => start(db));
+      if (started.type !== "continue_in_browser") throw new Error("Expected browser continuation");
+      const attempt = new URL(started.continuation.url).searchParams.get("attempt");
+      for (const phase of ["ready", "prepared"] as const) {
+        if (phase === "prepared") {
+          expect(
+            (yield* Effect.tryPromise(() =>
+              send(db, request(0, "/web/connections/begin", "POST", { attempt }))
+            )).status
+          ).toBe(200);
+        }
+        const foreign = yield* Effect.tryPromise(() =>
+          send(db, request(1, `/web/connections/review?attempt=${attempt}`))
+        );
+        expect(foreign.status).toBe(404);
+        expect(yield* Effect.tryPromise(() => foreign.json())).toEqual({
+          error: { code: "continuation_unavailable" },
+        });
+        const owned = yield* Effect.tryPromise(() =>
+          send(db, request(0, `/web/connections/review?attempt=${attempt}`))
+        );
+        expect(owned.status).toBe(200);
+        expect(yield* Effect.tryPromise(() => owned.json())).toEqual({
+          connection: started.connection,
+          institutionName: "Bancolombia",
+          expiresAt: DateTime.formatIso(started.continuation.expiresAt),
+          phase,
+        });
+      }
+      // Audit is an approved D1 seam: foreign review must never record accepted access.
+      expect(
+        yield* Effect.tryPromise(() =>
+          db
+            .prepare(
+              "SELECT id FROM pat_audit WHERE user_id = ? AND operation = 'connections.reviewContinuation' AND outcome = 'accepted'"
+            )
+            .bind(users[1])
+            .all()
+        )
+      ).toMatchObject({ results: [] });
+    })
+  ));
+it("reviews a live browser continuation without granting institution authority", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* setup();
+      yield* Effect.tryPromise(() =>
+        db.prepare("UPDATE connection_institution_gate SET enabled = 1").run()
+      );
+      const started = yield* Effect.tryPromise(() => start(db));
+      if (started.type !== "continue_in_browser") throw new Error("Expected browser continuation");
+      const attempt = new URL(started.continuation.url).searchParams.get("attempt");
+      const review = yield* Effect.tryPromise(() =>
+        send(db, request(0, `/web/connections/review?attempt=${attempt}`))
+      );
+      expect(review.status).toBe(200);
+      expect(review.headers.get("cache-control")).toContain("no-store");
+      expect(yield* Effect.tryPromise(() => review.json())).toEqual({
+        connection: started.connection,
+        institutionName: "Bancolombia",
+        expiresAt: DateTime.formatIso(started.continuation.expiresAt),
+        phase: "ready",
+      });
+      const listed = yield* Effect.tryPromise(() =>
+        send(db, request(0, `/connections/${started.connection.id}`))
+      );
+      expect(yield* Effect.tryPromise(() => listed.json())).toEqual({
+        data: started.connection,
+        next: [],
+      });
+    })
+  ));
 it("replaces an attempt at its exact expiry without changing stable Connection identity", () =>
   Effect.runPromise(
     Effect.gen(function* () {

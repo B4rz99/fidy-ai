@@ -9,6 +9,8 @@ export type AuditCredentialOperation =
   | "connections.listConnections"
   | "connections.getConnection"
   | "connections.connectInstitution"
+  | "connections.reviewContinuation"
+  | "connections.beginContinuation"
   | "budgets.createBudget"
   | "budgets.updateBudget"
   | "budgets.deleteBudget"
@@ -138,6 +140,7 @@ export type AuditQueryCall = Readonly<{
   authority: AuditAuthority;
   id: string;
   operation:
+    | "connections.reviewContinuation"
     | "connections.getConnection"
     | "transactions.getTransaction"
     | "transactions.listTransactions"

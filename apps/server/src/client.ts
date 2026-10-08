@@ -34,6 +34,12 @@ export {
   OAuthReviewChoice,
 } from "~/shell/oauth-agents/contract";
 export { CanonicalAllowance, canonicalAllowanceHeaders } from "~/shell/quotas/contract";
+export {
+  ConnectionBrowserApi,
+  ConnectionContinuationInput,
+  ConnectionContinuationFailure,
+  ConnectionContinuationReview,
+} from "~/shell/connections/contract";
 export { isHttpOrigin, ResourceLimited } from "~/shell/public-http/contract";
 export {
   ActivePATList,

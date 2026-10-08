@@ -1,3 +1,4 @@
+import { executeConnectionBrowserAdmission } from "../connections/operations";
 import {
   executeRefundSupportAdmission,
   executeSubscriptionRenewalAdmission,
@@ -341,6 +342,24 @@ const privateProactivityActivity = (
   );
 };
 
+const privateConnectionActivity = (
+  input: OAuthActivityInput
+): Option.Option<Effect.Effect<Response>> => {
+  if (
+    input.request.method !== "POST" ||
+    new URL(input.request.url).pathname !== "/connection-begin"
+  ) {
+    return Option.none();
+  }
+  return Option.some(
+    executeConnectionBrowserAdmission({
+      db: input.environment.DB,
+      candidate: input.candidate,
+      userId: input.userId,
+      signal: input.request.signal,
+    })
+  );
+};
 const privateOwnerActivity = (
   input: Parameters<typeof privateProactivityActivity>[0]
 ): Option.Option<Effect.Effect<Response>> => {
@@ -375,7 +394,8 @@ const privateOwnerActivity = (
       })
     );
   }
-  return privateProactivityActivity(input).pipe(
+  return privateConnectionActivity(input).pipe(
+    Option.orElse(() => privateProactivityActivity(input)),
     Option.orElse(() => privateRecurringActivity(input)),
     Option.orElse(() => privateIngestionActivity(input))
   );

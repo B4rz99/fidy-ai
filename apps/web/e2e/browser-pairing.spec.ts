@@ -21,6 +21,7 @@ const rateLimitedStatus = 429;
 const pairingId = "24000000-0000-4000-8000-000000000240";
 const privateVerifier = "v".repeat(opaqueProofEncodedLength);
 const publicCode = "BCDF-GHJK";
+const browserTime = (): number => performance.now();
 const expiresAt = "2099-01-01T00:00:00.000Z";
 const invalidPairingMessage = "Esta vinculación ya no es válida. Inicia de nuevo.";
 test.describe.configure({ mode: "parallel" });
@@ -125,7 +126,7 @@ const installPairingApiFixture = (page: Page): Promise<PairingApiFixture> =>
                 fixture.activeRedeems
               );
               fixture.redeemCount += 1;
-              fixture.redeemTimes.push(yield* Clock.currentTimeMillis);
+              fixture.redeemTimes.push(yield* wait(page.evaluate(browserTime)));
               expect(route.request().postDataJSON()).toEqual({ pairingId, privateVerifier });
               yield* Effect.sleep("100 millis");
               fixture.activeRedeems -= 1;
@@ -184,6 +185,7 @@ test("keeps the verifier ephemeral, polls sequentially, retains the cookie, and 
 }) =>
   Effect.runPromise(
     Effect.gen(function* () {
+      yield* wait(page.clock.install());
       const api = yield* wait(installPairingApiFixture(page));
       yield* wait(page.goto("/auth/pair"));
       yield* wait(
@@ -194,6 +196,13 @@ test("keeps the verifier ephemeral, polls sequentially, retains the cookie, and 
       yield* wait(expect(page.getByText(publicCode, { exact: true })).toBeVisible());
       expect(api.startCount).toBe(1);
       yield* wait(expectVerifierIsBrowserEphemeral(page));
+      const first = page.waitForResponse(
+        (reply) => reply.url().endsWith("/web/pairings/redeem") && reply.status() === pendingStatus
+      );
+      yield* wait(page.clock.fastForward(minimumPollIntervalMilliseconds));
+      yield* wait((yield* wait(first)).finished());
+      expect(api.redeemCount).toBe(1);
+      yield* wait(page.clock.fastForward(minimumPollIntervalMilliseconds));
       yield* wait(expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15000 }));
       yield* wait(expect(page.getByRole("heading", { name: "Transacciones" })).toBeVisible());
       expect(api.redeemCount).toBe(2);

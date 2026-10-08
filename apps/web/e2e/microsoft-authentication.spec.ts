@@ -1,9 +1,6 @@
 import { playwright } from "./playwright-runtime";
 import {
-  blockedPopupJourney,
   denialAndCancellationJourney,
-  lostCompletionJourney,
-  pendingRedemptionJourney,
   signupJourney,
   whatsappAssociationJourney,
 } from "./provider-authentication.journeys";
@@ -23,20 +20,8 @@ playwright.test(
   ({ page, context, request }) =>
     denialAndCancellationJourney({ configuration, page, context, request })
 );
-playwright.test(
-  "a lost committed signup response directs sign-in and never rediscloses recovery",
-  ({ page, context, request }) => lostCompletionJourney({ configuration, page, context, request })
-);
-playwright.test(
-  "pending Browser Login redemption refuses access truthfully instead of remaining stuck",
-  ({ page, context, request }) =>
-    pendingRedemptionJourney({ configuration, page, context, request })
-);
-
-playwright.test(
-  "a blocked popup sends no authentication mutation and permits restarting signup",
-  ({ page, context, request }) => blockedPopupJourney({ configuration, page, context, request })
-);
+// The shared controller's lost response, pending redemption and popup refusal are covered
+// by Google journeys. Microsoft keeps its provider-specific success, denial and chat handoff.
 
 for (const existing of [false, true]) {
   playwright.test(

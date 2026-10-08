@@ -24,11 +24,37 @@ acceptance harness also uses the native baseline installer instead of hundreds o
 proxy preparation/execution calls. Browser CI reuses Playwright's APT index refresh and installs
 only required native credential-store packages.
 
-An initial Linux fixture benchmark installing all migrations into 64 fresh bindings took
-62.7s before restoration and 9.6–10.3s after it, using the reviewed Bun runtime. Other validation
-was running on the same worker, so these preliminary samples establish the mechanism, not a
-controlled median or a whole-pipeline guarantee. GitHub Actions must confirm the complete-job
-and workflow durations; runner queueing and browser execution also affect the three-minute goal.
+Three alternating before/after Linux x64 samples each installed all checked-in migrations into
+64 fresh bindings, using the same 16-binding pool and reviewed Bun 1.4.3-canary.1+13a98b0db.
+Each sample used a fresh process with no other validation running. Complete fixture elapsed
+seconds, including acquisition and disposal, were:
+
+| Mode                          | Run 1 | Run 2 | Run 3 | Median |
+| ----------------------------- | ----: | ----: | ----: | -----: |
+| Replay migrations per binding | 48.09 | 51.28 | 48.24 |  48.24 |
+| Restore native baseline       |  8.80 |  9.50 |  8.80 |   8.80 |
+
+This is an **81.7% reduction in fixture setup**, not a whole-pipeline guarantee.
+The original fixture comes from `acddc7ba`; the optimized fixture is in `b8eab7e0`.
+
+Scheduling estimates were refreshed from the complete local adapter run, including six new
+10–44s files previously estimated at one second. These remain single-run cloud-worker estimates,
+not GitHub runner medians. The four estimated work sums differ by less than one second.
+
+The mocked browser polling case advances the browser clock while still asserting the full
+poll interval and no overlapping requests. Three duplicate Microsoft shared-controller journeys
+were removed: lost completion, pending redemption and popup blocking remain covered through
+Google; Microsoft retains real signup/session, denial and both WhatsApp handoff journeys.
+Real Core polling and security deadlines retain real time.
+
+Validation passed 1,549 adapter cases in the complete 114-file run, with nine unchanged
+provider-gated skips, plus 11 focused fixture/new-trunk Sandbox cases and all scheduling probes.
+The final 63-case browser suite and native CLI journey passed in 124.5s locally, excluding job
+setup. Typechecking, lint and the existing workflow tests pass. No security findings.
+
+GitHub Actions must confirm complete-job and workflow durations. The three-minute target remains
+unverified because publishing the branch was blocked by automatic approval review; local timings
+exclude CI dependency provisioning, runner queueing and the Required Checks job.
 
 ## Adapter regression follow-up: #1066
 

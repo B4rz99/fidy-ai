@@ -8,6 +8,8 @@ import { makeCredentialStore, supportedBunRevision } from "./credential/runtime"
 import { makePairingClient } from "./direct-client/runtime";
 import { runOperationCommand } from "./canonical/operations";
 import { makeCanonicalClient, readOperationInput } from "./canonical/runtime";
+import { runSupportRecovery } from "./support-recovery/operations";
+import { makeRecoveryOperator } from "./support-recovery/runtime";
 
 const args = Bun.argv.slice(2);
 const json = args.includes("--json");
@@ -20,8 +22,21 @@ const validateFlags = Effect.fn(function* () {
     return yield* new CliFailure({ reason: "InvalidInput" });
   }
 });
+const runOperator = Effect.fn(function* () {
+  const operator = yield* makeRecoveryOperator(yield* HttpClient.HttpClient, {
+    interactive: process.stdin.isTTY === true && process.stderr.isTTY === true,
+    write: (text) =>
+      Effect.sync(() => {
+        process.stderr.write(text);
+      }),
+  });
+  if (yield* runSupportRecovery(args, operator)) process.exitCode = 1;
+});
 const program = Effect.gen(function* () {
   yield* validateFlags();
+  if (commandArgs[0] === "support-recovery") {
+    return yield* runOperator();
+  }
   const home = yield* Schema.decodeUnknownEffect(Schema.NonEmptyString)(
     process.platform === "win32" ? Bun.env.USERPROFILE : Bun.env.HOME
   ).pipe(Effect.mapError(() => new CliFailure({ reason: "StorageUnavailable" })));
@@ -103,7 +118,11 @@ if (import.meta.main) {
           ? failure.value.reason
           : "TransportUnavailable";
       const interrupted = Cause.hasInterrupts(exit.cause) || reason === "Cancelled";
-      process.stderr.write(formatFailure({ reason: interrupted ? "Cancelled" : reason, json }));
+      process.stderr.write(
+        commandArgs[0] === "support-recovery"
+          ? "Proceso de recuperación interrumpido o no disponible. Si ya enviaste la solicitud, comprueba la vinculación en el mismo navegador; no repitas una decisión incierta ni compartas secretos.\n"
+          : formatFailure({ reason: interrupted ? "Cancelled" : reason, json })
+      );
       process.exitCode = interrupted ? interruptedExitCode : 1;
     }
   }

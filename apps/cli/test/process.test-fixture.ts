@@ -40,13 +40,14 @@ const stopProcess = (
 /** Scope teardown escalates after 300ms; exit/reader failure is a defect, never silent success. */
 export const scopedProcess = Effect.fn(function* (
   command: ReadonlyArray<string>,
-  env?: Readonly<Record<string, string>>
+  env?: Readonly<Record<string, string>>,
+  stdin?: Uint8Array
 ): Effect.fn.Return<TestProcess, ProcessUnavailable, Scope.Scope> {
   const resource = yield* Effect.acquireRelease(
     Effect.try({
       try: () => {
         const child = Bun.spawn([...command], {
-          stdin: "ignore",
+          stdin: stdin ?? "ignore",
           stdout: "pipe",
           stderr: "ignore",
           ...(env === undefined ? {} : { env }),

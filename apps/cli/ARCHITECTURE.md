@@ -6,6 +6,11 @@ queries, mutations and ordered atomic batches, in Spanish. It owns one saved log
 profiles, pasted PATs, passwords or headless credential provisioning. Friendly scalar flags derive
 from the canonical encoded input schema; structured file/stdin input remains the complete contract.
 
+`support-recovery` is a separate private operator command, outside canonical discovery and saved PAT
+authority. It collects no User identity or browser-private verifier. Cloudflare Access authenticates
+the operator; the existing Worker resolves the stable User, consumes proof and approves the pairing.
+Only Browser Login creates a WebSession. See [operator evidence](src/support-recovery/FEATURE.md).
+
 ## Runtime and execution
 
 The reviewed runtime is Bun `1.4.3-canary.1`, full revision
@@ -69,6 +74,10 @@ suite and real-public/Core/browser journey. Cloudflare remains the sole server r
 - `credential/contract.ts` declares `load`, `save`, `clear`, `Option` absence and redacted bearer
   values. `runtime.ts` owns native/file persistence. `main.ts` alone composes production adapters,
   process arguments, OS home and interruption handling.
+- `support-recovery` owns argument-free interactive presentation, hidden bounded key input and
+  one-decision certainty. Its runtime captures a bounded Access assertion from scoped `cloudflared`
+  children and reuses the fixed-origin bounded HTTP policy. The command runs before home/native
+  store construction, has no local recovery authority, accepts no raw proof flags and never retries.
 
 The CLI consumes only `@fidy/server/client`, never private server/native implementation.
 Expected transport/storage rejections become closed local failures. Neither raw causes nor HTTP

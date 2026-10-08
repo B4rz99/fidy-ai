@@ -1,0 +1,59 @@
+package.json
+  s_17949759447e50::t_9f47eaec1efde9 61
+apps/cli/test/process.test-fixture.ts
+  s_17949759447e50::t_9f47eaec1efde9 43-44,50
+apps/cli/src/support-recovery/contract.ts
+  s_17949759447e50::t_9f47eaec1efde9 1-30
+apps/cli/test/recovery-entry.ts
+  s_17949759447e50::t_9f47eaec1efde9 1-53
+apps/cli/src/support-recovery/internal/prompt.ts
+  s_17949759447e50::t_9f47eaec1efde9 1-45
+apps/cli/src/support-recovery/runtime.test.ts
+  s_17949759447e50::t_9f47eaec1efde9 1-121
+apps/web/e2e/provider-authentication.journeys.ts
+  s_17949759447e50::t_9f47eaec1efde9 3-4,463,468-515
+docs/operations/authentication-feature-map.md
+  s_17949759447e50::t_9f47eaec1efde9 6-7,9-16
+scripts/check-lint-suppressions.test.ts
+  s_17949759447e50::t_9f47eaec1efde9 127
+apps/cli/src/support-recovery/operations.ts
+  s_17949759447e50::t_9f47eaec1efde9 1-67
+apps/cli/src/support-recovery/internal/access.ts
+  s_17949759447e50::t_9f47eaec1efde9 1-62
+docs/operations/support-recovery.md
+  s_17949759447e50::t_9f47eaec1efde9 34-52,59-62
+apps/cli/test/recovery-operator.test-fixture.ts
+  s_17949759447e50::t_9f47eaec1efde9 1-35
+tsconfig.base.json
+  s_17949759447e50::t_9f47eaec1efde9 152
+apps/cli/src/support-recovery/native.test.ts
+  s_17949759447e50::t_9f47eaec1efde9 1-171
+apps/cli/ARCHITECTURE.md
+  s_17949759447e50::t_9f47eaec1efde9 9-13,77-80
+apps/cli/src/support-recovery/operations.test.ts
+  s_17949759447e50::t_9f47eaec1efde9 1-113
+apps/cli/src/support-recovery/runtime.ts
+  s_17949759447e50::t_9f47eaec1efde9 1-90
+apps/cli/src/main.ts
+  s_17949759447e50::t_9f47eaec1efde9 11-12,25-34,37-39,121-125
+apps/cli/src/support-recovery/FEATURE.md
+  s_17949759447e50::t_9f47eaec1efde9 1-24
+bun.lock
+  s_17949759447e50::t_02c97ab996dc9e 18,1295,1297,1299,1301,1303,1305,1307,1309,1311,1313,1315
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cd1701f426d330511dc9a1d95b6ba43b3a63babe",
+  "prompts": {},
+  "sessions": {
+    "s_17949759447e50": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11d45-2c6b-7871-aaae-257a23894b0a",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

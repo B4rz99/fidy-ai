@@ -1498,7 +1498,7 @@ const reservedCoreResponse = (
     );
   }
   if (
-    (path === providerPaths.complete || path === microsoftProviderPaths.complete) &&
+    [providerPaths.complete, microsoftProviderPaths.complete].some((owned) => owned === path) &&
     request.method === "POST"
   ) {
     return Option.some(

@@ -98,9 +98,9 @@ const setupJourney = (options: Readonly<{ whatsapp: boolean }>): Promise<Journey
                   "0003_pending_consent",
                   "0005_verified_onboarding",
                   "0006_browser_login",
-                  "0063_provider_authentication",
-                  "0064_microsoft_authentication",
-                  "0065_whatsapp_provider_handoff",
+                  "0066_provider_authentication",
+                  "0067_microsoft_authentication",
+                  "0068_whatsapp_provider_handoff",
                 ].map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
         })
       );

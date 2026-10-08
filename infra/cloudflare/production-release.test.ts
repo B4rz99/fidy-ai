@@ -15,6 +15,29 @@ const revision = "a".repeat(40);
 const publicVersion = "11111111-1111-4111-8111-111111111111";
 const coreVersion = "22222222-2222-4222-8222-222222222222";
 
+it.live(
+  "recognizes Wrangler's rewritten inconsistent-export rejection without disclosing its body",
+  () =>
+    Effect.gen(function* () {
+      const result = yield* Effect.exit(
+        releaseCommand({
+          args: [
+            process.execPath,
+            "-e",
+            "console.error('private-export-body\\nAll versions in a percentage-split deployment must declare identical Durable Object `exports`. Cloudflare requires this so traffic on one branch cannot route to code referencing unprovisioned namespaces.'); process.exit(1)",
+          ],
+          lifetime: "read-only",
+        })
+      );
+      expect(result._tag).toBe("Failure");
+      if (result._tag === "Failure") {
+        expect(releaseFailureMessage(result.cause)).toBe(
+          "Release tooling failed (Cloudflare API code 100405); inspect traffic state"
+        );
+      }
+    })
+);
+
 it.live("preserves a safe native rejection after routing reconciliation fails", () =>
   Effect.gen(function* () {
     let writes = 0;

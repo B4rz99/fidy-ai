@@ -28,7 +28,7 @@ bun run --cwd apps/web test -- src/features/browser-login src/features/provider-
 ```
 
 Passed: 80 Worker/D1 tests, 20 browser journeys, 14 CLI tests and 13 web tests.
-The release-controller, routing and native command checks also pass (44 tests), including
+The release-controller, routing and native command checks also pass (45 tests), including
 secret-safe native refusal diagnostics after uncertain-write reconciliation.
 Browser journeys use built static assets and real local public/Core/D1; external provider and
 operator/WhatsApp delivery edges are substituted. They are reusable regression checks, not live
@@ -46,6 +46,9 @@ stable and candidate Core versions are listed as deployable, but the stable Core
 onboarding Workflow returns 404 and the candidate removes `OnboardingEmailWorkflowV1`.
 These are deployment-compatibility leads; the failed staging command discarded its underlying
 diagnostic, so neither is yet established as the exact server rejection. Do not force promotion.
+
+Live Ingress/Core settings disable invocation logs, traces, Worker Logpush and tail consumers.
+Account-wide Logpush inspection was refused (403), so callback logging exclusion is not fully verified.
 
 Remaining: restore a matching deployed web/API release; verify real Google and Microsoft personal
 and work/school signup/returning login/denial with test identities; real WhatsApp association and

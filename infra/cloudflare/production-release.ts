@@ -224,9 +224,19 @@ const toolingErrorCode = (stream: ReadableStream<Uint8Array>): Promise<Option.Op
         },
       })
     )
-    .then(() =>
-      Option.fromNullishOr((retained + decoder.decode()).match(/\[code: (\d{4,6})\]/u)?.[1])
-    );
+    .then(() => {
+      const output = retained + decoder.decode();
+      // Wrangler 4.144.0 rewrites API 100405 as UserError and removes its numeric code.
+      return Option.fromNullishOr(output.match(/\[code: (\d{4,6})\]/u)?.[1]).pipe(
+        Option.orElse(() =>
+          output.includes(
+            "All versions in a percentage-split deployment must declare identical Durable Object `exports`."
+          )
+            ? Option.some("100405")
+            : Option.none()
+        )
+      );
+    });
 };
 
 const startReleaseCommand = (

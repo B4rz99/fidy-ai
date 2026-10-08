@@ -63,6 +63,10 @@ See root architecture's public-surface review and
 
 ### Connection browser preparation
 
+The portable Connections runtime derives browser transport identity and methods from its declared
+browser operations and owns cookie-only header forwarding policy. Public ingress, Core and native
+Connections consume that meaning while enforcing their own origin, method and authority checks.
+
 `cloudflare/connections` owns browser review and single-use preparation independently of the
 canonical initiation operation. The public Worker forwards only the browser cookie, Origin and
 body metadata to private Core. Preparation enters the existing User coordinator and atomically

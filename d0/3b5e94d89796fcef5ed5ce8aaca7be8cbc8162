@@ -1,0 +1,47 @@
+infra/cloudflare/production-release.test.ts
+  s_e3b9a05f422f64::t_2477bf6ef6053b 8,17,55-56,67-74
+  s_e3b9a05f422f64::t_d59dbbc96da7e2 23-40,42-44,57-66
+  s_e3b9a05f422f64::t_3919145359eb5b 18-22,41,45-54
+infra/cloudflare/release-controller.ts
+  s_e3b9a05f422f64::t_d59dbbc96da7e2 111-115
+  s_e3b9a05f422f64::t_c1595143c7d84e 116
+infra/cloudflare/production-release.ts
+  s_e3b9a05f422f64::t_eb39ea424ac41d 235,243
+  s_e3b9a05f422f64::t_9279ee0ce372b6 211,213-216,230-231,276,285
+  s_e3b9a05f422f64::t_33e5d4425f83e3 212,217-229
+  s_e3b9a05f422f64::t_c1595143c7d84e 118-123
+  s_e3b9a05f422f64::t_d59dbbc96da7e2 280-284
+  s_e3b9a05f422f64::t_5343c051809565 244-257,268
+  s_e3b9a05f422f64::t_ab75e6f8f302ba 232-234,236-242
+apps/web/src/features/provider-authentication/FEATURE.md
+  s_e3b9a05f422f64::t_e53f3dfae37454 1-7,17-30,33-42,50-53,55-57
+  s_e3b9a05f422f64::t_e2880cc2f773b3 43-49,54
+  s_e3b9a05f422f64::t_d2ce334fbb03fc 31-32
+  s_e3b9a05f422f64::t_7a217e3dfb84ab 8-16
+docs/operations/authentication-feature-map.md
+  s_b30a3a010d6dc7::t_b4ee1fbc7acd37 1,3-5,7-10,12-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d03b5e94d89796fcef5ed5ce8aaca7be8cbc8162",
+  "prompts": {},
+  "sessions": {
+    "s_b30a3a010d6dc7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11658-5fa7-7f40-bb43-bb885d7ee11c",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_e3b9a05f422f64": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a115f2-dfce-7741-a6e9-e22144cd3fad",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

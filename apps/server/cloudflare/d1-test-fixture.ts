@@ -210,6 +210,7 @@ export const canonicalAdmissionMigrationNames = (
       "0066_provider_authentication",
       "0067_microsoft_authentication",
       "0068_whatsapp_provider_handoff",
+      "0069_retire_email_code_signup",
       "0032_commercial_allowances",
       "0033_canonical_request_protection",
       "0034_forwarded_email_deferral",

@@ -47,6 +47,7 @@ import {
 import { sweepProactivityConsentOffers } from "../consent/runtime";
 import { sweepExpiredPATPairings } from "../tokens/runtime";
 import { sweepOAuthConfirmation } from "../oauth-confirmation/runtime";
+import { sweepConnectionAttempts } from "../connections/runtime";
 import { advanceProactivityWork } from "../insights/runtime";
 import { advanceRecurringWork } from "../recurring/runtime";
 import { repairDashboardProjections } from "../transactions/runtime";
@@ -236,6 +237,10 @@ const admissionActivities = (
   activity(
     "oauth.confirmationRetention",
     sweepOAuthConfirmation({ db: environment.DB, current: nowEpochMs })
+  ),
+  activity(
+    "connections.attemptRetention",
+    sweepConnectionAttempts({ db: environment.DB, current: nowEpochMs })
   ),
   activity(
     "quota.consumptionRetention",

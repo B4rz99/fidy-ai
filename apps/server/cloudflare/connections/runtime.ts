@@ -5,7 +5,7 @@ import {
   connectionBrowserPaths,
 } from "../../src/shell/connections/contract";
 import { authenticateCanonicalWebSession } from "../web-session/operations";
-import { ConnectionBrowserAdmission } from "./contract";
+import { ConnectionBrowserAdmission, ConnectionRetentionUnavailable } from "./contract";
 import { continuationFailure, reviewContinuation } from "./internal/browser";
 import { RequestBodyPolicy } from "../http/contract";
 import { boundedJsonBody } from "../http/operations";
@@ -19,6 +19,23 @@ const unavailableStatus = 503;
 const maximumBytes = 1024;
 const readDeadlineMilliseconds = 2000;
 const admissionLifetimeMilliseconds = 5000;
+const attemptRetentionMilliseconds = 86400000;
+const maximumRetentionRows = 128;
+
+/** Erase expired continuation metadata independently of User activity or current Consent. */
+export const sweepConnectionAttempts = (
+  input: Readonly<{ db: D1Database; current: number }>
+): Effect.Effect<void, ConnectionRetentionUnavailable> =>
+  Effect.tryPromise({
+    try: () =>
+      input.db
+        .prepare(`DELETE FROM connection_attempts WHERE id IN
+      (SELECT id FROM connection_attempts WHERE expires_at_ms <= ? ORDER BY expires_at_ms, id LIMIT ?)`)
+        .bind(input.current - attemptRetentionMilliseconds, maximumRetentionRows)
+        .run(),
+    catch: () => new ConnectionRetentionUnavailable(),
+  }).pipe(Effect.asVoid);
+
 type BrowserRequest = Readonly<{
   request: Request;
   db: D1Database;

@@ -8,6 +8,7 @@ import {
 } from "~/shell/email-authentication/contract";
 import { IdentityGroup } from "~/shell/identity/contract";
 import { RecoveryGroup } from "~/shell/recovery/contract";
+import { ConnectionBrowserApi } from "~/shell/connections/contract";
 
 export {
   BrowserLoginWebAuthGroup,
@@ -56,6 +57,7 @@ export class WebAuthApi extends HttpApi.make("webAuth")
   .add(BrowserLoginWebAuthGroup)
   .add(OAuthReviewGroup)
   .add(OAuthConnectionsGroup)
+  .addHttpApi(ConnectionBrowserApi)
   .add(EmailOnboardingWebAuthGroup)
   .add(BrowserPairingEmailAuthenticationWebAuthGroup)
   .annotate(OpenApi.Title, "fidy-ai WebAuth API") {}

@@ -7,6 +7,7 @@ import { useSession } from "@/session/session-context";
 import {
   BrowserLoginPairingInvalidApi,
   BrowserLoginPollingRateLimitedApi,
+  ConnectionAttemptReference,
   type EmailAddress,
   type EmailVerificationCode,
   OAuthRequestId,
@@ -370,6 +371,31 @@ export type BrowserLoginPairing = Readonly<{
   logout: () => void;
 }>;
 
+type LoginDestination =
+  | Readonly<{ to: "/oauth/review/$requestId"; params: { requestId: typeof OAuthRequestId.Type } }>
+  | Readonly<{
+      to: "/connections/continue";
+      search: { attempt: typeof ConnectionAttemptReference.Type };
+    }>
+  | Readonly<{ to: "/app/transactions" }>;
+const destinationAfterLogin = (search: unknown): LoginDestination => {
+  const requested = Schema.decodeUnknownOption(
+    Schema.Struct({
+      oauthRequest: Schema.OptionFromOptionalKey(OAuthRequestId),
+      connectionAttempt: Schema.OptionFromOptionalKey(ConnectionAttemptReference),
+    })
+  )(search);
+  if (Option.isNone(requested)) return { to: "/app/transactions" };
+  const { oauthRequest, connectionAttempt } = requested.value;
+  if (Option.isSome(oauthRequest)) {
+    return { to: "/oauth/review/$requestId", params: { requestId: oauthRequest.value } };
+  }
+  if (Option.isSome(connectionAttempt)) {
+    return { to: "/connections/continue", search: { attempt: connectionAttempt.value } };
+  }
+  return { to: "/app/transactions" };
+};
+
 /**
  * Owns browser-pairing presentation, command execution, and authentication-lifetime transitions.
  * Its small interface never exposes the pairing id, verifier, callbacks, or Atom commands.
@@ -393,16 +419,7 @@ export const useBrowserLoginPairing = (): BrowserLoginPairing => {
     startPairing({
       onAuthenticated: () => {
         completeLogin();
-        const requestedReview = Schema.decodeUnknownOption(OAuthRequestId)(
-          router.state.location.search.oauthRequest
-        );
-        const navigation = Option.isSome(requestedReview)
-          ? router.navigate({
-              to: "/oauth/review/$requestId",
-              params: { requestId: requestedReview.value },
-            })
-          : router.navigate({ to: "/app/transactions" });
-        navigation.catch(() => undefined);
+        router.navigate(destinationAfterLogin(router.state.location.search)).catch(() => undefined);
       },
       onStateChange: setPairingState,
     });

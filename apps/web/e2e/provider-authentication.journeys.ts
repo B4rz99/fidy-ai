@@ -367,6 +367,7 @@ const createWebUserForAssociation = (
     yield* Effect.tryPromise(() =>
       input.page.getByRole("button", { name: "Cerrar sesión" }).click()
     );
+    yield* Effect.tryPromise(() => expect(input.page).toHaveURL(/\/auth\/pair$/u));
   });
 const confirmBrowserAssociation = ({
   page,

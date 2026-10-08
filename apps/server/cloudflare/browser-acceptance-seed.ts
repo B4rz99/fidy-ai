@@ -1,52 +1,15 @@
-import { fileURLToPath } from "node:url";
 import { Clock, Effect } from "effect";
-import { Miniflare } from "miniflare";
+import { installTestSchema, isolatedTestDatabases } from "./d1-test-fixture";
 
-const miniflare = new Miniflare({
-  workers: [
-    {
-      config: {
-        compatibilityDate: "2026-09-08",
-        env: { DB: { id: "browser-acceptance", type: "d1" } },
-        manifest: {
-          mainModule: "index.mjs",
-          modules: {
-            "index.mjs": {
-              contents: "export default {fetch() {return new Response('ok')}}",
-              type: "esm",
-            },
-          },
-        },
-        name: "browser-acceptance",
-        type: "worker",
-      },
-    },
-  ],
-});
-await miniflare.ready;
-export const db = await miniflare.getD1Database("DB");
+const databases = isolatedTestDatabases();
+export const db = await databases.acquire();
 const migrationDirectory = new URL("./migrations/", import.meta.url);
-const migrations = Array.from(
-  new Bun.Glob("*.sql").scanSync({ cwd: fileURLToPath(migrationDirectory) })
-).sort();
-const applyMigration = (name: string): Promise<void> =>
-  Bun.file(new URL(name, migrationDirectory))
-    .text()
-    .then((sql) =>
-      sql
-        .replace(/^--.*$/gmu, "")
-        .trim()
-        .split(/;\s*\n(?=CREATE |ALTER |INSERT |DROP |$)/u)
-        .reduce<Promise<void>>(
-          (previous, statement) =>
-            previous.then(() => db.prepare(statement).run()).then(() => undefined),
-          Promise.resolve()
-        )
-    );
-await migrations.reduce<Promise<void>>(
-  (previous, name) => previous.then(() => applyMigration(name)),
-  Promise.resolve()
-);
+const migrations = Array.from(new Bun.Glob("*.sql").scanSync(migrationDirectory.pathname)).sort();
+// Acceptance needs the final native schema; migration-boundary tests run separately.
+await installTestSchema({
+  db,
+  sources: migrations.map((name) => new URL(name, migrationDirectory)),
+});
 
 // This identity is confined to Miniflare. The separate loopback operator simulates a verified
 // WhatsApp approval; the browser still obtains its cookie only by redeeming with the real Core.

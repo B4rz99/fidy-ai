@@ -3,6 +3,33 @@
 For the measured follow-up and remaining Linux evidence requirements for #922–#926, see
 [CI follow-up: #922–#926](ci-improvements-922-926.md).
 
+## Native fixture baseline restoration
+
+The follow-up retains the four existing adapter shards, three isolated file processes per
+runner, all adapter cases, and the same runner sizes. The expensive repeated work was installing
+the migration history into every fresh binding, including intermediate table rebuilds.
+
+The private fixture Worker now executes a requested migration baseline once, before any test
+seeding, and derives immutable SQL from native SQLite's final catalog and baseline rows.
+Subsequent empty bindings restore that schema in a real D1 transaction. Tables, indexes, triggers,
+views, baseline seeds, AUTOINCREMENT state and native FTS are retained; FTS shadow tables are
+created by their virtual-table declaration. Foreign-key checks remain native. Mutable bindings,
+coordinators and test rows are never cached or shared. A populated binding or a later schema
+addition always executes the original SQL. `applyTestMigration` and independently wrapped
+bindings retain actual migration execution and file boundaries.
+
+The fixture tests compare the complete migrated catalog and prove independent seeds, search,
+foreign-key rejection, rollback, and refusal to capture pre-existing test rows. The browser
+acceptance harness also uses the native baseline installer instead of hundreds of individual
+proxy preparation/execution calls. Browser CI reuses Playwright's APT index refresh and installs
+only required native credential-store packages.
+
+An initial Linux fixture benchmark installing all migrations into 64 fresh bindings took
+62.7s before restoration and 9.6–10.3s after it, using the reviewed Bun runtime. Other validation
+was running on the same worker, so these preliminary samples establish the mechanism, not a
+controlled median or a whole-pipeline guarantee. GitHub Actions must confirm the complete-job
+and workflow durations; runner queueing and browser execution also affect the three-minute goal.
+
 ## Adapter regression follow-up: #1066
 
 The last 50 actual adapter shard jobs on October 5–6 contained 45 successes, three failures,

@@ -197,8 +197,8 @@ jobs:
         env:
           VERIFY_TIMING_REPORT: apps/web/test-results/verify-browser.json
         run: |
-          sudo apt-get update
-          sudo apt-get install -y dbus-x11 gnome-keyring libsecret-1-0
+          # Playwright install-deps already refreshed the package index.
+          sudo apt-get install -y --no-install-recommends dbus-x11 gnome-keyring libsecret-1-0
           dbus-run-session -- bash -euc '
             printf "%s" fidy-test-keyring | gnome-keyring-daemon --unlock --components=secrets
             bun run --cwd apps/cli test:native

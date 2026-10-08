@@ -32,7 +32,8 @@ export const applyTestMigration = ({
     .then(() => undefined);
 
 /** Installs an ordered baseline in one transaction before seeding a fresh test database.
- * Failure rolls back the whole schema. This does not model production migration boundaries;
+ * Native pooled Workers retain only the immutable migrated schema and baseline seeds,
+ * never a test's rows. Failure rolls back the whole schema. This does not model migration boundaries;
  * tests of file-by-file migration behavior must use applyTestMigration instead.
  */
 export const installTestSchema = ({
@@ -74,14 +75,58 @@ const acquireDatabase = (slot: BindingSlot): Promise<D1Database> =>
     return db;
   });
 // Only checked-in fixture SQL crosses this private local bootstrap route.
-const schemaWorker = `export default {
+const schemaWorker = `
+const baselines = new Map();
+const installed = new Set();
+const identifier = value => '"' + value.replaceAll('"', '""') + '"';
+const snapshot = async database => {
+  const catalog = (await database.prepare(
+    "SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY rowid"
+  ).all()).results;
+  // FTS creates its own shadow tables; replay only its original virtual-table declaration.
+  const tableList = (await database.prepare('PRAGMA table_list').all()).results;
+  const shadows = new Set(tableList.filter(table => table.type === 'shadow').map(table => table.name));
+  const objects = catalog.filter(object => !shadows.has(object.name));
+  const tables = objects.filter(object => object.type === 'table');
+  const dataTables = tableList.some(table => table.name === 'sqlite_sequence')
+    ? [...tables, {name: 'sqlite_sequence'}] : tables;
+  const columns = await database.batch(dataTables.map(table =>
+    database.prepare('PRAGMA table_info(' + identifier(table.name) + ')')
+  ));
+  const data = await database.batch(dataTables.map((table, index) => {
+    const names = columns[index].results.map(column => identifier(column.name));
+    const prefix = 'INSERT INTO ' + identifier(table.name) + '(' + names.join(',') + ') VALUES (';
+    const values = names.map(name => 'quote(' + name + ')').join(" || ',' || ");
+    return database.prepare('SELECT ? || ' + values + " || ')' AS sql FROM " + identifier(table.name)).bind(prefix);
+  }));
+  return [
+    'PRAGMA defer_foreign_keys = ON',
+    ...tables.map(table => table.sql),
+    ...data.flatMap((result, index) => [
+      ...(dataTables[index].name === 'sqlite_sequence' ? ['DELETE FROM sqlite_sequence'] : []),
+      ...result.results.map(row => row.sql),
+    ]),
+    ...objects.filter(object => object.type !== 'table').map(object => object.sql),
+  ];
+};
+export default {
   async fetch(request, env) {
     const binding = new URL(request.url).pathname.slice(1);
     const database = env[binding];
     if (request.method !== 'POST' || !database) return new Response('missing', {status: 404});
     const statements = (await request.text()).split('\u0000');
     try {
-      await database.batch(statements.map(sql => database.prepare(sql)));
+      // Only the first install into a fresh binding can use a pristine baseline.
+      // Subsequent schema additions still execute their actual migration statements.
+      const pristine = !installed.has(binding) && (await database.prepare(
+        "SELECT count(*) AS count FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'"
+      ).first('count')) === 0;
+      const baseline = pristine ? baselines.get(statements.join('\\u0000')) : undefined;
+      await database.batch((baseline ?? statements).map(sql => database.prepare(sql)));
+      if (pristine && !baseline) {
+        baselines.set(statements.join('\\u0000'), await snapshot(database));
+      }
+      installed.add(binding);
       return new Response(null, {status: 204});
     } catch {
       return new Response('Fixture schema installation failed', {status: 500});

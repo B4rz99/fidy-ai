@@ -5,126 +5,90 @@ For the measured follow-up and remaining Linux evidence requirements for #922–
 
 ## Native fixture baseline restoration
 
-The follow-up retains the four existing adapter shards, three isolated file processes per
-runner, all adapter cases, and the same runner sizes. The expensive repeated work was installing
-the migration history into every fresh binding, including intermediate table rebuilds.
+[Complete Linux run 37860914126](https://github.com/B4rz99/fidy-ai/actions/runs/37860914126)
+passed every gate in **2m54s**, from workflow creation at 23:42:28 UTC to completion at
+23:45:22 UTC on October 8, 2026. The preceding trunk
+[run 37851111387](https://github.com/B4rz99/fidy-ai/actions/runs/37851111387) took **5m11s**.
+This is a 44.1% reduction in observed whole-workflow elapsed time. The successful revision
+is `4574f3caf539cb9b2ac3a205077deabee03bc15a`.
 
-The private fixture Worker now executes a requested migration baseline once, before any test
-seeding, and derives immutable SQL from native SQLite's final catalog and baseline rows.
-Subsequent empty bindings restore that schema in a real D1 transaction. Tables, indexes, triggers,
-views, baseline seeds, AUTOINCREMENT state and native FTS are retained; FTS shadow tables are
-created by their virtual-table declaration. Foreign-key checks remain native. Mutable bindings,
-coordinators and test rows are never cached or shared. A populated binding or a later schema
-addition always executes the original SQL. `applyTestMigration` and independently wrapped
-bindings retain actual migration execution and file boundaries.
+| Complete job | Elapsed |
+| ------------ | ------: |
+| Adapter 1/4 | 126s |
+| Adapter 2/4 | 138s |
+| Adapter 3/4 | 139s |
+| Adapter 4/4 | 124s |
+| Web and native CLI browser validation | 141s |
 
-The fixture tests compare the complete migrated catalog and prove independent seeds, search,
-foreign-key rejection, rollback, and refusal to capture pre-existing test rows. The browser
-acceptance harness also uses the native baseline installer instead of hundreds of individual
-proxy preparation/execution calls. Browser CI reuses Playwright's APT index refresh and installs
-only required native credential-store packages.
+All **1,554 adapter cases in 115 files** passed, with nine unchanged provider-gated skips.
+All 63 web browser cases and the native CLI browser journey passed. Infrastructure, builds,
+unit/artifact tests, Linux/macOS/Windows native CLI checks, typechecking, lint, accessibility,
+security scans and Required Checks also passed. Runner sizes, the four existing adapter shards,
+three adapter file processes per runner and test-file boundaries remain unchanged.
+
+### Native setup
+
+The private fixture Worker executes each migration baseline once before test seeding, then
+derives immutable SQL from native SQLite's final catalog and baseline rows. Fresh bindings
+restore tables, indexes, triggers, views, seeds, AUTOINCREMENT state and native FTS in a real
+D1 transaction. Virtual declarations recreate FTS shadow tables. Foreign-key checks remain
+native; mutable databases, coordinators and test rows are never shared. Populated bindings,
+later schema additions, wrapped bindings and `applyTestMigration` retain actual SQL execution.
+Fixture tests prove catalog equivalence, independent rows, native search, foreign-key refusal,
+rollback and refusal to capture private test rows.
+
+Seven subscription suites now amortize Worker startup through the existing 16-slot pool,
+with a never-reused native binding for each case. Immutable caller-owned auth DDL is part of
+the baseline key; per-case seeding and global/timer cleanup remain. Category, Memory and browser
+arrangement also use the baseline installer. Migration-history and runtime-lifecycle tests
+retain their original execution paths.
 
 Three alternating before/after Linux x64 samples each installed all checked-in migrations into
-64 fresh bindings, using the same 16-binding pool and reviewed Bun 1.4.3-canary.1+13a98b0db.
-Each sample used a fresh process with no other validation running. Complete fixture elapsed
-seconds, including acquisition and disposal, were:
+64 fresh bindings using the same 16-binding pool and Bun 1.4.3-canary.1+13a98b0db. Each sample
+used a fresh process without concurrent validation; acquisition and disposal are included.
 
-| Mode                          | Run 1 | Run 2 | Run 3 | Median |
-| ----------------------------- | ----: | ----: | ----: | -----: |
-| Replay migrations per binding | 48.09 | 51.28 | 48.24 |  48.24 |
-| Restore native baseline       |  8.80 |  9.50 |  8.80 |   8.80 |
+| Mode | Run 1 | Run 2 | Run 3 | Median |
+| ---- | ----: | ----: | ----: | -----: |
+| Replay migrations per binding | 48.09s | 51.28s | 48.24s | 48.24s |
+| Restore native baseline | 8.80s | 9.50s | 8.80s | 8.80s |
 
-This is an **81.7% reduction in fixture setup**, not a whole-pipeline guarantee.
-The original fixture comes from `acddc7ba`; the optimized fixture is in `b8eab7e0`.
+The controlled fixture setup reduction is **81.7%**. The original fixture is `acddc7ba` and
+its optimized implementation is `b8eab7e0`; this benchmark is separate from whole-CI timing.
 
-Scheduling estimates were refreshed from the complete local adapter run, including six new
-10–44s files previously estimated at one second. These remain single-run cloud-worker estimates,
-not GitHub runner medians. The four estimated work sums differ by less than one second.
+### Scheduling and browser work
 
-The mocked browser polling and email-approval cases advance the browser clock while still
-asserting the full poll interval and no overlapping requests. Three duplicate Microsoft shared-controller journeys
-were removed: lost completion, pending redemption and popup blocking remain covered through
-Google; Microsoft retains real signup/session, denial and both WhatsApp handoff journeys.
-Provider-neutral native operator recovery is exercised once through Google, alongside the
-dedicated SupportRecoveryCase journey; both providers retain signup, return login, session expiry
-and consent revocation. The parallel SupportRecoveryCase owns a separate User because recovery
-revokes sessions. Real Core polling and security deadlines retain real time.
+The existing longest-first shard scheduler now uses successful Linux file durations for all
+115 adapter files. Unchanged costs come from complete green run 37858866790; changed fixture
+costs come from passed files in run 37859634224. The failed OAuth file retains its previous
+successful cost. These are mixed-revision scheduling estimates, not medians or equivalent-revision
+benchmarks. Tiny and unknown files keep the one-second floor.
 
-Validation passed 1,549 adapter cases in the complete 114-file run, with nine unchanged
-provider-gated skips, plus 11 focused fixture/new-trunk Sandbox cases and all scheduling probes.
-The final 63-case browser suite and native CLI journey passed in 124.5s locally, excluding job
-setup. Typechecking, lint and the existing workflow tests pass. No security findings.
+The two existing browser suites overlap on one runner with separate ports, certificates, build
+outputs, Users and databases, retaining two web workers and one CLI worker. A rendezvous probe
+requires both processes to start and proves that failure of either child fails the gate.
+The longest existing browser files run first to avoid an idle worker at the end. Recovery and
+ordinary pairing use independent Users because recovery revokes sessions.
 
-[First complete Linux run 37854802258](https://github.com/B4rz99/fidy-ai/actions/runs/37854802258)
-passed in **3m20s**, measured from workflow creation through completion, versus **5m11s** for
-[preceding trunk run 37851111387](https://github.com/B4rz99/fidy-ai/actions/runs/37851111387).
-Complete adapter jobs took 146/165/162/158s and browser validation took 171s including setup
-and teardown. These are actual complete runs, not a controlled runner-performance guarantee.
+Three redundant Microsoft shared-controller cases were removed: lost completion, pending
+redemption and popup blocking remain covered through Google. Microsoft retains signup/session,
+denial and both WhatsApp handoffs. Provider-neutral operator recovery runs once through Google,
+alongside dedicated SupportRecoveryCase coverage; both providers retain return login, expiry
+and consent revocation. Only mocked polling/email timers advance the browser clock; native
+Core security deadlines retain real time.
 
-The first run also showed critical-path jobs spending 6–10s compressing the same 544MB Bun
-cache, then losing the reservation race to another job. Adapter and browser jobs now restore
-that exact cache without publishing; other existing jobs still publish it on a miss. No cache
-key, dependency installation or validation gate is bypassed.
+The first-card browser journey reads the actual Core response before navigation can discard
+its body, preserving pending payment and final real collection assertions. The OAuth in-flight
+deadline fixture drains the expired response and awaits native read settlement before its
+follow-up request. SQL-fencing, real deadlines and follow-up success remain; neither fix adds
+retries, sleeps or longer timeouts.
 
-[Follow-up run 37856351297](https://github.com/B4rz99/fidy-ai/actions/runs/37856351297)
-passed in **3m30s**. Complete adapter jobs took 142/152/136/140s and browser took 160s.
-One adapter started 36s after its peers; that queue delay held up Required Checks.
-The web and native CLI browser journeys now overlap on the same runner using their existing
-separate ports, certificates, build outputs, Users and databases. Each retains its worker limit
-(two web workers and one CLI worker), and other verification groups remain sequential.
-The verifier's rendezvous probe requires both children to start and checks that failure of
-either child fails the gate. All 63 web cases plus the native CLI journey pass locally in 96.7s,
-versus 108.2s sequentially.
+Adapter and browser jobs restore the exact Bun cache without competing to publish the same
+544MB archive; other jobs still publish cache misses. Browser setup reuses Playwright's APT
+index refresh and installs only required native credential-store packages.
 
-[Overlap run 37857113276](https://github.com/B4rz99/fidy-ai/actions/runs/37857113276)
-finished in 3m13s but failed the first-card browser journey: Chromium discarded the response
-body after application navigation. The native CLI journey had finished a minute earlier.
-The test now reads the actual Core reply through `route.fetch()` before fulfilling the original
-browser request; response status, pending payment, provider-only card data and final real Core
-collection assertions remain. All 11 real-Core browser journeys pass locally.
-
-Category keyword-rule and Memory arrangement still replayed each migration separately, despite
-having no migration-history assertions. They now use the native baseline installer. All 25 cases
-pass; test execution measured 10.3/10.5s under local contention versus the preceding 33.7/28.1s
-file estimates. Scheduling conservatively budgets 12s per file. The 64-binding pool experiment
-saved only 1.8s per 64 complete installations and was not adopted; pool size remains 16.
-[Next run 37858084842](https://github.com/B4rz99/fidy-ai/actions/runs/37858084842)
-passed every check in **3m05s**. Complete adapter jobs took 141/118/147/142s;
-browser took 153s. Its final real-Core file left the other browser worker idle for about 20s.
-The two longest existing browser files now sort first via `00-`/`01-` filename prefixes;
-no case or file is split. Ordinary pairing owns a separate User, TrialPeriod and Dashboard,
-so enrollment can run earlier without changing pairing's initial standing. All 63 web cases
-plus the native CLI journey pass locally in 88.7s.
-
-[Reordered run 37858866790](https://github.com/B4rz99/fidy-ai/actions/runs/37858866790)
-passed all checks in **3m07s**. Browser improved to 137s; adapters took 156/157/151/118s,
-so adapter variability was now the critical path.
-
-Seven subscription suites previously started and disposed a Worker for every case and replayed
-the same payment migrations. Their shared native D1 fixture now allocates a never-reused binding
-from the existing 16-slot pool. Immutable caller-owned auth DDL forms part of the baseline key,
-and seeding stays per database. The Worker closes at file teardown; per-case global/timer cleanup
-remains. The new fixture case proves auth schema variants, no private-row capture and native
-foreign-key rejection. Migration-specific suites retain their original runtime and migrations.
-All 321 subscription cases across 14 files pass locally in 26.7s with eight unchanged Sandbox
-skips; all eight native fixture cases pass. Scheduling budgets the seven new measured costs
-conservatively.
-
-[Subscription-pool run 37859634224](https://github.com/B4rz99/fidy-ai/actions/runs/37859634224)
-finished in 2m54s but failed an existing OAuth in-flight deadline case, so this is not a successful
-performance result. The test released a held D1 read and immediately issued a follow-up without
-consuming the expired reply or observing native read settlement. It now drains the reply and
-waits for the fixture's explicit settlement signal. The real deadline, coordinator, native
-response, SQL-fencing and follow-up success assertions remain; no retry or sleep is added.
-The three-file contention probe passes all 160 cases, including abort and deadline variants.
-
-Scheduling now uses actual file test-body durations from the complete green Linux run
-37858866790, replacing local estimates for all 115 files. Changed subscription/fixture costs
-use only their passed file results from 37859634224; the failed OAuth file retains its prior
-successful cost. These mixed-revision values are conservative scheduling estimates, not
-medians or equivalent-revision performance evidence. Tiny and unknown files keep a one-second
-floor. Original estimated work distribution missed a 194–309s spread in the latest run.
-Final CI must confirm all gates and the complete-workflow target.
+The 2m54s result includes setup, teardown and Required Checks. It is an observed successful run,
+not a guarantee of GitHub queue latency: an earlier run queued one adapter 36 seconds longer
+than its peers. No machine was scaled and no test suite or file was split by this change.
 
 ## Adapter regression follow-up: #1066
 

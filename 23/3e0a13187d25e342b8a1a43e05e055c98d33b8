@@ -1,0 +1,28 @@
+apps/server/cloudflare/release-isolation/operations.ts
+  s_e3b9a05f422f64::t_b82e735a0c0530 1-36
+infra/cloudflare/verify-edge-policy.ts
+  s_e3b9a05f422f64::t_b82e735a0c0530 27
+  s_e3b9a05f422f64::t_3a4be09d206c06 20
+infra/cloudflare/verify-edge-policy.test.ts
+  s_e3b9a05f422f64::t_3a4be09d206c06 7
+apps/server/cloudflare/public-worker.ts
+  s_e3b9a05f422f64::t_b82e735a0c0530 41
+apps/server/cloudflare/core-http/runtime.ts
+  s_e3b9a05f422f64::t_b82e735a0c0530 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "233e0a13187d25e342b8a1a43e05e055c98d33b8",
+  "prompts": {},
+  "sessions": {
+    "s_e3b9a05f422f64": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a115f2-dfce-7741-a6e9-e22144cd3fad",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

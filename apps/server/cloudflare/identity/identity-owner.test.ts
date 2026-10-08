@@ -155,16 +155,16 @@ it("keeps User, WhatsApp association and original TrialPeriod inside the caller'
             "CREATE TABLE users (id TEXT PRIMARY KEY, service_market TEXT, locale TEXT, time_zone TEXT, created_at_ms INTEGER)"
           ),
           db.prepare(
-            "CREATE TABLE whatsapp_identities (user_id TEXT PRIMARY KEY REFERENCES users(id), portfolio_id TEXT, bsuid TEXT, verified_at_ms INTEGER, UNIQUE(portfolio_id, bsuid))"
+            "CREATE TABLE whatsapp_identities (user_id TEXT PRIMARY KEY REFERENCES users(id), portfolio_id TEXT, bsuid TEXT, verified_at_ms INTEGER, phone_number_id TEXT, UNIQUE(portfolio_id, bsuid))"
           ),
           db.prepare(
             "CREATE TABLE trial_periods (user_id TEXT PRIMARY KEY REFERENCES users(id), started_at_ms INTEGER, ends_at_ms INTEGER)"
           ),
           db.prepare(
-            "CREATE TABLE pending_consent_exchanges (id TEXT PRIMARY KEY, portfolio_id TEXT, bsuid TEXT, state TEXT)"
+            "CREATE TABLE pending_consent_exchanges (id TEXT PRIMARY KEY, portfolio_id TEXT, bsuid TEXT, phone_number_id TEXT, expires_at_ms INTEGER, state TEXT)"
           ),
           db.prepare(
-            "INSERT INTO pending_consent_exchanges VALUES ('10000000-0000-4000-8000-000000000003', 'portfolio-a', 'CO.caller', 'accepted')"
+            "INSERT INTO pending_consent_exchanges VALUES ('10000000-0000-4000-8000-000000000003', 'portfolio-a', 'CO.caller', 'phone-a', 86401000, 'accepted')"
           ),
           db.prepare("CREATE TABLE verification_completion (valid INTEGER CHECK(valid = 1))"),
         ])

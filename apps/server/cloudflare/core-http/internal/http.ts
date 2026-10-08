@@ -1,6 +1,16 @@
 import { ConnectInstitutionInput } from "../../../src/core/connections/contract";
 import { connectionBrowserTransport } from "../../../src/shell/connections/runtime";
 import { handleConnectionBrowserRequest } from "../../connections/runtime";
+import type { HttpClient } from "effect/http";
+import { completeProviderOnboarding } from "../../onboarding/operations";
+import {
+  microsoftProviderPaths,
+  providerPaths,
+} from "../../../src/shell/provider-authentication/contract";
+import {
+  handleProviderAuthentication,
+  ownsProviderAuthenticationPath,
+} from "../../provider-authentication/operations";
 import { oauthPaths } from "../../../src/shell/oauth-agents/contract";
 import { handleOAuthRequest } from "../../oauth-agents/runtime";
 import { type MemoryOperationId, memoryOperationIds } from "../../../src/shell/memory/contract";
@@ -22,7 +32,6 @@ import {
 import {
   dispatchBrowserPairingEmail,
   dispatchEmailReplacement,
-  dispatchOnboardingEmail,
 } from "../../email-authentication/runtime";
 
 import { UserActionRequired } from "../../../src/shell/public-http/contract";
@@ -119,12 +128,7 @@ const ReleaseConfiguration = Schema.Struct({
   RELEASE_GIT_SHA: Schema.String.check(Schema.isPattern(gitRevisionPattern)),
 });
 
-type PublicationKind =
-  | "onboarding"
-  | "browserPairing"
-  | "emailReplacement"
-  | "billing"
-  | "whatsapp";
+type PublicationKind = "browserPairing" | "emailReplacement" | "billing" | "whatsapp";
 type PublishAcceptedWork = (kind: PublicationKind, id: string) => void;
 
 const publicationActivities = (
@@ -140,14 +144,6 @@ const publicationActivities = (
             queue: environment.HOSTED_WHATSAPP_QUEUE,
             userId: Option.map(identity, (id) => UserId.make(id)),
           }).pipe(Effect.mapError(() => undefined)),
-    onboarding: () =>
-      environment.ONBOARDING_EMAIL_QUEUE === undefined
-        ? Effect.void
-        : dispatchOnboardingEmail({
-            DB: environment.DB,
-            ONBOARDING_EMAIL_QUEUE: environment.ONBOARDING_EMAIL_QUEUE,
-            identity,
-          }),
     browserPairing: () =>
       environment.BROWSER_PAIRING_EMAIL_QUEUE === undefined
         ? Effect.void
@@ -261,7 +257,6 @@ const callbackEffect = (
   request.method === "POST"
     ? receiveWhatsAppWebhook({
         ...environment,
-        onAccepted: (id) => publish("onboarding", id),
         onHostedText: (admission) =>
           forwardHostedWhatsApp(environment, "whatsapp", admission).then((response) => {
             if (response.status === HTTP_ACCEPTED) publish("whatsapp", admission.userId);
@@ -509,6 +504,7 @@ const reconciliationOperation = (
 
 const ownedCorePath = (path: string): boolean =>
   Option.isSome(connectionBrowserTransport(path)) ||
+  ownsProviderAuthenticationPath(path) ||
   refundSupportRoute(path) ||
   enrollmentCorePath(path) ||
   [
@@ -1487,7 +1483,7 @@ const reservedCoreResponse = (
   request: Request,
   environment: CoreHttpEnvironment,
   path: string
-): Option.Option<Effect.Effect<Response>> => {
+): Option.Option<Effect.Effect<Response, never, HttpClient.HttpClient>> => {
   if (!ownedCorePath(path)) {
     return Option.some(Effect.succeed(jsonResponse('{"status":"not_found"}', HTTP_NOT_FOUND)));
   }
@@ -1500,6 +1496,19 @@ const reservedCoreResponse = (
         browserOrigin: environment.BROWSER_ORIGIN,
       })
     );
+  }
+  if (
+    [providerPaths.complete, microsoftProviderPaths.complete].some((owned) => owned === path) &&
+    request.method === "POST"
+  ) {
+    return Option.some(
+      Effect.tryPromise(() => completeProviderOnboarding({ db: environment.DB, request })).pipe(
+        Effect.orElseSucceed(unavailable)
+      )
+    );
+  }
+  if (ownsProviderAuthenticationPath(path)) {
+    return Option.some(handleProviderAuthentication({ request, environment }));
   }
   if (path === smokePath) return Option.some(smokeResponse(request, environment));
   if (refundSupportRoute(path)) {
@@ -1518,7 +1527,7 @@ export const executeCoreHttp = ({
   environment,
   telemetry,
   publish,
-}: RequestExecution): Effect.Effect<Response> => {
+}: RequestExecution): Effect.Effect<Response, never, HttpClient.HttpClient> => {
   const url = new URL(request.url);
   if (Object.values(oauthPaths).some((path) => path === url.pathname)) {
     return handleOAuthRequest({

@@ -29,6 +29,8 @@ type OutboundHttpPolicy = Readonly<{
 }>;
 
 const outboundHttpPolicies: Readonly<Record<OutboundHttpProvider, OutboundHttpPolicy>> = {
+  microsoft: { propagateTrace: false, redactedHeaders: [], retainedResponseHeaders: [] },
+  google: { propagateTrace: false, redactedHeaders: [], retainedResponseHeaders: [] },
   "cloudflare-access": {
     propagateTrace: false,
     redactedHeaders: ["cf-access-token"],

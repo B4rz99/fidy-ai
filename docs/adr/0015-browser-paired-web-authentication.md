@@ -2,16 +2,17 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-12
-- **Amended:** 2026-08-23
-- **Related:** [ADR 0020 Mandatory verified-email authentication and recovery](./0020-mandatory-verified-email-authentication-and-recovery.md)
+- **Amended:** 2026-10-08
+- **Related:** [ADR 0020 Provider authentication and recovery](./0020-mandatory-verified-email-authentication-and-recovery.md)
 
 ## Context
 
 A login link sent through WhatsApp or email is a bearer-equivalent Secret until redemption. Hiding
 it behind a provider button keeps it out of visible Transcript text but still exposes it to provider
-telemetry, previews, and scanners. The product has three ways to prove an existing User at launch:
-their WhatsAppIdentity, their VerifiedEmailCredential, or a tracked SupportRecoveryCase backed by
-their pre-issued BackupRecoveryCode. None should become a parallel web-session mechanism or
+telemetry, previews, and scanners. An existing User can authenticate through their ProviderCredential,
+an established WhatsAppIdentity, an independently established optional VerifiedEmailCredential, or a
+tracked SupportRecoveryCase backed by their pre-issued BackupRecoveryCode. Provider contact email
+creates no mailbox authority. None should become a parallel web-session mechanism or
 transport the browser's complete proof.
 
 ## Decision
@@ -31,6 +32,8 @@ The browser-login shell owns the unbound challenge and its lifecycle. Anonymous 
 insertion are one database transaction. Each approval authority invokes Browser Login's published
 approval operation:
 
+- Provider Authentication verifies the established ProviderCredential and approves the pairing for
+  its stable User; no email code or WhatsApp association is required for returning provider login.
 - WhatsApp approval is a canonical mutation whose caller input is only the public code; resolved
   WhatsAppIdentity supplies the stable UserId and exact hosted confirmation is required.
 - Email authentication verifies a short-lived purpose-bound proof for the existing

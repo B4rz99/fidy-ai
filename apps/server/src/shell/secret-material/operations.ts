@@ -84,3 +84,17 @@ export const derivePATBearerDigest = (
     Effect.map((digest) => PATBearerDigest.make(Hex.encode(digest))),
     Effect.orDie
   );
+
+/** Resolves Google's application credential without exposing malformed values in diagnostics. */
+export const loadGoogleClientSecret = configuredSecret({
+  name: "GOOGLE_CLIENT_SECRET",
+  schema: Schema.String.check(Schema.isNonEmpty()),
+  requirement: "must be a nonempty Google application secret",
+});
+
+/** Resolves Microsoft's application secret through redacted configuration diagnostics. */
+export const loadMicrosoftClientSecret = configuredSecret({
+  name: "MICROSOFT_CLIENT_SECRET",
+  schema: Schema.String.check(Schema.isNonEmpty()),
+  requirement: "must be a nonempty Microsoft application secret",
+});

@@ -1,20 +1,13 @@
 import { emailPairingAllowsUser } from "../../src/shell/email-authentication/operations";
 import { afterAll, expect, it } from "vitest";
-import { Clock, Effect, Exit, Option, Schema } from "effect";
+import { Clock, Effect, Schema } from "effect";
 import { UserId } from "../../src/core/identity/contract";
-import {
-  PendingConsentExchangeId,
-  Sha256Digest,
-  WhatsAppProviderMessageId,
-} from "../../src/shell/consent/contract";
 import { isolatedTestDatabases } from "../d1-test-fixture";
 import { freshSessionQuery } from "../../src/shell/web-session/operations";
 import { protectConsentStatement } from "../../src/shell/consent/operations";
 import {
-  findOnboardingEmailReplay,
   prepareEmailPendingWorkObservation,
   prepareEmailRejectedWorkObservation,
-  readOnboardingEmailStatus,
   verifiedEmailQuery,
 } from "./operations";
 
@@ -130,51 +123,6 @@ it("keeps an unclaimed or same-User pairing eligible while a foreign email proof
         db.prepare("UPDATE browser_pairing_email_proofs SET user_id = ?").bind(userB).run()
       );
       expect((yield* Effect.tryPromise(() => update.run())).meta.changes).toBe(0);
-    })
-  ));
-
-it("distinguishes missing enrollment from matching, conflicting and unreadable replay evidence", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const db = yield* Effect.tryPromise(() => databases.acquire());
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "CREATE TABLE pending_email_enrollments (exchange_id TEXT, submission_message_id TEXT, submission_body_sha256 TEXT, state TEXT)"
-          )
-          .run()
-      );
-      const input = {
-        db,
-        exchangeId: PendingConsentExchangeId.make(pairingId),
-        submissionMessageId: WhatsAppProviderMessageId.make("wamid.mailbox"),
-        submissionBodySha256: Sha256Digest.make("a".repeat(64)),
-      };
-      expect(Option.isNone(yield* findOnboardingEmailReplay(input))).toBe(true);
-      expect(yield* readOnboardingEmailStatus(input)).toBe("awaiting_email");
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare("INSERT INTO pending_email_enrollments VALUES (?, ?, ?, 'awaiting_proof')")
-          .bind(input.exchangeId, input.submissionMessageId, input.submissionBodySha256)
-          .run()
-      );
-      expect(yield* findOnboardingEmailReplay(input)).toEqual(Option.some("matching"));
-      expect(
-        yield* findOnboardingEmailReplay({
-          ...input,
-          submissionBodySha256: Sha256Digest.make("b".repeat(64)),
-        })
-      ).toEqual(Option.some("conflict"));
-      expect(yield* readOnboardingEmailStatus(input)).toBe("awaiting_proof");
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "UPDATE pending_email_enrollments SET submission_body_sha256 = 'invalid', state = 'unknown'"
-          )
-          .run()
-      );
-      expect(Exit.isFailure(yield* Effect.exit(findOnboardingEmailReplay(input)))).toBe(true);
-      expect(Exit.isFailure(yield* Effect.exit(readOnboardingEmailStatus(input)))).toBe(true);
     })
   ));
 

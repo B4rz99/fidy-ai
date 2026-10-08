@@ -10,8 +10,8 @@ const queueCriticalCount = 1_000;
 
 const isEmailProofOwner = (
   owner: PendingSignal["operation"]
-): owner is "onboarding" | "browserPairing" | "emailReplacement" =>
-  owner === "onboarding" || owner === "browserPairing" || owner === "emailReplacement";
+): owner is "browserPairing" | "emailReplacement" =>
+  owner === "browserPairing" || owner === "emailReplacement";
 
 const pendingWorkflowAlerts = (signal: PendingSignal): ReadonlyArray<OperationalAlert> =>
   signal.operation !== "forwardedEmail" && signal.failedWorkflows > 0

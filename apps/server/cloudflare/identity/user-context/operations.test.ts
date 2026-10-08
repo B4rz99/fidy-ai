@@ -15,9 +15,12 @@ const setup = (): Promise<D1Database> =>
   databases.acquire().then((db) =>
     installTestSchema({
       db,
-      sources: ["0003_pending_consent", "0004_onboarding_email", "0005_verified_onboarding"].map(
-        (name) => new URL(`../../migrations/${name}.sql`, import.meta.url)
-      ),
+      sources: [
+        "0003_pending_consent",
+        "0004_onboarding_email",
+        "0005_verified_onboarding",
+        "0069_retire_email_code_signup",
+      ].map((name) => new URL(`../../migrations/${name}.sql`, import.meta.url)),
     }).then(() => db)
   );
 

@@ -4,6 +4,7 @@ import {
   ConnectionAttemptReference,
   OAuthConnectionListQuery,
   OAuthRequestId,
+  ProviderHandoffSearch,
 } from "@/transport/client";
 import { ConnectionContinuationFeature } from "@/features/connections/feature";
 import { OAuthManagementFeature, OAuthReviewFeature } from "@/features/oauth-connections/feature";
@@ -18,7 +19,10 @@ import {
 } from "@tanstack/react-router";
 import { BrowserLoginPairingFeature } from "@/features/browser-login/feature";
 import { HostedAgentFeature } from "@/features/agent/feature";
-import { EmailOnboardingFeature } from "@/features/email-onboarding/feature";
+import {
+  ProviderAuthenticationFeature,
+  ProviderReturnFeature,
+} from "@/features/provider-authentication/feature";
 import { EmailReplacementFeature } from "@/features/email-replacement/feature";
 import { createPublicSiteRoute } from "@/features/public-site/feature";
 import { PATManagementFeature } from "@/features/pats/feature";
@@ -140,18 +144,50 @@ const connectionContinuationRoute = createRoute({
     Schema.decodeSync(Schema.Struct({ attempt: Schema.optionalKey(Schema.Unknown) }))(search),
   component: ConnectionContinuationFeature,
 });
-const emailOnboardingRoute = createRoute({
+
+const GoogleAuthentication = (): JSX.Element =>
+  createElement(ProviderAuthenticationFeature, {
+    provider: "google",
+    handoffReference: Option.fromUndefinedOr(googleRoute.useSearch().handoff),
+  });
+const MicrosoftAuthentication = (): JSX.Element =>
+  createElement(ProviderAuthenticationFeature, {
+    provider: "microsoft",
+    handoffReference: Option.fromUndefinedOr(microsoftRoute.useSearch().handoff),
+  });
+
+const googleRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/auth/verify-email",
-  component: EmailOnboardingFeature,
+  path: "/auth/google",
+  validateSearch: (search) => Schema.decodeSync(ProviderHandoffSearch)(search),
+  component: GoogleAuthentication,
+});
+const googleReturnRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/auth/google-return",
+  component: () => createElement(ProviderReturnFeature, { provider: "google" }),
+});
+const microsoftRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/auth/microsoft",
+  validateSearch: (search) => Schema.decodeSync(ProviderHandoffSearch)(search),
+  component: MicrosoftAuthentication,
+});
+const microsoftReturnRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/auth/microsoft-return",
+  component: () => createElement(ProviderReturnFeature, { provider: "microsoft" }),
 });
 const routeTree = rootRoute.addChildren([
   createPublicSiteRoute(rootRoute),
   browserLoginPairingRoute,
+  googleRoute,
+  googleReturnRoute,
+  microsoftRoute,
+  microsoftReturnRoute,
   oauthReviewRoute,
   connectionContinuationRoute,
   subscriptionOffersRoute,
-  emailOnboardingRoute,
   authenticatedRoute.addChildren([
     signedInRoute.addChildren([signedInIndexRoute, dashboardRoute, agentRoute, transactionsRoute]),
     patManagementRoute,

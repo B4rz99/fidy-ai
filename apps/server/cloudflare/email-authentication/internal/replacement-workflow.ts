@@ -11,7 +11,7 @@ import {
   EmailVerificationCode,
 } from "../../../src/core/email-authentication/contract";
 import { Clock, Effect, Exit, Option, Schema } from "effect";
-import { deliveryState, sendThroughResend } from "./onboarding-workflow";
+import { deliveryState, sendThroughResend } from "./proof-delivery";
 
 const Pending = Schema.Struct({
   candidate_email: EmailAddress,

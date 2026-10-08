@@ -146,7 +146,6 @@ export {
   BrowserLoginPairingInvalidApi,
   BrowserLoginPollingRateLimitedApi,
   BrowserPairingEmailAuthenticationInvalidApi,
-  EmailVerificationInvalidApi,
   EmailReplacementFreshPairingRequiredApi,
   EmailReplacementInvalidApi,
   emailReplacementFreshBody,
@@ -156,3 +155,7 @@ export {
 export { RecurringDigestReport, RecurringDigestReportParams } from "~/core/insights/contract";
 
 export { PATActivity } from "~/shell/tokens/contract";
+
+export type { AuthenticationProvider } from "~/shell/web-authentication/contract";
+
+export { ProviderHandoffSearch } from "~/shell/web-authentication/contract";

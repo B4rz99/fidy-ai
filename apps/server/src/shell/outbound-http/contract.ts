@@ -1,4 +1,4 @@
-import { Data, type Option, type Redacted } from "effect";
+import { type Cause, Data, type Effect, type Option, type Redacted } from "effect";
 import { type EnrollmentMethod } from "~/core/subscription/contract";
 import {
   type WhatsAppBusinessPhoneNumberId,
@@ -87,3 +87,16 @@ export type OutboundHttpRequest =
   | Readonly<{ readonly _tag: "WompiSandboxCardVoid"; readonly transactionId: string }>
   | Readonly<{ readonly _tag: "CloudflareAccessSupportRecovery"; readonly body: string }>
   | Readonly<{ readonly _tag: "CloudflareAccessSigningKeys" }>;
+
+/** Fixed-provider OIDC protocol transport; no request may select destinations, credentials or response limits. */
+export type ProviderOidcHttpService = Readonly<{
+  execute: (
+    request:
+      | Readonly<{ _tag: "SigningKeys" }>
+      | Readonly<{
+          _tag: "TokenExchange";
+          code: Redacted.Redacted<string>;
+          verifier: Redacted.Redacted<string>;
+        }>
+  ) => Effect.Effect<OutboundHttpResponse, OutboundHttpFailure | Cause.TimeoutError>;
+}>;

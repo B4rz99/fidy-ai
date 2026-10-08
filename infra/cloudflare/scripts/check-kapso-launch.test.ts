@@ -29,7 +29,7 @@ const ready = {
   },
   deletionTestEvidence: "restricted/deletion-test",
   policyRevision: "policy-2026-09-28-cloudflare-providers",
-  onboardingRevision: "onboarding-2026-09-28-kapso-free",
+  onboardingRevision: "onboarding-2026-10-08-providers",
 };
 
 const check = (evidence: unknown): { readonly code: number; readonly output: string } => {

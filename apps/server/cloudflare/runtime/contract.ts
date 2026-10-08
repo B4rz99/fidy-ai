@@ -29,13 +29,11 @@ export type PlatformMaintenanceInput = Readonly<{
   OPERATIONAL_CANARY_WORKFLOW: Option.Option<Workflow>;
   EMAIL_BUCKET: Option.Option<R2Bucket>;
   STATEMENT_STAGING_BUCKET: Option.Option<R2Bucket>;
-  ONBOARDING_EMAIL_QUEUE: Option.Option<Pick<Queue, "metrics">>;
   BROWSER_PAIRING_EMAIL_QUEUE: Option.Option<Pick<Queue, "metrics">>;
   EMAIL_REPLACEMENT_QUEUE: Option.Option<Queue>;
   BILLING_COLLECTION_QUEUE: Option.Option<Pick<Queue, "metrics">>;
   STATEMENT_EXTRACTION_QUEUE: Option.Option<Pick<Queue, "metrics">>;
   HOSTED_WHATSAPP_QUEUE: Option.Option<Pick<Queue, "metrics">>;
-  ONBOARDING_EMAIL_WORKFLOW: Option.Option<Workflow>;
   BROWSER_PAIRING_EMAIL_WORKFLOW: Option.Option<Workflow>;
   EMAIL_REPLACEMENT_WORKFLOW: Option.Option<Workflow>;
   BILLING_COLLECTION_WORKFLOW: Option.Option<Workflow>;

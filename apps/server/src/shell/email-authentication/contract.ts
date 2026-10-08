@@ -11,7 +11,6 @@ import {
   browserPairingEmailRetryAfterSeconds,
 } from "~/core/email-authentication/contract";
 import type { UserId } from "~/core/identity/contract";
-import { BackupRecoveryCode } from "~/core/recovery/contract";
 import {
   AtomicBatchEligible,
   freshWebSessionOnly,
@@ -32,48 +31,6 @@ export const RequestEmailReplacementPayload = Schema.Struct({
 export const EmailReplacementPending = Schema.Struct({
   status: Schema.Literal("pending"),
 }).annotate({ identifier: "EmailReplacementPending" });
-
-const emailVerificationInvalidError = {
-  code: "verification_invalid",
-  message: "El código no es válido. Revisa el correo o solicita uno nuevo.",
-} as const;
-
-/** One bounded raw browser field; proof parsing remains internal to the handler. */
-export const VerifyEmailEnrollmentPayload = Schema.Struct({
-  combinedCode: Schema.Unknown,
-});
-export type VerifyEmailEnrollmentPayload = typeof VerifyEmailEnrollmentPayload.Type;
-
-/** One-time no-store disclosure of the Recovery-owned emergency credential. */
-export const CreatedVerifiedOnboarding = Schema.Struct({
-  status: Schema.Literal("created"),
-  backupRecoveryCode: Schema.RedactedFromValue(BackupRecoveryCode),
-}).annotate({ identifier: "CreatedVerifiedOnboarding" });
-
-export class EmailVerificationInvalidApi extends Schema.Error<EmailVerificationInvalidApi>(
-  "EmailVerificationInvalidApi"
-)(
-  {
-    error: Schema.Struct({
-      code: Schema.Literal(emailVerificationInvalidError.code),
-      message: Schema.Literal(emailVerificationInvalidError.message),
-    }),
-  },
-  { httpApiStatus: 400 }
-) {}
-
-export const emailVerificationInvalidBody = { error: emailVerificationInvalidError } as const;
-
-export const EmailOnboardingWebAuthGroup = HttpApiGroup.make("emailOnboarding").add(
-  HttpApiEndpoint.post("verifyEmail", "/web/onboarding/email/verify", {
-    payload: VerifyEmailEnrollmentPayload,
-    success: CreatedVerifiedOnboarding,
-    error: EmailVerificationInvalidApi,
-  }).annotate(
-    OpenApi.Description,
-    "Verify one mailbox proof and atomically create the complete stable User state."
-  )
-);
 
 const emailReplacementInvalidError = {
   code: "verification_invalid",

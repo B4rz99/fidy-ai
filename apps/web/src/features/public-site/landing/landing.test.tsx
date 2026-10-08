@@ -111,25 +111,16 @@ it("supports keyboard feature selection and links each preview to its detailed v
   preference.dispatchEvent(new Event("change"));
 });
 
-it("updates launch prices and keeps signup as a dismissible placeholder", () => {
+it("updates launch prices and links to first-party Google signup", () => {
   mountHome();
   expect(screen.getByText("Cobro de $28.900 COP cada mes.")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Anual" }));
   expect(screen.getByText("Cobro de $289.900 COP cada año.")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Semanal" }));
   expect(screen.getByText("Cobro de $9.900 COP cada semana.")).toBeInTheDocument();
-  fireEvent.click(
-    within(screen.getByRole("banner")).getByRole("button", { name: "Empezar con Fidy" })
-  );
-  const dialog = screen.getByRole("dialog", { name: "Registro de Fidy" });
-  expect(within(dialog).getByText(/Por ahora es un placeholder/)).toBeInTheDocument();
-  fireEvent.click(within(dialog).getByRole("button", { name: "Seguir explorando ↗" }));
-  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  fireEvent.click(
-    within(screen.getByRole("banner")).getByRole("button", { name: "Empezar con Fidy" })
-  );
-  fireEvent(screen.getByRole("dialog"), new Event("close"));
-  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(
+    within(screen.getByRole("banner")).getByRole("link", { name: "Empezar con Fidy" })
+  ).toHaveAttribute("href", "/auth/google");
 });
 
 it("closes compact navigation on selection, focus departure and Escape", () => {

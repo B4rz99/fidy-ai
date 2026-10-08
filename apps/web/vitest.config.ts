@@ -40,6 +40,7 @@ export default defineConfig({
         "src/testing/**",
         "src/ui/components/**",
         "src/features/browser-login/**",
+        "src/features/provider-authentication/**",
         "src/features/dashboard/drag-adapter.tsx",
         "src/features/pats/feature.tsx",
       ],

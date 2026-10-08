@@ -176,7 +176,9 @@ export const EmailReplacementView = (props: EmailReplacementViewProps): JSX.Elem
           <h1>Cambiar correo verificado</h1>
         </CardTitle>
         <CardDescription>
-          Tu correo actual seguirá activo hasta que verifiques el nuevo.
+          Esta opción requiere un correo verificado establecido por separado. Iniciar sesión con
+          Google o Microsoft no lo establece. Si ya tienes uno, seguirá activo hasta que verifiques
+          el nuevo.
         </CardDescription>
       </CardHeader>
       <CardContent>{replacementContent(props)}</CardContent>

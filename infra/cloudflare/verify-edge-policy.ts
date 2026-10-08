@@ -14,7 +14,8 @@ import { edgeSecurityPolicy } from "./edge-security";
 // Includes #304's catalog-derived /institutions and /connections rate-limit routes.
 // Includes #305's same-User browser Connection review/preparation routes and edge rate limits.
 // Includes Connections-owned browser transport recognition and cookie-only forwarding policy.
-const expectedEdgePolicyDigest = "1e9e8d312ba9d716443225c86eeab7c89a585c0a6b374d27bfd219495fec50e9";
+// Includes #1086 provider callbacks, anonymous provider admission, and removal of email signup resources.
+const expectedEdgePolicyDigest = "55ceebdeae1346e5e9f4c07b5e3e69a7a7c062a1a62e108ead4554a55daa9134";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),

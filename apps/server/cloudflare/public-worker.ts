@@ -1,3 +1,7 @@
+import {
+  microsoftProviderPaths,
+  providerPaths,
+} from "../src/shell/provider-authentication/contract";
 import { oauthPaths } from "../src/shell/oauth-agents/contract";
 import { connectionBrowserTransport } from "../src/shell/connections/runtime";
 import { refundSupportBasePath, refundSupportReadPath } from "./subscription/contract";
@@ -201,7 +205,6 @@ const categoryAuthorizationFailure = (
 
 const callbackPath = "/providers/kapso/callback";
 const wompiBillingEventPath = "/providers/wompi/billing-events";
-const verificationPath = "/web/onboarding/email/verify";
 const pairingPaths = ["/web/pairings", "/web/pairings/redeem", "/web/session/logout"] as const;
 const userPath = "/user";
 const hostedTurnPath = "/web/hosted-turns";
@@ -224,10 +227,15 @@ const emailAuthenticationPaths = [
 const postPaths = new Set<string>([
   callbackPath,
   wompiBillingEventPath,
-  verificationPath,
   rotateRecoveryPath,
   ...replacementPaths,
   supportRecoveryPath,
+  microsoftProviderPaths.start,
+  microsoftProviderPaths.status,
+  microsoftProviderPaths.complete,
+  providerPaths.start,
+  providerPaths.status,
+  providerPaths.complete,
   ...emailAuthenticationPaths,
   ...pairingPaths,
   statementStagingPath,
@@ -238,6 +246,12 @@ const postPaths = new Set<string>([
 const browserMutationPaths = new Set<string>([
   rotateRecoveryPath,
   ...replacementPaths,
+  microsoftProviderPaths.start,
+  microsoftProviderPaths.status,
+  microsoftProviderPaths.complete,
+  providerPaths.start,
+  providerPaths.status,
+  providerPaths.complete,
   ...emailAuthenticationPaths,
   ...pairingPaths,
   statementStagingPath,
@@ -246,12 +260,20 @@ const browserMutationPaths = new Set<string>([
 ]);
 const sessionPaths = new Set<string>([userPath, ...browserMutationPaths]);
 const preflightPaths = new Set<string>([
+  providerPaths.disclosure,
   listCategoriesPath,
-  verificationPath,
   userPath,
   ...browserMutationPaths,
 ]);
-const ownedPaths = new Set<string>(["/health", listCategoriesPath, userPath, ...postPaths]);
+const ownedPaths = new Set<string>([
+  providerPaths.disclosure,
+  microsoftProviderPaths.callback,
+  providerPaths.callback,
+  "/health",
+  listCategoriesPath,
+  userPath,
+  ...postPaths,
+]);
 const oauthPath = (path: string): boolean =>
   Object.values(oauthPaths).some((owned) => owned === path);
 const connectionBrowserPath = (path: string): boolean =>
@@ -350,8 +372,6 @@ const credentialBearerHeaders = (request: Request, path: string): Option.Option<
         })
       )
     : Option.none();
-const browserForwardPath = (path: string): boolean =>
-  path === verificationPath || isBrowserMutation(path);
 const directHeaders = (request: Request, path: string): Option.Option<Headers> => {
   if (patDirectRoute(path)) {
     return Option.some(new Headers({ "content-type": request.headers.get("content-type") ?? "" }));
@@ -432,7 +452,7 @@ const forwardedHeaders = (request: Request, path: string): Headers => {
   if (Option.isSome(direct)) return direct.value;
   const bearerHeaders = credentialBearerHeaders(request, path);
   if (Option.isSome(bearerHeaders)) return bearerHeaders.value;
-  if (browserForwardPath(path)) return browserHeaders(request, path);
+  if (isBrowserMutation(path)) return browserHeaders(request, path);
   return fallbackHeaders(request, path);
 };
 const canonicalAdmissionHeaders = (
@@ -456,12 +476,13 @@ const canonicalAdmissionHeaders = (
       })
     );
   });
-const forwardsQuery = (path: string): boolean =>
+const preservesCoreQuery = (path: string): boolean =>
   transactionPath(path) ||
   canonicalRoute(path) ||
   path === smokePath ||
-  connectionBrowserPath(path);
-
+  connectionBrowserPath(path) ||
+  path === providerPaths.callback ||
+  path === microsoftProviderPaths.callback;
 const coreRequest = (
   request: Request,
   environment: PublicEnvironment
@@ -496,7 +517,7 @@ const coreRequest = (
     // Rebuilding a Request from the raw body requires runtime-specific duplex options.
     return new Request(
       new Request(
-        `https://core.internal${path}${forwardsQuery(path) ? new URL(request.url).search : ""}`,
+        `https://core.internal${path}${preservesCoreQuery(path) ? new URL(request.url).search : ""}`,
         request
       ),
       { headers }

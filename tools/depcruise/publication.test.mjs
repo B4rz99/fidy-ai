@@ -78,9 +78,10 @@ await test("a private runtime filename does not make its importer a composition 
 
 await test("an approved production root cannot import an approved integration test", () => {
   assert.equal(
-    inspect("cloudflare/core-worker.ts", "cloudflare/onboarding/verified-onboarding.test.ts").some(
-      (violation) => violation.name === "production-imports-test-code"
-    ),
+    inspect(
+      "cloudflare/core-worker.ts",
+      "cloudflare/onboarding/browser-authentication.test.ts"
+    ).some((violation) => violation.name === "production-imports-test-code"),
     true
   );
 });

@@ -81,15 +81,6 @@ export type OAuthGrantConsentSubject = Readonly<{
 /** Persist and decode only a validated version of the exact disclosure shown to the caller. */
 export const PendingDisclosureJson = Schema.fromJsonString(Schema.toCodecJson(DisclosureSnapshot));
 
-/** Pre-User mailbox collection and provider-acceptance states safe to disclose to its WhatsApp caller. */
-export type EmailStatus =
-  | "awaiting_email"
-  | "awaiting_delivery"
-  | "sending"
-  | "awaiting_proof"
-  | "rejected"
-  | "ambiguous";
-
 /** Fresh authenticated User and one live PAT selected for symmetric Consent revocation. */
 export type RevokeOnePATConsentInput = Readonly<{
   session: FreshSessionSubject;

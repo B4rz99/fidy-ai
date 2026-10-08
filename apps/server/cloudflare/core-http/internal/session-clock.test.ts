@@ -1,5 +1,6 @@
 import { afterAll, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Context, Effect, Layer, Schema } from "effect";
+import { FetchHttpClient, HttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
 import {
   DisabledTelemetryResource,
@@ -119,6 +120,7 @@ for (const path of [
           WOMPI_INTEGRITY_SECRET: "unused-clock-test",
         };
         yield* TestClock.setTime(current);
+        const clients = yield* Layer.build(FetchHttpClient.layer);
         const response = yield* executeCoreHttp({
           request: new Request(`https://api.fidyapp.com${path}`, {
             method: "POST",
@@ -134,7 +136,9 @@ for (const path of [
           publish: () => {
             publications += 1;
           },
-        });
+        }).pipe(
+          Effect.provideService(HttpClient.HttpClient, Context.get(clients, HttpClient.HttpClient))
+        );
         const body = yield* Effect.tryPromise(() => response.json());
         const session = yield* Schema.decodeUnknownEffect(SessionTimes)(
           yield* Effect.tryPromise(() =>

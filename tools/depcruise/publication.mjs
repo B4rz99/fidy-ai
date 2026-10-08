@@ -17,8 +17,10 @@ const compositionRoots = new Set([
   "cloudflare/coordinator-test-harness.ts",
   "cloudflare/browser-acceptance-core-module.ts",
   "cloudflare/browser-acceptance-preview.ts",
+  "cloudflare/browser-acceptance-whatsapp.ts",
   "cloudflare/resource-admission/resource-admission-worker.fixture.ts",
   "cloudflare/browser-acceptance-core-bundle.d.mts",
+  "cloudflare/browser-acceptance-core-bundle.mjs",
   "tools/email-formats/generate-runtime.ts",
   // These suites construct real cross-owner D1/DO/Workflow compositions. Ordinary owner tests
   // have no such role; a new broad composition must be named and reviewed here.
@@ -42,7 +44,9 @@ const compositionRoots = new Set([
   "cloudflare/recurring/recurring.test-fixture.ts",
   "cloudflare/memory/memory.test.ts",
   "cloudflare/onboarding/consent-ingress.test.ts",
-  "cloudflare/onboarding/verified-onboarding.test.ts",
+  "cloudflare/onboarding/browser-authentication.test.ts",
+  // Native chat ingress, provider approval and Consent expiry compose real owner runtimes.
+  "cloudflare/provider-authentication/whatsapp.test.ts",
   // Real public/Core proof routing and protected standing share the enrollment D1/Workflow.
   "cloudflare/subscription/payment-enrollment.test.ts",
   // Public/Core billing-support proof verifies the independent operator authority boundary.
@@ -83,9 +87,11 @@ const sharedTestSupport = new Set([
   "cloudflare/workflow-test-runtime.ts",
   "cloudflare/browser-acceptance-core-module.ts",
   "cloudflare/browser-acceptance-preview.ts",
+  "cloudflare/browser-acceptance-whatsapp.ts",
   "cloudflare/browser-acceptance-seed.ts",
   "cloudflare/browser-acceptance-wompi.ts",
   "cloudflare/browser-acceptance-core-bundle.d.mts",
+  "cloudflare/browser-acceptance-core-bundle.mjs",
 ]);
 
 /** @param {string} path - Every registered harness and fixture is test-only, independently of its composition role. */

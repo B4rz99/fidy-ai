@@ -7,7 +7,6 @@ import {
   isEmailReplacementWork,
   receiveBrowserPairingEmail,
   receiveEmailReplacement,
-  receiveOnboardingEmail,
 } from "../../email-authentication/runtime";
 import { receiveCanary } from "../../runtime/operational-health/operations";
 import { receiveSmoke, smokeReady } from "../../runtime/release-smoke/operations";
@@ -64,17 +63,7 @@ const receiveEmailQueue = ({
         BROWSER_PAIRING_EMAIL_WORKFLOW: environment.BROWSER_PAIRING_EMAIL_WORKFLOW,
       })(batch);
     }
-    if (
-      environment.ONBOARDING_EMAIL_QUEUE === undefined ||
-      environment.ONBOARDING_EMAIL_WORKFLOW === undefined ||
-      environment.RESEND_API_KEY === undefined
-    ) {
-      return yield* deliveryFailure(new Error("Onboarding email unavailable"));
-    }
-    return yield* receiveOnboardingEmail({
-      DB: environment.DB,
-      ONBOARDING_EMAIL_WORKFLOW: environment.ONBOARDING_EMAIL_WORKFLOW,
-    })(batch);
+    return yield* deliveryFailure(new Error("Unknown email work"));
   }).pipe(Effect.mapError(deliveryFailure));
 
 const receiveCanaryBatch = ({

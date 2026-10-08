@@ -1,4 +1,5 @@
-import { completeOnboarding } from "./operations";
+import { newId } from "../secret-material/operations";
+import { UserId } from "../../src/core/identity/contract";
 import {
   dispatchBrowserPairingEmail,
   dispatchEmailReplacement,
@@ -20,25 +21,9 @@ import {
   makeTelemetryService,
 } from "../../src/shell/observability/operations";
 
-import { handleSupportRecovery } from "../recovery/operations";
+import { handleSupportRecovery, issueInitialBackupRecoveryCode } from "../recovery/operations";
 import publicWorker from "../public-worker";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
-
-const signWebhook = (secret: string, body: string | Uint8Array): Promise<string> =>
-  crypto.subtle
-    .importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, [
-      "sign",
-    ])
-    .then((key) =>
-      crypto.subtle.sign(
-        "HMAC",
-        key,
-        typeof body === "string" ? new TextEncoder().encode(body) : new Uint8Array(body)
-      )
-    )
-    .then((bytes) =>
-      Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("")
-    );
 
 const encodeJson = (value: unknown): string =>
   Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(value);
@@ -46,8 +31,6 @@ const encodeJson = (value: unknown): string =>
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());
 const exchange = "10000000-0000-4000-8000-000000000001";
-const enrollment = "10000000-0000-4000-8000-000000000002";
-const code = "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ";
 const digest = (text: string): Promise<Uint8Array> =>
   crypto.subtle
     .digest("SHA-256", new TextEncoder().encode(text))
@@ -74,7 +57,7 @@ const setup = (
   }
 ): Promise<{
   db: D1Database;
-  send: (combinedCode: unknown) => Promise<Response>;
+  seedUser: () => Promise<Response>;
   sendRequest: (request: Request) => Promise<Response>;
 }> =>
   Effect.runPromise(
@@ -91,6 +74,7 @@ const setup = (
             "0007_browser_pairing_email",
             "0008_support_recovery",
             "0009_email_replacement",
+            "0069_retire_email_code_signup",
           ].map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
         })
       );
@@ -149,28 +133,6 @@ const setup = (
           )
           .run()
       );
-      yield* Effect.tryPromise(() =>
-        digest("JKLM-NPQR-STUV-WXYZ").then((awaited0) =>
-          db
-            .prepare(`INSERT INTO pending_email_enrollments
-    (id,exchange_id,email_address,submission_message_id,submission_body_sha256,created_at_ms,
-     expires_at_ms,state,public_code,proof_digest,proof_expires_at_ms)
-    VALUES (?,?,?,?,?,?,?,'awaiting_proof',?,?,?)`)
-            .bind(
-              enrollment,
-              exchange,
-              email,
-              "email",
-              "c".repeat(64),
-              now - 60000,
-              now + 600000,
-              "ABCD-EFGH",
-              awaited0,
-              now + 600000
-            )
-            .run()
-        )
-      );
       const sendRequest = (request: Request): Promise<Response> =>
         publicWorker.fetch(request, {
           BROWSER_ORIGIN: "https://app.fidyapp.com",
@@ -208,15 +170,38 @@ const setup = (
               ),
           },
         });
-      const send = (combinedCode: unknown): Promise<Response> =>
-        sendRequest(
-          new Request("https://api.fidyapp.com/web/onboarding/email/verify", {
-            method: "POST",
-            headers: { "content-type": "application/json", origin: "https://app.fidyapp.com" },
-            body: encodeJson({ combinedCode }),
-          })
-        );
-      return { db, send, sendRequest };
+      const seedUser = (): Promise<Response> => {
+        const userId = UserId.make(newId());
+        return issueInitialBackupRecoveryCode({
+          db,
+          userId,
+          createdAtMs: now,
+          commit: (credential) =>
+            db
+              .batch([
+                db
+                  .prepare("INSERT INTO users VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)")
+                  .bind(userId, now),
+                db
+                  .prepare("INSERT INTO whatsapp_identities VALUES (?, 'portfolio', ?, ?)")
+                  .bind(userId, bsuid, now),
+                db
+                  .prepare("INSERT INTO verified_email_credentials VALUES (?, ?, ?)")
+                  .bind(userId, email, now),
+                db
+                  .prepare(
+                    "INSERT INTO onboarding_consent_records VALUES (?, ?, '{}', 'disclosure', 'decision', ?, ?)"
+                  )
+                  .bind(exchange, userId, now, now),
+                db
+                  .prepare("INSERT INTO trial_periods VALUES (?, ?, ?)")
+                  .bind(userId, now, now + 604800000),
+                credential,
+              ])
+              .then(() => undefined),
+        }).then((backupRecoveryCode) => Response.json({ backupRecoveryCode }));
+      };
+      return { db, seedUser, sendRequest };
     })
   );
 
@@ -224,303 +209,6 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
-
-it("creates one complete stable identity on first valid mailbox proof and refuses replay", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send } = yield* Effect.tryPromise(() => setup());
-      const first = yield* Effect.tryPromise(() => send(code));
-      expect(first.status).toBe(200);
-      const created: { status: string; backupRecoveryCode: string } =
-        yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ status: Schema.String, backupRecoveryCode: Schema.String })
-        )(yield* Effect.tryPromise(() => first.json()));
-      expect(created.status).toBe("created");
-      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(400);
-      const result = yield* Effect.tryPromise(() =>
-        db
-          .prepare(`SELECT u.service_market, u.locale, u.time_zone,
-    w.portfolio_id, w.bsuid, v.email_address, c.disclosure_message_id,
-    c.decision_message_id, c.decision_received_at_ms, c.accepted_at_ms,
-    t.started_at_ms, t.ends_at_ms, b.code_digest,
-    x.enrollment_id
-    FROM users AS u JOIN whatsapp_identities AS w ON w.user_id = u.id
-    JOIN verified_email_credentials AS v ON v.user_id = u.id
-    JOIN onboarding_consent_records AS c ON c.user_id = u.id
-    JOIN trial_periods AS t ON t.user_id = u.id
-    JOIN backup_recovery_credentials AS b ON b.user_id = u.id
-    JOIN completed_email_enrollments AS x ON x.user_id = u.id`)
-          .first<{
-            ends_at_ms: number;
-            started_at_ms: number;
-            code_digest: Array<number>;
-            accepted_at_ms: number;
-            decision_received_at_ms: number;
-          }>()
-      );
-      expect(result).toMatchObject({
-        service_market: "CO",
-        locale: "es-CO",
-        time_zone: "America/Bogota",
-        portfolio_id: "portfolio",
-        bsuid: "CO.Person1",
-        email_address: "person@example.test",
-        disclosure_message_id: "disclosure",
-        decision_message_id: "decision",
-        enrollment_id: enrollment,
-      });
-      expect(result).not.toBeNull();
-      if (result !== null) {
-        expect(result.ends_at_ms - result.started_at_ms).toBe(604_800_000);
-        expect(result.accepted_at_ms).toBe(result.decision_received_at_ms - 1000);
-        expect(result.code_digest).toEqual(
-          Array.from(yield* Effect.tryPromise(() => digest(created.backupRecoveryCode)))
-        );
-      }
-      expect(
-        yield* Effect.tryPromise(() =>
-          db.prepare("SELECT proof_digest, public_code FROM pending_email_enrollments").first()
-        )
-      ).toMatchObject({ proof_digest: null, public_code: null });
-      yield* Effect.tryPromise(() =>
-        db.prepare("DELETE FROM pending_consent_exchanges WHERE id = ?").bind(exchange).run()
-      );
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT count(*) AS count FROM onboarding_consent_records")
-            .first<{ count: number }>()
-        ))?.count
-      ).toBe(1);
-    })
-  ));
-
-it.each(["backup_recovery_credentials", "completed_email_enrollments"])(
-  "rolls back every onboarding owner when %s refuses and permits a complete retry",
-  (table) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const { db } = yield* Effect.tryPromise(() => setup());
-        const complete = (): Promise<Response> =>
-          completeOnboarding({
-            db,
-            request: new Request("https://api.fidyapp.com/web/onboarding/email/verify", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: encodeJson({ combinedCode: code }),
-            }),
-          });
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(`CREATE TRIGGER refuse_initial_recovery BEFORE INSERT ON ${table}
-          BEGIN SELECT RAISE(ABORT, 'test_refusal'); END`)
-            .run()
-        );
-        const refused = yield* Effect.tryPromise(complete);
-        expect(refused.status).toBe(400);
-        expect(yield* Effect.tryPromise(() => refused.json())).toEqual({
-          error: {
-            code: "verification_invalid",
-            message: "El código no es válido. Revisa el correo o solicita uno nuevo.",
-          },
-        });
-        const stableState = (): Promise<unknown> =>
-          db
-            .prepare(`SELECT
-          (SELECT count(*) FROM users) AS users,
-          (SELECT count(*) FROM whatsapp_identities) AS identities,
-          (SELECT count(*) FROM verified_email_credentials) AS emails,
-          (SELECT count(*) FROM onboarding_consent_records) AS consents,
-          (SELECT count(*) FROM trial_periods) AS trials,
-          (SELECT count(*) FROM backup_recovery_credentials) AS recovery,
-          (SELECT count(*) FROM completed_email_enrollments) AS completions,
-          (SELECT count(*) FROM web_sessions) AS sessions`)
-            .first();
-        expect(yield* Effect.tryPromise(stableState)).toEqual({
-          users: 0,
-          identities: 0,
-          emails: 0,
-          consents: 0,
-          trials: 0,
-          recovery: 0,
-          completions: 0,
-          sessions: 0,
-        });
-        expect(
-          yield* Effect.tryPromise(() =>
-            db.prepare("SELECT state, public_code FROM pending_email_enrollments").first()
-          )
-        ).toEqual({ state: "awaiting_proof", public_code: "ABCD-EFGH" });
-        yield* Effect.tryPromise(() => db.prepare("DROP TRIGGER refuse_initial_recovery").run());
-        const completed = yield* Effect.tryPromise(complete);
-        expect(completed.status).toBe(200);
-        expect(completed.headers.get("cache-control")).toBe("no-store");
-        expect(completed.headers.get("set-cookie")).toBeNull();
-        expect(yield* Effect.tryPromise(stableState)).toEqual({
-          users: 1,
-          identities: 1,
-          emails: 1,
-          consents: 1,
-          trials: 1,
-          recovery: 1,
-          completions: 1,
-          sessions: 0,
-        });
-        expect((yield* Effect.tryPromise(complete)).status).toBe(400);
-      })
-    )
-);
-
-it("reads the created User through an independently approved browser WebSession", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send, sendRequest } = yield* Effect.tryPromise(() => setup());
-      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
-      const request = (path: string, body?: object, cookie?: string): Promise<Response> =>
-        sendRequest(
-          new Request(`https://api.fidyapp.com${path}`, {
-            method: body === undefined ? "GET" : "POST",
-            headers: {
-              origin: "https://app.fidyapp.com",
-              ...(body === undefined ? {} : { "content-type": "application/json" }),
-              ...(cookie === undefined ? {} : { cookie }),
-            },
-            body: body === undefined ? undefined : JSON.stringify(body),
-          })
-        );
-      expect((yield* Effect.tryPromise(() => request("/user"))).status).toBe(401);
-      const start = yield* Effect.tryPromise(() => request("/web/pairings", {}));
-      expect(start.status).toBe(200);
-      const pairing: { pairingId: string; privateVerifier: string; publicCode: string } =
-        yield* Schema.decodeUnknownEffect(
-          Schema.Struct({
-            pairingId: Schema.String,
-            privateVerifier: Schema.String,
-            publicCode: Schema.String,
-          })
-        )(yield* Effect.tryPromise(() => start.json()));
-      const poll = (): Promise<Response> =>
-        request("/web/pairings/redeem", {
-          pairingId: pairing.pairingId,
-          privateVerifier: pairing.privateVerifier,
-        });
-      expect((yield* Effect.tryPromise(() => poll())).status).toBe(202);
-      expect((yield* Effect.tryPromise(() => poll())).status).toBe(429);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          request("/web/pairings/redeem", {
-            pairingId: pairing.pairingId,
-            privateVerifier: "A".repeat(43),
-          })
-        )).status
-      ).toBe(400);
-
-      const receivedAtSeconds = Math.floor((yield* Clock.currentTimeMillis) / 1000);
-      const body = encodeJson({
-        message: {
-          id: "wamid.approve",
-          timestamp: String(receivedAtSeconds),
-          type: "text",
-          from_user_id: "CO.Person1",
-          text: { body: `Aprueba el código de inicio de sesión ${pairing.publicCode}` },
-        },
-        conversation: { business_scoped_user_id: "CO.Person1" },
-        phone_number_id: "123456789012345",
-      });
-      const signed = (signature: string, from: string): Promise<Response> =>
-        sendRequest(
-          new Request("https://api.fidyapp.com/providers/kapso/callback", {
-            method: "POST",
-            headers: {
-              "x-webhook-event": "whatsapp.message.received",
-              "x-idempotency-key": "delivery-approve",
-              "x-webhook-signature": signature,
-            },
-            body: from,
-          })
-        );
-      expect((yield* Effect.tryPromise(() => signed("wrong", body))).status).toBe(401);
-      const alien = body
-        .replaceAll("CO.Person1", "CO.Other2")
-        .replace("wamid.approve", "wamid.other");
-      const alienSignature = yield* Effect.tryPromise(() =>
-        signWebhook("onboarding-test-secret", alien)
-      );
-      expect((yield* Effect.tryPromise(() => signed(alienSignature, alien))).status).toBe(400);
-      vi.useFakeTimers({ toFake: ["Date"] });
-
-      vi.setSystemTime((yield* Clock.currentTimeMillis) + 11_000);
-      expect((yield* Effect.tryPromise(() => poll())).status).toBe(202);
-      const approvalSignature = yield* Effect.tryPromise(() =>
-        signWebhook("onboarding-test-secret", body)
-      );
-      expect((yield* Effect.tryPromise(() => signed(approvalSignature, body))).status).toBe(200);
-
-      vi.setSystemTime((yield* Clock.currentTimeMillis) + 11_000);
-      const completed = yield* Effect.tryPromise(() => poll());
-      expect(completed.status).toBe(200);
-      const cookie = completed.headers.get("set-cookie");
-      expect(cookie).toContain("__Host-fidy_session=");
-      expect(cookie).toContain("HttpOnly");
-      expect(cookie).toContain("Secure");
-      expect(cookie).toContain("Max-Age=2592000");
-      expect((yield* Effect.tryPromise(() => poll())).status).toBe(400);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          request("/user", undefined, "__Host-fidy_session=" + "A".repeat(43))
-        )).status
-      ).toBe(401);
-      const current = yield* Effect.tryPromise(() =>
-        request("/user", undefined, cookie?.split(";")[0])
-      );
-      expect(current.status).toBe(200);
-      expect(yield* Effect.tryPromise(() => current.json())).toMatchObject({
-        data: {
-          serviceMarket: "CO",
-          locale: "es-CO",
-          timeZone: "America/Bogota",
-        },
-        next: [],
-      });
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM web_sessions").first<{ count: number }>()
-        ))?.count
-      ).toBe(1);
-      const activeCookie = cookie?.split(";")[0];
-      const rotated = yield* Effect.tryPromise(() =>
-        request("/recovery/backup-code/rotate", {}, activeCookie)
-      );
-      expect(rotated.status).toBe(200);
-      const rotation: { data: { status: string; backupRecoveryCode: string } } =
-        yield* Schema.decodeUnknownEffect(
-          Schema.Struct({
-            data: Schema.Struct({ status: Schema.String, backupRecoveryCode: Schema.String }),
-          })
-        )(yield* Effect.tryPromise(() => rotated.json()));
-      expect(rotation.data.status).toBe("rotated");
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT code_digest FROM backup_recovery_credentials").first<{
-            code_digest: Array<number>;
-          }>()
-        ))?.code_digest
-      ).toEqual(
-        Array.from(yield* Effect.tryPromise(() => digest(rotation.data.backupRecoveryCode)))
-      );
-      expect(
-        (yield* Effect.tryPromise(() => request("/web/session/logout", {}, activeCookie))).status
-      ).toBe(204);
-      expect(
-        (yield* Effect.tryPromise(() => request("/user", undefined, activeCookie))).status
-      ).toBe(401);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          sendRequest(new Request("https://api.fidyapp.com/web/pairings", { method: "POST" }))
-        )).status
-      ).toBe(403);
-    })
-  ));
 
 const seedWebSession = (db: D1Database, token: string): Promise<number> =>
   Effect.runPromise(
@@ -625,8 +313,8 @@ const deliverPendingReplacement = (db: D1Database): Promise<string> =>
 it("renews an active WebSession until its hard deadline and never revives an expired one", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const { db, send, sendRequest } = yield* Effect.tryPromise(() => setup());
-      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
       const token = "B".repeat(43);
       const started = yield* Effect.tryPromise(() => seedWebSession(db, token));
       const use = (): Promise<Response> =>
@@ -650,8 +338,8 @@ it("renews an active WebSession until its hard deadline and never revives an exp
 it("refuses an idle-expired WebSession without writing a canonical User read", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const { db, send, sendRequest } = yield* Effect.tryPromise(() => setup());
-      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
       const token = "C".repeat(43);
       const started = yield* Effect.tryPromise(() => seedWebSession(db, token));
       vi.useFakeTimers({ toFake: ["Date"] });
@@ -687,8 +375,8 @@ it("refuses an idle-expired WebSession without writing a canonical User read", (
 it("refuses recovery rotation after WebSession freshness expires without changing the proof", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const { db, send, sendRequest } = yield* Effect.tryPromise(() => setup());
-      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
       const token = "D".repeat(43);
       const started = yield* Effect.tryPromise(() => seedWebSession(db, token));
       const before = yield* Effect.tryPromise(() =>
@@ -723,8 +411,8 @@ it("refuses recovery rotation after WebSession freshness expires without changin
 it("admits email approval only for a browser-held verifier and an existing verified mailbox", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const { db, send, sendRequest } = yield* Effect.tryPromise(() => setup());
-      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
       const start = yield* Effect.tryPromise(() =>
         sendRequest(
           new Request("https://api.fidyapp.com/web/pairings", {
@@ -854,8 +542,8 @@ it("admits email approval only for a browser-held verifier and an existing verif
 it("rejects each User's email proof at the other browser pairing without consuming either proof", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const { db, send, sendRequest } = yield* Effect.tryPromise(() => setup());
-      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
       const otherUser = "10000000-0000-4000-8000-000000000004";
       const now = yield* Clock.currentTimeMillis;
       yield* Effect.tryPromise(() =>
@@ -972,8 +660,8 @@ it("rejects each User's email proof at the other browser pairing without consumi
 it("replaces one credential only after fresh-session candidate proof and rejects replay", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const { db, send, sendRequest } = yield* Effect.tryPromise(() => setup());
-      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
       const token = "E".repeat(43);
       yield* Effect.tryPromise(() => seedWebSession(db, token));
       const request = replacementRequest(sendRequest, token);
@@ -1066,8 +754,8 @@ it("replaces one credential only after fresh-session candidate proof and rejects
 it("refuses malformed replacement work and revoked or foreign sessions before delivering a proof", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const { db, send, sendRequest } = yield* Effect.tryPromise(() => setup());
-      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
       const token = "K".repeat(43);
       const started = yield* Effect.tryPromise(() => seedWebSession(db, token));
       const request = replacementRequest(sendRequest, token);
@@ -1161,8 +849,8 @@ it("refuses malformed replacement work and revoked or foreign sessions before de
 it("keeps the old credential when freshness expires or a candidate is already owned", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const { db, send, sendRequest } = yield* Effect.tryPromise(() => setup());
-      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
       const token = "G".repeat(43);
       const started = yield* Effect.tryPromise(() => seedWebSession(db, token));
       const request = replacementRequest(sendRequest, token);
@@ -1225,8 +913,8 @@ it("keeps the old credential when freshness expires or a candidate is already ow
 it("preserves global mailbox ownership when another User claims the candidate after delivery", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const { db, send, sendRequest } = yield* Effect.tryPromise(() => setup());
-      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
       const token = "H".repeat(43);
       const started = yield* Effect.tryPromise(() => seedWebSession(db, token));
       const request = replacementRequest(sendRequest, token);
@@ -1278,8 +966,8 @@ it("preserves global mailbox ownership when another User claims the candidate af
 it("bounds replacement delivery across rejected proofs for the same User", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const { db, send, sendRequest } = yield* Effect.tryPromise(() => setup());
-      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
       const token = "J".repeat(43);
       yield* Effect.tryPromise(() => seedWebSession(db, token));
       const request = replacementRequest(sendRequest, token);
@@ -1346,8 +1034,8 @@ it("bounds replacement delivery across rejected proofs for the same User", () =>
 it("rejects unproved support recovery without creating a case or approving a pairing", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const { db, send, sendRequest } = yield* Effect.tryPromise(() => setup());
-      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
       const pairing: { pairingId: string; publicCode: string } = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ pairingId: Schema.String, publicCode: Schema.String })
       )(
@@ -1389,10 +1077,10 @@ it("rejects unproved support recovery without creating a case or approving a pai
 it("binds an Access-approved recovery case to one stable User, consumes its code and refuses replay", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const { db, send, sendRequest } = yield* Effect.tryPromise(() => setup());
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
       const created: { backupRecoveryCode: string } = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ backupRecoveryCode: Schema.String })
-      )(yield* Effect.tryPromise(() => send(code).then((awaited2) => awaited2.json())));
+      )(yield* Effect.tryPromise(() => seedUser().then((awaited2) => awaited2.json())));
       const pairing: { pairingId: string; publicCode: string; privateVerifier: string } =
         yield* Schema.decodeUnknownEffect(
           Schema.Struct({
@@ -1691,7 +1379,7 @@ it("keeps unexpected recovery defects out of operational failures and observes o
             return value;
           },
         });
-      const { db, send, sendRequest } = yield* Effect.tryPromise(() =>
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() =>
         setup("person@example.test", "CO.Person1", {
           worker: makeCoreWorker(telemetry),
           database,
@@ -1701,7 +1389,7 @@ it("keeps unexpected recovery defects out of operational failures and observes o
       );
       const created: { backupRecoveryCode: string } = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ backupRecoveryCode: Schema.String })
-      )(yield* Effect.tryPromise(() => send(code).then((result) => result.json())));
+      )(yield* Effect.tryPromise(() => seedUser().then((result) => result.json())));
       const pairing: { publicCode: string } = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ publicCode: Schema.String })
       )(
@@ -1793,7 +1481,7 @@ it("does not impose a shared login lockout after concurrent pairing starts", () 
 it("invalidates a browser pairing after five incorrect private verifiers", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const { db, send, sendRequest } = yield* Effect.tryPromise(() => setup());
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
       const request = (proof: unknown): Promise<Response> =>
         sendRequest(
           new Request("https://api.fidyapp.com/web/pairings/redeem", {
@@ -1836,7 +1524,7 @@ it("invalidates a browser pairing after five incorrect private verifiers", () =>
             .first<{ state: string }>()
         ))?.state
       ).toBe("invalidated");
-      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
+      expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
       const ready: typeof pairing = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
       )(
@@ -1865,276 +1553,13 @@ it("invalidates a browser pairing after five incorrect private verifiers", () =>
     })
   ));
 
-it("rejects incorrect proofs and conflicting global mailbox ownership without partial identity", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send } = yield* Effect.tryPromise(() => setup());
-      expect((yield* Effect.tryPromise(() => send("ABCD-EFGH-JKLM-NPQR-STUV-WXY2"))).status).toBe(
-        400
-      );
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM users").first<{ count: number }>()
-        ))?.count
-      ).toBe(0);
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare("INSERT INTO users VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)")
-          .bind("10000000-0000-4000-8000-000000000004", 1)
-          .run()
-      );
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare("INSERT INTO verified_email_credentials VALUES (?, ?, ?)")
-          .bind("10000000-0000-4000-8000-000000000004", "person@example.test", 1)
-          .run()
-      );
-      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(400);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM users").first<{ count: number }>()
-        ))?.count
-      ).toBe(1);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT count(*) AS count FROM completed_email_enrollments")
-            .first<{ count: number }>()
-        ))?.count
-      ).toBe(0);
-    })
-  ));
-
-it("refuses an already-owned WhatsAppIdentity without consuming another User's proof", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send } = yield* Effect.tryPromise(() => setup());
-      const other = "10000000-0000-4000-8000-000000000004";
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare("INSERT INTO users VALUES (?, 'CO', 'es-CO', 'America/Bogota', ?)")
-          .bind(other, 1)
-          .run()
-      );
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare("INSERT INTO whatsapp_identities VALUES (?, ?, ?, ?)")
-          .bind(other, "portfolio", "CO.Person1", 1)
-          .run()
-      );
-      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(400);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM users").first<{ count: number }>()
-        ))?.count
-      ).toBe(1);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT count(*) AS count FROM completed_email_enrollments")
-            .first<{ count: number }>()
-        ))?.count
-      ).toBe(0);
-    })
-  ));
-
-it("serializes simultaneous redemptions so only one User receives the proof", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send } = yield* Effect.tryPromise(() => setup());
-      const results = yield* Effect.tryPromise(() => Promise.all([send(code), send(code)]));
-      expect(results.map((result) => result.status).sort((left, right) => left - right)).toEqual([
-        200, 400,
-      ]);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM users").first<{ count: number }>()
-        ))?.count
-      ).toBe(1);
-    })
-  ));
-
-it("bounds failed mailbox proofs and never creates a User after the fourth attempt", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send } = yield* Effect.tryPromise(() => setup());
-      const wrong = "ABCD-EFGH-JKLM-NPQR-STUV-WXY2";
-      const attempts = yield* Effect.tryPromise(() =>
-        Promise.all([send(wrong), send(wrong), send(wrong), send(wrong)])
-      );
-      expect(attempts.map((response) => response.status)).toEqual([400, 400, 400, 400]);
-      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(400);
-      expect(
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT wrong_proof_attempts, proof_digest FROM pending_email_enrollments")
-            .first()
-        )
-      ).toMatchObject({ wrong_proof_attempts: 4, proof_digest: null });
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM users").first<{ count: number }>()
-        ))?.count
-      ).toBe(0);
-    })
-  ));
-
-it("rejects an oversized streaming request before it can reach D1", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, sendRequest } = yield* Effect.tryPromise(() => setup());
-      const oversized = new ReadableStream<Uint8Array>({
-        start(controller): void {
-          controller.enqueue(new Uint8Array(513));
-          controller.close();
-        },
-      });
-      const result = yield* Effect.tryPromise(() =>
-        sendRequest(
-          new Request("https://api.fidyapp.com/web/onboarding/email/verify", {
-            method: "POST",
-            headers: { "content-type": "application/json", origin: "https://app.fidyapp.com" },
-            body: oversized,
-            duplex: "half",
-          })
-        )
-      );
-      expect(result.status).toBe(400);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM users").first<{ count: number }>()
-        ))?.count
-      ).toBe(0);
-    })
-  ));
-
-it("refuses expired proof and a withdrawn pending Consent decision without creating a User", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send } = yield* Effect.tryPromise(() => setup());
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare("UPDATE pending_email_enrollments SET proof_expires_at_ms = ? WHERE id = ?")
-          .bind(1, enrollment)
-          .run()
-      );
-      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(400);
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare(
-            "UPDATE pending_email_enrollments SET proof_expires_at_ms = expires_at_ms WHERE id = ?"
-          )
-          .bind(enrollment)
-          .run()
-      );
-      yield* Effect.tryPromise(() =>
-        db
-          .prepare("UPDATE pending_consent_exchanges SET state = 'declined' WHERE id = ?")
-          .bind(exchange)
-          .run()
-      );
-      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(400);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT count(*) AS count FROM users").first<{ count: number }>()
-        ))?.count
-      ).toBe(0);
-    })
-  ));
-
-it.each([false, true])(
-  "publishes an accepted login email before cron or recovers a failed offer (%s)",
-  (failFirstOffer) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const pending: Array<Promise<unknown>> = [];
-        const offered: Array<unknown> = [];
-        let unavailable = failFirstOffer;
-        const queue: Queue = {
-          send: (body) => {
-            if (unavailable) return Promise.reject(new Error("private queue failure detail"));
-            offered.push(body);
-            return Promise.resolve({
-              metadata: { metrics: { backlogCount: 1, backlogBytes: 100 } },
-            });
-          },
-          sendBatch: () => Promise.reject(new Error("unused")),
-          metrics: () => Promise.reject(new Error("unused")),
-        };
-        const { db, send, sendRequest } = yield* Effect.tryPromise(() =>
-          setup("person@example.test", "CO.Person1", {
-            worker: coreWorker,
-            database: (db) => db,
-            accessIssuer: "https://example.cloudflareaccess.com",
-            publication: Option.some({
-              queue,
-              context: {
-                waitUntil: (work) => {
-                  pending.push(work);
-                },
-              },
-            }),
-          })
-        );
-        yield* Effect.tryPromise(() => send(code));
-        const start = yield* Effect.tryPromise(() =>
-          sendRequest(
-            new Request("https://api.fidyapp.com/web/pairings", {
-              method: "POST",
-              headers: { origin: "https://app.fidyapp.com" },
-            })
-          )
-        );
-        const pairing = yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
-        )(yield* Effect.tryPromise(() => start.json()));
-        for (const email of [
-          "unknown@example.test",
-          "person@example.test",
-          "person@example.test",
-        ]) {
-          const response = yield* Effect.tryPromise(() =>
-            sendRequest(
-              new Request("https://api.fidyapp.com/web/email/authentication/start", {
-                method: "POST",
-                headers: { origin: "https://app.fidyapp.com", "content-type": "application/json" },
-                body: encodeJson({ ...pairing, email }),
-              })
-            )
-          );
-          expect(response.status).toBe(202);
-          yield* Effect.tryPromise(() => Promise.all(pending.splice(0)));
-          if (email !== "unknown@example.test" && unavailable) {
-            expect(offered).toHaveLength(0);
-            unavailable = false;
-            // The next cron tick can reoffer the durable identity after the cooldown expires.
-            yield* Effect.tryPromise(() =>
-              db.prepare("UPDATE browser_pairing_email_outbox SET last_attempt_at_ms = 0").run()
-            );
-            yield* dispatchBrowserPairingEmail({
-              identity: Option.none(),
-              DB: db,
-              BROWSER_PAIRING_EMAIL_QUEUE: queue,
-            });
-          }
-          expect(offered).toHaveLength(email === "unknown@example.test" ? 0 : 1);
-        }
-        expect(offered[0]).toMatchObject({
-          kind: "browser-pairing-email",
-          version: 1,
-        });
-      })
-    ),
-  30_000
-);
-
 it(
   "reports rejected delivery even when its Workflow completed successfully",
   () =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const { db, send, sendRequest } = yield* Effect.tryPromise(() => setup());
-        yield* Effect.tryPromise(() => send(code));
+        const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+        yield* Effect.tryPromise(() => seedUser());
         const pairing = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
         )(
@@ -2186,8 +1611,8 @@ it(
 it("rejects a WebSession revoked during renewal without releasing the User or writing accepted read evidence", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const { db, send, sendRequest } = yield* Effect.tryPromise(() => setup());
-      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
       const token = "R".repeat(43);
       yield* Effect.tryPromise(() => seedWebSession(db, token));
       yield* Effect.tryPromise(() =>
@@ -2216,8 +1641,8 @@ it("rejects a WebSession revoked during renewal without releasing the User or wr
 it("redeems one approved pairing under concurrent replay without accepting a fixated browser bearer", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const { db, send, sendRequest } = yield* Effect.tryPromise(() => setup());
-      expect((yield* Effect.tryPromise(() => send(code))).status).toBe(200);
+      const { db, seedUser, sendRequest } = yield* Effect.tryPromise(() => setup());
+      expect((yield* Effect.tryPromise(() => seedUser())).status).toBe(200);
       const oldToken = "F".repeat(43);
       yield* Effect.tryPromise(() => seedWebSession(db, oldToken));
       const pairing = yield* Schema.decodeUnknownEffect(

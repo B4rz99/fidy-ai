@@ -38,18 +38,7 @@ export const TelemetryWorkKindGroup = {
  * never User, domain, provider-evidence, request, or payload data; additions require sentinel review.
  */
 export const TelemetryRegistry = {
-  component: [
-    "browser",
-    "api",
-    "agent",
-    "onboarding",
-    "email",
-    "whatsapp",
-    "kapso",
-    "resend",
-    "wompi",
-    "ci",
-  ],
+  component: ["browser", "api", "agent", "email", "whatsapp", "kapso", "resend", "wompi", "ci"],
   operation: [
     ...canonicalOperationCodes,
     "http.canonicalRequest",
@@ -57,7 +46,6 @@ export const TelemetryRegistry = {
     "http.kapsoWebhook",
     "http.kapsoIdentityWebhook",
     "authorization.agentBearer",
-    "onboarding.deliverVerification",
     "agent.hostedTurn",
     "agent.modelRound",
     "whatsapp.publishTurn",
@@ -71,7 +59,6 @@ export const TelemetryRegistry = {
     "email.forwardedEmailHandoff",
     "task.auditRetention",
     "task.emailAuthenticationRetention",
-    "task.onboardingRetention",
     "task.supportRecoveryRetention",
     "task.whatsappRetention",
     "task.billingReconciliationMaintenance",
@@ -87,7 +74,6 @@ export const TelemetryRegistry = {
     "worker.core.fetch",
     "worker.core.queue",
     "worker.core.scheduled",
-    "workflow.onboardingEmail",
     "workflow.browserPairingEmail",
     "workflow.emailReplacement",
     "workflow.billingCollection",
@@ -130,6 +116,8 @@ export const TelemetryRegistry = {
   ],
   provider: [
     "cloudflare-access",
+    "google",
+    "microsoft",
     "cloudflare-workers",
     "cloudflare-workers-ai",
     "kapso",

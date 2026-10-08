@@ -97,6 +97,8 @@ export default {
         pathNot: [
           "\\.test\\.ts$",
           "^cloudflare/oauth-agents/oauth-ingress\\.test-fixture\\.ts$",
+          // Both provider journeys compose the real Public/Core Worker boundary.
+          "^cloudflare/provider-authentication/journey\\.test-fixture\\.ts$",
           "^cloudflare/(core-worker|public-worker|operational-canary-workflow|browser-acceptance-preview)\\.ts$",
           "^cloudflare/ingestion/email-worker\\.ts$",
           "\\.d\\.mts$",
@@ -561,7 +563,7 @@ export default {
         path: "^cloudflare/",
         pathNot: [
           "^cloudflare/onboarding/",
-          "^cloudflare/(consent|email-authentication|identity|recovery|secret-material)/(contract|operations)\\.ts$",
+          "^cloudflare/(consent|email-authentication|identity|provider-authentication|recovery|secret-material)/(contract|operations)\\.ts$",
         ],
       },
     },

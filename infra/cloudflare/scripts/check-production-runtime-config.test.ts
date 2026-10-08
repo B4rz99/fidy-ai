@@ -21,6 +21,10 @@ const workflowStep = async (stepName: string): Promise<string> => {
 };
 const requiredConfiguration = [
   "PAT_ADMISSION_KEY",
+  "MICROSOFT_CLIENT_ID",
+  "MICROSOFT_CLIENT_SECRET",
+  "GOOGLE_CLIENT_ID",
+  "GOOGLE_CLIENT_SECRET",
   "KAPSO_API_KEY",
   "KAPSO_WEBHOOK_SECRET",
   "WHATSAPP_BUSINESS_PORTFOLIO_ID",

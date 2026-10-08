@@ -1,11 +1,9 @@
 import { admitResource, releaseOutstandingResource } from "../../../resource-admission/operations";
-import { EmailAddress } from "../../../../src/core/email-authentication/contract";
 import {
   ConsentIngressExchange,
   type ConsentIngressMessage,
   DisclosureDeliveryCorrelationToken,
   type DisclosureSnapshot,
-  type EmailStatus,
   PendingConsentExchangeId,
   PendingDisclosureJson,
   Sha256Digest,
@@ -27,11 +25,6 @@ import {
 } from "../../../../src/shell/consent/operations";
 import { Clock, Crypto, DateTime, Duration, Effect, Exit, Option, Result, Schema } from "effect";
 import { Hex } from "effect/encoding";
-import {
-  findOnboardingEmailReplay,
-  readOnboardingEmailStatus,
-  startOnboardingEmailEnrollment,
-} from "../../../email-authentication/operations";
 import {
   type ResourceAdmissionAuthorityConfig,
   ResourceAdmissionCharges,
@@ -59,20 +52,11 @@ export type DisclosureSender = (
   }>
 ) => Effect.Effect<WhatsAppSentMessage, WhatsAppSendFailed>;
 
-type EmailStatusSender = (
-  request: Readonly<{
-    caller: WhatsAppInboundEvent["caller"];
-    phoneNumberId: WhatsAppBusinessPhoneNumberId;
-    status: EmailStatus;
-  }>
-) => Effect.Effect<WhatsAppSentMessage, WhatsAppSendFailed>;
-
-type Environment = Pick<ConsentIngressEnvironment, "DB" | "onAccepted"> &
+type Environment = Pick<ConsentIngressEnvironment, "DB"> &
   Readonly<{
     delivery: Option.Option<
       Readonly<{
         sendDisclosure: DisclosureSender;
-        sendEmailStatus: EmailStatusSender;
       }>
     >;
   }>;
@@ -88,13 +72,11 @@ export const maxKapsoFutureSkewMs = Duration.toMillis(
   Duration.minutes(maxWhatsAppFutureTimestampMinutes)
 );
 const hourMs = 3_600_000;
-const statusReplyCooldownMs = 60_000;
 const maximumHourlyDisclosures = 500;
 const expiredExchangeSweepLimit = 32;
 const scheduledExchangeSweepLimit = 128;
 export const HTTP_OK = 200;
 export const HTTP_CONFLICT = 409;
-const HTTP_UNPROCESSABLE = 422;
 const HTTP_UNAVAILABLE = 503;
 const oneUnit = ResourceAdmissionUnits.make(1);
 const policies = ResourceAdmissionPolicies.make([
@@ -169,7 +151,6 @@ const PendingExchangeRow = Schema.Struct({
   expires_at_ms: Schema.Finite,
   initiating_message_id: WhatsAppProviderMessageId,
   initiating_body_sha256: Sha256Digest,
-  email_preaccept_latest_occurred_ms: Schema.NullOr(Schema.Finite),
   state: Schema.Literals([
     "awaiting_delivery",
     "outbound_started",
@@ -282,7 +263,7 @@ const findExchange = (
     db
       .prepare(`SELECT id, portfolio_id, bsuid, phone_number_id, disclosure_json, disclosure_message_id,
     correlation_token, created_at_ms, disclosed_at_ms, decision_not_before_ms, expires_at_ms, state,
-    initiating_message_id, initiating_body_sha256, email_preaccept_latest_occurred_ms
+    initiating_message_id, initiating_body_sha256
     FROM pending_consent_exchanges
     WHERE portfolio_id = ? AND bsuid = ? ORDER BY created_at_ms DESC LIMIT 1`)
       .bind(event.caller.businessPortfolioId, event.caller.businessScopedUserId)
@@ -377,150 +358,8 @@ const persistDecision = ({
     )
   );
 
-const findMailboxReplay = (
-  db: D1Database,
-  input: Inbound,
-  exchangeId: PendingConsentExchangeId
-): Effect.Effect<Option.Option<Response>, void> =>
-  findOnboardingEmailReplay({
-    db,
-    exchangeId,
-    submissionMessageId: input.event.messageEvidence.providerMessageId,
-    submissionBodySha256: input.digest,
-  }).pipe(
-    Effect.map(Option.map((replay) => answer(replay === "matching" ? HTTP_OK : HTTP_CONFLICT)))
-  );
-
-const insertMailbox = (
-  environment: Environment,
-  {
-    input,
-    pending,
-    email,
-  }: Readonly<{ input: Inbound; pending: StoredExchange; email: EmailAddress }>
-): Effect.Effect<Response, void, Crypto.Crypto> =>
-  Effect.gen(function* () {
-    const db = environment.DB;
-    const inserted = yield* Effect.result(
-      startOnboardingEmailEnrollment({
-        db,
-        exchangeId: pending.id,
-        email,
-        submissionMessageId: input.event.messageEvidence.providerMessageId,
-        submissionBodySha256: input.digest,
-        createdAtMs: input.receivedAtMs,
-        expiresAtMs: pending.expires_at_ms,
-      })
-    );
-    if (Result.isSuccess(inserted)) {
-      environment.onAccepted(inserted.success);
-      return answer(HTTP_OK);
-    }
-    const replay = yield* findMailboxReplay(db, input, pending.id);
-    return Option.getOrElse(replay, () => answer(HTTP_UNAVAILABLE));
-  });
-
-const recordMailbox = (
-  environment: Environment,
-  input: Inbound,
-  pending: StoredExchange
-): Effect.Effect<Response, void, Crypto.Crypto> =>
-  Effect.gen(function* () {
-    const db = environment.DB;
-    const replay = yield* findMailboxReplay(db, input, pending.id);
-    if (Option.isSome(replay)) return replay.value;
-    const decision = yield* attempt(() =>
-      db
-        .prepare(`SELECT occurred_at_ms FROM pending_consent_decisions
-        WHERE exchange_id = ? AND decision = 'accepted'`)
-        .bind(pending.id)
-        .first()
-    );
-    const proof = yield* Schema.decodeUnknownEffect(
-      Schema.Struct({ occurred_at_ms: Schema.Finite })
-    )(decision).pipe(Effect.mapError(() => undefined));
-    if (
-      pending.phone_number_id !== input.event.businessPhoneNumberId ||
-      DateTime.toEpochMillis(input.event.occurredAt) <= proof.occurred_at_ms ||
-      (pending.email_preaccept_latest_occurred_ms !== null &&
-        DateTime.toEpochMillis(input.event.occurredAt) <=
-          pending.email_preaccept_latest_occurred_ms) ||
-      input.receivedAtMs >= pending.expires_at_ms
-    ) {
-      return answer(HTTP_CONFLICT);
-    }
-    const email = Schema.decodeOption(EmailAddress)(input.event.content.text);
-    if (Option.isNone(email)) return answer(HTTP_UNPROCESSABLE);
-    return yield* insertMailbox(environment, { input, pending, email: email.value });
-  });
-
-const reportEmailStatus = (
-  environment: Environment,
-  input: Inbound,
-  pending: StoredExchange
-): Effect.Effect<Response, void> =>
-  Effect.gen(function* () {
-    const proof = yield* attempt(() =>
-      environment.DB.prepare(`SELECT occurred_at_ms FROM pending_consent_decisions
-        WHERE exchange_id = ? AND decision = 'accepted'`)
-        .bind(pending.id)
-        .first()
-    );
-    const accepted = yield* Schema.decodeUnknownEffect(
-      Schema.Struct({ occurred_at_ms: Schema.Finite })
-    )(proof).pipe(Effect.mapError(() => undefined));
-    if (
-      pending.phone_number_id !== input.event.businessPhoneNumberId ||
-      DateTime.toEpochMillis(input.event.occurredAt) <= accepted.occurred_at_ms ||
-      input.receivedAtMs >= pending.expires_at_ms
-    ) {
-      return answer(HTTP_CONFLICT);
-    }
-    const state = yield* readOnboardingEmailStatus({ db: environment.DB, exchangeId: pending.id });
-    if (Option.isNone(environment.delivery)) return answer(HTTP_UNAVAILABLE);
-    // The claim bounds pre-User provider spend; uncertainty may lose a status reply, never repeat email.
-    const claimed = yield* attempt(() =>
-      environment.DB.prepare(`UPDATE pending_consent_exchanges
-        SET email_status_attempts = email_status_attempts + 1, email_status_last_ms = ?
-        WHERE id = ? AND state = 'accepted' AND email_status_attempts < 5
-          AND (email_status_last_ms IS NULL OR email_status_last_ms <= ?)`)
-        .bind(input.receivedAtMs, pending.id, input.receivedAtMs - statusReplyCooldownMs)
-        .run()
-    );
-    if (claimed.meta.changes !== 1) return answer(HTTP_OK);
-    yield* Effect.exit(
-      environment.delivery.value.sendEmailStatus({
-        caller: input.event.caller,
-        phoneNumberId: input.event.businessPhoneNumberId,
-        status: state,
-      })
-    );
-    return answer(HTTP_OK);
-  });
-
 const validDisclosure = (json: string): boolean =>
   Option.isSome(Schema.decodeOption(PendingDisclosureJson)(json));
-
-const recordPrematureMailbox = (
-  db: D1Database,
-  input: Inbound,
-  exchangeId: PendingConsentExchangeId
-): Effect.Effect<Response, void> =>
-  Effect.gen(function* () {
-    if (Option.isNone(Schema.decodeOption(EmailAddress)(input.event.content.text))) {
-      return answer(HTTP_OK);
-    }
-    const recorded = yield* attempt(() =>
-      db
-        .prepare(`UPDATE pending_consent_exchanges
-        SET email_preaccept_latest_occurred_ms = MAX(
-          COALESCE(email_preaccept_latest_occurred_ms, 0), ?)
-        WHERE id = ? AND state IN ('awaiting_delivery', 'outbound_started', 'awaiting_decision')`)
-        .bind(DateTime.toEpochMillis(input.event.occurredAt), exchangeId)
-        .run()
-    );
-    return answer(recorded.meta.changes === 1 ? HTTP_OK : HTTP_CONFLICT);
-  });
 
 const recordDecision = (db: D1Database, input: Inbound): Effect.Effect<Response, void> =>
   Effect.gen(function* () {
@@ -540,7 +379,7 @@ const recordDecision = (db: D1Database, input: Inbound): Effect.Effect<Response,
     }
     if (!validDisclosure(pending.value.disclosure_json)) return answer(HTTP_UNAVAILABLE);
     if (choice._tag === "Clarify") {
-      return yield* recordPrematureMailbox(db, input, pending.value.id);
+      return answer(HTTP_OK);
     }
     return yield* persistDecision({ db, input, pending: pending.value, decision });
   });
@@ -597,8 +436,8 @@ const exchangeStatement = (
     .prepare(`INSERT INTO pending_consent_exchanges
     (id, portfolio_id, bsuid, phone_number_id, initiating_message_id, initiating_body_sha256,
      correlation_token, disclosure_json, created_at_ms, expires_at_ms,
-     email_preaccept_latest_occurred_ms, state)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'awaiting_delivery')`)
+     state)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'awaiting_delivery')`)
     .bind(
       id,
       input.event.caller.businessPortfolioId,
@@ -609,10 +448,7 @@ const exchangeStatement = (
       correlationToken,
       disclosureJson,
       input.receivedAtMs,
-      input.receivedAtMs + dayMs,
-      Option.isSome(Schema.decodeOption(EmailAddress)(input.event.content.text))
-        ? DateTime.toEpochMillis(input.event.occurredAt)
-        : null
+      input.receivedAtMs + dayMs
     );
 
 const admitExchange = (
@@ -797,36 +633,12 @@ const priorExchangeResponse = (
   return Option.some(answer(verdict === "replay" ? HTTP_OK : HTTP_CONFLICT));
 };
 
-const recordUndeliveredMailbox = (
-  db: D1Database,
-  input: Inbound,
-  pending: Option.Option<StoredExchange>
-): Effect.Effect<Option.Option<Response>, void> =>
-  Effect.gen(function* () {
-    if (
-      Option.isNone(pending) ||
-      (pending.value.state !== "awaiting_delivery" && pending.value.state !== "outbound_started") ||
-      Option.isNone(Schema.decodeOption(EmailAddress)(input.event.content.text))
-    ) {
-      return Option.none();
-    }
-    if (
-      pending.value.phone_number_id !== input.event.businessPhoneNumberId ||
-      input.receivedAtMs >= pending.value.expires_at_ms
-    ) {
-      return Option.some(answer(HTTP_CONFLICT));
-    }
-    return Option.some(yield* recordPrematureMailbox(db, input, pending.value.id));
-  });
-
 const startExchange = (
   environment: Environment,
   input: Inbound
 ): Effect.Effect<Response, void, Crypto.Crypto> =>
   Effect.gen(function* () {
     const pending = yield* findExchange(environment.DB, input.event);
-    const premature = yield* recordUndeliveredMailbox(environment.DB, input, pending);
-    if (Option.isSome(premature)) return premature.value;
     const prior = priorExchangeResponse(pending, input);
     if (Option.isSome(prior)) return prior.value;
     if (Option.isNone(environment.delivery)) {
@@ -845,21 +657,10 @@ const startExchange = (
     return yield* sendExchange(environment, exchange);
   });
 
-const requestsEmailStatus = (input: Inbound): boolean =>
-  input.event.content.text.trim().toLocaleLowerCase("es-CO") === "estado";
-
-const routeAcceptedInbound = (
-  environment: Environment,
-  input: Inbound,
-  pending: StoredExchange
-): Effect.Effect<Response, void, Crypto.Crypto> =>
-  Effect.gen(function* () {
-    const replay = yield* findRecordedDecision(environment.DB, input);
-    if (Option.isSome(replay)) return replay.value;
-    return requestsEmailStatus(input)
-      ? yield* reportEmailStatus(environment, input, pending)
-      : yield* recordMailbox(environment, input, pending);
-  });
+const acceptedLive = (pending: Option.Option<StoredExchange>, receivedAtMs: number): boolean =>
+  Option.isSome(pending) &&
+  pending.value.state === "accepted" &&
+  pending.value.expires_at_ms > receivedAtMs;
 
 export const receiveConsentText = ({
   environment,
@@ -871,8 +672,11 @@ export const receiveConsentText = ({
 > =>
   Effect.gen(function* () {
     const pending = yield* findExchange(environment.DB, input.event);
-    if (Option.isSome(pending) && pending.value.state === "accepted") {
-      return yield* routeAcceptedInbound(environment, input, pending.value);
+    if (acceptedLive(pending, input.receivedAtMs)) {
+      const choice = yield* decideConsentReply({ _tag: "Text", text: input.event.content.text });
+      return choice._tag === "Clarify"
+        ? answer(HTTP_OK)
+        : yield* recordDecision(environment.DB, input);
     }
     if (
       Option.isSome(pending) &&
@@ -881,7 +685,6 @@ export const receiveConsentText = ({
     ) {
       return yield* recordDecision(environment.DB, input);
     }
-    if (requestsEmailStatus(input)) return answer(HTTP_CONFLICT);
     return yield* startExchange(environment, input);
   });
 

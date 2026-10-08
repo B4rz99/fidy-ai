@@ -94,7 +94,6 @@ type WorkerExecution = Readonly<{
   operation:
     | "worker.core.queue"
     | "worker.core.scheduled"
-    | "workflow.onboardingEmail"
     | "workflow.browserPairingEmail"
     | "workflow.emailReplacement"
     | "workflow.billingCollection"

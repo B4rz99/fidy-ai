@@ -130,8 +130,8 @@ The static artifact contains no server implementation or Secrets. Local developm
 entrypoints, D1 migrations, and binding graph; other remote stages are rejected before resource
 creation.
 
-The application combines synchronous D1 commits with durable asynchronous execution. Onboarding,
-browser-pairing and replacement email, and billing collection use transactional outboxes, Queues,
+The application combines synchronous D1 commits with durable asynchronous execution.
+Browser-pairing and replacement email, and billing collection use transactional outboxes, Queues,
 and versioned Workflows. Statement extraction also uses a durable outbox and a Queue/Workflow path
 through the User coordinator. Prompt email/billing publication follows a commit; cron recovers missed offers and runs
 independent reconciliation and retention activities. Shared dead letters and bounded operational
@@ -146,7 +146,7 @@ Workstation and provider-controlled source deployments are not release paths. Se
 
 ## Identity and verification
 
-Browser login retains a private verifier in the browser. WhatsApp approval, verified email, or
+Browser login retains a private verifier in the browser. Google or Microsoft provider authentication, WhatsApp approval, verified email, or
 support recovery can approve a pairing for the same stable User, but cannot establish a session
 without that verifier. One approved pairing bootstraps one web session. The server verifies proof
 and owns session authority; the web keeps private material out of URLs, public references, and
@@ -160,3 +160,16 @@ fixtures cover presentation and failure cases without substituting for the real-
 Cloudflare integration tests exercise the relevant Worker and platform boundaries locally; live
 Workers AI behavior has a separate release gate. Application-specific test seams belong in the
 application architecture documents.
+
+Google and Microsoft web signup/login are implemented under #1089 and #1090. It creates a stable User by canonical issuer/subject,
+atomically retaining web Consent, TrialPeriod and digest-only recovery without a WhatsAppIdentity.
+Contact email grants no ownership. Provider approval and Browser Login session issuance remain
+separate authorities; deployed provider verification remains an operator gate.
+
+#1091 adds WhatsApp-led signup through the same provider owner. A ten-minute public handoff binds one
+browser pairing to the authenticated originating Consent exchange. The chat reviews the provider
+account and matching association identifier, and replies to the exact review message. Completion
+atomically creates all new-User records and the initial WhatsAppIdentity, or adds only that association
+to an existing provider User. Established associations refuse replacement. Browser Login retains sole
+WebSession ownership. Superseded mailbox-code signup has been removed under #1093; optional
+mailbox login/replacement requires independently established VerifiedEmailCredential authority.

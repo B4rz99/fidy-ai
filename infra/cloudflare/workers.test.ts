@@ -116,7 +116,7 @@ const coreEnvironment: Parameters<typeof coreWorker.fetch>[1] = {
 };
 
 const queueBatch = (body: unknown): MessageBatch<unknown> => ({
-  queue: "OnboardingEmailQueue",
+  queue: "BrowserPairingEmailQueue",
   messages: [
     {
       id: "opaque-test-message",
@@ -621,9 +621,7 @@ describe("Cloudflare Worker topology", () => {
         const batch = queueBatch(payload);
 
         yield* Effect.tryPromise(() =>
-          expect(worker.queue(batch, coreEnvironment)).rejects.toThrow(
-            "Onboarding email unavailable"
-          )
+          expect(worker.queue(batch, coreEnvironment)).rejects.toThrow("Unknown email work")
         );
         expect(records).toHaveLength(1);
         expect(records[0]).toMatchObject({
@@ -649,7 +647,7 @@ describe("Cloudflare Worker topology", () => {
       const batch = queueBatch("no-provider-binding");
 
       yield* Effect.tryPromise(() =>
-        expect(worker.queue(batch, coreEnvironment)).rejects.toThrow("Onboarding email unavailable")
+        expect(worker.queue(batch, coreEnvironment)).rejects.toThrow("Unknown email work")
       );
     })
   );

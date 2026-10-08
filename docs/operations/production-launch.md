@@ -139,8 +139,10 @@ No full-stack destroy command belongs in ordinary release or rollback tooling.
 - [ ] Record the concrete reviewed change that enables onboarding/real ingress and its rollback or
       disable procedure. Apply only through protected GitHub Production authority after approval.
       Leave unsupported Email Routing disabled; do not label the full email requirement complete.
-- [ ] After enablement, verify the first approved onboarding completes with its mandatory verified
-      email, Consent, and one stable User; use the approved product journey, never a fabricated proof.
+- [ ] After enablement, verify the first approved provider onboarding atomically establishes its
+      ProviderCredential, accepted Consent, one stable User, TrialPeriod and BackupRecoveryCode.
+      WhatsApp-led signup also requires exact originating-chat association confirmation. Use the
+      approved product journey, never a fabricated proof; provider contact email grants no mailbox authority.
 
 **After approval to admit real Users, destructive baseline replacement is prohibited**, even if no
 User has arrived yet. Future changes are additive and forward-only; Worker rollback is code traffic

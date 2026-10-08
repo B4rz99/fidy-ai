@@ -228,11 +228,11 @@ export type WhatsAppAuthenticatedInbound = Readonly<{
 
 /** Binding and callbacks required by the authenticated Consent ingress composition. */
 export type WhatsAppIngressEnvironment = Readonly<{
+  readonly BROWSER_ORIGIN: string;
   readonly DB: D1Database;
   readonly KAPSO_API_KEY: string;
   readonly KAPSO_WEBHOOK_SECRET: string;
   readonly WHATSAPP_BUSINESS_PORTFOLIO_ID: string;
-  readonly onAccepted: (id: string) => void;
   readonly onHostedText: (
     admission: WhatsAppTurnAdmission | WhatsAppDocumentAdmission
   ) => Promise<Response>;

@@ -3,27 +3,15 @@ import type {
   EmailProofRequest,
   EmailProofStart,
   EmailRejectedWorkObservationInput,
-  OnboardingEmailEnrollmentInput,
-  OnboardingEmailReplayInput,
-  OnboardingEmailStatusInput,
-  OnboardingEmailVerification,
   VerifiedEmailQueryInput,
 } from "./contract";
-import type { Crypto, Effect, Option } from "effect";
-import type { EmailStatus } from "../../src/shell/consent/contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 
-import {
-  findOnboardingEmailReplay as findReplay,
-  readOnboardingEmailStatus as readStatus,
-  startOnboardingEmailEnrollment as startEnrollment,
-} from "./internal/ingress-enrollment";
 import {
   prepareEmailPendingWorkObservation as pendingWork,
   prepareEmailRejectedWorkObservation as rejectedWork,
 } from "./internal/operational-observation";
 
-import { verifyOnboardingEmail as verify } from "./internal/verified-onboarding";
 import {
   completeBrowserPairingEmail as completePairing,
   startBrowserPairingEmail as startPairing,
@@ -33,13 +21,6 @@ import {
   requestEmailReplacement as requestReplacement,
 } from "./internal/email-replacement";
 
-/**
- * Verify the current bounded mailbox proof and lend its one-use atomic completion to Onboarding.
- * Credential storage, proof consumption, replay limits and safe refusals remain Email-owned;
- * the caller supplies the other owners' statements and releases success only after commit.
- */
-export const verifyOnboardingEmail = (input: OnboardingEmailVerification): Promise<Response> =>
-  verify(input);
 /** Request a bounded mailbox proof only after the browser proves its pending pairing; responses do not enumerate Users. */
 export const startBrowserPairingEmail = (input: EmailProofStart): Promise<Response> =>
   startPairing(input);
@@ -53,18 +34,6 @@ export const requestEmailReplacement = (input: EmailProofStart): Promise<Respons
 export const completeEmailReplacement = (input: EmailProofRequest): Promise<Response> =>
   completeReplacement(input);
 
-/** Return only whether the exact accepted exchange's submission matches; mailbox evidence stays private. */
-export const findOnboardingEmailReplay = (
-  input: OnboardingEmailReplayInput
-): Effect.Effect<Option.Option<"matching" | "conflict">, void> => findReplay(input);
-/** Commit the accepted exchange's bounded mailbox enrollment and durable delivery identity together. */
-export const startOnboardingEmailEnrollment = (
-  input: OnboardingEmailEnrollmentInput
-): Effect.Effect<string, void, Crypto.Crypto> => startEnrollment(input);
-/** Observe only the safe delivery status of an already-authorized accepted Consent exchange. */
-export const readOnboardingEmailStatus = (
-  input: OnboardingEmailStatusInput
-): Effect.Effect<EmailStatus, void> => readStatus(input);
 /**
  * Project only userId and emailAddress for the exact User inside the caller's guarded D1 statement.
  * Possession of a UserId grants no authority: compose the live credential and purpose guards in

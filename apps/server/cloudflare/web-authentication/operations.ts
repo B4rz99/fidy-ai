@@ -1,4 +1,3 @@
-import { completeOnboarding } from "../onboarding/operations";
 import { webAuthenticationEndpoints } from "../../src/shell/web-authentication/contract";
 import { Cause, Effect, Option } from "effect";
 import { redeemBrowserPairing, startBrowserPairing } from "../browser-login/operations";
@@ -23,8 +22,6 @@ const handlers = {
     startBrowserPairing(db),
   redeemPairing: redeemBrowserPairing,
   logout: (input): Effect.Effect<Response, void> => logoutWebSession(input),
-  verifyEmail: (input): Effect.Effect<Response, Cause.UnknownError> =>
-    Effect.tryPromise(() => completeOnboarding(input)),
   startEmail: ({ request, db, publish }): Effect.Effect<Response, Cause.UnknownError> =>
     Effect.tryPromise(() =>
       startBrowserPairingEmail({ request, db, onAccepted: (id) => publish("browserPairing", id) })

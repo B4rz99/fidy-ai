@@ -4,6 +4,7 @@ import type {
   WhatsAppBusinessScopedUserId,
 } from "../../src/core/identity/contract";
 import type { OwnedStatement } from "../../src/shell/owner-write/contract";
+import type { PendingConsentExchangeId } from "../../src/shell/consent/contract";
 import { Data } from "effect";
 
 /** An established caller lookup supplies coordination context, never reusable authority. */
@@ -26,17 +27,19 @@ export type WhatsAppAssociationSubject = Readonly<{
   bsuid: WhatsAppBusinessScopedUserId;
 }>;
 
-/** Stable identity created only alongside verified mailbox, Consent, recovery and proof consumption. */
-export type VerifiedIdentityInput = Readonly<{
+/** New stable User prepared for an atomic onboarding unit; preparation grants no authority. */
+export type UserCreationInput = Readonly<{
   db: D1Database;
   userId: UserId;
-  exchangeId: string;
   createdAtMs: number;
 }>;
 
-/** Three owner actions to compose, without executing, in the caller's verified-onboarding batch. */
-export type VerifiedIdentityStatements = Readonly<{
+/** Commit both actions with Consent, Recovery and the originating owner's final proof guard. */
+export type UserCreationStatements = Readonly<{
   createUser: D1PreparedStatement;
-  associateCaller: D1PreparedStatement;
   startTrial: D1PreparedStatement;
 }>;
+
+/** The originating accepted channel exchange, never a caller-supplied WhatsApp contact or pair. */
+export type OnboardingWhatsAppAssociation = UserCreationInput &
+  Readonly<{ exchangeId: PendingConsentExchangeId }>;

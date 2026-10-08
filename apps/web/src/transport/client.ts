@@ -21,6 +21,7 @@ import { AtomHttpApi } from "effect/reactivity";
 import { browserHttpClientLayer } from "./browser-http-policy";
 
 export type {
+  AuthenticationProvider,
   CanonicalInput,
   CanonicalSuccess,
   PaymentEnrollmentType,
@@ -48,7 +49,6 @@ export {
   BrowserLoginPollingRateLimitedApi,
   EmailAddress,
   EmailVerificationCode,
-  EmailVerificationInvalidApi,
   EmailReplacementFreshPairingRequiredApi,
   EmailReplacementInvalidApi,
   DashboardCatalogEntry,
@@ -276,3 +276,5 @@ export const makeSubscriptionEnrollmentClient = (
 };
 
 export { RecurringDigestReport, RecurringDigestReportParams } from "@fidy/server/client";
+
+export { ProviderHandoffSearch } from "@fidy/server/client";

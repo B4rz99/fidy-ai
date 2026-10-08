@@ -15,7 +15,6 @@ export type CanaryHealth = Readonly<{
   );
 
 export const WorkKind = Schema.Literals([
-  "onboarding",
   "browserPairing",
   "emailReplacement",
   "billing",
@@ -24,7 +23,6 @@ export const WorkKind = Schema.Literals([
 ]);
 export type WorkKind = typeof WorkKind.Type;
 export const QueueKind = Schema.Literals([
-  "onboardingQueue",
   "browserPairingQueue",
   "emailReplacementQueue",
   "billingQueue",
@@ -97,7 +95,6 @@ export type AlertSignal = OperationalSignal | EventMetricSignal | CanaryHealth |
 
 /** Alert coordinates are finite kind/owner pairs; invalid cross-products cannot be delivered. */
 const anyOwner = Schema.Literals([
-  "onboarding",
   "browserPairing",
   "emailReplacement",
   "billing",
@@ -106,7 +103,6 @@ const anyOwner = Schema.Literals([
   "whatsapp",
   "deadLetters",
   "retention",
-  "onboardingQueue",
   "browserPairingQueue",
   "emailReplacementQueue",
   "billingQueue",
@@ -126,16 +122,14 @@ const anyOwner = Schema.Literals([
 ]);
 const severity = Schema.Literals(["warning", "critical"]);
 const workOwner = Schema.Literals([
-  "onboarding",
   "browserPairing",
   "emailReplacement",
   "billing",
   "statement",
   "forwardedEmail",
 ]);
-const emailProofOwner = Schema.Literals(["onboarding", "browserPairing", "emailReplacement"]);
+const emailProofOwner = Schema.Literals(["browserPairing", "emailReplacement"]);
 const workflowOwner = Schema.Literals([
-  "onboarding",
   "browserPairing",
   "emailReplacement",
   "billing",
@@ -143,7 +137,6 @@ const workflowOwner = Schema.Literals([
   "workflowFailures",
 ]);
 const queueOwner = Schema.Literals([
-  "onboardingQueue",
   "browserPairingQueue",
   "emailReplacementQueue",
   "billingQueue",

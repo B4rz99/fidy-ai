@@ -30,6 +30,11 @@ than being silently converted or summed together. Corrections and reconciliation
 evidence, and uncertain imported material can require review instead of becoming an unquestioned
 financial fact.
 
+Google web signup/login is implemented with atomic Consent, trial and recovery creation, followed
+by Browser Login session redemption. Synthetic Worker/browser checks cover the journey; actual
+Google application registration, deployed credentials and real sign-in remain unchecked. See
+[configuration and evidence](docs/operations/google-authentication.md).
+
 Some product paths remain deliberately unavailable. Forwarded institutional email requires verified
 sender and connection admission before inbound routing can be enabled. Receipt/image processing is
 not yet an executable capture path, and hosted MCP/OAuth access remains a design rather than a live

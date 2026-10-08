@@ -19,6 +19,10 @@ const contractDigest = Config.String("CONTRACT_DIGEST").pipe(Config.withDefault(
 const hostedAiModel = Config.schema(ApprovedWorkersAiModel, "HOSTED_AI_MODEL");
 const kapsoWebhookSecret = Config.Redacted("KAPSO_WEBHOOK_SECRET");
 const kapsoApiKey = Config.Redacted("KAPSO_API_KEY");
+const microsoftClientId = Config.String("MICROSOFT_CLIENT_ID");
+const microsoftClientSecret = Config.Redacted("MICROSOFT_CLIENT_SECRET");
+const googleClientId = Config.String("GOOGLE_CLIENT_ID");
+const googleClientSecret = Config.Redacted("GOOGLE_CLIENT_SECRET");
 const resendApiKey = Config.Redacted("RESEND_API_KEY");
 const operatorAlertEmail = Config.schema(EmailAddress, "OPERATOR_ALERT_EMAIL");
 const wompiEnvironment = Config.String("WOMPI_ENVIRONMENT");
@@ -217,10 +221,6 @@ export default Alchemy.Stack(
     const weeklyDeliveryWorkflow = Cloudflare.Workflow("WeeklyDeliveryWorkflow", {
       className: "ProactivityDeliveryWorkflow",
     });
-    const onboardingEmailQueue = yield* Cloudflare.Queues.Queue("OnboardingEmailQueue");
-    const onboardingEmailWorkflow = Cloudflare.Workflow("OnboardingEmailWorkflowV1", {
-      className: "OnboardingEmailWorkflowV1",
-    });
     const browserPairingEmailQueue = yield* Cloudflare.Queues.Queue("BrowserPairingEmailQueue");
     const browserPairingEmailWorkflow = Cloudflare.Workflow("BrowserPairingEmailWorkflowV1", {
       className: "BrowserPairingEmailWorkflowV1",
@@ -295,14 +295,30 @@ export default Alchemy.Stack(
         BILLING_SUPPORT_AUDIENCE: yield* Config.String("BILLING_SUPPORT_AUDIENCE").pipe(
           Config.withDefault("")
         ),
-        ONBOARDING_EMAIL_QUEUE: onboardingEmailQueue,
-        ONBOARDING_EMAIL_WORKFLOW: onboardingEmailWorkflow,
         BROWSER_PAIRING_EMAIL_QUEUE: browserPairingEmailQueue,
         BROWSER_PAIRING_EMAIL_WORKFLOW: browserPairingEmailWorkflow,
         EMAIL_REPLACEMENT_QUEUE: emailReplacementQueue,
         EMAIL_REPLACEMENT_HEALTH_QUEUE: emailReplacementQueue,
         EMAIL_REPLACEMENT_WORKFLOW: emailReplacementWorkflow,
         RESEND_API_KEY: yield* resolveResendKey(development),
+        GOOGLE_CLIENT_ID: yield* development
+          ? googleClientId.pipe(Config.withDefault(""))
+          : googleClientId,
+        GOOGLE_CLIENT_SECRET: yield* development
+          ? googleClientSecret.pipe(Config.withDefault(Redacted.make("")))
+          : googleClientSecret,
+        GOOGLE_REDIRECT_URI: production
+          ? "https://api.fidyapp.com/providers/google/callback"
+          : "http://localhost:8787/providers/google/callback",
+        MICROSOFT_CLIENT_ID: yield* development
+          ? microsoftClientId.pipe(Config.withDefault(""))
+          : microsoftClientId,
+        MICROSOFT_CLIENT_SECRET: yield* development
+          ? microsoftClientSecret.pipe(Config.withDefault(Redacted.make("")))
+          : microsoftClientSecret,
+        MICROSOFT_REDIRECT_URI: production
+          ? "https://api.fidyapp.com/providers/microsoft/callback"
+          : "http://localhost:8787/providers/microsoft/callback",
         BROWSER_ORIGIN: resolveBrowserOrigin(production),
         WOMPI_ENVIRONMENT: yield* development
           ? wompiEnvironment.pipe(Config.withDefault("sandbox"))
@@ -363,12 +379,6 @@ export default Alchemy.Stack(
       settings: { batchSize: 10, maxRetries: 3 },
     });
 
-    yield* Cloudflare.Queues.Consumer("OnboardingEmailConsumer", {
-      queueId: onboardingEmailQueue.queueId,
-      scriptName: core.workerName,
-      deadLetterQueue: asyncDeadLetters.queueName,
-      settings: { batchSize: 10, maxRetries: 3 },
-    });
     yield* Cloudflare.Queues.Consumer("BrowserPairingEmailConsumer", {
       queueId: browserPairingEmailQueue.queueId,
       scriptName: core.workerName,

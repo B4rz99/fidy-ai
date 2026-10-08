@@ -1,13 +1,14 @@
 import { prepareCurrentUser } from "../../src/shell/identity/operations";
 import type { CurrentUserResponse } from "../../src/shell/identity/contract";
 import { IdentityUnavailable } from "./contract";
-import { bootstrapStatements } from "./internal/bootstrap";
+import { onboardingWhatsAppStatement, userCreationStatements } from "./internal/bootstrap";
 import { Effect, type Option } from "effect";
 import type { UserId } from "../../src/core/identity/contract";
 import type {
   IdentityStatement,
-  VerifiedIdentityInput,
-  VerifiedIdentityStatements,
+  OnboardingWhatsAppAssociation,
+  UserCreationInput,
+  UserCreationStatements,
   WhatsAppAssociationSubject,
   WhatsAppCallerLookup,
 } from "./contract";
@@ -40,13 +41,23 @@ export const prepareWhatsAppIdentity = (
 };
 
 /**
- * Prepare Identity's part of verified onboarding, including the one original 168-hour TrialPeriod.
- * Commit these actions in the same caller-owned D1 batch as the verified mailbox, historical
- * Consent, recovery credential and final current-proof assertion. No stable identity may commit
+ * Prepare one new Colombian User and its original 168-hour TrialPeriod without channel evidence.
+ * Commit these actions in the same onboarding D1 batch as Consent, recovery credential and the
+ * originating proof owner's final current-proof assertion. No stable identity may commit
  * before that assertion. Preparation neither consumes a proof nor establishes reusable authority.
  */
-export const prepareVerifiedIdentity = (input: VerifiedIdentityInput): VerifiedIdentityStatements =>
-  bootstrapStatements(input);
+export const prepareUserCreation = (input: UserCreationInput): UserCreationStatements =>
+  userCreationStatements(input);
+
+/**
+ * Establish the initial association of a new or provider-authenticated User only with the exact accepted Consent exchange's originating WhatsApp
+ * caller. Commit with the originating proof consumption and any new User, Consent and Recovery records; the final
+ * proof guard must refuse stale, foreign or missing exchange evidence in that same atomic unit.
+ * Preparation neither verifies a proof nor authorizes reassociation of an established User.
+ */
+export const prepareOnboardingWhatsAppAssociation = (
+  input: OnboardingWhatsAppAssociation
+): D1PreparedStatement => onboardingWhatsAppStatement(input);
 
 /**
  * Load one authenticated User's full canonical projection with their current Consent grant.

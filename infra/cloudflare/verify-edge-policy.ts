@@ -13,7 +13,8 @@ import { edgeSecurityPolicy } from "./edge-security";
 // Includes #236's authenticated canonical Subscription cancellation route in the catalog-derived rate limit.
 // Includes #304's catalog-derived /institutions and /connections rate-limit routes.
 // Includes #305's same-User browser Connection review/preparation routes and edge rate limits.
-const expectedEdgePolicyDigest = "007610d8ab24deb43c744a9ecf25102308bdc158dff5ef8b9b023fde11202a1b";
+// Includes #1086 provider callbacks, anonymous provider admission, and removal of email signup resources.
+const expectedEdgePolicyDigest = "d0413518f7c8cd12f362501c41bcac19fd4468b800a3cba0cb123b45d85546b2";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),

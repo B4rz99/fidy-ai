@@ -1,0 +1,16 @@
+infra/cloudflare/scripts/migration-history.test.ts
+  h_c6d49c804e0ad2 12,50-74
+infra/cloudflare/scripts/migration-history.ts
+  h_c6d49c804e0ad2 152-155,170,307-309
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a809ae4c1a61e3c3f2a2cfb1281a9fbbe88a209b",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -108,7 +108,12 @@ const deployExact = Effect.fn(function* (
   const reported = yield* port.deploy(name, versions).pipe(
     Effect.catchCauseIf(
       (cause) => !Cause.hasInterrupts(cause),
-      () => observeCommitted(port, name, { versions, previousId: previous.id })
+      (writeCause) =>
+        observeCommitted(port, name, { versions, previousId: previous.id }).pipe(
+          Effect.catchCause((observationCause) =>
+            Effect.failCause(Cause.combine(observationCause, writeCause))
+          )
+        )
     )
   );
   // Wrangler's write adapter reads traffic after its command; that read can still be the old ID.

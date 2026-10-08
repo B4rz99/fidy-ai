@@ -115,10 +115,12 @@ class ReleaseFailure extends Data.TaggedError("ReleaseFailure")<{ message: strin
 
 /** CLI failures report only owned release messages, never foreign errors or provider values. */
 export const releaseFailureMessage = (cause: Cause.Cause<unknown>): string => {
-  const error = Cause.findErrorOption(cause);
-  return Option.isSome(error) && error.value instanceof ReleaseFailure
-    ? error.value.message
-    : "Production release routing failed; inspect Worker deployment state before recovery.";
+  for (const reason of cause.reasons) {
+    if (Cause.isFailReason(reason) && reason.error instanceof ReleaseFailure) {
+      return reason.error.message;
+    }
+  }
+  return "Production release routing failed; inspect Worker deployment state before recovery.";
 };
 
 const Json = Schema.fromJsonString(Schema.Unknown);
@@ -206,6 +208,63 @@ const providerJson = Effect.fn(
   Effect.scoped,
   Effect.timeout("10 seconds")
 );
+// Retain at most 32 KiB in memory; drain the pipe without publishing foreign output.
+const toolingErrorCode = (stream: ReadableStream<Uint8Array>): Promise<Option.Option<string>> => {
+  const decoder = new TextDecoder();
+  const limit = 32_768;
+  let retained = "";
+  let size = 0;
+  return stream
+    .pipeTo(
+      new WritableStream<Uint8Array>({
+        write(chunk) {
+          const bytes = chunk.subarray(0, Math.max(0, limit - size));
+          retained += decoder.decode(bytes, { stream: true });
+          size += bytes.byteLength;
+        },
+      })
+    )
+    .then(() => {
+      const output = retained + decoder.decode();
+      // Wrangler 4.144.0 rewrites API 100405 as UserError and removes its numeric code.
+      return Option.fromNullishOr(output.match(/\[code: (\d{4,6})\]/u)?.[1]).pipe(
+        Option.orElse(() =>
+          output.includes(
+            "All versions in a percentage-split deployment must declare identical Durable Object `exports`."
+          )
+            ? Option.some("100405")
+            : Option.none()
+        )
+      );
+    });
+};
+
+const startReleaseCommand = (
+  args: ReadonlyArray<string>
+): {
+  child: Bun.Subprocess<"ignore", "pipe", "pipe">;
+  settlement: Promise<
+    [
+      PromiseSettledResult<string>,
+      PromiseSettledResult<number>,
+      PromiseSettledResult<Option.Option<string>>,
+    ]
+  >;
+} => {
+  const child = Bun.spawn([...args], {
+    cwd: import.meta.dir,
+    stdout: "pipe",
+    stderr: "pipe",
+    env: process.env,
+  });
+  const settlement = Promise.allSettled([
+    new Response(child.stdout).text(),
+    child.exited,
+    toolingErrorCode(child.stderr),
+  ]);
+  return { child, settlement };
+};
+
 /** Own native command output and actual exit; interruption of a started write is not rollback. */
 export const releaseCommand = ({
   args,
@@ -216,16 +275,7 @@ export const releaseCommand = ({
 }>): Effect.Effect<string, ReleaseFailure> =>
   Effect.acquireUseRelease(
     Effect.try({
-      try: () => {
-        const child = Bun.spawn([...args], {
-          cwd: import.meta.dir,
-          stdout: "pipe",
-          stderr: "ignore",
-          env: process.env,
-        });
-        const settlement = Promise.allSettled([new Response(child.stdout).text(), child.exited]);
-        return { child, settlement };
-      },
+      try: () => startReleaseCommand(args),
       catch: () => new ReleaseFailure({ message: "Release tooling failed" }),
     }),
     ({ settlement }) =>
@@ -233,11 +283,16 @@ export const releaseCommand = ({
         try: () => settlement,
         catch: () => new ReleaseFailure({ message: "Release tooling failed" }),
       }).pipe(
-        Effect.flatMap(([output, exit]) =>
+        Effect.flatMap(([output, exit, code]) =>
           output.status === "fulfilled" && exit.status === "fulfilled" && exit.value === 0
             ? Effect.succeed(output.value)
             : Effect.fail(
-                new ReleaseFailure({ message: "Release tooling failed; inspect traffic state" })
+                new ReleaseFailure({
+                  message:
+                    code.status === "fulfilled" && Option.isSome(code.value)
+                      ? `Release tooling failed (Cloudflare API code ${code.value.value}); inspect traffic state`
+                      : "Release tooling failed; inspect traffic state",
+                })
               )
         )
       ),

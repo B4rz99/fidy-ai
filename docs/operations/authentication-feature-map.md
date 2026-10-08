@@ -1,31 +1,14 @@
-# Authentication integration (#1093)
+# Authentication integration
+
+The [signup and browser login feature map](../../apps/web/src/features/provider-authentication/FEATURE.md)
+lives beside the browser feature. It records supported actions, runtime owners, repeatable checks,
+current Production evidence and remaining live checks.
 
 [ADR 0020](../adr/0020-mandatory-verified-email-authentication-and-recovery.md) defines provider
-signup/login. Contact email creates no mailbox authority. The unreleased product has no migration
-compatibility path: obsolete mailbox-code signup, enrollment/outbox storage, Queue/Workflow,
-bindings and browser page are retired; migration 0069 removes obsolete schema while preserving
-immutable applied migration history.
+signup/login. Provider contact email creates no mailbox authority. Superseded mailbox-code signup,
+its Queue/Workflow and browser page are retired; optional mailbox authentication/replacement
+remains independently owned. Immutable applied migration history is preserved.
 
-| Action                                                    | Owner and actual path                                                                                                                                                                  | Implementation and local evidence                                                                                                                                                                                                                                                                                                                                                                                                                |
-| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Google / Microsoft web signup and returning login         | Provider Authentication → Onboarding → Browser Login; `/web/providers/{google,microsoft}/*`, exact provider callback                                                                   | Implemented; [Worker/D1 journeys](../../apps/server/cloudflare/provider-authentication/journey.test.ts), [Google browser](../../apps/web/e2e/google-authentication.spec.ts), [Microsoft browser](../../apps/web/e2e/microsoft-authentication.spec.ts) substitute only external provider edges                                                                                                                                                    |
-| WhatsApp-led signup / initial association                 | Authenticated Kapso ingress → Consent → Provider Authentication → Identity; public handoff, native exact-message confirmation, provider completion                                     | Implemented; [Worker/D1](../../apps/server/cloudflare/provider-authentication/whatsapp.test.ts) and both provider browser journeys cover new signup and initial association; integration cases cover denial, forwarding, concurrency and rollback                                                                                                                                                                                                |
-| Optional mailbox login / replacement                      | Email Authentication; `/web/email/authentication/*`, `/email/replacement`, `/web/email/replacement/verify`; Resend → retained Queue/Workflow                                           | Implemented for an independently established VerifiedEmailCredential; provider contact email is insufficient. [Authentication boundaries](../../apps/server/cloudflare/onboarding/browser-authentication.test.ts), [retention](../../apps/server/cloudflare/email-authentication/retention.test.ts). No new mailbox enrollment UI is introduced                                                                                                  |
-| Existing WhatsApp login                                   | WhatsApp → Browser Login → WebSession; public pairing plus independent browser verifier                                                                                                | Preserved; [browser pairing](../../apps/web/e2e/browser-pairing.spec.ts)                                                                                                                                                                                                                                                                                                                                                                         |
-| Backup recovery and rotation                              | `fidy support-recovery` → Access-authenticated private Worker `/internal/support-recovery` → Recovery + Browser Login atomic D1 approval; fresh-session `/recovery/backup-code/rotate` | Implemented operator command, Worker approval, single-use evidence and rotation. [Operator feature evidence](../../apps/cli/src/support-recovery/FEATURE.md) covers hidden input and bounded Access transport. Both provider browser journeys run the command through public/Core/D1, proving recovery without WhatsApp/mailbox, stable User ownership, single use and fresh-session rotation. Live Access/operator recovery remains unverified. |
-| Freshness, logout, expiry, post-revocation authentication | Browser Login / WebSession / Consent; ordinary work still Consent-gated                                                                                                                | Preserved; authentication boundary and provider browser journeys                                                                                                                                                                                                                                                                                                                                                                                 |
-
-Local fixtures prove their stated boundaries only. Remaining prelaunch checks:
-
-- Actual Google and Microsoft registrations, account eligibility, authentication scopes, secrets,
-  exact callbacks, consent screens and real signup/returning-login/denial behavior.
-- Real WhatsApp disclosure delivery and exact originating-message confirmation, initial linking,
-  denial, expired handoffs and forwarded links with both providers.
-- A deployed Access operator recovery command using a hidden recovery-code prompt, same-browser
-  completion and subsequent fresh-session rotation for provider-created Users (#1092).
-- Deployed D1 schema, retained Queue/Workflow/Resend bindings and maintenance after deletion;
-  session persistence across reload/instances, logout, idle/hard expiry and freshness deadlines.
-- Deployed callbacks and handoffs under replay, conflicts, loss of responses, Consent withdrawal
-  and secret exclusion. No blind retry of uncertain mutations.
-
-This ticket performs no comprehensive Production verification and makes no Production-readiness claim.
+Provider setup and live procedures: [Google](google-authentication.md),
+[Microsoft](microsoft-authentication.md), and [support recovery](support-recovery.md).
+Local fixtures do not establish live provider or Production readiness.

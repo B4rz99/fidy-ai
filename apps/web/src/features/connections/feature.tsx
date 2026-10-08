@@ -8,6 +8,11 @@ import { Button } from "@/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/components/card";
 
 type AttemptReference = typeof ConnectionAttemptReference.Type;
+const expirationFormatter = new Intl.DateTimeFormat("es-CO", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "America/Bogota",
+});
 
 const Unavailable = ({ attempt }: Readonly<{ attempt: AttemptReference }>): JSX.Element => (
   <Card className="w-full max-w-md">
@@ -67,11 +72,7 @@ const ExpiringReview = ({
         <p>
           Esta solicitud vence:{" "}
           <time dateTime={DateTime.formatIso(review.expiresAt)}>
-            {new Intl.DateTimeFormat("es-CO", {
-              dateStyle: "medium",
-              timeStyle: "short",
-              timeZone: "America/Bogota",
-            }).format(DateTime.toDate(review.expiresAt))}
+            {expirationFormatter.format(DateTime.toDate(review.expiresAt))}
           </time>
           .
         </p>

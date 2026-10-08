@@ -402,7 +402,7 @@ it("starts in authenticated WhatsApp with provider instructions and creates no m
 
       expect(
         (yield* Effect.tryPromise(() =>
-          journey.db.prepare("SELECT id FROM pending_email_enrollments").all()
+          journey.db.prepare("SELECT user_id FROM verified_email_credentials").all()
         )).results
       ).toEqual([]);
     })

@@ -2,9 +2,9 @@
 
 ## Purpose
 
-This procedure approves an existing BrowserLoginPairing for an existing User who controls neither
-their VerifiedEmailCredential nor WhatsAppIdentity but still holds the BackupRecoveryCode disclosed
-at onboarding. It never creates a User, changes a VerifiedEmailCredential, reassociates a
+This procedure approves an existing BrowserLoginPairing for an existing User who has lost every
+established authentication proof but still holds the BackupRecoveryCode disclosed at onboarding.
+Provider-created Users need neither a WhatsAppIdentity nor a VerifiedEmailCredential. It never creates a User, changes a VerifiedEmailCredential, reassociates a
 WhatsAppIdentity, or creates a WebSession. The browser-held private verifier remains required.
 
 ## Launch configuration
@@ -31,9 +31,10 @@ The route is private transport, not a canonical operation. It must remain absent
 generated clients, browser routes, and hosted-agent tools. Generic HTTP request logging is disabled;
 do not add route, header, request-body, response-body, or JWT logging.
 
-No local CLI, database credential, process-local queue, or local recovery authority is permitted. Until
-the private Worker and its D1 adapter exist, this procedure must return the operator-only unavailable
-result.
+The private Worker and atomic D1 approval adapter are implemented. The authenticated operator CLI
+with hidden recovery-code entry remains tracked in #1092; this procedure is not ready for operator
+use until that interface and deployed Access policy are verified. The CLI is only private transport: it
+may hold no database credential, process-local queue or local recovery authority.
 
 ## Procedure
 
@@ -77,7 +78,7 @@ Generic refusal:
 
 Every established proof lost:
 
-> Si ya no tienes acceso a tu correo verificado, a tu WhatsApp ni a tu código de recuperación, Fidy no puede recuperar tu acceso. No aceptamos documentos, datos financieros, correos ni teléfonos nuevos como prueba de titularidad.
+> Si ya no tienes acceso a tu cuenta de Google o Microsoft, a tus otros medios de acceso establecidos ni a tu código de recuperación, Fidy no puede recuperar tu acceso. No aceptamos documentos, datos financieros, correos ni teléfonos nuevos como prueba de titularidad.
 
 Operator-only failure:
 

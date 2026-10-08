@@ -13,8 +13,6 @@ export type ScheduledOperation =
   | "quota.consumptionRetention"
   | "operational.events.retention"
   | "operational.canary.publish"
-  | "onboarding.email.dispatch"
-  | "onboarding.email.reconcile"
   | "browserPairing.email.dispatch"
   | "browserPairing.email.reconcile"
   | "emailReplacement.dispatch"
@@ -64,14 +62,12 @@ export class EmailScheduleUnavailable extends Data.TaggedError("EmailScheduleUna
 /** Native Core bindings normalized once at the Worker boundary; no binding grants domain authority. */
 export type CoreMaintenanceInput = Omit<
   PlatformMaintenanceInput,
-  | "ONBOARDING_EMAIL_QUEUE"
   | "BROWSER_PAIRING_EMAIL_QUEUE"
   | "BILLING_COLLECTION_QUEUE"
   | "STATEMENT_EXTRACTION_QUEUE"
   | "HOSTED_WHATSAPP_QUEUE"
 > &
   Readonly<{
-    ONBOARDING_EMAIL_QUEUE: Option.Option<Queue>;
     BROWSER_PAIRING_EMAIL_QUEUE: Option.Option<Queue>;
     BILLING_COLLECTION_QUEUE: Option.Option<Queue>;
     STATEMENT_EXTRACTION_QUEUE: Option.Option<Queue>;

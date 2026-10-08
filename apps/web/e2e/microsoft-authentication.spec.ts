@@ -5,6 +5,7 @@ import {
   lostCompletionJourney,
   pendingRedemptionJourney,
   signupJourney,
+  whatsappAssociationJourney,
 } from "./provider-authentication.journeys";
 
 const configuration = {
@@ -36,3 +37,11 @@ playwright.test(
   "a blocked popup sends no authentication mutation and permits restarting signup",
   ({ page, context, request }) => blockedPopupJourney({ configuration, page, context, request })
 );
+
+for (const existing of [false, true]) {
+  playwright.test(
+    `WhatsApp provider handoff confirms the originating chat and ${existing ? "initially links a web-created User" : "creates a new User with recovery"}`,
+    ({ page, context, request }) =>
+      whatsappAssociationJourney({ configuration, page, context, request, existing })
+  );
+}

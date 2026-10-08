@@ -37,7 +37,7 @@ const estimatedSeconds: Readonly<Record<string, number>> = {
   "audit/internal/audit.test.ts": 9.4,
   "subscription/refund-support.test.ts": 9.3,
   "subscription/billing-collection.test.ts": 8.9,
-  "onboarding/verified-onboarding.test.ts": 8.4,
+  "onboarding/browser-authentication.test.ts": 8.4,
   "consent/proactivity-consent.test.ts": 7.9,
   "insights/insight-store.test.ts": 7.7,
   "insights/reminder-schedule.test.ts": 7.0,

@@ -27,7 +27,6 @@ const retentionMs = 86_400_000;
 const migrations = [
   "0001_categories",
   "0003_pending_consent",
-  "0004_onboarding_email",
   "0005_verified_onboarding",
   "0006_browser_login",
   "0009_card_enrollment",

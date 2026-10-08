@@ -44,7 +44,6 @@ export type EmailVerificationCode = typeof EmailVerificationCode.Type;
 
 /** Closed selector for the fixed content of one EmailAuthentication proof delivery. */
 export const EmailProofPurpose = Schema.Literals([
-  "verified-onboarding",
   "credential-replacement",
   "browser-pairing-approval",
 ]);

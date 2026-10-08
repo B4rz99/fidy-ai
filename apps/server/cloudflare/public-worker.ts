@@ -205,7 +205,6 @@ const categoryAuthorizationFailure = (
 
 const callbackPath = "/providers/kapso/callback";
 const wompiBillingEventPath = "/providers/wompi/billing-events";
-const verificationPath = "/web/onboarding/email/verify";
 const pairingPaths = ["/web/pairings", "/web/pairings/redeem", "/web/session/logout"] as const;
 const userPath = "/user";
 const hostedTurnPath = "/web/hosted-turns";
@@ -228,7 +227,6 @@ const emailAuthenticationPaths = [
 const postPaths = new Set<string>([
   callbackPath,
   wompiBillingEventPath,
-  verificationPath,
   rotateRecoveryPath,
   ...replacementPaths,
   supportRecoveryPath,
@@ -264,7 +262,6 @@ const sessionPaths = new Set<string>([userPath, ...browserMutationPaths]);
 const preflightPaths = new Set<string>([
   providerPaths.disclosure,
   listCategoriesPath,
-  verificationPath,
   userPath,
   ...browserMutationPaths,
 ]);
@@ -376,8 +373,6 @@ const credentialBearerHeaders = (request: Request, path: string): Option.Option<
         })
       )
     : Option.none();
-const browserForwardPath = (path: string): boolean =>
-  path === verificationPath || isBrowserMutation(path);
 const directHeaders = (request: Request, path: string): Option.Option<Headers> => {
   if (patDirectRoute(path)) {
     return Option.some(new Headers({ "content-type": request.headers.get("content-type") ?? "" }));
@@ -459,7 +454,7 @@ const forwardedHeaders = (request: Request, path: string): Headers => {
   if (Option.isSome(direct)) return direct.value;
   const bearerHeaders = credentialBearerHeaders(request, path);
   if (Option.isSome(bearerHeaders)) return bearerHeaders.value;
-  if (browserForwardPath(path)) return browserHeaders(request, path);
+  if (isBrowserMutation(path)) return browserHeaders(request, path);
   return fallbackHeaders(request, path);
 };
 const canonicalAdmissionHeaders = (

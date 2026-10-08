@@ -23,7 +23,6 @@ import {
   ProviderAuthenticationFeature,
   ProviderReturnFeature,
 } from "@/features/provider-authentication/feature";
-import { EmailOnboardingFeature } from "@/features/email-onboarding/feature";
 import { EmailReplacementFeature } from "@/features/email-replacement/feature";
 import { createPublicSiteRoute } from "@/features/public-site/feature";
 import { PATManagementFeature } from "@/features/pats/feature";
@@ -145,11 +144,6 @@ const connectionContinuationRoute = createRoute({
     Schema.decodeSync(Schema.Struct({ attempt: Schema.optionalKey(Schema.Unknown) }))(search),
   component: ConnectionContinuationFeature,
 });
-const emailOnboardingRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/auth/verify-email",
-  component: EmailOnboardingFeature,
-});
 
 const GoogleAuthentication = (): JSX.Element =>
   createElement(ProviderAuthenticationFeature, {
@@ -194,7 +188,6 @@ const routeTree = rootRoute.addChildren([
   oauthReviewRoute,
   connectionContinuationRoute,
   subscriptionOffersRoute,
-  emailOnboardingRoute,
   authenticatedRoute.addChildren([
     signedInRoute.addChildren([signedInIndexRoute, dashboardRoute, agentRoute, transactionsRoute]),
     patManagementRoute,

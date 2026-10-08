@@ -118,10 +118,7 @@ const setup = (
       yield* Effect.tryPromise(() =>
         installTestSchema({
           db,
-          sources: [
-            new URL("../migrations/0026_whatsapp_recovery.sql", import.meta.url),
-            new URL("../migrations/0004_onboarding_email.sql", import.meta.url),
-          ],
+          sources: [new URL("../migrations/0026_whatsapp_recovery.sql", import.meta.url)],
         })
       );
       const send = (
@@ -274,11 +271,6 @@ it("refuses image work while extraction is unavailable without treating its capt
       expect(
         (yield* Effect.tryPromise(() =>
           db.prepare("SELECT exchange_id FROM pending_consent_decisions").all()
-        )).results
-      ).toEqual([]);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT id FROM pending_email_enrollments").all()
         )).results
       ).toEqual([]);
     })
@@ -705,126 +697,6 @@ it("records only one origin-qualified pending acceptance despite duplicate and l
           db.prepare("SELECT state FROM pending_consent_exchanges").first()
         ))?.state
       ).toBe("accepted");
-    })
-  ));
-
-it("does not enroll a replay of the mailbox message that initiated disclosure", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send } = yield* Effect.tryPromise(() => setup());
-      const token = yield* Effect.tryPromise(() => startDisclosure(send, "test@example.com"));
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db
-            .prepare("SELECT email_preaccept_latest_occurred_ms FROM pending_consent_exchanges")
-            .first()
-        ))?.email_preaccept_latest_occurred_ms
-      ).toBe(nowSeconds * 1_000);
-      const created = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first()
-      );
-      expect(
-        (yield* Effect.tryPromise(() =>
-          deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))
-        )).status
-      ).toBe(200);
-      const decisionTime = yield* Effect.tryPromise(() => advancePastDecisionProof(db));
-      expect(
-        (yield* Effect.tryPromise(() => send(inbound("wamid.accept", "Acepto", decisionTime))))
-          .status
-      ).toBe(200);
-      expect(
-        (yield* Effect.tryPromise(() => send(inbound("wamid.first", "test@example.com")))).status
-      ).toBe(200);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT * FROM pending_email_enrollments").all()
-        )).results
-      ).toEqual([]);
-      expect(
-        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM onboarding_email_outbox").all()))
-          .results
-      ).toEqual([]);
-    })
-  ));
-
-it("remembers a mailbox seen before disclosure delivery, without creating work", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send } = yield* Effect.tryPromise(() => setup());
-      const token = yield* Effect.tryPromise(() => startDisclosure(send));
-      const preDeliveryEmail = inbound(
-        "wamid.pre-delivery-email",
-        "test@example.com",
-        String(nowSeconds + 20)
-      );
-      expect((yield* Effect.tryPromise(() => send(preDeliveryEmail))).status).toBe(200);
-      const guarded = yield* Effect.tryPromise(() =>
-        db
-          .prepare("SELECT email_preaccept_latest_occurred_ms FROM pending_consent_exchanges")
-          .first()
-      );
-      expect(guarded?.email_preaccept_latest_occurred_ms).toBe((nowSeconds + 20) * 1_000);
-      expect(
-        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM onboarding_email_outbox").all()))
-          .results
-      ).toEqual([]);
-      const created = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first()
-      );
-      expect(
-        (yield* Effect.tryPromise(() =>
-          deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))
-        )).status
-      ).toBe(200);
-      const decisionTime = yield* Effect.tryPromise(() => advancePastDecisionProof(db));
-      expect(
-        (yield* Effect.tryPromise(() => send(inbound("wamid.accept", "Acepto", decisionTime))))
-          .status
-      ).toBe(200);
-      expect((yield* Effect.tryPromise(() => send(preDeliveryEmail))).status).toBe(200);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT * FROM pending_email_enrollments").all()
-        )).results
-      ).toEqual([]);
-    })
-  ));
-
-it("cannot replay a previously seen future-dated pre-Consent email into an enrollment", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send } = yield* Effect.tryPromise(() => setup());
-      const token = yield* Effect.tryPromise(() => startDisclosure(send));
-      const created = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first()
-      );
-      expect(
-        (yield* Effect.tryPromise(() =>
-          deliver(send, token, String(Math.ceil(Number(created?.created_at_ms) / 1000)))
-        )).status
-      ).toBe(200);
-      const decisionTime = yield* Effect.tryPromise(() => advancePastDecisionProof(db));
-      const earlyEmail = inbound(
-        "wamid.early-email",
-        "test@example.com",
-        String(Number(decisionTime) + 20)
-      );
-      expect((yield* Effect.tryPromise(() => send(earlyEmail))).status).toBe(200);
-      expect(
-        (yield* Effect.tryPromise(() => send(inbound("wamid.accept", "Acepto", decisionTime))))
-          .status
-      ).toBe(200);
-      expect((yield* Effect.tryPromise(() => send(earlyEmail))).status).toBe(200);
-      expect(
-        (yield* Effect.tryPromise(() =>
-          db.prepare("SELECT * FROM pending_email_enrollments").all()
-        )).results
-      ).toEqual([]);
-      expect(
-        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM onboarding_email_outbox").all()))
-          .results
-      ).toEqual([]);
     })
   ));
 

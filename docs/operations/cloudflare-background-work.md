@@ -174,14 +174,14 @@ The outbox remains the recovery source. Current Cloudflare behavior is documente
 
 ## Capability status and release evidence
 
-Onboarding email, browser-pairing email, email replacement, billing collection, and statement
+Browser-pairing email, email replacement, billing collection, and statement
 extraction have installed Queue/Workflow paths. Statement extraction executes bounded chunks through
 the User coordinator and exposes Transactions or NeedsReviewItems with truthful terminal state.
 Statement dispatch, reconciliation, and review-evidence expiry participate in independent scheduling;
 its Workflow binding and Queue dead letters participate in the same operational inspection.
-Statement publication uses its durable cron outbox path; the four email/billing owners also use
+Statement publication uses its durable cron outbox path; the three email/billing owners also use
 prompt postcommit offers. Forwarded-email ingress and retention are installed separately; this
-runbook's Queue/Workflow execution claims concern Core's five consumers.
+runbook's Queue/Workflow execution claims concern the four listed Core consumers.
 
 Before enabling a changed stack, run the relevant Worker/platform regression tests and deploy through
 the existing GitHub Actions release path. In Production, verify a harmless accepted operation reaches

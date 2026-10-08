@@ -301,7 +301,7 @@ AuditLogEntries remain allowlisted and never record free-text bodies.
 trace retention and anonymisation states; verify deletion/expiry is executable and tested rather
 than documentary.
 
-**Violation examples:** creating a User when Consent is accepted but before email verification;
+**Violation examples:** creating a User before provider verification and required originating-chat confirmation;
 forwarding an entire transcript when one message is needed; keeping raw emails indefinitely because
 anonymised fixtures also exist; saving a PDF password in the transcript.
 

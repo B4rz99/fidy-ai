@@ -60,9 +60,6 @@ const deliverOperationalSignals = (
 const operationalWorkQueues = (
   environment: PlatformMaintenanceInput
 ): OperationalHealthEnvironment["workQueues"] => ({
-  ...(Option.isSome(environment.ONBOARDING_EMAIL_QUEUE) && {
-    onboardingQueue: environment.ONBOARDING_EMAIL_QUEUE.value,
-  }),
   ...(Option.isSome(environment.BROWSER_PAIRING_EMAIL_QUEUE) && {
     browserPairingQueue: environment.BROWSER_PAIRING_EMAIL_QUEUE.value,
   }),
@@ -108,8 +105,6 @@ const requiredBindings = (environment: PlatformMaintenanceInput): ReadonlyArray<
     environment.STATEMENT_STAGING_BUCKET,
     environment.STATEMENT_EXTRACTION_QUEUE,
     environment.STATEMENT_EXTRACTION_WORKFLOW,
-    environment.ONBOARDING_EMAIL_QUEUE,
-    environment.ONBOARDING_EMAIL_WORKFLOW,
     environment.BROWSER_PAIRING_EMAIL_QUEUE,
     environment.BROWSER_PAIRING_EMAIL_WORKFLOW,
     environment.EMAIL_REPLACEMENT_QUEUE,
@@ -126,9 +121,6 @@ const operationalWorkflows = (
 ): OperationalHealthEnvironment["workflows"] => ({
   ...(Option.isSome(environment.STATEMENT_EXTRACTION_WORKFLOW) && {
     statement: environment.STATEMENT_EXTRACTION_WORKFLOW.value,
-  }),
-  ...(Option.isSome(environment.ONBOARDING_EMAIL_WORKFLOW) && {
-    onboarding: environment.ONBOARDING_EMAIL_WORKFLOW.value,
   }),
   ...(Option.isSome(environment.BROWSER_PAIRING_EMAIL_WORKFLOW) && {
     browserPairing: environment.BROWSER_PAIRING_EMAIL_WORKFLOW.value,

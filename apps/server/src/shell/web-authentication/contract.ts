@@ -5,7 +5,6 @@ import { BrowserLoginWebAuthGroup } from "~/shell/browser-login/contract";
 import {
   BrowserPairingEmailAuthenticationWebAuthGroup,
   EmailAuthenticationGroup,
-  EmailOnboardingWebAuthGroup,
 } from "~/shell/email-authentication/contract";
 import { IdentityGroup } from "~/shell/identity/contract";
 import { RecoveryGroup } from "~/shell/recovery/contract";
@@ -29,11 +28,6 @@ export {
 } from "~/shell/browser-login/contract";
 
 export {
-  VerifyEmailEnrollmentPayload,
-  CreatedVerifiedOnboarding,
-  EmailVerificationInvalidApi,
-  emailVerificationInvalidBody,
-  EmailOnboardingWebAuthGroup,
   CompleteEmailReplacementPayload,
   CompletedEmailReplacement,
   EmailReplacementInvalidApi,
@@ -64,7 +58,6 @@ export class WebAuthApi extends HttpApi.make("webAuth")
   .add(OAuthReviewGroup)
   .add(OAuthConnectionsGroup)
   .addHttpApi(ConnectionBrowserApi)
-  .add(EmailOnboardingWebAuthGroup)
   .add(BrowserPairingEmailAuthenticationWebAuthGroup)
   .annotate(OpenApi.Title, "fidy-ai WebAuth API") {}
 
@@ -77,7 +70,6 @@ export const webAuthenticationEndpoints = {
   startPairing: BrowserLoginWebAuthGroup.endpoints.startPairing,
   redeemPairing: BrowserLoginWebAuthGroup.endpoints.redeemPairing,
   logout: BrowserLoginWebAuthGroup.endpoints.logout,
-  verifyEmail: EmailOnboardingWebAuthGroup.endpoints.verifyEmail,
   startEmail: BrowserPairingEmailAuthenticationWebAuthGroup.endpoints.start,
   completeEmail: BrowserPairingEmailAuthenticationWebAuthGroup.endpoints.complete,
   requestReplacement: EmailAuthenticationGroup.endpoints.requestEmailReplacement,

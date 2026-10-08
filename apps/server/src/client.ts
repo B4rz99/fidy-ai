@@ -146,7 +146,6 @@ export {
   BrowserLoginPairingInvalidApi,
   BrowserLoginPollingRateLimitedApi,
   BrowserPairingEmailAuthenticationInvalidApi,
-  EmailVerificationInvalidApi,
   EmailReplacementFreshPairingRequiredApi,
   EmailReplacementInvalidApi,
   emailReplacementFreshBody,

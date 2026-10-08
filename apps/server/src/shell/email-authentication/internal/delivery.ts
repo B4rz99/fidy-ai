@@ -11,7 +11,6 @@ import {
   EmailSendFailed,
 } from "~/shell/email-authentication/contract";
 
-const onboardingSubject = "Verifica tu correo en Fidy";
 const replacementSubject = "Verifica tu nuevo correo en Fidy";
 const browserPairingSubject = "Tu código para iniciar sesión en Fidy";
 const successfulStatusMinimum = 200;
@@ -20,13 +19,6 @@ const rateLimitedStatus = 429;
 const serverErrorStatusMinimum = 500;
 
 type VerificationEmail = Readonly<{ subject: string; text: string; html: string }>;
-
-/** Immutable provider projection; only the fixed-format combined code varies. */
-const verificationEmail = (combinedCode: EmailVerificationCode): VerificationEmail => ({
-  subject: onboardingSubject,
-  text: `Tu código de verificación es:\n\n${combinedCode}\n\nEscríbelo en https://fidyapp.com/auth/verify-email. Este código vence en 10 minutos.\n\nSi no solicitaste este correo, ignóralo.\n\nFidy nunca te pedirá este código por WhatsApp ni por soporte.`,
-  html: `<p>Tu código de verificación es:</p><p><strong><code>${combinedCode}</code></strong></p><p>Escríbelo en <a href="https://fidyapp.com/auth/verify-email">https://fidyapp.com/auth/verify-email</a>. Este código vence en 10 minutos.</p><p>Si no solicitaste este correo, ignóralo.</p><p>Fidy nunca te pedirá este código por WhatsApp ni por soporte.</p>`,
-});
 
 /** Fixed replacement projection; the schema-bounded code is its only variable content. */
 const replacementVerificationEmail = (combinedCode: EmailVerificationCode): VerificationEmail => ({
@@ -47,7 +39,6 @@ const browserPairingVerificationEmail = (
 const verificationEmailByPurpose: Readonly<
   Record<EmailProofPurpose, (combinedCode: EmailVerificationCode) => VerificationEmail>
 > = {
-  "verified-onboarding": verificationEmail,
   "credential-replacement": replacementVerificationEmail,
   "browser-pairing-approval": browserPairingVerificationEmail,
 };

@@ -1,11 +1,9 @@
 import { admitResource, releaseOutstandingResource } from "../../../resource-admission/operations";
-import { EmailAddress } from "../../../../src/core/email-authentication/contract";
 import {
   ConsentIngressExchange,
   type ConsentIngressMessage,
   DisclosureDeliveryCorrelationToken,
   type DisclosureSnapshot,
-  type EmailStatus,
   PendingConsentExchangeId,
   PendingDisclosureJson,
   Sha256Digest,
@@ -54,20 +52,11 @@ export type DisclosureSender = (
   }>
 ) => Effect.Effect<WhatsAppSentMessage, WhatsAppSendFailed>;
 
-type EmailStatusSender = (
-  request: Readonly<{
-    caller: WhatsAppInboundEvent["caller"];
-    phoneNumberId: WhatsAppBusinessPhoneNumberId;
-    status: EmailStatus;
-  }>
-) => Effect.Effect<WhatsAppSentMessage, WhatsAppSendFailed>;
-
-type Environment = Pick<ConsentIngressEnvironment, "DB" | "onAccepted"> &
+type Environment = Pick<ConsentIngressEnvironment, "DB"> &
   Readonly<{
     delivery: Option.Option<
       Readonly<{
         sendDisclosure: DisclosureSender;
-        sendEmailStatus: EmailStatusSender;
       }>
     >;
   }>;
@@ -162,7 +151,6 @@ const PendingExchangeRow = Schema.Struct({
   expires_at_ms: Schema.Finite,
   initiating_message_id: WhatsAppProviderMessageId,
   initiating_body_sha256: Sha256Digest,
-  email_preaccept_latest_occurred_ms: Schema.NullOr(Schema.Finite),
   state: Schema.Literals([
     "awaiting_delivery",
     "outbound_started",
@@ -275,7 +263,7 @@ const findExchange = (
     db
       .prepare(`SELECT id, portfolio_id, bsuid, phone_number_id, disclosure_json, disclosure_message_id,
     correlation_token, created_at_ms, disclosed_at_ms, decision_not_before_ms, expires_at_ms, state,
-    initiating_message_id, initiating_body_sha256, email_preaccept_latest_occurred_ms
+    initiating_message_id, initiating_body_sha256
     FROM pending_consent_exchanges
     WHERE portfolio_id = ? AND bsuid = ? ORDER BY created_at_ms DESC LIMIT 1`)
       .bind(event.caller.businessPortfolioId, event.caller.businessScopedUserId)
@@ -373,27 +361,6 @@ const persistDecision = ({
 const validDisclosure = (json: string): boolean =>
   Option.isSome(Schema.decodeOption(PendingDisclosureJson)(json));
 
-const recordPrematureMailbox = (
-  db: D1Database,
-  input: Inbound,
-  exchangeId: PendingConsentExchangeId
-): Effect.Effect<Response, void> =>
-  Effect.gen(function* () {
-    if (Option.isNone(Schema.decodeOption(EmailAddress)(input.event.content.text))) {
-      return answer(HTTP_OK);
-    }
-    const recorded = yield* attempt(() =>
-      db
-        .prepare(`UPDATE pending_consent_exchanges
-        SET email_preaccept_latest_occurred_ms = MAX(
-          COALESCE(email_preaccept_latest_occurred_ms, 0), ?)
-        WHERE id = ? AND state IN ('awaiting_delivery', 'outbound_started', 'awaiting_decision')`)
-        .bind(DateTime.toEpochMillis(input.event.occurredAt), exchangeId)
-        .run()
-    );
-    return answer(recorded.meta.changes === 1 ? HTTP_OK : HTTP_CONFLICT);
-  });
-
 const recordDecision = (db: D1Database, input: Inbound): Effect.Effect<Response, void> =>
   Effect.gen(function* () {
     const replay = yield* findRecordedDecision(db, input);
@@ -412,7 +379,7 @@ const recordDecision = (db: D1Database, input: Inbound): Effect.Effect<Response,
     }
     if (!validDisclosure(pending.value.disclosure_json)) return answer(HTTP_UNAVAILABLE);
     if (choice._tag === "Clarify") {
-      return yield* recordPrematureMailbox(db, input, pending.value.id);
+      return answer(HTTP_OK);
     }
     return yield* persistDecision({ db, input, pending: pending.value, decision });
   });
@@ -469,8 +436,8 @@ const exchangeStatement = (
     .prepare(`INSERT INTO pending_consent_exchanges
     (id, portfolio_id, bsuid, phone_number_id, initiating_message_id, initiating_body_sha256,
      correlation_token, disclosure_json, created_at_ms, expires_at_ms,
-     email_preaccept_latest_occurred_ms, state)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'awaiting_delivery')`)
+     state)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'awaiting_delivery')`)
     .bind(
       id,
       input.event.caller.businessPortfolioId,
@@ -481,10 +448,7 @@ const exchangeStatement = (
       correlationToken,
       disclosureJson,
       input.receivedAtMs,
-      input.receivedAtMs + dayMs,
-      Option.isSome(Schema.decodeOption(EmailAddress)(input.event.content.text))
-        ? DateTime.toEpochMillis(input.event.occurredAt)
-        : null
+      input.receivedAtMs + dayMs
     );
 
 const admitExchange = (
@@ -669,36 +633,12 @@ const priorExchangeResponse = (
   return Option.some(answer(verdict === "replay" ? HTTP_OK : HTTP_CONFLICT));
 };
 
-const recordUndeliveredMailbox = (
-  db: D1Database,
-  input: Inbound,
-  pending: Option.Option<StoredExchange>
-): Effect.Effect<Option.Option<Response>, void> =>
-  Effect.gen(function* () {
-    if (
-      Option.isNone(pending) ||
-      (pending.value.state !== "awaiting_delivery" && pending.value.state !== "outbound_started") ||
-      Option.isNone(Schema.decodeOption(EmailAddress)(input.event.content.text))
-    ) {
-      return Option.none();
-    }
-    if (
-      pending.value.phone_number_id !== input.event.businessPhoneNumberId ||
-      input.receivedAtMs >= pending.value.expires_at_ms
-    ) {
-      return Option.some(answer(HTTP_CONFLICT));
-    }
-    return Option.some(yield* recordPrematureMailbox(db, input, pending.value.id));
-  });
-
 const startExchange = (
   environment: Environment,
   input: Inbound
 ): Effect.Effect<Response, void, Crypto.Crypto> =>
   Effect.gen(function* () {
     const pending = yield* findExchange(environment.DB, input.event);
-    const premature = yield* recordUndeliveredMailbox(environment.DB, input, pending);
-    if (Option.isSome(premature)) return premature.value;
     const prior = priorExchangeResponse(pending, input);
     if (Option.isSome(prior)) return prior.value;
     if (Option.isNone(environment.delivery)) {
@@ -716,9 +656,6 @@ const startExchange = (
     if (admitted.status !== HTTP_OK) return admitted;
     return yield* sendExchange(environment, exchange);
   });
-
-const requestsEmailStatus = (input: Inbound): boolean =>
-  input.event.content.text.trim().toLocaleLowerCase("es-CO") === "estado";
 
 const acceptedLive = (pending: Option.Option<StoredExchange>, receivedAtMs: number): boolean =>
   Option.isSome(pending) &&
@@ -748,7 +685,6 @@ export const receiveConsentText = ({
     ) {
       return yield* recordDecision(environment.DB, input);
     }
-    if (requestsEmailStatus(input)) return answer(HTTP_CONFLICT);
     return yield* startExchange(environment, input);
   });
 

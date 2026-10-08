@@ -1,6 +1,6 @@
 import { Context, type Crypto, Effect, Layer, Option, Redacted } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
-import { makeDisclosureSender, makeEmailStatusSender } from "../../../src/shell/consent/runtime";
+import { makeDisclosureSender } from "../../../src/shell/consent/runtime";
 import { type ConsentIngressEnvironment } from "./contract";
 import { receiveConsentText, recoverDisclosures, sweepExpired } from "./internal/ingress";
 
@@ -22,12 +22,8 @@ export const makeConsentIngress = ({
             apiKey: Redacted.make(environment.KAPSO_API_KEY),
             httpClient,
           }),
-          sendEmailStatus: makeEmailStatusSender({
-            apiKey: Redacted.make(environment.KAPSO_API_KEY),
-            httpClient,
-          }),
         });
-  const ingress = { DB: environment.DB, onAccepted: environment.onAccepted, delivery };
+  const ingress = { DB: environment.DB, delivery };
   return (input) => receiveConsentText({ environment: ingress, input });
 };
 

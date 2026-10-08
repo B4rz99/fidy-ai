@@ -44,9 +44,6 @@ const probeInterruptedBody = (
       KAPSO_API_KEY: "test-key",
       KAPSO_WEBHOOK_SECRET: "test-secret",
       WHATSAPP_BUSINESS_PORTFOLIO_ID: "test-portfolio",
-      onAccepted: () => {
-        throw new Error("Interrupted body cannot admit work");
-      },
       onHostedText: () => Promise.reject(new Error("Interrupted body cannot admit a Turn")),
       onHostedStatus: () => Promise.reject(new Error("Interrupted body cannot admit status")),
     })(request),

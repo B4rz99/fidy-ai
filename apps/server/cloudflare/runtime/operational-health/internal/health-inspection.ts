@@ -72,7 +72,7 @@ const emptySignal = (operation: WorkKind): PendingSignal => ({
 });
 
 const isEmailWork = (operation: WorkKind): operation is EmailWorkOperation =>
-  operation === "onboarding" || operation === "browserPairing" || operation === "emailReplacement";
+  operation === "browserPairing" || operation === "emailReplacement";
 const RejectionCount = Schema.Struct({
   count: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: sampleLimit })),
 });

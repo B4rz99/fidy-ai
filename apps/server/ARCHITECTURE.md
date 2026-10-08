@@ -178,20 +178,23 @@ session or change the stable User association. Onboarding composes verified owne
 but does not issue a WebSession. Tokens owns the distinct PAT/PATPairing lifecycle; bearer plaintext
 is disclosed only at issuance/claim, while server persistence retains verification evidence.
 
-Under #1088, Onboarding's private completion composition prepares the new User, original
-168-hour TrialPeriod and digest-only BackupRecoveryCode independently of channel evidence.
-The legacy WhatsApp/mailbox adapter, awaiting #1092 removal, requires accepted channel Consent and current mailbox
-proof: it supplies the exact exchange's WhatsApp association and historical Consent to that same
-new User. Email Authentication retains the one-use commit, adding its VerifiedEmailCredential and
-final proof-consumption guard to the single D1 batch. Refusal rolls back all owner state; success
-discloses the recovery code once in the immediate no-store response. Only the proof-bearing request
-is published; the common composition remains private. #1089 adds a Google web origin whose owner
-validates the browser-bound OIDC attempt, supplies accepted web Consent, and appends
-ProviderCredential plus origin-specific proof consumption to the same batch. Returning issuer/subject
-authentication approves the initiating BrowserLoginPairing without creating owner records or
-renewing Consent/TrialPeriod. Google and Microsoft adapters use Outbound HTTP for fixed token/JWKS destinations
-and transient tokens; the native Core root supplies its HTTP lifetime. Maintenance removes expired
-protocol attempts/receipts after one day. The legacy email owner remains pending removal. #1090 accepts personal and work/school Microsoft accounts through the common v2 authority, validating exact tenant/issuer and signing-key scope. Each attempt is bound to its selected provider. See [Google configuration and evidence](../../docs/operations/google-authentication.md) and [Microsoft configuration and evidence](../../docs/operations/microsoft-authentication.md).
+Onboarding composes a new User, original 168-hour TrialPeriod, accepted Consent and digest-only
+BackupRecoveryCode with the provider owner's verified proof in one D1 batch. Google and Microsoft
+OIDC authenticate issuer/subject; returning authentication approves the initiating BrowserLoginPairing
+without creating owner records or renewing Consent/TrialPeriod. WhatsApp-led signup additionally
+requires the exact originating chat's association confirmation. Provider contact email creates no
+VerifiedEmailCredential. Refusal rolls back all owner state; success discloses recovery once in the
+immediate no-store response. Browser Login alone creates the subsequent WebSession.
+
+The mandatory mailbox-code signup adapter, enrollment/outbox storage, Queue/Workflow and deployment
+bindings are deleted. Email Authentication retains optional existing-mailbox login and fresh-session
+credential replacement, with Resend proof delivery. Neither grants provider signup authority.
+Microsoft accepts personal and work/school accounts through the common v2 authority, validating
+exact tenant/issuer and signing-key scope. The native Core root supplies bounded Outbound HTTP for
+fixed token/JWKS destinations; Maintenance expires protocol state. See the
+[authentication feature map](../../docs/operations/authentication-feature-map.md),
+[Google evidence](../../docs/operations/google-authentication.md), and
+[Microsoft evidence](../../docs/operations/microsoft-authentication.md).
 
 Consent owns current standing and append-only evidence. A standing read is not cached authorization.
 Ordinary protected work checks current Consent. An exact Pending hosted Turn retains its admitted

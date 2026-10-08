@@ -766,7 +766,7 @@ const PROBES: readonly Probe[] = [
       {
         path: `cloudflare/${PROBE_PREFIX}onboarding-published/probe.ts`,
         source:
-          'import { completeOnboarding } from "../onboarding/operations";\nexport const published = [completeOnboarding];\n',
+          'import { completeProviderOnboarding } from "../onboarding/operations";\nexport const published = [completeProviderOnboarding];\n',
       },
     ],
   },
@@ -812,14 +812,14 @@ const PROBES: readonly Probe[] = [
     expect: {
       kind: "rejected",
       mustContain: [
-        `error onboarding-imports-unpublished-native-authority: cloudflare/onboarding/${PROBE_PREFIX}foreign-proof/probe.ts → cloudflare/email-authentication/internal/verified-onboarding.ts`,
+        `error onboarding-imports-unpublished-native-authority: cloudflare/onboarding/${PROBE_PREFIX}foreign-proof/probe.ts → cloudflare/email-authentication/internal/browser-pairing-email.ts`,
       ],
     },
     files: [
       {
         path: `cloudflare/onboarding/${PROBE_PREFIX}foreign-proof/probe.ts`,
         source:
-          'import { verifyOnboardingEmail } from "../../email-authentication/internal/verified-onboarding";\nexport const bypass = verifyOnboardingEmail;\n',
+          'import { completeBrowserPairingEmail } from "../../email-authentication/internal/browser-pairing-email";\nexport const bypass = completeBrowserPairingEmail;\n',
       },
     ],
   },
@@ -1809,14 +1809,14 @@ const PROBES: readonly Probe[] = [
     expect: {
       kind: "rejected",
       mustContain: [
-        `error foreign-module-imports-cloudflare-email-authentication-internal: tools/${PROBE_PREFIX}email-private/probe.ts → cloudflare/email-authentication/internal/onboarding-workflow.ts`,
+        `error foreign-module-imports-cloudflare-email-authentication-internal: tools/${PROBE_PREFIX}email-private/probe.ts → cloudflare/email-authentication/internal/proof-delivery.ts`,
       ],
     },
     files: [
       {
         path: `tools/${PROBE_PREFIX}email-private/probe.ts`,
         source:
-          'import { sendThroughResend } from "../../cloudflare/email-authentication/internal/onboarding-workflow";\nexport const provider = sendThroughResend;\n',
+          'import { sendThroughResend } from "../../cloudflare/email-authentication/internal/proof-delivery";\nexport const provider = sendThroughResend;\n',
       },
     ],
     name: "tooling cannot acquire Email Authentication provider delivery authority",

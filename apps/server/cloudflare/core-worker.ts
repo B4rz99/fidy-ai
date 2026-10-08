@@ -8,7 +8,6 @@ import type { WorkersAiEnvironment } from "./ai/contract";
 import type {
   BrowserPairingEmailEnvironment,
   EmailReplacementEnvironment,
-  OnboardingEmailEnvironment,
 } from "./email-authentication/contract";
 import type { BillingCollectionEnvironment } from "./subscription/contract";
 import type { SmokeEnvironment } from "./runtime/release-smoke/contract";
@@ -20,7 +19,6 @@ import { cloudflareWorkerTelemetry, observeWorkerExecution } from "./runtime/tel
 export {
   BrowserPairingEmailWorkflowV1,
   EmailReplacementWorkflowV1,
-  OnboardingEmailWorkflowV1,
 } from "./email-authentication/runtime";
 export { OperationalCanaryWorkflowV1 } from "./operational-canary-workflow";
 export {
@@ -71,8 +69,7 @@ type CoreEnvironment = ProviderEnvironment &
     }>
   > &
   Partial<SmokeEnvironment> &
-  Partial<Omit<OnboardingEmailEnvironment, "DB">> &
-  Partial<Omit<BrowserPairingEmailEnvironment, "DB" | "RESEND_API_KEY">> &
+  Partial<Omit<BrowserPairingEmailEnvironment, "DB">> &
   Partial<Omit<EmailReplacementEnvironment, "DB" | "RESEND_API_KEY">> &
   /** Private R2 binding for staged statement bytes; absent fails the transport closed. */
   Partial<
@@ -162,13 +159,11 @@ const maintenanceInput = (environment: CoreEnvironment): CoreMaintenanceInput =>
   OPERATIONAL_CANARY_WORKFLOW: Option.fromUndefinedOr(environment.OPERATIONAL_CANARY_WORKFLOW),
   EMAIL_BUCKET: Option.fromUndefinedOr(environment.EMAIL_BUCKET),
   STATEMENT_STAGING_BUCKET: Option.fromUndefinedOr(environment.STATEMENT_STAGING_BUCKET),
-  ONBOARDING_EMAIL_QUEUE: Option.fromUndefinedOr(environment.ONBOARDING_EMAIL_QUEUE),
   BROWSER_PAIRING_EMAIL_QUEUE: Option.fromUndefinedOr(environment.BROWSER_PAIRING_EMAIL_QUEUE),
   EMAIL_REPLACEMENT_QUEUE: Option.fromUndefinedOr(environment.EMAIL_REPLACEMENT_QUEUE),
   BILLING_COLLECTION_QUEUE: Option.fromUndefinedOr(environment.BILLING_COLLECTION_QUEUE),
   STATEMENT_EXTRACTION_QUEUE: Option.fromUndefinedOr(environment.STATEMENT_EXTRACTION_QUEUE),
   HOSTED_WHATSAPP_QUEUE: Option.fromUndefinedOr(environment.HOSTED_WHATSAPP_QUEUE),
-  ONBOARDING_EMAIL_WORKFLOW: Option.fromUndefinedOr(environment.ONBOARDING_EMAIL_WORKFLOW),
   BROWSER_PAIRING_EMAIL_WORKFLOW: Option.fromUndefinedOr(
     environment.BROWSER_PAIRING_EMAIL_WORKFLOW
   ),

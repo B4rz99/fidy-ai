@@ -210,7 +210,6 @@ const migrationNames = [
   "0001_categories",
   "0002_resource_admission",
   "0003_pending_consent",
-  "0004_onboarding_email",
   "0005_verified_onboarding",
   "0006_browser_login",
   "0007_browser_pairing_email",

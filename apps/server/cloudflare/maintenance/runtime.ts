@@ -20,10 +20,8 @@ import { recoverPendingDisclosures, sweepExpiredConsent } from "../consent/ingre
 import {
   dispatchBrowserPairingEmail,
   dispatchEmailReplacement,
-  dispatchOnboardingEmail,
   reconcileBrowserPairingEmail,
   reconcileEmailReplacement,
-  reconcileOnboardingEmail,
 } from "../email-authentication/runtime";
 import {
   dispatchBillingCollection,
@@ -60,19 +58,6 @@ const activity = <E>(
 ): ScheduledActivity => ({ operation, work: work.pipe(Effect.mapError(() => undefined)) });
 
 const emailActivities = (environment: CoreMaintenanceInput): ReadonlyArray<ScheduledActivity> => [
-  activity(
-    "onboarding.email.dispatch",
-    Option.match(environment.ONBOARDING_EMAIL_QUEUE, {
-      onNone: () => Effect.void,
-      onSome: (queue) =>
-        dispatchOnboardingEmail({
-          DB: environment.DB,
-          ONBOARDING_EMAIL_QUEUE: queue,
-          identity: Option.none(),
-        }),
-    })
-  ),
-  activity("onboarding.email.reconcile", reconcileOnboardingEmail(environment.DB)),
   activity(
     "browserPairing.email.dispatch",
     Option.match(environment.BROWSER_PAIRING_EMAIL_QUEUE, {

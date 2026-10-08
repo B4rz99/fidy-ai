@@ -29,7 +29,7 @@ it("refuses wrong-method authentication and unknown paths before any owner can c
         ["/web/pairings", "GET", 405],
         ["/web/pairings/redeem", "GET", 405],
         ["/web/email/authentication/complete", "GET", 405],
-        ["/web/onboarding/email/verify", "GET", 405],
+        ["/web/onboarding/email/verify", "GET", 404],
         ["/recovery/backup-code/rotate", "GET", 405],
         ["/internal/support-recovery", "GET", 405],
         ["/web/session/logout", "GET", 405],

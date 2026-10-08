@@ -130,8 +130,8 @@ The static artifact contains no server implementation or Secrets. Local developm
 entrypoints, D1 migrations, and binding graph; other remote stages are rejected before resource
 creation.
 
-The application combines synchronous D1 commits with durable asynchronous execution. Onboarding,
-browser-pairing and replacement email, and billing collection use transactional outboxes, Queues,
+The application combines synchronous D1 commits with durable asynchronous execution.
+Browser-pairing and replacement email, and billing collection use transactional outboxes, Queues,
 and versioned Workflows. Statement extraction also uses a durable outbox and a Queue/Workflow path
 through the User coordinator. Prompt email/billing publication follows a commit; cron recovers missed offers and runs
 independent reconciliation and retention activities. Shared dead letters and bounded operational
@@ -171,4 +171,5 @@ browser pairing to the authenticated originating Consent exchange. The chat revi
 account and matching association identifier, and replies to the exact review message. Completion
 atomically creates all new-User records and the initial WhatsAppIdentity, or adds only that association
 to an existing provider User. Established associations refuse replacement. Browser Login retains sole
-WebSession ownership. Legacy mailbox endpoints remain for the separate #1092 removal slice.
+WebSession ownership. Superseded mailbox-code signup has been removed under #1093; optional
+mailbox login/replacement requires independently established VerifiedEmailCredential authority.

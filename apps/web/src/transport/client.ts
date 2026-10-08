@@ -49,7 +49,6 @@ export {
   BrowserLoginPollingRateLimitedApi,
   EmailAddress,
   EmailVerificationCode,
-  EmailVerificationInvalidApi,
   EmailReplacementFreshPairingRequiredApi,
   EmailReplacementInvalidApi,
   DashboardCatalogEntry,

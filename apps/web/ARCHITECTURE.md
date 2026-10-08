@@ -88,8 +88,10 @@ and uncertain completion discard private proof and explain fresh sign-in; no mut
 recovery redisclosure. Authentication can succeed after Consent withdrawal while ordinary work
 remains gated. Personal and work/school Microsoft accounts are accepted; initial WhatsApp linking is installed under #1091.
 
-The preserved channel/mailbox Browser Login begins at `/auth/pair`. The browser retains the private verifier while WhatsApp
-approval, email authentication, or support recovery receives only its intended public proof. Public
+The optional channel/mailbox Browser Login begins at `/auth/pair`. The browser retains the private verifier while WhatsApp
+approval, independently established mailbox authentication, or support recovery receives only its
+intended public proof. Provider contact email cannot use this mailbox path. The superseded
+`/auth/verify-email` signup page is removed. Public
 references cannot establish a session, and pairing material does not enter URLs, unrelated browser
 state, or static artifacts.
 

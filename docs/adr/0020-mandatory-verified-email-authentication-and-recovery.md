@@ -1,83 +1,99 @@
-# Mandatory verified-email authentication and recovery
+# Google/Microsoft authentication, shared onboarding, and backup recovery
 
 - **Status:** Accepted
 - **Date:** 2026-08-23
-- **Amended:** 2026-08-27
-- **Active specification:** [Email authentication and recovery specification](https://github.com/B4rz99/fidy-ai/issues/14)
+- **Amended:** 2026-10-07
+- **Implementation issue:** [Complete signup and browser login](https://github.com/B4rz99/fidy-ai/issues/1086)
+- **Historical implementation:** [Verified email authentication and backup recovery](https://github.com/B4rz99/fidy-ai/issues/14)
+- **Amends:** [ADR 0015](./0015-browser-paired-web-authentication.md) for provider approval and [ADR 0011](./0011-bsuid-authority-for-whatsapp-identity.md) for explicit initial association of an existing User; their session ownership and BSUID authority remain.
 
 ## Context
 
-`UserId` must remain the stable owner when WhatsApp access changes or disappears. An optional
-verified email would leave some Users with no safe independent login proof and force support either
-to deny recovery or infer identity from new contact details, documents, or financial facts. Making
-email mandatory adds onboarding friction and another item of personal data, but it establishes one
-consistent mailbox credential before Fidy creates durable User state.
-
-Email must not become a second identity root. Authentication that creates another User, swaps a
-WhatsAppIdentity, or introduces its own session would split ownership and financial history. Naming
-the credential only for recovery would also hide that the same established proof supports ordinary
-email login.
+Mandatory mailbox codes add enrollment, delivery, resend, expiry, and uncertain-outcome handling to
+signup and login. Visitors should use the same Google/Microsoft authentication from the public
+website or a WhatsApp-led handoff. `UserId` must remain independent of providers and channels.
+Provider sign-in proves provider-account control, not universal control of a returned email address.
 
 ## Decision
 
-A User has exactly one VerifiedEmailCredential. New onboarding accepts the current Consent
-disclosure first, collects the required email, and proves mailbox control before creating the User.
-The normalized credential is globally unique; normalization trims and lowercases the address and
-never applies provider-specific dot or plus-address equivalence. The onboarding disclosure covers
-the mandatory contact and authentication purpose, so there is no separate email Consent grant.
+Google and Microsoft OpenID Connect (OIDC) authentication is sufficient for signup and ordinary
+provider login. Both entry points share one provider-authentication and onboarding implementation.
+Web signup requires no WhatsAppIdentity. WhatsApp signup accepts the current Fidy Consent disclosure
+and opens a first-party provider-signup page instead of collecting an email and delivering a Fidy
+verification code. Web signup also requires the current Consent disclosure. Neither journey requires
+a Fidy mailbox code. Signup therefore requires a supported Google or Microsoft account.
 
-Resend is the launch outbound adapter. EmailAuthentication owns bounded pre-User mailbox enrollment,
-short-lived purpose-bound proofs, durable delivery state, the VerifiedEmailCredential, replacement,
-and email approval of BrowserLoginPairing. Proofs are stored only as digests and submitted through
-direct POST bodies on stable first-party web forms. They do not enter WhatsApp, Transcript, model
-context, URLs, logs, analytics, or recoverable storage. A signed-in replacement verifies the
-candidate before atomically replacing the current credential; the old credential remains
-authoritative until that commit.
+A User is created with an established ProviderCredential, accepted Consent evidence, TrialPeriod,
+and recovery credential in one atomic unit. WhatsApp-led signup also establishes WhatsAppIdentity
+in that unit only after both sides of the association have been proven. ProviderCredential binds
+validated issuer and subject to one stable UserId; email, display name, and phone are never its
+identity key. Validate the provider response, intended audience, expiry, and browser-bound attempt
+before using it. Request authentication scopes only, not mailbox-reading access.
 
-Ordinary email login and email-assisted recovery use the same mechanism: a valid proof for the stored
-VerifiedEmailCredential approves an existing BrowserLoginPairing for that credential's existing
-UserId. The browser-private verifier remains independently necessary and Browser Login alone creates
-the WebSession. Authentication remains available after explicit Consent revocation so the User can
-reach Fidy-owned re-consent and data-rights surfaces, while ordinary canonical work remains blocked.
-Email authentication never creates a User, substitutes a newly supplied email, or replaces or
-reassociates WhatsAppIdentity.
+Returned email is contact information, not automatically a VerifiedEmailCredential or authority for
+email-code login, recovery, User merging, or channel association. Google can be authoritative for
+Gmail and qualifying Workspace mailboxes; third-party Google addresses and Microsoft's general email
+claim do not supply the same guarantee. Missing or changed email claims do not change an established
+ProviderCredential's UserId. Removing the mandatory VerifiedEmailCredential is intentional, not a
+claim that every provider address has independently verified mailbox control.
 
-Recovery owns BackupRecoveryCode digests and SupportRecoveryCases. Onboarding discloses one
-BackupRecoveryCode once and retains only its digest. If both email and WhatsApp authority are lost,
-an authenticated operator CLI may use that code and a tracked metadata-only SupportRecoveryCase to
-approve an existing BrowserLoginPairing. Approval consumes the code. If the User has also lost it,
-Fidy refuses recovery rather than attempting document-based KYC or inferring ownership from personal
-or financial facts.
+An opened or forwarded WhatsApp signup link never authorizes association. Completion requires the
+provider-authenticated browser and explicit confirmation from the authenticated originating
+WhatsApp caller, bound to the exact short-lived attempt and reviewed association. If the provider
+credential already belongs to a User, preserve that User and require explicit linking; never create
+a duplicate or silently associate by matching email. This permits initial association of an existing
+web-created User, not replacement or reassociation of an established WhatsAppIdentity. BSUID authority
+and the refusal of phone-based association remain unchanged.
 
-Support approval is an accepted cross-slice coordination transaction. Recovery owns its credential,
-case, and append-only evidence writes; after taking those locks it calls BrowserLogin's published
-owner operation, which alone locks, rechecks, and binds the existing pairing. Pairing binding,
-credential consumption, approval evidence, and case closure commit or roll back together. BrowserLogin
-alone creates the subsequent WebSession and records its source pairing. Recovery may use that stable
-pairing provenance to authorize one fresh-session BackupRecoveryCode rotation, but neither creates a
-WebSession nor writes BrowserLogin-owned state directly.
+Browser Login remains the only module that creates a WebSession. Provider authentication approves
+the initiating browser-bound pairing for the established User; the independent browser-private
+verifier remains necessary for redemption. Signup may continue into that separate login step without
+another manual approval screen. Existing WhatsApp approval and SupportRecoveryCase approval remain
+available. Provider callbacks do not mint a parallel session. Authentication remains available after
+explicit Consent revocation to reach Fidy-owned re-consent and data-rights surfaces, while ordinary
+canonical work remains blocked.
+
+Provider tokens, browser verifiers, and recovery secrets never enter chat, Transcript, model context,
+telemetry, or recoverable browser storage. Public handoff references grant no completion or session
+authority. Any protocol-required authorization code is confined to the exact validated provider
+callback, consumed once, and excluded from logging, referrers, and subsequent navigation; it is not
+a Fidy magic link or session bearer. Callback and handoff replay, expiry, cancellation, and uncertain
+outcomes must fail safely without duplicate creation or blind mutation retries.
+
+Recovery owns BackupRecoveryCode digests and SupportRecoveryCases. Onboarding discloses one code once
+on the first-party surface. When provider access and any established WhatsApp authority are lost,
+an authenticated operator CLI can use that code and a tracked metadata-only case to approve an
+existing BrowserLoginPairing. Approval consumes the code. Loss of every established proof ends recovery;
+support never infers ownership from contact details, documents, or financial facts. Recovery's proof
+consumption, evidence, case closure, and Browser Login's pairing binding remain one atomic coordination
+unit; Browser Login alone issues the subsequent session. Fresh-session recovery-code rotation remains.
 
 ## Consequences
 
-The final onboarding transaction composes EmailAuthentication, Recovery, Identity, and Consent owner
-operations under ADR 0009. Identity starts the TrialPeriod as part of creating the User; TrialPeriod
-is not another owner. Credential replacement, ordinary email login, and both recovery paths preserve
-stable UserId and financial history. Post-revocation authentication is a narrow exception to the
-ordinary Consent gate, not permission for financial processing.
+Issue #1086 must replace the superseded onboarding email-code path and align owner contracts, database
+guards, Consent evidence, browser surfaces, security standards, and architecture documents. Resend's
+unrelated delivery responsibilities are unaffected. Provider signup/login and explicit initial WhatsApp association are implemented locally; #1093
+removes the earlier mailbox-code signup runtime. This is not Production-verified behavior.
+No backward-compatibility requirement applies to this unreleased product.
+
+Microsoft personal and work/school accounts from public-cloud Entra tenants are supported. Credential-management scope beyond the required explicit
+linking must not be invented as part of signup.
 
 ## Rejected alternatives
 
-- **Optional email:** rejected because it leaves an unbounded unsafe support fallback.
-- **Recovery-only naming:** rejected because the same credential supports ordinary login and
-  recovery; the narrower name would misstate its lifecycle and purpose.
-- **EmailIdentity or a generic identity-provider abstraction:** rejected because the mailbox is a
-  credential for one stable User, not another identity root, and the launch choice is concrete.
-- **Passwords, magic links, or proof-bearing URLs:** rejected because they add durable or leak-prone
-  bearer surfaces without improving the paired-browser proof.
-- **Phone fallback or automatic WhatsApp reassociation:** rejected because mutable or recycled phone
-  evidence cannot prove ownership of the existing User.
-- **Documents, financial history, or newly supplied contact details as support proof:** rejected
-  because Fidy performs no KYC and those facts do not safely establish remote authority.
+- **Mandatory Fidy mailbox codes after provider sign-in:** rejected as redundant authentication
+  friction under the accepted provider-credential model, not because all email claims prove mailbox control.
+- **Automatic email matching or WhatsApp linking:** rejected because contact claims and forwarded
+  handoffs cannot prove authority to merge Users or attach a channel.
+- **Passwords, Fidy magic links, or provider-specific sessions:** rejected because they introduce
+  additional credential or session lifecycles instead of reusing Browser Login.
+- **Phone fallback, automatic WhatsApp reassociation, or document-based recovery:** rejected because
+  these do not establish authority for the existing stable User.
+
+## References
+
+- [Google ID-token verification and authoritative mailbox claims](https://developers.google.com/identity/gsi/web/guides/verify-google-id-token)
+- [Microsoft ID-token claims and email limitations](https://learn.microsoft.com/en-us/entra/identity-platform/id-token-claims-reference)
 
 ## Implementation status after #1091
 
@@ -97,5 +113,8 @@ proof are rechecked and consumed together in D1; an existing User receives only 
 Native send claims and admission fence uncertainty; no blind resend or recovery redisclosure occurs.
 Microsoft eligibility is resolved: personal and work/school accounts from public-cloud Entra tenants.
 Real authenticated Worker/D1 and built-browser journeys are local evidence. Deployed Google/Microsoft
-callbacks and real WhatsApp delivery/confirmation remain prelaunch checks. Legacy mailbox-code adapter
-removal belongs to #1092; this does not add a compatibility commitment.
+callbacks and real WhatsApp delivery/confirmation remain prelaunch checks. Legacy mailbox-code signup adapters are deleted in #1093, with no compatibility path. Both provider
+browser journeys prove backup recovery and rotation without WhatsApp or mailbox authority; the
+authenticated operator CLI and its deployed evidence remain tracked in #1092.
+See the [authentication feature map](../operations/authentication-feature-map.md) for current local
+evidence and remaining prelaunch checks.

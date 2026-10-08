@@ -9,7 +9,7 @@ import { type EmailDeliveryPortService, EmailSendFailed } from "./contract";
 import { makeEmailDelivery } from "./runtime";
 
 const deliveryInput = (): Parameters<EmailDeliveryPortService["send"]>[0] => ({
-  purpose: "verified-onboarding" as const,
+  purpose: "credential-replacement" as const,
   to: EmailAddress.make("person@example.com"),
   combinedCode: EmailVerificationCode.make("ABCD-EFGH-JKLM-NPQR-STUV-WXYZ"),
   idempotencyKey: "private-delivery-idempotency",
@@ -165,11 +165,6 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const purposes = [
-        {
-          purpose: "verified-onboarding",
-          subject: "Verifica tu correo en Fidy",
-          path: "/auth/verify-email",
-        },
         {
           purpose: "credential-replacement",
           subject: "Verifica tu nuevo correo en Fidy",

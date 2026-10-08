@@ -1,5 +1,6 @@
 import { playwright } from "./playwright-runtime";
-import type { APIRequestContext, BrowserContext, Page, Route } from "@playwright/test";
+import { visiblePairingCode } from "./real-core-fixture";
+import type { APIRequestContext, APIResponse, BrowserContext, Page, Route } from "@playwright/test";
 import { type Cause, Effect, Schema } from "effect";
 
 export type ProviderJourneyConfiguration = Readonly<{
@@ -19,6 +20,7 @@ const pendingStatus = 202;
 const noContentStatus = 204;
 const forbiddenStatus = 403;
 const successStatus = 200;
+const invalidStatus = 400;
 
 // Provider UI is the only substituted edge; completion and Browser Login run through real Core/D1.
 const redirectSubject = (
@@ -125,6 +127,9 @@ export const signupJourney = ({
           (cookie) => cookie.name === "__Host-fidy_session"
         )
       ).toBe(false);
+      const backupRecoveryCode = yield* Effect.tryPromise(() =>
+        page.getByLabel("Código de recuperación", { exact: true }).innerText()
+      );
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Lo guardé" }).click());
       yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/app\/transactions$/u));
       yield* Effect.tryPromise(() => page.reload());
@@ -132,15 +137,8 @@ export const signupJourney = ({
         expect(page.getByText("Aún no hay transacciones este mes")).toBeVisible()
       );
       expect(yield* Effect.tryPromise(() => page.evaluate(retainedSecretCount))).toBe(0);
-      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cerrar sesión" }).click());
-      yield* Effect.tryPromise(() => page.goto(`/auth/${configuration.provider}`));
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Ya tengo cuenta · Iniciar sesión" }).click()
-      );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click()
-      );
-      yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/app\/transactions$/u));
+      yield* returningProviderLogin({ configuration, page });
+      yield* providerRecoveryJourney({ page, context, request, backupRecoveryCode });
       yield* returningSessionPolicies(configuration, { page, context, request });
     })
   );
@@ -347,15 +345,19 @@ export const blockedPopupJourney = ({
   );
 
 const createWebUserForAssociation = (
-  input: Readonly<{ page: Page; context: BrowserContext }>
+  input: Readonly<{
+    page: Page;
+    context: BrowserContext;
+    configuration: ProviderJourneyConfiguration;
+  }>
 ): Effect.Effect<void, Cause.UnknownError> =>
   Effect.gen(function* () {
-    yield* Effect.tryPromise(() => input.page.goto("/auth/google"));
+    yield* Effect.tryPromise(() => input.page.goto(`/auth/${input.configuration.provider}`));
     yield* Effect.tryPromise(() =>
       input.page.getByLabel("Acepto el tratamiento de datos descrito").check()
     );
     yield* Effect.tryPromise(() =>
-      input.page.getByRole("button", { name: "Continuar con Google" }).click()
+      input.page.getByRole("button", { name: `Continuar con ${input.configuration.label}` }).click()
     );
     yield* Effect.tryPromise(() =>
       expect(input.page.getByText("Guarda tu código de recuperación")).toBeVisible()
@@ -404,46 +406,39 @@ const confirmBrowserAssociation = ({
     expect(confirmation.status()).toBe(successStatus);
   });
 export const whatsappAssociationJourney = ({
+  configuration,
   page,
   context,
   request,
   existing,
-}: ProviderJourney & Readonly<{ existing: boolean }>): Promise<void> =>
+}: ProviderJourney &
+  Readonly<{ existing: boolean; configuration: ProviderJourneyConfiguration }>): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const configuration: ProviderJourneyConfiguration = {
-        provider: "google",
-        label: "Google",
-        authorizationPattern: "https://accounts.google.com/o/oauth2/v2/auth**",
-        selectFromPublicSite: false,
-      };
-      const suffix = existing ? "existing" : "new";
+      const suffix = `${configuration.provider}-${existing ? "existing" : "new"}`;
       yield* Effect.tryPromise(() =>
         context.route(configuration.authorizationPattern, (route) =>
           redirectSubject(configuration, `whatsapp-browser-${suffix}`, route)
         )
       );
-      if (existing) yield* createWebUserForAssociation({ page, context });
-      const caller = `CO.Browser${suffix}`;
+      if (existing) yield* createWebUserForAssociation({ page, context, configuration });
+      const caller = `CO.Browser${configuration.provider}${existing ? "existing" : "new"}`;
       const start = yield* Effect.tryPromise(() =>
         request.post(`http://127.0.0.1:4175/whatsapp/start?caller=${caller}`)
       );
       const handoff = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ handoffReference: Schema.String })
       )(yield* Effect.tryPromise(() => start.json()));
-      yield* Effect.tryPromise(() => page.goto(`/auth/google?handoff=${handoff.handoffReference}`));
-      expect(
-        yield* Effect.tryPromise(() =>
-          page.getByLabel("Acepto el tratamiento de datos descrito").count()
-        )
-      ).toBe(0);
-      expect(
-        yield* Effect.tryPromise(() =>
-          page.getByRole("link", { name: "Microsoft", exact: true }).getAttribute("href")
-        )
-      ).toContain(`handoff=${handoff.handoffReference}`);
       yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Continuar con Google" }).click()
+        page.goto(`/auth/${configuration.provider}?handoff=${handoff.handoffReference}`)
+      );
+      yield* verifyHandoffEntry({
+        page,
+        configuration,
+        handoffReference: handoff.handoffReference,
+      });
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click()
       );
       yield* confirmBrowserAssociation({ page, context, request, caller });
       if (existing) {
@@ -461,3 +456,108 @@ export const whatsappAssociationJourney = ({
       expect(yield* Effect.tryPromise(() => page.evaluate(retainedSecretCount))).toBe(0);
     })
   );
+
+/** Recovery uses the pre-issued proof without calling either provider or requiring a mailbox. */
+const providerRecoveryJourney = ({
+  page,
+  context,
+  request,
+  backupRecoveryCode,
+}: ProviderJourney & Readonly<{ backupRecoveryCode: string }>): Effect.Effect<
+  void,
+  Cause.UnknownError
+> =>
+  Effect.gen(function* () {
+    const identity = yield* Effect.tryPromise(() =>
+      context.request.get("https://127.0.0.1:4174/user")
+    );
+    const before: unknown = yield* Effect.tryPromise(() => identity.json());
+    yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cerrar sesión" }).click());
+    const pending = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/web/pairings/redeem") && response.status() === pendingStatus
+    );
+    yield* Effect.tryPromise(() => page.goto("/auth/pair"));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click()
+    );
+    const pairingCode = yield* Effect.tryPromise(() => visiblePairingCode(page));
+    yield* Effect.tryPromise(() => pending);
+    const assertion = yield* Effect.tryPromise(() =>
+      request.get("http://127.0.0.1:4175/assertion").then((response) => response.text())
+    );
+    const decision = (): Promise<APIResponse> =>
+      request.post("https://127.0.0.1:4174/internal/support-recovery", {
+        headers: { "cf-access-jwt-assertion": assertion },
+        data: { pairingCode, backupRecoveryCode },
+      });
+    expect((yield* Effect.tryPromise(decision)).status()).toBe(successStatus);
+    expect((yield* Effect.tryPromise(decision)).status()).toBe(invalidStatus);
+    yield* Effect.tryPromise(() =>
+      expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15000 })
+    );
+    const recovered = yield* Effect.tryPromise(() =>
+      context.request.get("https://127.0.0.1:4174/user")
+    );
+    expect(yield* Effect.tryPromise(() => recovered.json())).toEqual(before);
+    yield* Effect.tryPromise(() => page.goto("/settings/recovery"));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Crear un código nuevo" }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      expect(page.getByRole("button", { name: "Copiar código" })).toBeVisible()
+    );
+    expect(yield* Effect.tryPromise(() => page.locator("code").innerText())).not.toBe(
+      backupRecoveryCode
+    );
+    yield* Effect.tryPromise(() => page.reload());
+    yield* Effect.tryPromise(() => expect(page.locator("code")).toHaveCount(0));
+    expect(yield* Effect.tryPromise(() => page.evaluate(retainedSecretCount))).toBe(0);
+    yield* Effect.tryPromise(() => page.goto("/app/transactions"));
+  });
+
+const returningProviderLogin = ({
+  configuration,
+  page,
+}: Readonly<{ configuration: ProviderJourneyConfiguration; page: Page }>): Effect.Effect<
+  void,
+  Cause.UnknownError
+> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cerrar sesión" }).click());
+    yield* Effect.tryPromise(() => page.goto(`/auth/${configuration.provider}`));
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: "Ya tengo cuenta · Iniciar sesión" }).click()
+    );
+    yield* Effect.tryPromise(() =>
+      page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click()
+    );
+    yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/app\/transactions$/u));
+  });
+
+const verifyHandoffEntry = ({
+  page,
+  configuration,
+  handoffReference,
+}: Readonly<{
+  page: Page;
+  configuration: ProviderJourneyConfiguration;
+  handoffReference: string;
+}>): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    expect(
+      yield* Effect.tryPromise(() =>
+        page.getByLabel("Acepto el tratamiento de datos descrito").count()
+      )
+    ).toBe(0);
+    expect(
+      yield* Effect.tryPromise(() =>
+        page
+          .getByRole("link", {
+            name: configuration.provider === "google" ? "Microsoft" : "Google",
+            exact: true,
+          })
+          .getAttribute("href")
+      )
+    ).toContain(`handoff=${handoffReference}`);
+  });

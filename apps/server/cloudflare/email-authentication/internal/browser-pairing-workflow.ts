@@ -8,7 +8,7 @@ import {
 } from "../../../src/core/email-authentication/contract";
 import type { WorkflowStepConfig } from "cloudflare:workers";
 import { Clock, Effect, Exit, Option, Schema } from "effect";
-import { deliveryState, sendThroughResend } from "./onboarding-workflow";
+import { deliveryState, sendThroughResend } from "./proof-delivery";
 
 const Outbox = Schema.Struct({ id: Schema.String.check(Schema.isUUID()) });
 const Pending = Schema.Struct({

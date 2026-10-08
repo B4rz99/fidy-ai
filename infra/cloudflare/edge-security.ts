@@ -104,7 +104,6 @@ const reservedRateLimitPaths = [
   ...Object.values(connectionBrowserPaths),
   reservedIngress.httpCallbacks.kapso.path,
   reservedIngress.httpCallbacks.wompi.path,
-  "/web/onboarding/email/verify",
   "/web/pairings",
   "/web/pairings/redeem",
   "/web/session/logout",

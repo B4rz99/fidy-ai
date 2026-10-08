@@ -12,8 +12,6 @@ export type CoreQueueEnvironment = Readonly<{
     Readonly<{
       EMAIL_BUCKET: R2Bucket;
       RESEND_API_KEY: string;
-      ONBOARDING_EMAIL_QUEUE: Queue;
-      ONBOARDING_EMAIL_WORKFLOW: Workflow;
       BROWSER_PAIRING_EMAIL_WORKFLOW: Workflow;
       EMAIL_REPLACEMENT_WORKFLOW: Workflow;
       BILLING_COLLECTION_WORKFLOW: Workflow;

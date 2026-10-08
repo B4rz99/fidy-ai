@@ -26,7 +26,6 @@ export type CoreHttpEnvironment = ProviderEnvironment &
       WOMPI_DAVIPLATA_ACTIVATED: string;
       WOMPI_DAVIPLATA_OTP_SEND_URL: string;
       WOMPI_DAVIPLATA_OTP_CONFIRM_URL: string;
-      ONBOARDING_EMAIL_QUEUE: Queue;
       BROWSER_PAIRING_EMAIL_QUEUE: Queue;
       EMAIL_REPLACEMENT_QUEUE: Queue;
       BILLING_COLLECTION_QUEUE: Queue;

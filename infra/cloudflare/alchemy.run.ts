@@ -221,10 +221,6 @@ export default Alchemy.Stack(
     const weeklyDeliveryWorkflow = Cloudflare.Workflow("WeeklyDeliveryWorkflow", {
       className: "ProactivityDeliveryWorkflow",
     });
-    const onboardingEmailQueue = yield* Cloudflare.Queues.Queue("OnboardingEmailQueue");
-    const onboardingEmailWorkflow = Cloudflare.Workflow("OnboardingEmailWorkflowV1", {
-      className: "OnboardingEmailWorkflowV1",
-    });
     const browserPairingEmailQueue = yield* Cloudflare.Queues.Queue("BrowserPairingEmailQueue");
     const browserPairingEmailWorkflow = Cloudflare.Workflow("BrowserPairingEmailWorkflowV1", {
       className: "BrowserPairingEmailWorkflowV1",
@@ -299,8 +295,6 @@ export default Alchemy.Stack(
         BILLING_SUPPORT_AUDIENCE: yield* Config.String("BILLING_SUPPORT_AUDIENCE").pipe(
           Config.withDefault("")
         ),
-        ONBOARDING_EMAIL_QUEUE: onboardingEmailQueue,
-        ONBOARDING_EMAIL_WORKFLOW: onboardingEmailWorkflow,
         BROWSER_PAIRING_EMAIL_QUEUE: browserPairingEmailQueue,
         BROWSER_PAIRING_EMAIL_WORKFLOW: browserPairingEmailWorkflow,
         EMAIL_REPLACEMENT_QUEUE: emailReplacementQueue,
@@ -385,12 +379,6 @@ export default Alchemy.Stack(
       settings: { batchSize: 10, maxRetries: 3 },
     });
 
-    yield* Cloudflare.Queues.Consumer("OnboardingEmailConsumer", {
-      queueId: onboardingEmailQueue.queueId,
-      scriptName: core.workerName,
-      deadLetterQueue: asyncDeadLetters.queueName,
-      settings: { batchSize: 10, maxRetries: 3 },
-    });
     yield* Cloudflare.Queues.Consumer("BrowserPairingEmailConsumer", {
       queueId: browserPairingEmailQueue.queueId,
       scriptName: core.workerName,

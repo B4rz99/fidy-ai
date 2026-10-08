@@ -41,6 +41,7 @@ playwright.test(
 for (const existing of [false, true]) {
   playwright.test(
     `WhatsApp provider handoff confirms the originating chat and ${existing ? "initially links a web-created User" : "creates a new User with recovery"}`,
-    ({ page, context, request }) => whatsappAssociationJourney({ page, context, request, existing })
+    ({ page, context, request }) =>
+      whatsappAssociationJourney({ configuration, page, context, request, existing })
   );
 }

@@ -32,7 +32,6 @@ import {
 import {
   dispatchBrowserPairingEmail,
   dispatchEmailReplacement,
-  dispatchOnboardingEmail,
 } from "../../email-authentication/runtime";
 
 import { UserActionRequired } from "../../../src/shell/public-http/contract";
@@ -129,12 +128,7 @@ const ReleaseConfiguration = Schema.Struct({
   RELEASE_GIT_SHA: Schema.String.check(Schema.isPattern(gitRevisionPattern)),
 });
 
-type PublicationKind =
-  | "onboarding"
-  | "browserPairing"
-  | "emailReplacement"
-  | "billing"
-  | "whatsapp";
+type PublicationKind = "browserPairing" | "emailReplacement" | "billing" | "whatsapp";
 type PublishAcceptedWork = (kind: PublicationKind, id: string) => void;
 
 const publicationActivities = (
@@ -150,14 +144,6 @@ const publicationActivities = (
             queue: environment.HOSTED_WHATSAPP_QUEUE,
             userId: Option.map(identity, (id) => UserId.make(id)),
           }).pipe(Effect.mapError(() => undefined)),
-    onboarding: () =>
-      environment.ONBOARDING_EMAIL_QUEUE === undefined
-        ? Effect.void
-        : dispatchOnboardingEmail({
-            DB: environment.DB,
-            ONBOARDING_EMAIL_QUEUE: environment.ONBOARDING_EMAIL_QUEUE,
-            identity,
-          }),
     browserPairing: () =>
       environment.BROWSER_PAIRING_EMAIL_QUEUE === undefined
         ? Effect.void
@@ -271,7 +257,6 @@ const callbackEffect = (
   request.method === "POST"
     ? receiveWhatsAppWebhook({
         ...environment,
-        onAccepted: (id) => publish("onboarding", id),
         onHostedText: (admission) =>
           forwardHostedWhatsApp(environment, "whatsapp", admission).then((response) => {
             if (response.status === HTTP_ACCEPTED) publish("whatsapp", admission.userId);

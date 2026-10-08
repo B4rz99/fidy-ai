@@ -1,0 +1,61 @@
+scripts/mcp/production-native.test.ts
+  s_e3b9a05f422f64::t_18032fe26e8724 53,61-67,83,204
+.oxlintrc.json
+  s_e3b9a05f422f64::t_f096fd50dd2bc5 211
+scripts/vitest.config.ts
+  s_e3b9a05f422f64::t_48dcd4697e71f2 1-3,7
+  s_e3b9a05f422f64::t_8dae763316586c 4-5
+  s_e3b9a05f422f64::t_d5532c850334c8 6
+scripts/mcp/production-catalog.test.ts
+  s_e3b9a05f422f64::t_2ca021a9323189 8-18,20-22,24-26,29-39,41,43-45
+  s_e3b9a05f422f64::t_d3946d77e1c7e3 1-7,27-28
+  s_e3b9a05f422f64::t_f88f9fdd639997 19,23,40,42
+scripts/mcp/production-checks.ts
+  s_e3b9a05f422f64::t_5a3429e5d52130 38-39,422-432
+scripts/mcp/production-native.ts
+  s_e3b9a05f422f64::t_dd25b8bba495da 23,25,629
+  s_e3b9a05f422f64::t_f54893577c5e46 689,882-885,1171-1172
+  s_e3b9a05f422f64::t_fffc5377536ace 1165,1621-1622,1624
+  s_e3b9a05f422f64::t_793e2a48f205a9 112,695,697,707,709,876-877,879,887-890,892,902-906,1080,1082,1507,1509,1515,1517
+  s_e3b9a05f422f64::t_5cf721d1dbcb1f 19,24,129-131,139-155
+  s_e3b9a05f422f64::t_ae5e27e0a9b3ab 896-901,1623
+  s_e3b9a05f422f64::t_c9fbd045b1cc6c 1516
+  s_e3b9a05f422f64::t_7e99a61a7c42ba 687,873-875,880-881,886,893-895,917,921,929,1079,1083
+  s_e3b9a05f422f64::t_9b40cfcce5c159 132-138,688,690-693,696,708,878,891,907-916,918-920,922-928,1081,1162,1166-1170,1192,1508
+scripts/mcp/production-cleanup.test.ts
+  s_e3b9a05f422f64::t_7adb401937dada 9-10,40
+  s_e3b9a05f422f64::t_8b4477e9684ab9 46
+  s_e3b9a05f422f64::t_fd40e6a4dd4e78 1-2
+  s_e3b9a05f422f64::t_477b2471a9bbc8 27,47
+  s_e3b9a05f422f64::t_b630244095e74a 3-8,11-14,16-26,28-39,41-45,48-56
+tsconfig.base.json
+  s_e3b9a05f422f64::t_50b67a5c342d65 118-119
+scripts/check-lint-suppressions.test.ts
+  s_e3b9a05f422f64::t_d601280e8297e8 115-118,129-135
+package.json
+  s_e3b9a05f422f64::t_50b67a5c342d65 35
+scripts/mcp/production-fixture.ts
+  s_e3b9a05f422f64::t_dd25b8bba495da 41-44
+scripts/mcp/production-catalog.ts
+  s_e3b9a05f422f64::t_d3946d77e1c7e3 1-6,52-54,67-71,80-81,85-86,93-94,106
+  s_e3b9a05f422f64::t_2ca021a9323189 7-51,55-66,72-79,82-84,87-92,95-105
+scripts/mcp/production-cleanup.ts
+  s_e3b9a05f422f64::t_dd25b8bba495da 2-3,5-43,52-54
+  s_e3b9a05f422f64::t_b630244095e74a 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d47b70af35e8065f56aeec9334e3f006c8d8e28f",
+  "prompts": {},
+  "sessions": {
+    "s_e3b9a05f422f64": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a115f2-dfce-7741-a6e9-e22144cd3fad",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

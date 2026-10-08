@@ -1,0 +1,82 @@
+scripts/mcp/README.md
+  s_e3b9a05f422f64::t_2c22832163ac8f 51-54
+  s_e3b9a05f422f64::t_cb1bbd4e86cc4c 42-44
+  s_e3b9a05f422f64::t_da81d4381e3f4b 60-61
+  s_e3b9a05f422f64::t_6991fb810cdde0 36,62-66
+scripts/mcp/production-observation.ts
+  s_e3b9a05f422f64::t_b6ce4f94f887a6 97-108
+  s_e3b9a05f422f64::t_dd7dc7efea45ff 133-137
+  s_e3b9a05f422f64::t_a90b187f60bc6a 132,138-139,161
+  s_e3b9a05f422f64::t_d07c49cf336ce9 64-66,71,81-82,162
+  s_e3b9a05f422f64::t_c2d6901e036e49 91-96
+scripts/mcp/production-checks.ts
+  s_e3b9a05f422f64::t_3c97c880365b33 473,476
+  s_e3b9a05f422f64::t_1a4173f4f21326 347-349,353-356,466-469
+  s_e3b9a05f422f64::t_eb3b05849bfee2 438-447,474
+  s_e3b9a05f422f64::t_948fdd4e5939fe 387-390
+  s_e3b9a05f422f64::t_112c682f04cc56 255-257,259-262
+  s_e3b9a05f422f64::t_da95947f3ba6eb 263
+  s_e3b9a05f422f64::t_a47ac98d8a490f 264-271
+  s_e3b9a05f422f64::t_6991fb810cdde0 475
+  s_e3b9a05f422f64::t_b5b559800a92de 258
+  s_b30a3a010d6dc7::t_69acfb1b2393f8 284,292,295,303,336
+  s_e3b9a05f422f64::t_401ec9b12489a7 170,239,278,318
+scripts/mcp/production-native.ts
+  s_e3b9a05f422f64::t_8fe8b6fe3f0ba7 607-610,616
+  s_e3b9a05f422f64::t_f5013e225c4357 15,163
+  s_e3b9a05f422f64::t_7614e6dfdef26f 1053-1055
+  s_e3b9a05f422f64::t_6e8f58df8d3ac0 127-128,160,162,700,712,1512,1536
+  s_e3b9a05f422f64::t_b9ea0ac712fa86 406,1261
+  s_e3b9a05f422f64::t_af4caf8c780d74 72,1563
+  s_e3b9a05f422f64::t_9d6550de5ad548 161
+  s_e3b9a05f422f64::t_739ff346075035 36,172-173,176,364-365,369,371,378,444-445,493-500,603,611,1207,1209,1375-1378,1666,1673,1738-1743,1746,1765,1793-1794
+  s_e3b9a05f422f64::t_71816f937dfb79 1379
+  s_e3b9a05f422f64::t_4e6e216916129f 1725-1730,1732,1734
+  s_e3b9a05f422f64::t_15b438cd7bbfe9 1731,1759
+  s_e3b9a05f422f64::t_401ec9b12489a7 559-563,1842-1846,1880-1884
+  s_e3b9a05f422f64::t_1ddd95753af13d 570-571,1855-1856,1891-1892
+scripts/mcp/production-native.test.ts
+  s_e3b9a05f422f64::t_48301076dfb14a 72-82,84-85,128-134,143-146
+  s_e3b9a05f422f64::t_ebf88fc63c94c0 141,163,179,198,218,251
+  s_e3b9a05f422f64::t_29eb6259b401a4 135-140,142,157-162,164,173-178,180,192-197,199,212-217,219,245-250,252
+  s_e3b9a05f422f64::t_401ec9b12489a7 151-156
+scripts/mcp/production-cleanup.test.ts
+  s_e3b9a05f422f64::t_6f5e5502c6c67e 15
+scripts/mcp/production-fixture.ts
+  s_e3b9a05f422f64::t_a47ac98d8a490f 14,38
+scripts/mcp/production-browser.ts
+  s_e3b9a05f422f64::t_6991fb810cdde0 139,166
+scripts/mcp/native-confirmation-hosts.ts
+  s_e3b9a05f422f64::t_2ab0ce8de57ef4 205
+  s_e3b9a05f422f64::t_ad58d37b2882a5 6
+  s_e3b9a05f422f64::t_29eb6259b401a4 199-204
+scripts/mcp/production-checks.test.ts
+  s_e3b9a05f422f64::t_6991fb810cdde0 74
+scripts/mcp/production-cleanup.ts
+  s_e3b9a05f422f64::t_5352cd127bf707 1,50
+  s_e3b9a05f422f64::t_29eb6259b401a4 44-49,51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "56e401e49949dd86e006bbdc4fbc6bdc5d17696b",
+  "prompts": {},
+  "sessions": {
+    "s_b30a3a010d6dc7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11658-5fa7-7f40-bb43-bb885d7ee11c",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_e3b9a05f422f64": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a115f2-dfce-7741-a6e9-e22144cd3fad",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

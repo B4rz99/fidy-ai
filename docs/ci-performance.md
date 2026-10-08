@@ -12,13 +12,13 @@ passed every gate in **2m54s**, from workflow creation at 23:42:28 UTC to comple
 This is a 44.1% reduction in observed whole-workflow elapsed time. The successful revision
 is `4574f3caf539cb9b2ac3a205077deabee03bc15a`.
 
-| Complete job | Elapsed |
-| ------------ | ------: |
-| Adapter 1/4 | 126s |
-| Adapter 2/4 | 138s |
-| Adapter 3/4 | 139s |
-| Adapter 4/4 | 124s |
-| Web and native CLI browser validation | 141s |
+| Complete job                          | Elapsed |
+| ------------------------------------- | ------: |
+| Adapter 1/4                           |    126s |
+| Adapter 2/4                           |    138s |
+| Adapter 3/4                           |    139s |
+| Adapter 4/4                           |    124s |
+| Web and native CLI browser validation |    141s |
 
 All **1,554 adapter cases in 115 files** passed, with nine unchanged provider-gated skips.
 All 63 web browser cases and the native CLI browser journey passed. Infrastructure, builds,
@@ -47,10 +47,10 @@ Three alternating before/after Linux x64 samples each installed all checked-in m
 64 fresh bindings using the same 16-binding pool and Bun 1.4.3-canary.1+13a98b0db. Each sample
 used a fresh process without concurrent validation; acquisition and disposal are included.
 
-| Mode | Run 1 | Run 2 | Run 3 | Median |
-| ---- | ----: | ----: | ----: | -----: |
+| Mode                          |  Run 1 |  Run 2 |  Run 3 | Median |
+| ----------------------------- | -----: | -----: | -----: | -----: |
 | Replay migrations per binding | 48.09s | 51.28s | 48.24s | 48.24s |
-| Restore native baseline | 8.80s | 9.50s | 8.80s | 8.80s |
+| Restore native baseline       |  8.80s |  9.50s |  8.80s |  8.80s |
 
 The controlled fixture setup reduction is **81.7%**. The original fixture is `acddc7ba` and
 its optimized implementation is `b8eab7e0`; this benchmark is separate from whole-CI timing.

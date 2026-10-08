@@ -1,0 +1,121 @@
+apps/web/e2e/provider-authentication.journeys.ts
+  s_55523bb8416825::t_b7ece26c188a6d 23,140,435-440,474,495,517-562
+  s_55523bb8416825::t_2aced3ee7d4e23 141,425,459-461,470,475,480,485,494,502-503,513-516,563
+  s_55523bb8416825::t_13e40e7d246f3f 2-3,130-132,462-469,471-473,476-479,481-484,486-493,496-501,504-512
+  s_55523bb8416825::t_812515168ac0a0 348-352,355,360,409,414-415,418,424,433-434,441
+docs/operations/production-launch.md
+  s_55523bb8416825::t_bd0cbae7fe4bbf 142-145
+apps/server/cloudflare/public-worker.ts
+  s_55523bb8416825::t_42dbf85d23da12 441
+apps/server/cloudflare/onboarding/consent-ingress.test.ts
+  s_55523bb8416825::t_1c4d42d9173d03 121
+apps/web/e2e/google-authentication.spec.ts
+  s_55523bb8416825::t_812515168ac0a0 44-45
+docs/operations/cloudflare-background-work.md
+  s_55523bb8416825::t_d594acb9a31d43 182,184
+  s_55523bb8416825::t_bd0cbae7fe4bbf 177
+apps/web/ARCHITECTURE.md
+  s_55523bb8416825::t_1c4d42d9173d03 91-94
+docs/operations/support-recovery.md
+  s_55523bb8416825::t_739438576c76a4 5-7,34-37,81
+docs/operations/authentication-feature-map.md
+  s_55523bb8416825::t_1c4d42d9173d03 1-7,16-30
+  s_55523bb8416825::t_b7ece26c188a6d 8-15
+docs/adr/0020-mandatory-verified-email-authentication-and-recovery.md
+  s_55523bb8416825::t_2ea5a9d34b2671 1,5-8,12-15,19-69,73-74,77
+  s_55523bb8416825::t_bd0cbae7fe4bbf 75-76,79-80,84-96,116-120
+  s_55523bb8416825::t_af3c9bc1dd2f3c 78
+apps/server/cloudflare/email-authentication/internal/proof-delivery.ts
+  s_55523bb8416825::t_1c4d42d9173d03 3-51
+  s_55523bb8416825::t_5b35e66707279e 1-2
+SECURITY_STANDARDS.md
+  s_55523bb8416825::t_1c4d42d9173d03 304
+apps/server/cloudflare/web-authentication/operations.test.ts
+  s_55523bb8416825::t_9299aa549bfdd6 32
+apps/server/ARCHITECTURE.md
+  s_55523bb8416825::t_1c4d42d9173d03 164-180
+apps/server/src/shell/observability/contract.ts
+  s_55523bb8416825::t_1c4d42d9173d03 41
+apps/web/e2e/microsoft-authentication.spec.ts
+  s_55523bb8416825::t_812515168ac0a0 8,40-47
+apps/server/cloudflare/maintenance/schedule.test.ts
+  s_55523bb8416825::t_13e40e7d246f3f 63-69
+  s_55523bb8416825::t_9299aa549bfdd6 14,42,104,164
+docs/adr/0009-atomic-consent-bootstrap-across-owner-seams.md
+  s_55523bb8416825::t_739438576c76a4 1,5-23
+apps/server/cloudflare/provider-authentication/whatsapp.test.ts
+  s_55523bb8416825::t_a48c6d9acefa70 405
+infra/cloudflare/workers.test.ts
+  s_55523bb8416825::t_812515168ac0a0 622,648
+  s_55523bb8416825::t_a48c6d9acefa70 119
+apps/server/cloudflare/core-http/internal/http.ts
+  s_55523bb8416825::t_1c4d42d9173d03 128
+apps/server/cloudflare/email-authentication/retention.test.ts
+  s_55523bb8416825::t_1c4d42d9173d03 4
+apps/server/cloudflare/onboarding/browser-authentication.test.ts
+  s_55523bb8416825::t_1c4d42d9173d03 68,174-199,300,484
+  s_55523bb8416825::t_5f06a5ceff6e8f 1-2,24,60,171-173,200-202,314-315,339-340,376-377,412-413,543-544,661-662,755-756,850-851,914-915,967-968,1035-1036,1078,1081,1380,1390,1482,1525,1559-1560,1612-1613,1642-1643
+tools/depcruise/publication.test.mjs
+  s_55523bb8416825::t_1c4d42d9173d03 81-84
+docs/adr/0015-browser-paired-web-authentication.md
+  s_55523bb8416825::t_739438576c76a4 5-6,12-15,35-36
+ARCHITECTURE.md
+  s_55523bb8416825::t_bd0cbae7fe4bbf 133-134
+  s_55523bb8416825::t_1c4d42d9173d03 174-175
+apps/server/cloudflare/consent/ingress/internal/ingress.ts
+  s_55523bb8416825::t_4a625fd56baa64 55,266,382,439-440,451
+apps/server/cloudflare/consent/ingress/runtime.ts
+  s_55523bb8416825::t_5b067b5ebe81a4 3,26
+apps/server/cloudflare/consent/internal/pre-user-projections.ts
+  s_55523bb8416825::t_9f4d853f94b5b3 1
+apps/server/cloudflare/consent/operations.ts
+  s_55523bb8416825::t_4ea7ff92953924 200
+apps/server/cloudflare/core-worker.ts
+  s_55523bb8416825::t_2f499ac42c3463 72
+apps/server/cloudflare/email-authentication/ancillary-operations.test.ts
+  s_55523bb8416825::t_1a481b064ee1cc 3
+apps/server/cloudflare/email-authentication/contract.ts
+  s_55523bb8416825::t_92affbb5bf7042 6,30,34,37,42
+apps/server/cloudflare/email-authentication/internal/browser-pairing-workflow.ts
+  s_55523bb8416825::t_56c1d67c0c584b 11
+apps/server/cloudflare/email-authentication/internal/replacement-workflow.ts
+  s_55523bb8416825::t_aecca2b83e646a 14
+apps/server/cloudflare/identity/user-context/operations.test.ts
+  s_55523bb8416825::t_b88c3cd8ef233e 18
+apps/server/cloudflare/queue/internal/dispatch.ts
+  s_55523bb8416825::t_17edc6225b6d0f 66
+apps/server/cloudflare/runtime/operational-health/contract.ts
+  s_55523bb8416825::t_fd9a59dd34f929 131
+apps/server/cloudflare/runtime/operational-health/internal/alert-policy.ts
+  s_55523bb8416825::t_e014caf9b24947 13-14
+apps/server/cloudflare/runtime/operational-health/internal/health-inspection.ts
+  s_55523bb8416825::t_96a37c8426bbaf 75
+apps/server/cloudflare/test-shards.ts
+  s_55523bb8416825::t_d704e9ba711cce 40
+apps/server/scripts/check-dependency-guards.ts
+  s_55523bb8416825::t_0714dda928e7de 769,815,822,1812,1819
+apps/server/src/shell/email-authentication/runtime.test.ts
+  s_55523bb8416825::t_24895b8a756099 12
+apps/server/src/shell/email-authentication/runtime.ts
+  s_55523bb8416825::t_cc03e34e53f53a 1
+apps/web/src/features/email-replacement/feature.tsx
+  s_55523bb8416825::t_00594946b17231 179-181
+tools/depcruise/publication.mjs
+  s_55523bb8416825::t_9a956e515150ce 23,46-48,93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "83c0c354b1cff3aab70c751a24849c03b954ec76",
+  "prompts": {},
+  "sessions": {
+    "s_55523bb8416825": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11896-74c5-7f82-b3d7-9e3ce7978236",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

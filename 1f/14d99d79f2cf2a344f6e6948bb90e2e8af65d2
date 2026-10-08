@@ -105,6 +105,8 @@ apps/server/src/shell/consent/internal/current-disclosure.ts
   s_5406acdc54bc93::t_d9604defad1d45 12,18-19
 tools/depcruise/publication.mjs
   s_5406acdc54bc93::t_0d29d7872f1c8c 20,87
+docs/adr/0020-mandatory-verified-email-authentication-and-recovery.md
+  s_55523bb8416825::t_9c2b9ffb0b878d 81-101
 ---
 {
   "schema_version": "authorship/3.0.0",

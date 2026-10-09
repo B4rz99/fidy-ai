@@ -2,11 +2,12 @@ import { Toaster, toast } from "sonner";
 import { useState } from "react";
 import type { JSX, ReactNode } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { FilterHorizontalIcon, Search01Icon } from "@hugeicons/core-free-icons";
+import { FilterHorizontalIcon } from "@hugeicons/core-free-icons";
 import { Array, DateTime, Option } from "effect";
 import { Button } from "@/ui/components/button";
-import { Input } from "@/ui/components/input";
-import { TransactionDropdown } from "./dropdown";
+import { HeaderSearch } from "@/ui/components/header-search";
+import { WorkspaceHeader as PageHeader, WorkspaceColumns } from "@/ui/components/workspace-layout";
+import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
 import { TransactionDateFilter } from "./date-filter";
 import { type FidyClient, maximumAtomicBatchCalls } from "@/transport/client";
 import { BulkTransactionCorrection } from "./bulk-correction";
@@ -15,7 +16,7 @@ import { TransactionSummary } from "./summary";
 import { InlineTransactionCategory } from "./inline-category";
 import { TransactionLedger } from "./ledger";
 import { ManualTransactionCapture } from "./manual-capture";
-import { ResponsiveTransactionPanel } from "./responsive-panel";
+import { WorkspacePanel as ResponsiveWorkspacePanel } from "@/ui/components/workspace-panel";
 import type { TransactionPanel } from "./panel-state";
 import {
   type Category,
@@ -82,7 +83,7 @@ const CategoryFilter = ({
   disabled: boolean;
   onChange: (value: string) => void;
 }>): JSX.Element => (
-  <TransactionDropdown
+  <ChoiceDropdown
     triggerLabel={value === "all" ? Option.some("Categorías") : Option.none()}
     width="auto"
     leading={null}
@@ -111,7 +112,7 @@ const WorkspaceToolbar = ({
   disabled: boolean;
 }>): JSX.Element => (
   <div className="contents">
-    <TransactionDropdown
+    <ChoiceDropdown
       triggerLabel={filters.direction === "all" ? Option.some("Transacciones") : Option.none()}
       width="auto"
       leading={null}
@@ -311,50 +312,6 @@ const WorkspacePanel = (props: PanelProps): JSX.Element => {
     />
   );
 };
-const focusSearch: React.RefCallback<HTMLInputElement> = (element): void => {
-  element?.focus();
-};
-const HeaderSearch = ({
-  search,
-  onSearch,
-  searching,
-  onSearchOpen,
-  disabled,
-}: Readonly<{
-  search: string;
-  onSearch: (value: string) => void;
-  searching: boolean;
-  onSearchOpen: (value: boolean) => void;
-  disabled: boolean;
-}>): JSX.Element => (
-  <>
-    {" "}
-    {searching ? (
-      <Input
-        ref={focusSearch}
-        aria-label="Buscar transacciones"
-        placeholder="Buscar transacciones"
-        value={search}
-        disabled={disabled}
-        className="min-w-0 sm:w-52"
-        onChange={(event) => onSearch(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") onSearchOpen(false);
-        }}
-      />
-    ) : (
-      <Button variant="outline" disabled={disabled} onClick={() => onSearchOpen(true)}>
-        <HugeiconsIcon
-          icon={Search01Icon}
-          strokeWidth={1.5}
-          data-icon="inline-start"
-          aria-hidden="true"
-        />
-        Buscar
-      </Button>
-    )}
-  </>
-);
 const WorkspaceHeader = ({
   period,
   disabled,
@@ -378,55 +335,56 @@ const WorkspaceHeader = ({
   disabled: boolean;
   onCapture: () => void;
 }>): JSX.Element => (
-  <header className="flex min-h-18 flex-wrap items-center justify-between gap-4 border-b px-5 py-3">
-    <div>
-      <h1 className="text-3xl font-semibold tracking-tight">Transacciones</h1>
+  <PageHeader
+    title="Transacciones"
+    context={
       <span className="sr-only">
         {period.monthLabel} · {period.timeZone}
       </span>
-    </div>
-    <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
-      <HeaderSearch
-        search={search}
-        onSearch={onSearch}
-        searching={searching}
-        onSearchOpen={onSearchOpen}
-        disabled={disabled}
+    }
+  >
+    <HeaderSearch
+      value={search}
+      onChange={onSearch}
+      open={searching}
+      onOpenChange={onSearchOpen}
+      label="Buscar transacciones"
+      disabled={disabled}
+    />
+    <TransactionDateFilter
+      value={date}
+      timeZone={period.timeZone}
+      disabled={disabled}
+      onChange={onDate}
+    />
+    <Button variant="outline" disabled={disabled} onClick={() => onTool("category")}>
+      <HugeiconsIcon
+        icon={FilterHorizontalIcon}
+        strokeWidth={1.5}
+        data-icon="inline-start"
+        aria-hidden="true"
       />
-      <TransactionDateFilter
-        value={date}
-        timeZone={period.timeZone}
-        disabled={disabled}
-        onChange={onDate}
-      />
-      <Button variant="outline" disabled={disabled} onClick={() => onTool("category")}>
-        <HugeiconsIcon
-          icon={FilterHorizontalIcon}
-          strokeWidth={1.5}
-          data-icon="inline-start"
-          aria-hidden="true"
-        />
-        Filtros
-      </Button>
-      <Button disabled={disabled} onClick={onCapture}>
-        + Registrar
-      </Button>
-    </div>
-  </header>
+      Filtros
+    </Button>
+    <Button disabled={disabled} onClick={onCapture}>
+      + Registrar
+    </Button>
+  </PageHeader>
 );
 const renderResponsivePanel = (
   content: JSX.Element,
   panel: TransactionPanel,
   controls: Readonly<{ locked: boolean; onPanel: (panel: TransactionPanel) => void }>
 ): JSX.Element => (
-  <ResponsiveTransactionPanel
+  <ResponsiveWorkspacePanel
+    description="Revisa o registra una transacción."
     open={panel._tag !== "Summary" && !(panel._tag === "Bulk" && panel.stage === "selecting")}
     locked={controls.locked}
     title={panelTitle(panel)}
     onClose={() => controls.onPanel({ _tag: "Summary" })}
   >
     {content}
-  </ResponsiveTransactionPanel>
+  </ResponsiveWorkspacePanel>
 );
 const panelEditing = (panel: TransactionPanel): boolean => {
   if (panel._tag === "Capture") return true;
@@ -506,37 +464,38 @@ const WorkspaceContent = ({
   const locked = panelLocked(panel);
   const editing = panelEditing(panel);
   return (
-    <div className="grid items-stretch xl:grid-cols-[minmax(0,1fr)_24rem]">
-      <div className="min-w-0 p-5">
-        <TransactionLedger
-          toolbar={
-            <WorkspaceToolbar
-              tool={tool}
-              filters={filters}
-              onFilters={onFilters}
-              categories={props.categories}
-              disabled={locked}
-            />
-          }
-          canEdit={props.editable}
-          onEdit={() => onPanel(selectionPanel(panel))}
-          selection={bulkSelection(panel, onPanel)}
-          rows={rows}
-          locale={props.currentUser.locale}
-          selected={panel._tag === "Detail" ? Option.some(panel.id) : Option.none()}
-          disabled={locked || (editing && panel._tag !== "Detail")}
-          renderCategory={(row, disabled) => renderCategoryCell(row, disabled, props)}
-          onSelect={(id) => onPanel(detailPanel(id, props.editable))}
+    <WorkspaceColumns
+      panel={
+        <WorkspacePanel
+          {...props}
+          panel={panel}
+          onPanel={onPanel}
+          transactions={panel._tag === "Summary" ? visible : props.transactions}
+          renderPanel={(content) => renderResponsivePanel(content, panel, { locked, onPanel })}
         />
-      </div>
-      <WorkspacePanel
-        {...props}
-        panel={panel}
-        onPanel={onPanel}
-        transactions={panel._tag === "Summary" ? visible : props.transactions}
-        renderPanel={(content) => renderResponsivePanel(content, panel, { locked, onPanel })}
+      }
+    >
+      <TransactionLedger
+        toolbar={
+          <WorkspaceToolbar
+            tool={tool}
+            filters={filters}
+            onFilters={onFilters}
+            categories={props.categories}
+            disabled={locked}
+          />
+        }
+        canEdit={props.editable}
+        onEdit={() => onPanel(selectionPanel(panel))}
+        selection={bulkSelection(panel, onPanel)}
+        rows={rows}
+        locale={props.currentUser.locale}
+        selected={panel._tag === "Detail" ? Option.some(panel.id) : Option.none()}
+        disabled={locked || (editing && panel._tag !== "Detail")}
+        renderCategory={(row, disabled) => renderCategoryCell(row, disabled, props)}
+        onSelect={(id) => onPanel(detailPanel(id, props.editable))}
       />
-    </div>
+    </WorkspaceColumns>
   );
 };
 /** Owns filters and panel interaction; canonical records remain in the authentication-lifetime registry. */

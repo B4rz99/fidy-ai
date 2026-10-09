@@ -3,14 +3,14 @@ import type { JSX, ReactNode } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { cn } from "@/ui/class-names";
-import { Button } from "@/ui/components/button";
+import { Button } from "./button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
-} from "@/ui/components/dropdown-menu";
+} from "./dropdown-menu";
 
 type DropdownProps = Readonly<{
   id: string;
@@ -24,8 +24,8 @@ type DropdownProps = Readonly<{
   triggerLabel: Option.Option<string>;
 }>;
 
-/** Uses the same keyboard, dismissal, and selection pattern as ledger sorting. */
-export const TransactionDropdown = ({
+/** Uses the same keyboard, dismissal, and selection pattern for single-choice controls. */
+export const ChoiceDropdown = ({
   id,
   label,
   value,
@@ -63,12 +63,12 @@ export const TransactionDropdown = ({
         aria-hidden="true"
       />
     </DropdownMenuTrigger>
-    <TransactionMenuOptions value={value} options={options} onChange={onChange} />
+    <ChoiceMenuOptions value={value} options={options} onChange={onChange} />
   </DropdownMenu>
 );
 
 /** Shared category, filter, and sort popup behavior. */
-export const TransactionMenuOptions = ({
+export const ChoiceMenuOptions = ({
   value,
   options,
   onChange,
@@ -87,4 +87,34 @@ export const TransactionMenuOptions = ({
       ))}
     </DropdownMenuRadioGroup>
   </DropdownMenuContent>
+);
+
+/** Offers an inline choice without a pill or chevron; selection effects remain with the feature. */
+export const InlineChoiceDropdown = ({
+  label,
+  disabled,
+  leading,
+  children,
+  value,
+  options,
+  onChange,
+}: Pick<DropdownProps, "label" | "disabled" | "leading" | "value" | "options" | "onChange"> &
+  Readonly<{ children: ReactNode }>): JSX.Element => (
+  <DropdownMenu>
+    <DropdownMenuTrigger
+      aria-label={label}
+      disabled={disabled}
+      render={
+        <button
+          type="button"
+          aria-label={label}
+          className="flex min-h-11 w-full items-center gap-2 rounded-md py-1 text-left outline-none transition-colors enabled:cursor-pointer enabled:hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring aria-expanded:bg-muted"
+        />
+      }
+    >
+      {leading}
+      <span className="min-w-0 break-words">{children}</span>
+    </DropdownMenuTrigger>
+    <ChoiceMenuOptions value={value} options={options} onChange={onChange} />
+  </DropdownMenu>
 );

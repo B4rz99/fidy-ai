@@ -1,5 +1,5 @@
 import type { JSX } from "react";
-import { TransactionDateField } from "./date-field";
+import { CalendarField } from "@/ui/components/calendar-field";
 
 /** Opens the shared calendar directly from the ledger header. */
 export const TransactionDateFilter = (
@@ -10,7 +10,7 @@ export const TransactionDateFilter = (
     onChange: (value: string) => void;
   }>
 ): JSX.Element => (
-  <TransactionDateField
+  <CalendarField
     {...props}
     id="transaction-date-filter"
     label="Fecha"

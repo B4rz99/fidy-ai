@@ -56,13 +56,8 @@ const QueryError = ({
 const QueryActivityNotice = ({ query }: Readonly<{ query: QueryActivity }>): JSX.Element => {
   switch (query._tag) {
     case "Current":
-      return <></>;
     case "Refreshing":
-      return (
-        <p aria-live="polite" className="text-sm text-muted-foreground">
-          Actualizando transacciones…
-        </p>
-      );
+      return <></>;
     case "RefreshFailure":
       return (
         <CanonicalQueryRetry

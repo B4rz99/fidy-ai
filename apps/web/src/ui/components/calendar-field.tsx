@@ -4,9 +4,9 @@ import { DateTime, Option } from "effect";
 import { es } from "react-day-picker/locale";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Calendar03Icon } from "@hugeicons/core-free-icons";
-import { Button } from "@/ui/components/button";
-import { Calendar } from "@/ui/components/calendar";
-import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/ui/components/popover";
+import { Button } from "./button";
+import { Calendar } from "./calendar";
+import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "./popover";
 import { cn } from "@/ui/class-names";
 
 type DateFieldProps = Readonly<{
@@ -32,8 +32,8 @@ const selectedDate = (date: Option.Option<Date>, timeZone: string): string =>
 const dateLabel = (value: string): string =>
   value === "" ? "Selecciona una fecha" : value.split("-").toReversed().join("-");
 
-/** Shares one Spanish calendar and User-zone conversion across filters and transaction forms. */
-export const TransactionDateField = (props: DateFieldProps): JSX.Element => {
+/** Shares one Spanish calendar and User-zone conversion across filters and forms. */
+export const CalendarField = (props: DateFieldProps): JSX.Element => {
   const [open, setOpen] = useState(false);
   const selected = Option.getOrUndefined(localDate(props.value, props.timeZone));
   return (

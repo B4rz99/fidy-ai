@@ -9,7 +9,7 @@
   "settings": {
     "shadcn": {
       "ui": "@/ui/components",
-      "note": "See DESIGN.md for Fidy's brand foundations and application defaults."
+      "note": "See DESIGN.md: Application components and patterns. Reuse the shared UI components and their named variants; transaction behavior stays in its feature."
     }
   },
   "ignorePatterns": [
@@ -156,6 +156,11 @@
             "allow": ["layout"],
             "contracts": [
               {
+                "pattern": "^(Button|Input|DropdownMenuTrigger|Calendar)$",
+                "allow": ["layout"],
+                "message": "Use the component's named variant or size. Keep Fidy colors, radii, focus, and control density in src/ui/components; use a parent for surrounding spacing. See DESIGN.md."
+              },
+              {
                 "pattern": "^Card$|(Content|Header|Footer|Group|Panel)$",
                 "allow": ["layout", "spacing"]
               },
@@ -164,7 +169,12 @@
                 "allow": ["layout", "typography"]
               },
               { "pattern": "^Empty$", "allow": ["layout", "border"] },
-              { "pattern": "^AlertDescription$", "allow": ["layout", "spacing"] }
+              { "pattern": "^AlertDescription$", "allow": ["layout", "spacing"] },
+              {
+                "pattern": "^(ChoiceDropdown|InlineChoiceDropdown|ChoiceMenuOptions|CalendarField|HeaderSearch|IconIndicator|DirectionIndicator|WorkspaceHeader|WorkspaceColumns|WorkspacePanel|RecordToolbar)$",
+                "allow": ["layout"],
+                "message": "Reuse the approved Fidy pattern. Change its shared component only for an approved design decision; do not override colors, typography, shape, or control spacing in a view. See DESIGN.md: Application components and patterns."
+              }
             ]
           }
         ]

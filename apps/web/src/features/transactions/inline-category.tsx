@@ -4,8 +4,7 @@ import { useAtomSet } from "@effect/atom-react";
 import { Option } from "effect";
 import type { FidyClient } from "@/transport/client";
 import { Button } from "@/ui/components/button";
-import { DropdownMenu, DropdownMenuTrigger } from "@/ui/components/dropdown-menu";
-import { TransactionMenuOptions } from "./dropdown";
+import { InlineChoiceDropdown } from "@/ui/components/choice-dropdown";
 import { makeTransactionCorrection } from "./correction-command";
 import { CategoryVisual } from "./visuals";
 import type { Category, Transaction, TransactionListRow } from "./presentation";
@@ -62,30 +61,19 @@ const CategoryCorrection = (props: CategoryProps): JSX.Element => {
   };
   return (
     <div className="min-w-0">
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          aria-label={`Cambiar categoría de ${props.row.counterpartyLabel}`}
-          disabled={props.disabled || status !== "idle"}
-          render={
-            <button
-              type="button"
-              aria-label={`Cambiar categoría de ${props.row.counterpartyLabel}`}
-              className="flex min-h-11 w-full items-center gap-2 rounded-md py-1 text-left outline-none transition-colors enabled:cursor-pointer enabled:hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring aria-expanded:bg-muted"
-            />
-          }
-        >
-          <CategoryVisual label={props.row.categoryLabel} bubble large={false} />
-          <span className="min-w-0 break-words">{props.row.categoryLabel}</span>
-        </DropdownMenuTrigger>
-        <TransactionMenuOptions
-          value={props.transaction.categoryId}
-          options={props.categories.map((category) => ({
-            value: category.id,
-            label: category.label,
-          }))}
-          onChange={change}
-        />
-      </DropdownMenu>
+      <InlineChoiceDropdown
+        label={`Cambiar categoría de ${props.row.counterpartyLabel}`}
+        disabled={props.disabled || status !== "idle"}
+        leading={<CategoryVisual label={props.row.categoryLabel} bubble large={false} />}
+        value={props.transaction.categoryId}
+        options={props.categories.map((category) => ({
+          value: category.id,
+          label: category.label,
+        }))}
+        onChange={change}
+      >
+        {props.row.categoryLabel}
+      </InlineChoiceDropdown>
       <CategoryFeedback
         status={status}
         onRefresh={() => {

@@ -8,11 +8,12 @@ import { Button } from "@/ui/components/button";
 import { Input } from "@/ui/components/input";
 import { Label } from "@/ui/components/label";
 import { makeTransactionCorrection } from "./correction-command";
-import { TransactionDropdown } from "./dropdown";
+import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
 import type { Category, Transaction } from "./presentation";
 
-import { TransactionDateField } from "./date-field";
-import { CategoryVisual, DirectionVisual } from "./visuals";
+import { CalendarField } from "@/ui/components/calendar-field";
+import { CategoryVisual } from "./visuals";
+import { DirectionIndicator } from "@/ui/components/icon-indicator";
 import type { CorrectionStatus } from "./panel-state";
 
 type CorrectionDraft = Readonly<{
@@ -111,7 +112,7 @@ const DraftInputs = ({
     </div>
     <div className="flex flex-col gap-2">
       <Label htmlFor="correction-date">Fecha</Label>
-      <TransactionDateField
+      <CalendarField
         required
         label="Fecha"
         timeZone={timeZone}
@@ -135,7 +136,7 @@ const DraftCategory = ({
 }>): JSX.Element => (
   <div className="flex flex-col gap-2">
     <Label htmlFor="correction-category">Categoría</Label>
-    <TransactionDropdown
+    <ChoiceDropdown
       triggerLabel={Option.none()}
       id="correction-category"
       label="Categoría"
@@ -178,7 +179,7 @@ const DraftDescription = ({
     <DraftCategory draft={draft} categories={categories} onChange={onChange} />
     <div className="flex flex-col gap-2">
       <Label htmlFor="correction-direction">Tipo</Label>
-      <TransactionDropdown
+      <ChoiceDropdown
         triggerLabel={Option.none()}
         id="correction-direction"
         label="Tipo"
@@ -186,7 +187,7 @@ const DraftDescription = ({
         disabled={false}
         leading={
           <span className="transaction-dropdown-visual" aria-hidden="true">
-            <DirectionVisual inflow={draft.direction === "inflow"} />
+            <DirectionIndicator inflow={draft.direction === "inflow"} />
           </span>
         }
         value={draft.direction}

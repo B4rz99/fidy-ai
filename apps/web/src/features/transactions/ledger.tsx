@@ -29,8 +29,10 @@ import {
 import { cn } from "@/ui/class-names";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowDown01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
-import { TransactionDropdown } from "./dropdown";
-import { CategoryVisual, DirectionVisual } from "./visuals";
+import { RecordToolbar } from "@/ui/components/workspace-layout";
+import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
+import { CategoryVisual } from "./visuals";
+import { DirectionIndicator } from "@/ui/components/icon-indicator";
 import { formatMoney } from "@/transport/money";
 import type { TransactionListRow } from "./presentation";
 
@@ -128,7 +130,7 @@ const TransactionClassification = ({
         aria-label={`Ver tipo de ${row.counterpartyLabel}`}
         className="flex w-full items-center gap-2 rounded-md py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
       >
-        <DirectionVisual inflow={row.direction === "inflow"} />
+        <DirectionIndicator inflow={row.direction === "inflow"} />
         {row.transactionTypeLabel}
       </button>
     </TableCell>
@@ -178,7 +180,7 @@ const TransactionRow = ({
         className="flex w-full items-center justify-end gap-2 rounded-md py-1 outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
       >
         <span className="transaction-amount-direction inline-flex shrink-0 @min-[481px]/ledger:hidden">
-          <DirectionVisual inflow={row.direction === "inflow"} />
+          <DirectionIndicator inflow={row.direction === "inflow"} />
         </span>
         <span className="min-w-0 break-words">{row.moneyText}</span>
         <HugeiconsIcon
@@ -287,7 +289,7 @@ const SortControl = ({
   onSorting: (sorting: SortingState) => void;
   disabled: boolean;
 }>): JSX.Element => (
-  <TransactionDropdown
+  <ChoiceDropdown
     triggerLabel={Option.none()}
     id="transaction-sort"
     label="Ordenar transacciones"
@@ -321,7 +323,7 @@ const LedgerControls = ({
   empty: boolean;
   selecting: boolean;
 }>): JSX.Element => (
-  <div className="mb-4 flex flex-wrap items-center gap-2 [&_button]:px-3">
+  <RecordToolbar>
     {toolbar}
     <div className="ledger-actions contents">
       <Button variant="outline" disabled={disabled || empty} onClick={onEdit}>
@@ -330,7 +332,7 @@ const LedgerControls = ({
       <SortControl sorting={sorting} onSorting={onSorting} disabled={disabled} />
       <ColumnControls table={table} disabled={disabled} />
     </div>
-  </div>
+  </RecordToolbar>
 );
 const LedgerBody = ({
   dates,

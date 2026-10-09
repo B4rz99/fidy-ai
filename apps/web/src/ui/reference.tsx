@@ -13,6 +13,7 @@ import { Skeleton } from "@/ui/components/skeleton";
 import { Spinner } from "@/ui/components/spinner";
 import { cn } from "./class-names";
 import { type DarkPalette, darkPalettes } from "./dark-palettes";
+import { WorkspaceReference } from "./workspace-reference";
 import "./reference.css";
 
 const themes = ["light", "dark", "system"] as const;
@@ -322,6 +323,7 @@ export const UIReference = (): JSX.Element => {
           <ActionReference />
           <FieldReference />
         </div>
+        <WorkspaceReference />
         <FeedbackReference />
         <div className="grid gap-6 lg:grid-cols-2">
           <TransactionReference />

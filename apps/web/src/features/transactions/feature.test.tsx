@@ -129,14 +129,14 @@ describe("current-month Transaction list presentation", () => {
 });
 
 describe("current-month Transaction list states", () => {
-  it("preserves inflow rows while refreshing", () => {
+  it("preserves inflow rows without a refresh notice while refreshing", () => {
     seedResources();
     queryMocks.values.set(
       "listTransactions",
       AsyncResult.success({ data: [{ ...transaction, direction: "inflow" }] }, { waiting: true })
     );
     render(<TransactionListFeature />);
-    expect(screen.getByText("Actualizando transacciones…")).toBeVisible();
+    expect(screen.queryByText("Actualizando transacciones…")).not.toBeInTheDocument();
     expect(
       within(screen.getByLabelText("Tabla de transacciones")).getByText("Ingreso")
     ).toBeVisible();

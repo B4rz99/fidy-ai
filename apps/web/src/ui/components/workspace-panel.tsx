@@ -1,12 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { JSX, ReactNode } from "react";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/ui/components/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "./sheet";
 
 const desktopQuery = "(min-width: 1280px)";
 const isDesktop = (): boolean => window.matchMedia(desktopQuery).matches;
@@ -16,18 +10,20 @@ const subscribe = (onChange: () => void): (() => void) => {
   return () => media.removeEventListener("change", onChange);
 };
 /** Shares one panel instance across a desktop rail and an accessible full-screen mobile sheet. */
-export const ResponsiveTransactionPanel = ({
+export const WorkspacePanel = ({
   children,
   open,
   locked,
   onClose,
   title,
+  description,
 }: Readonly<{
   children: ReactNode;
   open: boolean;
   locked: boolean;
   onClose: () => void;
   title: string;
+  description: string;
 }>): JSX.Element => {
   const desktop = useSyncExternalStore(subscribe, isDesktop);
   if (desktop) {
@@ -53,9 +49,7 @@ export const ResponsiveTransactionPanel = ({
       >
         <SheetHeader>
           <SheetTitle className="sr-only">{title}</SheetTitle>
-          <SheetDescription className="sr-only">
-            Revisa o registra una transacción.
-          </SheetDescription>
+          <SheetDescription className="sr-only">{description}</SheetDescription>
         </SheetHeader>
         <div className="p-5">{children}</div>
       </SheetContent>

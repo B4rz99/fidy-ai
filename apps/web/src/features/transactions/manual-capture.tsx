@@ -7,8 +7,8 @@ import type { FormEvent, JSX } from "react";
 import { Button } from "@/ui/components/button";
 import { Label } from "@/ui/components/label";
 import { Input } from "@/ui/components/input";
-import { TransactionDateField } from "./date-field";
-import { TransactionDropdown } from "./dropdown";
+import { CalendarField } from "@/ui/components/calendar-field";
+import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
 import type { CanonicalInput, CanonicalSuccess, FidyClient } from "@/transport/client";
 import { isCanonicalInput } from "@/transport/canonical-input";
 
@@ -107,7 +107,7 @@ const CaptureInputs = ({
     </div>
     <div className="flex flex-col gap-2">
       <Label htmlFor="transaction-date">Fecha del movimiento</Label>
-      <TransactionDateField
+      <CalendarField
         id="transaction-date"
         label="Fecha del movimiento"
         required
@@ -138,7 +138,7 @@ const CaptureDirection = ({
 }>): JSX.Element => (
   <div className="flex flex-col gap-2">
     <Label htmlFor="transaction-direction">Dirección</Label>
-    <TransactionDropdown
+    <ChoiceDropdown
       triggerLabel={Option.none()}
       id="transaction-direction"
       label="Dirección"

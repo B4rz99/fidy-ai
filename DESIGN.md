@@ -1,7 +1,7 @@
 ---
 version: alpha
 name: Fidy
-description: Brand foundations and the approved public website design for Fidy.
+description: Brand foundations and approved public website and application patterns for Fidy.
 colors:
   brand-green: "#7CB243"
   primary: "{colors.brand-green}"
@@ -134,7 +134,7 @@ those relationships tangible through examples.
 
 ### Scope and authority
 
-This first edition records the approved public landing and its feature detail pages.
+This edition records the approved public landing, its feature detail pages, and the transaction workspace.
 Brand colors, typography, and voice are foundations for future product design. The
 marketing layouts and illustrative dashboards are not specifications for the
 application's working screens. Preserve existing application conventions until those
@@ -148,7 +148,7 @@ the shared visual language, rather than treating every CSS value as a universal 
 The approved light and Grafito themes, pastel accents, financial color conventions,
 icon family, and comfortable application density are defined below. These establish
 design defaults; existing application screens still need a deliberate implementation
-and review. Detailed form compositions and advanced table behavior remain open.
+and review. The approved transaction workspace and shared application patterns are recorded below; other screen compositions remain deliberate design work.
 
 ### Voice
 
@@ -432,3 +432,71 @@ Transaction amounts display locale-aware currency symbols rather than currency
 codes. Canonical Money retains its currency and exact amount. Selecting a ledger
 identity or amount opens correction directly. Search expands in the header without
 changing filter visibility. Form dates and Fecha share one Spanish calendar.
+
+## Application components and patterns
+
+The approved transaction workspace is the working application reference. New views
+reuse its controls, geometry, interaction feedback, and shared light/Grafito tokens.
+The landing remains the reference for public-site composition. A working screen
+may have a different content layout; it does not introduce its own palette, font,
+control radius, calendar, or dropdown appearance.
+
+### Shared component ownership
+
+Import components directly from `@/ui/components/<file>`, without a barrel or a
+feature-private import. Components receive values, accessible labels, children,
+and callbacks. Features own canonical queries, mutations, revision checks,
+selection limits, filtering, and save outcomes. A dropdown selection is an intent;
+the shared component never decides whether or how to persist it.
+
+| Pattern          | Shared implementation                                       | Contract                                                                                                                                                                                              |
+| ---------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Single choice    | `choice-dropdown.tsx`: `ChoiceDropdown`                     | Outline pill, optional leading visual, explicit accessible label, selected radio item, shared keyboard and dismissal behavior. `width` selects full-width fields or automatic-width toolbar controls. |
+| Inline choice    | `choice-dropdown.tsx`: `InlineChoiceDropdown`               | Plain icon and label, no pill or chevron. Hover, focus, and open feedback reveal interactivity. Uses the same radio menu; the feature decides what selection does.                                    |
+| Choice menu      | `choice-dropdown.tsx`: `ChoiceMenuOptions`                  | Shared radio options for composed triggers; Columns retains checkbox items in the same `DropdownMenu` primitive.                                                                                      |
+| Calendar         | `calendar-field.tsx`: `CalendarField`                       | Spanish single-day calendar opens immediately. The caller supplies the IANA time zone and ISO local date; fields display `dd-mm-yyyy`. Required dates cannot be cleared.                              |
+| Header search    | `header-search.tsx`: `HeaderSearch`                         | Replaces Buscar with a focused input. Escape closes the input while retaining the query. Query and open state belong to the caller.                                                                   |
+| Indicators       | `icon-indicator.tsx`: `IconIndicator`, `DirectionIndicator` | Hugeicons outline at 1.5px, readable dark icons on semantic pastel fills. Named plain/category/category-large/direction treatments replace per-view dimensions. Adjacent text conveys meaning.        |
+| Page header      | `workspace-layout.tsx`: `WorkspaceHeader`                   | 24px Poppins title, aligned actions, 20px gutters. Actions become a two-column grid on phones. Context and actions are caller-supplied.                                                               |
+| Record controls  | `workspace-layout.tsx`: `RecordToolbar`                     | One wrapping control flow, compact horizontal padding, consistent 8px gaps. Filters and actions share the available row.                                                                              |
+| Content and rail | `workspace-layout.tsx`: `WorkspaceColumns`                  | Flexible content and a 384px rail from 1280px; stacked content below that viewport width.                                                                                                             |
+| Responsive panel | `workspace-panel.tsx`: `WorkspacePanel`                     | Desktop rail, stacked browsing summary, full-screen sheet for active work on smaller screens. The caller supplies title, description, close action, and save lock.                                    |
+
+The application shell already owns the shared wordmark, sidebar, and floating
+phone navigation. Reuse that shell for signed-in views rather than copying it
+into each feature. `Button`, `Input`, `Label`, `Alert`, `Empty`, `Skeleton`, and
+the overlay primitives remain the base controls; preserve their named variants,
+focus rings, comfortable hit areas, and disabled treatments.
+
+Category-to-illustration mapping stays with its feature; an indicator never assigns
+or infers canonical Category identity. Financial values use the existing exact
+Money formatter at the transport presentation seam. UI components accept formatted
+text and never round, add, or reinterpret canonical amounts. Keep comparable amounts
+aligned with tabular digits, explicit currency where ambiguous, and direction icons
+next to compact amounts when their separate type column is hidden.
+
+### Enforcement and reference
+
+`/ui-reference.html` demonstrates the shared tokens, control states, search,
+choice menus, calendar, indicators, and workspace composition using local example
+data. Extend this reference when approving a new reusable treatment, including
+keyboard behavior, light/Grafito appearance, and narrow layouts.
+
+The root `.oxlintrc.json` runs `@shadcn/lint` in normal lint and CI. Raw colors and
+arbitrary non-layout values are rejected. `no-restyle` contracts reserve component
+colors, typography, shape, focus, and control spacing for the UI owner. Pages may
+place controls; use component props and named variants for their appearance, or
+put surrounding spacing on a parent. Shared implementations can define their own
+styles inside `src/ui/components`; that exception is not permission for a view to
+copy a control and restyle it.
+
+Approved design changes update the shared component, its reference example, and
+this document together. Lint enforces configured styling rules; rendered interaction
+and responsive checks still verify behavior and composition. The transaction
+workspace remains a regression reference while these components are reused elsewhere.
+
+Selecting any transaction identity, type, or amount opens correction directly;
+switching records remains possible while no save is pending. Selecting a category
+from the desktop ledger uses an inline menu and saves that correction directly,
+without opening the panel. Income/expense icons precede compact amounts below the
+481px ledger threshold. Category triggers highlight on hover and while open.

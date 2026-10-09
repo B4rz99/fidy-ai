@@ -14,8 +14,8 @@ import { isCanonicalInput } from "@/transport/canonical-input";
 import { Button } from "@/ui/components/button";
 import { Input } from "@/ui/components/input";
 import { Label } from "@/ui/components/label";
-import { TransactionDropdown } from "./dropdown";
-import { TransactionDateField } from "./date-field";
+import { ChoiceDropdown } from "@/ui/components/choice-dropdown";
+import { CalendarField } from "@/ui/components/calendar-field";
 import type { CorrectionStatus } from "./panel-state";
 import type { Category, Transaction } from "./presentation";
 
@@ -171,7 +171,7 @@ const BulkFields = ({
     <legend className="sr-only">Cambios para las transacciones seleccionadas</legend>
     <div className="flex flex-col gap-2">
       <Label htmlFor="bulk-category">Categoría</Label>
-      <TransactionDropdown
+      <ChoiceDropdown
         triggerLabel={Option.none()}
         width="full"
         leading={null}
@@ -188,7 +188,7 @@ const BulkFields = ({
     </div>
     <div className="flex flex-col gap-2">
       <Label htmlFor="bulk-direction">Tipo</Label>
-      <TransactionDropdown
+      <ChoiceDropdown
         triggerLabel={Option.none()}
         width="full"
         leading={null}
@@ -230,7 +230,7 @@ const BulkTextFields = ({
     <BulkAmount draft={draft} onChange={onChange} props={props} />
     <div className="flex flex-col gap-2">
       <Label htmlFor="bulk-date">Fecha</Label>
-      <TransactionDateField
+      <CalendarField
         required={false}
         label="Fecha"
         timeZone={props.timeZone}

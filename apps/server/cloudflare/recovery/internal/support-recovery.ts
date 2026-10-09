@@ -10,6 +10,7 @@ import { recoveryCodeDigest } from "./material";
 import { type JWTVerifyGetKey, createRemoteJWKSet, jwtVerify } from "jose";
 import { Clock, Data, DateTime, Effect, Option, Schema } from "effect";
 import { newId } from "../../secret-material/operations";
+import { admitOperator } from "./admission";
 import { RequestBodyPolicy } from "../../http/contract";
 import { boundedJsonBody } from "../../http/operations";
 
@@ -22,6 +23,12 @@ const Claims = Schema.Struct({
   iat: Schema.Int.check(Schema.isGreaterThan(0)),
   exp: Schema.Int.check(Schema.isGreaterThan(0)),
 });
+type VerifiedOperator = Readonly<{
+  issuer: string;
+  subject: string;
+  issuedAtMs: number;
+  expiresAtMs: number;
+}>;
 const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 256,
   deadlineMilliseconds: 2_000,
@@ -35,8 +42,6 @@ const httpOk = 200;
 const maximumAssertionLength = 8192;
 const maximumAssertionLifetimeSeconds = 900;
 const millisecondsPerSecond = 1_000;
-const operatorWindowMilliseconds = 3_600_000;
-const maximumOperatorAttempts = 10;
 const digestBytes = 32;
 const response = (status: number, body: object): Response =>
   Response.json(body, { status, headers: { "cache-control": "no-store" } });
@@ -72,7 +77,7 @@ const verifySupportAccess = ({
   issuer: string;
   audience: string;
   clock: Clock.Clock;
-}): Promise<Option.Option<{ issuer: string; subject: string }>> => {
+}): Promise<Option.Option<VerifiedOperator>> => {
   if (!eligibleAssertion(assertion, issuer, audience) || Option.isNone(assertion)) {
     return Promise.resolve(Option.none());
   }
@@ -97,39 +102,17 @@ const verifySupportAccess = ({
       const claims = Schema.decodeUnknownOption(Claims)(payload);
       const now = Math.floor(clock.currentTimeMillisUnsafe() / millisecondsPerSecond);
       if (!currentClaims(claims, now) || Option.isNone(claims)) {
-        return Option.none<{ issuer: string; subject: string }>();
+        return Option.none<VerifiedOperator>();
       }
-      return Option.some({ issuer, subject: claims.value.sub });
+      return Option.some({
+        issuer,
+        subject: claims.value.sub,
+        issuedAtMs: claims.value.iat * millisecondsPerSecond,
+        expiresAtMs: claims.value.exp * millisecondsPerSecond,
+      });
     })
     .catch(() => Option.none());
 };
-
-const admitOperator = (
-  db: D1Database,
-  operator: { issuer: string; subject: string },
-  now: number
-): Promise<"allowed" | "limited" | "unavailable"> =>
-  db
-    .prepare(`INSERT INTO support_recovery_operator_limits
-    (operator_issuer, operator_subject, window_started_at_ms, attempts) VALUES (?, ?, ?, 1)
-    ON CONFLICT (operator_issuer, operator_subject) DO UPDATE SET
-      window_started_at_ms = CASE WHEN window_started_at_ms <= ? THEN excluded.window_started_at_ms
-        ELSE window_started_at_ms END,
-      attempts = CASE WHEN window_started_at_ms <= ? THEN 1 ELSE min(attempts + 1, 10) END
-    RETURNING attempts`)
-    .bind(
-      operator.issuer,
-      operator.subject,
-      now,
-      now - operatorWindowMilliseconds,
-      now - operatorWindowMilliseconds
-    )
-    .first()
-    .then((limit) => {
-      const attempts = Schema.decodeUnknownOption(Schema.Struct({ attempts: Schema.Int }))(limit);
-      if (Option.isNone(attempts)) return "unavailable";
-      return attempts.value.attempts >= maximumOperatorAttempts ? "limited" : "allowed";
-    });
 
 const recoveryCandidateQuery = ({
   codeDigest,
@@ -296,16 +279,20 @@ export const handleSupportRecovery = ({
     );
     if (Option.isNone(operator)) return response(httpUnauthorized, { status: "unauthorized" });
     const now = yield* Clock.currentTimeMillis;
-    const admission = yield* waitFor(() => admitOperator(db, operator.value, now));
+    const admission = yield* waitFor(() => admitOperator({ db, operator: operator.value, now }));
     if (admission !== "allowed") return admissionResponse(admission);
     const payload = yield* boundedJsonBody({ request, policy, schema: Payload });
     if (Option.isNone(payload)) return notApproved();
     const codeDigest = yield* waitFor(() => recoveryCodeDigest(payload.value.backupRecoveryCode));
+    const decisionAt = yield* Clock.currentTimeMillis;
+    if (operator.value.expiresAtMs <= decisionAt || operator.value.issuedAtMs > decisionAt) {
+      return response(httpUnauthorized, { status: "unauthorized" });
+    }
     const decision = {
       operator: operator.value,
       codeDigest,
       publicCode: payload.value.pairingCode,
-      now,
+      now: decisionAt,
     };
     if (!(yield* waitFor(() => matchingRecoveryCandidate(db, decision)))) return notApproved();
     return yield* waitFor(() => decideSupportCase(db, decision));

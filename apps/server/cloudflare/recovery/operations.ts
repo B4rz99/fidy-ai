@@ -1,4 +1,5 @@
 import type { Effect } from "effect";
+import type { OwnedStatement } from "../../src/shell/owner-write/contract";
 import type { BackupRecoveryCode } from "../../src/core/recovery/contract";
 import type {
   InitialRecoveryEnrollment,
@@ -44,3 +45,9 @@ export const rotateBackupRecoveryCode = (input: RecoveryRequest): Promise<Respon
  */
 export const handleSupportRecovery = (input: SupportRecoveryRequest): Effect.Effect<Response> =>
   handleSupport(input);
+
+/** Retained case evidence keeps its referenced pairing even when the browser never redeems it. */
+export const retainedRecoveryPairingsQuery = (): OwnedStatement => ({
+  sql: "SELECT pairing_id AS pairingId FROM support_recovery_cases",
+  params: [],
+});

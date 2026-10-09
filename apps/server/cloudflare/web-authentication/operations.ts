@@ -8,7 +8,11 @@ import {
   startBrowserPairingEmail,
 } from "../email-authentication/operations";
 import { supportRecoveryPath } from "../recovery/contract";
-import { handleSupportRecovery, rotateBackupRecoveryCode } from "../recovery/operations";
+import {
+  handleSupportRecovery,
+  retainedRecoveryPairingsQuery,
+  rotateBackupRecoveryCode,
+} from "../recovery/operations";
 import { handlePATRequest, patRoute } from "../tokens/operations";
 import { currentWebSessionUser, logoutWebSession } from "../web-session/operations";
 import type { WebAuthenticationRequest } from "./contract";
@@ -19,7 +23,7 @@ type AuthenticationHandler = (
 ) => Effect.Effect<Response, Cause.UnknownError | BrowserPairingUnavailable | void>;
 const handlers = {
   startPairing: ({ db }): Effect.Effect<Response, BrowserPairingUnavailable> =>
-    startBrowserPairing(db),
+    startBrowserPairing({ db, retainedPairings: retainedRecoveryPairingsQuery() }),
   redeemPairing: redeemBrowserPairing,
   logout: (input): Effect.Effect<Response, void> => logoutWebSession(input),
   startEmail: ({ request, db, publish }): Effect.Effect<Response, Cause.UnknownError> =>

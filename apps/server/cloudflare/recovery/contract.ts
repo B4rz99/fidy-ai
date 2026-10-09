@@ -1,4 +1,10 @@
 import type { UserId } from "../../src/core/identity/contract";
+import { Data } from "effect";
+
+/** Recovery evidence cleanup is unavailable; no storage error or claimant proof escapes. */
+export class RecoveryRetentionUnavailable extends Data.TaggedError(
+  "RecoveryRetentionUnavailable"
+) {}
 
 /** Incoming fresh-session request; the owner decodes and rechecks authority before rotation. */
 export type RecoveryRequest = Readonly<{ request: Request; db: D1Database }>;

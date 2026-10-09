@@ -246,6 +246,8 @@ export const canonicalAdmissionMigrationNames = (
       ...(names.includes("0016_budgets")
         ? ["0037_budget_crossing_facts", "0038_proactivity_consent", "0042_budget_proactivity"]
         : []),
+      "0007_browser_pairing_email",
+      "0008_support_recovery",
       "0009_card_enrollment",
       "0012_billing_collection",
       "0016_subscription_standing",
@@ -266,6 +268,8 @@ export const canonicalAdmissionMigrationNames = (
       "0067_microsoft_authentication",
       "0068_whatsapp_provider_handoff",
       "0069_retire_email_code_signup",
+      "0070_recovery_retention",
+      "0071_recovery_admission",
       "0032_commercial_allowances",
       "0033_canonical_request_protection",
       "0034_forwarded_email_deferral",

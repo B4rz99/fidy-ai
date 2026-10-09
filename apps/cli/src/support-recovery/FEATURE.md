@@ -33,6 +33,17 @@ second hidden prompt. Cloudflare Access success alone authenticates the operator
 Remaining live checks: consumed-code replay refusal and subsequent rotation. Reusable local
 journeys cover both, but those passes do not establish Production results. Recovery rotation
 also has a confirmed error-classification bug: an active session older than ten minutes returns
-`unauthenticated`, which the browser presents as expired. Fresh sign-in permits rotation. The pending fix returns a reauthentication refusal with a sign-in link,
+`unauthenticated`, which the browser presents as expired. Fresh sign-in permits rotation. [PR #1117](https://github.com/B4rz99/fidy-ai/pull/1117) returns a reauthentication refusal with a sign-in link,
 without expiring ordinary access. Both provider built-browser journeys and the Worker/D1 regression pass;
-deployment and live verification remain pending.
+its [Production deployment](https://github.com/B4rz99/fidy-ai/actions/runs/37913919939) passed.
+The User verified the deployed fresh-sign-in message; Transactions then loaded with the same
+recovered session, confirming that refusal preserves ordinary access.
+
+Follow-up Worker/D1 checks cover expired unredeemed recovery pairings, bounded rolling operator/global
+admission and scheduled terminal evidence retention with atomic rollback. Thirty-nine focused tests
+pass; deployment is pending. The operator flow creates terminal approved decisions, with no open-case
+retry lifecycle. Verified Titular deletion remains unimplemented.
+
+Recovery decision timing: held-body Worker/D1 regressions previously approved after operator assertion
+or pairing expiry. The follow-up rechecks verified assertion time and uses the post-read decision
+instant for pairing/proof guards. Both exact-expiry regressions pass; Production deployment is pending.

@@ -92,6 +92,40 @@ The 2m54s result includes setup, teardown and Required Checks. It is an observed
 not a guarantee of GitHub queue latency: an earlier run queued one adapter 36 seconds longer
 than its peers. No machine was scaled and no test suite or file was split by this change.
 
+### Further native arrangement and reporting
+
+The subsequent [green revision d7abacff](https://github.com/B4rz99/fidy-ai/actions/runs/37862580400)
+completed in **2m57s**, including Required Checks. Browser validation took 136s after suspending
+unrelated daemon maintenance during dependency installation. Native dependency installation and
+all verification gates remain.
+
+Six native confirmation refusal scenarios now run as three paired journeys. Each journey performs
+actual OAuth registration, browser review, approval, token exchange and Budget creation once;
+each response receives a new native operation intent. Every original refusal, unchanged Budget,
+zero accepted Audit entries and blocked later acceptance assertion remains. Journeys retain
+independent databases, Users and coordinators. Other confirmation and OAuth cases retain their
+original arrangement. No timeout or retry is added.
+
+One local Linux comparison measured the six scenario bodies at 10.54s before and 8.35s after
+pairing, a 20.8% reduction for this family. These are single-run local observations, not medians
+or whole-workflow savings. The four-file native confirmation/ingress/Hosted Turn/telemetry
+contention check passes all 165 cases, with one unchanged native-host skip. Typechecking and
+lint pass. Pairing reduces the adapter case count by three while retaining all six scenarios.
+
+Historical Hosted Turn arrangement now submits the same ordered native statements in three
+batches instead of 39, 49 and eight requests. The 39/49 Turn fixtures retain pending insertion,
+user and failure evidence, and terminal transition order. The production compaction, durable
+allowance and operational-health assertions remain unchanged. All three focused cases pass;
+the local timing difference was only about 0.1s across those cases and is not a material
+performance claim.
+
+Vitest's native `silent: "passed-only"` reporter setting retains console capture and emits
+failed-case logs while omitting successful traffic. Dedicated telemetry assertions and JSON
+case/timing artifacts remain. An intentional-failure probe verified failed-case output and
+normal failure diagnostics are retained; passing output is omitted. The preceding green run
+printed approximately eight megabytes across 11,156 INFO entries. The setting removes that
+output, but its effect on full CI must be measured independently of the fixture changes.
+
 ## Adapter regression follow-up: #1066
 
 The last 50 actual adapter shard jobs on October 5–6 contained 45 successes, three failures,

@@ -631,6 +631,46 @@ export const nativeConfirmationCall = ({
     }),
   });
 
+export const reviewBudgetDeletion = ({
+  send,
+  bearer,
+  id,
+}: Readonly<{ send: Harness["send"]; bearer: string; id: string }>): Effect.Effect<
+  Readonly<{
+    reference: string;
+    call: (response: Schema.Json, argumentsOverride?: Schema.Json) => Promise<Response>;
+  }>,
+  TestFailure | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    const args = { params: { id } };
+    const review = yield* wait(
+      nativeConfirmationCall({
+        fixture: { send, bearer },
+        params: { name: "budgets.deleteBudget", arguments: args },
+        name: "budgets.deleteBudget",
+      })
+    );
+    const pending = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ result: Schema.Struct({ requestState: Schema.String }) })
+    )(yield* wait(review.json()));
+    const call = (
+      response: Schema.Json,
+      argumentsOverride: Schema.Json = args
+    ): Promise<Response> =>
+      nativeConfirmationCall({
+        fixture: { send, bearer },
+        params: {
+          name: "budgets.deleteBudget",
+          arguments: argumentsOverride,
+          requestState: pending.result.requestState,
+          inputResponses: { review: response },
+        },
+        name: "budgets.deleteBudget",
+      });
+    return { reference: pending.result.requestState, call };
+  });
+
 export const pendingBudgetDeletion = (
   scopes: ReadonlyArray<string> = ["read", "write"]
 ): Effect.Effect<
@@ -676,32 +716,8 @@ export const pendingBudgetDeletion = (
       })
     )(yield* wait(created.json()));
     const id = creation.result.structuredContent.data.id;
-    const args = { params: { id } };
-    const review = yield* wait(
-      nativeConfirmationCall({
-        fixture: { ...fixture, bearer },
-        params: { name: "budgets.deleteBudget", arguments: args },
-        name: "budgets.deleteBudget",
-      })
-    );
-    const pending = yield* Schema.decodeUnknownEffect(
-      Schema.Struct({ result: Schema.Struct({ requestState: Schema.String }) })
-    )(yield* wait(review.json()));
-    const call = (
-      response: Schema.Json,
-      argumentsOverride: Schema.Json = args
-    ): Promise<Response> =>
-      nativeConfirmationCall({
-        fixture: { ...fixture, bearer },
-        params: {
-          name: "budgets.deleteBudget",
-          arguments: argumentsOverride,
-          requestState: pending.result.requestState,
-          inputResponses: { review: response },
-        },
-        name: "budgets.deleteBudget",
-      });
-    return { ...fixture, bearer, id, call, reference: pending.result.requestState };
+    const review = yield* reviewBudgetDeletion({ send: fixture.send, bearer, id });
+    return { ...fixture, bearer, id, ...review };
   });
 
 export type NativeFixture = Effect.Success<ReturnType<typeof pendingBudgetDeletion>>;

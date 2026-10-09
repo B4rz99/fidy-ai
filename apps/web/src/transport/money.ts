@@ -13,7 +13,7 @@ export const formatCurrencyAmount = ({
   const digits = currencyMetadata(Schema.decodeUnknownSync(Currency)(currency)).fractionalDigits;
   const formatter = new Intl.NumberFormat(locale, {
     currency,
-    currencyDisplay: "code",
+    currencyDisplay: "narrowSymbol",
     style: "currency",
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,

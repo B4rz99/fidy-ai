@@ -6,7 +6,7 @@ import { FilterHorizontalIcon, Search01Icon } from "@hugeicons/core-free-icons";
 import { Array, DateTime, Option } from "effect";
 import { Button } from "@/ui/components/button";
 import { Input } from "@/ui/components/input";
-import { TransactionFilterDropdown } from "./filter-dropdown";
+import { TransactionDropdown } from "./dropdown";
 import { TransactionDateFilter } from "./date-filter";
 import { type FidyClient, maximumAtomicBatchCalls } from "@/transport/client";
 import { BulkTransactionCorrection } from "./bulk-correction";
@@ -50,7 +50,7 @@ const hasFilters = (filters: WorkspaceFilters): boolean =>
   filters.direction !== "all" ||
   filters.categoryId !== "all" ||
   filters.date !== "";
-type FilterTool = "search" | "category";
+type FilterTool = "category";
 const matchesFilters = (
   transaction: Transaction,
   filters: WorkspaceFilters,
@@ -81,7 +81,10 @@ const CategoryFilter = ({
   disabled: boolean;
   onChange: (value: string) => void;
 }>): JSX.Element => (
-  <TransactionFilterDropdown
+  <TransactionDropdown
+    triggerLabel={value === "all" ? Option.some("Categorías") : Option.none()}
+    width="auto"
+    leading={null}
     id="transaction-category-filter"
     label="Filtrar por categoría"
     value={value}
@@ -107,17 +110,10 @@ const WorkspaceToolbar = ({
   disabled: boolean;
 }>): JSX.Element => (
   <div className="flex flex-wrap items-center gap-3">
-    {tool === "search" ? (
-      <Input
-        aria-label="Buscar transacciones"
-        placeholder="Buscar"
-        className="min-w-40 flex-1"
-        value={filters.search}
-        disabled={disabled}
-        onChange={(event) => onFilters({ ...filters, search: event.target.value })}
-      />
-    ) : null}
-    <TransactionFilterDropdown
+    <TransactionDropdown
+      triggerLabel={filters.direction === "all" ? Option.some("Transacciones") : Option.none()}
+      width="auto"
+      leading={null}
       id="transaction-type-filter"
       label="Filtrar por tipo"
       value={filters.direction}
@@ -314,15 +310,67 @@ const WorkspacePanel = (props: PanelProps): JSX.Element => {
     />
   );
 };
+const focusSearch: React.RefCallback<HTMLInputElement> = (element): void => {
+  element?.focus();
+};
+const HeaderSearch = ({
+  search,
+  onSearch,
+  searching,
+  onSearchOpen,
+  disabled,
+}: Readonly<{
+  search: string;
+  onSearch: (value: string) => void;
+  searching: boolean;
+  onSearchOpen: (value: boolean) => void;
+  disabled: boolean;
+}>): JSX.Element => (
+  <>
+    {" "}
+    {searching ? (
+      <Input
+        ref={focusSearch}
+        aria-label="Buscar transacciones"
+        placeholder="Buscar transacciones"
+        value={search}
+        disabled={disabled}
+        className="min-w-0 sm:w-52"
+        onChange={(event) => onSearch(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") onSearchOpen(false);
+        }}
+      />
+    ) : (
+      <Button variant="outline" disabled={disabled} onClick={() => onSearchOpen(true)}>
+        <HugeiconsIcon
+          icon={Search01Icon}
+          strokeWidth={1.5}
+          data-icon="inline-start"
+          aria-hidden="true"
+        />
+        Buscar
+      </Button>
+    )}
+  </>
+);
 const WorkspaceHeader = ({
   period,
   disabled,
   onCapture,
   onTool,
+  search,
+  onSearch,
+  searching,
+  onSearchOpen,
   date,
   onDate,
 }: Readonly<{
   onTool: (tool: FilterTool) => void;
+  search: string;
+  searching: boolean;
+  onSearch: (value: string) => void;
+  onSearchOpen: (value: boolean) => void;
   date: string;
   onDate: (date: string) => void;
   period: WorkspaceProps["period"];
@@ -332,22 +380,18 @@ const WorkspaceHeader = ({
   <header className="flex min-h-18 flex-wrap items-center justify-between gap-4 border-b px-5 py-3">
     <div>
       <h1 className="text-3xl font-semibold tracking-tight">Transacciones</h1>
-      <p className="sr-only">
-        <span className="capitalize">{period.monthLabel}</span>
-        {" · "}
-        {period.timeZone}
-      </p>
+      <span className="sr-only">
+        {period.monthLabel} · {period.timeZone}
+      </span>
     </div>
     <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
-      <Button variant="outline" disabled={disabled} onClick={() => onTool("search")}>
-        <HugeiconsIcon
-          icon={Search01Icon}
-          strokeWidth={1.5}
-          data-icon="inline-start"
-          aria-hidden="true"
-        />
-        Buscar
-      </Button>
+      <HeaderSearch
+        search={search}
+        onSearch={onSearch}
+        searching={searching}
+        onSearchOpen={onSearchOpen}
+        disabled={disabled}
+      />
       <TransactionDateFilter
         value={date}
         timeZone={period.timeZone}
@@ -414,6 +458,11 @@ const panelTitle = (panel: TransactionPanel): string => {
   if (panel._tag === "Bulk") return "Editar transacciones";
   return "Detalle de transacción";
 };
+const detailPanel = (id: string, editable: boolean): TransactionPanel => ({
+  _tag: "Detail",
+  id,
+  mode: editable ? { _tag: "Editing", status: "idle" } : { _tag: "Viewing" },
+});
 const WorkspaceContent = ({
   props,
   panel,
@@ -461,7 +510,7 @@ const WorkspaceContent = ({
           locale={props.currentUser.locale}
           selected={panel._tag === "Detail" ? Option.some(panel.id) : Option.none()}
           disabled={locked || editing}
-          onSelect={(id) => onPanel({ _tag: "Detail", id, mode: { _tag: "Viewing" } })}
+          onSelect={(id) => onPanel(detailPanel(id, props.editable))}
         />
       </div>
       <WorkspacePanel
@@ -476,6 +525,7 @@ const WorkspaceContent = ({
 };
 /** Owns filters and panel interaction; canonical records remain in the authentication-lifetime registry. */
 export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
+  const [searching, onSearchOpen] = useState(false);
   const [tool, setTool] = useState<FilterTool | "closed">("closed");
   const [panel, onPanel] = useState<TransactionPanel>({ _tag: "Summary" });
   const [filters, onFilters] = useState<WorkspaceFilters>(emptyFilters);
@@ -495,6 +545,10 @@ export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
       <Toaster position="bottom-right" richColors />
       <main className="flex w-full flex-col">
         <WorkspaceHeader
+          search={filters.search}
+          onSearch={(search) => onFilters({ ...filters, search })}
+          searching={searching}
+          onSearchOpen={onSearchOpen}
           date={filters.date}
           onDate={(date) => onFilters({ ...filters, date })}
           onTool={(next) => setTool(tool === next ? "closed" : next)}

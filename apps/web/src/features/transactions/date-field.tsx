@@ -1,45 +1,92 @@
-import { DateTime, Option } from "effect";
+import { useState } from "react";
 import type { JSX } from "react";
+import { DateTime, Option } from "effect";
+import { es } from "react-day-picker/locale";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Calendar03Icon } from "@hugeicons/core-free-icons";
-import { Input } from "@/ui/components/input";
+import { Button } from "@/ui/components/button";
+import { Calendar } from "@/ui/components/calendar";
+import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/ui/components/popover";
+import { cn } from "@/ui/class-names";
 
-/** Keeps the native date picker and keyboard editor while presenting an unambiguous Spanish date. */
-export const TransactionDateField = ({
-  id,
-  value,
-  onChange,
-  required,
-}: Readonly<{
+type DateFieldProps = Readonly<{
   id: string;
+  label: string;
   value: string;
-  onChange: (value: string) => void;
+  timeZone: string;
+  disabled: boolean;
   required: boolean;
-}>): JSX.Element => {
-  const label = DateTime.make(`${value}T00:00:00Z`).pipe(
-    Option.map((date) =>
-      new Intl.DateTimeFormat("es-CO", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-        timeZone: "UTC",
-      }).format(date.epochMilliseconds)
-    ),
-    Option.getOrElse(() => "Selecciona una fecha")
+  appearance: "field" | "filter";
+  onChange: (value: string) => void;
+}>;
+const localDate = (value: string, timeZone: string): Option.Option<Date> =>
+  DateTime.makeZoned(`${value}T00:00:00.000Z`, { timeZone, adjustForTimeZone: true }).pipe(
+    Option.map(DateTime.toDateUtc)
   );
+const selectedDate = (date: Option.Option<Date>, timeZone: string): string =>
+  Option.isNone(date)
+    ? ""
+    : DateTime.formatIsoDate(
+        DateTime.setZone(DateTime.makeUnsafe(date.value), DateTime.zoneMakeNamedUnsafe(timeZone))
+      );
+const dateLabel = (value: string): string =>
+  value === "" ? "Selecciona una fecha" : value.split("-").toReversed().join("-");
+
+/** Shares one Spanish calendar and User-zone conversion across filters and transaction forms. */
+export const TransactionDateField = (props: DateFieldProps): JSX.Element => {
+  const [open, setOpen] = useState(false);
+  const selected = Option.getOrUndefined(localDate(props.value, props.timeZone));
   return (
-    <div className="transaction-date-field">
-      <Input
-        id={id}
-        required={required}
-        type="date"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      />
-      <span aria-hidden="true">
-        <HugeiconsIcon icon={Calendar03Icon} size={20} strokeWidth={1.5} />
-        {label}
-      </span>
-    </div>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        id={props.id}
+        aria-label={props.label}
+        render={
+          <Button
+            type="button"
+            variant="outline"
+            disabled={props.disabled}
+            className={cn(props.appearance === "field" && "w-full")}
+          />
+        }
+      >
+        <HugeiconsIcon
+          icon={Calendar03Icon}
+          strokeWidth={1.5}
+          data-icon="inline-start"
+          aria-hidden="true"
+        />
+        {props.appearance === "filter" ? "Fecha" : dateLabel(props.value)}
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-auto max-w-[calc(100vw-8px)] p-0">
+        <PopoverTitle className="sr-only">
+          {props.appearance === "filter" ? "Filtrar por fecha" : "Seleccionar fecha"}
+        </PopoverTitle>
+        <Calendar
+          mode="single"
+          locale={es}
+          timeZone={props.timeZone}
+          selected={selected}
+          defaultMonth={selected}
+          onSelect={(date) => {
+            if (date === undefined && props.required) return;
+            props.onChange(selectedDate(Option.fromNullishOr(date), props.timeZone));
+            setOpen(false);
+          }}
+        />
+        {!props.required ? (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => {
+              props.onChange("");
+              setOpen(false);
+            }}
+          >
+            {props.appearance === "filter" ? "Todas las fechas" : "Sin cambiar fecha"}
+          </Button>
+        ) : null}
+      </PopoverContent>
+    </Popover>
   );
 };

@@ -209,8 +209,9 @@
 .transaction-ledger {
   container: ledger / inline-size;
 }
-@container ledger (width >= 800px) {
-  .transaction-ledger .transaction-category-inline {
+@container ledger (width >= 600px) {
+  .transaction-ledger .transaction-category-inline,
+  .transaction-ledger .transaction-identity-icon {
     display: none;
   }
 }
@@ -242,7 +243,7 @@
     grid-template-columns: minmax(0, 1fr) max-content max-content;
   }
 }
-@container ledger (width >= 800px) {
+@container ledger (width >= 600px) {
   .transaction-ledger[data-category-visible="true"] [data-slot="table-body"] {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) max-content;
   }
@@ -341,29 +342,6 @@
 .signed-in-theme .category-bubble[data-tone="rose"] {
   background: var(--chart-6);
 }
-.signed-in-theme .money-field {
-  display: flex;
-  align-items: center;
-  border: 1px solid var(--input);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-.signed-in-theme .money-field > span {
-  padding: 9px 14px;
-  background: var(--muted);
-  border-right: 1px solid var(--border);
-  font-size: 14px;
-}
-.signed-in-theme .money-field input {
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-}
-.signed-in-theme .money-field:focus-within {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-}
-
 .signed-in-theme .transaction-ledger[data-category-visible="false"] td:nth-child(2),
 .signed-in-theme .transaction-ledger[data-category-visible="false"] .transaction-category-inline,
 .signed-in-theme .transaction-ledger[data-type-visible="false"] td:nth-child(3) {
@@ -380,44 +358,10 @@
 .signed-in-theme .transaction-ledger button:disabled {
   opacity: 1;
 }
-.signed-in-theme .correction-select {
-  position: relative;
-}
-.signed-in-theme .correction-select > span {
-  position: absolute;
-  z-index: 1;
-  left: 12px;
-  top: 8px;
-  pointer-events: none;
-}
-.signed-in-theme .correction-select .category-bubble {
+.signed-in-theme .transaction-dropdown-visual .category-bubble {
   width: 28px;
   height: 28px;
 }
-.signed-in-theme .correction-select [data-slot="native-select"] {
-  padding-left: 48px;
-  font-size: 16px;
-}
-.signed-in-theme .transaction-date-field {
-  position: relative;
-}
-.signed-in-theme .transaction-date-field > span {
-  position: absolute;
-  left: 14px;
-  top: 12px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  pointer-events: none;
-  font-size: 14px;
-}
-.signed-in-theme .transaction-date-field input:not(:focus) {
-  color: transparent;
-}
-.signed-in-theme .transaction-date-field:focus-within > span {
-  display: none;
-}
-
 .signed-in-theme [data-sonner-toaster] {
   font-family: inherit;
   --border-radius: var(--radius-lg);

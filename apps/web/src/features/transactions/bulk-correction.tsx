@@ -14,7 +14,7 @@ import { isCanonicalInput } from "@/transport/canonical-input";
 import { Button } from "@/ui/components/button";
 import { Input } from "@/ui/components/input";
 import { Label } from "@/ui/components/label";
-import { TransactionFilterDropdown } from "./filter-dropdown";
+import { TransactionDropdown } from "./dropdown";
 import { TransactionDateField } from "./date-field";
 import type { CorrectionStatus } from "./panel-state";
 import type { Category, Transaction } from "./presentation";
@@ -138,9 +138,7 @@ const BulkAmount = ({
     new Set(props.transactions.map((record) => record.money.currency)).size > 1;
   return (
     <div className="flex flex-col gap-2">
-      <Label htmlFor="bulk-amount">
-        Monto {mixedCurrencies ? "" : props.transactions[0].money.currency}
-      </Label>
+      <Label htmlFor="bulk-amount">Monto ($)</Label>
       <Input
         id="bulk-amount"
         placeholder="Sin cambiar"
@@ -173,7 +171,10 @@ const BulkFields = ({
     <legend className="sr-only">Cambios para las transacciones seleccionadas</legend>
     <div className="flex flex-col gap-2">
       <Label htmlFor="bulk-category">Categoría</Label>
-      <TransactionFilterDropdown
+      <TransactionDropdown
+        triggerLabel={Option.none()}
+        width="full"
+        leading={null}
         id="bulk-category"
         label="Categoría de la selección"
         value={draft.categoryId}
@@ -187,7 +188,10 @@ const BulkFields = ({
     </div>
     <div className="flex flex-col gap-2">
       <Label htmlFor="bulk-direction">Tipo</Label>
-      <TransactionFilterDropdown
+      <TransactionDropdown
+        triggerLabel={Option.none()}
+        width="full"
+        leading={null}
         id="bulk-direction"
         label="Tipo de la selección"
         value={draft.direction}
@@ -228,6 +232,10 @@ const BulkTextFields = ({
       <Label htmlFor="bulk-date">Fecha</Label>
       <TransactionDateField
         required={false}
+        label="Fecha"
+        timeZone={props.timeZone}
+        disabled={false}
+        appearance="field"
         id="bulk-date"
         value={draft.date}
         onChange={(date) => onChange({ ...draft, date })}

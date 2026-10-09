@@ -8,7 +8,7 @@ import { isCanonicalInput } from "@/transport/canonical-input";
 import { Button } from "@/ui/components/button";
 import { Input } from "@/ui/components/input";
 import { Label } from "@/ui/components/label";
-import { NativeSelect, NativeSelectOption } from "@/ui/components/native-select";
+import { TransactionDropdown } from "./dropdown";
 import type { Category, Transaction } from "./presentation";
 
 import { TransactionDateField } from "./date-field";
@@ -124,33 +124,32 @@ const makeCorrection = (
   );
 const DraftInputs = ({
   draft,
-  currency,
+  timeZone,
   onChange,
 }: Readonly<{
   draft: CorrectionDraft;
-  currency: string;
-  categories: ReadonlyArray<Category>;
+  timeZone: string;
   onChange: (draft: CorrectionDraft) => void;
 }>): JSX.Element => (
   <>
     <div className="flex flex-col gap-2">
-      <Label htmlFor="correction-amount">Monto</Label>
-      <div className="money-field">
-        <span aria-hidden="true">{currency}</span>
-        <Input
-          id="correction-amount"
-          aria-label={`Monto en ${currency}`}
-          required
-          inputMode="decimal"
-          value={draft.amount}
-          onChange={(event) => onChange({ ...draft, amount: event.target.value })}
-        />
-      </div>
+      <Label htmlFor="correction-amount">Monto ($)</Label>
+      <Input
+        id="correction-amount"
+        required
+        inputMode="decimal"
+        value={draft.amount}
+        onChange={(event) => onChange({ ...draft, amount: event.target.value })}
+      />
     </div>
     <div className="flex flex-col gap-2">
       <Label htmlFor="correction-date">Fecha</Label>
       <TransactionDateField
         required
+        label="Fecha"
+        timeZone={timeZone}
+        disabled={false}
+        appearance="field"
         id="correction-date"
         value={draft.date}
         onChange={(date) => onChange({ ...draft, date })}
@@ -169,28 +168,25 @@ const DraftCategory = ({
 }>): JSX.Element => (
   <div className="flex flex-col gap-2">
     <Label htmlFor="correction-category">Categoría</Label>
-    <div className="correction-select">
-      <span aria-hidden="true">
-        <CategoryVisual
-          label={categories.find((category) => category.id === draft.categoryId)?.label ?? ""}
-          bubble
-          large={false}
-        />
-      </span>
-      <NativeSelect
-        id="correction-category"
-        size="default"
-        className="w-full"
-        value={draft.categoryId}
-        onChange={(event) => onChange({ ...draft, categoryId: event.target.value })}
-      >
-        {categories.map((category) => (
-          <NativeSelectOption key={category.id} value={category.id}>
-            {category.label}
-          </NativeSelectOption>
-        ))}
-      </NativeSelect>
-    </div>
+    <TransactionDropdown
+      triggerLabel={Option.none()}
+      id="correction-category"
+      label="Categoría"
+      width="full"
+      disabled={false}
+      leading={
+        <span className="transaction-dropdown-visual" aria-hidden="true">
+          <CategoryVisual
+            label={categories.find((category) => category.id === draft.categoryId)?.label ?? ""}
+            bubble
+            large={false}
+          />
+        </span>
+      }
+      value={draft.categoryId}
+      options={categories.map((category) => ({ value: category.id, label: category.label }))}
+      onChange={(categoryId) => onChange({ ...draft, categoryId })}
+    />
   </div>
 );
 const DraftDescription = ({
@@ -199,7 +195,6 @@ const DraftDescription = ({
   onChange,
 }: Readonly<{
   draft: CorrectionDraft;
-  currency: string;
   categories: ReadonlyArray<Category>;
   onChange: (draft: CorrectionDraft) => void;
 }>): JSX.Element => (
@@ -216,26 +211,26 @@ const DraftDescription = ({
     <DraftCategory draft={draft} categories={categories} onChange={onChange} />
     <div className="flex flex-col gap-2">
       <Label htmlFor="correction-direction">Tipo</Label>
-      <div className="correction-select">
-        <span aria-hidden="true">
-          <DirectionVisual inflow={draft.direction === "inflow"} />
-        </span>
-        <NativeSelect
-          className="w-full"
-          id="correction-direction"
-          size="default"
-          value={draft.direction}
-          onChange={(event) =>
-            onChange({
-              ...draft,
-              direction: event.target.value === "inflow" ? "inflow" : "outflow",
-            })
-          }
-        >
-          <NativeSelectOption value="outflow">Gasto</NativeSelectOption>
-          <NativeSelectOption value="inflow">Ingreso</NativeSelectOption>
-        </NativeSelect>
-      </div>
+      <TransactionDropdown
+        triggerLabel={Option.none()}
+        id="correction-direction"
+        label="Tipo"
+        width="full"
+        disabled={false}
+        leading={
+          <span className="transaction-dropdown-visual" aria-hidden="true">
+            <DirectionVisual inflow={draft.direction === "inflow"} />
+          </span>
+        }
+        value={draft.direction}
+        options={[
+          { value: "outflow", label: "Gasto" },
+          { value: "inflow", label: "Ingreso" },
+        ]}
+        onChange={(value) =>
+          onChange({ ...draft, direction: value === "inflow" ? "inflow" : "outflow" })
+        }
+      />
     </div>
   </>
 );
@@ -359,18 +354,8 @@ export const TransactionCorrection = (props: CorrectionProps): JSX.Element => {
       </div>
       <fieldset disabled={locked} className="flex min-w-0 flex-col gap-5">
         <legend className="sr-only">Datos de la transacción</legend>
-        <DraftDescription
-          draft={draft}
-          currency={props.transaction.money.currency}
-          categories={props.categories}
-          onChange={setDraft}
-        />
-        <DraftInputs
-          draft={draft}
-          currency={props.transaction.money.currency}
-          categories={props.categories}
-          onChange={setDraft}
-        />
+        <DraftDescription draft={draft} categories={props.categories} onChange={setDraft} />
+        <DraftInputs draft={draft} timeZone={props.timeZone} onChange={setDraft} />
         <OptionalNotes draft={draft} onChange={setDraft} />
       </fieldset>
       <CorrectionFeedback status={status} onRefresh={props.onRefresh} />

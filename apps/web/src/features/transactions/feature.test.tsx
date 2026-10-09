@@ -96,7 +96,7 @@ describe("manual Transaction capture", () => {
         onCheckHistory={() => undefined}
       />
     );
-    expect(screen.getByLabelText("Fecha del movimiento")).toHaveValue("2026-08-31");
+    expect(screen.getByLabelText("Fecha del movimiento")).toHaveTextContent("31-08-2026");
   });
 });
 
@@ -117,10 +117,10 @@ describe("current-month Transaction list presentation", () => {
     expect(ledger.getByRole("button", { name: "Ver transacción El Corral" })).toBeVisible();
     expect(ledger.getByRole("cell", { name: "Restaurantes" })).toBeVisible();
     expect(ledger.getByText("Gasto")).toBeVisible();
-    expect(ledger.getByText("COP 25.000,00")).toBeVisible();
+    expect(ledger.getByText("$ 25.000,00")).toBeVisible();
     expect(ledger.getByText("20 de julio de 2026")).toBeVisible();
     const summary = within(screen.getByLabelText("Resumen de transacciones"));
-    expect(summary.getAllByText("25.000,00")).toHaveLength(4);
+    expect(summary.getAllByText("$ 25.000,00")).toHaveLength(4);
     expect(summary.getAllByText("20-07-2026")).toHaveLength(2);
     expect(summary.queryByText(/COP/)).not.toBeInTheDocument();
     expect(summary.queryByText("Del periodo y los filtros seleccionados.")).not.toBeInTheDocument();
@@ -362,8 +362,8 @@ it("summarizes the visible records without combining different currencies", () =
   );
   render(<TransactionListFeature />);
   const summary = within(screen.getByLabelText("Resumen de transacciones"));
-  expect(summary.getAllByText("COP 100.000,00")).toHaveLength(2);
-  expect(summary.getAllByText("USD 10,25").length).toBeGreaterThan(0);
+  expect(summary.getAllByText("$ 100.000,00")).toHaveLength(2);
+  expect(summary.getAllByText("$ 10,25").length).toBeGreaterThan(0);
   expect(summary.getByText("Primera transacción")).toBeVisible();
   expect(summary.getByText("Última transacción")).toBeVisible();
 });
@@ -440,7 +440,7 @@ it("lets readers clear filters even after their input is hidden", () => {
   fireEvent.change(screen.getByLabelText("Buscar transacciones"), {
     target: { value: "no match" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+  fireEvent.keyDown(screen.getByLabelText("Buscar transacciones"), { key: "Escape" });
   expect(screen.queryByLabelText("Buscar transacciones")).not.toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "Ver transacción El Corral" })

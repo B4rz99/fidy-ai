@@ -11,8 +11,6 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/ui/components/dropdown-menu";
 import { Fragment, useMemo, useState } from "react";
@@ -30,7 +28,8 @@ import {
 } from "@/ui/components/table";
 import { cn } from "@/ui/class-names";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
+import { ArrowDown01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
+import { TransactionDropdown } from "./dropdown";
 import { CategoryVisual, DirectionVisual } from "./visuals";
 import { formatMoney } from "@/transport/money";
 import type { TransactionListRow } from "./presentation";
@@ -85,7 +84,9 @@ const TransactionIdentity = ({
           aria-expanded={Option.contains(selected, row.id)}
           className="flex w-full min-w-0 items-center gap-3 rounded-md py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
         >
-          <CategoryVisual label={row.categoryLabel} bubble large={false} />
+          <span className="transaction-identity-icon">
+            <CategoryVisual label={row.categoryLabel} bubble large={false} />
+          </span>
           <span className="min-w-0 flex-1">
             <span className="block break-words">{row.counterpartyLabel}</span>
             <span className="transaction-category-inline block break-words text-xs text-muted-foreground">
@@ -116,9 +117,9 @@ const TransactionRow = ({
       disabled={disabled}
       selection={selection}
     />
-    <TableCell className="hidden @min-[800px]/ledger:table-cell">
+    <TableCell className="hidden @min-[600px]/ledger:table-cell">
       <span className="flex items-center gap-2">
-        <CategoryVisual label={row.categoryLabel} bubble={false} large={false} />
+        <CategoryVisual label={row.categoryLabel} bubble large={false} />
         <span className="break-words">{row.categoryLabel}</span>
       </span>
     </TableCell>
@@ -129,7 +130,18 @@ const TransactionRow = ({
       </span>
     </TableCell>
     <TableCell className="text-right font-medium tabular-nums">
-      <span className="flex items-center justify-end gap-2">
+      <button
+        type="button"
+        disabled={
+          disabled ||
+          (selection.active &&
+            selection.ids.length >= selection.limit &&
+            !selection.ids.includes(row.id))
+        }
+        onClick={() => (selection.active ? selection.onToggle(row.id) : onSelect(row.id))}
+        aria-label={`Ver monto de ${row.counterpartyLabel}`}
+        className="flex w-full items-center justify-end gap-2 rounded-md py-1 outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+      >
         <span className="min-w-0 break-words">{row.moneyText}</span>
         <HugeiconsIcon
           icon={ArrowRight01Icon}
@@ -138,7 +150,7 @@ const TransactionRow = ({
           aria-hidden="true"
           className="shrink-0 text-muted-foreground"
         />
-      </span>
+      </button>
     </TableCell>
   </TableRow>
 );
@@ -154,7 +166,7 @@ const LedgerHeader = ({
           <TableHead
             key={header.id}
             className={cn(
-              header.column.id === "categoryLabel" && "hidden @min-[800px]/ledger:table-cell",
+              header.column.id === "categoryLabel" && "hidden @min-[600px]/ledger:table-cell",
               header.column.id === "transactionTypeLabel" &&
                 "hidden @min-[481px]/ledger:table-cell",
               header.column.id === "moneyText" && "text-right"
@@ -197,6 +209,12 @@ const ColumnControls = ({
   <DropdownMenu>
     <DropdownMenuTrigger render={<Button variant="outline" disabled={disabled} />}>
       Columnas
+      <HugeiconsIcon
+        icon={ArrowDown01Icon}
+        strokeWidth={1.5}
+        data-icon="inline-end"
+        aria-hidden="true"
+      />
     </DropdownMenuTrigger>
     <DropdownMenuContent align="end">
       {table
@@ -231,32 +249,20 @@ const SortControl = ({
   onSorting: (sorting: SortingState) => void;
   disabled: boolean;
 }>): JSX.Element => (
-  <DropdownMenu>
-    <DropdownMenuTrigger
-      render={<Button variant="outline" disabled={disabled} />}
-      aria-label="Ordenar transacciones"
-    >
-      <span className="min-w-0 truncate">
-        {sortOptions.find((option) => option.value === sortValue(sorting))?.label ?? "Ordenar"}
-      </span>
-    </DropdownMenuTrigger>
-    <DropdownMenuContent align="end" className="min-w-56">
-      <DropdownMenuRadioGroup
-        value={sortValue(sorting)}
-        onValueChange={(value: unknown) => {
-          if (typeof value !== "string") return;
-          const [id, order] = value.split(":");
-          onSorting(id !== undefined && id !== "default" ? [{ id, desc: order === "desc" }] : []);
-        }}
-      >
-        {sortOptions.map((option) => (
-          <DropdownMenuRadioItem key={option.value} value={option.value} closeOnClick>
-            {option.label}
-          </DropdownMenuRadioItem>
-        ))}
-      </DropdownMenuRadioGroup>
-    </DropdownMenuContent>
-  </DropdownMenu>
+  <TransactionDropdown
+    triggerLabel={Option.none()}
+    id="transaction-sort"
+    label="Ordenar transacciones"
+    width="auto"
+    leading={null}
+    disabled={disabled}
+    value={sortValue(sorting)}
+    options={sortOptions}
+    onChange={(value) => {
+      const [id, order] = value.split(":");
+      onSorting(id !== undefined && id !== "default" ? [{ id, desc: order === "desc" }] : []);
+    }}
+  />
 );
 const LedgerControls = ({
   table,
@@ -277,9 +283,9 @@ const LedgerControls = ({
   empty: boolean;
   selecting: boolean;
 }>): JSX.Element => (
-  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+  <div className="mb-4 flex flex-wrap items-center gap-3">
     {toolbar}
-    <div className="ledger-actions flex w-full flex-wrap items-center gap-3 @min-[700px]/ledger:w-auto">
+    <div className="ledger-actions flex w-auto flex-wrap items-center gap-3">
       <Button variant="outline" disabled={disabled || empty} onClick={onEdit}>
         {selecting ? "Cancelar selección" : "Editar varias"}
       </Button>

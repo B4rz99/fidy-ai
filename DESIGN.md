@@ -410,7 +410,7 @@ this composition when applying the shared light and Grafito theme tokens.
 Below 768px, application navigation uses the landing's floating, dismissible menu
 instead of a scrolling horizontal navigation bar. Transaction names and categories
 wrap when necessary. Columns share their alignment across rows, with Tipo visible
-from a 481px ledger width (521px viewport with the phone gutters) and a separate Categoría column from 800px. Smaller ledgers
+from a 481px ledger width (521px viewport with the phone gutters) and a separate Categoría column from 600px. Smaller ledgers
 stack identity and amount below 400px; phone toolbars fill their available rows.
 
 The summary omits the transaction-count footer and supporting subtitle. First and
@@ -419,9 +419,16 @@ codes and its currency heading; mixed-currency summaries retain separate labeled
 groups and explicit codes so amounts remain unambiguous. Exact fractional precision
 is preserved in every case.
 
-Transaction direction and category filters use the same dismissible radio-menu
-pattern as Sort and Columns. Fecha opens a Spanish calendar immediately, with day
+Transaction filters, sorting, capture, and single/bulk correction use the same
+dismissible radio-menu pattern. Columns uses checkbox items in that same menu.
+Toolbar filter triggers use the compact labels Transacciones and Categorías; the
+menus retain the full option labels. Fecha opens a Spanish calendar immediately, with day
 selection and an explicit clear action. Editar varias enables selection before
 replacing the summary with a shared correction form. Unchanged fields retain each
 record's value; corrections use the canonical atomic batch limit and observed
 revisions, and uncertain saves are never retried automatically.
+
+Transaction amounts display locale-aware currency symbols rather than currency
+codes. Canonical Money retains its currency and exact amount. Selecting a ledger
+identity or amount opens correction directly. Search expands in the header without
+changing filter visibility. Form dates and Fecha share one Spanish calendar.

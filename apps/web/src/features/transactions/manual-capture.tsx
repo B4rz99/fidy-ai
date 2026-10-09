@@ -7,7 +7,8 @@ import type { FormEvent, JSX } from "react";
 import { Button } from "@/ui/components/button";
 import { Label } from "@/ui/components/label";
 import { Input } from "@/ui/components/input";
-import { NativeSelect, NativeSelectOption } from "@/ui/components/native-select";
+import { TransactionDateField } from "./date-field";
+import { TransactionDropdown } from "./dropdown";
 import type { CanonicalInput, CanonicalSuccess, FidyClient } from "@/transport/client";
 import { isCanonicalInput } from "@/transport/canonical-input";
 
@@ -79,6 +80,7 @@ type CaptureInputsProps = Readonly<{
   amount: string;
   counterparty: string;
   occurredOn: string;
+  timeZone: string;
   onAmount: (value: string) => void;
   onCounterparty: (value: string) => void;
   onOccurredOn: (value: string) => void;
@@ -87,13 +89,14 @@ const CaptureInputs = ({
   amount,
   counterparty,
   occurredOn,
+  timeZone,
   onAmount,
   onCounterparty,
   onOccurredOn,
 }: CaptureInputsProps): JSX.Element => (
   <>
     <div className="flex flex-col gap-2">
-      <Label htmlFor="transaction-amount">Monto en COP</Label>
+      <Label htmlFor="transaction-amount">Monto ($)</Label>
       <Input
         id="transaction-amount"
         required
@@ -104,12 +107,15 @@ const CaptureInputs = ({
     </div>
     <div className="flex flex-col gap-2">
       <Label htmlFor="transaction-date">Fecha del movimiento</Label>
-      <Input
+      <TransactionDateField
         id="transaction-date"
+        label="Fecha del movimiento"
         required
-        type="date"
+        timeZone={timeZone}
+        disabled={false}
+        appearance="field"
         value={occurredOn}
-        onChange={(event) => onOccurredOn(event.target.value)}
+        onChange={onOccurredOn}
       />
     </div>
     <div className="flex flex-col gap-2">
@@ -132,15 +138,20 @@ const CaptureDirection = ({
 }>): JSX.Element => (
   <div className="flex flex-col gap-2">
     <Label htmlFor="transaction-direction">Dirección</Label>
-    <NativeSelect
+    <TransactionDropdown
+      triggerLabel={Option.none()}
       id="transaction-direction"
-      size="default"
+      label="Dirección"
+      width="full"
+      leading={null}
+      disabled={false}
       value={value}
-      onChange={(event) => onChange(event.target.value === "inflow" ? "inflow" : "outflow")}
-    >
-      <NativeSelectOption value="outflow">Gasto</NativeSelectOption>
-      <NativeSelectOption value="inflow">Ingreso</NativeSelectOption>
-    </NativeSelect>
+      options={[
+        { value: "outflow", label: "Gasto" },
+        { value: "inflow", label: "Ingreso" },
+      ]}
+      onChange={(next) => onChange(next === "inflow" ? "inflow" : "outflow")}
+    />
   </div>
 );
 
@@ -228,6 +239,7 @@ export const ManualTransactionCapture = ({
           amount={amount}
           counterparty={counterparty}
           occurredOn={occurredOn}
+          timeZone={timeZone}
           onAmount={setAmount}
           onCounterparty={setCounterparty}
           onOccurredOn={setOccurredOn}

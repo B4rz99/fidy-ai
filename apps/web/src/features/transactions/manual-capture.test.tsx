@@ -48,7 +48,7 @@ it("requires checking history after a capture acknowledgement is lost instead of
           />
         </RegistryProvider>
       );
-      fireEvent.change(screen.getByLabelText("Monto en COP"), { target: { value: "25000" } });
+      fireEvent.change(screen.getByLabelText("Monto ($)"), { target: { value: "25000" } });
       fireEvent.click(screen.getByRole("button", { name: "Registrar transacción" }));
       expect(
         yield* Effect.tryPromise(() =>

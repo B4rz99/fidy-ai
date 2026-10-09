@@ -108,7 +108,7 @@ export const TransactionSummary = (props: SummaryProps): JSX.Element => {
         <div key={currency} className="border-t pt-4">
           {currencies.length > 1 ? (
             <h3 className="text-xs font-semibold tracking-wider text-muted-foreground">
-              {currency}
+              {new Intl.DisplayNames(props.locale, { type: "currency" }).of(currency)}
             </h3>
           ) : null}
           <dl>
@@ -116,15 +116,7 @@ export const TransactionSummary = (props: SummaryProps): JSX.Element => {
               props.transactions.filter((record) => record.money.currency === currency),
               props.locale
             ).map((figure) => (
-              <SummaryLine
-                key={figure.label}
-                label={figure.label}
-                value={
-                  currency === "COP" && currencies.length === 1
-                    ? figure.value.replace("COP", "").trim()
-                    : figure.value
-                }
-              />
+              <SummaryLine key={figure.label} label={figure.label} value={figure.value} />
             ))}
           </dl>
         </div>

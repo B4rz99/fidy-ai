@@ -117,7 +117,7 @@ export const TransactionDetail = (props: DetailProps): JSX.Element => {
           props.onMode({ _tag: "Viewing" });
           props.onSaved();
         }}
-        onCancel={() => props.onMode({ _tag: "Viewing" })}
+        onCancel={props.onClose}
         onRefresh={props.onRefresh}
         status={props.mode.status}
         onStatus={(status) => props.onMode({ _tag: "Editing", status })}
@@ -128,13 +128,6 @@ export const TransactionDetail = (props: DetailProps): JSX.Element => {
     <DetailFrame props={props}>
       <>
         <DetailFacts {...props} />
-        <Button
-          variant="outline"
-          disabled={!props.editable}
-          onClick={() => props.onMode({ _tag: "Editing", status: "idle" })}
-        >
-          Editar transacción
-        </Button>
       </>
     </DetailFrame>
   );

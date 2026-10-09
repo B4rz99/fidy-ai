@@ -21,6 +21,7 @@ export type ProviderViewState =
   | Readonly<{ status: "refused" }>
   | Readonly<{ status: "cancelled" }>;
 type Submission = Readonly<{ intent: "signup" | "login"; revision: string; popup: Window }>;
+type RetryInput = Pick<Submission, "intent" | "revision">;
 const providerClient = (
   client: Client,
   provider: AuthenticationProvider
@@ -216,10 +217,31 @@ type ProviderAuthentication = Readonly<{
   state: ProviderViewState;
   mounted: RefCallback<HTMLElement>;
   start: (intent: "signup" | "login", revision: string) => void;
+  retry: () => void;
   restart: () => void;
   cancel: () => void;
   acknowledge: () => void;
 }>;
+const startProvider = ({
+  controller,
+  runStart,
+  setState,
+  intent,
+  revision,
+}: Readonly<{
+  controller: ProviderController;
+  runStart: (value: void) => void;
+  setState: ControllerInput["setState"];
+}> &
+  Pick<Submission, "intent" | "revision">): void => {
+  const popup = window.open("about:blank", "_blank", "popup,width=500,height=700");
+  if (popup === null) {
+    setState({ status: "refused" });
+    return;
+  }
+  controller.stage({ intent, revision, popup });
+  runStart(undefined);
+};
 export const useProviderAuthentication = ({
   provider,
   handoffReference,
@@ -230,6 +252,7 @@ export const useProviderAuthentication = ({
   const router = useRouter();
   const session = useSession();
   const [state, setState] = useState<ProviderViewState>({ status: "editing" });
+  const [retryInput, setRetryInput] = useState<Option.Option<RetryInput>>(Option.none());
   const [controller] = useState(() =>
     makeProviderController({
       webAuthClient: router.options.context.webAuthClient,
@@ -253,17 +276,17 @@ export const useProviderAuthentication = ({
     (node: Parameters<RefCallback<HTMLElement>>[0]) => (node !== null ? clear : undefined),
     [clear]
   );
+  const start = (intent: "signup" | "login", revision: string): void => {
+    setRetryInput(Option.some({ intent, revision }));
+    startProvider({ controller, runStart, setState, intent, revision });
+  };
   return {
     state,
     mounted,
-    start: (intent: "signup" | "login", revision: string): void => {
-      const popup = window.open("about:blank", "_blank", "popup,width=500,height=700");
-      if (popup === null) {
-        setState({ status: "refused" });
-        return;
-      }
-      controller.stage({ intent, revision, popup });
-      runStart(undefined);
+    start,
+    retry: (): void => {
+      if (state.status !== "refused" && state.status !== "cancelled") return;
+      Option.map(retryInput, ({ intent, revision }) => start(intent, revision));
     },
     cancel: (): void => {
       const cancellation = controller.cancellation();
@@ -272,6 +295,7 @@ export const useProviderAuthentication = ({
     },
     restart: (): void => {
       clear();
+      setRetryInput(Option.none());
       setState({ status: "editing" });
     },
     acknowledge: (): void => runAcknowledgement(undefined),

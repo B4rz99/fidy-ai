@@ -133,7 +133,12 @@ and replay reject completion and return to clean first-party URLs. Signup withou
 An unapproved Production pairing on `3a0bb529fe2676def32b756aaebaacc6cd6d99cd` refused redemption
 with a no-store 400 after 606 seconds.
 These synthetic checks create no User or session. Their reusable local counterparts are in the
-provider journey and Browser Login integration suites above; actual provider denial UI remains pending.
+provider journey and Browser Login integration suites above. On 2026-10-09 the User reported that
+real Google denial works; its retry button returned to the form instead of reopening the provider.
+The browser journeys now check direct retries after denial and cancellation for signup and login
+with both providers, plus popup blocking. Each retry uses a fresh attempt and the originally accepted
+disclosure revision; uncertain completion still requires the separate sign-in path.
+The concise signup notice links the full privacy policy and has its own disclosure revision and digest.
 The real Google-authenticated app also survives reload after the latest deployment without recovery
 code redisclosure.
 
@@ -179,7 +184,7 @@ receipts returned 200; an invalid signature returned 401. The delivered replay i
 read status. Consent delivery, handoff and User counts were unchanged before/after the replay.
 This verifies captured real callbacks against Production; it does not claim a newly sent message.
 
-Remaining live checks: Google and Microsoft personal denial UI;
+Remaining live checks: deployed Google retry UX and Microsoft personal denial UI;
 Microsoft work/school signup/returning login/denial (unavailable: the User has no work/school account);
 forwarded WhatsApp handoff refusal (expired confirmation and restart now pass); deployed server-side session deadlines and retention.
 Local fixture passes do not establish these Production results. The User approved

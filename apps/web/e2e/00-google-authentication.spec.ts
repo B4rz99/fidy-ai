@@ -19,11 +19,13 @@ playwright.test(
   "creates a User from the public site with Google, saves recovery, and persists the session",
   ({ page, context, request }) => signupJourney({ configuration, page, context, request })
 );
-playwright.test(
-  "denial and cancellation never claim successful signup or enter the authenticated app",
-  ({ page, context, request }) =>
-    denialAndCancellationJourney({ configuration, page, context, request })
-);
+for (const intent of ["signup", "login"] as const) {
+  playwright.test(
+    `${intent} denial and cancellation reopen the provider directly without authenticating`,
+    ({ page, context, request }) =>
+      denialAndCancellationJourney({ configuration, page, context, request, intent })
+  );
+}
 playwright.test(
   "a lost committed signup response directs sign-in and never rediscloses recovery",
   ({ page, context, request }) => lostCompletionJourney({ configuration, page, context, request })

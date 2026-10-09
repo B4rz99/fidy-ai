@@ -41,7 +41,18 @@ const ConsentNotice = ({
         onFailure: () => <p>No pudimos cargar el Consentimiento. Vuelve a intentarlo más tarde.</p>,
         onSuccess: ({ value }) => (
           <>
-            <p className="whitespace-pre-line text-sm">{value.text}</p>
+            <p className="text-sm">
+              {value.text}
+              <br />
+              <a
+                className="underline"
+                href="https://app.fidyapp.com/politica"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Política de privacidad
+              </a>
+            </p>
             <label className="flex gap-2">
               <input
                 type="checkbox"
@@ -174,7 +185,7 @@ const AttemptStatus = ({
             ? "Cancelaste el acceso."
             : "No se completó el acceso. Puedes iniciar un nuevo intento."}
         </p>
-        <Button onClick={authentication.restart}>Volver a intentar</Button>
+        <Button onClick={authentication.retry}>Volver a intentar</Button>
       </>
     )}
     {authentication.state.status === "uncertain" && (

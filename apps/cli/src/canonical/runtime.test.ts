@@ -1,10 +1,49 @@
 import { BunFileSystem } from "@effect/platform-bun";
 import { expect, layer } from "@effect/vitest";
-import { Effect, Fiber, FileSystem } from "effect";
+import { Effect, Fiber, FileSystem, Option } from "effect";
 import { TestClock } from "effect/testing";
-import { makeInputReader, readOperationInput as readQueryInput } from "./runtime";
+import { makeCanonicalFixture } from "./canonical.test-fixture";
+import {
+  makeCanonicalClient,
+  makeInputReader,
+  readOperationInput as readQueryInput,
+} from "./runtime";
 
 layer(BunFileSystem.layer)((it) => {
+  it.effect(
+    "rejects invalid path, query and payload fields before sending an authenticated request",
+    () =>
+      Effect.gen(function* () {
+        const fixture = makeCanonicalFixture(makeCanonicalClient)(undefined, ["read", "write"]);
+        const credential = Option.getOrThrow(yield* fixture.dependencies.store.load);
+        const client = yield* makeCanonicalClient({
+          httpClient: fixture.dependencies.httpClient,
+          credential,
+          captureRetry: () => {},
+          captureAllowance: () => {},
+        });
+        for (const { name, input } of [
+          { name: "getTransaction", input: { params: { id: "invalid-id" } } },
+          { name: "listTransactions", input: { query: { currency: "invalid-currency" } } },
+          { name: "createTransaction", input: { payload: {} } },
+        ]) {
+          const call = Option.getOrThrow(Option.fromUndefinedOr(client.transactions?.[name]));
+          expect(
+            yield* Effect.result(
+              call({
+                params: undefined,
+                query: undefined,
+                payload: undefined,
+                headers: undefined,
+                ...input,
+              })
+            )
+          ).toMatchObject({ failure: { _tag: "SchemaError" } });
+        }
+        expect(fixture.requests).toEqual([]);
+      }).pipe(Effect.scoped)
+  );
+
   it.effect(
     "reads a bounded UTF-8 JSON file and rejects oversize, invalid bytes and missing files safely",
     () =>

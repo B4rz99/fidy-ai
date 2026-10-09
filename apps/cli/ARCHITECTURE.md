@@ -67,8 +67,10 @@ suite and real-public/Core/browser journey. Cloudflare remains the sole server r
 - `canonical/operations.ts` owns policy-derived discovery, whole-input decoding, generic invocation,
   canonical result encoding and terminal-safe presentation. `canonical/runtime.ts` constructs one
   credential-bound generated client per invocation and owns bounded file/stdin consumption.
-  Runtime dispatch has one narrow typed bridge; the selected canonical input codec checks the
-  complete request before it reaches the client and its result/failure codec encodes the output.
+  Runtime dispatch uses checked, value-erased endpoint declarations to derive generated group
+  clients. The selected canonical input codec checks the complete request, a schema projects its
+  transport fields, and the original endpoint encoders validate those fields before HTTP execution.
+  Its result/failure codec encodes the output. No type assertion bridges the generated client.
   The catalog includes middleware failures, so expired/revoked authority and Consent refusal use
   the same canonical envelopes as ordinary declared failures. No suggestion is executed.
 - `credential/contract.ts` declares `load`, `save`, `clear`, `Option` absence and redacted bearer

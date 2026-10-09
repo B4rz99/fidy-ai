@@ -1,5 +1,5 @@
 import type { CanonicalAllowance } from "@fidy/server/client";
-import { type Effect, type Option, type Schema, type Scope } from "effect";
+import { type Effect, type Option, Schema, type Scope } from "effect";
 import type { CliFailure, Credential, CredentialStore } from "../credential/contract";
 import type { HttpClient } from "effect/http";
 
@@ -11,9 +11,25 @@ export type OperationResult = Readonly<{
   allowance: Option.Option<CanonicalAllowance>;
 }>;
 
-/** Dynamic generated-client port. Only selected, whole-input-decoded calls may reach it. */
+/** Request fields decoded by the selected canonical codec before generated-client encoding. */
+export const CanonicalRequest = Schema.Struct({
+  params: Schema.optionalKey(Schema.Unknown),
+  query: Schema.optionalKey(Schema.Unknown),
+  payload: Schema.optionalKey(Schema.Unknown),
+  headers: Schema.optionalKey(Schema.Unknown),
+});
+
+/** Generated-client port; endpoint encoders validate each decoded request field again. */
 export type CanonicalClient = Readonly<
-  Record<string, Readonly<Record<string, (input: unknown) => Effect.Effect<unknown, object>>>>
+  Record<
+    string,
+    Readonly<
+      Record<
+        string,
+        (input: Required<typeof CanonicalRequest.Type>) => Effect.Effect<unknown, object>
+      >
+    >
+  >
 >;
 export type CanonicalClientFactory = (
   options: Readonly<{

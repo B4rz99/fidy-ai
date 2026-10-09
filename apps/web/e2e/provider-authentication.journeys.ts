@@ -141,6 +141,21 @@ const staleRecoverySessionJourney = Effect.fn(function* (
     expect(page.getByText("Aún no hay transacciones este mes")).toBeVisible()
   );
 });
+const expectSignupNotice = Effect.fn(function* (page: Page) {
+  yield* Effect.tryPromise(() =>
+    expect(
+      page.getByText("Fidy usa tus datos para proteger tu cuenta y organizar tus finanzas.", {
+        exact: false,
+      })
+    ).toBeVisible()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("link", { name: "Política de privacidad", exact: true })).toHaveAttribute(
+      "href",
+      "https://app.fidyapp.com/politica"
+    )
+  );
+});
 
 export const signupJourney = ({
   configuration,
@@ -164,11 +179,7 @@ export const signupJourney = ({
           page.getByRole("link", { name: configuration.label, exact: true }).click()
         );
       }
-      yield* Effect.tryPromise(() =>
-        expect(
-          page.getByText("Google o Microsoft autentican tu cuenta", { exact: false })
-        ).toBeVisible()
-      );
+      yield* expectSignupNotice(page);
       yield* Effect.tryPromise(() =>
         page.getByLabel("Acepto el tratamiento de datos descrito").check()
       );
@@ -203,11 +214,28 @@ export const signupJourney = ({
     })
   );
 
+const retryPendingProvider = Effect.fn(function* (page: Page) {
+  const popup = yield* Effect.tryPromise(() =>
+    Promise.all([
+      page.waitForEvent("popup", { timeout: 5_000 }),
+      page.getByRole("button", { name: "Volver a intentar" }).click(),
+    ]).then(([opened]) => opened)
+  );
+  yield* Effect.tryPromise(() =>
+    expect(popup.getByText("Pending provider decision")).toBeVisible()
+  );
+  return popup;
+});
 export const denialAndCancellationJourney = ({
   configuration,
   page,
   context,
-}: ProviderJourney & Readonly<{ configuration: ProviderJourneyConfiguration }>): Promise<void> =>
+  intent,
+}: ProviderJourney &
+  Readonly<{
+    configuration: ProviderJourneyConfiguration;
+    intent: "signup" | "login";
+  }>): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.tryPromise(() =>
@@ -216,9 +244,16 @@ export const denialAndCancellationJourney = ({
         )
       );
       yield* Effect.tryPromise(() => page.goto(`/auth/${configuration.provider}`));
-      yield* Effect.tryPromise(() =>
-        page.getByLabel("Acepto el tratamiento de datos descrito").check()
-      );
+      yield* expectSignupNotice(page);
+      if (intent === "signup") {
+        yield* Effect.tryPromise(() =>
+          page.getByLabel("Acepto el tratamiento de datos descrito").check()
+        );
+      } else {
+        yield* Effect.tryPromise(() =>
+          page.getByRole("button", { name: "Ya tengo cuenta · Iniciar sesión" }).click()
+        );
+      }
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click()
       );
@@ -228,22 +263,23 @@ export const denialAndCancellationJourney = ({
           (cookie) => cookie.name === "__Host-fidy_session"
         )
       ).toBe(false);
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: "Volver a intentar" }).click()
-      );
       yield* Effect.tryPromise(() => context.unroute(configuration.authorizationPattern));
       yield* Effect.tryPromise(() =>
         context.route(configuration.authorizationPattern, pendingProvider)
       );
-      yield* Effect.tryPromise(() =>
-        page.getByLabel("Acepto el tratamiento de datos descrito").check()
-      );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click()
-      );
+      yield* retryPendingProvider(page);
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cancelar" }).click());
       yield* Effect.tryPromise(() => expect(page.getByRole("alert")).toBeVisible());
       expect(page.url()).toContain(`/auth/${configuration.provider}`);
+      yield* retryPendingProvider(page);
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("heading", {
+            name: intent === "login" ? "Inicia sesión" : "Crea tu cuenta",
+          })
+        ).toBeVisible()
+      );
+      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cancelar" }).click());
     })
   );
 const denyProvider = (configuration: ProviderJourneyConfiguration, route: Route): Promise<void> => {
@@ -392,12 +428,6 @@ export const blockedPopupJourney = ({
       expect(authenticationMutations).toBe(0);
       yield* Effect.tryPromise(() =>
         page.getByRole("button", { name: "Volver a intentar" }).click()
-      );
-      yield* Effect.tryPromise(() =>
-        page.getByLabel("Acepto el tratamiento de datos descrito").check()
-      );
-      yield* Effect.tryPromise(() =>
-        page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click()
       );
       yield* Effect.tryPromise(() =>
         expect(page.getByText("Guarda tu código de recuperación")).toBeVisible()

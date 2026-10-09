@@ -21,10 +21,17 @@ it("requires the initiating browser proof and current explicit Consent before Mi
       const disclosure = yield* Effect.tryPromise(() => send("/web/providers/disclosure"));
       expect(disclosure.status).toBe(200);
       const current = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({ revision: Schema.String, text: Schema.String })
+        Schema.Struct({
+          revision: Schema.String,
+          text: Schema.String,
+          policy: Schema.Struct({ publicUrl: Schema.String }),
+        })
       )(yield* Effect.tryPromise(() => disclosure.json()));
-      expect(current.revision).toBe("web-provider-2026-10-07");
-      expect(current.text).toContain("Google o Microsoft autentican tu cuenta");
+      expect(current.revision).toBe("web-provider-2026-10-09-short");
+      expect(current.text).toBe(
+        "Fidy usa tus datos para proteger tu cuenta y organizar tus finanzas."
+      );
+      expect(current.policy.publicUrl).toBe("https://app.fidyapp.com/politica");
       const stale = yield* Effect.tryPromise(() =>
         send("/web/providers/microsoft/start", {
           ...pairing,
@@ -680,7 +687,7 @@ it.each(["https://attacker.example", undefined])(
           const refused = yield* Effect.tryPromise(() =>
             send(
               `/web/providers/microsoft/${path}`,
-              { ...pairing, intent: "signup", consentRevision: "web-provider-2026-10-07" },
+              { ...pairing, intent: "signup", consentRevision: "web-provider-2026-10-09-short" },
               headers
             )
           );

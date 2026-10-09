@@ -85,8 +85,8 @@ const firstSteps = (
       <article className="step">
         <h3>1. Crea tu cuenta.</h3>
         <p>
-          Tu cuenta incluye una prueba de Fidy Pro de 7 días (168 horas), sin tarjeta. Crear la
-          cuenta no activa una suscripción de pago.
+          Tu cuenta incluye una prueba de Fidy Pro de 7 días, sin tarjeta. Crear la cuenta no activa
+          una suscripción de pago.
         </p>
       </article>
       <article className="step">

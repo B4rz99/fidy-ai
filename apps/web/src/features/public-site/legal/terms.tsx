@@ -61,10 +61,9 @@ const payment = (
   <section className="flex flex-col gap-2">
     <h2 className="font-heading text-xl font-semibold">3. Prueba, pagos y cancelación</h2>
     <p>
-      Al crear tu cuenta recibes una única prueba Pro de 7 días (168 horas), sin tarjeta. La prueba
-      no activa una suscripción de pago. Antes de pagar verás el precio total en COP, el período, el
-      medio de pago y las condiciones de renovación. Solo se cobra lo que autorices; Wompi procesa
-      el pago.
+      Al crear tu cuenta recibes una única prueba Pro de 7 días, sin tarjeta. La prueba no activa
+      una suscripción de pago. Antes de pagar verás el precio total en COP, el período, el medio de
+      pago y las condiciones de renovación. Solo se cobra lo que autorices; Wompi procesa el pago.
     </p>
     <p>
       Puedes cancelar futuras renovaciones desde la suscripción y conservar el acceso durante el

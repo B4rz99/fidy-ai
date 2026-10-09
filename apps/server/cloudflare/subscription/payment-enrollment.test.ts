@@ -2025,11 +2025,15 @@ it("prepares a Price and creates exactly one provider source and pending Billing
       const concurrent = yield* fromTestPromise(() => Promise.all([send(), send()]));
       expect(concurrent.every((response) => response.status === 200)).toBe(true);
       const first = yield* fromTestPromise(() => send());
-      const result = yield* fromTestPromise(() => first.json());
+      const result: unknown = yield* fromTestPromise(() => first.json());
+      yield* Schema.decodeUnknownEffect(Schema.toCodecJson(PaymentSubmission), {
+        onExcessProperty: "error",
+      })(result).pipe(Effect.orDie);
       // Worked SHA-256/UUID-v4 vector for this User and PaymentRequestId, independent of the helper.
       const expectedId = "c130318e-2d38-470c-90b0-4f77028b0364";
       expect(result).toMatchObject({
         status: "payment-pending",
+        enrollmentId: data.enrollmentId,
         billingAttempt: { id: expectedId, status: "pending", money: { amount: "9900" } },
       });
       const stored = yield* fromTestPromise(() =>
@@ -2059,7 +2063,7 @@ it("prepares a Price and creates exactly one provider source and pending Billing
       ).toMatchObject({ version: 1 });
       expect(
         yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result).pipe(Effect.orDie)
-      ).not.toMatch(/3891|tok_test_browser_only|prv_test|fidy-/u);
+      ).not.toMatch(/tok_test_browser_only|prv_test|fidy-/u);
       const retried = yield* fromTestPromise(() => send());
       expect(retried.status).toBe(200);
       expect(yield* fromTestPromise(() => retried.json())).toMatchObject({

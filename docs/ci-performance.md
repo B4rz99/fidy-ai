@@ -57,11 +57,11 @@ its optimized implementation is `b8eab7e0`; this benchmark is separate from whol
 
 ### Scheduling and browser work
 
-The existing longest-first shard scheduler now uses successful Linux file durations for all
-115 adapter files. Unchanged costs come from complete green run 37858866790; changed fixture
-costs come from passed files in run 37859634224. The failed OAuth file retains its previous
-successful cost. These are mixed-revision scheduling estimates, not medians or equivalent-revision
-benchmarks. Tiny and unknown files keep the one-second floor.
+The existing longest-first shard scheduler uses successful Linux file durations for all
+115 adapter files. Latest costs come from passed files in run 37865814951; payment enrollment
+retains its prior complete green cost from run 37862580400. No failed-file timing is used.
+These are mixed-revision scheduling estimates, not medians or equivalent-revision benchmarks.
+Tiny and unknown files keep the one-second floor.
 
 The two existing browser suites overlap on one runner with separate ports, certificates, build
 outputs, Users and databases, retaining two web workers and one CLI worker. A rendezvous probe
@@ -135,12 +135,17 @@ Reused-card submission uses the same actual-response capture helper as first-car
 reading Core's body before allowing browser navigation to discard it. All 11 real-Core browser
 journeys pass locally; no retry or timeout changes.
 
-Scheduling follow-up uses all 115 successful Linux file durations from run 37862580400,
-retaining the preceding confirmation/Hosted Turn costs conservatively after their arrangement
-changes. The full green follow-up run 37865194102 had 79–126s adapter validation steps, so
-older weights no longer predicted balance. Compact per-file summaries now print from the
-existing JSON artifact, retaining useful timing visibility alongside failure-only traffic logs.
-The estimates remain single-run observations rather than equivalent-revision medians.
+Compact per-file summaries print from the existing JSON artifact, retaining timing visibility
+alongside failure-only traffic logs. The updated costs showed 209–294s of file work per shard;
+scheduling now uses those passed-file measurements, retaining the failed file's prior successful
+cost. These are estimates rather than equivalent-revision performance medians.
+
+The enrollment privacy assertion validates the closed public PaymentSubmission codec with
+unknown fields rejected, matches the exact prepared enrollment identity and retains token,
+private-key and provider-reference redaction checks. It avoids treating the provider source
+number's digits inside a legitimate random public UUID as evidence of disclosure. A probe using
+the captured colliding UUID accepts that public response and rejects both root and nested
+provider-source fields. No payment scenario is removed.
 
 ## Adapter regression follow-up: #1066
 

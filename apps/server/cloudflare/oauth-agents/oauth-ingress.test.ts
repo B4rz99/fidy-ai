@@ -353,9 +353,10 @@ it.each(["abort", "deadline"])(
             )
           );
         } else {
-          yield* wait(response);
+          yield* wait((yield* wait(response)).text());
         }
         gate.release();
+        yield* wait(gate.settled);
         const next = yield* wait(
           mcpFixture({
             retryKey: Option.none(),

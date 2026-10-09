@@ -21,6 +21,7 @@ export const wait = <A>(promise: Promise<A>): Effect.Effect<A, TestFailure> =>
 type QueryGate = Readonly<{
   waiting: ReturnType<typeof Promise.withResolvers<void>>;
   release: ReturnType<typeof Promise.withResolvers<void>>;
+  settled: ReturnType<typeof Promise.withResolvers<void>>;
   scheduled: string[];
 }>;
 
@@ -41,10 +42,12 @@ const pauseBudgetRead = (
         if (key === "all" && sql.includes("FROM budgets WHERE") && gate.scheduled.length === 0) {
           gate.scheduled.push("held");
           gate.waiting.resolve();
-          return gate.release.promise.then(() => {
-            const result: unknown = Reflect.apply(method, target, args);
-            return result;
-          });
+          return gate.release.promise
+            .then(() => {
+              const result: unknown = Reflect.apply(method, target, args);
+              return result;
+            })
+            .finally(gate.settled.resolve);
         }
         if (gate.scheduled.length > 0) gate.scheduled.push(sql);
         const result: unknown = Reflect.apply(method, target, args);
@@ -117,6 +120,7 @@ export type Harness = Readonly<{
   holdBudgetRead: () => Readonly<{
     waiting: Promise<void>;
     release: () => void;
+    settled: Promise<void>;
     scheduled: () => ReadonlyArray<string>;
   }>;
   db: D1Database;
@@ -295,12 +299,14 @@ export const setup = (auditMigration = true): Effect.Effect<Harness, TestFailure
         const gate: QueryGate = {
           waiting: Promise.withResolvers<void>(),
           release: Promise.withResolvers<void>(),
+          settled: Promise.withResolvers<void>(),
           scheduled: [],
         };
         queryGate = Option.some(gate);
         return {
           waiting: gate.waiting.promise,
           release: gate.release.resolve,
+          settled: gate.settled.promise,
           scheduled: () => gate.scheduled.slice(1),
         };
       },
@@ -347,8 +353,13 @@ export const setup = (auditMigration = true): Effect.Effect<Harness, TestFailure
     };
   });
 
-export const sessionForUser = (
-  input: Readonly<{ db: D1Database; index: number; userIndex: number }>
+const createBrowserSession = (
+  input: Readonly<{
+    db: D1Database;
+    index: number;
+    userIndex: number;
+    consentId: Option.Option<string>;
+  }>
 ): Effect.Effect<string, TestFailure> =>
   Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
@@ -385,10 +396,31 @@ export const sessionForUser = (
             current + 600000,
             current + 7776000000
           ),
+        ...Option.match(input.consentId, {
+          onNone: () => [],
+          onSome: (id) => [
+            input.db
+              .prepare(
+                "INSERT INTO onboarding_consent_records VALUES (?, ?, '{}', 'disclosure', 'decision', 1, 1)"
+              )
+              .bind(id, user),
+          ],
+        }),
       ])
     );
     return `__Host-fidy_session=${bearer}`;
   });
+
+export const sessionForUser = (
+  input: Readonly<{ db: D1Database; index: number; userIndex: number }>
+): Effect.Effect<string, TestFailure> =>
+  createBrowserSession({ ...input, consentId: Option.none() });
+
+/** Seeds disclosed consent and its browser authority together, before native OAuth review. */
+export const consentedSessionForUser = (
+  input: Readonly<{ db: D1Database; index: number; userIndex: number; consentId: string }>
+): Effect.Effect<string, TestFailure> =>
+  createBrowserSession({ ...input, consentId: Option.some(input.consentId) });
 
 export const sessionFor = (
   input: Readonly<{ db: D1Database; index: number }>
@@ -477,15 +509,12 @@ export const reviewedFixture = (
     const started = yield* wait(harness.send(`/oauth/authorize?${query}`));
     const requestId =
       new URL(started.headers.get("location") ?? "").pathname.split("/").at(-1) ?? "";
-    const cookie = yield* sessionFor({ db: harness.db, index: 1 });
-    yield* wait(
-      harness.db
-        .prepare(
-          "INSERT INTO onboarding_consent_records VALUES ('grant-test', ?, '{}', 'disclosure', 'decision', 1, 1)"
-        )
-        .bind("10000000-0000-4000-8000-000000000001")
-        .run()
-    );
+    const cookie = yield* consentedSessionForUser({
+      db: harness.db,
+      index: 1,
+      userIndex: 1,
+      consentId: "grant-test",
+    });
     const headers = {
       origin: "https://app.fidyapp.com",
       cookie,
@@ -625,6 +654,46 @@ export const nativeConfirmationCall = ({
     }),
   });
 
+export const reviewBudgetDeletion = ({
+  send,
+  bearer,
+  id,
+}: Readonly<{ send: Harness["send"]; bearer: string; id: string }>): Effect.Effect<
+  Readonly<{
+    reference: string;
+    call: (response: Schema.Json, argumentsOverride?: Schema.Json) => Promise<Response>;
+  }>,
+  TestFailure | Schema.SchemaError
+> =>
+  Effect.gen(function* () {
+    const args = { params: { id } };
+    const review = yield* wait(
+      nativeConfirmationCall({
+        fixture: { send, bearer },
+        params: { name: "budgets.deleteBudget", arguments: args },
+        name: "budgets.deleteBudget",
+      })
+    );
+    const pending = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ result: Schema.Struct({ requestState: Schema.String }) })
+    )(yield* wait(review.json()));
+    const call = (
+      response: Schema.Json,
+      argumentsOverride: Schema.Json = args
+    ): Promise<Response> =>
+      nativeConfirmationCall({
+        fixture: { send, bearer },
+        params: {
+          name: "budgets.deleteBudget",
+          arguments: argumentsOverride,
+          requestState: pending.result.requestState,
+          inputResponses: { review: response },
+        },
+        name: "budgets.deleteBudget",
+      });
+    return { reference: pending.result.requestState, call };
+  });
+
 export const pendingBudgetDeletion = (
   scopes: ReadonlyArray<string> = ["read", "write"]
 ): Effect.Effect<
@@ -670,32 +739,8 @@ export const pendingBudgetDeletion = (
       })
     )(yield* wait(created.json()));
     const id = creation.result.structuredContent.data.id;
-    const args = { params: { id } };
-    const review = yield* wait(
-      nativeConfirmationCall({
-        fixture: { ...fixture, bearer },
-        params: { name: "budgets.deleteBudget", arguments: args },
-        name: "budgets.deleteBudget",
-      })
-    );
-    const pending = yield* Schema.decodeUnknownEffect(
-      Schema.Struct({ result: Schema.Struct({ requestState: Schema.String }) })
-    )(yield* wait(review.json()));
-    const call = (
-      response: Schema.Json,
-      argumentsOverride: Schema.Json = args
-    ): Promise<Response> =>
-      nativeConfirmationCall({
-        fixture: { ...fixture, bearer },
-        params: {
-          name: "budgets.deleteBudget",
-          arguments: argumentsOverride,
-          requestState: pending.result.requestState,
-          inputResponses: { review: response },
-        },
-        name: "budgets.deleteBudget",
-      });
-    return { ...fixture, bearer, id, call, reference: pending.result.requestState };
+    const review = yield* reviewBudgetDeletion({ send: fixture.send, bearer, id });
+    return { ...fixture, bearer, id, ...review };
   });
 
 export type NativeFixture = Effect.Success<ReturnType<typeof pendingBudgetDeletion>>;

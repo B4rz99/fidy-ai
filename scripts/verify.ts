@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Option } from "effect";
+import { Data, Effect, Option } from "effect";
 
 const workspaceRoot = Bun.fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/u, "");
 
@@ -256,21 +256,40 @@ if (Option.isSome(requestedGroup)) {
 const verificationStarted = performance.now();
 const timings: Array<{ label: string; elapsedMilliseconds: number; exitCode: number }> = [];
 const failed: Array<string> = [];
-for (const check of selectedChecks) {
-  process.stdout.write(`\n=== ${check.label} ===\n`);
-  const started = performance.now();
-  const result = Bun.spawnSync([...check.command], {
-    cwd: check.cwd,
-    env: check.env,
-    stdin: "inherit",
-    stdout: "inherit",
-    stderr: "inherit",
+class VerificationProcessFailure extends Data.TaggedError("VerificationProcessFailure")<{
+  readonly label: string;
+}> {}
+const runCheck = (check: Check): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    process.stdout.write(`\n=== ${check.label} ===\n`);
+    const started = performance.now();
+    const child = Bun.spawn([...check.command], {
+      cwd: check.cwd,
+      env: check.env,
+      stdin: "inherit",
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+    const exitCode = yield* Effect.tryPromise({
+      try: () => child.exited,
+      catch: () => new VerificationProcessFailure({ label: check.label }),
+    }).pipe(Effect.orElseSucceed(() => 1));
+    const elapsedMilliseconds = Math.round(performance.now() - started);
+    timings.push({ label: check.label, elapsedMilliseconds, exitCode });
+    process.stdout.write(`Timing: ${check.label}: ${elapsedMilliseconds}ms\n`);
+    if (exitCode !== 0) failed.push(check.label);
   });
-  const elapsedMilliseconds = Math.round(performance.now() - started);
-  timings.push({ label: check.label, elapsedMilliseconds, exitCode: result.exitCode });
-  process.stdout.write(`Timing: ${check.label}: ${elapsedMilliseconds}ms\n`);
-  if (result.exitCode !== 0) failed.push(check.label);
-}
+await Effect.runPromise(
+  Effect.forEach(verifyGroups, (group) => {
+    const groupChecks = selectedChecks.filter((check) => check.group === group);
+    // Browser journeys own separate ports, build outputs, Users and native databases.
+    // Overlap their real polling waits on this runner; each suite keeps its worker limit.
+    return Effect.forEach(groupChecks, runCheck, {
+      concurrency: group === "browser" ? 2 : 1,
+      discard: true,
+    });
+  })
+);
 const elapsedMilliseconds = Math.round(performance.now() - verificationStarted);
 process.stdout.write(`Verification elapsed: ${elapsedMilliseconds}ms (excludes job setup)\n`);
 if (Bun.env.VERIFY_TIMING_REPORT !== undefined) {

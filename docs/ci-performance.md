@@ -3,6 +3,187 @@
 For the measured follow-up and remaining Linux evidence requirements for #922–#926, see
 [CI follow-up: #922–#926](ci-improvements-922-926.md).
 
+## Native fixture baseline restoration
+
+[Complete Linux run 37860914126](https://github.com/B4rz99/fidy-ai/actions/runs/37860914126)
+passed every gate in **2m54s**, from workflow creation at 23:42:28 UTC to completion at
+23:45:22 UTC on October 8, 2026. The preceding trunk
+[run 37851111387](https://github.com/B4rz99/fidy-ai/actions/runs/37851111387) took **5m11s**.
+This is a 44.1% reduction in observed whole-workflow elapsed time. The successful revision
+is `4574f3caf539cb9b2ac3a205077deabee03bc15a`.
+
+| Complete job                          | Elapsed |
+| ------------------------------------- | ------: |
+| Adapter 1/4                           |    126s |
+| Adapter 2/4                           |    138s |
+| Adapter 3/4                           |    139s |
+| Adapter 4/4                           |    124s |
+| Web and native CLI browser validation |    141s |
+
+All **1,554 adapter cases in 115 files** passed, with nine unchanged provider-gated skips.
+All 63 web browser cases and the native CLI browser journey passed. Infrastructure, builds,
+unit/artifact tests, Linux/macOS/Windows native CLI checks, typechecking, lint, accessibility,
+security scans and Required Checks also passed. Runner sizes, the four existing adapter shards,
+three adapter file processes per runner and test-file boundaries remain unchanged.
+
+### Native setup
+
+The private fixture Worker executes each migration baseline once before test seeding, then
+derives immutable SQL from native SQLite's final catalog and baseline rows. Fresh bindings
+restore tables, indexes, triggers, views, seeds, AUTOINCREMENT state and native FTS in a real
+D1 transaction. Virtual declarations recreate FTS shadow tables. Foreign-key checks remain
+native; mutable databases, coordinators and test rows are never shared. Populated bindings,
+later schema additions, wrapped bindings and `applyTestMigration` retain actual SQL execution.
+Fixture tests prove catalog equivalence, independent rows, native search, foreign-key refusal,
+rollback and refusal to capture private test rows.
+
+Seven subscription suites now amortize Worker startup through the existing 16-slot pool,
+with a never-reused native binding for each case. Immutable caller-owned auth DDL is part of
+the baseline key; per-case seeding and global/timer cleanup remain. Category, Memory and browser
+arrangement also use the baseline installer. Migration-history and runtime-lifecycle tests
+retain their original execution paths.
+
+Three alternating before/after Linux x64 samples each installed all checked-in migrations into
+64 fresh bindings using the same 16-binding pool and Bun 1.4.3-canary.1+13a98b0db. Each sample
+used a fresh process without concurrent validation; acquisition and disposal are included.
+
+| Mode                          |  Run 1 |  Run 2 |  Run 3 | Median |
+| ----------------------------- | -----: | -----: | -----: | -----: |
+| Replay migrations per binding | 48.09s | 51.28s | 48.24s | 48.24s |
+| Restore native baseline       |  8.80s |  9.50s |  8.80s |  8.80s |
+
+The controlled fixture setup reduction is **81.7%**. The original fixture is `acddc7ba` and
+its optimized implementation is `b8eab7e0`; this benchmark is separate from whole-CI timing.
+
+### Scheduling and browser work
+
+The existing longest-first shard scheduler uses successful Linux file durations for all
+115 adapter files. Costs are medians from three complete green Linux runs: 37862580400,
+37866665288 and 37867675049. No failed-file timing is used. Multiple samples dampen individual
+runner contention; these are mixed-revision scheduling estimates, not controlled benchmarks.
+Tiny and unknown files keep the one-second floor.
+
+The two existing browser suites overlap on one runner with separate ports, certificates, build
+outputs, Users and databases, retaining two web workers and one CLI worker. A rendezvous probe
+requires both processes to start and proves that failure of either child fails the gate.
+The longest existing browser files run first to avoid an idle worker at the end. Recovery and
+ordinary pairing use independent Users because recovery revokes sessions.
+
+Three redundant Microsoft shared-controller cases were removed: lost completion, pending
+redemption and popup blocking remain covered through Google. Microsoft retains signup/session,
+denial and both WhatsApp handoffs. Provider-neutral operator recovery runs once through Google,
+alongside dedicated SupportRecoveryCase coverage; both providers retain return login, expiry
+and consent revocation. Only mocked polling/email timers advance the browser clock; native
+Core security deadlines retain real time.
+
+The reused-card and first-card browser journeys read the actual Core response before navigation can discard
+its body, preserving pending payment and final real collection assertions. The OAuth in-flight
+deadline fixture drains the expired response and awaits native read settlement before its
+follow-up request. SQL-fencing, real deadlines and follow-up success remain; neither fix adds
+retries, sleeps or longer timeouts.
+
+Adapter and browser jobs restore the exact Bun cache without competing to publish the same
+544MB archive; other jobs still publish cache misses. Browser setup reuses Playwright's APT
+index refresh and installs only required native credential-store packages. Package installation
+suspends `needrestart` daemon maintenance on the disposable runner; all dependency installation
+and native test gates remain.
+
+The 2m54s result includes setup, teardown and Required Checks. It is an observed successful run,
+not a guarantee of GitHub queue latency: an earlier run queued one adapter 36 seconds longer
+than its peers. No machine was scaled and no test suite or file was split by this change.
+
+### Further native arrangement and reporting
+
+The subsequent [green revision d7abacff](https://github.com/B4rz99/fidy-ai/actions/runs/37862580400)
+completed in **2m57s**, including Required Checks. Browser validation took 136s after suspending
+unrelated daemon maintenance during dependency installation. Native dependency installation and
+all verification gates remain.
+
+Six native confirmation refusal scenarios now run as three paired journeys. Each journey performs
+actual OAuth registration, browser review, approval, token exchange and Budget creation once;
+each response receives a new native operation intent. Every original refusal, unchanged Budget,
+zero accepted Audit entries and blocked later acceptance assertion remains. Journeys retain
+independent databases, Users and coordinators. Other confirmation and OAuth cases retain their
+original arrangement. No timeout or retry is added.
+
+One local Linux comparison measured the six scenario bodies at 10.54s before and 8.35s after
+pairing, a 20.8% reduction for this family. These are single-run local observations, not medians
+or whole-workflow savings. The four-file native confirmation/ingress/Hosted Turn/telemetry
+contention check passes all 165 cases, with one unchanged native-host skip. Typechecking and
+lint pass. Pairing reduces the adapter case count by three while retaining all six scenarios.
+
+Historical Hosted Turn arrangement now submits the same ordered native statements in three
+batches instead of 39, 49 and eight requests. The 39/49 Turn fixtures retain pending insertion,
+user and failure evidence, and terminal transition order. The production compaction, durable
+allowance and operational-health assertions remain unchanged. All three focused cases pass;
+the local timing difference was only about 0.1s across those cases and is not a material
+performance claim.
+
+Vitest's native `silent: "passed-only"` reporter setting retains console capture and emits
+failed-case logs while omitting successful traffic. Dedicated telemetry assertions and JSON
+case/timing artifacts remain. An intentional-failure probe verified failed-case output and
+normal failure diagnostics are retained; passing output is omitted. The preceding green run
+printed approximately eight megabytes across 11,156 INFO entries. The setting removes that
+output, but its effect on full CI must be measured independently of the fixture changes.
+
+Change selection keeps full commit history and all trees but uses checkout's `blob:none` filter.
+Its complete `base...head` path diff has `--no-renames`, so it does not require historical file
+bodies. The current checkout still materializes its source files. No changed-file API, pagination
+limit or shallow merge-base fallback is introduced.
+
+Reused-card submission uses the same actual-response capture helper as first-card submission,
+reading Core's body before allowing browser navigation to discard it. All 11 real-Core browser
+journeys pass locally; no retry or timeout changes.
+
+Compact per-file summaries print from the existing JSON artifact, retaining timing visibility
+alongside failure-only traffic logs. The updated costs showed 209–294s of file work per shard;
+scheduling now uses those passed-file measurements, retaining the failed file's prior successful
+cost. These are estimates rather than equivalent-revision performance medians.
+
+The enrollment privacy assertion validates the closed public PaymentSubmission codec with
+unknown fields rejected, matches the exact prepared enrollment identity and retains token,
+private-key and provider-reference redaction checks. It avoids treating the provider source
+number's digits inside a legitimate random public UUID as evidence of disclosure. A probe using
+the captured colliding UUID accepts that public response and rejects both root and nested
+provider-source fields. No payment scenario is removed.
+
+Required Checks receives the authoritative checked-in `scripts/check-ci-results.sh` through
+change selection's job output, avoiding another repository checkout after all test jobs end.
+The detector exports its exact source; the final job rejects a missing script before running it.
+The script's fail-closed selection/result rules remain unchanged, and the existing policy tests
+exercise its forwarded-string execution with the additional output present. No validation gate
+is removed or converted into an unconditional success.
+
+### Deeper query arrangement and delayed confirmation
+
+Owner/peer query catalog examples now execute both identities against one arranged resource
+snapshot per catalog group. The original fixture already created both identities and approved
+both Connections. Each still exchanges its own native token, invokes every installed operation,
+checks exact structured/text outcomes and records exactly one Audit per operation and Connection.
+All private-marker, exact Money and peer isolation assertions remain. Four duplicated journeys
+are removed; the number of catalog operations and identity scenarios exercised is unchanged.
+Every catalog group keeps a fresh database and coordinator registry.
+
+The session fixture optionally arranges the onboarding consent record in the same native D1
+batch as User, pairing and session creation. Ordinary session-only callers remain unchanged.
+Reviewed OAuth arrangement and the peer catalog fixture use this seam, avoiding a separate
+consent write while preserving foreign-key order and all actual registration/review/approval
+HTTP calls. No production SQL or source behavior changes.
+
+The legacy native form case advances JavaScript Date/timeout timers by six seconds instead of
+sleeping. D1 acquisition and session initialization retain live timers; fake timers start before
+the original tool request. The test asserts that the Effect wall clock crosses all six seconds,
+that the Budget remains pending, and that accepting the form completes the original request and
+deletes the Budget. Teardown restores real timers. A temporary regression probe reinstated the
+expired original transport deadline for continuation: the accelerated case failed its successful
+completion assertion. The production source was restored unchanged.
+
+A single local before/after run of the complete confirmation/discovery suites passed all cases:
+owner/peer query bodies fell from 22.49s to 18.41s (18.2%), and delayed legacy acceptance from
+8.10s to 1.93s (76.2%). Complete file elapsed times were 68.05s → 60.66s for confirmation and
+50.12s → 45.15s for discovery. These observations include the additional consent batching and
+are not isolated attribution experiments, medians or whole-pipeline savings.
+
 ## Adapter regression follow-up: #1066
 
 The last 50 actual adapter shard jobs on October 5–6 contained 45 successes, three failures,

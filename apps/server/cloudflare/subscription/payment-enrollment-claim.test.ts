@@ -1,7 +1,6 @@
-import { type Miniflare } from "miniflare";
 import { it } from "@effect/vitest";
 import { Data, Effect } from "effect";
-import { afterEach, expect } from "vitest";
+import { expect } from "vitest";
 import {
   BillingEmail,
   PaymentEnrollmentId,
@@ -18,10 +17,6 @@ const paymentRequestId = PaymentRequestId.make("30000000-0000-4000-8000-00000000
 const billingEmail = BillingEmail.make("a@example.test");
 const priceId = "22700000-0000-4000-8000-000000000001";
 const nowMs = 1_000_000;
-let nextDatabase = 0;
-const instances: Array<Miniflare> = [];
-
-afterEach(() => Promise.all(instances.splice(0).map((instance) => instance.dispose())));
 
 class TestOperationFailure extends Data.TaggedError("TestOperationFailure") {}
 const fromPromise = <A>(tryPromise: () => Promise<A>): Effect.Effect<A> =>
@@ -31,11 +26,10 @@ const fromPromise = <A>(tryPromise: () => Promise<A>): Effect.Effect<A> =>
 
 const setup = (): Effect.Effect<D1Database> =>
   Effect.gen(function* () {
-    const name = `card-enrollment-${++nextDatabase}`;
-    const { db, instance } = yield* makePaymentEnrollmentD1(name, [
+    const { db } = yield* makePaymentEnrollmentD1([
       "CREATE TABLE users (id TEXT PRIMARY KEY NOT NULL) STRICT",
     ]);
-    instances.push(instance);
+
     yield* fromPromise(() =>
       db.prepare("INSERT INTO users (id) VALUES (?), (?)").bind(userA, userB).run()
     );

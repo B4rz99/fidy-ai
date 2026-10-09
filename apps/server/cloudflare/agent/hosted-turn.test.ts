@@ -2878,17 +2878,18 @@ it("refuses a free-form reply when the verified inbound event is outside its 24-
         { status: "failed", kind: "failed", marker: "DeliveryFailed" },
       ]);
       // Older overdue rows must not hide the failed reply in a shared sample.
-      for (let index = 0; index < 8; index++) {
-        const last = now() - 172_800_000;
-        yield* Effect.tryPromise(() =>
-          db
-            .prepare(`INSERT INTO hosted_whatsapp_windows
+      yield* Effect.tryPromise(() =>
+        db.batch(
+          Array.from({ length: 8 }, (_, index) => {
+            const last = now() - 172_800_000;
+            return db
+              .prepare(`INSERT INTO hosted_whatsapp_windows
           (user_id, portfolio_id, bsuid, last_verified_inbound_at_ms, closes_at_ms)
           VALUES (?, ?, ?, ?, ?)`)
-            .bind(users[1], "portfolio-1", `CO.test-${index}`, last, last + 86_400_000)
-            .run()
-        );
-      }
+              .bind(users[1], "portfolio-1", `CO.test-${index}`, last, last + 86_400_000);
+          })
+        )
+      );
       const inspect = (): ReturnType<typeof observeOperationalHealth> =>
         observeOperationalHealth({
           DB: db,
@@ -5021,32 +5022,34 @@ it("compacts a long session of short Turns before its exact-entry capacity is re
           .first<{ id: string }>()
       );
       if (session === null) throw Error("missing session");
-      for (let index = 0; index < 39; index++) {
-        const turnId = newId();
-        const timestamp = now();
-        yield* Effect.tryPromise(() =>
-          db.batch([
-            db
-              .prepare(`INSERT INTO hosted_turns (id, user_id, hosted_session_id, started_at_ms, status)
+      yield* Effect.tryPromise(() =>
+        db.batch(
+          Array.from({ length: 39 }, () => {
+            const turnId = newId();
+            const timestamp = now();
+            return [
+              db
+                .prepare(`INSERT INTO hosted_turns (id, user_id, hosted_session_id, started_at_ms, status)
         VALUES (?, ?, ?, ?, 'pending')`)
-              .bind(turnId, users[0], session.id, timestamp),
-            db
-              .prepare(`INSERT INTO transcript_entries
+                .bind(turnId, users[0], session.id, timestamp),
+              db
+                .prepare(`INSERT INTO transcript_entries
         (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, text)
         VALUES (?, ?, ?, ?, 'user', ?, 'Short')`)
-              .bind(newId(), users[0], session.id, turnId, timestamp),
-            db
-              .prepare(`INSERT INTO transcript_entries
+                .bind(newId(), users[0], session.id, turnId, timestamp),
+              db
+                .prepare(`INSERT INTO transcript_entries
         (id, user_id, hosted_session_id, turn_id, kind, occurred_at_ms, failure_reason)
         VALUES (?, ?, ?, ?, 'failed', ?, 'HostedInferenceFailed')`)
-              .bind(newId(), users[0], session.id, turnId, timestamp),
-            db
-              .prepare(`UPDATE hosted_turns SET status = 'failed', terminal_at_ms = ?,
+                .bind(newId(), users[0], session.id, turnId, timestamp),
+              db
+                .prepare(`UPDATE hosted_turns SET status = 'failed', terminal_at_ms = ?,
         failure_reason = 'HostedInferenceFailed' WHERE id = ?`)
-              .bind(timestamp, turnId),
-          ])
-        );
-      }
+                .bind(timestamp, turnId),
+            ];
+          }).flat()
+        )
+      );
       let calls = 0;
       const provider = yield* Effect.tryPromise(() =>
         inference(() =>
@@ -5877,9 +5880,9 @@ it("checks the durable daily allowance before provider preparation or new eviden
       );
       if (session === null) throw Error("missing Hosted Agent Session");
       const timestamp = now();
-      const addTerminalTurn = (index: number): Promise<unknown> => {
+      const terminalTurnStatements = (index: number): D1PreparedStatement[] => {
         const turn = newId();
-        return db.batch([
+        return [
           db
             .prepare(
               "INSERT INTO hosted_turns (id, user_id, hosted_session_id, status, started_at_ms) VALUES (?, ?, ?, 'pending', ?)"
@@ -5900,11 +5903,11 @@ it("checks the durable daily allowance before provider preparation or new eviden
               "UPDATE hosted_turns SET status = 'failed', terminal_at_ms = ?, failure_reason = 'HostedInferenceFailed' WHERE id = ?"
             )
             .bind(timestamp, turn),
-        ]);
+        ];
       };
-      for (let index = 0; index < 49; index++) {
-        yield* Effect.tryPromise(() => addTerminalTurn(index));
-      }
+      yield* Effect.tryPromise(() =>
+        db.batch(Array.from({ length: 49 }, (_, index) => index).flatMap(terminalTurnStatements))
+      );
       const awaited43 = yield* Effect.tryPromise(() => subject(0));
       const overQuota = yield* Effect.tryPromise(() =>
         completeHostedTurn({

@@ -1,5 +1,9 @@
 name: Bun install
 description: Pin Bun, restore its install cache, and install the root dependencies.
+inputs:
+  save-cache:
+    description: Save a missing cache after the job; disable when another job publishes the same key.
+    default: "true"
 
 # The cache key hashes every lockfile in the repo, not just the root one, so all
 # jobs share one exact entry — including jobs that install an isolated tool
@@ -10,6 +14,12 @@ runs:
   steps:
     - uses: ./.github/actions/bun-runtime
     - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      if: ${{ inputs.save-cache == 'true' }}
+      with:
+        path: ~/.bun/install/cache
+        key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'tools/*/bun.lock') }}
+    - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      if: ${{ inputs.save-cache != 'true' }}
       with:
         path: ~/.bun/install/cache
         key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'tools/*/bun.lock') }}

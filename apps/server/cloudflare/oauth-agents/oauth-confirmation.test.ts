@@ -12,12 +12,16 @@ import {
   nativeConfirmationCall,
   nativePeer,
   pendingBudgetDeletion,
+  reviewBudgetDeletion,
   revokeFixtureConsent,
   transactionArguments,
   wait,
 } from "./oauth-ingress.test-fixture";
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 it("reviews an exact Budget deletion natively and consumes client acceptance with its mutation once", () =>
   Effect.runPromise(
@@ -126,42 +130,54 @@ it("reviews an exact Budget deletion natively and consumes client acceptance wit
 
 const explicitNativeAccept = { action: "accept", content: { confirm: true } };
 
-const refusingNativeResponses: ReadonlyArray<Schema.Json> = [
-  { action: "decline" },
-  { action: "cancel" },
-  { action: "accept", content: { confirm: false } },
-  { action: "accept" },
-  { action: "accept", content: {} },
-  { action: "accept", content: { confirm: "true" } },
+const refusingNativeResponses: ReadonlyArray<
+  Readonly<{ name: string; responses: ReadonlyArray<Schema.Json> }>
+> = [
+  { name: "decline and cancellation", responses: [{ action: "decline" }, { action: "cancel" }] },
+  {
+    name: "false and missing confirmation",
+    responses: [{ action: "accept", content: { confirm: false } }, { action: "accept" }],
+  },
+  {
+    name: "empty and mistyped confirmation",
+    responses: [
+      { action: "accept", content: {} },
+      { action: "accept", content: { confirm: "true" } },
+    ],
+  },
 ];
 
 it.each(refusingNativeResponses)(
-  "refuses native response %j without deleting the reviewed Budget or recording acceptance",
-  (response) =>
+  "refuses $name without deletion or acceptance and fences each refused intent",
+  ({ responses }) =>
     Effect.runPromise(
       Effect.gen(function* () {
         const fixture = yield* pendingBudgetDeletion();
-        const declined = yield* wait(fixture.call(response));
-        expect(yield* wait(declined.json())).toMatchObject({ result: { isError: true } });
-        expect(
-          yield* wait(
-            fixture.db
-              .prepare("SELECT count(*) FROM budgets WHERE id = ?")
-              .bind(fixture.id)
-              .first<number>("count(*)")
-          )
-        ).toBe(1);
-        expect(
-          yield* wait(
-            fixture.db
-              .prepare(
-                "SELECT count(*) FROM pat_audit WHERE operation = 'budgets.deleteBudget' AND outcome = 'accepted'"
-              )
-              .first<number>("count(*)")
-          )
-        ).toBe(0);
-        const later = yield* wait(fixture.call(explicitNativeAccept));
-        expect(yield* wait(later.json())).toMatchObject({ result: { isError: true } });
+        let review = { reference: fixture.reference, call: fixture.call };
+        for (const [index, response] of responses.entries()) {
+          if (index > 0) review = yield* reviewBudgetDeletion(fixture);
+          const declined = yield* wait(review.call(response));
+          expect(yield* wait(declined.json())).toMatchObject({ result: { isError: true } });
+          expect(
+            yield* wait(
+              fixture.db
+                .prepare("SELECT count(*) FROM budgets WHERE id = ?")
+                .bind(fixture.id)
+                .first<number>("count(*)")
+            )
+          ).toBe(1);
+          expect(
+            yield* wait(
+              fixture.db
+                .prepare(
+                  "SELECT count(*) FROM pat_audit WHERE operation = 'budgets.deleteBudget' AND outcome = 'accepted'"
+                )
+                .first<number>("count(*)")
+            )
+          ).toBe(0);
+          const later = yield* wait(review.call(explicitNativeAccept));
+          expect(yield* wait(later.json())).toMatchObject({ result: { isError: true } });
+        }
       })
     )
 );
@@ -345,6 +361,10 @@ it("resumes the original legacy native tool call after server-requested form acc
       );
       expect(notified.status).toBe(202);
       yield* wait(notified.text());
+      // Arrange native D1 and initialization with live timers, then own only this
+      // transport's JS timers. Advancing crosses its five-second deadline while
+      // the native form and original request are still outstanding.
+      vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
       const invoked = yield* wait(
         fixture.send("/mcp", {
           method: "POST",
@@ -387,7 +407,17 @@ it("resumes the original legacy native tool call after server-requested form acc
             .first<number>("count(*)")
         )
       ).toBe(1);
-      yield* Effect.sleep("6 seconds");
+      const reviewedAt = yield* Clock.currentTimeMillis;
+      yield* wait(vi.advanceTimersByTimeAsync(6_000));
+      expect((yield* Clock.currentTimeMillis) - reviewedAt).toBeGreaterThanOrEqual(6_000);
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare("SELECT count(*) FROM budgets WHERE id = ?")
+            .bind(fixture.id)
+            .first<number>("count(*)")
+        )
+      ).toBe(1);
       const replied = yield* wait(
         fixture.send("/mcp", {
           method: "POST",

@@ -13,11 +13,11 @@ import {
   TokenFixture,
   approveAgain,
   approvedFixture,
+  consentedSessionForUser,
   exchangeFixture,
   mcpFixture,
   revokeFixtureConsent,
   sessionFor,
-  sessionForUser,
   wait,
 } from "./oauth-ingress.test-fixture";
 
@@ -44,9 +44,6 @@ const queryGroups = Array.from(
     batch: index + 1,
     operations: queryTools.slice(index * queriesPerCase, (index + 1) * queriesPerCase),
   })
-);
-const userQueryCases = queryGroups.flatMap((group) =>
-  (["owner", "peer"] as const).map((user) => ({ ...group, user }))
 );
 
 it("refuses deliberately missing canonical query adapters without inventing a binding or accounting work", () =>
@@ -248,9 +245,9 @@ const expectedQueryFailure = (id: string, peer: boolean): boolean =>
       "transactions.getTransaction",
     ].includes(id));
 
-it.each(userQueryCases)(
-  "executes installed queries through Core for the $user User in batch $batch with private exact structured and text outcomes",
-  ({ user, operations }) =>
+it.each(queryGroups)(
+  "executes installed queries through Core for owner and peer in batch $batch with private exact structured and text outcomes",
+  ({ operations }) =>
     Effect.runPromise(
       Effect.gen(function* () {
         const fixture = yield* approvedFixture({
@@ -258,17 +255,17 @@ it.each(userQueryCases)(
           lifetimeDays: 7,
           auditMigration: true,
         });
-        const cookie = yield* sessionForUser({ db: fixture.db, index: 2, userIndex: 2 });
+        const cookie = yield* consentedSessionForUser({
+          db: fixture.db,
+          index: 2,
+          userIndex: 2,
+          consentId: "grant-peer",
+        });
         const time = DateTime.formatIso(yield* DateTime.now);
         const resourceId = "30000000-0000-4000-8000-000000000001";
         const privateMarker = "primary-user-private";
         yield* wait(
           fixture.db.batch([
-            fixture.db
-              .prepare(
-                "INSERT INTO onboarding_consent_records VALUES ('grant-peer', ?, '{}', 'disclosure', 'decision', 1, 1)"
-              )
-              .bind("20000000-0000-4000-8000-000000000001"),
             fixture.db
               .prepare("INSERT INTO trial_periods VALUES (?,0,604800000)")
               .bind("10000000-0000-4000-8000-000000000001"),
@@ -334,87 +331,90 @@ it.each(userQueryCases)(
           { query: { q: "mercado" } },
           { params: { id: resourceId } },
         ];
-        const current = user === "owner" ? fixture : peer;
-        const token = yield* Schema.decodeUnknownEffect(
-          Schema.Struct({ access_token: Schema.String })
-        )(
-          yield* wait(
-            (yield* wait(exchangeFixture({ send: fixture.send, body: current.body }))).json()
-          )
-        );
-        for (const operation of operations) {
-          // Catalog cases exercise owner behavior, not burst admission.
-          vi.spyOn(Date, "now").mockReturnValue((yield* Clock.currentTimeMillis) + 1000);
-          const args = examples.find((example) =>
-            Option.isSome(
-              Schema.decodeOption(operation.input, { onExcessProperty: "error" })(example)
+        // Both Users share only the arranged resource snapshot; credentials and accounting
+        // remain independent. Each catalog operation runs once for each identity.
+        for (const current of [fixture, peer]) {
+          const token = yield* Schema.decodeUnknownEffect(
+            Schema.Struct({ access_token: Schema.String })
+          )(
+            yield* wait(
+              (yield* wait(exchangeFixture({ send: fixture.send, body: current.body }))).json()
             )
           );
-          expect(args, operation.id).toBeDefined();
-          const response = yield* wait(
-            mcpFixture({
-              retryKey: Option.none(),
-              send: fixture.send,
-              bearer: token.access_token,
-              method: "tools/call",
-              name: operation.id,
-              args: args ?? {},
-            })
-          );
-          const raw = yield* wait(response.json());
-          expect(raw, operation.id).toHaveProperty("result.structuredContent");
-          const value = yield* Schema.decodeUnknownEffect(
-            Schema.Struct({
-              result: Schema.Struct({
-                isError: Schema.Boolean,
-                structuredContent: Schema.Json,
-                content: Schema.Tuple([
-                  Schema.Struct({ type: Schema.Literal("text"), text: Schema.String }),
-                ]),
-              }),
-            })
-          )(raw);
-          const result = value.result;
-          expect(
-            Option.isSome(
-              Schema.decodeOption(result.isError ? operation.failure : operation.success)(
-                result.structuredContent
+          for (const operation of operations) {
+            // Catalog cases exercise owner behavior, not burst admission.
+            vi.spyOn(Date, "now").mockReturnValue((yield* Clock.currentTimeMillis) + 1000);
+            const args = examples.find((example) =>
+              Option.isSome(
+                Schema.decodeOption(operation.input, { onExcessProperty: "error" })(example)
               )
-            ),
-            operation.id
-          ).toBe(true);
-          expect(
-            yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Json))(result.content[0].text)
-          ).toEqual(result.structuredContent);
-          expect(result.content[0].text, operation.id).not.toContain("unauthenticated");
-          expect(result.content[0].text, operation.id).not.toContain("validation_failed");
-          expect(result.content[0].text, operation.id).not.toContain('"code":"unavailable"');
-          const intentionallyAbsent = expectedQueryFailure(
-            operation.id,
-            current.connectionId === peer.connectionId
-          );
-          expect(result.isError, operation.id).toBe(intentionallyAbsent);
-          if (current.connectionId === peer.connectionId) {
-            expect(result.content[0].text, operation.id).not.toContain(privateMarker);
-            expect(result.content[0].text, operation.id).not.toContain("9007199254740993");
-          } else if (operation.id === "transactions.listTransactions") {
-            expect(result.content[0].text).toContain("9007199254740993");
-            expect(result.content[0].text).toContain(privateMarker);
+            );
+            expect(args, operation.id).toBeDefined();
+            const response = yield* wait(
+              mcpFixture({
+                retryKey: Option.none(),
+                send: fixture.send,
+                bearer: token.access_token,
+                method: "tools/call",
+                name: operation.id,
+                args: args ?? {},
+              })
+            );
+            const raw = yield* wait(response.json());
+            expect(raw, operation.id).toHaveProperty("result.structuredContent");
+            const value = yield* Schema.decodeUnknownEffect(
+              Schema.Struct({
+                result: Schema.Struct({
+                  isError: Schema.Boolean,
+                  structuredContent: Schema.Json,
+                  content: Schema.Tuple([
+                    Schema.Struct({ type: Schema.Literal("text"), text: Schema.String }),
+                  ]),
+                }),
+              })
+            )(raw);
+            const result = value.result;
+            expect(
+              Option.isSome(
+                Schema.decodeOption(result.isError ? operation.failure : operation.success)(
+                  result.structuredContent
+                )
+              ),
+              operation.id
+            ).toBe(true);
+            expect(
+              yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Json))(result.content[0].text)
+            ).toEqual(result.structuredContent);
+            expect(result.content[0].text, operation.id).not.toContain("unauthenticated");
+            expect(result.content[0].text, operation.id).not.toContain("validation_failed");
+            expect(result.content[0].text, operation.id).not.toContain('"code":"unavailable"');
+            const intentionallyAbsent = expectedQueryFailure(
+              operation.id,
+              current.connectionId === peer.connectionId
+            );
+            expect(result.isError, operation.id).toBe(intentionallyAbsent);
+            if (current.connectionId === peer.connectionId) {
+              expect(result.content[0].text, operation.id).not.toContain(privateMarker);
+              expect(result.content[0].text, operation.id).not.toContain("9007199254740993");
+            } else if (operation.id === "transactions.listTransactions") {
+              expect(result.content[0].text).toContain("9007199254740993");
+              expect(result.content[0].text).toContain(privateMarker);
+            }
+            const audit = yield* wait(
+              fixture.db
+                .prepare(
+                  "SELECT oauth_connection_id,oauth_credential_id,pat_id,operation,outcome FROM pat_audit WHERE operation = ? AND oauth_connection_id = ?"
+                )
+                .bind(operation.id, current.connectionId)
+                .all()
+            );
+            expect(audit.results, operation.id).toHaveLength(1);
+            expect(audit.results[0], operation.id).toMatchObject({
+              oauth_connection_id: current.connectionId,
+              pat_id: null,
+              operation: operation.id,
+            });
           }
-          const audit = yield* wait(
-            fixture.db
-              .prepare(
-                "SELECT oauth_connection_id,oauth_credential_id,pat_id,operation,outcome FROM pat_audit WHERE operation = ? AND oauth_connection_id = ?"
-              )
-              .bind(operation.id, current.connectionId)
-              .all()
-          );
-          expect(audit.results, operation.id).toHaveLength(1);
-          expect(audit.results[0], operation.id).toMatchObject({
-            oauth_connection_id: current.connectionId,
-            pat_id: null,
-            operation: operation.id,
-          });
         }
         expect(
           yield* wait(

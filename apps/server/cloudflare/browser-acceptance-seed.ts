@@ -1,52 +1,15 @@
-import { fileURLToPath } from "node:url";
 import { Clock, Effect } from "effect";
-import { Miniflare } from "miniflare";
+import { installTestSchema, isolatedTestDatabases } from "./d1-test-fixture";
 
-const miniflare = new Miniflare({
-  workers: [
-    {
-      config: {
-        compatibilityDate: "2026-09-08",
-        env: { DB: { id: "browser-acceptance", type: "d1" } },
-        manifest: {
-          mainModule: "index.mjs",
-          modules: {
-            "index.mjs": {
-              contents: "export default {fetch() {return new Response('ok')}}",
-              type: "esm",
-            },
-          },
-        },
-        name: "browser-acceptance",
-        type: "worker",
-      },
-    },
-  ],
-});
-await miniflare.ready;
-export const db = await miniflare.getD1Database("DB");
+const databases = isolatedTestDatabases();
+export const db = await databases.acquire();
 const migrationDirectory = new URL("./migrations/", import.meta.url);
-const migrations = Array.from(
-  new Bun.Glob("*.sql").scanSync({ cwd: fileURLToPath(migrationDirectory) })
-).sort();
-const applyMigration = (name: string): Promise<void> =>
-  Bun.file(new URL(name, migrationDirectory))
-    .text()
-    .then((sql) =>
-      sql
-        .replace(/^--.*$/gmu, "")
-        .trim()
-        .split(/;\s*\n(?=CREATE |ALTER |INSERT |DROP |$)/u)
-        .reduce<Promise<void>>(
-          (previous, statement) =>
-            previous.then(() => db.prepare(statement).run()).then(() => undefined),
-          Promise.resolve()
-        )
-    );
-await migrations.reduce<Promise<void>>(
-  (previous, name) => previous.then(() => applyMigration(name)),
-  Promise.resolve()
-);
+const migrations = Array.from(new Bun.Glob("*.sql").scanSync(migrationDirectory.pathname)).sort();
+// Acceptance needs the final native schema; migration-boundary tests run separately.
+await installTestSchema({
+  db,
+  sources: migrations.map((name) => new URL(name, migrationDirectory)),
+});
 
 // This identity is confined to Miniflare. The separate loopback operator simulates a verified
 // WhatsApp approval; the browser still obtains its cookie only by redeeming with the real Core.
@@ -56,6 +19,8 @@ export const firstDaviplataUserId = "24000000-0000-4000-8000-000000000291";
 const otherUserId = "24000000-0000-4000-8000-000000000261";
 const otherTransactionId = "24000000-0000-4000-8000-000000000262";
 const backupRecoveryCode = "ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2";
+const recoveryUserId = "24000000-0000-4000-8000-000000000311";
+export const pairingUserId = "24000000-0000-4000-8000-000000000321";
 const now = Effect.runSync(Clock.currentTimeMillis);
 const trialDurationMs = 604_800_000;
 const expiredTrialAgeMs = 691_200_000;
@@ -118,6 +83,13 @@ const seedIdentity = (overrides: Partial<SeedIdentity> = {}): Promise<void> => {
   );
 };
 await seedIdentity();
+// Pairing owns its standing and Dashboard; enrollment journeys may run first or concurrently.
+await seedIdentity({
+  userId: pairingUserId,
+  bsuid: "CO.Pairing",
+  email: "vinculacion@example.com",
+  consentId: "24000000-0000-4000-8000-000000000322",
+});
 await db
   .prepare(
     "INSERT INTO users (id, service_market, locale, time_zone, created_at_ms) VALUES (?,?,?,?,?)"
@@ -199,9 +171,17 @@ await seedIdentity({
 const recoveryDigest = new Uint8Array(
   await crypto.subtle.digest("SHA-256", new TextEncoder().encode(backupRecoveryCode))
 );
+// Recovery revokes existing sessions. Its parallel journey must not invalidate the
+// ordinary pairing journey's User while that browser is exercising financial operations.
+await seedIdentity({
+  userId: recoveryUserId,
+  bsuid: "CO.Recovery",
+  email: "recuperacion@example.com",
+  consentId: "24000000-0000-4000-8000-000000000312",
+});
 await db
   .prepare(
     "INSERT INTO backup_recovery_credentials (user_id, code_digest, created_at_ms) VALUES (?,?,?)"
   )
-  .bind(fixtureUserId, recoveryDigest, now)
+  .bind(recoveryUserId, recoveryDigest, now)
   .run();

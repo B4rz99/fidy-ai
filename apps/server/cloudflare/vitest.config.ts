@@ -17,5 +17,7 @@ export default defineConfig({
     fileParallelism: true,
     maxWorkers: 3,
     testTimeout: 15_000,
+    // Retain console capture and reveal a failing case's logs without printing successful traffic.
+    silent: "passed-only",
   },
 });

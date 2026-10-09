@@ -1,13 +1,158 @@
 import { afterAll, expect } from "vitest";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
-import { installTestSchema, isolatedTestDatabases, isolatedTestStorage } from "./d1-test-fixture";
+import {
+  installTestSchema,
+  installTestSchemaWithPrefix,
+  isolatedTestDatabases,
+  isolatedTestStorage,
+} from "./d1-test-fixture";
 
 const databases = isolatedTestDatabases();
 const storage = isolatedTestStorage();
 afterAll(() => Promise.all([databases.dispose(), storage.dispose()]));
 const wait = <A>(work: () => Promise<A>): Effect.Effect<A> =>
   Effect.tryPromise(work).pipe(Effect.orDie);
+
+it.live("keeps caller-owned auth schema variants and rows independent in native baselines", () =>
+  Effect.gen(function* () {
+    const sources = [new URL("./migrations/0001_categories.sql", import.meta.url)];
+    const prefix = (locale: string): ReadonlyArray<string> => [
+      `CREATE TABLE fixture_users (id TEXT PRIMARY KEY, locale TEXT NOT NULL DEFAULT '${locale}') STRICT`,
+      "CREATE TABLE fixture_credentials (user_id TEXT NOT NULL REFERENCES fixture_users(id)) STRICT",
+    ];
+    const original = yield* wait(() => databases.acquire());
+    yield* wait(() =>
+      installTestSchemaWithPrefix({ db: original, sources, prefixStatements: prefix("es-CO") })
+    );
+    yield* wait(() => original.prepare("INSERT INTO fixture_users(id) VALUES ('private')").run());
+    for (const locale of ["en-US", "es-CO"]) {
+      const fresh = yield* wait(() => databases.acquire());
+      yield* wait(() =>
+        installTestSchemaWithPrefix({ db: fresh, sources, prefixStatements: prefix(locale) })
+      );
+      expect(
+        (yield* wait(() => fresh.prepare("SELECT * FROM fixture_users").all())).results
+      ).toEqual([]);
+      yield* wait(() => fresh.prepare("INSERT INTO fixture_users(id) VALUES ('fresh')").run());
+      expect(
+        yield* wait(() => fresh.prepare("SELECT locale FROM fixture_users").first("locale"))
+      ).toBe(locale);
+      yield* wait(() =>
+        expect(
+          fresh.prepare("INSERT INTO fixture_credentials VALUES ('missing')").run()
+        ).rejects.toThrow()
+      );
+    }
+  })
+);
+
+it.live("installs schema additions without caching pre-existing test rows or replacing them", () =>
+  Effect.gen(function* () {
+    const source = new URL("./migrations/0001_categories.sql", import.meta.url);
+    const populated = yield* wait(() => databases.acquire());
+    yield* wait(() =>
+      populated.batch([
+        populated.prepare("CREATE TABLE retained (id TEXT)"),
+        populated.prepare("INSERT INTO retained VALUES ('private')"),
+      ])
+    );
+    yield* wait(() => installTestSchema({ db: populated, sources: [source] }));
+    expect(yield* wait(() => populated.prepare("SELECT id FROM retained").first("id"))).toBe(
+      "private"
+    );
+    const fresh = yield* wait(() => databases.acquire());
+    yield* wait(() => installTestSchema({ db: fresh, sources: [source] }));
+    expect(
+      (yield* wait(() =>
+        fresh.prepare("SELECT name FROM sqlite_master WHERE name = 'retained'").all()
+      )).results
+    ).toEqual([]);
+    yield* wait(() =>
+      installTestSchema({
+        db: populated,
+        sources: [new URL("./migrations/0002_resource_admission.sql", import.meta.url)],
+      })
+    );
+    yield* wait(() =>
+      expect(
+        populated
+          .prepare("INSERT INTO resource_admission_grants VALUES ('missing-claim', 0, 1)")
+          .run()
+      ).rejects.toThrow()
+    );
+    expect(yield* wait(() => populated.prepare("SELECT id FROM retained").first("id"))).toBe(
+      "private"
+    );
+  })
+);
+
+it.live(
+  "restores the migrated baseline with native search, seeds and constraints, without test mutations",
+  () =>
+    Effect.gen(function* () {
+      const sources = Array.from(
+        new Bun.Glob("*.sql").scanSync(new URL("./migrations/", import.meta.url).pathname)
+      )
+        .sort()
+        .map((name) => new URL(`./migrations/${name}`, import.meta.url));
+      const original = yield* wait(() => databases.acquire());
+      yield* wait(() => installTestSchema({ db: original, sources }));
+      const catalog =
+        "SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name";
+      const expected = yield* wait(() => original.prepare(catalog).all());
+      yield* wait(() =>
+        original.batch([
+          original.prepare("UPDATE categories SET label = 'changed' WHERE display_order = 0"),
+          original.prepare("CREATE TABLE leaked_test_rows (id TEXT)"),
+          original.prepare(
+            "INSERT INTO dashboard_projection_list_search (search_text) VALUES ('snapshot search')"
+          ),
+        ])
+      );
+      const restored = yield* wait(() => databases.acquire());
+      yield* wait(() => installTestSchema({ db: restored, sources }));
+      expect((yield* wait(() => restored.prepare(catalog).all())).results).toEqual(
+        expected.results
+      );
+      expect(
+        yield* wait(() =>
+          restored.prepare("SELECT label FROM categories WHERE display_order = 0").first("label")
+        )
+      ).toBe("Restaurantes");
+      expect(
+        (yield* wait(() =>
+          restored.prepare("SELECT * FROM dashboard_projection_list_search").all()
+        )).results
+      ).toEqual([]);
+      yield* wait(() =>
+        restored
+          .prepare(
+            "INSERT INTO dashboard_projection_list_search (search_text) VALUES ('native search')"
+          )
+          .run()
+      );
+      expect(
+        yield* wait(() =>
+          restored
+            .prepare(
+              "SELECT count(*) AS count FROM dashboard_projection_list_search WHERE dashboard_projection_list_search MATCH 'native'"
+            )
+            .first("count")
+        )
+      ).toBe(1);
+      yield* wait(() =>
+        expect(
+          restored
+            .prepare("INSERT INTO resource_admission_grants VALUES ('missing-claim', 0, 1)")
+            .run()
+        ).rejects.toThrow()
+      );
+      expect(
+        (yield* wait(() => restored.prepare("PRAGMA foreign_key_check").all())).results
+      ).toEqual([]);
+    })
+);
 
 it.live("does not carry rows, altered schema, triggers, or indexes into the next database", () =>
   Effect.gen(function* () {

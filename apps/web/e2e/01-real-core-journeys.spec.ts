@@ -445,6 +445,24 @@ test("replaces a verified EmailCredential through public operations after fixtur
       ).toBe(0);
     })
   ));
+type EnrollmentSubmission = Readonly<{ status: number; body: unknown }>;
+const captureEnrollmentReply = (
+  response: APIResponse,
+  route: Route,
+  capture: ReturnType<typeof Promise.withResolvers<EnrollmentSubmission>>
+): Promise<void> =>
+  response.json().then((body: unknown) => {
+    capture.resolve({ status: response.status(), body });
+    return route.fulfill({ response });
+  });
+const observeEnrollmentSubmission = (
+  page: Page,
+  capture: ReturnType<typeof Promise.withResolvers<EnrollmentSubmission>>
+): ReturnType<Page["route"]> =>
+  page.route(`${api}/web/subscription/payment-enrollments/submit`, (route) =>
+    route.fetch().then((response) => captureEnrollmentReply(response, route, capture))
+  );
+
 const submitReusedCard = Effect.fnUntraced(function* (page: Page, request: APIRequestContext) {
   yield* fromPlaywright(
     signInThroughCore({
@@ -474,16 +492,11 @@ const submitReusedCard = Effect.fnUntraced(function* (page: Page, request: APIRe
   );
   yield* fromPlaywright(page.getByLabel(/Acepto el reglamento/iu).check());
   yield* fromPlaywright(page.getByLabel(/Autorizo el tratamiento/iu).check());
-  // Capture the body as soon as the response arrives, before successful submission can navigate.
-  const submission = page
-    .waitForResponse(
-      (response) => response.url() === `${api}/web/subscription/payment-enrollments/submit`
-    )
-    .then((response) =>
-      response.json().then((body: unknown) => ({ status: response.status(), body }))
-    );
+  // Read the real Core reply before releasing it to the navigating browser.
+  const submission = Promise.withResolvers<EnrollmentSubmission>();
+  yield* fromPlaywright(observeEnrollmentSubmission(page, submission));
   yield* fromPlaywright(page.getByRole("button", { name: "Activar Pro" }).click());
-  const submitted = yield* fromPlaywright(submission);
+  const submitted = yield* fromPlaywright(submission.promise);
   expect(submitted.status).toBe(ok);
   const submissionBody = submitted.body;
   expect(submissionBody).toMatchObject({
@@ -610,9 +623,10 @@ test("tokenizes a first card outside Fidy and enrolls through real public and Co
       yield* fromPlaywright(page.getByLabel("Nombre en la tarjeta").fill("Usuario Prueba"));
       yield* fromPlaywright(page.getByLabel(/Acepto el reglamento/iu).check());
       yield* fromPlaywright(page.getByLabel(/Autorizo el tratamiento/iu).check());
-      const submitResponse = page.waitForResponse(
-        (response) => response.url() === `${api}/web/subscription/payment-enrollments/submit`
-      );
+      // The application navigates on this response. Read the real Core reply before
+      // releasing it to Chromium, which can discard response bodies after navigation.
+      const submitResponse = Promise.withResolvers<EnrollmentSubmission>();
+      yield* fromPlaywright(observeEnrollmentSubmission(page, submitResponse));
       yield* fromPlaywright(
         page
           .getByRole("button", {
@@ -620,9 +634,9 @@ test("tokenizes a first card outside Fidy and enrolls through real public and Co
           })
           .click()
       );
-      const submitted = yield* fromPlaywright(submitResponse);
-      expect(submitted.status()).toBe(ok);
-      expect(yield* fromPlaywright(submitted.json())).toMatchObject({
+      const submitted = yield* fromPlaywright(submitResponse.promise);
+      expect(submitted.status).toBe(ok);
+      expect(submitted.body).toMatchObject({
         status: "payment-pending",
       });
       expect(

@@ -1,6 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { type Cause, Clock, Effect, Exit, Option, Schema } from "effect";
-import { type Miniflare } from "miniflare";
+import { type Cause, Clock, Effect, Exit, Schema } from "effect";
 import { SignJWT, exportJWK, generateKeyPair } from "jose";
 import { makePaymentEnrollmentD1 } from "./payment-enrollment-d1.test-fixture";
 import { seedRefundCharge } from "./refund-charge.test-fixture";
@@ -11,20 +10,16 @@ import coreWorker from "../core-worker";
 import publicWorker from "../public-worker";
 import { handleRefundSupport } from "./runtime";
 
-let instance: Option.Option<Miniflare> = Option.none();
 let counter = 0;
 afterEach(() => {
   vi.unstubAllGlobals();
-  const disposed = Option.isSome(instance) ? instance.value.dispose() : Promise.resolve();
-  instance = Option.none();
-  return disposed;
 });
 const setup = Effect.fnUntraced(function* () {
   const number = ++counter;
-  const made = yield* makePaymentEnrollmentD1(`refund-support-${number}`, [
+  const made = yield* makePaymentEnrollmentD1([
     "CREATE TABLE users (id TEXT PRIMARY KEY, time_zone TEXT NOT NULL) STRICT",
   ]);
-  instance = Option.some(made.instance);
+
   const keys = yield* Effect.tryPromise(() => generateKeyPair("RS256", { extractable: true }));
   const jwk = yield* Effect.tryPromise(() => exportJWK(keys.publicKey));
   const issuer = `https://refund-support-${number}.cloudflareaccess.com`;

@@ -22,7 +22,7 @@ Re-runnable checks from the repository root, using its pinned Bun runtime:
 
 ```sh
 bun run --cwd apps/server test:cloudflare provider-authentication onboarding/browser-authentication.test.ts browser-login/operations.test.ts recovery/support-recovery.test.ts
-bun run --cwd apps/web test:browser google-authentication.spec.ts microsoft-authentication.spec.ts browser-pairing.spec.ts
+bun run --cwd apps/web test:browser 00-google-authentication.spec.ts microsoft-authentication.spec.ts browser-pairing.spec.ts
 bun run --cwd apps/cli test -- src/support-recovery
 bun run --cwd apps/web test -- src/features/browser-login src/features/provider-authentication src/features/recovery src/features/email-replacement
 ```

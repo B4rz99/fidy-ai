@@ -8,7 +8,7 @@ import {
 } from "./browser-acceptance-core-module";
 import { browserAcceptanceTopology } from "./browser-acceptance/operations";
 import { newId } from "./secret-material/operations";
-import { db, firstCardUserId, fixtureUserId } from "./browser-acceptance-seed";
+import { db, firstCardUserId, fixtureUserId, pairingUserId } from "./browser-acceptance-seed";
 import {
   providerPrivateKey,
   providerPublicKey,
@@ -343,6 +343,10 @@ const googleOperator = (request: Request): Option.Option<Promise<Response>> => {
         .bind(newId(), Effect.runSync(Clock.currentTimeMillis), subject.value);
   return Option.some(statement.run().then(() => new Response(null, { status: 204 })));
 };
+const approvedFixtureUser = (parameters: URLSearchParams): string => {
+  if (parameters.get("firstCard") === "true") return firstCardUserId;
+  return parameters.get("pairing") === "true" ? pairingUserId : fixtureUserId;
+};
 const operator = Bun.serve({
   hostname: "127.0.0.1",
   port: operatorPort,
@@ -365,10 +369,7 @@ const operator = Bun.serve({
     if (Option.isSome(loginCode)) return deliverEmailLoginProof(loginCode.value);
     const approvalCode = operatorCode(request, "/approve");
     if (Option.isSome(approvalCode)) {
-      const userId =
-        new URL(request.url).searchParams.get("firstCard") === "true"
-          ? firstCardUserId
-          : fixtureUserId;
+      const userId = approvedFixtureUser(new URL(request.url).searchParams);
       return approveWhatsAppPairing(approvalCode.value, userId);
     }
     return new Response(null, { status: 403 });

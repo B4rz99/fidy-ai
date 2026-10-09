@@ -31,10 +31,13 @@ jobs:
       browser: ${{ steps.plan.outputs.browser }}
       security-sast: ${{ steps.plan.outputs.security-sast }}
       security-sca: ${{ steps.plan.outputs.security-sca }}
+      required-script: ${{ steps.results-gate.outputs.script }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          # Path-only, no-rename diff needs full history and trees, not historical file bodies.
           fetch-depth: 0
+          filter: blob:none
           persist-credentials: false
       - uses: ./.github/actions/bun-runtime
       - name: Plan checks from the complete PR diff
@@ -43,6 +46,14 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: bun scripts/ci-changes.ts
+      - name: Export the authoritative required-check script
+        id: results-gate
+        run: |
+          {
+            echo 'script<<FIDY_REQUIRED_CHECK_SCRIPT'
+            cat scripts/check-ci-results.sh
+            echo 'FIDY_REQUIRED_CHECK_SCRIPT'
+          } >> "$GITHUB_OUTPUT"
 
   static:
     name: Workspace Gate
@@ -124,12 +135,27 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/bun-install
+        with:
+          # Other jobs publish this exact cache; avoid compressing it again at teardown.
+          save-cache: "false"
       - name: Cloudflare adapter validation
         env:
           CLOUDFLARE_TEST_SHARD: ${{ matrix.shard }}/4
           CLOUDFLARE_TEST_REPORT: "true"
           VERIFY_TIMING_REPORT: apps/server/test-results/verify-adapters.json
         run: bun run verify -- --group cloudflare-adapters
+      - name: Summarize adapter file timings
+        if: ${{ !cancelled() }}
+        run: |
+          python3 - <<'PYTHON'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("apps/server/test-results/cloudflare-adapters.json").read_text())
+          for result in report["testResults"]:
+              relative = result["name"].split("/apps/server/cloudflare/", 1)[-1]
+              seconds = (result["endTime"] - result["startTime"]) / 1000
+              print(f"{relative} [{result['status']}] {seconds:.3f}s")
+          PYTHON
       - name: Preserve adapter timing evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -173,6 +199,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/bun-install
+        with:
+          # Other jobs publish this exact cache; avoid compressing it again at teardown.
+          save-cache: "false"
       - name: Select installed Playwright version
         id: playwright-version
         working-directory: apps/web
@@ -184,7 +213,9 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}-headless-shell
       - name: Install Chromium system dependencies
-        run: time bunx --bun playwright install-deps chromium
+        # This disposable runner has no long-lived application daemons to restart.
+        # Use its Node CLI for root-only installation; native tests retain pinned Bun.
+        run: time sudo env NEEDRESTART_SUSPEND=1 node node_modules/.bin/playwright install-deps chromium
       # Default headless Chromium launches the shell, not the full headed browser.
       # Still run installation on cache hits to validate/download any missing binaries.
       - name: Install Chromium headless shell
@@ -197,8 +228,8 @@ jobs:
         env:
           VERIFY_TIMING_REPORT: apps/web/test-results/verify-browser.json
         run: |
-          sudo apt-get update
-          sudo apt-get install -y dbus-x11 gnome-keyring libsecret-1-0
+          # Playwright install-deps already refreshed the package index.
+          sudo env NEEDRESTART_SUSPEND=1 apt-get install -y --no-install-recommends dbus-x11 gnome-keyring libsecret-1-0
           dbus-run-session -- bash -euc '
             printf "%s" fidy-test-keyring | gnome-keyring-daemon --unlock --components=secrets
             bun run --cwd apps/cli test:native
@@ -327,10 +358,10 @@ jobs:
       - security-sca
     if: ${{ always() }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
       - name: Verify required jobs against the change plan
         env:
           RESULTS: ${{ toJSON(needs) }}
-        run: bash scripts/check-ci-results.sh
+          REQUIRED_CHECK_SCRIPT: ${{ needs.changes.outputs.required-script }}
+        run: |
+          : "${REQUIRED_CHECK_SCRIPT:?Required-check script unavailable}"
+          bash -c "$REQUIRED_CHECK_SCRIPT"

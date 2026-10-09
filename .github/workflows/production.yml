@@ -135,8 +135,7 @@ jobs:
           CLOUDFLARE_ACCESS_AUDIENCE: ${{ secrets.CLOUDFLARE_ACCESS_AUDIENCE }}
         run: |
           bash scripts/check-production-runtime-config.sh
-          alchemy() { bun ../../node_modules/alchemy/bin/alchemy.js "$@"; }
-          alchemy deploy --stage production --yes --no-input
+          bun production-resources.ts upload
 
       - name: Isolate public admission before replacing incompatible private Core
         if: ${{ inputs.recover_deleted_queue }}
@@ -189,8 +188,7 @@ jobs:
           CLOUDFLARE_ACCESS_AUDIENCE: ${{ secrets.CLOUDFLARE_ACCESS_AUDIENCE }}
         run: |
           bash scripts/check-production-runtime-config.sh
-          alchemy() { bun ../../node_modules/alchemy/bin/alchemy.js "$@"; }
-          alchemy deploy --stage production --yes --no-input
+          bun production-resources.ts upload
 
       - name: Install zero-traffic candidate routing
         working-directory: infra/cloudflare
@@ -294,6 +292,28 @@ jobs:
       - name: Probe production edge without valid User or provider authority
         working-directory: infra/cloudflare
         run: bun ./verify-edge-smoke.ts
+
+      - name: Retire obsolete resources after verified promotion
+        if: ${{ success() && steps.post_smoke.outcome == 'success' }}
+        working-directory: infra/cloudflare
+        env:
+          RECOVERY_ISOLATION: ""
+          MICROSOFT_CLIENT_ID: ${{ secrets.MICROSOFT_CLIENT_ID }}
+          MICROSOFT_CLIENT_SECRET: ${{ secrets.MICROSOFT_CLIENT_SECRET }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          KAPSO_API_KEY: ${{ secrets.KAPSO_API_KEY }}
+          KAPSO_WEBHOOK_SECRET: ${{ secrets.KAPSO_WEBHOOK_SECRET }}
+          WHATSAPP_BUSINESS_PORTFOLIO_ID: ${{ secrets.WHATSAPP_BUSINESS_PORTFOLIO_ID }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          WOMPI_ENVIRONMENT: ${{ secrets.WOMPI_ENVIRONMENT }}
+          WOMPI_PUBLIC_KEY: ${{ secrets.WOMPI_PUBLIC_KEY }}
+          WOMPI_PRIVATE_KEY: ${{ secrets.WOMPI_PRIVATE_KEY }}
+          WOMPI_INTEGRITY_SECRET: ${{ secrets.WOMPI_INTEGRITY_SECRET }}
+          WOMPI_EVENT_SECRET: ${{ secrets.WOMPI_EVENT_SECRET }}
+          CLOUDFLARE_ACCESS_ISSUER: ${{ secrets.CLOUDFLARE_ACCESS_ISSUER }}
+          CLOUDFLARE_ACCESS_AUDIENCE: ${{ secrets.CLOUDFLARE_ACCESS_AUDIENCE }}
+        run: bun production-resources.ts retire
 
       - name: Reject post-deployment Cloudflare drift
         working-directory: infra/cloudflare

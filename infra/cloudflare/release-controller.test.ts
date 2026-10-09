@@ -90,6 +90,60 @@ const captured = (port: ReleasePort): Effect.Effect<ReleaseSnapshot, Error> =>
     coreName,
   });
 
+it.effect("permits resource retirement only while the promoted pair still owns exact traffic", () =>
+  Effect.gen(function* () {
+    const fixture = harness();
+    const snapshot = yield* captured(fixture.port);
+    const release = yield* releaseController.stageRelease(fixture.port, snapshot, candidates);
+    const promoted = yield* releaseController.promoteRelease(fixture.port, release, {
+      exactPairPassed: true,
+      middlePairPassed: true,
+    });
+    const beforeVerification = [...fixture.changes];
+    yield* releaseController.verifyRetirement(fixture.port, { release, promoted });
+    expect(fixture.changes).toEqual(beforeVerification);
+    yield* fixture.port.deploy(coreName, [{ id: versions.coreStable, percentage: 100 }]);
+    const changed = yield* Effect.exit(
+      releaseController.verifyRetirement(fixture.port, { release, promoted })
+    );
+    expect(Exit.isFailure(changed)).toBe(true);
+  })
+);
+
+it.effect("refuses retirement for superseded, unreadable, or replaced deployment receipts", () =>
+  Effect.gen(function* () {
+    for (const scenario of ["superseded", publicName, coreName, "new-receipt"]) {
+      const fixture = harness();
+      const snapshot = yield* captured(fixture.port);
+      const release = yield* releaseController.stageRelease(fixture.port, snapshot, candidates);
+      const promoted = yield* releaseController.promoteRelease(fixture.port, release, {
+        exactPairPassed: true,
+        middlePairPassed: true,
+      });
+      if (scenario === "superseded") {
+        fixture.supersede();
+      }
+      if (scenario === "new-receipt") {
+        yield* fixture.port.deploy(publicName, [{ id: versions.publicCandidate, percentage: 100 }]);
+      }
+      const beforeVerification = [...fixture.changes];
+      const port: ReleasePort = {
+        ...fixture.port,
+        current: (name) =>
+          scenario === name
+            ? Effect.fail(Error("unreadable deployment"))
+            : fixture.port.current(name),
+      };
+      expect(
+        Exit.isFailure(
+          yield* Effect.exit(releaseController.verifyRetirement(port, { release, promoted }))
+        )
+      ).toBe(true);
+      expect(fixture.changes).toEqual(beforeVerification);
+    }
+  })
+);
+
 const isolationOrdering =
   (fixture: Harness): (() => Effect.Effect<void, Error>) =>
   () =>

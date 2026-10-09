@@ -252,7 +252,7 @@
 }
 .transaction-ledger [data-slot="table-cell"] {
   padding: 3px 12px;
-  font-size: 14px;
+  font-size: 16px;
 }
 .transaction-ledger [data-slot="table-row"][data-state="selected"] {
   background: var(--accent);

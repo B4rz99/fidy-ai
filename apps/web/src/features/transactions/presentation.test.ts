@@ -1,4 +1,4 @@
-import { BigDecimal, DateTime, Option } from "effect";
+import { BigDecimal, DateTime, Equal, Option } from "effect";
 import { describe, expect, it } from "vitest";
 import { formatMoney } from "@/ui/money";
 import {
@@ -89,7 +89,7 @@ describe("current-month Transaction presentation", () => {
         direction: "outflow",
         transactionTypeLabel: "Gasto",
         moneyText: "COP 25.000,00",
-        money: { amount: BigDecimal.fromStringUnsafe("25000"), currency: "COP" },
+        money: { currency: "COP" },
         dateLabel: "20 de julio de 2026",
         occurredOnText: "20-07-2026",
       },
@@ -100,10 +100,22 @@ describe("current-month Transaction presentation", () => {
         direction: "inflow",
         transactionTypeLabel: "Ingreso",
         moneyText: "USD 19,90",
-        money: { amount: BigDecimal.fromStringUnsafe("19.9"), currency: "USD" },
+        money: { currency: "USD" },
         dateLabel: "20 de julio de 2026",
         occurredOnText: "20-07-2026",
       },
     ]);
+    expect(
+      Equal.equals(
+        Option.getOrThrow(Option.fromNullishOr(rows[0])).money.amount,
+        BigDecimal.fromStringUnsafe("25000")
+      )
+    ).toBe(true);
+    expect(
+      Equal.equals(
+        Option.getOrThrow(Option.fromNullishOr(rows[1])).money.amount,
+        BigDecimal.fromStringUnsafe("19.9")
+      )
+    ).toBe(true);
   });
 });

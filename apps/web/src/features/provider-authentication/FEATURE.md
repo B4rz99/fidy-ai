@@ -162,11 +162,17 @@ callbacks for handoff/review messages still return 401/503: authenticated provid
 correlation token for these sends, while the lifecycle decoder requires one. They establish no
 delivery proof and caused no association effect. The follow-up acknowledges valid uncorrelated
 receipts without domain effects and admits each of the three status transitions once per
-endpoint/message/minute under the same shared 500/hour budget. Forty-seven Worker/D1 journeys
+endpoint/message/minute under the same shared 500/hour budget. Forty-eight Worker/D1 journeys
 cover malformed/mixed correlation, bad signatures, mismatched coordinates, future timestamps,
 read-only history and unchanged Consent/association state. The reusable checks
-now cover 47 Worker/D1 journeys, including absent callbacks, caller/correlation isolation and
+now cover 48 Worker/D1 journeys, including absent callbacks, caller/correlation isolation and
 concurrent replay/global lookup budgets. Both Security and Standards reviews are clear.
+
+[PR #1123](https://github.com/B4rz99/fidy-ai/pull/1123) deployed successfully. Replaying a real
+uncorrelated sent receipt changed 401 to 200. A delivered receipt containing a later read status
+still returned 401; its new Worker/D1 regression reproduces that failure and now passes. Valid
+uncorrelated history needs the requested status, while correlated delivery proof retains the
+latest-event guard. Final deployed replay of that delivered receipt remains pending.
 
 Remaining live checks: Google and Microsoft personal denial UI;
 Microsoft work/school signup/returning login/denial (unavailable: the User has no work/school account);

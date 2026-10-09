@@ -3,7 +3,6 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import {
   CreditCardIcon,
   Home01Icon,
-  Leaf01Icon,
   Settings01Icon,
   SparklesIcon,
 } from "@hugeicons/core-free-icons";
@@ -15,6 +14,7 @@ import type { JSX } from "react";
 import { useSession } from "@/session/session-context";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Button } from "@/ui/components/button";
+import { fidyLogoUrl } from "@/ui/brand";
 import { completeLogoutNavigation, makeLogoutOperation } from "./logout";
 
 /** Explains the authentication-lifetime transition without exposing or retaining credentials. */
@@ -57,13 +57,13 @@ const SignedInNavigation = ({
         className="flex min-h-12 shrink-0 items-center gap-4 rounded-md px-4 py-3 text-base text-muted-foreground hover:bg-muted"
         activeProps={{ className: "bg-secondary text-secondary-foreground font-medium" }}
       >
-        <HugeiconsIcon icon={link.icon} size={22} strokeWidth={1.7} aria-hidden="true" />
+        <HugeiconsIcon icon={link.icon} size={24} strokeWidth={1.5} aria-hidden="true" />
         {link.label}
       </Link>
     ))}
     <details className="shrink-0">
       <summary className="flex min-h-12 cursor-pointer list-none items-center gap-4 rounded-md px-4 py-3 text-base text-muted-foreground hover:bg-muted">
-        <HugeiconsIcon icon={Settings01Icon} size={22} strokeWidth={1.7} aria-hidden="true" />
+        <HugeiconsIcon icon={Settings01Icon} size={24} strokeWidth={1.5} aria-hidden="true" />
         Ajustes
       </summary>
       <div className="flex flex-col gap-1 py-2 pl-4">
@@ -118,19 +118,12 @@ const SignedInShell = (): JSX.Element => {
   return (
     <div className="signed-in-theme min-h-svh bg-background md:flex">
       <aside className="flex border-b bg-muted/30 md:sticky md:top-0 md:h-svh md:w-60 md:flex-none md:flex-col md:border-r md:border-b-0">
-        <Link className="flex shrink-0 items-start gap-3 px-6 py-5 md:pb-8" to="/app/dashboard">
-          <HugeiconsIcon
-            icon={Leaf01Icon}
-            size={32}
-            strokeWidth={2}
-            className="text-primary"
-            aria-hidden="true"
-          />
-          <span>
-            <span className="block text-2xl font-semibold leading-7">Fidy</span>
-            <span className="hidden text-xs text-muted-foreground md:block">
-              Tu dinero, más claro
-            </span>
+        <Link className="flex shrink-0 flex-col items-start gap-2 px-6 py-4" to="/app/dashboard">
+          <span className="flex h-11 w-24 items-center justify-center rounded-md bg-on-pastel">
+            <img className="w-20" src={fidyLogoUrl} alt="Fidy" />
+          </span>
+          <span className="hidden text-xs text-muted-foreground md:block">
+            Tu dinero, más claro
           </span>
         </Link>
         <SignedInNavigation loggingOut={status.waiting} onLogout={onLogout} />

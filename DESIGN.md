@@ -394,12 +394,15 @@ Document format: [DESIGN.md specification](https://github.com/google-labs-code/d
 
 ## Signed-in transaction workspace
 
-The approved transaction reference uses a neutral application theme: white surfaces,
-`#101522` text, `#687080` secondary text, `#27845d` emerald actions, `#e8ebef`
-borders, and `#edf8f2` selected rows. Application typography uses Arial/Helvetica
-at 16px for ledger rows, 14px for supporting text, and 28px for the page heading.
-Controls use 6px corners. The sidebar is 240px wide; the desktop detail/summary
-rail is 384px wide with a shared full-height divider. Rows are approximately
-55px tall, grouped by long local dates with currency-specific daily net totals.
-The right rail shows transaction identity above correction fields, and a detailed
-summary when browsing. This scoped theme does not change the public website.
+The approved transaction reference establishes the layout, while the shared Fidy
+tokens above establish its visual language. Use Poppins, brand-green primary actions
+with dark text, warm off-white and peach surfaces, and readable dark icons on pastel
+indicators. Normal spending is not an error. Use the supplied wordmark and the shared
+button, input, radius, and focus conventions; do not introduce a separate application
+palette or font.
+
+The sidebar is 240px wide; the desktop detail/summary rail is 384px wide with a
+shared full-height divider. Comfortable rows use 16px text and group by long local
+dates with currency-specific daily net totals. The right rail shows transaction
+identity above correction fields, and a detailed summary when browsing. Preserve
+this composition when applying the shared light and Grafito theme tokens.

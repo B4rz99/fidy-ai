@@ -87,6 +87,7 @@ const TransactionRow = ({
         <HugeiconsIcon
           icon={ArrowRight01Icon}
           size={16}
+          strokeWidth={1.5}
           aria-hidden="true"
           className="text-muted-foreground"
         />

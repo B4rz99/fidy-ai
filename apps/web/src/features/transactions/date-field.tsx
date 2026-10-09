@@ -31,7 +31,7 @@ export const TransactionDateField = ({
         onChange={(event) => onChange(event.target.value)}
       />
       <span aria-hidden="true">
-        <HugeiconsIcon icon={Calendar03Icon} size={20} />
+        <HugeiconsIcon icon={Calendar03Icon} size={20} strokeWidth={1.5} />
         {label}
       </span>
     </div>

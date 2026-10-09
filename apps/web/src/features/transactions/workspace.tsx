@@ -263,15 +263,30 @@ const WorkspaceHeader = ({
     </div>
     <div className="flex flex-wrap items-center gap-2">
       <Button variant="outline" disabled={disabled} onClick={() => onTool("search")}>
-        <HugeiconsIcon icon={Search01Icon} size={20} aria-hidden="true" />
+        <HugeiconsIcon
+          icon={Search01Icon}
+          strokeWidth={1.5}
+          data-icon="inline-start"
+          aria-hidden="true"
+        />
         Buscar
       </Button>
       <Button variant="outline" disabled={disabled} onClick={() => onTool("date")}>
-        <HugeiconsIcon icon={Calendar03Icon} size={20} aria-hidden="true" />
+        <HugeiconsIcon
+          icon={Calendar03Icon}
+          strokeWidth={1.5}
+          data-icon="inline-start"
+          aria-hidden="true"
+        />
         Fecha
       </Button>
       <Button variant="outline" disabled={disabled} onClick={() => onTool("category")}>
-        <HugeiconsIcon icon={FilterHorizontalIcon} size={20} aria-hidden="true" />
+        <HugeiconsIcon
+          icon={FilterHorizontalIcon}
+          strokeWidth={1.5}
+          data-icon="inline-start"
+          aria-hidden="true"
+        />
         Filtros
       </Button>
       <Button disabled={disabled} onClick={onCapture}>

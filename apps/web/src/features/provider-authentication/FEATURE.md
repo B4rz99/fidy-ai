@@ -172,7 +172,12 @@ concurrent replay/global lookup budgets. Both Security and Standards reviews are
 uncorrelated sent receipt changed 401 to 200. A delivered receipt containing a later read status
 still returned 401; its new Worker/D1 regression reproduces that failure and now passes. Valid
 uncorrelated history needs the requested status, while correlated delivery proof retains the
-latest-event guard. Final deployed replay of that delivered receipt remains pending.
+latest-event guard. [PR #1124](https://github.com/B4rz99/fidy-ai/pull/1124) and its
+[Production release](https://github.com/B4rz99/fidy-ai/actions/runs/37944450104) passed every gate.
+On `dca774b70ab2034555f2dcbf7f5471484089473f`, replaying the same captured sent and delivered
+receipts returned 200; an invalid signature returned 401. The delivered replay included the later
+read status. Consent delivery, handoff and User counts were unchanged before/after the replay.
+This verifies captured real callbacks against Production; it does not claim a newly sent message.
 
 Remaining live checks: Google and Microsoft personal denial UI;
 Microsoft work/school signup/returning login/denial (unavailable: the User has no work/school account);

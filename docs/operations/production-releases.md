@@ -79,10 +79,12 @@ The [Kapso real-user launch check](kapso-launch-readiness.md) is separate from o
    this exception applies to capture only. Candidate staging and cleanup still require completed
    receipts. All other in-progress/incomplete receipts, missing baselines, ambiguous deployments, and
    identity mismatches block candidate upload.
-9. Run `alchemy deploy --stage production --yes --no-input` with the same revision and digest.
+9. Run `bun production-resources.ts upload` with the same revision and digest.
    The capture step first requires existing Alchemy Worker hash state so the pinned provider cannot
    fall back to a direct 100% PUT. Alchemy owns the complete topology and uploads the public/Core
    immutable candidates with `version.traffic: 0`. This is **upload only**, not an active 0% deployment.
+   The retained Alchemy Apply patch defers resource deletion, including superseded generations,
+   while keeping their state tracked. Delete-first replacements are refused before mutation.
 10. Read the exact candidate IDs from Alchemy's persisted Worker upload receipts. The checked-in
     routing controller uses Wrangler's 0% deployment primitive to install each candidate alongside
     its captured stable version (100%). It re-reads Cloudflare after each write. Never replace 0%
@@ -103,7 +105,16 @@ The [Kapso real-user launch check](kapso-launch-readiness.md) is separate from o
     bounded three times for convergence; a confirmed failure attempts guarded code-only rollback,
     public first and then Core. A failed post-promotion probe fails the release even if code traffic
     was successfully restored. The failure email includes the observed traffic state.
-14. Record the Git revision, contract digest, and stack identity in the GitHub step summary.
+14. After normal-traffic smoke, topology, and unauthorized-edge checks pass, run
+    `bun production-resources.ts retire`. It plans the same revision, rechecks trunk and the exact
+    promoted public/Core deployments at 100%, and runs only Alchemy garbage collection. Pending
+    resource changes or unreadable/changed traffic refuse retirement. Failed earlier gates leave
+    obsolete resources tracked for a later successful release; no second PR or manual cleanup is
+    required. Retrying retirement uses Alchemy's idempotent deletion and reverse dependency order.
+    Resource deletion is irreversible: the seven-day artifact restores code traffic, not deleted
+    resources or data.
+15. Reject final topology drift and record the Git revision, contract digest, and stack identity in
+    the GitHub step summary.
 
 A superseded candidate reports:
 

@@ -26,6 +26,51 @@ const version = "dc8dcd28-271b-4367-9840-6c244f84cb40";
 const candidate = { gitRevision: revision, contractDigest: digest, workerVersionId: version };
 
 describe("production smoke identity", () => {
+  it.effect("pins Core for proof-admitted edge probes without forwarding smoke authority", () =>
+    Effect.gen(function* () {
+      const override = `fidy-public="${version}", fidy-core="${version}"`;
+      const environment = {
+        BROWSER_ORIGIN: "https://app.fidyapp.com",
+        CORE: {
+          fetch: (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+            const request = new Request(input, init);
+            expect(request.headers.get("x-fidy-smoke-proof")).toBeNull();
+            return Promise.resolve(
+              Response.json(
+                {},
+                {
+                  status:
+                    request.headers.get("cloudflare-workers-version-overrides") === override
+                      ? 200
+                      : 503,
+                }
+              )
+            );
+          },
+        },
+        LOCAL_CANONICAL_READ_BEARER: "",
+        PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
+        SMOKE_PROOF: "a".repeat(64),
+        RELEASE_GIT_SHA: revision,
+        CF_VERSION_METADATA: { id: version },
+      };
+      for (const proof of ["", "invalid", "a".repeat(64)]) {
+        const response = yield* Effect.tryPromise(() =>
+          publicWorker.fetch(
+            new Request("https://api.fidyapp.com/.well-known/oauth-protected-resource/mcp", {
+              headers: {
+                "x-fidy-smoke-proof": proof,
+                "cloudflare-workers-version-overrides": override,
+                "cf-connecting-ip": "198.51.100.1",
+              },
+            }),
+            environment
+          )
+        );
+        expect(response.status).toBe(proof === "a".repeat(64) ? 200 : 503);
+      }
+    })
+  );
   it("refuses a healthy stable Worker when the requested candidate override was ignored", () => {
     expect(
       verifySmokeIdentity({
@@ -56,6 +101,65 @@ describe("production smoke identity", () => {
 });
 
 describe("production smoke ingress", () => {
+  it.effect("isolates ordinary requests before Core during deleted-resource recovery", () =>
+    Effect.gen(function* () {
+      let coreCalls = 0;
+      const environment = {
+        BROWSER_ORIGIN: "https://app.fidyapp.com",
+        CORE: {
+          fetch: (): Promise<Response> => {
+            coreCalls++;
+            return Promise.resolve(
+              Response.json({
+                status: "passed",
+                core: candidate,
+                manifest: { protocolVersion: 1, asyncWorkVersion: 1 },
+              })
+            );
+          },
+        },
+        LOCAL_CANONICAL_READ_BEARER: "",
+        PAT_ADMISSION_KEY: "test-only-admission-key-with-32-bytes",
+        RELEASE_GIT_SHA: revision,
+        CONTRACT_DIGEST: digest,
+        RECOVERY_ISOLATION: "isolated",
+        SMOKE_PROOF: "a".repeat(64),
+        CF_VERSION_METADATA: { id: version },
+      };
+      for (const path of ["/web/providers/disclosure", "/providers/google/callback", "/mcp"]) {
+        const response = yield* Effect.tryPromise(() =>
+          publicWorker.fetch(
+            new Request(`https://api.fidyapp.com${path}`, {
+              headers: { "x-fidy-smoke-proof": "a".repeat(64) },
+            }),
+            environment
+          )
+        );
+        expect(response.status).toBe(503);
+        expect(response.headers.get("cache-control")).toBe("no-store");
+        expect(response.headers.get("x-fidy-recovery-isolation")).toBe("isolated");
+      }
+      expect(coreCalls).toBe(0);
+      const unauthorized = yield* Effect.tryPromise(() =>
+        publicWorker.fetch(
+          new Request("https://api.fidyapp.com/internal/release-smoke"),
+          environment
+        )
+      );
+      expect(unauthorized.status).toBe(503);
+      expect(coreCalls).toBe(0);
+      const authorized = yield* Effect.tryPromise(() =>
+        publicWorker.fetch(
+          new Request("https://api.fidyapp.com/internal/release-smoke", {
+            headers: { "x-fidy-smoke-proof": "a".repeat(64) },
+          }),
+          environment
+        )
+      );
+      expect(authorized.status).toBe(200);
+      expect(coreCalls).toBe(1);
+    })
+  );
   it.effect(
     "rejects unauthorized smoke requests before the private Core binding or any work runs",
     () =>

@@ -13,7 +13,7 @@ import {
 import { it as effectIt } from "@effect/vitest";
 import { TestClock } from "effect/testing";
 import { SmokeRequest } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
-import { FetchHttpClient, HttpClient } from "effect/http";
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import {
   verifyCandidateSmoke,
@@ -502,6 +502,37 @@ describe("read-only routing readiness", () => {
 
 /** A wrong public version in the second smoke must never generate a passing release gate. */
 describe("intermediate production smoke", () => {
+  effectIt.effect("reports the owned failing edge path without provider response content", () =>
+    Effect.gen(function* () {
+      const client = HttpClient.make((request) => {
+        const probe = new Request(request.url, {
+          method: request.method,
+          headers: request.headers,
+        });
+        const path = new URL(probe.url).pathname;
+        let response = edgeResponse(probe);
+        if (path === "/internal/release-smoke") {
+          response = pairingResponse({
+            oldPublic: intermediateRequest(probe),
+            coreRevision: revision,
+            readiness: false,
+          });
+        } else if (path === "/.well-known/oauth-protected-resource/mcp") {
+          response = new Response("secret-provider-body", { status: 503 });
+        }
+        return Effect.succeed(HttpClientResponse.fromWeb(request, response));
+      });
+      const exit = yield* Effect.exit(
+        verifyProductionSmoke(config).pipe(Effect.provideService(HttpClient.HttpClient, client))
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const failure = Option.getOrThrow(Cause.findErrorOption(exit.cause));
+        expect(failure.reason).toContain("/.well-known/oauth-protected-resource/mcp");
+        expect(failure.reason).not.toContain("secret-provider-body");
+      }
+    })
+  );
   it.each([200, 503])(
     "overlaps isolated pairings and requires both to pass (intermediate HTTP %i)",
     (intermediateStatus) =>

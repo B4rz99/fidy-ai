@@ -121,12 +121,17 @@ it("keeps platform diagnostic opt-outs on their reviewed file boundaries", () =>
           // contains all failures and Schema-decodes the read-only plan before reporting.
           "anyUnknownInErrorContext:./infra/cloudflare/inspect-worker-drift.ts",
           "anyUnknownInErrorContext:./infra/cloudflare/worker-receipt.test.ts",
+          // The protected Alchemy SDK entrypoint contains foreign planning failures.
+          "anyUnknownInErrorContext:./infra/cloudflare/production-resources.ts",
           // CLI process roots and the broad browser composition construct the reviewed runtime.
           "strictEffectProvide:./apps/cli/src/main.ts",
           "strictEffectProvide:./apps/cli/test/journey-entry.ts",
           "strictEffectProvide:./apps/cli/test/recovery-entry.ts",
           "strictEffectProvide:./apps/web/e2e/cli-login.spec.ts",
           "strictEffectProvide:./infra/cloudflare/inspect-worker-drift.ts",
+          // Alchemy builds dynamic session/stack contexts at its public SDK boundary.
+          "strictEffectProvide:./infra/cloudflare/production-resources.ts",
+          "strictEffectProvide:./infra/cloudflare/resource-retirement.test.ts",
           // Standalone Bun process roots and their isolated integration fixtures.
           "strictEffectProvide:./scripts/mcp/native-confirmation-hosts.ts",
           "strictEffectProvide:./scripts/mcp/production-catalog.test.ts",

@@ -1,5 +1,72 @@
+diff --git a/lib/Apply.d.ts b/lib/Apply.d.ts
+index d92584069ffec978ba02a0a3d74d71ba95f91c3c..4c44be9a40e6fd6c89cd9df154791e59a16695ab 100644
+--- a/lib/Apply.d.ts
++++ b/lib/Apply.d.ts
+@@ -16,11 +16,16 @@ export type AppliedPlan<P extends Plan> = {
+     [id in keyof P["resources"]]: P["resources"][id] extends Delete | undefined | never ? never : Simplify<P["resources"][id]["resource"]["attr"]>;
+ };
+ export interface ApplyOptions {
++    deletions?: "defer" | "only";
+     planDisplay?: PlanDisplayOptions;
+     /** Structured event sink for non-CLI callers. */
+     session?: PlanStatusSession;
+ }
+-export declare const apply: <P extends Plan>(plan: P, options?: ApplyOptions) => Effect.Effect<Input.Resolve<P["output"]>, Output.InvalidReferenceError | Output.MissingSourceError | StateStoreError | DestroyError | CredentialsRequired | AuthError | NeedsReauth | PlatformError | ConfigError, State | Stack | Stage>;
++declare const DeletionPhaseError_base: new <A extends Record<string, any> = {}>(args: import("effect/Types").VoidIfEmpty<{ readonly [P in keyof A as P extends "_tag" ? never : P]: A[P]; }>) => import("effect/Cause").YieldableError & {
++    readonly _tag: "DeletionPhaseError";
++} & Readonly<A>;
++export declare class DeletionPhaseError extends DeletionPhaseError_base<{ message: string }> {}
++export declare const apply: <P extends Plan>(plan: P, options?: ApplyOptions) => Effect.Effect<Input.Resolve<P["output"]>, Output.InvalidReferenceError | Output.MissingSourceError | StateStoreError | DestroyError | CredentialsRequired | AuthError | NeedsReauth | PlatformError | ConfigError | DeletionPhaseError, State | Stack | Stage>;
+ /** A provider delete (or its attr-recovery read / state commit) that failed. */
+ export interface DeleteFailure {
+     fqn: string;
+diff --git a/lib/Apply.js b/lib/Apply.js
+index 22a223eca67c519d34f7ced0f6cb9b2b85f53f14..7ecdd5447df4c24b8e82d6f3dba48fc3189f2e74 100644
+--- a/lib/Apply.js
++++ b/lib/Apply.js
+@@ -43,7 +43,20 @@ const instrumentLifecycle = (op, fqn, resourceType, logicalId, instanceId) => (e
+         "alchemy.resource.op": op,
+     },
+ }));
++export class DeletionPhaseError extends Data.TaggedError("DeletionPhaseError") {}
+ export const apply = (plan, options = {}) => Effect.gen(function* () {
++    if (options.deletions && (plan.destroy || plan.selectedFqns !== undefined)) {
++        return yield* Effect.fail(new DeletionPhaseError({ message: "Deletion phases require a complete deployment plan." }));
++    }
++    if (options.deletions === "defer" && Object.values(plan.resources).some((node) => node.action === "replace" && node.deleteFirst)) {
++        return yield* Effect.fail(new DeletionPhaseError({ message: "Upload refused: delete-first replacement cannot preserve serving resources." }));
++    }
++    if (options.deletions === "only" && (
++        Object.values(plan.resources).some((node) => node.action !== "noop" && !(node.action === "replace" && node.state.status === "replaced" && !node.restart && !node.deleteFirst)) ||
++        Object.values(plan.actions).some((node) => node.action !== "noop")
++    )) {
++        return yield* Effect.fail(new DeletionPhaseError({ message: "Cleanup refused: deployment changes remain unverified." }));
++    }
+     // Credential-free dev: a dev-mode plan that needs the real cloud
+     // (`Alchemy.remote()` rows, remote-proxied bindings, deletions of rows
+     // stamped `providerMode: "live"`) demands cloud credentials exactly
+@@ -71,6 +84,10 @@ export const apply = (plan, options = {}) => Effect.gen(function* () {
+     // wrapping this body in Effect.scoped would kill them when apply
+     // returns.
+     return yield* Effect.gen(function* () {
++        if (options.deletions === "only") {
++            yield* collectGarbage(plan, session);
++            return undefined;
++        }
+         const state = yield* yield* State;
+         const stack = yield* Stack;
+         const stage = yield* Stage;
+@@ -114,7 +131,7 @@ export const apply = (plan, options = {}) => Effect.gen(function* () {
+         // TODO(sam): support roll back to previous state if errors occur during expansion
+         // -> RISK: some UPDATEs may not be reversible (i.e. trigger replacements)
+         // TODO(sam): should pivot be done separately? E.g shift traffic?
+-        yield* collectGarbage(plan, session);
++        if (options.deletions !== "defer") yield* collectGarbage(plan, session);
+         yield* converge(plan, tracker, terminalStatuses, session, state, stackName, stage);
+         yield* Effect.forEach(Array.from(terminalStatuses.values()), ({ fqn, id, type, status, providerMode }) => session.emit({
+             _tag: "apply.resource.status",
 diff --git a/lib/Cloudflare/Workers/WorkerProvider.js b/lib/Cloudflare/Workers/WorkerProvider.js
-index 622b336b29..75ab507bb1 100644
+index 622b336b29d2b8c60406cd84660719afae6c8c96..75ab507bb13966dbe3273a6dd595a024a016d4f6 100644
 --- a/lib/Cloudflare/Workers/WorkerProvider.js
 +++ b/lib/Cloudflare/Workers/WorkerProvider.js
 @@ -4133,6 +4133,12 @@ export const LiveWorkerProvider = () => Provider.effect(Worker, Effect.gen(funct
@@ -23,8 +90,85 @@ index 622b336b29..75ab507bb1 100644
              };
              // Centralized ownership decision: the engine routes `read`'s
              // return value based on `AdoptPolicy`. We hand it the attrs
+diff --git a/src/Apply.ts b/src/Apply.ts
+index 473a9e7ebe81897693fbd09e70f77e4dd2f7a628..8910524517dc9595b6be10d4604b6c91c2750466 100644
+--- a/src/Apply.ts
++++ b/src/Apply.ts
+@@ -84,11 +84,17 @@ export type AppliedPlan<P extends Plan> = {
+ };
+
+ export interface ApplyOptions {
++  /** Keep tracked resources until release verification, or run only their cleanup. */
++  deletions?: "defer" | "only";
+   planDisplay?: PlanDisplayOptions;
+   /** Structured event sink for non-CLI callers. */
+   session?: PlanStatusSession;
+ }
+
++export class DeletionPhaseError extends Data.TaggedError("DeletionPhaseError")<{
++  message: string;
++}> {}
++
+ interface ResourceTracker {
+   output: any;
+   props: any;
+@@ -156,10 +162,33 @@ export const apply = <P extends Plan>(
+   | AuthError
+   | NeedsReauth
+   | PlatformError
+-  | ConfigError,
++  | ConfigError
++  | DeletionPhaseError,
+   State | Stack | Stage
+ > =>
+   Effect.gen(function* () {
++    if (options.deletions && (plan.destroy || plan.selectedFqns !== undefined)) {
++      return yield* Effect.fail(new DeletionPhaseError({
++        message: "Deletion phases require a complete deployment plan.",
++      }));
++    }
++    if (options.deletions === "defer" && Object.values(plan.resources).some(
++      (node) => node.action === "replace" && node.deleteFirst,
++    )) {
++      return yield* Effect.fail(new DeletionPhaseError({
++        message: "Upload refused: delete-first replacement cannot preserve serving resources.",
++      }));
++    }
++    if (options.deletions === "only" && (
++      Object.values(plan.resources).some((node) =>
++        node.action !== "noop" && !(node.action === "replace" &&
++          node.state.status === "replaced" && !node.restart && !node.deleteFirst)) ||
++      Object.values(plan.actions).some((node) => node.action !== "noop")
++    )) {
++      return yield* Effect.fail(new DeletionPhaseError({
++        message: "Cleanup refused: deployment changes remain unverified.",
++      }));
++    }
+     // Credential-free dev: a dev-mode plan that needs the real cloud
+     // (`Alchemy.remote()` rows, remote-proxied bindings, deletions of rows
+     // stamped `providerMode: "live"`) demands cloud credentials exactly
+@@ -193,6 +222,10 @@ export const apply = <P extends Plan>(
+     // wrapping this body in Effect.scoped would kill them when apply
+     // returns.
+     return yield* Effect.gen(function* () {
++      if (options.deletions === "only") {
++        yield* collectGarbage(plan, session);
++        return undefined;
++      }
+       const state = yield* yield* State;
+       const stack = yield* Stack;
+       const stage = yield* Stage;
+@@ -276,7 +309,7 @@ export const apply = <P extends Plan>(
+       // -> RISK: some UPDATEs may not be reversible (i.e. trigger replacements)
+       // TODO(sam): should pivot be done separately? E.g shift traffic?
+
+-      yield* collectGarbage(plan, session);
++      if (options.deletions !== "defer") yield* collectGarbage(plan, session);
+
+       yield* converge(
+         plan,
 diff --git a/src/Cloudflare/Workers/WorkerProvider.ts b/src/Cloudflare/Workers/WorkerProvider.ts
-index 798e8499d1..4a6c2efe3f 100644
+index 798e8499d1db0184d14defbd50e1e5bd0288e291..4a6c2efe3f756846e00737c03c351c158fe68169 100644
 --- a/src/Cloudflare/Workers/WorkerProvider.ts
 +++ b/src/Cloudflare/Workers/WorkerProvider.ts
 @@ -5587,6 +5587,19 @@ export const LiveWorkerProvider = () =>
@@ -53,5 +197,5 @@ index 798e8499d1..4a6c2efe3f 100644
                affinityZoneIds: output?.affinityZoneIds,
 +              versionId: uploadedVersionId,
              } satisfies Worker["Attributes"];
- 
+
              // Centralized ownership decision: the engine routes `read`'s

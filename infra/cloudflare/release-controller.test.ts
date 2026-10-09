@@ -1,5 +1,6 @@
 import { Cause, Deferred, Effect, Exit, Option } from "effect";
-import { describe, expect, it } from "vitest";
+import { describe, expect } from "vitest";
+import { it } from "@effect/vitest";
 import {
   type Deployment,
   type ReleasePort,
@@ -88,6 +89,122 @@ const captured = (port: ReleasePort): Effect.Effect<ReleaseSnapshot, Error> =>
     publicName,
     coreName,
   });
+
+it.effect("permits resource retirement only while the promoted pair still owns exact traffic", () =>
+  Effect.gen(function* () {
+    const fixture = harness();
+    const snapshot = yield* captured(fixture.port);
+    const release = yield* releaseController.stageRelease(fixture.port, snapshot, candidates);
+    const promoted = yield* releaseController.promoteRelease(fixture.port, release, {
+      exactPairPassed: true,
+      middlePairPassed: true,
+    });
+    const beforeVerification = [...fixture.changes];
+    yield* releaseController.verifyRetirement(fixture.port, { release, promoted });
+    expect(fixture.changes).toEqual(beforeVerification);
+    yield* fixture.port.deploy(coreName, [{ id: versions.coreStable, percentage: 100 }]);
+    const changed = yield* Effect.exit(
+      releaseController.verifyRetirement(fixture.port, { release, promoted })
+    );
+    expect(Exit.isFailure(changed)).toBe(true);
+  })
+);
+
+it.effect("refuses retirement for superseded, unreadable, or replaced deployment receipts", () =>
+  Effect.gen(function* () {
+    for (const scenario of ["superseded", publicName, coreName, "new-receipt"]) {
+      const fixture = harness();
+      const snapshot = yield* captured(fixture.port);
+      const release = yield* releaseController.stageRelease(fixture.port, snapshot, candidates);
+      const promoted = yield* releaseController.promoteRelease(fixture.port, release, {
+        exactPairPassed: true,
+        middlePairPassed: true,
+      });
+      if (scenario === "superseded") {
+        fixture.supersede();
+      }
+      if (scenario === "new-receipt") {
+        yield* fixture.port.deploy(publicName, [{ id: versions.publicCandidate, percentage: 100 }]);
+      }
+      const beforeVerification = [...fixture.changes];
+      const port: ReleasePort = {
+        ...fixture.port,
+        current: (name) =>
+          scenario === name
+            ? Effect.fail(Error("unreadable deployment"))
+            : fixture.port.current(name),
+      };
+      expect(
+        Exit.isFailure(
+          yield* Effect.exit(releaseController.verifyRetirement(port, { release, promoted }))
+        )
+      ).toBe(true);
+      expect(fixture.changes).toEqual(beforeVerification);
+    }
+  })
+);
+
+const isolationOrdering =
+  (fixture: Harness): (() => Effect.Effect<void, Error>) =>
+  () =>
+    Effect.gen(function* () {
+      expect(fixture.changes).toEqual([`${publicName}:100`]);
+      expect((yield* fixture.port.current(publicName)).versions).toEqual([
+        { id: versions.publicCandidate, percentage: 100 },
+      ]);
+      expect((yield* fixture.port.current(coreName)).versions).toEqual([
+        { id: versions.coreStable, percentage: 100 },
+      ]);
+    });
+
+describe("deleted-resource isolation", () => {
+  it.effect("closes public admission and proves isolation before replacing private Core", () =>
+    Effect.gen(function* () {
+      const fixture = harness();
+      const snapshot = yield* captured(fixture.port);
+      const result = yield* releaseController.isolateRelease(fixture.port, snapshot, {
+        candidate: candidates,
+        proveIsolation: isolationOrdering(fixture),
+      });
+      expect(fixture.changes).toEqual([`${publicName}:100`, `${coreName}:100`]);
+      expect(result.coreVersionId).toBe(versions.coreCandidate);
+    })
+  );
+
+  it.effect("leaves Core untouched when isolation evidence fails", () =>
+    Effect.gen(function* () {
+      const fixture = harness();
+      const snapshot = yield* captured(fixture.port);
+      const exit = yield* releaseController
+        .isolateRelease(fixture.port, snapshot, {
+          candidate: candidates,
+          proveIsolation: () => Effect.fail(Error("Admission is not isolated")),
+        })
+        .pipe(Effect.exit);
+      expect(Exit.isFailure(exit)).toBe(true);
+      expect(fixture.changes).toEqual([`${publicName}:100`]);
+      expect((yield* fixture.port.current(coreName)).versions).toEqual([
+        { id: versions.coreStable, percentage: 100 },
+      ]);
+    })
+  );
+
+  it.effect("refuses a superseded revision before isolation writes", () =>
+    Effect.gen(function* () {
+      const fixture = harness();
+      const snapshot = yield* captured(fixture.port);
+      fixture.supersede();
+      const exit = yield* releaseController
+        .isolateRelease(fixture.port, snapshot, {
+          candidate: candidates,
+          proveIsolation: () => Effect.void,
+        })
+        .pipe(Effect.exit);
+      expect(Exit.isFailure(exit)).toBe(true);
+      expect(fixture.changes).toEqual([]);
+    })
+  );
+});
 const staged = (port: ReleasePort): Effect.Effect<StagedRelease, Error> =>
   Effect.gen(function* () {
     return yield* releaseController.stageRelease(port, yield* captured(port), candidates);

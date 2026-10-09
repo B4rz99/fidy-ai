@@ -38,6 +38,7 @@ import { smokeProofAccepted } from "./runtime/release-smoke/operations";
 import { patBrowserRoute, patDirectRoute, patMethods, patRoute } from "./tokens/operations";
 import { canonicalMethods, canonicalOperation, canonicalRoute } from "./routing/operations";
 import { bancolombiaSandboxResponse } from "./bancolombia-sandbox/operations";
+import { recoveryIsolationResponse } from "./release-isolation/operations";
 
 type PublicEnvironment = WorkerTelemetryEnvironment & {
   readonly BROWSER_ORIGIN: string;
@@ -47,6 +48,7 @@ type PublicEnvironment = WorkerTelemetryEnvironment & {
 } & Partial<
     Readonly<{
       SMOKE_PROOF: string;
+      RECOVERY_ISOLATION: string;
       CONTRACT_DIGEST: string;
       CF_VERSION_METADATA: { readonly id: string };
     }>
@@ -484,6 +486,16 @@ const preservesCoreQuery = (path: string): boolean =>
   connectionBrowserPath(path) ||
   path === providerPaths.callback ||
   path === microsoftProviderPaths.callback;
+const forwardSmokeVersionOverride = (
+  request: Request,
+  environment: PublicEnvironment,
+  headers: Headers
+): void => {
+  headers.delete(smokeVersionHeader);
+  if (!smokeProofAccepted({ request, secret: environment.SMOKE_PROOF ?? "" })) return;
+  const override = request.headers.get(smokeVersionHeader);
+  if (override !== null) headers.set(smokeVersionHeader, override);
+};
 const coreRequest = (
   request: Request,
   environment: PublicEnvironment
@@ -491,6 +503,7 @@ const coreRequest = (
   Effect.gen(function* () {
     const path = new URL(request.url).pathname;
     const headers = forwardedHeaders(request, path);
+    forwardSmokeVersionOverride(request, environment, headers);
     yield* canonicalAdmissionHeaders(request, environment, headers);
     if (path === "/pat-pairings" || oauthPath(path)) {
       headers.set(
@@ -723,6 +736,16 @@ const fetchEffect = (request: Request, environment: PublicEnvironment): Effect.E
     const origin = Option.fromNullishOr(request.headers.get("origin"));
     if (Option.exists(origin, (value) => value !== browserOrigin.value)) {
       return applyApiPolicy(forbiddenOrigin(), browserOrigin.value, origin);
+    }
+    const recoveryResponse = recoveryIsolationResponse({
+      request,
+      environment: {
+        mode: Option.fromUndefinedOr(environment.RECOVERY_ISOLATION),
+        proof: Option.fromUndefinedOr(environment.SMOKE_PROOF),
+      },
+    });
+    if (Option.isSome(recoveryResponse)) {
+      return applyApiPolicy(recoveryResponse.value, browserOrigin.value, origin);
     }
     const sandboxResponse = bancolombiaSandboxResponse(request);
     if (Option.isSome(sandboxResponse)) {

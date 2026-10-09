@@ -8,3 +8,28 @@
 6. **Confirm restoration.** Verify normal-traffic release identities, synthetic smoke, the affected User-owned operation or owner lifecycle through an authorized seam, alert delivery, and retention cleanup. If D1 or Cloudflare itself is unavailable, operator console inspection and the independent GitHub release-failure email are the fallback; no second database or cross-provider restore is promised.
 
 Before first real-User ingress, complete the empty-stack synthetic proof and rollback/refusal exercise in the [Production release runbook](production-releases.md). These steps are not a substitute for that remote evidence.
+
+## Inspected deleted Queue incident — 2026-10-08
+
+[Production evidence](https://github.com/B4rz99/fidy-ai/actions/runs/37854432026) identifies a Queue
+refusal. Stable Core `fa578c5f-2e94-4507-ba70-1fe4fe4dd150` retains a deleted onboarding Queue
+binding. Recreating its name does not restore the immutable binding. D1 contains User records;
+preserve all state and do not use an empty-stack reset.
+
+The reviewed incident dispatch uses the protected Production workflow:
+
+```sh
+gh workflow run production.yml --ref trunk -f recover_deleted_queue=true
+```
+
+It accepts only the inspected stable public/Core IDs. Alchemy uploads candidates first. The
+controller confirms Core has no public domain, zone route or workers.dev/preview URL, installs
+only the isolated Ingress version, and proves ordinary admission returns 503 before replacing
+private Core. Both candidates must declare isolation; Core also denies admission during public
+routing propagation. Metadata health and authenticated synthetic smoke remain available. No old public
+version remains selectable by an override. Failure leaves admission closed and alerts the operator.
+
+After normal-routing synthetic proof, the workflow captures that isolated baseline and returns to
+the ordinary zero-traffic, exact/intermediate smoke, promotion and post-promotion gates. Core's
+version message distinguishes the recovery and ordinary uploads. No force flag, resource recreation,
+state reset, workstation deployment or automatic restoration of the deleted binding is allowed.

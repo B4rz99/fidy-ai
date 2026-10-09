@@ -1,8 +1,8 @@
 import { playwright } from "./playwright-runtime";
 import { visiblePairingCode } from "./real-core-fixture";
 import { invokeRecoveryOperator } from "../../cli/test/recovery-operator.test-fixture";
-import type { APIRequestContext, BrowserContext, Page, Route } from "@playwright/test";
-import { type Cause, Effect, Schema } from "effect";
+import type { APIRequestContext, APIResponse, BrowserContext, Page, Route } from "@playwright/test";
+import { type Cause, Clock, Effect, Option, Schema } from "effect";
 
 export type ProviderJourneyConfiguration = Readonly<{
   provider: "google" | "microsoft";
@@ -22,6 +22,236 @@ const pendingStatus = 202;
 const noContentStatus = 204;
 const forbiddenStatus = 403;
 const successStatus = 200;
+const unavailableStatus = 503;
+const advancePastRequestDeadline = 10_001;
+const lateResponseAdvance = 1_000;
+const deliverUnavailable = (route: Route, available: boolean): Promise<void> =>
+  route.fetch().then((response) => {
+    expect(response.status()).toBe(successStatus);
+    return route.fulfill(
+      available
+        ? { response }
+        : {
+            response,
+            status: unavailableStatus,
+            body: '{"status":"unavailable"}',
+          }
+    );
+  });
+
+type HeldStatus = Readonly<{ ready: () => boolean; release: () => Promise<void> }>;
+const holdProviderStatus = (
+  page: Page,
+  provider: ProviderJourneyConfiguration["provider"]
+): Effect.Effect<HeldStatus, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    let release = Option.none<() => Promise<void>>();
+    const hold = (route: Route): Promise<void> => {
+      const retainResponse = (response: APIResponse): void => {
+        expect(response.status()).toBe(successStatus);
+        release = Option.some(route.fulfill.bind(route, { response }));
+      };
+      return route.fetch().then(retainResponse);
+    };
+    yield* Effect.tryPromise(() => page.route(`**/web/providers/${provider}/status`, hold));
+    return {
+      ready: (): boolean => Option.isSome(release),
+      release: (): Promise<void> => Option.getOrThrow(release)(),
+    };
+  });
+
+const retryStalledProvider = ({
+  page,
+  context,
+  configuration,
+  outcome,
+}: Pick<ProviderJourney, "page" | "context"> &
+  Readonly<{
+    configuration: ProviderJourneyConfiguration;
+    outcome: string;
+  }>): Effect.Effect<void, Cause.UnknownError> =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() =>
+      page.unroute(`**/web/providers/${configuration.provider}/status`)
+    );
+    yield* Effect.tryPromise(() => context.unroute(configuration.authorizationPattern));
+    yield* Effect.tryPromise(() =>
+      context.route(configuration.authorizationPattern, (route) =>
+        redirectSubject(
+          configuration,
+          `stalled-status-retry-${configuration.provider}-${outcome}`,
+          route
+        )
+      )
+    );
+    yield* Effect.tryPromise(() => page.clock.resume());
+    yield* Effect.tryPromise(() => page.getByRole("button", { name: "Volver a intentar" }).click());
+    yield* Effect.tryPromise(() =>
+      expect(page.getByText("Guarda tu código de recuperación")).toBeVisible()
+    );
+  });
+
+export const unavailablePairingJourney = ({
+  configuration,
+  page,
+  context,
+}: ProviderJourney & Readonly<{ configuration: ProviderJourneyConfiguration }>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() =>
+        context.route(configuration.authorizationPattern, (route) =>
+          redirectSubject(configuration, `pairing-retry-${configuration.provider}`, route)
+        )
+      );
+      // Exercise real Ingress/Core/D1, then replace only the response delivered to the browser.
+      let starts = 0;
+      yield* Effect.tryPromise(() =>
+        page.route("**/web/pairings", (route) => {
+          starts += 1;
+          return deliverUnavailable(route, false);
+        })
+      );
+      yield* Effect.tryPromise(() => page.goto(`/auth/${configuration.provider}`));
+      yield* Effect.tryPromise(() =>
+        page.getByLabel("Acepto el tratamiento de datos descrito").check()
+      );
+      const popup = yield* Effect.tryPromise(() =>
+        Promise.all([
+          page.waitForEvent("popup"),
+          page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click(),
+        ]).then(([opened]) => opened)
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByRole("alert")).toHaveText(
+          "No se completó el acceso. Puedes iniciar un nuevo intento."
+        )
+      );
+      yield* Effect.tryPromise(() => expect.poll(() => popup.isClosed()).toBe(true));
+      expect(starts).toBe(1);
+      expect(
+        (yield* Effect.tryPromise(() => context.cookies())).some(
+          (cookie) => cookie.name === "__Host-fidy_session"
+        )
+      ).toBe(false);
+      yield* Effect.tryPromise(() => page.unroute("**/web/pairings"));
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Volver a intentar" }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Guarda tu código de recuperación")).toBeVisible()
+      );
+    })
+  );
+
+export const disclosureRetryJourney = ({
+  configuration,
+  page,
+  context,
+}: ProviderJourney & Readonly<{ configuration: ProviderJourneyConfiguration }>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let available = false;
+      yield* Effect.tryPromise(() =>
+        page.route("**/web/providers/disclosure", (route) => deliverUnavailable(route, available))
+      );
+      yield* Effect.tryPromise(() =>
+        context.route(configuration.authorizationPattern, (route) =>
+          redirectSubject(configuration, `disclosure-retry-${configuration.provider}`, route)
+        )
+      );
+      yield* Effect.tryPromise(() => page.goto(`/auth/${configuration.provider}`));
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByText("No pudimos cargar el Consentimiento.", { exact: false })
+        ).toBeVisible()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", { name: `Continuar con ${configuration.label}` })
+        ).toBeDisabled()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByLabel("Acepto el tratamiento de datos descrito")).toHaveCount(0)
+      );
+      available = true;
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: "Volver a intentar" }).click()
+      );
+      yield* expectSignupNotice(page);
+      yield* Effect.tryPromise(() =>
+        expect(
+          page.getByRole("button", { name: `Continuar con ${configuration.label}` })
+        ).toBeDisabled()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByLabel("Acepto el tratamiento de datos descrito").check()
+      );
+      yield* Effect.tryPromise(() =>
+        page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click()
+      );
+      yield* Effect.tryPromise(() =>
+        expect(page.getByText("Guarda tu código de recuperación")).toBeVisible()
+      );
+    })
+  );
+
+export const stalledProviderJourney = ({
+  configuration,
+  page,
+  context,
+  outcome,
+}: ProviderJourney &
+  Readonly<{
+    configuration: ProviderJourneyConfiguration;
+    outcome: "popup-close" | "cancel" | "timeout";
+  }>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.tryPromise(() => page.clock.install());
+      yield* Effect.tryPromise(() =>
+        context.route(configuration.authorizationPattern, pendingProvider)
+      );
+      const held = yield* holdProviderStatus(page, configuration.provider);
+      yield* Effect.tryPromise(() => page.goto(`/auth/${configuration.provider}`));
+      yield* Effect.tryPromise(() =>
+        page.getByLabel("Acepto el tratamiento de datos descrito").check()
+      );
+      const popup = yield* Effect.tryPromise(() =>
+        Promise.all([
+          page.waitForEvent("popup"),
+          page.getByRole("button", { name: `Continuar con ${configuration.label}` }).click(),
+        ]).then(([opened]) => opened)
+      );
+      yield* Effect.tryPromise(() =>
+        expect.poll(held.ready, { message: "real status response is held" }).toBe(true)
+      );
+      yield* Effect.tryPromise(() =>
+        expect(popup.getByText("Pending provider decision")).toBeVisible()
+      );
+      const browserNow = yield* Clock.currentTimeMillis;
+      yield* Effect.tryPromise(() => page.clock.pauseAt(browserNow + 100));
+      if (outcome === "popup-close") yield* Effect.tryPromise(() => popup.close());
+      if (outcome === "cancel") {
+        yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cancelar" }).click());
+      }
+      // The web-auth transport deadline is ten seconds, even while a status body is withheld.
+      yield* Effect.tryPromise(() => page.clock.runFor(advancePastRequestDeadline));
+      const message =
+        outcome === "timeout"
+          ? "No se completó el acceso. Puedes iniciar un nuevo intento."
+          : "Cancelaste el acceso.";
+      yield* Effect.tryPromise(() => expect(page.getByText(message)).toBeVisible());
+      yield* Effect.tryPromise(held.release);
+      yield* Effect.tryPromise(() => page.clock.runFor(lateResponseAdvance));
+      yield* Effect.tryPromise(() => expect(page.getByText(message)).toBeVisible());
+      expect(
+        (yield* Effect.tryPromise(() => context.cookies())).some(
+          (cookie) => cookie.name === "__Host-fidy_session"
+        )
+      ).toBe(false);
+      yield* retryStalledProvider({ page, context, configuration, outcome });
+    })
+  );
 
 // Provider UI is the only substituted edge; completion and Browser Login run through real Core/D1.
 const redirectSubject = (

@@ -73,7 +73,7 @@ export const reconcileSandboxDelivery = Effect.fn(
       correlationToken: pending.correlation_token,
       receivedAt: event.receivedAt,
     };
-    yield* admitStatusLookup({ database: input.db, request });
+    yield* admitStatusLookup({ database: input.db, request: { ...request, status: "delivered" } });
     const verified = yield* input.verify(request);
     if (Option.isNone(verified) || verified.value.outcome !== "accepted") return;
     yield* input.recordDelivery({

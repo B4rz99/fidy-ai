@@ -6,7 +6,7 @@ import {
   type WhatsAppWebhookReceipt,
   maxWhatsAppDeliveryEvents,
 } from "./contract";
-import { type DateTime, Effect, Array as EffectArray, type Redacted, Schema } from "effect";
+import { type DateTime, Effect, Array as EffectArray, Option, type Redacted, Schema } from "effect";
 import { WhatsAppBusinessPortfolioId } from "~/core/identity/contract";
 import {
   RawKapsoEnvelope,
@@ -73,7 +73,8 @@ export const authenticateHostedStatus = Effect.fn(function* (
   input: WhatsAppLifecycleAuthentication
 ) {
   const latest = yield* decodeLifecycleStatus(input);
-  return projectHostedStatus(latest);
+  if (Option.isNone(latest)) return yield* invalidKapsoPayload("uncorrelated hosted status");
+  return projectHostedStatus(latest.value);
 });
 
 /**
@@ -90,7 +91,8 @@ export const authenticateDisclosureStatus = Effect.fn(function* (
   input: WhatsAppLifecycleAuthentication
 ) {
   const latest = yield* decodeLifecycleStatus(input);
-  return { ...latest.evidence, businessPhoneNumberId: latest.businessPhoneNumberId };
+  if (Option.isNone(latest)) return yield* invalidKapsoPayload("uncorrelated disclosure status");
+  return { ...latest.value.evidence, businessPhoneNumberId: latest.value.businessPhoneNumberId };
 });
 
 /**

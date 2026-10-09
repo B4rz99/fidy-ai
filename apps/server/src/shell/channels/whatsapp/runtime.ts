@@ -34,6 +34,7 @@ import {
 /** Authenticate lifecycle proof before exposing metadata. Signed v2 hints without history require
  * one fixed-origin, 64 KiB provider read within eight seconds; read/sent never prove delivery.
  * Invalid signature, malformed history or mismatching provider coordinates fail before state changes.
+ * None acknowledges a valid uncorrelated receipt without delivery authority or domain effects.
  */
 export const makeLifecycleVerifier = (
   input: Readonly<{
@@ -44,7 +45,7 @@ export const makeLifecycleVerifier = (
 ): ((
   authentication: WhatsAppLifecycleAuthentication
 ) => Effect.Effect<
-  WhatsAppHostedLifecycleEvidence,
+  Option.Option<WhatsAppHostedLifecycleEvidence>,
   | InvalidWhatsAppPayload
   | InvalidWhatsAppSignature
   | WhatsAppPayloadTooLarge
@@ -52,8 +53,9 @@ export const makeLifecycleVerifier = (
 >) => {
   const lookup = makeKapsoOutboundHttp(input);
   return Effect.fn(function* (authentication: WhatsAppLifecycleAuthentication) {
-    return projectHostedStatus(
-      yield* decodeLifecycleStatus(authentication, Option.some(lookup), input.admitLookup)
+    return Option.map(
+      yield* decodeLifecycleStatus(authentication, Option.some(lookup), input.admitLookup),
+      projectHostedStatus
     );
   });
 };
@@ -77,11 +79,10 @@ export const makeDeliveryVerifier = (
       outboundHttp,
       status: "delivered",
     });
-    return Option.flatMap(verified, (latest) =>
-      latest.evidence.correlationToken === request.correlationToken
-        ? Option.some(latest.evidence)
-        : Option.none()
-    );
+    return verified._tag === "Correlated" &&
+      verified.value.evidence.correlationToken === request.correlationToken
+      ? Option.some(verified.value.evidence)
+      : Option.none();
   });
 };
 

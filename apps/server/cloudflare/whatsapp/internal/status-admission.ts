@@ -40,7 +40,9 @@ const policies = ResourceAdmissionPolicies.make([
   },
 ]);
 
-/** Admit after signature verification, before provider I/O. Failures permit a retry next minute. */
+/** Admit after signature verification, before provider I/O. Each of the three lifecycle statuses
+ * has one read per endpoint/message/minute; all paths share 500 reads/hour. Failures remain charged.
+ */
 export const makeStatusLookupAdmission =
   (database: D1Database): WhatsAppStatusLookupAdmission =>
   (request) =>
@@ -49,7 +51,7 @@ export const makeStatusLookupAdmission =
         crypto.subtle.digest(
           "SHA-256",
           new TextEncoder().encode(
-            `${request.businessPhoneNumberId.length}:${request.businessPhoneNumberId}${request.messageId}`
+            `${request.businessPhoneNumberId.length}:${request.businessPhoneNumberId}${request.messageId.length}:${request.messageId}${request.status}`
           )
         )
       );

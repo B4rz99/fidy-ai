@@ -117,10 +117,16 @@ const RawDisclosureStatus = Schema.Struct({
   errors: Model.optionalOption(Schema.Array(Schema.Struct({ code: Schema.Int }))),
 });
 
-const RawDisclosureLifecycleEvent = Schema.Struct({
+const RawReceiptStatus = Schema.Struct({
+  ...RawDisclosureStatus.fields,
+  status: Schema.Literals(["sent", "delivered", "failed", "read"]),
+  biz_opaque_callback_data: Model.optionalOption(Schema.String.check(Schema.isUUID())),
+});
+
+const RawReceiptEvent = Schema.Struct({
   message: Schema.Struct({
     id: WhatsAppProviderMessageId,
-    kapso: Schema.Struct({ statuses: Schema.Array(RawDisclosureStatus) }),
+    kapso: Schema.Struct({ statuses: Schema.NonEmptyArray(RawReceiptStatus) }),
   }),
   phone_number_id: WhatsAppBusinessPhoneNumberId,
 });
@@ -142,12 +148,7 @@ const RawStoredMessage = Schema.Struct({
   kapso: Schema.Struct({
     direction: Schema.Literal("outbound"),
     phone_number_id: WhatsAppBusinessPhoneNumberId,
-    statuses: Schema.NonEmptyArray(
-      Schema.Struct({
-        ...RawDisclosureStatus.fields,
-        status: Schema.Literals(["sent", "delivered", "failed", "read"]),
-      })
-    ),
+    statuses: Schema.NonEmptyArray(RawReceiptStatus),
   }),
 });
 
@@ -422,6 +423,36 @@ const latestDisclosureLifecycleStatus = Effect.fn(function* (
   );
 });
 
+const projectReceiptHistory = Effect.fn(function* (
+  statuses: ReadonlyArray<typeof RawReceiptStatus.Type>,
+  requested: "sent" | "delivered" | "failed",
+  receivedAt: DateTime.Utc
+) {
+  yield* Effect.forEach(statuses, (status) => parseOccurredAt(status.timestamp, receivedAt));
+  const tokens = statuses.map((status) => status.biz_opaque_callback_data);
+  const token = tokens[0] ?? Option.none<string>();
+  if (
+    tokens.some((candidate) => Option.getOrUndefined(candidate) !== Option.getOrUndefined(token))
+  ) {
+    return yield* invalidKapsoInvariant("inconsistent status correlation");
+  }
+  const selected = statuses.filter((status) => status.status === requested);
+  if (selected.length === 0) return { _tag: "Absent" as const };
+  if (Option.isNone(token)) return { _tag: "Uncorrelated" as const };
+  const correlated = yield* Effect.forEach(selected, (status) =>
+    Schema.decodeUnknownEffect(RawDisclosureStatus)({
+      id: status.id,
+      status: status.status,
+      timestamp: status.timestamp,
+      ...Option.match(status.errors, { onNone: () => ({}), onSome: (errors) => ({ errors }) }),
+      biz_opaque_callback_data: token.value,
+    }).pipe(Effect.mapError(invalidKapsoPayload))
+  );
+  const latest = yield* latestDisclosureLifecycleStatus(correlated, receivedAt);
+  if (Option.isNone(latest)) return { _tag: "Absent" as const };
+  return { _tag: "Correlated" as const, value: latest.value };
+});
+
 export const lookupLifecycleStatus = Effect.fn(function* (
   input: Readonly<{
     outboundHttp: OutboundHttpService;
@@ -455,17 +486,17 @@ export const lookupLifecycleStatus = Effect.fn(function* (
   ) {
     return yield* invalidKapsoInvariant("lookup coordinates disagreed");
   }
-  // A read status is not a substitute for the requested raw provider receipt.
-  const statuses = stored.kapso.statuses.flatMap((status) =>
-    status.status !== "read" && status.status === input.status
-      ? [{ ...status, status: status.status }]
-      : []
+  const projected = yield* projectReceiptHistory(
+    stored.kapso.statuses,
+    input.status,
+    input.receivedAt
   );
-  return yield* latestDisclosureLifecycleStatus(statuses, input.receivedAt).pipe(
-    Effect.map(
-      Option.map((latest) => ({ ...latest, businessPhoneNumberId: input.businessPhoneNumberId }))
-    )
-  );
+  return projected._tag === "Correlated"
+    ? {
+        ...projected,
+        value: { ...projected.value, businessPhoneNumberId: input.businessPhoneNumberId },
+      }
+    : projected;
 });
 
 const resolveLifecycleHint = Effect.fn(function* (
@@ -492,6 +523,7 @@ const resolveLifecycleHint = Effect.fn(function* (
     businessPhoneNumberId: hint.phone_number_id,
     messageId: hint.message.id,
     receivedAt,
+    status: lifecycleStatus(eventName),
   });
   const latest = yield* lookupLifecycleStatus({
     outboundHttp: lookup.value,
@@ -500,8 +532,38 @@ const resolveLifecycleHint = Effect.fn(function* (
     status: lifecycleStatus(eventName),
     receivedAt,
   });
-  if (Option.isNone(latest)) return yield* invalidKapsoInvariant("missing provider status");
-  return latest.value;
+  if (latest._tag === "Absent") return yield* invalidKapsoInvariant("missing provider status");
+  return latest._tag === "Uncorrelated" ? Option.none() : Option.some(latest.value);
+});
+
+const projectReceiptEvent = Effect.fn(function* (
+  raw: typeof RawReceiptEvent.Type,
+  eventName: typeof DisclosureLifecycleEventName.Type,
+  receivedAt: DateTime.Utc
+) {
+  if (raw.message.kapso.statuses.some((status) => status.id !== raw.message.id)) {
+    return yield* invalidKapsoInvariant("event/status mismatch");
+  }
+  const times = yield* Effect.forEach(raw.message.kapso.statuses, (status) =>
+    parseOccurredAt(status.timestamp, receivedAt)
+  );
+  const newest = times.reduce(
+    (index, time, candidate) =>
+      DateTime.Order(time, times[index] ?? time) > 0 ? candidate : index,
+    0
+  );
+  if (raw.message.kapso.statuses[newest]?.status !== lifecycleStatus(eventName)) {
+    return yield* invalidKapsoInvariant("event/status mismatch");
+  }
+  const latest = yield* projectReceiptHistory(
+    raw.message.kapso.statuses,
+    lifecycleStatus(eventName),
+    receivedAt
+  );
+  if (latest._tag === "Absent") return yield* invalidKapsoInvariant("missing provider status");
+  return latest._tag === "Uncorrelated"
+    ? Option.none()
+    : Option.some({ ...latest.value, businessPhoneNumberId: raw.phone_number_id });
 });
 
 /** One authenticated event and its latest chronological status, shared across delivery purposes. */
@@ -515,7 +577,7 @@ export const decodeLifecycleStatus = Effect.fn(function* (
   const eventName = yield* Schema.decodeUnknownEffect(DisclosureLifecycleEventName)(
     input.eventName
   ).pipe(Effect.mapError(invalidKapsoPayload));
-  const full = Schema.decodeUnknownOption(RawDisclosureLifecycleEvent)(unknown);
+  const full = Schema.decodeUnknownOption(RawReceiptEvent)(unknown);
   if (Option.isNone(full)) {
     return yield* resolveLifecycleHint({
       body: unknown,
@@ -525,23 +587,15 @@ export const decodeLifecycleStatus = Effect.fn(function* (
       admitLookup,
     });
   }
-  const raw = full.value;
-  const latest = yield* latestDisclosureLifecycleStatus(
-    raw.message.kapso.statuses,
-    input.receivedAt
-  );
-  if (Option.isNone(latest)) return yield* invalidKapsoInvariant("missing provider status");
-  if (
-    latest.value.status.status !== lifecycleStatus(eventName) ||
-    latest.value.status.id !== raw.message.id
-  ) {
-    return yield* invalidKapsoInvariant("event/status mismatch");
-  }
-  return { ...latest.value, businessPhoneNumberId: raw.phone_number_id };
+  return yield* projectReceiptEvent(full.value, eventName, input.receivedAt);
 });
 
 export const projectHostedStatus = (
-  latest: Effect.Success<ReturnType<typeof decodeLifecycleStatus>>
+  latest: Readonly<{
+    status: typeof RawDisclosureStatus.Type;
+    evidence: WhatsAppDisclosureLifecycleEvidence;
+    businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
+  }>
 ): WhatsAppHostedLifecycleEvidence => {
   const status = latest.status;
   const evidence = {

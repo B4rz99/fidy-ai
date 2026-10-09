@@ -26,7 +26,6 @@ type DetailProps = Readonly<{
   onClose: () => void;
   editable: boolean;
   mode: DetailMode;
-  initialCategory: Option.Option<string>;
   onMode: (mode: DetailMode) => void;
 }>;
 const detailRow = ({
@@ -110,7 +109,6 @@ export const TransactionDetail = (props: DetailProps): JSX.Element => {
     return (
       <TransactionCorrection
         renderForm={(form) => props.renderPanel(<DetailFrame props={props}>{form}</DetailFrame>)}
-        initialCategory={props.initialCategory}
         apiClient={props.apiClient}
         transaction={props.transaction}
         categories={props.categories}

@@ -12,6 +12,7 @@ import { type FidyClient, maximumAtomicBatchCalls } from "@/transport/client";
 import { BulkTransactionCorrection } from "./bulk-correction";
 import { TransactionDetail } from "./detail";
 import { TransactionSummary } from "./summary";
+import { InlineTransactionCategory } from "./inline-category";
 import { TransactionLedger } from "./ledger";
 import { ManualTransactionCapture } from "./manual-capture";
 import { ResponsiveTransactionPanel } from "./responsive-panel";
@@ -216,8 +217,7 @@ const DetailPanel = ({
   return (
     <TransactionDetail
       renderPanel={renderPanel}
-      key={`${panel.id}:${Option.getOrElse(panel.categoryId, () => "original")}`}
-      initialCategory={panel.categoryId}
+      key={panel.id}
       transaction={transaction.value}
       apiClient={props.apiClient}
       categories={props.categories}
@@ -462,17 +462,28 @@ const panelTitle = (panel: TransactionPanel): string => {
 const detailPanel = (id: string, editable: boolean): TransactionPanel => ({
   _tag: "Detail",
   id,
-  categoryId: Option.none(),
   mode: editable ? { _tag: "Editing", status: "idle" } : { _tag: "Viewing" },
-});
-const categoryPanel = (id: string, categoryId: string): TransactionPanel => ({
-  _tag: "Detail",
-  id,
-  categoryId: Option.some(categoryId),
-  mode: { _tag: "Editing", status: "idle" },
 });
 const selectionPanel = (panel: TransactionPanel): TransactionPanel =>
   panel._tag === "Bulk" ? { _tag: "Summary" } : { _tag: "Bulk", ids: [], stage: "selecting" };
+const renderCategoryCell = (
+  row: React.ComponentProps<typeof InlineTransactionCategory>["row"],
+  disabled: boolean,
+  props: WorkspaceProps
+): JSX.Element => (
+  <InlineTransactionCategory
+    row={row}
+    disabled={disabled}
+    apiClient={props.apiClient}
+    transactions={props.transactions}
+    categories={props.categories}
+    onRefresh={props.onRefresh}
+    onSaved={() => {
+      toast.success("Categoría guardada");
+      props.onRefresh();
+    }}
+  />
+);
 const WorkspaceContent = ({
   props,
   panel,
@@ -514,8 +525,7 @@ const WorkspaceContent = ({
           locale={props.currentUser.locale}
           selected={panel._tag === "Detail" ? Option.some(panel.id) : Option.none()}
           disabled={locked || (editing && panel._tag !== "Detail")}
-          categories={props.categories}
-          onCategory={(id, categoryId) => onPanel(categoryPanel(id, categoryId))}
+          renderCategory={(row, disabled) => renderCategoryCell(row, disabled, props)}
           onSelect={(id) => onPanel(detailPanel(id, props.editable))}
         />
       </div>

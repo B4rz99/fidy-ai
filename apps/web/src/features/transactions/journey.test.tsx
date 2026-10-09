@@ -554,22 +554,45 @@ it("opens corrections from transaction type and lets the user switch records", (
       expect(screen.getByLabelText("Contraparte")).toHaveValue("El Corral");
     })
   ));
-it("chooses a category from the ledger for review without saving until confirmed", () =>
+it("saves a category from the ledger directly without opening correction", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      renderBulkJourney();
+      const requests = renderJourney();
       fireEvent.click(
         yield* Effect.tryPromise(() =>
-          screen.findByRole("button", { name: "Cambiar categoría de Éxito" })
+          screen.findByRole("button", { name: "Cambiar categoría de El Corral" })
         )
       );
       fireEvent.click(
         yield* Effect.tryPromise(() => screen.findByRole("menuitemradio", { name: "Mercado" }))
       );
-      expect(screen.getByRole("button", { name: /^Categoría$/ })).toHaveTextContent("Mercado");
-      expect(screen.getByLabelText("Contraparte")).toHaveValue("Éxito");
-      fireEvent.click(screen.getByRole("button", { name: /^Cancelar$/ }));
-      fireEvent.click(screen.getByRole("button", { name: "Ver transacción Éxito" }));
-      expect(screen.getByRole("button", { name: /^Categoría$/ })).toHaveTextContent("Restaurantes");
+      yield* Effect.tryPromise(() => screen.findByText("Categoría guardada"));
+      expect(requests.updates()).toBe(1);
+      expect(requests.updateBody()).toContain('"expectedRevision":0');
+      expect(requests.updateBody()).toContain(
+        '"categoryId":"24000000-0000-4000-8000-000000000099"'
+      );
+      expect(screen.queryByRole("form", { name: "Corregir transacción" })).not.toBeInTheDocument();
+      expect(screen.getByLabelText("Resumen de transacciones")).toBeInTheDocument();
+    })
+  ));
+it("blocks repeating an uncertain inline category correction", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const requests = renderJourney(true);
+      fireEvent.click(
+        yield* Effect.tryPromise(() =>
+          screen.findByRole("button", { name: "Cambiar categoría de El Corral" })
+        )
+      );
+      fireEvent.click(
+        yield* Effect.tryPromise(() => screen.findByRole("menuitemradio", { name: "Mercado" }))
+      );
+      yield* Effect.tryPromise(() => screen.findByRole("alert"));
+      expect(screen.getByRole("button", { name: "Cambiar categoría de El Corral" })).toBeDisabled();
+      expect(requests.updates()).toBe(1);
+      fireEvent.click(screen.getByRole("button", { name: "Actualizar historial" }));
+      yield* Effect.tryPromise(() => screen.findByLabelText("Resumen de transacciones"));
+      expect(requests.updates()).toBe(1);
     })
   ));

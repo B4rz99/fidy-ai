@@ -1,6 +1,5 @@
 import { useAtomSet } from "@effect/atom-react";
-import { BigDecimal, Cause, DateTime, Effect, Option, Predicate } from "effect";
-import type * as Atom from "effect/reactivity/Atom";
+import { BigDecimal, DateTime, Option } from "effect";
 import { useState } from "react";
 import type { FormEvent, JSX } from "react";
 import type { CanonicalInput, FidyClient } from "@/transport/client";
@@ -8,6 +7,7 @@ import { isCanonicalInput } from "@/transport/canonical-input";
 import { Button } from "@/ui/components/button";
 import { Input } from "@/ui/components/input";
 import { Label } from "@/ui/components/label";
+import { makeTransactionCorrection } from "./correction-command";
 import { TransactionDropdown } from "./dropdown";
 import type { Category, Transaction } from "./presentation";
 
@@ -24,7 +24,6 @@ type CorrectionDraft = Readonly<{
   categoryId: string;
 }>;
 type CorrectionProps = Readonly<{
-  initialCategory: Option.Option<string>;
   renderForm: (form: JSX.Element) => JSX.Element;
   apiClient: FidyClient;
   transaction: Transaction;
@@ -90,39 +89,6 @@ const correctionChanges = (
     ? Option.some(changes)
     : Option.none();
 };
-type CorrectionCommand = Readonly<{
-  changes: CanonicalInput<"transactions.updateTransaction">["payload"]["changes"];
-  onSaved: () => void;
-  onRejected: () => void;
-  onUncertain: () => void;
-}>;
-const makeCorrection = (
-  apiClient: FidyClient,
-  transaction: Transaction
-): Atom.AtomResultFn<CorrectionCommand, void, never> =>
-  apiClient.runtime.fn<CorrectionCommand>()((command) =>
-    Effect.gen(function* () {
-      const client = yield* apiClient;
-      yield* client.transactions.updateTransaction({
-        params: { id: transaction.id },
-        payload: { expectedRevision: transaction.revision, changes: command.changes },
-      });
-      yield* Effect.sync(command.onSaved);
-    }).pipe(
-      Effect.catch((failure) =>
-        Effect.sync(
-          Predicate.isTagged(failure, "ValidationFailed") ||
-            Predicate.isTagged(failure, "NotFound") ||
-            Predicate.isTagged(failure, "ResourceLimited")
-            ? command.onRejected
-            : command.onUncertain
-        )
-      ),
-      Effect.catchCause((cause) =>
-        Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.sync(command.onUncertain)
-      )
-    )
-  );
 const DraftInputs = ({
   draft,
   timeZone,
@@ -320,12 +286,11 @@ const CorrectionActions = ({
 );
 /** Corrects only explicitly changed facts at the observed revision; an uncertain write is never replayed. */
 export const TransactionCorrection = (props: CorrectionProps): JSX.Element => {
-  const [draft, setDraft] = useState(() => ({
-    ...initialDraft(props.transaction, props.timeZone),
-    categoryId: Option.getOrElse(props.initialCategory, () => props.transaction.categoryId),
-  }));
+  const [draft, setDraft] = useState(() => initialDraft(props.transaction, props.timeZone));
   const { status, onStatus: setStatus } = props;
-  const [command] = useState(() => makeCorrection(props.apiClient, props.transaction));
+  const [command] = useState(() =>
+    makeTransactionCorrection({ apiClient: props.apiClient, transaction: props.transaction })
+  );
   const submit = useAtomSet(command);
   const locked = status === "saving" || status === "uncertain" || status === "rejected";
   const onSubmit = (event: FormEvent<HTMLFormElement>): void => {

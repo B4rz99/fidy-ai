@@ -32,7 +32,7 @@ import { ArrowDown01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { TransactionDropdown } from "./dropdown";
 import { CategoryVisual, DirectionVisual } from "./visuals";
 import { formatMoney } from "@/transport/money";
-import type { Category, TransactionListRow } from "./presentation";
+import type { TransactionListRow } from "./presentation";
 
 const columns: Array<ColumnDef<TransactionListRow>> = [
   { accessorKey: "counterpartyLabel", header: "Contraparte" },
@@ -44,8 +44,7 @@ type LedgerProps = Readonly<{
   rows: ReadonlyArray<TransactionListRow>;
   selected: Option.Option<string>;
   onSelect: (id: string) => void;
-  categories: ReadonlyArray<Category>;
-  onCategory: (id: string, categoryId: string) => void;
+  renderCategory: (row: TransactionListRow, disabled: boolean) => JSX.Element;
   disabled: boolean;
   locale: string;
   toolbar: JSX.Element;
@@ -105,27 +104,16 @@ const TransactionClassification = ({
   onSelect,
   disabled,
   selection,
-  categories,
-  onCategory,
+  renderCategory,
   canEdit,
 }: Readonly<{ row: TransactionListRow }> &
   Pick<
     LedgerProps,
-    "onSelect" | "disabled" | "selection" | "categories" | "onCategory" | "canEdit"
+    "onSelect" | "disabled" | "selection" | "renderCategory" | "canEdit"
   >): JSX.Element => (
   <>
     <TableCell className="hidden @min-[600px]/ledger:table-cell">
-      <TransactionDropdown
-        id={`category-${row.id}`}
-        label={`Cambiar categoría de ${row.counterpartyLabel}`}
-        value={row.categoryId}
-        options={categories.map((category) => ({ value: category.id, label: category.label }))}
-        disabled={disabled || selection.active || !canEdit}
-        width="full"
-        leading={<CategoryVisual label={row.categoryLabel} bubble large={false} />}
-        triggerLabel={Option.none()}
-        onChange={(categoryId) => onCategory(row.id, categoryId)}
-      />
+      {renderCategory(row, disabled || selection.active || !canEdit)}
     </TableCell>
     <TableCell className="hidden @min-[481px]/ledger:table-cell">
       <button
@@ -152,8 +140,7 @@ const TransactionRow = ({
   onSelect,
   disabled,
   selection,
-  categories,
-  onCategory,
+  renderCategory,
   canEdit,
 }: Readonly<{ row: TransactionListRow }> & Omit<LedgerProps, "rows">): JSX.Element => (
   <TableRow
@@ -173,8 +160,7 @@ const TransactionRow = ({
       onSelect={onSelect}
       disabled={disabled}
       selection={selection}
-      categories={categories}
-      onCategory={onCategory}
+      renderCategory={renderCategory}
       canEdit={canEdit}
     />
     <TableCell className="text-right font-medium tabular-nums">

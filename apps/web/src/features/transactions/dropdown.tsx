@@ -63,19 +63,28 @@ export const TransactionDropdown = ({
         aria-hidden="true"
       />
     </DropdownMenuTrigger>
-    <DropdownMenuContent align="start" className="min-w-56">
-      <DropdownMenuRadioGroup
-        value={value}
-        onValueChange={(next: unknown) => {
-          if (typeof next === "string") onChange(next);
-        }}
-      >
-        {options.map((option) => (
-          <DropdownMenuRadioItem key={option.value} value={option.value} closeOnClick>
-            {option.label}
-          </DropdownMenuRadioItem>
-        ))}
-      </DropdownMenuRadioGroup>
-    </DropdownMenuContent>
+    <TransactionMenuOptions value={value} options={options} onChange={onChange} />
   </DropdownMenu>
+);
+
+/** Shared category, filter, and sort popup behavior. */
+export const TransactionMenuOptions = ({
+  value,
+  options,
+  onChange,
+}: Pick<DropdownProps, "value" | "options" | "onChange">): JSX.Element => (
+  <DropdownMenuContent align="start" className="min-w-56">
+    <DropdownMenuRadioGroup
+      value={value}
+      onValueChange={(next: unknown) => {
+        if (typeof next === "string") onChange(next);
+      }}
+    >
+      {options.map((option) => (
+        <DropdownMenuRadioItem key={option.value} value={option.value} closeOnClick>
+          {option.label}
+        </DropdownMenuRadioItem>
+      ))}
+    </DropdownMenuRadioGroup>
+  </DropdownMenuContent>
 );

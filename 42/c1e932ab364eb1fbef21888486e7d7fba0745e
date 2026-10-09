@@ -1,0 +1,44 @@
+apps/web/src/features/transactions/workspace.tsx
+  s_b75995d26622a8::t_62cdf54d2be69c 469-486,528
+  s_b75995d26622a8::t_7e37333bc53e17 15,220
+apps/web/src/features/transactions/panel-state.ts
+  s_b75995d26622a8::t_7e37333bc53e17 1,24
+apps/web/src/features/transactions/journey.test.tsx
+  s_b75995d26622a8::t_82ee97fb670356 560,563,571-593
+  s_b75995d26622a8::t_62cdf54d2be69c 569-570
+  s_b75995d26622a8::t_18c9ae3b6c766b 594-596
+  s_b75995d26622a8::t_ce20cc1798d5f5 557
+apps/web/src/features/transactions/dropdown.tsx
+  s_b75995d26622a8::t_7e37333bc53e17 66,69-70
+  s_b75995d26622a8::t_82ee97fb670356 71-89
+  s_b75995d26622a8::t_73185ac9db2cc2 90
+apps/web/src/features/transactions/correction.tsx
+  s_b75995d26622a8::t_7e37333bc53e17 2,10,289
+  s_b75995d26622a8::t_7aec8097b523fd 291-293
+apps/web/src/features/transactions/inline-category.tsx
+  s_b75995d26622a8::t_82ee97fb670356 1-19,21,45,50-52,55-56,59-71,73-88,96-115
+  s_b75995d26622a8::t_7aec8097b523fd 47-49,53-54,57
+  s_b75995d26622a8::t_18c9ae3b6c766b 89-95
+  s_b75995d26622a8::t_62cdf54d2be69c 20,22-44,46,58,72
+apps/web/src/features/transactions/correction-command.ts
+  s_b75995d26622a8::t_7e37333bc53e17 1-11,19-41
+  s_b75995d26622a8::t_7aec8097b523fd 12-18
+apps/web/src/features/transactions/ledger.tsx
+  s_b75995d26622a8::t_7e37333bc53e17 35,47,107,112,116,143,163
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "42c1e932ab364eb1fbef21888486e7d7fba0745e",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

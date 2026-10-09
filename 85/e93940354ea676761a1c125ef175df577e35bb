@@ -1,0 +1,60 @@
+apps/web/src/features/transactions/feature.test.tsx
+  s_b75995d26622a8::t_49551862a23ff2 395-396,417-418,431-450,452,455-457,462-463,465,469-471,473,476-479,481
+  s_b75995d26622a8::t_e51798347c85f9 1,388-394,397,400-416,419-430,451,453-454,458-461,464,466-468,472,474-475,480,482-483
+  s_b75995d26622a8::t_5c0f0df25f5014 398-399
+  s_b75995d26622a8::t_f5fd1980699f4c 385
+apps/web/src/features/transactions/manual-capture.tsx
+  s_b75995d26622a8::t_c5ec7c298f784e 10-12,43-55,58,135,137,141-143
+apps/web/src/ui/components/dropdown-menu.tsx
+  s_b75995d26622a8::t_bdcd00e69f23a0 1,3-4
+  s_b75995d26622a8::t_d9bf5602f98acf 5,15,47,80
+  s_b75995d26622a8::t_f078392f8860ad 2,6
+  s_b75995d26622a8::t_781b4ee0efef17 10,14,16-22,46,48-50,65,73,79,81-82,96
+  s_b75995d26622a8::t_92dc015c076e21 7-9,11-13,26-45,52-64,66-72,76-78,84-95,97-103
+  s_b75995d26622a8::t_5c0f0df25f5014 23-25,51,74-75,83,104-111
+apps/web/src/features/transactions/workspace.tsx
+  s_b75995d26622a8::t_e0ea7d1b2070a5 40-50,149-153,402
+apps/web/src/features/transactions/ledger.tsx
+  s_b75995d26622a8::t_f5fd1980699f4c 10,17,156-160,165-171,173,215-216,237
+  s_b75995d26622a8::t_af9f853386c402 203-204
+  s_b75995d26622a8::t_bdcd00e69f23a0 11,13-15
+  s_b75995d26622a8::t_5c0f0df25f5014 12,16,175-202,205-214,241
+  s_b75995d26622a8::t_0ac837f3430453 18,37,70,78,84,116,118,288,290-292
+  s_b75995d26622a8::t_92dc015c076e21 72,91-92,98,117
+apps/web/src/ui/components/wordmark.tsx
+  s_b75995d26622a8::t_432741d1c27d76 1-8
+apps/web/src/transport/canonical-input.ts
+  s_b75995d26622a8::t_f63879759dde7c 1-16
+apps/web/src/features/transactions/correction.tsx
+  s_b75995d26622a8::t_81499d967759df 7,77,84-90,373
+apps/web/src/ui/money.ts
+  s_b75995d26622a8::t_5923889be6502d 1,13,18-19
+apps/web/src/index.css
+  s_b75995d26622a8::t_92dc015c076e21 208-216,221-237,330
+apps/server/src/client.ts
+  s_b75995d26622a8::t_bc6e043eda7c33 162-163
+apps/web/src/features/signed-in/feature.tsx
+  s_b75995d26622a8::t_a8bba1a71b1810 50
+  s_b75995d26622a8::t_432741d1c27d76 17,122
+apps/web/src/features/transactions/journey.test.tsx
+  s_b75995d26622a8::t_2f4a4865be1d9d 316-352
+  s_b75995d26622a8::t_a0f71123bfb8c8 307,310
+.oxlintrc.json
+  s_b75995d26622a8::t_efc588da33e132 269
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "85e93940354ea676761a1c125ef175df577e35bb",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

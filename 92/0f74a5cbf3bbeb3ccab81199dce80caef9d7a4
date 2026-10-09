@@ -1,0 +1,21 @@
+apps/web/src/features/transactions/presentation.test.ts
+  s_b75995d26622a8::t_8f706ce70a4166 1,92,103,108-119
+apps/web/src/index.css
+  s_b75995d26622a8::t_8f706ce70a4166 255
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "920f74a5cbf3bbeb3ccab81199dce80caef9d7a4",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

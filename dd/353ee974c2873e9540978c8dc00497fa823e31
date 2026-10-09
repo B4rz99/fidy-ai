@@ -1,0 +1,67 @@
+apps/web/src/features/transactions/dropdown.tsx
+  s_b75995d26622a8::t_a88432cc95aaef 2-36,39-53,58-65,67-81
+  s_b75995d26622a8::t_ce6c9ad9d9c86c 1,37-38,54-57,66
+apps/web/src/features/transactions/date-field.tsx
+  s_b75995d26622a8::t_cdcbe48dc13769 1,3-4,7-10,12,14,16-17,19-24,26-38,40-90
+apps/web/src/features/transactions/detail.tsx
+  s_b75995d26622a8::t_c2d44125fedff5 120
+apps/web/src/features/transactions/date-filter.tsx
+  s_b75995d26622a8::t_cdcbe48dc13769 2,4-20
+apps/web/src/features/transactions/summary.tsx
+  s_b75995d26622a8::t_c2d44125fedff5 111
+  s_b75995d26622a8::t_cdcbe48dc13769 119
+apps/web/src/features/transactions/ledger.tsx
+  s_b75995d26622a8::t_cdcbe48dc13769 87-89,120,122,133-144,153,169,212-217,252-265,286,288
+  s_b75995d26622a8::t_76e1a36c84cf1f 31-32
+apps/web/src/features/transactions/correction.tsx
+  s_b75995d26622a8::t_c2d44125fedff5 127,131,136,149-152,358
+  s_b75995d26622a8::t_cdcbe48dc13769 137-143
+  s_b75995d26622a8::t_a88432cc95aaef 11,171-177,179-189,214-220,222-233
+  s_b75995d26622a8::t_5c952e921588b6 178,221,357
+apps/web/src/features/transactions/bulk-correction.tsx
+  s_b75995d26622a8::t_c2d44125fedff5 235-238
+  s_b75995d26622a8::t_a88432cc95aaef 17,174-177,191-194
+  s_b75995d26622a8::t_cdcbe48dc13769 141
+apps/web/src/features/transactions/manual-capture.tsx
+  s_b75995d26622a8::t_cdcbe48dc13769 110,112,114-116,118
+  s_b75995d26622a8::t_a88432cc95aaef 11,141-142,144-147,149-154
+  s_b75995d26622a8::t_c2d44125fedff5 10,83,92,99,242
+apps/web/src/index.css
+  s_b75995d26622a8::t_cdcbe48dc13769 212-214,246
+  s_b75995d26622a8::t_28e5b08fcc0e60 361
+apps/web/src/transport/money.ts
+  s_b75995d26622a8::t_c2d44125fedff5 16
+apps/web/src/features/transactions/workspace.tsx
+  s_b75995d26622a8::t_c2d44125fedff5 53,362-365,370-373,528,548-551
+  s_b75995d26622a8::t_cdcbe48dc13769 314-335,337,342-344,346-352,393-394
+  s_b75995d26622a8::t_a88432cc95aaef 9,84-87,113-116
+  s_b75995d26622a8::t_7bc7dc312478cc 313,336,338-341,345,353-356,383-385,388-392,461-465,513
+DESIGN.md
+  s_b75995d26622a8::t_bbf95a28002aec 413,422-425,430-434
+apps/web/src/features/dashboard/money-presentation.test.ts
+  s_b75995d26622a8::t_12578e204fe65a 24,44
+apps/web/src/features/transactions/feature.test.tsx
+  s_b75995d26622a8::t_503dddc1e73700 99,120,123,365-366,443
+apps/web/src/features/transactions/journey.test.tsx
+  s_b75995d26622a8::t_596da9df3ff937 162,168,187,197,209,221,278,280,282,285,287,289,304,311,314,330,338-339,344,347-349,503,506
+apps/web/src/features/transactions/manual-capture.test.tsx
+  s_b75995d26622a8::t_c169cef6d3f3a1 51
+apps/web/src/features/transactions/presentation.test.ts
+  s_b75995d26622a8::t_8d7a569c1378b7 52,61,91,102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dd353ee974c2873e9540978c8dc00497fa823e31",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

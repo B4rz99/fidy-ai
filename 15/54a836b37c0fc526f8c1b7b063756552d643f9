@@ -1,0 +1,37 @@
+apps/web/src/ui/reference.tsx
+  s_b75995d26622a8::t_1a9c52afbd0fb2 266
+apps/web/src/features/dashboard/money-presentation.test.ts
+  s_b75995d26622a8::t_e1cfe48d2315ee 2
+apps/web/src/features/dashboard/money-presentation.ts
+  s_b75995d26622a8::t_4ef7f1bf973ad1 4
+apps/web/src/features/recurring-digest/feature.tsx
+  s_b75995d26622a8::t_2866304d1fbd0a 9
+apps/web/src/features/subscription/feature.tsx
+  s_b75995d26622a8::t_03af5233f7bc34 42
+apps/web/src/features/subscription/presentation.ts
+  s_b75995d26622a8::t_768a6a6a01a0df 2
+apps/web/src/features/transactions/ledger.tsx
+  s_b75995d26622a8::t_edba61d8e79851 34
+apps/web/src/features/transactions/presentation.test.ts
+  s_b75995d26622a8::t_acd37c3f3d3033 3
+apps/web/src/features/transactions/presentation.ts
+  s_b75995d26622a8::t_dc002b1e8ca424 3
+apps/web/src/features/transactions/summary.tsx
+  s_b75995d26622a8::t_0a31e37cd1d963 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1554a836b37c0fc526f8c1b7b063756552d643f9",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

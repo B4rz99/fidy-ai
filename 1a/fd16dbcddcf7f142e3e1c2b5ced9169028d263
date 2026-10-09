@@ -1,0 +1,36 @@
+apps/web/src/features/transactions/presentation.ts
+  s_b75995d26622a8::t_2eab1e88ccce56 37,102
+apps/web/src/features/transactions/workspace.tsx
+  s_b75995d26622a8::t_2eab1e88ccce56 468-473
+  s_b75995d26622a8::t_44be36049ec74c 474-475,511
+  s_b75995d26622a8::t_b86fe9c8c0d24f 112,219-220,465,516-518
+apps/web/src/features/transactions/ledger.tsx
+  s_b75995d26622a8::t_2eab1e88ccce56 103-148,155-157,171-179
+  s_b75995d26622a8::t_26ba7868a35e04 35,47-48,334,336
+apps/web/src/features/transactions/journey.test.tsx
+  s_b75995d26622a8::t_c19a1bc2e3c0a6 543,549-554,560,570,572
+  s_b75995d26622a8::t_2eab1e88ccce56 545,562
+  s_b75995d26622a8::t_21932b51f26465 132-137,456-461,539-542,544,546-548,555-559,561,563-569,571,573-575
+apps/web/src/features/transactions/correction.tsx
+  s_b75995d26622a8::t_055c95cf422990 27,323-326
+apps/web/src/features/transactions/detail.tsx
+  s_b75995d26622a8::t_b6e6b751389b4d 29,113
+apps/web/src/features/transactions/panel-state.ts
+  s_b75995d26622a8::t_dfd580512e9045 1,24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1afd16dbcddcf7f142e3e1c2b5ced9169028d263",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

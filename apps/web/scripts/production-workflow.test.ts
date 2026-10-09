@@ -129,11 +129,13 @@ describe("Production release workflow policy", () => {
       "WOMPI_PRIVATE_KEY: ${{ secrets.WOMPI_PRIVATE_KEY }}",
       "WOMPI_INTEGRITY_SECRET: ${{ secrets.WOMPI_INTEGRITY_SECRET }}",
       "CLOUDFLARE_ACCESS_ISSUER: ${{ secrets.CLOUDFLARE_ACCESS_ISSUER }}",
-      "CLOUDFLARE_ACCESS_AUDIENCE: ${{ secrets.CLOUDFLARE_ACCESS_AUDIENCE }}",
     ];
 
     expect(planStart).toBeGreaterThan(0);
     expect(deployStart).toBeGreaterThan(0);
+    const jobEnv = workflow.slice(workflow.indexOf("    env:\n"), workflow.indexOf("    steps:\n"));
+    expect(jobEnv).toContain("RECOVERY_OPERATOR_EMAIL: ${{ vars.RECOVERY_OPERATOR_EMAIL }}");
+    expect(workflow).not.toContain("CLOUDFLARE_ACCESS_AUDIENCE:");
     for (const binding of runtimeConfiguration) {
       expect(planStep).toContain(binding);
       expect(deployStep).toContain(binding);

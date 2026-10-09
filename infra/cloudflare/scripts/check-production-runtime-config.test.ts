@@ -36,7 +36,7 @@ const requiredConfiguration = [
   "WOMPI_INTEGRITY_SECRET",
   "WOMPI_EVENT_SECRET",
   "CLOUDFLARE_ACCESS_ISSUER",
-  "CLOUDFLARE_ACCESS_AUDIENCE",
+  "RECOVERY_OPERATOR_EMAIL",
 ] as const;
 
 type ConfigurationName = (typeof requiredConfiguration)[number];

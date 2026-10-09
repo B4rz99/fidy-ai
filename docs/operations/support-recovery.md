@@ -16,16 +16,27 @@ POST https://api.fidyapp.com/internal/support-recovery
 ```
 
 Restrict its allow policy to the `recovery-operator` group and set the user session duration to 15
-minutes. Store the exact issuer and audience in Cloudflare secret bindings. The private Worker must
+minutes. Production Alchemy owns the dedicated path application, its email-PIN identity provider
+and the group with exactly `RECOVERY_OPERATOR_EMAIL`. Configure that email in the GitHub Production
+environment variable and the existing organization issuer in `CLOUDFLARE_ACCESS_ISSUER`.
+Core receives the application's generated audience directly; no manually entered audience secret is
+used by deployment. Issuer and audience are public JWT verification metadata, not credentials.
+The private Worker must
 verify the forwarded assertion against the issuer JWKS and check its signature, exact issuer, exact
 audience, nonfuture issued-at time, expiry no farther than 15 minutes from verification, maximum
 15-minute assertion lifetime, and nonempty subject. Missing or malformed configuration makes the
 route unavailable.
 
 This Access application and allow policy are launch blockers, not optional dashboard guidance. Before
-promotion, the release operator must verify in Cloudflare Zero Trust that the application path,
-`recovery-operator` group, session duration, and audience exactly match this section; otherwise the
-support command remains unavailable.
+promotion, `production-release.ts stage` reads the actual application, policy, group, login provider,
+organization and uploaded Core version. It refuses missing resources, broader group membership,
+non-15-minute authority or issuer/audience mismatches. The account's existing Zero Trust organization
+must be configured first; deployment does not overwrite organization-wide settings.
+
+The deployment API token needs account-scoped Access applications/policies, groups and identity
+providers edit permissions and organizations read permission. The observability token needs only
+the corresponding read permissions for verification. Keep token values out of repository files
+and terminal output.
 
 The route is private transport, not a canonical operation. It must remain absent from public OpenAPI,
 generated clients, browser routes, and hosted-agent tools. Generic HTTP request logging is disabled;

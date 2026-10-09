@@ -19,7 +19,7 @@ required_configuration=(
   WOMPI_INTEGRITY_SECRET
   WOMPI_EVENT_SECRET
   CLOUDFLARE_ACCESS_ISSUER
-  CLOUDFLARE_ACCESS_AUDIENCE
+  RECOVERY_OPERATOR_EMAIL
 )
 
 for name in "${required_configuration[@]}"; do

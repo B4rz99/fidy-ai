@@ -213,6 +213,166 @@ const providerJson = Effect.fn(
   Effect.timeout("10 seconds")
 );
 
+type RecoveryAccessConfig = Pick<Config, "account" | "token"> &
+  Readonly<{ issuer: string; operatorEmail: string }>;
+const AccessApplication = Schema.Struct({
+  id: Schema.NonEmptyString,
+  domain: Schema.String,
+  type: Schema.String,
+  aud: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
+  session_duration: Schema.String,
+  allowed_idps: Schema.Array(Schema.String),
+});
+const emptyAccessRules = Schema.optional(Schema.NullOr(Schema.Tuple([])));
+const RecoveryPolicy = Schema.Struct({
+  decision: Schema.Literal("allow"),
+  name: Schema.Literal("recovery-operator"),
+  session_duration: Schema.Literal("15m"),
+  include: Schema.Tuple([Schema.Record(Schema.String, Schema.Unknown)]),
+  exclude: emptyAccessRules,
+  require: emptyAccessRules,
+});
+const readAccess = <A, E>(
+  env: RecoveryAccessConfig & Readonly<{ client: HttpClient.HttpClient }>,
+  path: string,
+  schema: Schema.Codec<A, E>
+): Effect.Effect<A, Error> =>
+  providerJson(
+    HttpClientRequest.get(
+      `https://api.cloudflare.com/client/v4/accounts/${env.account}/access/${path}`,
+      { headers: { authorization: `Bearer ${env.token}` } }
+    )
+  ).pipe(
+    Effect.provideService(HttpClient.HttpClient, env.client),
+    Effect.flatMap(
+      Schema.decodeUnknownEffect(Schema.Struct({ success: Schema.Literal(true), result: schema }))
+    ),
+    Effect.map((value) => value.result)
+  );
+const recoveryApplication = Effect.fn(function* (
+  env: RecoveryAccessConfig,
+  client: HttpClient.HttpClient
+) {
+  const raw = yield* providerJson(
+    HttpClientRequest.get(
+      `https://api.cloudflare.com/client/v4/accounts/${env.account}/access/apps?per_page=100`,
+      { headers: { authorization: `Bearer ${env.token}` } }
+    )
+  ).pipe(Effect.provideService(HttpClient.HttpClient, client));
+  const inventory = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      success: Schema.Literal(true),
+      result: Schema.Array(AccessApplication),
+      result_info: Schema.Struct({ total_count: Schema.Int }),
+    })
+  )(raw);
+  if (inventory.result_info.total_count !== inventory.result.length) {
+    return yield* Effect.fail(Error("Incomplete Access inventory"));
+  }
+  const matches = inventory.result.filter(
+    (app) => app.domain === "api.fidyapp.com/internal/support-recovery"
+  );
+  const app = matches[0];
+  if (
+    matches.length !== 1 ||
+    app?.type !== "self_hosted" ||
+    app.session_duration !== "15m" ||
+    app.allowed_idps.length !== 1
+  ) {
+    return yield* Effect.fail(Error("Recovery Access application missing"));
+  }
+  return app;
+});
+const verifyRecoveryOperator = Effect.fn(function* (
+  env: RecoveryAccessConfig,
+  app: typeof AccessApplication.Type,
+  client: HttpClient.HttpClient
+) {
+  const [policy] = yield* readAccess(
+    { ...env, client },
+    `apps/${encodeURIComponent(app.id)}/policies`,
+    Schema.Tuple([RecoveryPolicy])
+  );
+  const rule = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({ group: Schema.Struct({ id: Schema.NonEmptyString }) })
+  )(policy.include[0]);
+  if (encodeJson(policy.include) !== encodeJson([{ group: { id: rule.group.id } }])) {
+    return yield* Effect.fail(Error("Recovery group rule mismatch"));
+  }
+  const group = yield* readAccess(
+    { ...env, client },
+    `groups/${encodeURIComponent(rule.group.id)}`,
+    Schema.Struct({
+      name: Schema.Literal("recovery-operator"),
+      include: Schema.Array(Schema.Unknown),
+      exclude: emptyAccessRules,
+      require: emptyAccessRules,
+    })
+  );
+  if (encodeJson(group.include) !== encodeJson([{ email: { email: env.operatorEmail } }])) {
+    return yield* Effect.fail(Error("Recovery group membership mismatch"));
+  }
+  const identityId = app.allowed_idps[0];
+  if (identityId === undefined) return yield* Effect.fail(Error("Recovery identity missing"));
+  yield* readAccess(
+    { ...env, client },
+    `identity_providers/${encodeURIComponent(identityId)}`,
+    Schema.Struct({ type: Schema.Literal("onetimepin") })
+  );
+  const organization = yield* readAccess(
+    { ...env, client },
+    "organizations",
+    Schema.Struct({ auth_domain: Schema.String })
+  );
+  if (env.issuer !== `https://${organization.auth_domain}`) {
+    return yield* Effect.fail(Error("Recovery issuer mismatch"));
+  }
+});
+const verifyRecoveryCandidate = Effect.fn(function* (
+  env: RecoveryAccessConfig & Readonly<{ client: HttpClient.HttpClient }>,
+  audience: string,
+  core: Readonly<{ name: string; version: string }>
+) {
+  const candidate = yield* providerJson(
+    HttpClientRequest.get(
+      `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(core.name)}/versions/${encodeURIComponent(core.version)}`,
+      { headers: { authorization: `Bearer ${env.token}` } }
+    )
+  ).pipe(
+    Effect.provideService(HttpClient.HttpClient, env.client),
+    Effect.flatMap(Schema.decodeUnknownEffect(IsolationVersion))
+  );
+  const bindingMatches = (name: string, text: string): boolean => {
+    const bindings = candidate.result.resources.bindings.filter((binding) => binding.name === name);
+    return bindings.length === 1 && bindings[0]?.type === "plain_text" && bindings[0].text === text;
+  };
+  if (
+    candidate.result.id !== core.version ||
+    !bindingMatches("CLOUDFLARE_ACCESS_ISSUER", env.issuer) ||
+    !bindingMatches("CLOUDFLARE_ACCESS_AUDIENCE", audience)
+  ) {
+    return yield* Effect.fail(Error("Recovery candidate bindings mismatch"));
+  }
+});
+/** Observe real Access resources; environment variable presence is not operator authority. */
+export const verifyRecoveryAccess = Effect.fn(
+  function* (
+    env: RecoveryAccessConfig,
+    client: HttpClient.HttpClient,
+    core: Readonly<{ name: string; version: string }>
+  ) {
+    const app = yield* recoveryApplication(env, client);
+    yield* verifyRecoveryOperator(env, app, client);
+    yield* verifyRecoveryCandidate({ ...env, client }, app.aud, core);
+  },
+  Effect.mapError(
+    () =>
+      new ReleaseFailure({
+        message: "Release staging refused: support recovery Access configuration is unverified",
+      })
+  )
+);
+
 /** Script settings are independent of gradual code uploads; verify privacy before staging. */
 export const redactReleaseQueries = Effect.fn(function* (
   env: Pick<Config, "account" | "token">,
@@ -792,6 +952,30 @@ const stage = Effect.fn(function* (port: ReleasePort, env: Config, client: HttpC
     return yield* Effect.fail(Error("Alchemy candidate receipts are incomplete"));
   }
   yield* redactReleaseQueries(env, [snapshot.public.name, snapshot.core.name], client);
+  const recovery = yield* Schema.decodeUnknownEffect(
+    Schema.Struct({
+      CLOUDFLARE_ACCESS_ISSUER: Schema.String.check(
+        Schema.isPattern(/^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/u)
+      ),
+      RECOVERY_OPERATOR_EMAIL: Schema.NonEmptyString,
+    })
+  )(process.env).pipe(
+    Effect.mapError(
+      () =>
+        new ReleaseFailure({
+          message: "Release staging refused: support recovery Access configuration is unverified",
+        })
+    )
+  );
+  yield* verifyRecoveryAccess(
+    {
+      ...env,
+      issuer: recovery.CLOUDFLARE_ACCESS_ISSUER,
+      operatorEmail: recovery.RECOVERY_OPERATOR_EMAIL,
+    },
+    client,
+    { name: snapshot.core.name, version: workers.core.versionId.value }
+  );
   const result = yield* releaseController.stageRelease(port, snapshot, {
     publicVersionId: workers.public.versionId.value,
     coreVersionId: workers.core.versionId.value,

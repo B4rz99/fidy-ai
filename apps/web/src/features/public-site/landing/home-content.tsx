@@ -93,8 +93,7 @@ const firstSteps = (
         <h3>2. Registra una transacción.</h3>
         <p>
           Escribe cuánto fue y en qué consistió, desde la web o por WhatsApp. También puedes
-          adjuntar un CSV o XLSX por WhatsApp para incorporar transacciones, según tu plan. Nunca
-          envíes claves bancarias ni números de tarjeta al chat.
+          adjuntar un Excel por WhatsApp para incorporar transacciones, según tu plan.
         </p>
       </article>
       <article className="step">
@@ -108,10 +107,6 @@ const firstSteps = (
         </a>
       </article>
     </div>
-    <p className="first-steps-note">
-      Fidy refleja la información que registras. No obtiene automáticamente todos tus datos
-      bancarios ni presenta un historial completo de tus finanzas.
-    </p>
   </section>
 );
 

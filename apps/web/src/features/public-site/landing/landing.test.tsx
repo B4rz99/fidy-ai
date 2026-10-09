@@ -275,3 +275,12 @@ it("keeps legal review status separate from an active service agreement", () => 
     "/terminos"
   );
 });
+
+it("uses concise first-use wording and the ChatGPT brand", () => {
+  render(<PublicHome />);
+  expect(screen.getByRole("heading", { name: "Conéctalo a ChatGPT o Claude" })).toBeVisible();
+  expect(screen.getByText(/adjuntar un Excel por WhatsApp/u)).toBeVisible();
+  expect(screen.queryByText(/Nunca envíes claves/u)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Fidy refleja la información/u)).not.toBeInTheDocument();
+  expect(screen.queryByText(/CSV o XLSX/u)).not.toBeInTheDocument();
+});

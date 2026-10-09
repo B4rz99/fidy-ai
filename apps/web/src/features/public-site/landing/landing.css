@@ -2782,11 +2782,6 @@ html:has(.fidy-landing) {
     margin-top: 22px;
   }
 }
-.fidy-landing .first-steps-note {
-  margin-top: 28px;
-  max-width: 780px;
-  color: light-dark(#5f5c57, var(--night-muted));
-}
 .fidy-landing .first-steps .step .textlink {
   display: inline-block;
   margin-top: 18px;

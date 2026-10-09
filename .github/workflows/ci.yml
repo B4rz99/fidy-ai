@@ -31,6 +31,7 @@ jobs:
       browser: ${{ steps.plan.outputs.browser }}
       security-sast: ${{ steps.plan.outputs.security-sast }}
       security-sca: ${{ steps.plan.outputs.security-sca }}
+      required-script: ${{ steps.results-gate.outputs.script }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -45,6 +46,14 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: bun scripts/ci-changes.ts
+      - name: Export the authoritative required-check script
+        id: results-gate
+        run: |
+          {
+            echo 'script<<FIDY_REQUIRED_CHECK_SCRIPT'
+            cat scripts/check-ci-results.sh
+            echo 'FIDY_REQUIRED_CHECK_SCRIPT'
+          } >> "$GITHUB_OUTPUT"
 
   static:
     name: Workspace Gate
@@ -349,10 +358,10 @@ jobs:
       - security-sca
     if: ${{ always() }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
       - name: Verify required jobs against the change plan
         env:
           RESULTS: ${{ toJSON(needs) }}
-        run: bash scripts/check-ci-results.sh
+          REQUIRED_CHECK_SCRIPT: ${{ needs.changes.outputs.required-script }}
+        run: |
+          : "${REQUIRED_CHECK_SCRIPT:?Required-check script unavailable}"
+          bash -c "$REQUIRED_CHECK_SCRIPT"

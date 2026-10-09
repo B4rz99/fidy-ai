@@ -147,6 +147,13 @@ number's digits inside a legitimate random public UUID as evidence of disclosure
 the captured colliding UUID accepts that public response and rejects both root and nested
 provider-source fields. No payment scenario is removed.
 
+Required Checks receives the authoritative checked-in `scripts/check-ci-results.sh` through
+change selection's job output, avoiding another repository checkout after all test jobs end.
+The detector exports its exact source; the final job rejects a missing script before running it.
+The script's fail-closed selection/result rules remain unchanged, and the existing policy tests
+exercise its forwarded-string execution with the additional output present. No validation gate
+is removed or converted into an unconditional success.
+
 ## Adapter regression follow-up: #1066
 
 The last 50 actual adapter shard jobs on October 5–6 contained 45 successes, three failures,

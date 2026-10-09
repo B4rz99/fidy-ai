@@ -168,6 +168,8 @@ describe("PR check selection", () => {
   });
 });
 
+const requiredCheckScript = await Bun.file(`${root}/scripts/check-ci-results.sh`).text();
+
 const gate = (
   selection: string,
   result: string,
@@ -176,11 +178,14 @@ const gate = (
     staticResult: "success",
   }
 ): number => {
-  const execution = Bun.spawnSync(["bash", `${root}/scripts/check-ci-results.sh`], {
+  const execution = Bun.spawnSync(["bash", "-c", requiredCheckScript], {
     env: {
       ...Bun.env,
       RESULTS: JSON.stringify({
-        changes: { result: outcomes.detector, outputs: { browser: selection } },
+        changes: {
+          result: outcomes.detector,
+          outputs: { browser: selection, "required-script": requiredCheckScript },
+        },
         static: { result: outcomes.staticResult, outputs: {} },
         browser: { result, outputs: {} },
       }),

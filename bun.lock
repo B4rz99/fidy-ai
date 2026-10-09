@@ -131,6 +131,7 @@
   },
   "patchedDependencies": {
     "alchemy@2.0.0-beta.80": "patches/alchemy@2.0.0-beta.80.patch",
+    "@distilled.cloud/cloudflare@1.0.0-rc.13": "patches/@distilled.cloud%2Fcloudflare@1.0.0-rc.13.patch",
   },
   "overrides": {
     "@effect/platform-node-shared": "4.0.0",

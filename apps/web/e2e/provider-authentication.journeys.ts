@@ -87,6 +87,33 @@ const returningSessionPolicies = (
     );
     expect(blocked.status()).toBe(forbiddenStatus);
   });
+const signupHistoryJourney = Effect.fn(function* (
+  configuration: ProviderJourneyConfiguration,
+  page: Page
+) {
+  yield* Effect.tryPromise(() => page.goBack());
+  yield* Effect.tryPromise(() =>
+    expect(page).toHaveURL(new RegExp(`/auth/${configuration.provider}$`, "u"))
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByLabel("Código de recuperación", { exact: true })).toHaveCount(0)
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByLabel("Acepto el tratamiento de datos descrito")).toBeVisible()
+  );
+  yield* Effect.tryPromise(() => page.reload());
+  yield* Effect.tryPromise(() =>
+    expect(page.getByLabel("Código de recuperación", { exact: true })).toHaveCount(0)
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByLabel("Acepto el tratamiento de datos descrito")).toBeVisible()
+  );
+  yield* Effect.tryPromise(() => page.goto("/app/transactions"));
+  yield* Effect.tryPromise(() =>
+    expect(page.getByText("Aún no hay transacciones este mes")).toBeVisible()
+  );
+});
+
 export const signupJourney = ({
   configuration,
   page,
@@ -138,6 +165,7 @@ export const signupJourney = ({
         expect(page.getByText("Aún no hay transacciones este mes")).toBeVisible()
       );
       expect(yield* Effect.tryPromise(() => page.evaluate(retainedSecretCount))).toBe(0);
+      yield* signupHistoryJourney(configuration, page);
       yield* returningProviderLogin({ configuration, page });
       // Recovery acts on the stable User, independently of the authentication provider.
       if (configuration.recoverWithOperator) {

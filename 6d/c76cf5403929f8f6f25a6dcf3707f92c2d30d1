@@ -1,0 +1,37 @@
+apps/server/cloudflare/d1-test-fixture.ts
+  s_3d012310b53cfe::t_385f60628cf1fc 274
+apps/server/cloudflare/ai/internal/admission-retention.ts
+  s_3d012310b53cfe::t_385f60628cf1fc 17-18,25-29
+tools/depcruise/publication.mjs
+  s_3d012310b53cfe::t_71e54a2e54205c 27
+apps/server/cloudflare/migrations/0073_admission_retention.sql
+  s_3d012310b53cfe::t_385f60628cf1fc 1-13
+apps/server/cloudflare/maintenance/admission-retention.test.ts
+  s_3d012310b53cfe::t_71e54a2e54205c 2-12,24-27,29-31,42-45,54-55,59-60,63,66-74,77-78,80-94,100,167
+  s_3d012310b53cfe::t_385f60628cf1fc 41
+  s_3d012310b53cfe::t_e64f24603c2bc4 48-51,98,125-127,154
+  s_3d012310b53cfe::t_e1410c1a7af8b7 105,118,134,138,146-150,156,159,162
+  s_3d012310b53cfe::t_da9d009246f29e 1,13-23,28,32-40,46-47,52-53,56-58,61-62,64-65,75-76,79,95-97,99,101-104,106-117,119-124,128-133,135-137,139-145,151-153,155,157-158,160-161,163-166,168-172
+apps/server/cloudflare/subscription/internal/enrollment-admission.ts
+  s_3d012310b53cfe::t_385f60628cf1fc 79-80,87-91
+apps/server/cloudflare/ingestion/internal/statement-ingestion.ts
+  s_3d012310b53cfe::t_385f60628cf1fc 271-276,282,286-290,293
+docs/operations/d1-admission-retention.md
+  s_3d012310b53cfe::t_becbd94a64882d 1-57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6dc76cf5403929f8f6f25a6dcf3707f92c2d30d1",
+  "prompts": {},
+  "sessions": {
+    "s_3d012310b53cfe": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a121a9-b718-7f33-b328-fba07b5be992",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

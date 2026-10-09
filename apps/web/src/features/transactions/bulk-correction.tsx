@@ -30,7 +30,7 @@ type BulkDraft = Readonly<{
 type BatchInput = CanonicalInput<"operations.executeAtomicBatch">;
 type Changes = CanonicalInput<"transactions.updateTransaction">["payload"]["changes"];
 type BulkProps = Readonly<{
-  transactions: ReadonlyArray<Transaction>;
+  transactions: Arr.NonEmptyReadonlyArray<Transaction>;
   categories: ReadonlyArray<Category>;
   apiClient: FidyClient;
   timeZone: string;
@@ -125,6 +125,39 @@ const makeBulkCorrection = (apiClient: FidyClient): Atom.AtomResultFn<BulkComman
       )
     )
   );
+const BulkAmount = ({
+  draft,
+  onChange,
+  props,
+}: Readonly<{
+  draft: BulkDraft;
+  onChange: (draft: BulkDraft) => void;
+  props: BulkProps;
+}>): JSX.Element => {
+  const mixedCurrencies =
+    new Set(props.transactions.map((record) => record.money.currency)).size > 1;
+  return (
+    <div className="flex flex-col gap-2">
+      <Label htmlFor="bulk-amount">
+        Monto {mixedCurrencies ? "" : props.transactions[0].money.currency}
+      </Label>
+      <Input
+        id="bulk-amount"
+        placeholder="Sin cambiar"
+        inputMode="decimal"
+        disabled={mixedCurrencies}
+        aria-describedby={mixedCurrencies ? "bulk-amount-help" : undefined}
+        value={draft.amount}
+        onChange={(event) => onChange({ ...draft, amount: event.target.value })}
+      />
+      {mixedCurrencies ? (
+        <p id="bulk-amount-help" className="text-sm text-muted-foreground">
+          Para cambiar el monto en conjunto, selecciona transacciones con la misma moneda.
+        </p>
+      ) : null}
+    </div>
+  );
+};
 const BulkFields = ({
   draft,
   onChange,
@@ -190,17 +223,7 @@ const BulkTextFields = ({
         onChange={(event) => onChange({ ...draft, counterparty: event.target.value })}
       />
     </div>
-    <div className="flex flex-col gap-2">
-      <Label htmlFor="bulk-amount">Monto {props.transactions[0]?.money.currency}</Label>
-      <Input
-        id="bulk-amount"
-        placeholder="Sin cambiar"
-        inputMode="decimal"
-        disabled={new Set(props.transactions.map((record) => record.money.currency)).size > 1}
-        value={draft.amount}
-        onChange={(event) => onChange({ ...draft, amount: event.target.value })}
-      />
-    </div>
+    <BulkAmount draft={draft} onChange={onChange} props={props} />
     <div className="flex flex-col gap-2">
       <Label htmlFor="bulk-date">Fecha</Label>
       <TransactionDateField
@@ -252,9 +275,7 @@ export const BulkTransactionCorrection = (props: BulkProps): JSX.Element => {
     amount: "",
     date: "",
   });
-  const [observedRevisions] = useState(() =>
-    props.transactions.map(({ id, revision }) => ({ id, revision }))
-  );
+  const observedRevisions = props.transactions.map(({ id, revision }) => ({ id, revision }));
   const [command] = useState(() => makeBulkCorrection(props.apiClient));
   const submit = useAtomSet(command);
   const locked =

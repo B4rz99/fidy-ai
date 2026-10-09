@@ -3,6 +3,7 @@ import { type EnrollmentMethod } from "~/core/subscription/contract";
 import {
   type WhatsAppBusinessPhoneNumberId,
   type WhatsAppMediaId,
+  type WhatsAppProviderMessageId,
 } from "~/shell/channels/whatsapp/contract";
 
 /** Closed coordinate-free reason reported by the Outbound HTTP interface. */
@@ -55,6 +56,11 @@ export type OutboundHttpRequest =
       readonly businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
     }>
   | Readonly<{ readonly _tag: "KapsoMediaDownload"; readonly token: Redacted.Redacted<string> }>
+  | Readonly<{
+      readonly _tag: "KapsoMessageStatus";
+      readonly businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
+      readonly messageId: WhatsAppProviderMessageId;
+    }>
   | Readonly<{
       readonly _tag: "KapsoMessages";
       readonly businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;

@@ -1,3 +1,4 @@
+import { makeStatusLookupAdmission as makeStatusLookupAdmissionOwned } from "./internal/status-admission";
 import { Effect } from "effect";
 import * as proactivity from "./internal/proactivity-delivery";
 
@@ -303,3 +304,12 @@ export const inspectWhatsApp: typeof inspect = (input) => inspect(input);
 
 /** Prioritize a due hosted_turns alias t by its retained channel work age within the caller’s bounded recovery query. */
 export const whatsAppRecoveryPriority = (): string => recoveryPriority();
+
+/** Share durable provider-history admission across callback and Consent reconciliation paths. */
+export const admitStatusLookup = (
+  input: Readonly<{
+    database: D1Database;
+    request: Parameters<ReturnType<typeof makeStatusLookupAdmissionOwned>>[0];
+  }>
+): ReturnType<ReturnType<typeof makeStatusLookupAdmissionOwned>> =>
+  makeStatusLookupAdmissionOwned(input.database)(input.request);

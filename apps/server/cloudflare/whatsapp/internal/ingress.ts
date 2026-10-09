@@ -1,3 +1,4 @@
+import { makeStatusLookupAdmission } from "./status-admission";
 import { receiveWhatsAppProviderHandoff } from "../../provider-authentication/runtime";
 import { TranscriptText } from "../../../src/core/agent/contract";
 import { Sha256Digest } from "../../../src/shell/consent/contract";
@@ -7,12 +8,12 @@ import {
   maxWhatsAppFutureTimestampMinutes,
   maxWhatsAppWebhookBytes,
 } from "../../../src/shell/channels/whatsapp/contract";
+import { authenticateWhatsAppInbound } from "../../../src/shell/channels/whatsapp/operations";
 import {
-  authenticateDisclosureStatus,
-  authenticateHostedStatus,
-  authenticateWhatsAppInbound,
-} from "../../../src/shell/channels/whatsapp/operations";
-import { makeVoiceUnavailableSender } from "../../../src/shell/channels/whatsapp/runtime";
+  makeLifecycleVerifier,
+  makeVoiceUnavailableSender,
+} from "../../../src/shell/channels/whatsapp/runtime";
+import { DisclosureDeliveryCorrelationToken } from "../../../src/core/provider-evidence/contract";
 import {
   Context,
   Crypto,
@@ -23,6 +24,7 @@ import {
   Layer,
   Option,
   Redacted,
+  Result,
   Schema,
 } from "effect";
 import { Hex } from "effect/encoding";
@@ -114,24 +116,6 @@ type WebhookBase = Readonly<{
   signature: string;
   receivedAt: DateTime.Utc;
 }>;
-
-const handleDelivery = (base: WebhookBase, db: D1Database): Effect.Effect<Response, void> =>
-  Effect.gen(function* () {
-    const result = yield* Effect.exit(
-      authenticateDisclosureStatus({ ...base, eventName: "whatsapp.message.delivered" })
-    );
-    if (Exit.isFailure(result)) return answer(HTTP_UNAUTHORIZED);
-    return yield* recordConsentDelivery({
-      db,
-      input: {
-        correlationToken: result.value.correlationToken,
-        phoneNumberId: result.value.businessPhoneNumberId,
-        messageId: result.value.messageEvidence.providerMessageId,
-        occurredAtMs: DateTime.toEpochMillis(result.value.occurredAt),
-        receivedAtMs: DateTime.toEpochMillis(base.receivedAt),
-      },
-    });
-  });
 
 const sendVoiceRefusal = (
   environment: Environment,
@@ -376,31 +360,53 @@ const handleHostedLifecycle = (
   base: WebhookBase,
   eventName: string,
   environment: Environment
-): Effect.Effect<Response, void> =>
+): Effect.Effect<Response, void, HttpClient.HttpClient> =>
   Effect.gen(function* () {
-    const hosted = yield* Effect.exit(authenticateHostedStatus({ ...base, eventName }));
-    if (Exit.isFailure(hosted)) return answer(HTTP_UNAUTHORIZED);
+    const httpClient = yield* HttpClient.HttpClient;
+    const hosted = yield* Effect.result(
+      makeLifecycleVerifier({
+        admitLookup: makeStatusLookupAdmission(environment.DB),
+        apiKey: Redacted.make(environment.KAPSO_API_KEY),
+        httpClient,
+      })({ ...base, eventName })
+    );
+    if (Result.isFailure(hosted)) {
+      return answer(
+        hosted.failure._tag === "WhatsAppStatusUnavailable" ? HTTP_UNAVAILABLE : HTTP_UNAUTHORIZED
+      );
+    }
     const lookup = {
       db: environment.DB,
-      correlationToken: hosted.value.correlationToken,
-      businessPhoneNumberId: hosted.value.businessPhoneNumberId,
+      correlationToken: hosted.success.correlationToken,
+      businessPhoneNumberId: hosted.success.businessPhoneNumberId,
     };
     const user = yield* findHostedStatusUser(lookup);
     if (Option.isSome(user)) {
       return yield* attempt(() =>
         environment.onHostedStatus({
           userId: user.value,
-          correlationToken: hosted.value.correlationToken,
-          businessPhoneNumberId: hosted.value.businessPhoneNumberId,
-          providerMessageId: hosted.value.messageEvidence.providerMessageId,
-          outcome: hosted.value.outcome,
-          occurredAtMs: DateTime.toEpochMillis(hosted.value.occurredAt),
+          correlationToken: hosted.success.correlationToken,
+          businessPhoneNumberId: hosted.success.businessPhoneNumberId,
+          providerMessageId: hosted.success.messageEvidence.providerMessageId,
+          outcome: hosted.success.outcome,
+          occurredAtMs: DateTime.toEpochMillis(hosted.success.occurredAt),
           receivedAtMs: DateTime.toEpochMillis(base.receivedAt),
         })
       );
     }
     return eventName === "whatsapp.message.delivered"
-      ? yield* handleDelivery(base, environment.DB)
+      ? yield* recordConsentDelivery({
+          db: environment.DB,
+          input: {
+            correlationToken: DisclosureDeliveryCorrelationToken.make(
+              hosted.success.correlationToken
+            ),
+            phoneNumberId: hosted.success.businessPhoneNumberId,
+            messageId: hosted.success.messageEvidence.providerMessageId,
+            occurredAtMs: DateTime.toEpochMillis(hosted.success.occurredAt),
+            receivedAtMs: DateTime.toEpochMillis(base.receivedAt),
+          },
+        })
       : answer(HTTP_OK);
   });
 

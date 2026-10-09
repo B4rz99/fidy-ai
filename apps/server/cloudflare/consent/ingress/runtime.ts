@@ -3,6 +3,9 @@ import { FetchHttpClient, HttpClient } from "effect/http";
 import { makeDisclosureSender } from "../../../src/shell/consent/runtime";
 import { type ConsentIngressEnvironment } from "./contract";
 import { receiveConsentText, recoverDisclosures, sweepExpired } from "./internal/ingress";
+import { recordConsentDelivery } from "./operations";
+import { reconcileSandboxDelivery } from "./internal/reconcile-delivery";
+import { makeDeliveryVerifier } from "../../../src/shell/channels/whatsapp/runtime";
 
 /** Construct pre-User Consent handling for authenticated typed text and exact-body replay evidence. */
 export const makeConsentIngress = ({
@@ -31,7 +34,22 @@ export const makeConsentIngress = ({
     delivery,
     sandboxPhoneNumberId: Option.fromNullishOr(environment.WHATSAPP_SANDBOX_PHONE_NUMBER_ID),
   };
-  return (input) => receiveConsentText({ environment: ingress, input });
+  const verify = makeDeliveryVerifier({
+    apiKey: Redacted.make(environment.KAPSO_API_KEY),
+    httpClient,
+  });
+  return (input) =>
+    Effect.gen(function* () {
+      yield* reconcileSandboxDelivery({
+        db: environment.DB,
+        sandboxPhoneNumberId: ingress.sandboxPhoneNumberId,
+        inbound: input,
+        verify,
+        recordDelivery: (deliveryInput) =>
+          recordConsentDelivery({ db: environment.DB, input: deliveryInput }),
+      });
+      return yield* receiveConsentText({ environment: ingress, input });
+    });
 };
 
 /** Resume only disclosures that never claimed their irreversible provider-send boundary. */

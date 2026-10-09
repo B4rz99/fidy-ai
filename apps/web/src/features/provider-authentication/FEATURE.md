@@ -142,7 +142,14 @@ and returned 404. Updating it to `/providers/kapso/callback` produced a delivere
 outbound disclosure then returned HTTP 403, “BSUID recipients are not supported in sandbox mode.”
 Regression checks now cover explicit business-endpoint phone delivery, endpoint isolation,
 missing-phone refusal, interrupted disclosure recovery, and fresh-greeting restart after a definite
-rejection. Portfolio/BSUID remains the association proof. Deployment and the real reply remain pending.
+rejection. Portfolio/BSUID remains the association proof. PR #1121 deployed as
+`ebc6e79266bc118e340c6adc80402c2f9fd66200`; API/web release metadata agree and all release gates pass.
+The current disclosure reached the real Sandbox chat. The User authorized sending “Acepto”, but
+it returned 409: signed v2 status callbacks omit `kapso.statuses` and were refused with 401.
+Only sent callbacks were observed; authenticated message lookup independently contains delivered
+and read history with the original correlation. Follow-up regressions cover bounded history lookup,
+matching delivery proof, and caller-scoped Sandbox reconciliation when callbacks are absent.
+The follow-up is not yet deployed; the real provider handoff and association remain pending.
 
 Remaining live checks: Google and Microsoft personal denial UI;
 Microsoft work/school signup/returning login/denial (unavailable: the User has no work/school account);

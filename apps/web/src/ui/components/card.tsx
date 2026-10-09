@@ -7,7 +7,7 @@ const Card = ({ className, ...props }: DivProps): React.JSX.Element => (
     data-slot="card"
     data-size="default"
     className={cn(
-      "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl bg-card py-(--card-spacing) text-sm text-card-foreground ring-1 ring-foreground/10 [--card-spacing:--spacing(4)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
+      "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl bg-card py-(--card-spacing) text-base text-card-foreground ring-1 ring-foreground/10 [--card-spacing:--spacing(4)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
       className
     )}
     {...props}
@@ -26,7 +26,7 @@ const CardHeader = ({ className, ...props }: DivProps): React.JSX.Element => (
 const CardTitle = ({ className, ...props }: DivProps): React.JSX.Element => (
   <div
     data-slot="card-title"
-    className={cn("font-heading text-base leading-snug font-medium", className)}
+    className={cn("font-heading text-lg leading-snug font-semibold", className)}
     {...props}
   />
 );

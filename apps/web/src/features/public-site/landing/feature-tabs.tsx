@@ -48,7 +48,6 @@ export const FeatureTabs = (): React.JSX.Element => {
       >
         {features[selected]?.content}
       </div>
-      <p className="feature-disclosure">Vistas ilustrativas con datos de ejemplo.</p>
     </section>
   );
 };
@@ -65,12 +64,9 @@ const nextFeature = (key: string, index: number): number => {
 const heading = (
   <div className="section-head">
     <h2>
-      De registrar tu plata,
-      <br />a entenderla y actuar.
+      De registrar tu plata, <br />a entenderla y actuar.
     </h2>
-    <p>
-      Registros, presupuestos y hallazgos conectados con el asistente, la web y tus propios agentes.
-    </p>
+    <p>Dale contexto a cada gasto, sigue tu presupuesto y encuentra lo que merece tu atención.</p>
   </div>
 );
 

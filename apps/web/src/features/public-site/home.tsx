@@ -8,7 +8,7 @@ export const PublicHome = (): React.JSX.Element => (
     <title>Fidy — Tu plata, más clara</title>
     <meta
       name="description"
-      content="Tus registros financieros, presupuestos y hallazgos en un mismo sistema. Usa Fidy conversando, desde la web o con tus propios agentes. Hecho para Colombia."
+      content="Entiende en qué se va tu plata y planea lo que viene. Lleva tus finanzas desde WhatsApp, la web o tu agente de IA."
     />
     <HomeContent />
   </LandingTheme>

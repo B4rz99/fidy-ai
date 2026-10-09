@@ -1,3 +1,4 @@
+import { AgentBrands } from "./agent-brands";
 import { logoUrl } from "./assets";
 import { LaunchButton } from "./registration";
 import { Header } from "./navigation";
@@ -29,30 +30,25 @@ const hero = (
     <div className="wrap hero-grid">
       <div className="hero-copy">
         <h1>
-          {"Tu plata,"}
-          <br />
-          {"más clara."}
-          <br />
+          {"Tu plata,"} <br />
+          {"más clara."} <br />
           <em>
-            {"Tu vida,"}
-            <br />
+            {"Tu vida,"} <br />
             {"más tranquila."}
           </em>
         </h1>
         <p>
           {
-            "Fidy reúne tus registros financieros, presupuestos y hallazgos en un mismo sistema. Úsalo conversando, desde la web app o con tus propios agentes de IA."
+            "Entiende en qué se va tu plata y planea lo que viene. Lleva tus finanzas desde WhatsApp, la web o tu agente de IA."
           }
         </p>
         <div className="actions">
-          <LaunchButton dark={false} />
+          <LaunchButton dark={false} arrow />
           <a className="textlink" href="#como">
             {"Así funciona ↓"}
           </a>
         </div>
-        <small className="fine">
-          {"Finanzas personales para Colombia. Pensadas para ti y tus agentes."}
-        </small>
+        <small className="fine">{"Finanzas personales. Pensadas para ti y tus agentes."}</small>
       </div>
       <div id="demo">
         <PhoneDemo />
@@ -64,9 +60,9 @@ const hero = (
 const marketStrip = (
   <div className="strip">
     <div className="wrap">
-      <b>{"Hecho para tu día a día en Colombia"}</b>
-      <span>{"Pesos colombianos"}</span>
-      <span>{"Asistente y web app"}</span>
+      <b>{"Hecho para tu día a día"}</b>
+      <span>{"Gastos con contexto"}</span>
+      <span>{"Presupuestos a tu medida"}</span>
       <span>{"Tus propios agentes"}</span>
     </div>
   </div>
@@ -76,13 +72,12 @@ const waysToUse = (
   <section className="section wrap" id="como">
     <div className="section-head">
       <h2>
-        {"Tus finanzas."}
-        <br />
+        {"Tus finanzas."} <br />
         {"Tres formas de usarlas."}
       </h2>
       <p>
         {
-          "Fidy es agent-first: está pensado desde el inicio para que tú y tus agentes trabajen con la misma información financiera."
+          "Fidy es agent-first: está pensado desde el inicio para que tú y tus agentes trabajen de forma cohesiva y sin fricción con tus finanzas."
         }
       </p>
     </div>
@@ -91,7 +86,7 @@ const waysToUse = (
         <h3>{"Conversa con Fidy."}</h3>
         <p>
           {
-            "Registra una transacción, consulta tus cifras o revisa un presupuesto con el asistente de la web app."
+            "Registra una transacción, consulta tus cifras o revisa un presupuesto conversando con Fidy en WhatsApp."
           }
         </p>
       </div>
@@ -99,12 +94,15 @@ const waysToUse = (
         <h3>{"Explora la web app."}</h3>
         <p>
           {
-            "Revisa los detalles, corrige tus registros y organiza un tablero con lo que quieres tener a mano."
+            "Revisa los detalles, corrige tus transacciones y organiza un dashboard con lo que quieres tener a mano."
           }
         </p>
       </div>
       <div className="agent-entry">
-        <h3>{"Trae a tu propio agente."}</h3>
+        <h3>
+          {"Conéctalo a "}
+          <AgentBrands />
+        </h3>
         <p>
           {
             "Conéctalo mediante MCP, CLI o API. Autoriza su acceso para consultar información o ayudarte a organizarla."
@@ -133,7 +131,7 @@ const questions = (
         <summary>{"¿Puedo corregir una transacción?"}</summary>
         <p>
           {
-            "Sí. Puedes corregir los datos de una transacción si algo quedó mal registrado, como el monto o la categoría. La corrección actualiza ese registro."
+            "Sí. Puedes corregir los datos de una transacción si algo quedó mal registrado, como el monto o la categoría. La corrección actualiza esa transacción."
           }
         </p>
       </details>
@@ -141,7 +139,7 @@ const questions = (
         <summary>{"¿Qué pasa con mis datos?"}</summary>
         <p>
           {
-            "Se usan para prestar el servicio y proteger tu acceso. Puedes consultar su uso, solicitar correcciones y pedir su eliminación cuando corresponda. Cierta información puede conservarse por obligaciones legales, contractuales o de seguridad."
+            "Se usan para prestar el servicio y proteger tu acceso. Puedes consultar su uso, solicitar correcciones y pedir su eliminación cuando corresponda."
           }
         </p>
       </details>
@@ -149,7 +147,7 @@ const questions = (
         <summary>{"¿Necesito tener mi propio agente?"}</summary>
         <p>
           {
-            "No. Puedes usar el asistente de Fidy y la web app. Si ya usas un agente compatible con MCP, la CLI o la API, puedes configurarlo y autorizarlo para trabajar con tu información."
+            "No. Puedes conversar con Fidy en WhatsApp y usar la web app. Si ya usas un agente compatible con MCP, la CLI o la API, puedes configurarlo y autorizarlo para trabajar con tu información."
           }
         </p>
       </details>
@@ -157,7 +155,7 @@ const questions = (
         <summary>{"¿Qué puede hacer mi agente?"}</summary>
         <p>
           {
-            "Depende de los permisos que le des: consultar registros y hallazgos, registrar o corregir transacciones y trabajar con tu tablero. El acceso tiene vencimiento y puedes revocarlo desde Fidy."
+            "Depende de los permisos que le des: consultar transacciones y hallazgos, registrar o corregir transacciones y trabajar con tu dashboard. El acceso tiene vencimiento y puedes revocarlo desde Fidy."
           }
         </p>
       </details>
@@ -165,7 +163,7 @@ const questions = (
         <summary>{"¿Qué son los hallazgos?"}</summary>
         <p>
           {
-            "Son señales basadas en tus registros, como resúmenes semanales, avisos de presupuesto o patrones de cobros recurrentes. Tus agentes también pueden consultarlos. No representan información que aún no hayas incorporado a Fidy."
+            "Son señales basadas en tus transacciones, como resúmenes semanales, avisos de presupuesto o patrones de cobros recurrentes. Tus agentes también pueden consultarlos. No representan información que aún no hayas incorporado a Fidy."
           }
         </p>
       </details>
@@ -179,11 +177,10 @@ const questions = (
       </details>
       <details>
         <summary>{"¿Cómo empiezo?"}</summary>
-        <p>
-          {
-            "El registro será desde la web app de Fidy. Por ahora, el botón “Empezar con Fidy” muestra un placeholder; el registro aún no está habilitado."
-          }
-        </p>
+        <p>{"Crea tu cuenta para organizar tus finanzas y conectar tus agentes."}</p>
+        <div className="actions">
+          <LaunchButton dark={false} arrow />
+        </div>
       </details>
     </div>
   </section>
@@ -192,21 +189,21 @@ const questions = (
 const closing = (
   <section className="closing">
     <h2>
-      {"Tu plata, más clara."}
-      <br />
+      {"Tu plata, más clara."} <br />
       {"Con la ayuda que tú eliges."}
     </h2>
     <p>{"Conversa con Fidy, explora la web o trabaja con tu propio agente."}</p>
-    <LaunchButton dark />
+    <LaunchButton dark arrow />
   </section>
 );
 
 const footer = (
   <footer className="footer">
     <div className="wrap">
-      <img src={logoUrl} alt="fidy" />
+      <a className="logo" href="/" aria-label="Fidy, inicio">
+        <img src={logoUrl} alt="fidy" />
+      </a>
       <span>{"Finanzas personales para ti y tus agentes."}</span>
-      <small>{"Prototipo de diseño · No es un servicio activo."}</small>
     </div>
   </footer>
 );

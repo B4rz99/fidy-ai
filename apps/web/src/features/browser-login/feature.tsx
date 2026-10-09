@@ -104,7 +104,11 @@ const EmailCodeForm = ({
         required
       />
       {rejected ? (
-        <p className="text-sm text-destructive" id="browser-login-code-error" role="alert">
+        <p
+          className="rounded-lg bg-destructive p-3 text-sm text-destructive-foreground"
+          id="browser-login-code-error"
+          role="alert"
+        >
           El código no es válido. Revisa el correo o solicita uno nuevo.
         </p>
       ) : null}
@@ -164,7 +168,7 @@ const AwaitingPairing = ({
     </Alert>
     <p
       aria-label={`Código de vinculación ${publicCode}`}
-      className="rounded-lg border bg-background py-4 text-center font-mono text-3xl font-semibold tracking-[0.2em]"
+      className="rounded-lg border bg-background py-4 text-center font-mono text-3xl font-semibold tracking-widest"
     >
       {publicCode}
     </p>

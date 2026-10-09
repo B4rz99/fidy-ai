@@ -1,3 +1,4 @@
+import { ThemeToggle } from "./theme";
 import { logoUrl } from "./assets";
 import { LaunchButton } from "./registration";
 import { CorrectionDemo } from "./correction-demo";
@@ -11,12 +12,15 @@ export const detailViews = [
       <a className="textlink" href="/#funciones">
         {"← Todas las funciones"}
       </a>
-      <LaunchButton dark={false} />
+      <div className="navend">
+        <LaunchButton dark={false} arrow={false} />
+        <ThemeToggle />
+      </div>
     </header>
     <main className="detail-page detail-transacciones">
       <section className="detail-hero wrap">
         <h1>
-          {"De cada registro,"}
+          {"De cada transacción,"}
           <br />
           {"al detalle que importa."}
         </h1>
@@ -26,7 +30,7 @@ export const detailViews = [
           }
         </p>
         <div className="actions">
-          <LaunchButton dark={false} />
+          <LaunchButton dark={false} arrow />
           <a className="textlink" href="#vista">
             {"Ver el ejemplo ↓"}
           </a>
@@ -46,22 +50,18 @@ export const detailViews = [
       </section>
       <section className="section wrap">
         <div className="section-head">
-          <h2>{"Tus registros cuentan una historia."}</h2>
+          <h2>{"Tus transacciones cuentan una historia."}</h2>
         </div>
         <div className="steps">
           <article className="step">
             <h3>{"Captura a tu ritmo."}</h3>
-            <p>
-              {
-                "Registra una transacción desde la web app o cuéntasela al asistente en tus propias palabras."
-              }
-            </p>
+            <p>{"Registra una transacción desde la web app o cuéntasela a Fidy en WhatsApp."}</p>
           </article>
           <article className="step">
             <h3>{"Entiende cada dato."}</h3>
             <p>
               {
-                "Consulta el monto, la fecha y la categoría de tus registros. Los detalles te ayudan a dar contexto a tus gastos."
+                "Consulta el monto, la fecha y la categoría de tus transacciones. Los detalles te ayudan a dar contexto a tus gastos."
               }
             </p>
           </article>
@@ -107,13 +107,14 @@ export const detailViews = [
           {"Con la ayuda que tú eliges."}
         </h2>
         <p>{"Conversa con Fidy, explora la web o trabaja con tu propio agente."}</p>
-        <LaunchButton dark />
+        <LaunchButton dark arrow />
       </section>
       <footer className="footer">
         <div className="wrap">
-          <img src={logoUrl} alt="fidy" />
+          <a className="logo" href="/" aria-label="Fidy, inicio">
+            <img src={logoUrl} alt="fidy" />
+          </a>
           <span>{"Finanzas personales para ti y tus agentes."}</span>
-          <small>{"Prototipo de diseño · No es un servicio activo."}</small>
         </div>
       </footer>
     </main>
@@ -126,7 +127,10 @@ export const detailViews = [
       <a className="textlink" href="/#funciones">
         {"← Todas las funciones"}
       </a>
-      <LaunchButton dark={false} />
+      <div className="navend">
+        <LaunchButton dark={false} arrow={false} />
+        <ThemeToggle />
+      </div>
     </header>
     <main className="detail-page detail-presupuestos">
       <section className="detail-hero wrap">
@@ -141,7 +145,7 @@ export const detailViews = [
           }
         </p>
         <div className="actions">
-          <LaunchButton dark={false} />
+          <LaunchButton dark={false} arrow />
           <a className="textlink" href="#vista">
             {"Ver el ejemplo ↓"}
           </a>
@@ -276,13 +280,14 @@ export const detailViews = [
           {"Con la ayuda que tú eliges."}
         </h2>
         <p>{"Conversa con Fidy, explora la web o trabaja con tu propio agente."}</p>
-        <LaunchButton dark />
+        <LaunchButton dark arrow />
       </section>
       <footer className="footer">
         <div className="wrap">
-          <img src={logoUrl} alt="fidy" />
+          <a className="logo" href="/" aria-label="Fidy, inicio">
+            <img src={logoUrl} alt="fidy" />
+          </a>
           <span>{"Finanzas personales para ti y tus agentes."}</span>
-          <small>{"Prototipo de diseño · No es un servicio activo."}</small>
         </div>
       </footer>
     </main>
@@ -295,7 +300,10 @@ export const detailViews = [
       <a className="textlink" href="/#funciones">
         {"← Todas las funciones"}
       </a>
-      <LaunchButton dark={false} />
+      <div className="navend">
+        <LaunchButton dark={false} arrow={false} />
+        <ThemeToggle />
+      </div>
     </header>
     <main className="detail-page detail-asistente">
       <section className="detail-hero wrap">
@@ -306,11 +314,11 @@ export const detailViews = [
         </h1>
         <p>
           {
-            "Escribe como hablas. Fidy te ayuda a registrar transacciones y consultar tus cifras desde la web app."
+            "Escribe como hablas. Fidy te ayuda a registrar transacciones y consultar tus cifras desde WhatsApp."
           }
         </p>
         <div className="actions">
-          <LaunchButton dark={false} />
+          <LaunchButton dark={false} arrow />
           <a className="textlink" href="#vista">
             {"Ver el ejemplo ↓"}
           </a>
@@ -411,13 +419,14 @@ export const detailViews = [
           {"Con la ayuda que tú eliges."}
         </h2>
         <p>{"Conversa con Fidy, explora la web o trabaja con tu propio agente."}</p>
-        <LaunchButton dark />
+        <LaunchButton dark arrow />
       </section>
       <footer className="footer">
         <div className="wrap">
-          <img src={logoUrl} alt="fidy" />
+          <a className="logo" href="/" aria-label="Fidy, inicio">
+            <img src={logoUrl} alt="fidy" />
+          </a>
           <span>{"Finanzas personales para ti y tus agentes."}</span>
-          <small>{"Prototipo de diseño · No es un servicio activo."}</small>
         </div>
       </footer>
     </main>
@@ -430,7 +439,10 @@ export const detailViews = [
       <a className="textlink" href="/#funciones">
         {"← Todas las funciones"}
       </a>
-      <LaunchButton dark={false} />
+      <div className="navend">
+        <LaunchButton dark={false} arrow={false} />
+        <ThemeToggle />
+      </div>
     </header>
     <main className="detail-page detail-tablero">
       <section className="detail-hero wrap">
@@ -441,11 +453,11 @@ export const detailViews = [
         </h1>
         <p>
           {
-            "Organiza tu tablero con las cifras y los registros que quieres tener cerca. Una vista personal de tu información en Fidy."
+            "Organiza tu dashboard con las cifras y las transacciones que quieres tener cerca. Una vista personal de tu información en Fidy."
           }
         </p>
         <div className="actions">
-          <LaunchButton dark={false} />
+          <LaunchButton dark={false} arrow />
           <a className="textlink" href="#vista">
             {"Ver el ejemplo ↓"}
           </a>
@@ -535,7 +547,7 @@ export const detailViews = [
             <h3>{"Elige qué ver."}</h3>
             <p>
               {
-                "Combina métricas, gastos por categoría, presupuestos y listas de transacciones en tu tablero."
+                "Combina métricas, gastos por categoría, presupuestos y listas de transacciones en tu dashboard."
               }
             </p>
           </article>
@@ -549,7 +561,7 @@ export const detailViews = [
             <h3>{"Conserva la perspectiva."}</h3>
             <p>
               {
-                "Cada cifra parte de tus registros. Consulta el detalle para entender qué hay detrás del total."
+                "Cada cifra parte de tus transacciones. Consulta el detalle para entender qué hay detrás del total."
               }
             </p>
           </article>
@@ -587,13 +599,14 @@ export const detailViews = [
           {"Con la ayuda que tú eliges."}
         </h2>
         <p>{"Conversa con Fidy, explora la web o trabaja con tu propio agente."}</p>
-        <LaunchButton dark />
+        <LaunchButton dark arrow />
       </section>
       <footer className="footer">
         <div className="wrap">
-          <img src={logoUrl} alt="fidy" />
+          <a className="logo" href="/" aria-label="Fidy, inicio">
+            <img src={logoUrl} alt="fidy" />
+          </a>
           <span>{"Finanzas personales para ti y tus agentes."}</span>
-          <small>{"Prototipo de diseño · No es un servicio activo."}</small>
         </div>
       </footer>
     </main>
@@ -606,12 +619,15 @@ export const detailViews = [
       <a className="textlink" href="/#funciones">
         {"← Todas las funciones"}
       </a>
-      <LaunchButton dark={false} />
+      <div className="navend">
+        <LaunchButton dark={false} arrow={false} />
+        <ThemeToggle />
+      </div>
     </header>
     <main className="detail-page detail-insights">
       <section className="detail-hero wrap">
         <h1>
-          {"De tus registros,"}
+          {"De tus transacciones,"}
           <br />
           {"a lo que importa."}
         </h1>
@@ -621,7 +637,7 @@ export const detailViews = [
           }
         </p>
         <div className="actions">
-          <LaunchButton dark={false} />
+          <LaunchButton dark={false} arrow />
           <a className="textlink" href="#vista">
             {"Ver el ejemplo ↓"}
           </a>
@@ -662,7 +678,7 @@ export const detailViews = [
               <h3>{"Un cobro que se repite."}</h3>
               <p>
                 {
-                  "Varios registros de $24.900 con la misma contraparte muestran un patrón. Es una señal en tu historial, no una confirmación de una suscripción activa."
+                  "Varias transacciones de $24.900 con la misma contraparte muestran un patrón. Es una señal en tu historial, no una confirmación de una suscripción activa."
                 }
               </p>
             </article>
@@ -689,7 +705,7 @@ export const detailViews = [
             <h3>{"Mira tu semana."}</h3>
             <p>
               {
-                "Los resúmenes semanales reúnen información de tus registros y permiten comparar períodos. La cobertura depende de los datos disponibles."
+                "Los resúmenes semanales reúnen información de tus transacciones y permiten comparar períodos. La cobertura depende de los datos disponibles."
               }
             </p>
           </article>
@@ -735,13 +751,14 @@ export const detailViews = [
           {"Con la ayuda que tú eliges."}
         </h2>
         <p>{"Conversa con Fidy, explora la web o trabaja con tu propio agente."}</p>
-        <LaunchButton dark />
+        <LaunchButton dark arrow />
       </section>
       <footer className="footer">
         <div className="wrap">
-          <img src={logoUrl} alt="fidy" />
+          <a className="logo" href="/" aria-label="Fidy, inicio">
+            <img src={logoUrl} alt="fidy" />
+          </a>
           <span>{"Finanzas personales para ti y tus agentes."}</span>
-          <small>{"Prototipo de diseño · No es un servicio activo."}</small>
         </div>
       </footer>
     </main>
@@ -754,7 +771,10 @@ export const detailViews = [
       <a className="textlink" href="/#funciones">
         {"← Todas las funciones"}
       </a>
-      <LaunchButton dark={false} />
+      <div className="navend">
+        <LaunchButton dark={false} arrow={false} />
+        <ThemeToggle />
+      </div>
     </header>
     <main className="detail-page detail-agentes">
       <section className="detail-hero wrap">
@@ -765,11 +785,11 @@ export const detailViews = [
         </h1>
         <p>
           {
-            "Fidy está construido para que tus propios agentes sean una forma de usar el producto. Conéctalos mediante MCP, CLI o API para trabajar con tus registros, presupuestos y hallazgos."
+            "Fidy está construido para que tus propios agentes sean una forma de usar el producto. Conéctalos mediante MCP, CLI o API para trabajar con tus transacciones, presupuestos y hallazgos."
           }
         </p>
         <div className="actions">
-          <LaunchButton dark={false} />
+          <LaunchButton dark={false} arrow />
           <a className="textlink" href="#vista">
             {"Ver el ejemplo ↓"}
           </a>
@@ -782,7 +802,7 @@ export const detailViews = [
               <span>{"Tu petición a tu agente"}</span>
               <h3>{"“Revisa mi semana en Fidy y ayúdame a entender qué cambió.”"}</h3>
               <div className="agent-task-step">
-                <b>{"Consulta tus registros"}</b>
+                <b>{"Consulta tus transacciones"}</b>
                 <p>{"Revisa transacciones y presupuestos con los permisos que autorizaste."}</p>
               </div>
               <div className="agent-task-step">
@@ -805,7 +825,7 @@ export const detailViews = [
                 <dd>{"7 días"}</dd>
               </dl>
               <div className="agent-scope-note">
-                {"Puede consultar. Este acceso no le permite modificar tus registros."}
+                {"Puede consultar. Este acceso no le permite modificar tus transacciones."}
               </div>
               <p>
                 {
@@ -837,7 +857,7 @@ export const detailViews = [
             <h3>{"Permisos concretos."}</h3>
             <p>
               {
-                "Elige acceso de lectura, escritura o tablero, y una vigencia de 7, 30, 90 o 365 días. Puedes revocarlo desde la web app."
+                "Elige acceso de lectura, escritura o dashboard, y una vigencia de 7, 30, 90 o 365 días. Puedes revocarlo desde la web app."
               }
             </p>
           </article>
@@ -845,7 +865,7 @@ export const detailViews = [
             <h3>{"Una base para tus flujos."}</h3>
             <p>
               {
-                "Conecta un agente compatible mediante MCP, usa la CLI en tus flujos o integra la API. Tu agente puede consultar información, registrar transacciones o preparar tu tablero con el acceso que autorices."
+                "Conecta un agente compatible mediante MCP, usa la CLI en tus flujos o integra la API. Tu agente puede consultar información, registrar transacciones o preparar tu dashboard con el acceso que autorices."
               }
             </p>
           </article>
@@ -883,13 +903,14 @@ export const detailViews = [
           {"Con la ayuda que tú eliges."}
         </h2>
         <p>{"Conversa con Fidy, explora la web o trabaja con tu propio agente."}</p>
-        <LaunchButton dark />
+        <LaunchButton dark arrow />
       </section>
       <footer className="footer">
         <div className="wrap">
-          <img src={logoUrl} alt="fidy" />
+          <a className="logo" href="/" aria-label="Fidy, inicio">
+            <img src={logoUrl} alt="fidy" />
+          </a>
           <span>{"Finanzas personales para ti y tus agentes."}</span>
-          <small>{"Prototipo de diseño · No es un servicio activo."}</small>
         </div>
       </footer>
     </main>

@@ -88,8 +88,8 @@ const WidgetFrame = ({
   title: string;
   titleEditor: Option.Option<JSX.Element>;
 }>): JSX.Element => (
-  <Card className="min-h-72 flex-1 shadow-sm">
-    <CardHeader className={editing ? "px-14 pr-20" : undefined}>
+  <Card className="min-h-72 flex-1">
+    <CardHeader className={editing ? "px-14 pr-28" : undefined}>
       <CardTitle>
         {Option.getOrElse(titleEditor, () => (
           <h2>{title}</h2>

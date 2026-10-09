@@ -39,9 +39,6 @@ export const DashboardStory = (): React.JSX.Element => {
             <StoryResult recorded={recorded} />
             {"\n    "}
           </div>
-          <p className="story-disclosure">
-            {"Demostración con datos ficticios en COP. No envía mensajes ni guarda transacciones."}
-          </p>
           {"\n  "}
         </div>
       </section>{" "}
@@ -61,7 +58,7 @@ const StoryChat = ({
       <span className="avatar">{"f"}</span>
       <div>
         <strong>{"fidy"}</strong>
-        <small>{"Asistente en la web app"}</small>
+        <small>{"Asistente en WhatsApp"}</small>
       </div>
     </div>
     {"\n        "}
@@ -85,13 +82,7 @@ const StoryChat = ({
       aria-controls="story-dashboard"
       onClick={onRecord}
     >
-      {recorded ? (
-        "↻ Reiniciar ejemplo"
-      ) : (
-        <>
-          Registrar ejemplo <span aria-hidden="true">↗</span>
-        </>
-      )}
+      {recorded ? "↻ Reiniciar ejemplo" : "Registrar ejemplo"}
     </button>
     {"\n        "}
     <small className="story-note">{"Pruébalo. Solo cambia esta demostración."}</small>
@@ -104,7 +95,7 @@ const StoryMetrics = ({ recorded }: { recorded: boolean }): React.JSX.Element =>
     <div className="metric">
       <small>{"Gastos registrados · COP"}</small>
       <strong data-story-total="">{recorded ? "$1.084.000" : "$1.056.000"}</strong>
-      <small>{"Basado en tus registros"}</small>
+      <small>{"Basado en tus transacciones"}</small>
     </div>
     {"\n          "}
     <div className="metric">
@@ -137,7 +128,7 @@ const StoryLedger = ({ recorded }: { recorded: boolean }): React.JSX.Element => 
       <span>{"Restaurantes"}</span>
       <strong>{"− $28.000"}</strong>
     </div>
-    <p className="story-empty">{"Tu próximo registro aparecerá aquí."}</p>
+    <p className="story-empty">{"Tu próxima transacción aparecerá aquí."}</p>
   </div>
 );
 
@@ -150,7 +141,7 @@ const StoryResult = ({ recorded }: { recorded: boolean }): React.JSX.Element => 
           {"fidy"}
           <span style={{ color: "#7cb243" }}>{"."}</span>
         </b>
-        <span>{"Tu panorama · Octubre"}</span>
+        <span>{"Tus finanzas · Octubre"}</span>
       </div>
       {"\n        "}
       <div className="story-dashboard-body">
@@ -165,10 +156,13 @@ const StoryResult = ({ recorded }: { recorded: boolean }): React.JSX.Element => 
         {"\n          "}
         <StoryLedger recorded={recorded} />
         {"\n          "}
-        <output className="story-status" aria-live="polite">
+        <output
+          className={recorded ? "story-status" : "story-status empty-status"}
+          aria-live="polite"
+        >
           {recorded
             ? "Una transacción de $28.000 registrada en Restaurantes. Tu presupuesto ya la incluye."
-            : "Registra el ejemplo para ver cómo cambia tu panorama."}
+            : ""}
         </output>
         {"\n        "}
       </div>

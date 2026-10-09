@@ -1,0 +1,32 @@
+/* Experimental dark palettes used by local design previews. */
+[data-dark-palette="charcoal"] {
+  --preview-canvas: #191816;
+  --preview-surface: #23211e;
+  --preview-raised: #302d28;
+  --preview-muted: #c9c2b7;
+  --preview-border: #625c52;
+}
+
+[data-dark-palette="graphite"] {
+  --preview-canvas: #141414;
+  --preview-surface: #202020;
+  --preview-raised: #2e2e2e;
+  --preview-muted: #c7c7c7;
+  --preview-border: #606060;
+}
+
+[data-dark-palette="olive"] {
+  --preview-canvas: #171b14;
+  --preview-surface: #22291e;
+  --preview-raised: #30382b;
+  --preview-muted: #c4cbb9;
+  --preview-border: #5c6752;
+}
+
+[data-dark-palette="espresso"] {
+  --preview-canvas: #211713;
+  --preview-surface: #30231d;
+  --preview-raised: #413127;
+  --preview-muted: #d2bfb0;
+  --preview-border: #786153;
+}

@@ -207,7 +207,6 @@ it("keeps ordered-loop opt-outs scoped and does not re-disable refactored rules"
       const refactoredComplexity = new Set([
         "apps/server/tools/contracts/generate.ts",
         "scripts/oxlint/dictionary-types.js",
-        "scripts/check-web-design-system.ts",
       ]);
       expect(
         overrides

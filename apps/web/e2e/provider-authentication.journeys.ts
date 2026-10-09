@@ -157,7 +157,7 @@ export const signupJourney = ({
       );
       yield* Effect.tryPromise(() => page.goto("/"));
       yield* Effect.tryPromise(() =>
-        page.getByRole("link", { name: "Empezar con Fidy" }).first().click()
+        page.getByRole("link", { name: "Crear mi cuenta" }).first().click()
       );
       if (configuration.selectFromPublicSite) {
         yield* Effect.tryPromise(() =>

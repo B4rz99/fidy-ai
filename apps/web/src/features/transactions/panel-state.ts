@@ -1,4 +1,4 @@
-import type { Array } from "effect";
+import type { Array, Option } from "effect";
 import type { Transaction } from "./presentation";
 
 /** Interaction state shared by the panel, its controls, and the responsive sheet. */
@@ -21,4 +21,4 @@ export type TransactionPanel =
       status: CorrectionStatus;
     }>
   | Readonly<{ _tag: "Capture"; status: CaptureStatus }>
-  | Readonly<{ _tag: "Detail"; id: string; mode: DetailMode }>;
+  | Readonly<{ _tag: "Detail"; id: string; categoryId: Option.Option<string>; mode: DetailMode }>;

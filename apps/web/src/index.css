@@ -252,12 +252,6 @@
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) max-content max-content;
   }
 }
-@container ledger (width < 700px) {
-  .ledger-actions > button {
-    flex: 1;
-    min-width: 0;
-  }
-}
 @container ledger (width < 400px) {
   .transaction-ledger [data-slot="table-body"] {
     grid-template-columns: minmax(0, 1fr);
@@ -267,11 +261,6 @@
   }
   .transaction-ledger [data-slot="table-cell"]:last-child {
     padding-bottom: 10px;
-  }
-}
-@container ledger (width < 340px) {
-  .ledger-actions > button {
-    flex-basis: calc(50% - 12px);
   }
 }
 .transaction-ledger [data-slot="table-row"][data-state="selected"] {

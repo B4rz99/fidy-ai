@@ -34,6 +34,7 @@ export const deriveCurrentMonthPeriod = ({
 /** Presentation-only projection consumed by both desktop and mobile Transaction views. */
 export type TransactionListRow = Readonly<{
   id: string;
+  categoryId: string;
   categoryLabel: string;
   counterpartyLabel: string;
   direction: Transaction["direction"];
@@ -98,6 +99,7 @@ export const presentTransactionRows = ({
   const categoryLabels = new Map(categories.map(({ id, label }) => [id, label]));
   return transactions.map((transaction) => ({
     id: transaction.id,
+    categoryId: transaction.categoryId,
     categoryLabel: categoryLabels.get(transaction.categoryId) ?? "Categoría no disponible",
     counterpartyLabel: Option.getOrElse(transaction.counterparty, () => counterpartyFallback),
     direction: transaction.direction,

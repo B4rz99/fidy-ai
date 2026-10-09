@@ -32,7 +32,7 @@ import { ArrowDown01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { TransactionDropdown } from "./dropdown";
 import { CategoryVisual, DirectionVisual } from "./visuals";
 import { formatMoney } from "@/transport/money";
-import type { TransactionListRow } from "./presentation";
+import type { Category, TransactionListRow } from "./presentation";
 
 const columns: Array<ColumnDef<TransactionListRow>> = [
   { accessorKey: "counterpartyLabel", header: "Contraparte" },
@@ -44,6 +44,8 @@ type LedgerProps = Readonly<{
   rows: ReadonlyArray<TransactionListRow>;
   selected: Option.Option<string>;
   onSelect: (id: string) => void;
+  categories: ReadonlyArray<Category>;
+  onCategory: (id: string, categoryId: string) => void;
   disabled: boolean;
   locale: string;
   toolbar: JSX.Element;
@@ -98,12 +100,61 @@ const TransactionIdentity = ({
     </TableCell>
   );
 };
+const TransactionClassification = ({
+  row,
+  onSelect,
+  disabled,
+  selection,
+  categories,
+  onCategory,
+  canEdit,
+}: Readonly<{ row: TransactionListRow }> &
+  Pick<
+    LedgerProps,
+    "onSelect" | "disabled" | "selection" | "categories" | "onCategory" | "canEdit"
+  >): JSX.Element => (
+  <>
+    <TableCell className="hidden @min-[600px]/ledger:table-cell">
+      <TransactionDropdown
+        id={`category-${row.id}`}
+        label={`Cambiar categoría de ${row.counterpartyLabel}`}
+        value={row.categoryId}
+        options={categories.map((category) => ({ value: category.id, label: category.label }))}
+        disabled={disabled || selection.active || !canEdit}
+        width="full"
+        leading={<CategoryVisual label={row.categoryLabel} bubble large={false} />}
+        triggerLabel={Option.none()}
+        onChange={(categoryId) => onCategory(row.id, categoryId)}
+      />
+    </TableCell>
+    <TableCell className="hidden @min-[481px]/ledger:table-cell">
+      <button
+        type="button"
+        disabled={
+          disabled ||
+          (selection.active &&
+            selection.ids.length >= selection.limit &&
+            !selection.ids.includes(row.id))
+        }
+        onClick={() => (selection.active ? selection.onToggle(row.id) : onSelect(row.id))}
+        aria-label={`Ver tipo de ${row.counterpartyLabel}`}
+        className="flex w-full items-center gap-2 rounded-md py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+      >
+        <DirectionVisual inflow={row.direction === "inflow"} />
+        {row.transactionTypeLabel}
+      </button>
+    </TableCell>
+  </>
+);
 const TransactionRow = ({
   row,
   selected,
   onSelect,
   disabled,
   selection,
+  categories,
+  onCategory,
+  canEdit,
 }: Readonly<{ row: TransactionListRow }> & Omit<LedgerProps, "rows">): JSX.Element => (
   <TableRow
     data-state={
@@ -117,18 +168,15 @@ const TransactionRow = ({
       disabled={disabled}
       selection={selection}
     />
-    <TableCell className="hidden @min-[600px]/ledger:table-cell">
-      <span className="flex items-center gap-2">
-        <CategoryVisual label={row.categoryLabel} bubble large={false} />
-        <span className="break-words">{row.categoryLabel}</span>
-      </span>
-    </TableCell>
-    <TableCell className="hidden @min-[481px]/ledger:table-cell">
-      <span className="flex items-center gap-2">
-        <DirectionVisual inflow={row.direction === "inflow"} />
-        {row.transactionTypeLabel}
-      </span>
-    </TableCell>
+    <TransactionClassification
+      row={row}
+      onSelect={onSelect}
+      disabled={disabled}
+      selection={selection}
+      categories={categories}
+      onCategory={onCategory}
+      canEdit={canEdit}
+    />
     <TableCell className="text-right font-medium tabular-nums">
       <button
         type="button"
@@ -283,9 +331,9 @@ const LedgerControls = ({
   empty: boolean;
   selecting: boolean;
 }>): JSX.Element => (
-  <div className="mb-4 flex flex-wrap items-center gap-3">
+  <div className="mb-4 flex flex-wrap items-center gap-2 [&_button]:px-3">
     {toolbar}
-    <div className="ledger-actions flex w-auto flex-wrap items-center gap-3">
+    <div className="ledger-actions contents">
       <Button variant="outline" disabled={disabled || empty} onClick={onEdit}>
         {selecting ? "Cancelar selección" : "Editar varias"}
       </Button>

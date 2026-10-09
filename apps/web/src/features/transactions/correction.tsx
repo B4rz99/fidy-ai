@@ -24,6 +24,7 @@ type CorrectionDraft = Readonly<{
   categoryId: string;
 }>;
 type CorrectionProps = Readonly<{
+  initialCategory: Option.Option<string>;
   renderForm: (form: JSX.Element) => JSX.Element;
   apiClient: FidyClient;
   transaction: Transaction;
@@ -319,7 +320,10 @@ const CorrectionActions = ({
 );
 /** Corrects only explicitly changed facts at the observed revision; an uncertain write is never replayed. */
 export const TransactionCorrection = (props: CorrectionProps): JSX.Element => {
-  const [draft, setDraft] = useState(() => initialDraft(props.transaction, props.timeZone));
+  const [draft, setDraft] = useState(() => ({
+    ...initialDraft(props.transaction, props.timeZone),
+    categoryId: Option.getOrElse(props.initialCategory, () => props.transaction.categoryId),
+  }));
   const { status, onStatus: setStatus } = props;
   const [command] = useState(() => makeCorrection(props.apiClient, props.transaction));
   const submit = useAtomSet(command);

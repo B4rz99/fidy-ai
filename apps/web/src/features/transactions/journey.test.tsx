@@ -129,7 +129,12 @@ const renderJourney = (
       );
     }
     if (request.url.endsWith("/categories")) {
-      return Effect.succeed(jsonResponse(request, [{ id: categoryId, label: "Restaurantes" }]));
+      return Effect.succeed(
+        jsonResponse(request, [
+          { id: categoryId, label: "Restaurantes" },
+          { id: "24000000-0000-4000-8000-000000000099", label: "Mercado" },
+        ])
+      );
     }
     return Effect.succeed(jsonResponse(request, captured ? [created, transaction] : [transaction]));
   });
@@ -448,7 +453,12 @@ const renderBulkJourney = (
     }
     if (request.url.endsWith("/user")) return Effect.succeed(jsonResponse(request, bulkUser));
     if (request.url.endsWith("/categories")) {
-      return Effect.succeed(jsonResponse(request, [{ id: categoryId, label: "Restaurantes" }]));
+      return Effect.succeed(
+        jsonResponse(request, [
+          { id: categoryId, label: "Restaurantes" },
+          { id: "24000000-0000-4000-8000-000000000099", label: "Mercado" },
+        ])
+      );
     }
     return Effect.succeed(jsonResponse(request, records));
   });
@@ -526,3 +536,40 @@ it.each(["rejected", "uncertain"] as const)("blocks replay after a %s bulk save"
     })
   )
 );
+
+it("opens corrections from transaction type and lets the user switch records", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      renderBulkJourney();
+      fireEvent.click(
+        yield* Effect.tryPromise(() =>
+          screen.findByRole("button", { name: "Ver tipo de El Corral" })
+        )
+      );
+      expect(screen.getByLabelText("Contraparte")).toHaveValue("El Corral");
+      fireEvent.change(screen.getByLabelText("Contraparte"), { target: { value: "Borrador" } });
+      fireEvent.click(screen.getByRole("button", { name: "Ver transacción Éxito" }));
+      expect(screen.getByLabelText("Contraparte")).toHaveValue("Éxito");
+      fireEvent.click(screen.getByRole("button", { name: "Ver monto de El Corral" }));
+      expect(screen.getByLabelText("Contraparte")).toHaveValue("El Corral");
+    })
+  ));
+it("chooses a category from the ledger for review without saving until confirmed", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      renderBulkJourney();
+      fireEvent.click(
+        yield* Effect.tryPromise(() =>
+          screen.findByRole("button", { name: "Cambiar categoría de Éxito" })
+        )
+      );
+      fireEvent.click(
+        yield* Effect.tryPromise(() => screen.findByRole("menuitemradio", { name: "Mercado" }))
+      );
+      expect(screen.getByRole("button", { name: /^Categoría$/ })).toHaveTextContent("Mercado");
+      expect(screen.getByLabelText("Contraparte")).toHaveValue("Éxito");
+      fireEvent.click(screen.getByRole("button", { name: /^Cancelar$/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Ver transacción Éxito" }));
+      expect(screen.getByRole("button", { name: /^Categoría$/ })).toHaveTextContent("Restaurantes");
+    })
+  ));

@@ -11,7 +11,7 @@ import {
 import { DateTime, Effect, Option, Schema } from "effect";
 import { CliFailure, type Credential } from "../credential/contract";
 import { formatFailure } from "../command/operations";
-import type { CanonicalDependencies, OperationResult } from "./contract";
+import { type CanonicalDependencies, CanonicalRequest, type OperationResult } from "./contract";
 import { type FlagPlan, assembleFlags, deriveFlags, flagHelp } from "./internal/flags";
 
 const eligibleOperation = (id: string, scopes: ReadonlyArray<PATScope>): boolean => {
@@ -99,7 +99,15 @@ const decodeInput = Effect.fn(function* (
       }
     }
   }
-  return decoded;
+  const request = yield* Schema.decodeUnknownEffect(CanonicalRequest)(decoded).pipe(
+    Effect.mapError(() => new CliFailure({ reason: "InvalidInput" }))
+  );
+  return {
+    params: request.params,
+    query: request.query,
+    payload: request.payload,
+    headers: request.headers,
+  };
 });
 
 /** Invokes one eligible operation without retries, returning only canonical encoded data and safe metadata. */

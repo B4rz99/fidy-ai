@@ -1,29 +1,53 @@
-import { FidyApi, makeTokenAuthorizationClientLive } from "@fidy/server/client";
-import { Effect, Layer, Redacted, Stream } from "effect";
-import { HttpApiClient } from "effect/http-api";
+import { FidyApi, type FidyApiGroups, makeTokenAuthorizationClientLive } from "@fidy/server/client";
+import { Effect, Layer, Redacted, type Schema, Stream } from "effect";
+import { HttpApi, HttpApiClient, type HttpApiEndpoint, type HttpApiGroup } from "effect/http-api";
 import { makeProtectedClient } from "../direct-client/runtime";
 import { CliFailure, apiOrigin } from "../credential/contract";
 import type { CanonicalClient, CanonicalClientFactory } from "./contract";
+
+// Erase decoded value types on the declaration, where assignability is checked. Generated
+// methods still encode through the original endpoint schemas before executing any request.
+type CanonicalEndpoint = HttpApiEndpoint.ConstraintRequest & {
+  readonly "~Params": Schema.ConstraintCodec<unknown, unknown>;
+  readonly "~Query": Schema.ConstraintCodec<unknown, unknown>;
+  readonly "~Payload": Schema.ConstraintCodec<unknown, unknown>;
+  readonly "~Headers": Schema.ConstraintCodec<unknown, unknown>;
+  readonly "~Success": Schema.ConstraintCodec<unknown, unknown>;
+  readonly "~Error": Schema.ConstraintCodec<object, unknown>;
+  readonly "~Middleware": HttpApiEndpoint.Middleware<HttpApiGroup.Endpoints<FidyApiGroups>>;
+};
+type CanonicalGroup = HttpApiGroup.Constraint & {
+  readonly topLevel: false;
+  readonly endpoints: Readonly<Record<string, CanonicalEndpoint>>;
+};
+
 /** Per-invocation derived client: bearer authority never enters an ambient shared transport. */
 export const makeCanonicalClient: CanonicalClientFactory = Effect.fn(function* (options) {
   const authorization = yield* Layer.build(
     makeTokenAuthorizationClientLive(Redacted.value(options.credential.bearer))
   );
-  const client = yield* HttpApiClient.makeWith(FidyApi, {
-    httpClient: makeProtectedClient({
-      client: options.httpClient,
-      allowQuery: true,
-      maximumResponseBytes: 1_048_576,
-      maximumRequestBytes: maximumInputBytes,
-      captureRetry: options.captureRetry,
-      captureAllowance: options.captureAllowance,
-    }),
-    baseUrl: apiOrigin,
-  }).pipe(Effect.provideContext(authorization));
-  // The static union cannot express selection by runtime id. This single bridge is safe only
-  // after invokeOperation selects the same catalog id and decodes that operation's complete input.
-  // Every result/failure crosses the selected codec again before it can leave the invocation.
-  return client as unknown as CanonicalClient;
+  const httpClient = makeProtectedClient({
+    client: options.httpClient,
+    allowQuery: true,
+    maximumResponseBytes: 1_048_576,
+    maximumRequestBytes: maximumInputBytes,
+    captureRetry: options.captureRetry,
+    captureAllowance: options.captureAllowance,
+  });
+  const client: Record<string, CanonicalClient[string]> = {};
+  for (const group of Object.values(FidyApi.groups)) {
+    const declaration: CanonicalGroup = group;
+    const api = HttpApi.make(FidyApi.identifier)
+      .add(declaration)
+      .annotateMerge(FidyApi.annotations);
+    const methods = yield* HttpApiClient.group(api, {
+      group: group.identifier,
+      httpClient,
+      baseUrl: apiOrigin,
+    }).pipe(Effect.provideContext(authorization));
+    client[group.identifier] = methods;
+  }
+  return client;
 });
 
 const maximumInputBytes = 65_536;

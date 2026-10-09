@@ -321,7 +321,14 @@ const googleOperator = (request: Request): Option.Option<Promise<Response>> => {
   const path = new URL(request.url).pathname;
   if (
     request.method !== "POST" ||
-    !["/google/expire", "/google/revoke", "/microsoft/expire", "/microsoft/revoke"].includes(path)
+    ![
+      "/google/expire",
+      "/google/stale",
+      "/google/revoke",
+      "/microsoft/expire",
+      "/microsoft/stale",
+      "/microsoft/revoke",
+    ].includes(path)
   ) {
     return Option.none();
   }
@@ -330,6 +337,17 @@ const googleOperator = (request: Request): Option.Option<Promise<Response>> => {
   );
   if (Option.isNone(subject)) {
     return Option.some(Promise.resolve(new Response(null, { status: 400 })));
+  }
+  if (path.endsWith("/stale")) {
+    return Option.some(
+      db
+        .prepare(
+          "UPDATE web_sessions SET created_at_ms=created_at_ms-600001,fresh_until_ms=fresh_until_ms-600001,hard_expires_at_ms=hard_expires_at_ms-600001 WHERE user_id=(SELECT user_id FROM provider_credentials WHERE subject=?)"
+        )
+        .bind(subject.value)
+        .run()
+        .then(() => new Response(null, { status: 204 }))
+    );
   }
   const statement = path.endsWith("/expire")
     ? db

@@ -392,7 +392,19 @@ it("refuses recovery rotation after WebSession freshness expires without changin
       expect((yield* Effect.tryPromise(() => rotate("https://attacker.example"))).status).toBe(403);
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(started + 600_000);
-      expect((yield* Effect.tryPromise(() => rotate("https://app.fidyapp.com"))).status).toBe(401);
+      const refused = yield* Effect.tryPromise(() => rotate("https://app.fidyapp.com"));
+      expect(refused.status).toBe(403);
+      expect(yield* Effect.tryPromise(() => refused.json())).toMatchObject({
+        error: { code: "user_action_required" },
+      });
+      const currentUser = yield* Effect.tryPromise(() =>
+        sendRequest(
+          new Request("https://api.fidyapp.com/user", {
+            headers: { origin: "https://app.fidyapp.com", cookie: `__Host-fidy_session=${token}` },
+          })
+        )
+      );
+      expect(currentUser.status).toBe(200);
       expect(
         yield* Effect.tryPromise(() =>
           db.prepare("SELECT code_digest FROM backup_recovery_credentials").first()

@@ -268,24 +268,29 @@ export const sweepExpiredUploadAdmission = ({
         db
           .prepare(
             `DELETE FROM resource_admission_events WHERE grant_id IN (
-            SELECT g.id FROM resource_admission_grants g
-            WHERE g.id LIKE 'ingestion-upload-%'
-              AND g.admitted_at_epoch_ms <= ?
-              AND NOT EXISTS (
+            SELECT g.id FROM (
+              SELECT id FROM resource_admission_grants
+              WHERE id GLOB 'ingestion-upload-*' AND admitted_at_epoch_ms <= ?
+              ORDER BY admitted_at_epoch_ms, id LIMIT ?
+            ) g
+            WHERE NOT EXISTS (
                 SELECT 1 FROM resource_admission_events e
                 WHERE e.grant_id = g.id AND e.expires_at_epoch_ms > ?
               )
-            ORDER BY g.admitted_at_epoch_ms LIMIT ?
           )`
           )
-          .bind(now - uploadWindowMilliseconds, now, maximumAdmissionSweep),
+          .bind(now - uploadWindowMilliseconds, maximumAdmissionSweep, now),
         db
           .prepare(
             `DELETE FROM resource_admission_grants
-           WHERE id LIKE 'ingestion-upload-%' AND admitted_at_epoch_ms <= ?
+           WHERE id IN (
+             SELECT id FROM resource_admission_grants
+             WHERE id GLOB 'ingestion-upload-*' AND admitted_at_epoch_ms <= ?
+             ORDER BY admitted_at_epoch_ms, id LIMIT ?
+           )
              AND NOT EXISTS (SELECT 1 FROM resource_admission_events e WHERE e.grant_id = id)`
           )
-          .bind(now - uploadWindowMilliseconds),
+          .bind(now - uploadWindowMilliseconds, maximumAdmissionSweep),
       ]),
     catch: (cause) => new IngestionAuditFailed({ cause }),
   }).pipe(Effect.asVoid);

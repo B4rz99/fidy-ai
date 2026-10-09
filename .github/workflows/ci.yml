@@ -191,8 +191,8 @@ jobs:
           key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}-headless-shell
       - name: Install Chromium system dependencies
         # This disposable runner has no long-lived application daemons to restart.
-        # Run Playwright as root so its apt child retains needrestart's suspend flag.
-        run: time sudo env NEEDRESTART_SUSPEND=1 "$(command -v bun)" x --bun playwright install-deps chromium
+        # Use its Node CLI for root-only installation; native tests retain pinned Bun.
+        run: time sudo env NEEDRESTART_SUSPEND=1 node node_modules/.bin/playwright install-deps chromium
       # Default headless Chromium launches the shell, not the full headed browser.
       # Still run installation on cache hits to validate/download any missing binaries.
       - name: Install Chromium headless shell

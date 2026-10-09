@@ -45,7 +45,7 @@ const recoveryIsolation = Config.Literals(["", "isolated"], "RECOVERY_ISOLATION"
   Config.withDefault("")
 );
 const accessIssuer = Config.String("CLOUDFLARE_ACCESS_ISSUER");
-const accessAudience = Config.String("CLOUDFLARE_ACCESS_AUDIENCE");
+const recoveryOperatorEmail = Config.schema(EmailAddress, "RECOVERY_OPERATOR_EMAIL");
 const whatsAppBusinessPortfolioId = Config.String("WHATSAPP_BUSINESS_PORTFOLIO_ID");
 
 const resolveKapsoBindings = (
@@ -83,16 +83,38 @@ const resolvePatAdmissionKey = (development: boolean): typeof patAdmissionKey =>
       )
     : patAdmissionKey;
 
-const resolveAccessConfig = (
-  development: boolean
-): Effect.Effect<Readonly<{ issuer: string; audience: string }>, Config.ConfigError> =>
-  Effect.gen(function* () {
-    const issuer = yield* development ? accessIssuer.pipe(Config.withDefault("")) : accessIssuer;
-    const audience = yield* development
-      ? accessAudience.pipe(Config.withDefault(""))
-      : accessAudience;
-    return { issuer, audience };
+const resolveAccessConfig = Effect.fn(function* (development: boolean) {
+  if (development) return { issuer: "", audience: "" };
+  const issuer = yield* accessIssuer;
+  const operatorEmail = yield* recoveryOperatorEmail;
+  const identity = yield* Cloudflare.Access.IdentityProvider("RecoveryIdentity", {
+    name: "Fidy recovery email PIN",
+    type: "onetimepin",
   });
+  const operators = yield* Cloudflare.Access.Group("RecoveryOperators", {
+    name: "recovery-operator",
+    include: [{ email: { email: operatorEmail } }],
+  });
+  const application = yield* Cloudflare.Access.Application("SupportRecoveryAccess", {
+    type: "self_hosted",
+    name: "Fidy support recovery",
+    domain: "api.fidyapp.com/internal/support-recovery",
+    sessionDuration: "15m",
+    appLauncherVisible: false,
+    allowedIdps: [identity.identityProviderId],
+    autoRedirectToIdentity: true,
+    policies: [
+      {
+        name: "recovery-operator",
+        decision: "allow",
+        precedence: 1,
+        sessionDuration: "15m",
+        include: [{ group: operators.groupId }],
+      },
+    ],
+  });
+  return { issuer, audience: application.aud };
+});
 
 const resolveBrowserOrigin = (production: boolean): string =>
   production ? edgeSecurityPolicy.browserOrigin : browserOrigins.local;

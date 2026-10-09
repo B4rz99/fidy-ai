@@ -9,12 +9,158 @@ import {
   releaseCommand,
   releaseFailureMessage,
   releasePort,
+  verifyRecoveryAccess,
 } from "./production-release";
 import { type ReleasePort, releaseController } from "./release-controller";
 
 const revision = "a".repeat(40);
 const publicVersion = "11111111-1111-4111-8111-111111111111";
 const coreVersion = "22222222-2222-4222-8222-222222222222";
+
+const recoveryFixture = {
+  "/access/apps": [
+    {
+      id: "recovery",
+      domain: "api.fidyapp.com/internal/support-recovery",
+      type: "self_hosted",
+      aud: "a".repeat(64),
+      session_duration: "15m",
+      allowed_idps: ["pin"],
+    },
+  ],
+  "/access/apps/recovery/policies": [
+    {
+      decision: "allow",
+      name: "recovery-operator",
+      session_duration: "15m",
+      include: [{ group: { id: "operator" } }],
+      exclude: [],
+      require: [],
+    },
+  ],
+  "/access/groups/operator": {
+    name: "recovery-operator",
+    include: [{ email: { email: "operator@example.com" } }],
+    exclude: [],
+    require: [],
+  },
+  "/access/identity_providers/pin": { type: "onetimepin" },
+  "/access/organizations": { auth_domain: "test.cloudflareaccess.com" },
+};
+const recoveryCandidate = (audience: string): object => ({
+  id: coreVersion,
+  resources: {
+    bindings: [
+      {
+        name: "CLOUDFLARE_ACCESS_ISSUER",
+        type: "plain_text",
+        text: "https://test.cloudflareaccess.com",
+      },
+      { name: "CLOUDFLARE_ACCESS_AUDIENCE", type: "plain_text", text: audience },
+    ],
+  },
+});
+it.effect.each([
+  {
+    label: "verified operator, issuer and candidate audience",
+    fixture: recoveryFixture,
+    audience: "a".repeat(64),
+    failure: false,
+    count: 1,
+  },
+  {
+    label: "mismatched audience",
+    fixture: recoveryFixture,
+    audience: "wrong-audience",
+    failure: true,
+    count: 1,
+  },
+  {
+    label: "recovery bindings but no Access application",
+    fixture: { ...recoveryFixture, "/access/apps": [] },
+    audience: "a".repeat(64),
+    failure: true,
+    count: 0,
+  },
+  {
+    label: "operator group admits everyone",
+    fixture: {
+      ...recoveryFixture,
+      "/access/groups/operator": {
+        name: "recovery-operator",
+        include: [{ everyone: {} }],
+        exclude: [],
+        require: [],
+      },
+    },
+    audience: "a".repeat(64),
+    failure: true,
+    count: 1,
+  },
+  {
+    label: "bypass policy",
+    fixture: {
+      ...recoveryFixture,
+      "/access/apps/recovery/policies": [
+        {
+          ...recoveryFixture["/access/apps/recovery/policies"][0],
+          decision: "bypass",
+        },
+      ],
+    },
+    audience: "a".repeat(64),
+    failure: true,
+    count: 1,
+  },
+  {
+    label: "wrong organization issuer",
+    fixture: {
+      ...recoveryFixture,
+      "/access/organizations": { auth_domain: "other.cloudflareaccess.com" },
+    },
+    audience: "a".repeat(64),
+    failure: true,
+    count: 1,
+  },
+])("checks recovery release authority: $label", ({ fixture, audience, failure, count }) =>
+  Effect.gen(function* () {
+    const responses: Readonly<Record<string, unknown>> = {
+      ...fixture,
+      [`/workers/scripts/core/versions/${coreVersion}`]: recoveryCandidate(audience),
+    };
+    const client = HttpClient.make((request) => {
+      const path = new URL(request.url).pathname.replace("/client/v4/accounts/test-account", "");
+      return Effect.succeed(
+        HttpClientResponse.fromWeb(
+          request,
+          Response.json({
+            success: true,
+            result: responses[path],
+            result_info: { total_count: count },
+          })
+        )
+      );
+    });
+    const result = yield* Effect.exit(
+      verifyRecoveryAccess(
+        {
+          account: "test-account",
+          token: "test-only",
+          issuer: "https://test.cloudflareaccess.com",
+          operatorEmail: "operator@example.com",
+        },
+        client,
+        { name: "core", version: coreVersion }
+      )
+    );
+    expect(Exit.isFailure(result)).toBe(failure);
+    if (Exit.isFailure(result)) {
+      expect(releaseFailureMessage(result.cause)).toBe(
+        "Release staging refused: support recovery Access configuration is unverified"
+      );
+    }
+  })
+);
 
 it.effect(
   "redacts gradual-release request queries without deploying code or changing bindings",

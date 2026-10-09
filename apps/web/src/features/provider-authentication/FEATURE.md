@@ -7,17 +7,18 @@ after approval and proof of the initiating browser's private verifier.
 
 | Action                                                              | Code and runtime                                                                                                                    | Verification                                                                                                               |
 | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Public signup and returning login                                   | This feature, `/auth/google`, `/auth/microsoft` → public Ingress → private Core Provider Authentication → D1                        | Real Google signup and returning login reach the app without recovery redisclosure; Microsoft live checks pending          |
+| Public signup and returning login                                   | This feature, `/auth/google`, `/auth/microsoft` → public Ingress → private Core Provider Authentication → D1                        | Real Google and Microsoft personal signup/returning login pass; Microsoft work/school live checks pending                  |
 | Consent and one-time recovery acknowledgement                       | `/web/providers/disclosure`, provider start/completion; Onboarding                                                                  | Atomic creation/rollback, concurrent completion, same-contact isolation and lost-response non-redisclosure covered locally |
 | WhatsApp-led signup and initial linking                             | Kapso authenticated Portfolio/BSUID → Consent handoff → provider browser → exact originating-message association approval           | New and existing User journeys pass for both providers; real Kapso delivery/reply pending                                  |
 | Existing WhatsApp and optional verified-mailbox login               | `browser-login`, `email-authentication`; `/auth/pair`                                                                               | Existing pairing and authentication boundaries pass; provider contact email grants no mailbox login                        |
-| Backup recovery and rotation                                        | `fidy support-recovery` → Cloudflare Access → `/internal/support-recovery` → Recovery/Browser Login; `/recovery/backup-code/rotate` | Both provider browser journeys recover the same User and rotate; native command tests pass; real Access recovery pending   |
+| Backup recovery and rotation                                        | `fidy support-recovery` → Cloudflare Access → `/internal/support-recovery` → Recovery/Browser Login; `/recovery/backup-code/rotate` | Google browser recovery/rotation and native command tests pass; real Access recovery pending                               |
 | Session persistence, logout, expiry and Consent withdrawal          | Browser Login/WebSession and browser authentication registry                                                                        | Production reload and logout pass; local expiry and withdrawal checks pass; deployed deadline observation pending          |
 | Denial, cancellation, blocked popup, replay and uncertain responses | Provider Authentication plus mounted browser controller                                                                             | Worker refusals and browser failure journeys pass; no blind retry or recovery redisclosure                                 |
 
 ## Evidence — 2026-10-08
 
-Production checked: `4e5c304a4d3e533b038b922f37cef713dd1647ee`.
+Initial Production checks: `4e5c304a4d3e533b038b922f37cef713dd1647ee`.
+Latest deployed revision: `9dea956d6b73e8f7f0aa7e483ce395ef51c24825`.
 Re-runnable checks from the repository root, using its pinned Bun runtime:
 
 ```sh
@@ -26,6 +27,7 @@ bun run --cwd apps/server test:cloudflare web-authentication/session-clock.test.
 bun run --cwd apps/web test:browser 00-google-authentication.spec.ts microsoft-authentication.spec.ts browser-pairing.spec.ts
 bun run --cwd apps/cli test -- src/support-recovery
 bun run --cwd apps/web test -- src/features/browser-login src/features/provider-authentication src/features/recovery src/features/email-replacement
+bun run --cwd infra/cloudflare test worker-observability.test.ts production-release.test.ts
 ```
 
 Re-run on the revision above: 83 Worker/D1 tests, 20 browser journeys and six session-clock tests.
@@ -38,7 +40,7 @@ Browser journeys use built static assets and real local public/Core/D1; external
 operator/WhatsApp delivery edges are substituted. They are reusable regression checks, not live
 Google, Microsoft, Kapso or Cloudflare Access evidence.
 
-Production web deployment metadata and API health match the revision above and contract digest.
+Production web deployment metadata and API health match the latest deployed revision and contract digest.
 The [release](https://github.com/B4rz99/fidy-ai/actions/runs/37868801744) passed promotion and
 normal-traffic gates. Public disclosure returns 200 with no-store. The previous deleted-Queue
 and isolated-routing failures no longer block the signup page.
@@ -63,18 +65,52 @@ Production back/reload/forward check loads Consent, shows no recovery code and p
 authenticated app; it did not reproduce the earlier failure.
 
 Production Core and Ingress disable invocation logs, traces, Logpush and tail consumers.
-However, a narrowly filtered saved authentication diagnostic still contains protocol query fields
-in Cloudflare's request metadata; the application log contains only closed failure codes.
-Deployed `redact_query_string` is false. Explicit platform query redaction and fresh-log verification
-are required before marking callback logging safe. No protocol values were copied into evidence.
-The retained SDK patch and upload transport regression send the query-redaction setting.
-The release transport checks apply and read back script-level redaction before gradual staging,
-refusing to proceed if the provider does not persist it. Deployment verification remains pending.
+A saved diagnostic previously exposed protocol query fields in Cloudflare request metadata.
+[PR #1114](https://github.com/B4rz99/fidy-ai/pull/1114) enables explicit query redaction;
+its [Production release](https://github.com/B4rz99/fidy-ai/actions/runs/37873062603) passed every gate.
+Both Workers now report `redact_query_string: true`. Fresh, narrowly filtered Google and Microsoft
+diagnostics retain request metadata without OAuth query values. No protocol values were copied
+into evidence. The retained SDK upload regression and release transport checks verify serialization,
+script-level application and readback; release staging refuses an unpersisted setting.
+Microsoft's invalid-code diagnostic remains the generic `verification_failed`; that synthetic
+refusal alone did not prove successful Microsoft token exchange.
+Subsequent real Microsoft personal-account signup reaches the one-time recovery screen and,
+after the User's acknowledgement, Transactions. The session survives reload; recovery settings
+offer rotation without showing the original code, including after reload. Logout blocks protected
+Transactions. Returning Microsoft login restores access without recovery redisclosure and survives
+reload. Back/reload/forward loads Consent, shows no recovery code and preserves authenticated access.
+No recovery value was inspected or copied. These tabs share browser cookies; the active session
+switches on login, so separate tabs do not establish isolated Google and Microsoft sessions.
 
-Remaining live checks: Google denial; Microsoft personal and
-work/school signup/returning login/denial; real WhatsApp association and forwarded/expired handoff
-refusal; Access-backed recovery; deployed server-side session deadlines, retention and callback-query
-log exclusion. Local fixture passes do not establish these Production results. The User approved
+The actual Production `support-recovery` CLI exits with operator authentication unavailable,
+before reading claimant proof or submitting a recovery request. Installed cloudflared is present.
+The account-level Access application inventory returns success with zero applications; the public
+recovery path returns 405 for GET and 401 for unauthenticated POST, without an Access login redirect.
+Access-backed recovery therefore remains blocked by operator-access configuration, despite the
+Worker's issuer/audience bindings being present. No recovery code was submitted.
+The configured audience also fails the generated-audience shape check. The pending infrastructure
+fix manages the dedicated Access application, sole operator group and email-PIN provider, derives
+Core's audience from that application, and refuses release staging unless real provider resources
+and candidate bindings agree. Local release transport checks pass for missing applications, broad
+operator groups, wrong candidate audience and valid configuration. Deployment and real operator
+login remain pending; the local token cannot yet read the Access organization (403).
+
+On the latest revision, both providers refuse missing/wrong proof cookies, duplicate state and
+cross-provider callbacks while preserving the legitimate pending attempt. Synthetic provider denial
+and replay reject completion and return to clean first-party URLs. Signup without Consent returns
+400, anonymous current-User access returns 401 and an untrusted browser origin returns 403.
+An unapproved Production pairing on `3a0bb529fe2676def32b756aaebaacc6cd6d99cd` refused redemption
+with a no-store 400 after 606 seconds.
+These synthetic checks create no User or session. Their reusable local counterparts are in the
+provider journey and Browser Login integration suites above; actual provider denial UI remains pending.
+The real Google-authenticated app also survives reload after the latest deployment without recovery
+code redisclosure.
+
+Remaining live checks: Google and Microsoft personal denial UI;
+Microsoft work/school signup/returning login/denial (unavailable: the User has no work/school account);
+real WhatsApp association and forwarded/expired handoff
+refusal; Access-backed recovery; deployed server-side session deadlines and retention.
+Local fixture passes do not establish these Production results. The User approved
 personal Google, Microsoft and WhatsApp accounts and handles sign-in and confirmation.
 
 [Provider configuration and live checks](../../../../../docs/operations/authentication-feature-map.md)

@@ -1,0 +1,47 @@
+apps/web/src/features/provider-authentication/FEATURE.md
+  s_6d017cc65783af::t_3fd3fa6b4c44b6 136-141,187
+apps/web/e2e/provider-authentication.journeys.ts
+  s_6d017cc65783af::t_bc68833453c7e7 145-157
+  s_6d017cc65783af::t_6d2054c5f97b39 217-222,226-228,274
+  s_6d017cc65783af::t_45f6c7fb4df788 233,248-256,275,281-282
+  s_6d017cc65783af::t_345479df5a8fa5 223-225
+  s_6d017cc65783af::t_38bfce62b6f84d 234-238,276-280
+  s_6d017cc65783af::t_c1580d74fdeb36 144,158,182,247
+  s_6d017cc65783af::t_d1860f643b2d29 270
+apps/web/e2e/00-google-authentication.spec.ts
+  s_6d017cc65783af::t_04e0ae87f6119b 22-28
+apps/server/src/shell/consent/internal/web-disclosure.ts
+  s_6d017cc65783af::t_0d10d0d8542b97 3,6
+  s_6d017cc65783af::t_b199c907736329 7
+apps/server/cloudflare/provider-authentication/microsoft.test.ts
+  s_6d017cc65783af::t_b199c907736329 26,685
+  s_6d017cc65783af::t_38bfce62b6f84d 27-29
+apps/web/e2e/microsoft-authentication.spec.ts
+  s_6d017cc65783af::t_04e0ae87f6119b 19-25
+apps/web/src/features/provider-authentication/controller.ts
+  s_6d017cc65783af::t_345479df5a8fa5 235-236
+  s_6d017cc65783af::t_4e2b8ca226b4d0 220,279,282,286-289,298
+  s_6d017cc65783af::t_76e704b25e70a8 24,255
+  s_6d017cc65783af::t_2d7dc094a03b1a 225-234,237-244,281
+  s_6d017cc65783af::t_38bfce62b6f84d 280
+apps/web/src/features/provider-authentication/feature.tsx
+  s_6d017cc65783af::t_4e2b8ca226b4d0 188
+  s_6d017cc65783af::t_0d10d0d8542b97 44-46,53-55
+  s_6d017cc65783af::t_38bfce62b6f84d 47-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8fe91b2283ef7c7ed24df8bbc613c79fad0d4b2c",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

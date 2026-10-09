@@ -119,6 +119,12 @@ describe("current-month Transaction list presentation", () => {
     expect(ledger.getByText("Gasto")).toBeVisible();
     expect(ledger.getByText("COP 25.000,00")).toBeVisible();
     expect(ledger.getByText("20 de julio de 2026")).toBeVisible();
+    const summary = within(screen.getByLabelText("Resumen de transacciones"));
+    expect(summary.getAllByText("25.000,00")).toHaveLength(4);
+    expect(summary.getAllByText("20-07-2026")).toHaveLength(2);
+    expect(summary.queryByText(/COP/)).not.toBeInTheDocument();
+    expect(summary.queryByText("Del periodo y los filtros seleccionados.")).not.toBeInTheDocument();
+    expect(screen.queryByText(/de 1 transacciones del mes/)).not.toBeInTheDocument();
   });
 });
 

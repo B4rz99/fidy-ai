@@ -44,7 +44,7 @@ export type TransactionListRow = Readonly<{
   occurredOnText: string;
 }>;
 
-const formatOccurrence = ({
+export const formatOccurrence = ({
   locale,
   occurredAt,
   timeZone,

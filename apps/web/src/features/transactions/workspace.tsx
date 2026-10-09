@@ -277,7 +277,7 @@ const WorkspaceHeader = ({
         {period.timeZone}
       </p>
     </div>
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
       <Button variant="outline" disabled={disabled} onClick={() => onTool("search")}>
         <HugeiconsIcon
           icon={Search01Icon}
@@ -381,9 +381,6 @@ const WorkspaceContent = ({
           disabled={locked || editing}
           onSelect={(id) => onPanel({ _tag: "Detail", id, mode: { _tag: "Viewing" } })}
         />
-        <p aria-live="polite" className="mt-3 text-xs text-muted-foreground">
-          {visible.length} de {props.transactions.length} transacciones del mes
-        </p>
       </div>
       <WorkspacePanel
         {...props}

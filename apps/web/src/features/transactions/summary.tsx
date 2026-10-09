@@ -1,7 +1,7 @@
 import { BigDecimal, Option } from "effect";
 import type { JSX } from "react";
 import { formatMoney } from "@/transport/money";
-import type { Transaction } from "./presentation";
+import { type Transaction, formatOccurrence } from "./presentation";
 
 type SummaryProps = Readonly<{
   transactions: ReadonlyArray<Transaction>;
@@ -66,18 +66,12 @@ const dateRange = ({
   timeZone,
 }: SummaryProps): Readonly<{ first: string; last: string }> => {
   const dates = transactions
-    .map((transaction) => transaction.occurredAt.epochMilliseconds)
-    .toSorted((left, right) => left - right);
-  const format = (value: Option.Option<number>): string =>
+    .map((transaction) => transaction.occurredAt)
+    .toSorted((left, right) => left.epochMilliseconds - right.epochMilliseconds);
+  const format = (value: Option.Option<Transaction["occurredAt"]>): string =>
     Option.match(value, {
       onNone: () => "—",
-      onSome: (date) =>
-        new Intl.DateTimeFormat(locale, {
-          day: "numeric",
-          month: "short",
-          year: "numeric",
-          timeZone,
-        }).format(date),
+      onSome: (occurredAt) => formatOccurrence({ locale, occurredAt, timeZone }),
     });
   return {
     first: format(Option.fromNullishOr(dates[0])),
@@ -94,9 +88,6 @@ export const TransactionSummary = (props: SummaryProps): JSX.Element => {
     <section aria-label="Resumen de transacciones" className="flex flex-col gap-5">
       <div>
         <h2 className="text-xl font-semibold">Resumen</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Del periodo y los filtros seleccionados.
-        </p>
       </div>
       <dl>
         <SummaryLine label="Total de transacciones" value={String(props.transactions.length)} />
@@ -115,13 +106,25 @@ export const TransactionSummary = (props: SummaryProps): JSX.Element => {
       </dl>
       {currencies.map((currency) => (
         <div key={currency} className="border-t pt-4">
-          <h3 className="text-xs font-semibold tracking-wider text-muted-foreground">{currency}</h3>
+          {currencies.length > 1 ? (
+            <h3 className="text-xs font-semibold tracking-wider text-muted-foreground">
+              {currency}
+            </h3>
+          ) : null}
           <dl>
             {currencyFigures(
               props.transactions.filter((record) => record.money.currency === currency),
               props.locale
             ).map((figure) => (
-              <SummaryLine key={figure.label} {...figure} />
+              <SummaryLine
+                key={figure.label}
+                label={figure.label}
+                value={
+                  currency === "COP" && currencies.length === 1
+                    ? figure.value.replace("COP", "").trim()
+                    : figure.value
+                }
+              />
             ))}
           </dl>
         </div>

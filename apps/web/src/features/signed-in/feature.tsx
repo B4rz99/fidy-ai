@@ -1,8 +1,10 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
+  Cancel01Icon,
   CreditCardIcon,
   Home01Icon,
+  Menu01Icon,
   Settings01Icon,
   SparklesIcon,
 } from "@hugeicons/core-free-icons";
@@ -10,7 +12,7 @@ import { Link, Outlet, useRouter } from "@tanstack/react-router";
 import { Cause, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { useState } from "react";
-import type { JSX } from "react";
+import type { JSX, MouseEvent } from "react";
 import { useSession } from "@/session/session-context";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Button } from "@/ui/components/button";
@@ -38,6 +40,9 @@ const settingsLinks = [
   { to: "/settings/agents", label: "Agentes conectados" },
   { to: "/settings/recovery", label: "Recuperación" },
 ] as const;
+const dismissCompactNavigation = (event: MouseEvent<HTMLAnchorElement>): void => {
+  event.currentTarget.closest<HTMLElement>("[popover]")?.hidePopover();
+};
 const SignedInNavigation = ({
   onLogout,
   loggingOut,
@@ -45,15 +50,13 @@ const SignedInNavigation = ({
   onLogout: () => void;
   loggingOut: boolean;
 }>): JSX.Element => (
-  <nav
-    aria-label="Aplicación"
-    className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto px-3 pb-3 md:flex-col md:items-stretch"
-  >
+  <nav aria-label="Aplicación" className="flex min-w-0 flex-1 flex-col gap-2 px-3 pb-3">
     {navigationLinks.map((link) => (
       <Link
         key={link.to}
         to={link.to}
         search={{}}
+        onClick={dismissCompactNavigation}
         className="flex min-h-12 shrink-0 items-center gap-4 rounded-md px-4 py-3 text-base text-muted-foreground hover:bg-muted"
         activeProps={{ className: "bg-secondary text-secondary-foreground font-medium" }}
       >
@@ -72,6 +75,7 @@ const SignedInNavigation = ({
             key={link.to}
             to={link.to}
             search={{}}
+            onClick={dismissCompactNavigation}
             className="rounded-md px-4 py-2 text-sm hover:bg-muted"
             activeProps={{ className: "bg-secondary text-secondary-foreground" }}
           >
@@ -90,6 +94,40 @@ const SignedInNavigation = ({
       {loggingOut ? "Cerrando sesión…" : "Cerrar sesión"}
     </Button>
   </nav>
+);
+
+const CompactNavigation = ({
+  loggingOut,
+  onLogout,
+}: Readonly<{ loggingOut: boolean; onLogout: () => void }>): JSX.Element => (
+  <>
+    <div className="px-5 md:hidden">
+      <Button
+        variant="outline"
+        size="icon"
+        popoverTarget="signed-in-navigation"
+        aria-label="Menú de navegación"
+      >
+        <HugeiconsIcon
+          className="signed-in-menu-bars"
+          icon={Menu01Icon}
+          size={24}
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
+        <HugeiconsIcon
+          className="signed-in-menu-close"
+          icon={Cancel01Icon}
+          size={24}
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
+      </Button>
+    </div>
+    <div id="signed-in-navigation" className="signed-in-compact-navigation" popover="auto">
+      <SignedInNavigation loggingOut={loggingOut} onLogout={onLogout} />
+    </div>
+  </>
 );
 
 const SignedInShell = (): JSX.Element => {
@@ -117,14 +155,17 @@ const SignedInShell = (): JSX.Element => {
 
   return (
     <div className="signed-in-theme min-h-svh bg-background md:flex">
-      <aside className="flex border-b bg-muted/30 md:sticky md:top-0 md:h-svh md:w-60 md:flex-none md:flex-col md:border-r md:border-b-0">
+      <aside className="signed-in-sidebar flex items-center justify-between border-b bg-muted/30 md:sticky md:top-0 md:h-svh md:w-60 md:flex-none md:flex-col md:items-stretch md:border-r md:border-b-0">
         <Link className="flex shrink-0 flex-col items-start gap-2 px-6 py-4" to="/app/dashboard">
           <FidyWordmark />
           <span className="hidden text-xs text-muted-foreground md:block">
             Tu dinero, más claro
           </span>
         </Link>
-        <SignedInNavigation loggingOut={status.waiting} onLogout={onLogout} />
+        <div className="hidden min-h-0 flex-1 md:flex">
+          <SignedInNavigation loggingOut={status.waiting} onLogout={onLogout} />
+        </div>
+        <CompactNavigation loggingOut={status.waiting} onLogout={onLogout} />
         {failed ? (
           <Alert className="m-3" variant="destructive" role="alert">
             <AlertTitle>No pudimos confirmar el cierre de sesión</AlertTitle>

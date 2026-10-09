@@ -218,13 +218,47 @@
   padding: 3px 12px;
   font-size: 16px;
 }
-@container ledger (width < 400px) {
-  .transaction-ledger [data-slot="table"],
-  .transaction-ledger [data-slot="table-body"] {
-    display: block;
+.transaction-ledger [data-slot="table"] {
+  display: block;
+}
+.transaction-ledger [data-slot="table-body"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+}
+.transaction-ledger [data-slot="table-row"] {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+.transaction-ledger [data-slot="table-cell"] {
+  min-width: 0;
+}
+.transaction-ledger [data-date-group="true"] [data-slot="table-cell"] {
+  grid-column: 1 / -1;
+}
+@container ledger (width >= 440px) {
+  .transaction-ledger[data-type-visible="true"] [data-slot="table-body"] {
+    grid-template-columns: minmax(0, 1fr) max-content max-content;
   }
-  .transaction-ledger [data-slot="table-row"] {
-    display: grid;
+}
+@container ledger (width >= 800px) {
+  .transaction-ledger[data-category-visible="true"] [data-slot="table-body"] {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) max-content;
+  }
+  .transaction-ledger[data-category-visible="true"][data-type-visible="true"]
+    [data-slot="table-body"] {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) max-content max-content;
+  }
+}
+@container ledger (width < 700px) {
+  .ledger-actions > button {
+    flex: 1;
+    min-width: 0;
+  }
+}
+@container ledger (width < 400px) {
+  .transaction-ledger [data-slot="table-body"] {
     grid-template-columns: minmax(0, 1fr);
   }
   .transaction-ledger [data-slot="table-cell"] {
@@ -232,6 +266,11 @@
   }
   .transaction-ledger [data-slot="table-cell"]:last-child {
     padding-bottom: 10px;
+  }
+}
+@container ledger (width < 340px) {
+  .ledger-actions > button {
+    flex-basis: calc(50% - 12px);
   }
 }
 .transaction-ledger [data-slot="table-row"][data-state="selected"] {
@@ -397,4 +436,34 @@
   --error-bg: var(--destructive);
   --error-border: var(--on-pastel);
   --error-text: var(--on-pastel);
+}
+
+/* Same native floating menu composition as the public landing, with shared theme tokens. */
+.signed-in-compact-navigation {
+  inset: 84px 20px auto auto;
+  width: min(260px, calc(100vw - 40px));
+  max-height: calc(100dvh - 108px);
+  overflow-y: auto;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--background);
+  color: var(--foreground);
+  box-shadow: 0 12px 32px #00000024;
+}
+.signed-in-compact-navigation nav {
+  padding: 0;
+}
+.signed-in-menu-close,
+.signed-in-sidebar:has(.signed-in-compact-navigation:popover-open) .signed-in-menu-bars {
+  display: none;
+}
+.signed-in-sidebar:has(.signed-in-compact-navigation:popover-open) .signed-in-menu-close {
+  display: block;
+}
+@media (min-width: 768px) {
+  .signed-in-compact-navigation:popover-open {
+    display: none;
+  }
 }

@@ -406,3 +406,15 @@ shared full-height divider. Comfortable rows use 16px text and group by long loc
 dates with currency-specific daily net totals. The right rail shows transaction
 identity above correction fields, and a detailed summary when browsing. Preserve
 this composition when applying the shared light and Grafito theme tokens.
+
+Below 768px, application navigation uses the landing's floating, dismissible menu
+instead of a scrolling horizontal navigation bar. Transaction names and categories
+wrap when necessary. Columns share their alignment across rows, with Tipo visible
+from a 440px ledger width and a separate Categoría column from 800px. Smaller ledgers
+stack identity and amount below 400px; phone toolbars fill their available rows.
+
+The summary omits the transaction-count footer and supporting subtitle. First and
+last transaction dates use `dd-mm-yyyy`. A COP-only summary omits repeated currency
+codes and its currency heading; mixed-currency summaries retain separate labeled
+groups and explicit codes so amounts remain unambiguous. Exact fractional precision
+is preserved in every case.

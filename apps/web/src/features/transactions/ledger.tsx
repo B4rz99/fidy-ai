@@ -67,22 +67,22 @@ const TransactionRow = ({
         className="flex w-full min-w-0 items-center gap-3 rounded-md py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
       >
         <CategoryVisual label={row.categoryLabel} bubble large={false} />
-        <span className="w-0 min-w-0 flex-1">
-          <span className="block truncate">{row.counterpartyLabel}</span>
-          <span className="transaction-category-inline block truncate text-xs text-muted-foreground">
+        <span className="min-w-0 flex-1">
+          <span className="block break-words">{row.counterpartyLabel}</span>
+          <span className="transaction-category-inline block break-words text-xs text-muted-foreground">
             {row.categoryLabel}
           </span>
         </span>
       </button>
     </TableCell>
     <TableCell className="hidden @min-[800px]/ledger:table-cell">
-      <span className="flex items-center gap-4">
+      <span className="flex items-center gap-2">
         <CategoryVisual label={row.categoryLabel} bubble={false} large={false} />
-        <span className="truncate">{row.categoryLabel}</span>
+        <span className="break-words">{row.categoryLabel}</span>
       </span>
     </TableCell>
-    <TableCell className="hidden @min-[640px]/ledger:table-cell">
-      <span className="flex items-center gap-4">
+    <TableCell className="hidden @min-[440px]/ledger:table-cell">
+      <span className="flex items-center gap-2">
         <DirectionVisual inflow={row.direction === "inflow"} />
         {row.transactionTypeLabel}
       </span>
@@ -115,7 +115,7 @@ const LedgerHeader = ({
             className={cn(
               header.column.id === "categoryLabel" && "hidden @min-[800px]/ledger:table-cell",
               header.column.id === "transactionTypeLabel" &&
-                "hidden @min-[640px]/ledger:table-cell",
+                "hidden @min-[440px]/ledger:table-cell",
               header.column.id === "moneyText" && "text-right"
             )}
           >
@@ -195,7 +195,9 @@ const SortControl = ({
       render={<Button variant="outline" disabled={disabled} />}
       aria-label="Ordenar transacciones"
     >
-      {sortOptions.find((option) => option.value === sortValue(sorting))?.label ?? "Ordenar"}
+      <span className="min-w-0 truncate">
+        {sortOptions.find((option) => option.value === sortValue(sorting))?.label ?? "Ordenar"}
+      </span>
     </DropdownMenuTrigger>
     <DropdownMenuContent align="end" className="min-w-56">
       <DropdownMenuRadioGroup
@@ -234,7 +236,7 @@ const LedgerControls = ({
 }>): JSX.Element => (
   <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
     {toolbar}
-    <div className="flex flex-wrap items-center gap-3">
+    <div className="ledger-actions flex w-full flex-wrap items-center gap-3 @min-[700px]/ledger:w-auto">
       <Button variant="outline" disabled={disabled || empty} onClick={onEdit}>
         Editar
       </Button>

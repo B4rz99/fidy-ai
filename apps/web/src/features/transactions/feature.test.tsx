@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { BigDecimal, Cause, DateTime, Option, Predicate } from "effect";
+import { BigDecimal, Cause, DateTime, Effect, Option, Predicate } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TransactionListFeature, TransactionListView } from "./feature";
@@ -368,29 +368,43 @@ it("summarizes the visible records without combining different currencies", () =
   expect(summary.getByText("Última transacción")).toBeVisible();
 });
 
-it("filters the ledger from header tools and lets readers hide a column", () => {
-  seedResources();
-  render(<TransactionListFeature />);
-  fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
-  fireEvent.change(screen.getByLabelText("Buscar transacciones"), {
-    target: { value: "sin coincidencias" },
+const calendarClosed = (): Promise<void> =>
+  waitFor(() => {
+    expect(screen.queryByRole("dialog", { name: "Filtrar por fecha" })).not.toBeInTheDocument();
   });
-  expect(
-    screen.queryByRole("button", { name: "Ver transacción El Corral" })
-  ).not.toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText("Buscar transacciones"), { target: { value: "Corral" } });
-  expect(screen.getByRole("button", { name: "Ver transacción El Corral" })).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "Fecha" }));
-  fireEvent.change(screen.getByLabelText("Filtrar por fecha"), { target: { value: "2026-07-19" } });
-  expect(
-    screen.queryByRole("button", { name: "Ver transacción El Corral" })
-  ).not.toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText("Filtrar por fecha"), { target: { value: "2026-07-20" } });
-  expect(screen.getByRole("button", { name: "Ver transacción El Corral" })).toBeVisible();
-  fireEvent.click(screen.getByText("Columnas"));
-  fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Categoría" }));
-  expect(screen.queryByRole("columnheader", { name: "Categoría" })).not.toBeInTheDocument();
-});
+it("filters the ledger from header tools and lets readers hide a column", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(DateTime.makeUnsafe("2026-07-20T14:00:00Z").epochMilliseconds);
+      seedResources();
+      render(<TransactionListFeature />);
+      fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+      fireEvent.change(screen.getByLabelText("Buscar transacciones"), {
+        target: { value: "sin coincidencias" },
+      });
+      expect(
+        screen.queryByRole("button", { name: "Ver transacción El Corral" })
+      ).not.toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText("Buscar transacciones"), {
+        target: { value: "Corral" },
+      });
+      expect(screen.getByRole("button", { name: "Ver transacción El Corral" })).toBeVisible();
+      fireEvent.click(screen.getByRole("button", { name: "Fecha" }));
+      fireEvent.click(screen.getByRole("button", { name: /19 de julio de 2026/ }));
+      yield* Effect.tryPromise(calendarClosed);
+      expect(
+        screen.queryByRole("button", { name: "Ver transacción El Corral" })
+      ).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Fecha" }));
+      fireEvent.click(screen.getByRole("button", { name: /20 de julio de 2026/ }));
+      yield* Effect.tryPromise(calendarClosed);
+      expect(screen.getByRole("button", { name: "Ver transacción El Corral" })).toBeVisible();
+      fireEvent.click(screen.getByText("Columnas"));
+      fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Categoría" }));
+      expect(screen.queryByRole("columnheader", { name: "Categoría" })).not.toBeInTheDocument();
+    })
+  ));
 
 const waitForMenuClosed = (trigger: HTMLElement): Promise<void> =>
   waitFor(() => {
@@ -470,11 +484,11 @@ it("combines filters, keeps the summary in sync and sorts the visible rows", () 
           .getAllByRole("button", { name: /^Ver transacción/ })
           .map((button) => button.getAttribute("aria-label"))
       ).toEqual(["Ver transacción Éxito", "Ver transacción El Corral", "Ver transacción Acme"]);
-      fireEvent.change(screen.getByLabelText("Filtrar por tipo"), { target: { value: "outflow" } });
+      fireEvent.click(screen.getByRole("button", { name: "Filtrar por tipo" }));
+      fireEvent.click(screen.getByRole("menuitemradio", { name: "Gastos" }));
       fireEvent.click(screen.getByRole("button", { name: "Filtros" }));
-      fireEvent.change(screen.getByLabelText("Filtrar por categoría"), {
-        target: { value: market.id },
-      });
+      fireEvent.click(screen.getByRole("button", { name: "Filtrar por categoría" }));
+      fireEvent.click(screen.getByRole("menuitemradio", { name: "Mercado" }));
       expect(ledger.getAllByRole("button", { name: /^Ver transacción/ })).toHaveLength(1);
       expect(
         screen.queryByRole("button", { name: "Ver transacción Acme" })
@@ -486,4 +500,36 @@ it("combines filters, keeps the summary in sync and sorts the visible rows", () 
       expect(ledger.getAllByRole("button", { name: /^Ver transacción/ })).toHaveLength(3);
     }
   );
+});
+
+it("caps multiple selection and releases capacity when a row is deselected", () => {
+  seedResources();
+  const limit = 12;
+  queryMocks.values.set(
+    "listTransactions",
+    AsyncResult.success({
+      data: Array.from({ length: limit + 1 }, (_, index) => ({
+        ...transaction,
+        id: `record-${index}`,
+        counterparty: Option.some(`Compra ${index}`),
+      })),
+    })
+  );
+  render(<TransactionListFeature />);
+  fireEvent.click(screen.getByRole("button", { name: "Editar varias" }));
+  for (let index = 0; index < limit; index += 1) {
+    fireEvent.click(screen.getByRole("checkbox", { name: `Seleccionar Compra ${index}` }));
+  }
+  expect(screen.getByRole("checkbox", { name: "Seleccionar Compra 12" })).toHaveAttribute(
+    "aria-disabled",
+    "true"
+  );
+  fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar Compra 0" }));
+  expect(screen.getByRole("checkbox", { name: "Seleccionar Compra 12" })).not.toHaveAttribute(
+    "aria-disabled",
+    "true"
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Cancelar selección" }));
+  expect(screen.getByLabelText("Resumen de transacciones")).toBeVisible();
+  expect(screen.queryByRole("checkbox", { name: "Seleccionar Compra 0" })).not.toBeInTheDocument();
 });

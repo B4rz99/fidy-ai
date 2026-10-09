@@ -9,7 +9,13 @@ export const TransactionDateField = ({
   id,
   value,
   onChange,
-}: Readonly<{ id: string; value: string; onChange: (value: string) => void }>): JSX.Element => {
+  required,
+}: Readonly<{
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  required: boolean;
+}>): JSX.Element => {
   const label = DateTime.make(`${value}T00:00:00Z`).pipe(
     Option.map((date) =>
       new Intl.DateTimeFormat("es-CO", {
@@ -25,7 +31,7 @@ export const TransactionDateField = ({
     <div className="transaction-date-field">
       <Input
         id={id}
-        required
+        required={required}
         type="date"
         value={value}
         onChange={(event) => onChange(event.target.value)}

@@ -237,7 +237,7 @@
 .transaction-ledger [data-date-group="true"] [data-slot="table-cell"] {
   grid-column: 1 / -1;
 }
-@container ledger (width >= 440px) {
+@container ledger (width >= 481px) {
   .transaction-ledger[data-type-visible="true"] [data-slot="table-body"] {
     grid-template-columns: minmax(0, 1fr) max-content max-content;
   }

@@ -7,7 +7,7 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import { DateTime, Deferred, Effect, Layer } from "effect";
+import { DateTime, Deferred, Effect, Layer, Option, Schema } from "effect";
 import {
   HttpClient,
   HttpClientError,
@@ -23,6 +23,7 @@ const findDetailAmount = (amount: string): Promise<HTMLElement> =>
     within(screen.getByRole("region", { name: "Detalle de transacción" })).getByText(amount)
   );
 const createdStatus = 201;
+const invalidStatus = 400;
 const categoryId = "24000000-0000-4000-8000-000000000001";
 const transactionId = "24000000-0000-4000-8000-000000000002";
 const storedTransaction = {
@@ -35,12 +36,12 @@ const storedTransaction = {
   createdAt: "2026-10-09T12:30:00Z",
   revision: 0,
 };
-const jsonResponse = (
+const wireResponse = (
   request: HttpClientRequest.HttpClientRequest,
   data: unknown,
   status = 200
 ): HttpClientResponse.HttpClientResponse => {
-  const bytes = new TextEncoder().encode(JSON.stringify({ data, next: [] }));
+  const bytes = new TextEncoder().encode(JSON.stringify(data));
   const realmBytes = new window.Uint8Array(bytes.length);
   realmBytes.set(bytes);
   const response = new Response(bytes, { status, headers: { "content-type": "application/json" } });
@@ -49,6 +50,11 @@ const jsonResponse = (
   });
   return HttpClientResponse.fromWeb(request, response);
 };
+const jsonResponse = (
+  request: HttpClientRequest.HttpClientRequest,
+  data: unknown,
+  status = 200
+): HttpClientResponse.HttpClientResponse => wireResponse(request, { data, next: [] }, status);
 const mountJourney = (client: HttpClient.HttpClient): void => {
   const options = {
     apiOrigin: "https://api.test.fidyapp.com",
@@ -350,3 +356,179 @@ it("rejects invalid corrections and discards cancelled field changes", () =>
       expect(screen.getByLabelText("Notas (opcional)")).toHaveValue("");
     })
   ));
+
+const bulkRequest = Schema.fromJsonString(
+  Schema.Struct({
+    calls: Schema.Array(
+      Schema.Struct({
+        callId: Schema.String,
+        operation: Schema.String,
+        input: Schema.Struct({
+          params: Schema.Struct({ id: Schema.String }),
+          payload: Schema.Struct({
+            expectedRevision: Schema.Finite,
+            changes: Schema.Struct({ notes: Schema.String }),
+          }),
+        }),
+      })
+    ),
+  })
+);
+const bulkRejection = (
+  request: HttpClientRequest.HttpClientRequest
+): HttpClientResponse.HttpClientResponse =>
+  wireResponse(
+    request,
+    {
+      error: {
+        code: "validation_failed",
+        message: "Revision changed",
+        failedCallIndex: 1,
+        operation: "transactions.updateTransaction",
+        fields: [],
+      },
+      next: [],
+    },
+    invalidStatus
+  );
+const bulkUser = {
+  id: "24000000-0000-4000-8000-000000000241",
+  serviceMarket: "CO",
+  locale: "es-CO",
+  timeZone: "America/Bogota",
+  trialPeriod: { startedAt: "2026-10-01T00:00:00Z", endsAt: "2026-10-08T00:00:00Z" },
+  createdAt: "2026-10-01T00:00:00Z",
+};
+const bulkRecords = [
+  storedTransaction,
+  {
+    ...storedTransaction,
+    id: "24000000-0000-4000-8000-000000000003",
+    counterparty: "Éxito",
+    revision: 4,
+  },
+  {
+    ...storedTransaction,
+    id: "24000000-0000-4000-8000-000000000004",
+    counterparty: "Transporte",
+  },
+];
+const renderBulkJourney = (
+  result: "saved" | "rejected" | "uncertain" = "saved"
+): Readonly<{ bodies: string[] }> => {
+  let records = [...bulkRecords];
+  const bodies: string[] = [];
+  const client = HttpClient.make((request) => {
+    if (request.url.endsWith("/operations/atomic-batch")) {
+      if (request.body._tag === "Uint8Array") {
+        bodies.push(new TextDecoder().decode(request.body.body));
+      }
+      if (result === "uncertain") {
+        return Effect.fail(
+          new HttpClientError.HttpClientError({
+            reason: new HttpClientError.TransportError({ request }),
+          })
+        );
+      }
+      if (result === "rejected") return Effect.succeed(bulkRejection(request));
+      const { calls } = Schema.decodeSync(bulkRequest)(
+        Option.getOrThrow(Option.fromNullishOr(bodies[0]))
+      );
+      records = records.map((record) =>
+        calls.some((call) => call.input.params.id === record.id)
+          ? { ...record, notes: "Compra revisada", revision: record.revision + 1 }
+          : record
+      );
+      return Effect.succeed(
+        jsonResponse(request, {
+          results: calls.map((call) => ({
+            callId: call.callId,
+            operation: call.operation,
+            output: {
+              data: records.find((record) => record.id === call.input.params.id),
+              next: [],
+            },
+          })),
+        })
+      );
+    }
+    if (request.url.endsWith("/user")) return Effect.succeed(jsonResponse(request, bulkUser));
+    if (request.url.endsWith("/categories")) {
+      return Effect.succeed(jsonResponse(request, [{ id: categoryId, label: "Restaurantes" }]));
+    }
+    return Effect.succeed(jsonResponse(request, records));
+  });
+  mountJourney(client);
+  return { bodies };
+};
+const selectBulkRecords: Effect.Effect<void> = Effect.gen(function* () {
+  fireEvent.click(
+    yield* Effect.tryPromise(() => screen.findByRole("button", { name: "Editar varias" }))
+  );
+  expect(screen.queryByLabelText("Resumen de transacciones")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Editar selección" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar El Corral" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar Éxito" }));
+  expect(screen.getByText("2 seleccionadas")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Editar selección" }));
+}).pipe(Effect.orDie);
+it("corrects only selected records atomically at their observed revisions", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const requests = renderBulkJourney();
+      yield* selectBulkRecords;
+      fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+      expect(screen.getByRole("alert")).toHaveTextContent("Revisa los campos");
+      expect(requests.bodies).toHaveLength(0);
+      fireEvent.change(screen.getByLabelText("Notas"), { target: { value: "Compra revisada" } });
+      fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+      yield* Effect.tryPromise(() => screen.findByLabelText("Resumen de transacciones"));
+      expect(requests.bodies).toHaveLength(1);
+      const batch = yield* Schema.decodeEffect(bulkRequest)(
+        Option.getOrThrow(Option.fromNullishOr(requests.bodies[0]))
+      );
+      expect(batch.calls.map((call) => ({ operation: call.operation, input: call.input }))).toEqual(
+        [
+          {
+            operation: "transactions.updateTransaction",
+            input: {
+              params: { id: transactionId },
+              payload: { expectedRevision: 0, changes: { notes: "Compra revisada" } },
+            },
+          },
+          {
+            operation: "transactions.updateTransaction",
+            input: {
+              params: { id: "24000000-0000-4000-8000-000000000003" },
+              payload: { expectedRevision: 4, changes: { notes: "Compra revisada" } },
+            },
+          },
+        ]
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Ver transacción Éxito" }));
+      yield* Effect.tryPromise(() => screen.findByText("Compra revisada"));
+      fireEvent.click(screen.getByRole("button", { name: "Cerrar detalle" }));
+      fireEvent.click(screen.getByRole("button", { name: "Ver transacción Transporte" }));
+      expect(screen.queryByText("Compra revisada")).not.toBeInTheDocument();
+    })
+  ));
+it.each(["rejected", "uncertain"] as const)("blocks replay after a %s bulk save", (result) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const requests = renderBulkJourney(result);
+      yield* selectBulkRecords;
+      fireEvent.change(screen.getByLabelText("Notas"), { target: { value: "Compra revisada" } });
+      fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+      yield* Effect.tryPromise(() => screen.findByRole("button", { name: "Actualizar historial" }));
+      expect(screen.getByRole("button", { name: "Guardar cambios" })).toBeDisabled();
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        result === "rejected" ? "No se guardó ningún cambio" : "No pudimos confirmar los cambios"
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+      expect(requests.bodies).toHaveLength(1);
+      fireEvent.click(screen.getByRole("button", { name: "Actualizar historial" }));
+      yield* Effect.tryPromise(() => screen.findByLabelText("Resumen de transacciones"));
+      expect(requests.bodies).toHaveLength(1);
+    })
+  )
+);

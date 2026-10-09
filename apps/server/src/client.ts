@@ -10,6 +10,9 @@ export {
 export { FidyApi, operationCatalog, type FidyApiGroups, type OperationId } from "~/shell/api";
 export { decideOperationAccess } from "~/shell/canonical-policy/operations";
 export {
+  AtomicBatchCallId,
+  AtomicBatchRejected,
+  maximumAtomicBatchCalls,
   atomicBatchChildOperations,
   atomicBatchOperation,
   getAtomicBatchInputSchema,

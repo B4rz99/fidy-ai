@@ -2,12 +2,14 @@ import { Toaster, toast } from "sonner";
 import { useState } from "react";
 import type { JSX, ReactNode } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Calendar03Icon, FilterHorizontalIcon, Search01Icon } from "@hugeicons/core-free-icons";
+import { FilterHorizontalIcon, Search01Icon } from "@hugeicons/core-free-icons";
 import { DateTime, Option } from "effect";
 import { Button } from "@/ui/components/button";
 import { Input } from "@/ui/components/input";
-import { NativeSelect, NativeSelectOption } from "@/ui/components/native-select";
-import type { FidyClient } from "@/transport/client";
+import { TransactionFilterDropdown } from "./filter-dropdown";
+import { TransactionDateFilter } from "./date-filter";
+import { type FidyClient, maximumAtomicBatchCalls } from "@/transport/client";
+import { BulkTransactionCorrection } from "./bulk-correction";
 import { TransactionDetail } from "./detail";
 import { TransactionSummary } from "./summary";
 import { TransactionLedger } from "./ledger";
@@ -48,7 +50,7 @@ const hasFilters = (filters: WorkspaceFilters): boolean =>
   filters.direction !== "all" ||
   filters.categoryId !== "all" ||
   filters.date !== "";
-type FilterTool = "search" | "date" | "category";
+type FilterTool = "search" | "category";
 const matchesFilters = (
   transaction: Transaction,
   filters: WorkspaceFilters,
@@ -79,20 +81,17 @@ const CategoryFilter = ({
   disabled: boolean;
   onChange: (value: string) => void;
 }>): JSX.Element => (
-  <NativeSelect
-    aria-label="Filtrar por categoría"
-    size="default"
+  <TransactionFilterDropdown
+    id="transaction-category-filter"
+    label="Filtrar por categoría"
     value={value}
     disabled={disabled}
-    onChange={(event) => onChange(event.target.value)}
-  >
-    <NativeSelectOption value="all">Todas las categorías</NativeSelectOption>
-    {categories.map((category) => (
-      <NativeSelectOption key={category.id} value={category.id}>
-        {category.label}
-      </NativeSelectOption>
-    ))}
-  </NativeSelect>
+    onChange={onChange}
+    options={[
+      { value: "all", label: "Todas las categorías" },
+      ...categories.map((category) => ({ value: category.id, label: category.label })),
+    ]}
+  />
 );
 const WorkspaceToolbar = ({
   filters,
@@ -118,32 +117,24 @@ const WorkspaceToolbar = ({
         onChange={(event) => onFilters({ ...filters, search: event.target.value })}
       />
     ) : null}
-    <NativeSelect
-      aria-label="Filtrar por tipo"
-      size="default"
+    <TransactionFilterDropdown
+      id="transaction-type-filter"
+      label="Filtrar por tipo"
       value={filters.direction}
       disabled={disabled}
-      onChange={(event) => onFilters({ ...filters, direction: event.target.value })}
-    >
-      <NativeSelectOption value="all">Todas las transacciones</NativeSelectOption>
-      <NativeSelectOption value="outflow">Gastos</NativeSelectOption>
-      <NativeSelectOption value="inflow">Ingresos</NativeSelectOption>
-    </NativeSelect>
+      onChange={(direction) => onFilters({ ...filters, direction })}
+      options={[
+        { value: "all", label: "Todas las transacciones" },
+        { value: "outflow", label: "Gastos" },
+        { value: "inflow", label: "Ingresos" },
+      ]}
+    />
     {tool === "category" ? (
       <CategoryFilter
         categories={categories}
         value={filters.categoryId}
         disabled={disabled}
         onChange={(categoryId) => onFilters({ ...filters, categoryId })}
-      />
-    ) : null}
-    {tool === "date" ? (
-      <Input
-        aria-label="Filtrar por fecha"
-        type="date"
-        value={filters.date}
-        disabled={disabled}
-        onChange={(event) => onFilters({ ...filters, date: event.target.value })}
       />
     ) : null}
     {hasFilters(filters) ? (
@@ -154,6 +145,7 @@ const WorkspaceToolbar = ({
   </div>
 );
 const panelLocked = (panel: TransactionPanel): boolean =>
+  (panel._tag === "Bulk" && panel.status === "saving") ||
   (panel._tag === "Capture" && panel.status === "saving") ||
   (panel._tag === "Detail" && panel.mode._tag === "Editing" && panel.mode.status === "saving");
 type PanelProps = WorkspaceProps &
@@ -246,7 +238,64 @@ const DetailPanel = ({
     />
   );
 };
+const BulkPanel = (
+  props: PanelProps & Readonly<{ panel: Extract<TransactionPanel, { _tag: "Bulk" }> }>
+): JSX.Element => {
+  const { panel } = props;
+  const selected = props.transactions.filter((record) => panel.ids.includes(record.id));
+  const close = (): void => props.onPanel({ _tag: "Summary" });
+  if (panel.stage === "selecting") {
+    return props.renderPanel(
+      <section aria-label="Selección de transacciones" className="flex flex-col gap-5">
+        <h2 className="text-xl font-semibold">Editar varias transacciones</h2>
+        <p>
+          Selecciona las transacciones que quieres corregir. Puedes elegir hasta{" "}
+          {maximumAtomicBatchCalls}.
+        </p>
+        <p aria-live="polite">{selected.length} seleccionadas</p>
+        <ul className="flex flex-col gap-2">
+          {selected.map((record) => (
+            <li key={record.id}>
+              {Option.getOrElse(record.counterparty, () => "Contraparte no identificada")}
+            </li>
+          ))}
+        </ul>
+        <Button
+          disabled={selected.length === 0}
+          onClick={() => props.onPanel({ ...panel, stage: "editing" })}
+        >
+          Editar selección
+        </Button>
+        <Button variant="outline" onClick={close}>
+          Cancelar
+        </Button>
+      </section>
+    );
+  }
+  return (
+    <BulkTransactionCorrection
+      renderForm={props.renderPanel}
+      transactions={selected}
+      categories={props.categories}
+      apiClient={props.apiClient}
+      timeZone={props.currentUser.timeZone}
+      status={panel.status}
+      onStatus={(status) => props.onPanel({ ...panel, status })}
+      onCancel={close}
+      onRefresh={() => {
+        close();
+        props.onRefresh();
+      }}
+      onSaved={() => {
+        toast.success("Cambios guardados");
+        close();
+        props.onRefresh();
+      }}
+    />
+  );
+};
 const WorkspacePanel = (props: PanelProps): JSX.Element => {
+  if (props.panel._tag === "Bulk") return <BulkPanel {...props} panel={props.panel} />;
   if (props.panel._tag === "Capture") return <CapturePanel {...props} panel={props.panel} />;
   if (props.panel._tag === "Detail") return <DetailPanel {...props} panel={props.panel} />;
   return props.renderPanel(
@@ -262,8 +311,12 @@ const WorkspaceHeader = ({
   disabled,
   onCapture,
   onTool,
+  date,
+  onDate,
 }: Readonly<{
   onTool: (tool: FilterTool) => void;
+  date: string;
+  onDate: (date: string) => void;
   period: WorkspaceProps["period"];
   disabled: boolean;
   onCapture: () => void;
@@ -287,15 +340,12 @@ const WorkspaceHeader = ({
         />
         Buscar
       </Button>
-      <Button variant="outline" disabled={disabled} onClick={() => onTool("date")}>
-        <HugeiconsIcon
-          icon={Calendar03Icon}
-          strokeWidth={1.5}
-          data-icon="inline-start"
-          aria-hidden="true"
-        />
-        Fecha
-      </Button>
+      <TransactionDateFilter
+        value={date}
+        timeZone={period.timeZone}
+        disabled={disabled}
+        onChange={onDate}
+      />
       <Button variant="outline" disabled={disabled} onClick={() => onTool("category")}>
         <HugeiconsIcon
           icon={FilterHorizontalIcon}
@@ -311,33 +361,46 @@ const WorkspaceHeader = ({
     </div>
   </header>
 );
-const editSelected = (
-  panel: TransactionPanel,
-  rows: ReturnType<typeof presentTransactionRows>,
-  onPanel: (panel: TransactionPanel) => void
-): void => {
-  const selected =
-    panel._tag === "Detail"
-      ? Option.some(panel.id)
-      : Option.fromNullishOr(rows[0]).pipe(Option.map((row) => row.id));
-  Option.map(selected, (id) =>
-    onPanel({ _tag: "Detail", id, mode: { _tag: "Editing", status: "idle" } })
-  );
-};
 const renderResponsivePanel = (
   content: JSX.Element,
   panel: TransactionPanel,
   controls: Readonly<{ locked: boolean; onPanel: (panel: TransactionPanel) => void }>
 ): JSX.Element => (
   <ResponsiveTransactionPanel
-    open={panel._tag !== "Summary"}
+    open={panel._tag !== "Summary" && !(panel._tag === "Bulk" && panel.stage === "selecting")}
     locked={controls.locked}
-    title={panel._tag === "Capture" ? "Registrar transacción" : "Detalle de transacción"}
+    title={panelTitle(panel)}
     onClose={() => controls.onPanel({ _tag: "Summary" })}
   >
     {content}
   </ResponsiveTransactionPanel>
 );
+const panelEditing = (panel: TransactionPanel): boolean => {
+  if (panel._tag === "Capture") return true;
+  if (panel._tag === "Bulk") return panel.stage === "editing";
+  return panel._tag === "Detail" && panel.mode._tag === "Editing";
+};
+const bulkSelection = (
+  panel: TransactionPanel,
+  onPanel: (panel: TransactionPanel) => void
+): React.ComponentProps<typeof TransactionLedger>["selection"] => ({
+  active: panel._tag === "Bulk",
+  ids: panel._tag === "Bulk" ? panel.ids : [],
+  limit: maximumAtomicBatchCalls,
+  onToggle: (id) => {
+    if (panel._tag !== "Bulk" || panel.stage !== "selecting") return;
+    if (panel.ids.includes(id)) {
+      onPanel({ ...panel, ids: panel.ids.filter((item) => item !== id) });
+    } else if (panel.ids.length < maximumAtomicBatchCalls) {
+      onPanel({ ...panel, ids: [...panel.ids, id] });
+    }
+  },
+});
+const panelTitle = (panel: TransactionPanel): string => {
+  if (panel._tag === "Capture") return "Registrar transacción";
+  if (panel._tag === "Bulk") return "Editar transacciones";
+  return "Detalle de transacción";
+};
 const WorkspaceContent = ({
   props,
   panel,
@@ -358,8 +421,7 @@ const WorkspaceContent = ({
   rows: ReturnType<typeof presentTransactionRows>;
 }>): JSX.Element => {
   const locked = panelLocked(panel);
-  const editing =
-    panel._tag === "Capture" || (panel._tag === "Detail" && panel.mode._tag === "Editing");
+  const editing = panelEditing(panel);
   return (
     <div className="grid items-stretch xl:grid-cols-[minmax(0,1fr)_24rem]">
       <div className="min-w-0 p-5">
@@ -374,7 +436,14 @@ const WorkspaceContent = ({
             />
           }
           canEdit={props.editable}
-          onEdit={() => editSelected(panel, rows, onPanel)}
+          onEdit={() =>
+            onPanel(
+              panel._tag === "Bulk"
+                ? { _tag: "Summary" }
+                : { _tag: "Bulk", ids: [], stage: "selecting", status: "idle" }
+            )
+          }
+          selection={bulkSelection(panel, onPanel)}
           rows={rows}
           locale={props.currentUser.locale}
           selected={panel._tag === "Detail" ? Option.some(panel.id) : Option.none()}
@@ -407,13 +476,14 @@ export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
     timeZone: props.currentUser.timeZone,
     counterpartyFallback: "Contraparte no identificada",
   });
-  const editing =
-    panel._tag === "Capture" || (panel._tag === "Detail" && panel.mode._tag === "Editing");
+  const editing = panelEditing(panel);
   return (
     <>
       <Toaster position="bottom-right" richColors />
       <main className="flex w-full flex-col">
         <WorkspaceHeader
+          date={filters.date}
+          onDate={(date) => onFilters({ ...filters, date })}
           onTool={(next) => setTool(tool === next ? "closed" : next)}
           period={props.period}
           disabled={editing || !props.editable}

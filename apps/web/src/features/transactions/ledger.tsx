@@ -18,6 +18,7 @@ import {
 import { Fragment, useMemo, useState } from "react";
 import type { JSX } from "react";
 import { BigDecimal, Option } from "effect";
+import { Checkbox } from "@/ui/components/checkbox";
 import { Button } from "@/ui/components/button";
 import {
   Table,
@@ -49,39 +50,79 @@ type LedgerProps = Readonly<{
   toolbar: JSX.Element;
   onEdit: () => void;
   canEdit: boolean;
+  selection: Readonly<{
+    active: boolean;
+    ids: ReadonlyArray<string>;
+    onToggle: (id: string) => void;
+    limit: number;
+  }>;
 }>;
+const TransactionIdentity = ({
+  row,
+  selected,
+  onSelect,
+  disabled,
+  selection,
+}: Readonly<{ row: TransactionListRow }> &
+  Pick<LedgerProps, "selected" | "onSelect" | "disabled" | "selection">): JSX.Element => {
+  const atLimit = selection.ids.length >= selection.limit && !selection.ids.includes(row.id);
+  return (
+    <TableCell>
+      <div className="flex min-w-0 items-center gap-3">
+        {selection.active ? (
+          <Checkbox
+            aria-label={`Seleccionar ${row.counterpartyLabel}`}
+            checked={selection.ids.includes(row.id)}
+            disabled={disabled || atLimit}
+            onCheckedChange={() => selection.onToggle(row.id)}
+          />
+        ) : null}
+        <button
+          type="button"
+          disabled={disabled || (selection.active && atLimit)}
+          onClick={() => (selection.active ? selection.onToggle(row.id) : onSelect(row.id))}
+          aria-label={`Ver transacción ${row.counterpartyLabel}`}
+          aria-expanded={Option.contains(selected, row.id)}
+          className="flex w-full min-w-0 items-center gap-3 rounded-md py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+        >
+          <CategoryVisual label={row.categoryLabel} bubble large={false} />
+          <span className="min-w-0 flex-1">
+            <span className="block break-words">{row.counterpartyLabel}</span>
+            <span className="transaction-category-inline block break-words text-xs text-muted-foreground">
+              {row.categoryLabel}
+            </span>
+          </span>
+        </button>
+      </div>
+    </TableCell>
+  );
+};
 const TransactionRow = ({
   row,
   selected,
   onSelect,
   disabled,
+  selection,
 }: Readonly<{ row: TransactionListRow }> & Omit<LedgerProps, "rows">): JSX.Element => (
-  <TableRow data-state={Option.contains(selected, row.id) ? "selected" : "idle"}>
-    <TableCell>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => onSelect(row.id)}
-        aria-label={`Ver transacción ${row.counterpartyLabel}`}
-        aria-expanded={Option.contains(selected, row.id)}
-        className="flex w-full min-w-0 items-center gap-3 rounded-md py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-      >
-        <CategoryVisual label={row.categoryLabel} bubble large={false} />
-        <span className="min-w-0 flex-1">
-          <span className="block break-words">{row.counterpartyLabel}</span>
-          <span className="transaction-category-inline block break-words text-xs text-muted-foreground">
-            {row.categoryLabel}
-          </span>
-        </span>
-      </button>
-    </TableCell>
+  <TableRow
+    data-state={
+      Option.contains(selected, row.id) || selection.ids.includes(row.id) ? "selected" : "idle"
+    }
+  >
+    <TransactionIdentity
+      row={row}
+      selected={selected}
+      onSelect={onSelect}
+      disabled={disabled}
+      selection={selection}
+    />
     <TableCell className="hidden @min-[800px]/ledger:table-cell">
       <span className="flex items-center gap-2">
         <CategoryVisual label={row.categoryLabel} bubble={false} large={false} />
         <span className="break-words">{row.categoryLabel}</span>
       </span>
     </TableCell>
-    <TableCell className="hidden @min-[440px]/ledger:table-cell">
+    <TableCell className="hidden @min-[481px]/ledger:table-cell">
       <span className="flex items-center gap-2">
         <DirectionVisual inflow={row.direction === "inflow"} />
         {row.transactionTypeLabel}
@@ -115,7 +156,7 @@ const LedgerHeader = ({
             className={cn(
               header.column.id === "categoryLabel" && "hidden @min-[800px]/ledger:table-cell",
               header.column.id === "transactionTypeLabel" &&
-                "hidden @min-[440px]/ledger:table-cell",
+                "hidden @min-[481px]/ledger:table-cell",
               header.column.id === "moneyText" && "text-right"
             )}
           >
@@ -225,6 +266,7 @@ const LedgerControls = ({
   toolbar,
   onEdit,
   empty,
+  selecting,
 }: Readonly<{
   table: ReactTable<TransactionListRow>;
   sorting: SortingState;
@@ -233,12 +275,13 @@ const LedgerControls = ({
   toolbar: JSX.Element;
   onEdit: () => void;
   empty: boolean;
+  selecting: boolean;
 }>): JSX.Element => (
   <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
     {toolbar}
     <div className="ledger-actions flex w-full flex-wrap items-center gap-3 @min-[700px]/ledger:w-auto">
       <Button variant="outline" disabled={disabled || empty} onClick={onEdit}>
-        Editar
+        {selecting ? "Cancelar selección" : "Editar varias"}
       </Button>
       <SortControl sorting={sorting} onSorting={onSorting} disabled={disabled} />
       <ColumnControls table={table} disabled={disabled} />
@@ -316,6 +359,7 @@ export const TransactionLedger = ({ rows, ...props }: LedgerProps): JSX.Element 
         toolbar={props.toolbar}
         onEdit={props.onEdit}
         empty={rows.length === 0 || !props.canEdit}
+        selecting={props.selection.active}
       />
       {rows.length === 0 ? (
         <div className="p-8">

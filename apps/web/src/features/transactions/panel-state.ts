@@ -6,5 +6,11 @@ export type DetailMode =
   | Readonly<{ _tag: "Editing"; status: CorrectionStatus }>;
 export type TransactionPanel =
   | Readonly<{ _tag: "Summary" }>
+  | Readonly<{
+      _tag: "Bulk";
+      ids: ReadonlyArray<string>;
+      stage: "selecting" | "editing";
+      status: CorrectionStatus;
+    }>
   | Readonly<{ _tag: "Capture"; status: CaptureStatus }>
   | Readonly<{ _tag: "Detail"; id: string; mode: DetailMode }>;

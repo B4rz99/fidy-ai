@@ -150,6 +150,7 @@ const DraftInputs = ({
     <div className="flex flex-col gap-2">
       <Label htmlFor="correction-date">Fecha</Label>
       <TransactionDateField
+        required
         id="correction-date"
         value={draft.date}
         onChange={(date) => onChange({ ...draft, date })}

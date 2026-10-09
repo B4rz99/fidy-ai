@@ -81,7 +81,7 @@ describe("current-month Transaction presentation", () => {
       ],
     });
 
-    expect(rows).toEqual([
+    expect(rows).toMatchObject([
       {
         id: "24000000-0000-4000-8000-000000000002",
         categoryLabel: "Restaurantes",
@@ -89,6 +89,8 @@ describe("current-month Transaction presentation", () => {
         direction: "outflow",
         transactionTypeLabel: "Gasto",
         moneyText: "COP 25.000,00",
+        money: { amount: BigDecimal.fromStringUnsafe("25000"), currency: "COP" },
+        dateLabel: "20 de julio de 2026",
         occurredOnText: "20-07-2026",
       },
       {
@@ -98,6 +100,8 @@ describe("current-month Transaction presentation", () => {
         direction: "inflow",
         transactionTypeLabel: "Ingreso",
         moneyText: "USD 19,90",
+        money: { amount: BigDecimal.fromStringUnsafe("19.9"), currency: "USD" },
+        dateLabel: "20 de julio de 2026",
         occurredOnText: "20-07-2026",
       },
     ]);

@@ -32,12 +32,12 @@ export const ResponsiveTransactionPanel = ({
   const desktop = useSyncExternalStore(subscribe, isDesktop);
   if (desktop) {
     return (
-      <aside className="self-start rounded-xl border bg-card p-5 xl:sticky xl:top-6">
+      <aside className="self-stretch border-l bg-card p-6 xl:sticky xl:top-0 xl:min-h-[calc(100svh-72px)]">
         {children}
       </aside>
     );
   }
-  if (!open) return <aside className="rounded-xl border bg-card p-5">{children}</aside>;
+  if (!open) return <aside className="border-t bg-card p-5">{children}</aside>;
   return (
     <Sheet
       open={open}
@@ -48,6 +48,7 @@ export const ResponsiveTransactionPanel = ({
       <SheetContent
         side="right"
         showCloseButton={false}
+        appearance="application"
         className="overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:max-w-none"
       >
         <SheetHeader>

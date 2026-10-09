@@ -1,5 +1,5 @@
 import { RegistryProvider } from "@effect/atom-react";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import {
   RouterProvider,
   createMemoryHistory,
@@ -18,6 +18,10 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { makeFidyClient, makeHostedTurnClient, makeWebAuthClient } from "@/transport/client";
 import { TransactionListFeature } from "./feature";
 
+const findDetailAmount = (amount: string): Promise<HTMLElement> =>
+  waitFor(() =>
+    within(screen.getByRole("region", { name: "Detalle de transacción" })).getByText(amount)
+  );
 const createdStatus = 201;
 const categoryId = "24000000-0000-4000-8000-000000000001";
 const transactionId = "24000000-0000-4000-8000-000000000002";
@@ -156,7 +160,7 @@ it("corrects the selected transaction and refreshes the same history entry", () 
       fireEvent.click(screen.getByRole("button", { name: "Cerrar detalle" }));
       expect(
         yield* Effect.tryPromise(() =>
-          within(screen.getByLabelText("Transacciones del mes")).findByText("−COP 30.000,00")
+          within(screen.getByLabelText("Transacciones del mes")).findByText("COP 30.000,00")
         )
       ).toBeVisible();
       expect(screen.getAllByRole("button", { name: "Ver transacción El Corral" })).toHaveLength(1);
@@ -186,7 +190,7 @@ it("keeps an uncertain correction from being submitted a second time", () =>
       expect(requests.updates()).toBe(1);
       fireEvent.click(screen.getByRole("button", { name: "Actualizar historial" }));
       fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
-      expect(yield* Effect.tryPromise(() => screen.findByText("COP 25.000,00"))).toBeVisible();
+      expect(yield* Effect.tryPromise(() => findDetailAmount("COP 25.000,00"))).toBeVisible();
     })
   ));
 
@@ -209,7 +213,9 @@ it("records a transaction, shows the saved history entry and opens its details",
       expect(screen.getByLabelText("Resumen de transacciones")).toBeVisible();
       fireEvent.click(row);
       expect(
-        within(screen.getByLabelText("Detalle de transacción")).getByText("COP 45.000,00")
+        within(screen.getByRole("region", { name: "Detalle de transacción" })).getByText(
+          "COP 45.000,00"
+        )
       ).toBeVisible();
     })
   ));
@@ -301,7 +307,7 @@ it("finishes a pending correction after crossing the responsive breakpoint", () 
       resize(false);
       expect(screen.getByLabelText("Monto en COP")).toHaveValue("30000");
       yield* Deferred.succeed(complete, undefined);
-      expect(yield* Effect.tryPromise(() => screen.findByText("COP 30.000,00"))).toBeVisible();
+      expect(yield* Effect.tryPromise(() => findDetailAmount("COP 30.000,00"))).toBeVisible();
       expect(requests.updates()).toBe(1);
     })
   ));

@@ -1,7 +1,9 @@
 import { Toaster, toast } from "sonner";
 import { useState } from "react";
 import type { JSX, ReactNode } from "react";
-import { Option } from "effect";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Calendar03Icon, FilterHorizontalIcon, Search01Icon } from "@hugeicons/core-free-icons";
+import { DateTime, Option } from "effect";
 import { Button } from "@/ui/components/button";
 import { Input } from "@/ui/components/input";
 import { NativeSelect, NativeSelectOption } from "@/ui/components/native-select";
@@ -29,8 +31,18 @@ type WorkspaceProps = Readonly<{
   onRefresh: () => void;
   editable: boolean;
 }>;
-type WorkspaceFilters = Readonly<{ search: string; direction: string; categoryId: string }>;
-const matchesFilters = (transaction: Transaction, filters: WorkspaceFilters): boolean => {
+type WorkspaceFilters = Readonly<{
+  search: string;
+  direction: string;
+  categoryId: string;
+  date: string;
+}>;
+type FilterTool = "search" | "date" | "category";
+const matchesFilters = (
+  transaction: Transaction,
+  filters: WorkspaceFilters,
+  timeZone: string
+): boolean => {
   const text =
     `${Option.getOrElse(transaction.counterparty, () => "")} ${Option.getOrElse(transaction.notes, () => "")}`.toLocaleLowerCase(
       "es-CO"
@@ -38,29 +50,63 @@ const matchesFilters = (transaction: Transaction, filters: WorkspaceFilters): bo
   return (
     text.includes(filters.search.trim().toLocaleLowerCase("es-CO")) &&
     (filters.direction === "all" || transaction.direction === filters.direction) &&
-    (filters.categoryId === "all" || transaction.categoryId === filters.categoryId)
+    (filters.categoryId === "all" || transaction.categoryId === filters.categoryId) &&
+    (filters.date === "" ||
+      DateTime.formatIsoDate(
+        DateTime.setZone(transaction.occurredAt, DateTime.zoneMakeNamedUnsafe(timeZone))
+      ) === filters.date)
   );
 };
+const CategoryFilter = ({
+  categories,
+  value,
+  disabled,
+  onChange,
+}: Readonly<{
+  categories: ReadonlyArray<Category>;
+  value: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}>): JSX.Element => (
+  <NativeSelect
+    aria-label="Filtrar por categoría"
+    size="default"
+    value={value}
+    disabled={disabled}
+    onChange={(event) => onChange(event.target.value)}
+  >
+    <NativeSelectOption value="all">Todas las categorías</NativeSelectOption>
+    {categories.map((category) => (
+      <NativeSelectOption key={category.id} value={category.id}>
+        {category.label}
+      </NativeSelectOption>
+    ))}
+  </NativeSelect>
+);
 const WorkspaceToolbar = ({
   filters,
   onFilters,
   categories,
   disabled,
+  tool,
 }: Readonly<{
+  tool: FilterTool | "closed";
   filters: WorkspaceFilters;
   onFilters: (filters: WorkspaceFilters) => void;
   categories: ReadonlyArray<Category>;
   disabled: boolean;
 }>): JSX.Element => (
-  <div className="flex flex-wrap items-center gap-3 border-b p-4">
-    <Input
-      aria-label="Buscar transacciones"
-      placeholder="Buscar contraparte o notas…"
-      className="min-w-40 flex-1"
-      value={filters.search}
-      disabled={disabled}
-      onChange={(event) => onFilters({ ...filters, search: event.target.value })}
-    />
+  <div className="flex flex-wrap items-center gap-3">
+    {tool === "search" ? (
+      <Input
+        aria-label="Buscar transacciones"
+        placeholder="Buscar"
+        className="min-w-40 flex-1"
+        value={filters.search}
+        disabled={disabled}
+        onChange={(event) => onFilters({ ...filters, search: event.target.value })}
+      />
+    ) : null}
     <NativeSelect
       aria-label="Filtrar por tipo"
       size="default"
@@ -72,20 +118,23 @@ const WorkspaceToolbar = ({
       <NativeSelectOption value="outflow">Gastos</NativeSelectOption>
       <NativeSelectOption value="inflow">Ingresos</NativeSelectOption>
     </NativeSelect>
-    <NativeSelect
-      aria-label="Filtrar por categoría"
-      size="default"
-      value={filters.categoryId}
-      disabled={disabled}
-      onChange={(event) => onFilters({ ...filters, categoryId: event.target.value })}
-    >
-      <NativeSelectOption value="all">Todas las categorías</NativeSelectOption>
-      {categories.map((category) => (
-        <NativeSelectOption key={category.id} value={category.id}>
-          {category.label}
-        </NativeSelectOption>
-      ))}
-    </NativeSelect>
+    {tool === "category" ? (
+      <CategoryFilter
+        categories={categories}
+        value={filters.categoryId}
+        disabled={disabled}
+        onChange={(categoryId) => onFilters({ ...filters, categoryId })}
+      />
+    ) : null}
+    {tool === "date" ? (
+      <Input
+        aria-label="Filtrar por fecha"
+        type="date"
+        value={filters.date}
+        disabled={disabled}
+        onChange={(event) => onFilters({ ...filters, date: event.target.value })}
+      />
+    ) : null}
   </div>
 );
 const panelLocked = (panel: TransactionPanel): boolean =>
@@ -196,24 +245,67 @@ const WorkspaceHeader = ({
   period,
   disabled,
   onCapture,
+  onTool,
 }: Readonly<{
+  onTool: (tool: FilterTool) => void;
   period: WorkspaceProps["period"];
   disabled: boolean;
   onCapture: () => void;
 }>): JSX.Element => (
-  <header className="flex flex-wrap items-center justify-between gap-4">
+  <header className="flex min-h-18 flex-wrap items-center justify-between gap-4 border-b px-5 py-3">
     <div>
-      <h1 className="font-heading text-2xl font-semibold tracking-tight">Transacciones</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
+      <h1 className="text-3xl font-semibold tracking-tight">Transacciones</h1>
+      <p className="sr-only">
         <span className="capitalize">{period.monthLabel}</span>
         {" · "}
         {period.timeZone}
       </p>
     </div>
-    <Button disabled={disabled} onClick={onCapture}>
-      + Registrar
-    </Button>
+    <div className="flex flex-wrap items-center gap-2">
+      <Button variant="outline" disabled={disabled} onClick={() => onTool("search")}>
+        <HugeiconsIcon icon={Search01Icon} size={20} aria-hidden="true" />
+        Buscar
+      </Button>
+      <Button variant="outline" disabled={disabled} onClick={() => onTool("date")}>
+        <HugeiconsIcon icon={Calendar03Icon} size={20} aria-hidden="true" />
+        Fecha
+      </Button>
+      <Button variant="outline" disabled={disabled} onClick={() => onTool("category")}>
+        <HugeiconsIcon icon={FilterHorizontalIcon} size={20} aria-hidden="true" />
+        Filtros
+      </Button>
+      <Button disabled={disabled} onClick={onCapture}>
+        + Registrar
+      </Button>
+    </div>
   </header>
+);
+const editSelected = (
+  panel: TransactionPanel,
+  rows: ReturnType<typeof presentTransactionRows>,
+  onPanel: (panel: TransactionPanel) => void
+): void => {
+  const selected =
+    panel._tag === "Detail"
+      ? Option.some(panel.id)
+      : Option.fromNullishOr(rows[0]).pipe(Option.map((row) => row.id));
+  Option.map(selected, (id) =>
+    onPanel({ _tag: "Detail", id, mode: { _tag: "Editing", status: "idle" } })
+  );
+};
+const renderResponsivePanel = (
+  content: JSX.Element,
+  panel: TransactionPanel,
+  controls: Readonly<{ locked: boolean; onPanel: (panel: TransactionPanel) => void }>
+): JSX.Element => (
+  <ResponsiveTransactionPanel
+    open={panel._tag !== "Summary"}
+    locked={controls.locked}
+    title={panel._tag === "Capture" ? "Registrar transacción" : "Detalle de transacción"}
+    onClose={() => controls.onPanel({ _tag: "Summary" })}
+  >
+    {content}
+  </ResponsiveTransactionPanel>
 );
 const WorkspaceContent = ({
   props,
@@ -223,7 +315,9 @@ const WorkspaceContent = ({
   onFilters,
   visible,
   rows,
+  tool,
 }: Readonly<{
+  tool: FilterTool | "closed";
   props: WorkspaceProps;
   panel: TransactionPanel;
   onPanel: (panel: TransactionPanel) => void;
@@ -236,22 +330,26 @@ const WorkspaceContent = ({
   const editing =
     panel._tag === "Capture" || (panel._tag === "Detail" && panel.mode._tag === "Editing");
   return (
-    <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
-      <div className="min-w-0">
-        <div className="overflow-hidden rounded-xl border bg-card">
-          <WorkspaceToolbar
-            filters={filters}
-            onFilters={onFilters}
-            categories={props.categories}
-            disabled={locked}
-          />
-          <TransactionLedger
-            rows={rows}
-            selected={panel._tag === "Detail" ? Option.some(panel.id) : Option.none()}
-            disabled={locked || editing}
-            onSelect={(id) => onPanel({ _tag: "Detail", id, mode: { _tag: "Viewing" } })}
-          />
-        </div>
+    <div className="grid items-stretch xl:grid-cols-[minmax(0,1fr)_24rem]">
+      <div className="min-w-0 p-5">
+        <TransactionLedger
+          toolbar={
+            <WorkspaceToolbar
+              tool={tool}
+              filters={filters}
+              onFilters={onFilters}
+              categories={props.categories}
+              disabled={locked}
+            />
+          }
+          canEdit={props.editable}
+          onEdit={() => editSelected(panel, rows, onPanel)}
+          rows={rows}
+          locale={props.currentUser.locale}
+          selected={panel._tag === "Detail" ? Option.some(panel.id) : Option.none()}
+          disabled={locked || editing}
+          onSelect={(id) => onPanel({ _tag: "Detail", id, mode: { _tag: "Viewing" } })}
+        />
         <p aria-live="polite" className="mt-3 text-xs text-muted-foreground">
           {visible.length} de {props.transactions.length} transacciones del mes
         </p>
@@ -261,29 +359,24 @@ const WorkspaceContent = ({
         panel={panel}
         onPanel={onPanel}
         transactions={panel._tag === "Summary" ? visible : props.transactions}
-        renderPanel={(content) => (
-          <ResponsiveTransactionPanel
-            open={panel._tag !== "Summary"}
-            locked={locked}
-            title={panel._tag === "Capture" ? "Registrar transacción" : "Detalle de transacción"}
-            onClose={() => onPanel({ _tag: "Summary" })}
-          >
-            {content}
-          </ResponsiveTransactionPanel>
-        )}
+        renderPanel={(content) => renderResponsivePanel(content, panel, { locked, onPanel })}
       />
     </div>
   );
 };
 /** Owns filters and panel interaction; canonical records remain in the authentication-lifetime registry. */
 export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
+  const [tool, setTool] = useState<FilterTool | "closed">("closed");
   const [panel, onPanel] = useState<TransactionPanel>({ _tag: "Summary" });
   const [filters, onFilters] = useState<WorkspaceFilters>({
     search: "",
     direction: "all",
     categoryId: "all",
+    date: "",
   });
-  const visible = props.transactions.filter((transaction) => matchesFilters(transaction, filters));
+  const visible = props.transactions.filter((transaction) =>
+    matchesFilters(transaction, filters, props.currentUser.timeZone)
+  );
   const rows = presentTransactionRows({
     transactions: visible,
     categories: props.categories,
@@ -295,15 +388,17 @@ export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
     panel._tag === "Capture" || (panel._tag === "Detail" && panel.mode._tag === "Editing");
   return (
     <>
-      <Toaster position="bottom-right" />
-      <main className="mx-auto flex w-full max-w-screen-2xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+      <Toaster position="bottom-right" richColors />
+      <main className="flex w-full flex-col">
         <WorkspaceHeader
+          onTool={(next) => setTool(tool === next ? "closed" : next)}
           period={props.period}
           disabled={editing || !props.editable}
           onCapture={() => onPanel({ _tag: "Capture", status: "idle" })}
         />
         {props.queryNotice}
         <WorkspaceContent
+          tool={tool}
           props={props}
           panel={panel}
           onPanel={onPanel}

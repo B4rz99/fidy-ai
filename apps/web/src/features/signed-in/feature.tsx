@@ -1,4 +1,12 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  CreditCardIcon,
+  Home01Icon,
+  Leaf01Icon,
+  Settings01Icon,
+  SparklesIcon,
+} from "@hugeicons/core-free-icons";
 import { Link, Outlet, useRouter } from "@tanstack/react-router";
 import { Cause, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
@@ -20,43 +28,64 @@ export const AuthenticationExpired = (): JSX.Element => (
 );
 
 const navigationLinks = [
-  { to: "/app/dashboard", label: "Tablero" },
-  { to: "/app/agent", label: "Agente" },
-  { to: "/app/transactions", label: "Transacciones" },
+  { to: "/app/dashboard", label: "Tablero", icon: Home01Icon },
+  { to: "/app/transactions", label: "Transacciones", icon: CreditCardIcon },
+  { to: "/app/agent", label: "Agente", icon: SparklesIcon },
+] as const;
+const settingsLinks = [
   { to: "/settings/email", label: "Correo" },
   { to: "/settings/pats", label: "Tokens personales (PAT)" },
   { to: "/settings/agents", label: "Agentes conectados" },
   { to: "/settings/recovery", label: "Recuperación" },
 ] as const;
-
 const SignedInNavigation = ({
   onLogout,
   loggingOut,
-}: {
-  readonly onLogout: () => void;
-  readonly loggingOut: boolean;
-}): JSX.Element => (
+}: Readonly<{
+  onLogout: () => void;
+  loggingOut: boolean;
+}>): JSX.Element => (
   <nav
     aria-label="Aplicación"
-    className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-3 pb-3 md:flex-col md:items-stretch"
+    className="flex min-w-0 flex-1 gap-2 overflow-x-auto px-3 pb-3 md:flex-col"
   >
     {navigationLinks.map((link) => (
-      <Button
+      <Link
         key={link.to}
-        nativeButton={false}
-        className="shrink-0 justify-start"
-        render={<Link to={link.to} search={{}} activeProps={{ className: "bg-muted" }} />}
-        variant="ghost"
+        to={link.to}
+        search={{}}
+        className="flex min-h-12 shrink-0 items-center gap-4 rounded-md px-4 py-3 text-base text-muted-foreground hover:bg-muted"
+        activeProps={{ className: "bg-secondary text-secondary-foreground font-medium" }}
       >
+        <HugeiconsIcon icon={link.icon} size={22} strokeWidth={1.7} aria-hidden="true" />
         {link.label}
-      </Button>
+      </Link>
     ))}
+    <details className="shrink-0">
+      <summary className="flex min-h-12 cursor-pointer list-none items-center gap-4 rounded-md px-4 py-3 text-base text-muted-foreground hover:bg-muted">
+        <HugeiconsIcon icon={Settings01Icon} size={22} strokeWidth={1.7} aria-hidden="true" />
+        Ajustes
+      </summary>
+      <div className="flex flex-col gap-1 py-2 pl-4">
+        {settingsLinks.map((link) => (
+          <Link
+            key={link.to}
+            to={link.to}
+            search={{}}
+            className="rounded-md px-4 py-2 text-sm hover:bg-muted"
+            activeProps={{ className: "bg-secondary text-secondary-foreground" }}
+          >
+            {link.label}
+          </Link>
+        ))}
+      </div>
+    </details>
     <Button
       className="justify-start md:mt-auto"
       disabled={loggingOut}
       onClick={onLogout}
       type="button"
-      variant="outline"
+      variant="ghost"
     >
       {loggingOut ? "Cerrando sesión…" : "Cerrar sesión"}
     </Button>
@@ -87,10 +116,22 @@ const SignedInShell = (): JSX.Element => {
   };
 
   return (
-    <div className="min-h-svh bg-muted/30 md:flex">
-      <aside className="flex border-b bg-background md:sticky md:top-0 md:h-svh md:w-56 md:flex-none md:flex-col md:border-r md:border-b-0">
-        <Link className="px-5 py-5 font-heading text-xl font-semibold" to="/app/dashboard">
-          Fidy
+    <div className="signed-in-theme min-h-svh bg-background md:flex">
+      <aside className="flex border-b bg-muted/30 md:sticky md:top-0 md:h-svh md:w-60 md:flex-none md:flex-col md:border-r md:border-b-0">
+        <Link className="flex shrink-0 items-start gap-3 px-6 py-5 md:pb-8" to="/app/dashboard">
+          <HugeiconsIcon
+            icon={Leaf01Icon}
+            size={32}
+            strokeWidth={2}
+            className="text-primary"
+            aria-hidden="true"
+          />
+          <span>
+            <span className="block text-2xl font-semibold leading-7">Fidy</span>
+            <span className="hidden text-xs text-muted-foreground md:block">
+              Tu dinero, más claro
+            </span>
+          </span>
         </Link>
         <SignedInNavigation loggingOut={status.waiting} onLogout={onLogout} />
         {failed ? (

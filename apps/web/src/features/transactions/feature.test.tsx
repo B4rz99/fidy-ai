@@ -112,13 +112,13 @@ describe("current-month Transaction list presentation", () => {
     vi.setSystemTime(DateTime.makeUnsafe("2026-07-20T14:00:00Z").epochMilliseconds);
     seedResources();
     render(<TransactionListFeature />);
-    expect(screen.getByText(/julio de 2026/)).toBeVisible();
+    expect(screen.getByText("20 de julio de 2026")).toBeVisible();
     const ledger = within(screen.getByLabelText("Tabla de transacciones"));
     expect(ledger.getByRole("button", { name: "Ver transacción El Corral" })).toBeVisible();
     expect(ledger.getByRole("cell", { name: "Restaurantes" })).toBeVisible();
     expect(ledger.getByText("Gasto")).toBeVisible();
-    expect(ledger.getByText("−COP 25.000,00")).toBeVisible();
-    expect(ledger.getByText("20-07-2026")).toBeVisible();
+    expect(ledger.getByText("COP 25.000,00")).toBeVisible();
+    expect(ledger.getByText("20 de julio de 2026")).toBeVisible();
   });
 });
 
@@ -322,7 +322,7 @@ describe("transaction workspace", () => {
     render(<TransactionListFeature />);
     expect(screen.getByRole("heading", { name: "Resumen" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Ver transacción El Corral" }));
-    expect(screen.getByRole("heading", { name: "Detalle de transacción" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Detalle de la transacción" })).toBeVisible();
     expect(screen.queryByRole("heading", { name: "Resumen" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Cerrar detalle" }));
     expect(screen.getByRole("heading", { name: "Resumen" })).toBeVisible();
@@ -360,4 +360,28 @@ it("summarizes the visible records without combining different currencies", () =
   expect(summary.getAllByText("USD 10,25").length).toBeGreaterThan(0);
   expect(summary.getByText("Primera transacción")).toBeVisible();
   expect(summary.getByText("Última transacción")).toBeVisible();
+});
+
+it("filters the ledger from header tools and lets readers hide a column", () => {
+  seedResources();
+  render(<TransactionListFeature />);
+  fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+  fireEvent.change(screen.getByLabelText("Buscar transacciones"), {
+    target: { value: "sin coincidencias" },
+  });
+  expect(
+    screen.queryByRole("button", { name: "Ver transacción El Corral" })
+  ).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Buscar transacciones"), { target: { value: "Corral" } });
+  expect(screen.getByRole("button", { name: "Ver transacción El Corral" })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Fecha" }));
+  fireEvent.change(screen.getByLabelText("Filtrar por fecha"), { target: { value: "2026-07-19" } });
+  expect(
+    screen.queryByRole("button", { name: "Ver transacción El Corral" })
+  ).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Filtrar por fecha"), { target: { value: "2026-07-20" } });
+  expect(screen.getByRole("button", { name: "Ver transacción El Corral" })).toBeVisible();
+  fireEvent.click(screen.getByText("Columnas"));
+  fireEvent.click(screen.getByRole("checkbox", { name: "Categoría" }));
+  expect(screen.queryByRole("columnheader", { name: "Categoría" })).not.toBeInTheDocument();
 });

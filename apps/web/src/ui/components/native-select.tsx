@@ -1,7 +1,7 @@
 import * as React from "react";
 import { cn } from "@/ui/class-names";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { UnfoldMoreIcon } from "@hugeicons/core-free-icons";
+import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 
 type NativeSelectProps = Omit<React.ComponentProps<"select">, "size"> & {
   size: "sm" | "default";
@@ -20,7 +20,7 @@ const NativeSelect = ({ className, size, ...props }: NativeSelectProps): React.J
       {...props}
     />
     <HugeiconsIcon
-      icon={UnfoldMoreIcon}
+      icon={ArrowDown01Icon}
       strokeWidth={2}
       className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground select-none"
       aria-hidden="true"

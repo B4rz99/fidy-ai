@@ -1,10 +1,18 @@
 import { Option } from "effect";
 import type { JSX } from "react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Cancel01Icon } from "@hugeicons/core-free-icons";
+import { CategoryVisual } from "./visuals";
 import { Button } from "@/ui/components/button";
 import type { FidyClient } from "@/transport/client";
 import type { DetailMode } from "./panel-state";
 import { TransactionCorrection } from "./correction";
-import { type Category, type Transaction, presentTransactionRows } from "./presentation";
+import {
+  type Category,
+  type Transaction,
+  type TransactionListRow,
+  presentTransactionRows,
+} from "./presentation";
 
 type DetailProps = Readonly<{
   renderPanel: (content: JSX.Element) => JSX.Element;
@@ -20,8 +28,13 @@ type DetailProps = Readonly<{
   mode: DetailMode;
   onMode: (mode: DetailMode) => void;
 }>;
-const DetailFacts = ({ transaction, categories, locale, timeZone }: DetailProps): JSX.Element => {
-  const row = Option.getOrThrow(
+const detailRow = ({
+  transaction,
+  categories,
+  locale,
+  timeZone,
+}: Pick<DetailProps, "transaction" | "categories" | "locale" | "timeZone">): TransactionListRow =>
+  Option.getOrThrow(
     Option.fromNullishOr(
       presentTransactionRows({
         transactions: [transaction],
@@ -32,12 +45,10 @@ const DetailFacts = ({ transaction, categories, locale, timeZone }: DetailProps)
       })[0]
     )
   );
+const DetailFacts = ({ transaction, categories, locale, timeZone }: DetailProps): JSX.Element => {
+  const row = detailRow({ transaction, categories, locale, timeZone });
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <p className="text-sm text-muted-foreground">{row.counterpartyLabel}</p>
-        <p className="mt-2 text-2xl font-semibold tabular-nums">{row.moneyText}</p>
-      </div>
       <dl className="grid grid-cols-2 gap-4 text-sm">
         <dt className="text-muted-foreground">Tipo</dt>
         <dd>{row.transactionTypeLabel}</dd>
@@ -53,13 +64,31 @@ const DetailFacts = ({ transaction, categories, locale, timeZone }: DetailProps)
     </div>
   );
 };
+const DetailIdentity = ({
+  transaction,
+  categories,
+  locale,
+  timeZone,
+}: DetailProps): JSX.Element => {
+  const row = detailRow({ transaction, categories, locale, timeZone });
+  return (
+    <div className="flex items-start gap-5 border-b pb-8">
+      <CategoryVisual label={row.categoryLabel} bubble large />
+      <div className="min-w-0">
+        <p className="text-lg font-semibold">{row.counterpartyLabel}</p>
+        <p className="mt-1 text-3xl font-semibold tabular-nums">{row.moneyText}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{row.dateLabel}</p>
+      </div>
+    </div>
+  );
+};
 const DetailFrame = ({
   props,
   children,
 }: Readonly<{ props: DetailProps; children: JSX.Element }>): JSX.Element => (
   <section aria-label="Detalle de transacción" className="flex flex-col gap-6">
     <header className="flex items-center justify-between gap-3">
-      <h2 className="text-lg font-semibold">Detalle de transacción</h2>
+      <h2 className="text-lg font-semibold">Detalle de la transacción</h2>
       <Button
         size="sm"
         variant="ghost"
@@ -67,9 +96,10 @@ const DetailFrame = ({
         aria-label="Cerrar detalle"
         disabled={props.mode._tag === "Editing" && props.mode.status === "saving"}
       >
-        Cerrar
+        <HugeiconsIcon icon={Cancel01Icon} size={20} aria-hidden="true" />
       </Button>
     </header>
+    <DetailIdentity {...props} />
     {children}
   </section>
 );

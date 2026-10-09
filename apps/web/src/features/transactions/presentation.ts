@@ -39,6 +39,8 @@ export type TransactionListRow = Readonly<{
   direction: Transaction["direction"];
   transactionTypeLabel: "Gasto" | "Ingreso";
   moneyText: string;
+  money: Transaction["money"];
+  dateLabel: string;
   occurredOnText: string;
 }>;
 
@@ -100,6 +102,13 @@ export const presentTransactionRows = ({
     counterpartyLabel: Option.getOrElse(transaction.counterparty, () => counterpartyFallback),
     direction: transaction.direction,
     transactionTypeLabel: transaction.direction === "inflow" ? "Ingreso" : "Gasto",
+    money: transaction.money,
+    dateLabel: new Intl.DateTimeFormat(locale, {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      timeZone,
+    }).format(transaction.occurredAt.epochMilliseconds),
     moneyText: formatMoney({ locale, money: transaction.money }),
     occurredOnText: formatOccurrence({ locale, occurredAt: transaction.occurredAt, timeZone }),
   }));

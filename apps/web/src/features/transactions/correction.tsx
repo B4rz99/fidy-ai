@@ -10,6 +10,8 @@ import { Label } from "@/ui/components/label";
 import { NativeSelect, NativeSelectOption } from "@/ui/components/native-select";
 import type { Category, Transaction } from "./presentation";
 
+import { TransactionDateField } from "./date-field";
+import { CategoryVisual, DirectionVisual } from "./visuals";
 import type { CorrectionStatus } from "./panel-state";
 
 type CorrectionDraft = Readonly<{
@@ -125,49 +127,48 @@ const DraftInputs = ({
 }>): JSX.Element => (
   <>
     <div className="flex flex-col gap-2">
-      <Label htmlFor="correction-amount">Monto en {currency}</Label>
-      <Input
-        id="correction-amount"
-        required
-        inputMode="decimal"
-        value={draft.amount}
-        onChange={(event) => onChange({ ...draft, amount: event.target.value })}
-      />
+      <Label htmlFor="correction-amount">Monto</Label>
+      <div className="money-field">
+        <span aria-hidden="true">{currency}</span>
+        <Input
+          id="correction-amount"
+          aria-label={`Monto en ${currency}`}
+          required
+          inputMode="decimal"
+          value={draft.amount}
+          onChange={(event) => onChange({ ...draft, amount: event.target.value })}
+        />
+      </div>
     </div>
     <div className="flex flex-col gap-2">
       <Label htmlFor="correction-date">Fecha</Label>
-      <Input
+      <TransactionDateField
         id="correction-date"
-        required
-        type="date"
         value={draft.date}
-        onChange={(event) => onChange({ ...draft, date: event.target.value })}
+        onChange={(date) => onChange({ ...draft, date })}
       />
     </div>
   </>
 );
-const DraftDescription = ({
+const DraftCategory = ({
   draft,
   categories,
   onChange,
 }: Readonly<{
   draft: CorrectionDraft;
-  currency: string;
   categories: ReadonlyArray<Category>;
   onChange: (draft: CorrectionDraft) => void;
 }>): JSX.Element => (
-  <>
-    <div className="flex flex-col gap-2">
-      <Label htmlFor="correction-counterparty">Contraparte (opcional)</Label>
-      <Input
-        id="correction-counterparty"
-        maxLength={200}
-        value={draft.counterparty}
-        onChange={(event) => onChange({ ...draft, counterparty: event.target.value })}
-      />
-    </div>
-    <div className="flex flex-col gap-2">
-      <Label htmlFor="correction-category">Categoría</Label>
+  <div className="flex flex-col gap-2">
+    <Label htmlFor="correction-category">Categoría</Label>
+    <div className="correction-select">
+      <span aria-hidden="true">
+        <CategoryVisual
+          label={categories.find((category) => category.id === draft.categoryId)?.label ?? ""}
+          bubble
+          large={false}
+        />
+      </span>
       <NativeSelect
         id="correction-category"
         size="default"
@@ -182,21 +183,52 @@ const DraftDescription = ({
         ))}
       </NativeSelect>
     </div>
+  </div>
+);
+const DraftDescription = ({
+  draft,
+  categories,
+  onChange,
+}: Readonly<{
+  draft: CorrectionDraft;
+  currency: string;
+  categories: ReadonlyArray<Category>;
+  onChange: (draft: CorrectionDraft) => void;
+}>): JSX.Element => (
+  <>
+    <div className="flex flex-col gap-2">
+      <Label htmlFor="correction-counterparty">Contraparte</Label>
+      <Input
+        id="correction-counterparty"
+        maxLength={200}
+        value={draft.counterparty}
+        onChange={(event) => onChange({ ...draft, counterparty: event.target.value })}
+      />
+    </div>
+    <DraftCategory draft={draft} categories={categories} onChange={onChange} />
     <div className="flex flex-col gap-2">
       <Label htmlFor="correction-direction">Tipo</Label>
-      <NativeSelect
-        id="correction-direction"
-        size="default"
-        value={draft.direction}
-        onChange={(event) =>
-          onChange({ ...draft, direction: event.target.value === "inflow" ? "inflow" : "outflow" })
-        }
-      >
-        <NativeSelectOption value="outflow">Gasto</NativeSelectOption>
-        <NativeSelectOption value="inflow">Ingreso</NativeSelectOption>
-      </NativeSelect>
+      <div className="correction-select">
+        <span aria-hidden="true">
+          <DirectionVisual inflow={draft.direction === "inflow"} />
+        </span>
+        <NativeSelect
+          className="w-full"
+          id="correction-direction"
+          size="default"
+          value={draft.direction}
+          onChange={(event) =>
+            onChange({
+              ...draft,
+              direction: event.target.value === "inflow" ? "inflow" : "outflow",
+            })
+          }
+        >
+          <NativeSelectOption value="outflow">Gasto</NativeSelectOption>
+          <NativeSelectOption value="inflow">Ingreso</NativeSelectOption>
+        </NativeSelect>
+      </div>
     </div>
-    <DraftNotes draft={draft} onChange={onChange} />
   </>
 );
 const DraftNotes = ({
@@ -250,6 +282,20 @@ const CorrectionFeedback = ({
     ) : null}
   </>
 );
+const OptionalNotes = ({
+  draft,
+  onChange,
+}: Readonly<{
+  draft: CorrectionDraft;
+  onChange: (draft: CorrectionDraft) => void;
+}>): JSX.Element => (
+  <details>
+    <summary className="cursor-pointer text-sm text-muted-foreground">Notas (opcional)</summary>
+    <div className="pt-2">
+      <DraftNotes draft={draft} onChange={onChange} />
+    </div>
+  </details>
+);
 const CorrectionActions = ({
   status,
   locked,
@@ -259,7 +305,7 @@ const CorrectionActions = ({
   locked: boolean;
   onCancel: () => void;
 }>): JSX.Element => (
-  <div className="flex gap-2">
+  <div className="grid grid-cols-2 gap-3">
     <Button type="button" variant="outline" disabled={status === "saving"} onClick={onCancel}>
       Cancelar
     </Button>
@@ -297,8 +343,13 @@ export const TransactionCorrection = (props: CorrectionProps): JSX.Element => {
   };
   return props.renderForm(
     <form aria-label="Corregir transacción" onSubmit={onSubmit} className="flex flex-col gap-5">
-      <p className="text-sm text-muted-foreground">Corrige esta transacción sin crear otra.</p>
-      <fieldset disabled={locked} className="flex min-w-0 flex-col gap-4">
+      <div>
+        <h3 className="text-xl font-semibold">Corregir transacción</h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Corrige esta transacción sin crear otra.
+        </p>
+      </div>
+      <fieldset disabled={locked} className="flex min-w-0 flex-col gap-5">
         <legend className="sr-only">Datos de la transacción</legend>
         <DraftDescription
           draft={draft}
@@ -315,6 +366,7 @@ export const TransactionCorrection = (props: CorrectionProps): JSX.Element => {
       </fieldset>
       <CorrectionFeedback status={status} onRefresh={props.onRefresh} />
       <CorrectionActions status={status} locked={locked} onCancel={props.onCancel} />
+      <OptionalNotes draft={draft} onChange={setDraft} />
     </form>
   );
 };

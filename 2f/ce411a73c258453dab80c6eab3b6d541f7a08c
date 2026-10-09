@@ -1,0 +1,36 @@
+apps/web/src/features/transactions/presentation.ts
+  s_b75995d26622a8::t_19e8a20a6ea9ca 47
+apps/web/src/features/transactions/summary.tsx
+  s_b75995d26622a8::t_19e8a20a6ea9ca 69-71,74,109-113,119-127
+  s_b75995d26622a8::t_72540320a46850 4
+apps/web/src/features/transactions/workspace.tsx
+  s_b75995d26622a8::t_19e8a20a6ea9ca 280
+apps/web/src/index.css
+  s_b75995d26622a8::t_19e8a20a6ea9ca 222-228,232-233,235-237,239-257,269-273,438-467
+  s_b75995d26622a8::t_9336a77a8bf7d2 221,229-231,234,238
+apps/web/src/features/transactions/ledger.tsx
+  s_b75995d26622a8::t_19e8a20a6ea9ca 70-72,79,81,84-85,118,198-200,239
+apps/web/src/features/signed-in/feature.tsx
+  s_b75995d26622a8::t_19e8a20a6ea9ca 7,15,43-45,53,59,78,99-127,131-132,158,165-167
+  s_b75995d26622a8::t_f13539a52e768d 4,128-130,168
+DESIGN.md
+  s_b75995d26622a8::t_821ec059e0ef0d 409-420
+apps/web/src/features/transactions/feature.test.tsx
+  s_b75995d26622a8::t_f5013da4701e13 122-127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2fce411a73c258453dab80c6eab3b6d541f7a08c",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

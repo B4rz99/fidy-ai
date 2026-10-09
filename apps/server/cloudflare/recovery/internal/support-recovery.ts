@@ -23,6 +23,12 @@ const Claims = Schema.Struct({
   iat: Schema.Int.check(Schema.isGreaterThan(0)),
   exp: Schema.Int.check(Schema.isGreaterThan(0)),
 });
+type VerifiedOperator = Readonly<{
+  issuer: string;
+  subject: string;
+  issuedAtMs: number;
+  expiresAtMs: number;
+}>;
 const policy = Schema.decodeSync(RequestBodyPolicy)({
   maximumBytes: 256,
   deadlineMilliseconds: 2_000,
@@ -71,7 +77,7 @@ const verifySupportAccess = ({
   issuer: string;
   audience: string;
   clock: Clock.Clock;
-}): Promise<Option.Option<{ issuer: string; subject: string }>> => {
+}): Promise<Option.Option<VerifiedOperator>> => {
   if (!eligibleAssertion(assertion, issuer, audience) || Option.isNone(assertion)) {
     return Promise.resolve(Option.none());
   }
@@ -96,9 +102,14 @@ const verifySupportAccess = ({
       const claims = Schema.decodeUnknownOption(Claims)(payload);
       const now = Math.floor(clock.currentTimeMillisUnsafe() / millisecondsPerSecond);
       if (!currentClaims(claims, now) || Option.isNone(claims)) {
-        return Option.none<{ issuer: string; subject: string }>();
+        return Option.none<VerifiedOperator>();
       }
-      return Option.some({ issuer, subject: claims.value.sub });
+      return Option.some({
+        issuer,
+        subject: claims.value.sub,
+        issuedAtMs: claims.value.iat * millisecondsPerSecond,
+        expiresAtMs: claims.value.exp * millisecondsPerSecond,
+      });
     })
     .catch(() => Option.none());
 };
@@ -273,11 +284,15 @@ export const handleSupportRecovery = ({
     const payload = yield* boundedJsonBody({ request, policy, schema: Payload });
     if (Option.isNone(payload)) return notApproved();
     const codeDigest = yield* waitFor(() => recoveryCodeDigest(payload.value.backupRecoveryCode));
+    const decisionAt = yield* Clock.currentTimeMillis;
+    if (operator.value.expiresAtMs <= decisionAt || operator.value.issuedAtMs > decisionAt) {
+      return response(httpUnauthorized, { status: "unauthorized" });
+    }
     const decision = {
       operator: operator.value,
       codeDigest,
       publicCode: payload.value.pairingCode,
-      now,
+      now: decisionAt,
     };
     if (!(yield* waitFor(() => matchingRecoveryCandidate(db, decision)))) return notApproved();
     return yield* waitFor(() => decideSupportCase(db, decision));

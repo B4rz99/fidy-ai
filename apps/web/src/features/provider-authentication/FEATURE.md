@@ -110,7 +110,7 @@ Direct Production cleanup observation remains unavailable: the existing CLI data
 Recovery controls (2026-10-09): further Worker/D1 testing reproduced a new-sign-in failure when an
 approved recovery pairing expired without redemption. The follow-up preserves case-referenced pairings,
 adds scheduled 24-calendar-month terminal evidence retention, and enforces the documented operator
-5/minute and 20/hour and global 20/minute and 100/hour rolling admission limits. Thirty-seven focused
+5/minute and 20/hour and global 20/minute and 100/hour rolling admission limits. Thirty-nine focused
 tests pass, including concurrent requests, exact rolling boundaries, leap-day retention, and atomic
 cleanup rollback without restoring consumed proof. Deployment remains pending. Open-case retry
 tracking and verified Titular deletion are not implemented; they are not verified capabilities.
@@ -135,3 +135,7 @@ personal Google, Microsoft and WhatsApp accounts and handles sign-in and confirm
 
 [Provider configuration and live checks](../../../../../docs/operations/authentication-feature-map.md)
 and [recovery procedure](../../../../../docs/operations/support-recovery.md) contain operator details.
+
+Recovery decision timing: held-body Worker/D1 regressions previously approved after operator assertion
+or pairing expiry. The follow-up rechecks verified assertion time and uses the post-read decision
+instant for pairing/proof guards. Both exact-expiry regressions pass; Production deployment is pending.

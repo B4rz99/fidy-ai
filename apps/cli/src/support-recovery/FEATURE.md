@@ -39,6 +39,10 @@ its [Production deployment](https://github.com/B4rz99/fidy-ai/actions/runs/37913
 Live verification of the rotation refusal requires the User's credential action.
 
 Follow-up Worker/D1 checks cover expired unredeemed recovery pairings, bounded rolling operator/global
-admission and scheduled terminal evidence retention with atomic rollback. Thirty-seven focused tests
+admission and scheduled terminal evidence retention with atomic rollback. Thirty-nine focused tests
 pass; deployment is pending. The operator flow creates terminal approved decisions, with no open-case
 retry lifecycle. Verified Titular deletion remains unimplemented.
+
+Recovery decision timing: held-body Worker/D1 regressions previously approved after operator assertion
+or pairing expiry. The follow-up rechecks verified assertion time and uses the post-read decision
+instant for pairing/proof guards. Both exact-expiry regressions pass; Production deployment is pending.

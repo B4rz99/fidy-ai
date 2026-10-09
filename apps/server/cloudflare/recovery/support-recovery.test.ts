@@ -427,6 +427,64 @@ const credentialSnapshot = (fixture: Fixture): Effect.Effect<unknown, TestFailur
       .first()
   );
 
+it.each([
+  { description: "operator assertion", elapsedMs: 300_000, assertionSeconds: 300, status: 401 },
+  { description: "browser pairing", elapsedMs: 600_000, assertionSeconds: 900, status: 400 },
+])(
+  "refuses recovery when its $description expires while reading the body",
+  ({ elapsedMs, assertionSeconds, status }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        let current = Math.floor((yield* Clock.currentTimeMillis) / 1000) * 1000;
+        const clock = ownedClock(yield* Clock.Clock, () => current);
+        const fixture = yield* setup(current).pipe(Effect.provideService(Clock.Clock, clock));
+        const credential = yield* credentialSnapshot(fixture);
+        const assertion = yield* fixture.assertion({
+          subject: Option.none(),
+          issuedAt: current / 1000,
+          expiresAt: current / 1000 + assertionSeconds,
+        });
+        const original = fixture.request(assertion);
+        const bytes = new Uint8Array(yield* wait(() => original.arrayBuffer()));
+        const reading = Promise.withResolvers<void>();
+        const released = Promise.withResolvers<void>();
+        const body = new ReadableStream<Uint8Array>(
+          {
+            pull: (controller): Promise<void> => {
+              reading.resolve();
+              return released.promise.then(() => {
+                controller.enqueue(bytes);
+                controller.close();
+              });
+            },
+          },
+          { highWaterMark: 0 }
+        );
+        const request = new Request(original.url, {
+          method: "POST",
+          headers: original.headers,
+          body,
+        });
+        const pending = yield* handleSupportRecovery({
+          request,
+          db: fixture.db,
+          config: fixture.config,
+        }).pipe(Effect.provideService(Clock.Clock, clock), Effect.forkChild);
+        yield* wait(() => reading.promise);
+        current += elapsedMs;
+        released.resolve();
+        const response = yield* Fiber.join(pending);
+        expect(response.status).toBe(status);
+        expect(yield* credentialSnapshot(fixture)).toEqual(credential);
+        expect(
+          yield* wait(() =>
+            fixture.db.prepare("SELECT count(*) AS count FROM support_recovery_cases").first()
+          )
+        ).toEqual({ count: 0 });
+      })
+    )
+);
+
 it("starts a new browser pairing after an approved recovery expires without browser redemption", () =>
   Effect.runPromise(
     Effect.gen(function* () {

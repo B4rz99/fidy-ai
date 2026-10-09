@@ -1,4 +1,5 @@
 import { sweepProviderAuthentication } from "../provider-authentication/runtime";
+import { sweepRecoveryEvidence } from "../recovery/runtime";
 import { Clock, Effect, Option } from "effect";
 import { makeAuditRetention } from "../../src/shell/audit/runtime";
 import {
@@ -288,6 +289,7 @@ export const runCoreMaintenance = (
         makeAuditRetention({ database: environment.DB }).sweep(nowEpochMs)
       ),
       activity("operational.events.retention", platform.retainEventBuckets(nowEpochMs)),
+      activity("recovery.retention", sweepRecoveryEvidence({ db: environment.DB, nowEpochMs })),
       activity("operational.canary.publish", platform.publishCanary(nowEpochMs)),
       ...emailActivities(environment),
       ...billingActivities(environment),

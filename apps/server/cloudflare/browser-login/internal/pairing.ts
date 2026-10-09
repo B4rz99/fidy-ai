@@ -4,6 +4,7 @@ import {
 } from "../../../src/core/browser-login/contract";
 import { prepareClaim } from "./claim";
 import { retainedSessionPairingsQuery } from "../../../src/shell/web-session/operations";
+import type { BrowserPairingStart } from "../contract";
 import { establishWebSession } from "../../web-session/operations";
 import { findWhatsAppUser, prepareWhatsAppIdentity } from "../../identity/operations";
 import { protectConsentStatement } from "../../../src/shell/consent/operations";
@@ -106,7 +107,10 @@ const samplePublicCode = (): string => {
 };
 
 /** Start an unbound browser challenge. Only the browser receives its private verifier. */
-export const startBrowserPairing = (db: D1Database): Effect.Effect<Response, void> =>
+export const startBrowserPairing = ({
+  db,
+  retainedPairings: recovery,
+}: BrowserPairingStart): Effect.Effect<Response, void> =>
   Effect.gen(function* () {
     const started = yield* Clock.currentTimeMillis;
     const retained = retainedSessionPairingsQuery();
@@ -116,9 +120,10 @@ export const startBrowserPairing = (db: D1Database): Effect.Effect<Response, voi
         .prepare(
           `DELETE FROM browser_login_pairings WHERE id IN (
     SELECT id FROM browser_login_pairings WHERE expires_at_ms <= ? AND id NOT IN
-    (SELECT pairingId FROM (${retained.sql})) ORDER BY expires_at_ms LIMIT 32)`
+    (SELECT pairingId FROM (${retained.sql})) AND id NOT IN
+    (SELECT pairingId FROM (${recovery.sql})) ORDER BY expires_at_ms LIMIT 32)`
         )
-        .bind(started, ...retained.params)
+        .bind(started, ...retained.params, ...recovery.params)
         .run()
     );
     const publicCode = samplePublicCode();

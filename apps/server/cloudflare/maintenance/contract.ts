@@ -5,6 +5,7 @@ import type { PlatformMaintenanceInput } from "../runtime/contract";
 /** Closed metadata for the published owner activities assembled by Maintenance. */
 export type ScheduledOperation =
   | "provider.authenticationRetention"
+  | "recovery.retention"
   | "async.health"
   | "audit.retention"
   | "canonical.admissionRetention"

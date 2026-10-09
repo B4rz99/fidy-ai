@@ -122,14 +122,15 @@ Every invocation with a valid Access assertion is counted before body decoding, 
 unattributable input. Launch limits are:
 
 - 5 admitted commands per rolling minute and 20 per rolling hour for one verified operator;
-- 20 admitted commands per rolling minute and 100 per rolling hour globally;
-- 100 open SupportRecoveryCases globally;
-- one open case per User; and
-- five attributable rejections per case.
+- 20 admitted commands per rolling minute and 100 per rolling hour globally.
 
-Admission evidence is retained for exactly one hour. The fifth attributable rejection closes the case
-as refused. An open case expires no later than its BrowserLoginPairing. Approved, refused, and expired
-cases never resume.
+The admission transaction removes expired evidence and conditionally inserts metadata before body
+decoding. At most 100 admissions remain in the rolling hour; denied requests retain no body or proof.
+Scheduled cleanup also removes expired admission metadata when operators stop making requests.
+
+The current proof flow creates a terminal approved case only when the pre-issued code and pending
+pairing match. Invalid proof cannot attribute a User and creates no case. There is no open-case retry
+or five-rejection lifecycle in the deployed adapter; prior descriptions of those controls were inaccurate.
 
 Escalate invalid Access configuration, JWKS failures, D1 unavailability, repeated operator limits, or
 unexpected safe failures through the internal incident channel. Escalation may include timestamp,
@@ -138,11 +139,12 @@ BackupRecoveryCode, request body, User prose, or match detail.
 
 ## Retention and Titular deletion
 
-Terminal SupportRecoveryCases and their append-only metadata events are retained for exactly 24 months
-from `closedAt`, then deleted together in fixed batches. Routine deletion may set a consumed
-credential's case reference to null while retaining `consumedAt`; this never restores credential
-authority.
+Terminal SupportRecoveryCases and their append-only metadata events become eligible for deletion
+24 calendar months from `closedAt`. Core Maintenance deletes them together in batches of at most
+32 cases. A failed case deletion rolls back event deletion. Consumed credentials are untouched;
+cleanup never restores credential authority. Referenced BrowserLoginPairings survive ordinary
+expiry pruning until their retained case evidence is deleted.
 
-A verified Titular deletion immediately deletes their SupportRecoveryCases, events, and Recovery
-credential as part of the User-deletion atomic unit. There is no legal-hold exception at launch. A
-future actual legal obligation requires a tracked policy and ADR change before behavior changes.
+Verified Titular deletion is not implemented by this recovery adapter and remains a feature gap.
+It must delete cases, events and the Recovery credential as part of the User-deletion atomic unit;
+this procedure does not establish that behavior.

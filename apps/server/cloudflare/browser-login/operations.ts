@@ -1,6 +1,7 @@
 import type {
   BrowserPairingApproval,
   BrowserPairingApprovalStatement,
+  BrowserPairingStart,
   PendingBrowserPairingQuery,
   PendingBrowserPairingRequest,
   RecoveryBrowserPairingApproval,
@@ -29,9 +30,9 @@ import {
 
 /** Create a bounded unbound pairing; disclose its private verifier only to the initiating browser. */
 export const startBrowserPairing = (
-  db: D1Database
+  input: BrowserPairingStart
 ): Effect.Effect<Response, BrowserPairingUnavailable> =>
-  start(db).pipe(Effect.mapError(() => new BrowserPairingUnavailable()));
+  start(input).pipe(Effect.mapError(() => new BrowserPairingUnavailable()));
 
 /** Bind a pending pairing only to the established User proved by this authenticated channel event. */
 export const approveBrowserPairing = (input: BrowserPairingApproval): Effect.Effect<Response> =>

@@ -21,7 +21,11 @@ import {
   makeTelemetryService,
 } from "../../src/shell/observability/operations";
 
-import { handleSupportRecovery, issueInitialBackupRecoveryCode } from "../recovery/operations";
+import {
+  handleSupportRecovery,
+  issueInitialBackupRecoveryCode,
+  retainedRecoveryPairingsQuery,
+} from "../recovery/operations";
 import publicWorker from "../public-worker";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 
@@ -75,6 +79,8 @@ const setup = (
             "0008_support_recovery",
             "0009_email_replacement",
             "0069_retire_email_code_signup",
+            "0070_recovery_retention",
+            "0071_recovery_admission",
           ].map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
         })
       );
@@ -216,7 +222,7 @@ const seedWebSession = (db: D1Database, token: string): Promise<number> =>
       const pairing: { pairingId: string } = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ pairingId: Schema.String })
       )(
-        yield* startBrowserPairing(db).pipe(
+        yield* startBrowserPairing({ db, retainedPairings: retainedRecoveryPairingsQuery() }).pipe(
           Effect.flatMap((response) => Effect.tryPromise(() => response.json()))
         )
       );
@@ -1051,7 +1057,7 @@ it("rejects unproved support recovery without creating a case or approving a pai
       const pairing: { pairingId: string; publicCode: string } = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ pairingId: Schema.String, publicCode: Schema.String })
       )(
-        yield* startBrowserPairing(db).pipe(
+        yield* startBrowserPairing({ db, retainedPairings: retainedRecoveryPairingsQuery() }).pipe(
           Effect.flatMap((response) => Effect.tryPromise(() => response.json()))
         )
       );
@@ -1101,9 +1107,10 @@ it("binds an Access-approved recovery case to one stable User, consumes its code
             privateVerifier: Schema.String,
           })
         )(
-          yield* startBrowserPairing(db).pipe(
-            Effect.flatMap((response) => Effect.tryPromise(() => response.json()))
-          )
+          yield* startBrowserPairing({
+            db,
+            retainedPairings: retainedRecoveryPairingsQuery(),
+          }).pipe(Effect.flatMap((response) => Effect.tryPromise(() => response.json())))
         );
       const { publicKey, privateKey } = yield* Effect.tryPromise(() => generateKeyPair("RS256"));
       const jwk = {
@@ -1150,9 +1157,10 @@ it("binds an Access-approved recovery case to one stable User, consumes its code
         yield* Schema.decodeUnknownEffect(
           Schema.Struct({ pairingId: Schema.String, publicCode: Schema.String })
         )(
-          yield* startBrowserPairing(db).pipe(
-            Effect.flatMap((response) => Effect.tryPromise(() => response.json()))
-          )
+          yield* startBrowserPairing({
+            db,
+            retainedPairings: retainedRecoveryPairingsQuery(),
+          }).pipe(Effect.flatMap((response) => Effect.tryPromise(() => response.json())))
         );
       expect(
         (yield* Effect.tryPromise(() =>
@@ -1215,7 +1223,7 @@ it("binds an Access-approved recovery case to one stable User, consumes its code
       const expiredPairing = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ pairingId: Schema.String, publicCode: Schema.String })
       )(
-        yield* startBrowserPairing(db).pipe(
+        yield* startBrowserPairing({ db, retainedPairings: retainedRecoveryPairingsQuery() }).pipe(
           Effect.flatMap((response) => Effect.tryPromise(() => response.json()))
         )
       );
@@ -1270,8 +1278,23 @@ it("binds an Access-approved recovery case to one stable User, consumes its code
           .prepare("SELECT user_id, portfolio_id, bsuid FROM whatsapp_identities ORDER BY user_id")
           .all()
       );
+      // The first operator exhausted its minute allowance with refusal/rollback checks above.
+      // A separately verified operator still competes for the same globally single-use proof.
+      const competingOperator = yield* Effect.tryPromise(() =>
+        new SignJWT({})
+          .setProtectedHeader({ alg: "RS256", kid: "support-key" })
+          .setIssuer("https://example.cloudflareaccess.com")
+          .setAudience("test-support-audience")
+          .setSubject("competing-operator")
+          .setIssuedAt(now)
+          .setExpirationTime(now + 300)
+          .sign(privateKey)
+      );
       const competing = yield* Effect.tryPromise(() =>
-        Promise.all([approve(created.backupRecoveryCode), approve(created.backupRecoveryCode)])
+        Promise.all([
+          approve(created.backupRecoveryCode, competingOperator),
+          approve(created.backupRecoveryCode, competingOperator),
+        ])
       );
       expect(competing.filter((result) => result.status === 200)).toHaveLength(1);
       expect(competing.map((result) => result.status).sort((left, right) => left - right)).toEqual([
@@ -1285,9 +1308,10 @@ it("binds an Access-approved recovery case to one stable User, consumes its code
             .first()
         )
       ).toMatchObject({ state: "pending_approval", user_id: null });
-      expect((yield* Effect.tryPromise(() => approve(created.backupRecoveryCode))).status).toBe(
-        400
-      );
+      expect(
+        (yield* Effect.tryPromise(() => approve(created.backupRecoveryCode, competingOperator)))
+          .status
+      ).toBe(400);
       expect(
         (yield* Effect.tryPromise(() =>
           db
@@ -1405,7 +1429,7 @@ it("keeps unexpected recovery defects out of operational failures and observes o
       const pairing: { publicCode: string } = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ publicCode: Schema.String })
       )(
-        yield* startBrowserPairing(db).pipe(
+        yield* startBrowserPairing({ db, retainedPairings: retainedRecoveryPairingsQuery() }).pipe(
           Effect.flatMap((response) => Effect.tryPromise(() => response.json()))
         )
       );
@@ -1482,11 +1506,16 @@ it("does not impose a shared login lockout after concurrent pairing starts", () 
     Effect.gen(function* () {
       const { db } = yield* Effect.tryPromise(() => setup());
       const starts = yield* Effect.all(
-        Array.from({ length: 101 }, () => startBrowserPairing(db)),
+        Array.from({ length: 101 }, () =>
+          startBrowserPairing({ db, retainedPairings: retainedRecoveryPairingsQuery() })
+        ),
         { concurrency: 101 }
       );
       expect(starts.every((response) => response.status === 200)).toBe(true);
-      expect((yield* startBrowserPairing(db)).status).toBe(200);
+      expect(
+        (yield* startBrowserPairing({ db, retainedPairings: retainedRecoveryPairingsQuery() }))
+          .status
+      ).toBe(200);
     })
   ));
 
@@ -1540,7 +1569,7 @@ it("invalidates a browser pairing after five incorrect private verifiers", () =>
       const ready: typeof pairing = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
       )(
-        yield* startBrowserPairing(db).pipe(
+        yield* startBrowserPairing({ db, retainedPairings: retainedRecoveryPairingsQuery() }).pipe(
           Effect.flatMap((response) => Effect.tryPromise(() => response.json()))
         )
       );
@@ -1575,9 +1604,10 @@ it(
         const pairing = yield* Schema.decodeUnknownEffect(
           Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
         )(
-          yield* startBrowserPairing(db).pipe(
-            Effect.flatMap((response) => Effect.tryPromise(() => response.json()))
-          )
+          yield* startBrowserPairing({
+            db,
+            retainedPairings: retainedRecoveryPairingsQuery(),
+          }).pipe(Effect.flatMap((response) => Effect.tryPromise(() => response.json())))
         );
         const accepted = yield* Effect.tryPromise(() =>
           sendRequest(
@@ -1660,7 +1690,7 @@ it("redeems one approved pairing under concurrent replay without accepting a fix
       const pairing = yield* Schema.decodeUnknownEffect(
         Schema.Struct({ pairingId: Schema.String, privateVerifier: Schema.String })
       )(
-        yield* startBrowserPairing(db).pipe(
+        yield* startBrowserPairing({ db, retainedPairings: retainedRecoveryPairingsQuery() }).pipe(
           Effect.flatMap((response) => Effect.tryPromise(() => response.json()))
         )
       );

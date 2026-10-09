@@ -1,12 +1,18 @@
 import { deepStrictEqual } from "node:assert";
-import { Cause, Clock, Data, Effect, Exit, Fiber, Schema } from "effect";
+import { Cause, Clock, Data, Effect, Exit, Fiber, Option, Schema } from "effect";
 import { type JWK, SignJWT, exportJWK, generateKeyPair } from "jose";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { UserId } from "../../src/core/identity/contract";
 import { startBrowserPairing } from "../browser-login/operations";
 import { installTestSchema, isolatedTestDatabases } from "../d1-test-fixture";
-import { handleSupportRecovery, issueInitialBackupRecoveryCode } from "./operations";
+import {
+  handleSupportRecovery,
+  issueInitialBackupRecoveryCode,
+  retainedRecoveryPairingsQuery,
+} from "./operations";
+import { sweepRecoveryEvidence } from "./runtime";
 import type { SupportAccessConfiguration } from "./contract";
+import { RecoveryRetentionUnavailable } from "./contract";
 
 class TestFailure extends Data.TaggedError("TestFailure")<{ cause: unknown }> {}
 const wait = <A>(run: () => Promise<A>): Effect.Effect<A, TestFailure> =>
@@ -37,7 +43,11 @@ const ownedClock = (live: Clock.Clock, current: () => number): Clock.Clock => ({
   monotonicTimeNanos: live.monotonicTimeNanos,
   sleep: (duration) => live.sleep(duration),
 });
-type AssertionTimes = Readonly<{ issuedAt: number; expiresAt: number }>;
+type AssertionTimes = Readonly<{
+  issuedAt: number;
+  expiresAt: number;
+  subject: Option.Option<string>;
+}>;
 type Fixture = Readonly<{
   db: D1Database;
   pairingId: string;
@@ -59,6 +69,8 @@ const setup = (current: number): Effect.Effect<Fixture, TestFailure> =>
           "0006_browser_login",
           "0007_browser_pairing_email",
           "0008_support_recovery",
+          "0070_recovery_retention",
+          "0071_recovery_admission",
         ].map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
       })
     );
@@ -77,7 +89,7 @@ const setup = (current: number): Effect.Effect<Fixture, TestFailure> =>
       })
     );
     const pairing = yield* Schema.decodeUnknownEffect(Pairing)(
-      yield* startBrowserPairing(db).pipe(
+      yield* startBrowserPairing({ db, retainedPairings: retainedRecoveryPairingsQuery() }).pipe(
         Effect.flatMap((response) => wait(() => response.json())),
         Effect.mapError((cause) => new TestFailure({ cause }))
       )
@@ -113,19 +125,130 @@ const setup = (current: number): Effect.Effect<Fixture, TestFailure> =>
           headers: { "content-type": "application/json", "cf-access-jwt-assertion": assertion },
           body,
         }),
-      assertion: ({ issuedAt, expiresAt }): Effect.Effect<string, TestFailure> =>
+      assertion: ({ issuedAt, expiresAt, subject }): Effect.Effect<string, TestFailure> =>
         wait(() =>
           new SignJWT({})
             .setProtectedHeader({ alg: "RS256", kid: "support-clock-key" })
             .setIssuer(config.CLOUDFLARE_ACCESS_ISSUER)
             .setAudience(config.CLOUDFLARE_ACCESS_AUDIENCE)
-            .setSubject("support-clock-operator")
+            .setSubject(Option.getOrElse(subject, () => "support-clock-operator"))
             .setIssuedAt(issuedAt)
             .setExpirationTime(expiresAt)
             .sign(privateKey)
         ),
     };
   });
+
+it("admits only five concurrent operator commands per rolling minute before body decoding", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let current = Math.floor((yield* Clock.currentTimeMillis) / 1000) * 1000;
+      const clock = ownedClock(yield* Clock.Clock, () => current);
+      const fixture = yield* setup(current).pipe(Effect.provideService(Clock.Clock, clock));
+      const assertion = yield* fixture.assertion({
+        subject: Option.none(),
+        issuedAt: current / 1000,
+        expiresAt: current / 1000 + 300,
+      });
+      const invoke = (): Effect.Effect<Response> =>
+        handleSupportRecovery({
+          request: new Request(fixture.request(assertion), { method: "POST", body: "{}" }),
+          db: fixture.db,
+          config: fixture.config,
+        }).pipe(Effect.provideService(Clock.Clock, clock));
+      const results = yield* Effect.all(Array.from({ length: 6 }, invoke), {
+        concurrency: "unbounded",
+      });
+      expect(
+        results.map((response) => response.status).sort((left, right) => left - right)
+      ).toEqual([400, 400, 400, 400, 400, 429]);
+      current += 60_000;
+      expect((yield* invoke()).status).toBe(400);
+    })
+  ));
+
+const malformedCommand = (
+  fixture: Fixture,
+  assertion: string,
+  clock: Clock.Clock
+): Effect.Effect<Response> =>
+  handleSupportRecovery({
+    request: new Request(fixture.request(assertion), { method: "POST", body: "{}" }),
+    db: fixture.db,
+    config: fixture.config,
+  }).pipe(Effect.provideService(Clock.Clock, clock));
+
+it("enforces an operator rolling-hour limit independently of minute refills", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const started = Math.floor((yield* Clock.currentTimeMillis) / 1000) * 1000;
+      let current = started;
+      const clock = ownedClock(yield* Clock.Clock, () => current);
+      const fixture = yield* setup(current).pipe(Effect.provideService(Clock.Clock, clock));
+      const assertion = yield* fixture.assertion({
+        subject: Option.none(),
+        issuedAt: current / 1000,
+        expiresAt: current / 1000 + 900,
+      });
+      for (let minute = 0; minute < 4; minute++) {
+        const responses = yield* Effect.all(
+          Array.from({ length: 5 }, () => malformedCommand(fixture, assertion, clock)),
+          { concurrency: "unbounded" }
+        );
+        expect(responses.map((response) => response.status)).toEqual([400, 400, 400, 400, 400]);
+        current += 60_000;
+      }
+      expect((yield* malformedCommand(fixture, assertion, clock)).status).toBe(429);
+      current = started + 3_600_000;
+      const renewed = yield* fixture.assertion({
+        subject: Option.none(),
+        issuedAt: current / 1000,
+        expiresAt: current / 1000 + 300,
+      });
+      expect((yield* malformedCommand(fixture, renewed, clock)).status).toBe(400);
+    })
+  ));
+
+it("bounds verified recovery commands globally across operators and releases expired hourly admission", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const started = Math.floor((yield* Clock.currentTimeMillis) / 1000) * 1000;
+      let current = started;
+      const clock = ownedClock(yield* Clock.Clock, () => current);
+      const fixture = yield* setup(current).pipe(Effect.provideService(Clock.Clock, clock));
+      const outsider = yield* fixture.assertion({
+        issuedAt: current / 1000,
+        expiresAt: current / 1000 + 900,
+        subject: Option.some("outsider"),
+      });
+      for (let minute = 0; minute < 5; minute++) {
+        const assertions = yield* Effect.all(
+          Array.from({ length: 4 }, (_, operator) =>
+            fixture.assertion({
+              issuedAt: current / 1000,
+              expiresAt: current / 1000 + 900,
+              subject: Option.some(`operator-${minute}-${operator}`),
+            })
+          )
+        );
+        const commands = assertions.flatMap((assertion) =>
+          Array.from({ length: 5 }, () => malformedCommand(fixture, assertion, clock))
+        );
+        const responses = yield* Effect.all(commands, { concurrency: "unbounded" });
+        expect(responses.every((response) => response.status === 400)).toBe(true);
+        expect((yield* malformedCommand(fixture, outsider, clock)).status).toBe(429);
+        current += 60_000;
+      }
+      expect((yield* malformedCommand(fixture, outsider, clock)).status).toBe(429);
+      current = started + 3_600_000;
+      const renewed = yield* fixture.assertion({
+        issuedAt: current / 1000,
+        expiresAt: current / 1000 + 300,
+        subject: Option.some("outsider"),
+      });
+      expect((yield* malformedCommand(fixture, renewed, clock)).status).toBe(400);
+    })
+  ));
 
 it("approves a valid assertion on the supplied Clock even when native JWT time considers it expired", () =>
   Effect.runPromise(
@@ -134,6 +257,7 @@ it("approves a valid assertion on the supplied Clock even when native JWT time c
       const clock = ownedClock(yield* Clock.Clock, () => current);
       const fixture = yield* setup(current).pipe(Effect.provideService(Clock.Clock, clock));
       const assertion = yield* fixture.assertion({
+        subject: Option.none(),
         issuedAt: current / 1000,
         expiresAt: current / 1000 + 300,
       });
@@ -204,6 +328,7 @@ it.each(["owning Effect", "native Request"])(
         const current = yield* Clock.currentTimeMillis;
         const fixture = yield* setup(current);
         const assertion = yield* fixture.assertion({
+          subject: Option.none(),
           issuedAt: Math.floor(current / 1000),
           expiresAt: Math.floor(current / 1000) + 300,
         });
@@ -268,7 +393,9 @@ it.each(["owning Effect", "native Request"])(
         // The operator admission completed before body acquisition; cancellation must not undo it.
         expect(
           yield* wait(() =>
-            fixture.db.prepare("SELECT attempts FROM support_recovery_operator_limits").first()
+            fixture.db
+              .prepare("SELECT count(*) AS attempts FROM support_recovery_admissions")
+              .first()
           )
         ).toEqual({ attempts: 1 });
         for (const table of ["support_recovery_cases", "support_recovery_events", "web_sessions"]) {
@@ -299,6 +426,126 @@ const credentialSnapshot = (fixture: Fixture): Effect.Effect<unknown, TestFailur
       .bind(userId)
       .first()
   );
+
+it("starts a new browser pairing after an approved recovery expires without browser redemption", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      let current = Math.floor((yield* Clock.currentTimeMillis) / 1000) * 1000;
+      const clock = ownedClock(yield* Clock.Clock, () => current);
+      const fixture = yield* setup(current).pipe(Effect.provideService(Clock.Clock, clock));
+      const assertion = yield* fixture.assertion({
+        subject: Option.none(),
+        issuedAt: current / 1000,
+        expiresAt: current / 1000 + 300,
+      });
+      const approved = yield* handleSupportRecovery({
+        request: fixture.request(assertion),
+        db: fixture.db,
+        config: fixture.config,
+      }).pipe(Effect.provideService(Clock.Clock, clock));
+      expect(approved.status).toBe(200);
+      current += 600_000;
+      const next = yield* startBrowserPairing({
+        db: fixture.db,
+        retainedPairings: retainedRecoveryPairingsQuery(),
+      }).pipe(Effect.provideService(Clock.Clock, clock));
+      expect(next.status).toBe(200);
+      expect(
+        yield* wait(() =>
+          fixture.db.prepare("SELECT count(*) AS count FROM support_recovery_cases").first()
+        )
+      ).toEqual({ count: 1 });
+      expect(
+        yield* wait(() =>
+          fixture.db.prepare("SELECT count(*) AS count FROM support_recovery_events").first()
+        )
+      ).toEqual({ count: 2 });
+    })
+  ));
+
+it("retains recovery evidence until its calendar deadline then removes it without restoring consumed proof", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const current = Date.UTC(2024, 1, 29, 12);
+      const clock = ownedClock(yield* Clock.Clock, () => current);
+      const fixture = yield* setup(current).pipe(Effect.provideService(Clock.Clock, clock));
+      const assertion = yield* fixture.assertion({
+        subject: Option.none(),
+        issuedAt: current / 1000,
+        expiresAt: current / 1000 + 300,
+      });
+      const approved = yield* handleSupportRecovery({
+        request: fixture.request(assertion),
+        db: fixture.db,
+        config: fixture.config,
+      }).pipe(Effect.provideService(Clock.Clock, clock));
+      expect(approved.status).toBe(200);
+      const credential = yield* credentialSnapshot(fixture);
+      yield* sweepRecoveryEvidence({ db: fixture.db, nowEpochMs: Date.UTC(2026, 1, 28, 12) - 1 });
+      expect(
+        yield* wait(() =>
+          fixture.db.prepare("SELECT count(*) AS count FROM support_recovery_cases").first()
+        )
+      ).toEqual({ count: 1 });
+      yield* sweepRecoveryEvidence({ db: fixture.db, nowEpochMs: Date.UTC(2026, 1, 28, 12) });
+      for (const table of [
+        "support_recovery_cases",
+        "support_recovery_events",
+        "support_recovery_operator_limits",
+      ]) {
+        expect(
+          yield* wait(() => fixture.db.prepare(`SELECT count(*) AS count FROM ${table}`).first())
+        ).toEqual({ count: 0 });
+      }
+      expect(yield* credentialSnapshot(fixture)).toEqual(credential);
+    })
+  ));
+it("rolls back recovery event deletion when its terminal case cannot be removed", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const current = Date.UTC(2024, 0, 1);
+      const clock = ownedClock(yield* Clock.Clock, () => current);
+      const fixture = yield* setup(current).pipe(Effect.provideService(Clock.Clock, clock));
+      const assertion = yield* fixture.assertion({
+        subject: Option.none(),
+        issuedAt: current / 1000,
+        expiresAt: current / 1000 + 300,
+      });
+      const approved = yield* handleSupportRecovery({
+        request: fixture.request(assertion),
+        db: fixture.db,
+        config: fixture.config,
+      }).pipe(Effect.provideService(Clock.Clock, clock));
+      expect(approved.status).toBe(200);
+      const credential = yield* credentialSnapshot(fixture);
+      yield* wait(() =>
+        fixture.db.batch([
+          fixture.db.prepare(
+            "CREATE TABLE retained_case_dependency (case_id TEXT REFERENCES support_recovery_cases(id))"
+          ),
+          fixture.db.prepare(
+            "INSERT INTO retained_case_dependency SELECT id FROM support_recovery_cases"
+          ),
+        ])
+      );
+      const exit = yield* Effect.exit(
+        sweepRecoveryEvidence({ db: fixture.db, nowEpochMs: Date.UTC(2026, 0, 1) })
+      );
+      deepStrictEqual(exit, Exit.fail(new RecoveryRetentionUnavailable()));
+      expect(
+        yield* wait(() =>
+          fixture.db.prepare("SELECT count(*) AS count FROM support_recovery_events").first()
+        )
+      ).toEqual({ count: 2 });
+      expect(
+        yield* wait(() =>
+          fixture.db.prepare("SELECT count(*) AS count FROM support_recovery_cases").first()
+        )
+      ).toEqual({ count: 1 });
+      expect(yield* credentialSnapshot(fixture)).toEqual(credential);
+    })
+  ));
+
 const expectUnchanged = ({
   fixture,
   credential,
@@ -317,6 +564,7 @@ const expectUnchanged = ({
       "support_recovery_cases",
       "support_recovery_events",
       "support_recovery_operator_limits",
+      "support_recovery_admissions",
       "web_sessions",
     ]) {
       expect(
@@ -345,6 +593,7 @@ it.each([
       const fixture = yield* setup(current).pipe(Effect.provideService(Clock.Clock, clock));
       const credential = yield* credentialSnapshot(fixture);
       const assertion = yield* fixture.assertion({
+        subject: Option.none(),
         issuedAt: nativeSeconds,
         expiresAt: nativeSeconds + 300,
       });
@@ -369,7 +618,11 @@ it("refuses an assertion that expires on the supplied Clock while foreign key ve
       const fixture = yield* setup(current).pipe(Effect.provideService(Clock.Clock, clock));
       const credential = yield* credentialSnapshot(fixture);
       const expiresAt = current / 1000 + 300;
-      const assertion = yield* fixture.assertion({ issuedAt: current / 1000, expiresAt });
+      const assertion = yield* fixture.assertion({
+        subject: Option.none(),
+        issuedAt: current / 1000,
+        expiresAt,
+      });
       const requested = Promise.withResolvers<void>();
       const keys = Promise.withResolvers<Response>();
       vi.spyOn(globalThis, "fetch").mockImplementation((input): Promise<Response> => {

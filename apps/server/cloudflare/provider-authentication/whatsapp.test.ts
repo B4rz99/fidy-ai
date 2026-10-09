@@ -25,10 +25,14 @@ const uncorrelatedStatuses = (fault: string, now: number): ReadonlyArray<unknown
         },
       ]
     : []),
+  ...(fault === "inline_read"
+    ? [{ id: "wamid.review", status: "read", timestamp: String(Math.floor(now / 1000) + 1) }]
+    : []),
 ];
 
 it.each([
   "inline",
+  "inline_read",
   "bad_signature",
   "message",
   "endpoint",
@@ -43,6 +47,7 @@ it.each([
       const journey = yield* Effect.tryPromise(() => setupWhatsApp());
       const now = yield* Clock.currentTimeMillis;
       const statuses = uncorrelatedStatuses(fault, now);
+      const inline = fault.startsWith("inline");
       let reads = 0;
       vi.spyOn(globalThis, "fetch").mockImplementation(() => {
         reads += 1;
@@ -66,7 +71,7 @@ it.each([
             kapso: {
               direction: "outbound",
               status: "delivered",
-              ...(fault === "inline" ? { statuses } : {}),
+              ...(inline ? { statuses } : {}),
             },
           },
         },
@@ -75,8 +80,8 @@ it.each([
           event: "whatsapp.message.delivered",
         }
       );
-      expect(response.status).toBe(fault === "inline" ? 200 : 401);
-      expect(reads).toBe(fault === "inline" || fault === "bad_signature" ? 0 : 1);
+      expect(response.status).toBe(inline ? 200 : 401);
+      expect(reads).toBe(inline || fault === "bad_signature" ? 0 : 1);
       expect(
         (yield* Effect.tryPromise(() =>
           journey.db
@@ -805,7 +810,10 @@ it("permits a fresh greeting after definite provider rejection without retrying 
       expect((yield* sendChat(journey, "Hola", { message, timestamp })).status).toBe(200);
       expect((yield* sendChat(journey, "Hola", { message, timestamp })).status).toBe(409);
       expect(provider).toHaveBeenCalledTimes(1);
-      expect((yield* sendChat(journey, "Hola", { timestamp: timestamp + 1 })).status).toBe(200);
+      const replacementTimestamp = Math.floor((yield* Clock.currentTimeMillis) / 1000) + 1;
+      expect((yield* sendChat(journey, "Hola", { timestamp: replacementTimestamp })).status).toBe(
+        200
+      );
       expect(provider).toHaveBeenCalledTimes(2);
     })
   ));

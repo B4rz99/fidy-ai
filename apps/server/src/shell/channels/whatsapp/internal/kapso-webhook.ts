@@ -544,6 +544,13 @@ const projectReceiptEvent = Effect.fn(function* (
   if (raw.message.kapso.statuses.some((status) => status.id !== raw.message.id)) {
     return yield* invalidKapsoInvariant("event/status mismatch");
   }
+  const latest = yield* projectReceiptHistory(
+    raw.message.kapso.statuses,
+    lifecycleStatus(eventName),
+    receivedAt
+  );
+  if (latest._tag === "Absent") return yield* invalidKapsoInvariant("missing provider status");
+  if (latest._tag === "Uncorrelated") return Option.none();
   const times = yield* Effect.forEach(raw.message.kapso.statuses, (status) =>
     parseOccurredAt(status.timestamp, receivedAt)
   );
@@ -555,15 +562,7 @@ const projectReceiptEvent = Effect.fn(function* (
   if (raw.message.kapso.statuses[newest]?.status !== lifecycleStatus(eventName)) {
     return yield* invalidKapsoInvariant("event/status mismatch");
   }
-  const latest = yield* projectReceiptHistory(
-    raw.message.kapso.statuses,
-    lifecycleStatus(eventName),
-    receivedAt
-  );
-  if (latest._tag === "Absent") return yield* invalidKapsoInvariant("missing provider status");
-  return latest._tag === "Uncorrelated"
-    ? Option.none()
-    : Option.some({ ...latest.value, businessPhoneNumberId: raw.phone_number_id });
+  return Option.some({ ...latest.value, businessPhoneNumberId: raw.phone_number_id });
 });
 
 /** One authenticated event and its latest chronological status, shared across delivery purposes. */

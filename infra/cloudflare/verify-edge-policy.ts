@@ -20,7 +20,8 @@ import { edgeSecurityPolicy } from "./edge-security";
 // Includes #1086's query-redacted diagnostic logs; invocation records remain disabled.
 // Includes #1086's path-scoped recovery Access application, sole-email operator group,
 // email PIN identity provider, and application-derived Core audience.
-const expectedEdgePolicyDigest = "cd5f4a3cc02beb2361ee54a18d74c0c4f841683f8bf2ba97d0dd9a975653e4a5";
+// Includes #1091's provider-entry popup isolation exceptions; authenticated documents remain strict.
+const expectedEdgePolicyDigest = "d5ac11eb4201801694205e9d22d05d610fec936fe56f579ed32a30383b7207cf";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),

@@ -4,6 +4,7 @@ import type * as Atom from "effect/reactivity/Atom";
 import { useState } from "react";
 import type { FormEvent, JSX } from "react";
 import type { CanonicalInput, FidyClient } from "@/transport/client";
+import { isCanonicalInput } from "@/transport/canonical-input";
 import { Button } from "@/ui/components/button";
 import { Input } from "@/ui/components/input";
 import { Label } from "@/ui/components/label";
@@ -73,14 +74,20 @@ const correctionChanges = (
     return Option.none();
   }
   const original = initialDraft(props.transaction, props.timeZone);
-  return Option.some({
+  const changes: CorrectionChanges = {
     ...textChanges(draft, original),
     ...(BigDecimal.Order(amount.value, props.transaction.money.amount) !== 0
       ? { money: { amount: amount.value, currency: props.transaction.money.currency } }
       : {}),
     ...(draft.categoryId !== original.categoryId ? { categoryId: category.value.id } : {}),
     ...(draft.date !== original.date ? { occurredAt: DateTime.toUtc(occurredAt.value) } : {}),
-  });
+  };
+  return isCanonicalInput("transactions.updateTransaction", {
+    params: { id: props.transaction.id },
+    payload: { expectedRevision: props.transaction.revision, changes },
+  })
+    ? Option.some(changes)
+    : Option.none();
 };
 type CorrectionCommand = Readonly<{
   changes: CanonicalInput<"transactions.updateTransaction">["payload"]["changes"];
@@ -363,10 +370,10 @@ export const TransactionCorrection = (props: CorrectionProps): JSX.Element => {
           categories={props.categories}
           onChange={setDraft}
         />
+        <OptionalNotes draft={draft} onChange={setDraft} />
       </fieldset>
       <CorrectionFeedback status={status} onRefresh={props.onRefresh} />
       <CorrectionActions status={status} locked={locked} onCancel={props.onCancel} />
-      <OptionalNotes draft={draft} onChange={setDraft} />
     </form>
   );
 };

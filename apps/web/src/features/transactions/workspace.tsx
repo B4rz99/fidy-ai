@@ -37,6 +37,17 @@ type WorkspaceFilters = Readonly<{
   categoryId: string;
   date: string;
 }>;
+const emptyFilters: WorkspaceFilters = {
+  search: "",
+  direction: "all",
+  categoryId: "all",
+  date: "",
+};
+const hasFilters = (filters: WorkspaceFilters): boolean =>
+  filters.search.trim() !== "" ||
+  filters.direction !== "all" ||
+  filters.categoryId !== "all" ||
+  filters.date !== "";
 type FilterTool = "search" | "date" | "category";
 const matchesFilters = (
   transaction: Transaction,
@@ -134,6 +145,11 @@ const WorkspaceToolbar = ({
         disabled={disabled}
         onChange={(event) => onFilters({ ...filters, date: event.target.value })}
       />
+    ) : null}
+    {hasFilters(filters) ? (
+      <Button variant="ghost" disabled={disabled} onClick={() => onFilters(emptyFilters)}>
+        Limpiar filtros
+      </Button>
     ) : null}
   </div>
 );
@@ -383,12 +399,7 @@ const WorkspaceContent = ({
 export const TransactionWorkspace = (props: WorkspaceProps): JSX.Element => {
   const [tool, setTool] = useState<FilterTool | "closed">("closed");
   const [panel, onPanel] = useState<TransactionPanel>({ _tag: "Summary" });
-  const [filters, onFilters] = useState<WorkspaceFilters>({
-    search: "",
-    direction: "all",
-    categoryId: "all",
-    date: "",
-  });
+  const [filters, onFilters] = useState<WorkspaceFilters>(emptyFilters);
   const visible = props.transactions.filter((transaction) =>
     matchesFilters(transaction, filters, props.currentUser.timeZone)
   );

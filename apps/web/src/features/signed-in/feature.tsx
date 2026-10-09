@@ -14,7 +14,7 @@ import type { JSX } from "react";
 import { useSession } from "@/session/session-context";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Button } from "@/ui/components/button";
-import { fidyLogoUrl } from "@/ui/brand";
+import { FidyWordmark } from "@/ui/components/wordmark";
 import { completeLogoutNavigation, makeLogoutOperation } from "./logout";
 
 /** Explains the authentication-lifetime transition without exposing or retaining credentials. */
@@ -47,7 +47,7 @@ const SignedInNavigation = ({
 }>): JSX.Element => (
   <nav
     aria-label="Aplicación"
-    className="flex min-w-0 flex-1 gap-2 overflow-x-auto px-3 pb-3 md:flex-col"
+    className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto px-3 pb-3 md:flex-col md:items-stretch"
   >
     {navigationLinks.map((link) => (
       <Link
@@ -119,9 +119,7 @@ const SignedInShell = (): JSX.Element => {
     <div className="signed-in-theme min-h-svh bg-background md:flex">
       <aside className="flex border-b bg-muted/30 md:sticky md:top-0 md:h-svh md:w-60 md:flex-none md:flex-col md:border-r md:border-b-0">
         <Link className="flex shrink-0 flex-col items-start gap-2 px-6 py-4" to="/app/dashboard">
-          <span className="flex h-11 w-24 items-center justify-center rounded-md bg-on-pastel">
-            <img className="w-20" src={fidyLogoUrl} alt="Fidy" />
-          </span>
+          <FidyWordmark />
           <span className="hidden text-xs text-muted-foreground md:block">
             Tu dinero, más claro
           </span>

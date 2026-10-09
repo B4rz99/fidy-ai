@@ -130,10 +130,6 @@ export const TransactionSummary = (props: SummaryProps): JSX.Element => {
         <SummaryLine label="Primera transacción" value={range.first} />
         <SummaryLine label="Última transacción" value={range.last} />
       </dl>
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        Este resumen refleja las transacciones registradas en Fidy. Puede no incluir toda tu
-        actividad financiera.
-      </p>
     </section>
   );
 };

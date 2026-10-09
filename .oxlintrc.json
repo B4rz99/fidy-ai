@@ -266,7 +266,7 @@
       "files": [
         "scripts/mcp/production-browser.ts",
         "apps/web/src/ui/class-names.ts",
-        "apps/web/src/ui/components/{alert,badge,button,checkbox,empty,input,progress,toggle-group}.tsx",
+        "apps/web/src/ui/components/{alert,badge,button,checkbox,dropdown-menu,empty,input,progress,toggle-group}.tsx",
         "apps/web/e2e/{browser-pairing,static-shell}.spec.ts",
         "apps/web/{playwright,vite,vitest}.config.ts",
         "apps/web/src/testing/setup.ts"

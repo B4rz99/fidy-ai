@@ -304,10 +304,49 @@ it("finishes a pending correction after crossing the responsive breakpoint", () 
       expect(
         yield* Effect.tryPromise(() => screen.findByRole("button", { name: "Guardando…" }))
       ).toBeDisabled();
+      expect(screen.getByLabelText("Notas (opcional)")).toBeDisabled();
       resize(false);
       expect(screen.getByLabelText("Monto en COP")).toHaveValue("30000");
+      expect(screen.getByLabelText("Notas (opcional)")).toBeDisabled();
       yield* Deferred.succeed(complete, undefined);
       expect(yield* Effect.tryPromise(() => findDetailAmount("COP 30.000,00"))).toBeVisible();
       expect(requests.updates()).toBe(1);
+    })
+  ));
+
+it("rejects invalid corrections and discards cancelled field changes", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const requests = renderJourney();
+      fireEvent.click(
+        yield* Effect.tryPromise(() =>
+          screen.findByRole("button", { name: "Ver transacción El Corral" })
+        )
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Editar transacción" }));
+      const invalidAmounts = ["0", "-1", "not money", "1.001"];
+      for (const amount of invalidAmounts) {
+        fireEvent.change(screen.getByLabelText("Monto en COP"), { target: { value: amount } });
+        fireEvent.submit(screen.getByRole("form", { name: "Corregir transacción" }));
+        expect(screen.getByRole("alert")).toHaveTextContent("Revisa el monto");
+        expect(requests.updates()).toBe(0);
+      }
+      fireEvent.change(screen.getByLabelText("Contraparte"), {
+        target: { value: "Draft merchant" },
+      });
+      fireEvent.change(screen.getByLabelText("Tipo"), { target: { value: "inflow" } });
+      fireEvent.change(screen.getByLabelText("Notas (opcional)"), {
+        target: { value: "Draft notes" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+      expect(screen.getByRole("region", { name: "Detalle de transacción" })).toHaveTextContent(
+        "El Corral"
+      );
+      expect(screen.queryByText("Draft merchant")).not.toBeInTheDocument();
+      expect(requests.updates()).toBe(0);
+      fireEvent.click(screen.getByRole("button", { name: "Editar transacción" }));
+      expect(screen.getByLabelText("Monto en COP")).toHaveValue("25000");
+      expect(screen.getByLabelText("Tipo")).toHaveValue("outflow");
+      expect(screen.getByLabelText("Notas (opcional)")).toHaveValue("");
     })
   ));

@@ -7,7 +7,9 @@ import type { FormEvent, JSX } from "react";
 import { Button } from "@/ui/components/button";
 import { Label } from "@/ui/components/label";
 import { Input } from "@/ui/components/input";
-import type { CanonicalSuccess, FidyClient } from "@/transport/client";
+import { NativeSelect, NativeSelectOption } from "@/ui/components/native-select";
+import type { CanonicalInput, CanonicalSuccess, FidyClient } from "@/transport/client";
+import { isCanonicalInput } from "@/transport/canonical-input";
 
 type CapturedTransaction = CanonicalSuccess<"transactions.createTransaction">["data"];
 
@@ -38,18 +40,22 @@ const makeCapture = (apiClient: FidyClient): Atom.AtomResultFn<CaptureCommand, v
       ) {
         return Effect.sync(command.onFailed);
       }
+      const input: CanonicalInput<"transactions.createTransaction"> = {
+        payload: {
+          money: { amount: amount.value, currency: "COP" },
+          direction: command.direction,
+          counterparty: Option.fromNullishOr(command.counterparty.trim() || undefined),
+          notes: Option.none(),
+          categoryId: Option.none(),
+          occurredAt: DateTime.toUtc(zoned.value),
+        },
+      };
+      if (!isCanonicalInput("transactions.createTransaction", input)) {
+        return Effect.sync(command.onFailed);
+      }
       return Effect.gen(function* () {
         const client = yield* apiClient;
-        const created = yield* client.transactions.createTransaction({
-          payload: {
-            money: { amount: amount.value, currency: "COP" },
-            direction: command.direction,
-            counterparty: Option.fromNullishOr(command.counterparty.trim() || undefined),
-            notes: Option.none(),
-            categoryId: Option.none(),
-            occurredAt: DateTime.toUtc(zoned.value),
-          },
-        });
+        const created = yield* client.transactions.createTransaction(input);
         yield* Effect.sync(() => command.onSaved(created.data));
       }).pipe(
         Effect.catch((failure) =>
@@ -126,15 +132,15 @@ const CaptureDirection = ({
 }>): JSX.Element => (
   <div className="flex flex-col gap-2">
     <Label htmlFor="transaction-direction">Dirección</Label>
-    <select
+    <NativeSelect
       id="transaction-direction"
-      className="border-input bg-background h-9 rounded-md border px-3"
+      size="default"
       value={value}
       onChange={(event) => onChange(event.target.value === "inflow" ? "inflow" : "outflow")}
     >
-      <option value="outflow">Gasto</option>
-      <option value="inflow">Ingreso</option>
-    </select>
+      <NativeSelectOption value="outflow">Gasto</NativeSelectOption>
+      <NativeSelectOption value="inflow">Ingreso</NativeSelectOption>
+    </NativeSelect>
   </div>
 );
 

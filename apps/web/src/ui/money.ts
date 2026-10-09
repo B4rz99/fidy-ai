@@ -1,3 +1,4 @@
+import { Currency, currencyMetadata } from "@fidy/server/client";
 import { BigDecimal, Schema } from "effect";
 
 const ExactDecimal = Schema.NonEmptyString.pipe(Schema.decodeTo(Schema.BigDecimalFromString));
@@ -9,14 +10,14 @@ export const formatCurrencyAmount = ({
   locale,
 }: Readonly<{ amount: string; currency: string; locale: string }>): string => {
   const decimal = Schema.decodeSync(ExactDecimal)(amount);
+  const digits = currencyMetadata(Schema.decodeUnknownSync(Currency)(currency)).fractionalDigits;
   const formatter = new Intl.NumberFormat(locale, {
     currency,
     currencyDisplay: "code",
     style: "currency",
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
   });
-  const digits = Schema.decodeUnknownSync(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)))(
-    formatter.resolvedOptions().maximumFractionDigits
-  );
   const scaled = BigDecimal.scale(BigDecimal.round(decimal, { scale: digits }), digits).value;
   const unit = 10n ** BigInt(digits);
   const whole = scaled / unit;

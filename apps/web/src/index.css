@@ -205,9 +205,35 @@
 .signed-in-theme {
   line-height: 1.5;
 }
+/* Columns depend on the ledger width, including when the detail rail is open. */
+.transaction-ledger {
+  container: ledger / inline-size;
+}
+@container ledger (width >= 800px) {
+  .transaction-ledger .transaction-category-inline {
+    display: none;
+  }
+}
 .transaction-ledger [data-slot="table-cell"] {
   padding: 3px 12px;
   font-size: 16px;
+}
+@container ledger (width < 400px) {
+  .transaction-ledger [data-slot="table"],
+  .transaction-ledger [data-slot="table-body"] {
+    display: block;
+  }
+  .transaction-ledger [data-slot="table-row"] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .transaction-ledger [data-slot="table-cell"] {
+    padding-inline: 4px;
+    font-size: 14px;
+  }
+  .transaction-ledger [data-slot="table-cell"]:last-child {
+    padding-bottom: 10px;
+  }
 }
 .transaction-ledger [data-slot="table-row"][data-state="selected"] {
   background: var(--accent);
@@ -301,34 +327,10 @@
 }
 
 .signed-in-theme .transaction-ledger[data-category-visible="false"] td:nth-child(2),
+.signed-in-theme .transaction-ledger[data-category-visible="false"] .transaction-category-inline,
 .signed-in-theme .transaction-ledger[data-type-visible="false"] td:nth-child(3) {
   display: none;
 }
-.signed-in-theme .column-controls {
-  position: relative;
-  font-size: 14px;
-}
-.signed-in-theme .column-controls summary {
-  cursor: pointer;
-  list-style: none;
-  padding: 9px 16px;
-  border: 1px solid var(--input);
-  border-radius: var(--radius-lg);
-  min-height: 44px;
-}
-.signed-in-theme .column-controls > div {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  z-index: 20;
-  min-width: 160px;
-  background: var(--popover);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 6px;
-  box-shadow: 0 4px 16px #0001;
-}
-
 .signed-in-theme main > header h1 {
   font-size: 24px;
 }

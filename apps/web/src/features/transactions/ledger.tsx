@@ -7,11 +7,17 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { NativeSelect, NativeSelectOption } from "@/ui/components/native-select";
-import { Fragment, useState } from "react";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/ui/components/dropdown-menu";
+import { Fragment, useMemo, useState } from "react";
 import type { JSX } from "react";
 import { BigDecimal, Option } from "effect";
-import { Checkbox } from "@/ui/components/checkbox";
 import { Button } from "@/ui/components/button";
 import {
   Table,
@@ -28,7 +34,7 @@ import { CategoryVisual, DirectionVisual } from "./visuals";
 import { formatMoney } from "@/ui/money";
 import type { TransactionListRow } from "./presentation";
 
-const columns: ReadonlyArray<ColumnDef<TransactionListRow>> = [
+const columns: Array<ColumnDef<TransactionListRow>> = [
   { accessorKey: "counterpartyLabel", header: "Contraparte" },
   { accessorKey: "categoryLabel", header: "Categoría" },
   { accessorKey: "transactionTypeLabel", header: "Tipo" },
@@ -61,35 +67,35 @@ const TransactionRow = ({
         className="flex w-full min-w-0 items-center gap-3 rounded-md py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
       >
         <CategoryVisual label={row.categoryLabel} bubble large={false} />
-        <span className="min-w-0">
+        <span className="w-0 min-w-0 flex-1">
           <span className="block truncate">{row.counterpartyLabel}</span>
-          <span className="block truncate text-xs text-muted-foreground lg:hidden">
+          <span className="transaction-category-inline block truncate text-xs text-muted-foreground">
             {row.categoryLabel}
           </span>
         </span>
       </button>
     </TableCell>
-    <TableCell className="hidden lg:table-cell">
+    <TableCell className="hidden @min-[800px]/ledger:table-cell">
       <span className="flex items-center gap-4">
         <CategoryVisual label={row.categoryLabel} bubble={false} large={false} />
         <span className="truncate">{row.categoryLabel}</span>
       </span>
     </TableCell>
-    <TableCell className="hidden md:table-cell">
+    <TableCell className="hidden @min-[640px]/ledger:table-cell">
       <span className="flex items-center gap-4">
         <DirectionVisual inflow={row.direction === "inflow"} />
         {row.transactionTypeLabel}
       </span>
     </TableCell>
     <TableCell className="text-right font-medium tabular-nums">
-      <span className="flex items-center justify-end gap-6">
-        {row.moneyText}
+      <span className="flex items-center justify-end gap-2">
+        <span className="min-w-0 break-words">{row.moneyText}</span>
         <HugeiconsIcon
           icon={ArrowRight01Icon}
           size={16}
           strokeWidth={1.5}
           aria-hidden="true"
-          className="text-muted-foreground"
+          className="shrink-0 text-muted-foreground"
         />
       </span>
     </TableCell>
@@ -107,8 +113,9 @@ const LedgerHeader = ({
           <TableHead
             key={header.id}
             className={cn(
-              header.column.id === "categoryLabel" && "hidden lg:table-cell",
-              header.column.id === "transactionTypeLabel" && "hidden md:table-cell",
+              header.column.id === "categoryLabel" && "hidden @min-[800px]/ledger:table-cell",
+              header.column.id === "transactionTypeLabel" &&
+                "hidden @min-[640px]/ledger:table-cell",
               header.column.id === "moneyText" && "text-right"
             )}
           >
@@ -146,24 +153,67 @@ const ColumnControls = ({
   table,
   disabled,
 }: Readonly<{ table: ReactTable<TransactionListRow>; disabled: boolean }>): JSX.Element => (
-  <details className="column-controls">
-    <summary>Columnas</summary>
-    <div>
+  <DropdownMenu>
+    <DropdownMenuTrigger render={<Button variant="outline" disabled={disabled} />}>
+      Columnas
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="end">
       {table
         .getAllLeafColumns()
         .filter((column) => column.id === "categoryLabel" || column.id === "transactionTypeLabel")
         .map((column) => (
-          <label key={column.id} className="flex items-center gap-2 p-2">
-            <Checkbox
-              checked={column.getIsVisible()}
-              disabled={disabled}
-              onCheckedChange={(checked) => column.toggleVisibility(checked)}
-            />
+          <DropdownMenuCheckboxItem
+            key={column.id}
+            checked={column.getIsVisible()}
+            disabled={disabled}
+            closeOnClick={false}
+            onCheckedChange={(checked) => column.toggleVisibility(checked)}
+          >
             {column.id === "categoryLabel" ? "Categoría" : "Tipo"}
-          </label>
+          </DropdownMenuCheckboxItem>
         ))}
-    </div>
-  </details>
+    </DropdownMenuContent>
+  </DropdownMenu>
+);
+const sortOptions = [
+  { value: "default", label: "Ordenar" },
+  { value: "counterpartyLabel:asc", label: "Contraparte A–Z" },
+  { value: "counterpartyLabel:desc", label: "Contraparte Z–A" },
+  { value: "categoryLabel:asc", label: "Categoría A–Z" },
+];
+const SortControl = ({
+  sorting,
+  onSorting,
+  disabled,
+}: Readonly<{
+  sorting: SortingState;
+  onSorting: (sorting: SortingState) => void;
+  disabled: boolean;
+}>): JSX.Element => (
+  <DropdownMenu>
+    <DropdownMenuTrigger
+      render={<Button variant="outline" disabled={disabled} />}
+      aria-label="Ordenar transacciones"
+    >
+      {sortOptions.find((option) => option.value === sortValue(sorting))?.label ?? "Ordenar"}
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="end" className="min-w-56">
+      <DropdownMenuRadioGroup
+        value={sortValue(sorting)}
+        onValueChange={(value: unknown) => {
+          if (typeof value !== "string") return;
+          const [id, order] = value.split(":");
+          onSorting(id !== undefined && id !== "default" ? [{ id, desc: order === "desc" }] : []);
+        }}
+      >
+        {sortOptions.map((option) => (
+          <DropdownMenuRadioItem key={option.value} value={option.value} closeOnClick>
+            {option.label}
+          </DropdownMenuRadioItem>
+        ))}
+      </DropdownMenuRadioGroup>
+    </DropdownMenuContent>
+  </DropdownMenu>
 );
 const LedgerControls = ({
   table,
@@ -184,25 +234,11 @@ const LedgerControls = ({
 }>): JSX.Element => (
   <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
     {toolbar}
-    <div className="flex items-center gap-3">
+    <div className="flex flex-wrap items-center gap-3">
       <Button variant="outline" disabled={disabled || empty} onClick={onEdit}>
         Editar
       </Button>
-      <NativeSelect
-        size="default"
-        aria-label="Ordenar transacciones"
-        value={sortValue(sorting)}
-        disabled={disabled}
-        onChange={(event) => {
-          const [id, order] = event.target.value.split(":");
-          onSorting(id !== undefined && id !== "default" ? [{ id, desc: order === "desc" }] : []);
-        }}
-      >
-        <NativeSelectOption value="default">Ordenar</NativeSelectOption>
-        <NativeSelectOption value="counterpartyLabel:asc">Contraparte A–Z</NativeSelectOption>
-        <NativeSelectOption value="counterpartyLabel:desc">Contraparte Z–A</NativeSelectOption>
-        <NativeSelectOption value="categoryLabel:asc">Categoría A–Z</NativeSelectOption>
-      </NativeSelect>
+      <SortControl sorting={sorting} onSorting={onSorting} disabled={disabled} />
       <ColumnControls table={table} disabled={disabled} />
     </div>
   </div>
@@ -249,9 +285,11 @@ const LedgerBody = ({
 export const TransactionLedger = ({ rows, ...props }: LedgerProps): JSX.Element => {
   const [visibility, setVisibility] = useState({});
   const [sorting, onSortingChange] = useState<SortingState>([]);
+  const data = useMemo(() => Array.from(rows), [rows]);
   const table = useReactTable({
-    data: Array.from(rows),
-    columns: Array.from(columns),
+    data,
+    columns,
+    autoResetPageIndex: false,
     state: { sorting, columnVisibility: visibility },
     onColumnVisibilityChange: setVisibility,
     onSortingChange,

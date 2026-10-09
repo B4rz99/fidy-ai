@@ -1,0 +1,68 @@
+.patterns/alchemy.md
+  s_e3b9a05f422f64::t_63e06861b791bf 47-53
+infra/cloudflare/release-controller.ts
+  s_e3b9a05f422f64::t_12a2fc35a3061e 336-355,362
+infra/cloudflare/production-release.ts
+  s_e3b9a05f422f64::t_e10d2b1320d428 1139-1148
+  s_e3b9a05f422f64::t_c90536dfd348c4 1192-1198
+  s_e3b9a05f422f64::t_12a2fc35a3061e 89
+docs/operations/production-releases.md
+  s_e3b9a05f422f64::t_63e06861b791bf 82,86-87,108-117
+patches/alchemy@2.0.0-beta.80.patch
+  s_e3b9a05f422f64::t_c90536dfd348c4 99-169,171,200
+  s_e3b9a05f422f64::t_c9f658a92bd682 1-67,69,93-98
+tsconfig.base.json
+  s_e3b9a05f422f64::t_05cd9f64b4a0ae 201-204,212-215
+  s_e3b9a05f422f64::t_8132801a1f9e84 216-217
+.patterns/effect-4-stable.md
+  s_e3b9a05f422f64::t_63e06861b791bf 63-65
+infra/cloudflare/production-resources.ts
+  s_e3b9a05f422f64::t_e10d2b1320d428 14-16
+  s_e3b9a05f422f64::t_960d8a5a6cee48 1-2,4-13,19,21-25,27-29,33-37,47,49-52,54-56,64-72,88
+  s_e3b9a05f422f64::t_63e06861b791bf 53
+  s_e3b9a05f422f64::t_05cd9f64b4a0ae 3,17-18,20,26,48
+  s_e3b9a05f422f64::t_b3328997a13e3a 30-32,38-46,57-63,73-87
+infra/cloudflare/release-controller.test.ts
+  s_e3b9a05f422f64::t_b3328997a13e3a 99-100,106-108
+  s_e3b9a05f422f64::t_0a4d84f0b9f235 123-125,132-135,137-141
+  s_e3b9a05f422f64::t_769ecb83082479 113-122,126-131,136,142-146
+  s_e3b9a05f422f64::t_9d9f949b1ba89e 93-98,101-105,109-112
+infra/cloudflare/resource-retirement.test.ts
+  s_e3b9a05f422f64::t_a0ddaa8b541f9c 6,39,99,162-165,167-169,173-175
+  s_e3b9a05f422f64::t_d5e537b4024c71 1,3-5,7-10,36,38,40,42,44,47-50,57-65,73-76,88-92,98,100-103,105-106,118,211
+  s_e3b9a05f422f64::t_e18a813cee4cfa 67-70,109-116,194-210
+  s_e3b9a05f422f64::t_05cd9f64b4a0ae 71,104
+  s_e3b9a05f422f64::t_6d9dafb2c6d36b 2
+  s_e3b9a05f422f64::t_9ae3d1dce1b051 45-46,117,123,142,166,181,191-193
+  s_e3b9a05f422f64::t_b3328997a13e3a 16-29,31,33-35,51-52,54-56,77-84,93-97,119-122,124-135,138-141,143-161,170-172,188-190
+  s_e3b9a05f422f64::t_c90536dfd348c4 30,32,53
+  s_e3b9a05f422f64::t_bc6d9916e7da57 11,13-15
+  s_e3b9a05f422f64::t_e10d2b1320d428 37,41,85-87,107-108
+  s_e3b9a05f422f64::t_80a4688d55d538 176-180,182-187
+  s_e3b9a05f422f64::t_0197e22f568433 12,43,66,72,136-137
+.github/workflows/production.yml
+  s_e3b9a05f422f64::t_724d824c7e4f2f 138,191,296-316
+  s_e3b9a05f422f64::t_f074ccaabc4a8c 317
+scripts/check-lint-suppressions.test.ts
+  s_e3b9a05f422f64::t_05cd9f64b4a0ae 124-125,132-134
+apps/web/scripts/production-workflow.test.ts
+  s_e3b9a05f422f64::t_724d824c7e4f2f 61,147,175,188,206,233,257,270
+  s_e3b9a05f422f64::t_feda0502b37a72 16-29,33-34
+  s_e3b9a05f422f64::t_b3328997a13e3a 30-32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3a98900f086e0af61518bd966695a5d4b86e68c0",
+  "prompts": {},
+  "sessions": {
+    "s_e3b9a05f422f64": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a115f2-dfce-7741-a6e9-e22144cd3fad",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

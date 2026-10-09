@@ -1,0 +1,52 @@
+infra/cloudflare/production-release.ts
+  s_6d017cc65783af::t_7af8d4e1e3137b 955-978
+  s_6d017cc65783af::t_6c7be46d6afcb8 219-221,223-224,228-229,232-233,237,239-245,247-268,272-274,276-277,279-281,287-289,291,293,295,302,304-309,311,317,319,321-322,324,326,333,336-341,343-344,349-353,358-365,367-374
+  s_6d017cc65783af::t_4051160536edb0 375
+  s_6d017cc65783af::t_f4ff523d935665 216-218,222,225-227,230-231,234-235,269-271,275,282-286,290,296-301,312-316,327-331,335,345-348,354-357
+  s_6d017cc65783af::t_5136cb4107d63e 278
+  s_6d017cc65783af::t_02b04d1141db7a 236,238,246,292,294,303,310,318,320,323,325,332,334,342,366
+infra/cloudflare/production-release.test.ts
+  s_6d017cc65783af::t_c8bc873059e545 63
+  s_6d017cc65783af::t_87c7f8c76f25fd 126,131,143
+  s_6d017cc65783af::t_7af8d4e1e3137b 64,67-68,70,105,108,133-137,140-142,144-154,158-160
+  s_6d017cc65783af::t_6c7be46d6afcb8 12,20-62,65-66,69,71-104,106-107,109-125,127-130,132,138-139,156-157,161
+  s_6d017cc65783af::t_905a5ec26f8578 155,162-163
+  s_6d017cc65783af::t_66704bc82d6e3e 164
+apps/web/src/features/provider-authentication/FEATURE.md
+  s_6d017cc65783af::t_3a0ea2443a2ea7 110-111
+  s_6d017cc65783af::t_e666534c78e16e 91-96
+  s_6d017cc65783af::t_832178ddae3286 102-103
+  s_6d017cc65783af::t_ce1076dc72c71d 20-21,30,43,68-74,98-101,104-108,112-113
+  s_6d017cc65783af::t_379e4e953f0162 10
+  s_6d017cc65783af::t_d775dd9b9508e9 75-83,109
+  s_6d017cc65783af::t_a2a7c2b18013fd 14
+  s_6d017cc65783af::t_9fd4c1142d227f 85-90,97
+docs/operations/support-recovery.md
+  s_6d017cc65783af::t_e666534c78e16e 19-24,31-39
+.github/workflows/production.yml
+  s_6d017cc65783af::t_c90fcbb78c0cdf 36-37
+infra/cloudflare/scripts/check-production-runtime-config.sh
+  s_6d017cc65783af::t_c90fcbb78c0cdf 22
+infra/cloudflare/scripts/check-production-runtime-config.test.ts
+  s_6d017cc65783af::t_c90fcbb78c0cdf 39
+infra/cloudflare/alchemy.run.ts
+  s_6d017cc65783af::t_6c7be46d6afcb8 87-114,116-117
+  s_6d017cc65783af::t_f4ff523d935665 86
+  s_6d017cc65783af::t_e9f2cd28139975 48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c53f3cbfaef2f527eed62060bf93c3345297729e",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

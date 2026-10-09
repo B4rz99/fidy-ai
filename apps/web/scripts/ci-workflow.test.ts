@@ -58,7 +58,13 @@ describe("pull-request checks workflow policy", () => {
     expect(requiredJob).toContain("name: Required Checks");
     expect(requiredJob).toContain("- changes");
     expect(requiredJob).toContain("if: ${{ always() }}");
-    expect(requiredJob).toContain("run: bash scripts/check-ci-results.sh");
+    expect(checksWorkflow).toContain("required-script: ${{ steps.results-gate.outputs.script }}");
+    expect(checksWorkflow).toContain("cat scripts/check-ci-results.sh");
+    expect(requiredJob).toContain(
+      "REQUIRED_CHECK_SCRIPT: ${{ needs.changes.outputs.required-script }}"
+    );
+    expect(requiredJob).toContain("${REQUIRED_CHECK_SCRIPT:?Required-check script unavailable}");
+    expect(requiredJob).toContain('bash -c "$REQUIRED_CHECK_SCRIPT"');
     expect(checksWorkflow).toContain("fetch-depth: 0");
     expect(checksWorkflow).toContain("run: bun scripts/ci-changes.ts");
   });

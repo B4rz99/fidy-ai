@@ -157,6 +157,19 @@ const expectSignupNotice = Effect.fn(function* (page: Page) {
   );
 });
 
+const acknowledgeRecovery = Effect.fn(function* (page: Page) {
+  const authenticatedDocument = yield* Effect.tryPromise(() =>
+    Promise.all([
+      page.waitForResponse(
+        (response) =>
+          response.request().isNavigationRequest() &&
+          new URL(response.url()).pathname === "/app/transactions"
+      ),
+      page.getByRole("button", { name: "Lo guardé" }).click(),
+    ]).then(([response]) => response)
+  );
+  expect(authenticatedDocument.headers()["cross-origin-opener-policy"]).toBe("same-origin");
+});
 export const signupJourney = ({
   configuration,
   page,
@@ -197,7 +210,7 @@ export const signupJourney = ({
       const backupRecoveryCode = yield* Effect.tryPromise(() =>
         page.getByLabel("Código de recuperación", { exact: true }).innerText()
       );
-      yield* Effect.tryPromise(() => page.getByRole("button", { name: "Lo guardé" }).click());
+      yield* acknowledgeRecovery(page);
       yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/app\/transactions$/u));
       yield* Effect.tryPromise(() => page.reload());
       yield* Effect.tryPromise(() =>
@@ -224,7 +237,27 @@ const retryPendingProvider = Effect.fn(function* (page: Page) {
   yield* Effect.tryPromise(() =>
     expect(popup.getByText("Pending provider decision")).toBeVisible()
   );
+  expect(yield* Effect.tryPromise(() => popup.evaluate(() => window.opener === null))).toBe(true);
+  for (const _ of [0, 1]) {
+    yield* Effect.tryPromise(() =>
+      page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/status"), {
+        timeout: 5_000,
+      })
+    );
+  }
+  yield* Effect.tryPromise(() => expect(page.getByText("Esperando confirmación…")).toBeVisible());
   return popup;
+});
+const openProviderEntry = Effect.fn(function* (
+  configuration: ProviderJourneyConfiguration,
+  page: Page
+) {
+  const loginResponse = yield* Effect.tryPromise(() =>
+    page.goto(`/auth/${configuration.provider}`)
+  );
+  expect(loginResponse?.headers()["cross-origin-opener-policy"]).toBe("same-origin-allow-popups");
+  const protectedResponse = yield* Effect.tryPromise(() => page.request.get("/app/transactions"));
+  expect(protectedResponse.headers()["cross-origin-opener-policy"]).toBe("same-origin");
 });
 export const denialAndCancellationJourney = ({
   configuration,
@@ -243,7 +276,7 @@ export const denialAndCancellationJourney = ({
           denyProvider(configuration, route)
         )
       );
-      yield* Effect.tryPromise(() => page.goto(`/auth/${configuration.provider}`));
+      yield* openProviderEntry(configuration, page);
       yield* expectSignupNotice(page);
       if (intent === "signup") {
         yield* Effect.tryPromise(() =>
@@ -267,6 +300,9 @@ export const denialAndCancellationJourney = ({
       yield* Effect.tryPromise(() =>
         context.route(configuration.authorizationPattern, pendingProvider)
       );
+      const closedPopup = yield* retryPendingProvider(page);
+      yield* Effect.tryPromise(() => closedPopup.close());
+      yield* Effect.tryPromise(() => expect(page.getByText("Cancelaste el acceso.")).toBeVisible());
       yield* retryPendingProvider(page);
       yield* Effect.tryPromise(() => page.getByRole("button", { name: "Cancelar" }).click());
       yield* Effect.tryPromise(() => expect(page.getByRole("alert")).toBeVisible());

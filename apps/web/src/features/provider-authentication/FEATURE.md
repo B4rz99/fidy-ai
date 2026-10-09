@@ -184,7 +184,14 @@ receipts returned 200; an invalid signature returned 401. The delivered replay i
 read status. Consent delivery, handoff and User counts were unchanged before/after the replay.
 This verifies captured real callbacks against Production; it does not claim a newly sent message.
 
-Remaining live checks: deployed Google retry UX and Microsoft personal denial UI;
+The User verified direct Google retry on PR #1128's deployed revision
+`21e701693d519cb4163a6f1929fee73ad5847a7e`. Closing the provider window manually still
+left Fidy waiting. The regression now closes the actual external fixture popup and checks
+cancellation plus direct retry for both providers and intents. It also checks that an open
+popup remains pending with no opener, and that authenticated pages retain strict opener policy.
+Live verification of this popup-close fix remains pending.
+
+Remaining live checks: deployed popup-close UX and Microsoft personal denial UI;
 Microsoft work/school signup/returning login/denial (unavailable: the User has no work/school account);
 forwarded WhatsApp handoff refusal (expired confirmation and restart now pass); deployed server-side session deadlines and retention.
 Local fixture passes do not establish these Production results. The User approved

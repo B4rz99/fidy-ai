@@ -1,0 +1,40 @@
+apps/web/src/features/provider-authentication/controller.ts
+  s_6d017cc65783af::t_a4004dbe08ca48 14-15,39
+  s_6d017cc65783af::t_decdec0d8dc93d 38,43,106-122,155-156,205,207
+  s_6d017cc65783af::t_db86a5e266e538 42,52
+  s_6d017cc65783af::t_62adcc92690f6a 263,286
+  s_6d017cc65783af::t_5a9f5d8a1f37a0 57
+apps/web/src/features/provider-authentication/FEATURE.md
+  s_6d017cc65783af::t_7dfe3a3a91ea20 187-194
+apps/web/e2e/provider-authentication.journeys.ts
+  s_6d017cc65783af::t_2b69baad0707c1 303-305
+  s_6d017cc65783af::t_7dfe3a3a91ea20 240
+  s_6d017cc65783af::t_62adcc92690f6a 255,257
+  s_6d017cc65783af::t_1594761df6c281 241-243,245-248
+  s_6d017cc65783af::t_e1ec5b65eb0c5f 161-171
+  s_6d017cc65783af::t_0365dc95dd1992 160,172,213,244,251-254,256,258-261,279
+apps/web/cloudflare/production/_headers
+  s_6d017cc65783af::t_62adcc92690f6a 11-18
+apps/web/scripts/serve-preview.ts
+  s_6d017cc65783af::t_d5378f68fb1347 52-57,59,61-62,71-77,79,81,83-90,96,131-132,134
+  s_6d017cc65783af::t_777291b149b01b 58,60,63-70,78,80,82
+  s_6d017cc65783af::t_576180822df329 133
+apps/web/ARCHITECTURE.md
+  s_6d017cc65783af::t_7dfe3a3a91ea20 86-91,153-154
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1a27c717ec499428a385919351a6ccb2c895d265",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

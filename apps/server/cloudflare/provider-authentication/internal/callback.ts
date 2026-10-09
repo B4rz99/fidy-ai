@@ -1,11 +1,11 @@
-import { Clock, Effect, Option, Schema } from "effect";
+import { Cause, Clock, Effect, Option, Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { digestBytes } from "../../secret-material/operations";
 import type { ProviderEnvironment } from "../contract";
 import { providerConfiguration } from "./configuration";
 import { validateGoogleToken } from "./google-token";
 import { validateMicrosoftToken } from "./microsoft-token";
-import type { Validation } from "./token-contract";
+import { ProviderVerificationFailure, type Validation } from "./token-contract";
 import type { AuthenticationProvider } from "../../../src/shell/provider-authentication/contract";
 
 const redirectStatus = 303;
@@ -33,6 +33,12 @@ const cookieVerifier = (request: Request, cookieName: string): Option.Option<str
   const value = values[0]?.slice(cookieName.length + 1) ?? "";
   return /^[A-Za-z0-9_-]{43}$/u.test(value) ? Option.some(value) : Option.none();
 };
+const rejectionReason = (
+  failure: unknown
+): ProviderVerificationFailure["reason"] | "verification_failed" | "verification_timed_out" => {
+  if (failure instanceof ProviderVerificationFailure) return failure.reason;
+  return Cause.isTimeoutError(failure) ? "verification_timed_out" : "verification_failed";
+};
 const verifyAttempt = (input: Validation): Effect.Effect<void, never, HttpClient.HttpClient> =>
   Effect.gen(function* () {
     if (!validCode(input.query)) return yield* Effect.fail("invalid" as const);
@@ -59,7 +65,7 @@ const verifyAttempt = (input: Validation): Effect.Effect<void, never, HttpClient
     }
   }).pipe(
     Effect.timeout("10 seconds"),
-    Effect.catch(() =>
+    Effect.catch((failure) =>
       Effect.tryPromise(() =>
         input.environment.DB.prepare(
           "UPDATE provider_authentication_attempts SET state='rejected' WHERE id=? AND state='exchanging'"
@@ -67,6 +73,14 @@ const verifyAttempt = (input: Validation): Effect.Effect<void, never, HttpClient
           .bind(input.attempt.id)
           .run()
       ).pipe(
+        Effect.tap(() =>
+          Effect.log({
+            component: "api",
+            operation: "provider.authentication",
+            provider: input.provider,
+            reason: rejectionReason(failure),
+          })
+        ),
         Effect.asVoid,
         Effect.orElseSucceed(() => undefined)
       )

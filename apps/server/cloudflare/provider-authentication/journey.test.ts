@@ -374,6 +374,28 @@ it("keeps configured Google credentials and protocol proofs out of exported diag
     })
   ));
 
+it("identifies a rejected Google signature privately without disclosing protocol or identity material", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const logs = vi.spyOn(console, "log").mockImplementation(() => undefined);
+      const journey = yield* Effect.tryPromise(setup);
+      expect(
+        (yield* authenticate(journey, journey.pairing, { invalidSignature: true })).status
+      ).toBe(400);
+      const diagnostics = yield* Schema.encodeEffect(Json)(logs.mock.calls);
+      expect(diagnostics).toContain("signature_invalid");
+      for (const secret of [
+        "test-secret",
+        "synthetic-code",
+        journey.pairing.privateVerifier,
+        "stable-google-user",
+      ]) {
+        expect(diagnostics).not.toContain(secret);
+      }
+      expect(yield* countRows(journey.db, "users")).toBe(0);
+    })
+  ));
+
 it("refuses state, cookie, browser substitution, and expired attempts before any owner commit", () =>
   Effect.runPromise(
     Effect.gen(function* () {

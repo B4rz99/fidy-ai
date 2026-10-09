@@ -1,5 +1,4 @@
 import {
-  type Cause,
   Clock,
   type Config,
   ConfigProvider,
@@ -10,12 +9,17 @@ import {
   Schema,
 } from "effect";
 import { HttpClient } from "effect/http";
-import { createLocalJWKSet, jwtVerify } from "jose";
+import { createLocalJWKSet, errors, jwtVerify } from "jose";
 import { makeGoogleOutboundHttp } from "../../../src/shell/outbound-http/operations";
+import type { ProviderOidcHttpService } from "../../../src/shell/outbound-http/contract";
 import { loadGoogleClientSecret } from "../../../src/shell/secret-material/operations";
 
 import type { ProviderEnvironment } from "../contract";
-import type { Validation, VerifiedProviderIdentity } from "./token-contract";
+import {
+  ProviderVerificationFailure,
+  type Validation,
+  type VerifiedProviderIdentity,
+} from "./token-contract";
 
 const successStatus = 200;
 const maximumTokenLength = 16384;
@@ -24,6 +28,9 @@ const maximumEmailLength = 320;
 const millisecondsPerSecond = 1000;
 const TokenResponse = Schema.Struct({
   id_token: Schema.String.check(Schema.isMaxLength(maximumTokenLength)),
+});
+const TokenRefusal = Schema.Struct({
+  error: Schema.Literals(["invalid_client", "invalid_grant"]),
 });
 const Claims = Schema.Struct({
   iss: Schema.Literals(["https://accounts.google.com", "accounts.google.com"]),
@@ -46,10 +53,20 @@ const validClaims = ({
   current: number;
   clientId: string;
   multipleAudiences: boolean;
-}>): boolean => {
-  if (claims.nonce !== attempt.nonce || claims.iat * millisecondsPerSecond > current) return false;
-  if (claims.azp !== undefined && claims.azp !== clientId) return false;
-  return !multipleAudiences || claims.azp === clientId;
+}>): Effect.Effect<void, ProviderVerificationFailure> => {
+  if (claims.nonce !== attempt.nonce) {
+    return Effect.fail(new ProviderVerificationFailure({ reason: "nonce_mismatch" }));
+  }
+  if (claims.iat * millisecondsPerSecond > current) {
+    return Effect.fail(new ProviderVerificationFailure({ reason: "issued_in_future" }));
+  }
+  if (
+    (claims.azp !== undefined && claims.azp !== clientId) ||
+    (multipleAudiences && claims.azp !== clientId)
+  ) {
+    return Effect.fail(new ProviderVerificationFailure({ reason: "authorized_party_mismatch" }));
+  }
+  return Effect.void;
 };
 const googleHttp = (
   environment: ProviderEnvironment
@@ -106,15 +123,67 @@ const signingKeys = (
       })),
     });
   });
+const tokenVerificationFailure = (failure: unknown): ProviderVerificationFailure => {
+  if (failure instanceof errors.JWTExpired) {
+    return new ProviderVerificationFailure({ reason: "token_expired" });
+  }
+  if (failure instanceof errors.JWTClaimValidationFailed) {
+    if (failure.claim === "aud") {
+      return new ProviderVerificationFailure({ reason: "audience_mismatch" });
+    }
+    if (failure.claim === "iss") {
+      return new ProviderVerificationFailure({ reason: "issuer_mismatch" });
+    }
+    return new ProviderVerificationFailure({ reason: "claims_invalid" });
+  }
+  if (failure instanceof errors.JWKSNoMatchingKey) {
+    return new ProviderVerificationFailure({ reason: "signing_key_unmatched" });
+  }
+  if (failure instanceof errors.JWSSignatureVerificationFailed) {
+    return new ProviderVerificationFailure({ reason: "signature_invalid" });
+  }
+  return new ProviderVerificationFailure({ reason: "token_verification_failed" });
+};
+const exchangeToken = (
+  http: ProviderOidcHttpService,
+  code: string,
+  verifier: string
+): Effect.Effect<typeof TokenResponse.Type, ProviderVerificationFailure> =>
+  Effect.gen(function* () {
+    const response = yield* http
+      .execute({
+        _tag: "TokenExchange",
+        code: Redacted.make(code),
+        verifier: Redacted.make(verifier),
+      })
+      .pipe(
+        Effect.mapError(() => new ProviderVerificationFailure({ reason: "token_transport_failed" }))
+      );
+    if (response.status !== successStatus) {
+      const refusal = Schema.decodeOption(Schema.fromJsonString(TokenRefusal))(
+        new TextDecoder().decode(response.body)
+      );
+      if (Option.isSome(refusal)) {
+        return yield* new ProviderVerificationFailure({
+          reason:
+            refusal.value.error === "invalid_client"
+              ? "token_invalid_client"
+              : "token_invalid_grant",
+        });
+      }
+      return yield* new ProviderVerificationFailure({ reason: "token_refused" });
+    }
+    return yield* Schema.decodeEffect(Schema.fromJsonString(TokenResponse))(
+      new TextDecoder().decode(response.body)
+    ).pipe(
+      Effect.mapError(() => new ProviderVerificationFailure({ reason: "token_response_invalid" }))
+    );
+  });
 export const validateGoogleToken = (
   input: Validation
 ): Effect.Effect<
   VerifiedProviderIdentity,
-  | Config.ConfigError
-  | Cause.UnknownError
-  | Schema.SchemaError
-  | Effect.Error<ReturnType<ReturnType<typeof makeGoogleOutboundHttp>["execute"]>>
-  | "invalid",
+  ProviderVerificationFailure | "invalid",
   HttpClient.HttpClient
 > =>
   Effect.gen(function* () {
@@ -123,42 +192,36 @@ export const validateGoogleToken = (
       return yield* Effect.fail("invalid" as const);
     }
     const clientId = input.environment.GOOGLE_CLIENT_ID ?? "";
-    const http = yield* googleHttp(input.environment);
-    const response = yield* http.execute({
-      _tag: "TokenExchange",
-      code: Redacted.make(code),
-      verifier: Redacted.make(input.verifier),
-    });
-    if (response.status !== successStatus) {
-      return yield* Effect.fail("invalid" as const);
-    }
-    const token = yield* Schema.decodeEffect(Schema.fromJsonString(TokenResponse))(
-      new TextDecoder().decode(response.body)
+    const http = yield* googleHttp(input.environment).pipe(
+      Effect.mapError(() => new ProviderVerificationFailure({ reason: "configuration_invalid" }))
     );
-    const keys = yield* signingKeys(http);
+    const token = yield* exchangeToken(http, code, input.verifier);
+    const keys = yield* signingKeys(http).pipe(
+      Effect.mapError(() => new ProviderVerificationFailure({ reason: "signing_keys_failed" }))
+    );
     const current = yield* Clock.currentTimeMillis;
-    const verified = yield* Effect.tryPromise(() =>
-      jwtVerify(token.id_token, keys, {
-        issuer: ["https://accounts.google.com", "accounts.google.com"],
-        audience: clientId,
-        algorithms: ["RS256"],
-        requiredClaims: ["iss", "sub", "aud", "exp", "iat", "nonce"],
-        clockTolerance: 0,
-        currentDate: DateTime.toDateUtc(DateTime.makeUnsafe(current)),
-      })
+    const verified = yield* Effect.tryPromise({
+      try: () =>
+        jwtVerify(token.id_token, keys, {
+          issuer: ["https://accounts.google.com", "accounts.google.com"],
+          audience: clientId,
+          algorithms: ["RS256"],
+          requiredClaims: ["iss", "sub", "aud", "exp", "iat", "nonce"],
+          clockTolerance: 0,
+          currentDate: DateTime.toDateUtc(DateTime.makeUnsafe(current)),
+        }),
+      catch: tokenVerificationFailure,
+    });
+    const claims = yield* Schema.decodeUnknownEffect(Claims)(verified.payload).pipe(
+      Effect.mapError(() => new ProviderVerificationFailure({ reason: "claims_invalid" }))
     );
-    const claims = yield* Schema.decodeUnknownEffect(Claims)(verified.payload);
-    if (
-      !validClaims({
-        claims,
-        attempt: input.attempt,
-        current,
-        clientId,
-        multipleAudiences: Array.isArray(verified.payload.aud) && verified.payload.aud.length > 1,
-      })
-    ) {
-      return yield* Effect.fail("invalid" as const);
-    }
+    yield* validClaims({
+      claims,
+      attempt: input.attempt,
+      current,
+      clientId,
+      multipleAudiences: Array.isArray(verified.payload.aud) && verified.payload.aud.length > 1,
+    });
     return {
       issuer: "https://accounts.google.com",
       subject: claims.sub,

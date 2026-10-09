@@ -18,7 +18,10 @@ import {
   wait,
 } from "./oauth-ingress.test-fixture";
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 it("reviews an exact Budget deletion natively and consumes client acceptance with its mutation once", () =>
   Effect.runPromise(
@@ -358,6 +361,10 @@ it("resumes the original legacy native tool call after server-requested form acc
       );
       expect(notified.status).toBe(202);
       yield* wait(notified.text());
+      // Arrange native D1 and initialization with live timers, then own only this
+      // transport's JS timers. Advancing crosses its five-second deadline while
+      // the native form and original request are still outstanding.
+      vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
       const invoked = yield* wait(
         fixture.send("/mcp", {
           method: "POST",
@@ -400,7 +407,17 @@ it("resumes the original legacy native tool call after server-requested form acc
             .first<number>("count(*)")
         )
       ).toBe(1);
-      yield* Effect.sleep("6 seconds");
+      const reviewedAt = yield* Clock.currentTimeMillis;
+      yield* wait(vi.advanceTimersByTimeAsync(6_000));
+      expect((yield* Clock.currentTimeMillis) - reviewedAt).toBeGreaterThanOrEqual(6_000);
+      expect(
+        yield* wait(
+          fixture.db
+            .prepare("SELECT count(*) FROM budgets WHERE id = ?")
+            .bind(fixture.id)
+            .first<number>("count(*)")
+        )
+      ).toBe(1);
       const replied = yield* wait(
         fixture.send("/mcp", {
           method: "POST",

@@ -58,9 +58,9 @@ its optimized implementation is `b8eab7e0`; this benchmark is separate from whol
 ### Scheduling and browser work
 
 The existing longest-first shard scheduler uses successful Linux file durations for all
-115 adapter files. Latest costs come from passed files in run 37865814951; payment enrollment
-retains its prior complete green cost from run 37862580400. No failed-file timing is used.
-These are mixed-revision scheduling estimates, not medians or equivalent-revision benchmarks.
+115 adapter files. Costs are medians from three complete green Linux runs: 37862580400,
+37866665288 and 37867675049. No failed-file timing is used. Multiple samples dampen individual
+runner contention; these are mixed-revision scheduling estimates, not controlled benchmarks.
 Tiny and unknown files keep the one-second floor.
 
 The two existing browser suites overlap on one runner with separate ports, certificates, build
@@ -153,6 +153,36 @@ The detector exports its exact source; the final job rejects a missing script be
 The script's fail-closed selection/result rules remain unchanged, and the existing policy tests
 exercise its forwarded-string execution with the additional output present. No validation gate
 is removed or converted into an unconditional success.
+
+### Deeper query arrangement and delayed confirmation
+
+Owner/peer query catalog examples now execute both identities against one arranged resource
+snapshot per catalog group. The original fixture already created both identities and approved
+both Connections. Each still exchanges its own native token, invokes every installed operation,
+checks exact structured/text outcomes and records exactly one Audit per operation and Connection.
+All private-marker, exact Money and peer isolation assertions remain. Four duplicated journeys
+are removed; the number of catalog operations and identity scenarios exercised is unchanged.
+Every catalog group keeps a fresh database and coordinator registry.
+
+The session fixture optionally arranges the onboarding consent record in the same native D1
+batch as User, pairing and session creation. Ordinary session-only callers remain unchanged.
+Reviewed OAuth arrangement and the peer catalog fixture use this seam, avoiding a separate
+consent write while preserving foreign-key order and all actual registration/review/approval
+HTTP calls. No production SQL or source behavior changes.
+
+The legacy native form case advances JavaScript Date/timeout timers by six seconds instead of
+sleeping. D1 acquisition and session initialization retain live timers; fake timers start before
+the original tool request. The test asserts that the Effect wall clock crosses all six seconds,
+that the Budget remains pending, and that accepting the form completes the original request and
+deletes the Budget. Teardown restores real timers. A temporary regression probe reinstated the
+expired original transport deadline for continuation: the accelerated case failed its successful
+completion assertion. The production source was restored unchanged.
+
+A single local before/after run of the complete confirmation/discovery suites passed all cases:
+owner/peer query bodies fell from 22.49s to 18.41s (18.2%), and delayed legacy acceptance from
+8.10s to 1.93s (76.2%). Complete file elapsed times were 68.05s → 60.66s for confirmation and
+50.12s → 45.15s for discovery. These observations include the additional consent batching and
+are not isolated attribution experiments, medians or whole-pipeline savings.
 
 ## Adapter regression follow-up: #1066
 

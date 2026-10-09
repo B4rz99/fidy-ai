@@ -354,7 +354,8 @@ export const setup = (auditMigration = true): Effect.Effect<Harness, TestFailure
   });
 
 export const sessionForUser = (
-  input: Readonly<{ db: D1Database; index: number; userIndex: number }>
+  input: Readonly<{ db: D1Database; index: number; userIndex: number }>,
+  consentId: Option.Option<string> = Option.none()
 ): Effect.Effect<string, TestFailure> =>
   Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
@@ -391,14 +392,26 @@ export const sessionForUser = (
             current + 600000,
             current + 7776000000
           ),
+        ...Option.match(consentId, {
+          onNone: () => [],
+          onSome: (id) => [
+            input.db
+              .prepare(
+                "INSERT INTO onboarding_consent_records VALUES (?, ?, '{}', 'disclosure', 'decision', 1, 1)"
+              )
+              .bind(id, user),
+          ],
+        }),
       ])
     );
     return `__Host-fidy_session=${bearer}`;
   });
 
 export const sessionFor = (
-  input: Readonly<{ db: D1Database; index: number }>
-): Effect.Effect<string, TestFailure> => sessionForUser({ ...input, userIndex: input.index });
+  input: Readonly<{ db: D1Database; index: number }>,
+  consentId: Option.Option<string> = Option.none()
+): Effect.Effect<string, TestFailure> =>
+  sessionForUser({ ...input, userIndex: input.index }, consentId);
 
 export const authorizationQuery = (
   send: Harness["send"]
@@ -483,15 +496,7 @@ export const reviewedFixture = (
     const started = yield* wait(harness.send(`/oauth/authorize?${query}`));
     const requestId =
       new URL(started.headers.get("location") ?? "").pathname.split("/").at(-1) ?? "";
-    const cookie = yield* sessionFor({ db: harness.db, index: 1 });
-    yield* wait(
-      harness.db
-        .prepare(
-          "INSERT INTO onboarding_consent_records VALUES ('grant-test', ?, '{}', 'disclosure', 'decision', 1, 1)"
-        )
-        .bind("10000000-0000-4000-8000-000000000001")
-        .run()
-    );
+    const cookie = yield* sessionFor({ db: harness.db, index: 1 }, Option.some("grant-test"));
     const headers = {
       origin: "https://app.fidyapp.com",
       cookie,

@@ -1,0 +1,45 @@
+apps/web/src/features/transactions/ledger.tsx
+  s_b75995d26622a8::t_f60128efe1a977 90
+apps/web/src/features/transactions/date-field.tsx
+  s_b75995d26622a8::t_f60128efe1a977 34
+DESIGN.md
+  s_b75995d26622a8::t_f7eff6f825d2c9 397-408
+apps/web/src/features/public-site/landing/home-content.tsx
+  s_b75995d26622a8::t_cc8758ae12bf1d 2,204
+apps/web/src/index.css
+  s_b75995d26622a8::t_f60128efe1a977 382
+  s_b75995d26622a8::t_848cada9177e3d 204,218,223,239,255-257,259,261-266,268-269,271-272,274-278,284,316-317,327,333,350,367,380-381,383-398
+  s_b75995d26622a8::t_5c2e2b0daac6b2 399
+apps/web/src/features/public-site/landing/detail-content.tsx
+  s_b75995d26622a8::t_cc8758ae12bf1d 2,10,115,125,288,298,427,437,607,617,759,769,911
+apps/web/src/ui/components/button.tsx
+  s_b75995d26622a8::t_f7eff6f825d2c9 7
+apps/web/src/features/transactions/visuals.tsx
+  s_b75995d26622a8::t_848cada9177e3d 18,24,26,28-32,54,68
+apps/web/src/ui/components/native-select.tsx
+  s_b75995d26622a8::t_848cada9177e3d 19,24
+apps/web/src/features/transactions/workspace.tsx
+  s_b75995d26622a8::t_02834e85a70af5 266-271,275-280,284-289
+apps/web/src/features/signed-in/feature.tsx
+  s_b75995d26622a8::t_f7eff6f825d2c9 17,60,66,121-126
+apps/web/src/ui/brand.ts
+  s_b75995d26622a8::t_f7eff6f825d2c9 1
+apps/web/src/features/public-site/landing/navigation.tsx
+  s_b75995d26622a8::t_f7eff6f825d2c9 2,34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "911ee65c3e6b8359bde0ca871b73bac662a069b9",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

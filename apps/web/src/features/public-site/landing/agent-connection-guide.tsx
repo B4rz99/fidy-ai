@@ -13,7 +13,7 @@ export const AgentConnectionGuide = (): React.JSX.Element => (
       </p>
     </div>
     <p>
-      <a className="textlink" href="/agentes.txt">
+      <a className="textlink" href="/llms.txt">
         Leer la guía en texto, sin JavaScript ↗
       </a>
     </p>
@@ -28,9 +28,7 @@ const mcpSetup = (
   <details open>
     <summary>MCP · Claude Code y Codex</summary>
     <p>
-      Servidor: <code>https://api.fidyapp.com/mcp</code> (HTTP). Las versiones verificadas en
-      pruebas locales son Claude Code 2.1.289 y Codex 0.160.0; otras versiones y clientes requieren
-      verificación.
+      Servidor: <code>https://api.fidyapp.com/mcp</code> (HTTP).
     </p>
     <h3>Claude Code · solo lectura</h3>
     <pre>

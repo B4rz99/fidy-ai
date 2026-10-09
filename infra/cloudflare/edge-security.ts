@@ -73,7 +73,7 @@ const customFirewallRules: ReadonlyArray<Cloudflare.Ruleset.Rule> = [
     description: "Allow browser-signature-independent reads of public marketing documents",
     enabled: true,
     expression:
-      '(http.host in {"fidyapp.com" "app.fidyapp.com"} and http.request.method in {"GET" "HEAD"} and http.request.uri.path in {"/" "/politica" "/terminos" "/cookies" "/robots.txt" "/agentes.txt" "/sitemap.xml" "/funciones/transacciones" "/funciones/presupuestos" "/funciones/asistente" "/funciones/tablero" "/funciones/insights" "/funciones/agentes"})',
+      '(http.host in {"fidyapp.com" "app.fidyapp.com"} and http.request.method in {"GET" "HEAD"} and http.request.uri.path in {"/" "/politica" "/terminos" "/cookies" "/robots.txt" "/llms.txt" "/sitemap.xml" "/funciones/transacciones" "/funciones/presupuestos" "/funciones/asistente" "/funciones/tablero" "/funciones/insights" "/funciones/agentes"})',
   },
 ];
 

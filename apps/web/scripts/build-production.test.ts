@@ -83,7 +83,7 @@ describe("production static release identity", () => {
     () =>
       Effect.gen(function* () {
         const directory = yield* productionOutput();
-        for (const file of ["robots.txt", "sitemap.xml", "agentes.txt"]) {
+        for (const file of ["robots.txt", "sitemap.xml", "llms.txt"]) {
           yield* Effect.tryPromise(() => Bun.write(join(directory, file), "public discovery"));
         }
         yield* Effect.tryPromise(() => expect(validate(directory)).resolves.toBeUndefined());

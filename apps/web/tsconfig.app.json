@@ -21,8 +21,6 @@
     "cloudflare/**/*.ts",
     "scripts/**/*.ts",
     "e2e/**/*.ts",
-    "public-preview/**/*.ts",
-    "playwright.public-preview.config.ts",
     "playwright.config.ts",
     "playwright.cli.config.ts",
     "server-client-boundary.ts",

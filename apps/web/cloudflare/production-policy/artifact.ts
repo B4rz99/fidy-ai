@@ -43,7 +43,7 @@ export type ProductionArtifactRequest = {
 const allowedPath = (path: string): boolean =>
   REQUIRED_PATHS.has(path) ||
   path === "robots.txt" ||
-  path === "agentes.txt" ||
+  path === "llms.txt" ||
   path === "sitemap.xml" ||
   (path.startsWith("assets/") && ASSET_SUFFIXES.has(extname(path).toLowerCase()));
 

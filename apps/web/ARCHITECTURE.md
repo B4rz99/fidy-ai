@@ -83,7 +83,12 @@ The mounted Provider Authentication feature owns its private pairing proof, one-
 and provider popup. It uses the generated authentication client: accept the exact disclosure revision,
 initiate the selected provider, poll proof-bearing status, submit completion once, save recovery, then redeem through
 Browser Login. No provider token or protocol code reaches the feature. `/auth/google-return` or `/auth/microsoft-return` closes
-the popup at a parameter-free URL; existing opener isolation remains intact. Cancellation, timeout
+the popup at a parameter-free URL. Only the two provider entry documents use
+`same-origin-allow-popups` so the parent can observe a manually closed cross-origin popup.
+The blank popup's opener is cleared before provider navigation. Pending verification with a
+closed popup shows cancellation; verified status and native association confirmation take precedence.
+Successful authentication loads a new Transactions document to restore strict `same-origin` isolation.
+Cancellation, timeout
 and uncertain completion discard private proof and explain fresh sign-in; no mutation auto-retry or
 recovery redisclosure. Authentication can succeed after Consent withdrawal while ordinary work
 remains gated. Personal and work/school Microsoft accounts are accepted; initial WhatsApp linking is installed under #1091.
@@ -145,7 +150,8 @@ Wompi's fixed sandbox/production tokenization origins. Card fields, Nequi number
 CC document/product and OTP material never pass through Fidy. An OTP policy must match those
 already permitted origins exactly; it does not widen CSP to arbitrary provider-supplied hosts.
 Cloudflare applies
-the same security headers to every SPA fallback, keeps shells and release metadata revalidating with
+the security headers to every SPA fallback, with the two provider-entry opener-policy exceptions
+described above, keeps shells and release metadata revalidating with
 `no-cache`, and removes that inherited value before assigning one-year immutable caching to
 content-hashed assets.
 

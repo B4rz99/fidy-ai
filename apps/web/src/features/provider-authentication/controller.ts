@@ -11,7 +11,8 @@ type Pairing = Effect.Success<ReturnType<Client["browserLogin"]["startPairing"]>
 type CommandError =
   | Effect.Error<ReturnType<Client["browserLogin"]["startPairing"]>>
   | Effect.Error<ReturnType<Client["providerAuthentication"]["start"]>>
-  | "rejected";
+  | "rejected"
+  | "cancelled";
 export type ProviderViewState =
   | Readonly<{ status: "editing" }>
   | Readonly<{ status: "waiting" }>
@@ -34,10 +35,12 @@ const providerClient = (
 const awaitProviderVerification = (
   client: Client,
   pairing: Pairing,
-  input: Pick<ControllerInput, "provider" | "setState">
-): Effect.Effect<void, "rejected"> =>
+  input: Pick<ControllerInput, "provider" | "setState"> & Readonly<{ popup: Window }>
+): Effect.Effect<void, "rejected" | "cancelled"> =>
   Effect.gen(function* () {
     for (;;) {
+      // Read status after observing closure: a response already in flight may predate completion.
+      const popupClosed = input.popup.closed;
       const result = yield* providerClient(client, input.provider).status({
         payload: proof(pairing),
       });
@@ -46,11 +49,12 @@ const awaitProviderVerification = (
         input.setState({ status: "confirming", code: result.associationCode });
       }
       if (result.status === "rejected") return yield* Effect.fail("rejected");
+      if (result.status === "pending" && popupClosed) return yield* Effect.fail("cancelled");
       yield* Effect.sleep("1 second");
     }
   }).pipe(
     Effect.timeout("10 minutes"),
-    Effect.mapError(() => "rejected" as const)
+    Effect.mapError((error) => (error === "cancelled" ? error : ("rejected" as const)))
   );
 
 const proof = (
@@ -99,6 +103,23 @@ const clearAttempt = (active: ActiveAttempt): void => {
   Option.map(active.popup, (value) => value.close());
   active.popup = Option.none();
 };
+const navigateProviderPopup = (
+  popup: Window,
+  authorizationUrl: string
+): Effect.Effect<void, "cancelled"> =>
+  popup.closed
+    ? Effect.fail("cancelled" as const)
+    : Effect.sync(() => popup.location.replace(authorizationUrl));
+const failureState = (
+  active: ActiveAttempt,
+  cause: Cause.Cause<CommandError>
+): ProviderViewState => {
+  if (active.completionRequested) return { status: "uncertain" };
+  const cancelled = Cause.findErrorOption(cause).pipe(
+    Option.exists((error) => error === "cancelled")
+  );
+  return { status: cancelled ? "cancelled" : "refused" };
+};
 const executeStart = (
   input: ControllerInput,
   active: ActiveAttempt
@@ -131,8 +152,8 @@ const executeStart = (
     if (active.generation !== current) {
       return;
     }
-    yield* Effect.sync(() => staged.value.popup.location.replace(authorization.authorizationUrl));
-    yield* awaitProviderVerification(client, started, input);
+    yield* navigateProviderPopup(staged.value.popup, authorization.authorizationUrl);
+    yield* awaitProviderVerification(client, started, { ...input, popup: staged.value.popup });
     staged.value.popup.close();
     if (active.generation !== current) {
       return;
@@ -181,9 +202,9 @@ const guardedCommand = (
           Cause.hasInterruptsOnly(cause) || active.generation !== current
             ? Effect.void
             : Effect.sync(() => {
-                const status = active.completionRequested ? "uncertain" : "refused";
+                const state = failureState(active, cause);
                 clearAttempt(active);
-                input.setState({ status });
+                input.setState(state);
               })
         )
       );
@@ -239,6 +260,7 @@ const startProvider = ({
     setState({ status: "refused" });
     return;
   }
+  popup.opener = null;
   controller.stage({ intent, revision, popup });
   runStart(undefined);
 };
@@ -261,7 +283,7 @@ export const useProviderAuthentication = ({
       handoffReference,
       authenticated: () => {
         session.completeLogin();
-        router.navigate({ to: "/app/transactions" }).catch(() => undefined);
+        window.location.assign("/app/transactions");
       },
     })
   );

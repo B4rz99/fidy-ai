@@ -49,23 +49,51 @@ const productionOrigin = "https://api.fidyapp.com";
 if (policy.split(productionOrigin).length !== 2 || !policy.includes("/assets/*")) {
   throw new Error("Production security policy is missing or ambiguous");
 }
-const [shellPolicy, assetPolicy] = policy.replace(productionOrigin, apiOrigin).split("/assets/*");
-if (shellPolicy === undefined || assetPolicy === undefined) {
-  throw new Error("Production security policy is malformed");
-}
-const policyHeaders = Object.fromEntries(
-  shellPolicy.split("\n").flatMap((line): ReadonlyArray<readonly [string, string]> => {
-    const match = /^  ([\w-]+): (.+)$/u.exec(line);
-    return match?.[1] === undefined || match[2] === undefined ? [] : [[match[1], match[2]]];
-  })
-);
-const assetCache = /^  Cache-Control: (.+)$/mu.exec(assetPolicy)?.[1];
-if (policyHeaders["Content-Security-Policy"] === undefined || assetCache === undefined) {
+const headerRules = policy
+  .replace(productionOrigin, apiOrigin)
+  .trim()
+  .split(/\n\n+/u)
+  .map((block) => {
+    const [path, ...lines] = block.split("\n");
+    if (path === undefined || !path.startsWith("/")) {
+      throw new Error("Production header rule is malformed");
+    }
+    return { path, lines };
+  });
+const applyHeaderDirective = (headers: Headers, line: string): void => {
+  const removal = /^  ! ([\w-]+)$/u.exec(line)?.[1];
+  const addition = /^  ([\w-]+): (.+)$/u.exec(line);
+  if (removal !== undefined) headers.delete(removal);
+  else if (addition?.[1] !== undefined && addition[2] !== undefined) {
+    headers.append(addition[1], addition[2]);
+  } else throw new Error("Production header directive is malformed");
+};
+const policyHeadersFor = (pathname: string): Readonly<Record<string, string>> => {
+  const headers = new Headers();
+  for (const rule of headerRules) {
+    if (
+      !(rule.path.endsWith("*")
+        ? pathname.startsWith(rule.path.slice(0, -1))
+        : pathname === rule.path)
+    ) {
+      continue;
+    }
+    for (const line of rule.lines) {
+      applyHeaderDirective(headers, line);
+    }
+  }
+  return Object.fromEntries(headers);
+};
+if (
+  policyHeadersFor("/")["content-security-policy"] === undefined ||
+  policyHeadersFor("/assets/probe.js")["cache-control"] !== "public, max-age=31536000, immutable"
+) {
   throw new Error("Production security policy lacks security or asset caching rules");
 }
 
 const responseFor = (request: Request): Promise<Response> => {
   const pathname = new URL(request.url).pathname;
+  const policyHeaders = policyHeadersFor(pathname);
   const candidate = filePath(pathname);
   if (Option.isNone(candidate)) {
     return Promise.resolve(new Response(null, { status: 400, headers: policyHeaders }));
@@ -81,7 +109,6 @@ const responseFor = (request: Request): Promise<Response> => {
       return new Response(file, {
         headers: {
           ...policyHeaders,
-          ...(pathname.startsWith("/assets/") ? { "Cache-Control": assetCache } : {}),
           "content-type": contentTypes[extension] ?? "application/octet-stream",
         },
       });
@@ -101,7 +128,10 @@ const server = Bun.serve({
   fetch: (request) =>
     request.method === "GET" || request.method === "HEAD"
       ? responseFor(request)
-      : new Response(null, { status: 405, headers: policyHeaders }),
+      : new Response(null, {
+          status: 405,
+          headers: policyHeadersFor(new URL(request.url).pathname),
+        }),
 });
 
 process.stdout.write(`Static preview server listening at ${server.url}\n`);

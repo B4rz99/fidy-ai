@@ -8,6 +8,14 @@
   X-Frame-Options: DENY
   Cache-Control: no-cache
 
+/auth/google
+  ! Cross-Origin-Opener-Policy
+  Cross-Origin-Opener-Policy: same-origin-allow-popups
+
+/auth/microsoft
+  ! Cross-Origin-Opener-Policy
+  Cross-Origin-Opener-Policy: same-origin-allow-popups
+
 /assets/*
   ! Cache-Control
   Cache-Control: public, max-age=31536000, immutable

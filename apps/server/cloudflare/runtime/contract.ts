@@ -16,6 +16,7 @@ export type PlatformMaintenanceInput = Readonly<{
   RELEASE_GIT_SHA: string;
   KAPSO_API_KEY: string;
   KAPSO_WEBHOOK_SECRET: string;
+  WHATSAPP_SANDBOX_PHONE_NUMBER_ID: string;
   HOSTED_AI_MODEL: string;
   WOMPI_ENVIRONMENT: string;
   WOMPI_PUBLIC_KEY: string;

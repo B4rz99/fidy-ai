@@ -109,6 +109,7 @@ for (const path of [
             },
           },
           KAPSO_API_KEY: "unused-clock-test",
+          WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
           KAPSO_WEBHOOK_SECRET: "unused-clock-test",
           WHATSAPP_BUSINESS_PORTFOLIO_ID: "clock-test",
           CLOUDFLARE_ACCESS_ISSUER: "https://example.cloudflareaccess.com",

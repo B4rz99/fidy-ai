@@ -242,6 +242,7 @@ export const setup = (auditMigration = true): Effect.Effect<Harness, TestFailure
         }),
       },
       KAPSO_API_KEY: "",
+      WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
       KAPSO_WEBHOOK_SECRET: "",
       WHATSAPP_BUSINESS_PORTFOLIO_ID: "",
       CLOUDFLARE_ACCESS_ISSUER: "",

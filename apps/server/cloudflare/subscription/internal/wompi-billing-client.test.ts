@@ -21,6 +21,7 @@ const privateKeyFixture = `prv_test_${"f1d7c0de".repeat(3)}`;
 const integritySecretFixture = `test_integrity_${"f1d7c0de".repeat(3)}`;
 const sharedProviderConfig = {
   KAPSO_API_KEY: "test-kapso-key",
+  WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
   RESEND_API_KEY: `re_${"f1d7c0de".repeat(3)}`,
 };
 const config = ConfigProvider.layer(

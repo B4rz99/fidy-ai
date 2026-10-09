@@ -150,7 +150,11 @@ const channelActivities = (
   activity("consent.proactivityOfferRetention", sweepProactivityConsentOffers(environment.DB)),
   activity(
     "consent.disclosureRecovery",
-    recoverPendingDisclosures({ db: environment.DB, apiKey: environment.KAPSO_API_KEY })
+    recoverPendingDisclosures({
+      db: environment.DB,
+      apiKey: environment.KAPSO_API_KEY,
+      sandboxPhoneNumberId: Option.fromNullishOr(environment.WHATSAPP_SANDBOX_PHONE_NUMBER_ID),
+    })
   ),
   activity(
     "hostedTurn.whatsapp.dispatch",

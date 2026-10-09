@@ -9,6 +9,7 @@ export type CoreHttpEnvironment = ProviderEnvironment &
     CONTRACT_DIGEST: string;
     USER_TRANSACTION_COORDINATOR: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
     KAPSO_API_KEY: string;
+    WHATSAPP_SANDBOX_PHONE_NUMBER_ID: string;
     KAPSO_WEBHOOK_SECRET: string;
     WHATSAPP_BUSINESS_PORTFOLIO_ID: string;
     CLOUDFLARE_ACCESS_ISSUER: string;

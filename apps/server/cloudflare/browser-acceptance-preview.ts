@@ -461,6 +461,7 @@ const server = Bun.serve({
                 getByName: coordinatorFor,
               },
               KAPSO_API_KEY: "acceptance-kapso-key",
+              WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
               KAPSO_WEBHOOK_SECRET: "acceptance-kapso-secret",
               CLOUDFLARE_ACCESS_ISSUER: accessIssuer,
               CLOUDFLARE_ACCESS_AUDIENCE: accessAudience,

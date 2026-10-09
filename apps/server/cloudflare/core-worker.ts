@@ -44,6 +44,7 @@ type CoreEnvironment = ProviderEnvironment &
     readonly KAPSO_API_KEY: string;
     readonly KAPSO_WEBHOOK_SECRET: string;
     readonly WHATSAPP_BUSINESS_PORTFOLIO_ID: string;
+    readonly WHATSAPP_SANDBOX_PHONE_NUMBER_ID: string;
     readonly CLOUDFLARE_ACCESS_ISSUER: string;
     readonly CLOUDFLARE_ACCESS_AUDIENCE: string;
     readonly BROWSER_ORIGIN: string;
@@ -145,6 +146,7 @@ const maintenanceInput = (environment: CoreEnvironment): CoreMaintenanceInput =>
   RELEASE_GIT_SHA: environment.RELEASE_GIT_SHA,
   KAPSO_API_KEY: environment.KAPSO_API_KEY,
   KAPSO_WEBHOOK_SECRET: environment.KAPSO_WEBHOOK_SECRET,
+  WHATSAPP_SANDBOX_PHONE_NUMBER_ID: environment.WHATSAPP_SANDBOX_PHONE_NUMBER_ID,
   HOSTED_AI_MODEL: environment.HOSTED_AI_MODEL,
   WOMPI_ENVIRONMENT: environment.WOMPI_ENVIRONMENT,
   WOMPI_PUBLIC_KEY: environment.WOMPI_PUBLIC_KEY,

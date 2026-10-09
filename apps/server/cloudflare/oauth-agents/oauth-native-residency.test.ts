@@ -210,6 +210,7 @@ describe("native2025 residency integration", () => {
         BROWSER_ORIGIN: "https://app.fidyapp.com",
         HOSTED_AI_MODEL: "",
         KAPSO_API_KEY: "",
+        WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
         KAPSO_WEBHOOK_SECRET: "",
         WHATSAPP_BUSINESS_PORTFOLIO_ID: "",
         CLOUDFLARE_ACCESS_ISSUER: "",

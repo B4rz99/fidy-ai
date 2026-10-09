@@ -1,4 +1,4 @@
-import { sweepExpiredConsent } from "../consent/ingress/runtime";
+import { recoverPendingDisclosures, sweepExpiredConsent } from "../consent/ingress/runtime";
 import { newId } from "../secret-material/operations";
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
 import { type Cause, Clock, Effect, Option, Schema } from "effect";
@@ -7,6 +7,114 @@ import { disposeJourneys, setup, setupWhatsApp } from "./journey.test-fixture";
 
 afterAll(disposeJourneys);
 afterEach(() => vi.restoreAllMocks());
+
+it("delivers signup disclosure to the provider-observed phone for the configured sandbox endpoint", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const journey = yield* Effect.tryPromise(() => setupWhatsApp("123456789012345"));
+      const outbound: Array<string> = [];
+      vi.spyOn(globalThis, "fetch").mockImplementation((input, init) =>
+        new Request(input, init).text().then((body) => {
+          outbound.push(body);
+          return Response.json({
+            messaging_product: "whatsapp",
+            messages: [{ id: "wamid.disclosure" }],
+          });
+        })
+      );
+      expect((yield* sendChat(journey, "Hola", { phone: "573001234567" })).status).toBe(200);
+      const message = yield* Schema.decodeEffect(
+        Schema.fromJsonString(
+          Schema.Struct({
+            to: Schema.String,
+            text: Schema.Struct({ body: Schema.String }),
+            biz_opaque_callback_data: Schema.String,
+          })
+        )
+      )(outbound[0] ?? "");
+      expect(message.to).toBe("573001234567");
+      expect(message.text.body).toContain("Google o Microsoft");
+    })
+  ));
+
+it.each([
+  { sandbox: "987654321098765", phone: "573001234567", expectedSends: 1 },
+  { sandbox: "123456789012345", phone: undefined, expectedSends: 0 },
+])(
+  "keeps sandbox routing scoped to its business endpoint and refuses missing phone: $sandbox / $phone",
+  ({ sandbox, phone, expectedSends }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const journey = yield* Effect.tryPromise(() => setupWhatsApp(sandbox));
+        const outbound: Array<string> = [];
+        vi.spyOn(globalThis, "fetch").mockImplementation((input, init) =>
+          new Request(input, init).text().then((body) => {
+            outbound.push(body);
+            return Response.json({
+              messaging_product: "whatsapp",
+              messages: [{ id: "wamid.disclosure" }],
+            });
+          })
+        );
+        expect(
+          (yield* sendChat(journey, "Hola", phone === undefined ? {} : { phone })).status
+        ).toBe(200);
+        expect(outbound).toHaveLength(expectedSends);
+        if (expectedSends === 1) {
+          const body = yield* Schema.decodeEffect(
+            Schema.fromJsonString(Schema.Struct({ recipient: Schema.String }))
+          )(outbound[0] ?? "");
+          expect(body.recipient).toBe("CO.Person1");
+          expect(outbound[0]).not.toContain('"to"');
+        }
+      })
+    )
+);
+
+it("isolates two callers during interrupted sandbox disclosure recovery and never resends a started attempt", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const journey = yield* Effect.tryPromise(() => setupWhatsApp("123456789012345"));
+      const outbound: Array<string> = [];
+      vi.spyOn(globalThis, "fetch").mockImplementation((input, init) =>
+        new Request(input, init).text().then((body) => {
+          outbound.push(body);
+          return Response.json({
+            messaging_product: "whatsapp",
+            messages: [{ id: "wamid.disclosure" }],
+          });
+        })
+      );
+      expect((yield* sendChat(journey, "Hola", { phone: "573001234567" })).status).toBe(200);
+      expect(
+        (yield* sendChat(journey, "Hola", { phone: "573009876543", caller: "CO.Person2" })).status
+      ).toBe(200);
+      const prepared = [...outbound];
+      // Model a crash after durable preparation but before the provider-send claim.
+      yield* Effect.tryPromise(() =>
+        journey.db
+          .prepare(
+            "UPDATE pending_consent_exchanges SET state = 'awaiting_delivery', disclosure_message_id = NULL"
+          )
+          .run()
+      );
+      outbound.length = 0;
+      yield* recoverPendingDisclosures({
+        db: journey.db,
+        apiKey: "fixture",
+        sandboxPhoneNumberId: Option.some("123456789012345"),
+      });
+      yield* recoverPendingDisclosures({
+        db: journey.db,
+        apiKey: "fixture",
+        sandboxPhoneNumberId: Option.some("123456789012345"),
+      });
+      expect(outbound).toHaveLength(2);
+      expect(new Set(outbound)).toEqual(new Set(prepared));
+      expect(outbound.filter((body) => body.includes('"to":"573001234567"'))).toHaveLength(1);
+      expect(outbound.filter((body) => body.includes('"to":"573009876543"'))).toHaveLength(1);
+    })
+  ));
 
 it("refuses an unknown WhatsApp handoff instead of silently starting web-only signup", () =>
   Effect.runPromise(
@@ -145,6 +253,7 @@ const sendChat = (
       signature: string;
       message: string;
       timestamp: number;
+      phone: string;
     }>
   > = {}
 ): Effect.Effect<Response, Cause.UnknownError | Schema.SchemaError> =>
@@ -157,6 +266,7 @@ const sendChat = (
         timestamp: String(options.timestamp ?? Math.floor(now / 1000)),
         type: "text",
         from_user_id: options.caller ?? "CO.Person1",
+        ...(options.phone === undefined ? {} : { from: options.phone }),
         text: { body: text },
         ...(options.reply === undefined ? {} : { context: { id: options.reply } }),
       },
@@ -168,6 +278,94 @@ const sendChat = (
       event: "whatsapp.message.received",
     });
   });
+it("permits a fresh greeting after definite provider rejection without retrying the rejected message", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const journey = yield* Effect.tryPromise(() => setupWhatsApp());
+      const provider = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(
+          Response.json(
+            { error: "BSUID recipients are not supported in sandbox mode" },
+            { status: 403 }
+          )
+        )
+        .mockResolvedValue(
+          Response.json({ messaging_product: "whatsapp", messages: [{ id: "wamid.disclosure" }] })
+        );
+      const now = yield* Clock.currentTimeMillis;
+      const message = "wamid.rejected-greeting";
+      const timestamp = Math.floor(now / 1000);
+      expect((yield* sendChat(journey, "Hola", { message, timestamp })).status).toBe(200);
+      expect((yield* sendChat(journey, "Hola", { message, timestamp })).status).toBe(409);
+      expect(provider).toHaveBeenCalledTimes(1);
+      expect((yield* sendChat(journey, "Hola", { timestamp: timestamp + 1 })).status).toBe(200);
+      expect(provider).toHaveBeenCalledTimes(2);
+    })
+  ));
+
+it("refuses late delivery for a rejected disclosure without changing its replacement or repeating egress", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const journey = yield* Effect.tryPromise(() => setupWhatsApp());
+      const outbound: Array<string> = [];
+      const provider = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) =>
+        new Request(input, init).text().then((body) => {
+          outbound.push(body);
+          return outbound.length === 1
+            ? Response.json(
+                { error: "BSUID recipients are not supported in sandbox mode" },
+                { status: 403 }
+              )
+            : Response.json({
+                messaging_product: "whatsapp",
+                messages: [{ id: "wamid.replacement" }],
+              });
+        })
+      );
+      const now = yield* Clock.currentTimeMillis;
+      const timestamp = Math.floor(now / 1000) + 1;
+      const token = (body: string): Effect.Effect<string, Schema.SchemaError> =>
+        Schema.decodeEffect(
+          Schema.fromJsonString(Schema.Struct({ biz_opaque_callback_data: Schema.String }))
+        )(body).pipe(Effect.map((message) => message.biz_opaque_callback_data));
+      const deliver = (
+        correlation: string,
+        id: string
+      ): Effect.Effect<Response, Cause.UnknownError | Schema.SchemaError> =>
+        sendPacket(
+          journey,
+          {
+            message: {
+              id,
+              kapso: {
+                statuses: [
+                  {
+                    id,
+                    status: "delivered",
+                    timestamp: String(timestamp),
+                    biz_opaque_callback_data: correlation,
+                  },
+                ],
+              },
+            },
+            phone_number_id: "123456789012345",
+          },
+          { signature: Option.none(), event: "whatsapp.message.delivered" }
+        );
+      expect((yield* sendChat(journey, "Hola")).status).toBe(200);
+      const rejectedToken = yield* token(outbound[0] ?? "");
+      expect((yield* deliver(rejectedToken, "wamid.rejected")).status).toBe(409);
+      expect((yield* sendChat(journey, "Hola", { timestamp })).status).toBe(200);
+      const replacementToken = yield* token(outbound[1] ?? "");
+      expect(replacementToken).not.toBe(rejectedToken);
+      expect((yield* deliver(rejectedToken, "wamid.rejected")).status).toBe(409);
+      expect((yield* deliver(replacementToken, "wamid.replacement")).status).toBe(200);
+      expect((yield* deliver(replacementToken, "wamid.replacement")).status).toBe(200);
+      expect(provider).toHaveBeenCalledTimes(2);
+    })
+  ));
+
 const authenticateChatProvider = (
   journey: Awaited<ReturnType<typeof setup>>,
   reference: string
@@ -249,10 +447,40 @@ const requestReview = (
     expect((yield* sendChat(journey, "Estado")).status).toBe(200);
     return review.associationCode;
   });
+
+it("delivers the immutable association review to the authenticated sandbox phone", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const journey = yield* Effect.tryPromise(() => setupWhatsApp("123456789012345"));
+      const reference = yield* seedAcceptedChat(journey.db);
+      yield* authenticateChatProvider(journey, reference);
+      const outbound: Array<string> = [];
+      vi.spyOn(globalThis, "fetch").mockImplementation((input, init) =>
+        new Request(input, init).text().then((body) => {
+          outbound.push(body);
+          return Response.json({
+            messaging_product: "whatsapp",
+            messages: [{ id: "wamid.association-review" }],
+          });
+        })
+      );
+      expect((yield* sendChat(journey, "Estado", { phone: "573001234567" })).status).toBe(200);
+      const review = yield* Schema.decodeEffect(
+        Schema.fromJsonString(
+          Schema.Struct({
+            to: Schema.String,
+            text: Schema.Struct({ body: Schema.String }),
+          })
+        )
+      )(outbound[0] ?? "");
+      expect(review.to).toBe("573001234567");
+      expect(review.text.body).toContain("Confirmo asociación");
+    })
+  ));
 it("requires exact originating caller and reply confirmation, then atomically creates the WhatsApp User and redeems only with private browser proof", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const journey = yield* Effect.tryPromise(setupWhatsApp);
+      const journey = yield* Effect.tryPromise(() => setupWhatsApp());
       const reference = yield* seedAcceptedChat(journey.db);
       yield* authenticateChatProvider(journey, reference);
       expect(
@@ -330,7 +558,7 @@ it("requires exact originating caller and reply confirmation, then atomically cr
 it("starts in authenticated WhatsApp with provider instructions and creates no mailbox enrollment", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const journey = yield* Effect.tryPromise(setupWhatsApp);
+      const journey = yield* Effect.tryPromise(() => setupWhatsApp());
       const outbound: Array<string> = [];
       vi.spyOn(globalThis, "fetch").mockImplementation((input, init) =>
         new Request(input, init).text().then((body) => {
@@ -413,7 +641,7 @@ it.each(["denied", "expired", "uncertain_send"] as const)(
   (scenario) =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const journey = yield* Effect.tryPromise(setupWhatsApp);
+        const journey = yield* Effect.tryPromise(() => setupWhatsApp());
         const reference = yield* seedAcceptedChat(journey.db);
         yield* authenticateChatProvider(journey, reference);
         if (scenario === "uncertain_send") {
@@ -459,7 +687,7 @@ it.each(["denied", "expired", "uncertain_send"] as const)(
 it("rolls back a failed association commit and permits exactly one concurrent successful completion", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const journey = yield* Effect.tryPromise(setupWhatsApp);
+      const journey = yield* Effect.tryPromise(() => setupWhatsApp());
       yield* authenticateChatProvider(journey, yield* seedAcceptedChat(journey.db));
       const code = yield* requestReview(journey);
       yield* Effect.sleep("1100 millis");
@@ -514,7 +742,7 @@ it.each([false, true])(
   (conflict) =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const journey = yield* Effect.tryPromise(setupWhatsApp);
+        const journey = yield* Effect.tryPromise(() => setupWhatsApp());
         yield* authenticateChatProvider(journey, "");
         expect(
           (yield* Effect.tryPromise(() =>
@@ -580,7 +808,7 @@ it.each([false, true])(
 it("allows an explicit new handoff after expiry without reusing the consumed public reference", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const journey = yield* Effect.tryPromise(setupWhatsApp);
+      const journey = yield* Effect.tryPromise(() => setupWhatsApp());
       const reference = yield* seedAcceptedChat(journey.db);
       yield* Effect.tryPromise(() =>
         journey.db
@@ -625,7 +853,7 @@ it.each(["source", "spend", "storage"] as const)(
   (scenario) =>
     Effect.runPromise(
       Effect.gen(function* () {
-        const journey = yield* Effect.tryPromise(setupWhatsApp);
+        const journey = yield* Effect.tryPromise(() => setupWhatsApp());
         yield* seedAcceptedChat(journey.db);
         const fetch = vi
           .spyOn(globalThis, "fetch")
@@ -690,7 +918,7 @@ it.each(["source", "spend", "storage"] as const)(
 it("sweeps expired handoff correlation while preserving committed User and legal evidence", () =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const journey = yield* Effect.tryPromise(setupWhatsApp);
+      const journey = yield* Effect.tryPromise(() => setupWhatsApp());
       yield* authenticateChatProvider(journey, yield* seedAcceptedChat(journey.db));
       const code = yield* requestReview(journey);
       yield* Effect.sleep("1100 millis");

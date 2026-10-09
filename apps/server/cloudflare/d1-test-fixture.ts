@@ -270,6 +270,7 @@ export const canonicalAdmissionMigrationNames = (
       "0069_retire_email_code_signup",
       "0070_recovery_retention",
       "0071_recovery_admission",
+      "0072_disclosure_transport",
       "0032_commercial_allowances",
       "0033_canonical_request_protection",
       "0034_forwarded_email_deferral",

@@ -15,6 +15,7 @@ export const makeDisclosureSender = (
   input: Readonly<{
     readonly apiKey: Redacted.Redacted<string>;
     readonly httpClient: HttpClient.HttpClient;
+    readonly sandboxPhoneNumberId: Option.Option<string>;
   }>
 ): ((
   request: Readonly<{
@@ -26,6 +27,7 @@ export const makeDisclosureSender = (
 ) => ReturnType<WhatsAppDelivery["sendText"]>) => {
   const client = makeWhatsAppDelivery({
     deliveryMode: "bsuid",
+    sandboxPhoneNumberId: input.sandboxPhoneNumberId,
     outboundHttp: makeKapsoOutboundHttp(input),
   });
   return (
@@ -38,7 +40,10 @@ export const makeDisclosureSender = (
   ): ReturnType<WhatsAppDelivery["sendText"]> =>
     client.sendText({
       businessPhoneNumberId: request.phoneNumberId,
-      destination: { recipient: request.caller.businessScopedUserId, sandboxPhone: Option.none() },
+      destination: {
+        recipient: request.caller.businessScopedUserId,
+        sandboxPhone: request.caller.phoneNumber,
+      },
       text: TranscriptText.make(request.disclosure.text),
       opaqueCallbackData: Option.some(request.correlationToken),
     });

@@ -381,6 +381,7 @@ const coreEnvironment = (runtime: Runtime): Parameters<typeof coreWorker.fetch>[
   DB: runtime.db,
   HOSTED_AI_MODEL: approvedWorkersAiModel,
   KAPSO_API_KEY: "",
+  WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
   KAPSO_WEBHOOK_SECRET: "",
   RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
   STATEMENT_STAGING_BUCKET: runtime.bucket,

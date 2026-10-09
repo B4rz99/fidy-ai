@@ -60,7 +60,11 @@ needs no extra client telemetry; the Worker's metadata-only recovery evidence re
 
 Local command tests and both provider browser journeys exercise this operator workflow through real
 public/Core Workers and D1, substituting terminal entry and external Access authentication. Live
-Production Access policy, operator login, CLI approval and original-browser session completion were verified on 2026-10-09. Consumed-code replay and post-recovery rotation still need live verification.
+Production Access policy, operator login, CLI approval and original-browser session completion were verified on 2026-10-09.
+On the PR #1118 release, the User confirmed consumed-code replay refusal; the original pairing
+browser remained awaiting approval without authenticated app access. The User then completed fresh
+provider sign-in and code rotation. Recovery settings expose only rotation after navigation and
+reload, without redisclosing the new code; no recovery value was copied into evidence.
 
 ## Procedure
 

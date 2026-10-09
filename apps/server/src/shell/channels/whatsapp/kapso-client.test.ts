@@ -61,7 +61,8 @@ const fakeOutboundHttp = (response: () => Response): OutboundHttpService => ({
 const makeService = (
   outboundHttp: OutboundHttpService,
   deliveryMode: "bsuid" | "sandbox-phone" = "bsuid"
-): WhatsAppDelivery => makeWhatsAppDelivery({ deliveryMode, outboundHttp });
+): WhatsAppDelivery =>
+  makeWhatsAppDelivery({ deliveryMode, outboundHttp, sandboxPhoneNumberId: Option.none() });
 
 const responseWithStatusOutsideFetchRange = (): Response => {
   const response = Response.json({}, { status: 599 });
@@ -252,6 +253,14 @@ it.effect("classifies the adapter deadline as an ambiguous timeout", () =>
 it.effect("classifies every known rejection with safe retry semantics", () =>
   Effect.gen(function* () {
     const cases = [
+      {
+        response: (): Response =>
+          Response.json(
+            { error: "BSUID recipients are not supported in sandbox mode" },
+            { status: 403 }
+          ),
+        expected: ["sandbox_bsuid_unsupported", false] as const,
+      },
       {
         response: (): Response =>
           Response.json(
@@ -487,6 +496,7 @@ it.effect("keeps provider bodies and send inputs out of typed failures", () =>
     };
     const service = makeWhatsAppDelivery({
       deliveryMode: "bsuid",
+      sandboxPhoneNumberId: Option.none(),
       outboundHttp: fakeOutboundHttp(() =>
         Response.json(
           {

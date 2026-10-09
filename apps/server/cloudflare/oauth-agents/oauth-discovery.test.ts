@@ -13,11 +13,11 @@ import {
   TokenFixture,
   approveAgain,
   approvedFixture,
+  consentedSessionForUser,
   exchangeFixture,
   mcpFixture,
   revokeFixtureConsent,
   sessionFor,
-  sessionForUser,
   wait,
 } from "./oauth-ingress.test-fixture";
 
@@ -255,14 +255,12 @@ it.each(queryGroups)(
           lifetimeDays: 7,
           auditMigration: true,
         });
-        const cookie = yield* sessionForUser(
-          {
-            db: fixture.db,
-            index: 2,
-            userIndex: 2,
-          },
-          Option.some("grant-peer")
-        );
+        const cookie = yield* consentedSessionForUser({
+          db: fixture.db,
+          index: 2,
+          userIndex: 2,
+          consentId: "grant-peer",
+        });
         const time = DateTime.formatIso(yield* DateTime.now);
         const resourceId = "30000000-0000-4000-8000-000000000001";
         const privateMarker = "primary-user-private";

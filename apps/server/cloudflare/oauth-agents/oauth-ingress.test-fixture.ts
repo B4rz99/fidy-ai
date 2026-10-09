@@ -353,9 +353,13 @@ export const setup = (auditMigration = true): Effect.Effect<Harness, TestFailure
     };
   });
 
-export const sessionForUser = (
-  input: Readonly<{ db: D1Database; index: number; userIndex: number }>,
-  consentId: Option.Option<string> = Option.none()
+const createBrowserSession = (
+  input: Readonly<{
+    db: D1Database;
+    index: number;
+    userIndex: number;
+    consentId: Option.Option<string>;
+  }>
 ): Effect.Effect<string, TestFailure> =>
   Effect.gen(function* () {
     const current = yield* Clock.currentTimeMillis;
@@ -392,7 +396,7 @@ export const sessionForUser = (
             current + 600000,
             current + 7776000000
           ),
-        ...Option.match(consentId, {
+        ...Option.match(input.consentId, {
           onNone: () => [],
           onSome: (id) => [
             input.db
@@ -407,11 +411,20 @@ export const sessionForUser = (
     return `__Host-fidy_session=${bearer}`;
   });
 
-export const sessionFor = (
-  input: Readonly<{ db: D1Database; index: number }>,
-  consentId: Option.Option<string> = Option.none()
+export const sessionForUser = (
+  input: Readonly<{ db: D1Database; index: number; userIndex: number }>
 ): Effect.Effect<string, TestFailure> =>
-  sessionForUser({ ...input, userIndex: input.index }, consentId);
+  createBrowserSession({ ...input, consentId: Option.none() });
+
+/** Seeds disclosed consent and its browser authority together, before native OAuth review. */
+export const consentedSessionForUser = (
+  input: Readonly<{ db: D1Database; index: number; userIndex: number; consentId: string }>
+): Effect.Effect<string, TestFailure> =>
+  createBrowserSession({ ...input, consentId: Option.some(input.consentId) });
+
+export const sessionFor = (
+  input: Readonly<{ db: D1Database; index: number }>
+): Effect.Effect<string, TestFailure> => sessionForUser({ ...input, userIndex: input.index });
 
 export const authorizationQuery = (
   send: Harness["send"]
@@ -496,7 +509,12 @@ export const reviewedFixture = (
     const started = yield* wait(harness.send(`/oauth/authorize?${query}`));
     const requestId =
       new URL(started.headers.get("location") ?? "").pathname.split("/").at(-1) ?? "";
-    const cookie = yield* sessionFor({ db: harness.db, index: 1 }, Option.some("grant-test"));
+    const cookie = yield* consentedSessionForUser({
+      db: harness.db,
+      index: 1,
+      userIndex: 1,
+      consentId: "grant-test",
+    });
     const headers = {
       origin: "https://app.fidyapp.com",
       cookie,

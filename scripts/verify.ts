@@ -98,7 +98,6 @@ const checks: Array<Check> = [
   rootCheck("static", "Module graph", ["bun", "run", "lint:deps"]),
   rootCheck("static", "Browser client graph", ["bun", "run", "check:browser-client"]),
   rootCheck("static", "Web policy integrity", ["bun", "run", "check:policy"]),
-  rootCheck("static", "Web design-system policy", ["bun", "run", "check:design-system"]),
   rootCheck("static", "Shadcn output integrity", ["bun", "run", "check:shadcn"]),
   rootCheck("static", "Generated contract freshness", ["bun", "run", "contracts:check:freshness"]),
   rootCheck("static", "Generated notification-email format freshness", [

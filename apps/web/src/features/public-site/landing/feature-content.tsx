@@ -9,7 +9,7 @@ export const features = [
           <h3>{"Cada transacción tiene su lugar."}</h3>
           <p>
             {
-              "Revisa tus registros, consulta sus categorías y corrige los datos que necesites. El mismo registro está disponible para ti y tus agentes autorizados."
+              "Revisa tus transacciones, consulta sus categorías y corrige los datos que necesites. Tú y tus agentes autorizados trabajan con la misma información."
             }
           </p>
           <a className="textlink" href="/funciones/transacciones">
@@ -20,7 +20,7 @@ export const features = [
           <div className="feature-window">
             <div className="feature-window-head">
               {"Tus transacciones "}
-              <span>{"Octubre · COP"}</span>
+              <span>{"Octubre"}</span>
             </div>
             <div className="feature-record">
               <span>
@@ -70,7 +70,7 @@ export const features = [
           <div className="feature-window">
             <div className="feature-window-head">
               {"Tu presupuesto "}
-              <span>{"Octubre · COP"}</span>
+              <span>{"Octubre"}</span>
             </div>
             <div className="feature-budget">
               <span>{"Restaurantes"}</span>
@@ -100,7 +100,7 @@ export const features = [
           <h3>{"Pregúntalo como lo piensas."}</h3>
           <p>
             {
-              "Conversa con Fidy desde la web app. Registra una transacción, consulta tus gastos o revisa cómo va tu presupuesto, en tus propias palabras."
+              "Conversa con Fidy desde WhatsApp. Registra una transacción, consulta tus gastos o revisa cómo va tu presupuesto, en tus propias palabras."
             }
           </p>
           <a className="textlink" href="/funciones/asistente">
@@ -127,27 +127,27 @@ export const features = [
     ),
   },
   {
-    label: "Tablero",
+    label: "Dashboard",
     slug: "tablero",
     content: (
       <>
         {" "}
         <div className="feature-copy">
-          <h3>{"Tu panorama, a tu manera."}</h3>
+          <h3>{"Tus finanzas, a tu manera."}</h3>
           <p>
             {
-              "Organiza tu tablero para tener a mano la información que te importa. Consulta tus cifras y encuentra perspectiva en lo que has registrado."
+              "Organiza tu dashboard para tener a mano la información que te importa. Consulta tus cifras y encuentra perspectiva en lo que has registrado."
             }
           </p>
           <a className="textlink" href="/funciones/tablero">
-            {"Explorar tablero ↗"}
+            {"Explorar dashboard ↗"}
           </a>
         </div>
         <div className="feature-art">
           <div className="feature-window">
             <div className="feature-window-head">
-              {"Tu panorama "}
-              <span>{"Octubre · COP"}</span>
+              {"Tus finanzas "}
+              <span>{"Octubre"}</span>
             </div>
             <div className="feature-budget">
               <span>{"Gastos registrados"}</span>
@@ -178,7 +178,7 @@ export const features = [
           <h3>{"Encuentra lo que merece atención."}</h3>
           <p>
             {
-              "Resúmenes semanales, avisos de presupuesto y patrones recurrentes convierten tus registros en contexto. Tu agente también puede consultar estos hallazgos."
+              "Resúmenes semanales, avisos de presupuesto y patrones recurrentes convierten tus transacciones en contexto. Tu agente también puede consultar estos hallazgos."
             }
           </p>
           <a className="textlink" href="/funciones/insights">
@@ -215,7 +215,7 @@ export const features = [
           <h3>{"Tu agente también puede ayudarte."}</h3>
           <p>
             {
-              "Conecta tu agente mediante MCP, CLI o API para consultar registros, revisar hallazgos y ayudarte a organizar tus finanzas. Tú autorizas su acceso."
+              "Conecta tu agente mediante MCP, CLI o API para consultar transacciones, revisar hallazgos y ayudarte a organizar tus finanzas. Tú autorizas su acceso."
             }
           </p>
           <a className="textlink" href="/funciones/agentes">
@@ -229,7 +229,7 @@ export const features = [
               <span>{"Acceso de ejemplo"}</span>
             </div>
             <div className="feature-budget">
-              <span>{"Consulta tus registros y hallazgos"}</span>
+              <span>{"Consulta tus transacciones y hallazgos"}</span>
               <strong>{"Solo lectura"}</strong>
               <p>
                 {"MCP · CLI · API"}

@@ -23,41 +23,6 @@
   display: contents;
 }
 
-@font-face {
-  font-family: Poppins;
-  src: url("./Poppins-Regular.ttf") format("truetype");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: Poppins;
-  src: url("./Poppins-Medium.ttf") format("truetype");
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: Poppins;
-  src: url("./Poppins-SemiBold.ttf") format("truetype");
-  font-weight: 600;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: Poppins;
-  src: url("./Poppins-Bold.ttf") format("truetype");
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: Poppins;
-  src: url("./Poppins-ExtraBold.ttf") format("truetype");
-  font-weight: 800;
-  font-style: normal;
-  font-display: swap;
-}
 .fidy-landing * {
   box-sizing: border-box;
 }
@@ -701,9 +666,6 @@ html:has(.fidy-landing) {
   color: light-dark(#999c91, var(--night-muted));
   font-size: 10px;
 }
-.fidy-landing .footer img {
-  width: 95px;
-}
 .fidy-landing .demo-controls {
   display: flex;
   gap: 8px;
@@ -1278,12 +1240,6 @@ html:has(.fidy-landing) {
   color: light-dark(#626759, var(--night-muted));
   margin-top: 10px;
 }
-.fidy-landing .story-disclosure {
-  font-size: 10px;
-  text-align: center;
-  margin-top: 36px !important;
-  color: light-dark(#989e8d, var(--night-muted)) !important;
-}
 .fidy-landing .story-demo[data-instant="true"] .story-reply,
 .fidy-landing .story-demo[data-instant="true"] .story-row,
 .fidy-landing .story-demo[data-instant="true"] .story-progress {
@@ -1422,7 +1378,6 @@ html:has(.fidy-landing) {
     .strip .wrap,
     .footer small,
     .story-note,
-    .story-disclosure,
     .story-chat-head small,
     .demo-controls button
   ) {
@@ -1734,12 +1689,6 @@ html:has(.fidy-landing) {
   margin-top: 8px;
   color: light-dark(#6a655f, var(--night-muted));
 }
-.fidy-landing .product-features .feature-disclosure {
-  font-size: var(--type-secondary);
-  text-align: right;
-  margin-top: 16px;
-  color: light-dark(#6a655f, var(--night-muted));
-}
 .fidy-landing .pricing-layout {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1800,10 +1749,6 @@ html:has(.fidy-landing) {
 .fidy-landing .price-value > span {
   font-size: var(--type-secondary);
 }
-.fidy-landing .price-card [data-price-charge] {
-  font-size: var(--type-secondary);
-  min-height: 48px;
-}
 .fidy-landing .price-card .btn {
   width: 100%;
   margin: 20px 0;
@@ -1856,9 +1801,6 @@ html:has(.fidy-landing) {
   }
   .fidy-landing .feature-record {
     padding: 16px;
-  }
-  .fidy-landing .product-features .feature-disclosure {
-    text-align: left;
   }
   .fidy-landing .price-value {
     min-height: 58px;
@@ -2384,91 +2326,41 @@ html:has(.fidy-landing) {
 .fidy-landing .main-nav .navend .btn {
   white-space: nowrap;
 }
-.fidy-landing .nav-toggle {
-  display: none;
-  font: inherit;
-  color: inherit;
-  background: transparent;
-  border: 1px solid light-dark(#d4cec6, var(--night-border));
-  border-radius: 50%;
-  width: 44px;
-  height: 44px;
-  cursor: pointer;
-  align-items: center;
-  justify-content: center;
-  font-size: 22px;
-}
-.fidy-landing .nav-toggle:focus-visible,
-.fidy-landing .main-nav .navlinks a:focus-visible {
-  outline: 2px solid light-dark(#527d2c, var(--night-emphasis));
-  outline-offset: 4px;
-}
 @media (max-width: 1100px) {
   .fidy-landing .main-nav {
-    gap: 16px;
+    flex-wrap: nowrap;
+    gap: 12px;
     padding: 18px 0;
   }
   .fidy-landing .main-nav .navend {
-    gap: 12px;
-    margin-left: auto;
+    gap: 8px;
   }
   .fidy-landing .main-nav .navend > .textlink {
     display: none;
   }
   .fidy-landing .main-nav .navend .btn {
-    padding: 14px 22px;
-    font-size: 14px;
-    gap: 18px;
-  }
-  .fidy-landing .main-nav .nav-toggle {
-    display: flex;
+    padding: 12px 16px;
+    font-size: 12px;
   }
   .fidy-landing .main-nav .navlinks {
     display: none;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    background: light-dark(#fffaf6, var(--night-canvas));
-    border: 1px solid light-dark(#e5ded6, var(--night-border));
-    border-radius: 16px;
-    padding: 12px;
-    box-shadow: 0 14px 30px #00000012;
-    gap: 0;
   }
-  .fidy-landing .main-nav.nav-open .navlinks {
+  .fidy-landing .main-nav .nav-toggle {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-  }
-  .fidy-landing .main-nav .navlinks a {
-    display: block;
-    padding: 16px;
-    border-radius: 8px;
-    font-size: 14px;
   }
 }
 @media (max-width: 480px) {
   .fidy-landing .main-nav {
     gap: 8px;
   }
-  .fidy-landing .main-nav .navend {
-    gap: 8px;
-  }
-  .fidy-landing .main-nav .navend .btn {
-    padding: 12px 16px;
-    font-size: 12px;
-  }
-  .fidy-landing .main-nav .navend .btn span {
-    display: none;
-  }
-  .fidy-landing .main-nav.nav-open .navlinks {
-    grid-template-columns: 1fr;
-  }
 }
 @media (max-width: 360px) {
   .fidy-landing .main-nav .logo {
-    width: 64px;
+    width: 48px;
     height: 40px;
+  }
+  .fidy-landing .main-nav .logo img {
+    width: 44px;
   }
 }
 @media (hover: hover) and (pointer: fine) {
@@ -2529,60 +2421,25 @@ html:has(.fidy-landing) {
 .fidy-landing .logo {
   background: #000;
 }
-.fidy-landing .theme-picker {
-  position: fixed;
-  z-index: 50;
-  right: 20px;
-  bottom: max(16px, env(safe-area-inset-bottom));
-  display: flex;
-  gap: 4px;
-  margin: 0;
-  padding: 5px;
-  border: 1px solid light-dark(#ebebeb, var(--night-border));
-  border-radius: 999px;
-  background: light-dark(#fffaf6, var(--night-surface));
-  box-shadow: 0 6px 24px #00000020;
-}
-.fidy-landing .theme-picker button {
-  border: 0;
-  padding: 9px 14px;
-  border-radius: 999px;
-  background: transparent;
-  color: inherit;
-  font-size: 12px;
-  font-weight: 500;
-}
-.fidy-landing .theme-picker button[aria-pressed="true"] {
-  background: var(--brand-green);
-  color: #000;
-}
-@media (max-width: 700px) {
-  .fidy-landing .theme-picker {
-    right: 12px;
-  }
-}
 
-/* Midnight with warm highlights: approved dark palette. */
+/* Grafito with warm highlights: approved dark palette. */
 .fidy-landing {
-  --night-canvas: #10121c;
-  --night-surface: #191e2e;
-  --night-raised: #2a3247;
-  --night-deep: #090c14;
-  --night-bubble: #354660;
-  --night-border: #4a536b;
+  --night-canvas: #141414;
+  --night-surface: #202020;
+  --night-raised: #2e2e2e;
+  --night-deep: #141414;
+  --night-bubble: #2e2e2e;
+  --night-border: #606060;
   --night-text: #fff6ef;
-  --night-muted: #c5cada;
+  --night-muted: #c7c7c7;
   --night-emphasis: #fae3d9;
 }
-.fidy-landing .theme-picker {
-  max-width: calc(100% - 24px);
-  flex-wrap: wrap;
-  justify-content: center;
-}
 .fidy-landing .hero {
-  background-image:
-    radial-gradient(ellipse at 80% 35%, light-dark(transparent, #a6c4ff18), transparent 58%),
-    radial-gradient(ellipse at 15% 85%, light-dark(transparent, #ffb9960d), transparent 55%);
+  background-image: radial-gradient(
+    ellipse at 80% 35%,
+    light-dark(transparent, #7cb24312),
+    transparent 58%
+  );
 }
 .fidy-landing.variant-a .btn.green {
   background: var(--brand-green);
@@ -2593,14 +2450,12 @@ html:has(.fidy-landing) {
   background: #8abe53;
 }
 .fidy-landing .phone {
-  background: light-dark(#f5f3ed, #161e30);
-  border-color: light-dark(#171916, #67748d);
-  box-shadow:
-    0 28px 60px light-dark(#312e251f, #00000060),
-    0 0 70px light-dark(transparent, #93b7ff12);
+  background: light-dark(#f5f3ed, var(--night-surface));
+  border-color: light-dark(#171916, var(--night-border));
+  box-shadow: 0 28px 60px light-dark(#312e251f, #00000060);
 }
 .fidy-landing .bubble {
-  background: light-dark(#fff, #34415b);
+  background: light-dark(#fff, var(--night-raised));
 }
 .fidy-landing .bubble.user {
   background: light-dark(#e1edcd, #f3cfb7);
@@ -2621,13 +2476,13 @@ html:has(.fidy-landing) {
   color: light-dark(#6c7065, #62695c);
 }
 .fidy-landing .chat-head {
-  background: light-dark(#fff, #202a40);
+  background: light-dark(#fff, var(--night-surface));
 }
 .fidy-landing .chat-input {
-  background: light-dark(#fff, #202a40);
+  background: light-dark(#fff, var(--night-surface));
 }
 .fidy-landing .chat-input span {
-  background: light-dark(#f5f4f1, #303c55);
+  background: light-dark(#f5f4f1, var(--night-raised));
 }
 
 /* Pastel accents retain neutral, high-contrast text in both themes. */
@@ -2672,4 +2527,245 @@ html:has(.fidy-landing) {
 .fidy-landing .story-demo[data-recorded="true"] :is(.story-badge, .story-status) {
   background: var(--pastel-success);
   color: #171916;
+}
+
+.fidy-landing .agent-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
+  white-space: nowrap;
+}
+.fidy-landing .agent-brand svg {
+  width: 0.8em;
+  height: 0.8em;
+  flex: none;
+}
+
+.fidy-landing .theme-toggle {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 10px;
+  flex: none;
+  border: 1px solid light-dark(#cbc8bd, var(--night-border));
+  border-radius: 50%;
+  background: light-dark(#fffaf6, var(--night-surface));
+  color: inherit;
+}
+.fidy-landing .theme-toggle svg {
+  width: 22px;
+  height: 22px;
+}
+@media (max-width: 480px) {
+  .fidy-landing .feature-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .fidy-landing .feature-tabs button {
+    min-height: 44px;
+  }
+  .fidy-landing .main-nav .navend .btn {
+    padding: 12px 10px;
+  }
+}
+@media (min-width: 701px) and (max-width: 900px) {
+  .fidy-landing .detail-budget-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .fidy-landing .hero-grid > div {
+    min-width: 0;
+  }
+  .fidy-landing .halo {
+    max-width: 100%;
+  }
+}
+
+/* Let stacked sections use their available width instead of desktop text columns. */
+@media (max-width: 700px) {
+  .fidy-landing .hero-copy p,
+  .fidy-landing .section-head p,
+  .fidy-landing .feature-copy p,
+  .fidy-landing .feature-copy h3 {
+    max-width: none;
+  }
+  .fidy-landing.variant-a .hero-copy h1 {
+    font-size: clamp(40px, 9vw, 56px);
+  }
+  .fidy-landing .hero-copy h1 em {
+    display: block;
+  }
+  .fidy-landing .hero-copy h1 br,
+  .fidy-landing .section-head h2 br,
+  .fidy-landing .pricing-copy h2 br {
+    display: none;
+  }
+}
+
+.fidy-landing .nav-toggle {
+  display: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 10px;
+  border: 1px solid light-dark(#cbc8bd, var(--night-border));
+  border-radius: 50%;
+  background: light-dark(#fffaf6, var(--night-surface));
+  color: inherit;
+  flex: none;
+}
+.fidy-landing .nav-toggle svg {
+  width: 22px;
+  height: 22px;
+}
+
+.fidy-landing .compact-navigation {
+  flex-direction: column;
+  gap: 4px;
+  inset: 84px 24px auto auto;
+  width: min(260px, calc(100vw - 40px));
+  max-height: calc(100dvh - 108px);
+  overflow-y: auto;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid light-dark(#cbc8bd, var(--night-border));
+  border-radius: 16px;
+  background: light-dark(#fffaf6, var(--night-surface));
+  color: inherit;
+  box-shadow: 0 12px 32px #00000024;
+}
+.fidy-landing .compact-navigation:popover-open {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.fidy-landing .compact-navigation a {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+.fidy-landing .compact-navigation a:focus-visible {
+  outline-offset: -3px;
+}
+.fidy-landing .nav-toggle .menu-close,
+.fidy-landing .main-nav:has(.compact-navigation:popover-open) .menu-bars {
+  display: none;
+}
+.fidy-landing .main-nav:has(.compact-navigation:popover-open) .menu-close {
+  display: block;
+}
+@media (min-width: 1101px) {
+  .fidy-landing .compact-navigation:popover-open {
+    display: none;
+  }
+}
+
+/* Keep the phone and its decorations in one composition as the viewport changes. */
+.fidy-landing .demo-shell {
+  container-type: inline-size;
+}
+.fidy-landing .hero-stage {
+  width: 460px;
+  height: 600px;
+  min-height: 600px;
+  padding-right: 40px;
+  margin: 0 auto;
+  transform: none;
+  zoom: min(1, calc(100cqw / 460px));
+}
+.fidy-landing .coin {
+  right: 20px;
+  top: 24px;
+}
+
+/* Pointer opening grows from the menu trigger; keyboard opening stays immediate. */
+.fidy-landing .compact-navigation {
+  transform-origin: top right;
+  opacity: 0;
+  transform: scale(0.97);
+  transition:
+    opacity 180ms var(--ease-out),
+    transform 180ms var(--ease-out),
+    display 180ms allow-discrete,
+    overlay 180ms allow-discrete;
+}
+.fidy-landing .compact-navigation:popover-open {
+  opacity: 1;
+  transform: scale(1);
+}
+@starting-style {
+  .fidy-landing .compact-navigation:popover-open {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+.fidy-landing .compact-navigation[data-motion="instant"] {
+  transition: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fidy-landing .compact-navigation {
+    transform: none !important;
+    transition:
+      opacity 120ms var(--ease-out),
+      display 120ms allow-discrete,
+      overlay 120ms allow-discrete !important;
+  }
+}
+
+@media (max-width: 700px) {
+  .fidy-landing .strip .wrap {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px 24px;
+    align-items: start;
+  }
+}
+.fidy-landing .story-status.empty-status {
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+}
+
+/* Scroll progress drives gentle entrances and exits; reading stays fully visible. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .fidy-landing
+      :is(
+        .hero-copy,
+        .section-head,
+        .agent-system,
+        .feature-panel,
+        .story-heading,
+        .story-demo,
+        .pricing-copy,
+        .price-card,
+        .faq > div,
+        .closing > *,
+        .footer .wrap
+      ) {
+      animation: landing-scroll-reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% exit 100%;
+    }
+  }
+}
+@keyframes landing-scroll-reveal {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  12%,
+  88% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
 }

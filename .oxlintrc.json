@@ -5,7 +5,13 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["typescript", "unicorn", "oxc", "import", "promise", "jsdoc", "react", "jsx-a11y"],
-  "jsPlugins": ["./scripts/oxlint/effect-guards.js"],
+  "jsPlugins": ["./scripts/oxlint/effect-guards.js", "@shadcn/lint"],
+  "settings": {
+    "shadcn": {
+      "ui": "@/ui/components",
+      "note": "See DESIGN.md for Fidy's brand foundations and application defaults."
+    }
+  },
   "ignorePatterns": [
     "**/node_modules/**",
     "**/dist/**",
@@ -139,6 +145,38 @@
     "yoda": "error"
   },
   "overrides": [
+    {
+      "files": ["apps/web/src/**/*.{ts,tsx}"],
+      "rules": {
+        "shadcn/no-raw-colors": "error",
+        "shadcn/no-arbitrary-values": ["error", { "allow": ["layout"] }],
+        "shadcn/no-restyle": [
+          "error",
+          {
+            "allow": ["layout"],
+            "contracts": [
+              {
+                "pattern": "^Card$|(Content|Header|Footer|Group|Panel)$",
+                "allow": ["layout", "spacing"]
+              },
+              {
+                "pattern": "^CardTitle$|^Table(Cell|Head)$|^CardAction$",
+                "allow": ["layout", "typography"]
+              },
+              { "pattern": "^Empty$", "allow": ["layout", "border"] },
+              { "pattern": "^AlertDescription$", "allow": ["layout", "spacing"] }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/web/src/ui/components/**"],
+      "rules": {
+        "shadcn/no-restyle": "off",
+        "shadcn/no-arbitrary-values": "off"
+      }
+    },
     {
       "files": ["apps/cli/vitest.config.ts"],
       "rules": { "import/no-default-export": "off" }

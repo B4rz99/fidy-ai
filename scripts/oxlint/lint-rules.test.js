@@ -182,6 +182,48 @@ try {
   unlinkSync(probeFile);
 }
 
+// Verify the configured design policy through the same Oxlint command CI runs.
+const designProbe = join(workspaceRoot, "apps/web/src/app/.lint-design-probe.tsx");
+const designCases = [
+  { expression: '<div className="bg-blue-500" />', rule: "no-raw-colors" },
+  { expression: '<div className={cn("text-[#123456]")} />', rule: "no-arbitrary-values" },
+  { expression: '<Button className="bg-secondary">Guardar</Button>', rule: "no-restyle" },
+  { expression: '<Button className="p-4">Guardar</Button>', rule: "no-restyle" },
+  { expression: '<Button variant="outline" className="w-full">Guardar</Button>' },
+  { expression: '<CardContent className="flex gap-4 px-6">Contenido</CardContent>' },
+];
+try {
+  for (const { expression, rule } of designCases) {
+    writeFileSync(
+      designProbe,
+      `import type { JSX } from "react";\n` +
+        (expression.includes("Button")
+          ? `import { Button } from "@/ui/components/button";\n`
+          : "") +
+        (expression.includes("CardContent")
+          ? `import { CardContent } from "@/ui/components/card";\n`
+          : "") +
+        (expression.includes("cn(") ? `import { cn } from "@/ui/class-names";\n` : "") +
+        "\n" +
+        `export const DesignProbe = (): JSX.Element => ${expression};\n`
+    );
+    const result = spawnSync(
+      "./node_modules/.bin/oxlint",
+      ["--config", ".oxlintrc.json", designProbe],
+      { cwd: workspaceRoot, encoding: "utf8" }
+    );
+    const report = `${result.stdout}\n${result.stderr}`;
+    if (rule) {
+      assert.ok(report.includes(`shadcn(${rule})`), report);
+      assert.notEqual(result.status, 0);
+    } else {
+      assert.equal(result.status, 0, report);
+    }
+  }
+} finally {
+  unlinkSync(designProbe);
+}
+
 // Run the source guard in an isolated workspace so guidance is exercised without a probe file
 // racing the repository's other static checks.
 const isolatedRoot = mkdtempSync(join(tmpdir(), "fidy-symbol-guidance-"));

@@ -29,13 +29,13 @@ colors:
   chart-lavender: "{colors.pending}"
   chart-butter: "{colors.warning}"
   chart-rose: "#E8BED5"
-  dark-canvas: "#10121C"
-  dark-surface: "#191E2E"
-  dark-raised: "#2A3247"
-  dark-deep: "#090C14"
-  dark-border: "#4A536B"
+  dark-canvas: "#141414"
+  dark-surface: "#202020"
+  dark-raised: "#2E2E2E"
+  dark-deep: "#141414"
+  dark-border: "#606060"
   dark-text: "#FFF6EF"
-  dark-text-secondary: "#C5CADA"
+  dark-text-secondary: "#C7C7C7"
   dark-heading-accent: "{colors.secondary}"
 typography:
   headline-display:
@@ -145,7 +145,7 @@ responsive exceptions. The implementation contains additional illustration-speci
 values that are not new system tokens. Update this document with approved changes to
 the shared visual language, rather than treating every CSS value as a universal rule.
 
-The approved light and midnight themes, pastel accents, financial color conventions,
+The approved light and Grafito themes, pastel accents, financial color conventions,
 icon family, and comfortable application density are defined below. These establish
 design defaults; existing application screens still need a deliberate implementation
 and review. Detailed form compositions and advanced table behavior remain open.
@@ -180,7 +180,7 @@ Pair color with labels, selection states, or icons when it carries meaning.
 
 ### Themes and semantic accents
 
-Light retains the original off-white canvas and peach sections. Dark uses midnight
+Light retains the original off-white canvas and peach sections. Dark uses neutral graphite
 surfaces with warm text, peach emphasis, and brand-green actions. Distinguish nested product
 surfaces by tone; light peach messages and budget cards can remain luminous within
 a dark illustration. Reserve subtle background illumination for the landing hero.
@@ -387,4 +387,7 @@ view leaves, and preserve focus during state changes and dialog dismissal.
   themes, semantic colors, icons, and density without inventing product behavior.
 
 Implementation reference: [public-site landing](apps/web/src/features/public-site/landing/).
+Application foundation: [shared theme](apps/web/src/index.css) and
+[UI primitives](apps/web/src/ui/components/). Review the local `/ui-reference.html` page
+and [frontend polish audit](docs/design/frontend-polish.md) before extending screen layouts.
 Document format: [DESIGN.md specification](https://github.com/google-labs-code/design.md/blob/main/docs/spec.md).

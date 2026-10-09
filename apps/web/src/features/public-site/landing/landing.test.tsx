@@ -70,7 +70,7 @@ const mountHome = (): void => {
 
 it("switches and replays local conversations while retaining the phone shell", () => {
   mountHome();
-  const phone = screen.getByText("Tu asistente · Web app").closest(".phone");
+  const phone = screen.getByText("Tu asistente · WhatsApp").closest(".phone");
   fireEvent.click(screen.getByRole("button", { name: "Consultar" }));
   expect(
     screen.getByText("Tienes 12 transacciones en Restaurantes. La más reciente: $28.000 en Crepes.")
@@ -81,7 +81,7 @@ it("switches and replays local conversations while retaining the phone shell", (
     detail: 1,
   });
   fireEvent.click(screen.getByRole("button", { name: "Presupuestar" }));
-  expect(screen.getByText("Tu asistente · Web app").closest(".phone")).toBe(phone);
+  expect(screen.getByText("Tu asistente · WhatsApp").closest(".phone")).toBe(phone);
   fireEvent.click(screen.getByRole("button", { name: "Registrar" }));
   expect(screen.getByRole("button", { name: "Registrar" })).toHaveAttribute("aria-pressed", "true");
 });
@@ -113,33 +113,14 @@ it("supports keyboard feature selection and links each preview to its detailed v
 
 it("updates launch prices and links to first-party Google signup", () => {
   mountHome();
-  expect(screen.getByText("Cobro de $28.900 COP cada mes.")).toBeInTheDocument();
+  expect(screen.getByText("$28.900", { selector: "[data-price-amount]" })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Anual" }));
-  expect(screen.getByText("Cobro de $289.900 COP cada año.")).toBeInTheDocument();
+  expect(screen.getByText("$289.900", { selector: "[data-price-amount]" })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Semanal" }));
-  expect(screen.getByText("Cobro de $9.900 COP cada semana.")).toBeInTheDocument();
+  expect(screen.getByText("$9.900", { selector: "[data-price-amount]" })).toBeInTheDocument();
   expect(
-    within(screen.getByRole("banner")).getByRole("link", { name: "Empezar con Fidy" })
+    within(screen.getByRole("banner")).getByRole("link", { name: "Crear mi cuenta" })
   ).toHaveAttribute("href", "/auth/google");
-});
-
-it("closes compact navigation on selection, focus departure and Escape", () => {
-  mountHome();
-  fireEvent.click(screen.getByRole("button", { name: "Abrir menú" }));
-  const toggle = screen.getByRole("button", { name: "Cerrar menú" });
-  fireEvent.keyDown(toggle, { key: "Escape" });
-  expect(screen.getByRole("button", { name: "Abrir menú" })).toHaveFocus();
-  fireEvent.click(toggle);
-  fireEvent.blur(toggle, {
-    relatedTarget: screen.getByRole("link", { name: "Funciones" }),
-  });
-  expect(toggle).toHaveAttribute("aria-expanded", "true");
-  fireEvent.click(screen.getByRole("link", { name: "Funciones" }));
-  expect(toggle).toHaveAttribute("aria-expanded", "false");
-  fireEvent.keyDown(toggle, { key: "Tab" });
-  fireEvent.click(toggle);
-  fireEvent.blur(toggle, { relatedTarget: document.body });
-  expect(toggle).toHaveAttribute("aria-expanded", "false");
 });
 
 it("registers and resets only the illustrative dashboard transaction", () => {
@@ -182,8 +163,8 @@ it("honors reduced motion and cancels owned animations on unmount", () => {
 it("restores a saved theme and tolerates unavailable browser storage", () => {
   localStorage.setItem("fidy-landing-theme", "dark");
   const view = render(<FeatureDetail index={0} />);
-  expect(screen.getByRole("button", { name: "Oscuro" })).toHaveAttribute("aria-pressed", "true");
-  fireEvent.click(screen.getByRole("button", { name: "Claro" }));
+  expect(screen.getByRole("button", { name: "Activar tema claro" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Activar tema claro" }));
   expect(localStorage.getItem("fidy-landing-theme")).toBe("light");
   view.unmount();
   vi.stubGlobal("localStorage", {
@@ -195,7 +176,7 @@ it("restores a saved theme and tolerates unavailable browser storage", () => {
     },
   });
   render(<FeatureDetail index={0} />);
-  expect(screen.getByRole("button", { name: "Sistema" })).toHaveAttribute("aria-pressed", "true");
-  fireEvent.click(screen.getByRole("button", { name: "Oscuro" }));
-  expect(screen.getByRole("button", { name: "Oscuro" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Activar tema oscuro" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Activar tema oscuro" }));
+  expect(screen.getByRole("button", { name: "Activar tema claro" })).toBeInTheDocument();
 });

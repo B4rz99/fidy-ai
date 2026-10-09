@@ -102,7 +102,8 @@ const OfferButton = ({
       selected ? `Oferta ${offer.selectionLabel} seleccionada` : `Elegir ${offer.selectionLabel}`
     }
     aria-pressed={selected}
-    className="h-auto w-full py-6 font-heading text-xl font-semibold tabular-nums"
+    className="w-full"
+    size="offer"
     disabled={disabled}
     onClick={() => select(offer.id)}
     type="button"

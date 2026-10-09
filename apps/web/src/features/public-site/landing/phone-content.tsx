@@ -25,7 +25,7 @@ export const PhoneContent = ({
             <span className="avatar">{"f"}</span>
             <div>
               <strong>{"fidy"}</strong>
-              <small>{"Tu asistente · Web app"}</small>
+              <small>{"Tu asistente · WhatsApp"}</small>
             </div>
           </div>
           {conversation}

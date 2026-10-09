@@ -8,10 +8,10 @@ type SpinnerProps = Omit<React.ComponentProps<typeof HugeiconsIcon>, "icon" | "s
 const Spinner = ({ className, ...props }: SpinnerProps): React.JSX.Element => (
   <HugeiconsIcon
     aria-hidden="true"
-    className={cn("size-4 animate-spin", className)}
+    className={cn("size-5 animate-spin motion-reduce:animate-none", className)}
     data-slot="spinner"
     icon={Loading03Icon}
-    strokeWidth={2}
+    strokeWidth={1.5}
     {...props}
   />
 );

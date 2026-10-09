@@ -174,8 +174,12 @@ const TransactionRow = ({
         }
         onClick={() => (selection.active ? selection.onToggle(row.id) : onSelect(row.id))}
         aria-label={`Ver monto de ${row.counterpartyLabel}`}
+        title={row.transactionTypeLabel}
         className="flex w-full items-center justify-end gap-2 rounded-md py-1 outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
       >
+        <span className="transaction-amount-direction inline-flex shrink-0 @min-[481px]/ledger:hidden">
+          <DirectionVisual inflow={row.direction === "inflow"} />
+        </span>
         <span className="min-w-0 break-words">{row.moneyText}</span>
         <HugeiconsIcon
           icon={ArrowRight01Icon}

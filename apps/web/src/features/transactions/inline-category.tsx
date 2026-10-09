@@ -70,7 +70,7 @@ const CategoryCorrection = (props: CategoryProps): JSX.Element => {
             <button
               type="button"
               aria-label={`Cambiar categoría de ${props.row.counterpartyLabel}`}
-              className="flex min-h-11 w-full items-center gap-2 rounded-md py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex min-h-11 w-full items-center gap-2 rounded-md py-1 text-left outline-none transition-colors enabled:cursor-pointer enabled:hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring aria-expanded:bg-muted"
             />
           }
         >

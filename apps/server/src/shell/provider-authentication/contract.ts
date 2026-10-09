@@ -2,6 +2,7 @@ import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api";
 import { BrowserLoginPairingId, BrowserLoginPrivateVerifier } from "~/core/browser-login/contract";
 import { BackupRecoveryCode } from "~/core/recovery/contract";
+import { PolicyUrl } from "~/core/consent/contract";
 
 const maximumRevisionLength = 128;
 const invalidStatus = 400;
@@ -50,7 +51,11 @@ export const ProviderCompletion = Schema.Union([
   }),
   Schema.Struct({ status: Schema.Literal("approved") }),
 ]);
-export const WebSignupDisclosure = Schema.Struct({ revision: Schema.String, text: Schema.String });
+export const WebSignupDisclosure = Schema.Struct({
+  revision: Schema.String,
+  text: Schema.String,
+  policy: Schema.Struct({ publicUrl: PolicyUrl }),
+});
 const Refusal = Schema.Struct({ status: Schema.Literals(["invalid", "unavailable"]) });
 export const ProviderAuthenticationGroup = HttpApiGroup.make("providerAuthentication")
   .add(

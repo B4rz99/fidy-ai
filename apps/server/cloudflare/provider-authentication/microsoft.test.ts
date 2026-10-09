@@ -21,12 +21,17 @@ it("requires the initiating browser proof and current explicit Consent before Mi
       const disclosure = yield* Effect.tryPromise(() => send("/web/providers/disclosure"));
       expect(disclosure.status).toBe(200);
       const current = yield* Schema.decodeUnknownEffect(
-        Schema.Struct({ revision: Schema.String, text: Schema.String })
+        Schema.Struct({
+          revision: Schema.String,
+          text: Schema.String,
+          policy: Schema.Struct({ publicUrl: Schema.String }),
+        })
       )(yield* Effect.tryPromise(() => disclosure.json()));
       expect(current.revision).toBe("web-provider-2026-10-09-short");
       expect(current.text).toBe(
         "Fidy usa tus datos para proteger tu cuenta y organizar tus finanzas."
       );
+      expect(current.policy.publicUrl).toBe("https://app.fidyapp.com/politica");
       const stale = yield* Effect.tryPromise(() =>
         send("/web/providers/microsoft/start", {
           ...pairing,

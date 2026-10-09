@@ -28,8 +28,10 @@ const providerGet = ({
 > => {
   const path = new URL(request.url).pathname;
   if (path === providerPaths.disclosure) {
-    const { revision, text } = webSignupDisclosure();
-    return Effect.succeed(providerJson({ body: { revision, text } }));
+    const { revision, text, policy } = webSignupDisclosure();
+    return Effect.succeed(
+      providerJson({ body: { revision, text, policy: { publicUrl: policy.publicUrl } } })
+    );
   }
   if (path === microsoftProviderPaths.callback) {
     return providerCallback({ request, environment, provider: "microsoft" });

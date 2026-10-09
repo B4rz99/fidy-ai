@@ -46,7 +46,7 @@ const ConsentNotice = ({
               <br />
               <a
                 className="underline"
-                href="https://app.fidyapp.com/politica"
+                href={value.policy.publicUrl}
                 target="_blank"
                 rel="noopener noreferrer"
               >

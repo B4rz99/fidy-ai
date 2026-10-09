@@ -66,3 +66,32 @@ test("captures matched public-page views without using account data", ({ page },
       }
     })
   ));
+
+test("captures every landing section for visual review", ({ page }, info) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      yield* wait(
+        page.route("**/*", (route) =>
+          new URL(route.request().url()).hostname === "127.0.0.1" ? route.continue() : route.abort()
+        )
+      );
+      yield* wait(page.goto("/"));
+      yield* wait(expect(page.locator(".hero")).toBeVisible());
+      yield* wait(settle(page));
+      yield* wait(page.screenshot({ path: info.outputPath("landing-full.png"), fullPage: true }));
+      for (const section of ["#como", "#precios", "#preguntas", ".footer"]) {
+        yield* wait(page.locator(section).scrollIntoViewIfNeeded());
+        yield* wait(settle(page));
+        yield* wait(
+          page.locator(section).screenshot({ path: info.outputPath(`${section.slice(1)}.png`) })
+        );
+      }
+      if (info.project.name.startsWith("after")) {
+        yield* wait(page.locator(".first-steps").scrollIntoViewIfNeeded());
+        yield* wait(settle(page));
+        yield* wait(
+          page.locator(".first-steps").screenshot({ path: info.outputPath("first-steps-new.png") })
+        );
+      }
+    })
+  ));

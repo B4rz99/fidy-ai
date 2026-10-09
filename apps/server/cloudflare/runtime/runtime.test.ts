@@ -27,6 +27,7 @@ const input = (
   AI: { run: unavailable },
   RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
   KAPSO_API_KEY: "configured",
+  WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
   KAPSO_WEBHOOK_SECRET: "configured",
   HOSTED_AI_MODEL: "configured",
   WOMPI_ENVIRONMENT: "configured",

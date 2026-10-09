@@ -5,20 +5,28 @@ import type { WhatsAppDelivery, WhatsAppInboundEvent } from "~/shell/channels/wh
 import { makeWhatsAppDelivery } from "~/shell/channels/whatsapp/runtime";
 import { makeKapsoOutboundHttp } from "~/shell/outbound-http/operations";
 
-/** Deliver one owner-prepared public handoff or immutable association review only to its authenticated BSUID. */
+/** Deliver to the authenticated caller; only the configured sandbox endpoint uses its observed phone. */
 export const makeProviderHandoffSender = (
-  input: Readonly<{ apiKey: Redacted.Redacted<string>; httpClient: HttpClient.HttpClient }>
+  input: Readonly<{
+    apiKey: Redacted.Redacted<string>;
+    httpClient: HttpClient.HttpClient;
+    sandboxPhoneNumberId: Option.Option<string>;
+  }>
 ): ((
   input: Readonly<{ event: WhatsAppInboundEvent; text: string }>
 ) => ReturnType<WhatsAppDelivery["sendText"]>) => {
   const client = makeWhatsAppDelivery({
     deliveryMode: "bsuid",
+    sandboxPhoneNumberId: input.sandboxPhoneNumberId,
     outboundHttp: makeKapsoOutboundHttp(input),
   });
   return ({ event, text }) =>
     client.sendText({
       businessPhoneNumberId: event.businessPhoneNumberId,
-      destination: { recipient: event.caller.businessScopedUserId, sandboxPhone: Option.none() },
+      destination: {
+        recipient: event.caller.businessScopedUserId,
+        sandboxPhone: event.caller.phoneNumber,
+      },
       text: TranscriptText.make(text),
       opaqueCallbackData: Option.none(),
     });

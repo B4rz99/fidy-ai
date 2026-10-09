@@ -30,7 +30,7 @@ const requestHeaders = (overrides: Readonly<Record<string, string>>): Headers =>
   return headers;
 };
 const sendThroughWorkers =
-  (db: D1Database): Journey["send"] =>
+  (db: D1Database, sandboxPhoneNumberId: string = ""): Journey["send"] =>
   (
     path: string,
     body?: unknown,
@@ -68,6 +68,7 @@ const sendThroughWorkers =
               KAPSO_API_KEY: "test-kapso-key",
               KAPSO_WEBHOOK_SECRET: "test-kapso-secret",
               WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio",
+              WHATSAPP_SANDBOX_PHONE_NUMBER_ID: sandboxPhoneNumberId,
               CLOUDFLARE_ACCESS_ISSUER: "https://test.cloudflareaccess.com",
               CLOUDFLARE_ACCESS_AUDIENCE: "support",
               WOMPI_ENVIRONMENT: "sandbox",
@@ -79,7 +80,9 @@ const sendThroughWorkers =
       }
     );
 
-const setupJourney = (options: Readonly<{ whatsapp: boolean }>): Promise<Journey> =>
+const setupJourney = (
+  options: Readonly<{ whatsapp: boolean; sandboxPhoneNumberId: string }>
+): Promise<Journey> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const db = yield* Effect.tryPromise(() => databases.acquire());
@@ -108,10 +111,11 @@ const setupJourney = (options: Readonly<{ whatsapp: boolean }>): Promise<Journey
                   "0069_retire_email_code_signup",
                   "0070_recovery_retention",
                   "0071_recovery_admission",
+                  "0072_disclosure_transport",
                 ].map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
         })
       );
-      const send = sendThroughWorkers(db);
+      const send = sendThroughWorkers(db, options.sandboxPhoneNumberId);
       const response = yield* Effect.tryPromise(() => send("/web/pairings", {}));
       const pairing = yield* Schema.decodeUnknownEffect(Pairing)(
         yield* Effect.tryPromise(() => response.json())
@@ -121,8 +125,10 @@ const setupJourney = (options: Readonly<{ whatsapp: boolean }>): Promise<Journey
   );
 export const disposeJourneys = (): Promise<void> => databases.dispose();
 
-export const setup = (): Promise<Journey> => setupJourney({ whatsapp: false });
-export const setupWhatsApp = (): Promise<Journey> => setupJourney({ whatsapp: true });
+export const setup = (): Promise<Journey> =>
+  setupJourney({ whatsapp: false, sandboxPhoneNumberId: "" });
+export const setupWhatsApp = (sandboxPhoneNumberId: string = ""): Promise<Journey> =>
+  setupJourney({ whatsapp: true, sandboxPhoneNumberId });
 
 /** Model a provider issuing its token after the callback's initial clock sample. */
 export const delayedProviderTokenResponse = ({

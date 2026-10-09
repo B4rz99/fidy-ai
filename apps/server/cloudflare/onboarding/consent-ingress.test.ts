@@ -71,6 +71,7 @@ const setup = (
           sources: [
             new URL("../migrations/0002_resource_admission.sql", import.meta.url),
             migration,
+            new URL("../migrations/0072_disclosure_transport.sql", import.meta.url),
             new URL("../migrations/0025_voice_refusal.sql", import.meta.url),
           ],
         })
@@ -170,6 +171,7 @@ const setup = (
                     CLOUDFLARE_ACCESS_ISSUER: "",
                     CLOUDFLARE_ACCESS_AUDIENCE: "",
                     KAPSO_API_KEY: "fake-provider-key",
+                    WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
 
                     WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio,
                     RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",
@@ -1099,11 +1101,23 @@ it("recovers a committed pre-send disclosure once without resending a started at
           .run()
       );
       expect(
-        Exit.isFailure(yield* Effect.exit(recoverPendingDisclosures({ db, apiKey: "" })))
+        Exit.isFailure(
+          yield* Effect.exit(
+            recoverPendingDisclosures({ db, sandboxPhoneNumberId: Option.none(), apiKey: "" })
+          )
+        )
       ).toBe(true);
-      yield* recoverPendingDisclosures({ db, apiKey: "fake-provider-key" });
-      yield* recoverPendingDisclosures({ db, apiKey: "fake-provider-key" });
-      yield* recoverPendingDisclosures({ db, apiKey: "" });
+      yield* recoverPendingDisclosures({
+        db,
+        sandboxPhoneNumberId: Option.none(),
+        apiKey: "fake-provider-key",
+      });
+      yield* recoverPendingDisclosures({
+        db,
+        sandboxPhoneNumberId: Option.none(),
+        apiKey: "fake-provider-key",
+      });
+      yield* recoverPendingDisclosures({ db, sandboxPhoneNumberId: Option.none(), apiKey: "" });
       expect(provider).toHaveBeenCalledTimes(1);
       const payload = yield* Schema.decodeUnknownEffect(ProviderSend)(
         decodeJson(providerBody(provider.mock.calls[0]?.[1]))
@@ -1117,55 +1131,67 @@ it("recovers a committed pre-send disclosure once without resending a started at
     })
   ));
 
-it("accepts an authenticated matching delivery even before the send response is retained", () =>
-  Effect.runPromise(
-    Effect.gen(function* () {
-      const { db, send } = yield* Effect.tryPromise(() => setup());
-      const pendingResponse = Promise.withResolvers<Response>();
-      const provider = vi.fn((_url: string, _init: RequestInit) => pendingResponse.promise);
-      vi.stubGlobal("fetch", provider);
-      const sending = send(inbound("wamid.first", "Hola"));
-      yield* Effect.tryPromise(() => vi.waitFor(() => expect(provider).toHaveBeenCalledTimes(1)));
-      const payload = yield* Schema.decodeUnknownEffect(ProviderSend)(
-        decodeJson(providerBody(provider.mock.calls[0]?.[1]))
-      );
-      const token = payload.biz_opaque_callback_data;
-      const created = yield* Effect.tryPromise(() =>
-        db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first()
-      );
-      const occurred = String(Math.ceil(Number(created?.created_at_ms) / 1000));
-      expect((yield* Effect.tryPromise(() => deliver(send, token, occurred))).status).toBe(200);
-      expect(
-        (yield* Effect.tryPromise(() => db.prepare("SELECT * FROM pending_consent_delivery").all()))
-          .results
-      ).toHaveLength(1);
-      pendingResponse.resolve(
-        Response.json({ messaging_product: "whatsapp", messages: [{ id: "wamid.disclosure-1" }] })
-      );
-      expect((yield* Effect.tryPromise(() => sending)).status).toBe(200);
-      const wrongId = encodeJson({
-        message: {
-          id: "wamid.other",
-          kapso: {
-            statuses: [
-              {
-                id: "wamid.other",
-                status: "delivered",
-                timestamp: occurred,
-                biz_opaque_callback_data: token,
-              },
-            ],
+it.each([200, 403])(
+  "preserves authenticated delivery evidence before the send response is retained: %s",
+  (providerStatus) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { db, send } = yield* Effect.tryPromise(() => setup());
+        const pendingResponse = Promise.withResolvers<Response>();
+        const provider = vi.fn((_url: string, _init: RequestInit) => pendingResponse.promise);
+        vi.stubGlobal("fetch", provider);
+        const sending = send(inbound("wamid.first", "Hola"));
+        yield* Effect.tryPromise(() => vi.waitFor(() => expect(provider).toHaveBeenCalledTimes(1)));
+        const payload = yield* Schema.decodeUnknownEffect(ProviderSend)(
+          decodeJson(providerBody(provider.mock.calls[0]?.[1]))
+        );
+        const token = payload.biz_opaque_callback_data;
+        const created = yield* Effect.tryPromise(() =>
+          db.prepare("SELECT created_at_ms FROM pending_consent_exchanges").first()
+        );
+        const occurred = String(Math.ceil(Number(created?.created_at_ms) / 1000));
+        expect((yield* Effect.tryPromise(() => deliver(send, token, occurred))).status).toBe(200);
+        expect(
+          (yield* Effect.tryPromise(() =>
+            db.prepare("SELECT * FROM pending_consent_delivery").all()
+          )).results
+        ).toHaveLength(1);
+        pendingResponse.resolve(
+          providerStatus === 403
+            ? Response.json(
+                { error: "BSUID recipients are not supported in sandbox mode" },
+                { status: 403 }
+              )
+            : Response.json({
+                messaging_product: "whatsapp",
+                messages: [{ id: "wamid.disclosure-1" }],
+              })
+        );
+        expect((yield* Effect.tryPromise(() => sending)).status).toBe(200);
+        const wrongId = encodeJson({
+          message: {
+            id: "wamid.other",
+            kapso: {
+              statuses: [
+                {
+                  id: "wamid.other",
+                  status: "delivered",
+                  timestamp: occurred,
+                  biz_opaque_callback_data: token,
+                },
+              ],
+            },
           },
-        },
-        phone_number_id: "123456789012345",
-      });
-      expect(
-        (yield* Effect.tryPromise(() => send(wrongId, undefined, "whatsapp.message.delivered")))
-          .status
-      ).toBe(409);
-      expect((yield* Effect.tryPromise(() => deliver(send, token, occurred))).status).toBe(200);
-    })
-  ));
+          phone_number_id: "123456789012345",
+        });
+        expect(
+          (yield* Effect.tryPromise(() => send(wrongId, undefined, "whatsapp.message.delivered")))
+            .status
+        ).toBe(409);
+        expect((yield* Effect.tryPromise(() => deliver(send, token, occurred))).status).toBe(200);
+      })
+    )
+);
 
 it("records refusal without financial work and rejects a decision before verified disclosure", () =>
   Effect.runPromise(

@@ -11,14 +11,14 @@ after approval and proof of the initiating browser's private verifier.
 | Consent and one-time recovery acknowledgement                       | `/web/providers/disclosure`, provider start/completion; Onboarding                                                                  | Atomic creation/rollback, concurrent completion, same-contact isolation and lost-response non-redisclosure covered locally |
 | WhatsApp-led signup and initial linking                             | Kapso authenticated Portfolio/BSUID → Consent handoff → provider browser → exact originating-message association approval           | New and existing User journeys pass for both providers; real Kapso delivery/reply pending                                  |
 | Existing WhatsApp and optional verified-mailbox login               | `browser-login`, `email-authentication`; `/auth/pair`                                                                               | Existing pairing and authentication boundaries pass; provider contact email grants no mailbox login                        |
-| Backup recovery and rotation                                        | `fidy support-recovery` → Cloudflare Access → `/internal/support-recovery` → Recovery/Browser Login; `/recovery/backup-code/rotate` | Real Production Access/CLI recovery, browser completion and reload pass; stale-session rotation error remains              |
+| Backup recovery and rotation                                        | `fidy support-recovery` → Cloudflare Access → `/internal/support-recovery` → Recovery/Browser Login; `/recovery/backup-code/rotate` | Real Production recovery, replay refusal, fresh-sign-in rotation and reload non-redisclosure pass                          |
 | Session persistence, logout, expiry and Consent withdrawal          | Browser Login/WebSession and browser authentication registry                                                                        | Production reload and logout pass; local expiry and withdrawal checks pass; deployed deadline observation pending          |
 | Denial, cancellation, blocked popup, replay and uncertain responses | Provider Authentication plus mounted browser controller                                                                             | Worker refusals and browser failure journeys pass; no blind retry or recovery redisclosure                                 |
 
 ## Evidence — 2026-10-08
 
 Initial Production checks: `4e5c304a4d3e533b038b922f37cef713dd1647ee`.
-Latest deployed revision (2026-10-09): `2801102cbf5e77eae6804d4fd4d98d7602716c9a`.
+Latest deployed revision (2026-10-09): `fc6d29097638436d3c861123f740a7e8ce11103a`.
 Re-runnable checks from the repository root, using its pinned Bun runtime:
 
 ```sh
@@ -94,7 +94,11 @@ redirect to Access; the release gate verifies actual issuer/audience agreement w
 The User completed email-PIN operator login and the real cloudflared/CLI flow. CLI approval
 completed the original browser pairing into Transactions; protected data loaded after reload.
 No claimant code, operator token or cookie value was copied into evidence. Production
-consumed-code replay refusal and subsequent rotation remain unverified.
+consumed-code replay refusal was subsequently confirmed by the User on the PR #1118 release:
+the CLI returned the expected refusal and the original pairing browser remained awaiting approval,
+without authenticated app access. The User then signed in again and successfully rotated the code,
+saved it privately and returned to Transactions. Recovery settings offer rotation without a copy-code
+control after navigation and reload, confirming non-redisclosure of the rotated code.
 
 Recovery rotation has a confirmed active-session error: after the ten-minute freshness window,
 the API returns `unauthenticated` and the browser displays session expiry although Transactions
@@ -113,7 +117,13 @@ approved recovery pairing expired without redemption. The follow-up preserves ca
 adds scheduled 24-calendar-month terminal evidence retention, and enforces the documented operator
 5/minute and 20/hour and global 20/minute and 100/hour rolling admission limits. Thirty-nine focused
 tests pass, including concurrent requests, exact rolling boundaries, leap-day retention, and atomic
-cleanup rollback without restoring consumed proof. Deployment remains pending. Open-case retry
+cleanup rollback without restoring consumed proof. [PR #1118](https://github.com/B4rz99/fidy-ai/pull/1118)
+merged after full CI passed, including all four Cloudflare adapter shards and browser checks.
+Its [Production release](https://github.com/B4rz99/fidy-ai/actions/runs/37917226691) passed every gate;
+API and web metadata both identify `fc6d29097638436d3c861123f740a7e8ce11103a`.
+The recovered session still loads Transactions after reload. Public disclosure returns no-store 200,
+anonymous current-User access with trusted Origin is refused, and anonymous recovery redirects to Access.
+Open-case retry
 tracking and verified Titular deletion are not implemented; they are not verified capabilities.
 
 On the latest revision, both providers refuse missing/wrong proof cookies, duplicate state and
@@ -127,10 +137,17 @@ provider journey and Browser Login integration suites above; actual provider den
 The real Google-authenticated app also survives reload after the latest deployment without recovery
 code redisclosure.
 
+Kapso Sandbox diagnosis (2026-10-09): its active webhook still targeted the retired Railway route
+and returned 404. Updating it to `/providers/kapso/callback` produced a delivered HTTP 200 callback;
+outbound disclosure then returned HTTP 403, “BSUID recipients are not supported in sandbox mode.”
+Regression checks now cover explicit business-endpoint phone delivery, endpoint isolation,
+missing-phone refusal, interrupted disclosure recovery, and fresh-greeting restart after a definite
+rejection. Portfolio/BSUID remains the association proof. Deployment and the real reply remain pending.
+
 Remaining live checks: Google and Microsoft personal denial UI;
 Microsoft work/school signup/returning login/denial (unavailable: the User has no work/school account);
 real WhatsApp association and forwarded/expired handoff
-refusal; consumed recovery-code replay and post-recovery rotation; deployed server-side session deadlines and retention.
+refusal; deployed server-side session deadlines and retention.
 Local fixture passes do not establish these Production results. The User approved
 personal Google, Microsoft and WhatsApp accounts and handles sign-in and confirmation.
 
@@ -139,4 +156,4 @@ and [recovery procedure](../../../../../docs/operations/support-recovery.md) con
 
 Recovery decision timing: held-body Worker/D1 regressions previously approved after operator assertion
 or pairing expiry. The follow-up rechecks verified assertion time and uses the post-read decision
-instant for pairing/proof guards. Both exact-expiry regressions pass; Production deployment is pending.
+instant for pairing/proof guards. Both exact-expiry regressions pass; PR #1118 deployed successfully.

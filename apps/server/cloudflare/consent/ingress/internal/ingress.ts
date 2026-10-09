@@ -4,6 +4,7 @@ import {
   type ConsentIngressMessage,
   DisclosureDeliveryCorrelationToken,
   type DisclosureSnapshot,
+  E164PhoneNumber,
   PendingConsentExchangeId,
   PendingDisclosureJson,
   Sha256Digest,
@@ -23,7 +24,18 @@ import {
   decideConsentReply,
   isConsentIngressDecisionPhase,
 } from "../../../../src/shell/consent/operations";
-import { Clock, Crypto, DateTime, Duration, Effect, Exit, Option, Result, Schema } from "effect";
+import {
+  Cause,
+  Clock,
+  Crypto,
+  DateTime,
+  Duration,
+  Effect,
+  Exit,
+  Option,
+  Result,
+  Schema,
+} from "effect";
 import { Hex } from "effect/encoding";
 import {
   type ResourceAdmissionAuthorityConfig,
@@ -54,6 +66,7 @@ export type DisclosureSender = (
 
 type Environment = Pick<ConsentIngressEnvironment, "DB"> &
   Readonly<{
+    sandboxPhoneNumberId: Option.Option<string>;
     delivery: Option.Option<
       Readonly<{
         sendDisclosure: DisclosureSender;
@@ -262,7 +275,8 @@ const findExchange = (
   attempt(() =>
     db
       .prepare(`SELECT id, portfolio_id, bsuid, phone_number_id, disclosure_json, disclosure_message_id,
-    correlation_token, created_at_ms, disclosed_at_ms, decision_not_before_ms, expires_at_ms, state,
+    correlation_token, created_at_ms, disclosed_at_ms, decision_not_before_ms,
+    COALESCE(rejected_at_ms, expires_at_ms) AS expires_at_ms, state,
     initiating_message_id, initiating_body_sha256
     FROM pending_consent_exchanges
     WHERE portfolio_id = ? AND bsuid = ? ORDER BY created_at_ms DESC LIMIT 1`)
@@ -425,19 +439,20 @@ type NewExchange = Readonly<{
   id: PendingConsentExchangeId;
   correlationToken: DisclosureDeliveryCorrelationToken;
   disclosure: ReturnType<typeof currentDisclosureFor>;
+  sandboxPhone: Option.Option<E164PhoneNumber>;
 }>;
 
 const exchangeStatement = (
   db: D1Database,
-  { input, id, correlationToken }: NewExchange,
+  { input, id, correlationToken, sandboxPhone }: NewExchange,
   disclosureJson: string
 ): D1PreparedStatement =>
   db
     .prepare(`INSERT INTO pending_consent_exchanges
     (id, portfolio_id, bsuid, phone_number_id, initiating_message_id, initiating_body_sha256,
      correlation_token, disclosure_json, created_at_ms, expires_at_ms,
-     state)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'awaiting_delivery')`)
+     sandbox_phone, state)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'awaiting_delivery')`)
     .bind(
       id,
       input.event.caller.businessPortfolioId,
@@ -448,7 +463,8 @@ const exchangeStatement = (
       correlationToken,
       disclosureJson,
       input.receivedAtMs,
-      input.receivedAtMs + dayMs
+      input.receivedAtMs + dayMs,
+      Option.getOrNull(sandboxPhone)
     );
 
 const admitExchange = (
@@ -473,7 +489,7 @@ const admitExchange = (
         statements: [
           db
             .prepare(`DELETE FROM pending_consent_exchanges
-            WHERE portfolio_id = ? AND bsuid = ? AND expires_at_ms <= ?`)
+            WHERE portfolio_id = ? AND bsuid = ? AND COALESCE(rejected_at_ms, expires_at_ms) <= ?`)
             .bind(
               input.event.caller.businessPortfolioId,
               input.event.caller.businessScopedUserId,
@@ -501,6 +517,7 @@ const DisclosureRecoveryRow = Schema.Struct({
   phone_number_id: WhatsAppBusinessPhoneNumberId,
   correlation_token: DisclosureDeliveryCorrelationToken,
   disclosure_json: Schema.String,
+  sandbox_phone: Schema.NullOr(E164PhoneNumber),
 });
 
 /** One durable claim fences either synchronous or scheduled execution before provider I/O. */
@@ -539,6 +556,24 @@ const runDisclosureAttempt = <R>({
           .bind(result.value.messageEvidence.providerMessageId, id)
           .run()
       );
+    } else if (
+      Option.exists(
+        Cause.findErrorOption(result.cause),
+        (failure) => failure.deliveryCertainty === "rejected"
+      )
+    ) {
+      // A confirmed rejection may admit a new authenticated greeting; never retry this message.
+      const rejectedAt = yield* Clock.currentTimeMillis;
+      yield* attempt(() =>
+        db
+          .prepare(`UPDATE pending_consent_exchanges SET rejected_at_ms = MIN(?, expires_at_ms)
+          WHERE id = ? AND state = 'outbound_started' AND disclosure_message_id IS NULL
+          AND rejected_at_ms IS NULL
+          AND NOT EXISTS (SELECT 1 FROM pending_consent_delivery AS d
+            WHERE d.correlation_token = pending_consent_exchanges.correlation_token)`)
+          .bind(rejectedAt, id)
+          .run()
+      );
     }
     return true;
   });
@@ -561,7 +596,7 @@ const sendRecoveredDisclosure = (
           businessScopedUserId: candidate.bsuid,
           parentBusinessScopedUserId: Option.none(),
           username: Option.none(),
-          phoneNumber: Option.none(),
+          phoneNumber: Option.fromNullishOr(candidate.sandbox_phone),
         },
         phoneNumberId: candidate.phone_number_id,
         disclosure,
@@ -583,7 +618,7 @@ export const recoverDisclosures = ({
     const now = yield* Clock.currentTimeMillis;
     const raw = yield* attempt(() =>
       db
-        .prepare(`SELECT id, portfolio_id, bsuid, phone_number_id, correlation_token, disclosure_json
+        .prepare(`SELECT id, portfolio_id, bsuid, phone_number_id, correlation_token, disclosure_json, sandbox_phone
           FROM pending_consent_exchanges WHERE state = 'awaiting_delivery' AND expires_at_ms > ?
           ORDER BY created_at_ms LIMIT 16`)
         .bind(now)
@@ -651,7 +686,18 @@ const startExchange = (
     const correlationToken = DisclosureDeliveryCorrelationToken.make(
       yield* cryptoService.randomUUIDv4.pipe(Effect.orDie)
     );
-    const exchange = { input, id, correlationToken, disclosure: disclosure.value };
+    const exchange = {
+      input,
+      id,
+      correlationToken,
+      disclosure: disclosure.value,
+      sandboxPhone: Option.contains(
+        environment.sandboxPhoneNumberId,
+        input.event.businessPhoneNumberId
+      )
+        ? input.event.caller.phoneNumber
+        : Option.none<E164PhoneNumber>(),
+    };
     const admitted = yield* admitExchange(environment.DB, exchange);
     if (admitted.status !== HTTP_OK) return admitted;
     return yield* sendExchange(environment, exchange);

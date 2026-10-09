@@ -17,4 +17,5 @@ export type ConsentDeliveryInput = Readonly<{
 export type ConsentIngressEnvironment = Readonly<{
   DB: D1Database;
   KAPSO_API_KEY: string;
+  WHATSAPP_SANDBOX_PHONE_NUMBER_ID: string;
 }>;

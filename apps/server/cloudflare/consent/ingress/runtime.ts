@@ -21,9 +21,16 @@ export const makeConsentIngress = ({
           sendDisclosure: makeDisclosureSender({
             apiKey: Redacted.make(environment.KAPSO_API_KEY),
             httpClient,
+            sandboxPhoneNumberId: Option.fromNullishOr(
+              environment.WHATSAPP_SANDBOX_PHONE_NUMBER_ID
+            ),
           }),
         });
-  const ingress = { DB: environment.DB, delivery };
+  const ingress = {
+    DB: environment.DB,
+    delivery,
+    sandboxPhoneNumberId: Option.fromNullishOr(environment.WHATSAPP_SANDBOX_PHONE_NUMBER_ID),
+  };
   return (input) => receiveConsentText({ environment: ingress, input });
 };
 
@@ -31,7 +38,12 @@ export const makeConsentIngress = ({
 export const recoverPendingDisclosures = ({
   db,
   apiKey,
-}: Readonly<{ db: D1Database; apiKey: string }>): Effect.Effect<void, void> =>
+  sandboxPhoneNumberId,
+}: Readonly<{
+  db: D1Database;
+  apiKey: string;
+  sandboxPhoneNumberId: Option.Option<string>;
+}>): Effect.Effect<void, void> =>
   Effect.scoped(
     Effect.gen(function* () {
       const clients = yield* Layer.build(FetchHttpClient.layer);
@@ -42,6 +54,7 @@ export const recoverPendingDisclosures = ({
               makeDisclosureSender({
                 apiKey: Redacted.make(apiKey),
                 httpClient: Context.get(clients, HttpClient.HttpClient),
+                sandboxPhoneNumberId,
               })
             );
       yield* recoverDisclosures({ db, delivery });

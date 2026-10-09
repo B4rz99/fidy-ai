@@ -34,6 +34,7 @@ const probeOversizedBody = (
       DB: db,
       BROWSER_ORIGIN: "https://app.fidyapp.com",
       KAPSO_API_KEY: "test-key",
+      WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
       KAPSO_WEBHOOK_SECRET: "test-secret",
       WHATSAPP_BUSINESS_PORTFOLIO_ID: "test-portfolio",
       onHostedText: () => Promise.reject(new Error("Oversized bytes cannot admit a Turn")),

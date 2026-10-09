@@ -88,7 +88,10 @@ const classifyFailureBody = (
   const kapsoFailure = Schema.decodeUnknownOption(KapsoFailureResponse)(body);
   if (
     Option.isSome(kapsoFailure) &&
-    kapsoFailure.value.error.toLowerCase() === "sandbox numbers do not support bsuid recipients"
+    [
+      "sandbox numbers do not support bsuid recipients",
+      "bsuid recipients are not supported in sandbox mode",
+    ].includes(kapsoFailure.value.error.toLowerCase())
   ) {
     return rejected("sandbox_bsuid_unsupported", false, status);
   }
@@ -186,12 +189,20 @@ const decodeSentMessage = (
 export const makeWhatsAppDelivery = ({
   deliveryMode,
   outboundHttp,
+  sandboxPhoneNumberId,
 }: Readonly<{
   deliveryMode: KapsoDeliveryMode;
   outboundHttp: OutboundHttpService;
+  /** Only this operator-selected business endpoint may use provider-observed phone delivery. */
+  sandboxPhoneNumberId: Option.Option<string>;
 }>): WhatsAppDelivery => {
   const sendText = Effect.fn("Kapso.sendText")(function* (input: KapsoSendInput) {
-    const address = yield* resolveRecipientAddress(deliveryMode, input.destination);
+    const address = yield* resolveRecipientAddress(
+      Option.contains(sandboxPhoneNumberId, input.businessPhoneNumberId)
+        ? "sandbox-phone"
+        : deliveryMode,
+      input.destination
+    );
     const body = yield* encodeTextMessage(address, input.text, input.opaqueCallbackData);
     return yield* sendKapsoMessage({
       outboundHttp,
@@ -220,6 +231,14 @@ export const sendKapsoMessage = ({
     const responseText = new TextDecoder().decode(response.body);
     if (Option.isNone(decodedStatus)) return yield* rejected("invalid_response");
     const responseStatus = decodedStatus.value;
+    // Kapso returns its sandbox recipient refusal as HTTP403; preserve that safe diagnosis.
+    if (responseStatus === forbiddenStatus) {
+      const body = Schema.decodeOption(UnknownJsonString)(responseText);
+      if (Option.isSome(body)) {
+        const failure = classifyFailureBody(body.value, responseStatus);
+        if (failure.safeReason === "sandbox_bsuid_unsupported") return yield* failure;
+      }
+    }
     const statusFailure = classifyHttpStatus(responseStatus);
     if (Option.isSome(statusFailure)) return yield* statusFailure.value;
     const responseBody = yield* Schema.decodeEffect(UnknownJsonString)(responseText).pipe(
@@ -256,7 +275,11 @@ export class KapsoClient extends Context.Service<KapsoClient, WhatsAppDelivery>(
         ["bsuid", "sandbox-phone"],
         "WHATSAPP_DELIVERY_MODE"
       ).pipe(Config.withDefault("bsuid"));
-      return makeWhatsAppDelivery({ deliveryMode, outboundHttp });
+      return makeWhatsAppDelivery({
+        deliveryMode,
+        outboundHttp,
+        sandboxPhoneNumberId: Option.none(),
+      });
     })
   );
 }

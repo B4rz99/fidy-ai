@@ -233,6 +233,7 @@ export type WhatsAppIngressEnvironment = Readonly<{
   readonly KAPSO_API_KEY: string;
   readonly KAPSO_WEBHOOK_SECRET: string;
   readonly WHATSAPP_BUSINESS_PORTFOLIO_ID: string;
+  readonly WHATSAPP_SANDBOX_PHONE_NUMBER_ID: string;
   readonly onHostedText: (
     admission: WhatsAppTurnAdmission | WhatsAppDocumentAdmission
   ) => Promise<Response>;

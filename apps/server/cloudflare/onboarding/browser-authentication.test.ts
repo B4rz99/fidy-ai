@@ -167,6 +167,7 @@ const setup = (
                     getByName: () => ({ fetch: () => Promise.reject(new Error("unused")) }),
                   },
                   KAPSO_API_KEY: "",
+                  WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
                   KAPSO_WEBHOOK_SECRET: "onboarding-test-secret",
                   CLOUDFLARE_ACCESS_ISSUER: accessIssuer,
                   CLOUDFLARE_ACCESS_AUDIENCE: "test-support-audience",

@@ -45,6 +45,7 @@ export const makeHostedSender = ({
 }>) => {
   const client = makeWhatsAppDelivery({
     deliveryMode: "bsuid",
+    sandboxPhoneNumberId: Option.none(),
     outboundHttp: makeKapsoOutboundHttp({ apiKey, httpClient }),
   });
   return ({
@@ -85,6 +86,7 @@ export const makeVoiceUnavailableSender = (
 ) => ReturnType<WhatsAppDelivery["sendText"]>) => {
   const client = makeWhatsAppDelivery({
     deliveryMode: "bsuid",
+    sandboxPhoneNumberId: Option.none(),
     outboundHttp: makeKapsoOutboundHttp(input),
   });
   return (

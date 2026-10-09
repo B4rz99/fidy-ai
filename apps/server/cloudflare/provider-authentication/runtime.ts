@@ -6,7 +6,7 @@ import type {
 import { HttpClient } from "effect/http";
 import { receiveHandoffText } from "./internal/whatsapp-handoff";
 import { ProviderAuthenticationRetentionUnavailable } from "./contract";
-import { Effect, type Option, Redacted } from "effect";
+import { Effect, Option, Redacted } from "effect";
 
 const maximumSweepRows = 500;
 const retainedAttemptMilliseconds = 86_400_000;
@@ -53,6 +53,7 @@ export const receiveWhatsAppProviderHandoff = ({
       send: makeProviderHandoffSender({
         apiKey: Redacted.make(environment.KAPSO_API_KEY),
         httpClient,
+        sandboxPhoneNumberId: Option.fromNullishOr(environment.WHATSAPP_SANDBOX_PHONE_NUMBER_ID),
       }),
     });
   });

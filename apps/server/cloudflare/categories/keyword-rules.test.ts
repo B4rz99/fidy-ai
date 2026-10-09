@@ -216,6 +216,7 @@ const setup = (): Promise<{
         WOMPI_PRIVATE_KEY: "",
         WOMPI_INTEGRITY_SECRET: "",
         KAPSO_API_KEY: "",
+        WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
         KAPSO_WEBHOOK_SECRET: "unused",
         WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio",
         CLOUDFLARE_ACCESS_ISSUER: "https://example.cloudflareaccess.com",

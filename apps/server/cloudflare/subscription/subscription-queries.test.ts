@@ -295,6 +295,7 @@ effectIt.effect(
         CLOUDFLARE_ACCESS_ISSUER: "",
         CLOUDFLARE_ACCESS_AUDIENCE: "",
         KAPSO_API_KEY: "",
+        WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
         WHATSAPP_BUSINESS_PORTFOLIO_ID: "",
         RELEASE_GIT_SHA: "",
       };

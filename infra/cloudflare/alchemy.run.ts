@@ -6,6 +6,8 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Layer from "effect/Layer";
 import { Hex } from "effect/encoding";
 import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+import { WhatsAppBusinessPhoneNumberId } from "@fidy/server/whatsapp-contract";
 import { ApprovedWorkersAiModel } from "@fidy/server/hosted-inference-contract";
 import { EmailAddress } from "@fidy/server/email-authentication-contract";
 import { resolveDeploymentConfiguration, resolveStateBackend } from "./deployment-configuration";
@@ -47,6 +49,10 @@ const recoveryIsolation = Config.Literals(["", "isolated"], "RECOVERY_ISOLATION"
 const accessIssuer = Config.String("CLOUDFLARE_ACCESS_ISSUER");
 const recoveryOperatorEmail = Config.schema(EmailAddress, "RECOVERY_OPERATOR_EMAIL");
 const whatsAppBusinessPortfolioId = Config.String("WHATSAPP_BUSINESS_PORTFOLIO_ID");
+const whatsAppSandboxPhoneNumberId = Config.schema(
+  Schema.Union([Schema.Literal(""), WhatsAppBusinessPhoneNumberId]),
+  "WHATSAPP_SANDBOX_PHONE_NUMBER_ID"
+).pipe(Config.withDefault(""));
 
 const resolveKapsoBindings = (
   development: boolean
@@ -55,6 +61,7 @@ const resolveKapsoBindings = (
     apiKey: Redacted.Redacted<string>;
     webhookSecret: Redacted.Redacted<string>;
     portfolioId: string;
+    sandboxPhoneNumberId: string;
   }>,
   Config.ConfigError
 > =>
@@ -68,7 +75,8 @@ const resolveKapsoBindings = (
     const portfolioId = yield* development
       ? whatsAppBusinessPortfolioId.pipe(Config.withDefault(""))
       : whatsAppBusinessPortfolioId;
-    return { apiKey, webhookSecret, portfolioId };
+    const sandboxPhoneNumberId = yield* whatsAppSandboxPhoneNumberId;
+    return { apiKey, webhookSecret, portfolioId, sandboxPhoneNumberId };
   });
 
 const resolveResendKey = (development: boolean): typeof resendApiKey =>
@@ -374,6 +382,7 @@ export default Alchemy.Stack(
         CLOUDFLARE_ACCESS_ISSUER: accessConfig.issuer,
         CLOUDFLARE_ACCESS_AUDIENCE: accessConfig.audience,
         WHATSAPP_BUSINESS_PORTFOLIO_ID: kapsoBindings.portfolioId,
+        WHATSAPP_SANDBOX_PHONE_NUMBER_ID: kapsoBindings.sandboxPhoneNumberId,
         RELEASE_GIT_SHA: releaseMetadata.gitRevision,
       },
       workersDev: productionTopology.core.workersDev,

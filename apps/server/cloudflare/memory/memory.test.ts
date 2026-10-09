@@ -176,6 +176,7 @@ const coordinationEnvironment = (db: D1Database): Parameters<typeof coreWorker.f
   WOMPI_PRIVATE_KEY: "",
   WOMPI_INTEGRITY_SECRET: "",
   KAPSO_API_KEY: "",
+  WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
   KAPSO_WEBHOOK_SECRET: "",
   WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio",
   CLOUDFLARE_ACCESS_ISSUER: "",

@@ -239,6 +239,7 @@ const send = (db: D1Database, request: Request): Promise<Response> => {
             }),
           },
           KAPSO_API_KEY: "",
+          WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
           KAPSO_WEBHOOK_SECRET: "",
           WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio",
           CLOUDFLARE_ACCESS_ISSUER: "",
@@ -428,6 +429,7 @@ it.each([
           DB: db,
           PROACTIVITY_ENABLED: "enabled",
           KAPSO_API_KEY: "test-only",
+          WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
           PROACTIVITY_TEMPLATE_JSON: yield* Schema.encodeEffect(
             Schema.fromJsonString(ProactivityTemplateConfiguration)
           )({
@@ -1812,6 +1814,7 @@ it("installed category generation atomically materializes two Budget events and 
           DB: db,
           PROACTIVITY_ENABLED: "enabled",
           KAPSO_API_KEY: "test-key",
+          WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
           PROACTIVITY_TEMPLATE_JSON:
             '{"name":"fidy_proactivity","language":"es","body":"Fidy: {{1}}","approval":"approved"}',
         };
@@ -2012,6 +2015,7 @@ it("category Queue-to-Workflow redelivery rejects another User's frozen Budget m
         DB: db,
         PROACTIVITY_ENABLED: "enabled",
         KAPSO_API_KEY: "test-only",
+        WHATSAPP_SANDBOX_PHONE_NUMBER_ID: "",
         PROACTIVITY_TEMPLATE_JSON: yield* Schema.encodeEffect(
           Schema.fromJsonString(ProactivityTemplateConfiguration)
         )({ name: "fidy_proactivity", language: "es", approval: "approved", body: "Fidy: {{1}}" }),

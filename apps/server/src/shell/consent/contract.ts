@@ -15,6 +15,8 @@ export const ProactivityOptInKind = Schema.Literals([
 ]);
 export type ProactivityOptInKind = typeof ProactivityOptInKind.Type;
 
+export { E164PhoneNumber } from "~/core/identity/contract";
+
 export {
   ConsentIngressExchange,
   DisclosureSnapshot,

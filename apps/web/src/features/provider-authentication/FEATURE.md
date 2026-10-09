@@ -51,12 +51,16 @@ Logout returns 204; subsequently opening protected Transactions receives 401 and
 expiry. Both provider callbacks reject synthetic invalid proofs with no-store/no-referrer 303 to
 parameter-free first-party return pages. Unauthenticated support recovery returns 401.
 Returning Google login also reaches Transactions, survives reload and shows no recovery code.
+The live session response sets an HttpOnly, Secure, SameSite=Lax, host-only cookie with root path
+and 2,592,000-second Max-Age. No cookie value was copied into evidence.
 Production Core has its every-minute Maintenance schedule configured; actual expired-record
 removal has not yet been observed in Production.
 
 The User reported a Consent-loading error after navigating backwards. The session remained usable;
 a fresh signup load retrieved disclosure successfully. Both automated history journeys pass, so
-the reported intermittent failure remains unresolved rather than being marked fixed.
+the reported intermittent failure remains unresolved rather than being marked fixed. A subsequent
+Production back/reload/forward check loads Consent, shows no recovery code and preserves the
+authenticated app; it did not reproduce the earlier failure.
 
 Production Core and Ingress disable invocation logs, traces, Logpush and tail consumers.
 However, a narrowly filtered saved authentication diagnostic still contains protocol query fields
@@ -69,7 +73,7 @@ refusing to proceed if the provider does not persist it. Deployment verification
 
 Remaining live checks: Google denial; Microsoft personal and
 work/school signup/returning login/denial; real WhatsApp association and forwarded/expired handoff
-refusal; Access-backed recovery; deployed session/cookie deadlines, retention and callback-query
+refusal; Access-backed recovery; deployed server-side session deadlines, retention and callback-query
 log exclusion. Local fixture passes do not establish these Production results. The User approved
 personal Google, Microsoft and WhatsApp accounts and handles sign-in and confirmation.
 

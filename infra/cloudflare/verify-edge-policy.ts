@@ -17,7 +17,8 @@ import { edgeSecurityPolicy } from "./edge-security";
 // Includes #1086 provider callbacks, anonymous provider admission, and removal of email signup resources.
 // Includes #305's static sandbox JWKS and fail-closed registration callback without Core authority.
 // Includes #1086's incident-only isolated public/Core admission and gated recovery uploads.
-const expectedEdgePolicyDigest = "8b587f39ba4f4f0d9c7a3ecd9490637efe2aa4f59fb3b38012701db869b2d4ca";
+// Includes #1086's query-redacted diagnostic logs; invocation records remain disabled.
+const expectedEdgePolicyDigest = "b0d17e19ffb6ac69df44c4516cb0d60b4ead736169c181dc9c96c5c69ad1ad11";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),

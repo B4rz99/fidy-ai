@@ -31,6 +31,13 @@ jobs:
       - name: Build native standalone release candidate
         shell: bash
         run: bash scripts/cli-release/build.sh
+      - name: Verify repeat-build archive identity
+        shell: bash
+        run: |
+          bash scripts/cli-release/build.sh dist/cli-repeat
+          for archive in dist/cli-release/*.zip; do
+            cmp "$archive" "dist/cli-repeat/$(basename "$archive")"
+          done
       - name: Test POSIX installer failure safety
         if: runner.os != 'Windows'
         run: python3 scripts/cli-release/test-install.py

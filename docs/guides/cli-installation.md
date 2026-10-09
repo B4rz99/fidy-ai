@@ -40,10 +40,11 @@ Windows uses the reviewed local credential persistence. There is no plaintext fa
 ## Release preparation
 
 1. Build on each native runner using `scripts/cli-release/build.sh`; no cross-target runtime fetch.
-2. Require normal repository CI plus the `CLI release candidates` matrix to pass for the exact SHA.
+2. Require the same-source repeat-build archive comparison on every native target and normal repository CI plus the `CLI release candidates` matrix to pass for the exact SHA.
 3. Download all three candidate artifacts. Inspect packaged binary names, version output and
    checksum files. Exercise real login/status/logout on supported desktop targets before launch.
-4. Obtain owner approval for publication and any signing/credential setup. Sign/notarize where
+4. Inventory the bundled runtime/dependencies and include their required licenses and notices in the
+   approved distribution before publication. Obtain owner approval for publication and any signing/credential setup. Sign/notarize where
    appropriate, then regenerate checksums for the final archive bytes and retest installation.
 5. Publish a versioned `cli-v0.1.0` release with the three `fidy-OS-ARCH.zip` files, their individual
    `.sha256` files and both installers. Never replace assets under an existing version tag.
@@ -69,6 +70,9 @@ python3 scripts/cli-release/test-install.py
 ```
 
 Standalone bundling follows [Bun's executable build documentation](https://bun.sh/docs/bundler/executables).
+Archive timestamps, executable mode and ZIP metadata are fixed; stored entries avoid host zlib
+variation. Each native CI job rebuilds into a second output directory and compares the complete ZIP
+bytes. This proves repeatability in that runner, not cross-toolchain identity or reproducible signatures.
 The pinned runtime guard remains active in the resulting executable. The workflow validates native
 compilation/help/version on all three target OSes; existing repository native-store conformance
 checks remain required. A passing build is not evidence that code signing or production pairing

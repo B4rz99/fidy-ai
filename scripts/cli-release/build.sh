@@ -16,11 +16,16 @@ bun build apps/cli/src/main.ts --compile --minify --outfile "$output/$target/$ex
 cp scripts/cli-release/install.sh scripts/cli-release/install.ps1 "$output/"
 python3 - "$output" "$target" "$executable" <<'PY'
 from pathlib import Path
-import hashlib,sys,zipfile
+import hashlib,stat,sys,zipfile
 root=Path(sys.argv[1]);target=sys.argv[2];name=sys.argv[3]
 archive=root/f'fidy-{target}.zip'
-with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED) as bundle:
-    bundle.write(root/target/name,name)
+entry=zipfile.ZipInfo(name,date_time=(1980,1,1,0,0,0))
+entry.create_system=3
+entry.external_attr=(stat.S_IFREG | 0o755) << 16
+entry.compress_type=zipfile.ZIP_STORED
+# Stored bytes avoid host zlib versions and source mtimes changing the release digest.
+with zipfile.ZipFile(archive,'w') as bundle:
+    bundle.writestr(entry,(root/target/name).read_bytes())
 digest=hashlib.sha256(archive.read_bytes()).hexdigest()
 (root/f'fidy-{target}.zip.sha256').write_text(f'{digest}  {archive.name}\n')
 PY

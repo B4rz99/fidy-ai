@@ -100,10 +100,14 @@ const setupJourney = (options: Readonly<{ whatsapp: boolean }>): Promise<Journey
                   "0004_onboarding_email",
                   "0005_verified_onboarding",
                   "0006_browser_login",
+                  "0007_browser_pairing_email",
+                  "0008_support_recovery",
                   "0066_provider_authentication",
                   "0067_microsoft_authentication",
                   "0068_whatsapp_provider_handoff",
                   "0069_retire_email_code_signup",
+                  "0070_recovery_retention",
+                  "0071_recovery_admission",
                 ].map((name) => new URL(`../migrations/${name}.sql`, import.meta.url)),
         })
       );

@@ -104,7 +104,8 @@ access; the Worker/D1 regression verifies refusal without changing the recovery 
 authentication and session-clock tests, three recovery UI tests and type checking pass. Its
 [Production release](https://github.com/B4rz99/fidy-ai/actions/runs/37913919939) succeeded for
 `ddb1bde82e33e01cb5e066746b1c166e8d0935a4`; recovered browser access survives the deployment.
-Live verification of the rotation refusal still needs the User to press the credential action.
+The User verified the deployed rotation refusal: it requests fresh sign-in and explains that the
+current session remains active. Transactions then loaded in that same recovered browser session.
 Direct Production cleanup observation remains unavailable: the existing CLI database read was refused.
 
 Recovery controls (2026-10-09): further Worker/D1 testing reproduced a new-sign-in failure when an

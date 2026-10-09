@@ -36,7 +36,8 @@ also has a confirmed error-classification bug: an active session older than ten 
 `unauthenticated`, which the browser presents as expired. Fresh sign-in permits rotation. [PR #1117](https://github.com/B4rz99/fidy-ai/pull/1117) returns a reauthentication refusal with a sign-in link,
 without expiring ordinary access. Both provider built-browser journeys and the Worker/D1 regression pass;
 its [Production deployment](https://github.com/B4rz99/fidy-ai/actions/runs/37913919939) passed.
-Live verification of the rotation refusal requires the User's credential action.
+The User verified the deployed fresh-sign-in message; Transactions then loaded with the same
+recovered session, confirming that refusal preserves ordinary access.
 
 Follow-up Worker/D1 checks cover expired unredeemed recovery pairings, bounded rolling operator/global
 admission and scheduled terminal evidence retention with atomic rollback. Thirty-nine focused tests

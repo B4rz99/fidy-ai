@@ -1,0 +1,58 @@
+apps/server/cloudflare/consent/ingress/internal/reconcile-delivery.ts
+  s_6d017cc65783af::t_d27d81a3d93d31 76
+apps/server/src/shell/channels/whatsapp/internal/kapso-webhook.ts
+  s_6d017cc65783af::t_56b3e569e6211a 545-547,549-557
+  s_6d017cc65783af::t_75c04836d182d3 444-446
+  s_6d017cc65783af::t_4cdddab20b4cd5 120-126,129,151,426-433,437-443,448-454,494,499,526,535-537,543-544,563
+  s_6d017cc65783af::t_1d321d14207275 434-436,447,489-492,495-498,558-560,562,564-566,594-598
+  s_6d017cc65783af::t_d6848b5219f1c7 539-542,548,561,580,590
+  s_6d017cc65783af::t_c981cbfb33cc69 455,538
+apps/server/src/shell/channels/whatsapp/runtime.ts
+  s_6d017cc65783af::t_ee4dfac21e2f56 37
+  s_6d017cc65783af::t_d27d81a3d93d31 48,56-58,84-85
+  s_6d017cc65783af::t_1d321d14207275 82-83
+apps/server/cloudflare/whatsapp/internal/status-admission.ts
+  s_6d017cc65783af::t_ee4dfac21e2f56 43-45
+  s_6d017cc65783af::t_d27d81a3d93d31 54
+apps/web/src/features/provider-authentication/FEATURE.md
+  s_6d017cc65783af::t_d3e040eb78addd 158-160
+  s_6d017cc65783af::t_98babf9d685a4c 156-157
+  s_6d017cc65783af::t_8699b243b8534e 161-162,173
+  s_6d017cc65783af::t_1b5928118596e2 168
+  s_6d017cc65783af::t_1d321d14207275 8-16
+  s_6d017cc65783af::t_851ab8aa281fe5 163-167
+  s_6d017cc65783af::t_f3e1dc92ec124d 152-155,169
+apps/server/cloudflare/provider-authentication/whatsapp.test.ts
+  s_6d017cc65783af::t_851ab8aa281fe5 11
+  s_6d017cc65783af::t_f565c68b6f9fe7 12-27
+  s_6d017cc65783af::t_e890c6f88104f6 72,96-97
+  s_6d017cc65783af::t_d6848b5219f1c7 28
+  s_6d017cc65783af::t_6cc24498d11ea8 29,45
+  s_6d017cc65783af::t_1d321d14207275 30-44,46-71,73-95,106-119,122-131,135-139,203-212
+  s_6d017cc65783af::t_1395cace4ddb9e 98-105,120-121,132-134,140-143
+  s_6d017cc65783af::t_634de05a6b98c4 213
+apps/server/cloudflare/whatsapp/internal/ingress.ts
+  s_6d017cc65783af::t_1d321d14207275 403
+  s_6d017cc65783af::t_d27d81a3d93d31 378-379,382-383,390-394,404-406
+apps/server/src/shell/channels/whatsapp/contract.ts
+  s_6d017cc65783af::t_1d321d14207275 391-392
+apps/server/src/shell/channels/whatsapp/operations.ts
+  s_6d017cc65783af::t_c74ebf639ee383 9
+  s_6d017cc65783af::t_7771f360d5e515 76-77,94-95
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "96ee09d044ef4597dd950fbe3aa4948be89f0002",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,26 @@
+apps/server/cloudflare/provider-authentication/journey.test-fixture.ts
+  s_6d017cc65783af::t_b1e09b2e61d62c 103-104,109-110
+apps/web/src/features/provider-authentication/FEATURE.md
+  s_6d017cc65783af::t_b1e09b2e61d62c 107-108
+apps/server/cloudflare/d1-test-fixture.ts
+  s_6d017cc65783af::t_96468b99912545 249-250
+  s_6d017cc65783af::t_b1e09b2e61d62c 271-272
+apps/cli/src/support-recovery/FEATURE.md
+  s_6d017cc65783af::t_96468b99912545 39-40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "377442e91932b794b2d35139248ca428d898bafa",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

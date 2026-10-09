@@ -1,6 +1,6 @@
 import type { CanonicalSuccess } from "@/transport/client";
 import { DateTime, Option } from "effect";
-import { formatMoney } from "@/ui/money";
+import { formatMoney } from "@/transport/money";
 
 /** Canonical values remain derived from FidyApi rather than redeclared by the browser. */
 export type CurrentUser = CanonicalSuccess<"identity.getCurrentUser">["data"];

@@ -39,7 +39,7 @@ import {
   type SubscriptionStatus,
 } from "@/transport/client";
 import { Skeleton } from "@/ui/components/skeleton";
-import { formatMoney } from "@/ui/money";
+import { formatMoney } from "@/transport/money";
 import { CanonicalQueryRetry } from "@/ui/canonical-query-feedback";
 import {
   type PriceId,

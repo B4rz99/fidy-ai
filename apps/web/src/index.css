@@ -229,7 +229,6 @@
   }
   .transaction-ledger [data-slot="table-cell"] {
     padding-inline: 4px;
-    font-size: 14px;
   }
   .transaction-ledger [data-slot="table-cell"]:last-child {
     padding-bottom: 10px;

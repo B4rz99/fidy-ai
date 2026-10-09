@@ -31,7 +31,7 @@ import { cn } from "@/ui/class-names";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { CategoryVisual, DirectionVisual } from "./visuals";
-import { formatMoney } from "@/ui/money";
+import { formatMoney } from "@/transport/money";
 import type { TransactionListRow } from "./presentation";
 
 const columns: Array<ColumnDef<TransactionListRow>> = [

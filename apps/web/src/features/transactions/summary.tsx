@@ -1,6 +1,6 @@
 import { BigDecimal, Option } from "effect";
 import type { JSX } from "react";
-import { formatMoney } from "@/ui/money";
+import { formatMoney } from "@/transport/money";
 import type { Transaction } from "./presentation";
 
 type SummaryProps = Readonly<{

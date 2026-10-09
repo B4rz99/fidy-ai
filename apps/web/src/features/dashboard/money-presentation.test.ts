@@ -1,5 +1,5 @@
 import { BigDecimal, Option } from "effect";
-import { formatMoney as formatTransactionMoney } from "@/ui/money";
+import { formatMoney as formatTransactionMoney } from "@/transport/money";
 import { describe, expect, it } from "vitest";
 import {
   exactChartAmount,

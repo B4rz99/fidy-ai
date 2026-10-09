@@ -1,6 +1,6 @@
 import { BigDecimal, DateTime, Equal, Option } from "effect";
 import { describe, expect, it } from "vitest";
-import { formatMoney } from "@/ui/money";
+import { formatMoney } from "@/transport/money";
 import {
   type TransactionPresentationCategory,
   type TransactionPresentationRecord,

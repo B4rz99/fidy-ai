@@ -1,5 +1,5 @@
 import type { CanonicalSuccess } from "@/transport/client";
-import { formatMoney } from "@/ui/money";
+import { formatMoney } from "@/transport/money";
 
 /** Offers returned by subscription.listSubscriptionOffers. */
 export type SubscriptionOffers = CanonicalSuccess<"subscription.listSubscriptionOffers">["data"];

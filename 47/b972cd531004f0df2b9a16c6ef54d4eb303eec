@@ -1,0 +1,44 @@
+infra/cloudflare/production-release.test.ts
+  s_6d017cc65783af::t_4f9c0328b21dfa 8
+  s_6d017cc65783af::t_3748b3f275640f 19-43,45-72,77-94
+  s_6d017cc65783af::t_8cfc15c777ed16 44,73-76,95-97
+  s_6d017cc65783af::t_33335e8e78362f 98
+apps/web/e2e/provider-authentication.journeys.ts
+  s_6d017cc65783af::t_6bcde7102c173d 90-116,168
+apps/web/src/features/provider-authentication/FEATURE.md
+  s_6d017cc65783af::t_30cf1dcbad6333 20,25,31-34,42-43,46-52,56-65
+  s_6d017cc65783af::t_3748b3f275640f 8-9,11-16
+  s_6d017cc65783af::t_2a0447129d9397 10,53-55,66-70
+patches/@distilled.cloud%2Fcloudflare@1.0.0-rc.13.patch
+  s_6d017cc65783af::t_9b1482c0b7045f 1-43
+package.json
+  s_6d017cc65783af::t_bfd26c1ec5ccf6 88-89
+infra/cloudflare/worker-observability.test.ts
+  s_6d017cc65783af::t_307a9b2580396b 1-3,5-6,9-49,55-58
+  s_6d017cc65783af::t_756d9f5e1b80ae 51-54
+  s_6d017cc65783af::t_4f9c0328b21dfa 4,50
+infra/cloudflare/production-release.ts
+  s_6d017cc65783af::t_5c50fd07cfeeec 19,228-232
+  s_6d017cc65783af::t_3748b3f275640f 240-261,265-270
+  s_6d017cc65783af::t_16ee5b6a92abdd 215-227,233-239,262-264,271-273,781,794,1226
+infra/cloudflare/worker-observability.ts
+  s_6d017cc65783af::t_8f57fde5d25265 1,5
+bun.lock
+  s_6d017cc65783af::t_cf27a1936c73e4 134
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "47b972cd531004f0df2b9a16c6ef54d4eb303eec",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

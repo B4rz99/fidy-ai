@@ -8,6 +8,47 @@ class ResourceReleaseFailed extends Data.TaggedError("ResourceReleaseFailed")<{
 }> {}
 
 const Phase = Schema.Literals(["upload", "retire"]);
+const maximumRefusalReasons = 16;
+
+const ProviderRefusal = Schema.Struct({
+  _tag: Schema.Literals([
+    "Forbidden",
+    "Unauthorized",
+    "BadRequest",
+    "Conflict",
+    "NotFound",
+    "UnprocessableEntity",
+    "TooManyRequests",
+    "InternalServerError",
+    "BadGateway",
+    "ServiceUnavailable",
+    "GatewayTimeout",
+    "ConfigError",
+    "InvalidRoute",
+    "UnknownCloudflareError",
+    "CloudflareHttpError",
+    "CloudflareParseError",
+    "UnownedResource",
+    "MissingProviderError",
+  ]),
+  code: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 999999 }))),
+});
+
+/** Only known provider categories and numeric API codes may leave the apply boundary. */
+export const resourceFailureMessage = (cause: Cause.Cause<unknown>): string => {
+  const details = new Set<string>();
+  for (const reason of cause.reasons.slice(0, maximumRefusalReasons)) {
+    if (Cause.isInterruptReason(reason)) continue;
+    const error = Cause.isFailReason(reason) ? reason.error : reason.defect;
+    const refusal = Schema.decodeUnknownOption(ProviderRefusal)(error);
+    if (Option.isSome(refusal)) {
+      const { _tag, code } = refusal.value;
+      details.add(code === undefined ? _tag : `${_tag}; code=${code}`);
+    }
+  }
+  const suffix = details.size === 0 ? "" : ` (${[...details].join(", ")})`;
+  return `Alchemy resource operation failed${suffix}; inspect release state.`;
+};
 
 // Alchemy keeps pending deletions in its state; retirement never reconciles the verified resources.
 const releaseResources = Effect.fn(function* (phase: typeof Phase.Type) {
@@ -54,13 +95,14 @@ const releaseResources = Effect.fn(function* (phase: typeof Phase.Type) {
     Effect.catchTag("DeletionPhaseError", (error) =>
       Effect.fail(new ResourceReleaseFailed({ message: error.message }))
     ),
-    Effect.mapError((error) =>
-      error._tag === "ResourceReleaseFailed"
-        ? error
-        : new ResourceReleaseFailed({
-            message: "Alchemy resource operation failed; inspect release state.",
-          })
-    )
+    Effect.catchCause((cause) => {
+      const own = Cause.findErrorOption(cause);
+      return Effect.fail(
+        Option.isSome(own) && own.value._tag === "ResourceReleaseFailed"
+          ? own.value
+          : new ResourceReleaseFailed({ message: resourceFailureMessage(cause) })
+      );
+    })
   );
 });
 

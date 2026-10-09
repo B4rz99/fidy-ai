@@ -41,6 +41,11 @@ test("captures matched public-page views without using account data", ({ page },
         ).toBe(true);
       }
       yield* wait(page.locator(".footer").scrollIntoViewIfNeeded());
+      if (info.project.name.startsWith("after")) {
+        yield* wait(
+          expect(page.locator(".footer-brand p")).toHaveCSS("color", "rgb(250, 227, 217)")
+        );
+      }
       yield* wait(settle(page));
       yield* wait(page.screenshot({ path: info.outputPath("footer.png") }));
       yield* wait(page.goto("/funciones/agentes"));

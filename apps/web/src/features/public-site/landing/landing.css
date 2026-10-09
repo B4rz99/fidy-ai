@@ -2792,6 +2792,7 @@ html:has(.fidy-landing) {
   margin-top: 18px;
 }
 .fidy-landing .footer-brand p {
+  color: inherit;
   margin-top: 16px;
   font-size: 14px;
 }

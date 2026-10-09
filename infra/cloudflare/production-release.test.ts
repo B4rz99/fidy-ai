@@ -5,6 +5,7 @@ import { describe, expect } from "vitest";
 import {
   decodeCaptureWorkerReceipts,
   decodeWorkerReceipts,
+  redactReleaseQueries,
   releaseCommand,
   releaseFailureMessage,
   releasePort,
@@ -14,6 +15,86 @@ import { type ReleasePort, releaseController } from "./release-controller";
 const revision = "a".repeat(40);
 const publicVersion = "11111111-1111-4111-8111-111111111111";
 const coreVersion = "22222222-2222-4222-8222-222222222222";
+
+it.effect(
+  "redacts gradual-release request queries without deploying code or changing bindings",
+  () =>
+    Effect.gen(function* () {
+      const requests: string[] = [];
+      const client = HttpClient.make((request) => {
+        requests.push(`${request.method} ${new URL(request.url).pathname}`);
+        if (request.method === "PATCH") {
+          expect(request.body._tag).toBe("Uint8Array");
+          if (request.body._tag === "Uint8Array") {
+            expect(JSON.parse(new TextDecoder().decode(request.body.body))).toEqual({
+              observability: {
+                enabled: true,
+                head_sampling_rate: 1,
+                redact_query_string: true,
+                logs: {
+                  enabled: true,
+                  head_sampling_rate: 1,
+                  invocation_logs: false,
+                  persist: true,
+                },
+                traces: { enabled: false },
+              },
+            });
+          }
+        }
+        return Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            Response.json({
+              success: true,
+              result: {
+                observability: {
+                  enabled: true,
+                  redact_query_string: true,
+                  logs: { enabled: true, invocation_logs: false, persist: true },
+                },
+              },
+            })
+          )
+        );
+      });
+      yield* redactReleaseQueries(
+        { account: "test-account", token: "test-only" },
+        ["ingress", "core"],
+        client
+      );
+      expect(requests).toEqual([
+        "PATCH /client/v4/accounts/test-account/workers/scripts/ingress/script-settings",
+        "GET /client/v4/accounts/test-account/workers/scripts/ingress/settings",
+        "PATCH /client/v4/accounts/test-account/workers/scripts/core/script-settings",
+        "GET /client/v4/accounts/test-account/workers/scripts/core/settings",
+      ]);
+    })
+);
+
+it.effect("refuses staging when the provider does not persist query redaction", () =>
+  Effect.gen(function* () {
+    const client = HttpClient.make((request) =>
+      Effect.succeed(
+        HttpClientResponse.fromWeb(
+          request,
+          Response.json({
+            success: true,
+            result: { observability: { enabled: true, redact_query_string: false } },
+          })
+        )
+      )
+    );
+    const result = yield* Effect.exit(
+      redactReleaseQueries(
+        { account: "test-account", token: "test-only" },
+        ["ingress", "core"],
+        client
+      )
+    );
+    expect(Exit.isFailure(result)).toBe(true);
+  })
+);
 
 it.live(
   "classifies a queue-related native refusal without publishing resource names or secrets",

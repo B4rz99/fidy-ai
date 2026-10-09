@@ -1,0 +1,43 @@
+diff --git a/lib/services/workers.d.ts b/lib/services/workers.d.ts
+index 5326a8910d221f48faa2abea203049a240854a97..6a7789be93dc09f1c44af4c72bb54d61870fb73a 100644
+--- a/lib/services/workers.d.ts
++++ b/lib/services/workers.d.ts
+@@ -4105,6 +4105,7 @@ export interface PutScriptObservabilityTraces {
+ export declare const PutScriptObservabilityTraces: S.Schema<PutScriptObservabilityTraces>;
+ export interface PutScriptMetadataObservability {
+     enabled: boolean;
++    redactQueryString?: boolean;
+     headSamplingRate?: number | null;
+     logs?: PutScriptObservabilityLogs | null;
+     traces?: PutScriptObservabilityTraces | null;
+diff --git a/lib/services/workers.js b/lib/services/workers.js
+index e73a49ba1dfdc68ef0bf3e484d5a1d4045f15cde..ef17717cbe6d18c765a39c1744ef307fd1061d66 100644
+--- a/lib/services/workers.js
++++ b/lib/services/workers.js
+@@ -4325,6 +4325,7 @@ export const PutScriptObservabilityTraces = /*@__PURE__*/ S.suspend(() => S.Stru
+ });
+ export const PutScriptMetadataObservability = /*@__PURE__*/ S.suspend(() => S.Struct({
+     enabled: S.Boolean,
++    redactQueryString: S.optional(S.Boolean.pipe(T.Body("redact_query_string"))),
+     headSamplingRate: S.optional(S.NullOr(S.Number).pipe(T.Body("head_sampling_rate"))),
+     logs: S.optional(S.NullOr(PutScriptObservabilityLogs)),
+     traces: S.optional(S.NullOr(PutScriptObservabilityTraces)),
+diff --git a/src/services/workers.ts b/src/services/workers.ts
+index 476df346840cc07c836fd0ac517264d76d1b654b..718abd73b8786a5d3ea621ef937e2d57370dc88d 100644
+--- a/src/services/workers.ts
++++ b/src/services/workers.ts
+@@ -11282,12 +11282,14 @@ export const PutScriptObservabilityTraces = /*@__PURE__*/ S.suspend(() =>
+ export interface PutScriptMetadataObservability {
+   enabled: boolean;
+   headSamplingRate?: number | null;
++  redactQueryString?: boolean;
+   logs?: PutScriptObservabilityLogs | null;
+   traces?: PutScriptObservabilityTraces | null;
+ }
+ export const PutScriptMetadataObservability = /*@__PURE__*/ S.suspend(() =>
+   S.Struct({
+     enabled: S.Boolean,
++    redactQueryString: S.optional(S.Boolean.pipe(T.Body("redact_query_string"))),
+     headSamplingRate: S.optional(
+       S.NullOr(S.Number).pipe(T.Body("head_sampling_rate")),
+     ),

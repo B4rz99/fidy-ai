@@ -16,6 +16,7 @@ import {
   smokePath,
 } from "../../apps/server/cloudflare/runtime/release-smoke/contract";
 import { releaseCleanup } from "./release-cleanup";
+import { freeTierWorkerObservability } from "./worker-observability";
 import { type RollbackPort, RollbackReceipt, releaseRollback } from "./release-rollback";
 import { type WorkerResources, rollbackCompatible } from "./rollback-compatibility";
 import {
@@ -211,6 +212,65 @@ const providerJson = Effect.fn(
   Effect.scoped,
   Effect.timeout("10 seconds")
 );
+
+/** Script settings are independent of gradual code uploads; verify privacy before staging. */
+export const redactReleaseQueries = Effect.fn(function* (
+  env: Pick<Config, "account" | "token">,
+  names: ReadonlyArray<string>,
+  client: HttpClient.HttpClient
+) {
+  const response = Schema.Struct({
+    success: Schema.Literal(true),
+    result: Schema.Struct({
+      observability: Schema.Struct({
+        enabled: Schema.Literal(true),
+        redact_query_string: Schema.Literal(true),
+        logs: Schema.Struct({
+          enabled: Schema.Literal(true),
+          invocation_logs: Schema.Literal(false),
+          persist: Schema.Literal(true),
+        }),
+      }),
+    }),
+  });
+  for (const name of names) {
+    const base = `https://api.cloudflare.com/client/v4/accounts/${env.account}/workers/scripts/${encodeURIComponent(name)}`;
+    const headers = { authorization: `Bearer ${env.token}` };
+    // Patch only privacy metadata. Bindings, code and traffic remain owned by their release gates.
+    yield* providerJson(
+      HttpClientRequest.patch(`${base}/script-settings`, {
+        headers: { ...headers, "content-type": "application/json" },
+        body: HttpBody.text(
+          encodeJson({
+            observability: {
+              enabled: freeTierWorkerObservability.enabled,
+              head_sampling_rate: freeTierWorkerObservability.headSamplingRate,
+              redact_query_string: freeTierWorkerObservability.redactQueryString,
+              logs: {
+                enabled: freeTierWorkerObservability.logs.enabled,
+                head_sampling_rate: freeTierWorkerObservability.logs.headSamplingRate,
+                invocation_logs: freeTierWorkerObservability.logs.invocationLogs,
+                persist: freeTierWorkerObservability.logs.persist,
+              },
+              traces: { enabled: false },
+            },
+          }),
+          "application/json"
+        ),
+      })
+    ).pipe(Effect.provideService(HttpClient.HttpClient, client));
+    yield* providerJson(HttpClientRequest.get(`${base}/settings`, { headers })).pipe(
+      Effect.provideService(HttpClient.HttpClient, client),
+      Effect.flatMap(Schema.decodeUnknownEffect(response)),
+      Effect.mapError(
+        () =>
+          new ReleaseFailure({
+            message: "Release staging refused: request query redaction is unverified",
+          })
+      )
+    );
+  }
+});
 // Retain at most 32 KiB in memory; drain the pipe without publishing foreign output.
 const toolingRefusal = (stream: ReadableStream<Uint8Array>): Promise<Option.Option<string>> => {
   const decoder = new TextDecoder();
@@ -718,7 +778,7 @@ const capture = Effect.fn(function* (
   }
   yield* writeFile(env.file, encodeJson(snapshot));
 });
-const stage = Effect.fn(function* (port: ReleasePort, env: Config) {
+const stage = Effect.fn(function* (port: ReleasePort, env: Config, client: HttpClient.HttpClient) {
   const snapshot = yield* Schema.decodeUnknownEffect(releaseSchemas.snapshot)(
     yield* readFile(env.file)
   );
@@ -731,6 +791,7 @@ const stage = Effect.fn(function* (port: ReleasePort, env: Config) {
   ) {
     return yield* Effect.fail(Error("Alchemy candidate receipts are incomplete"));
   }
+  yield* redactReleaseQueries(env, [snapshot.public.name, snapshot.core.name], client);
   const result = yield* releaseController.stageRelease(port, snapshot, {
     publicVersionId: workers.public.versionId.value,
     coreVersionId: workers.core.versionId.value,
@@ -1162,7 +1223,7 @@ const runRouting = Effect.fn(function* ({
       yield* capture(port, env, client);
       break;
     case "stage":
-      yield* stage(port, env);
+      yield* stage(port, env, client);
       break;
     case "promote":
       yield* promote(port, env);

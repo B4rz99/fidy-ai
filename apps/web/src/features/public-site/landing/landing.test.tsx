@@ -160,6 +160,32 @@ it("honors reduced motion and cancels owned animations on unmount", () => {
   expect(cancel).toHaveBeenCalled();
 });
 
+it("preserves browser scroll timelines while cleaning up owned animations in Strict Mode", () => {
+  class NativeScrollAnimation {
+    cancel = vi.fn();
+  }
+  const scrollAnimation = new NativeScrollAnimation();
+  const ownedAnimation = { cancel: vi.fn() };
+  vi.stubGlobal("CSS", { supports: () => true });
+  vi.stubGlobal("CSSAnimation", NativeScrollAnimation);
+  Object.defineProperty(Element.prototype, "getAnimations", {
+    configurable: true,
+    value(this: Element) {
+      return this.classList.contains("fidy-landing")
+        ? [scrollAnimation, ownedAnimation]
+        : [ownedAnimation];
+    },
+  });
+  const view = render(
+    <StrictMode>
+      <PublicHome />
+    </StrictMode>
+  );
+  view.unmount();
+  expect(ownedAnimation.cancel).toHaveBeenCalled();
+  expect(scrollAnimation.cancel).not.toHaveBeenCalled();
+});
+
 it("restores a saved theme and tolerates unavailable browser storage", () => {
   localStorage.setItem("fidy-landing-theme", "dark");
   const view = render(<FeatureDetail index={0} />);

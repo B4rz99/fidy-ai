@@ -71,7 +71,7 @@ export const Header = (): React.JSX.Element => (
       id="compact-navigation"
       className="compact-navigation"
       popover="auto"
-      aria-label="Principal"
+      aria-label="Navegación compacta"
     >
       {links.map(([id, label]) => (
         <a

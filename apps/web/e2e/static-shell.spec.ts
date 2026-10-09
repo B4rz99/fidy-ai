@@ -6,7 +6,15 @@ const wait = <A>(promise: Promise<A>): Effect.Effect<A, Cause.UnknownError> =>
   Effect.tryPromise(() => promise);
 const json = (value: object, space: number): string => JSON.stringify(value, undefined, space);
 const waitForEntrances = (page: Page): Promise<Animation[]> =>
-  page.evaluate(() => Promise.all(document.getAnimations().map((animation) => animation.finished)));
+  page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        // View timelines progress with scrolling and intentionally never finish while stationary.
+        .filter((animation) => animation.timeline instanceof DocumentTimeline)
+        .map((animation) => animation.finished)
+    )
+  );
 const expectSeriousAccessibilityViolations = (page: Page): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -164,28 +172,19 @@ test("renders the public home route without serious accessibility violations", (
 test("persists landing appearance across reloads and feature pages", ({ page }) =>
   Effect.runPromise(
     Effect.gen(function* () {
+      yield* wait(page.emulateMedia({ colorScheme: "light" }));
       yield* wait(page.goto("/"));
-      yield* wait(
-        expect(page.getByRole("button", { name: "Sistema", exact: true })).toHaveAttribute(
-          "aria-pressed",
-          "true"
-        )
-      );
-      yield* wait(page.getByRole("button", { name: "Oscuro", exact: true }).click());
+      yield* wait(expect(page.locator(".fidy-landing")).toHaveAttribute("data-theme", "system"));
+      yield* wait(page.getByRole("button", { name: "Activar tema oscuro" }).click());
       yield* wait(expect(page.locator(".fidy-landing")).toHaveAttribute("data-theme", "dark"));
       yield* wait(waitForEntrances(page));
       yield* wait(expectSeriousAccessibilityViolations(page));
       yield* wait(page.reload());
-      yield* wait(
-        expect(page.getByRole("button", { name: "Oscuro", exact: true })).toHaveAttribute(
-          "aria-pressed",
-          "true"
-        )
-      );
+      yield* wait(expect(page.getByRole("button", { name: "Activar tema claro" })).toBeVisible());
       yield* wait(page.goto("/funciones/agentes"));
       yield* wait(expect(page.locator(".fidy-landing")).toHaveAttribute("data-theme", "dark"));
       yield* wait(expectSeriousAccessibilityViolations(page));
-      yield* wait(page.getByRole("button", { name: "Claro", exact: true }).click());
+      yield* wait(page.getByRole("button", { name: "Activar tema claro" }).click());
       yield* wait(expect(page.locator(".fidy-landing")).toHaveAttribute("data-theme", "light"));
     })
   ));

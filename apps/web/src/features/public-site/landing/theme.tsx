@@ -1,4 +1,11 @@
-import { type ReactNode, createContext, useContext, useState, useSyncExternalStore } from "react";
+import {
+  type ReactNode,
+  createContext,
+  useContext,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { mountMotion } from "./motion";
 
 const storageKey = "fidy-landing-theme";
@@ -64,16 +71,23 @@ export const LandingTheme = ({
   const [theme, setTheme] = useState(readTheme);
   const prefersDark = useSyncExternalStore(subscribe, systemDark);
   const dark = theme === "dark" || (theme === "system" && prefersDark);
-  const select = (next: Theme): void => {
-    setTheme(next);
-    try {
-      localStorage.setItem(storageKey, next);
-    } catch {
-      // The theme still works for this visit when browser storage is unavailable.
-    }
-  };
+  const context = useMemo(
+    () => ({
+      dark,
+      toggle: (): void => {
+        const next = dark ? "light" : "dark";
+        setTheme(next);
+        try {
+          localStorage.setItem(storageKey, next);
+        } catch {
+          // The theme still works for this visit when browser storage is unavailable.
+        }
+      },
+    }),
+    [dark]
+  );
   return (
-    <ThemeContext value={{ dark, toggle: () => select(dark ? "light" : "dark") }}>
+    <ThemeContext value={context}>
       <div
         className={`fidy-landing variant-a${detail ? " feature-detail-open" : ""}`}
         data-theme={theme}

@@ -81,12 +81,17 @@ See the upstream [rules](https://github.com/shadcn-ui/lint/blob/main/docs/rules.
 
 - Root project-reference typecheck, type-aware Oxlint, real-config design-policy probes,
   formatting, web module graph, shadcn aliases, and browser bundle boundary passed.
-- Ten repository-tool tests passed. The web suite passed 354 tests; two existing topology
-  discovery tests failed because their local launcher executes Bun-dependent code under Node.
-  Direct Bun invocation successfully listed both the shared and isolated CLI browser suites.
+- Ten repository-tool tests passed. With the pinned Bun 1.4.3 runtime, all 361 web tests passed
+  and Istanbul coverage passed the unchanged thresholds (90.14% branches). The older local
+  Bun 1.4.1 launcher had failed two topology discovery tests by executing Bun-dependent code
+  under Node; both pass with the pinned runtime.
 - Thirteen built-production browser tests passed, covering Transaction capture/history,
   loading and cross-User refusal, static security policy, landing appearance persistence,
   and public-page accessibility. Vite was invoked through its file entry to avoid the launcher issue.
+- A further 29 built-browser checks passed for signup, browser pairing, Dashboard editing,
+  theme persistence, static security policy, and accessibility. Dashboard title editing reserves
+  space for the enlarged icon controls. Appearance checks use the single theme toggle, and
+  entrance waits exclude scroll timelines that intentionally remain active while stationary.
 - The UI reference had no WCAG A/AA axe findings or horizontal overflow at 390px, 715px,
   and 1440px in Light and Dark. System followed an emulated preference change; keyboard focus
   reached the primary action. At 390px with 200% root text size, the page remained within the viewport.

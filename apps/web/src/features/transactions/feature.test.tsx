@@ -2,9 +2,8 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { BigDecimal, Cause, DateTime, Option, Predicate } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { TransactionListFeature, TransactionListView, type TransactionPageState } from "./feature";
+import { TransactionListFeature, TransactionListView } from "./feature";
 import { ManualTransactionCapture } from "./manual-capture";
-import type { TransactionListRow } from "./presentation";
 import { makeFidyClient } from "@/transport/client";
 
 const queryKey = (atom: unknown): string => {
@@ -43,13 +42,6 @@ vi.mock("@tanstack/react-router", () => ({
   }),
 }));
 
-const period: Readonly<{ monthLabel: string; timeZone: string }> = {
-  monthLabel: "julio de 2026",
-  timeZone: "America/Bogota",
-};
-const idleQuery: Extract<TransactionPageState, { readonly _tag: "Ready" }>["query"] = {
-  _tag: "Current",
-};
 const category = {
   id: "24000000-0000-4000-8000-000000000001",
   label: "Restaurantes",
@@ -57,22 +49,27 @@ const category = {
 const transaction = {
   id: "24000000-0000-4000-8000-000000000002",
   categoryId: category.id,
+  notes: Option.none(),
   counterparty: Option.some("El Corral"),
   direction: "outflow" as const,
   money: { amount: BigDecimal.fromStringUnsafe("25000"), currency: "COP" as const },
   occurredAt: DateTime.makeUnsafe("2026-07-20T12:30:00Z"),
 };
-const row: TransactionListRow = {
-  id: transaction.id,
-  categoryLabel: category.label,
-  counterpartyLabel: "El Corral",
-  direction: transaction.direction,
-  transactionTypeLabel: "Gasto",
-  moneyText: "COP 25.000,00",
-  occurredOnText: "20-07-2026",
+const seedResources = (): void => {
+  queryMocks.values.set(
+    "getCurrentUser",
+    AsyncResult.success({ data: { locale: "es-CO", timeZone: "America/Bogota" } })
+  );
+  queryMocks.values.set("listCategories", AsyncResult.success({ data: [category] }));
+  queryMocks.values.set("listTransactions", AsyncResult.success({ data: [transaction] }));
 };
 
 beforeEach(() => {
+  vi.stubGlobal("matchMedia", () => ({
+    matches: true,
+    addEventListener: (): void => undefined,
+    removeEventListener: (): void => undefined,
+  }));
   queryMocks.query.mockClear();
   queryMocks.refresh.mockClear();
   queryMocks.dispatch.mockReset();
@@ -81,6 +78,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 describe("manual Transaction capture", () => {
@@ -89,6 +87,9 @@ describe("manual Transaction capture", () => {
     vi.setSystemTime(DateTime.makeUnsafe("2026-09-01T02:00:00Z").epochMilliseconds);
     render(
       <ManualTransactionCapture
+        renderForm={(form) => form}
+        status="idle"
+        onStatus={() => undefined}
         apiClient={makeFidyClient({ apiOrigin: "https://api.test.fidyapp.com" })}
         timeZone="America/Bogota"
         onCreated={() => undefined}
@@ -106,50 +107,40 @@ describe("current-month Transaction list presentation", () => {
     expect(screen.getByLabelText("Cargando transacciones")).toBeVisible();
   });
 
-  it("renders month and zone context with desktop and mobile Transaction rows", () => {
-    render(
-      <TransactionListView state={{ _tag: "Ready", period, query: idleQuery, rows: [row] }} />
-    );
-
-    expect(screen.getByText("julio de 2026")).toBeVisible();
-    expect(screen.getByText("America/Bogota")).toBeVisible();
-
-    const desktop = within(screen.getByLabelText("Tabla de transacciones"));
-    expect(desktop.getByText("El Corral")).toBeVisible();
-    expect(desktop.getByText("Restaurantes")).toBeVisible();
-    expect(desktop.getByText("Tipo")).toBeVisible();
-    expect(desktop.getByText("Gasto")).toBeVisible();
-    expect(desktop.getByText("COP 25.000,00")).toBeVisible();
-    expect(desktop.getByText("20-07-2026")).toBeVisible();
-
-    const mobile = within(screen.getByLabelText("Lista móvil de transacciones"));
-    expect(mobile.getByText("El Corral")).toBeVisible();
-    expect(mobile.getByText("Gasto")).toBeVisible();
+  it("renders month and zone context in the current ledger", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(DateTime.makeUnsafe("2026-07-20T14:00:00Z").epochMilliseconds);
+    seedResources();
+    render(<TransactionListFeature />);
+    expect(screen.getByText(/julio de 2026/)).toBeVisible();
+    const ledger = within(screen.getByLabelText("Tabla de transacciones"));
+    expect(ledger.getByRole("button", { name: "Ver transacción El Corral" })).toBeVisible();
+    expect(ledger.getByRole("cell", { name: "Restaurantes" })).toBeVisible();
+    expect(ledger.getByText("Gasto")).toBeVisible();
+    expect(ledger.getByText("−COP 25.000,00")).toBeVisible();
+    expect(ledger.getByText("20-07-2026")).toBeVisible();
   });
 });
 
 describe("current-month Transaction list states", () => {
   it("preserves inflow rows while refreshing", () => {
-    render(
-      <TransactionListView
-        state={{
-          _tag: "Ready",
-          period,
-          query: { _tag: "Refreshing" },
-          rows: [{ ...row, direction: "inflow", transactionTypeLabel: "Ingreso" }],
-        }}
-      />
+    seedResources();
+    queryMocks.values.set(
+      "listTransactions",
+      AsyncResult.success({ data: [{ ...transaction, direction: "inflow" }] }, { waiting: true })
     );
-
+    render(<TransactionListFeature />);
     expect(screen.getByText("Actualizando transacciones…")).toBeVisible();
-    expect(screen.getAllByText("Ingreso")).toHaveLength(2);
+    expect(
+      within(screen.getByLabelText("Tabla de transacciones")).getByText("Ingreso")
+    ).toBeVisible();
   });
-
-  it("renders the current-month empty state with its applied zone", () => {
-    render(<TransactionListView state={{ _tag: "Empty", period, query: idleQuery }} />);
-
-    expect(screen.getByText("Aún no hay transacciones este mes")).toBeVisible();
-    expect(screen.getByText("America/Bogota")).toBeVisible();
+  it("renders the current ledger empty state with its applied zone", () => {
+    seedResources();
+    queryMocks.values.set("listTransactions", AsyncResult.success({ data: [] }));
+    render(<TransactionListFeature />);
+    expect(screen.getByText("No hay transacciones para mostrar")).toBeVisible();
+    expect(screen.getByText(/America\/Bogota/)).toBeVisible();
   });
 
   it("renders canonical and boundary errors without exposing their causes", () => {
@@ -235,7 +226,7 @@ describe("current-month Transaction refreshes", () => {
 
     const { rerender } = render(<TransactionListFeature />);
 
-    expect(screen.getAllByText("El Corral")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Ver transacción El Corral" })).toBeVisible();
     expect(screen.getByText("Actualizando perfil de transacciones…")).toBeVisible();
     expect(screen.getByText("No pudimos actualizar tu perfil")).toBeVisible();
     expect(screen.getByRole("button", { name: "Reintentando…" })).toBeDisabled();
@@ -267,7 +258,7 @@ describe("current-month Transaction refreshes", () => {
 
     render(<TransactionListFeature />);
 
-    expect(screen.getAllByText("El Corral")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Ver transacción El Corral" })).toBeVisible();
     expect(screen.getByText("Mostramos las últimas transacciones disponibles.")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Reintentar actualización" }));
     expect(queryMocks.refresh).toHaveBeenCalledWith("listCategories");
@@ -297,7 +288,7 @@ describe("current-month Transaction resource successes", () => {
     queryMocks.values.set("listCategories", AsyncResult.success({ data: [category] }));
     queryMocks.values.set("listTransactions", AsyncResult.success({ data: [] }));
     rerender(<TransactionListFeature />);
-    expect(screen.getByText("Aún no hay transacciones este mes")).toBeVisible();
+    expect(screen.getByText("No hay transacciones para mostrar")).toBeVisible();
 
     queryMocks.values.set(
       "listTransactions",
@@ -313,6 +304,60 @@ describe("current-month Transaction resource successes", () => {
     rerender(<TransactionListFeature />);
 
     expect(screen.getByLabelText("Transacciones del mes")).toBeVisible();
-    expect(screen.getAllByText("El Corral")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Ver transacción El Corral" })).toBeVisible();
   });
+});
+
+describe("transaction workspace", () => {
+  it("replaces the summary with details and restores it when the transaction closes", () => {
+    queryMocks.values.set(
+      "getCurrentUser",
+      AsyncResult.success({ data: { locale: "es-CO", timeZone: "America/Bogota" } })
+    );
+    queryMocks.values.set("listCategories", AsyncResult.success({ data: [category] }));
+    queryMocks.values.set(
+      "listTransactions",
+      AsyncResult.success({ data: [{ ...transaction, revision: 0, notes: Option.none() }] })
+    );
+    render(<TransactionListFeature />);
+    expect(screen.getByRole("heading", { name: "Resumen" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Ver transacción El Corral" }));
+    expect(screen.getByRole("heading", { name: "Detalle de transacción" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Resumen" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar detalle" }));
+    expect(screen.getByRole("heading", { name: "Resumen" })).toBeVisible();
+  });
+});
+
+it("summarizes the visible records without combining different currencies", () => {
+  queryMocks.values.set(
+    "getCurrentUser",
+    AsyncResult.success({ data: { locale: "es-CO", timeZone: "America/Bogota" } })
+  );
+  queryMocks.values.set("listCategories", AsyncResult.success({ data: [category] }));
+  queryMocks.values.set(
+    "listTransactions",
+    AsyncResult.success({
+      data: [
+        transaction,
+        {
+          ...transaction,
+          id: "income",
+          direction: "inflow",
+          money: { amount: BigDecimal.fromStringUnsafe("100000"), currency: "COP" },
+        },
+        {
+          ...transaction,
+          id: "usd",
+          money: { amount: BigDecimal.fromStringUnsafe("10.25"), currency: "USD" },
+        },
+      ],
+    })
+  );
+  render(<TransactionListFeature />);
+  const summary = within(screen.getByLabelText("Resumen de transacciones"));
+  expect(summary.getAllByText("COP 100.000,00")).toHaveLength(2);
+  expect(summary.getAllByText("USD 10,25").length).toBeGreaterThan(0);
+  expect(summary.getByText("Primera transacción")).toBeVisible();
+  expect(summary.getByText("Última transacción")).toBeVisible();
 });

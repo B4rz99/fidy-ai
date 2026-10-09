@@ -19,6 +19,16 @@ export const AuthenticationExpired = (): JSX.Element => (
   </main>
 );
 
+const navigationLinks = [
+  { to: "/app/dashboard", label: "Tablero" },
+  { to: "/app/agent", label: "Agente" },
+  { to: "/app/transactions", label: "Transacciones" },
+  { to: "/settings/email", label: "Correo" },
+  { to: "/settings/pats", label: "Tokens personales (PAT)" },
+  { to: "/settings/agents", label: "Agentes conectados" },
+  { to: "/settings/recovery", label: "Recuperación" },
+] as const;
+
 const SignedInNavigation = ({
   onLogout,
   loggingOut,
@@ -28,33 +38,19 @@ const SignedInNavigation = ({
 }): JSX.Element => (
   <nav
     aria-label="Aplicación"
-    className="flex flex-1 flex-wrap items-center gap-1 px-3 pb-3 md:flex-col md:items-stretch"
+    className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-3 pb-3 md:flex-col md:items-stretch"
   >
-    <Button className="justify-start" render={<Link to="/app/dashboard" />} variant="ghost">
-      Tablero
-    </Button>
-    <Button className="justify-start" render={<Link to="/app/agent" />} variant="ghost">
-      Agente
-    </Button>
-    <Button className="justify-start" render={<Link to="/app/transactions" />} variant="ghost">
-      Transacciones
-    </Button>
-    <Button className="justify-start" render={<Link to="/settings/email" />} variant="ghost">
-      Correo
-    </Button>
-    <Button className="justify-start" render={<Link to="/settings/pats" />} variant="ghost">
-      Tokens personales (PAT)
-    </Button>
-    <Button
-      className="justify-start"
-      render={<Link to="/settings/agents" search={{}} />}
-      variant="ghost"
-    >
-      Agentes conectados
-    </Button>
-    <Button className="justify-start" render={<Link to="/settings/recovery" />} variant="ghost">
-      Recuperación
-    </Button>
+    {navigationLinks.map((link) => (
+      <Button
+        key={link.to}
+        nativeButton={false}
+        className="shrink-0 justify-start"
+        render={<Link to={link.to} search={{}} activeProps={{ className: "bg-muted" }} />}
+        variant="ghost"
+      >
+        {link.label}
+      </Button>
+    ))}
     <Button
       className="justify-start md:mt-auto"
       disabled={loggingOut}

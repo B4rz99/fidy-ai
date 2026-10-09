@@ -170,6 +170,21 @@
         ]
       }
     },
+    // These libraries expose extensionless package exports that resolve to .mjs.
+    {
+      "files": [
+        "apps/web/src/ui/components/sheet.tsx",
+        "apps/web/src/features/transactions/workspace.tsx",
+        "apps/web/src/features/transactions/ledger.tsx"
+      ],
+      "rules": { "import/extensions": "off" }
+    },
+    // Table V8 uses interior mutability. This app does not enable React Compiler;
+    // the ledger reads its row model each render and never memoizes the table object.
+    {
+      "files": ["apps/web/src/features/transactions/ledger.tsx"],
+      "rules": { "react/incompatible-library": "off" }
+    },
     {
       "files": ["apps/web/src/ui/components/**"],
       "rules": {

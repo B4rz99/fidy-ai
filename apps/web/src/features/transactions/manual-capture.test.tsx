@@ -1,3 +1,7 @@
+import { useState } from "react";
+import type { JSX } from "react";
+import type { FidyClient } from "@/transport/client";
+import type { CaptureStatus } from "./panel-state";
 import { RegistryProvider } from "@effect/atom-react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { Effect, Layer } from "effect";
@@ -6,6 +10,20 @@ import { afterEach, expect, it } from "vitest";
 import { makeFidyClient } from "@/transport/client";
 import { ManualTransactionCapture } from "./manual-capture";
 
+const CaptureHarness = ({ apiClient }: Readonly<{ apiClient: FidyClient }>): JSX.Element => {
+  const [status, onStatus] = useState<CaptureStatus>("idle");
+  return (
+    <ManualTransactionCapture
+      renderForm={(form) => form}
+      apiClient={apiClient}
+      timeZone="America/Bogota"
+      onCreated={() => undefined}
+      onCheckHistory={() => undefined}
+      status={status}
+      onStatus={onStatus}
+    />
+  );
+};
 afterEach(cleanup);
 
 it("requires checking history after a capture acknowledgement is lost instead of replaying it", () =>
@@ -22,14 +40,11 @@ it("requires checking history after a capture acknowledgement is lost instead of
       });
       render(
         <RegistryProvider>
-          <ManualTransactionCapture
+          <CaptureHarness
             apiClient={makeFidyClient({
               apiOrigin: "https://api.test.fidyapp.com",
               httpClient: Layer.succeed(HttpClient.HttpClient, client),
             })}
-            timeZone="America/Bogota"
-            onCreated={() => undefined}
-            onCheckHistory={() => undefined}
           />
         </RegistryProvider>
       );

@@ -1,0 +1,39 @@
+apps/server/cloudflare/provider-authentication/internal/token-contract.ts
+  s_6d017cc65783af::t_fc3bda62e2081d 1,5-15,21-25
+  s_6d017cc65783af::t_d2e122fa575f8c 16-20
+  s_6d017cc65783af::t_4f5f39205df153 26
+apps/server/cloudflare/provider-authentication/internal/callback.ts
+  s_6d017cc65783af::t_88d9a51509ee02 39-41
+  s_6d017cc65783af::t_17f991bdfee1b3 1
+  s_6d017cc65783af::t_7ae144cda85d24 8,68,76-80,82-83
+  s_6d017cc65783af::t_9106fcac17737d 36-38,81
+apps/server/cloudflare/provider-authentication/journey.test.ts
+  s_6d017cc65783af::t_9f32cd0ca18dd6 377-390,392-398
+  s_6d017cc65783af::t_1e5f13dc9b9229 391
+apps/web/src/features/provider-authentication/FEATURE.md
+  s_6d017cc65783af::t_fe3db1fd6651a2 10,20,30,37-51
+apps/server/cloudflare/provider-authentication/internal/google-token.ts
+  s_6d017cc65783af::t_fc3bda62e2081d 18-20,22,32-34,56,58,61,63-69
+  s_6d017cc65783af::t_dbf9fe2ad6b1d7 204-212
+  s_6d017cc65783af::t_7ae144cda85d24 195-197,199-200,215-216,218-224
+  s_6d017cc65783af::t_046769fa79b861 127-129,131-136,138-143,151-174,176-181
+  s_6d017cc65783af::t_d2e122fa575f8c 12,186,203,214
+  s_6d017cc65783af::t_c0e7b109782924 14,57,59-60,62,126,130,137,144-150,175,198,213
+  s_6d017cc65783af::t_3c925ae8f41dc6 21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "21399492b685a0999a9c57409d160393a2aa5e10",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

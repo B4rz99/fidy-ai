@@ -8,6 +8,139 @@ import { disposeJourneys, setup, setupWhatsApp } from "./journey.test-fixture";
 afterAll(disposeJourneys);
 afterEach(() => vi.restoreAllMocks());
 
+const uncorrelatedStatuses = (fault: string, now: number): ReadonlyArray<unknown> => [
+  {
+    id: fault === "status_message" ? "wamid.other" : "wamid.review",
+    status: fault === "read_only" ? "read" : "delivered",
+    timestamp: String(Math.floor((fault === "future" ? now + 600_000 : now) / 1000)),
+    ...(fault === "malformed" ? { biz_opaque_callback_data: "invalid" } : {}),
+  },
+  ...(fault === "mixed"
+    ? [
+        {
+          id: "wamid.review",
+          status: "sent",
+          timestamp: String(Math.floor(now / 1000)),
+          biz_opaque_callback_data: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        },
+      ]
+    : []),
+];
+
+it.each([
+  "inline",
+  "bad_signature",
+  "message",
+  "endpoint",
+  "status_message",
+  "mixed",
+  "malformed",
+  "future",
+  "read_only",
+] as const)("validates uncorrelated lifecycle proof before acknowledging it: %s", (fault) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const journey = yield* Effect.tryPromise(() => setupWhatsApp());
+      const now = yield* Clock.currentTimeMillis;
+      const statuses = uncorrelatedStatuses(fault, now);
+      let reads = 0;
+      vi.spyOn(globalThis, "fetch").mockImplementation(() => {
+        reads += 1;
+        return Promise.resolve(
+          Response.json({
+            id: fault === "message" ? "wamid.other" : "wamid.review",
+            kapso: {
+              direction: "outbound",
+              phone_number_id: fault === "endpoint" ? "987654321098765" : "123456789012345",
+              statuses,
+            },
+          })
+        );
+      });
+      const response = yield* sendPacket(
+        journey,
+        {
+          phone_number_id: "123456789012345",
+          message: {
+            id: "wamid.review",
+            kapso: {
+              direction: "outbound",
+              status: "delivered",
+              ...(fault === "inline" ? { statuses } : {}),
+            },
+          },
+        },
+        {
+          signature: fault === "bad_signature" ? Option.some("0".repeat(64)) : Option.none(),
+          event: "whatsapp.message.delivered",
+        }
+      );
+      expect(response.status).toBe(fault === "inline" ? 200 : 401);
+      expect(reads).toBe(fault === "inline" || fault === "bad_signature" ? 0 : 1);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          journey.db
+            .prepare("SELECT count(*) AS total FROM pending_consent_delivery")
+            .first<{ total: number }>()
+        ))?.total
+      ).toBe(0);
+      expect(
+        (yield* Effect.tryPromise(() =>
+          journey.db
+            .prepare("SELECT count(*) AS total FROM whatsapp_provider_handoffs")
+            .first<{ total: number }>()
+        ))?.total
+      ).toBe(0);
+    })
+  )
+);
+
+it("acknowledges uncorrelated sent, delivered and failed receipts without delivery or association effects", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const journey = yield* Effect.tryPromise(() => setupWhatsApp());
+      const now = yield* Clock.currentTimeMillis;
+      let reads = 0;
+      vi.spyOn(globalThis, "fetch").mockImplementation(() => {
+        reads += 1;
+        return Promise.resolve(
+          Response.json({
+            id: "wamid.review",
+            kapso: {
+              direction: "outbound",
+              phone_number_id: "123456789012345",
+              statuses: ["sent", "delivered", "failed"].map((status) => ({
+                id: "wamid.review",
+                status,
+                timestamp: String(Math.floor(now / 1000)),
+              })),
+            },
+          })
+        );
+      });
+      for (const status of ["sent", "delivered", "failed"] as const) {
+        expect(
+          (yield* sendPacket(
+            journey,
+            {
+              phone_number_id: "123456789012345",
+              message: { id: "wamid.review", kapso: { direction: "outbound", status } },
+            },
+            { signature: Option.none(), event: `whatsapp.message.${status}` }
+          )).status
+        ).toBe(200);
+      }
+      expect(reads).toBe(3);
+      for (const table of ["pending_consent_delivery", "whatsapp_provider_handoffs", "users"]) {
+        expect(
+          (yield* Effect.tryPromise(() =>
+            journey.db.prepare(`SELECT count(*) AS total FROM ${table}`).first<{ total: number }>()
+          ))?.total
+        ).toBe(0);
+      }
+    })
+  ));
+
 const lifecycleHistory = (fault: string, correlation: string, now: number): Response => {
   const deliveredStatus = fault === "sent_only" ? "sent" : "delivered";
   return Response.json({
@@ -66,6 +199,17 @@ it("bounds signed lifecycle replay, concurrent failures and the shared provider-
         { concurrency: "unbounded" }
       );
       expect(concurrent.map((response) => response.status)).toEqual([503, 503, 503]);
+      expect(reads).toBe(1);
+      expect(
+        (yield* sendPacket(
+          journey,
+          {
+            phone_number_id: "123456789012345",
+            message: { id: "wamid.replay", kapso: { direction: "outbound", status: "sent" } },
+          },
+          { signature: Option.none(), event: "whatsapp.message.sent" }
+        )).status
+      ).toBe(503);
       expect(reads).toBe(1);
       expect(
         (yield* Effect.tryPromise(() =>

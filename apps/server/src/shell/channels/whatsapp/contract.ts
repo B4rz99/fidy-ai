@@ -388,5 +388,6 @@ export type WhatsAppLifecycleAuthentication = Readonly<{
 
 /** Durable admission at the authenticated missing-history lookup boundary. */
 export type WhatsAppStatusLookupAdmission = (
-  request: Pick<WhatsAppDeliveryLookup, "businessPhoneNumberId" | "messageId" | "receivedAt">
+  request: Pick<WhatsAppDeliveryLookup, "businessPhoneNumberId" | "messageId" | "receivedAt"> &
+    Readonly<{ status: "sent" | "delivered" | "failed" }>
 ) => Effect.Effect<void, WhatsAppStatusUnavailable>;

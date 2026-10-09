@@ -5,15 +5,15 @@ merges Users or establishes mailbox authority. Onboarding atomically creates the
 168-hour TrialPeriod and digest-only BackupRecoveryCode. Browser Login alone issues WebSession
 after approval and proof of the initiating browser's private verifier.
 
-| Action                                                              | Code and runtime                                                                                                                    | Verification                                                                                                               |
-| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Public signup and returning login                                   | This feature, `/auth/google`, `/auth/microsoft` → public Ingress → private Core Provider Authentication → D1                        | Real Google and Microsoft personal signup/returning login pass; Microsoft work/school live checks pending                  |
-| Consent and one-time recovery acknowledgement                       | `/web/providers/disclosure`, provider start/completion; Onboarding                                                                  | Atomic creation/rollback, concurrent completion, same-contact isolation and lost-response non-redisclosure covered locally |
-| WhatsApp-led signup and initial linking                             | Kapso authenticated Portfolio/BSUID → Consent handoff → provider browser → exact originating-message association approval           | New and existing User journeys pass for both providers; real Kapso delivery/reply pending                                  |
-| Existing WhatsApp and optional verified-mailbox login               | `browser-login`, `email-authentication`; `/auth/pair`                                                                               | Existing pairing and authentication boundaries pass; provider contact email grants no mailbox login                        |
-| Backup recovery and rotation                                        | `fidy support-recovery` → Cloudflare Access → `/internal/support-recovery` → Recovery/Browser Login; `/recovery/backup-code/rotate` | Real Production recovery, replay refusal, fresh-sign-in rotation and reload non-redisclosure pass                          |
-| Session persistence, logout, expiry and Consent withdrawal          | Browser Login/WebSession and browser authentication registry                                                                        | Production reload and logout pass; local expiry and withdrawal checks pass; deployed deadline observation pending          |
-| Denial, cancellation, blocked popup, replay and uncertain responses | Provider Authentication plus mounted browser controller                                                                             | Worker refusals and browser failure journeys pass; no blind retry or recovery redisclosure                                 |
+| Action                                                              | Code and runtime                                                                                                                    | Verification                                                                                                                                |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public signup and returning login                                   | This feature, `/auth/google`, `/auth/microsoft` → public Ingress → private Core Provider Authentication → D1                        | Real Google and Microsoft personal signup/returning login pass; Microsoft work/school live checks pending                                   |
+| Consent and one-time recovery acknowledgement                       | `/web/providers/disclosure`, provider start/completion; Onboarding                                                                  | Atomic creation/rollback, concurrent completion, same-contact isolation and lost-response non-redisclosure covered locally                  |
+| WhatsApp-led signup and initial linking                             | Kapso authenticated Portfolio/BSUID → Consent handoff → provider browser → exact originating-message association approval           | New and existing User journeys pass for both providers; real Kapso Consent, Google handoff, quoted association confirmation and reload pass |
+| Existing WhatsApp and optional verified-mailbox login               | `browser-login`, `email-authentication`; `/auth/pair`                                                                               | Existing pairing and authentication boundaries pass; provider contact email grants no mailbox login                                         |
+| Backup recovery and rotation                                        | `fidy support-recovery` → Cloudflare Access → `/internal/support-recovery` → Recovery/Browser Login; `/recovery/backup-code/rotate` | Real Production recovery, replay refusal, fresh-sign-in rotation and reload non-redisclosure pass                                           |
+| Session persistence, logout, expiry and Consent withdrawal          | Browser Login/WebSession and browser authentication registry                                                                        | Production reload and logout pass; local expiry and withdrawal checks pass; deployed deadline observation pending                           |
+| Denial, cancellation, blocked popup, replay and uncertain responses | Provider Authentication plus mounted browser controller                                                                             | Worker refusals and browser failure journeys pass; no blind retry or recovery redisclosure                                                  |
 
 ## Evidence — 2026-10-08
 
@@ -149,12 +149,28 @@ it returned 409: signed v2 status callbacks omit `kapso.statuses` and were refus
 Only sent callbacks were observed; authenticated message lookup independently contains delivered
 and read history with the original correlation. Follow-up regressions cover bounded history lookup,
 matching delivery proof, and caller-scoped Sandbox reconciliation when callbacks are absent.
-The follow-up is not yet deployed; the real provider handoff and association remain pending.
+PR #1122 deployed as `aed6f3d9996ffe54493bb9c0c6f76cf2382fb227`; API/web metadata agree,
+all CI and Production release gates pass. The real Sandbox missing-callback path recorded the
+delivery receipt, refused Consent during the five-minute guard, then accepted a fresh reply and
+delivered the provider handoff. Google sign-in completed and the browser showed the association
+identifier. The exact quoted confirmation matched the stored review and public reference, but
+arrived after the ten-minute handoff expiry and was refused with 409; no association was created.
+A real expired-attempt restart produced a new provider handoff. Fresh Google sign-in, the exact
+quoted review confirmation and browser completion then passed: the confirmation webhook returned
+200, the association was confirmed and consumed, and Transactions survived reload. Delivery-status
+callbacks for handoff/review messages still return 401/503: authenticated provider history has no
+correlation token for these sends, while the lifecycle decoder requires one. They establish no
+delivery proof and caused no association effect. The follow-up acknowledges valid uncorrelated
+receipts without domain effects and admits each of the three status transitions once per
+endpoint/message/minute under the same shared 500/hour budget. Forty-seven Worker/D1 journeys
+cover malformed/mixed correlation, bad signatures, mismatched coordinates, future timestamps,
+read-only history and unchanged Consent/association state. The reusable checks
+now cover 47 Worker/D1 journeys, including absent callbacks, caller/correlation isolation and
+concurrent replay/global lookup budgets. Both Security and Standards reviews are clear.
 
 Remaining live checks: Google and Microsoft personal denial UI;
 Microsoft work/school signup/returning login/denial (unavailable: the User has no work/school account);
-real WhatsApp association and forwarded/expired handoff
-refusal; deployed server-side session deadlines and retention.
+forwarded WhatsApp handoff refusal (expired confirmation and restart now pass); deployed server-side session deadlines and retention.
 Local fixture passes do not establish these Production results. The User approved
 personal Google, Microsoft and WhatsApp accounts and handles sign-in and confirmation.
 

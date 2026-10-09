@@ -375,21 +375,23 @@ const handleHostedLifecycle = (
         hosted.failure._tag === "WhatsAppStatusUnavailable" ? HTTP_UNAVAILABLE : HTTP_UNAUTHORIZED
       );
     }
+    if (Option.isNone(hosted.success)) return answer(HTTP_OK);
+    const evidence = hosted.success.value;
     const lookup = {
       db: environment.DB,
-      correlationToken: hosted.success.correlationToken,
-      businessPhoneNumberId: hosted.success.businessPhoneNumberId,
+      correlationToken: evidence.correlationToken,
+      businessPhoneNumberId: evidence.businessPhoneNumberId,
     };
     const user = yield* findHostedStatusUser(lookup);
     if (Option.isSome(user)) {
       return yield* attempt(() =>
         environment.onHostedStatus({
           userId: user.value,
-          correlationToken: hosted.success.correlationToken,
-          businessPhoneNumberId: hosted.success.businessPhoneNumberId,
-          providerMessageId: hosted.success.messageEvidence.providerMessageId,
-          outcome: hosted.success.outcome,
-          occurredAtMs: DateTime.toEpochMillis(hosted.success.occurredAt),
+          correlationToken: evidence.correlationToken,
+          businessPhoneNumberId: evidence.businessPhoneNumberId,
+          providerMessageId: evidence.messageEvidence.providerMessageId,
+          outcome: evidence.outcome,
+          occurredAtMs: DateTime.toEpochMillis(evidence.occurredAt),
           receivedAtMs: DateTime.toEpochMillis(base.receivedAt),
         })
       );
@@ -398,12 +400,10 @@ const handleHostedLifecycle = (
       ? yield* recordConsentDelivery({
           db: environment.DB,
           input: {
-            correlationToken: DisclosureDeliveryCorrelationToken.make(
-              hosted.success.correlationToken
-            ),
-            phoneNumberId: hosted.success.businessPhoneNumberId,
-            messageId: hosted.success.messageEvidence.providerMessageId,
-            occurredAtMs: DateTime.toEpochMillis(hosted.success.occurredAt),
+            correlationToken: DisclosureDeliveryCorrelationToken.make(evidence.correlationToken),
+            phoneNumberId: evidence.businessPhoneNumberId,
+            messageId: evidence.messageEvidence.providerMessageId,
+            occurredAtMs: DateTime.toEpochMillis(evidence.occurredAt),
             receivedAtMs: DateTime.toEpochMillis(base.receivedAt),
           },
         })

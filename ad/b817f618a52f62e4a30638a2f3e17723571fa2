@@ -1,0 +1,52 @@
+apps/web/src/application.test.tsx
+  s_b75995d26622a8::t_7a4682fd8b70a4 2,6,120,288-295
+  s_b75995d26622a8::t_17079fa41e186f 385,387-390,392-393,395,407,419,421-422
+  s_b75995d26622a8::t_ce4f4b3be6ef08 296,362
+apps/web/src/features/dashboard/feature.test.tsx
+  s_b75995d26622a8::t_17079fa41e186f 342
+apps/web/e2e/financial-journeys.spec.ts
+  s_b75995d26622a8::t_17079fa41e186f 64-66,82,138-141,143,150,153
+apps/web/e2e/browser-pairing.spec.ts
+  s_b75995d26622a8::t_17079fa41e186f 207-209,427-428,431,470,533,535-536,539
+  s_b75995d26622a8::t_7a4682fd8b70a4 225
+apps/web/src/features/recurring-digest/feature.test.tsx
+  s_b75995d26622a8::t_17079fa41e186f 53
+apps/web/src/features/transactions/summary.tsx
+  s_b75995d26622a8::t_1cf1d332fbc1f7 3,88-91
+  s_b75995d26622a8::t_87f73214fe1df6 38-40,116
+apps/web/e2e/provider-authentication.journeys.ts
+  s_b75995d26622a8::t_17079fa41e186f 343,371,447
+apps/web/src/features/subscription/feature.test.tsx
+  s_b75995d26622a8::t_17079fa41e186f 503,574,657-659
+apps/web/src/features/transactions/ledger.tsx
+  s_b75995d26622a8::t_87f73214fe1df6 230-235,261-263,272-274,367-371
+apps/web/src/features/transactions/workspace.tsx
+  s_b75995d26622a8::t_87f73214fe1df6 256-257
+  s_b75995d26622a8::t_17079fa41e186f 25,189-192
+apps/web/e2e/oauth-review.spec.ts
+  s_b75995d26622a8::t_17079fa41e186f 101,340
+apps/web/src/features/transactions/presentation.ts
+  s_b75995d26622a8::t_87f73214fe1df6 100-105,114
+apps/web/e2e/01-real-core-journeys.spec.ts
+  s_b75995d26622a8::t_17079fa41e186f 344-346
+apps/web/e2e/canonical-browser.spec.ts
+  s_b75995d26622a8::t_17079fa41e186f 46,147
+apps/server/.dependency-cruiser.mjs
+  s_b75995d26622a8::t_87f73214fe1df6 180-181
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "adb817f618a52f62e4a30638a2f3e17723571fa2",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

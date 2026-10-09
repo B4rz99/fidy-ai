@@ -17,7 +17,7 @@ after approval and proof of the initiating browser's private verifier.
 
 ## Evidence — 2026-10-08
 
-Production checked: `19d8d9f085bf1ebda831a5201fcb490e1a9b48c2`; local checks include the pending callback diagnostics.
+Production checked: `2becd7945141224e2df7002d94a705854fe23f87`; local checks include the pending Workers redirect fix.
 Re-runnable checks from the repository root, using its pinned Bun runtime:
 
 ```sh
@@ -39,10 +39,18 @@ The [release](https://github.com/B4rz99/fidy-ai/actions/runs/37859954800) restor
 availability: its public GET returns 200 with no-store and no-referrer. The previous deleted-Queue
 and isolated-routing failures no longer block the signup page.
 
-Real Google signup failed twice after the User completed provider sign-in. Provider start returns
+Real Google signup failed again after the User completed provider sign-in. Provider start returns
 200; proof-bearing status ends in `rejected`; the browser sends no completion or session-redemption
-request. Root cause remains unresolved. Callback diagnostics distinguish only closed failure codes;
+request. Production's structured callback diagnostic reports `token_transport_failed`. A real
+workerd probe reproduces the cause: OIDC selected `redirect: "error"`, which Workers rejects before
+network I/O. Access recovery signing-key retrieval had the same defect. The transport regressions
+validate both providers and Access signing-key fetch options with workerd and
+requires ordinary responses and redirects to remain observable without following them. The pending
+fix uses `manual`; successful real sign-in remains unverified. Callback diagnostics use closed codes;
 no protocol values, provider body, identity, or recovery material may enter the evidence.
+The fix passes 42 Google/Microsoft journey and workerd transport checks plus 21 outbound-policy tests.
+A local workerd probe with synthetic invalid values reaches Google's token endpoint (401) under
+`manual`; the same probe throws before network I/O under `error`.
 
 Remaining live checks: successful Google signup/returning login/denial; Microsoft personal and
 work/school signup/returning login/denial; real WhatsApp association and forwarded/expired handoff

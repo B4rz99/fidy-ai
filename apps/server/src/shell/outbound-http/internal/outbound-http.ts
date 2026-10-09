@@ -489,7 +489,7 @@ export const makeCloudflareAccessSigningKeysHttp = ({
           http,
           request: HttpClientRequest.get(`${issuer}/cdn-cgi/access/certs`),
           maximumResponseBytes: maximumWompiResponseBytes,
-          redirect: "error" as const,
+          redirect: "manual" as const,
         })
       : rejectRequest()
   );

@@ -47,7 +47,7 @@ export const oidcHttp = (
       return http
         .execute(prepared, maximumResponseBytes)
         .pipe(
-          Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }),
+          Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
           Effect.timeout("5 seconds")
         );
     },

@@ -93,7 +93,17 @@ fix manages the dedicated Access application, sole operator group and email-PIN 
 Core's audience from that application, and refuses release staging unless real provider resources
 and candidate bindings agree. Local release transport checks pass for missing applications, broad
 operator groups, wrong candidate audience and valid configuration. Deployment and real operator
-login remain pending; the local token cannot yet read the Access organization (403).
+login remain pending. Updated token permissions now allow reading the existing Access organization;
+its actual issuer corrected the Production secret. The sole approved operator is configured.
+[PR #1115](https://github.com/B4rz99/fidy-ai/pull/1115) passed every CI check and merged, but its
+[Production release](https://github.com/B4rz99/fidy-ai/actions/runs/37877209457) refused resource
+upload before Core/Ingress promotion. The generic apply error did not identify the provider refusal;
+closed category/code diagnostics are being added rather than attributing the failure to permissions.
+Core/Ingress still serve `9dea956d6b73e8f7f0aa7e483ce395ef51c24825` at 100%; the static web
+upload reached `58163e9c6f9b9345e552d9fbcfdaf8384685feb3`. Both public health endpoints return
+200 with the same contract digest; the signed-in app survives reload without recovery redisclosure.
+Twelve local Worker/D1 recovery/session checks and eighteen workflow/policy checks also pass.
+Direct Production cleanup observation remains unavailable: the existing CLI database read was refused.
 
 On the latest revision, both providers refuse missing/wrong proof cookies, duplicate state and
 cross-provider callbacks while preserving the legitimate pending attempt. Synthetic provider denial

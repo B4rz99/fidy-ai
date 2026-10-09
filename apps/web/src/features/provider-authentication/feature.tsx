@@ -1,6 +1,6 @@
 import { Option } from "effect";
 import type { AuthenticationProvider } from "@/transport/client";
-import { useAtomValue } from "@effect/atom-react";
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { AsyncResult } from "effect/reactivity";
 import { type JSX, useState } from "react";
@@ -31,14 +31,25 @@ const ConsentNotice = ({
   setAccepted,
 }: Readonly<{ accepted: boolean; setAccepted: (value: boolean) => void }>): JSX.Element => {
   const router = useRouter();
-  const disclosure = useAtomValue(
-    router.options.context.webAuthClient.query("providerAuthentication", "disclosure", {})
+  const query = router.options.context.webAuthClient.query(
+    "providerAuthentication",
+    "disclosure",
+    {}
   );
+  const disclosure = useAtomValue(query);
+  const refresh = useAtomRefresh(query);
   return (
     <>
       {AsyncResult.match(disclosure, {
         onInitial: () => <p>Cargando información de Consentimiento…</p>,
-        onFailure: () => <p>No pudimos cargar el Consentimiento. Vuelve a intentarlo más tarde.</p>,
+        onFailure: () => (
+          <>
+            <p role="alert">No pudimos cargar el Consentimiento.</p>
+            <Button variant="outline" disabled={disclosure.waiting} onClick={refresh}>
+              Volver a intentar
+            </Button>
+          </>
+        ),
         onSuccess: ({ value }) => (
           <>
             <p className="text-sm">

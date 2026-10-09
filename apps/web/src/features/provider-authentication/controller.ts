@@ -41,9 +41,16 @@ const awaitProviderVerification = (
     for (;;) {
       // Read status after observing closure: a response already in flight may predate completion.
       const popupClosed = input.popup.closed;
-      const result = yield* providerClient(client, input.provider).status({
-        payload: proof(pairing),
-      });
+      const result = yield* providerClient(client, input.provider)
+        .status({
+          payload: proof(pairing),
+        })
+        .pipe(
+          Effect.catchCauseIf(
+            (cause) => !Cause.hasInterruptsOnly(cause),
+            () => Effect.fail(input.popup.closed ? ("cancelled" as const) : ("rejected" as const))
+          )
+        );
       if (result.status === "verified") return;
       if (result.status === "awaiting_confirmation") {
         input.setState({ status: "confirming", code: result.associationCode });

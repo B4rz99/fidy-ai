@@ -189,13 +189,42 @@ The User verified direct Google retry on PR #1128's deployed revision
 left Fidy waiting. The regression now closes the actual external fixture popup and checks
 cancellation plus direct retry for both providers and intents. It also checks that an open
 popup remains pending with no opener, and that authenticated pages retain strict opener policy.
-Live verification of this popup-close fix remains pending.
+The User verified Google popup closure and direct retry on PR #1129's deployed revision
+`8616fcbada71b7ab42046f68fbf6e5f955b82a5b`. Microsoft popup closure remains a live check.
 
-Remaining live checks: deployed popup-close UX and Microsoft personal denial UI;
+Remaining live checks: Microsoft personal denial and popup-close UI;
 Microsoft work/school signup/returning login/denial (unavailable: the User has no work/school account);
 forwarded WhatsApp handoff refusal (expired confirmation and restart now pass); deployed server-side session deadlines and retention.
 Local fixture passes do not establish these Production results. The User approved
 personal Google, Microsoft and WhatsApp accounts and handles sign-in and confirmation.
+
+## Local coverage audit — 2026-10-09
+
+On merged revision `ac0946b5b8`, 147 Worker/D1 tests, 19 built-browser journeys and 13 web UI
+tests pass. The expanded Worker run includes authentication route guards, interrupted session
+operations, Core session-clock checks and mailbox-proof retention that the earlier command omitted:
+
+```sh
+bun run --cwd apps/server test:cloudflare provider-authentication onboarding/browser-authentication.test.ts browser-login/operations.test.ts recovery/support-recovery.test.ts web-authentication core-http/internal/session-clock.test.ts email-authentication --maxWorkers=1
+bun run --cwd apps/web test:browser 00-google-authentication.spec.ts microsoft-authentication.spec.ts browser-pairing.spec.ts --workers=1 --timeout=120000
+```
+
+The 14 CLI and 30 release/observability tests also pass; their source is unchanged by that revision.
+The first parallel run had timing failures. Isolated reruns and the final runs above pass with
+unchanged assertions; the browser run uses a longer overall test deadline.
+Forwarded WhatsApp second-browser refusal already has a passing local Worker/D1 regression.
+
+The three audit gaps now have five built-browser regressions: a delivered pairing 503 followed by
+explicit retry; failed Consent loading followed by reload and explicit acceptance; and stalled status
+polling with popup closure, explicit cancellation, or the ten-second request deadline. The stalled
+cases deliver a late response, check that cancellation/refusal persists without a Session, and then
+complete a fresh signup. Ingress, Core and D1 run locally; only delivered HTTP responses and the
+external provider UI are substituted. This does not reproduce Cloudflare account quota exhaustion.
+
+The regressions exposed and fixed missing Consent reload UI and generic refusal after popup closure
+during a status timeout. Consent loading and popup-close tests failed before their respective fixes.
+The expanded local browser run passes all 24 journeys, including both providers and browser pairing.
+Production verification of these two UI fixes remains pending deployment.
 
 [Provider configuration and live checks](../../../../../docs/operations/authentication-feature-map.md)
 and [recovery procedure](../../../../../docs/operations/support-recovery.md) contain operator details.

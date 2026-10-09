@@ -43,8 +43,8 @@ export const TransactionDateFilter = ({
         />
         Fecha
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-auto max-w-[calc(100vw-40px)]">
-        <PopoverTitle>Filtrar por fecha</PopoverTitle>
+      <PopoverContent align="end" className="w-auto max-w-[calc(100vw-8px)] p-0">
+        <PopoverTitle className="mx-2 mt-2">Filtrar por fecha</PopoverTitle>
         <Calendar
           mode="single"
           locale={es}

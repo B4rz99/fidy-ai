@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { JSX, ReactNode } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { FilterHorizontalIcon, Search01Icon } from "@hugeicons/core-free-icons";
-import { DateTime, Option } from "effect";
+import { Array, DateTime, Option } from "effect";
 import { Button } from "@/ui/components/button";
 import { Input } from "@/ui/components/input";
 import { TransactionFilterDropdown } from "./filter-dropdown";
@@ -145,7 +145,7 @@ const WorkspaceToolbar = ({
   </div>
 );
 const panelLocked = (panel: TransactionPanel): boolean =>
-  (panel._tag === "Bulk" && panel.status === "saving") ||
+  (panel._tag === "Bulk" && panel.stage === "editing" && panel.status === "saving") ||
   (panel._tag === "Capture" && panel.status === "saving") ||
   (panel._tag === "Detail" && panel.mode._tag === "Editing" && panel.mode.status === "saving");
 type PanelProps = WorkspaceProps &
@@ -238,13 +238,21 @@ const DetailPanel = ({
     />
   );
 };
+const beginBulkEditing = (
+  selected: ReadonlyArray<Transaction>,
+  onPanel: (panel: TransactionPanel) => void
+): void => {
+  if (Array.isReadonlyArrayNonEmpty(selected)) {
+    onPanel({ _tag: "Bulk", stage: "editing", transactions: selected, status: "idle" });
+  }
+};
 const BulkPanel = (
   props: PanelProps & Readonly<{ panel: Extract<TransactionPanel, { _tag: "Bulk" }> }>
 ): JSX.Element => {
   const { panel } = props;
-  const selected = props.transactions.filter((record) => panel.ids.includes(record.id));
   const close = (): void => props.onPanel({ _tag: "Summary" });
   if (panel.stage === "selecting") {
+    const selected = props.transactions.filter((record) => panel.ids.includes(record.id));
     return props.renderPanel(
       <section aria-label="Selección de transacciones" className="flex flex-col gap-5">
         <h2 className="text-xl font-semibold">Editar varias transacciones</h2>
@@ -262,7 +270,7 @@ const BulkPanel = (
         </ul>
         <Button
           disabled={selected.length === 0}
-          onClick={() => props.onPanel({ ...panel, stage: "editing" })}
+          onClick={() => beginBulkEditing(selected, props.onPanel)}
         >
           Editar selección
         </Button>
@@ -275,7 +283,7 @@ const BulkPanel = (
   return (
     <BulkTransactionCorrection
       renderForm={props.renderPanel}
-      transactions={selected}
+      transactions={panel.transactions}
       categories={props.categories}
       apiClient={props.apiClient}
       timeZone={props.currentUser.timeZone}
@@ -380,12 +388,17 @@ const panelEditing = (panel: TransactionPanel): boolean => {
   if (panel._tag === "Bulk") return panel.stage === "editing";
   return panel._tag === "Detail" && panel.mode._tag === "Editing";
 };
+const bulkIds = (panel: TransactionPanel): ReadonlyArray<string> => {
+  if (panel._tag !== "Bulk") return [];
+  if (panel.stage === "selecting") return panel.ids;
+  return panel.transactions.map((record) => record.id);
+};
 const bulkSelection = (
   panel: TransactionPanel,
   onPanel: (panel: TransactionPanel) => void
 ): React.ComponentProps<typeof TransactionLedger>["selection"] => ({
   active: panel._tag === "Bulk",
-  ids: panel._tag === "Bulk" ? panel.ids : [],
+  ids: bulkIds(panel),
   limit: maximumAtomicBatchCalls,
   onToggle: (id) => {
     if (panel._tag !== "Bulk" || panel.stage !== "selecting") return;
@@ -440,7 +453,7 @@ const WorkspaceContent = ({
             onPanel(
               panel._tag === "Bulk"
                 ? { _tag: "Summary" }
-                : { _tag: "Bulk", ids: [], stage: "selecting", status: "idle" }
+                : { _tag: "Bulk", ids: [], stage: "selecting" }
             )
           }
           selection={bulkSelection(panel, onPanel)}

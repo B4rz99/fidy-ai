@@ -1,3 +1,6 @@
+import type { Array } from "effect";
+import type { Transaction } from "./presentation";
+
 /** Interaction state shared by the panel, its controls, and the responsive sheet. */
 export type CorrectionStatus = "idle" | "saving" | "invalid" | "rejected" | "uncertain";
 export type CaptureStatus = "idle" | "saving" | "saved" | "failed" | "uncertain";
@@ -8,8 +11,13 @@ export type TransactionPanel =
   | Readonly<{ _tag: "Summary" }>
   | Readonly<{
       _tag: "Bulk";
+      stage: "selecting";
       ids: ReadonlyArray<string>;
-      stage: "selecting" | "editing";
+    }>
+  | Readonly<{
+      _tag: "Bulk";
+      stage: "editing";
+      transactions: Array.NonEmptyReadonlyArray<Transaction>;
       status: CorrectionStatus;
     }>
   | Readonly<{ _tag: "Capture"; status: CaptureStatus }>

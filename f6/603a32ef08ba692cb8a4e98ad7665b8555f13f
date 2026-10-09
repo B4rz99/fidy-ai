@@ -1,0 +1,70 @@
+apps/server/src/client.ts
+  s_b75995d26622a8::t_ce2e5fd9c6d352 14
+  s_b75995d26622a8::t_ea9772a28d67fd 13,15
+apps/web/src/features/transactions/journey.test.tsx
+  s_b75995d26622a8::t_ce2e5fd9c6d352 26,39,44,53-57,359-458
+  s_b75995d26622a8::t_770d4d92a49644 10,459-534
+apps/web/src/transport/client.ts
+  s_b75995d26622a8::t_ce2e5fd9c6d352 48
+  s_b75995d26622a8::t_46eb8d4ef1eb2c 47,49
+apps/web/src/features/transactions/feature.test.tsx
+  s_b75995d26622a8::t_ca8e354c16d565 372-373
+  s_b75995d26622a8::t_2c019888e8de58 2,371,375-407,487-488,490-491,504-535
+apps/web/src/features/transactions/date-filter.tsx
+  s_b75995d26622a8::t_6b3e6ce47dee73 1-22,24-32,44-46,70-71
+  s_b75995d26622a8::t_028b562226fa20 23,33-43,47-69
+apps/web/src/features/transactions/filter-dropdown.tsx
+  s_b75995d26622a8::t_6b3e6ce47dee73 1-17,19-41,43-45,47-50
+  s_b75995d26622a8::t_cf67b40b31077a 18,42,46
+apps/web/src/features/transactions/workspace.tsx
+  s_b75995d26622a8::t_6b3e6ce47dee73 5,9-12,53,84-86,89-91,93-94,120-122,125-128,130-131,148,241-296,298,314-315,318-319,343-348,370,372,378-403,424,439-446,479,485-486
+  s_b75995d26622a8::t_ef0ce557feee52 92,129
+apps/web/src/ui/components/calendar.tsx
+  s_b75995d26622a8::t_04d9d8f1697729 4,8,10-17,19-34,36,39-50,52,54-59,66,68,70-72,74-77,82-92,95,100-107,109-112,114-124,127-128,130-139,144-163,174-176,181-183,192-194,201-203
+  s_b75995d26622a8::t_ca8e354c16d565 5
+  s_b75995d26622a8::t_dc20af29b3c952 1-3,6-7,9,18,35,37-38,51,53,60-65,67,69,73,78-81,93-94,96-99,108,113,125-126,129,140-143,164-173,177-180,184-191,195-200,204
+apps/web/src/features/transactions/bulk-correction.tsx
+  s_b75995d26622a8::t_2d30d36b34b201 2-7,13-27,29-43,58,60,62,77-84,86-87,90-96,98-108,110,112-119,121-123,168-169,172,174-193,195-226,229-230,232-241,243,245-252,254,257-269,271-279,281-288,290-305
+  s_b75995d26622a8::t_ce2e5fd9c6d352 8-12,120
+  s_b75995d26622a8::t_0575f3aaa89ddc 1,28,44-57,59,61,63-76,85,88-89,97,109,111,124-167,170-171,173,194,227-228,231,242,244,253,255-256,270,280,289
+.oxlintrc.json
+  s_b75995d26622a8::t_2cc1a015210355 269
+DESIGN.md
+  s_b75995d26622a8::t_8b8ceb196846d2 413,421-427
+apps/web/package.json
+  s_b75995d26622a8::t_2bee25924c0b91 34,37
+apps/web/src/browser/crypto.ts
+  s_b75995d26622a8::t_4e09220073979d 1-20
+apps/web/src/features/pats/view.tsx
+  s_b75995d26622a8::t_15b4be012036bf 1,18
+apps/web/src/features/transactions/correction.tsx
+  s_b75995d26622a8::t_12d8aacab71c97 153
+apps/web/src/features/transactions/date-field.tsx
+  s_b75995d26622a8::t_fea981db572bca 12-18,34
+apps/web/src/features/transactions/ledger.tsx
+  s_b75995d26622a8::t_19f0a31a3398f0 21,53-58,60,65-69,71-93,95-96,98-118,125,159,269,278,284,362
+apps/web/src/features/transactions/panel-state.ts
+  s_b75995d26622a8::t_b96e45c8fa4d8b 9-14
+apps/web/src/index.css
+  s_b75995d26622a8::t_e67be094faba0f 240
+apps/web/src/ui/components/popover.tsx
+  s_b75995d26622a8::t_2d5dd96df1a5d4 1-72
+bun.lock
+  s_b75995d26622a8::t_43ba928933dab4 86,89,280-281,1090-1091,1564-1565
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f6603a32ef08ba692cb8a4e98ad7665b8555f13f",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -479,6 +479,7 @@ const runWhatsAppWork = (
           bucket: Option.fromUndefinedOr(env.STATEMENT_STAGING_BUCKET),
           inference: prepared.value.inference,
           signal: deadline.signal,
+          onAdmitted: deadline.onAdmitted,
           scheduleRecovery: owner.scheduleRecovery,
           deliver: (admission) => ({
             _tag: "WhatsApp",

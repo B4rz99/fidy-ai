@@ -340,6 +340,11 @@ Compaction, confirmation, bounded inference, canonical execution, delivery, and 
 A soft HTTP deadline cannot release serialization before owner settlement or durable recovery.
 Progress observation does not start a second Turn or bypass canonical tool policy.
 
+WhatsApp recovery restores that soft response lifecycle only after rechecking the exact Pending
+Turn, User and current channel association. Its original model deadline is unchanged. A Queue
+batch dispatches at most four User groups concurrently, retaining each User's message order and
+individual acknowledgment/retry decisions; the User coordinator still owns execution settlement.
+
 An accepted User entry and Pending Turn are retained atomically. A generated reply is a delivery
 proposal, not yet Transcript evidence. Agent commits exact assistant content and Completed status
 only from authenticated visible-delivery evidence: a browser receipt or the channel's authoritative

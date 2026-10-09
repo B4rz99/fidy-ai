@@ -7,6 +7,7 @@ import { WhatsAppWork } from "../contract";
 const outboxLimit = 32;
 const offerCooldownMs = 60_000;
 const serverFailureStatus = 500;
+const concurrentUsers = 4;
 const OutboxEntry = Schema.Struct({ user_id: UserId, turn_id: TranscriptTurnId });
 
 /** A missed publication is reoffered by cron; duplicate offers are harmless at the User owner. */
@@ -68,43 +69,61 @@ export const dispatchWhatsAppWork = ({
     if (failed) return yield* Effect.fail(undefined);
   });
 
-/** Queue redelivery is serialized by the same User coordinator as webhook admission. */
+type WorkMessage = Readonly<{
+  body: unknown;
+  ack: () => void;
+  retry: () => void;
+}>;
+type Coordinator = Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
+
+const receiveOwnedWork = (
+  { message, work }: Readonly<{ message: WorkMessage; work: WhatsAppWork }>,
+  coordinator: Coordinator
+): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> =>
+  Effect.gen(function* () {
+    const owner = coordinator.getByName(work.userId);
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(WhatsAppWork))(work);
+    const response = yield* Effect.exit(
+      Effect.tryPromise(() =>
+        owner.fetch(
+          new Request("https://coordinator.internal/hosted-turn/whatsapp/work", {
+            method: "POST",
+            body,
+          })
+        )
+      )
+    );
+    if (Exit.isFailure(response) || response.value.status >= serverFailureStatus) {
+      message.retry();
+      return;
+    }
+    message.ack();
+  });
+
+/** Bound unrelated User dispatch without reordering one User's messages; its coordinator owns execution serialization. */
 export const receiveWhatsAppWork = ({
   messages,
   coordinator,
 }: Readonly<{
-  messages: ReadonlyArray<
-    Readonly<{
-      body: unknown;
-      ack: () => void;
-      retry: () => void;
-    }>
-  >;
-  coordinator: Readonly<{ getByName: (name: string) => Pick<Fetcher, "fetch"> }>;
+  messages: ReadonlyArray<WorkMessage>;
+  coordinator: Coordinator;
 }>): Effect.Effect<void, Cause.UnknownError | Schema.SchemaError> =>
   Effect.gen(function* () {
+    const users = new Map<UserId, Array<Readonly<{ message: WorkMessage; work: WhatsAppWork }>>>();
     for (const message of messages) {
       const work = Schema.decodeUnknownOption(WhatsAppWork)(message.body);
       if (Option.isNone(work)) {
         message.ack();
         continue;
       }
-      const owner = coordinator.getByName(work.value.userId);
-      const body = yield* Schema.encodeEffect(Schema.fromJsonString(WhatsAppWork))(work.value);
-      const response = yield* Effect.exit(
-        Effect.tryPromise(() =>
-          owner.fetch(
-            new Request("https://coordinator.internal/hosted-turn/whatsapp/work", {
-              method: "POST",
-              body,
-            })
-          )
-        )
-      );
-      if (Exit.isFailure(response) || response.value.status >= serverFailureStatus) {
-        message.retry();
-        continue;
-      }
-      message.ack();
+      const owned = users.get(work.value.userId) ?? [];
+      owned.push({ message, work: work.value });
+      users.set(work.value.userId, owned);
     }
+    yield* Effect.forEach(
+      users.values(),
+      (owned) =>
+        Effect.forEach(owned, (entry) => receiveOwnedWork(entry, coordinator), { discard: true }),
+      { concurrency: concurrentUsers, discard: true }
+    );
   });

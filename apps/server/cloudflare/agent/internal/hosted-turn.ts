@@ -308,6 +308,7 @@ export const resumeWhatsAppTurn = ({
   deliver,
   signal,
   scheduleRecovery,
+  onAdmitted,
 }: Readonly<{
   db: D1Database;
   userId: UserId;
@@ -325,6 +326,7 @@ export const resumeWhatsAppTurn = ({
   ) => WhatsAppHostedDelivery;
   signal: AbortSignal;
   scheduleRecovery: (dueAtMs: number) => Promise<void>;
+  onAdmitted: (turnId: TranscriptTurnId) => void;
 }>): Effect.Effect<Response, HostedWorkFailure> =>
   Effect.gen(function* () {
     const work = yield* readWhatsAppPendingWork({ db, userId, turnId });
@@ -350,6 +352,7 @@ export const resumeWhatsAppTurn = ({
       });
       return interrupted();
     }
+    onAdmitted(turnId);
     const caller = yield* mintHostedStatementCaller({
       db,
       subject,

@@ -27,7 +27,10 @@ import {
   approvedWorkersAiModel,
 } from "../../src/shell/hosted-inference/contract";
 
-import { authenticateWhatsAppInbound } from "../../src/shell/channels/whatsapp/operations";
+import {
+  authenticateHostedStatus,
+  authenticateWhatsAppInbound,
+} from "../../src/shell/channels/whatsapp/operations";
 import {
   Cause,
   Clock,
@@ -1054,6 +1057,233 @@ const retainedChannelState = (db: D1Database): Promise<ReadonlyArray<unknown>> =
     ])
     .then((batches) => batches.map(({ results }) => results));
 
+it("keeps recovered WhatsApp inference alive past the soft deadline and settles one delivery", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const turnId = yield* Effect.tryPromise(() =>
+        queuedWhatsAppTurn(db, 0, "Respuesta pendiente")
+      );
+      const gate = promiseGate();
+      const started = promiseGate();
+      const model = vi.fn(() => {
+        started.release();
+        return gate.promise.then(() => reply("Respuesta recuperada"));
+      });
+      const provider = vi.fn(() =>
+        Promise.resolve(
+          Response.json({
+            messaging_product: "whatsapp",
+            messages: [{ id: "wamid.recovered.answer" }],
+          })
+        )
+      );
+      vi.stubGlobal("fetch", provider);
+      const owner = coordinatorFor(db, model);
+      const request = (): Request =>
+        new Request("https://coordinator.internal/hosted-turn/whatsapp/work", {
+          method: "POST",
+          body: encodeJson({ _tag: "HostedWhatsAppWork", userId: users[0], turnId }),
+        });
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+      const running = owner.fetch(request());
+      try {
+        yield* Effect.tryPromise(() => started.promise);
+        yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(25_001));
+        const response = yield* Effect.tryPromise(() => running);
+        expect(response.status).toBe(202);
+        expect(yield* Effect.tryPromise(() => response.json())).toEqual({
+          status: "processing",
+          turnId,
+        });
+        expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
+          { status: "pending", kind: "user", text: "Respuesta pendiente" },
+        ]);
+        expect(provider).not.toHaveBeenCalled();
+        gate.release();
+        expect((yield* Effect.tryPromise(() => owner.fetch(request()))).status).toBe(200);
+        expect(model).toHaveBeenCalledTimes(1);
+        expect(provider).toHaveBeenCalledTimes(1);
+        const delivery = yield* Schema.decodeUnknownEffect(
+          Schema.Struct({
+            correlation_token: HostedDeliveryCorrelationToken,
+          })
+        )(
+          yield* Effect.tryPromise(() =>
+            db
+              .prepare("SELECT correlation_token FROM hosted_whatsapp_delivery WHERE turn_id = ?")
+              .bind(turnId)
+              .first()
+          )
+        );
+        const rawBody = new TextEncoder().encode(
+          encodeJson({
+            message: {
+              id: "wamid.recovered.answer",
+              kapso: {
+                statuses: [
+                  {
+                    id: "wamid.recovered.answer",
+                    status: "delivered",
+                    timestamp: String(Math.floor(now() / 1_000)),
+                    biz_opaque_callback_data: delivery.correlation_token,
+                  },
+                ],
+              },
+            },
+            phone_number_id: "123456789",
+          })
+        );
+        const secret = "test-recovery-webhook-secret-32-characters";
+        const authenticated = yield* authenticateHostedStatus({
+          rawBody,
+          secret: Redacted.make(secret),
+          signature: new Bun.CryptoHasher("sha256", secret).update(rawBody).digest("hex"),
+          eventName: "whatsapp.message.delivered",
+          receivedAt: DateTime.makeUnsafe(now()),
+        });
+        const status = yield* Effect.tryPromise(() =>
+          owner.fetch(
+            new Request("https://coordinator.internal/hosted-turn/whatsapp/status", {
+              method: "POST",
+              body: encodeJson(
+                WhatsAppStatusAdmission.make({
+                  userId: UserId.make(users[0]),
+                  correlationToken: authenticated.correlationToken,
+                  businessPhoneNumberId: authenticated.businessPhoneNumberId,
+                  providerMessageId: authenticated.messageEvidence.providerMessageId,
+                  outcome: authenticated.outcome,
+                  occurredAtMs: DateTime.toEpochMillis(authenticated.occurredAt),
+                  receivedAtMs: now(),
+                })
+              ),
+            })
+          )
+        );
+        expect(status.status).toBe(200);
+        expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
+          { status: "completed", kind: "user", text: "Respuesta pendiente" },
+          { status: "completed", kind: "assistant", text: "Respuesta recuperada" },
+        ]);
+        expect((yield* Effect.tryPromise(() => owner.fetch(request()))).status).toBe(200);
+        expect(model).toHaveBeenCalledTimes(1);
+        expect(provider).toHaveBeenCalledTimes(1);
+      } finally {
+        gate.release();
+        vi.useRealTimers();
+      }
+    })
+  ));
+
+it("times out recovered inference at the original Turn deadline rather than granting a fresh budget", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(() => setup());
+      const turnId = yield* Effect.tryPromise(() =>
+        queuedWhatsAppTurn(db, 0, "Respuesta pendiente")
+      );
+      const original = yield* Effect.tryPromise(() =>
+        db.prepare("SELECT started_at_ms FROM hosted_turns WHERE id = ?").bind(turnId).first()
+      );
+      const gate = promiseGate();
+      const started = promiseGate();
+      const model = vi.fn(() => {
+        started.release();
+        return gate.promise.then(() => reply());
+      });
+      const provider = vi.fn(() => Promise.resolve(new Response(null, { status: 500 })));
+      vi.stubGlobal("fetch", provider);
+      const owner = coordinatorFor(db, model);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+      try {
+        yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(100_000));
+        const running = owner.fetch(
+          new Request("https://coordinator.internal/hosted-turn/whatsapp/work", {
+            method: "POST",
+            body: encodeJson({ _tag: "HostedWhatsAppWork", userId: users[0], turnId }),
+          })
+        );
+        yield* Effect.tryPromise(() => started.promise);
+        yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(19_000));
+        expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
+          { status: "pending", kind: "user" },
+        ]);
+        yield* Effect.tryPromise(() => vi.advanceTimersByTimeAsync(2_001));
+        expect((yield* Effect.tryPromise(() => running)).status).toBe(503);
+        expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
+          { status: "failed", kind: "user", failure_reason: "HostedInferenceTimedOut" },
+          { status: "failed", kind: "failed", marker: "HostedInferenceTimedOut" },
+        ]);
+        expect(
+          yield* Effect.tryPromise(() =>
+            db.prepare("SELECT started_at_ms FROM hosted_turns WHERE id = ?").bind(turnId).first()
+          )
+        ).toEqual(original);
+        expect(model).toHaveBeenCalledTimes(1);
+        expect(provider).not.toHaveBeenCalled();
+      } finally {
+        gate.release();
+        vi.useRealTimers();
+      }
+    })
+  ));
+
+it.each([
+  { kind: "missing", status: 200, terminal: "pending" },
+  { kind: "association-revoked", status: 503, terminal: "interrupted" },
+  { kind: "expired", status: 503, terminal: "failed" },
+] as const)(
+  "does not infer or deliver $kind WhatsApp recovery work",
+  ({ kind, status, terminal }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* Effect.tryPromise(() => setup());
+        const admitted = yield* Effect.tryPromise(() =>
+          queuedWhatsAppTurn(db, 0, "Respuesta pendiente")
+        );
+        const turnId = kind === "missing" ? TranscriptTurnId.make(newId()) : admitted;
+        if (kind === "association-revoked") {
+          yield* Effect.tryPromise(() =>
+            db.prepare("DELETE FROM whatsapp_identities WHERE user_id = ?").bind(users[0]).run()
+          );
+        }
+        const before = yield* Effect.tryPromise(() => retainedChannelState(db));
+        const model = vi.fn(() => Promise.resolve(reply()));
+        const provider = vi.fn(() => Promise.resolve(new Response(null, { status: 500 })));
+        vi.stubGlobal("fetch", provider);
+        const owner = coordinatorFor(db, model);
+        vi.useFakeTimers({ toFake: ["Date"] });
+        try {
+          if (kind === "expired") vi.setSystemTime(now() + 121_001);
+          const response = yield* Effect.tryPromise(() =>
+            owner.fetch(
+              new Request("https://coordinator.internal/hosted-turn/whatsapp/work", {
+                method: "POST",
+                body: encodeJson({ _tag: "HostedWhatsAppWork", userId: users[0], turnId }),
+              })
+            )
+          );
+          expect(response.status).toBe(status);
+          expect(model).not.toHaveBeenCalled();
+          expect(provider).not.toHaveBeenCalled();
+          if (kind === "missing") {
+            expect(yield* Effect.tryPromise(() => retainedChannelState(db))).toEqual(before);
+          } else {
+            expect((yield* Effect.tryPromise(() => retained(db, users[0]))).results).toMatchObject([
+              { status: terminal, kind: "user" },
+              {
+                status: terminal,
+                kind: terminal,
+              },
+            ]);
+          }
+        } finally {
+          vi.useRealTimers();
+        }
+      })
+    )
+);
+
 it("rejects crossed User and Turn queue identities before inference, delivery or any retained change", () =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -2072,6 +2302,7 @@ const resumeInterruptedStatement = ({
       )
     );
     const resumed = yield* resumeWhatsAppTurn({
+      onAdmitted: () => {},
       db,
       userId: UserId.make(users[0]),
       turnId: pending.id,

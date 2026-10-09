@@ -837,7 +837,8 @@ it("refuses late delivery for a rejected disclosure without changing its replace
         )(body).pipe(Effect.map((message) => message.biz_opaque_callback_data));
       const deliver = (
         correlation: string,
-        id: string
+        id: string,
+        occurredAt = timestamp
       ): Effect.Effect<Response, Cause.UnknownError | Schema.SchemaError> =>
         sendPacket(
           journey,
@@ -849,7 +850,7 @@ it("refuses late delivery for a rejected disclosure without changing its replace
                   {
                     id,
                     status: "delivered",
-                    timestamp: String(timestamp),
+                    timestamp: String(occurredAt),
                     biz_opaque_callback_data: correlation,
                   },
                 ],
@@ -862,12 +863,19 @@ it("refuses late delivery for a rejected disclosure without changing its replace
       expect((yield* sendChat(journey, "Hola")).status).toBe(200);
       const rejectedToken = yield* token(outbound[0] ?? "");
       expect((yield* deliver(rejectedToken, "wamid.rejected")).status).toBe(409);
-      expect((yield* sendChat(journey, "Hola", { timestamp })).status).toBe(200);
+      const replacementTimestamp = Math.floor((yield* Clock.currentTimeMillis) / 1000) + 1;
+      expect((yield* sendChat(journey, "Hola", { timestamp: replacementTimestamp })).status).toBe(
+        200
+      );
       const replacementToken = yield* token(outbound[1] ?? "");
       expect(replacementToken).not.toBe(rejectedToken);
       expect((yield* deliver(rejectedToken, "wamid.rejected")).status).toBe(409);
-      expect((yield* deliver(replacementToken, "wamid.replacement")).status).toBe(200);
-      expect((yield* deliver(replacementToken, "wamid.replacement")).status).toBe(200);
+      expect(
+        (yield* deliver(replacementToken, "wamid.replacement", replacementTimestamp)).status
+      ).toBe(200);
+      expect(
+        (yield* deliver(replacementToken, "wamid.replacement", replacementTimestamp)).status
+      ).toBe(200);
       expect(provider).toHaveBeenCalledTimes(2);
     })
   ));

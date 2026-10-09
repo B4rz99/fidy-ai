@@ -76,7 +76,7 @@ alongside dedicated SupportRecoveryCase coverage; both providers retain return l
 and consent revocation. Only mocked polling/email timers advance the browser clock; native
 Core security deadlines retain real time.
 
-The first-card browser journey reads the actual Core response before navigation can discard
+The reused-card and first-card browser journeys read the actual Core response before navigation can discard
 its body, preserving pending payment and final real collection assertions. The OAuth in-flight
 deadline fixture drains the expired response and awaits native read settlement before its
 follow-up request. SQL-fencing, real deadlines and follow-up success remain; neither fix adds
@@ -125,6 +125,15 @@ case/timing artifacts remain. An intentional-failure probe verified failed-case 
 normal failure diagnostics are retained; passing output is omitted. The preceding green run
 printed approximately eight megabytes across 11,156 INFO entries. The setting removes that
 output, but its effect on full CI must be measured independently of the fixture changes.
+
+Change selection keeps full commit history and all trees but uses checkout's `blob:none` filter.
+Its complete `base...head` path diff has `--no-renames`, so it does not require historical file
+bodies. The current checkout still materializes its source files. No changed-file API, pagination
+limit or shallow merge-base fallback is introduced.
+
+Reused-card submission uses the same actual-response capture helper as first-card submission,
+reading Core's body before allowing browser navigation to discard it. All 11 real-Core browser
+journeys pass locally; no retry or timeout changes.
 
 ## Adapter regression follow-up: #1066
 

@@ -34,7 +34,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          # Path-only, no-rename diff needs full history and trees, not historical file bodies.
           fetch-depth: 0
+          filter: blob:none
           persist-credentials: false
       - uses: ./.github/actions/bun-runtime
       - name: Plan checks from the complete PR diff

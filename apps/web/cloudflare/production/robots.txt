@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /app/
+Disallow: /auth/
+Disallow: /settings/
+Disallow: /connections/
+Disallow: /terminos
+Sitemap: https://app.fidyapp.com/sitemap.xml

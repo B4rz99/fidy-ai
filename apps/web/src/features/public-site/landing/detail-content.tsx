@@ -1,3 +1,5 @@
+import { Footer } from "./footer";
+import { AgentConnectionGuide } from "./agent-connection-guide";
 import { ThemeToggle } from "./theme";
 import { logoUrl } from "./assets";
 import { LaunchButton } from "./registration";
@@ -109,14 +111,7 @@ export const detailViews = [
         <p>{"Conversa con Fidy, explora la web o trabaja con tu propio agente."}</p>
         <LaunchButton dark arrow />
       </section>
-      <footer className="footer">
-        <div className="wrap">
-          <a className="logo" href="/" aria-label="Fidy, inicio">
-            <img src={logoUrl} alt="fidy" />
-          </a>
-          <span>{"Finanzas personales para ti y tus agentes."}</span>
-        </div>
-      </footer>
+      <Footer />
     </main>
   </>,
   <>
@@ -282,14 +277,7 @@ export const detailViews = [
         <p>{"Conversa con Fidy, explora la web o trabaja con tu propio agente."}</p>
         <LaunchButton dark arrow />
       </section>
-      <footer className="footer">
-        <div className="wrap">
-          <a className="logo" href="/" aria-label="Fidy, inicio">
-            <img src={logoUrl} alt="fidy" />
-          </a>
-          <span>{"Finanzas personales para ti y tus agentes."}</span>
-        </div>
-      </footer>
+      <Footer />
     </main>
   </>,
   <>
@@ -421,14 +409,7 @@ export const detailViews = [
         <p>{"Conversa con Fidy, explora la web o trabaja con tu propio agente."}</p>
         <LaunchButton dark arrow />
       </section>
-      <footer className="footer">
-        <div className="wrap">
-          <a className="logo" href="/" aria-label="Fidy, inicio">
-            <img src={logoUrl} alt="fidy" />
-          </a>
-          <span>{"Finanzas personales para ti y tus agentes."}</span>
-        </div>
-      </footer>
+      <Footer />
     </main>
   </>,
   <>
@@ -601,14 +582,7 @@ export const detailViews = [
         <p>{"Conversa con Fidy, explora la web o trabaja con tu propio agente."}</p>
         <LaunchButton dark arrow />
       </section>
-      <footer className="footer">
-        <div className="wrap">
-          <a className="logo" href="/" aria-label="Fidy, inicio">
-            <img src={logoUrl} alt="fidy" />
-          </a>
-          <span>{"Finanzas personales para ti y tus agentes."}</span>
-        </div>
-      </footer>
+      <Footer />
     </main>
   </>,
   <>
@@ -753,14 +727,7 @@ export const detailViews = [
         <p>{"Conversa con Fidy, explora la web o trabaja con tu propio agente."}</p>
         <LaunchButton dark arrow />
       </section>
-      <footer className="footer">
-        <div className="wrap">
-          <a className="logo" href="/" aria-label="Fidy, inicio">
-            <img src={logoUrl} alt="fidy" />
-          </a>
-          <span>{"Finanzas personales para ti y tus agentes."}</span>
-        </div>
-      </footer>
+      <Footer />
     </main>
   </>,
   <>
@@ -785,13 +752,13 @@ export const detailViews = [
         </h1>
         <p>
           {
-            "Fidy está construido para que tus propios agentes sean una forma de usar el producto. Conéctalos mediante MCP, CLI o API para trabajar con tus transacciones, presupuestos y hallazgos."
+            "Fidy está construido para que tus propios agentes sean una forma de usar el producto. Consulta cómo conectar MCP, CLI o API y qué está disponible antes de autorizar acceso a tus transacciones, presupuestos y hallazgos."
           }
         </p>
         <div className="actions">
           <LaunchButton dark={false} arrow />
-          <a className="textlink" href="#vista">
-            {"Ver el ejemplo ↓"}
+          <a className="textlink" href="#conectar">
+            {"Ver guía de conexión ↓"}
           </a>
         </div>
       </section>
@@ -871,6 +838,7 @@ export const detailViews = [
           </article>
         </div>
       </section>
+      <AgentConnectionGuide />
       <section className="detail-explore wrap">
         <h2>{"Sigue explorando."}</h2>
         <div>
@@ -905,14 +873,7 @@ export const detailViews = [
         <p>{"Conversa con Fidy, explora la web o trabaja con tu propio agente."}</p>
         <LaunchButton dark arrow />
       </section>
-      <footer className="footer">
-        <div className="wrap">
-          <a className="logo" href="/" aria-label="Fidy, inicio">
-            <img src={logoUrl} alt="fidy" />
-          </a>
-          <span>{"Finanzas personales para ti y tus agentes."}</span>
-        </div>
-      </footer>
+      <Footer />
     </main>
   </>,
 ];

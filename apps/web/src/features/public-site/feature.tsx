@@ -3,6 +3,8 @@ import { FeatureDetail } from "@/features/public-site/landing/feature-detail";
 import { PublicHome } from "./home";
 import { PublicSiteLayout } from "./layout";
 import { PublicSiteNotFound } from "./not-found";
+import { CookiesPolicy } from "@/features/public-site/legal/cookies";
+import { Terms } from "@/features/public-site/legal/terms";
 import { PrivacyPolicy } from "@/features/public-site/legal/privacy-policy";
 
 /**
@@ -25,6 +27,16 @@ export const createPublicSiteRoute = <TRootRoute extends AnyRootRoute>(rootRoute
     path: "/politica",
     component: PrivacyPolicy,
   });
+  const cookiesRoute = createRoute({
+    getParentRoute: () => publicSiteRoute,
+    path: "/cookies",
+    component: CookiesPolicy,
+  });
+  const termsRoute = createRoute({
+    getParentRoute: () => publicSiteRoute,
+    path: "/terminos",
+    component: Terms,
+  });
   const notFoundRoute = createRoute({
     getParentRoute: () => publicSiteRoute,
     path: "$",
@@ -45,5 +57,12 @@ export const createPublicSiteRoute = <TRootRoute extends AnyRootRoute>(rootRoute
       component: () => <FeatureDetail index={index} />,
     })
   );
-  return publicSiteRoute.addChildren([homeRoute, policyRoute, notFoundRoute, ...detailRoutes]);
+  return publicSiteRoute.addChildren([
+    homeRoute,
+    policyRoute,
+    cookiesRoute,
+    termsRoute,
+    notFoundRoute,
+    ...detailRoutes,
+  ]);
 };

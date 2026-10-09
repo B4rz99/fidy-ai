@@ -78,6 +78,26 @@ describe("production static release identity", () => {
     })
   );
 
+  it.effect(
+    "accepts only the named public discovery files without allowing arbitrary text dumps",
+    () =>
+      Effect.gen(function* () {
+        const directory = yield* productionOutput();
+        for (const file of ["robots.txt", "sitemap.xml", "agentes.txt"]) {
+          yield* Effect.tryPromise(() => Bun.write(join(directory, file), "public discovery"));
+        }
+        yield* Effect.tryPromise(() => expect(validate(directory)).resolves.toBeUndefined());
+        yield* Effect.tryPromise(() =>
+          Bun.write(join(directory, "private.txt"), "not a public artifact")
+        );
+        yield* Effect.tryPromise(() =>
+          expect(validate(directory)).rejects.toThrow(
+            "forbidden production artifact path: private.txt"
+          )
+        );
+      })
+  );
+
   it.effect("rejects an unhashed browser asset", () =>
     Effect.gen(function* () {
       const directory = yield* productionOutput("app.js");

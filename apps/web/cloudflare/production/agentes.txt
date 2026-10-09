@@ -1,0 +1,48 @@
+Fidy — Conecta tu agente
+https://app.fidyapp.com/funciones/agentes#conectar
+
+Fidy es una aplicación de finanzas personales para Colombia. Organiza las
+transacciones que registras; no es un banco ni ejecuta transferencias por ti.
+
+MCP remoto (HTTP): https://api.fidyapp.com/mcp
+Autorización: inicia la conexión desde tu cliente y aprueba el acceso en
+https://app.fidyapp.com. No pegues contraseñas, tokens ni códigos en el chat.
+
+Claude Code, solo lectura:
+claude mcp add-json fidy '{"type":"http","url":"https://api.fidyapp.com/mcp","oauth":{"scopes":"read"}}'
+Abre /mcp y elige autenticar Fidy.
+
+Codex, solo lectura:
+codex mcp add fidy --url https://api.fidyapp.com/mcp
+codex mcp login fidy --scopes read
+
+Las versiones verificadas en pruebas locales son Claude Code 2.1.289 y
+Codex 0.160.0. Otros clientes y versiones requieren verificación.
+
+Permisos: read (consultar), write (crear y modificar), dashboard (tablero).
+Duración: 7, 30, 90 o 365 días. Empieza con read y 7 días si solo consultas.
+El nombre del cliente no certifica su identidad. Las acciones sensibles
+requieren confirmación nativa compatible. La respuesta del cliente autorizado
+no certifica presencia humana. Cancelar la autorización no concede acceso.
+
+CLI: requiere acceso al repositorio de Fidy y su Bun fijado; no hay un paquete
+público de instalación documentado. Desde el proyecto instalado:
+bun run cli login --recipient 'Mi agente' --scopes read --lifetime 7
+bun run cli status --json
+bun run cli commands --json
+bun run cli transactions listTransactions --help
+La CLI guarda su acceso en el almacén de credenciales del sistema.
+
+API: https://api.fidyapp.com
+Crea un PAT limitado en https://app.fidyapp.com/settings/pats.
+Ejemplo de consulta: GET /transactions?currency=COP
+Autenticación: encabezado Authorization: Bearer con tu PAT, nunca en la URL.
+Conserva el token en un gestor de secretos. /openapi.json no es público.
+
+Revoca MCP en https://app.fidyapp.com/settings/agents.
+Revoca PAT en https://app.fidyapp.com/settings/pats.
+Cerrar sesión no revoca agentes; revocar no deshace cambios completados.
+
+Privacidad: https://app.fidyapp.com/politica
+Cookies y almacenamiento: https://app.fidyapp.com/cookies
+Contacto: obarboza@fidyapp.com

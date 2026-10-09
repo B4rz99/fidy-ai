@@ -423,6 +423,18 @@ describe("Production topology contract", () => {
     });
   });
 
+  it("limits browser-signature exemptions to safe reads of explicit public marketing paths", () => {
+    const rule = edgeSecurityPolicy.rulesets.customFirewall.rules[3];
+    expect(rule).toMatchObject({
+      action: "skip",
+      actionParameters: { products: ["bic", "uaBlock"] },
+      expression:
+        '(http.host in {"fidyapp.com" "app.fidyapp.com"} and http.request.method in {"GET" "HEAD"} and http.request.uri.path in {"/" "/politica" "/terminos" "/cookies" "/robots.txt" "/agentes.txt" "/sitemap.xml" "/funciones/transacciones" "/funciones/presupuestos" "/funciones/asistente" "/funciones/tablero" "/funciones/insights" "/funciones/agentes"})',
+    });
+    expect(rule).not.toHaveProperty("actionParameters.phases");
+    expect(rule?.expression).not.toMatch(/auth|settings|transactions|api\.fidyapp/u);
+  });
+
   it("permits declared canonical methods through production ingress for Worker-level route enforcement", () => {
     expect(edgeSecurityPolicy.rulesets.customFirewall.rules[2]).toMatchObject({
       action: "block",

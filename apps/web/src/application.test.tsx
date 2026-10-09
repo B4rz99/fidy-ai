@@ -246,17 +246,57 @@ describe("public web application routes", () => {
             })
           )
         ).toBeVisible();
-        expect(screen.getByText("policy-2026-09-28-cloudflare-providers")).toBeVisible();
+        expect(screen.getByText("policy-2026-10-09-browser-agents")).toBeVisible();
         expect(screen.getByText(/Fidy usa a Kapso y Meta/iu)).toBeVisible();
         expect(screen.getByText(/sin un plazo de eliminación automática/iu)).toBeVisible();
         expect(screen.getByText(/fuera de Colombia/iu)).toBeVisible();
-        expect(screen.queryByText(/cuentas|saldos/iu)).not.toBeInTheDocument();
+        expect(
+          screen.queryByText(/conectamos automáticamente tus bancos/iu)
+        ).not.toBeInTheDocument();
         expect(
           screen.queryByRole("link", { name: /términos de servicio/iu })
         ).not.toBeInTheDocument();
       })
     ));
+});
 
+describe("public legal draft and storage routes", () => {
+  afterEach(resetApplicationTest);
+  it("explains session and payment storage at the public cookies route", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* fromPromise(renderRoute("/cookies"));
+        expect(
+          yield* fromPromise(
+            screen.findByRole("heading", { level: 1, name: "Cookies y almacenamiento" })
+          )
+        ).toBeVisible();
+        expect(screen.getByText("__Host-fidy_session")).toBeVisible();
+        expect(screen.getByText("fidy.billing-email.*")).toBeVisible();
+        expect(screen.getByText(/30 días desde su emisión/u)).toBeVisible();
+      })
+    ));
+
+  it("labels the proposed terms as not yet in force", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        yield* fromPromise(renderRoute("/terminos"));
+        expect(
+          yield* fromPromise(
+            screen.findByRole("heading", { level: 1, name: "Términos de servicio de Fidy" })
+          )
+        ).toBeVisible();
+        expect(screen.getByText(/No está vigente/u)).toBeVisible();
+        expect(document.head.querySelector('meta[name="robots"]')).toHaveAttribute(
+          "content",
+          "noindex"
+        );
+      })
+    ));
+});
+
+describe("public pairing route", () => {
+  afterEach(resetApplicationTest);
   it("does not start browser pairing merely by opening its route", () =>
     Effect.runPromise(
       Effect.gen(function* () {

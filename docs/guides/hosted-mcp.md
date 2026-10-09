@@ -1,9 +1,9 @@
 # Conectar tu agente con Fidy
 
-**Acceso todavía en preparación.** Esta guía describe el flujo previsto para Claude Code y Codex.
-La URL pública y sus controles de acceso se verificaron; la experiencia completa de conexión de
-estas versiones todavía necesita la prueba controlada indicada en el
-[informe de verificación](../research/hosted-mcp-release-990.md). No habilita el acceso de usuarios.
+MCP remoto está disponible para conectar agentes con Fidy. El responsable del producto confirmó
+su prueba en Producción el 9 de octubre de 2026. La evidencia automatizada y su alcance histórico
+siguen documentados en el [informe de verificación](../research/hosted-mcp-release-990.md).
+Esta actualización no amplía las versiones o clientes cubiertos por las pruebas automatizadas.
 
 ## Configuración
 
@@ -29,7 +29,7 @@ codex mcp add fidy --url https://api.fidyapp.com/mcp
 codex mcp login fidy --scopes read,write,dashboard
 ```
 
-Estos comandos configuran el cliente; no certifican que la conexión completa esté disponible.
+Estos comandos configuran el cliente y comienzan su autorización en Fidy.
 Las versiones con evidencia de confirmación nativa son Claude Code **2.1.289** y Codex **0.160.0**.
 Estas versiones también completaron registro dinámico e inicio de sesión con la autoridad de
 Fidy en una prueba local aislada; eso todavía no certifica el recorrido en Producción. Las versiones nuevas necesitan verificación. Pi, OpenCode, aplicaciones de escritorio y

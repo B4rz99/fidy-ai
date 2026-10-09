@@ -253,6 +253,8 @@
         "apps/web/src/ui/class-names.ts",
         "apps/web/src/ui/components/{alert,badge,button,checkbox,empty,input,progress,toggle-group}.tsx",
         "apps/web/e2e/{browser-pairing,static-shell}.spec.ts",
+        "apps/web/public-preview/landing.spec.ts",
+        "apps/web/playwright.public-preview.config.ts",
         "apps/web/{playwright,vite,vitest}.config.ts",
         "apps/web/src/testing/setup.ts"
       ],
@@ -262,7 +264,9 @@
     },
     // Vite and Vitest require default-exported configuration objects.
     {
-      "files": ["apps/web/{playwright,playwright.cli,playwright.oauth,vite,vitest}.config.ts"],
+      "files": [
+        "apps/web/{playwright,playwright.cli,playwright.oauth,playwright.public-preview,vite,vitest}.config.ts"
+      ],
       "rules": {
         "import/no-default-export": "off"
       }

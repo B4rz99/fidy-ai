@@ -22,6 +22,7 @@ import {
   type Category,
   type CurrentUser,
   type Transaction,
+  formatOccurrence,
   presentTransactionRows,
 } from "./presentation";
 
@@ -185,8 +186,10 @@ const CapturePanel = ({
     status={panel.status}
     onStatus={(status) => onPanel({ _tag: "Capture", status })}
     onCheckHistory={props.onRefresh}
-    onCreated={() => {
-      toast.success("Transacción registrada");
+    onCreated={(transaction) => {
+      toast.success("Transacción registrada", {
+        description: `${Option.getOrElse(transaction.counterparty, () => "Contraparte no identificada")} · ${formatOccurrence({ locale: props.currentUser.locale, timeZone: props.currentUser.timeZone, occurredAt: transaction.occurredAt })}`,
+      });
       onPanel({ _tag: "Summary" });
       props.onRefresh();
     }}
@@ -250,7 +253,8 @@ const BulkPanel = (
   const { panel } = props;
   const close = (): void => props.onPanel({ _tag: "Summary" });
   if (panel.stage === "selecting") {
-    const selected = props.transactions.filter((record) => panel.ids.includes(record.id));
+    const selectedIds = new Set(panel.ids);
+    const selected = props.transactions.filter((record) => selectedIds.has(record.id));
     return props.renderPanel(
       <section aria-label="Selección de transacciones" className="flex flex-col gap-5">
         <h2 className="text-xl font-semibold">Editar varias transacciones</h2>

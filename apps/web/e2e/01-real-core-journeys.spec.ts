@@ -341,7 +341,9 @@ test("renders a seeded Category identity from real public and Core routes", ({ p
       expect(captured.status()).toBe(created);
       yield* fromPlaywright(page.goto("/app/transactions"));
       yield* fromPlaywright(expect(page.getByText("La Cocina real").first()).toBeVisible());
-      yield* fromPlaywright(expect(page.getByText("Restaurantes").first()).toBeVisible());
+      yield* fromPlaywright(
+        expect(page.getByText("Restaurantes").filter({ visible: true }).first()).toBeVisible()
+      );
     })
   ));
 test("a browser cannot render or fetch another User's private Transaction through public routes", ({

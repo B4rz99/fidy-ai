@@ -1,5 +1,6 @@
 import { BigDecimal, Option } from "effect";
 import type { JSX } from "react";
+import { useMemo } from "react";
 import { formatMoney } from "@/transport/money";
 import { type Transaction, formatOccurrence } from "./presentation";
 
@@ -34,9 +35,9 @@ const currencyFigures = (
       money: {
         currency,
         amount: BigDecimal.sumAll(
-          transactions
-            .filter((record) => record.direction === direction)
-            .map((record) => record.money.amount)
+          transactions.flatMap((record) =>
+            record.direction === direction ? [record.money.amount] : []
+          )
         ),
       },
     });
@@ -84,6 +85,10 @@ export const TransactionSummary = (props: SummaryProps): JSX.Element => {
     new Set(props.transactions.map((transaction) => transaction.money.currency))
   );
   const range = dateRange(props);
+  const currencyNames = useMemo(
+    () => new Intl.DisplayNames(props.locale, { type: "currency" }),
+    [props.locale]
+  );
   return (
     <section aria-label="Resumen de transacciones" className="flex flex-col gap-5">
       <div>
@@ -108,7 +113,7 @@ export const TransactionSummary = (props: SummaryProps): JSX.Element => {
         <div key={currency} className="border-t pt-4">
           {currencies.length > 1 ? (
             <h3 className="text-xs font-semibold tracking-wider text-muted-foreground">
-              {new Intl.DisplayNames(props.locale, { type: "currency" }).of(currency)}
+              {currencyNames.of(currency)}
             </h3>
           ) : null}
           <dl>

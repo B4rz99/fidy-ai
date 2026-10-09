@@ -50,7 +50,7 @@ it("renders the complete canonical report, exact Money and untrusted labels as t
   expect(within(screen.getByRole("list")).getAllByRole("listitem")).toHaveLength(itemCount);
   expect(screen.getByText("32 <script>histórico</script> · mensual")).toBeVisible();
   expect(container.querySelector("script")).toBeNull();
-  expect(screen.getAllByText(/COP.*9.*007.*199.*254.*740.*993/)).toHaveLength(itemCount);
+  expect(screen.getAllByText(/\$.*9.*007.*199.*254.*740.*993/)).toHaveLength(itemCount);
   expect(screen.getByText(/Estos patrones no indican/)).toBeVisible();
   expect(query.read).toHaveBeenCalledWith("insights", "getRecurringDigestReport", {
     params: { id: report.insightEventId },

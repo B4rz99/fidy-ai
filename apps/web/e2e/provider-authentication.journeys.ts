@@ -340,7 +340,7 @@ const signupHistoryJourney = Effect.fn(function* (
   );
   yield* Effect.tryPromise(() => page.goto("/app/transactions"));
   yield* Effect.tryPromise(() =>
-    expect(page.getByText("Aún no hay transacciones este mes")).toBeVisible()
+    expect(page.getByText("No hay transacciones para mostrar")).toBeVisible()
   );
 });
 
@@ -368,7 +368,7 @@ const staleRecoverySessionJourney = Effect.fn(function* (
   );
   yield* Effect.tryPromise(() => page.goto("/app/transactions"));
   yield* Effect.tryPromise(() =>
-    expect(page.getByText("Aún no hay transacciones este mes")).toBeVisible()
+    expect(page.getByText("No hay transacciones para mostrar")).toBeVisible()
   );
 });
 const expectSignupNotice = Effect.fn(function* (page: Page) {
@@ -444,7 +444,7 @@ export const signupJourney = ({
       yield* Effect.tryPromise(() => expect(page).toHaveURL(/\/app\/transactions$/u));
       yield* Effect.tryPromise(() => page.reload());
       yield* Effect.tryPromise(() =>
-        expect(page.getByText("Aún no hay transacciones este mes")).toBeVisible()
+        expect(page.getByText("No hay transacciones para mostrar")).toBeVisible()
       );
       expect(yield* Effect.tryPromise(() => page.evaluate(retainedSecretCount))).toBe(0);
       yield* signupHistoryJourney(configuration, page);

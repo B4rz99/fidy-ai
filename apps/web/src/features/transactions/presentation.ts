@@ -97,6 +97,12 @@ export const presentTransactionRows = ({
   transactions: ReadonlyArray<TransactionPresentationRecord>;
 }>): ReadonlyArray<TransactionListRow> => {
   const categoryLabels = new Map(categories.map(({ id, label }) => [id, label]));
+  const dateFormatter = new Intl.DateTimeFormat(locale, {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone,
+  });
   return transactions.map((transaction) => ({
     id: transaction.id,
     categoryId: transaction.categoryId,
@@ -105,12 +111,7 @@ export const presentTransactionRows = ({
     direction: transaction.direction,
     transactionTypeLabel: transaction.direction === "inflow" ? "Ingreso" : "Gasto",
     money: transaction.money,
-    dateLabel: new Intl.DateTimeFormat(locale, {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-      timeZone,
-    }).format(transaction.occurredAt.epochMilliseconds),
+    dateLabel: dateFormatter.format(transaction.occurredAt.epochMilliseconds),
     moneyText: formatMoney({ locale, money: transaction.money }),
     occurredOnText: formatOccurrence({ locale, occurredAt: transaction.occurredAt, timeZone }),
   }));

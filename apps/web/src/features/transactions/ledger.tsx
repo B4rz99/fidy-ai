@@ -227,11 +227,12 @@ const dailyTotals = (rows: ReadonlyArray<TransactionListRow>, locale: string): s
         money: {
           currency,
           amount: BigDecimal.sumAll(
-            rows
-              .filter((row) => row.money.currency === currency)
-              .map((row) =>
-                row.direction === "inflow" ? row.money.amount : BigDecimal.negate(row.money.amount)
-              )
+            rows.flatMap((row) => {
+              if (row.money.currency !== currency) return [];
+              return [
+                row.direction === "inflow" ? row.money.amount : BigDecimal.negate(row.money.amount),
+              ];
+            })
           ),
         },
       })
@@ -257,10 +258,9 @@ const ColumnControls = ({
       />
     </DropdownMenuTrigger>
     <DropdownMenuContent align="end">
-      {table
-        .getAllLeafColumns()
-        .filter((column) => column.id === "categoryLabel" || column.id === "transactionTypeLabel")
-        .map((column) => (
+      {table.getAllLeafColumns().flatMap((column) => {
+        if (column.id !== "categoryLabel" && column.id !== "transactionTypeLabel") return [];
+        return [
           <DropdownMenuCheckboxItem
             key={column.id}
             checked={column.getIsVisible()}
@@ -269,8 +269,9 @@ const ColumnControls = ({
             onCheckedChange={(checked) => column.toggleVisibility(checked)}
           >
             {column.id === "categoryLabel" ? "Categoría" : "Tipo"}
-          </DropdownMenuCheckboxItem>
-        ))}
+          </DropdownMenuCheckboxItem>,
+        ];
+      })}
     </DropdownMenuContent>
   </DropdownMenu>
 );
@@ -363,11 +364,11 @@ const LedgerBody = ({
             </div>
           </TableCell>
         </TableRow>
-        {sortedRows
-          .filter((item) => item.original.occurredOnText === date)
-          .map((item) => (
-            <TransactionRow key={item.id} row={item.original} {...rowProps} />
-          ))}
+        {sortedRows.flatMap((item) =>
+          item.original.occurredOnText === date
+            ? [<TransactionRow key={item.id} row={item.original} {...rowProps} />]
+            : []
+        )}
       </Fragment>
     ))}
   </TableBody>

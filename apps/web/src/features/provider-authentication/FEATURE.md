@@ -40,7 +40,8 @@ Browser journeys use built static assets and real local public/Core/D1; external
 operator/WhatsApp delivery edges are substituted. They are reusable regression checks, not live
 Google, Microsoft, Kapso or Cloudflare Access evidence.
 
-Production web deployment metadata and API health match the latest deployed revision and contract digest.
+Before the recovery upload attempts below, Production web metadata and API health matched that revision
+and contract digest.
 The [release](https://github.com/B4rz99/fidy-ai/actions/runs/37868801744) passed promotion and
 normal-traffic gates. Public disclosure returns 200 with no-store. The previous deleted-Queue
 and isolated-routing failures no longer block the signup page.
@@ -97,11 +98,15 @@ login remain pending. Updated token permissions now allow reading the existing A
 its actual issuer corrected the Production secret. The sole approved operator is configured.
 [PR #1115](https://github.com/B4rz99/fidy-ai/pull/1115) passed every CI check and merged, but its
 [Production release](https://github.com/B4rz99/fidy-ai/actions/runs/37877209457) refused resource
-upload before Core/Ingress promotion. The generic apply error did not identify the provider refusal;
-closed category/code diagnostics are being added rather than attributing the failure to permissions.
-Core/Ingress still serve `9dea956d6b73e8f7f0aa7e483ce395ef51c24825` at 100%; the static web
-upload reached `58163e9c6f9b9345e552d9fbcfdaf8384685feb3`. Both public health endpoints return
-200 with the same contract digest; the signed-in app survives reload without recovery redisclosure.
+upload before Core/Ingress promotion. [PR #1116](https://github.com/B4rz99/fidy-ai/pull/1116)
+passed all CI and added closed category/code diagnostics. Its
+[release](https://github.com/B4rz99/fidy-ai/actions/runs/37878216469) identifies `Forbidden` and
+`Unauthorized` during resource upload: deployment credentials still lack required authorization.
+Recovery remains an origin-side 401 without an Access redirect; no claimant proof was submitted.
+Core/Ingress still serve `9dea956d6b73e8f7f0aa7e483ce395ef51c24825` at 100%; static web reached
+`2801102cbf5e77eae6804d4fd4d98d7602716c9a`. Both health endpoints return 200 with the same
+contract digest. Signed-in reload, both providers' synthetic refusal/replay/proof boundaries,
+browser-origin refusal and fresh diagnostic query redaction pass after the partial uploads.
 Twelve local Worker/D1 recovery/session checks and eighteen workflow/policy checks also pass.
 Direct Production cleanup observation remains unavailable: the existing CLI database read was refused.
 

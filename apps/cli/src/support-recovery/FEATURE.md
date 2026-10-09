@@ -22,3 +22,9 @@ Remaining Production checks: deployed Access application, operator group, issuer
 provider-created User recovery with the original browser verifier, single-use refusal and rotation;
 deployed D1/migrations, session persistence/logout/expiry, real providers/WhatsApp and secret exclusion.
 Local fixtures establish no live provider, Access or Production-readiness evidence.
+
+Production diagnosis (2026-10-08): cloudflared is installed, but no recovery Access application
+exists. Managed configuration and closed diagnostics merged in PRs #1115/#1116; the protected
+resource upload reports `Forbidden` and `Unauthorized` before Core/Ingress promotion. Operator
+login and claimant recovery remain unverified pending deployment-token authorization and the
+User's email PIN/code entry. See the [current browser authentication evidence](../../../../apps/web/src/features/provider-authentication/FEATURE.md).

@@ -135,6 +135,18 @@ jobs:
           CLOUDFLARE_TEST_REPORT: "true"
           VERIFY_TIMING_REPORT: apps/server/test-results/verify-adapters.json
         run: bun run verify -- --group cloudflare-adapters
+      - name: Summarize adapter file timings
+        if: ${{ !cancelled() }}
+        run: |
+          python3 - <<'PYTHON'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("apps/server/test-results/cloudflare-adapters.json").read_text())
+          for result in report["testResults"]:
+              relative = result["name"].split("/apps/server/cloudflare/", 1)[-1]
+              seconds = (result["endTime"] - result["startTime"]) / 1000
+              print(f"{relative} [{result['status']}] {seconds:.3f}s")
+          PYTHON
       - name: Preserve adapter timing evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

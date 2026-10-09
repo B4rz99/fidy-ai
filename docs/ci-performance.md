@@ -135,6 +135,13 @@ Reused-card submission uses the same actual-response capture helper as first-car
 reading Core's body before allowing browser navigation to discard it. All 11 real-Core browser
 journeys pass locally; no retry or timeout changes.
 
+Scheduling follow-up uses all 115 successful Linux file durations from run 37862580400,
+retaining the preceding confirmation/Hosted Turn costs conservatively after their arrangement
+changes. The full green follow-up run 37865194102 had 79–126s adapter validation steps, so
+older weights no longer predicted balance. Compact per-file summaries now print from the
+existing JSON artifact, retaining useful timing visibility alongside failure-only traffic logs.
+The estimates remain single-run observations rather than equivalent-revision medians.
+
 ## Adapter regression follow-up: #1066
 
 The last 50 actual adapter shard jobs on October 5–6 contained 45 successes, three failures,

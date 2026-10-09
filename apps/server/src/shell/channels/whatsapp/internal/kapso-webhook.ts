@@ -1,11 +1,13 @@
 import {
   DisclosureDeliveryCorrelationToken,
   type DisclosureDeliveryFailureReason,
+  HostedDeliveryCorrelationToken,
   InvalidWhatsAppPayload,
   InvalidWhatsAppSignature,
   WhatsAppBusinessPhoneNumberId,
   type WhatsAppDisclosureLifecycleEvidence,
   WhatsAppDocumentFileName,
+  type WhatsAppHostedLifecycleEvidence,
   type WhatsAppIdentityChangeEvent,
   type WhatsAppInboundContent,
   type WhatsAppInboundEvent,
@@ -13,6 +15,8 @@ import {
   WhatsAppMediaId,
   WhatsAppPayloadTooLarge,
   WhatsAppProviderMessageId,
+  type WhatsAppStatusLookupAdmission,
+  WhatsAppStatusUnavailable,
   maxWhatsAppFutureTimestampMinutes,
   maxWhatsAppWebhookBytes,
 } from "~/shell/channels/whatsapp/contract";
@@ -29,6 +33,8 @@ import {
 import { TranscriptText } from "~/core/agent/contract";
 import { UnknownJsonString } from "~/shell/schema-codecs/contract";
 import { classifyKapsoMetaFailureCode } from "./kapso-failure";
+import { type OutboundHttpService } from "~/shell/outbound-http/operations";
+import { okStatus } from "~/shell/public-http/contract";
 
 const hmacSha256Bytes = 32;
 
@@ -117,6 +123,32 @@ const RawDisclosureLifecycleEvent = Schema.Struct({
     kapso: Schema.Struct({ statuses: Schema.Array(RawDisclosureStatus) }),
   }),
   phone_number_id: WhatsAppBusinessPhoneNumberId,
+});
+
+const RawLifecycleHint = Schema.Struct({
+  message: Schema.Struct({
+    id: WhatsAppProviderMessageId,
+    kapso: Schema.Struct({
+      direction: Schema.Literal("outbound"),
+      status: Schema.Literals(["sent", "delivered", "failed"]),
+      statuses: Model.optionalOption(Schema.Unknown),
+    }),
+  }),
+  phone_number_id: WhatsAppBusinessPhoneNumberId,
+});
+
+const RawStoredMessage = Schema.Struct({
+  id: WhatsAppProviderMessageId,
+  kapso: Schema.Struct({
+    direction: Schema.Literal("outbound"),
+    phone_number_id: WhatsAppBusinessPhoneNumberId,
+    statuses: Schema.NonEmptyArray(
+      Schema.Struct({
+        ...RawDisclosureStatus.fields,
+        status: Schema.Literals(["sent", "delivered", "failed", "read"]),
+      })
+    ),
+  }),
 });
 
 export const RawMetaEnvelope = Schema.Struct({
@@ -390,15 +422,110 @@ const latestDisclosureLifecycleStatus = Effect.fn(function* (
   );
 });
 
+export const lookupLifecycleStatus = Effect.fn(function* (
+  input: Readonly<{
+    outboundHttp: OutboundHttpService;
+    businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
+    messageId: WhatsAppProviderMessageId;
+    status: "sent" | "delivered" | "failed";
+    receivedAt: DateTime.Utc;
+  }>
+) {
+  const response = yield* input.outboundHttp
+    .execute({
+      _tag: "KapsoMessageStatus",
+      businessPhoneNumberId: input.businessPhoneNumberId,
+      messageId: input.messageId,
+    })
+    .pipe(
+      Effect.mapError(() => new WhatsAppStatusUnavailable()),
+      Effect.timeoutOrElse({
+        duration: "8 seconds",
+        orElse: () => Effect.fail(new WhatsAppStatusUnavailable()),
+      })
+    );
+  if (response.status !== okStatus) return yield* new WhatsAppStatusUnavailable();
+  const stored = yield* Schema.decodeEffect(Schema.fromJsonString(RawStoredMessage))(
+    new TextDecoder().decode(response.body)
+  ).pipe(Effect.mapError(invalidKapsoPayload));
+  if (
+    stored.id !== input.messageId ||
+    stored.kapso.phone_number_id !== input.businessPhoneNumberId ||
+    stored.kapso.statuses.some((status) => status.id !== stored.id)
+  ) {
+    return yield* invalidKapsoInvariant("lookup coordinates disagreed");
+  }
+  // A read status is not a substitute for the requested raw provider receipt.
+  const statuses = stored.kapso.statuses.flatMap((status) =>
+    status.status !== "read" && status.status === input.status
+      ? [{ ...status, status: status.status }]
+      : []
+  );
+  return yield* latestDisclosureLifecycleStatus(statuses, input.receivedAt).pipe(
+    Effect.map(
+      Option.map((latest) => ({ ...latest, businessPhoneNumberId: input.businessPhoneNumberId }))
+    )
+  );
+});
+
+const resolveLifecycleHint = Effect.fn(function* (
+  input: Readonly<{
+    body: unknown;
+    eventName: typeof DisclosureLifecycleEventName.Type;
+    receivedAt: DateTime.Utc;
+    lookup: Option.Option<OutboundHttpService>;
+    admitLookup: WhatsAppStatusLookupAdmission;
+  }>
+) {
+  const { eventName, receivedAt, lookup } = input;
+  const hint = yield* Schema.decodeUnknownEffect(RawLifecycleHint)(input.body).pipe(
+    Effect.mapError(invalidKapsoPayload)
+  );
+  if (
+    Option.isSome(hint.message.kapso.statuses) ||
+    Option.isNone(lookup) ||
+    hint.message.kapso.status !== lifecycleStatus(eventName)
+  ) {
+    return yield* invalidKapsoInvariant("invalid lifecycle hint");
+  }
+  yield* input.admitLookup({
+    businessPhoneNumberId: hint.phone_number_id,
+    messageId: hint.message.id,
+    receivedAt,
+  });
+  const latest = yield* lookupLifecycleStatus({
+    outboundHttp: lookup.value,
+    businessPhoneNumberId: hint.phone_number_id,
+    messageId: hint.message.id,
+    status: lifecycleStatus(eventName),
+    receivedAt,
+  });
+  if (Option.isNone(latest)) return yield* invalidKapsoInvariant("missing provider status");
+  return latest.value;
+});
+
 /** One authenticated event and its latest chronological status, shared across delivery purposes. */
-export const decodeLifecycleStatus = Effect.fn(function* (input: WhatsAppLifecycleAuthentication) {
+export const decodeLifecycleStatus = Effect.fn(function* (
+  input: WhatsAppLifecycleAuthentication,
+  lookup: Option.Option<OutboundHttpService> = Option.none(),
+  admitLookup: WhatsAppStatusLookupAdmission = (): Effect.Effect<void, WhatsAppStatusUnavailable> =>
+    Effect.fail(new WhatsAppStatusUnavailable())
+) {
   const unknown = yield* authenticateAndDecodeKapsoBody(input);
   const eventName = yield* Schema.decodeUnknownEffect(DisclosureLifecycleEventName)(
     input.eventName
   ).pipe(Effect.mapError(invalidKapsoPayload));
-  const raw = yield* Schema.decodeUnknownEffect(RawDisclosureLifecycleEvent)(unknown).pipe(
-    Effect.mapError(invalidKapsoPayload)
-  );
+  const full = Schema.decodeUnknownOption(RawDisclosureLifecycleEvent)(unknown);
+  if (Option.isNone(full)) {
+    return yield* resolveLifecycleHint({
+      body: unknown,
+      eventName,
+      receivedAt: input.receivedAt,
+      lookup,
+      admitLookup,
+    });
+  }
+  const raw = full.value;
   const latest = yield* latestDisclosureLifecycleStatus(
     raw.message.kapso.statuses,
     input.receivedAt
@@ -412,6 +539,25 @@ export const decodeLifecycleStatus = Effect.fn(function* (input: WhatsAppLifecyc
   }
   return { ...latest.value, businessPhoneNumberId: raw.phone_number_id };
 });
+
+export const projectHostedStatus = (
+  latest: Effect.Success<ReturnType<typeof decodeLifecycleStatus>>
+): WhatsAppHostedLifecycleEvidence => {
+  const status = latest.status;
+  const evidence = {
+    correlationToken: HostedDeliveryCorrelationToken.make(status.biz_opaque_callback_data),
+    messageEvidence: latest.evidence.messageEvidence,
+    businessPhoneNumberId: latest.businessPhoneNumberId,
+    occurredAt: latest.evidence.occurredAt,
+  };
+  return status.status === "failed"
+    ? {
+        ...evidence,
+        outcome: "failed",
+        reason: latest.evidence.outcome === "failed" ? latest.evidence.reason : "invalid_response",
+      }
+    : { ...evidence, outcome: status.status };
+};
 
 export const projectIdentityChange = Effect.fn(function* (
   message: unknown,

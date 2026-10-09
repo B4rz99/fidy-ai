@@ -1,8 +1,6 @@
 import {
-  HostedDeliveryCorrelationToken,
   WhatsAppBatchTooLarge,
   WhatsAppDeliveryKey,
-  type WhatsAppHostedLifecycleEvidence,
   type WhatsAppIdentityChangeEvent,
   type WhatsAppLifecycleAuthentication,
   type WhatsAppWebhookReceipt,
@@ -17,6 +15,7 @@ import {
   decodeLifecycleStatus,
   invalidKapsoPayload,
   projectEvent,
+  projectHostedStatus,
   projectIdentityChange,
 } from "~/shell/channels/whatsapp/internal/kapso-webhook";
 
@@ -74,20 +73,7 @@ export const authenticateHostedStatus = Effect.fn(function* (
   input: WhatsAppLifecycleAuthentication
 ) {
   const latest = yield* decodeLifecycleStatus(input);
-  const status = latest.status;
-  const evidence = {
-    correlationToken: HostedDeliveryCorrelationToken.make(status.biz_opaque_callback_data),
-    messageEvidence: latest.evidence.messageEvidence,
-    businessPhoneNumberId: latest.businessPhoneNumberId,
-    occurredAt: latest.evidence.occurredAt,
-  };
-  return status.status === "failed"
-    ? ({
-        ...evidence,
-        outcome: "failed",
-        reason: latest.evidence.outcome === "failed" ? latest.evidence.reason : "invalid_response",
-      } satisfies WhatsAppHostedLifecycleEvidence)
-    : ({ ...evidence, outcome: status.status } satisfies WhatsAppHostedLifecycleEvidence);
+  return projectHostedStatus(latest);
 });
 
 /**

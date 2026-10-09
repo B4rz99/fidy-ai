@@ -323,6 +323,17 @@ export class InvalidWhatsAppPayload extends Data.TaggedError("InvalidWhatsAppPay
 /** Authentic buffered delivery exceeds Kapso's documented event maximum. */
 export class WhatsAppBatchTooLarge extends Data.TaggedError("WhatsAppBatchTooLarge")<{}> {}
 
+/** A bounded provider history read could not complete; it authorizes no state change. */
+export class WhatsAppStatusUnavailable extends Data.TaggedError("WhatsAppStatusUnavailable")<{}> {}
+
+/** Stored attempt coordinates owned by the caller; provider history must agree with all three. */
+export type WhatsAppDeliveryLookup = Readonly<{
+  businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
+  messageId: WhatsAppProviderMessageId;
+  correlationToken: DisclosureDeliveryCorrelationToken;
+  receivedAt: DateTime.Utc;
+}>;
+
 /** Safe operational reason retained after a provider send does not complete. */
 export const DisclosureDeliveryFailureReason = Schema.Literals([
   "sandbox_bsuid_unsupported",
@@ -374,3 +385,8 @@ export type WhatsAppLifecycleAuthentication = Readonly<{
   eventName: string;
   receivedAt: DateTime.Utc;
 }>;
+
+/** Durable admission at the authenticated missing-history lookup boundary. */
+export type WhatsAppStatusLookupAdmission = (
+  request: Pick<WhatsAppDeliveryLookup, "businessPhoneNumberId" | "messageId" | "receivedAt">
+) => Effect.Effect<void, WhatsAppStatusUnavailable>;

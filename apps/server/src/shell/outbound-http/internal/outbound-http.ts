@@ -357,12 +357,32 @@ const prepareWompi = (
     })
   );
 
+const prepareKapsoStatus = (
+  request: Extract<StandardOutboundHttpRequest, { _tag: "KapsoMessageStatus" }>,
+  context: RequestPreparationContext
+): Effect.Effect<PreparedRequest, OutboundHttpFailure> =>
+  Option.match(context.config.kapsoApiKey, {
+    onNone: () => Effect.fail(unavailableTransport()),
+    onSome: (apiKey) =>
+      Effect.succeed({
+        http: context.kapsoHttp,
+        request: HttpClientRequest.get(
+          `${kapsoMessagesBaseUrl}/${encodeURIComponent(request.businessPhoneNumberId)}/messages/${encodeURIComponent(request.messageId)}?fields=kapso`,
+          { headers: { "x-api-key": Redacted.value(apiKey) } }
+        ),
+        maximumResponseBytes: maximumKapsoResponseBytes,
+        redirect: "manual" as const,
+      }),
+  });
+
 const prepareNonProviderGroup = (
   request: Exclude<StandardOutboundHttpRequest, ResendRequest | WompiRequest>,
   context: RequestPreparationContext
 ): Effect.Effect<PreparedRequest, OutboundHttpFailure> => {
   const config = context.config;
   switch (request._tag) {
+    case "KapsoMessageStatus":
+      return prepareKapsoStatus(request, context);
     case "KapsoMediaMetadata":
     case "KapsoMediaDownload":
       return Option.match(config.kapsoApiKey, {
@@ -416,6 +436,7 @@ const prepareRequest = (
       KapsoMediaMetadata: (value) => prepareNonProviderGroup(value, context),
       KapsoMediaDownload: (value) => prepareNonProviderGroup(value, context),
       KapsoMessages: (value) => prepareNonProviderGroup(value, context),
+      KapsoMessageStatus: (value) => prepareNonProviderGroup(value, context),
       CloudflareAccessSupportRecovery: (value) => prepareNonProviderGroup(value, context),
       CloudflareAccessSigningKeys: (value) => prepareNonProviderGroup(value, context),
       ResendEmailDelivery: (value) => prepareResend(value, context),

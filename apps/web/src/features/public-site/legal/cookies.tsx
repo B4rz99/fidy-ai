@@ -12,9 +12,9 @@ export const CookiesPolicy = (): React.JSX.Element => (
     <article className="flex flex-col gap-5">
       <h1 className="font-heading text-3xl font-semibold">Cookies y almacenamiento</h1>
       <p>
-        Actualizada el 9 de octubre de 2026. Fidy usa almacenamiento necesario para la sesión y el
-        pago, y una preferencia visual opcional. Esta versión de la aplicación no incorpora cookies
-        publicitarias ni herramientas de remarketing.
+        Actualizada el 9 de octubre de 2026. Fidy usa almacenamiento necesario para iniciar sesión,
+        mantenerla y gestionar el pago, y una preferencia visual opcional. Esta versión de la
+        aplicación no incorpora cookies publicitarias ni herramientas de remarketing.
       </p>
       {storage}
       <section className="flex flex-col gap-2">
@@ -57,6 +57,17 @@ const storage = (
         autenticado. Contiene un identificador de sesión, no tus transacciones. Se envía por HTTPS y
         no puede leerla el JavaScript de la página. Dura hasta 30 días desde su emisión o
         renovación; cerrar sesión la elimina y revoca esa sesión.
+      </p>
+    </div>
+    <div>
+      <h3 className="font-semibold">Inicio de sesión · cookies necesarias y temporales</h3>
+      <p>
+        <code>__Host-fidy_google</code> y <code>__Host-fidy_microsoft</code>, en
+        <code> api.fidyapp.com</code>, vinculan el regreso de Google o Microsoft con el intento de
+        autenticación iniciado en este navegador. Guardan una prueba temporal de seguridad, no tus
+        transacciones. Son cookies de Fidy: se envían por HTTPS y el JavaScript de la página no
+        puede leerlas. Caducan en 10 minutos y se eliminan al regresar del proveedor. Bloquearlas
+        impide completar ese inicio de sesión.
       </p>
     </div>
     <div>

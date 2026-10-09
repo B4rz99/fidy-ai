@@ -262,7 +262,7 @@ describe("public web application routes", () => {
 
 describe("public legal draft and storage routes", () => {
   afterEach(resetApplicationTest);
-  it("explains session and payment storage at the public cookies route", () =>
+  it("explains sign-in, session and payment storage at the public cookies route", () =>
     Effect.runPromise(
       Effect.gen(function* () {
         yield* fromPromise(renderRoute("/cookies"));
@@ -272,6 +272,9 @@ describe("public legal draft and storage routes", () => {
           )
         ).toBeVisible();
         expect(screen.getByText("__Host-fidy_session")).toBeVisible();
+        expect(screen.getByText("__Host-fidy_google")).toBeVisible();
+        expect(screen.getByText("__Host-fidy_microsoft")).toBeVisible();
+        expect(screen.getByText(/Caducan en 10 minutos/u)).toBeVisible();
         expect(screen.getByText("fidy.billing-email.*")).toBeVisible();
         expect(screen.getByText(/30 días desde su emisión/u)).toBeVisible();
       })

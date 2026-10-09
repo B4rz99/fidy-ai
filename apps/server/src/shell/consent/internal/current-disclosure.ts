@@ -21,7 +21,7 @@ export const currentDisclosureFacts: typeof DisclosureSnapshot.Encoded = {
   policy: {
     publicUrl: "https://app.fidyapp.com/politica",
     revision: "policy-2026-10-09-browser-agents",
-    contentSha256: "215218d7bf6860ae8ee7d7785f5d6f03a9b8135bd163f91d9da369dca118d049",
+    contentSha256: "31930717d057070eff00a1ff27af5cb26dbafadaddb7bc1d0aa33db93c9385da",
   },
   purposes: [
     "Crear, autenticar, administrar y proteger la cuenta",

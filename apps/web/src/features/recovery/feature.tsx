@@ -1,6 +1,6 @@
 import { useAtomSet } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Effect, Option, Redacted } from "effect";
+import { Effect, Option, Redacted, Schema } from "effect";
 import type { Atom } from "effect/reactivity";
 import { type JSX, useState } from "react";
 import { type SensitiveClipboard, sensitiveClipboardLifetime } from "@/browser/sensitive-clipboard";
@@ -21,13 +21,15 @@ import {
 export type RotateBackupRecoveryCommand = Readonly<{
   onRotated: (code: BackupRecoveryCode) => void;
   onFailed: () => void;
+  onFreshSessionRequired: () => void;
 }>;
 
 type RotationState =
   | Readonly<{ _tag: "Idle" }>
   | Readonly<{ _tag: "Rotating" }>
   | Readonly<{ _tag: "Disclosed"; code: BackupRecoveryCode; copied: boolean }>
-  | Readonly<{ _tag: "Failed" }>;
+  | Readonly<{ _tag: "Failed" }>
+  | Readonly<{ _tag: "FreshSessionRequired" }>;
 
 type RotationViewProps = Readonly<{
   rotate: (command: RotateBackupRecoveryCommand) => void;
@@ -44,6 +46,15 @@ const RotationFeedback = ({ state }: { state: RotationState }): JSX.Element => (
             Este código se muestra una sola vez. Guárdalo fuera de Fidy y no lo compartas.
           </span>
           <code className="break-all text-base font-semibold">{state.code}</code>
+        </AlertDescription>
+      </Alert>
+    ) : null}
+    {state._tag === "FreshSessionRequired" ? (
+      <Alert>
+        <AlertTitle>Inicia sesión de nuevo</AlertTitle>
+        <AlertDescription>
+          Por seguridad, necesitas una sesión reciente para crear un código nuevo. Tu sesión actual
+          sigue activa.
         </AlertDescription>
       </Alert>
     ) : null}
@@ -69,19 +80,30 @@ const RotationAction = (props: {
   state: RotationState;
   onStart: () => void;
   onCopy: () => void;
-}): JSX.Element => (
-  <CardFooter className="flex flex-wrap gap-2">
-    {props.state._tag === "Disclosed" ? (
-      <Button onClick={props.onCopy} type="button">
-        {props.state.copied ? "Copiado" : "Copiar código"}
-      </Button>
-    ) : (
-      <Button disabled={props.state._tag === "Rotating"} onClick={props.onStart} type="button">
-        {actionLabel(props.state)}
-      </Button>
-    )}
-  </CardFooter>
-);
+}): JSX.Element => {
+  if (props.state._tag === "FreshSessionRequired") {
+    return (
+      <CardFooter>
+        <Button render={<a aria-label="Iniciar sesión" href="/auth/google" />}>
+          Iniciar sesión
+        </Button>
+      </CardFooter>
+    );
+  }
+  return (
+    <CardFooter className="flex flex-wrap gap-2">
+      {props.state._tag === "Disclosed" ? (
+        <Button onClick={props.onCopy} type="button">
+          {props.state.copied ? "Copiado" : "Copiar código"}
+        </Button>
+      ) : (
+        <Button disabled={props.state._tag === "Rotating"} onClick={props.onStart} type="button">
+          {actionLabel(props.state)}
+        </Button>
+      )}
+    </CardFooter>
+  );
+};
 
 /** Mounted disclosure view; replacing its React identity irreversibly drops the raw code state. */
 export const BackupRecoveryRotationView = ({
@@ -94,6 +116,7 @@ export const BackupRecoveryRotationView = ({
     rotate({
       onRotated: (code) => setState({ _tag: "Disclosed", code, copied: false }),
       onFailed: () => setState({ _tag: "Failed" }),
+      onFreshSessionRequired: () => setState({ _tag: "FreshSessionRequired" }),
     });
   };
   const copyCode = (): void => {
@@ -118,6 +141,10 @@ export const BackupRecoveryRotationView = ({
   );
 };
 
+const FreshSessionRequired = Schema.Struct({
+  error: Schema.Struct({ code: Schema.Literal("user_action_required") }),
+});
+
 const makeRotateCommand = (
   apiClient: FidyClient
 ): Atom.AtomResultFn<RotateBackupRecoveryCommand, void, never> =>
@@ -129,7 +156,15 @@ const makeRotateCommand = (
         yield* Effect.sync(() =>
           command.onRotated(Redacted.value(response.data.backupRecoveryCode))
         );
-      }).pipe(Effect.catch(() => Effect.sync(command.onFailed))),
+      }).pipe(
+        Effect.catch((error) =>
+          Effect.sync(
+            Schema.is(FreshSessionRequired)(error)
+              ? command.onFreshSessionRequired
+              : command.onFailed
+          )
+        )
+      ),
     { concurrent: false }
   );
 

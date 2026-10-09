@@ -11,14 +11,14 @@ after approval and proof of the initiating browser's private verifier.
 | Consent and one-time recovery acknowledgement                       | `/web/providers/disclosure`, provider start/completion; Onboarding                                                                  | Atomic creation/rollback, concurrent completion, same-contact isolation and lost-response non-redisclosure covered locally |
 | WhatsApp-led signup and initial linking                             | Kapso authenticated Portfolio/BSUID → Consent handoff → provider browser → exact originating-message association approval           | New and existing User journeys pass for both providers; real Kapso delivery/reply pending                                  |
 | Existing WhatsApp and optional verified-mailbox login               | `browser-login`, `email-authentication`; `/auth/pair`                                                                               | Existing pairing and authentication boundaries pass; provider contact email grants no mailbox login                        |
-| Backup recovery and rotation                                        | `fidy support-recovery` → Cloudflare Access → `/internal/support-recovery` → Recovery/Browser Login; `/recovery/backup-code/rotate` | Google browser recovery/rotation and native command tests pass; real Access recovery pending                               |
+| Backup recovery and rotation                                        | `fidy support-recovery` → Cloudflare Access → `/internal/support-recovery` → Recovery/Browser Login; `/recovery/backup-code/rotate` | Real Production Access/CLI recovery, browser completion and reload pass; stale-session rotation error remains              |
 | Session persistence, logout, expiry and Consent withdrawal          | Browser Login/WebSession and browser authentication registry                                                                        | Production reload and logout pass; local expiry and withdrawal checks pass; deployed deadline observation pending          |
 | Denial, cancellation, blocked popup, replay and uncertain responses | Provider Authentication plus mounted browser controller                                                                             | Worker refusals and browser failure journeys pass; no blind retry or recovery redisclosure                                 |
 
 ## Evidence — 2026-10-08
 
 Initial Production checks: `4e5c304a4d3e533b038b922f37cef713dd1647ee`.
-Latest deployed revision: `9dea956d6b73e8f7f0aa7e483ce395ef51c24825`.
+Latest deployed revision (2026-10-09): `2801102cbf5e77eae6804d4fd4d98d7602716c9a`.
 Re-runnable checks from the repository root, using its pinned Bun runtime:
 
 ```sh
@@ -40,7 +40,8 @@ Browser journeys use built static assets and real local public/Core/D1; external
 operator/WhatsApp delivery edges are substituted. They are reusable regression checks, not live
 Google, Microsoft, Kapso or Cloudflare Access evidence.
 
-Production web deployment metadata and API health match the latest deployed revision and contract digest.
+Before the recovery upload attempts below, Production web metadata and API health matched that revision
+and contract digest.
 The [release](https://github.com/B4rz99/fidy-ai/actions/runs/37868801744) passed promotion and
 normal-traffic gates. Public disclosure returns 200 with no-store. The previous deleted-Queue
 and isolated-routing failures no longer block the signup page.
@@ -82,27 +83,26 @@ reload. Back/reload/forward loads Consent, shows no recovery code and preserves 
 No recovery value was inspected or copied. These tabs share browser cookies; the active session
 switches on login, so separate tabs do not establish isolated Google and Microsoft sessions.
 
-The actual Production `support-recovery` CLI exits with operator authentication unavailable,
-before reading claimant proof or submitting a recovery request. Installed cloudflared is present.
-The account-level Access application inventory returns success with zero applications; the public
-recovery path returns 405 for GET and 401 for unauthenticated POST, without an Access login redirect.
-Access-backed recovery therefore remains blocked by operator-access configuration, despite the
-Worker's issuer/audience bindings being present. No recovery code was submitted.
-The configured audience also fails the generated-audience shape check. The pending infrastructure
-fix manages the dedicated Access application, sole operator group and email-PIN provider, derives
-Core's audience from that application, and refuses release staging unless real provider resources
-and candidate bindings agree. Local release transport checks pass for missing applications, broad
-operator groups, wrong candidate audience and valid configuration. Deployment and real operator
-login remain pending. Updated token permissions now allow reading the existing Access organization;
-its actual issuer corrected the Production secret. The sole approved operator is configured.
-[PR #1115](https://github.com/B4rz99/fidy-ai/pull/1115) passed every CI check and merged, but its
-[Production release](https://github.com/B4rz99/fidy-ai/actions/runs/37877209457) refused resource
-upload before Core/Ingress promotion. The generic apply error did not identify the provider refusal;
-closed category/code diagnostics are being added rather than attributing the failure to permissions.
-Core/Ingress still serve `9dea956d6b73e8f7f0aa7e483ce395ef51c24825` at 100%; the static web
-upload reached `58163e9c6f9b9345e552d9fbcfdaf8384685feb3`. Both public health endpoints return
-200 with the same contract digest; the signed-in app survives reload without recovery redisclosure.
-Twelve local Worker/D1 recovery/session checks and eighteen workflow/policy checks also pass.
+Recovery deployment and real journey (2026-10-09): PRs #1115/#1116 added the dedicated
+Access resources and closed upload diagnostics. Initial resource upload failed with
+`Forbidden`/`Unauthorized`; after correcting deployment-token permissions, the
+[release](https://github.com/B4rz99/fidy-ai/actions/runs/37878216469) succeeded for
+`2801102cbf5e77eae6804d4fd4d98d7602716c9a`, including promotion, smoke, topology,
+normal-traffic and drift gates. Live readback confirmed one restricted recovery application,
+15-minute policy, sole approved operator group and email-PIN provider. Unauthenticated requests
+redirect to Access; the release gate verifies actual issuer/audience agreement with Core.
+The User completed email-PIN operator login and the real cloudflared/CLI flow. CLI approval
+completed the original browser pairing into Transactions; protected data loaded after reload.
+No claimant code, operator token or cookie value was copied into evidence. Production
+consumed-code replay refusal and subsequent rotation remain unverified.
+
+Recovery rotation has a confirmed active-session error: after the ten-minute freshness window,
+the API returns `unauthenticated` and the browser displays session expiry although Transactions
+still works. Fresh provider sign-in followed by rotation succeeded for the User. The pending fix returns 403 `user_action_required` for a live session past the freshness window.
+Both Google and Microsoft built-browser journeys now verify the sign-in link and continued Transactions
+access; the Worker/D1 regression verifies refusal without changing the recovery proof. Thirty recovery,
+authentication and session-clock tests, three recovery UI tests and type checking pass. Deployment
+and live verification of this correction remain pending.
 Direct Production cleanup observation remains unavailable: the existing CLI database read was refused.
 
 On the latest revision, both providers refuse missing/wrong proof cookies, duplicate state and
@@ -119,7 +119,7 @@ code redisclosure.
 Remaining live checks: Google and Microsoft personal denial UI;
 Microsoft work/school signup/returning login/denial (unavailable: the User has no work/school account);
 real WhatsApp association and forwarded/expired handoff
-refusal; Access-backed recovery; deployed server-side session deadlines and retention.
+refusal; consumed recovery-code replay and post-recovery rotation; deployed server-side session deadlines and retention.
 Local fixture passes do not establish these Production results. The User approved
 personal Google, Microsoft and WhatsApp accounts and handles sign-in and confirmation.
 

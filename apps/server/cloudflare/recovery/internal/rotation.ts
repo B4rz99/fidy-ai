@@ -3,8 +3,9 @@ import { freshSessionExists, freshSessionParams } from "../../../src/shell/web-s
 import { Clock, DateTime, Effect, Option } from "effect";
 import { newId } from "../../secret-material/operations";
 import { recoveryCodeDigest, sampleRecoveryCode } from "./material";
-import { freshBrowserSession } from "../../web-session/operations";
+import { browserSession, freshBrowserSession } from "../../web-session/operations";
 
+const freshSessionRequiredStatus = 403;
 const unavailable = (): Response => Response.json({ status: "unavailable" }, { status: 503 });
 const noSession = (): Response =>
   Response.json(
@@ -38,7 +39,27 @@ export const rotateBackupRecoveryCode = ({
     Effect.gen(function* () {
       const usedAt = yield* Clock.currentTimeMillis;
       const session = yield* attempt(() => freshBrowserSession({ request, db, current: usedAt }));
-      if (Option.isNone(session)) return noSession();
+      if (Option.isNone(session)) {
+        const live = yield* attempt(() =>
+          browserSession({
+            request,
+            db,
+            input: { current: usedAt, fresh: false },
+          })
+        );
+        return Option.isSome(live)
+          ? json(
+              {
+                error: {
+                  code: "user_action_required",
+                  message: "Sign in again before rotating your recovery code.",
+                },
+                next: [],
+              },
+              freshSessionRequiredStatus
+            )
+          : noSession();
+      }
       return yield* rotateFreshSessionProof(db, session.value, usedAt);
     }).pipe(Effect.catchCause(() => Effect.succeed(unavailable())))
   );

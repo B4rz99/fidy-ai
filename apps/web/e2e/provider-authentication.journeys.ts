@@ -114,6 +114,34 @@ const signupHistoryJourney = Effect.fn(function* (
   );
 });
 
+const staleRecoverySessionJourney = Effect.fn(function* (
+  configuration: ProviderJourneyConfiguration,
+  { page, request }: Pick<ProviderJourney, "page" | "request">
+) {
+  yield* Effect.tryPromise(() =>
+    request.post(
+      `http://127.0.0.1:4175/${configuration.provider}/stale?subject=browser-${configuration.provider}-signup`
+    )
+  );
+  yield* Effect.tryPromise(() => page.goto("/settings/recovery"));
+  yield* Effect.tryPromise(() =>
+    page.getByRole("button", { name: "Crear un código nuevo" }).click()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByText("Inicia sesión de nuevo", { exact: true })).toBeVisible()
+  );
+  yield* Effect.tryPromise(() =>
+    expect(page.getByRole("link", { name: "Iniciar sesión" })).toHaveAttribute(
+      "href",
+      "/auth/google"
+    )
+  );
+  yield* Effect.tryPromise(() => page.goto("/app/transactions"));
+  yield* Effect.tryPromise(() =>
+    expect(page.getByText("Aún no hay transacciones este mes")).toBeVisible()
+  );
+});
+
 export const signupJourney = ({
   configuration,
   page,
@@ -167,10 +195,10 @@ export const signupJourney = ({
       expect(yield* Effect.tryPromise(() => page.evaluate(retainedSecretCount))).toBe(0);
       yield* signupHistoryJourney(configuration, page);
       yield* returningProviderLogin({ configuration, page });
-      // Recovery acts on the stable User, independently of the authentication provider.
       if (configuration.recoverWithOperator) {
         yield* providerRecoveryJourney({ page, context, request, backupRecoveryCode });
       }
+      yield* staleRecoverySessionJourney(configuration, { page, request });
       yield* returningSessionPolicies(configuration, { page, context, request });
     })
   );

@@ -60,14 +60,16 @@ needs no extra client telemetry; the Worker's metadata-only recovery evidence re
 
 Local command tests and both provider browser journeys exercise this operator workflow through real
 public/Core Workers and D1, substituting terminal entry and external Access authentication. Live
-Cloudflare Access login, policy and deployed operator recovery remain unverified launch gates.
+Production Access policy, operator login, CLI approval and original-browser session completion were verified on 2026-10-09. Consumed-code replay and post-recovery rotation still need live verification.
 
 ## Procedure
 
 1. Ask the User to start a new BrowserLoginPairing in the same browser they will continue using.
 2. Accept only its public reference and the pre-issued BackupRecoveryCode. The User enters no
    browser-private verifier into support.
-3. Run `bun run cli support-recovery` from an interactive terminal. Complete Cloudflare Access in
+3. Run the repository-pinned Bun directly from an interactive terminal, for example
+   `/Users/obarbozaa/.fidy/bun-13a98b0db/bun apps/cli/src/main.ts support-recovery`,
+   if the shell PATH selects a different Bun. Complete Cloudflare Access in
    the browser as the recovery operator, enter the public pairing reference, then enter the
    BackupRecoveryCode in the hidden prompt. Do not run `cloudflared access token` separately or
    print/copy the assertion.

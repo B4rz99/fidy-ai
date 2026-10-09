@@ -1,0 +1,80 @@
+apps/server/cloudflare/recovery/internal/support-recovery.ts
+  s_6d017cc65783af::t_57715cb0be5590 271
+  s_6d017cc65783af::t_e34b2e3c8c6f01 13
+apps/server/cloudflare/browser-login/internal/pairing.ts
+  s_6d017cc65783af::t_a4f2038b9ccd43 123-124,126
+  s_6d017cc65783af::t_8460479de70de1 110-113
+  s_6d017cc65783af::t_b3eada416861c9 7
+apps/server/cloudflare/recovery/runtime.ts
+  s_6d017cc65783af::t_c83575943d5153 10-11
+  s_6d017cc65783af::t_8460479de70de1 21-28,50-59
+  s_6d017cc65783af::t_231c38ce608f5a 1-8,12-19,30-38,44,46-49,60
+  s_6d017cc65783af::t_e34b2e3c8c6f01 39-43
+  s_6d017cc65783af::t_57715cb0be5590 20,29,45
+  s_6d017cc65783af::t_c57cd480b98dd7 9
+apps/server/cloudflare/maintenance/contract.ts
+  s_6d017cc65783af::t_231c38ce608f5a 8
+apps/server/cloudflare/recovery/operations.ts
+  s_6d017cc65783af::t_b3eada416861c9 2,48-53
+apps/server/cloudflare/onboarding/browser-authentication.test.ts
+  s_6d017cc65783af::t_e34b2e3c8c6f01 82-83
+  s_6d017cc65783af::t_604c7c65ecf410 225,1060,1226,1432,1572,1693
+  s_6d017cc65783af::t_8460479de70de1 24-28,1110-1113,1160-1163,1509-1511,1515-1518,1607-1610
+  s_6d017cc65783af::t_fec7d928f57053 1281-1292,1294-1295,1297,1311-1314
+  s_6d017cc65783af::t_c1cbf92d6ba803 1296
+docs/operations/support-recovery.md
+  s_6d017cc65783af::t_280f397fdf83a9 125,127-133,142-146,148-150
+apps/server/cloudflare/recovery/internal/admission.ts
+  s_6d017cc65783af::t_57715cb0be5590 18-21
+  s_6d017cc65783af::t_e34b2e3c8c6f01 1-12,29-33
+  s_6d017cc65783af::t_8460479de70de1 13-17,22-28,34-55
+apps/web/src/features/provider-authentication/FEATURE.md
+  s_6d017cc65783af::t_280f397fdf83a9 101,104-107,110-116
+  s_6d017cc65783af::t_7123e90c68eeed 117
+apps/server/cloudflare/recovery/support-recovery.test.ts
+  s_6d017cc65783af::t_850361a7838da4 128,142-147,150,152,154,156-159,161,165-168
+  s_6d017cc65783af::t_5f25243a1234e0 15
+  s_6d017cc65783af::t_0ddc5ca3bbe332 13,463-471,474,476-479,481-493,495-500
+  s_6d017cc65783af::t_67df077b4c711b 170-175,177-187,190,192-202,205,207-221,223-229,231-246,248-252
+  s_6d017cc65783af::t_bb4d0dbbe2ba7e 72
+  s_6d017cc65783af::t_f9c1fa716a93ac 429-435,438-447,452-462,501-502
+  s_6d017cc65783af::t_604c7c65ecf410 92,134,153,155,176,222,230,247
+  s_6d017cc65783af::t_d6e9e06384410d 503-508,511,513-516,518-548
+  s_6d017cc65783af::t_8460479de70de1 8-12,46-50,148-149,162-164,188-189,203-204,260,331,436-437,448-451,472-473,509-510,596,621-625
+  s_6d017cc65783af::t_e34b2e3c8c6f01 73,396-398,567
+  s_6d017cc65783af::t_85a4089ee441a7 2,151,160,169,191,206,475,480,494,512,517
+apps/cli/src/support-recovery/FEATURE.md
+  s_6d017cc65783af::t_280f397fdf83a9 36,38-44
+apps/server/cloudflare/browser-login/operations.ts
+  s_6d017cc65783af::t_b3eada416861c9 33,35
+  s_6d017cc65783af::t_52ed5741c01c13 4
+apps/server/cloudflare/web-authentication/operations.ts
+  s_6d017cc65783af::t_8460479de70de1 11-15
+  s_6d017cc65783af::t_604c7c65ecf410 26
+apps/server/cloudflare/maintenance/runtime.ts
+  s_6d017cc65783af::t_231c38ce608f5a 2,292
+apps/server/cloudflare/migrations/0070_recovery_retention.sql
+  s_6d017cc65783af::t_bb4d0dbbe2ba7e 1-3
+apps/server/cloudflare/migrations/0071_recovery_admission.sql
+  s_6d017cc65783af::t_e34b2e3c8c6f01 1-8
+apps/server/cloudflare/recovery/contract.ts
+  s_6d017cc65783af::t_231c38ce608f5a 2-7
+apps/server/cloudflare/browser-login/contract.ts
+  s_6d017cc65783af::t_b3eada416861c9 5-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "813dcd02acd455701ee77da83f8312a24e93baf0",
+  "prompts": {},
+  "sessions": {
+    "s_6d017cc65783af": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a11de5-52e0-7801-8b15-9a3beef23404",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

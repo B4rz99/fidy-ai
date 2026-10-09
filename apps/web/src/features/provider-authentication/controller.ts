@@ -252,7 +252,7 @@ export const useProviderAuthentication = ({
   const router = useRouter();
   const session = useSession();
   const [state, setState] = useState<ProviderViewState>({ status: "editing" });
-  const [retryInput, setRetryInput] = useState<Option.Option<RetryInput>>(Option.none());
+  const [retryInput, setRetryInput] = useState<Option.Option<RetryInput>>(() => Option.none());
   const [controller] = useState(() =>
     makeProviderController({
       webAuthClient: router.options.context.webAuthClient,

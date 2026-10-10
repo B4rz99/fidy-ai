@@ -35,7 +35,7 @@ try {
   Copy-Item $Binary $Staged
   $Destination = Join-Path $Directory 'fidy.exe'
   if ([IO.File]::Exists($Destination)) {
-    [IO.File]::Replace($Staged, $Destination, $null)
+    [IO.File]::Replace($Staged, $Destination, [System.Management.Automation.Language.NullString]::Value)
   } else {
     [IO.File]::Move($Staged, $Destination)
   }

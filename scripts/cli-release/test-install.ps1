@@ -52,6 +52,12 @@ try {
   if ((& $Installed --version) -ne "fidy $ExpectedVersion") { throw 'Installed executable failed.' }
   if ($Extraction.Count -ne 1) { throw 'Positive installer did not exercise actual extraction.' }
   & "$PSScriptRoot/install.ps1"
+  if ((& $Installed --version) -ne "fidy $ExpectedVersion" -or $Extraction.Count -ne 2) {
+    throw 'Upgrade did not replace the installation with the verified executable.'
+  }
+  if (@(Get-ChildItem (Split-Path $Installed) -File).Count -ne 1) {
+    throw 'Upgrade left staged files in the installation directory.'
+  }
   $PreviousHash = (Get-FileHash $Installed).Hash
   Set-Content (Join-Path $FixtureRelease 'fidy-windows-x64.zip') 'corrupt download'
   $Rejected = $false

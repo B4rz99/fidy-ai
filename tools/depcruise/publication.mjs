@@ -25,6 +25,8 @@ const compositionRoots = new Set([
   // These suites construct real cross-owner D1/DO/Workflow compositions. Ordinary owner tests
   // have no such role; a new broad composition must be named and reviewed here.
   "cloudflare/maintenance/admission-retention.test.ts",
+  // Fault injection runs the actual Core maintenance composition against an isolated D1.
+  "cloudflare/maintenance/monitoring-isolation.test.ts",
   "cloudflare/agent/hosted-turn.test.ts",
   "cloudflare/budgets/budgets.test.ts",
   "cloudflare/connections/connections.test.ts",

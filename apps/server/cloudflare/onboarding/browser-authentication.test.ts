@@ -1630,6 +1630,7 @@ it(
         );
         const signals = yield* observeOperationalHealth({
           DB: db,
+          proactivity: { weeklyEnabled: false, proactivityEnabled: false },
           workflows: {
             browserPairing: {
               get: () => Promise.resolve({ status: () => Promise.resolve({ status: "complete" }) }),

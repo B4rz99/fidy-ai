@@ -684,3 +684,52 @@ it("four unavailable due Users do not starve a healthy fifth User's generation",
       );
     })
   ));
+
+it("an exhausted Proactivity Workflow step records one metadata-only failure and preserves rejection", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* weeklySummaryDatabaseAt(weeklySummaryTestNow);
+      const harness = proactivityWorkflowHarness({
+        environment: { DB: db },
+        userId,
+        otherUserIds: [],
+        unavailableUserIds: [],
+      });
+      const original = new Error("private-financial-failure-sentinel");
+      const logs = vi.spyOn(console, "log").mockImplementation(() => undefined);
+      const step: WorkflowStep = {
+        do: () => Promise.reject(original),
+        sleep: unexpected,
+        sleepUntil: unexpected,
+        waitForEvent: unexpected,
+      };
+      const outcome = yield* Effect.tryPromise(() =>
+        harness
+          .execute({
+            work: { kind: "weekly-question", version: 1, userId, id: questionId },
+            step,
+          })
+          .then(
+            () => undefined,
+            (error: unknown) => error
+          )
+      );
+      // The native step error stays in the existing Effect rejection; observation cannot replace it.
+      expect(outcome).toHaveProperty("cause", original);
+      expect(
+        yield* Effect.tryPromise(() =>
+          db.prepare("SELECT kind,count FROM operational_event_buckets").all()
+        )
+      ).toMatchObject({
+        results: [{ kind: "workflow_failure", count: 1 }],
+      });
+      const exported = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(
+        logs.mock.calls
+      );
+      expect(exported).toContain("workflow.proactivityDelivery");
+      expect(exported).toContain("failed");
+      expect(exported).not.toContain(original.message);
+      expect(exported).not.toContain(userId);
+      expect(exported).not.toContain(questionId);
+    })
+  ));

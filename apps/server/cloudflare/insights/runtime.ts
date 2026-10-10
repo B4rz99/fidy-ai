@@ -1,3 +1,4 @@
+import { proactivityWorkflowId } from "./internal/proactivity-workflow";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { Context, DateTime, Effect, Layer, Option, Redacted, Schema, type Scope } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
@@ -15,6 +16,12 @@ import {
   type OutboundHttpService,
   makeKapsoOutboundHttp,
 } from "../../src/shell/outbound-http/operations";
+import { captureWorkflowFailure } from "../runtime/operational-health/operations";
+import {
+  cloudflareWorkerTelemetry,
+  observeWorkerPromise,
+  workerRelease,
+} from "../runtime/telemetry/operations";
 import { executeWeeklyActivity, weeklyThresholds } from "./internal/weekly-execution";
 import { deliverProactivity, generateProactivity } from "./internal/proactivity-execution";
 import { discoverProactivityUsers, noteProactivityEvaluation } from "./internal/proactivity-work";
@@ -300,7 +307,7 @@ export const startProactivityWorkflow = (
     if (Option.isNone(input.workflow)) return yield* new InsightUnavailable();
     const workflow = input.workflow.value;
     const work = yield* Schema.decodeUnknownEffect(ProactivityDeliveryWork)(input.body);
-    const id = `weekly-${work.userId}-${work.kind}-${work.kind === "weekly-summary" ? work.insightEventId : work.id}`;
+    const id = yield* proactivityWorkflowId(work);
     const created = yield* Effect.exit(
       Effect.tryPromise(() => workflow.create({ id, params: work }))
     );
@@ -346,36 +353,61 @@ export const receiveProactivityWork = (
     }
   });
 
+const runProactivityWorkflow = ({
+  coordinator,
+  payload,
+  step,
+}: Readonly<{
+  coordinator: Coordinator;
+  payload: ProactivityDeliveryWork;
+  step: WorkflowStep;
+}>): Promise<void> =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const work = yield* Schema.decodeEffect(ProactivityDeliveryWork)(payload);
+      const context = yield* Effect.context<never>();
+      const run = Effect.runPromiseWith(context);
+      for (let wake = 0; wake < 4; wake += 1) {
+        const result = yield* Effect.tryPromise(() =>
+          step.do(
+            `weekly-delivery-${wake}`,
+            {
+              retries: { limit: 3, delay: "1 minute", backoff: "exponential" },
+              timeout: "40 seconds",
+            },
+            () => run(runActivity({ coordinator, work }))
+          )
+        );
+        if (result._tag !== "Deferred") return;
+        yield* Effect.tryPromise(() =>
+          step.sleepUntil(`weekly-window-${wake}`, result.nextEligibleAtMs)
+        );
+      }
+      return yield* new InsightUnavailable();
+    })
+  );
+
 /** Native Workflow persists identities and wake-up instants only; every wake rechecks live User authority. */
 export class ProactivityDeliveryWorkflow extends WorkflowEntrypoint<
   ProactivityBackgroundEnvironment,
   ProactivityDeliveryWork
 > {
   run(event: WorkflowEvent<ProactivityDeliveryWork>, step: WorkflowStep): Promise<void> {
-    const coordinator = this.env.USER_TRANSACTION_COORDINATOR;
-    return Effect.runPromise(
-      Effect.gen(function* () {
-        const work = yield* Schema.decodeEffect(ProactivityDeliveryWork)(event.payload);
-        const context = yield* Effect.context<never>();
-        const run = Effect.runPromiseWith(context);
-        for (let wake = 0; wake < 4; wake += 1) {
-          const result = yield* Effect.tryPromise(() =>
-            step.do(
-              `weekly-delivery-${wake}`,
-              {
-                retries: { limit: 3, delay: "1 minute", backoff: "exponential" },
-                timeout: "40 seconds",
-              },
-              () => run(runActivity({ coordinator, work }))
-            )
-          );
-          if (result._tag !== "Deferred") return;
-          yield* Effect.tryPromise(() =>
-            step.sleepUntil(`weekly-window-${wake}`, result.nextEligibleAtMs)
-          );
+    return captureWorkflowFailure({
+      db: this.env.DB,
+      work: observeWorkerPromise(
+        () =>
+          runProactivityWorkflow({
+            coordinator: this.env.USER_TRANSACTION_COORDINATOR,
+            payload: event.payload,
+            step,
+          }),
+        {
+          environment: workerRelease(this.env),
+          telemetry: cloudflareWorkerTelemetry,
+          operation: "workflow.proactivityDelivery",
         }
-        return yield* new InsightUnavailable();
-      })
-    );
+      ),
+    });
   }
 }

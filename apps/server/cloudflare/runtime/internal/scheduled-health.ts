@@ -75,6 +75,9 @@ const operationalWorkQueues = (
   ...(Option.isSome(environment.FORWARDED_EMAIL_QUEUE) && {
     forwardedEmailQueue: environment.FORWARDED_EMAIL_QUEUE.value,
   }),
+  ...(environment.WEEKLY_DELIVERY_QUEUE !== undefined && {
+    proactivityQueue: environment.WEEKLY_DELIVERY_QUEUE,
+  }),
   ...(Option.isSome(environment.HOSTED_WHATSAPP_QUEUE) && {
     whatsappQueue: environment.HOSTED_WHATSAPP_QUEUE.value,
   }),
@@ -114,6 +117,13 @@ const requiredBindings = (environment: PlatformMaintenanceInput): ReadonlyArray<
     environment.HOSTED_WHATSAPP_QUEUE,
     environment.FORWARDED_EMAIL_QUEUE,
     environment.EMAIL_REPLACEMENT_HEALTH_QUEUE,
+    ...(environment.WEEKLY_SUMMARY_ENABLED === "enabled" ||
+    environment.PROACTIVITY_ENABLED === "enabled"
+      ? [
+          Option.fromUndefinedOr(environment.WEEKLY_DELIVERY_QUEUE),
+          Option.fromUndefinedOr(environment.WEEKLY_DELIVERY_WORKFLOW),
+        ]
+      : []),
   ].map((binding) => Option.isSome<unknown>(binding));
 
 const operationalWorkflows = (
@@ -127,6 +137,9 @@ const operationalWorkflows = (
   }),
   ...(Option.isSome(environment.EMAIL_REPLACEMENT_WORKFLOW) && {
     emailReplacement: environment.EMAIL_REPLACEMENT_WORKFLOW.value,
+  }),
+  ...(environment.WEEKLY_DELIVERY_WORKFLOW !== undefined && {
+    proactivity: environment.WEEKLY_DELIVERY_WORKFLOW,
   }),
   ...(Option.isSome(environment.BILLING_COLLECTION_WORKFLOW) && {
     billing: environment.BILLING_COLLECTION_WORKFLOW.value,
@@ -184,6 +197,10 @@ export const inspectScheduledHealth = (
     ? Effect.void
     : observeOperationalHealth({
         DB: environment.DB,
+        proactivity: {
+          weeklyEnabled: environment.WEEKLY_SUMMARY_ENABLED === "enabled",
+          proactivityEnabled: environment.PROACTIVITY_ENABLED === "enabled",
+        },
         deadLetters: environment.ASYNC_DEAD_LETTERS,
         workQueues: operationalWorkQueues(environment),
         workflows: operationalWorkflows(environment),

@@ -107,6 +107,7 @@ it.live(
             );
             const signals = yield* observeOperationalHealth({
               DB: db,
+              proactivity: { weeklyEnabled: false, proactivityEnabled: false },
               workflows: {},
               deadLetters: Option.none(),
               workQueues: {

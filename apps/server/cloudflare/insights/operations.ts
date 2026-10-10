@@ -1,3 +1,9 @@
+import { ProactivityWorkObservations } from "./contract";
+import {
+  PendingDeliveryObservations,
+  prepareProactivityWorkObservation,
+} from "./internal/operational-observation";
+import { proactivityWorkflowId } from "./internal/proactivity-workflow";
 import type { RecurringDigestAdvanceResult } from "./contract";
 import { requestDiscoveryOffer } from "./internal/recurring-offer";
 import * as recurringGeneration from "./internal/recurring-generation";
@@ -42,7 +48,7 @@ import {
   readNotice,
 } from "./internal/weekly-governor";
 import { prepareWeeklyDeliverySettlement as prepareWeeklyDeliverySettlementOwned } from "./internal/weekly-settlement";
-import { type DateTime, Effect, Option } from "effect";
+import { type DateTime, Effect, Option, Schema } from "effect";
 import * as reminder from "./internal/reminder-schedule";
 import type { ReminderSchedule, ReminderScheduleEdit } from "../../src/core/insights/contract";
 import type {
@@ -391,3 +397,18 @@ export const readHeldRecurringDigestReport: typeof readHeldDigestOwned = (input)
 export const requestRecurringDigestOffer = (
   input: ProactivityConsentContext & Readonly<{ messageId: string }>
 ): Effect.Effect<void, InsightUnavailable> => requestDiscoveryOffer(input);
+
+/** Observe at most eight oldest enabled delivery identities. Decode owner storage and construct the same Workflow locators as delivery; report, recipient, financial content, and delivery authority never cross this boundary. */
+export const observeProactivityWork = (
+  input: Readonly<{ db: D1Database; weeklyEnabled: boolean; proactivityEnabled: boolean }>
+): Effect.Effect<ProactivityWorkObservations, InsightUnavailable> =>
+  Effect.gen(function* () {
+    const result = yield* Effect.tryPromise(() => prepareProactivityWorkObservation(input).all());
+    const rows = yield* Schema.decodeUnknownEffect(PendingDeliveryObservations)(result.results);
+    const observations = yield* Effect.forEach(rows, (row) =>
+      proactivityWorkflowId(row).pipe(
+        Effect.map((id) => ({ id, created: row.created, deadline: row.deadline }))
+      )
+    );
+    return yield* Schema.decodeEffect(Schema.toType(ProactivityWorkObservations))(observations);
+  }).pipe(Effect.mapError(() => new InsightUnavailable()));

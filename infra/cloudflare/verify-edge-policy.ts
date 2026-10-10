@@ -22,7 +22,9 @@ import { edgeSecurityPolicy } from "./edge-security";
 // email PIN identity provider, and application-derived Core audience.
 // Includes #1091's provider-entry popup isolation exceptions; authenticated documents remain strict.
 // Public marketing GET/HEAD only: skip BIC/UA signatures; preserve managed WAF, DDoS and private-route controls.
-const expectedEdgePolicyDigest = "d3446ae4886aedf83bc93f329f8779188261f3363355060d79f44a7c0f4bc373";
+// Includes #1139's type-only Proactivity health binding declarations in the hashed runtime contract.
+// #1139 adds no change to the merged public marketing policy, topology, routing, or security settings.
+const expectedEdgePolicyDigest = "9fcdfa1f546c38d82a683950d5935dffadd3c12dc617d3ad471b6fd072046859";
 const securityArtifacts = [
   JSON.stringify(edgeSecurityPolicy),
   await Bun.file(new URL("alchemy.run.ts", import.meta.url)).text(),

@@ -1,0 +1,179 @@
+[
+  {
+    "scenario": "provider-start-and-four-status",
+    "attempts": {
+      "POST /web/pairings": 1,
+      "POST /web/providers/google/start": 1,
+      "POST /web/providers/google/status": 4
+    },
+    "requests": {
+      "POST /web/pairings 200": 1,
+      "POST /web/providers/google/start 200": 1,
+      "POST /web/providers/google/status 200": 4
+    },
+    "rowsRead": 14,
+    "rowsWritten": 7
+  },
+  {
+    "scenario": "provider-hidden-three-status",
+    "attempts": {
+      "POST /web/providers/google/status": 3
+    },
+    "requests": {
+      "POST /web/providers/google/status 200": 3
+    },
+    "rowsRead": 6,
+    "rowsWritten": 0
+  },
+  {
+    "scenario": "provider-cancelled-20s",
+    "attempts": {},
+    "requests": {},
+    "rowsRead": 0,
+    "rowsWritten": 0
+  },
+  {
+    "scenario": "ordinary-start-and-two-pending-polls",
+    "attempts": {
+      "POST /web/pairings": 1,
+      "POST /web/pairings/redeem": 2
+    },
+    "requests": {
+      "POST /web/pairings 200": 1,
+      "POST /web/pairings/redeem 202": 2
+    },
+    "rowsRead": 8,
+    "rowsWritten": 5
+  },
+  {
+    "scenario": "ordinary-after-route-unmount",
+    "attempts": {},
+    "requests": {},
+    "rowsRead": 0,
+    "rowsWritten": 0
+  },
+  {
+    "scenario": "three-document-navigation-round-trips",
+    "attempts": {
+      "GET /subscription/offers": 3,
+      "GET /subscription/status": 3,
+      "GET /web/subscription/payment-enrollments/availability": 3,
+      "GET /user": 3,
+      "GET /categories": 3,
+      "GET /transactions": 4
+    },
+    "requests": {
+      "GET /subscription/offers 200": 3,
+      "GET /subscription/status 200": 3,
+      "GET /web/subscription/payment-enrollments/availability 200": 3,
+      "GET /user 200": 3,
+      "GET /categories 200": 3,
+      "GET /transactions 200": 3,
+      "GET /transactions 429": 1
+    },
+    "rowsRead": 484,
+    "rowsWritten": 267
+  },
+  {
+    "scenario": "three-spa-navigation-round-trips",
+    "attempts": {
+      "GET /user": 3,
+      "GET /categories": 4,
+      "GET /transactions": 7
+    },
+    "requests": {
+      "GET /user 200": 3,
+      "GET /transactions 429": 4,
+      "GET /categories 200": 3,
+      "GET /transactions 200": 3,
+      "GET /categories 429": 1
+    },
+    "rowsRead": 497,
+    "rowsWritten": 147
+  },
+  {
+    "scenario": "payment-setup-and-first-poll",
+    "attempts": {
+      "GET /subscription/offers": 2,
+      "GET /subscription/status": 3,
+      "GET /web/subscription/payment-enrollments/availability": 1,
+      "POST /web/subscription/payment-enrollments/prepare": 1,
+      "POST /web/subscription/payment-enrollments/submit": 1,
+      "GET /web/subscription/billing-attempts/:id": 1
+    },
+    "requests": {
+      "GET /subscription/offers 429": 1,
+      "GET /subscription/status 429": 2,
+      "GET /subscription/offers 200": 1,
+      "GET /web/subscription/payment-enrollments/availability 200": 1,
+      "POST /web/subscription/payment-enrollments/prepare 200": 1,
+      "POST /web/subscription/payment-enrollments/submit 200": 1,
+      "GET /subscription/status 200": 1,
+      "GET /web/subscription/billing-attempts/:id 200": 1
+    },
+    "rowsRead": 134,
+    "rowsWritten": 86
+  },
+  {
+    "scenario": "payment-two-pending-polls",
+    "attempts": {
+      "GET /web/subscription/billing-attempts/:id": 2
+    },
+    "requests": {
+      "GET /web/subscription/billing-attempts/:id 200": 2
+    },
+    "rowsRead": 14,
+    "rowsWritten": 0
+  },
+  {
+    "scenario": "payment-hidden-60s",
+    "attempts": {},
+    "requests": {},
+    "rowsRead": 0,
+    "rowsWritten": 0
+  },
+  {
+    "scenario": "payment-resumed-settlement-and-terminal-60s",
+    "attempts": {
+      "GET /web/subscription/billing-attempts/:id": 1
+    },
+    "requests": {
+      "GET /web/subscription/billing-attempts/:id 200": 1
+    },
+    "rowsRead": 8,
+    "rowsWritten": 0
+  },
+  {
+    "scenario": "navigation-before-logout",
+    "attempts": {
+      "GET /user": 1,
+      "GET /categories": 1,
+      "GET /transactions": 1
+    },
+    "requests": {
+      "GET /user 200": 1,
+      "GET /categories 200": 1,
+      "GET /transactions 200": 1
+    },
+    "rowsRead": 189,
+    "rowsWritten": 44
+  },
+  {
+    "scenario": "logout",
+    "attempts": {
+      "POST /web/session/logout": 1
+    },
+    "requests": {
+      "POST /web/session/logout 204": 1
+    },
+    "rowsRead": 1,
+    "rowsWritten": 1
+  },
+  {
+    "scenario": "authentication-replaced-60s",
+    "attempts": {},
+    "requests": {},
+    "rowsRead": 0,
+    "rowsWritten": 0
+  }
+]

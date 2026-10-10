@@ -9,6 +9,7 @@ import {
 import { browserAcceptanceTopology } from "./browser-acceptance/operations";
 import { newId } from "./secret-material/operations";
 import { db, firstCardUserId, fixtureUserId, pairingUserId } from "./browser-acceptance-seed";
+import { observeBrowserCost } from "./browser-cost/operations";
 import {
   providerPrivateKey,
   providerPublicKey,
@@ -21,6 +22,14 @@ const syntheticDaviplataBindings = {
   WOMPI_DAVIPLATA_OTP_SEND_URL: syntheticDaviplataSendUrl,
   WOMPI_DAVIPLATA_OTP_CONFIRM_URL: syntheticDaviplataConfirmUrl,
 };
+
+// Opt-in, loopback-only measurement; operator setup and background collection use the raw binding.
+const browserCost =
+  Bun.env.BROWSER_COST_MEASUREMENT === "1" ? Option.some(observeBrowserCost(db)) : Option.none();
+const browserDatabase = Option.match(browserCost, {
+  onNone: () => db,
+  onSome: (observed) => observed.database,
+});
 
 const { makePublicWorker } = await import("./public-worker");
 const { makeWorkerTelemetry } = await import("./runtime/telemetry/operations");
@@ -295,6 +304,15 @@ const cliEvidence = (): Promise<Response> =>
       })
     );
 const operatorSetup = (request: Request): Option.Option<Promise<Response>> => {
+  if (Option.isSome(browserCost) && operatorRoute(request, "/browser-cost", "GET")) {
+    return Option.some(
+      Promise.resolve(
+        Response.json(browserCost.value.cost(), {
+          headers: { "cache-control": "no-store" },
+        })
+      )
+    );
+  }
   if (acceptanceMode === "cli" && operatorRoute(request, "/cli/evidence", "GET")) {
     return Option.some(cliEvidence());
   }
@@ -406,7 +424,7 @@ const coordinatorFor = (name: string): Pick<Fetcher, "fetch"> => {
   const coordinator = new UserTransactionCoordinator(
     { id: { name }, storage: { setAlarm: (): Promise<void> => Promise.resolve() } },
     {
-      DB: db,
+      DB: browserDatabase,
       AI: { run: (): Promise<never> => Promise.reject(new Error("unused")) },
       HOSTED_AI_MODEL: approvedWorkersAiModel,
     }
@@ -440,7 +458,7 @@ const server = Bun.serve({
         CORE: {
           fetch: (forwarded) =>
             core.fetch(new Request(forwarded), {
-              DB: db,
+              DB: browserDatabase,
               AI: { run: () => Promise.reject(new Error("unused")) },
               CONTRACT_DIGEST: "a".repeat(digestHexLength),
               RELEASE_GIT_SHA: "0123456789abcdef0123456789abcdef01234567",

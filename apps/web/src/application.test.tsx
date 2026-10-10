@@ -1,3 +1,4 @@
+import { StrictMode } from "react";
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import { Data, DateTime, Deferred, Effect, Layer, Option } from "effect";
 import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/http";
@@ -109,7 +110,9 @@ const renderHostedRoute = (
       });
       render(
         <SessionRegistryProvider>
-          <RouterProvider router={router} />
+          <StrictMode>
+            <RouterProvider router={router} />
+          </StrictMode>
         </SessionRegistryProvider>
       );
       yield* fromPromise(router.load());
@@ -695,57 +698,73 @@ const proposedStatus = 202;
 const acknowledgedStatus = 200;
 const rejectedStatus = 401;
 
+const automaticReplyClient = (paths: Array<string>): HttpClient.HttpClient => {
+  const reply = (
+    request: HttpClientRequest.HttpClientRequest
+  ): Effect.Effect<HttpClientResponse.HttpClientResponse> => {
+    const path = new URL(request.url).pathname;
+    paths.push(path);
+    return Effect.succeed(
+      responseJson(
+        request,
+        path.endsWith("/delivery")
+          ? { status: "completed" }
+          : {
+              text: paths.length === 1 ? "Respuesta exacta" : "Segunda respuesta",
+              turnId:
+                paths.length === 1
+                  ? "10000000-0000-4000-8000-000000000097"
+                  : "10000000-0000-4000-8000-000000000098",
+              receipt: "a".repeat(hostedReceiptLength),
+            },
+        path.endsWith("/delivery") ? acknowledgedStatus : proposedStatus
+      )
+    );
+  };
+  return makeHttpClient(reply);
+};
+
+const automaticReplyTest = Effect.fnUntraced(function* () {
+  const paths: Array<string> = [];
+  const httpClient = automaticReplyClient(paths);
+  const channel = makeHostedTurnClient({
+    apiOrigin: "https://api.test.fidyapp.com",
+    httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
+  });
+  const route = renderHostedRoute(channel);
+  yield* fromPromise(route);
+  fireEvent.change(yield* fromPromise(screen.findByLabelText("Mensaje")), {
+    target: { value: "Hola" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+  expect(yield* fromPromise(screen.findByText("Respuesta exacta"))).toBeVisible();
+  yield* fromPromise(
+    waitFor(() => expect(paths).toEqual(["/web/hosted-turns", "/web/hosted-turns/delivery"]))
+  );
+  const assertComposerEnabled = (): void => {
+    expect(screen.getByLabelText("Mensaje")).toBeEnabled();
+  };
+  yield* fromPromise(waitFor(assertComposerEnabled));
+  expect(screen.queryByRole("button", { name: "Confirmar recepción" })).not.toBeInTheDocument();
+  expect(screen.queryByText("Respuesta entregada.")).not.toBeInTheDocument();
+  expect(screen.queryByText(/Confirma que la recibiste/)).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Mensaje"), { target: { value: "Otra pregunta" } });
+  fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+  expect(yield* fromPromise(screen.findByText("Segunda respuesta"))).toBeVisible();
+  yield* fromPromise(waitFor(assertComposerEnabled));
+  expect(screen.getByText("Respuesta exacta")).toBeVisible();
+  expect(paths).toEqual([
+    "/web/hosted-turns",
+    "/web/hosted-turns/delivery",
+    "/web/hosted-turns",
+    "/web/hosted-turns/delivery",
+  ]);
+});
+
 describe("hosted Agent reply delivery", () => {
   afterEach(resetApplicationTest);
-
-  it("requires a visibly rendered reply and explicit receipt before showing Completed", () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const paths: Array<string> = [];
-        const reply = (
-          request: HttpClientRequest.HttpClientRequest
-        ): Effect.Effect<HttpClientResponse.HttpClientResponse> => {
-          const path = new URL(request.url).pathname;
-          paths.push(path);
-          return Effect.succeed(
-            responseJson(
-              request,
-              path.endsWith("/delivery")
-                ? { status: "completed" }
-                : {
-                    text: "Respuesta exacta",
-                    turnId: "10000000-0000-4000-8000-000000000097",
-                    receipt: "a".repeat(hostedReceiptLength),
-                  },
-              path.endsWith("/delivery") ? acknowledgedStatus : proposedStatus
-            )
-          );
-        };
-        const httpClient = makeHttpClient(reply);
-        const channel = makeHostedTurnClient({
-          apiOrigin: "https://api.test.fidyapp.com",
-          httpClient: Layer.succeed(HttpClient.HttpClient, httpClient),
-        });
-        const route = renderHostedRoute(channel);
-        yield* fromPromise(route);
-        fireEvent.change(yield* fromPromise(screen.findByLabelText("Mensaje")), {
-          target: { value: "Hola" },
-        });
-        fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
-        expect(yield* fromPromise(screen.findByText("Respuesta exacta"))).toBeVisible();
-        expect(paths).toEqual(["/web/hosted-turns"]);
-        fireEvent.click(screen.getByRole("button", { name: "Cerrar chat" }));
-        expect(screen.queryByText("Respuesta exacta")).not.toBeInTheDocument();
-        expect(paths).toEqual(["/web/hosted-turns"]);
-        fireEvent.click(screen.getByRole("button", { name: "Abrir agente Fidy" }));
-        expect(yield* fromPromise(screen.findByText("Respuesta exacta"))).toBeVisible();
-        expect(screen.getByRole("button", { name: "Enviar" })).toBeDisabled();
-        expect(screen.queryByText("Respuesta entregada.")).not.toBeInTheDocument();
-        fireEvent.click(screen.getByRole("button", { name: "Confirmar recepción" }));
-        expect(yield* fromPromise(screen.findByText("Respuesta entregada."))).toBeVisible();
-        expect(paths).toEqual(["/web/hosted-turns", "/web/hosted-turns/delivery"]);
-      })
-    ));
+  it("automatically delivers a rendered reply and permits the next message without confirmation", () =>
+    Effect.runPromise(automaticReplyTest()));
 });
 
 const progressTestClient = (progress: {
@@ -755,6 +774,9 @@ const progressTestClient = (progress: {
   makeHttpClient((request) => {
     const path = new URL(request.url).pathname;
     progress.paths.push(path);
+    if (path.endsWith("/delivery")) {
+      return Effect.succeed(responseJson(request, { status: "completed" }, acknowledgedStatus));
+    }
     if (path.endsWith("/progress")) progress.polls += 1;
     const body =
       path.endsWith("/progress") && progress.polls > 1
@@ -775,7 +797,7 @@ const waitForProgressPoll = (progress: { polls: number }): Promise<void> =>
 describe("hosted Agent progress", () => {
   afterEach(resetApplicationTest);
 
-  it("polls a processing Turn until its reply is visible without acknowledging it", () =>
+  it("polls a processing Turn and automatically delivers its visible reply", () =>
     Effect.runPromise(
       Effect.gen(function* () {
         const progress: { paths: Array<string>; polls: number } = { paths: [], polls: 0 };
@@ -795,11 +817,15 @@ describe("hosted Agent progress", () => {
         yield* fromPromise(waitForProgressPoll(progress));
         fireEvent.click(screen.getByRole("button", { name: "Consultar estado" }));
         expect(yield* fromPromise(screen.findByText("Respuesta recuperada"))).toBeVisible();
-        expect(screen.getByRole("button", { name: "Confirmar recepción" })).toBeVisible();
+        const assertComposerEnabled = (): void => {
+          expect(screen.getByLabelText("Mensaje")).toBeEnabled();
+        };
+        yield* fromPromise(waitFor(assertComposerEnabled));
         expect(progress.paths).toEqual([
           "/web/hosted-turns",
           "/web/hosted-turns/progress",
           "/web/hosted-turns/progress",
+          "/web/hosted-turns/delivery",
         ]);
         expect(screen.queryByText("Respuesta entregada.")).not.toBeInTheDocument();
       })
@@ -839,15 +865,12 @@ describe("rejected hosted Agent receipt", () => {
           target: { value: "Hola" },
         });
         fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
-        fireEvent.click(
-          yield* fromPromise(screen.findByRole("button", { name: "Confirmar recepción" }))
-        );
         expect(
-          yield* fromPromise(screen.findByText(/La entrega no se pudo confirmar/u))
+          yield* fromPromise(screen.findByText(/No pudimos guardar la respuesta/u))
         ).toBeVisible();
         expect(screen.queryByText("Respuesta entregada.")).not.toBeInTheDocument();
         expect(screen.getByRole("button", { name: "Enviar" })).toBeDisabled();
-        expect(screen.getByRole("button", { name: "Confirmar recepción" })).toBeEnabled();
+        expect(screen.getByRole("button", { name: "Reintentar conexión" })).toBeEnabled();
       })
     ));
 });
@@ -995,6 +1018,9 @@ const closedReplyClient = (fixture: ClosedReplyFixture): HostedTurnClient =>
       HttpClient.HttpClient,
       makeHttpClient((request) => {
         fixture.paths.push(new URL(request.url).pathname);
+        if (request.url.endsWith("/delivery")) {
+          return Effect.succeed(responseJson(request, { status: "completed" }, acknowledgedStatus));
+        }
         fixture.request = Option.some(request);
         return fromPromise(fixture.deferred.promise).pipe(Effect.orDie);
       })
@@ -1050,11 +1076,16 @@ const closedReplyTest = (): Promise<void> =>
           proposedStatus
         )
       );
-      yield* fromPromise(fixture.deferred.promise);
+      yield* fromPromise(act(() => fixture.deferred.promise.then(() => undefined)));
+      expect(fixture.paths).toEqual(["/web/hosted-turns"]);
       fireEvent.click(screen.getByRole("button", { name: "Abrir agente Fidy" }));
       expect(yield* fromPromise(screen.findByText("Respuesta en segundo plano"))).toBeVisible();
-      expect(screen.getByRole("button", { name: "Confirmar recepción" })).toBeEnabled();
-      expect(fixture.paths).toEqual(["/web/hosted-turns"]);
+      yield* fromPromise(
+        waitFor(() =>
+          expect(fixture.paths).toEqual(["/web/hosted-turns", "/web/hosted-turns/delivery"])
+        )
+      );
+      expect(screen.queryByRole("button", { name: "Confirmar recepción" })).not.toBeInTheDocument();
     })
   );
 

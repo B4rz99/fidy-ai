@@ -264,6 +264,8 @@ const ChatView = (props: ChatViewProps): JSX.Element => (
   </ChatWindow>
 );
 
+const initialDeliveredTurn = Option.none<string>();
+
 /** Chat state outlives popup dismissal and navigation, but never the authenticated layout. */
 export const HostedAgentFeature = (): JSX.Element => {
   const client = useRouter().options.context.hostedTurnClient;
@@ -277,7 +279,7 @@ export const HostedAgentFeature = (): JSX.Element => {
   const [history, setHistory] = useState<ReadonlyArray<Entry>>([]);
   const [text, setText] = useState("");
   const [turn, setTurn] = useState<TurnState>({ tag: "idle" });
-  const deliveredTurn = useRef<Option.Option<string>>(Option.none());
+  const deliveredTurn = useRef(initialDeliveredTurn);
   const onVisible = (value: Proposal): void => {
     if (Option.isSome(deliveredTurn.current) && deliveredTurn.current.value === value.turnId) {
       return;

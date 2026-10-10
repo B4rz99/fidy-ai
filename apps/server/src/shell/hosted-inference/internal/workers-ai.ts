@@ -1,4 +1,4 @@
-import { type Duration, Effect, Option, Schema } from "effect";
+import { type Duration, Effect, type JsonSchema, Option, Schema } from "effect";
 import { type Prompt, Tool } from "effect/ai";
 import { type TranscriptEntry, maximumModelRoundMillis } from "~/core/agent/contract";
 import { operationCatalog } from "~/shell/api";
@@ -117,11 +117,18 @@ const ProviderResponse = Schema.Struct({
 type ProviderResponse = typeof ProviderResponse.Type;
 type FunctionCallItem = typeof ProviderFunctionCall.Type;
 
+const providerSchema = (schema: Schema.Top): JsonSchema.JsonSchema => {
+  const document = Schema.toJsonSchemaDocument(Schema.toEncoded(schema), {
+    referencePolicy: () => undefined,
+  });
+  return { ...document.schema, $defs: document.definitions };
+};
+
 const workersAiOperationBindings = hostedOperationBindings(operationCatalog).map(
   ({ operation, wireName }) => ({
     operation,
     wireName,
-    parameters: Schema.toJsonSchemaDocument(Schema.toEncoded(operation.input)).schema,
+    parameters: providerSchema(operation.input),
   })
 );
 
@@ -505,7 +512,7 @@ const makeStructuredAdapter = (
         Option.none()
       );
       const schema = yield* Effect.try({
-        try: () => Schema.toJsonSchemaDocument(Schema.toEncoded(input.outputSchema)).schema,
+        try: () => providerSchema(input.outputSchema),
         catch: () => invalidProviderOutput("Hosted structured schema was invalid"),
       });
       const request: WorkersAiRequest = {

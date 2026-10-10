@@ -3,6 +3,7 @@ import { expect, it } from "@effect/vitest";
 import { Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
+import { operationCatalog } from "~/shell/api";
 import { ToolCallId } from "~/core/agent/contract";
 import {
   HostedInferenceError,
@@ -170,6 +171,38 @@ it.effect(
       });
       expect(call?.request).toHaveProperty("messages");
     })
+);
+
+it.effect("advertises self-contained schemas for every canonical tool", () =>
+  Effect.gen(function* () {
+    const binding = captureRun(() => Promise.resolve(completed()));
+    const inference = yield* makeConfiguredInference(binding.run);
+    const prepared = yield* inference.prepareText({
+      context: initialContext(),
+      availableOperations: operationCatalog.operations.map(({ id }) => id),
+      toolChoice: "auto",
+      maximumToolCalls: HostedToolCallMaximum.make(1),
+    });
+    yield* prepared.execute;
+    const request = binding.calls[0]?.request;
+    assert(request?.tool_choice === "auto");
+    for (const tool of request.tools) {
+      const schema = tool.function.parameters;
+      const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(schema);
+      const references = encoded.matchAll(/"\$ref":"#\/\$defs\/([^"/]+)"/g);
+      for (const [, name] of references) {
+        assert(name !== undefined);
+        expect(schema.$defs, tool.function.name).toHaveProperty(name);
+      }
+    }
+    const update = request.tools.find(
+      ({ function: tool }) => tool.name === "transactions__updateTransaction"
+    );
+    expect(update?.function.parameters).toHaveProperty("properties.payload.required", [
+      "expectedRevision",
+      "changes",
+    ]);
+  })
 );
 
 it.effect("rejects a truncated tool call before it can be executed", () =>

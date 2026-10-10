@@ -128,6 +128,9 @@ it("keeps platform diagnostic opt-outs on their reviewed file boundaries", () =>
           "strictEffectProvide:./apps/cli/test/journey-entry.ts",
           "strictEffectProvide:./apps/cli/test/recovery-entry.ts",
           "strictEffectProvide:./apps/web/e2e/cli-login.spec.ts",
+          // The browser fixture process and live process tests own their filesystem scope.
+          "strictEffectProvide:./apps/server/cloudflare/browser-acceptance-core-module.ts",
+          "strictEffectProvide:./scripts/browser-core-bundle.test.ts",
           "strictEffectProvide:./infra/cloudflare/inspect-worker-drift.ts",
           // Alchemy builds dynamic session/stack contexts at its public SDK boundary.
           "strictEffectProvide:./infra/cloudflare/production-resources.ts",

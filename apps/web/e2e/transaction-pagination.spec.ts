@@ -83,15 +83,19 @@ const completePending = (fixture: HistoryFixture): Promise<void> =>
     onSome: (route) => fulfillPage(fixture, route),
   });
 const installCorrection = (page: Page, fixture: HistoryFixture, last: HistoryRow): Promise<void> =>
-  page.route(`${apiOrigin}/transactions/${last.id}`, (route) => {
-    const corrected = { ...last, money: { amount: "0.02", currency: "USD" }, revision: 1 };
-    fixture.rows = fixture.rows.map((row) => (row.id === last.id ? corrected : row));
-    return route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ data: corrected, next: [] }),
-    });
-  });
+  page
+    .route(`${apiOrigin}/transactions/${last.id}`, (route) => {
+      const corrected = { ...last, money: { amount: "0.02", currency: "USD" }, revision: 1 };
+      fixture.rows = fixture.rows.map((row) => (row.id === last.id ? corrected : row));
+      return route
+        .fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ data: corrected, next: [] }),
+        })
+        .then(() => {});
+    })
+    .then(() => {});
 const pendingReceived =
   (fixture: HistoryFixture): (() => boolean) =>
   () =>

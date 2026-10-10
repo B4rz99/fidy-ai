@@ -19,7 +19,9 @@ import { makeFidyClient, makeHostedTurnClient, makeWebAuthClient } from "@/trans
 import { TransactionListFeature } from "./feature";
 
 const waitForEditableHistory = (): Promise<void> =>
-  waitFor(() => expect(screen.getByRole("button", { name: "+ Registrar" })).toBeEnabled());
+  waitFor(() => expect(screen.getByRole("button", { name: "+ Registrar" })).toBeEnabled()).then(
+    () => {}
+  );
 const waitForMutation = (updates: () => number): Promise<void> =>
   waitFor(() => expect(updates()).toBe(1));
 const createdStatus = 201;

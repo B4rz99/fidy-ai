@@ -81,6 +81,36 @@ it.effect("refuses nested archive fallback and case-insensitive alternate format
   })
 );
 
+it.effect("refuses repeated same-cell comments before workbook construction", () =>
+  Effect.gen(function* () {
+    yield* reject(
+      modify(workbook("normal"), (entries) => {
+        const comments =
+          '<comment ref="A2" authorId="0"><text><t>annotation</t></text></comment>'.repeat(1000);
+        entries["xl/comments1.xml"] = strToU8(
+          `<comments xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><authors><author>author</author></authors><commentList>${comments}</commentList></comments>`
+        );
+        replacePart(entries, "[Content_Types].xml", (xml) =>
+          xml.replace(
+            "</Types>",
+            '<Override PartName="/xl/comments1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.comments+xml"/></Types>'
+          )
+        );
+        entries["xl/worksheets/_rels/sheet1.xml.rels"] = strToU8(
+          '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="comment" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="../comments1.xml"/></Relationships>'
+        );
+      })
+    );
+    yield* reject(
+      modify(workbook("normal"), (entries) => {
+        entries["xl/threadedComments/threadedComment1.xml"] = strToU8(
+          '<ThreadedComments xmlns="http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments"><threadedComment ref="A2" personId="person"><text>annotation</text></threadedComment></ThreadedComments>'
+        );
+      })
+    );
+  })
+);
+
 it.effect("admits the exact repeated-text work boundary and rejects its next byte", () =>
   Effect.gen(function* () {
     // Header h costs two bytes; shared index 1 costs one byte in addition to the value.

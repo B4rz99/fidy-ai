@@ -1,0 +1,26 @@
+apps/web/e2e/01-real-core-journeys.spec.ts
+  s_b75995d26622a8::t_5d39d448b5b780 891,895
+apps/web/src/features/provider-authentication/feature.tsx
+  s_b75995d26622a8::t_5d39d448b5b780 29,33
+apps/web/e2e/security-journeys.spec.ts
+  s_b75995d26622a8::t_5d39d448b5b780 76
+apps/web/src/features/pats/pairing-view.test.tsx
+  s_b75995d26622a8::t_5d39d448b5b780 206-219,221-225
+  s_b75995d26622a8::t_4c9268dbff35aa 220
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a603dc473bdf2cc8d9d2a0533a13198960c7e91c",
+  "prompts": {},
+  "sessions": {
+    "s_b75995d26622a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a12167-67e3-7233-a616-a15dd0f99195",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

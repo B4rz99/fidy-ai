@@ -342,6 +342,9 @@ export type HostedConformanceCheck =
   | "canonical_mutation"
   | "canonical_mutation_money"
   | "canonical_mutation_time"
+  | "canonical_correction"
+  | "canonical_deletion"
+  | "canonical_date_only"
   | "invalid_output_recovery"
   | "structured_es_co";
 

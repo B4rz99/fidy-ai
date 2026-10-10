@@ -30,6 +30,9 @@ export const systemPromptInternal = ({
   `y zona IANA ${timeZone}. ` +
   `Convierte las horas locales que indique el Usuario usando esta zona IANA; envía los instantes ` +
   `de las operaciones canónicas en UTC con su offset explícito, nunca como hora local sin zona. ` +
+  `Si el Usuario indica una fecha sin hora, usa las 00:00 de esa fecha en su zona IANA ` +
+  `y convierte ese instante a UTC; por ejemplo, 10 de octubre de 2026 en America/Bogota ` +
+  `es 2026-10-10T05:00:00Z, nunca 2026-10-10T00:00:00Z. ` +
   `No infieras ese contexto de teléfonos, monedas ni proveedores. ` +
   `Las categorías canónicas disponibles son ${listLaunchCategories()
     .map(({ id, label }) => `${label}: ${id}`)

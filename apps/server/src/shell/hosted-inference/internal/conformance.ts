@@ -1,5 +1,9 @@
 import { BigDecimal, Brand, DateTime, Effect, Option, Predicate, Schema } from "effect";
-import { CreateTransactionInput } from "~/core/transactions/contract";
+import {
+  CreateTransactionInput,
+  TransactionId,
+  UpdateTransactionInput,
+} from "~/core/transactions/contract";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { CanonicalOperationId } from "~/core/canonical-operations/contract";
 import {
@@ -68,7 +72,9 @@ export const verifyCanonicalQuery = (
       queryResult.toolCalls.length !== 1 ||
       queryResult.toolCalls[0]?.operation !== "transactions.listTransactions"
     ) {
-      return yield* conformanceFailure();
+      {
+        return yield* conformanceFailure();
+      }
     }
   });
 
@@ -93,7 +99,9 @@ export const verifyCanonicalMutation = (
       mutationResult.toolCalls.length !== 1 ||
       mutationCall?.operation !== "transactions.createTransaction"
     ) {
-      return yield* conformanceFailure();
+      {
+        return yield* conformanceFailure();
+      }
     }
     return yield* Schema.decodeUnknownEffect(MutationArguments)(mutationCall.params).pipe(
       Effect.mapError(() => conformanceFailure())
@@ -115,6 +123,98 @@ export const verifyMutationTime = (
   DateTime.formatIso(args.payload.occurredAt) === "2026-09-22T12:00:00.000Z"
     ? Effect.void
     : Effect.fail(conformanceFailure());
+
+const isCorrectionMoney = (money: UpdateTransactionInput["changes"]["money"]): boolean =>
+  money?.currency === "COP" && BigDecimal.equals(money.amount, BigDecimal.make(2345n, 0));
+
+const representativeTransactionId = "00000000-0000-4000-8000-000000000001";
+
+export const verifyTransactionCorrection = (
+  inference: HostedInferenceService
+): Effect.Effect<void, HostedInferenceError> =>
+  Effect.gen(function* () {
+    const prepared = yield* inference.prepareText({
+      context: context(
+        `Corrige únicamente el monto de la transacción ${representativeTransactionId}, revisión actual 2, a 2.345 COP. Usa la herramienta; no crees otra transacción.`
+      ),
+      availableOperations: [CanonicalOperationId.make("transactions.updateTransaction")],
+      toolChoice: "auto",
+      maximumToolCalls: HostedToolCallMaximum.make(1),
+    });
+    const result = yield* prepared.execute;
+    const call = result.toolCalls[0];
+    if (result.toolCalls.length !== 1 || call?.operation !== "transactions.updateTransaction") {
+      return yield* conformanceFailure();
+    }
+    const args = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({
+        params: Schema.Struct({ id: TransactionId }),
+        payload: UpdateTransactionInput,
+      })
+    )(call.params).pipe(Effect.mapError(conformanceFailure));
+    const money = args.payload.changes.money;
+    if (money === undefined) {
+      return yield* conformanceFailure();
+    }
+
+    if (
+      args.params.id !== representativeTransactionId ||
+      args.payload.expectedRevision !== 2 ||
+      !isCorrectionMoney(money)
+    ) {
+      return yield* conformanceFailure();
+    }
+  });
+
+export const verifyTransactionDeletion = (
+  inference: HostedInferenceService
+): Effect.Effect<void, HostedInferenceError> =>
+  Effect.gen(function* () {
+    const prepared = yield* inference.prepareText({
+      context: context(
+        `Elimina únicamente la transacción ${representativeTransactionId} usando la herramienta.`
+      ),
+      availableOperations: [CanonicalOperationId.make("transactions.deleteTransaction")],
+      toolChoice: "auto",
+      maximumToolCalls: HostedToolCallMaximum.make(1),
+    });
+    const result = yield* prepared.execute;
+    const call = result.toolCalls[0];
+    if (result.toolCalls.length !== 1 || call?.operation !== "transactions.deleteTransaction") {
+      return yield* conformanceFailure();
+    }
+    const args = yield* Schema.decodeUnknownEffect(
+      Schema.Struct({ params: Schema.Struct({ id: TransactionId }) })
+    )(call.params).pipe(Effect.mapError(conformanceFailure));
+    if (args.params.id !== representativeTransactionId) {
+      return yield* conformanceFailure();
+    }
+  });
+
+export const verifyDateOnlyMutation = (
+  inference: HostedInferenceService
+): Effect.Effect<void, HostedInferenceError> =>
+  Effect.gen(function* () {
+    const prepared = yield* inference.prepareText({
+      context: context(
+        "Registra con la herramienta un gasto de 42.000 COP en mercado del 21 de septiembre de 2026. No tengo una hora específica."
+      ),
+      availableOperations: [CanonicalOperationId.make("transactions.createTransaction")],
+      toolChoice: "auto",
+      maximumToolCalls: HostedToolCallMaximum.make(1),
+    });
+    const result = yield* prepared.execute;
+    const call = result.toolCalls[0];
+    if (result.toolCalls.length !== 1 || call?.operation !== "transactions.createTransaction") {
+      return yield* conformanceFailure();
+    }
+    const args = yield* Schema.decodeUnknownEffect(MutationArguments)(call.params).pipe(
+      Effect.mapError(conformanceFailure)
+    );
+    if (DateTime.formatIso(args.payload.occurredAt) !== "2026-09-21T05:00:00.000Z") {
+      return yield* conformanceFailure();
+    }
+  });
 
 export const verifyInvalidOutputRecovery = (
   inference: HostedInferenceService

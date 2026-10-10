@@ -1,3 +1,5 @@
+import { ConsentRecordId, OnboardingConsentGrantId } from "../../src/core/consent/contract";
+import { UserId } from "../../src/core/identity/contract";
 import { Effect, Schema } from "effect";
 import { afterAll, expect, it } from "vitest";
 import { currentDisclosureFor } from "../../src/shell/consent/operations";
@@ -8,6 +10,7 @@ import {
   readConsentStanding,
   readConsentStatus,
   recordConsentRevocation,
+  recordWebOnboardingConsent,
 } from "./operations";
 
 const databases = isolatedTestDatabases();
@@ -182,3 +185,46 @@ it("keeps withdrawal and protected actions User-scoped and rolls evidence back w
       expect((yield* Effect.tryPromise(() => protectedWrite(userB).run())).meta.changes).toBe(1);
     })
   ));
+
+it("reads the exact provider-signup grant whose identifier is an opaque authentication attempt", () =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const db = yield* Effect.tryPromise(setup);
+      const attemptId = "a".repeat(43);
+      const disclosure = currentDisclosureFor();
+      yield* Effect.tryPromise(() =>
+        db.batch([
+          db
+            .prepare("INSERT INTO users VALUES (?,'CO','es-CO','America/Bogota',?)")
+            .bind(userA, now),
+          recordWebOnboardingConsent({
+            db,
+            userId: UserId.make(userA),
+            attemptId,
+            disclosure,
+            acceptedAtMs: now,
+          }),
+        ])
+      );
+      expect(yield* readConsentStanding({ db, userId: userA })).toEqual({
+        _tag: "Granted",
+        subjectUserId: userA,
+        basis: {
+          grantId: attemptId,
+          disclosureRevision: disclosure.revision,
+          disclosureSha256: disclosure.contentSha256,
+          policyRevision: disclosure.policy.revision,
+          policySha256: disclosure.policy.contentSha256,
+        },
+      });
+    })
+  ));
+
+it("keeps canonical Consent identifiers UUID-only and rejects malformed onboarding grant references", () => {
+  expect(Schema.is(OnboardingConsentGrantId)(grantA)).toBe(true);
+  expect(Schema.is(OnboardingConsentGrantId)("a".repeat(43))).toBe(true);
+  expect(Schema.is(ConsentRecordId)("a".repeat(43))).toBe(false);
+  for (const value of ["a".repeat(42), "a".repeat(44), "!".repeat(43), "arbitrary-id"]) {
+    expect(Schema.is(OnboardingConsentGrantId)(value)).toBe(false);
+  }
+});

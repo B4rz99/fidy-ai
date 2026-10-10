@@ -511,3 +511,19 @@ Show dates as `dd-mm-yyyy` without times; retain the full UTC instant in each `t
 On narrow screens, scroll
 the table within its container; keep the page width stable. One-token deactivation confirmation
 occupies a full-width row beneath that token. Default table density remains unchanged.
+
+### Floating Agent conversation
+
+The signed-in shell exposes a green, circular Agent launcher at the bottom right, with a comfortable
+48px target and safe-area clearance. It opens a non-modal chat above the launcher, using
+`ChatWindow` and `ChatComposer` from `ui/components/chat.tsx`. The panel fits the viewport on phones,
+uses existing Fidy surface, border and focus tokens, and supports Escape, a labeled close action,
+and reduced motion. It leaves the underlying workspace usable.
+
+AI Elements `Conversation` and `Message` live in `ui/components/ai-elements`, adapted to the local
+aliases, Hugeicons and branded controls. Conversation scrolling stays immediate, honors a reader's
+position, and offers a labeled jump-to-latest control. User entries use peach bubbles; assistant text
+stays plain and readable. Enter sends, Shift+Enter inserts a line, and composing IME text cannot send.
+The feature owns the draft, bounded session-only history, pending status and explicit delivery receipt;
+closing the panel preserves those values and never acknowledges a hidden reply. The UI advertises
+only text capabilities supported by the existing Agent endpoint.

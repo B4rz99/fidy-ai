@@ -6,13 +6,12 @@ import {
   Home01Icon,
   Menu01Icon,
   Settings01Icon,
-  SparklesIcon,
 } from "@hugeicons/core-free-icons";
 import { Link, Outlet, useRouter } from "@tanstack/react-router";
 import { Cause, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { useState } from "react";
-import type { JSX, MouseEvent } from "react";
+import type { ComponentProps, JSX, MouseEvent } from "react";
 import { useSession } from "@/session/session-context";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Button } from "@/ui/components/button";
@@ -32,7 +31,6 @@ export const AuthenticationExpired = (): JSX.Element => (
 const navigationLinks = [
   { to: "/app/dashboard", label: "Tablero", icon: Home01Icon },
   { to: "/app/transactions", label: "Transacciones", icon: CreditCardIcon },
-  { to: "/app/agent", label: "Agente", icon: SparklesIcon },
 ] as const;
 const settingsLinks = [
   { to: "/settings/email", label: "Correo" },
@@ -130,7 +128,9 @@ const CompactNavigation = ({
   </>
 );
 
-const SignedInShell = (): JSX.Element => {
+const SignedInShell = ({
+  children,
+}: Readonly<Pick<ComponentProps<"div">, "children">>): JSX.Element => {
   const router = useRouter();
   const { completeLogout } = useSession();
   const logoutRequest = router.options.context.webAuthClient.pipe(
@@ -177,13 +177,20 @@ const SignedInShell = (): JSX.Element => {
       </aside>
       <div className="min-w-0 flex-1">
         <Outlet />
+        {children}
       </div>
     </div>
   );
 };
 
 /** Authenticated route layout whose child server state shares one authentication lifetime. */
-export const SignedInFeature = (): JSX.Element => {
+export const SignedInFeature = ({
+  children,
+}: Readonly<Pick<ComponentProps<"div">, "children">>): JSX.Element => {
   const { authentication } = useSession();
-  return authentication === "expired" ? <AuthenticationExpired /> : <SignedInShell />;
+  return authentication === "expired" ? (
+    <AuthenticationExpired />
+  ) : (
+    <SignedInShell>{children}</SignedInShell>
+  );
 };

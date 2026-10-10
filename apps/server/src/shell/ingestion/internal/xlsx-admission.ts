@@ -99,7 +99,7 @@ const assertXmlRepresentation = (tag: SaxesTagPlain, root: string): void => {
   if (requiredRoot !== undefined && root !== requiredRoot) malformed();
   // SheetJS selects binary parsers by content type and by a part's .bin suffix.
   // Inert VBA attachments remain allowed, but no binary financial part is admitted.
-  if (["Override", "Default"].includes(name)) assertContentType(tag);
+  if (name === "Override") assertContentType(tag);
   if (name === "Relationship") assertRelationship(tag);
 };
 

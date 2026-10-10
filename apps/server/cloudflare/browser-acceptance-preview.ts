@@ -9,7 +9,7 @@ import {
 import { browserAcceptanceTopology } from "./browser-acceptance/operations";
 import { newId } from "./secret-material/operations";
 import { db, firstCardUserId, fixtureUserId, pairingUserId } from "./browser-acceptance-seed";
-import { observeBrowserCost } from "./browser-cost.test-fixture";
+import { observeBrowserCost } from "./browser-cost/operations";
 import {
   providerPrivateKey,
   providerPublicKey,

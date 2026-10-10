@@ -1,8 +1,8 @@
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
 import { afterAll, expect } from "vitest";
-import { observeBrowserCost } from "./browser-cost.test-fixture";
-import { isolatedTestDatabases } from "./d1-test-fixture";
+import { observeBrowserCost } from "./operations";
+import { isolatedTestDatabases } from "../d1-test-fixture";
 
 const databases = isolatedTestDatabases();
 afterAll(() => databases.dispose());

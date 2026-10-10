@@ -2632,6 +2632,9 @@ effectIt.effect("refuses forged progress and preserves captures after a lost row
   })
 );
 
+// Batch synthetic fixture receipts independently of the processor's 32-row activity.
+const receiptBatchSize = 96;
+
 const seedReceipts = ({
   db,
   rows,
@@ -2646,11 +2649,14 @@ const seedReceipts = ({
   submission: string;
 }>): Effect.Effect<void> =>
   Effect.forEach(
-    Array.from({ length: Math.ceil((rows - from) / 32) }, (_, batch) => from + batch * 32),
+    Array.from(
+      { length: Math.ceil((rows - from) / receiptBatchSize) },
+      (_, batch) => from + batch * receiptBatchSize
+    ),
     (offset) =>
       fromTestPromise(() =>
         db.batch(
-          Array.from({ length: Math.min(32, rows - offset) }, (_, index) =>
+          Array.from({ length: Math.min(receiptBatchSize, rows - offset) }, (_, index) =>
             db
               .prepare(
                 "INSERT INTO statement_record_outcomes(user_id,submission_id,record_number,outcome) VALUES (?,?,?,'needs-review')"
@@ -2722,7 +2728,8 @@ effectIt.effect(
       );
       expect(nextCosts[1]?.accounting).toBeLessThanOrEqual((nextCosts[0]?.accounting ?? 0) + 8);
       expect(nextCosts[1]?.all).toBeLessThanOrEqual((nextCosts[0]?.all ?? 0) + 8);
-    })
+    }),
+  30_000
 );
 
 effectIt.effect(

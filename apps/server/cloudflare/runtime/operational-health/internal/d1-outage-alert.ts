@@ -36,7 +36,7 @@ const foreign = <A>(
     Effect.timeout("3 seconds"),
     Effect.mapError(() => new OperatorClaimUnavailable())
   );
-const readClaim = (
+const findClaim = (
   input: Input
 ): Effect.Effect<Option.Option<StoredClaim>, OperatorClaimUnavailable | Schema.SchemaError> =>
   Effect.gen(function* () {
@@ -135,7 +135,7 @@ const sendClaim = (
 export const deliverD1Outage = (input: Input): Effect.Effect<void, OperatorClaimUnavailable> =>
   Effect.gen(function* () {
     input.signal.throwIfAborted();
-    const previous = yield* readClaim(input);
+    const previous = yield* findClaim(input);
     const claim = nextClaim(input, previous);
     if (Option.isNone(claim)) {
       return;

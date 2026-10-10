@@ -13,3 +13,6 @@ export const maximumMaterializedStatementBytes = 16_777_216;
 
 /** Bounded encoded column headings retained with one materialization identity. */
 export const maximumMaterializedHeaderBytes = 524_288;
+
+/** Source parsing reservations are durable; ambiguous reservation responses consume one slot. */
+export const maximumStatementSourceParses = 3;

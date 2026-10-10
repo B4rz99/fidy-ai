@@ -5,6 +5,7 @@ import { type ParsedStatement, statementParserLimits } from "../../../src/shell/
 import {
   maximumMaterializedHeaderBytes,
   maximumMaterializedStatementBytes,
+  maximumStatementSourceParses,
   statementChunkSize,
 } from "./statement-processing-limits";
 import { materializedHeaderBytes, materializedStatementBytes } from "./statement-review-budget";
@@ -34,7 +35,6 @@ const Manifest = Schema.Struct({
   byte_length: Schema.Int.check(
     Schema.isBetween({ minimum: 1, maximum: maximumMaterializedBytes })
   ),
-  rebuilds: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1 })),
   state: Schema.Literals(["building", "ready"]),
 });
 type Manifest = typeof Manifest.Type;
@@ -82,12 +82,12 @@ const checksum = (text: string): Effect.Effect<string, StatementMaterializationU
   foreign(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))).pipe(
     Effect.map((value) => Hex.encode(new Uint8Array(value)))
   );
-const manifest = (
+const findManifest = (
   input: MaterializationIdentity
 ): Effect.Effect<Option.Option<Manifest>, BoundaryFailure> =>
   foreign(() =>
     input.DB.prepare(`SELECT source_sha256,parser_revision,source_format,expires_at_ms,
-    headers_json,row_count,part_count,byte_length,state,rebuilds FROM statement_materializations
+    headers_json,row_count,part_count,byte_length,state FROM statement_materializations
     WHERE submission_id=? AND user_id=?`)
       .bind(input.submissionId, input.userId)
       .first()
@@ -125,18 +125,11 @@ const recoverBuilding = (input: MaterializationIdentity): Effect.Effect<boolean,
     if (yield* publish(input, yield* Clock.currentTimeMillis)) {
       return true;
     }
-    const reset = yield* foreign(() =>
-      input.DB.prepare(`UPDATE statement_materializations SET rebuilds=1
-      WHERE submission_id=? AND user_id=? AND state='building' AND rebuilds=0 RETURNING submission_id`)
-        .bind(input.submissionId, input.userId)
-        .all()
-    );
-    if (reset.results.length === 0) {
-      return yield* new StatementMaterializationUnavailable();
-    }
+    // Idempotent cleanup: lost responses and failed deletes consume no parse reservation.
     yield* foreign(() =>
-      input.DB.prepare(`DELETE FROM statement_materialization_parts WHERE submission_id=?`)
-        .bind(input.submissionId)
+      input.DB.prepare(`DELETE FROM statement_materialization_parts WHERE submission_id=?
+        AND EXISTS(SELECT 1 FROM statement_materializations WHERE submission_id=? AND user_id=? AND state='building')`)
+        .bind(input.submissionId, input.submissionId, input.userId)
         .run()
     );
     return false;
@@ -197,12 +190,12 @@ const readRows = (
     return rows.slice(offset % statementChunkSize);
   });
 
-/** Loads at most one owned chunk at the durable cursor. Refuses substituted data and permits one bounded rebuild of interrupted publication. */
-export const readMaterializedChunk = (
+/** Loads at most one owned chunk at the durable cursor. Refuses substituted data and recovers interrupted publication within the durable source-parse budget. */
+export const findMaterializedChunk = (
   input: MaterializationIdentity & Readonly<{ offset: number }>
 ): Effect.Effect<Option.Option<MaterializedChunk>, Failure> =>
   Effect.gen(function* () {
-    const found = yield* manifest(input);
+    const found = yield* findManifest(input);
     if (Option.isNone(found)) {
       return Option.none();
     }
@@ -270,7 +263,7 @@ const prepareManifest = (
   encoded: EncodedMaterial
 ): Effect.Effect<void, BoundaryFailure> =>
   Effect.gen(function* () {
-    const found = yield* manifest(input);
+    const found = yield* findManifest(input);
     if (Option.isSome(found)) {
       const value = found.value;
       if (
@@ -323,6 +316,35 @@ const writeParts = (
       );
     }
   });
+/** Reserve before expensive source reads. Ambiguous acknowledgements consume a slot, while idempotent cache cleanup remains independently retryable. */
+export const reserveStatementSourceParse = (
+  input: MaterializationIdentity
+): Effect.Effect<void, Failure> =>
+  Effect.gen(function* () {
+    const current = yield* Clock.currentTimeMillis;
+    const reserved = yield* foreign(() =>
+      input.DB.prepare(`UPDATE statement_submissions
+      SET source_parse_attempts=source_parse_attempts+1
+      WHERE id=? AND user_id=? AND status IN ('queued','processing')
+        AND source_parse_attempts<? AND parser_revision=? AND source_format=?
+        AND retention_expires_at_ms=? AND retention_expires_at_ms>?
+      RETURNING id`)
+        .bind(
+          input.submissionId,
+          input.userId,
+          maximumStatementSourceParses,
+          input.parserRevision,
+          input.sourceFormat,
+          input.expiresAtMs,
+          current
+        )
+        .all()
+    );
+    if (reserved.results.length === 0) {
+      return yield* new StatementMaterializationFailed({ reason: "resource-limit" });
+    }
+  });
+
 /** Retains at most 16 MiB of derived rows for the original source purpose/deadline. Only complete publication may drive captures. Requires the User coordinator. */
 export const materializeStatement = (
   input: MaterializationIdentity & Readonly<{ parsed: ParsedStatement }>

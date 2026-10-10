@@ -1917,3 +1917,167 @@ effectIt.effect(
     }),
   30_000
 );
+
+it.each(["failed-delete", "lost-reservation-response"] as const)(
+  "recovers partial publication after %s without consuming an unused source rebuild",
+  (failure) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const csv =
+          "fecha,valor,moneda,contraparte\n" +
+          Array.from({ length: 289 }, () => "2026-08-01,-1,COP,Cafe").join("\n") +
+          "\n";
+        const { db, bucket } = yield* fromTestPromise(() => setup(csv));
+        const reads = observeStatementReads(bucket);
+        let batches = 0;
+        const interrupted = new Proxy(db, {
+          get(target, property): unknown {
+            if (property === "batch") {
+              return (
+                ...args: Parameters<D1Database["batch"]>
+              ): ReturnType<D1Database["batch"]> => {
+                batches += 1;
+                return batches === 2
+                  ? Promise.reject(new Error("partial publication"))
+                  : target.batch(...args);
+              };
+            }
+            const method: unknown = Reflect.get(target, property, target);
+            return typeof method === "function" ? method.bind(target) : method;
+          },
+        });
+        const input = {
+          DB: interrupted,
+          STATEMENT_STAGING_BUCKET: reads.bucket,
+          userId: userA,
+          submissionId,
+        };
+        deepStrictEqual(
+          yield* Effect.exit(processStatementSubmission(input)),
+          Exit.fail(new StatementProcessingUnavailable())
+        );
+        expect(
+          yield* fromTestPromise(() =>
+            db.prepare("SELECT count(*) AS count FROM statement_materialization_parts").first()
+          )
+        ).toEqual({ count: 8 });
+        let loseResponse = true;
+        const withLostReservationResponse = (statement: D1PreparedStatement): D1PreparedStatement =>
+          new Proxy(statement, {
+            get(target, property): unknown {
+              if (property === "bind") {
+                return (...args: Parameters<D1PreparedStatement["bind"]>): D1PreparedStatement =>
+                  withLostReservationResponse(target.bind(...args));
+              }
+              if (property === "all") {
+                return (
+                  ...args: Parameters<D1PreparedStatement["all"]>
+                ): ReturnType<D1PreparedStatement["all"]> =>
+                  target.all(...args).then((result) => {
+                    if (loseResponse) {
+                      loseResponse = false;
+                      throw new Error("lost reservation response");
+                    }
+                    return result;
+                  });
+              }
+              const method: unknown = Reflect.get(target, property, target);
+              return typeof method === "function" ? method.bind(target) : method;
+            },
+          });
+        const failingReservation = new Proxy(db, {
+          get(target, property): unknown {
+            if (property === "prepare") {
+              return (sql: string): D1PreparedStatement =>
+                sql.includes("SET source_parse_attempts")
+                  ? withLostReservationResponse(target.prepare(sql))
+                  : target.prepare(sql);
+            }
+            const method: unknown = Reflect.get(target, property, target);
+            return typeof method === "function" ? method.bind(target) : method;
+          },
+        });
+        if (failure === "failed-delete") {
+          yield* fromTestPromise(() =>
+            db
+              .prepare(
+                "CREATE TRIGGER fail_cache_cleanup BEFORE DELETE ON statement_materialization_parts BEGIN SELECT RAISE(ABORT,'cleanup unavailable'); END"
+              )
+              .run()
+          );
+        }
+        deepStrictEqual(
+          yield* Effect.exit(
+            processStatementSubmission({
+              ...input,
+              DB: failure === "failed-delete" ? db : failingReservation,
+            })
+          ),
+          Exit.fail(new StatementProcessingUnavailable())
+        );
+        expect(reads.observed.gets).toBe(1);
+        expect(
+          yield* fromTestPromise(() =>
+            db.prepare("SELECT count(*) AS count FROM transactions").first()
+          )
+        ).toEqual({ count: 0 });
+        if (failure === "failed-delete") {
+          yield* fromTestPromise(() => db.prepare("DROP TRIGGER fail_cache_cleanup").run());
+        }
+        // The fixture's daily capture allowance is 100; prove three resumed chunks within it.
+        for (let activity = 0; activity < 3; activity += 1) {
+          expect(yield* processStatementSubmission({ ...input, DB: db })).toBe("continue");
+        }
+        expect(reads.observed.gets).toBe(2);
+        expect(
+          yield* fromTestPromise(() =>
+            db.prepare("SELECT count(*) AS count FROM transactions").first()
+          )
+        ).toEqual({ count: 96 });
+      })
+    )
+);
+
+effectIt.effect("caps repeated partial-publication failures before further source work", () =>
+  Effect.gen(function* () {
+    const { db, bucket } = yield* fromTestPromise(() => setup(boundedStatementCsv()));
+    const reads = observeStatementReads(bucket);
+    const cacheWritesUnavailableDb = new Proxy(db, {
+      get(target, property): unknown {
+        if (property === "batch") {
+          return (): ReturnType<D1Database["batch"]> =>
+            Promise.reject(new Error("cache writes unavailable"));
+        }
+        const method: unknown = Reflect.get(target, property, target);
+        return typeof method === "function" ? method.bind(target) : method;
+      },
+    });
+    const input = {
+      DB: cacheWritesUnavailableDb,
+      STATEMENT_STAGING_BUCKET: reads.bucket,
+      userId: userA,
+      submissionId,
+    };
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      deepStrictEqual(
+        yield* Effect.exit(processStatementSubmission(input)),
+        Exit.fail(new StatementProcessingUnavailable())
+      );
+    }
+    expect(yield* processStatementSubmission({ ...input, DB: db })).toBe("completed");
+    expect(reads.observed.gets).toBe(3);
+    expect(
+      yield* fromTestPromise(() =>
+        db
+          .prepare(
+            "SELECT status,failure_reason,source_parse_attempts FROM statement_submissions WHERE id=?"
+          )
+          .bind(submissionId)
+          .first()
+      )
+    ).toEqual({ status: "failed", failure_reason: "resource-limit", source_parse_attempts: 3 });
+    expect(
+      yield* fromTestPromise(() => db.prepare("SELECT count(*) AS count FROM transactions").first())
+    ).toEqual({ count: 0 });
+  })
+);

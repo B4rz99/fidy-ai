@@ -27,7 +27,11 @@ import { prepareStatementCapture } from "../../transactions/operations";
 import { StatementProcessingUnavailable } from "../contract";
 import { StatementStaging, newIngestionId } from "./statement-staging";
 import { maximumRetainedReviewEvidence } from "./statement-review-retention";
-import { materializeStatement, readMaterializedChunk } from "./statement-materialization";
+import {
+  findMaterializedChunk,
+  materializeStatement,
+  reserveStatementSourceParse,
+} from "./statement-materialization";
 import { statementChunkSize } from "./statement-processing-limits";
 import { statementReviewAdmission } from "./statement-review-budget";
 
@@ -684,12 +688,13 @@ export const processStatementSubmission = (
       expiresAtMs: context.value.retention_expires_at_ms,
     };
     const progress = yield* readProgress(input);
-    let chunk = yield* readMaterializedChunk({ ...identity, offset: progress.total });
+    let chunk = yield* findMaterializedChunk({ ...identity, offset: progress.total });
     if (Option.isNone(chunk)) {
+      yield* reserveStatementSourceParse(identity);
       const parsed = yield* readParsed(input, context.value);
       if (Option.isNone(parsed)) return "completed";
       yield* materializeStatement({ ...identity, parsed: parsed.value });
-      chunk = yield* readMaterializedChunk({ ...identity, offset: progress.total });
+      chunk = yield* findMaterializedChunk({ ...identity, offset: progress.total });
     }
     return Option.isSome(chunk)
       ? yield* advanceSubmission(input, context.value, chunk.value)

@@ -10,7 +10,6 @@ CREATE TABLE statement_materializations (
   row_count INTEGER NOT NULL CHECK(row_count BETWEEN 1 AND 20000),
   part_count INTEGER NOT NULL CHECK(part_count BETWEEN 1 AND 1024),
   byte_length INTEGER NOT NULL CHECK(byte_length BETWEEN 1 AND 16777216),
-  rebuilds INTEGER NOT NULL DEFAULT 0 CHECK(rebuilds BETWEEN 0 AND 1),
   state TEXT NOT NULL CHECK(state IN ('building','ready'))
 ) STRICT;
 CREATE TABLE statement_materialization_parts (
@@ -47,6 +46,7 @@ WHEN NEW.status IN ('completed','failed')
 BEGIN DELETE FROM statement_materializations WHERE submission_id=NEW.id AND user_id=NEW.user_id; END;
 
 -- Durable progress is updated with each row receipt, never by rescanning its growing prefix.
+ALTER TABLE statement_submissions ADD COLUMN source_parse_attempts INTEGER NOT NULL DEFAULT 0 CHECK(source_parse_attempts BETWEEN 0 AND 3);
 ALTER TABLE statement_submissions ADD COLUMN processed_rows INTEGER NOT NULL DEFAULT 0 CHECK(processed_rows>=0);
 ALTER TABLE statement_submissions ADD COLUMN processed_accepted_rows INTEGER NOT NULL DEFAULT 0 CHECK(processed_accepted_rows>=0);
 ALTER TABLE statement_submissions ADD COLUMN processed_review_rows INTEGER NOT NULL DEFAULT 0 CHECK(processed_review_rows>=0);

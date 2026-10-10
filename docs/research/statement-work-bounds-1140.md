@@ -211,8 +211,10 @@ open under #1130/#1140 and is not implemented by the review-record fix.
 The follow-up replaces the deferred reusable-parsing design above with private D1 fragments.
 This makes derived publication, owner checks, progress receipts and terminal cleanup transactional
 within one store; it avoids a second R2 write/deletion protocol. The original upload stays in R2.
-Normal processing reads and hashes that upload once. A partial interrupted materialization permits
-one rebuild; a complete generation with a lost publication response is reused directly. Each later
+Normal processing reads and hashes that upload once. Partial interrupted materialization has
+idempotent cleanup. At most three durable source-parse
+reservations are available per submission; ambiguous reservation responses consume a slot. A complete
+generation with a lost publication response is reused directly. Each later
 activity loads at most 32 derived rows. Receipt counters replace repeated prefix COUNT queries.
 
 The retained rows have a 16 MiB encoded JSON budget, measured before encoding, with at most 1,024

@@ -1,6 +1,11 @@
+import {
+  maximumMaterializedHeaderBytes,
+  maximumMaterializedStatementBytes,
+} from "./statement-processing-limits";
 import { Option } from "effect";
 import type {
   NeedsReviewStatementRow,
+  ParsedStatementRow,
   StatementRowEvidence,
   XlsxCellEvidence,
 } from "../../../src/core/ingestion/contract";
@@ -56,7 +61,7 @@ const utf8Bytes = (unit: number, next: number, json: boolean): number => {
   return surrogateBytes(unit, next, json);
 };
 
-const stringBytes = (value: string, json: boolean): number => {
+const stringBytes = (value: string, json: boolean, maximum = maximumRowBytes): number => {
   let bytes = json ? 2 : 0;
   for (let index = 0; index < value.length; index += 1) {
     const unit = value.charCodeAt(index);
@@ -64,7 +69,7 @@ const stringBytes = (value: string, json: boolean): number => {
     const width = escaped || utf8Bytes(unit, value.charCodeAt(index + 1), json);
     bytes += width;
     if (width === 4) index += 1;
-    if (bytes > maximumRowBytes) return overBudget;
+    if (bytes > maximum) return maximum + 1;
   }
   return bytes;
 };
@@ -74,11 +79,15 @@ const objectBytes = (members: ReadonlyArray<EncodedMember>): number =>
   Math.max(0, members.length - 1) +
   members.reduce((sum, [key, size]) => sum + key.length + 3 + size, 0);
 
-const arrayBytes = <A>(values: ReadonlyArray<A>, size: (value: A) => number): number => {
+const arrayBytes = <A>(
+  values: ReadonlyArray<A>,
+  size: (value: A) => number,
+  maximum = maximumRowBytes
+): number => {
   let bytes = 2 + Math.max(0, values.length - 1);
   for (const value of values) {
     bytes += size(value);
-    if (bytes > maximumRowBytes) return overBudget;
+    if (bytes > maximum) return maximum + 1;
   }
   return bytes;
 };
@@ -99,7 +108,11 @@ const cellBytes = (cell: XlsxCellEvidence, size: (value: string) => number): num
   return objectBytes(members);
 };
 
-const evidenceBytes = (evidence: StatementRowEvidence, size: (value: string) => number): number =>
+const evidenceBytes = (
+  evidence: StatementRowEvidence,
+  size: (value: string) => number,
+  maximum = maximumRowBytes
+): number =>
   evidence.sourceFormat === "csv"
     ? objectBytes([
         ["sourceFormat", size(evidence.sourceFormat)],
@@ -107,7 +120,7 @@ const evidenceBytes = (evidence: StatementRowEvidence, size: (value: string) => 
         ["startLine", String(evidence.startLine).length],
         ["endLine", String(evidence.endLine).length],
         ["rawRecord", size(evidence.rawRecord)],
-        ["fields", arrayBytes(evidence.fields, size)],
+        ["fields", arrayBytes(evidence.fields, size, maximum)],
       ])
     : objectBytes([
         ["sourceFormat", size(evidence.sourceFormat)],
@@ -115,8 +128,40 @@ const evidenceBytes = (evidence: StatementRowEvidence, size: (value: string) => 
         ["sheetIndex", String(evidence.sheetIndex).length],
         ["rowNumber", String(evidence.rowNumber).length],
         ["hidden", evidence.hidden ? 4 : "false".length],
-        ["cells", arrayBytes(evidence.cells, (cell) => cellBytes(cell, size))],
+        ["cells", arrayBytes(evidence.cells, (cell) => cellBytes(cell, size), maximum)],
       ]);
+
+/** Measures heading JSON before allocation; overflow is above the heading admission ceiling. */
+export const materializedHeaderBytes = (headers: ReadonlyArray<string>): number =>
+  arrayBytes(
+    headers,
+    (value) => stringBytes(value, true, maximumMaterializedHeaderBytes),
+    maximumMaterializedHeaderBytes
+  );
+
+/** Measures bounded derived JSON before encoding, including repeated evidence and escape expansion. Oversized input returns above the admission ceiling. */
+export const materializedStatementBytes = (rows: ReadonlyArray<ParsedStatementRow>): number => {
+  const sizes = new Map<string, number>();
+  const size = (value: string): number => {
+    const previous = sizes.get(value);
+    if (previous !== undefined) {
+      return previous;
+    }
+    const bytes = stringBytes(value, true, maximumMaterializedStatementBytes);
+    sizes.set(value, bytes);
+    return bytes;
+  };
+  return arrayBytes(
+    rows,
+    (row) =>
+      objectBytes([
+        ["recordNumber", String(row.recordNumber).length],
+        ["fields", arrayBytes(row.fields, size, maximumMaterializedStatementBytes)],
+        ["evidence", evidenceBytes(row.evidence, size, maximumMaterializedStatementBytes)],
+      ]),
+    maximumMaterializedStatementBytes
+  );
+};
 
 const textValue = (bytes: number): StoredValue => ({ bytes, serial: textSerialBase + 2 * bytes });
 const integerValue = (value: number): StoredValue => {

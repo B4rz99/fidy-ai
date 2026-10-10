@@ -20,6 +20,7 @@ import {
   unavailableSignal,
 } from "./internal/health-inspection";
 import { asyncAlerts } from "./internal/alert-policy";
+import { deliverD1Outage } from "./internal/d1-outage-alert";
 import { claimResolutions, deliverFiring, deliverResolution } from "./internal/alert-delivery";
 import {
   WorkflowFailureCounts,
@@ -246,6 +247,19 @@ export const decideOperationalAlerts = (
 export const runOperationalAlerts = (input: OperationalAlertDelivery): Promise<void> =>
   Effect.runPromise(
     Effect.gen(function* () {
+      const unavailable = input.alerts.some(
+        (alert) => alert.kind === "inspection_unavailable" && alert.owner === "d1"
+      );
+      if (Option.isSome(input.outage)) {
+        const outageWork = deliverD1Outage({
+          ...input,
+          outageBucket: input.outage.value.bucket,
+          release: input.outage.value.release,
+          unavailable,
+        });
+        yield* unavailable ? outageWork : outageWork.pipe(Effect.orElseSucceed(() => undefined));
+        if (unavailable) return;
+      }
       const attempts = yield* Effect.forEach(
         input.alerts,
         (alert) => deliverFiring({ input, alert }),

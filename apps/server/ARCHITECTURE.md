@@ -241,6 +241,11 @@ submission, accounting, staging promotion, and extraction intent together. Unpub
 expires; authoritative submissions cannot reference missing or mismatched bytes. See
 [ADR 0028](../../docs/adr/0028-statement-bytes-are-staged-outside-atomic-batches.md).
 
+Statement extraction materializes bounded, private derived chunks in D1, pinned to the same User,
+original digest, parser revision and retention deadline. Complete publication precedes capture;
+atomic row receipts advance progress without rescanning prior outcomes. Terminal or expired
+submissions delete derived material in the same D1 transition. Original bytes remain in R2.
+
 A D1 commit and external submission are also separate effects. Durable outbox intent plus idempotent
 handoff bridges that boundary. Provider uncertainty belongs to the owner's retained lifecycle and
 reconciliation policy; timeout or lost acknowledgment is not proof of rejection.
@@ -394,7 +399,10 @@ activities, while interruption preserves cleanup. Maintenance owns no SQL, reten
 aggregate, provider execution, or authorization.
 
 Operational Health observes bounded owner metadata and dead-letter signals separately from public
-reachability health. Unreadable measurements are unavailable, not zero. Operational procedures and
+reachability health. Unreadable measurements are unavailable, not zero. D1 outage email claims use
+bounded, conditional writes in the existing private R2 staging bucket,
+so a failed D1 inspection or metrics read cannot disable outage notification. Claim metadata contains
+no User or financial content. Ordinary alerts retain D1 claims. Operational procedures and
 limits belong in the [background-work runbook](../../docs/operations/cloudflare-background-work.md).
 
 Budget crossing snapshots, category-separated Budget/reminder Consent evidence, and guarded reminder

@@ -29,3 +29,4 @@ public API and official React documentation as the application-facing contract.
 | Alchemy and Cloudflare deployment topology                        | [alchemy.md](alchemy.md)                   |
 | dnd-kit drag and drop                                             | [dnd-kit.md](dnd-kit.md)                   |
 | React component behavior and runtime                              | [react.md](react.md)                       |
+| Foldkit embedded features, scoped DOM and authentication state    | [foldkit.md](foldkit.md)                   |

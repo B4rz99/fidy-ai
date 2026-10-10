@@ -10,6 +10,9 @@ const testSource = /(?:\.(?:test|spec|fixture)|\.test-fixture)\.[cm]?[jt]sx?$/u;
 const compositionRoots = new Set([
   "src/client.ts",
   "cloudflare/core-worker.ts",
+  // Native scheduler journeys share private object transport while retaining real owner D1 work.
+  // The test-support direction rule still forbids every production import of this composition.
+  "cloudflare/core-worker.test-fixture.ts",
   "cloudflare/public-worker.ts",
   "cloudflare/operational-canary-workflow.ts",
   "cloudflare/ingestion/email-worker.ts",

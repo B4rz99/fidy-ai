@@ -9,7 +9,7 @@ import {
 } from "../d1-test-fixture";
 import { approvedWorkersAiModel } from "../../src/shell/hosted-inference/contract";
 import { UserTransactionCoordinator } from "../transactions/runtime";
-import coreWorker from "../core-worker";
+import { fixtureWorker as coreWorker } from "../core-worker.test-fixture";
 import publicWorker from "../public-worker";
 import { ConnectInstitutionResult } from "../../src/core/connections/contract";
 import { handleConnectionBrowserRequest, sweepConnectionAttempts } from "./runtime";

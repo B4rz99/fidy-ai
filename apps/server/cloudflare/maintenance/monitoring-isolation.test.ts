@@ -1,4 +1,4 @@
-import coreWorker from "../core-worker";
+import { fixtureWorker as coreWorker } from "../core-worker.test-fixture";
 import { type ProactivityDeliveryWork } from "../insights/contract";
 import { coordinatorProbeName } from "../runtime/operational-health/contract";
 import assert from "node:assert/strict";

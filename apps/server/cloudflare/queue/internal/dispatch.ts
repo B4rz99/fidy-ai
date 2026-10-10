@@ -1,6 +1,6 @@
 import { ProactivityDeliveryWork } from "../../insights/contract";
 import { receiveProactivityWork } from "../../insights/runtime";
-import { Clock, Data, Effect, Option, Schema } from "effect";
+import { Cause, Clock, Data, Effect, Exit, Option, Schema } from "effect";
 import type { CoreQueueEnvironment } from "../contract";
 import {
   isBrowserPairingEmailWork,
@@ -40,6 +40,31 @@ type QueueInput = Readonly<{ batch: MessageBatch<unknown>; environment: CoreQueu
 const nativeDelivery = (work: () => Promise<void>): Effect.Effect<void, QueueDeliveryUnavailable> =>
   Effect.tryPromise({ try: work, catch: deliveryFailure });
 
+const receiveWorkflowBatch = <E>(
+  batch: MessageBatch<unknown>,
+  receive: (message: MessageBatch<unknown>) => Effect.Effect<void, E>
+): Effect.Effect<void, E> =>
+  Effect.gen(function* () {
+    let failure = Option.none<Cause.Cause<E>>();
+    for (const message of batch.messages) {
+      const result = yield* Effect.exit(
+        receive({
+          queue: batch.queue,
+          metadata: batch.metadata,
+          messages: [message],
+          ackAll: () => message.ack(),
+          retryAll: (options) => message.retry(options),
+        })
+      );
+      if (Exit.isFailure(result)) {
+        if (Cause.hasInterrupts(result.cause)) return yield* Effect.failCause(result.cause);
+        if (Option.isNone(failure)) failure = Option.some(result.cause);
+      }
+    }
+    // Owner acknowledgments fence successful handoffs from this final batch rejection.
+    if (Option.isSome(failure)) return yield* Effect.failCause(failure.value);
+  });
+
 const receiveEmailQueue = ({
   batch,
   environment,
@@ -49,19 +74,25 @@ const receiveEmailQueue = ({
       if (environment.EMAIL_REPLACEMENT_WORKFLOW === undefined) {
         return yield* deliveryFailure(new Error("Email replacement unavailable"));
       }
-      return yield* receiveEmailReplacement({
-        DB: environment.DB,
-        EMAIL_REPLACEMENT_WORKFLOW: environment.EMAIL_REPLACEMENT_WORKFLOW,
-      })(batch).pipe(Effect.withSpan("emailReplacement.receive"));
+      return yield* receiveWorkflowBatch(
+        batch,
+        receiveEmailReplacement({
+          DB: environment.DB,
+          EMAIL_REPLACEMENT_WORKFLOW: environment.EMAIL_REPLACEMENT_WORKFLOW,
+        })
+      ).pipe(Effect.withSpan("emailReplacement.receive"));
     }
     if (batch.messages.some((message) => isBrowserPairingEmailWork(message.body))) {
       if (environment.BROWSER_PAIRING_EMAIL_WORKFLOW === undefined) {
         return yield* deliveryFailure(new Error("Browser pairing email unavailable"));
       }
-      return yield* receiveBrowserPairingEmail({
-        DB: environment.DB,
-        BROWSER_PAIRING_EMAIL_WORKFLOW: environment.BROWSER_PAIRING_EMAIL_WORKFLOW,
-      })(batch);
+      return yield* receiveWorkflowBatch(
+        batch,
+        receiveBrowserPairingEmail({
+          DB: environment.DB,
+          BROWSER_PAIRING_EMAIL_WORKFLOW: environment.BROWSER_PAIRING_EMAIL_WORKFLOW,
+        })
+      );
     }
     return yield* deliveryFailure(new Error("Unknown email work"));
   }).pipe(Effect.mapError(deliveryFailure));
@@ -175,21 +206,21 @@ const receiveWorkQueue = (input: QueueInput): Effect.Effect<void, QueueDeliveryU
     }).pipe(Effect.withSpan("ingestion.forwarded-email.queue"));
   }
   if (batch.messages.some((message) => isStatementExtractionWork(message.body))) {
-    if (environment.STATEMENT_EXTRACTION_WORKFLOW === undefined) {
+    const workflow = environment.STATEMENT_EXTRACTION_WORKFLOW;
+    if (workflow === undefined) {
       return Effect.fail(deliveryFailure(new Error("Statement extraction unavailable")));
     }
-    return receiveStatementExtraction({
-      environment: {
-        DB: environment.DB,
-        STATEMENT_EXTRACTION_WORKFLOW: environment.STATEMENT_EXTRACTION_WORKFLOW,
-      },
-      messages: batch.messages,
-    }).pipe(Effect.mapError(deliveryFailure));
+    return receiveWorkflowBatch(batch, (entry) =>
+      receiveStatementExtraction({
+        environment: { DB: environment.DB, STATEMENT_EXTRACTION_WORKFLOW: workflow },
+        messages: entry.messages,
+      })
+    ).pipe(Effect.mapError(deliveryFailure));
   }
   return batch.messages.some(
     (message) => isBillingCollectionWork(message.body) || isRefundWork(message.body)
   )
-    ? receiveBillingQueue(input)
+    ? receiveWorkflowBatch(batch, (entry) => receiveBillingQueue({ batch: entry, environment }))
     : receiveEmailQueue(input);
 };
 
